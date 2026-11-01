@@ -3600,8 +3600,11 @@ async def test_a_later_judge_reads_the_gaps_of_the_earlier_heads_and_the_round_j
   pr = head("sha11")
   await conductor.bent(pr)
   conductor.done[conductor.judged["7 sha11"]["act"]] = answered(conductor, "7 sha11", [], "fixed at `a.py:1`: `+x`")
+  assert await conductor.bent(pr) is True
+  second = conductor.judged["7 sha11"]
+  assert conductor.prompts[-1][1] == "chain-judge/second/7" and second["state"] == "cleared"
+  conductor.done[second["second"]] = [(gap, "fixed") for gap in second["earlier"]]
   assert await conductor.bent(pr) is False
-  assert conductor.judged["7 sha11"]["state"] == "cleared"
 
 
 @POSIX
@@ -3708,9 +3711,15 @@ async def test_before_the_merge_of_a_head_after_gaps_the_round_posts_the_account
   conductor.done[conductor.judged["7 sha8"]["act"]] = ([], [('"no hidden control flow": Gap one.', "fixed at a.py:3: fixed  =  True")])
   assert await conductor.bent(pr) is True
   assert conductor.judged["7 sha8"]["state"] == "cleared"
+  assert posts == []
+  message, on = conductor.prompts[-1]
+  assert on == "chain-judge/second/7"
+  assert '- "no hidden control flow": Gap one.\n  The first judge says it is fixed at a.py:3: fixed = True' in message
+  conductor.done[conductor.judged["7 sha8"]["second"]] = [('"no hidden control flow": Gap one.', "Fixed.")]
+  assert await conductor.bent(pr) is True
   assert len(posts) == 1
   assert await conductor.bent(pr) is False
-  assert posts[1].startswith("🤖 The judge cleared sha8. The account of each gap that a judge found at an earlier head of #7:")
+  assert posts[1].startswith("🤖 The judge cleared sha8, and a second blind judge saw each fix below in the diff.")
   assert '- "no hidden control flow": Gap one.\n  Fixed at a.py:3: `fixed = True`' in posts[1]
   assert conductor.judged["7 sha8"]["shown"] == {'"no hidden control flow": Gap one.': ["a.py", "fixed = True"]}
   assert await conductor.bent(pr) is False
@@ -3814,6 +3823,86 @@ async def test_an_account_that_names_a_line_with_no_text_is_no_account(conductor
   assert conductor.accounted([(gap, "fixed at a.py:3")], [gap]) is None
   assert conductor.accounted([(gap, "`fixed at a.py:3`: `x = 1`")], [gap]) == [(gap, "fixed at a.py:3: x = 1")]
   assert conductor.accounted([(gap, "Open.")], [gap]) == [(gap, "open")]
+
+
+async def seconding(conductor: Round, posts: list[str]) -> dict:
+  judging(conductor)
+
+  async def bash(command: str, stdin: str | None = "", timeout: float = 600, show: object = None, **_: object) -> Exit:
+    if command.startswith("gh pr comment"):
+      posts.append(stdin or "")
+    said = "  fixed = True\n" if "git show" in command else "+diff\n"
+    return Exit(0, Text("stdout", said), Text("stderr", ""))
+
+  conductor.ns["bash"] = bash
+  first = regapped(conductor)
+  await conductor.bent(first)
+  conductor.done[conductor.judged["7 sha7"]["act"]] = [("no hidden control flow", "Gap one.")]
+  await conductor.bent(first)
+  pr = conductor.pr(n=7, sha="sha8", labels=["w:k"], checks=("SUCCESS",))
+  conductor.prs[7] = pr
+  await conductor.bent(pr)
+  conductor.done[conductor.judged["7 sha8"]["act"]] = ([], [('"no hidden control flow": Gap one.', "fixed at a.py:3: fixed = True")])
+  assert await conductor.bent(pr) is True
+  return pr
+
+
+async def test_a_gap_that_the_second_judge_does_not_see_fixed_sends_the_head_back_to_its_worker(conductor: Round) -> None:
+  posts: list[str] = []
+  pr = await seconding(conductor, posts)
+  asked = len(conductor.prompts)
+  conductor.done[conductor.judged["7 sha8"]["second"]] = [('"no hidden control flow": Gap one.', "open: it still hides the flow.")]
+  assert await conductor.bent(pr) is True
+  assert conductor.judged["7 sha8"]["state"] == "gaps"
+  assert conductor.judged["7 sha8"]["gaps"] == ['"no hidden control flow": Gap one.']
+  assert await conductor.bent(pr) is True
+  assert posts == []
+  assert len(conductor.prompts) == asked + 1
+  assert conductor.prompts[-1][1] == "chain-k"
+
+
+async def test_a_second_judge_that_fails_twice_holds_the_head_and_tells_the_coordinator(conductor: Round) -> None:
+  posts: list[str] = []
+  pr = await seconding(conductor, posts)
+  conductor.done[conductor.judged["7 sha8"]["second"]] = []
+  assert await conductor.bent(pr) is True
+  assert conductor.judged["7 sha8"]["second_fails"] == 1
+  assert await conductor.bent(pr) is True
+  assert conductor.prompts[-1][1] == "chain-judge/second/7"
+  conductor.done[conductor.judged["7 sha8"]["second"]] = [("another gap", "fixed")]
+  assert await conductor.bent(pr) is True
+  assert conductor.judged["7 sha8"]["state"] == "stuck"
+  assert "The second judge of the account of #7 at sha8 failed twice" in conductor.prompts[-1][0]
+  assert posts == []
+
+
+async def test_a_head_whose_diff_the_second_judge_cannot_read_does_not_merge_and_tells_the_coordinator(
+  conductor: Round,
+) -> None:
+  judging(conductor)
+  broken = []
+
+  async def bash(command: str, stdin: str | None = "", timeout: float = 600, show: object = None, **_: object) -> Exit:
+    if "git diff" in command and broken:
+      return Exit(1, Text("stdout", ""), Text("stderr", "no network"))
+    said = "  fixed = True\n" if "git show" in command else "+diff\n"
+    return Exit(0, Text("stdout", said), Text("stderr", ""))
+
+  conductor.ns["bash"] = bash
+  first = regapped(conductor)
+  await conductor.bent(first)
+  conductor.done[conductor.judged["7 sha7"]["act"]] = [("no hidden control flow", "Gap one.")]
+  await conductor.bent(first)
+  pr = conductor.pr(n=7, sha="sha8", labels=["w:k"], checks=("SUCCESS",))
+  conductor.prs[7] = pr
+  await conductor.bent(pr)
+  broken.append(1)
+  conductor.done[conductor.judged["7 sha8"]["act"]] = ([], [('"no hidden control flow": Gap one.', "fixed at a.py:3: fixed = True")])
+  asked = len(conductor.prompts)
+  assert await conductor.bent(pr) is True
+  assert "could not read the diff of #7 at sha8" in conductor.prompts[-1][0] and "no network" in conductor.prompts[-1][0]
+  assert await conductor.bent(pr) is True
+  assert len(conductor.prompts) == asked + 1
 
 
 def test_the_audit_leaves_a_pr_with_a_hold_label_out_of_the_idle_check(conductor: Round) -> None:
