@@ -126,3 +126,34 @@ def test_default_work_and_collection_roots_are_outside_the_temporary_directory(
   assert Path.home() / ".cache/furb/deepswe-work" == deepswe.WORK
   assert scratch not in deepswe.CACHE.parents
   assert scratch not in deepswe.WORK.parents
+
+
+def test_watched_ends_when_the_app_or_record_vanishes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+  """The watcher ends a run when its app or record vanishes."""
+  deepswe = rig(monkeypatch)
+  task = tmp_path / "task"
+  app = task / "app"
+  app.mkdir(parents=True)
+  record = task / ".run" / "record.jsonl"
+  record.parent.mkdir()
+  record.touch()
+  record.unlink()
+  assert "record vanished" in deepswe.watched(record, "root", 0, {"did": 0, "answers": 0})
+  record.touch()
+  shutil.rmtree(app)
+  assert "app checkout vanished" in deepswe.watched(record, "root", 0, {"did": 0, "answers": 0})
+
+
+def test_watched_ends_when_record_numbers_fall(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+  """The watcher ends a run when its record numbers fall below an earlier mark."""
+  deepswe = rig(monkeypatch)
+  record = tmp_path / "task" / ".run" / "record.jsonl"
+  (record.parent.parent / "app").mkdir(parents=True)
+  record.parent.mkdir()
+  record.touch()
+  monkeypatch.setattr(
+    deepswe, "numbered", lambda *_: {"wall_seconds": 1, "answers": 1, "commands": 0, "reads": 0, "writes": 0, "usd": 0}
+  )
+  monkeypatch.setattr(deepswe.engine, "paused", lambda _root: False)
+  why = deepswe.watched(record, "root", 0, {"did": 2, "answers": 2, "commands": 1})
+  assert "answers, commands fell below an earlier mark" in why
