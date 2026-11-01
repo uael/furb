@@ -11,8 +11,19 @@ if [ -z "$PRE_COMMIT" ]; then
 fi
 out=$(mktemp "${TMPDIR:-/tmp}/furb-hook.XXXXXX") || exit 1
 trap 'rm -f "$out"' EXIT
-# shellcheck disable=SC2086
-$PRE_COMMIT hook-impl --config=.pre-commit-config.yaml --hook-type=pre-commit --hook-dir "$(dirname "$0")" -- "$@" >"$out" 2>&1
+if [ "$1" = merge ] || git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+  # Git gives a merge no staged diff that the hooks read well: they read only the files that a conflict touched, and a
+  # merge with no conflict reaches no pre-commit hook. So a merge is checked on every file that it changes against its
+  # first parent, as a commit is.
+  tree=$(git write-tree) || exit 1
+  merge=$(GIT_AUTHOR_NAME=hook GIT_AUTHOR_EMAIL=hook@furb GIT_COMMITTER_NAME=hook GIT_COMMITTER_EMAIL=hook@furb \
+    git commit-tree "$tree" -p HEAD -m merge) || exit 1
+  # shellcheck disable=SC2086
+  $PRE_COMMIT run --config=.pre-commit-config.yaml --hook-stage=pre-commit --from-ref=HEAD --to-ref="$merge" >"$out" 2>&1
+else
+  # shellcheck disable=SC2086
+  $PRE_COMMIT hook-impl --config=.pre-commit-config.yaml --hook-type=pre-commit --hook-dir "$(dirname "$0")" -- "$@" >"$out" 2>&1
+fi
 code=$?
 if [ "$code" -ne 0 ]; then
   grep -vE '(Passed|Skipped)$' "$out"
