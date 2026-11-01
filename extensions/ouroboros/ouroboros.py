@@ -16,11 +16,27 @@ at, title, lines}, a rule in the feed of chain after the last act that began bef
 acts of a kind.
 An official extension lives in furb: a word, a contract, a suite and an ear of the World in the crate.
 Take it for what every project needs, and ask the operator first.
-enabled() gives the extensions that the life runs."""
+enabled() gives the extensions that the life runs.
+bound_by() gives each name that a word of the chain bound, with the rung of that word."""
 
 
 def enabled() -> list[str]:
   return list(dict.fromkeys(str(x[3]) for x in transcript(ROOT) if x[0] == "enable"))
+
+
+def bound_by(on: str = "") -> dict[str, str]:
+  found = {}
+  for by, text in program(on).items():
+    for line in text.splitlines():
+      left, eq, right = line.partition("=")
+      name = left.split(":")[0].strip() if eq and not right.startswith("=") else ""
+      if line.startswith("<s:"):
+        name = line[3:].split(">")[0]
+      elif line.removeprefix("async ").startswith(("def ", "class ")):
+        name = line.removeprefix("async ").split(None, 2)[1].split("(")[0].split(":")[0]
+      if line[:1].strip() and name.isidentifier():
+        found[name] = by
+  return found
 
 
 def extend(name: str, *rungs: str, tui: str = "") -> Text:
