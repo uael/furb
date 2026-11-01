@@ -3599,7 +3599,7 @@ async def test_a_later_judge_reads_the_gaps_of_the_earlier_heads_and_the_round_j
   assert "The round holds" not in " ".join(p for p, _ in conductor.prompts)
   pr = head("sha11")
   await conductor.bent(pr)
-  conductor.done[conductor.judged["7 sha11"]["act"]] = answered(conductor, "7 sha11", [], "fixed at a.py:1")
+  conductor.done[conductor.judged["7 sha11"]["act"]] = answered(conductor, "7 sha11", [], "fixed at `a.py:1`: `+x`")
   assert await conductor.bent(pr) is False
   assert conductor.judged["7 sha11"]["state"] == "cleared"
 
@@ -3705,7 +3705,7 @@ async def test_before_the_merge_of_a_head_after_gaps_the_round_posts_the_account
   pr = conductor.pr(n=7, sha="sha8", labels=["w:k"], checks=("SUCCESS",))
   conductor.prs[7] = pr
   await conductor.bent(pr)
-  conductor.done[conductor.judged["7 sha8"]["act"]] = ([], [('"no hidden control flow": Gap one.', "fixed at a.py:3")])
+  conductor.done[conductor.judged["7 sha8"]["act"]] = ([], [('"no hidden control flow": Gap one.', "fixed at a.py:3: fixed  =  True")])
   assert await conductor.bent(pr) is True
   assert conductor.judged["7 sha8"]["state"] == "cleared"
   assert len(posts) == 1
@@ -3773,13 +3773,47 @@ async def test_a_head_whose_earlier_gap_has_no_fix_that_it_shows_does_not_merge_
   pr = conductor.pr(n=7, sha="sha8", labels=["w:k"], checks=("SUCCESS",))
   conductor.prs[7] = pr
   await conductor.bent(pr)
-  conductor.done[conductor.judged["7 sha8"]["act"]] = ([], [('"no hidden control flow": Gap one.', "fixed at a.py:3")])
+  conductor.done[conductor.judged["7 sha8"]["act"]] = ([], [('"no hidden control flow": Gap one.', "fixed at a.py:3: x = 1")])
   assert await conductor.bent(pr) is True
   assert posts == []
   assert conductor.judged["7 sha8"]["state"] == "gaps"
   assert conductor.judged["7 sha8"]["gaps"] == ['"no hidden control flow": Gap one.']
   assert await conductor.bent(pr) is True
   assert conductor.prompts[-1][1] == "chain-k"
+
+
+async def test_a_fix_whose_line_at_the_head_differs_from_the_text_that_the_judge_copied_does_not_merge(
+  conductor: Round,
+) -> None:
+  judging(conductor)
+  posts: list[str] = []
+
+  async def bash(command: str, stdin: str | None = "", timeout: float = 600, show: object = None, **_: object) -> Exit:
+    if command.startswith("gh pr comment"):
+      posts.append(stdin or "")
+    said = "  other = 2\n" if "git show" in command else "+diff\n"
+    return Exit(0, Text("stdout", said), Text("stderr", ""))
+
+  conductor.ns["bash"] = bash
+  first = regapped(conductor)
+  await conductor.bent(first)
+  conductor.done[conductor.judged["7 sha7"]["act"]] = [("no hidden control flow", "Gap one.")]
+  assert await conductor.bent(first) is True
+  pr = conductor.pr(n=7, sha="sha8", labels=["w:k"], checks=("SUCCESS",))
+  conductor.prs[7] = pr
+  await conductor.bent(pr)
+  account = [('"no hidden control flow": Gap one.', "fixed at a.py:3: fixed = True")]
+  conductor.done[conductor.judged["7 sha8"]["act"]] = ([], account)
+  assert await conductor.bent(pr) is True
+  assert posts == []
+  assert conductor.judged["7 sha8"]["state"] == "gaps"
+
+
+async def test_an_account_that_names_a_line_with_no_text_is_no_account(conductor: Round) -> None:
+  gap = '"q": Gap one.'
+  assert conductor.accounted([(gap, "fixed at a.py:3")], [gap]) is None
+  assert conductor.accounted([(gap, "`fixed at a.py:3`: `x = 1`")], [gap]) == [(gap, "fixed at a.py:3: x = 1")]
+  assert conductor.accounted([(gap, "Open.")], [gap]) == [(gap, "open")]
 
 
 def test_the_audit_leaves_a_pr_with_a_hold_label_out_of_the_idle_check(conductor: Round) -> None:
