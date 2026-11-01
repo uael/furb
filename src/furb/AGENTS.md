@@ -274,6 +274,7 @@ meanings. The entry of such a name here gives only its form in the engine.
   asks a model for, with the message of the prompt each advances, of a word that told nothing, of the prompts and the
   words it refuses, and of the done of an act that one of its rungs made on another chain, or of the pause of the
   chain of such a prompt.
+- A recoverable error is one a model can correct on another turn: a cut turn, context overflow, transient provider failure, or refusal of its word. The provider gives the next turn the cause, and never pauses the chain for these errors. It retries transient failures within its backoff first. A failed setting, missing model, unsupported input or a fault of the host is not recoverable; do not retry it as a model error.
 - A drift is a hard error.
 - A change that makes room under the wall and rewrites the code of a fix names that fix, and shows that the test
   of the fix fails on the old form of its cause, since a test that does not hold the failure lets a later change undo

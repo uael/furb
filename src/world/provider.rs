@@ -186,12 +186,46 @@ fn passing(no: &CompletionError) -> Option<String> {
     "connection lost".to_owned()
   } else if let Some(code) = status {
     format!("server error {code}")
-  } else if matches!(no, CompletionError::HttpError(_)) {
+  } else if has(&[
+    "connection refused",
+    "could not resolve",
+    "dns error",
+    "tls handshake",
+    "network is unreachable",
+  ]) {
     "network error".to_owned()
   } else {
     return None;
   };
   Some(why)
+}
+
+/// Whether a failed call can be corrected by another turn of the model: a transient provider fault, a cut turn, or
+/// a request that does not fit the model's context.
+pub(super) fn recoverable(no: &CompletionError) -> bool {
+  if passing(no).is_some() {
+    return true;
+  }
+  let text = match no {
+    CompletionError::ResponseError(text) | CompletionError::ProviderError(text) => {
+      text.to_lowercase()
+    }
+    CompletionError::HttpError(error) => error.to_string().to_lowercase(),
+    _ => return false,
+  };
+  [
+    "reached the most it writes before its end",
+    "stopped before its end",
+    "context length",
+    "context window",
+    "maximum context",
+    "prompt is too long",
+    "too many tokens",
+    "maximum tokens",
+    "token limit",
+  ]
+  .iter()
+  .any(|phrase| text.contains(phrase))
 }
 
 /// The wait before the claude command line is asked again when its message gives no moment for the end of a limit.
@@ -608,8 +642,8 @@ impl Provider {
   ///
   /// A reply reads the turns of its chain: the system prompt is the engine, a user turn goes as its python and the
   /// images that the prompts it opens name, and an assistant turn as the blocks its provider gave. It is done with
-  /// the turn of the model, or with a refusal, and a second refusal in a row of the same actor on a chain pauses the
-  /// chain first. A turn whose word lost the marks of a fence or of a tool call around it, or the line of three
+  /// the turn of the model, or with a refusal; a recoverable refusal gives the model another turn with its cause, and
+  /// never pauses the chain. A turn whose word lost the marks of a fence or of a tool call around it, or the line of three
   /// backticks at its end, tells its chain so once, before its done. A
   /// done of a reply that the ear did not say ends the call of its model.
   ///
@@ -868,8 +902,11 @@ impl Provider {
                 Fact::says("tell", &reply.chain, [Object::list([Object::string(&note)])]),
               );
             }
+            let recoverable = got.as_ref().is_err_and(recoverable);
             let got = got.map_err(|no| format!("{} answered nothing: {no}", reply.actor));
-            if let (Err(why), true) = (&got, reply.again) {
+            if let (Err(why), true) = (&got, reply.again)
+              && !recoverable
+            {
               let _ = co
                 .call("pause", vec![Object::string(&reply.chain), Object::string(why)], vec![])
                 .await;
@@ -1031,7 +1068,7 @@ impl Provider {
   }
 }
 
-/// A reply the ear took: its chain, its actor, the rung it answers, whether a refusal of it pauses its chain, the
+/// A reply the ear took: its chain, its actor, the rung it answers, whether a prior refusal of it pauses its chain, the
 /// watch over its word while its model writes it, when the model streams its word, and the stop of its work, which
 /// ends the call of its model, and what the host is told of it, when the reply goes.
 struct Reply {
