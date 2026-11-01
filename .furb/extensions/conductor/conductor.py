@@ -1260,7 +1260,11 @@ async def mend(pr: dict, now: float, red: bool) -> str:
     )
   else:
     problem = "conflicts with its base" if state == "conflicting" else "has a failed check"
-    note = await based_now(pr) + (await evidence(pr) if state == "red" else await main_changes(pr))
+    note = (
+      await based_now(pr)
+      + (await evidence(pr) if state == "red" else await main_changes(pr))
+      + await gates_for(pr)
+    )
     order = FIXOWN.replace("{n}", str(n)).replace("{problem}", problem).replace("{sha}", sha) + note
     key = f"fix{n}"
     brief = FIX.replace("{n}", str(n)).replace("{problem}", problem).replace("{sha}", sha).replace("{base}", note)
@@ -1312,6 +1316,48 @@ async def on_main(pr: dict) -> bool | None:
   waits = bool(tip and mine <= {alike(x) for x in redmain[tip]})
   onmain[pr["n"]] = (pr["sha"], tip, waits)
   return waits
+
+
+HOOK_TYPES = {"python": ".py", "pyi": ".pyi", "toml": ".toml", "json": ".json", "rust": ".rs", "yaml": ".yaml .yml", "markdown": ".md", "shell": ".sh"}
+
+
+def hook_gates(files: list[str], config: str) -> list[str]:
+  # Only a hook that runs a command of its own is a gate that a worker can run. A hook of a remote repo, a hook that
+  # runs at each commit and a hook that fails by design are left out.
+  found = []
+  for block in config.split("- id: ")[1:]:
+    seen = {}
+    for key in ("name", "entry", "language", "types_or", "files", "exclude"):
+      hit = re.search(rf"(?m)^\s+{key}: (.+)$", block)
+      if hit:
+        seen[key] = hit[1].strip().strip("'\"")
+    if "entry" not in seen or seen.get("language") == "fail" or "always_run: true" in block:
+      continue
+    kinds = re.findall(r"[\w-]+", seen.get("types_or", ""))
+    ends = tuple(e for k in kinds for e in HOOK_TYPES.get(k, "").split())
+    mine = [
+      p
+      for p in files
+      if (not kinds or any(k not in HOOK_TYPES for k in kinds) or p.endswith(ends))
+      and re.search(seen.get("files", ""), p)
+      and not (seen.get("exclude") and re.search(seen["exclude"], p))
+    ]
+    if mine:
+      found.append(f"{seen.get('name') or block.split(chr(10), 1)[0].strip()} ({seen['entry']})")
+  return found
+
+
+async def gates_for(pr: dict) -> str:
+  got = await bash(
+    f"gh pr view {pr['n']} --json files --jq '.files[].path'; echo ---; "
+    "gh api 'repos/{owner}/{repo}/contents/.pre-commit-config.yaml?ref=main' -H 'Accept: application/vnd.github.raw'",
+    show=HIDDEN,
+    timeout=120,
+    ok=True,
+  )
+  files, _, config = got.stdout.content.partition("---\n")
+  names = hook_gates([x for x in files.splitlines() if x.strip()], config)
+  return " The gates that your files touch: " + "; ".join(names) + "." if names else ""
 
 
 async def evidence(pr: dict) -> str:
