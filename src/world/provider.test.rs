@@ -30,7 +30,8 @@ use jiff::{Zoned, civil};
 
 use super::{
   Backoff, Hosted, Model, Provider, Retries, Retry, Thinking, Writes, budgeted, catalog::Catalog,
-  images, limit, local::Server, messages, passing, resets, tail, thinking, unclosed, unfenced,
+  images, limit, local::Server, messages, passing, recoverable, resets, tail, thinking, unclosed,
+  unfenced,
 };
 use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, verbs, world};
 
@@ -907,6 +908,52 @@ fn a_call_whose_attempts_are_spent_is_refused_with_its_last_failure() {
 }
 
 #[test]
+fn cut_turns_context_overflow_and_transient_provider_errors_are_recoverable() {
+  let cases = [
+    CompletionError::ResponseError("the turn reached the most it writes before its end".into()),
+    CompletionError::ResponseError("prompt exceeds the model context window".into()),
+    CompletionError::ProviderError("400 prompt is too long".into()),
+    CompletionError::ProviderError("connection reset by peer".into()),
+    CompletionError::ProviderError("503 Service Unavailable".into()),
+  ];
+  for no in cases {
+    assert!(recoverable(&no), "{no}");
+  }
+  for no in [
+    CompletionError::ProviderError("the model does not accept images".into()),
+    CompletionError::ResponseError("invalid response format".into()),
+  ] {
+    assert!(!recoverable(&no), "{no}");
+  }
+}
+
+#[test]
+fn an_exhausted_recoverable_provider_error_gives_the_model_another_turn_without_pausing() {
+  for (label, why) in [
+    ("transient", "connection reset"),
+    ("cut", "the turn reached the most it writes before its end"),
+    ("context", "400 prompt exceeds the model context window"),
+  ] {
+    let reasons = [why, why];
+    let (host, calls) = failing(&reasons);
+    let model = scripted(&MockCompletionModel::default()).hosted(host);
+    let backoff = Backoff { most: 1, first: Duration::from_millis(1) };
+    let provider = Provider::new(yard(label).display().to_string(), vec![model]).backoff(backoff);
+    let mut engine = lived(provider);
+    asked(&mut engine);
+    assert!(
+      until(&mut engine, |engine| calls.load(Ordering::SeqCst) >= 3
+        && said(engine).iter().any(|(kind, about, _)| kind == "started" && about == "reply3")),
+      "{label}: {:?}",
+      said(&mut engine)
+    );
+    let facts = said(&mut engine);
+    assert!(!facts.iter().any(|(kind, _, _)| kind == "pause"), "{label}: {facts:?}");
+    assert!(calls.load(Ordering::SeqCst) >= 3, "{label}: {:?}", calls.load(Ordering::SeqCst));
+  }
+}
+
+#[test]
 fn only_a_failure_of_the_network_or_of_the_side_of_the_provider_passes() {
   let provider = |why: &str| passing(&CompletionError::ProviderError(why.to_owned()));
   assert_eq!(
@@ -918,6 +965,8 @@ fn only_a_failure_of_the_network_or_of_the_side_of_the_provider_passes() {
   assert_eq!(provider("Invalid status code 502 Bad Gateway").as_deref(), Some("server error 502"));
   assert_eq!(provider("unavailable"), None);
   assert_eq!(provider("boom"), None);
+  assert_eq!(provider("400 Bad Request: unsupported parameter"), None);
+  assert_eq!(provider("could not resolve host"), Some("network error".to_owned()));
   assert_eq!(provider("No model is m/x."), None);
   assert_eq!(
     provider("No program to run: claude did not start: No such file or directory (os error 2)")
