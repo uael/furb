@@ -284,7 +284,10 @@ fix what your change broke, and report what was broken before.
   `src/engine.rs`, and those of the engine drive the real engine on ears in rust. `cli/tests/furb.rs` runs `furb` as
   a process, on a claude command line that answers from a script.
 - `cargo run -p furb-cli -- <words>`, or `uv run furb <words>`: the command line, as `furb --help` says.
-- `uv run pre-commit run --all-files`: every gate the commit hook runs. A `git commit` runs the hooks, `cargo test`
+- `sh script/hooks/pre-commit run --all-files`: every gate the commit hook runs, with the same pre-commit as the commit
+  hook: the `.venv` of the checkout, else the `.venv` of the main checkout, else the `pre-commit` of PATH. Name
+  `--files <files>` to run some files. In a new worktree, `uv run --no-sync pre-commit` makes an empty `.venv` and runs
+  the old `pre-commit` of the system, which cannot read the config, so do not use it there. A `git commit` runs the hooks, `cargo test`
   among them, and takes minutes: give it a timeout in `bash` of twice the time that it took last. The hook
   `script/hooks/pre-commit`, which `git config core.hooksPath script/hooks` turns on, prints only what fails. A merge commit, which `git merge` makes or `git commit` ends after a conflict, runs the hooks on
   each file that it changes against its first parent, as a commit does. Run the

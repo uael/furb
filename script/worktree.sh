@@ -94,6 +94,7 @@ python_note() {
   echo "uv run --no-sync before it falls back to the system python, which lacks the packages. Run: (cd $path && uv sync)"
   if [ -x "$main/.venv/bin/python" ]; then
     echo "Until then, run a probe with $main/.venv/bin/python."
+    echo "Run the hooks by hand with: sh script/hooks/pre-commit run --files <files>. uv run --no-sync pre-commit does not serve."
   fi
 }
 

@@ -6,17 +6,18 @@ from pathlib import Path
 HOOK = Path(__file__).resolve().parents[2] / "script" / "hooks" / "pre-commit"
 # A commit hook runs this suite with GIT_INDEX_FILE and more set, so a git command that inherits them acts on the repo
 # that is committing and not on the repo of the test.
-CLEAN = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+# The same hook sets PRE_COMMIT=1, which the script reads as the command that runs the hooks.
+CLEAN = {key: value for key, value in os.environ.items() if not key.startswith("GIT_") and key != "PRE_COMMIT"}
 
 
-def run(tmp_path: Path, body: str) -> subprocess.CompletedProcess[str]:
+def run(tmp_path: Path, body: str, *args: str) -> subprocess.CompletedProcess[str]:
   stub = tmp_path / "stub.sh"
   stub.write_text("#!/bin/sh\n" + body)
   stub.chmod(0o755)
   subprocess.run(["git", "init", "-q", str(tmp_path / "repo")], check=True, env=CLEAN)
   env = {**CLEAN, "PRE_COMMIT": stub.as_posix(), "TMPDIR": tmp_path.as_posix()}
   return subprocess.run(
-    ["sh", HOOK.as_posix()], cwd=tmp_path / "repo", env=env, capture_output=True, text=True, check=False
+    ["sh", HOOK.as_posix(), *args], cwd=tmp_path / "repo", env=env, capture_output=True, text=True, check=False
   )
 
 
@@ -93,3 +94,25 @@ def test_hook_gates_the_commit_of_a_merge_with_a_conflict_on_each_file_that_it_c
   assert merged.returncode != 0
   assert sorted(seen.read_text().splitlines()) == ["a.txt", "bad.txt"]
   assert parents(repo) == 1
+
+
+def test_hook_runs_pre_commit_by_hand_with_the_arguments_that_it_is_given(tmp_path: Path):
+  got = run(tmp_path, 'echo "$@"\n', "run", "--files", "a.py")
+  assert (got.returncode, got.stdout) == (0, "run --files a.py\n")
+
+
+def test_hook_takes_the_venv_of_the_main_checkout_in_a_worktree_that_has_none(tmp_path: Path):
+  main = tmp_path / "main"
+  subprocess.run(["git", "init", "-q", "-b", "main", str(main)], check=True, env=CLEAN)
+  python = main / ".venv" / "bin" / "python"
+  python.parent.mkdir(parents=True)
+  python.write_text('#!/bin/sh\n[ "$1" = -c ] && exit 0\necho "main venv $*"\nexit 1\n')
+  python.chmod(0o755)
+  config = ["-c", "user.name=t", "-c", "user.email=t@t"]
+  subprocess.run(["git", *config, "commit", "-q", "--allow-empty", "-m", "x"], cwd=main, check=True, env=CLEAN)
+  tree = tmp_path / "tree"
+  subprocess.run(["git", "worktree", "add", "-q", "-b", "side", str(tree)], cwd=main, check=True, env=CLEAN)
+  env = {**CLEAN, "TMPDIR": tmp_path.as_posix()}
+  got = subprocess.run(["sh", HOOK.as_posix()], cwd=tree, env=env, capture_output=True, text=True, check=False)
+  assert got.returncode == 1, got.stderr
+  assert got.stdout.startswith("main venv -mpre_commit hook-impl")

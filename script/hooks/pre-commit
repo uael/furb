@@ -3,11 +3,21 @@
 # commits and pushes shows the push. PRE_COMMIT names the command that runs them, which a test replaces.
 top=$(git rev-parse --show-toplevel) || exit 1
 if [ -z "$PRE_COMMIT" ]; then
-  if [ -x "$top/.venv/bin/python" ]; then
-    PRE_COMMIT="$top/.venv/bin/python -mpre_commit"
-  else
-    PRE_COMMIT=pre-commit
-  fi
+  # A worktree has no .venv until uv sync makes it, and uv run makes one with no pre-commit in it. The pre-commit on
+  # PATH can be too old to read the config, so the first .venv that holds pre-commit serves.
+  main=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")
+  PRE_COMMIT=pre-commit
+  for dir in "$top" "$main"; do
+    if [ -x "$dir/.venv/bin/python" ] && "$dir/.venv/bin/python" -c "import pre_commit" 2>/dev/null; then
+      PRE_COMMIT="$dir/.venv/bin/python -mpre_commit"
+      break
+    fi
+  done
+fi
+# A hand run takes the same pre-commit as a commit: sh script/hooks/pre-commit run --files <files>
+if [ "${1:-}" = run ]; then
+  # shellcheck disable=SC2086
+  exec $PRE_COMMIT "$@"
 fi
 out=$(mktemp "${TMPDIR:-/tmp}/furb-hook.XXXXXX") || exit 1
 trap 'rm -f "$out"' EXIT
