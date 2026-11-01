@@ -4018,3 +4018,48 @@ async def test_a_pr_whose_failed_lines_stay_unread_gets_its_fixer_after_the_unre
   assert conductor.hired == []
   await conductor.mend(pr, conductor.UNREAD, True)
   assert [key for key, _ in conductor.hired] == ["fix4"] and conductor.onmain == {4: ("sha4", "m1", False)}
+
+
+CRATE_GATES = "fmt (cargo fmt --all --check); clippy (cargo clippy --workspace --all-targets -- -D warnings); cargo test (cargo test --workspace)"
+
+
+def gated(conductor: Round, files: list[str]) -> None:
+  config = (HERE.parents[2] / ".pre-commit-config.yaml").read_text(encoding="utf-8")
+  conductor.say(r"pr view 5 --json files", json.dumps({"files": [{"path": x} for x in files]}))
+  conductor.say(r"contents/\.pre-commit-config\.yaml\?ref=main", config)
+
+
+@POSIX
+@JQ
+async def test_the_gates_that_the_files_of_a_pr_touch_come_from_the_hooks_of_the_repository(conductor: Round) -> None:
+  gated(conductor, ["src/lib.rs", "tui/src/app.ts"])
+  assert await conductor.gates_for(conductor.pr()) == f" The gates that your files touch: {CRATE_GATES}."
+  conductor.says.clear()
+  gated(conductor, ["tui/src/app.ts", "docs/furb.gif"])
+  assert await conductor.gates_for(conductor.pr()) == ""
+  conductor.says.clear()
+  gated(conductor, [".furb/extensions/conductor/conductor.py"])
+  ty = "ty (uv run ty check --error-on-warning); pytest (uv run pytest -q)"
+  assert await conductor.gates_for(conductor.pr()) == f" The gates that your files touch: {ty}."
+  conductor.says.clear()
+  gated(conductor, ["src/furb/engine.py"])
+  assert await conductor.gates_for(conductor.pr()) == f" The gates that your files touch: {ty}; cargo test (cargo test --workspace)."
+
+
+@POSIX
+@JQ
+async def test_a_fixer_brief_and_the_order_to_a_maker_name_the_gates_that_the_files_touch(
+  conductor: Round, tmp_path: Path
+) -> None:
+  sha = evidence_repo(conductor, tmp_path)
+  conductor.say(r"limit 30 --json databaseId,conclusion", json.dumps([{"databaseId": 9, "conclusion": "failure"}]))
+  failed_run(conductor, 9, {"gates": "FAILED test/test_hygiene.py::test_wall\n"})
+  gated(conductor, ["src/lib.rs", "tui/src/app.ts"])
+  line = f"The gates that your files touch: {CRATE_GATES}."
+  await conductor.mend(conductor.pr(checks=("FAILURE",), sha=sha), 0.0, False)
+  assert [key for key, _ in conductor.hired] == ["fix5"] and line in conductor.hired[0][1]
+  conductor.assigned.clear()
+  conductor.hired.clear()
+  conductor.busy("p1", "k5", SONNET)
+  await conductor.mend(conductor.pr(checks=("FAILURE",), sha=sha, labels=["w:k5"]), 0.0, False)
+  assert line in conductor.prompts[-1][0] and conductor.hired == []
