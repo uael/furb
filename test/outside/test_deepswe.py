@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from types import ModuleType
 
@@ -109,3 +110,19 @@ def test_the_dev_and_test_requirements_of_a_python_checkout_are_installed(
   monkeypatch.setattr(deepswe, "ran", ran)
   deepswe.required(tmp_path, {}, deepswe.SAID)
   assert [call[2].split("-q -r ")[1] for call in calls] == ["requirements-dev.txt", "requirements_test.txt"]
+
+
+def test_default_work_and_collection_roots_are_outside_the_temporary_directory(
+  tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+  """The default work and collection roots do not use the temporary directory."""
+  monkeypatch.delenv("DEEPSWE_DIR", raising=False)
+  monkeypatch.delenv("DEEPSWE_WORK", raising=False)
+  scratch = tmp_path
+  monkeypatch.setenv("TMPDIR", str(scratch))
+  monkeypatch.setattr(tempfile, "tempdir", str(scratch))
+  deepswe = importlib.reload(rig(monkeypatch))
+  assert Path.home() / ".cache/furb/deep-swe" == deepswe.CACHE
+  assert Path.home() / ".cache/furb/deepswe-work" == deepswe.WORK
+  assert scratch not in deepswe.CACHE.parents
+  assert scratch not in deepswe.WORK.parents
