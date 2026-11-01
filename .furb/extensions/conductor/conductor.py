@@ -76,7 +76,7 @@ The round holds at most cap() chains that hold an open prompt with a shape, and 
 The owner rules, on 10-29: "we should use more gh stacks in conductor, because they can be merged at once (all PRs of stack as once)". So a PR on main at the bottom of a stack whose layers are all green, free of hold, paused and owner-merge, and passed by the vetoes, merges with its whole stack at once through gh stack merge, and while a layer above it still runs its checks, the bottom waits rather than merge alone; a stack with a red layer merges its green layers below it at once; a stack that gh stack does not hold lands one layer at a time, and the round tells it once. Each sweep links each chain of stacked PRs on GitHub with gh stack link, once for each chain, so that it shows as one stack. GitHub gives no priority to a queued run, so each sweep cancels each queued run of the gates that can serve no merge: a run of a closed PR, of an old head or of a conflicting PR, and a run whose gates withheld(pr) holds back, which is a run of a draft, of a held or a paused PR, or of a layer above a layer that is not green. It defers each run that it cancels under a hold or under a layer below, and runs it again once withheld(pr) at the same head is empty and fewer than THROTTLE runs wait, once for each cancel, and it notes rerun <sha> then, so that heal does not run that head again; a draft runs its gates again when it is made ready. It never touches a run of main or of a PR that can merge.
 reload(path, on) loads the definitions of the file of an extension into the module of a chain: it runs, in the order of the file, each top-level definition whose binding in the module now is not its text in the file, and ends the load with seal(path). Before it starts the load, it gates the load word, and it raises Refused with one line when a name that the file imports from furb.engine does not fit the engine that the life runs, as a call with a parameter that the bash of the life lacks: the file needs the engine of a newer build, and a restart of the life on that build loads it. Monty gives a function no source, so seal keeps in bindings the object that each name of the load bound and its text, and a binding has that text only while the module holds that same object: a later word that binds the name again, an older word or another extension, makes the next reload run it again, and a load that was cancelled or failed before its end loads again. Then seal raises Refused with each name of the file that the module binds with another text, so a load that leaves the round on old code fails and says which names. reload gives (rung, names): the rung that runs the load, which quietly starts so that no end of the caller cancels it, and the names. The load is done only when that rung is over and peek(rung) is no exception: await it. Use it after a PR that changed the conductor merged.
 The owner rules, on 10-31, after #816 and #859 merged green and wrong, since no gate compared a PR with his words: an item may hold his exact words in rulings[key], a list of str, each quoted as he wrote it. hire puts them at the top of the brief, under RULED, before any line of yours. Before its merge, each green PR whose item, by its label w:key or by owns, holds rulings passes the veto bent: a blind judge on a chain of its own, RULER (opus/medium) under a grant of RULER_USD dollars, reads his words and the diff alone, and closes with each way that the diff fails or bends them, each with his exact words. A head with a gap does not merge, and its worker gets the gaps, or a worker on its chain when it ended, and a comment on the PR names them; a head that the judge cleared merges, and each new head is judged again, with the gaps of the earlier heads and the commits that answered them, so that the judge names only a gap that the newest head made or left open; the round never holds a PR for the owner by itself, by his ruling on 10-31: "it's not supposed to be on me to remove the flag. And it should be fixed until judged ok, automatically", so each new head is judged until the judge finds no gap, and only a label hold of the owner stops the loop. Each order to fix holds the gaps of every head that a judge held, the oldest first and each once, so that the worker fixes each once and trades no gap for another, and after JUDGE_ROUNDS (3) heads with gaps each fix goes to STRONGER (opus/high), so the loop converges. A hold that an earlier word put after JUDGE_ROUNDS heads comes off at the next sweep, and its PR is judged again. A judge that fails twice, with no answer or with a quote that is not his, tells you and holds the PR: judge it yourself, then set judged["n sha"]["state"] to "cleared", or give the gaps to its worker. judged keeps the state of each head.
-The owner rules again, on 10-31, after #905 merged two minutes after a judge cleared its head, with no word on the 4 gaps that a judge found at its earlier head: "WTF is wrong with you ?????????????? Please stop doing shit now and think of the proper action frist time", and of #912: "and same for 912 ! if it get merged, then follow ups are needed." So the judge of a head after heads with gaps closes with an account of each earlier gap, ACCOUNT: fixed at a file and a line of the head, or open. accounted() reads it: an account that leaves out an earlier gap fails the judge as a clear would, and an open gap holds the head as a new gap does. Before such a head merges, posted() reads the line of the head that the account names for each fix: a gap whose line is not there, or whose text differs from the text that the judge copied, sends the head back to its worker with that gap, and the head merges only once each gap shows fixed and the comment of the account stands on the PR. When a PR whose heads had gaps merges, by the round or by any hand, followed() takes the gaps from the judged entries of the PR, reads each fix of the account in main at the merge commit, and queues at once one follow-up item gapN-i for each gap that main does not show fixed, with the gap, the PR and the words of the owner in its brief, on the model of the worker of that PR.
+The owner rules again, on 10-31, after #905 merged two minutes after a judge cleared its head, with no word on the 4 gaps that a judge found at its earlier head: "WTF is wrong with you ?????????????? Please stop doing shit now and think of the proper action frist time", and of #912: "and same for 912 ! if it get merged, then follow ups are needed." So the judge of a head after heads with gaps closes with an account of each earlier gap, ACCOUNT: fixed at a file and a line of the head, or open. accounted() reads it: an account that leaves out an earlier gap fails the judge as a clear would, and an open gap holds the head as a new gap does. Before such a head merges, posted() reads the line of the head that the account names for each fix: a gap whose line is not there, or whose text differs from the text that the judge copied, sends the head back to its worker with that gap, and seconded() then gives each gap, the line that the account names and the diff to a second blind judge, SECOND, in one prompt for each head: a gap that it does not see fixed sends the head back to its worker with that gap, a judge that fails twice holds the head and tells the coordinator, and the head merges only once each gap shows fixed, the second judge saw each fix, and the comment of the account stands on the PR. When a PR whose heads had gaps merges, by the round or by any hand, followed() takes the gaps from the judged entries of the PR, reads each fix of the account in main at the merge commit, and queues at once one follow-up item gapN-i for each gap that main does not show fixed, with the gap, the PR and the words of the owner in its brief, on the model of the worker of that PR.
 A statement of yours to the owner states only what a command of the same word proved, and names each other part as a hypothesis.
 A review blocks only on a defect that a command reproduces, or on a false sentence of a contract."""
 
@@ -1462,6 +1462,17 @@ HISTORY = """
 Earlier judges of this PR held earlier heads of it, and its worker answered them with new pushes. Name only a gap that the newest head made or left open: a gap that a later push closed is closed, and a part that no push changed stays as the earlier judges left it. Their gaps, and the commits that the worker pushed after each:
 {rounds}"""
 
+SECOND = """A judge found the gaps below at earlier heads of a pull request, and a later judge says that the newest head fixes each of them at the line that it names. You check that account, and nothing else: read each gap, the line that the account names and the diff below, and the code of the repository around it when the diff alone does not show what it does. A gap is fixed only when the diff shows that the code no longer does what the gap says; a line that exists, or that names the same thing, is no fix.
+Close with a list of (gap, verdict) pairs of str, one for each gap below, in their order, each once: gap holds the gap copied exactly, and verdict is "fixed", or "open: " and in one sentence what the diff still does.
+
+The gaps and the account:
+
+{gaps}
+
+The diff of #{n} at {sha}:
+
+{diff}"""
+
 CLOSING = """Close with a list of (quote, gap) pairs of str, one for each way the diff fails or bends his words: quote holds the words of the owner that it fails, copied exactly, and gap says in one or two sentences what the diff does instead, with its file. Close with an empty list when the diff serves each of his words."""
 
 ACCOUNT = """Close with a tuple of two lists. The first is a list of (quote, gap) pairs of str, one for each way the newest head fails or bends his words: quote holds the words of the owner that it fails, copied exactly, and gap says in one or two sentences what the diff does instead, with its file. It is empty when the head serves each of his words. The second is the account of the earlier gaps above: one (gap, answer) pair of str for each of them, in their order, each once. gap holds the earlier gap copied exactly, with its quote, and answer is "fixed at <file>:<line>: <text>", with the file and the number of the line of the newest head that shows its fix, and the text of that line copied exactly, or "open". The round reads that line in the head and holds the head when its text differs. The owner reads this account on the PR before the merge. An account that leaves out an earlier gap fails the judge, and an open gap holds the head as a new gap does."""
@@ -1647,6 +1658,68 @@ async def bent(pr: dict) -> bool:
   return True
 
 
+def checked_fixes(got: object, earlier: list[str]) -> dict[str, str] | None:
+  """The verdict of the second judge on each earlier gap, fixed or open with why: an answer that leaves out a gap, or answers it in another way, is no answer."""
+  if not isinstance(got, (list, tuple)):
+    return None
+  told: dict[str, str] = {}
+  for x in got:
+    if not (isinstance(x, (tuple, list)) and len(x) == 2 and all(isinstance(y, str) for y in x)):
+      return None
+    said = " ".join(str(x[1]).split()).strip("`")
+    if said.strip("\"'. ").lower() == "fixed":
+      said = "fixed"
+    elif not said.lower().startswith("open"):
+      return None
+    told[" ".join(str(x[0]).split()).removeprefix("- ")] = said
+  found = {gap: told.get(" ".join(gap.split()), "") for gap in earlier}
+  return None if any(not v for v in found.values()) else found
+
+
+async def seconded(pr: dict, held: dict, claims: dict[str, str]) -> bool:
+  """Before the round posts the account of a head and merges it, a second blind judge reads each earlier gap, the line that the first judge names as its fix and the diff, by the ruling of the coordinator on 10-31 after the judge of #936 found that a wrong account lets a head merge over a gap: one prompt for each head holds all its gaps, and a gap that the second judge does not see fixed sends the head back to its worker."""
+  n, sha = pr["n"], pr["sha"]
+  if held.get("seconded"):
+    return True
+  if held.get("second"):
+    if not over(held["second"]):
+      return False
+    got = peek(held["second"])
+    held["second"] = ""
+    found = checked_fixes(got, list(claims))
+    if found is None:
+      held["second_fails"] = held.get("second_fails", 0) + 1
+      if held["second_fails"] >= 2:
+        held["state"] = "stuck"
+        notice(
+          f"second {n} {sha}",
+          f"The second judge of the account of #{n} at {sha[:7]} failed twice, so the PR does not merge. Its last"
+          f" answer: {got!r:.300}. Read each fix of judged[{f'{n} {sha}'!r}]['account'] in the diff yourself, then set"
+          " its 'seconded' to True, or give the open gaps to its worker.",
+        )
+      return False
+    still = [gap for gap, said in found.items() if said != "fixed"]
+    if still:
+      held.update(state="gaps", gaps=still, told=False)
+      heard.append(f"#{n} at {sha[:7]} does not merge: the second judge sees {len(still)} earlier gaps not fixed.")
+      return False
+    held["seconded"] = True
+    return True
+  got = await bash(f"git fetch -q origin main refs/pull/{n}/head && git diff origin/main...{sha}", show=HIDDEN, timeout=180, ok=True)
+  diff = got.stdout.content
+  if got.code != 0 or not diff.strip():
+    return False
+  if len(diff) > RULER_DIFF:
+    diff = diff[:RULER_DIFF] + f"\n(The diff is cut here: read the rest with gh pr diff {n}.)"
+  listed = "\n".join(f"- {gap}\n  The first judge says it is fixed at {line}" for gap, line in claims.items())
+  where = str(quietly(chain, f"judge/second/{n}"))
+  quietly(rung, f"actor = {RULER!r}", on=where)
+  quietly(grant, RULER_USD, on=where)
+  text = SECOND.replace("{gaps}", listed).replace("{n}", str(n)).replace("{sha}", sha).replace("{diff}", diff)
+  held["second"] = str(quietly(prompt, list[tuple[str, str]], text, to=RULER, on=where))
+  return False
+
+
 async def posted(pr: dict, held: dict) -> bool:
   """Before the merge of a head after heads with gaps, the round posts on the PR the account of each earlier gap, by the ruling of the owner on 10-31 after #905 merged with no word on the gaps of its earlier head, and the head merges only once that comment stands."""
   n, sha = pr["n"], pr["sha"]
@@ -1673,13 +1746,18 @@ async def posted(pr: dict, held: dict) -> bool:
     held.update(state="gaps", gaps=missing, told=False)
     heard.append(f"#{n} at {sha[:7]} does not merge: {len(missing)} earlier gaps have no fix that the head shows.")
     return False
+  if not await seconded(pr, held, {gap: f"{fixed[gap][1]}:{fixed[gap][2]}: {lines[gap]}" for gap in earlier}):
+    return False
   shown: dict[str, list[str]] = {}
   rows = []
   for gap in earlier:
     hit = fixed[gap]
     shown[gap] = [hit[1], lines[gap]]
     rows.append(f"- {gap}\n  Fixed at {hit[1]}:{hit[2]}: `{lines[gap]}`")
-  body = f"🤖 The judge cleared {sha[:7]}. The account of each gap that a judge found at an earlier head of #{n}:\n\n" + "\n".join(rows)
+  body = (
+    f"🤖 The judge cleared {sha[:7]}, and a second blind judge saw each fix below in the diff. The account of each gap"
+    f" that a judge found at an earlier head of #{n}:\n\n" + "\n".join(rows)
+  )
   got = await bash(f"gh pr comment {n} --body-file -", stdin=marked(body) + "\n", show=HIDDEN, timeout=120)
   if got.code != 0:
     return False
