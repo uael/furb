@@ -784,6 +784,11 @@ def watched(record: Path, root: str, began: float, mark: dict[str, float]) -> st
   over the moment the pause stands. A life that buys answers and does nothing with them is wedged, which the mark of
   the last thing it did says.
   """
+  app = record.parent.parent / "app"
+  if not app.is_dir():
+    return f"the app checkout vanished: {app}"
+  if not record.is_file():
+    return f"the life record vanished: {record}"
   numbers = numbered(record, began)
   say(
     f"[deepswe] {numbers['wall_seconds']}s: answers={numbers['answers']} commands={numbers['commands']} "
@@ -791,12 +796,18 @@ def watched(record: Path, root: str, began: float, mark: dict[str, float]) -> st
   )
   if engine.paused(root):
     return "a pause stands over the chain, which buys nothing more"
+  watched = ("answers", "commands", "reads", "writes")
+  fell = [name for name in watched if numbers[name] < mark.get(f"seen_{name}", mark.get(name, numbers[name]))]
+  if fell:
+    return f"the life record went backwards: {', '.join(fell)} fell below an earlier mark"
+  mark.update({f"seen_{name}": numbers[name] for name in watched})
   did = sum(numbers[name] for name in ("commands", "reads", "writes"))
   answers = numbers["answers"]
   if did > mark["did"]:
     mark.update(did=did, answers=answers)
   elif answers - mark["answers"] >= STUCK:
     return f"{answers - mark['answers']} answers bought and nothing done with them: the life is wedged"
+  mark.update({name: numbers[name] for name in ("commands", "reads", "writes")})
   return ""
 
 
