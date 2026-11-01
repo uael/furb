@@ -116,3 +116,38 @@ def test_hook_takes_the_venv_of_the_main_checkout_in_a_worktree_that_has_none(tm
   got = subprocess.run(["sh", HOOK.as_posix()], cwd=tree, env=env, capture_output=True, text=True, check=False)
   assert got.returncode == 1, got.stderr
   assert got.stdout.startswith("main venv -mpre_commit hook-impl")
+
+
+PUSH = HOOK.parent / "pre-push"
+
+
+def pushing(tmp_path: Path, *refs: str) -> tuple[subprocess.CompletedProcess[str], str]:
+  """Pushes of a clone with the hooks of the repository, to each ref named, and the branches of origin after them."""
+  origin, repo = tmp_path / "origin.git", tmp_path / "repo"
+  subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(origin)], check=True, env=CLEAN)
+  subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True, env=CLEAN)
+  config = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", f"core.hooksPath={PUSH.parent.as_posix()}"]
+
+  def git(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["git", *config, *args], cwd=repo, env=CLEAN, capture_output=True, text=True, check=False)
+
+  (repo / "a.txt").write_text("a\n")
+  git("add", ".")
+  git("commit", "-q", "--no-verify", "-m", "base")
+  git("remote", "add", "origin", origin.as_posix())
+  got = git("push", "origin", *[f"HEAD:{one}" for one in refs])
+  heads = subprocess.run(
+    ["git", "for-each-ref", "--format=%(refname)"], cwd=origin, env=CLEAN, capture_output=True, text=True, check=True
+  )
+  return got, heads.stdout
+
+
+def test_a_push_to_main_is_refused_and_moves_nothing(tmp_path: Path):
+  got, heads = pushing(tmp_path, "refs/heads/w/mine", "refs/heads/main")
+  assert got.returncode != 0 and heads == ""
+  assert "The push to main of origin is refused: main changes only through a pull request." in got.stderr
+
+
+def test_a_push_of_a_branch_of_its_own_goes_through(tmp_path: Path):
+  got, heads = pushing(tmp_path, "refs/heads/w/mine")
+  assert got.returncode == 0 and heads == "refs/heads/w/mine\n"

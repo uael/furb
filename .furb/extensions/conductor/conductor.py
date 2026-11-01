@@ -71,6 +71,7 @@ At each round a watchdog reads each open command of each worker, with no model: 
 DEBRIEFS is on by default and lives in the state of the round: DEBRIEFS = False in a word turns off the debrief of each worker that ends, which saves tokens.
 An item waits for others with after[key] = [keys], set before you queue it: staff() hires it only once each PR that those keys ended with merged, an item of backlog whose keys merged goes to queue, and the round lists in a notice each key that no item holds. The entries of held_items in the module of the root move into backlog at each round, so a dict of your own chain is not needed.
 An item that names a file which an open PR of the round changes waits for that PR, as an after on it, by the defect e372: each sweep reads the files that each open PR changes, in touched[n], and staff() holds an item whose brief or areas[key] names a path with a folder that one changes, in serial[key], until that PR is no longer open, so two designs of one file never race. A PR that the item names as #N, labels w:key, or owns, holds nothing.
+main changes only through the merge of a PR, by the incident of 11-01, when a worker pushed the commits of its tests straight to main: each sweep reads the activity of main on GitHub and tells you at once, in one notice, each change of main that is not a pr_merge, with its kind, its actor, its time, and its before and after.
 Method, at each notice: read the whole state, fix every thing that is off in one go, read the state again to verify, and go on until nothing is off. Only then report. Each round also checks the state in invariants(): it gives each open PR that the round tends a home, from the chain that pushed its head, wakes no chain, and lists in the next notice what code cannot fix.
 A PR waits on a decision of the owner while awaited[decision] names one of its labels, or its number as #N, and the decision is an act that is not over, as the prompt that asked him: a failed check of that PR gets no order, no handover and no fixer, a conflict of it still does, and the round names the decision once. When the act ends, the round drops it and tends the PR again.
 The round holds at most cap() chains that hold an open prompt with a shape, and counts the chains of workers, of sub-chains and of judges alike: room() counts them, and a resume of a worker waits for a slot. A sub-chain that a chain of a live worker made, at any depth, counts within the slot of that worker, since the worker waits on it: the round never parks it. A parked chain takes the next free slot before any new chain, since tend and sweep hire before staff wakes. When more chains stand, the round pauses the newest overflow with a note and wakes it in order when a slot frees, and it never ends its task.
@@ -3105,6 +3106,30 @@ async def throttle() -> None:
       await bash(f"gh run rerun {one}", show=HIDDEN, timeout=120)
 
 
+MAIN_ACTIVITY = """gh api 'repos/{owner}/{repo}/activity?ref=refs/heads/main&per_page=30' --jq '[.[] | {id, kind: .activity_type, before, after, at: .timestamp, by: .actor.login}]'"""
+
+
+async def main_pushes() -> None:
+  got = await bash(MAIN_ACTIVITY, show=HIDDEN, timeout=120)
+  try:
+    events = json.loads(got.stdout.content) if got.code == 0 else []
+  except ValueError:
+    events = []
+  odd = [e for e in events if isinstance(e, dict) and e.get("kind") != "pr_merge" and f"main {e.get('id')}" not in noticed]
+  if not odd:
+    return
+  noticed.update(f"main {e.get('id')}" for e in odd)
+  lines = [
+    f"- {e.get('kind')} by {e.get('by')} at {e.get('at')}: {str(e.get('before'))[:8]}..{str(e.get('after'))[:8]}"
+    for e in odd
+  ]
+  notice(
+    "main " + " ".join(str(e.get("id")) for e in odd),
+    "main changed with no merge of a PR, which only the merge of a PR may do:\n" + "\n".join(lines)
+    + "\nRead git log before..after of each, and restore main when it lost work.",
+  )
+
+
 async def sweep(every: float) -> None:
   got = await bash(PRS, show=HIDDEN, timeout=300)
   bits = re.split(r"\n--- (\d+)\n", got.stdout.content)
@@ -3128,6 +3153,7 @@ async def sweep(every: float) -> None:
     prs[pr["n"]] = pr
   merged.update(json.loads(parts[1]))
   await unheld()
+  await main_pushes()
   for one in [x for x in pool.values() if x["pr"] and x["folders"] is None]:
     files = await bash(f"gh pr view {one['pr']} --json files --jq '.files[].path'", show=HIDDEN, timeout=120, ok=True)
     if files.code == 0:

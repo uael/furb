@@ -2170,6 +2170,34 @@ def test_an_item_with_an_unmerged_after_stays_in_the_backlog_and_starts_once_it_
   assert [key for key, _ in conductor.hired] == ["k2"] and conductor.backlog == []
 
 
+@JQ
+def test_a_change_of_main_that_is_no_merge_of_a_pr_is_told_once_with_its_before_and_after(conductor: Round) -> None:
+  events = [
+    {"id": 3, "activity_type": "force_push", "before": "a" * 40, "after": "b" * 40, "timestamp": "T3", "actor": {"login": "u"}},
+    {"id": 2, "activity_type": "pr_merge", "before": "c" * 40, "after": "a" * 40, "timestamp": "T2", "actor": {"login": "u"}},
+    {"id": 1, "activity_type": "push", "before": "d" * 40, "after": "c" * 40, "timestamp": "T1", "actor": {"login": "w"}},
+  ]
+  conductor.say(r"activity\?ref=refs/heads/main", json.dumps(events))
+  asyncio.run(conductor.main_pushes())
+  asyncio.run(conductor.main_pushes())
+  [(told, _)] = conductor.prompts
+  assert told.startswith(
+    "main changed with no merge of a PR, which only the merge of a PR may do:\n"
+    "- force_push by u at T3: aaaaaaaa..bbbbbbbb\n- push by w at T1: dddddddd..cccccccc\n"
+  )
+
+
+@JQ
+def test_a_main_that_changed_only_by_merges_or_an_activity_that_fails_tells_nothing(conductor: Round) -> None:
+  merge = {"id": 2, "activity_type": "pr_merge", "before": "c", "after": "a", "timestamp": "T", "actor": {"login": "u"}}
+  conductor.say(r"activity\?ref=refs/heads/main", json.dumps([merge]))
+  asyncio.run(conductor.main_pushes())
+  conductor.says.clear()
+  conductor.say(r"activity\?ref=refs/heads/main", "boom", 1)
+  asyncio.run(conductor.main_pushes())
+  assert conductor.prompts == []
+
+
 def test_an_item_that_names_a_file_of_an_open_pr_waits_for_that_pr_and_starts_once_it_closed(conductor: Round) -> None:
   conductor.prs[7] = conductor.pr(n=7, labels=["w:reader-cache"])
   conductor.touched[7] = {"sha": "abc", "paths": ["src/world/reader.rs", "docs/x.md"]}
