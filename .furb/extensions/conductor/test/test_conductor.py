@@ -163,6 +163,7 @@ class Round:
         "stronger": "claude-cli:opus/high",
         "audit": "claude-cli:opus/medium",
       },
+      "model_version": 1,
     }
     # The root plays pr before the conductor, which uses its names, as .furb/config.json orders them.
     exec(compile(IMPORT.sub("", PULL.read_text(encoding="utf-8")), str(PULL), "exec"), ns)  # noqa: S102
@@ -901,6 +902,7 @@ def test_the_rulings_of_the_owner_stand_in_conducting_in_his_words(conductor: Ro
       "actor": OPUS, "handover": SONNET, "editor": SONNET_HIGH, "patcher": OPUS,
       "ruler": OPUS, "stronger": TOP, "audit": OPUS,
     },
+    "model_version": 1,
   }
   assert conductor.cap() == 5
   for words in ('limits["room"] gives the room', 'limits["fixer"]', "a reload keeps your choices"):
@@ -914,10 +916,22 @@ def test_a_fixer_runs_on_sonnet_high_unless_its_effort_says_otherwise(conductor:
   assert conductor.model_of("fix50") == SONNET_HIGH
 
 
+def test_a_reload_moves_an_existing_claude_fixer_and_room_to_luna(conductor: Round) -> None:
+  conductor.limits["fixer"] = "claude-cli:sonnet/high"
+  conductor.limits["room"] = {"opus": 1, "sonnet": 3, "opus/high": 1}
+  conductor.limits.pop("model_version")
+  exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), conductor.ns)
+  assert conductor.limits["fixer"] == "codex:gpt-6-luna/medium"
+  assert conductor.limits["room"] == {"gpt-6-luna": 5}
+
+
 def test_a_reload_adds_model_roles_to_a_round_that_predates_them(conductor: Round) -> None:
   conductor.limits.pop("models")
+  conductor.limits.pop("model_version")
   exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), conductor.ns)  # noqa: S102
   luna = "codex:gpt-6-luna/medium"
+  assert conductor.limits["fixer"] == luna
+  assert conductor.limits["room"] == {"gpt-6-luna": 5}
   assert conductor.limits["models"] == dict.fromkeys(
     ("actor", "handover", "editor", "patcher", "ruler", "stronger", "audit"), luna
   )
@@ -1008,6 +1022,7 @@ def test_the_word_plays_on_a_module_of_the_previous_conductor_that_binds_no_name
     "room": {"gpt-6-luna": 5},
     "fixer": luna,
     "models": dict.fromkeys(("actor", "handover", "editor", "patcher", "ruler", "stronger", "audit"), luna),
+    "model_version": 1,
   }
   assert conductor.cap() == 5
   for name in STATE[1:]:

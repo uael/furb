@@ -87,9 +87,16 @@ LIMITS = {
   "room": {"gpt-6-luna": 5},
   "fixer": LUNA,
   "models": dict.fromkeys(("actor", "handover", "editor", "patcher", "ruler", "stronger", "audit"), LUNA),
+  "model_version": 1,
 }
 limits: dict[str, Any] = globals().setdefault("limits", LIMITS)
-limits.setdefault("models", LIMITS["models"])
+if limits.get("model_version") != 1:
+  if limits.get("fixer") == "claude-cli:sonnet/high":
+    limits["fixer"] = LIMITS["fixer"]
+  if limits["room"] == {"opus": 1, "sonnet": 3, "opus/high": 1}:
+    limits["room"] = LIMITS["room"]
+  limits.setdefault("models", LIMITS["models"])
+  limits["model_version"] = 1
 ACTOR = limits["models"]["actor"]
 HANDOVER = limits["models"]["handover"]
 EDITOR = limits["models"]["editor"]
