@@ -109,7 +109,7 @@ fn a_definition_gives_its_transport_with_its_variables_expanded_its_timeout_and_
       "timeout": 2.5,
       "deny": ["drop"],
     },
-    "remote": {"type": "http", "url": "https://${HOST}/mcp", "headers": {"authorization": "Bearer ${KEY}"}},
+    "remote": {"type": "http", "url": "https://${HOST}/mcp", "headers": {"authorization": "Bearer ${KEY}"}, "oauth": {"clientId": "id1", "callbackPort": 3118}},
   }});
   file(&places.file(Scope::User), &user.to_string());
   let got = servers(&places, &variables(&[("PORT", "8080"), ("KEY", "k"), ("HOST", "h.dev")]));
@@ -133,7 +133,8 @@ fn a_definition_gives_its_transport_with_its_variables_expanded_its_timeout_and_
     got[1].transport,
     Transport::Http {
       url: "https://h.dev/mcp".to_owned(),
-      headers: vec![("authorization".to_owned(), "Bearer k".to_owned())]
+      headers: vec![("authorization".to_owned(), "Bearer k".to_owned())],
+      oauth: super::Login { client: Some("id1".to_owned()), port: Some(3118) },
     }
   );
   assert_eq!(

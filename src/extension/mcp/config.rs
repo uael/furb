@@ -40,18 +40,33 @@ impl Scope {
   }
 }
 
+/// The client that a server of HTTP wants for its login, when it registers none: its id and the port of the redirect.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Login {
+  pub client: Option<String>,
+  pub port: Option<u16>,
+}
+
 /// How furb reaches a server.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Transport {
   /// A process that furb starts, which reads requests on its stdin and writes answers on its stdout, one JSON a line.
   Stdio { command: String, args: Vec<String>, env: Vec<(String, String)>, cwd: Option<PathBuf> },
   /// A server of the streamable HTTP at an address.
-  Http { url: String, headers: Vec<(String, String)> },
+  Http { url: String, headers: Vec<(String, String)>, oauth: Login },
   /// A server of the older HTTP with SSE at the address of its stream of events.
-  Sse { url: String, headers: Vec<(String, String)> },
+  Sse { url: String, headers: Vec<(String, String)>, oauth: Login },
 }
 
 impl Transport {
+  /// The client of its login that the definition names; none for a server that runs on this machine.
+  pub fn oauth(&self) -> Login {
+    match self {
+      Transport::Http { oauth, .. } | Transport::Sse { oauth, .. } => oauth.clone(),
+      Transport::Stdio { .. } => Login::default(),
+    }
+  }
+
   /// The kind of the transport, as a server dict gives it.
   pub fn kind(&self) -> &'static str {
     match self {
@@ -310,7 +325,28 @@ fn defined(
       let url = text("url")?.filter(|url| !url.is_empty()).ok_or("the server names no url")?;
       url::Url::parse(&url).map_err(|no| format!("the url {url} is not valid: {no}"))?;
       let headers = pairs("headers")?;
-      if kind == "sse" { Transport::Sse { url, headers } } else { Transport::Http { url, headers } }
+      let oauth = match one.get("oauth") {
+        None | Some(Value::Null) => Login::default(),
+        Some(Value::Object(held)) => Login {
+          client: held.get("clientId").and_then(Value::as_str).map(str::to_owned),
+          port: match held.get("callbackPort") {
+            None | Some(Value::Null) => None,
+            Some(port) => Some(
+              port
+                .as_u64()
+                .and_then(|p| u16::try_from(p).ok())
+                .filter(|p| *p > 0)
+                .ok_or("oauth.callbackPort is no port")?,
+            ),
+          },
+        },
+        Some(_) => return Err("oauth is no map".to_owned()),
+      };
+      if kind == "sse" {
+        Transport::Sse { url, headers, oauth }
+      } else {
+        Transport::Http { url, headers, oauth }
+      }
     }
     other => return Err(format!("the type {other} is none of stdio, http and sse")),
   };
