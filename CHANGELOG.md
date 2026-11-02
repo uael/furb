@@ -3,6 +3,13 @@
 Each release of furb is listed here, the newest first. release-please writes the entry of each release from the
 titles of the pull requests that it holds, as [the template of a pull request](.github/pull_request_template.md) says.
 
+## [0.4.2](https://github.com/uael/furb/compare/v0.4.1...v0.4.2) (2026-11-02)
+
+
+### Features
+
+* **mcp:** Log in to a server with a client id from its config ([#980](https://github.com/uael/furb/issues/980)) ([739b547](https://github.com/uael/furb/commit/739b547033ad529536e68f3b38e2fa98efeb810e))
+
 ## [0.4.1](https://github.com/uael/furb/compare/v0.4.0...v0.4.1) (2026-11-01)
 
 
