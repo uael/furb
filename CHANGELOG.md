@@ -3,6 +3,15 @@
 Each release of furb is listed here, the newest first. release-please writes the entry of each release from the
 titles of the pull requests that it holds, as [the template of a pull request](.github/pull_request_template.md) says.
 
+## [0.4.1](https://github.com/uael/furb/compare/v0.4.0...v0.4.1) (2026-11-01)
+
+
+### Fixes
+
+* **ci:** Compact DeepSWE task chains before context fills ([#973](https://github.com/uael/furb/issues/973)) ([6ff1258](https://github.com/uael/furb/commit/6ff1258d3cdcee1c79fe03b813af650dace1d882))
+* **ci:** Stop DeepSWE runs when workspaces disappear ([#975](https://github.com/uael/furb/issues/975)) ([ffc27fe](https://github.com/uael/furb/commit/ffc27fe39bb574c0ffebba827cf916c61ec175cf))
+* **script:** Keep DeepSWE work out of scratch ([#972](https://github.com/uael/furb/issues/972)) ([66f4a9a](https://github.com/uael/furb/commit/66f4a9a336019561dbc26c04b5ba02c9f4fd46d2))
+
 ## [0.4.0](https://github.com/uael/furb/compare/v0.3.5...v0.4.0) (2026-11-01)
 
 
