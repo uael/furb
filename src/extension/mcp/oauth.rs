@@ -150,15 +150,25 @@ pub struct Endpoints {
 
 /// The tokens of a login to the server at an address, whose challenge named the metadata of its resource, or not:
 /// the page of the login opened by the opener, and the code that the browser hands back traded for tokens.
-pub async fn login(url: &str, hint: Option<&str>, opener: &Opener) -> Result<Tokens, String> {
+pub async fn login(
+  url: &str,
+  hint: Option<&str>,
+  opener: &Opener,
+  preset: &super::config::Login,
+) -> Result<Tokens, String> {
   let client = Client::new();
   let (issuer, scope) = protected(&client, url, hint).await?;
   let ends = authority(&client, &issuer).await?;
-  let listener =
-    TcpListener::bind("127.0.0.1:0").await.map_err(|no| format!("no port for the login: {no}"))?;
+  let listener = TcpListener::bind(("127.0.0.1", preset.port.unwrap_or(0)))
+    .await
+    .map_err(|no| format!("no port for the login: {no}"))?;
   let port = listener.local_addr().map_err(|no| format!("no port for the login: {no}"))?.port();
-  let redirect = format!("http://127.0.0.1:{port}/callback");
-  let (id, secret) = registered(&client, &issuer, &ends, &redirect).await?;
+  let host = if preset.port.is_some() { "localhost" } else { "127.0.0.1" };
+  let redirect = format!("http://{host}:{port}/callback");
+  let (id, secret) = match &preset.client {
+    Some(id) => (id.clone(), None),
+    None => registered(&client, &issuer, &ends, &redirect).await?,
+  };
   let (verifier, state) = (random(48)?, random(24)?);
   let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
   let mut address = url::Url::parse(&ends.authorize)

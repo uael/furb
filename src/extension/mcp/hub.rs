@@ -348,7 +348,9 @@ impl Hub {
           .ok_or_else(|| format!("the server {name} runs on this machine and takes no login"))?;
         let (vault, key) = (self.settings.vault.clone(), oauth::key(name, url));
         if action == "login" {
-          let tokens = oauth::login(url, hint.as_deref(), &self.settings.opener).await?;
+          let tokens =
+            oauth::login(url, hint.as_deref(), &self.settings.opener, &server.transport.oauth())
+              .await?;
           oauth::blocking(move || oauth::store(vault.as_ref(), &key, &tokens)).await?;
         } else {
           oauth::blocking(move || vault.forget(&key)).await?;

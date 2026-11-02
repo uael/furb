@@ -125,8 +125,8 @@ impl Peer {
       Transport::Stdio { command, args, env, cwd } => {
         Arc::new(Process::start(command, args, env, cwd, inbox)?)
       }
-      Transport::Http { url, headers } => Arc::new(Streamable::new(url, headers, token, inbox)),
-      Transport::Sse { url, headers } => {
+      Transport::Http { url, headers, .. } => Arc::new(Streamable::new(url, headers, token, inbox)),
+      Transport::Sse { url, headers, .. } => {
         Arc::new(Legacy::connect(url, headers, token, inbox).await?)
       }
     };
