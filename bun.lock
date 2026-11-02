@@ -17,13 +17,13 @@
     },
     "bind/typescript": {
       "name": "@uael/furb",
-      "version": "0.4.1",
+      "version": "0.4.2",
       "optionalDependencies": {
-        "@uael/furb-darwin-arm64": "0.4.1",
-        "@uael/furb-darwin-x64": "0.4.1",
-        "@uael/furb-linux-arm64-gnu": "0.4.1",
-        "@uael/furb-linux-x64-gnu": "0.4.1",
-        "@uael/furb-win32-x64-msvc": "0.4.1",
+        "@uael/furb-darwin-arm64": "0.4.2",
+        "@uael/furb-darwin-x64": "0.4.2",
+        "@uael/furb-linux-arm64-gnu": "0.4.2",
+        "@uael/furb-linux-x64-gnu": "0.4.2",
+        "@uael/furb-win32-x64-msvc": "0.4.2",
       },
     },
     "docs/examples": {
