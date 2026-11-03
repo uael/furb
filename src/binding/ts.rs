@@ -461,6 +461,14 @@ impl JsEngine {
     self.held.call(|engine| engine.names(chain.as_deref()))
   }
 
+  /// The life ends with its checkpoint at the tip of its record, from which a later life on the
+  /// record opens, as the engine of the crate writes it; then the engine is gone, as after a
+  /// dispose. A life that keeps no record refuses it, and ends too.
+  #[napi]
+  pub fn checkpoint(&self) -> napi::Result<()> {
+    self.held.checkpoint()
+  }
+
   /// The engine is gone, and every result JavaScript awaits of it is refused. Its ears go with it: a command of the
   /// crate ends, a wait ends, and the store lets its record go.
   #[napi]

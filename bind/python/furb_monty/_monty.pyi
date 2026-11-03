@@ -234,6 +234,9 @@ class Engine:
   def names(self, chain: str | None = None) -> list[str]:
     """Every name the module of a chain binds, the root when none is given, in the order it bound them."""
 
+  def checkpoint(self) -> None:
+    """The life ends with its checkpoint at the tip of its record, from which a later life on the record opens."""
+
   def dispose(self) -> None:
     """The engine is gone, and its ears with it."""
 

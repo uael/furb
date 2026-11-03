@@ -31,7 +31,9 @@ API of its own:
   any replay, and `tests/corpus` holds the records that each build must replay with no drift. Each door gives it as
   `opened` and as `Engine.open`.
 - `src/checkpoint.rs` holds the checkpoint of a life: a fact at the tip of its record with each chain that lives, its
-  turns, its module and its open prompts, from which a later life of any build goes on. `furb checkpoint` writes one.
+  turns, its module and its open prompts, from which a later life of any build goes on. A life ends with one through
+  `Engine::checkpoint`, which its store keeps as it keeps each fact, as the TUI does at the end of a life and at a
+  handover, and `furb checkpoint` writes one on a record that no life holds.
 - `src/snapshot.rs` holds the snapshot of a life beside its record: the session of the sandbox that monty dumps and
   what the engine holds of the ears, which a later life on the same record and build opens from with no replay.
 - `src/engine.rs` opens a life in the sandbox: it loads the engine, the sheet and the Kernel, each in a namespace of its

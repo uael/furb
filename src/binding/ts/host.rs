@@ -494,6 +494,20 @@ impl Held {
     Ok(promise)
   }
 
+  /// The life ends with its checkpoint at the tip of its record, and each result JavaScript awaits
+  /// of it is refused, as after a dispose.
+  pub fn checkpoint(&self) -> napi::Result<()> {
+    let mut engine = self
+      .engine
+      .try_borrow_mut()
+      .map_err(|_| napi::Error::from_reason("The engine is in a call of the host."))?;
+    let life = engine.take().ok_or_else(|| napi::Error::from_reason("The engine is disposed."));
+    drop(engine);
+    let got = life.and_then(|life| life.checkpoint().map_err(napi::Error::from));
+    self.kept();
+    got
+  }
+
   pub fn dispose(&self) -> napi::Result<()> {
     let mut engine = self
       .engine

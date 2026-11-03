@@ -516,7 +516,7 @@ function read(data: { target: string; method: string; args: unknown[] }): unknow
       throw new Error(`There is no file at ${path}.`);
     }
   }
-  if (data.target === "session" && data.method === "dispose") return open.dispose();
+  if (data.target === "session" && data.method === "end") return open.dispose();
   if (data.target === "engine" && views.includes(data.method)) {
     const method = Reflect.get(open, data.method) as (...args: unknown[]) => unknown;
     return Reflect.apply(method, open, data.args);
@@ -525,9 +525,9 @@ function read(data: { target: string; method: string; args: unknown[] }): unknow
 }
 
 self.onmessage = async ({ data }) => {
-  // The end of the life is the dispose of its session: a window of its own ends it so, and a window of a host ends it
-  // by end, since a dispose there only detaches the window.
-  if (data.target === "session" && data.method === "end") data.method = "dispose";
+  // The end of the life is the end of its session, with its checkpoint, so the next life opens from it: a window of
+  // its own ends it by dispose, and a window of a host ends it by end, since a dispose there only detaches the window.
+  if (data.target === "session" && data.method === "dispose") data.method = "end";
   let reply: { value?: unknown; error?: string; name?: string };
   try {
     reply = { value: await answer(data) };
@@ -536,7 +536,7 @@ self.onmessage = async ({ data }) => {
     reply = error instanceof Error ? { error: error.message, name: error.name } : { error: String(error) };
   }
   if (data.method === "open" && !reply.error) state();
-  if (data.target !== "session" || data.method !== "dispose") {
+  if (data.target !== "session" || data.method !== "end") {
     self.postMessage({ id: data.id, ...reply });
     return;
   }

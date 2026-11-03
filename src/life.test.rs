@@ -924,9 +924,9 @@ fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_promp
   let waiting = closed(&mut first, word).as_ref().as_str().unwrap().to_owned();
   drop(first);
   // The checkpoint is written as the command line writes it: in a life that only replays the record.
-  let (mut inspected, kept) =
-    Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap();
-  let written = crate::checkpoint::written(&mut inspected, &kept).unwrap();
+  let mut inspected =
+    Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+  let written = crate::checkpoint::written(&mut inspected).unwrap();
   drop(inspected);
   crate::checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
   let mut later = scripted(&at, &["close('again')"]).boot::<String>([]).unwrap().0;
@@ -964,6 +964,52 @@ fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_promp
 }
 
 #[test]
+fn a_life_ends_with_its_checkpoint_and_a_later_life_boots_on_it_and_on_the_tail_alone() {
+  let at = place("checkpoint-live");
+  let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0)\nclose(f'round {rounds}')";
+  let mut first = scripted(&at, &[ran]).boot::<String>([]).unwrap().0;
+  let word = "work = chain('work')\nSIZE = 6\ndef f():\n  return SIZE\nwaiting = prompt(str, 'Wait.', on=work)\n\
+              await wait(0.3)\nclose(str(waiting))";
+  let waiting = closed(&mut first, word).as_ref().as_str().unwrap().to_owned();
+  let turns = "close(len(turns('chain2')))";
+  let told = closed(&mut first, turns).as_ref().as_int();
+  first.checkpoint().unwrap();
+  let mut second = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  assert_eq!(closed(&mut second, "after = f() + 1\nclose(after)").as_ref().as_int(), Some(7));
+  drop(second);
+  let kept = world::kept(at.join("record.jsonl")).unwrap();
+  let at_checkpoint = crate::checkpoint::last(&kept).expect("the life kept its checkpoint");
+  let tail = &kept[at_checkpoint + 1..];
+  let carried = crate::checkpoint::booted(kept[..=at_checkpoint].to_vec()).len();
+  let booted = crate::checkpoint::booted(kept.clone());
+  assert_eq!(
+    booted.len(),
+    carried + tail.len(),
+    "a later life boots on the checkpoint and the tail alone"
+  );
+  assert_eq!(&booted[carried..], tail);
+  let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  assert!(closed(&mut later, turns).as_ref().as_int() >= told, "each chain keeps its turns");
+  let word =
+    format!("wake('chain2')\nclose([f(), after, get('{waiting}')[:2], await Act('{waiting}')])");
+  assert_eq!(
+    closed(&mut later, &word).as_ref().py_repr(),
+    format!("[6, 7, ('prompt', '{waiting}'), 'round 2']"),
+    "the module of each chain and its open prompt go on, with what the tail added"
+  );
+}
+
+#[test]
+fn a_life_that_keeps_no_record_refuses_a_checkpoint() {
+  let at = place("checkpoint-unkept");
+  let life = Opening { keeps: Some(false), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+  assert_eq!(
+    life.checkpoint().unwrap_err().message(),
+    "a life that keeps no record keeps no checkpoint"
+  );
+}
+
+#[test]
 fn the_log_of_a_life_after_a_checkpoint_holds_the_facts_of_the_lives_before_it_and_agrees_with_its_record()
  {
   let at = place("checkpoint-log");
@@ -972,9 +1018,9 @@ fn the_log_of_a_life_after_a_checkpoint_holds_the_facts_of_the_lives_before_it_a
   let before = "before = 'said before'\nclose(before)";
   closed(&mut first, before);
   drop(first);
-  let (mut inspected, kept) =
-    Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap();
-  let written = crate::checkpoint::written(&mut inspected, &kept).unwrap();
+  let mut inspected =
+    Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+  let written = crate::checkpoint::written(&mut inspected).unwrap();
   drop(inspected);
   crate::checkpoint::keep(&record, written).unwrap();
   for word in ["close('said after')", "close('said last')"] {
@@ -1003,9 +1049,9 @@ fn a_chain_that_only_a_value_names_goes_on_from_a_checkpoint_with_its_own_module
   let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
   closed(&mut first, "kids = [chain('kid')]\nawait rung('n = 5', on=kids[0])\nclose(None)");
   drop(first);
-  let (mut inspected, kept) =
-    Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap();
-  let written = crate::checkpoint::written(&mut inspected, &kept).unwrap();
+  let mut inspected =
+    Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+  let written = crate::checkpoint::written(&mut inspected).unwrap();
   drop(inspected);
   crate::checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
   let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
@@ -1026,9 +1072,9 @@ fn a_word_that_ran_at_a_checkpoint_runs_again_and_asks_again_the_prompt_that_it_
     "waiting = prompt(str, 'Wait.', on=chain('work'))\nawait wait(0.5)\nclose(str(waiting))";
   let waiting = closed(&mut first, word).as_ref().as_str().unwrap().to_owned();
   drop(first);
-  let (mut inspected, kept) =
-    Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap();
-  let written = crate::checkpoint::written(&mut inspected, &kept).unwrap();
+  let mut inspected =
+    Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+  let written = crate::checkpoint::written(&mut inspected).unwrap();
   drop(inspected);
   crate::checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
   let mut later = scripted(&at, &["close('fresh')"]).boot::<String>([]).unwrap().0;
@@ -1048,8 +1094,7 @@ fn a_record_of_another_version_opens_on_this_build_from_its_last_checkpoint() {
   let path = at.join("record.jsonl");
   let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
   assert_eq!(closed(&mut first, "kept = 1\nclose(kept)").as_ref().as_int(), Some(1));
-  let written =
-    crate::checkpoint::written(&mut first, &world::kept(at.join("record.jsonl")).unwrap()).unwrap();
+  let written = crate::checkpoint::written(&mut first).unwrap();
   drop(first);
   crate::checkpoint::keep(&path, written).unwrap();
   let made =
