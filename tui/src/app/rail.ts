@@ -2,9 +2,9 @@ import { basename } from "node:path";
 import { type BoxOptions, type BoxRenderable, InputRenderable, InputRenderableEvents } from "@opentui/core";
 import {
   type Ask,
+  attentionOf,
   type ChainThread,
   chainThreads,
-  concerns,
   gist,
   nestThreads,
   type ThreadNode,
@@ -231,11 +231,11 @@ export const rail = part({
   },
 
   /** The state of a thread in a word and its color. */
-  stateWord(thread: ChainThread): Part {
-    if (thread.state === "asks") return ["asks you", c.warning, bold];
-    if (thread.state === "held") return ["paused", c.warning];
-    if (thread.state === "failed") return ["failed", c.danger];
-    if (thread.state === "cancelled") return ["cancelled", c.faint];
+  stateWord(thread: ChainThread, state: ChainThread["state"] = thread.state): Part {
+    if (state === "asks") return ["asks you", c.warning, bold];
+    if (state === "held") return ["paused", c.warning];
+    if (state === "failed") return ["failed", c.danger];
+    if (state === "cancelled") return ["cancelled", c.faint];
     if (thread.resolved) return ["resolved", c.faint];
     return ["working", c.accent];
   },
@@ -250,8 +250,8 @@ export const rail = part({
   },
 
   /** What a row of a thread says at its right: why it needs a look, and how long ago it last changed. */
-  threadMeta(thread: ChainThread): Part[] {
-    const live = thread.state === "running" || thread.state === "done";
+  threadMeta(thread: ChainThread, state: ChainThread["state"] = thread.state): Part[] {
+    const live = state === "running" || state === "done";
     const at = this.threadChanged(thread);
     const minutes = at === undefined ? 0 : Math.floor((clock() - at) / 60000);
     const age =
@@ -260,7 +260,10 @@ export const rail = part({
         : minutes < 60 * 24
           ? `${Math.floor(minutes / 60)}h`
           : `${Math.floor(minutes / 60 / 24)}d`;
-    return [...(live ? [] : [this.stateWord(thread)]), ...(minutes < 1 ? [] : [[age, c.faint] as Part])];
+    return [
+      ...(live ? [] : [this.stateWord(thread, state)]),
+      ...(minutes < 1 ? [] : [[age, c.faint] as Part]),
+    ];
   },
 
   /** A row of the sidebar in two parts, its head, which the room cuts and a hover shows whole, and its tail, which
@@ -664,10 +667,10 @@ export const rail = part({
     };
 
     // A thread of the session shown, on one row.
-    const threadRow = (thread: ChainThread, indent: number) => {
+    const threadRow = (thread: ChainThread, indent: number, state = thread.state) => {
       const id = `th:${thread.act.id}`;
       const lit = active === thread;
-      const [mark, tone] = threadMarks(thread);
+      const [mark, tone] = threadMarks(thread, state);
       order(id, {
         enter: () => this.chooseThread(thread),
         space: () => this.foldThread(thread.act.id),
@@ -681,7 +684,7 @@ export const rail = part({
           [`${mark} `, tone],
           [title, lit ? c.text : thread.resolved ? c.faint : c.muted, lit ? bold : 0],
         ],
-        this.threadMeta(thread),
+        this.threadMeta(thread, state),
         () => this.chooseThread(thread),
         { paddingLeft: indent, paddingRight: RIGHT },
         lit || cursor === id,
@@ -692,10 +695,10 @@ export const rail = part({
     };
 
     // A thread of the session shown, as a card of its own.
-    const card = (thread: ChainThread) => {
+    const card = (thread: ChainThread, state = thread.state) => {
       const id = `th:${thread.act.id}`;
       const lit = active === thread || cursor === id;
-      const [mark, tone] = threadMarks(thread);
+      const [mark, tone] = threadMarks(thread, state);
       order(id, {
         enter: () => this.chooseThread(thread),
         space: () => this.foldThread(thread.act.id),
@@ -732,9 +735,9 @@ export const rail = part({
             { truncate: true },
           ),
         );
-      const state = this.stateWord(thread);
+      const word = this.stateWord(thread, state);
       const chain = thread.act.on === w.engine.root ? "" : (w.labelOf(thread.act.on).split("/").at(-1) ?? "");
-      const since = plain(this.threadMeta(thread).filter((one) => one[0] !== state[0]));
+      const since = plain(this.threadMeta(thread, state).filter((one) => one[0] !== word[0]));
       const age = since && `${since} ago`;
       const notes = [
         thread.messages.length ? `${thread.messages.length + 1} msgs` : "",
@@ -743,7 +746,7 @@ export const rail = part({
       ].filter(Boolean);
       box.add(
         this.line(
-          [bar, ["   "], state, [notes.length ? `  ·  ${notes.join("  ·  ")}` : "", c.faint]],
+          [bar, ["   "], word, [notes.length ? `  ·  ${notes.join("  ·  ")}` : "", c.faint]],
           c.muted,
           { truncate: true },
         ),
@@ -842,8 +845,8 @@ export const rail = part({
     // opens, each agent one step deeper as a row. A question that waits in an agent marks the thread over it, since
     // `nestThreads` rolls it into the state of that thread.
     const nodeRow = (node: ThreadNode, indent: number, carded = false) => {
-      if (carded) card(node.thread);
-      else threadRow(node.thread, indent);
+      if (carded) card(node.thread, node.state);
+      else threadRow(node.thread, indent, node.state);
       if (!node.agents.length) return;
       const fold = `agents:${node.thread.act.id}`;
       const label = `${" ".repeat(carded ? 2 : indent + 2 - LEFT)}${node.agents.length === 1 ? "Agent" : "Agents"}`;
@@ -853,9 +856,7 @@ export const rail = part({
         for (const one of node.agents) nodeRow(one, carded ? LEFT + 4 : indent + 2);
     };
     const shows = (node: ThreadNode): boolean => node.thread === active || node.agents.some(shows);
-    const unresolved = tree.filter(
-      (one) => !one.thread.resolved || one.thread.state === "asks" || shows(one),
-    );
+    const unresolved = tree.filter((one) => !one.thread.resolved || one.state === "asks" || shows(one));
     const resolvedNodes = tree.filter((one) => !unresolved.includes(one));
 
     // The threads that a session holds: those that live, and the resolved ones folded under a row of their own, each
@@ -892,7 +893,7 @@ export const rail = part({
         folds(group, earlier);
         const heading = this.row({ paddingLeft: LEFT, paddingRight: RIGHT, marginTop: space.section });
         heading.add(this.text("Threads", c.text, { attributes: bold, flexGrow: 1 }));
-        heading.add(this.text(this.badges(this.threadAttention(threads)), c.muted));
+        heading.add(this.text(this.badges(this.threadAttention(tree)), c.muted));
         this.railSpaces.add(heading);
         step(1, undefined, space.section);
         if (!threads.length) {
@@ -984,14 +985,8 @@ export const rail = part({
 
   /** What the threads of the session shown say, counted as the marks of a row: a question anywhere, and the failure
    * or the pause of a thread that the operator started. The failure of an agent counts for nothing. */
-  threadAttention(threads: readonly ChainThread[]): Attention {
-    const kinds = threads.map(concerns);
-    return {
-      asks: kinds.filter((one) => one === "asks").length,
-      held: kinds.filter((one) => one === "held").length,
-      failed: kinds.filter((one) => one === "failed").length,
-      unread: 0,
-    };
+  threadAttention(tree: readonly ThreadNode[]): Attention {
+    return { ...attentionOf(tree), unread: 0 };
   },
 
   /** The row that the keys of the sidebar stand on. */
