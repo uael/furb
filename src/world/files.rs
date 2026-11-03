@@ -31,7 +31,8 @@ use crate::{
   value::{Fault, Object, Text},
 };
 
-/// The ear of the files: it answers a cd with the directory that the path names, a read with the text at the path
+/// The ear of the files: it answers a cd with the directory that the path names, a read with the text at the path,
+/// or with one line for each entry of a folder, in order of name, with a slash after a folder and no walk below it,
 /// and a write with the text as it stands after, but a write of a door of a command, which the ear of the commands
 /// answers, each resolved against the working directory of the chain, or with
 /// the refusal. The path of a cd, a read or a write that is `~` or starts with `~/`, or with `~\\` on Windows, resolves
@@ -246,9 +247,7 @@ pub(crate) fn read(at: &Path) -> Result<Text, Fault> {
 pub(super) fn text(at: &Path, name: String, gallery: Option<&Path>) -> Result<Text, Fault> {
   let info = fs::metadata(at).map_err(|no| failed(&no, &name))?;
   if info.is_dir() {
-    return Err(Fault::refused(format!(
-      "Read needs a text file, and {name} is a directory: await bash(\"ls {name}\") lists it"
-    )));
+    return listed(at, &name);
   }
   if !info.is_file() {
     return Err(Fault::refused(format!("Read needs a text file: {name}")));
@@ -277,6 +276,22 @@ fn seen(at: &Path, name: &str, bytes: &[u8], gallery: Option<&Path>) -> Result<T
   };
   let kept = images::attach(gallery, at).map_err(|why| Fault::refused(format!("{why} {name}")))?;
   Ok(Text::new(name, images::reference(&kept.name, &kept.uri)))
+}
+
+/// The text of a folder: one line for each entry, in order of name, with a slash after a folder, and no walk below it.
+/// A link counts as what it points at, and a link that points at nothing counts as a file.
+fn listed(at: &Path, name: &str) -> Result<Text, Fault> {
+  let mut names = Vec::new();
+  for entry in fs::read_dir(at).map_err(|no| failed(&no, name))? {
+    let entry = entry.map_err(|no| failed(&no, name))?;
+    let mut one = entry.file_name().to_string_lossy().into_owned();
+    if fs::metadata(entry.path()).is_ok_and(|info| info.is_dir()) {
+      one.push('/');
+    }
+    names.push(one);
+  }
+  names.sort();
+  Ok(Text::new(name, names.join("\n")))
 }
 
 /// A path that is `~` or starts with `~/`, or with `~\\` on Windows, resolved against the home of the user, as a shell
