@@ -32,7 +32,7 @@ export const thread = part({
       kind: "earlier",
       step: (at ?? base).step,
       count,
-      text: "...",
+      text: "…",
     });
     const runs = given.findLastIndex((line) => line.kind === "code" && line.runs);
     const anchor = runs < 0 ? n - 1 : runs;

@@ -147,6 +147,28 @@ test("a question of a str shows a field in its card in the sidebar, and Enter in
     true,
   ));
 
+test("a thread whose title is longer than the sidebar ends its row in one ellipsis, and keeps its state at the right", () =>
+  composing(
+    async ({ session, app, frame }) => {
+      await idle(session);
+      const first = listed(session)[0];
+      expect(first).toBeDefined();
+      const title = first?.title ?? "";
+      session.preferences.sidebarWidth = 28;
+      session.preferences.sidebarStyle = "outline";
+      app.render();
+      await frame();
+      const rows = (await frame()).split("\n").map((line) => line.slice(size.width - 28));
+      const row = rows.find((line) => line.includes(title.slice(0, 8)));
+      expect(row).toBeDefined();
+      expect(row).toContain("…");
+      expect(row).not.toContain("...");
+      expect(rows.join("\n")).not.toContain(title);
+    },
+    size,
+    true,
+  ));
+
 test("a question that waits shows on top of the sidebar and as a mark on its workspace and its session, and the input goes to the thread that is lit", () =>
   composing(
     async (use) => {
@@ -179,7 +201,7 @@ test("a question that waits shows on top of the sidebar and as a mark on its wor
     true,
   ));
 
-test("a string too long for its line folds to its start and an underlined ..., which a hover shows whole and a click opens in place", () =>
+test("a string too long for its line folds to its start and an underlined …, which a hover shows whole and a click opens in place", () =>
   composing(
     async ({ session, screen, frame }) => {
       const long = `${"word ".repeat(48)}ENDMARK`;
@@ -191,9 +213,9 @@ test("a string too long for its line folds to its start and an underlined ..., w
       const rows = folded.split("\n");
       const y = rows.findIndex((row) => row.includes('brief = "word'));
       expect(y).toBeGreaterThanOrEqual(0);
-      expect(rows[y]).toContain('..."');
+      expect(rows[y]).toContain('…"');
       expect(folded).not.toContain("ENDMARK");
-      const x = (rows[y] ?? "").indexOf('..."') + 1;
+      const x = (rows[y] ?? "").indexOf('…"');
       await screen.mockMouse.moveTo(x, y);
       await until(screen.renderer, () => screen.captureCharFrame().includes("ENDMARK"), "frame");
       await screen.mockMouse.click(x, y);
@@ -206,7 +228,7 @@ test("a string too long for its line folds to its start and an underlined ..., w
         opened
           .split("\n")
           .filter((row) => row.includes("word word"))
-          .some((row) => row.includes('..."')),
+          .some((row) => row.includes('…"')),
       ).toBe(false);
     },
     { ...size, useMouse: true },
@@ -302,7 +324,7 @@ test("a line that does not fit its room lays out in rows, and it and a folded st
       expect(first).toBeGreaterThan(cut);
       expect(rows[cut]).not.toContain("n0xyz");
       expect(rows.some((row) => row.includes('"n15xyz"'))).toBe(true);
-      expect(rows[fold]).toContain('..."');
+      expect(rows[fold]).toContain('…"');
       const palette = palettes.ink;
       const fg = (x: number, y: number) => cellAt(screen.captureSpans(), x, y).fg;
       const keyword = RGBA.fromHex(palette.syntaxKeyword);
@@ -312,9 +334,9 @@ test("a line that does not fit its room lays out in rows, and it and a folded st
         fg((rows[first] ?? "").indexOf("n0xyz"), first)?.equals(RGBA.fromHex(palette.syntaxString)),
       ).toBe(true);
       // The closing mark of the folded string, after its underlined ..., is a string.
-      expect(
-        fg((rows[fold] ?? "").indexOf('..."') + 3, fold)?.equals(RGBA.fromHex(palette.syntaxString)),
-      ).toBe(true);
+      expect(fg((rows[fold] ?? "").indexOf('…"') + 1, fold)?.equals(RGBA.fromHex(palette.syntaxString))).toBe(
+        true,
+      );
       expect(fg((rows[def + 1] ?? "").indexOf("return"), def + 1)?.equals(keyword)).toBe(true);
     },
     size,
@@ -382,18 +404,18 @@ test("a string of three marks over many lines shows as one string with its escap
       const rows = folded.split("\n");
       const y = rows.findIndex((row) => row.includes('note = "alpha beta'));
       expect(y).toBeGreaterThanOrEqual(0);
-      expect(rows[y]).toContain('..."');
+      expect(rows[y]).toContain('…"');
       expect(folded).not.toContain("ENDMARK");
       expect(folded).not.toContain('"""');
       expect(rows[y + 1]).toContain("print(len(note))");
       const fg = (x: number, row: number) => cellAt(screen.captureSpans(), x, row).fg;
       const string = RGBA.fromHex(palettes.ink.syntaxString);
       // The closing mark of the string, after its underlined ..., is a string of the statement, as it is whole.
-      const x = (rows[y] ?? "").indexOf('..."');
-      await until(screen.renderer, () => Boolean(fg(x + 3, y)?.equals(string)), "frame");
-      await screen.mockMouse.moveTo(x + 1, y);
+      const x = (rows[y] ?? "").indexOf('…"');
+      await until(screen.renderer, () => Boolean(fg(x + 1, y)?.equals(string)), "frame");
+      await screen.mockMouse.moveTo(x, y);
       await until(screen.renderer, () => screen.captureCharFrame().includes("ENDMARK"), "frame");
-      await screen.mockMouse.click(x + 1, y);
+      await screen.mockMouse.click(x, y);
       await until(session, () => session.folds[`string:${rung}:1:0`] === false);
       const opened = await frame();
       keep("multiline-open", opened);
@@ -402,7 +424,7 @@ test("a string of three marks over many lines shows as one string with its escap
       const first = shownRows.findIndex((row) => row.includes('note = "alpha beta'));
       const end = shownRows.findIndex((row) => row.includes("ENDMARK"));
       expect(end).toBeGreaterThan(first);
-      expect(shownRows.slice(first, end + 1).some((row) => row.includes('..."'))).toBe(false);
+      expect(shownRows.slice(first, end + 1).some((row) => row.includes('…"'))).toBe(false);
       expect(shownRows.slice(first, end + 1).join("")).toContain("\\ngamma");
     },
     { ...size, useMouse: true },
@@ -423,7 +445,7 @@ test("a quote of a word shows as the string that it binds: its name, an equal si
       const y = rows.findIndex((row) => row.includes("brief = 'Fix the largest gap."));
       expect(y).toBeGreaterThanOrEqual(0);
       expect(rows[y]).toContain("\\n");
-      expect(rows[y]).toContain("...'");
+      expect(rows[y]).toContain("…'");
       expect(shown).not.toContain("<s:brief>");
       expect(rows[y + 1]).toContain("print(brief)");
       const fg = (x: number, row: number) => cellAt(screen.captureSpans(), x, row).fg;
