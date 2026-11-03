@@ -82,9 +82,6 @@ pub enum Verb {
   Detach {
     life: String,
   },
-  End {
-    life: String,
-  },
   Pin {
     life: String,
     holder: String,

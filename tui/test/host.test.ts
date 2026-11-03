@@ -328,7 +328,7 @@ test.skipIf(process.platform === "win32")(
 );
 
 test.skipIf(process.platform === "win32")(
-  "a command that runs past the wait of a host that hands its life over waits in the new host, and a wake ends it as interrupted",
+  "a command that runs past the wait of a host that hands its life over ends in the new host as interrupted",
   () =>
     demoLife(async (record, directory) => {
       const options = { demo: true, host: true, cwd: directory, record };
@@ -347,10 +347,8 @@ test.skipIf(process.platform === "win32")(
       const start = performance.now();
       const { engine, host } = await openEngine(options);
       expect(performance.now() - start).toBeGreaterThan(10000);
-      await eventually(() => host.pending.has(cut), "the new host to hold the command as pending");
-      expect(await engine.peek(cut)).toBeNull();
-      await host.resume();
-      await eventually(async () => (await engine.peek(cut)) !== null, "the wake to end the command");
+      await eventually(async () => (await engine.peek(cut)) !== null, "the checkpoint to end the command");
+      expect(host.pending.has(cut)).toBe(false);
       expect(await engine.peek(cut)).toMatchObject({
         is: "Refused",
         args: ['"sleep 60; echo never" was interrupted: the life that ran it ended before it did'],
