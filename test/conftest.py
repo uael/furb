@@ -795,13 +795,18 @@ def cached(tmp_path_factory: pytest.TempPathFactory) -> None:
 
 @pytest.fixture(autouse=True)
 def engine_of(request: pytest.FixtureRequest) -> Generator[str]:
-  """The engine a test runs on, bound under every name the suite reads it by for the length of the test."""
+  """The engine a test runs on, bound under every name the suite reads it by for the length of the test, and the life of
+  monty that the test boots goes with it, so no test reads the life of an earlier test on the same worker."""
   which = getattr(request, "param", "python")
   if which == "monty" and request.node.originalname in MONTY_SKIPS:
     pytest.skip("the test boots on a Kernel of this interpreter, and the engine of monty holds its own")
   swapped(ENGINES[which])
   yield which
   swapped(furb.python)
+  life = furb_monty.engine.LIFE
+  if life is not None:
+    life.end()
+    furb_monty.engine.LIFE = None
 
 
 # pytest loads this file as its plugin under a name of its own; the tests and the probe import it as conftest. One

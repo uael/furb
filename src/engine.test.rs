@@ -1734,3 +1734,32 @@ fn a_fault_that_cuts_a_run_stops_the_life_which_refuses_each_later_entry_and_kee
   assert_eq!(view.message(), no.message());
   assert_eq!(lived.read.borrow().len(), 1, "the model was asked once");
 }
+
+/// An ear that says a wait started and done, and ends in the same poll.
+fn briefly() -> Box<dyn Ear> {
+  ear(move |mut co| async move {
+    loop {
+      let a = hear(&mut co).await;
+      if a.kind() == "wait" && a.question() {
+        say(&mut co, Fact::says("started", a.about(), []));
+        say(&mut co, done(a.about(), Object::none()));
+        return Ok(());
+      }
+    }
+  })
+}
+
+#[test]
+fn an_ear_that_ends_after_it_says_still_has_each_saying_heard() {
+  let at = std::env::temp_dir().join(format!("furb-engine-briefly-{}", std::process::id()));
+  let ears = [("provider", provider(at, Rc::default(), Rc::default())), ("briefly", briefly())];
+  let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
+  let root = engine.root().to_owned();
+  let act = engine.wait(&[], verbs::Wait { seconds: Some(9.0), on: on(&root) }).unwrap();
+  let id = act.id().to_owned();
+  block_on(act).unwrap();
+  let facts = engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
+  let heard: Vec<&str> =
+    facts.iter().filter(|one| one.about() == id).map(|one| one.kind()).collect();
+  assert_eq!(heard, ["wait", "started", "done"]);
+}
