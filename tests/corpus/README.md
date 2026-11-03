@@ -38,3 +38,10 @@ site, as the life said it, so the root pauses again and the second chain asks th
 both as interrupted at once, in its hearing of that wake. The word that awaited the first command reads the clock
 when both are over, and chance when only its own is. The journal says those answers again at once at the wake, as
 the World said them, so the word reads the clock again, as in the life.
+
+`handover/checkpoint.jsonl` is a life that ended with a checkpoint of the form before `schema`, which holds the
+entries that the journal replays in the place of the data. The life of the owner wrote that form at its handover, so
+the first build with the data must open it: `a_checkpoint_of_the_form_before_its_schema_opens_on_this_build` in
+`src/life.test.rs` opens it on a build of another engine. It stands apart from the corpus, since its crafted word
+says a prefix that no turn shows. It and the reader of that form in `src/checkpoint.rs` go once each life of that form
+crossed to the data, which the next checkpoint of each life does.

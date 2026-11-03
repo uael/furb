@@ -29,7 +29,7 @@ G = "def g() -> int:\n  return 2"
 
 
 async def test_extend_writes_the_words_of_the_rungs_it_names(tmp_path: Path) -> None:
-  """extend writes the words of the rungs it names, in order, as the program of the chain holds them, with a blank line between two, after the word that the file holds, as the word of the extension of that name in .furb/extensions/<name>, with a manifest of that name and of that word, and gives the word as it landed."""
+  """extend writes the words of the rungs it names, in order, as the program of the chain holds them, with a blank line between two, after the word that the file holds, as the word of the extension of that name in .furb/extensions/<name>, with its manifest SKILL.md, whose metadata names that word under furb-word and which keeps each other line that it holds, and gives the word as it landed."""
   _, root = extended("ouroboros", tmp_path, lives=True, sand=Disk())
   f, g = engine.rung(F, on=root), engine.rung(G, on=root)
   await g
@@ -39,11 +39,18 @@ async def test_extend_writes_the_words_of_the_rungs_it_names(tmp_path: Path) -> 
   assert (got.path, got.content) == (tilded(folder / "kit.py"), G + "\n")
   await engine.rung(f"extend('kit', {f!r})", on=root)
   assert (folder / "kit.py").read_text(encoding="utf-8") == f"{G}\n\n{F}\n"
-  assert json.loads((folder / "furb.json").read_text(encoding="utf-8")) == {"name": "kit", "word": "kit.py"}
+  said = "The extension kit of this project."
+  made = f"---\nname: kit\ndescription: {said}\nmetadata:\n  furb-word: kit.py\n---\n{said}\n"
+  assert (folder / "SKILL.md").read_text(encoding="utf-8") == made
+  mine = "---\nname: kit\ndescription: Mine.\nlicense: MIT\nmetadata:\n  furb-life: f()\n  furb-word: old.py\n---\nMy body.\n"
+  (folder / "SKILL.md").write_text(mine, encoding="utf-8")
+  await engine.rung(f"extend('kit', {g!r})", on=root)
+  kept = "---\nname: kit\ndescription: Mine.\nlicense: MIT\nmetadata:\n  furb-word: kit.py\n  furb-life: f()\n---\nMy body.\n"
+  assert (folder / "SKILL.md").read_text(encoding="utf-8") == kept
 
 
 async def test_extend_writes_tui_as_the_part_that_the_tui_loads(tmp_path: Path) -> None:
-  """extend writes tui, when it is given, as tui.ts in the folder of the extension, the part that the TUI loads, and the manifest names tui.ts under tui whenever the folder holds that file."""
+  """extend writes tui, when it is given, as tui.ts in the folder of the extension, the part that the TUI loads, and the manifest names tui.ts under furb-view of its metadata whenever the folder holds that file."""
   _, root = extended("ouroboros", tmp_path, lives=True, sand=Disk())
   f, g = engine.rung(F, on=root), engine.rung(G, on=root)
   await g
@@ -51,11 +58,12 @@ async def test_extend_writes_tui_as_the_part_that_the_tui_loads(tmp_path: Path) 
   part = 'export default (furb) => furb.panel("Kit", () => ["one"])'
   await engine.rung(f"extend('kit', {f!r}, tui={part!r})", on=root)
   assert (folder / "tui.ts").read_text(encoding="utf-8") == part + "\n"
-  manifest = {"name": "kit", "word": "kit.py", "tui": "tui.ts"}
-  assert json.loads((folder / "furb.json").read_text(encoding="utf-8")) == manifest
+  said = "The extension kit of this project."
+  manifest = f"---\nname: kit\ndescription: {said}\nmetadata:\n  furb-word: kit.py\n  furb-view: tui.ts\n---\n{said}\n"
+  assert (folder / "SKILL.md").read_text(encoding="utf-8") == manifest
   await engine.rung(f"extend('kit', {g!r})", on=root)
   assert (folder / "tui.ts").read_text(encoding="utf-8") == part + "\n"
-  assert json.loads((folder / "furb.json").read_text(encoding="utf-8")) == manifest
+  assert (folder / "SKILL.md").read_text(encoding="utf-8") == manifest
 
 
 async def test_extend_turns_the_extension_on_in_the_config_of_the_project(tmp_path: Path) -> None:

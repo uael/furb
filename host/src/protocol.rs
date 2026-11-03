@@ -26,15 +26,15 @@ pub enum Role {
   Write,
 }
 
-/// What a peer is: a window of an operator, or the process of a kit.
+/// What a peer is: a window of an operator, or the process of a skill.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Kind {
   Window,
-  Kit,
+  Skill,
 }
 
-/// The first frame of a peer: the protocol that it speaks, its kind, and the name of a kit.
+/// The first frame of a peer: the protocol that it speaks, its kind, and the name of a skill.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Hello {
   pub protocol: u32,
@@ -43,7 +43,7 @@ pub struct Hello {
 }
 
 /// A peer as the daemon knows it after its hello: the login that its transport proved, its role,
-/// its kind, and the name of a kit.
+/// its kind, and the name of a skill.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Peer {
   pub login: String,
@@ -270,12 +270,13 @@ pub struct Listed {
   pub open: bool,
 }
 
-/// A view that a window mounts in a slot, which the process of a kit serves.
+/// A view that a window mounts in a slot of a life, which the process of a skill serves.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Mount {
   pub viewer: String,
+  pub life: String,
   pub slot: Slot,
-  pub kit: String,
+  pub skill: String,
 }
 
 /// The tree of a view, which takes the place of each tree of a lower version.
@@ -296,7 +297,7 @@ pub struct ViewEvent {
   pub value: Option<String>,
 }
 
-/// What a kit asks of the one window of a view.
+/// What a skill asks of the one window of a view.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ViewEffect {
   pub viewer: String,
@@ -309,21 +310,29 @@ pub struct Dispose {
   pub viewer: String,
 }
 
-/// Where a window shows a view.
+/// Where a window shows a view. The dock follows the chain that it names, and the row, the detail
+/// and the mark follow the chain of the act that they name. The sidebar, the footer, a screen and
+/// an overlay follow the life.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "slot", rename_all = "snake_case")]
 pub enum Slot {
-  Dock,
+  Dock {
+    on: String,
+  },
+  /// A section of the sidebar.
   Sidebar,
-  /// The row of each act of a kind.
+  /// The row of one act, of a kind that the skill draws.
   Row {
-    kind: String,
+    act: String,
   },
-  /// The detail of each act of a kind.
+  /// The detail of one act, of a kind that the skill draws.
   Detail {
-    kind: String,
+    act: String,
   },
-  Mark,
+  /// A mark in the feed, after one act, of a kind that the skill marks.
+  Mark {
+    act: String,
+  },
   Footer,
   Screen,
   Overlay,
@@ -338,7 +347,7 @@ pub enum Gesture {
   Submit,
 }
 
-/// What a kit asks of a window.
+/// What a skill asks of a window.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "effect", rename_all = "snake_case")]
 pub enum Effect {
