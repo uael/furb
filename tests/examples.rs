@@ -12,6 +12,9 @@
 )]
 #![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
 
+#[path = "common/pipes.rs"]
+mod pipes;
+
 use std::{
   fs,
   io::Write,
@@ -84,15 +87,8 @@ impl Yard {
       .expect("its stdin")
       .write_all(stdin.as_bytes())
       .expect("its stdin is written");
-    let started = Instant::now();
-    while child.try_wait().expect("the example").is_none() {
-      if started.elapsed() > BOUND {
-        child.kill().expect("the example ends");
-        panic!("{name} ran for more than {BOUND:?}");
-      }
-      thread::sleep(Duration::from_millis(20));
-    }
-    let out = child.wait_with_output().expect("the example ends");
+    let out =
+      pipes::finished(child, BOUND).unwrap_or_else(|| panic!("{name} ran for more than {BOUND:?}"));
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
     String::from_utf8(out.stdout).expect("its stdout")
   }

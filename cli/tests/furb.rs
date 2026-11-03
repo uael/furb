@@ -6,10 +6,6 @@
 //! test gave it, and it counts what it answered.
 
 #![cfg(unix)]
-#![expect(
-  clippy::disallowed_methods,
-  reason = "debt: a call that blocks: sleep, block_on or try_wait"
-)]
 #![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
 #![expect(
   clippy::let_underscore_must_use,
@@ -17,6 +13,9 @@
 )]
 #![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
 #![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
+
+#[path = "../../tests/common/pipes.rs"]
+mod pipes;
 
 use std::{
   fs,
@@ -345,18 +344,26 @@ fn a_word_run_on_a_record_that_holds_pending_work_names_that_work_and_wakes_none
 /// What a command did, or nothing when it still ran after this many seconds and was killed.
 fn ran_within(mut command: Command, seconds: u64) -> Option<Output> {
   let piped = || Stdio::piped();
-  let mut child =
+  let child =
     command.stdin(Stdio::null()).stdout(piped()).stderr(piped()).spawn().expect("furb starts");
-  let end = Instant::now() + Duration::from_secs(seconds);
-  while child.try_wait().expect("furb is polled").is_none() {
-    if Instant::now() >= end {
-      let _ = child.kill();
-      let _ = child.wait();
-      return None;
-    }
-    thread::sleep(Duration::from_millis(50));
-  }
-  child.wait_with_output().ok()
+  pipes::finished(child, Duration::from_secs(seconds))
+}
+
+#[test]
+fn a_command_that_fills_both_pipes_is_read_to_its_end_within_the_bound() {
+  let mut command = Command::new("sh");
+  command.args(["-c", "head -c 300000 /dev/zero; head -c 300000 /dev/zero >&2"]);
+  let output = ran_within(command, 30).expect("the command ends");
+  assert_eq!((output.stdout.len(), output.stderr.len()), (300_000, 300_000));
+}
+
+#[test]
+fn a_command_that_runs_past_the_bound_is_killed_and_gives_nothing() {
+  let mut command = Command::new("sh");
+  command.args(["-c", "exec sleep 30"]);
+  let started = Instant::now();
+  assert!(ran_within(command, 1).is_none());
+  assert!(started.elapsed() < Duration::from_secs(20));
 }
 
 #[test]
