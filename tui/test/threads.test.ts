@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { RGBA } from "@opentui/core";
 import { chainThreads } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
-import { glyph, palettes } from "../src/theme.ts";
+import { glyph, palettes, spacing as space } from "../src/theme.ts";
 import { type Composing, cellAt, composing } from "./composing.ts";
 import { idle } from "./idle.ts";
 
@@ -392,15 +392,20 @@ test("the keys of the footer stand under the context, on the row of the footer, 
     { width: 140, height: 40 },
   ));
 
-test("the sidebar ends as far above the context as the last thread of the feed ends above the input", () =>
+test("the sidebar ends as far above the context as the feed ends above the input, on a feed that fills the screen", () =>
   composing(
     async ({ app, frame }) => {
       await frame();
-      const gap = app.corner.y - (app.railSlot.y + app.railSlot.height);
-      expect(gap).toBeGreaterThan(0);
-      const last = app.scroll.content.getChildren().at(-1);
-      expect(last).toBeDefined();
-      expect(app.scroll.y + app.scroll.height - ((last?.y ?? 0) + (last?.height ?? 0))).toBe(gap);
+      app.scroll.scrollTo(0);
+      const rows = (await frame()).split("\n");
+      expect(app.scroll.scrollHeight).toBeGreaterThan(app.scroll.height);
+      const feed = app.lower.y - (app.scroll.y + app.scroll.height);
+      const side = app.corner.y - (app.railSlot.y + app.railSlot.height);
+      expect(feed).toBe(space.rest);
+      expect(side).toBe(space.rest);
+      const left = 140 - app.corner.width;
+      expect((rows[app.lower.y] ?? "").slice(3, 4)).toBe(glyph.halfTop);
+      expect((rows[app.corner.y] ?? "").slice(left + 2, left + 3)).toBe(glyph.halfTop);
     },
     { width: 140, height: 20 },
     true,
