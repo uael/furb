@@ -787,8 +787,17 @@ test("a quote in a turn of the transcript takes the colors of a string region", 
       await session.refresh();
       session.show("transcript");
       await frame();
-      app.scroll.scrollTo(app.scroll.scrollHeight);
-      const lines = (await frame()).split("\n");
+      await until(
+        screen.renderer,
+        () => {
+          app.scroll.scrollTo(app.scroll.scrollHeight);
+          screen.renderer.requestRender();
+          const shown = screen.captureCharFrame();
+          return shown.includes("<s:rung") && shown.includes("quoted body");
+        },
+        "frame",
+      );
+      const lines = screen.captureCharFrame().split("\n");
       // The turn of the rung quotes the word that it ran, so its tags are the keywords and the word is the string.
       const open = lines.findIndex((line) => line.includes("<s:rung"));
       const body = lines.findIndex((line) => line.includes("quoted body"));
