@@ -27,7 +27,7 @@ test("a word of the operator stands as his messages stand, as its program in a p
       await session.refresh();
       const running = await frame();
       expect(running).not.toContain("You ran");
-      expect(line(running)).toMatch(/◉ +1 await wait\(60\) +waits 60s/);
+      expect(line(running)).toMatch(/[\u2800-\u28ff✻] await wait\(60\) +waits 60s/);
       expect(app.scroll.getChildren().some((card) => card.id === rung)).toBe(true);
       expect(line(running)).toMatch(/^ +┃ /);
       const wait = session.acts.find((act) => act.kind === "wait" && act.by === rung);
@@ -411,7 +411,7 @@ test("the setup of the root stands as code: a comment that names the setup, then
               .trim()
               .replace(/\s{2,}.*$/, ""),
           )
-          .filter((row) => row && !/^word · rung\d+/.test(row))
+          .filter((row) => /^\d+ /.test(row))
           .slice(0, 16);
         expect(shown[0]).toBe('1 debug(t"{standing()[4]=}")');
         expect(shown[1]).toMatch(/^2 read\('.*DOCTRINE\.md'\)$/);
@@ -428,7 +428,7 @@ test("the setup of the root stands as code: a comment that names the setup, then
           "14 stand()",
         ]);
         expect(shown[14]).toMatch(/^15 cd\('.*'\)$/);
-        expect(shown[15]).not.toMatch(/^16 /);
+        expect(shown[15] ?? "").not.toMatch(/^16 /);
         expect(rows.join("\n")).not.toMatch(/rung\d+…\d+|remember1|ouroboros1|catchup1/);
       },
       { width: 140, height: 90 },

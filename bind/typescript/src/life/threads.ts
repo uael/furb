@@ -283,3 +283,35 @@ export function chainThreads(
   }
   return [...out.values()];
 }
+
+/** A thread of a list with the threads that its ladder made, its agents, each nested the same way, and the questions
+ * that wait in it or in any of its agents. */
+export interface ThreadNode {
+  thread: ChainThread;
+  agents: ThreadNode[];
+  asks: string[];
+}
+
+/** The threads of a list as a tree: each thread under the thread whose ladder made its prompt, as [`threadOf`] walks
+ * the makers, and a thread whose maker is no thread of the list at the top, each list in the order that it was given.
+ * A question that waits in an agent waits on each thread over it too. */
+export function nestThreads(list: readonly ChainThread[], rows: Rows): ThreadNode[] {
+  const nodes = new Map(
+    list.map((thread): [string, ThreadNode] => [thread.act.id, { thread, agents: [], asks: [] }]),
+  );
+  const tops: ThreadNode[] = [];
+  for (const node of nodes.values()) {
+    const parent = nodes.get(threadOf(node.thread.act, rows) ?? "");
+    if (parent && parent !== node) parent.agents.push(node);
+    else tops.push(node);
+  }
+  const gather = (node: ThreadNode, depth: number): string[] => {
+    node.asks = [
+      ...node.thread.asks,
+      ...(depth < 64 ? node.agents.flatMap((one) => gather(one, depth + 1)) : []),
+    ];
+    return node.asks;
+  };
+  for (const top of tops) gather(top, 0);
+  return tops;
+}

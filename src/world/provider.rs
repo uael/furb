@@ -22,11 +22,6 @@
 )]
 #![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
 #![expect(clippy::implicit_clone, reason = "debt: to_owned or to_string where clone serves")]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
 #![expect(clippy::map_unwrap_or, reason = "debt: map then unwrap_or, where map_or serves")]
 #![expect(clippy::option_option, reason = "debt: an Option of an Option, where an enum serves")]
 #![expect(
@@ -797,7 +792,7 @@ impl Provider {
     let mut images = Images::new(images);
     hearing(&["stand", "reply", RAN], move |mut co: Co<Replied>| async move {
       // The ids of chains repeat in every life, so a conversation of this life is keyed by the life too.
-      let life = uuid();
+      let life = uuid().map_err(|no| Fault::refused(no.to_string()))?;
       let mut replies: HashMap<String, Reply> = HashMap::new();
       // The actor whose last reply on each chain the ear refused.
       let mut mute: HashMap<String, String> = HashMap::new();
@@ -1083,9 +1078,16 @@ impl Provider {
             if let (Err(why), true) = (&got, reply.again)
               && !recoverable
             {
-              let _ = co
+              let paused = co
                 .call("pause", vec![Object::string(&reply.chain), Object::string(why)], vec![])
                 .await;
+              if let Err(no) = paused {
+                told(
+                  &mut co,
+                  &reply.chain,
+                  &format!("#{} could not pause the chain: {}", reply.rung, no.message()),
+                );
+              }
             }
             let got = got.map_err(Fault::refused).unwrap_or_else(|fault| fault.object());
             say(&mut co, Fact::says("done", &id, [got]));
@@ -1256,9 +1258,16 @@ async fn asking(
 }
 
 /// The wait of a call of a model to be made again while a pause holds its reply, which the wake ends. A reply that
-/// went has no pause to wait for.
-async fn released(hold: &mut holding::Receiver<bool>) {
-  let _ = hold.wait_for(|paused| !*paused).await;
+/// went has no pause to wait for, so its call ends.
+async fn released(hold: &mut holding::Receiver<bool>) -> Result<(), CompletionError> {
+  hold.wait_for(|paused| !*paused).await.map(drop).map_err(reply_gone)
+}
+
+/// The failure of a call of a model whose reply went: no one reads what it would give.
+fn reply_gone(why: impl std::fmt::Display) -> CompletionError {
+  CompletionError::ProviderError(format!(
+    "the reply went before its call of the model ended: {why}"
+  ))
 }
 
 /// What the work of a reply gives: a part that its model wrote, a retry of the call of its model, or what the reply
@@ -1350,7 +1359,8 @@ fn written(id: &str, tells: &mpsc::UnboundedSender<Replied>) -> Told {
   let (id, tells) = (id.to_owned(), tells.clone());
   Arc::new(move |text, thinking| {
     let (text, thinking) = (text.to_owned(), thinking.to_owned());
-    let _ = tells.send(Replied::Wrote { id: id.clone(), text, thinking });
+    // A reply that went has no reader for what its model still writes.
+    drop(tells.send(Replied::Wrote { id: id.clone(), text, thinking }));
   })
 }
 
@@ -1837,7 +1847,7 @@ fn answered(
       let mut limited = false;
       let mut signed = false;
       if retry {
-        released(&mut hold).await;
+        released(&mut hold).await?;
       }
       loop {
         let no = match (model.answers)(asked.clone()).await {
@@ -1857,39 +1867,45 @@ fn answered(
             reset.map_or(String::new(), |at| at.strftime(" until %Y-%m-%d %H:%M (%Q)").to_string());
           let why = format!("usage limit{until}");
           let retry = Retry { attempt: attempt + 1, most: backoff.most, wait, why };
-          let _ = tells.send(Replied::Retried { id: id.clone(), retry, limit: !limited });
+          tells
+            .send(Replied::Retried { id: id.clone(), retry, limit: !limited })
+            .map_err(reply_gone)?;
           limited = true;
           tokio::time::sleep(wait).await;
-          released(&mut hold).await;
+          released(&mut hold).await?;
           continue;
         }
         if claude::signed_out(&no) {
           let why = "signed out, sign in again".to_owned();
           let retry = Retry { attempt: attempt + 1, most: backoff.most, wait: SIGN_POLL, why };
-          let _ = tells.send(Replied::Retried { id: id.clone(), retry, limit: !signed });
+          tells
+            .send(Replied::Retried { id: id.clone(), retry, limit: !signed })
+            .map_err(reply_gone)?;
           signed = true;
           tokio::time::sleep(SIGN_POLL).await;
-          released(&mut hold).await;
+          released(&mut hold).await?;
           continue;
         }
         let Some(why) = passing(&no).filter(|_| attempt < backoff.most) else { return Err(no) };
         attempt += 1;
         let wait = backoff.wait(attempt);
         let retry = Retry { attempt, most: backoff.most, wait, why };
-        let _ = tells.send(Replied::Retried { id: id.clone(), retry, limit: false });
+        tells.send(Replied::Retried { id: id.clone(), retry, limit: false }).map_err(reply_gone)?;
         tokio::time::sleep(wait).await;
-        released(&mut hold).await;
+        released(&mut hold).await?;
       }
     };
     let (got, dropped) = match got.await {
       Ok((turn, dropped)) => (Ok(turn), dropped),
       Err(no) => (Err(no), None),
     };
-    let _ = tells.send(Replied::Came { id, got, dropped });
+    // The stream holds the receiver, so a send that fails means the stream is going.
+    // The stream then gives the reply itself.
+    tells.send(Replied::Came { id, got, dropped }).err().map(|no| no.0)
   };
   // The reply comes through the channel alone, so it comes after all that its model wrote before it.
   let told = stream::poll_fn(move |cx| told.poll_recv(cx));
-  let came = stream::once(came).filter_map(|()| std::future::ready(None));
+  let came = stream::once(came).filter_map(std::future::ready);
   stream::select(told, came).take_until(stopped)
 }
 
@@ -2080,13 +2096,23 @@ fn hosted(turn: ObjectRef<'_>) -> Result<Object, CompletionError> {
 }
 
 /// A new random id, a uuid of version 4, as the claude command line takes one for a conversation.
-fn uuid() -> String {
+/// A machine that gives no random bytes fails the call that needs the id.
+fn uuid() -> Result<String, CompletionError> {
+  uuid_from(getrandom::fill)
+}
+
+/// The uuid that the bytes of `fill` make.
+fn uuid_from(
+  fill: impl FnOnce(&mut [u8]) -> Result<(), getrandom::Error>,
+) -> Result<String, CompletionError> {
   let mut bytes = [0u8; 16];
-  let _ = getrandom::fill(&mut bytes);
+  fill(&mut bytes).map_err(|no| {
+    CompletionError::ProviderError(format!("the machine gave no random bytes: {no}"))
+  })?;
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   let hex: String = bytes.iter().map(|one| format!("{one:02x}")).collect();
-  format!("{}-{}-{}-{}-{}", &hex[..8], &hex[8..12], &hex[12..16], &hex[16..20], &hex[20..])
+  Ok(format!("{}-{}-{}-{}-{}", &hex[..8], &hex[8..12], &hex[12..16], &hex[16..20], &hex[20..]))
 }
 
 #[cfg(test)]
