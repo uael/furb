@@ -340,6 +340,11 @@ fix what your change broke, and report what was broken before.
 - `uv run python script/links.py`: check that each link in a README that a package carries works on the page of the
   package on PyPI, npm or crates.io, which read no relative link. It lists each package and its README from the
   manifests, and fails on a relative link, which `--fix` writes as absolute, at `main` on GitHub. The hooks run it.
+- `uv run python script/contract.py [--base TAG] [--since REF] [--title TITLE] [--wording]`: compare `src/furb/engine.pyi` and the
+  interface of each official kit with the last tag, and name each break, each sentence that changes and each minor. It
+  fails on a break, and on a sentence that changes, unless the title holds `!`, and unless `--wording` says that the
+  pull request holds the label wording for the sentence. A change that stands already at the ref of `--since`, the base of
+  the pull request, is known and fails nothing. `.github/workflows/contract.yml` runs it on each pull request.
 - `uv run python script/paths.py`: check that each path of the repository that a file of `script/` or of
   `.github/workflows/` names is a file or a folder that git holds, or a file that a build makes and git ignores. It
   names the file, the line and the path of each one that stands no more, and it reads git alone. The hooks run it.

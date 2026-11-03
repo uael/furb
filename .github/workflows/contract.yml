@@ -1,0 +1,57 @@
+name: contract
+
+# The contract is the one promise to a caller of furb: `src/furb/engine.pyi` and the interface of each official kit.
+# script/contract.py reads each one at the last tag and in the pull request, and names each change that breaks a
+# caller. A break needs a title with a !, and a sentence that changes needs the label wording or a title with a !. It
+# is a workflow of its own, and not a job of gates.yml, since it runs again at each edit of the title and at each
+# label: a run of gates.yml for those events would cancel the suite of the head, or show each of its jobs as skipped.
+on:
+  pull_request:
+    types: [opened, synchronize, edited, labeled, unlabeled, reopened]
+  # release.yml starts it on the branch of the pull request of a release, which the token of a workflow opens, and
+  # which so starts no workflow.
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  contract:
+    # A branch protection requires the check by this name.
+    name: the contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            src/furb/engine.pyi
+            extensions/*/*.pyi
+            script/contract.py
+          sparse-checkout-cone-mode: false
+      # The script reads each contract of the last tag through git, so the tags come with the commit that each names.
+      # The title and the labels come through the environment, and never into the text of the script.
+      - env:
+          TITLE: ${{ github.event.pull_request.title }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ' ') }}
+          BRANCH: ${{ github.ref_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch --no-tags --depth=1 origin '+refs/tags/v*:refs/tags/v*'
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            TITLE=$(gh pr view "$BRANCH" --repo "$GITHUB_REPOSITORY" --json title --jq .title)
+            LABELS=$(gh pr view "$BRANCH" --repo "$GITHUB_REPOSITORY" --json labels --jq '[.labels[].name] | join(" ")')
+            BASE=main
+          fi
+          # A break that the base holds already was declared by the pull request that made it.
+          git fetch --no-tags --depth=1 origin "$BASE"
+          flags=
+          case " $LABELS " in *" wording "*) flags=--wording ;; esac
+          python3 -I script/contract.py --since FETCH_HEAD --title "$TITLE" $flags
