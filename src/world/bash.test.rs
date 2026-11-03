@@ -96,6 +96,12 @@ fn fake_shell(name: &str, body: &str) -> std::path::PathBuf {
   path
 }
 
+/// What the login shell says its PATH is, awaited on the runtime of the ears.
+#[cfg(unix)]
+fn asked(shell: &std::path::Path) -> Option<std::ffi::OsString> {
+  crate::ear::reactor().block_on(asked_path(shell))
+}
+
 #[test]
 #[cfg(unix)]
 fn the_path_of_the_login_shell_is_read_between_its_marks() {
@@ -103,16 +109,16 @@ fn the_path_of_the_login_shell_is_read_between_its_marks() {
     "marks",
     "echo noise of a profile; printf '<furb-path>/opt/homebrew/bin:/usr/bin</furb-path>'",
   );
-  assert_eq!(asked_path(&shell), Some("/opt/homebrew/bin:/usr/bin".into()));
+  assert_eq!(asked(&shell), Some("/opt/homebrew/bin:/usr/bin".into()));
 }
 
 #[test]
 #[cfg(unix)]
 fn a_login_shell_that_fails_or_gives_no_path_gives_none() {
-  assert_eq!(asked_path(&fake_shell("fails", "printf '<furb-path>/a</furb-path>'; exit 1")), None);
-  assert_eq!(asked_path(&fake_shell("empty", "printf '<furb-path></furb-path>'")), None);
-  assert_eq!(asked_path(&fake_shell("silent", "true")), None);
-  assert_eq!(asked_path(std::path::Path::new("/no/such/shell")), None);
+  assert_eq!(asked(&fake_shell("fails", "printf '<furb-path>/a</furb-path>'; exit 1")), None);
+  assert_eq!(asked(&fake_shell("empty", "printf '<furb-path></furb-path>'")), None);
+  assert_eq!(asked(&fake_shell("silent", "true")), None);
+  assert_eq!(asked(std::path::Path::new("/no/such/shell")), None);
 }
 
 #[test]

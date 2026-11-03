@@ -2,10 +2,6 @@
 //! writes it, and ends at its exit, at its timeout, or at the done that a control said of it first.
 
 #![expect(clippy::cast_precision_loss, reason = "debt: an as cast that loses precision")]
-#![expect(
-  clippy::disallowed_methods,
-  reason = "debt: a call that blocks: sleep, block_on or try_wait"
-)]
 #![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
 #![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
 #![expect(
@@ -20,13 +16,13 @@ use std::{
   env,
   ffi::{OsStr, OsString},
   future,
-  io::{ErrorKind, Read},
+  io::ErrorKind,
   ops::{Deref, DerefMut},
   path::{Path, PathBuf},
   pin::pin,
   process::{Command, Stdio},
   sync::OnceLock,
-  time::{Duration, Instant},
+  time::Duration,
 };
 
 use futures::{
@@ -66,41 +62,28 @@ pub fn shell() -> &'static Path {
 /// The PATH that the login shell of the user sets, read once for the process, or none on Windows, with no `SHELL`, or
 /// when that shell fails to give one. A life started from a desktop or a service has the short PATH of its parent, which
 /// lacks the folders that the profile of the user adds, as `/opt/homebrew/bin`.
-fn login_path() -> Option<&'static OsString> {
-  static FOUND: OnceLock<Option<OsString>> = OnceLock::new();
-  FOUND
-    .get_or_init(
-      || if cfg!(windows) { None } else { asked_path(Path::new(&env::var_os("SHELL")?)) },
-    )
-    .as_ref()
+async fn login_path() -> Option<&'static OsString> {
+  static FOUND: tokio::sync::OnceCell<Option<OsString>> = tokio::sync::OnceCell::const_new();
+  let found = async {
+    if cfg!(windows) { None } else { asked_path(Path::new(&env::var_os("SHELL")?)).await }
+  };
+  FOUND.get_or_init(|| found).await.as_ref()
 }
 
 /// What the login shell `shell` says its PATH is, between two marks that a profile which writes to its output cannot
-/// forge by accident, or none when it fails, gives no path, or runs past five seconds.
-fn asked_path(shell: &Path) -> Option<OsString> {
-  let mut child = Command::new(shell)
+/// forge by accident, or none when it fails, gives no path, or runs past five seconds, when it is ended.
+async fn asked_path(shell: &Path) -> Option<OsString> {
+  let mut command = tokio::process::Command::new(shell);
+  command
     .args(["-l", "-c", "printf '<furb-path>%s</furb-path>' \"$PATH\""])
     .stdin(Stdio::null())
     .stdout(Stdio::piped())
     .stderr(Stdio::null())
-    .spawn()
-    .ok()?;
-  let end = Instant::now() + Duration::from_secs(5);
-  let status = loop {
-    if let Some(status) = child.try_wait().ok()? {
-      break status;
-    }
-    if Instant::now() >= end {
-      let _ = child.kill();
-      let _ = child.wait();
-      return None;
-    }
-    std::thread::sleep(Duration::from_millis(10));
-  };
-  let mut said = String::new();
-  child.stdout.take()?.read_to_string(&mut said).ok()?;
+    .kill_on_drop(true);
+  let out = tokio::time::timeout(Duration::from_secs(5), command.output()).await.ok()?.ok()?;
+  let said = String::from_utf8_lossy(&out.stdout);
   let path = said.split_once("<furb-path>")?.1.split_once("</furb-path>")?.0;
-  (status.success() && !path.is_empty()).then(|| OsString::from(path))
+  (out.status.success() && !path.is_empty()).then(|| OsString::from(path))
 }
 
 /// The folders of `login` in order, then those of `current` that it lacks.
@@ -190,6 +173,12 @@ pub fn bash(scratch: Scratch, record: &[Object]) -> Box<dyn Ear> {
             }
             Said::Exit { about, exit } if running.remove(&about).is_some() => {
               Fact::says("done", &about, [exit.object()])
+            }
+            // The machine would not start it, so the ear closes it with why, as a prompt that the operator cannot
+            // answer is closed, and the chain is told why.
+            Said::Failed { about, fault } if running.remove(&about).is_some() => {
+              co.call("close", vec![fault.object()], vec![("id", Object::string(&about))]).await?;
+              continue;
             }
             _ => continue,
           };
@@ -305,23 +294,25 @@ impl Running {
   }
 }
 
-/// What a command says: a text that one of its streams wrote, or its exit.
+/// What a command says: a text that one of its streams wrote, its exit, or why the machine would not start it.
 enum Said {
   Out { about: String, text: String, stream: &'static str },
   Exit { about: String, exit: Exit },
+  Failed { about: String, fault: Fault },
 }
 
-/// A command that just started: its act, its process, the group of its processes, its timeout, and the text that its
+/// A command ready to start: its act, its shell with its words, how it is shown, its directory, its timeout, and the text that its
 /// stdin is given, or nothing when its stdin stays open for what is fed to it.
 struct Begun {
   about: String,
-  child: Shell,
-  group: Group,
+  command: Command,
+  shown: String,
+  dir: PathBuf,
   timeout: Option<Duration>,
   given: Option<String>,
 }
 
-/// A command begun: its shell spawned in the directory of its chain, with the scratch directory as its `TMPDIR`.
+/// A command begun: its shell made ready in the directory of its chain, with the scratch directory as its `TMPDIR`.
 async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, Fault> {
   let about = a.about().to_owned();
   let on = a.on().to_owned();
@@ -349,11 +340,17 @@ async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, 
     .stderr(Stdio::piped());
   let tmp = scratch.made()?;
   command.env("TMPDIR", tmp);
-  if let Some(login) = login_path() {
-    command.env("PATH", merged_path(login, &env::var_os("PATH").unwrap_or_default()));
-  }
   if cfg!(windows) {
     command.env("TMP", tmp).env("TEMP", tmp);
+  }
+  Ok(Begun { about, command, shown, dir, timeout, given })
+}
+
+/// The shell of a command spawned with the PATH of the login shell of the user, and the group of its processes, or
+/// why the machine would not start it or hold it.
+async fn spawned(mut command: Command, shown: &str, dir: &Path) -> Result<(Shell, Group), Fault> {
+  if let Some(login) = login_path().await {
+    command.env("PATH", merged_path(login, &env::var_os("PATH").unwrap_or_default()));
   }
   grouped(&mut command);
   let mut child = tokio::process::Command::from(command).spawn().map_err(|no| {
@@ -365,7 +362,7 @@ async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, 
     Fault::refused(format!("{shown} did not start: {why}: {}", dir.display()))
   })?;
   match Group::of(&child) {
-    Ok(group) => Ok(Begun { about, child: Shell(Some(child)), group, timeout, given }),
+    Ok(group) => Ok((Shell(Some(child)), group)),
     Err(no) => {
       let _ = child.start_kill();
       Err(Fault::refused(format!("{shown} could not be held: {no}")))
@@ -400,7 +397,14 @@ async fn ran(
   stopped: oneshot::Receiver<()>,
   says: UnboundedSender<Said>,
 ) {
-  let Begun { about, mut child, mut group, timeout, .. } = begun;
+  let Begun { about, command, shown, dir, timeout, .. } = begun;
+  let (mut child, mut group) = match spawned(command, &shown, &dir).await {
+    Ok(one) => one,
+    Err(fault) => {
+      let _ = says.unbounded_send(Said::Failed { about, fault });
+      return;
+    }
+  };
   let (stdout, stderr, stdin) = (child.stdout.take(), child.stderr.take(), child.stdin.take());
   let (mut out, mut err) = (Kept::new(HEAD, TAIL), Kept::new(HEAD, TAIL));
   let streams = async {

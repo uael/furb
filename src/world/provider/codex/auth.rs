@@ -1,14 +1,6 @@
 //! OpenAI models on a ChatGPT subscription, with credentials kept outside the project.
 
 #![expect(clippy::cast_possible_truncation, reason = "debt: an as cast that can truncate")]
-#![expect(
-  clippy::clone_on_ref_ptr,
-  reason = "debt: a clone of an Arc or an Rc that hides its kind"
-)]
-#![expect(
-  clippy::disallowed_methods,
-  reason = "debt: a call that blocks: sleep, block_on or try_wait"
-)]
 #![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
 #![expect(clippy::items_after_statements, reason = "debt: an item declared after a statement")]
 #![expect(
@@ -19,10 +11,6 @@
 #![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
 #![expect(clippy::map_unwrap_or, reason = "debt: map then unwrap_or, where map_or serves")]
 #![expect(
-  clippy::needless_pass_by_value,
-  reason = "debt: an argument taken by value and only borrowed"
-)]
-#![expect(
   clippy::redundant_closure_for_method_calls,
   reason = "debt: a closure where a method path serves"
 )]
@@ -32,14 +20,11 @@
 use std::{
   collections::HashMap,
   fs::{self, File, OpenOptions},
-  io::{Read, Write},
+  io::Write,
   net::TcpListener,
   path::{Path, PathBuf},
-  sync::{
-    Arc, Mutex, OnceLock,
-    atomic::{AtomicBool, Ordering},
-  },
-  time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+  sync::{Mutex, OnceLock},
+  time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -47,6 +32,11 @@ use rig_core::http_client::ReqwestClient;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+
+use tokio::{
+  io::{AsyncReadExt, AsyncWriteExt},
+  sync::watch,
+};
 
 use crate::{ear::reactor, extension::Places};
 
@@ -106,7 +96,7 @@ struct Catalog {
 
 struct Flow {
   status: Status,
-  canceled: Arc<AtomicBool>,
+  canceled: watch::Sender<bool>,
 }
 
 pub(super) struct Failure {
@@ -244,13 +234,13 @@ pub fn cancel(config: Option<&Path>) {
     .get_mut(&path)
     .filter(|flow| ["waiting", "connecting"].contains(&flow.status.state.as_str()))
   {
-    flow.canceled.store(true, Ordering::Relaxed);
+    flow.canceled.send_replace(true);
     flow.status = Status { state: "canceled".to_owned(), ..Status::default() };
   }
 }
 
-fn update(path: &Path, canceled: &AtomicBool, status: Status) {
-  if canceled.load(Ordering::Relaxed) {
+fn update(path: &Path, canceled: &watch::Receiver<bool>, status: Status) {
+  if *canceled.borrow() {
     return;
   }
   if let Some(flow) = flows().lock().unwrap_or_else(|no| no.into_inner()).get_mut(path) {
@@ -291,7 +281,7 @@ pub(super) fn needs_login(path: &Path) {
         url: None,
         message: Some("Sign in to Codex again from Providers.".to_owned()),
       },
-      canceled: Arc::new(AtomicBool::new(false)),
+      canceled: watch::channel(false).0,
     },
   );
 }
@@ -462,7 +452,7 @@ pub fn begin(config: Option<&Path>) -> Result<Status, String> {
     }
     retry = flows.get(&path).is_some_and(|flow| flow.status.state == "needs-login");
   }
-  let canceled = Arc::new(AtomicBool::new(false));
+  let (stop, canceled) = watch::channel(false);
   let existing =
     held(&path).filter(|one| !retry && (one.expires > now() + 60_000 || one.refresh.is_some()));
   let (status, callback) = if existing.is_some() {
@@ -496,16 +486,12 @@ pub fn begin(config: Option<&Path>) -> Result<Status, String> {
   flows()
     .lock()
     .unwrap_or_else(|no| no.into_inner())
-    .insert(path.clone(), Flow { status: status.clone(), canceled: canceled.clone() });
+    .insert(path.clone(), Flow { status: status.clone(), canceled: stop });
   reactor().spawn(async move {
     let result = async {
       let credential = match callback {
         Some((listener, state, verifier)) => {
-          let stopping = canceled.clone();
-          let code =
-            tokio::task::spawn_blocking(move || callback_code(listener, &state, &stopping))
-              .await
-              .map_err(|no| no.to_string())??;
+          let code = callback_code(listener, &state, canceled.clone()).await?;
           let token = token(&[
             ("grant_type", "authorization_code"),
             ("client_id", CLIENT),
@@ -515,7 +501,7 @@ pub fn begin(config: Option<&Path>) -> Result<Status, String> {
           ])
           .await?;
           let credential = token.credential(None)?;
-          if canceled.load(Ordering::Relaxed) {
+          if *canceled.borrow() {
             return Err(Failure::from("Sign-in canceled"));
           }
           save(&path.join("codex.json"), &credential)?;
@@ -539,68 +525,65 @@ pub fn begin(config: Option<&Path>) -> Result<Status, String> {
   Ok(status)
 }
 
-fn callback_code(
+/// The code of the sign-in that the browser gives back on the callback of furb, awaited on the runtime of the ears
+/// until it comes, the sign-in is canceled or ten minutes pass.
+async fn callback_code(
   listener: TcpListener,
   state: &str,
-  canceled: &AtomicBool,
+  mut canceled: watch::Receiver<bool>,
 ) -> Result<String, String> {
-  let stop = Instant::now() + Duration::from_secs(600);
-  while Instant::now() < stop && !canceled.load(Ordering::Relaxed) {
-    let (mut stream, _) = match listener.accept() {
-      Ok(one) => one,
-      Err(no) if no.kind() == std::io::ErrorKind::WouldBlock => {
-        std::thread::sleep(Duration::from_millis(100));
-        continue;
-      }
-      Err(no) => return Err(no.to_string()),
-    };
-    stream.set_nonblocking(false).map_err(|no| no.to_string())?;
-    stream.set_read_timeout(Some(Duration::from_secs(2))).map_err(|no| no.to_string())?;
-    let mut bytes = [0; 8192];
-    let mut count = 0;
-    while count < bytes.len() && !bytes[..count].windows(4).any(|part| part == b"\r\n\r\n") {
-      match stream.read(&mut bytes[count..]) {
-        Ok(0) => break,
-        Ok(read) => count += read,
-        Err(no)
-          if matches!(no.kind(), std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock) =>
-        {
-          break;
+  let listener = tokio::net::TcpListener::from_std(listener).map_err(|no| no.to_string())?;
+  let heard = async {
+    loop {
+      let (mut stream, _) = listener.accept().await.map_err(|no| no.to_string())?;
+      let mut bytes = [0; 8192];
+      let mut count = 0;
+      while count < bytes.len() && !bytes[..count].windows(4).any(|part| part == b"\r\n\r\n") {
+        let read = tokio::time::timeout(Duration::from_secs(2), stream.read(&mut bytes[count..]));
+        match read.await {
+          Ok(Ok(0)) | Err(_) => break,
+          Ok(Ok(read)) => count += read,
+          Ok(Err(no)) => return Err(no.to_string()),
         }
-        Err(no) => return Err(no.to_string()),
+      }
+      let text = String::from_utf8_lossy(&bytes[..count]);
+      let target = text
+        .lines()
+        .next()
+        .and_then(|line| line.strip_prefix("GET "))
+        .and_then(|line| line.split_once(' '))
+        .map(|one| one.0);
+      let url =
+        target.and_then(|target| url::Url::parse(&format!("http://localhost{target}")).ok());
+      let pairs: HashMap<_, _> =
+        url.as_ref().map(|url| url.query_pairs().into_owned().collect()).unwrap_or_default();
+      let valid = url.as_ref().is_some_and(|url| url.path() == "/auth/callback")
+        && pairs.get("state").is_some_and(|one| one == state);
+      let code = valid.then(|| pairs.get("code").cloned()).flatten();
+      let (status, body) = if code.is_some() {
+        ("200 OK", "Finishing OpenAI sign-in. Return to furb.")
+      } else {
+        ("400 Bad Request", "This sign-in response is invalid. Return to furb and try again.")
+      };
+      let answer = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+      );
+      // The browser shows the answer when it can; the code holds whether or not it does.
+      let _: std::io::Result<()> = stream.write_all(answer.as_bytes()).await;
+      if let Some(code) = code {
+        return Ok(code);
+      }
+      if valid && pairs.contains_key("error") {
+        return Err("OpenAI sign-in was refused".to_owned());
       }
     }
-    let text = String::from_utf8_lossy(&bytes[..count]);
-    let target = text
-      .lines()
-      .next()
-      .and_then(|line| line.strip_prefix("GET "))
-      .and_then(|line| line.split_once(' '))
-      .map(|one| one.0);
-    let url = target.and_then(|target| url::Url::parse(&format!("http://localhost{target}")).ok());
-    let pairs: HashMap<_, _> =
-      url.as_ref().map(|url| url.query_pairs().into_owned().collect()).unwrap_or_default();
-    let valid = url.as_ref().is_some_and(|url| url.path() == "/auth/callback")
-      && pairs.get("state").is_some_and(|one| one == state);
-    let code = valid.then(|| pairs.get("code").cloned()).flatten();
-    let (status, body) = if code.is_some() {
-      ("200 OK", "Finishing OpenAI sign-in. Return to furb.")
-    } else {
-      ("400 Bad Request", "This sign-in response is invalid. Return to furb and try again.")
-    };
-    let _ = write!(
-      stream,
-      "HTTP/1.1 {status}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-      body.len()
-    );
-    if let Some(code) = code {
-      return Ok(code);
-    }
-    if valid && pairs.contains_key("error") {
-      return Err("OpenAI sign-in was refused".to_owned());
-    }
+  };
+  let ended = "OpenAI sign-in was canceled or timed out".to_owned();
+  tokio::select! {
+    got = tokio::time::timeout(Duration::from_secs(600), heard) => got.unwrap_or(Err(ended)),
+    _ = canceled.wait_for(|one| *one) => Err(ended),
   }
-  Err("OpenAI sign-in was canceled or timed out".to_owned())
 }
 
 #[cfg(test)]
