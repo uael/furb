@@ -359,6 +359,59 @@ try {
   session.folds[markdown] = false;
   await session.refresh();
   await capture("51-markdown");
+  // A test skill shows a view in the dock of the chain on screen, with each node of the closed set that a dock holds.
+  app().showTree({
+    viewer: "gallery",
+    slot: { slot: "dock", on: session.selected },
+    version: 1,
+    tree: {
+      id: "root",
+      node: "box",
+      axis: "column",
+      gap: 0,
+      border: true,
+      children: [
+        {
+          id: "title",
+          node: "text",
+          runs: [
+            { text: "checks ", tone: "accent" },
+            { text: "2 of 3 green", tone: "muted" },
+          ],
+        },
+        {
+          id: "jobs",
+          node: "table",
+          header: ["job", "state"],
+          rows: [
+            [
+              { id: "j1", node: "text", runs: [{ text: "lint" }] },
+              { id: "s1", node: "text", runs: [{ text: "pass", tone: "success" }] },
+            ],
+            [
+              { id: "j2", node: "text", runs: [{ text: "types" }] },
+              { id: "s2", node: "text", runs: [{ text: "pass", tone: "success" }] },
+            ],
+            [
+              { id: "j3", node: "text", runs: [{ text: "suite" }] },
+              { id: "s3", node: "progress" },
+            ],
+          ],
+        },
+        { id: "share", node: "progress", done: 0.66 },
+        { id: "note", node: "input", value: "", hint: "a note for the rerun" },
+        { id: "rerun", node: "button", label: "Rerun failed" },
+      ],
+    },
+  });
+  await capture("51b-skill-view");
+  const role = session.host.role;
+  session.host.role = "read";
+  app().dockKey = "";
+  app().renderDock();
+  await capture("51c-skill-view-read-only");
+  session.host.role = role;
+  app().disposeView("gallery");
   // The rung that wrote the file opens to its read and its write, each with what it did.
   session.folds[markdown] = true;
   const wrote = session.acts.find((act) => act.kind === "write")?.by;
