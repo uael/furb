@@ -514,7 +514,7 @@ test("deleting the current session moves to the next session that opens, and to 
       const current = await library.create(group, "Delete me");
       lease = store(held.path)[1];
       const sibling = group.sessions.find((entry) => entry.path === held.path);
-      expect(group.sessions.map((entry) => entry.name)).toEqual(["Delete me", basename(held.path, ".jsonl")]);
+      expect(group.sessions.map((entry) => entry.name)).toEqual(["Delete me", "Held elsewhere"]);
       await library.delete(current);
       expect(sibling?.status).toBe("failed");
       expect(sibling?.error).toContain("Another process owns");

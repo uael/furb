@@ -564,7 +564,9 @@ export class Workspaces extends EventEmitter {
     }
     if (entry.session) {
       entry.session.sessionName = label;
-      if (name !== undefined) void entry.session.rename(name);
+      // A session that opens in the background says its name when its life opens, and the others wait for the record.
+      const said = name === undefined ? undefined : entry.session.rename(name);
+      if (!lazy) await said;
       entry.name = label;
       entry.session.save();
     }
