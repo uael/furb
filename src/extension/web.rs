@@ -4,10 +4,9 @@
 #![expect(clippy::match_bool, reason = "debt: a match on a bool")]
 #![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
 
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc};
 
 use futures::{FutureExt, StreamExt, future::BoxFuture, stream};
-use rig_core::http_client::ReqwestClient;
 use serde_json::{Value, json};
 use unsync::oneshot;
 
@@ -15,27 +14,14 @@ use crate::{
   ear::{Co, Ear, Next, hearing, say},
   fact::Fact,
   value::{Fault, Text},
-  world::{Search, Searches, posted, spawned},
+  world::{Search, Searches, fetched, posted, spawned},
 };
 
 /// The free search, which needs no key: the server of Parallel for agents, which answers the protocol of MCP.
 const FREE: &str = "https://search.parallel.ai/mcp";
 
-/// How a fetch names itself to a server.
-const AGENT: &str = "Mozilla/5.0 (compatible; furb; +https://github.com/uael/furb)";
-
-/// The kinds of a page that a fetch prefers.
-const ACCEPT: &str = "text/html, text/markdown;q=0.9, text/plain;q=0.8, */*;q=0.5";
-
-/// The largest page that a fetch reads, in bytes.
-const LARGEST: u64 = 10 << 20;
-
 /// The most of the excerpts of one result of the free search that an answer holds, in characters.
 const EXCERPT: usize = 1500;
-
-/// The tags of a page that hold no text to read, which its Markdown leaves out.
-const SKIPPED: [&str; 8] =
-  ["head", "script", "style", "noscript", "template", "svg", "iframe", "canvas"];
 
 /// What a work of the ear came to: the act, and its text or why it has none.
 type Worked = (String, Result<Text, String>);
@@ -44,8 +30,8 @@ type Worked = (String, Result<Text, String>);
 /// text or with the refusal. A web_search, of a query and an actor, is answered by the native search of the provider
 /// of that actor, which `native` gives, or by the free search when the provider has none; its text stands at the
 /// path of the query. A web_fetch of an address is answered with the page at that address, as Markdown when it is
-/// HTML and as it is when it is other text, at the path of that address. A control that ends an act first ends its
-/// work, and the ear says nothing more of it.
+/// HTML and as it is when it is other text, at the path of that address, by the same code as the question fetch of
+/// the World. A control that ends an act first ends its work, and the ear says nothing more of it.
 pub fn web(native: Search) -> Box<dyn Ear> {
   hearing(&["web_search", "web_fetch"], move |mut co: Co<Worked>| async move {
     let mut stops: HashMap<String, oneshot::Sender<()>> = HashMap::new();
@@ -136,71 +122,6 @@ fn found(got: &str) -> Result<String, String> {
     })
     .collect();
   Ok(if answers.is_empty() { "No result.".to_owned() } else { answers.join("\n\n") })
-}
-
-/// The page at an address, as a text at the path of that address: as Markdown when it is HTML, and as it is when it
-/// is other text; or why it is none.
-fn fetched(url: String) -> BoxFuture<'static, Result<Text, String>> {
-  spawned(async move {
-    let client =
-      ReqwestClient::builder().user_agent(AGENT).timeout(Duration::from_secs(60)).build();
-    let client = client.map_err(|no| no.to_string())?;
-    let mut response = client
-      .get(&url)
-      .header("accept", ACCEPT)
-      .send()
-      .await
-      .map_err(|no| format!("{url}: {no}"))?;
-    let status = response.status();
-    if !status.is_success() {
-      return Err(format!("{url} answered {status}"));
-    }
-    let kind = response.headers().get("content-type").and_then(|one| one.to_str().ok());
-    let kind = kind.unwrap_or_default().to_ascii_lowercase();
-    if response.content_length().is_some_and(|size| size > LARGEST) {
-      return Err(format!("{url} is larger than {LARGEST} bytes"));
-    }
-    // A page that tells no length, or tells one that is wrong, is read on only while it stays under the bound.
-    let mut bytes = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(|no| format!("{url}: {no}"))? {
-      if (bytes.len() + chunk.len()) as u64 > LARGEST {
-        return Err(format!("{url} is larger than {LARGEST} bytes"));
-      }
-      bytes.extend_from_slice(&chunk);
-    }
-    let content =
-      page(&kind, &String::from_utf8_lossy(&bytes)).map_err(|no| format!("{url} {no}"))?;
-    Ok(Text::new(url, content))
-  })
-}
-
-/// The text of a page of a kind: its Markdown when it is HTML, the page itself when it is other text, and a page of
-/// no kind is HTML when it opens with a tag; or why it is no text.
-fn page(kind: &str, body: &str) -> Result<String, String> {
-  let html = kind.contains("html") || (kind.is_empty() && body.trim_start().starts_with('<'));
-  let texts = ["text/", "json", "xml", "javascript", "yaml", "toml"];
-  match () {
-    () if html => Ok(markdown(body)),
-    () if kind.is_empty() || texts.iter().any(|one| kind.contains(one)) => Ok(body.to_owned()),
-    () => Err(format!("is no text: {kind}")),
-  }
-}
-
-/// The Markdown of a page of HTML, less the tags that hold no text to read, with no space at the end of a line and
-/// no run of more than one empty line.
-fn markdown(html: &str) -> String {
-  let converter = htmd::HtmlToMarkdown::builder().skip_tags(SKIPPED.to_vec()).build();
-  let converted = converter.convert(html).unwrap_or_else(|_| html.to_owned());
-  let mut out: Vec<&str> = Vec::new();
-  for line in converted.lines().map(str::trim_end) {
-    if !(line.is_empty() && out.last().is_none_or(|one| one.is_empty())) {
-      out.push(line);
-    }
-  }
-  while out.last().is_some_and(|one| one.is_empty()) {
-    out.pop();
-  }
-  out.join("\n")
 }
 
 #[cfg(test)]
