@@ -30,6 +30,10 @@
     "./life": {
       "types": "./dist/life/index.d.ts",
       "import": "./dist/life/index.js"
+    },
+    "./protocol": {
+      "types": "./dist/protocol.d.ts",
+      "import": "./dist/protocol.js"
     }
   },
   "files": [

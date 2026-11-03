@@ -4,7 +4,7 @@ The jobs on Linux always run: they hold the whole proof of the logic. A job on m
 alone, and a runner of macOS waits in a queue for minutes, so a change runs those jobs only when one of its paths can
 behave in another way there. The paths come one on each line from the standard input, and the answer is the lines
 `key=value` that a step of GitHub takes into its outputs. With `--all`, which each run but a pull request takes, every
-job runs.
+job runs. A change to the files of the gallery alone runs no hook, which the output hooks says.
 """
 
 import json
@@ -35,10 +35,16 @@ RUST = re.compile(
   r"((src|cli|tests|extensions|\.cargo)/.*|Cargo\.(toml|lock)|build\.rs|rust-toolchain\.toml|docs/examples/rust/.*)"
 )
 APP = re.compile(r"gui/.*")
+# A render of the gallery changes only these files, which no gate reads, so it runs no gate, by the ruling of the owner
+# on 10-29. The job of the gates alone reports on it.
+GALLERY = re.compile(r"docs/(screenshots/.*|furb[.]gif)")
 
 
 def scope(paths: list[str]) -> dict[str, object]:
-  """The systems of the suite and of the bindings, and whether the crate on Windows and on macOS and the app run."""
+  """The systems of the suite and of the bindings, and whether the crate on Windows and on macOS and the app run.
+
+  The hooks run unless the change is a render of the gallery alone.
+  """
   kinds = {"python": False, "typescript": False, "rust": False, "other": False, "app": False, "project": False}
   for path in paths:
     if INERT.fullmatch(path):
@@ -54,6 +60,7 @@ def scope(paths: list[str]) -> dict[str, object]:
       kinds["rust"] = True
     else:
       kinds["other"] = True
+  gallery = bool(paths) and all(GALLERY.fullmatch(path) for path in paths)
   every = kinds["rust"] or kinds["other"]
   return {
     "suite_os": EVERY if every or kinds["python"] else LINUX,
@@ -61,6 +68,7 @@ def scope(paths: list[str]) -> dict[str, object]:
     "crate": every,
     "gui": every or kinds["app"],
     "code": any(kinds.values()),
+    "hooks": not gallery,
   }
 
 

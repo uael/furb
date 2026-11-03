@@ -83,44 +83,109 @@ mod protocol {
     .collect()
   }
 
-  /// One of each frame of a view.
-  fn views() -> Vec<Verb> {
-    let viewer = || "v1".to_owned();
-    let tree = Node {
-      id: "root".to_owned(),
-      shape: Shape::Box {
+  /// A node of a view under an id.
+  fn node(id: &str, shape: Shape) -> Node {
+    Node { id: id.to_owned(), shape }
+  }
+
+  /// A tree that holds each node and each tone.
+  fn every_node() -> Node {
+    let text =
+      |id: &str, tone| node(id, Shape::Text { runs: vec![Run { text: id.to_owned(), tone }] });
+    let tones = [
+      Tone::Text,
+      Tone::Muted,
+      Tone::Faint,
+      Tone::Accent,
+      Tone::Success,
+      Tone::Warning,
+      Tone::Danger,
+    ];
+    node(
+      "root",
+      Shape::Box {
         axis: Axis::Column,
         gap: 1,
         border: true,
         children: vec![
-          Node {
-            id: "t".to_owned(),
-            shape: Shape::Text { runs: vec![Run { text: "hi".to_owned(), tone: Tone::Accent }] },
-          },
-          Node { id: "b".to_owned(), shape: Shape::Button { label: "go".to_owned() } },
-          Node { id: "p".to_owned(), shape: Shape::Progress { done: Some(0.5) } },
+          node(
+            "line",
+            Shape::Box {
+              axis: Axis::Row,
+              gap: 0,
+              border: false,
+              children: tones
+                .iter()
+                .enumerate()
+                .map(|(n, &tone)| text(&format!("t{n}"), tone))
+                .collect(),
+            },
+          ),
+          node("l", Shape::List { items: vec![text("i", Tone::Text)] }),
+          node(
+            "tb",
+            Shape::Table { header: vec!["a".to_owned()], rows: vec![vec![text("c", Tone::Text)]] },
+          ),
+          node("in", Shape::Input { value: String::new(), hint: Some("name".to_owned()) }),
+          node("b", Shape::Button { label: "go".to_owned() }),
+          node("p", Shape::Progress { done: Some(0.5) }),
+          node("spin", Shape::Progress { done: None }),
+          node("co", Shape::Code { text: "x = 1".to_owned(), language: Some("python".to_owned()) }),
+          node("d", Shape::Diff { text: "-a\n+b\n".to_owned() }),
+          node("m", Shape::Markdown { text: "# hi".to_owned() }),
         ],
       },
-    };
-    vec![
+    )
+  }
+
+  /// Each frame of a view, with each slot, each gesture and each effect, on a tree of each node.
+  fn views() -> Vec<Verb> {
+    let viewer = || "v1".to_owned();
+    let root = every_node();
+    let slots = [
+      Slot::Dock { on: "chain1".to_owned() },
+      Slot::Sidebar,
+      Slot::Row { act: "bash1".to_owned() },
+      Slot::Detail { act: "bash1".to_owned() },
+      Slot::Mark { act: "bash1".to_owned() },
+      Slot::Footer,
+      Slot::Screen,
+      Slot::Overlay,
+    ];
+    let effects = [
+      Effect::Open { url: "https://example.com".to_owned() },
+      Effect::Draft { text: "x".to_owned() },
+      Effect::Notice { text: "done".to_owned() },
+    ];
+    let mounts = slots.into_iter().map(|slot| {
       Verb::ViewMount(Mount {
         viewer: viewer(),
-        slot: Slot::Row { kind: "bash".to_owned() },
-        kit: "k".to_owned(),
-      }),
-      Verb::ViewTree(Tree { viewer: viewer(), slot: Slot::Dock, version: 2, tree }),
+        life: "life.jsonl".to_owned(),
+        slot,
+        skill: "k".to_owned(),
+      })
+    });
+    let tree = Verb::ViewTree(Tree {
+      viewer: viewer(),
+      slot: Slot::Dock { on: "chain1".to_owned() },
+      version: 2,
+      tree: root,
+    });
+    let events = [Gesture::Press, Gesture::Change, Gesture::Submit].map(|kind| {
       Verb::ViewEvent(ViewEvent {
         viewer: viewer(),
         node: "b".to_owned(),
-        kind: Gesture::Press,
-        value: None,
-      }),
-      Verb::ViewEffect(ViewEffect {
-        viewer: viewer(),
-        effect: Effect::Draft { text: "x".to_owned() },
-      }),
-      Verb::ViewDispose(Dispose { viewer: viewer() }),
-    ]
+        kind,
+        value: (kind != Gesture::Press).then(|| "typed".to_owned()),
+      })
+    });
+    let effected = effects.map(|effect| Verb::ViewEffect(ViewEffect { viewer: viewer(), effect }));
+    mounts
+      .chain([tree])
+      .chain(events)
+      .chain(effected)
+      .chain([Verb::ViewDispose(Dispose { viewer: viewer() })])
+      .collect()
   }
 
   /// A peer of a stream: it writes lines and reads frames.

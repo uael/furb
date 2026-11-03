@@ -157,6 +157,10 @@ impl Life {
 }
 
 /// The thread of a life, until each handle of the life is gone.
+#[expect(
+  clippy::disallowed_methods,
+  reason = "the thread of each life blocks on its own current_thread runtime by design (#983 section 2)"
+)]
 fn lived(
   opening: Opening,
   received: UnboundedReceiver<Message>,

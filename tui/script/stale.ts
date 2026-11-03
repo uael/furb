@@ -13,7 +13,7 @@ const crate = [
   "build.rs",
   "DOCTRINE.md",
   "src/**/*.{rs,py,pyi,json}",
-  "extensions/*/furb.json",
+  "extensions/*/SKILL.md",
   "extensions/*/*.py",
   "extensions/*/tui.ts",
   "extensions/*/*/SKILL.md",

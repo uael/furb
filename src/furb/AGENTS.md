@@ -159,7 +159,7 @@ meanings. The entry of such a name here gives only its form in the engine.
   no reply, makes crafted rungs of its default actor: the read of the doctrine, the turn
   `rung(read('<file>', HIDDEN).content)` of each extension of every chain that has a file, in the order of the life,
   whose rung tells the code of the file alone in the turn after it and runs that code in the module of the root, the
-  file being the copy of the word in `~/.furb/extensions/<name>/`, then one turn of their life words, which read the
+  file being the copy of the word in `words/<name>/` of the config directory, then one turn of their life words, which read the
   place against the directory of the standing, as every chain that ran no cd, then the fact setup,
   `("setup", "chain1", "chain1")`, then the same turns for the extensions of the root alone. No ear makes a rung of the
   setup, so the transcript shows each word that ran, and the record holds only the standing that the World gave. Then

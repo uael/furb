@@ -795,7 +795,10 @@ fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
   fs::write(at.join("record.jsonl.log"), "{\"entries\": 0}\n").unwrap();
   let held = |name: &str| fs::read(at.join(name)).unwrap();
   let (text, log) = (held("record.jsonl"), held("record.jsonl.log"));
-  let refused = opening(&at, true).boot::<String>([]).map(|_| ()).unwrap_err();
+  // The config directory of the user stands apart, since a life writes there the copy of each word.
+  let config = Some(format!("{}-config", at.display()));
+  let refused =
+    Opening { config, ..opening(&at, true) }.boot::<String>([]).map(|_| ()).unwrap_err();
   assert!(refused.to_string().starts_with("Drift: "), "{refused}");
   let moved = format!("stand()\\ncd('{place}-elsewhere')");
   assert!(
