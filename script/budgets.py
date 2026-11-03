@@ -1,8 +1,7 @@
 """Set the budget of time of each job of the gates from its measures, in `.github/budgets.json`.
 
 The budget of a job is one and a half times its median time in the last green runs of `gates.yml` on main, rounded up
-to a whole minute. The round of the conductor compares the median of the last five green runs of each job with its
-budget at each sweep, and queues an item when a job passes it. Run it from the root of the repository, on `gh`:
+to a whole minute. Run it from the root of the repository, on `gh`:
 
     python script/budgets.py [--runs 60]
 """

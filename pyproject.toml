@@ -66,7 +66,7 @@ src = ["src", "test", "bind/python"]
 force-exclude = true
 # A word of the project reads the names that a word before it in .furb/config.json defines: pr, PR_TITLE, PR_BOXES and
 # shq of pr, and the conductor, tree_of and TARGETS of converge. A test holds each of them to a definition.
-builtins = ["pr", "prcheck", "PR_TITLE", "PR_BOXES", "shq", "conductor", "tree_of", "TARGETS"]
+builtins = ["pr", "shq", "conductor", "tree_of", "TARGETS"]
 
 [tool.ruff.per-file-target-version]
 # The verifier images use Python versions older than this repository.
