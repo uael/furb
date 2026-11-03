@@ -2,7 +2,7 @@
 //!
 //! The contract makes the World the ears of the outside that serve the machine, one or many. These are the ones
 //! every host shares, written once in rust: [`files`] reads and writes a path, the files of the [`Scratch`] directory
-//! of the life among them, [`bash`] runs a command, [`time`] reads the clock, draws a chance and ends a wait,
+//! of the life among them, [`bash`] runs a command, [`fetch`] gets a page of the web, [`time`] reads the clock, draws a chance and ends a wait,
 //! [`store`] keeps the record on the disk under a lease, as a file of lines or a database of SQLite, the store of
 //! builds holds the program of each version that ran on this machine, which [`stored`] finds, [`log`] writes
 //! the log of the life beside the record, which [`logged`] reads, [`retold`] reads a record with no life, and the
@@ -15,6 +15,7 @@
 
 mod bash;
 mod builds;
+mod fetch;
 pub(crate) mod files;
 mod log;
 mod operator;
@@ -32,6 +33,8 @@ use std::{
 pub(crate) use bash::{Group, grouped};
 pub use bash::{bash, program, shell};
 pub use builds::{build, shelve, stored};
+pub use fetch::fetch;
+pub(crate) use fetch::fetched;
 pub use files::files;
 pub(crate) use log::continued;
 pub use log::{log, logged};

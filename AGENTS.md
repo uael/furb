@@ -14,7 +14,7 @@ API of its own:
 - `src/lib.rs` says what the crate gives: `Engine`, whose methods are the verbs of the contract, which `build.rs`
   makes from the contract, and `Ear`, the one trait of an ear, which a host writes as a generator of rust with `ear`.
 - `src/world/` holds the ears of the World that the crate writes, one file for each concern: the files, the commands,
-  the time, the store of the record and the store of builds, the log of a life, the reader of a record with no life, the
+  the pages of the web, the time, the store of the record and the store of builds, the log of a life, the reader of a record with no life, the
   scratch directory, the rules by which a console reads the operator, and the provider of models, which asks each model
   through rig and streams what it writes. The doc comments of `src/world.rs` and of each module say what each does, the
   tables of [`CONTRIBUTING.md`](CONTRIBUTING.md#the-world-and-the-life) list its files, and `docs/models.md` tells a
