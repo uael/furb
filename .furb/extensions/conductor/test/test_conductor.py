@@ -2318,6 +2318,13 @@ def test_an_item_never_waits_for_the_pr_that_it_names_labels_or_owns(conductor: 
   assert conductor.serialized("k4", "Fix src/life.rs on #7.") and conductor.serial == {"k4": 8}
 
 
+def test_a_file_with_no_folder_in_an_open_pr_holds_no_item_that_names_another_file_of_that_name(conductor: Round) -> None:
+  conductor.prs[7] = conductor.pr(n=7)
+  conductor.touched[7] = {"sha": "abc", "paths": ["AGENTS.md", "tui/foo.ts"]}
+  assert conductor.rival("k1", "Change src/furb/AGENTS.md.") is None
+  assert conductor.rival("k2", "Change tui/foo.ts.") == (7, ["tui/foo.ts"])
+
+
 @JQ
 def test_a_sweep_reads_the_files_of_each_open_pr_of_the_round_once_for_each_head(conductor: Round) -> None:
   conductor.say(r"pr view 7 --json files", json.dumps({"files": [{"path": "a/b.py"}, {"path": "c.md"}]}))
