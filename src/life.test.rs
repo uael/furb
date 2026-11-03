@@ -1040,6 +1040,43 @@ fn a_checkpoint_holds_data_alone_and_a_later_engine_seeds_a_life_from_it_with_no
   assert_eq!(again.count(), 0, "no carried act runs again");
 }
 
+/// The words of the seed of the root that the lives after the last checkpoint of a record gave the
+/// gate.
+fn seeds(at: &Path) -> usize {
+  let kept = world::kept(at.join("record.jsonl")).unwrap();
+  let seed = |a: &Fact| {
+    a.kind() == "gate"
+      && a.word(1).and_then(|one| one.as_str()) == Some("debug(t\"{standing()[4]=}\")")
+  };
+  crate::checkpoint::segment(&kept)
+    .iter()
+    .filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of))
+    .filter(seed)
+    .count()
+}
+
+#[test]
+fn a_checkpoint_of_a_later_life_of_a_record_opens_with_no_drift_and_seeds_the_root_once() {
+  let at = place("checkpoint-relife");
+  let open =
+    || Opening { extensions: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+  let mut first = open();
+  assert_eq!(closed(&mut first, "n = 1\nclose(n)").as_ref().as_int(), Some(1));
+  assert_eq!(seeds(&at), 1, "the first life of a record seeds the root once");
+  first.checkpoint().unwrap();
+  for n in 2..=4 {
+    let mut later = open();
+    let word = "n = n + 1\nclose([n, len([x for x in transcript('chain1', 'setup')])])";
+    assert_eq!(
+      closed(&mut later, word).as_ref().py_repr(),
+      format!("[{n}, 1]"),
+      "each later life goes on from the checkpoint of the life before it, and holds the one setup of the root"
+    );
+    assert_eq!(seeds(&at), 0, "a life that goes on from a checkpoint runs no seed of the root");
+    later.checkpoint().unwrap();
+  }
+}
+
 #[test]
 fn a_checkpoint_of_a_later_schema_is_refused_with_both_schemas() {
   let at = place("checkpoint-schema");
@@ -1064,6 +1101,28 @@ fn a_checkpoint_of_a_later_schema_is_refused_with_both_schemas() {
 }
 
 #[test]
+fn a_checkpoint_of_the_form_before_its_schema_that_a_later_life_wrote_opens_and_seeds_no_root_again()
+ {
+  let at = place("checkpoint-1034-relife");
+  fs::copy(corpus().join("handover").join("relife.jsonl"), at.join("record.jsonl")).unwrap();
+  for n in 3..=4 {
+    let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+    let word = format!("queue.append({n})\nclose([f(), queue])");
+    assert_eq!(
+      closed(&mut later, &word).as_ref().py_repr(),
+      format!("[6, {:?}]", (1..=n).collect::<Vec<_>>()),
+      "a life that a later life of that form handed over goes on with its module"
+    );
+    assert_eq!(
+      seeds(&at),
+      0,
+      "a life that goes on from a checkpoint of that form runs no seed of the root"
+    );
+    later.checkpoint().unwrap();
+  }
+}
+
+#[test]
 fn a_checkpoint_of_the_form_before_its_schema_opens_on_this_build() {
   let at = place("checkpoint-1034");
   fs::copy(corpus().join("handover").join("checkpoint.jsonl"), at.join("record.jsonl")).unwrap();
@@ -1074,6 +1133,11 @@ fn a_checkpoint_of_the_form_before_its_schema_opens_on_this_build() {
       .py_repr(),
     "[6, 1, ('prompt', 'prompt1'), False]",
     "a life that a build of that form handed over goes on with its module and its open prompt"
+  );
+  assert_eq!(
+    seeds(&at),
+    0,
+    "a life that goes on from a checkpoint of that form runs no seed of the root"
   );
 }
 
