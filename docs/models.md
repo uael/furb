@@ -30,6 +30,23 @@ An **actor** is a model and an effort, which is how hard the model thinks: `off`
 - `--roster` gives more models that a life can ask, one name each time. With no `--roster`, a life can ask each
   model that furb offers. A prompt to a model that the roster does not hold is refused.
 
+## Classes and automatic work
+
+Each model has a class, `cheap` or `dear`. The class of a model of the claude command line and of Codex is fixed:
+`haiku`, and a `mini` or `nano` model of Codex, are cheap, and the others are dear. The class of another model comes
+from its price: a model that costs 1 dollar or less for a million tokens that it reads is cheap. A model with no price
+is dear. Each entry of the roster gives the class as its fourth field, as `["claude-cli:haiku", ["low"], 200000,
+"cheap"]`.
+
+`classes` in `.furb/config.json` gives a model another class, and `automatic` lists the models of automatic work, as a
+compaction, in order:
+
+```json
+{"classes": {"openai:gpt-5": "cheap"}, "automatic": ["claude-cli:haiku", "codex:gpt-5-mini"]}
+```
+
+Automatic work asks the first model of `automatic` that the roster holds, else the first cheap model of the roster.
+
 ## Provider settings
 
 For a ChatGPT subscription, open `/providers` and choose `codex`. furb uses an existing ChatGPT sign-in when

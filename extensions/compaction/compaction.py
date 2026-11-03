@@ -1,4 +1,8 @@
+import json
+
 from furb.engine import (
+  HIDDEN,
+  OPERATOR,
   Act,
   Exit,
   Filter,
@@ -21,6 +25,7 @@ from furb.engine import (
   say,
   scope,
   site,
+  standing,
   take,
   told,
   transcript,
@@ -46,10 +51,27 @@ compaction = """Compaction cuts this chain to the work that it still needs, and 
 - imported(record, source) makes a chain that goes on from the chain source of another record: its turns, and each
   of its open prompts under a new name. No value of its module, no word that ran and no command that was open comes
   with it.
+- automatic() gives the model of automatic work, which an empty CHOOSER asks: the first of the list automatic of
+  .furb/config.json that the roster holds, else the first cheap model of the roster.
 - A project changes the defaults in an extension of its own, whose word rebinds SHARE, FILTERS, CHOOSER, LISTED or
   BRIEF."""
 SHARE = 0.6
 CHOOSER = ""
+
+
+def automatic() -> str:
+  """The actor of automatic work: the first model of the list automatic of .furb/config.json in the directory of the
+  standing that the roster holds, else the first cheap model of the roster, else none."""
+  roster, directory = standing()[:2] or ([], "")
+  names = [str(x[0]) for x in roster if x[0] != OPERATOR]
+  try:
+    listed = json.loads(read(f"{directory}/.furb/config.json", HIDDEN).content).get("automatic", [])
+  except Refused, ValueError, AttributeError:
+    listed = []
+  first = next((one for one in listed if isinstance(one, str) and one in names), "")
+  return first or next((str(x[0]) for x in roster if x[0] != OPERATOR and x[3:4] == ["cheap"]), "")
+
+
 LISTED = 40
 BRIEF = """The chain below grows past its window, and it goes on with what the work still needs.
 Choose what it keeps: each act that holds a decision or a ruling of the operator, a brief, a finding that the work
@@ -124,7 +146,7 @@ def choice(to: str = "", on: str = "") -> Act:
     else:
       lines.append(f"{entry[1]} {', '.join(map(repr, entry[4:]))[:200]}{state}")
   brief = BRIEF + "\n\n" + "\n".join(lines)
-  return prompt(tuple[list[str], str], brief, to=to or CHOOSER, on=chain("chosen", on=here))
+  return prompt(tuple[list[str], str], brief, to=to or CHOOSER or automatic(), on=chain("chosen", on=here))
 
 
 async def chosen(to: str = "", on: str = "") -> Filter:

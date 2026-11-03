@@ -378,6 +378,56 @@ enum Answer {
 type Answers =
   Arc<dyn Fn(Asked) -> BoxFuture<'static, Result<Answer, CompletionError>> + Send + Sync>;
 
+/// The class of a model, which automatic work reads: a cheap model takes the work that no one waits on, and a dear one
+/// the work of the operator.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Class {
+  Cheap,
+  Dear,
+}
+
+impl Class {
+  /// The name of the class, as the roster and `.furb/config.json` say it.
+  pub fn name(self) -> &'static str {
+    match self {
+      Class::Cheap => "cheap",
+      Class::Dear => "dear",
+    }
+  }
+
+  /// The class of a name, and nothing for another word.
+  pub fn named(name: &str) -> Option<Class> {
+    match name {
+      "cheap" => Some(Class::Cheap),
+      "dear" => Some(Class::Dear),
+      _ => None,
+    }
+  }
+}
+
+/// The most that a cheap model costs, in dollars for a million tokens that it reads.
+pub const CHEAP: f64 = 1.0;
+
+/// The key of `.furb/config.json` whose map gives a model the class that it names, over the one of the catalog.
+pub(super) const KEY_CLASSES: &str = "classes";
+
+/// The classes that the config of a project in a directory gives, by the name of the model, the later file over the
+/// earlier one. A word that names no class gives none.
+pub(super) fn classes(directory: &std::path::Path) -> HashMap<String, Class> {
+  let mut given = HashMap::new();
+  for file in crate::extension::projected(directory) {
+    let Ok(text) = std::fs::read_to_string(file) else { continue };
+    let Ok(config) = serde_json::from_str::<Value>(&text) else { continue };
+    let Some(map) = config.get(KEY_CLASSES).and_then(Value::as_object) else { continue };
+    for (name, class) in map {
+      if let Some(class) = class.as_str().and_then(Class::named) {
+        given.insert(name.clone(), class);
+      }
+    }
+  }
+  given
+}
+
 /// A model the provider offers: its name, the window it reads, the efforts it spends, what it costs, whether it takes
 /// an image, and what answers it.
 ///
@@ -411,6 +461,9 @@ pub struct Model {
   hosted: bool,
   /// How it takes the most tokens of thought of one turn, when it takes one.
   thought: Option<Thought>,
+  /// Its class, which code fixes for a model whose provider says no price, as a model of the claude command line, and
+  /// which its price gives otherwise.
+  class: Option<Class>,
   /// Whether it reads its earlier turns with no thought, as a model of a local server, whose own template drops the
   /// thought of each earlier turn, and whose thought of each turn would else fill its window in a few turns.
   forgets: bool,
@@ -454,6 +507,7 @@ impl Model {
       hosted: false,
       forgets: false,
       thought: None,
+      class: None,
       answers,
       search: None,
     }
@@ -552,6 +606,21 @@ impl Model {
   /// What the model costs, in dollars for a million tokens: read, written, read from the cache, and written to it.
   pub fn priced(&self) -> Option<[f64; 4]> {
     self.price
+  }
+
+  /// The model, of a class that code fixes, which its price no longer gives.
+  pub fn classed(mut self, class: Class) -> Model {
+    self.class = Some(class);
+    self
+  }
+
+  /// The class of the model: the one that code fixed, else cheap when a million tokens that it reads cost [`CHEAP`]
+  /// dollars or less, else dear, as a model that says no price is.
+  pub fn class(&self) -> Class {
+    self.class.unwrap_or(match self.price {
+      Some([input, ..]) if input <= CHEAP => Class::Cheap,
+      _ => Class::Dear,
+    })
   }
 
   /// The settings of an actor that names this model: none for its name alone, and those of its effort for its name
@@ -1288,13 +1357,22 @@ fn standing(
   actor: &str,
   extensions: Option<&[Advertised]>,
 ) -> Object {
+  // The config of the project gives a model another class than the one of the catalog.
+  let given = classes(Path::new(directory));
   let offered = models.iter().map(|model| {
     let efforts = model.efforts.iter().map(|(effort, _)| Object::string(effort));
     let window = i64::try_from(model.window).unwrap_or(i64::MAX);
-    Object::list([Object::string(&model.name), Object::list(efforts), Object::int(window)])
+    let class = given.get(&model.name).copied().unwrap_or_else(|| model.class());
+    let fields = [Object::string(&model.name), Object::list(efforts), Object::int(window)];
+    Object::list(fields.into_iter().chain([Object::string(class.name())]))
   });
-  // The operator answers in person, with no effort, and reads the window of the engine.
-  let operator = Object::list([Object::string(OPERATOR), Object::list([]), Object::int(WINDOW)]);
+  // The operator answers in person, with no effort, reads the window of the engine, and costs no dollar.
+  let operator = Object::list([
+    Object::string(OPERATOR),
+    Object::list([]),
+    Object::int(WINDOW),
+    Object::string(Class::Cheap.name()),
+  ]);
   let roster = Object::list(offered.chain([operator]));
   let home = std::env::home_dir();
   let shown = |one: &Path| Object::string(super::files::tilded(one, home.as_deref()));

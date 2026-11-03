@@ -13,7 +13,7 @@ async def test_the_window_an_actor_reads() -> None:
   assert engine.offered(STANDS[0], OPERATOR) == 200000
   assert engine.offered(STANDS[0], "n/high") is None
   assert engine.offered(STANDS[0], "ghost") is None
-  roster = [*STANDS[0], ["q", ["low"], 300000]]
+  roster = [*STANDS[0], ["q", ["low"], 300000, "dear"]]
   assert engine.offered(roster, "q/low") == 300000
   assert engine.offered(roster, "q") == 300000
   assert engine.offered(roster, "q/high") is None

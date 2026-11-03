@@ -7,7 +7,7 @@ from furb import engine
 
 
 async def test_chooser_is_the_actor_that_choice_asks(tmp_path: Path) -> None:
-  """CHOOSER is the actor that choice asks when it is given none, and an empty CHOOSER is the default actor of the chain of the model that chooses."""
+  """CHOOSER is the actor that choice asks when it is given none, and an empty CHOOSER is the actor that automatic() gives, else the default actor of the chain of the model that chooses."""
   sand, root, _ = compacting(tmp_path)
   sand.script.update(
     {root: ["await chosen()\nCHOOSER = 'n/low'\nawait chosen()\nclose(1)"], "chain2": ["close(([], ''))"]}
