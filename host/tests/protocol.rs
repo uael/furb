@@ -1,6 +1,11 @@
 //! The proofs of the protocol: the role of each verb, the bound of a frame, the version of a hello,
 //! and a round trip of each verb on each transport of the system.
 
+#![expect(
+  clippy::disallowed_methods,
+  reason = "the tests block on the runtime that tokio starts for them"
+)]
+
 #[cfg(test)]
 mod protocol {
   use std::{
