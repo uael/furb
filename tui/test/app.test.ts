@@ -353,8 +353,9 @@ test("the block of a word whose model works holds the loader in the column of th
     await session.refresh();
     const step = session.activity.find((act) => act.kind === "rung" && !act.done)?.id ?? "";
     const rows = (await frame()).split("\n");
-    const label = rows.find((row) => row.includes(`word · ${step} · thinking`)) ?? "";
-    expect(label).toMatch(/[\u2800-\u28ff] +word · rung\d+ · thinking/);
+    const label = rows.find((row) => row.includes(" · thinking")) ?? "";
+    expect(label).toMatch(/[\u2800-\u28ff] +\S+ · thinking/);
+    expect(label).not.toContain("word · ");
     expect(rows.join("\n")).not.toContain("# thinking");
     // The block holds the one loader of the step, so the footer turns none.
     expect(rows.findLast((row) => row.trim()) ?? "").not.toMatch(/[\u2800-\u28ff]/);
@@ -370,19 +371,20 @@ test("the block of a word whose model works holds the loader in the column of th
     );
     await new Promise((done) => setTimeout(done, 250));
     const thought = await frame();
-    expect(thought).toContain(`word · ${step} · thinking`);
+    expect(thought).toContain(" · thinking");
     expect(thought).not.toContain("Then I wait.");
     await session.submit("/cancel");
   }));
 
-test("each word stands in a block under its label, with the mark of the line that runs or failed at the left of its number, and what an act came to at the right edge, with no comment mark", () =>
+test("each word stands in a block under its label, with the mark of the line that failed at the left of its number, the loader in the place of the number of the line that runs, and what an act came to at the right edge, with no comment mark", () =>
   composing(
     async ({ session, frame }) => {
       await session.command("/run ready = True\nnext = = 2").catch(() => {});
       await idle(session);
       let shown = await frame();
       expect(shown).toMatch(/✗ +2 next = = 2/);
-      expect(shown).toMatch(/word · rung\d+/);
+      expect(shown).toMatch(/┃ +operator +$/m);
+      expect(shown).not.toMatch(/word · rung\d+/);
       void session.command('/run build = bash("sleep 3")\nsize = 1\nbuilt = await build').catch(() => {});
       await until(session, () => session.activity.some((act) => act.kind === "bash" && !act.done));
       for (let tries = 0; tries < 50 && !shown.includes("waits on"); tries++) {
@@ -391,7 +393,7 @@ test("each word stands in a block under its label, with the mark of the line tha
       }
       const rows = shown.split("\n");
       const waits = rows.find((row) => row.includes("built = await build")) ?? "";
-      expect(waits).toMatch(/◉ +3 built = await build +waits on bash\d+/);
+      expect(waits).toMatch(/[\u2800-\u28ff✻] built = await build +waits on bash\d+/);
       expect(waits).not.toContain("#");
       const runs = rows.find((row) => row.includes('build = bash("sleep 3")')) ?? "";
       expect(runs).toMatch(/1 build = bash\("sleep 3"\) {4,}runs/);
@@ -408,7 +410,7 @@ test("a word whose time this life measured as no time shows no time in its label
       await idle(session);
       await session.refresh();
       const shown = await frame();
-      expect(shown).toMatch(/word · rung\d+/);
+      expect(shown).toMatch(/┃ +operator +$/m);
       expect(shown).not.toMatch(/\\b0ms\\b/);
     },
     { width: 120, height: 40 },
@@ -710,7 +712,9 @@ test("an act that no word made stands as a lit line of python in a panel, which 
         setSystemTime(new Date(start + 1300));
         await frame();
         expect(app.scroll.getChildren().some((node) => node.id === id)).toBe(true);
-        expect(screen.captureCharFrame()).toMatch(new RegExp(`◉ .*${id} = wait\\(60\\) +waits 60s +1\\.0s`));
+        expect(screen.captureCharFrame()).toMatch(
+          new RegExp(`[\\u2800-\\u28ff✻] +${id} = wait\\(60\\) +waits 60s +1\\.0s`),
+        );
       } finally {
         setSystemTime();
       }
@@ -743,7 +747,7 @@ test("a tick writes only the time of a line that runs, and the text of its progr
         const times = app.liveLines.get(view);
         setSystemTime(new Date(start + 2300));
         await new Promise((done) => setTimeout(done, 350));
-        expect(times?.shown).toBe("2.0s");
+        expect(times?.shown).toEndWith("|2.0s");
         await screen.flush();
         const second = screen.captureCharFrame().split("\n");
         // Only the time moved: the frames differ in that row alone, and by the time alone.

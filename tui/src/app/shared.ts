@@ -1,4 +1,12 @@
-import type { BoxRenderable, CliRenderer, KeyEvent, Renderable, RGBA, TextOptions } from "@opentui/core";
+import type {
+  BoxRenderable,
+  CliRenderer,
+  KeyEvent,
+  LineSign,
+  Renderable,
+  RGBA,
+  TextOptions,
+} from "@opentui/core";
 import type { Keymap } from "@opentui/keymap";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import type { ChainThread, Chip } from "furb/life";
@@ -102,6 +110,24 @@ export const PROGRAM_STEPS = 6;
 /** The width of the numbers of a program, with the space after them: room for two digits at least, so the code of
  * each thread of under a hundred lines starts at one column. */
 export const gutterWidth = (digits: number) => Math.max(2, digits) + space.inset;
+
+/** The cells of the column of the states, at the left of the numbers of a block of code. They show the loader while
+ * the model writes, and the mark of the line that failed. A code block of markdown keeps the column blank. So the
+ * numbers and the code of every block have the same columns. */
+export const STATE = 2;
+
+/** The column of the states, as signs of the gutter. It holds the mark of each row that has one. The first row gets
+ * blanks, so that the column stands when no row has a mark. */
+export const stateSigns = (states: ReadonlyMap<number, Part>, rows: number): Map<number, LineSign> => {
+  const signs = new Map<number, LineSign>();
+  if (rows) signs.set(0, { before: " ".repeat(STATE) });
+  for (const [row, [mark, color]] of states)
+    signs.set(row, {
+      before: `${mark}${" ".repeat(Math.max(0, STATE - Bun.stringWidth(mark)))}`,
+      beforeColor: color,
+    });
+  return signs;
+};
 
 /** A row that a model writes as the tick compares it: its number, and its text with the color of each part. */
 export const saidOf = (number: number, parts: readonly Part[]) =>
