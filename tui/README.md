@@ -305,7 +305,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ⌃G / ⌃click a name | Inspect a value and follow its definition |
 | Drag / ⌃Y | Select text and copy it / copy the selected text again |
 | Click / right-click an act | Fold or expand it / inspect its value or prompt program |
-| Pointer / click on an underlined ... | Show a folded string whole / open it in place |
+| Pointer / click on an underlined … | Show a folded string whole / open it in place |
 | Pointer on a line of a program | Show what its acts came to, the act that it awaits, a message whole, or why the line failed |
 | ⌃⌥← | Return from a definition jump |
 | ⌥[ / ⌥] or ⌥P / ⌥N | Previous / next message of the feed |
