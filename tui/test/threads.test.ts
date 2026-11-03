@@ -413,6 +413,28 @@ test("the sidebar ends as far above the context as the feed ends above the input
     true,
   ));
 
+test("the last thread of the feed ends as far above the input as the sidebar ends above the context, on a short feed and on a full one", async () => {
+  for (const height of [20, 80])
+    await composing(
+      async ({ app, frame }) => {
+        await frame();
+        app.scroll.scrollTo(app.scroll.scrollHeight);
+        await frame();
+        const last = app.scroll.content.getChildren().at(-1);
+        expect(last).toBeDefined();
+        const full = app.scroll.scrollHeight > app.scroll.height;
+        // A short feed starts at the top of its room, so its room ends where its last thread cannot.
+        const end = full ? (last?.y ?? 0) + (last?.height ?? 0) : app.scroll.y + app.scroll.height;
+        const feed = app.lower.y - end;
+        const side = app.corner.y - (app.railSlot.y + app.railSlot.height);
+        expect(feed).toBe(space.rest);
+        expect(side).toBe(feed);
+      },
+      { width: 140, height },
+      true,
+    );
+});
+
 test("on a narrow terminal and with the sidebar hidden, the keys stay in the footer beside its state", async () => {
   for (const [width, hidden] of [
     [80, false],
