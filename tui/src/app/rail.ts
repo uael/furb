@@ -565,7 +565,6 @@ export const rail = part({
       for (const key of [...this.unfolded]) if (key.startsWith("ws:")) this.unfolded.delete(key);
     }
     const threads = this.railThreads();
-    const tree = nestThreads(threads, w.ladderIndex.ids);
     const active = this.activeThread();
     const cursor = this.railKeys ? this.railAt : undefined;
     const askCount = (entry: SessionEntry) =>
@@ -599,6 +598,7 @@ export const rail = part({
     ]);
     this.railHeading.visible = style !== "cards";
     if (!this.paneChanged(this.railSpaces, key)) return;
+    const tree = nestThreads(threads, w.ladderIndex.ids);
     this.clear(this.railHeading);
     this.clear(this.railSpaces);
     this.unhover();

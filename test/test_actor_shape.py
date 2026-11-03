@@ -6,8 +6,8 @@ from furb.engine import Refused
 
 
 async def test_an_actor_the_world_offers() -> None:
-  """An actor the World offers: the name of a model, the efforts it takes, the window it reads and its class, cheap or dear, which a World may leave unsaid."""
-  offers = [*STANDS[0], ["q", ["low"], 300000], ["c", [], 100000, "cheap"]]
+  """An actor the World offers: the name of a model, the efforts it takes, the window it reads, its class, cheap or dear, and its place from 0 in the list of automatic work when that list names it, and a World may leave the class and the place unsaid."""
+  offers = [*STANDS[0], ["q", ["low"], 300000], ["c", [], 100000, "cheap"], ["d", [], 100000, "dear", 0]]
   born(stands=[offers, "/w", "m/low"])
   assert engine.standing()[0] == offers
   assert [engine.offered(offers, to) for to in ("q/low", "m/low", "c")] == [300000, 400000, 100000]

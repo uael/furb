@@ -173,15 +173,17 @@ pub(super) fn offered(
           .unwrap_or_default()
           .saturating_mul(one.effective_context_window_percent.unwrap_or(95).min(100))
           / 100;
-        // Codex says no price, so a mini or a nano model of its account is cheap, and the others are dear.
-        let small = one.slug.contains("mini") || one.slug.contains("nano");
+        // Codex says no price, so the catalog gives the class of each model of its account.
+        let class = super::catalog::family(NAME, &one.slug);
         let mut model = super::Model::new(
           format!("{NAME}:{}", one.slug),
           window.max(1),
           Codex { config: directory.clone(), id: one.slug },
         )
         .conversation("prompt_cache_key");
-        model = model.classed(if small { super::Class::Cheap } else { super::Class::Dear });
+        if let Some(class) = class {
+          model = model.classed(class);
+        }
         model.images = one.input_modalities.iter().any(|one| one == "image");
         for effort in one.supported_reasoning_levels {
           if super::catalog::LEVELS.contains(&effort.effort.as_str()) {
