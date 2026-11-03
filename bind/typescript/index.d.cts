@@ -253,9 +253,9 @@ export interface Extension {
 export declare function extensions(given: Array<Extension>): NativeEar
 
 /**
- * The ear of the files, which reads and writes a path, a path of `scratch://` in the scratch directory that the host
- * names, which the ear of commands is given too, and a path of `config://` in the config directory of the user, the
- * one of this process when the host names none.
+ * The ear of the files, which reads and writes a path, a path of `scratch://` in the scratch
+ * directory that the host names, which the ear of commands is given too, and a path of `config://`
+ * in the config directory of the user, the one of this process when the host names none.
  */
 export declare function files(scratch: string, config?: string | undefined | null): NativeEar
 
