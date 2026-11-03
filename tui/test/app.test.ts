@@ -416,6 +416,50 @@ test("a word whose time this life measured as no time shows no time in its label
     { width: 120, height: 40 },
   ));
 
+test("the words that one model wrote one after another stand in one block under one label, and their numbers run on", () =>
+  composing(
+    async ({ session, frame }) => {
+      // A word of the operator ends the setup of the chain, so its words stand whole above it.
+      await session.command('/run first = "one"');
+      await idle(session);
+      await session.refresh();
+      const rows = (await frame()).split("\n");
+      const setup = rows.findIndex((row) => row.includes("# setup"));
+      const steps = rows.slice(setup + 1, setup + 8);
+      expect(steps[0]).toMatch(/^ +\S+\/\S+ +/);
+      expect(steps.slice(1, 5).map((row) => row.match(/^ +(\d+) /)?.[1])).toEqual(["1", "2", "3", "4"]);
+      expect(steps.slice(1).filter((row) => /^ +\S+\/high +/.test(row))).toEqual([]);
+    },
+    { width: 120, height: 40 },
+  ));
+
+test("a message between two words of one model parts them into two blocks", () =>
+  composing(async ({ app }) => {
+    const step = (id: string) =>
+      ({ id, kind: "rung", by: "chain1", words: ["", "", "claude-cli:opus/high"], done: true }) as never;
+    const code = (one: unknown, display: number, text: string) =>
+      ({ kind: "code", step: one, text, display, number: 1, acts: [], hint: "" }) as never;
+    const [a, b, c] = [step("rung1"), step("rung2"), step("rung3")];
+    const lines = [
+      code(a, 1, "x = 1"),
+      code(b, 2, "y = 2"),
+      { kind: "note", step: b, text: "# Between them." } as never,
+      code(c, 3, "z = 3"),
+    ];
+    const heads = new Set([lines[0], lines[1], lines[3]]);
+    const view = app.programView(
+      lines,
+      100,
+      () => "",
+      () => "",
+      heads as never,
+      1,
+    );
+    const text = String(Reflect.get(Reflect.get(view, "target") as object, "content") ?? "");
+    expect(text.split("\n").filter((row) => row.startsWith("opus/high")).length).toBe(2);
+    expect(text).toMatch(/x = 1\ny = 2\n# Between them\.\n\nopus\/high +\nz = 3/);
+  }));
+
 test("a prompt of None to the operator is a notice that settles as a quiet line, which no key dismisses", () =>
   composing(
     async ({ session, screen, frame }) => {
