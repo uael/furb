@@ -2,7 +2,10 @@
 //! credentials a test gives, so no test reads the environment or the network.
 
 #![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
-#![expect(clippy::items_after_statements, reason = "debt: an item declared after a statement")]
+#![cfg_attr(
+  unix,
+  expect(clippy::items_after_statements, reason = "debt: an item declared after a statement")
+)]
 #![expect(
   clippy::let_underscore_must_use,
   reason = "debt: a let _ drops a value that must be used"
