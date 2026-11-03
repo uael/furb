@@ -141,7 +141,7 @@ try {
     // The life opens in the background, so the window draws at once, and a life that fails to open ends the TUI then.
     const entry = await library.create(group, undefined, undefined, false, directory, true);
     void entry.ready?.then((open) => {
-      if (!open && entry.status === "error") void fatal(entry.error);
+      if (!open && entry.status === "failed") void fatal(entry.error);
     });
   } else {
     // The demo holds a real life recorded from a log, which only reads, and opens on a life that plays by itself,

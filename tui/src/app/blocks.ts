@@ -625,12 +625,12 @@ export const blocks = part({
           : act.run?.status === "done"
             ? stateOf("done")
             : act.paused
-              ? stateOf("held")
+              ? stateOf("paused")
               : running();
     if (act.done) return stateOf(failed(act) ? "failed" : cancelled(act) ? "cancelled" : "done");
     if (w.host.pending.has(act.id)) return as("pending", "idle");
     if (w.host.prompts.has(act.id)) return as("needs input", "asks");
-    if (act.paused && act.kind !== "bash") return stateOf("held");
+    if (act.paused && act.kind !== "bash") return stateOf("paused");
     return running();
   },
 

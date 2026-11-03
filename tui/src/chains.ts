@@ -1,5 +1,5 @@
 import type { RGBA } from "@opentui/core";
-import type { Loom, Row, Tone } from "furb/life";
+import { busy, type Loom, type Row, type Tone } from "furb/life";
 import { clip } from "./format.ts";
 import { measureParts, pad, questionOf, shortActor } from "./overview.ts";
 import { theme as c, rowMark, spin, markOf as stateMark } from "./theme.ts";
@@ -162,7 +162,7 @@ function merged(parts: Part[]): Part[] {
 function stateWord(row: Row, input: ChainsInput): string {
   const ask = questionOf(row.id, input.loom.owed);
   if (ask) return ask;
-  if (row.state === "working") return row.waits ?? "working";
+  if (busy(row.state)) return row.waits ?? row.state;
   return row.state === "asks" ? "asks you" : row.state;
 }
 
@@ -249,7 +249,7 @@ function footer(input: ChainsInput, shown: Shown[]): Line[] {
   for (let node: Node | undefined = at.node; node; node = node.parent) crumbs.unshift(node.row.label);
   const [mark, color] = rowMark(row.state);
   const ask = questionOf(row.id, input.loom.owed);
-  const doing = row.state === "working" ? `working${row.waits ? `, waits on ${row.waits}` : ""}` : row.state;
+  const doing = busy(row.state) ? `working${row.waits ? `, waits on ${row.waits}` : ""}` : row.state;
   return [
     rule,
     {
@@ -290,7 +290,7 @@ function ribbon(row: Row, width: number): Part[] {
         : { work: "━", past: "─", none: " " }[cell.tone];
     const fade = 0.45 + (0.55 * (index + 1)) / cells.length;
     out[offset + index] =
-      index === cells.length - 1 && row.state === "working"
+      index === cells.length - 1 && busy(row.state)
         ? [spin(), c.accent]
         : [glyph, mix(c.background, ink[cell.tone](), fade)];
   }

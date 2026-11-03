@@ -19,7 +19,6 @@
 
 pub mod compaction;
 pub mod skills;
-pub mod web;
 
 use std::{
   fs,

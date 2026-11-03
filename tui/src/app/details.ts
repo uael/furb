@@ -137,7 +137,7 @@ export const details = part({
           ? stateOf("cancelled")
           : undefined
       : act.paused || this.session.host.pending.has(act.id)
-        ? stateOf("held")
+        ? stateOf("paused")
         : undefined;
     return state ? [shape, [`   ${state.mark} ${state.word}`, state.color]] : [shape];
   },

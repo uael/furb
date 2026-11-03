@@ -25,7 +25,7 @@ use std::{
 use crate::{
   Ear, Engine, Fault, Object, checkpoint,
   ear::{hear, hearing, lasting},
-  extension::{self, Places, compaction::compaction, skills::skills, web::web},
+  extension::{self, Places, compaction::compaction, skills::skills},
   snapshot::{self, Keeper},
   world::{self, Catalog, Retries, Scratch, Writes, mcp::mcp},
 };
@@ -155,7 +155,7 @@ impl Opening {
 
   /// The record the life opens on, and the ears of the crate, in the order of boot: the provider,
   /// the extensions, each official extension, the files, the commands and time, and the store and
-  /// the log of the life when the life keeps. The ears of the web, of the servers of MCP, of the
+  /// the log of the life when the life keeps. The ears of the servers of MCP, of the
   /// compaction and of the fetch do work, so a life that inspects hears them silent.
   ///
   /// The files and the commands share the scratch directory of the life: the one of its record when it keeps the
@@ -186,7 +186,6 @@ impl Opening {
       "provider",
       "extensions",
       "skills",
-      "web",
       "mcp",
       "compaction",
       "fetch",
@@ -234,7 +233,6 @@ impl Opening {
     let Prepared { places, extensions, provider } = prepared;
     let gallery = self.gallery();
     let project = PathBuf::from(&self.directory);
-    let search = provider.search();
     let provider = provider.ear();
     let working = |made: Option<Box<dyn Ear>>| made.unwrap_or_else(silent);
     let config = places.config;
@@ -246,7 +244,6 @@ impl Opening {
       ("provider", provider),
       ("extensions", extension::extensions(extensions)),
       ("skills", lasting(skills(config.clone()), move || skills(config.clone()))),
-      ("web", working(works.then(|| lasting(web(search.clone()), move || web(search.clone()))))),
       (
         "mcp",
         working(works.then(|| {
@@ -313,7 +310,7 @@ impl Opening {
 
   /// The provider: the models of the roster that the catalog makes, which the function of the host answers when it
   /// gives one, and which a life that inspects asks nothing; and the native search of the web of each of them, which
-  /// the ear of the web asks.
+  /// the provider answers the question search with.
   fn provider(&self, advertised: Vec<world::Advertised>) -> Result<world::Provider, Fault> {
     let works = self.works();
     let gallery = self.gallery();
@@ -347,7 +344,7 @@ impl Opening {
         .map_err(|no| no.to_string())?;
       Ok(candidate.into_settings())
     }));
-    provider = provider.advertises(advertised);
+    provider = provider.advertises(advertised).searching(works);
     if let Some(gallery) = gallery {
       provider = provider.images(gallery);
     }

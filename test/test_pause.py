@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import born, chained, heads, hushed, paragraphs, said, settle, slow, stalled, world_says
+from conftest import born, chained, heads, hushed, paragraphs, plain, relived, said, settle, slow, stalled, world_says
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
@@ -125,6 +125,9 @@ async def test_a_control_is_on_the_scope_of_what_it_is_over() -> None:
   assert (held[0], held[1], held[2]) == ("pause", act, engine.OPERATOR) and engine.scope(act) == two
   assert heads(engine.turns(on=two))[-2:] == [f"#{act}", f"#{act} paused by operator"]
   assert heads(engine.turns(on=root)) == [f"#{root}"]
+  controller = engine.rung(f"pause({two!r})\nawait wait(0)\nwake({two!r})\nclose(7)", on=root)
+  await settle()
+  assert engine.peek(controller, ...) == 7 and not engine.paused(two)
 
 
 async def test_a_pause_of_a_name_of_no_act_raises_refused_that_names_it() -> None:
@@ -146,3 +149,20 @@ async def test_a_pause_carries_its_cause() -> None:
   await settle()
   assert said(log, "pause") == [("pause", one, OPERATOR, "wait for the owner")]
   assert f"#{one} paused by operator\n{one}_value = 'wait for the owner'" in paragraphs(engine.turns(on=root))
+
+
+@pytest.mark.parametrize("target", ["acting()", "scope(acting())", "get(acting())[2]"])
+async def test_a_word_cannot_pause_its_own_rung(target: str) -> None:
+  """A word that pauses its own rung, or an act whose pause covers that rung, raises Refused before the pause is entered, so the model can read the error and continue."""
+  sand, log, root = born(f"pause({target})\nawait wait(0)", "close(2)")
+  task = engine.prompt(int, "finish", on=root)
+  await settle()
+  assert engine.peek(task, ...) == 2
+  target_id = {"acting()": "rung1", "scope(acting())": "chain1", "get(acting())[2]": "prompt1"}[target]
+  assert paragraphs(engine.turns(on=root))[3] == (
+    "#rung1 raised\nrung1_raised = Refused('rung1 cannot pause itself through " + target_id + "')"
+  )
+  assert said(log, "pause") == [] and said(log, "wait") == []
+  before = engine.turns(on=root)
+  await relived(sand, plain(sand.record))
+  assert engine.turns(on=root) == before and engine.peek(task, ...) == 2

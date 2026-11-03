@@ -1,6 +1,7 @@
 import type { Exit, LiveAct } from "./acts.js";
-import { type ActState, actState, valueText } from "./ladder.js";
+import { valueText } from "./ladder.js";
 import { unmarked } from "./marks.js";
+import { actState, type State } from "./states.js";
 
 /** One line of the source of a chain.
  *
@@ -9,7 +10,7 @@ import { unmarked } from "./marks.js";
  * - `value`: what a prompt closed with.
  */
 export type SourceLine =
-  | { type: "prompt"; act: LiveAct; state: ActState }
+  | { type: "prompt"; act: LiveAct; state: State }
   | {
       type: "code";
       rung: LiveAct;
@@ -17,7 +18,7 @@ export type SourceLine =
       text: string;
       acts: LiveAct[];
       runs: boolean;
-      state: ActState;
+      state: State;
     }
   | { type: "value"; act: LiveAct; text: string };
 
@@ -88,7 +89,9 @@ export function source(
     const on = placed(text, children);
     const state = actState(rung, owed);
     const open =
-      state === "running" ? children.findLast((act) => !act.done && followed.has(act.kind)) : undefined;
+      state === "thinks" || state === "runs"
+        ? children.findLast((act) => !act.done && followed.has(act.kind))
+        : undefined;
     for (const [index, line] of text.split("\n").entries()) {
       const here = on[index] ?? [];
       out.push({

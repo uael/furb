@@ -1,5 +1,6 @@
 import type { Exit, LiveAct } from "./acts.js";
-import { type ActState, actState, valueText } from "./ladder.js";
+import { valueText } from "./ladder.js";
+import { actState, type State } from "./states.js";
 
 /** Where a thread hangs: the act that it is about, a place in a file, and a pull request, each when it names one. */
 export interface Anchor {
@@ -21,7 +22,7 @@ export interface Thread {
   title: string;
   shape: string;
   to: string;
-  state: ActState;
+  state: State;
   /** How deep it stands in the tree of threads, from 0 at the top. */
   depth: number;
   anchor?: Anchor;
@@ -216,7 +217,7 @@ export interface ChainThread {
   asked: LiveAct[];
   /** The ids of the questions that wait for the operator. */
   asks: string[];
-  state: ActState;
+  state: State;
   resolved: boolean;
   /** Who made its prompt: the operator, a rung of a word, or an ear. */
   origin: "operator" | "rung" | "ear";
@@ -230,7 +231,7 @@ function byOperator(act: { by: string }): boolean {
 }
 
 /** How a thread concerns the operator: a question waits for them in it, or they started it and it failed or is held. */
-export type Concern = "asks" | "failed" | "held";
+export type Concern = "asks" | "failed" | "paused";
 
 /** How a thread concerns the operator, or nothing when it does not, from the state that its node shows. The failure of
  * an agent does not concern them: it rolls into the thread that made it, and only a question escalates. */
@@ -238,7 +239,7 @@ export function concerns(
   node: Pick<ThreadNode, "state"> & { thread: Pick<ChainThread, "yours"> },
 ): Concern | undefined {
   if (node.state === "asks") return "asks";
-  if (node.thread.yours && (node.state === "failed" || node.state === "held")) return node.state;
+  if (node.thread.yours && (node.state === "failed" || node.state === "paused")) return node.state;
   return undefined;
 }
 
@@ -316,7 +317,7 @@ export function chainThreads(
 export interface ThreadNode {
   thread: ChainThread;
   agents: ThreadNode[];
-  state: ActState;
+  state: State;
 }
 
 /** The threads of a list as a tree: each thread under the thread whose ladder made its prompt, as [`threadOf`] walks
@@ -345,7 +346,7 @@ export function nestThreads(list: readonly ChainThread[], rows: Rows): ThreadNod
 /** What a tree of threads says to the operator, counted by thread: a question counts once, in the thread where it
  * waits, and the failure or the pause of a thread that they started counts in that thread. */
 export function attentionOf(tops: readonly ThreadNode[]): Record<Concern, number> {
-  const count: Record<Concern, number> = { asks: 0, failed: 0, held: 0 };
+  const count: Record<Concern, number> = { asks: 0, failed: 0, paused: 0 };
   const visit = (node: ThreadNode): void => {
     const kind = concerns(node);
     if (kind && !(kind === "asks" && node.agents.some((one) => one.state === "asks"))) count[kind] += 1;

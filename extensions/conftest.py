@@ -115,11 +115,11 @@ def extended(  # noqa: PLR0913
 
 
 def naming(at: Path, roster: Sequence[Sequence[object]] = (), record: Sequence[tuple] = ()) -> tuple[Sand, str]:
-  """A life of a new record that runs the extension compaction, then the extension naming with its life word, on a
+  """A life of a new record that runs the extension naming with its life word, and no compaction, on a
   roster whose model h has the first place in the list of automatic work, or on the roster that it is given, and on
   the record that it is given: the World and the root."""
   given = roster or [*STANDS[0], ["h", ["low"], 200000, "cheap", 0]]
-  return extended("naming", at, lives=True, doctrine="Read first.\n", also=("compaction",), roster=given, record=record)
+  return extended("naming", at, lives=True, doctrine="Read first.\n", roster=given, record=record)
 
 
 CATCHUP = next(x for x in _monty.official() if x["name"] == "catchup")
@@ -211,12 +211,12 @@ def compacting(at: Path) -> tuple[Sand, str, str]:
 
 
 def surfed(answers: dict[str, Text], heard: list[tuple]) -> World:
-  """The web of the suite, in memory: an ear that takes each web_search and each web_fetch, keeps it in heard, says it
+  """The web of the suite, in memory: an ear that takes each search and each fetch, keeps it in heard, says it
   started, and says it done from its own loop with the answer of its query or its address, or with a refusal when it
   has none."""
   while True:
     a = yield
-    if a[0] in ("web_search", "web_fetch") and engine.question(a):
+    if a[0] in ("search", "fetch") and engine.question(a):
       heard.append(a)
       yield "started", a[1]
       got = answers.get(a[4], Refused(f"No page answers {a[4]}."))

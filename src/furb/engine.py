@@ -92,6 +92,18 @@ def standing():
   return answer("stand", ROOT, [])
 
 
+def automatic():
+  models = [one for one in (standing()[:1] or [[]])[0] if one[0] != OPERATOR]
+  placed = {}
+  for entry in models:
+    isinstance(place := (entry[4:] or [None])[0], int) and placed.setdefault(place, entry[0])
+  return next(iter([placed[k] for k in sorted(placed)] + [two[0] for two in models if two[3:4] == ["cheap"]]), "")
+
+
+def operated(where):
+  return where.split("/")[0] == OPERATOR
+
+
 def stand(on=""):
   isinstance(got := peek(a := act("stand", on, None)), list) and tell(on, roster=got[0], actor=got[2])
   return a
@@ -120,6 +132,8 @@ def cwd(on="") -> str:
 
 
 def pause(id: str, why=None):
+  if question(("rung", who := acting())) and covers(("pause", id), who):
+    raise Refused(f"{who} cannot pause itself through {id}")
   control("pause", "paused", id, why)
 
 
@@ -524,7 +538,9 @@ class Act[T = object](str):
   def __await__(self) -> Generator[object, Any, T]:
     if (acting() and question(("chain", self))) or not get(self):
       raise Refused(self + " never settles")
-    if acting():
+    if who := acting():
+      if not over(self) and (self == who or (question(("run", self)) and get(self)[4] == who)):
+        raise Refused(f"{who} cannot await its own completion through {self}")
       return (yield self)
     f = get_running_loop().create_future()
 

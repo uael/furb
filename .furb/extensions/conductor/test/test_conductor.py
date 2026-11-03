@@ -132,7 +132,7 @@ class Round:
     self.says.clear()
     self.say(r"workflows/gates\.yml/runs\?", '{"workflow_runs": []}')
     ns: dict = {"__name__": "conductor", "re": re, "Text": Text, "Exit": Exit, "Refused": Refused}
-    ns.update(HIDDEN=None, OPERATOR="operator", ROOT="chain1", bash=self.bash, clock=lambda: self.now)
+    ns.update(HIDDEN=None, OPERATOR="operator", operated=lambda s: s.split("/")[0] == "operator", ROOT="chain1", bash=self.bash, clock=lambda: self.now)
     ns.update(cwd=lambda: str(tmp), get=self.facts.get, over=lambda name: name in self.done, prompt=self.prompt)
     ns.update(peek=lambda name, waiting=None: self.done.get(name, waiting), read=self.read, write=self.write)
     ns.update(transcript=lambda on="", of="": [], paused=lambda name: False, scope=lambda name: self.chain)

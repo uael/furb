@@ -81,7 +81,7 @@ test("a damaged journal in the middle opens with --resume and from the list, and
       expect(frame).not.toContain("JSON");
       expect(session.damagedJournal).toEndWith("is damaged: change 2 cannot be read.");
       // The view that shows the damage fails, and the session that the list marks does not.
-      expect(session.status(session.selected)).toBe("error");
+      expect(session.status(session.selected)).toBe("failed");
       expect(session.status()).not.toBe("error");
       // The rewind reads the same journal, and it reads each change that it can.
       const first = session.acts.find((act) => act.kind === "rung");

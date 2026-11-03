@@ -1,4 +1,4 @@
-import { type Loom, momentsOf, owedAt, weave } from "furb/life";
+import { busy, type Loom, momentsOf, owedAt, weave } from "furb/life";
 import { conversation } from "../conversation.ts";
 import type { Stage } from "../graph.ts";
 import { actorOf, joined, type LifeView, LoomPane, lifeViews } from "../overview.ts";
@@ -86,7 +86,7 @@ export const stage = part({
   /** Whether the stage moves with time: a chain works, or the graph shows a message that flows. */
   moves(): boolean {
     return (
-      this.stageLoom.rows.some((row) => row.state === "working") ||
+      this.stageLoom.rows.some((row) => busy(row.state)) ||
       (this.lifeView === "graph" && this.stageLoom.owed.length > 0)
     );
   },

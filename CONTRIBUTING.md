@@ -114,7 +114,7 @@ no network.
 | `src/world/provider/pi.rs` | The protocol of pi-ai itself, which the gateway Radius speaks. |
 | `src/world/provider/claude/` | The provider `claude-cli`: the claude command line as a model of rig, its accounts and its models. |
 | `src/world/provider/codex/` | The provider `codex`: the Responses API on a ChatGPT sign-in that furb keeps. |
-| `src/world/provider/search.rs` | The native search of the web of each provider that has one, which the extension `web` asks. |
+| `src/world/provider/search.rs` | The search of the web, which the provider answers: the native search of each provider that has one, else the free search. |
 | `src/world/provider/images.rs` | The images that a message names, each kept under the digest of its bytes. |
 | `src/world/provider/watch.rs` | The watch over the word of a reply while its model writes it, which finds the first statement that cannot be python, or that the gate refuses for a fault that no later statement can mend. |
 

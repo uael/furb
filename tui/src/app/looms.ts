@@ -1,5 +1,5 @@
 import type { MouseEvent } from "@opentui/core";
-import { type Loom, weave } from "furb/life";
+import { busy, type Loom, weave } from "furb/life";
 import { type ChainEntry, type ChainsDrawn, drawChains, quietFolds, weaveWidth } from "../chains.ts";
 import { theme as c } from "../theme.ts";
 import { plain } from "../ui.ts";
@@ -77,7 +77,7 @@ export const looms = part({
   chainsDraw(panel: ChainsPanel, width: number, height: number): ChainsDrawn {
     const loom = this.chainsLoom(panel, weaveWidth(width));
     panel.loom = loom;
-    panel.live = loom.rows.some((row) => row.state === "working");
+    panel.live = loom.rows.some((row) => busy(row.state));
     const drawn = drawChains({
       loom,
       width,
