@@ -207,7 +207,9 @@ impl Answer {
       "list[Fact]" => Answer::Facts,
       "list[Turn]" => Answer::Turns,
       "Text" => Answer::Text,
-      "object" | "Show" | "Filter" | "dict" | "dict[str, str]" | "Standing" => Answer::Object,
+      "object" | "Show" | "Filter" | "dict" | "dict[str, str]" | "Standing" | "list[Entry]" => {
+        Answer::Object
+      }
       "Act" | "Act[object]" | "Act[T]" | "Act[Never]" | "Act[Standing]" => {
         Answer::Act(Came::Object)
       }

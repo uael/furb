@@ -809,3 +809,22 @@ async def test_a_fact_that_the_journal_keeps_after_a_fact_that_it_does_not_keep_
   assert [record[at - 1][0] == "joined" for at in notes] == [False, False]
   assert [a[1:5] for a in again] == [a[1:5] for a in first]
   assert [a[2] for a in first] == ["player", "rung1", "player"]
+
+
+async def test_an_act_whose_maker_is_the_journal_as_seed_gives_one_stands_known_in_the_transcript_of_its_chain_with_no_verb_and_runs_nothing_and_the_journal_says_its_later_facts_at_their_place() -> (
+  None
+):
+  """An act whose maker is the journal, as seed gives one, stands known in the transcript of its chain with no verb and runs nothing, and the journal says its later facts at their place."""
+  sand = sown()
+  record = [
+    (("chain", "chain1", OPERATOR, "", "root", ""),),
+    (("bash", "bash4", "journal", "chain1"),),
+    (("started", "bash4", "journal"),),
+    (("done", "bash4", "journal", "kept"),),
+  ]
+  life(sand, record)
+  await settle()
+  assert engine.get("bash4") == ("bash", "bash4", "journal", "chain1")
+  assert [x[1] for x in engine.transcript("chain1", "bash")] == ["bash4"]
+  assert engine.peek("bash4") == "kept"
+  assert not [x for x in sand.calls if x[0] == "bash"]

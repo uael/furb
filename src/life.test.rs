@@ -794,7 +794,10 @@ fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
   fs::write(at.join("record.jsonl.log"), "{\"entries\": 0}\n").unwrap();
   let held = |name: &str| fs::read(at.join(name)).unwrap();
   let (text, log) = (held("record.jsonl"), held("record.jsonl.log"));
-  let refused = opening(&at, true).boot::<String>([]).map(|_| ()).unwrap_err();
+  // The config directory of the user stands apart, since a life writes there the copy of each word.
+  let config = Some(format!("{}-config", at.display()));
+  let refused =
+    Opening { config, ..opening(&at, true) }.boot::<String>([]).map(|_| ()).unwrap_err();
   assert!(refused.to_string().starts_with("Drift: "), "{refused}");
   let moved = format!("stand()\\ncd('{place}-elsewhere')");
   assert!(
@@ -982,6 +985,94 @@ fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_promp
     closed(&mut again, "close([f(), str(chain('last'))])").as_ref().py_repr(),
     "[6, 'chain4']",
     "a later life replays the segment after the checkpoint"
+  );
+}
+
+#[test]
+fn a_checkpoint_holds_data_alone_and_a_later_engine_seeds_a_life_from_it_with_no_act_run_again() {
+  let at = place("checkpoint-data");
+  let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0)\nclose('late')";
+  let mut first = scripted(&at, &[ran]).boot::<String>([]).unwrap().0;
+  let word = "work = chain('work')\nshell = bash('echo one')\nawait shell\nqueue = [shell]\nSIZE = 6\n\
+              def f():\n  return SIZE\nwaiting = prompt(str, 'Wait.', on=work)\nawait wait(0.3)\nclose(str(waiting))";
+  let waiting = closed(&mut first, word).as_ref().as_str().unwrap().to_owned();
+  first.checkpoint().unwrap();
+  let kept = world::kept(at.join("record.jsonl")).unwrap();
+  let fact = entry(&kept[crate::checkpoint::last(&kept).unwrap()].as_ref(), 0).and_then(Fact::of);
+  let data = crate::wire::outward(fact.unwrap().word(0).unwrap());
+  assert_eq!(data["schema"], serde_json::json!(crate::checkpoint::SCHEMA));
+  assert!(data.get("entries").is_none(), "the checkpoint holds data and no entry");
+  let chains: Vec<&str> =
+    data["chains"].as_array().unwrap().iter().filter_map(|one| one["id"].as_str()).collect();
+  assert_eq!(chains, ["chain1", "chain2"]);
+  let root = &data["chains"][0];
+  assert_eq!(root["values"]["queue"], serde_json::json!("[Act('bash1')]"));
+  assert!(root["definitions"].as_str().unwrap().contains("def f():"));
+  let acts: Vec<(&str, bool)> = data["acts"]
+    .as_array()
+    .unwrap()
+    .iter()
+    .map(|one| (one["id"].as_str().unwrap(), one.get("value").is_some()))
+    .collect();
+  assert!(acts.contains(&("bash1", true)) && acts.contains(&(waiting.as_str(), false)), "{acts:?}");
+  assert!(
+    !data.to_string().contains("say('prefix'"),
+    "the checkpoint holds no word that the crate crafts"
+  );
+  let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  let word = format!(
+    "wake('chain2')\nclose([await queue[0], f(), get('{waiting}')[:2], await Act('{waiting}'), str(bash('echo two'))])"
+  );
+  let exit = "Exit(code=0, stdout=Text(path='bash1/stdout', content='one\\n'), stderr=Text(path='bash1/stderr', content=''))";
+  assert_eq!(
+    closed(&mut later, &word).as_ref().py_repr(),
+    format!("[{exit}, 6, ('prompt', '{waiting}'), 'late', 'bash2']"),
+    "each value, definition, open prompt and act that a value names stands, and a new act takes the next name"
+  );
+  drop(later);
+  let kept = world::kept(at.join("record.jsonl")).unwrap();
+  let tail = crate::checkpoint::segment(&kept);
+  let again = tail
+    .iter()
+    .filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of))
+    .filter(|a| a.kind() == "started" && a.about() == "bash1");
+  assert_eq!(again.count(), 0, "no carried act runs again");
+}
+
+#[test]
+fn a_checkpoint_of_a_later_schema_is_refused_with_both_schemas() {
+  let at = place("checkpoint-schema");
+  let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  closed(&mut first, "kept = 1\nclose(kept)");
+  first.checkpoint().unwrap();
+  let text = fs::read_to_string(at.join("record.jsonl")).unwrap();
+  let schema = format!("\"schema\":{}", crate::checkpoint::SCHEMA);
+  assert!(text.contains(&schema), "the checkpoint names its schema");
+  let later = format!("\"schema\":{}", crate::checkpoint::SCHEMA + 1);
+  fs::write(at.join("record.jsonl"), text.replace(&schema, &later)).unwrap();
+  let refused = scripted(&at, &[]).boot::<String>([]).unwrap_err();
+  assert_eq!(
+    refused.message(),
+    format!(
+      "the checkpoint of the record holds the schema {}, and this build reads the schema {} at most: open the \
+       record with a later build",
+      crate::checkpoint::SCHEMA + 1,
+      crate::checkpoint::SCHEMA
+    )
+  );
+}
+
+#[test]
+fn a_checkpoint_of_the_form_before_its_schema_opens_on_this_build() {
+  let at = place("checkpoint-1034");
+  fs::copy(corpus().join("handover").join("checkpoint.jsonl"), at.join("record.jsonl")).unwrap();
+  let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  assert_eq!(
+    closed(&mut later, "close([f(), len(queue), get(waiting)[:2], over(waiting)])")
+      .as_ref()
+      .py_repr(),
+    "[6, 1, ('prompt', 'prompt1'), False]",
+    "a life that a build of that form handed over goes on with its module and its open prompt"
   );
 }
 

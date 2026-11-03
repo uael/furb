@@ -18,8 +18,9 @@ mod life;
 pub mod protocol;
 mod serve;
 pub mod transport;
+pub mod view;
 
 pub use error::{LifeError, ProtocolError, TransportError};
-pub use event::{Act, Event, Seq, State};
+pub use event::{Event, Seq};
 pub use life::{Command, Life, LifeHandle, Reply};
 pub use serve::{Host, Outbox, serve};

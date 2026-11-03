@@ -20,7 +20,10 @@ use furb::{
   Object,
   life::{Answer, Opening},
 };
-use furb_host::{Command, Event, Life, LifeError, LifeHandle, Reply, Seq, State};
+use furb_host::{
+  Command, Event, Life, LifeError, LifeHandle, Reply, Seq,
+  view::{Phase, RunState, State},
+};
 use futures::{Stream, StreamExt};
 use serde_json::json;
 
@@ -87,7 +90,12 @@ async fn until(
 
 /// Whether an event is the act of a name, done.
 fn done(id: &str) -> impl Fn(&Event) -> bool {
-  move |event| matches!(event, Event::Act(act) if act.id == id && matches!(act.state, State::Done(_)))
+  move |event| matches!(event, Event::Act(act) if act.id == id && matches!(act.phase, Phase::Done(_)))
+}
+
+/// Whether an event is the act of a name, in a state.
+fn stands(id: String, state: State) -> impl Fn(&Event) -> bool {
+  move |event| matches!(event, Event::Act(act) if act.id == id && act.state == state)
 }
 
 /// The act that a command made.
@@ -114,14 +122,14 @@ async fn a_prompt_is_told_as_its_facts_and_its_acts_in_order_with_no_gap_until_t
   let got = until(&mut events, done(&id)).await;
   let places: Vec<Seq> = got.iter().map(|one| one.0).collect();
   assert_eq!(places, (0..got.len() as Seq).collect::<Vec<_>>());
-  let states: Vec<&State> = got
+  let phases: Vec<&Phase> = got
     .iter()
     .filter_map(|one| match &*one.1 {
-      Event::Act(act) if act.id == id => Some(&act.state),
+      Event::Act(act) if act.id == id => Some(&act.phase),
       _ => None,
     })
     .collect();
-  assert_eq!(states, [&State::Asked, &State::Started, &State::Done(json!("ok"))]);
+  assert_eq!(phases, [&Phase::Asked, &Phase::Started, &Phase::Done(json!("ok"))]);
   let asked =
     got.iter().position(|one| matches!(&*one.1, Event::Fact(fact) if fact[1] == json!(id)));
   let act = got.iter().position(|one| matches!(&*one.1, Event::Act(act) if act.id == id));
@@ -202,5 +210,47 @@ async fn a_life_that_does_not_open_ends_with_its_fault() {
   assert!(matches!(&*got.last().unwrap().1, Event::Ended(Some(why)) if !why.is_empty()));
   assert!(events.next().await.is_none());
   assert!(matches!(life.send(Command::Standing).await, Err(LifeError::Ended)));
+  fs::remove_dir_all(&at).unwrap();
+}
+#[tokio::test]
+async fn each_act_is_told_with_its_meaning_and_each_chain_with_the_state_of_its_work() {
+  let at = place("meaning");
+  let life = Life::spawn(scripted(&at, &[])).unwrap();
+  let mut events = Box::pin(life.events(0));
+  let refused = made(&life, rung("BAD")).await;
+  let got = until(&mut events, stands(refused.clone(), State::Failed)).await;
+  let Some(Event::Act(failed)) = got.last().map(|one| &*one.1) else { panic!("an act") };
+  assert!(
+    matches!(&failed.run, Some(RunState::Refused(found)) if found.contains("BAD")),
+    "{:?}",
+    failed.run
+  );
+  let prompt = Command::Prompt {
+    shape: "str".to_owned(),
+    message: "Which base?".to_owned(),
+    to: Some("operator".to_owned()),
+    on: None,
+  };
+  let asked = made(&life, prompt).await;
+  until(&mut events, stands(asked.clone(), State::Asks)).await;
+  until(&mut events, stands("chain1".to_owned(), State::Asks)).await;
+  life.send(Command::Answer { id: asked.clone(), line: "main".to_owned() }).await.unwrap();
+  until(&mut events, stands(asked, State::Done)).await;
+  until(&mut events, stands("chain1".to_owned(), State::Done)).await;
+  made(&life, rung("await wait(60)")).await;
+  until(&mut events, |event| matches!(event, Event::Act(act) if act.kind == "wait")).await;
+  life.send(Command::Pause { id: "chain1".to_owned() }).await.unwrap();
+  let held = until(
+    &mut events,
+    |event| matches!(event, Event::Act(act) if act.kind == "wait" && act.state == State::Paused),
+  )
+  .await;
+  let Some(Event::Act(wait)) = held.last().map(|one| &*one.1) else { panic!("an act") };
+  assert_eq!(wait.pause.as_ref().map(|one| one.by.as_str()), Some("operator"));
+  let chain = |one: &&Logged| matches!(&*one.1, Event::Act(act) if act.id == "chain1");
+  let Some(Event::Act(root)) = held.iter().rfind(chain).map(|one| &*one.1) else {
+    panic!("an act")
+  };
+  assert_eq!(root.state, State::Paused);
   fs::remove_dir_all(&at).unwrap();
 }

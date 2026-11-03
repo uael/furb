@@ -623,6 +623,14 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   When the chain of a prompt that a rung of the chain made on another chain pauses at a refused reply of that prompt, the chain tells that rung under the header paused and binds the refusal under the word why, and when the word of that rung does not run it acknowledges the pause, so a model sees that the prompt waits for a wake.
   """
 
+def seed(data: object) -> list[Entry]:
+  """seed gives the entries that a life boots on from the data of a checkpoint, which the open of an engine hands it in the place of the checkpoint, before the entries that follow it, so an engine opens a checkpoint that an earlier engine of its major wrote.
+  Each chain of the data is made again under its name, on its parent and with its label, as the operator makes it, and each name of a kind up to the highest that the data takes, which no entry carries, stays taken.
+  Each open prompt of the data is made again through prompt under its name, and each chain that the data says paused is paused.
+  Each act of the data with a value stands known on its chain with that value and runs nothing.
+  A rung of the operator on each chain binds its definitions and its values, says its turns as its prefix, tells what the checkpoint lost and cut, and runs again each word that ran on it.
+  """
+
 def grant(usd: float | None = None, share: float | None = None, on: str = "") -> Act[None]:
   """A ceiling on a chain, in dollars, in the share of the window that one answer fills, or both: it holds the ledger of the chain from the moment it is made, the dollars of the answers since then and the share of the window the last one filled, and it tells the dollars of that ledger at each answer of a model, since the advance binds the share before the next reply, so no turn a reply has sent grows a line after it.
   grant on a chain puts a ceiling on it: dollars, a share of the window, or both.
@@ -1159,6 +1167,7 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   The journal says again a done that is the first answer of an act when the act is made again, and every later fact of it at the place where the record holds it, the started of each act that a wake began again among them.
   A first answer that the record holds with no maker is a refusal of the life, that nothing took the act, so the journal says it again under no site, as the life said it, and neither keeps it again nor reads it as a drift.
   What the record shows started and not done when boot returns is pending: the journal holds it from the outside until a wake that this life says.
+  An act whose maker is the journal, as seed gives one, stands known in the transcript of its chain with no verb and runs nothing, and the journal says its later facts at their place.
   """
 
 actor: str

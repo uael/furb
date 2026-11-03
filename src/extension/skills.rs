@@ -4,6 +4,7 @@ use std::{fs, path::PathBuf};
 
 use crate::{
   ear::{Ear, hear, hearing, say},
+  extension::frontmatter,
   fact::Fact,
   value::{Fault, Text},
   world::{files::read, here},
@@ -11,9 +12,6 @@ use crate::{
 
 /// The scheme of the paths that the ear serves.
 const SCHEME: &str = "skills://";
-
-/// The marks that open a block of lines as the value of a key of a frontmatter.
-const BLOCKS: [&str; 6] = ["|", "|-", "|+", ">", ">-", ">+"];
 
 /// The skill that the extension carries, which says how a model extends furb, and which a skill of its name in a
 /// folder replaces.
@@ -74,87 +72,23 @@ fn found(roots: impl Iterator<Item = PathBuf>) -> Vec<Skill> {
     for folder in folders {
       let path = folder.join("SKILL.md");
       let Ok(text) = read(&path) else { continue };
-      let (name, description) = frontmatter(&text.content);
-      let name = name.unwrap_or_else(|| {
-        folder.file_name().map(|one| one.to_string_lossy().into()).unwrap_or_default()
-      });
+      let front = frontmatter(&text.content);
+      let name = front.field("name").map_or_else(
+        || folder.file_name().map(|one| one.to_string_lossy().into()).unwrap_or_default(),
+        str::to_owned,
+      );
       if !out.iter().any(|one| one.name == name) {
-        out.push(Skill { name, description: description.unwrap_or_default(), path: Some(path) });
+        let description = front.field("description").unwrap_or_default().to_owned();
+        out.push(Skill { name, description, path: Some(path) });
       }
     }
   }
-  let (name, description) = frontmatter(EXTENDING);
-  let name = name.unwrap_or_default();
+  let front = frontmatter(EXTENDING);
+  let name = front.field("name").unwrap_or_default().to_owned();
   if !out.iter().any(|one| one.name == name) {
-    out.push(Skill { name, description: description.unwrap_or_default(), path: None });
+    let description = front.field("description").unwrap_or_default().to_owned();
+    out.push(Skill { name, description, path: None });
   }
   out.sort_by(|one, two| one.name.cmp(&two.name));
   out
-}
-
-/// The name and the description that the frontmatter of a SKILL.md file gives, each on one line: the text after its
-/// key and the lines under the key that are indented, less the mark of a block and the quotes around it.
-fn frontmatter(text: &str) -> (Option<String>, Option<String>) {
-  let mut lines = text.lines();
-  if lines.next().map(str::trim_end) != Some("---") {
-    return (None, None);
-  }
-  let mut fields: Vec<(&str, String)> = Vec::new();
-  for line in lines.take_while(|one| one.trim_end() != "---") {
-    match fields.last_mut() {
-      Some((_, value)) if line.starts_with([' ', '\t']) => {
-        value.push(' ');
-        value.push_str(line.trim());
-      }
-      _ => {
-        if let Some((key, value)) = line.split_once(':') {
-          let value = value.trim();
-          fields.push((
-            key.trim(),
-            if BLOCKS.contains(&value) { String::new() } else { value.to_owned() },
-          ));
-        }
-      }
-    }
-  }
-  let field = |key: &str| {
-    let value = fields.iter().find(|one| one.0 == key)?.1.trim();
-    let bare = ['"', '\''].iter().find_map(|mark| value.strip_prefix(*mark)?.strip_suffix(*mark));
-    Some(bare.unwrap_or(value).split_whitespace().collect::<Vec<_>>().join(" "))
-      .filter(|one| !one.is_empty())
-  };
-  (field("name"), field("description"))
-}
-
-#[cfg(test)]
-mod tests {
-  use super::frontmatter as read;
-
-  #[test]
-  fn a_frontmatter_gives_a_name_and_a_description_each_on_one_line() {
-    let some =
-      |name: &str, description: &str| (Some(name.to_owned()), Some(description.to_owned()));
-    assert_eq!(
-      read("---\nname: brew\ndescription: Make tea.\n---\nBody."),
-      some("brew", "Make tea.")
-    );
-    assert_eq!(
-      read("---\r\nname: 'brew'\r\ndescription: \"Make: tea.\"\r\n---\r\n"),
-      some("brew", "Make: tea.")
-    );
-    assert_eq!(
-      read("---\nname: brew\ndescription: |\n  Make\n  tea.\nlicense: none\n---\n"),
-      some("brew", "Make tea.")
-    );
-    assert_eq!(
-      read("---\nname: brew\ndescription: >-\n  Make\n\n  tea.\n---\n"),
-      some("brew", "Make tea.")
-    );
-    assert_eq!(read("---\ndescription: Make tea.\n---\n"), (None, Some("Make tea.".to_owned())));
-    assert_eq!(
-      read("# Brew\n\nname: brew\n"),
-      (None, None),
-      "a file that opens with no --- has no frontmatter"
-    );
-  }
 }
