@@ -6,6 +6,16 @@
 //! program changes or [`refresh`] is called. A command line that does not answer, as an older one does not, leaves the
 //! fixed table of [`fallback`].
 
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(
+  clippy::redundant_closure_for_method_calls,
+  reason = "debt: a closure where a method path serves"
+)]
+
 use std::{
   collections::HashMap,
   fs,

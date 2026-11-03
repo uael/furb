@@ -2,6 +2,13 @@
 //! as a value of the shape the prompt wants. Every console reads a line by these rules, so an answer means the same at
 //! every host.
 
+#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
+#![expect(clippy::match_same_arms, reason = "debt: match arms with the same body")]
+#![expect(
+  clippy::unnecessary_wraps,
+  reason = "debt: a Result or an Option that is always Ok or Some"
+)]
+
 use indexmap::IndexMap;
 use serde_json::value::RawValue;
 

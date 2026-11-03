@@ -1,6 +1,18 @@
 //! The store: the record of a life, which one process at a time owns by a lease. A record whose name ends in
 //! `.sqlite`, `.sqlite3` or `.db` is a database of SQLite, and any other record is a file of lines, one fact per line.
 
+#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::match_bool, reason = "debt: a match on a bool")]
+#![expect(
+  clippy::redundant_closure_for_method_calls,
+  reason = "debt: a closure where a method path serves"
+)]
+
 mod lines;
 mod sqlite;
 

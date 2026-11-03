@@ -21,6 +21,19 @@
 //!
 //! [`local`]: super::local
 
+#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
+#![expect(
+  clippy::clone_on_ref_ptr,
+  reason = "debt: a clone of an Arc or an Rc that hides its kind"
+)]
+#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
+#![expect(clippy::match_same_arms, reason = "debt: match arms with the same body")]
+#![expect(
+  clippy::return_self_not_must_use,
+  reason = "debt: a method that returns Self with no must_use"
+)]
+#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
+
 mod config;
 mod update;
 

@@ -1,6 +1,36 @@
 //! The provider of models in a life of the real engine: models of rig that answer from a script, a model that never
 //! answers, and the claude command line of the tests.
 
+#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
+#![expect(clippy::default_trait_access, reason = "debt: Default::default() where the type serves")]
+#![expect(
+  clippy::disallowed_methods,
+  reason = "debt: a call that blocks: sleep, block_on or try_wait"
+)]
+#![expect(
+  clippy::format_collect,
+  reason = "debt: a format! for each item, collected into a String"
+)]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(
+  clippy::needless_pass_by_value,
+  reason = "debt: an argument taken by value and only borrowed"
+)]
+#![expect(clippy::redundant_clone, reason = "debt: a clone of a value that is not used again")]
+#![expect(
+  clippy::redundant_closure_for_method_calls,
+  reason = "debt: a closure where a method path serves"
+)]
+#![expect(
+  clippy::unnecessary_wraps,
+  reason = "debt: a Result or an Option that is always Ok or Some"
+)]
+#![expect(clippy::unused_async_trait_impl, reason = "debt: an async fn that awaits nothing")]
+
 use std::{
   fs,
   future::Future,

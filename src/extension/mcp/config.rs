@@ -7,6 +7,10 @@
 //! scope holds the choices of the operator too: `"approved"` and `"approveAll"` approve the servers of the project
 //! scope, `"disabled"` turns servers off, and `"enabled"` turns on a server whose definition says `"disabled": true`.
 
+#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
+#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+
 use std::{
   fs,
   path::{Path, PathBuf},

@@ -11,6 +11,15 @@
 //! as one the sandbox calls back. Each door hands the ears and the functions over to the life the value comes into,
 //! and a verb that a host says while a life hears it goes to that life.
 
+#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
+#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
+#![expect(clippy::map_unwrap_or, reason = "debt: map then unwrap_or, where map_or serves")]
+#![expect(
+  clippy::needless_pass_by_value,
+  reason = "debt: an argument taken by value and only borrowed"
+)]
+#![expect(clippy::ref_option, reason = "debt: &Option<T> where Option<&T> serves")]
+
 #[cfg(feature = "python")]
 pub mod py;
 #[cfg(feature = "typescript")]
@@ -772,6 +781,15 @@ pub fn on_console_end(callback: Told) -> Result<(), Fault> {
 
 #[cfg(windows)]
 mod console {
+  #![expect(
+    clippy::let_underscore_must_use,
+    reason = "debt: a let _ drops a value that must be used"
+  )]
+  #![expect(
+    clippy::let_underscore_untyped,
+    reason = "debt: a let _ hides the type of what it drops"
+  )]
+
   use std::sync::OnceLock;
 
   use windows_sys::{
@@ -815,13 +833,15 @@ mod console {
   }
 
   /// The callback, kept, and the handler of this module, added to the handlers of the process, once.
-  pub fn listen(callback: Told) -> Result<(), Fault> {
+  pub(super) fn listen(callback: Told) -> Result<(), Fault> {
+    static ADDED: OnceLock<bool> = OnceLock::new();
     ending()
       .send(Ending::Callback(callback))
       .map_err(|_| Fault::refused("the keeper of the console callback is gone"))?;
-    static ADDED: OnceLock<bool> = OnceLock::new();
     // The system calls the handlers from the last added to the first, so this one comes before those of the
     // runtime, which end the process at once.
+    // SAFETY: `heard` is a handler routine with the signature that the system calls, and it stays valid as long
+    // as the process.
     if *ADDED.get_or_init(|| unsafe { SetConsoleCtrlHandler(Some(heard), 1) } != 0) {
       Ok(())
     } else {

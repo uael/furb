@@ -1,5 +1,9 @@
 //! The ear of the web extension, which answers a search of the web and a fetch of a page of the web.
 
+#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
+#![expect(clippy::match_bool, reason = "debt: a match on a bool")]
+#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
+
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use futures::{FutureExt, StreamExt, future::BoxFuture, stream};

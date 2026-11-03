@@ -10,6 +10,18 @@
 //! the WebContent of WebKit, a process of its own, whose id the app prints, so the test runs on macOS. A check ends
 //! once its window drew and its stdin ended, so the test reads the web view after the window drew, while it stands.
 
+#![expect(
+  clippy::disallowed_methods,
+  reason = "debt: a call that blocks: sleep, block_on or try_wait"
+)]
+#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
+#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
 #![cfg(target_os = "macos")]
 
 use std::{

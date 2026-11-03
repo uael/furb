@@ -5,6 +5,11 @@
 //! command line runs as it did. With several, a turn that meets a usage limit or a failed sign in parks its account,
 //! and the next turn takes another: a limit parks it until its reset, and a failed sign in until a reload.
 
+#![expect(
+  clippy::redundant_closure_for_method_calls,
+  reason = "debt: a closure where a method path serves"
+)]
+
 use std::{
   env, fs,
   path::{Path, PathBuf},

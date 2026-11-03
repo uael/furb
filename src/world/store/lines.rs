@@ -1,5 +1,7 @@
 //! The store of a record as a file of lines: one fact per line, in JSON.
 
+#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
+
 use std::{
   fs::{File, OpenOptions},
   io::{BufRead, BufReader, ErrorKind, Seek, SeekFrom, Write},

@@ -1,3 +1,8 @@
+#![expect(
+  clippy::disallowed_methods,
+  reason = "debt: a call that blocks: sleep, block_on or try_wait"
+)]
+
 use std::error::Error;
 
 use furb::life::Life;

@@ -1,6 +1,20 @@
 //! The scratch directory, proved where no life reaches it: its place, the paths of its scheme, and the files that a
 //! record makes again in it. The tests of the World drive it in a life.
 
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(
+  clippy::redundant_closure_for_method_calls,
+  reason = "debt: a closure where a method path serves"
+)]
+#![expect(
+  clippy::semicolon_if_nothing_returned,
+  reason = "debt: a unit expression with no semicolon"
+)]
+
 use std::{fs, path::PathBuf};
 
 use super::{SCRATCH, Scratch, WHOLE};

@@ -5,6 +5,21 @@
 //! each fact it says, each prompt it puts to the operator, and the done of each act that a command made. `docs/rpc.md`
 //! says each command and each event. The life ends when stdin ends.
 
+#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
+#![expect(clippy::cast_precision_loss, reason = "debt: an as cast that loses precision")]
+#![expect(clippy::default_trait_access, reason = "debt: Default::default() where the type serves")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
+#![expect(
+  clippy::single_match_else,
+  reason = "debt: a match of one arm and else, where if let serves"
+)]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+
 use std::{
   collections::HashMap,
   future::{Future, poll_fn},

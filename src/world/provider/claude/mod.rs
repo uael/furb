@@ -10,6 +10,39 @@
 //! it, and a new conversation that grows out of one the command line holds forks it. A subscription pays for the
 //! turns, and no key is read.
 
+#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
+#![expect(
+  clippy::assigning_clones,
+  reason = "debt: an assignment of a clone, where clone_from serves"
+)]
+#![expect(
+  clippy::disallowed_methods,
+  reason = "debt: a call that blocks: sleep, block_on or try_wait"
+)]
+#![expect(
+  clippy::duration_suboptimal_units,
+  reason = "debt: a Duration in a unit that is not the largest"
+)]
+#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
+#![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
+#![expect(
+  clippy::semicolon_if_nothing_returned,
+  reason = "debt: a unit expression with no semicolon"
+)]
+#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
+#![expect(
+  clippy::single_match_else,
+  reason = "debt: a match of one arm and else, where if let serves"
+)]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+#![expect(clippy::unused_async_trait_impl, reason = "debt: an async fn that awaits nothing")]
+
 use std::{
   collections::{HashMap, VecDeque},
   env,

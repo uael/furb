@@ -9,6 +9,17 @@
 //! the engine, and `McpResult` and `mcp_call`, which the word of the extension binds. `McpResult` is
 //! `dict[str, Any]`, since monty cannot import `TypedDict`.
 
+#![expect(
+  clippy::assigning_clones,
+  reason = "debt: an assignment of a clone, where clone_from serves"
+)]
+#![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
+#![expect(
+  clippy::single_match_else,
+  reason = "debt: a match of one arm and else, where if let serves"
+)]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+
 use serde_json::{Map, Value};
 
 /// The most characters of the first sentence of a description that a docstring holds.

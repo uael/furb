@@ -6,6 +6,31 @@
 //! due, a function of the host is called back, a fault crosses as itself, a word that never yields raises at the
 //! bound of its turn, and the record the store kept opens a second life.
 
+#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
+#![expect(clippy::default_trait_access, reason = "debt: Default::default() where the type serves")]
+#![expect(
+  clippy::disallowed_methods,
+  reason = "debt: a call that blocks: sleep, block_on or try_wait"
+)]
+#![expect(clippy::items_after_statements, reason = "debt: an item declared after a statement")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::match_bool, reason = "debt: a match on a bool")]
+#![expect(clippy::redundant_clone, reason = "debt: a clone of a value that is not used again")]
+#![expect(
+  clippy::semicolon_if_nothing_returned,
+  reason = "debt: a unit expression with no semicolon"
+)]
+#![expect(clippy::struct_field_names, reason = "debt: fields that repeat the name of their struct")]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+#![expect(
+  clippy::unnecessary_wraps,
+  reason = "debt: a Result or an Option that is always Ok or Some"
+)]
+
 use std::{
   cell::RefCell,
   collections::VecDeque,

@@ -1,6 +1,23 @@
 //! The native searches: what each API answers comes to an answer with its sources, and the claude command line
 //! searches with its tool WebSearch alone.
 
+#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
+#![cfg_attr(
+  unix,
+  expect(clippy::items_after_statements, reason = "debt: an item declared after a statement")
+)]
+#![cfg_attr(
+  unix,
+  expect(
+    clippy::let_underscore_must_use,
+    reason = "debt: a let _ drops a value that must be used"
+  )
+)]
+#![cfg_attr(
+  unix,
+  expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")
+)]
+
 #[cfg(unix)]
 use std::fs;
 

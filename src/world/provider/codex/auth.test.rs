@@ -1,3 +1,18 @@
+#![expect(
+  clippy::clone_on_ref_ptr,
+  reason = "debt: a clone of an Arc or an Rc that hides its kind"
+)]
+#![expect(
+  clippy::disallowed_methods,
+  reason = "debt: a call that blocks: sleep, block_on or try_wait"
+)]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::redundant_clone, reason = "debt: a clone of a value that is not used again")]
+
 use std::{
   io::{Read, Write},
   net::{TcpListener, TcpStream},

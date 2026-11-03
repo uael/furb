@@ -14,6 +14,9 @@
 //! extension by a fact that the record keeps, and plays the word and the life word as a rung on each chain where the
 //! extension plays, and the definitions alone of a new word of an extension that the life runs, which reloads it.
 
+#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+
 pub mod compaction;
 pub mod mcp;
 pub mod memory;

@@ -1,6 +1,21 @@
 //! The catalog of models, read from a snapshot of the tests and from the snapshot the crate carries, with the
 //! credentials a test gives, so no test reads the environment or the network.
 
+#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
+#![cfg_attr(
+  unix,
+  expect(clippy::items_after_statements, reason = "debt: an item declared after a statement")
+)]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::redundant_clone, reason = "debt: a clone of a value that is not used again")]
+#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+#![expect(clippy::unreadable_literal, reason = "debt: a long literal with no separator")]
+
 use std::{fs, path::PathBuf, sync::Arc};
 
 use rig_core::{completion::CompletionRequest, message::Message};

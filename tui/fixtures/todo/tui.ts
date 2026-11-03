@@ -85,7 +85,7 @@ export default function todo(furb: Furb): void {
     const added = await seen.run(`todo(${JSON.stringify(got.item)})`);
     seen.say(`Added ${String(added)}${got.token ? `, with a secret of ${got.token.length} signs` : ""}.`);
   });
-  furb.command("clear", "Mark every item done, once you confirm it", async (_, seen) => {
+  furb.command("sweep", "Mark every item done, once you confirm it", async (_, seen) => {
     const open = items(seen).filter((one) => !one.done);
     if (
       !(await seen.confirm("Clear the list", `Mark ${open.length} items done?`, { yes: "Clear", no: "Keep" }))

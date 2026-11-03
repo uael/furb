@@ -1,5 +1,11 @@
 //! Where furb finds the TUI, in the order it looks, on a PATH and a checkout that a test makes.
 
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+
 use std::{ffi::OsString, fs, path::PathBuf};
 
 use super::{NONE, found};

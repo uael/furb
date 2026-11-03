@@ -1191,8 +1191,8 @@ try {
   app().dispose();
   await library.dispose();
 
-  // The part of the official extension compaction, which the crate carries: a rule at each compaction of a chain,
-  // with its summary, between what the model no longer reads and what it reads now. The board says how many times
+  // The part of the official extension compaction, which the crate carries: a rule at each compaction of a chain and at
+  // each clear, with its summary, between what the model no longer reads and what it reads now. The board says how many times
   // each chain compacted.
   await show(await demoSession({ cwd: await project("compaction") }));
   const compaction = (
@@ -1209,6 +1209,8 @@ try {
   await session.command(
     '/run compact(summary="The docs of the parser are written.\\nThe screenshots of the parser wait.")',
   );
+  await settle();
+  await session.command("/run clear()");
   await settle();
   await rest();
   await capture("75-compaction");

@@ -3,11 +3,37 @@
 //! comes out as the instance of `furb.python` it is, an exception as the one object it is for the life, a generator
 //! of python goes in as an ear, and a function as one the sandbox calls back.
 
+#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
+#![expect(
+  clippy::clone_on_ref_ptr,
+  reason = "debt: a clone of an Arc or an Rc that hides its kind"
+)]
+#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(
+  clippy::single_match_else,
+  reason = "debt: a match of one arm and else, where if let serves"
+)]
+#![expect(clippy::too_many_arguments, reason = "debt: more than 4 parameters is a struct")]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+#![expect(
+  clippy::unnecessary_wraps,
+  reason = "debt: a Result or an Option that is always Ok or Some"
+)]
+#![cfg_attr(
+  not(test),
+  expect(clippy::wildcard_imports, reason = "debt: an import of * that hides what it takes")
+)]
+
 use indexmap::IndexMap;
 use std::{
   cell::{OnceCell, RefCell},
   sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
     mpsc,
   },
@@ -573,12 +599,29 @@ impl Wake for Wakes {
   }
 }
 
+/// Whether the interpreter is on its way out. The thread of a waker holds this lock while it attaches to python, so
+/// once the exit of the interpreter took it, no thread of a waker attaches again: a thread that attached while the
+/// interpreter finalized read the state that the finalization frees, and the process died with a segmentation fault.
+static LEAVING: Mutex<bool> = Mutex::new(false);
+static EXIT: PyOnceLock<()> = PyOnceLock::new();
+
 /// What wakes the running loop to drive, as `drive` does: a thread of its own, which puts the drive on that loop at
-/// each wake, and ends when the waker goes.
+/// each wake, and ends when the waker goes or when the interpreter exits.
 fn waker(
   py: Python<'_>,
   drive: impl Fn(Python<'_>) -> PyResult<()> + Send + Sync + 'static,
 ) -> PyResult<Waker> {
+  EXIT.get_or_try_init(py, || {
+    let leave = PyCFunction::new_closure(py, None, None, |args, _| {
+      args.py().detach(|| {
+        if let Ok(mut leaving) = LEAVING.lock() {
+          *leaving = true;
+        }
+      });
+      PyResult::Ok(())
+    })?;
+    py.import("atexit")?.call_method1("register", (leave,)).map(|_| ())
+  })?;
   let running = py.import("asyncio")?.call_method0("get_running_loop")?.unbind();
   let drive =
     PyCFunction::new_closure(py, None, None, move |args, _| drive(args.py()))?.into_any().unbind();
@@ -588,6 +631,10 @@ fn waker(
   let woken = move || {
     while wakes.recv().is_ok() {
       seen.store(false, Ordering::Release);
+      let Ok(leaving) = LEAVING.lock() else { break };
+      if *leaving {
+        break;
+      }
       Python::attach(|py| {
         // A loop that is closed drives nothing more, and the engine is gone with it.
         let _ = running.bind(py).call_method1("call_soon_threadsafe", (drive.bind(py),));

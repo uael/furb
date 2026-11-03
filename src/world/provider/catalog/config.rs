@@ -1,5 +1,13 @@
 //! The provider settings of the user and the project, applied to a catalog before a life stands on it.
 
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
+#![expect(
+  clippy::needless_pass_by_value,
+  reason = "debt: an argument taken by value and only borrowed"
+)]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+
 use std::{collections::HashMap, env, fs};
 
 use indexmap::IndexMap;

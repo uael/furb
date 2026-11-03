@@ -4,6 +4,18 @@
 //! built, as the methods of the crate are. Views, queries and controls give their value at once, and an act is an
 //! [`JsAct`], a name that JavaScript awaits. The ears of an engine are generators of JavaScript and the ears the
 //! crate writes, each a [`NativeEar`], in the order the engine offers them a question.
+
+#![expect(clippy::items_after_statements, reason = "debt: an item declared after a statement")]
+#![expect(
+  clippy::needless_pass_by_value,
+  reason = "debt: an argument taken by value and only borrowed"
+)]
+#![expect(clippy::redundant_clone, reason = "debt: a clone of a value that is not used again")]
+#![expect(
+  clippy::trivially_copy_pass_by_ref,
+  reason = "debt: a small Copy value taken by reference"
+)]
+
 mod host;
 
 use indexmap::IndexMap;
@@ -475,7 +487,7 @@ impl JsEngine {
   }
 
   /// One verb of the contract with the words JavaScript gave, each as the contract says its type, and what it gave.
-  #[allow(clippy::too_many_arguments)]
+  #[expect(clippy::too_many_arguments, reason = "debt: more than 4 parameters is a struct")]
   fn worded<'env>(
     &self,
     env: &'env Env,
@@ -509,7 +521,7 @@ impl JsEngine {
   }
 
   /// One verb of the contract that gives a value, as JavaScript reads it.
-  #[allow(clippy::too_many_arguments)]
+  #[expect(clippy::too_many_arguments, reason = "debt: more than 4 parameters is a struct")]
   fn plain<'env>(
     &self,
     env: &'env Env,
@@ -524,7 +536,7 @@ impl JsEngine {
   }
 
   /// One verb of the contract that makes an act, and the act.
-  #[allow(clippy::too_many_arguments)]
+  #[expect(clippy::too_many_arguments, reason = "debt: more than 4 parameters is a struct")]
   fn acted<'env>(
     &self,
     env: &'env Env,

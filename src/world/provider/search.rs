@@ -3,6 +3,12 @@
 //! of the Responses API of OpenAI and of xAI, the grounding of Gemini in Google Search, and the search API of
 //! DeepSeek. A search answers with text in Markdown, which ends with its sources.
 
+#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
+#![expect(
+  clippy::unnecessary_wraps,
+  reason = "debt: a Result or an Option that is always Ok or Some"
+)]
+
 use std::{future::Future, process::Stdio, sync::Arc, time::Duration};
 
 use futures::future::BoxFuture;

@@ -1,6 +1,16 @@
 //! The store of builds: the program of the command line of each version, in the cache of furb, so a record of any
 //! version opens on a build of that version.
 
+#![expect(
+  clippy::format_collect,
+  reason = "debt: a format! for each item, collected into a String"
+)]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+
 use std::{
   fs, io,
   path::{Path, PathBuf},

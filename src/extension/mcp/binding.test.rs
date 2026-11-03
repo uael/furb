@@ -1,3 +1,15 @@
+#![expect(
+  clippy::format_collect,
+  reason = "debt: a format! for each item, collected into a String"
+)]
+#![expect(
+  clippy::needless_pass_by_value,
+  reason = "debt: an argument taken by value and only borrowed"
+)]
+#![expect(clippy::redundant_clone, reason = "debt: a clone of a value that is not used again")]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+#![expect(clippy::uninlined_format_args, reason = "debt: a format argument that is not inline")]
+
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use monty_types::NamedValues;

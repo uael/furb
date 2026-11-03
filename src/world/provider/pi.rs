@@ -2,6 +2,15 @@
 //! its options, which one post to `<address>/messages` carries, and the reply streams as the events of pi-ai, each a
 //! line of data of its own.
 
+#![expect(
+  clippy::match_wildcard_for_single_variants,
+  reason = "debt: a wildcard arm for one variant"
+)]
+#![expect(
+  clippy::redundant_closure_for_method_calls,
+  reason = "debt: a closure where a method path serves"
+)]
+
 use std::collections::VecDeque;
 
 use futures::StreamExt;

@@ -1,6 +1,18 @@
 //! The local server of the catalog, asked on servers of the tests on ports of this machine, so no test asks a real
 //! one.
 
+#![expect(
+  clippy::disallowed_methods,
+  reason = "debt: a call that blocks: sleep, block_on or try_wait"
+)]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+#![expect(clippy::unreadable_literal, reason = "debt: a long literal with no separator")]
+
 use std::{
   io::{BufRead, BufReader, Read, Write},
   net::TcpListener,

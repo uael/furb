@@ -3,6 +3,20 @@
 //! PATH, else on the bun of the places where its installers put it, since an app that the Finder opens has a short
 //! PATH. The host prints the address of its socket as its first line, and ends when its stdin ends.
 
+#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::manual_let_else, reason = "debt: a match where let else serves")]
+#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
+#![expect(clippy::map_unwrap_or, reason = "debt: map then unwrap_or, where map_or serves")]
+#![expect(
+  clippy::single_match_else,
+  reason = "debt: a match of one arm and else, where if let serves"
+)]
+
 use std::{
   env,
   io::{BufRead, BufReader},

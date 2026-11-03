@@ -1,6 +1,12 @@
 //! The config of the servers: the scopes and their order, the definitions and why one cannot run, the variables, and
 //! the choices of the operator in the local scope.
 
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+
 use std::{
   collections::HashMap,
   fs,

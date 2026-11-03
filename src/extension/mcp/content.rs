@@ -2,6 +2,8 @@
 //! joined. An image goes to the directory of the images of the life, as the images of a turn do, and its text names
 //! it, so a model that reads the text sees it. A text past [`LONGEST`] characters is cut, and says so.
 
+#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
+
 use std::path::Path;
 
 use base64::{Engine, engine::general_purpose::STANDARD};

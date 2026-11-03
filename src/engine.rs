@@ -19,6 +19,29 @@
 //! that holds the key `is` crosses as its pairs under `is` with the name `dict`, both ways, so no side reads the map
 //! of a word or of a host as a mark.
 
+#![expect(
+  clippy::assigning_clones,
+  reason = "debt: an assignment of a clone, where clone_from serves"
+)]
+#![expect(clippy::cast_precision_loss, reason = "debt: an as cast that loses precision")]
+#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
+#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
+#![expect(clippy::match_bool, reason = "debt: a match on a bool")]
+#![expect(
+  clippy::needless_pass_by_value,
+  reason = "debt: an argument taken by value and only borrowed"
+)]
+#![expect(
+  clippy::redundant_closure_for_method_calls,
+  reason = "debt: a closure where a method path serves"
+)]
+#![expect(
+  clippy::single_match_else,
+  reason = "debt: a match of one arm and else, where if let serves"
+)]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+#![expect(clippy::unreadable_literal, reason = "debt: a long literal with no separator")]
+
 use std::{
   cell::RefCell,
   collections::{HashMap, HashSet},

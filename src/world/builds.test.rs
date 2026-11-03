@@ -1,3 +1,9 @@
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+
 use std::{fs, path::PathBuf};
 
 use super::{DIGEST, PROGRAM, shelved, sound};
