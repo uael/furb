@@ -600,6 +600,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   When nothing was told on the chain since the word of the last rung that the chain did not make was ready, the chain tells that rung under the header told nothing before the advance, so the model sees that the word showed it nothing.
   While a word of the chain awaits an act that is not over, the chain advances no rung after a word that told nothing, so it asks no reply until a fact is told on the chain.
   Of the rungs that wait, the chain advances first the one whose maker said the fewest facts on the chain, so a new prompt waits for no turn of an older one.
+  A new prompt on a chain is asked while a word of the chain awaits a wait that is not over, so no wait holds a prompt.
   The chain holds the text of each paragraph told on it but the word of a rung, in order.
   At the advance of the next rung, before it asks the reply, or at the first ready of a rung that it does not advance, the chain runs that text as the told rung of that rung, and holds nothing more.
   Each act that a told paragraph opened and each value that it told is bound for the word of that rung, whoever wrote it.
