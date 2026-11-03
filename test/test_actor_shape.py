@@ -6,11 +6,11 @@ from furb.engine import Refused
 
 
 async def test_an_actor_the_world_offers() -> None:
-  """An actor the World offers: the name of a model, the efforts it takes and the window it reads."""
-  offers = [*STANDS[0], ["q", ["low"], 300000]]
+  """An actor the World offers: the name of a model, the efforts it takes, the window it reads and its class, cheap or dear, which a World may leave unsaid."""
+  offers = [*STANDS[0], ["q", ["low"], 300000], ["c", [], 100000, "cheap"]]
   born(stands=[offers, "/w", "m/low"])
   assert engine.standing()[0] == offers
-  assert [engine.offered(offers, to) for to in ("q/low", "m/low")] == [300000, 400000]
+  assert [engine.offered(offers, to) for to in ("q/low", "m/low", "c")] == [300000, 400000, 100000]
   _, _, root = born()
   await engine.rung("stand()", on=root)
   assert paragraphs(engine.turns(on=root))[-1] == (

@@ -59,9 +59,9 @@ use serde_json::{Value, json};
 use jiff::{Zoned, civil};
 
 use super::{
-  Backoff, Hosted, Model, Provider, Retries, Retry, Thinking, Writes, budgeted, catalog::Catalog,
-  images, limit, local::Server, messages, passing, recoverable, resets, tail, thinking, unclosed,
-  unfenced,
+  Backoff, CHEAP, Class, Hosted, Model, Provider, Retries, Retry, Thinking, Writes, budgeted,
+  catalog::Catalog, images, limit, local::Server, messages, passing, recoverable, resets, tail,
+  thinking, unclosed, unfenced,
 };
 use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, verbs, world};
 
@@ -191,7 +191,7 @@ fn the_provider_answers_a_stand_with_its_roster_its_directory_its_default_actor_
     super::super::files::tilded(one, std::env::home_dir().as_deref()).replace('\\', "\\\\")
   };
   let expected = format!(
-    "[[['m', ['low', 'high'], 1000], ['operator', [], 200000]], '{}', 'm/high', '{}']",
+    "[[['m', ['low', 'high'], 1000, 'dear'], ['operator', [], 200000, 'cheap']], '{}', 'm/high', '{}']",
     shown(&at),
     shown(&doctrine)
   );
@@ -199,12 +199,11 @@ fn the_provider_answers_a_stand_with_its_roster_its_directory_its_default_actor_
 }
 
 #[test]
-fn the_entry_of_each_model_ends_at_its_window() {
+fn the_entry_of_each_model_ends_at_its_window_then_its_class() {
   let qwen = Model::new("local:qwen3", 1000, MockCompletionModel::new([]));
   let (mut engine, _) = life("doctrine", vec![qwen, scripted(&MockCompletionModel::new([]))]);
   let standing = engine.standing().expect("the life stands");
-  let expected =
-    "[[['local:qwen3', [], 1000], ['m', ['low', 'high'], 1000], ['operator', [], 200000]]";
+  let expected = "[[['local:qwen3', [], 1000, 'dear'], ['m', ['low', 'high'], 1000, 'dear'], ['operator', [], 200000, 'cheap']]";
   assert!(standing.py_repr().starts_with(expected), "{}", standing.py_repr());
 }
 
@@ -2481,4 +2480,38 @@ fn a_stand_that_reads_the_settings_slowly_holds_no_chain_while_it_reads() {
   assert!(!stood(&mut engine), "the stand still reads the settings");
   answer.send(()).expect("the login is waited for");
   assert!(until(&mut engine, stood), "the stand is done once the login answers");
+}
+
+#[test]
+fn a_model_takes_the_class_that_code_fixes_else_the_one_of_its_price_else_dear() {
+  let catalog = Catalog::of(&indexmap::IndexMap::new(), None, None, |_| None);
+  let class = |name: &str| catalog.find(name).map(|one| one.class());
+  assert_eq!(class("claude-cli:haiku"), Some(Class::Cheap));
+  assert_eq!(class("claude-cli:opus"), Some(Class::Dear));
+  let model = || Model::new("p:m", 1000, MockCompletionModel::new([]));
+  let priced = |input: f64| model().price(input, 1.0, 0.0, 0.0).class();
+  assert_eq!([priced(0.25), priced(CHEAP), priced(3.0)], [Class::Cheap, Class::Cheap, Class::Dear]);
+  assert_eq!(model().class(), Class::Dear);
+  assert_eq!(model().price(0.1, 0.1, 0.0, 0.0).classed(Class::Dear).class(), Class::Dear);
+}
+
+#[test]
+fn the_config_of_a_project_gives_a_model_another_class_in_the_roster() {
+  let at = yard("classes");
+  fs::create_dir_all(at.join(".furb")).unwrap();
+  let config = r#"{"classes": {"p:m": "cheap", "p:n": "free"}}"#;
+  fs::write(at.join(".furb").join("config.json"), config).unwrap();
+  let models = vec![
+    Model::new("p:m", 1000, MockCompletionModel::new([])),
+    Model::new("p:n", 1000, MockCompletionModel::new([])).price(2.0, 8.0, 0.0, 0.0),
+  ];
+  let mut engine = lived(Provider::new(at.display().to_string(), models));
+  let standing = engine.standing().expect("the life stands").py_repr();
+  // A word that names no class leaves the class of the catalog.
+  assert!(
+    standing.starts_with(
+      "[[['p:m', [], 1000, 'cheap'], ['p:n', [], 1000, 'dear'], ['operator', [], 200000, 'cheap']]"
+    ),
+    "{standing}"
+  );
 }

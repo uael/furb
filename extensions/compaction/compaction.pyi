@@ -5,13 +5,16 @@ compaction: str
 SHARE: float
 """SHARE is the share of the window of its actor that an answer reads past, after which compacted asks choice what to keep of its chain, and it is 0.6 unless a word rebinds it."""
 CHOOSER: str
-"""CHOOSER is the actor that choice asks when it is given none, and an empty CHOOSER is the default actor of the chain of the model that chooses."""
+"""CHOOSER is the actor that choice asks when it is given none, and an empty CHOOSER is the actor that automatic() gives, else the default actor of the chain of the model that chooses."""
 LISTED: int
 """LISTED is the most acts of one step that choice lists, and it is 40 unless a word rebinds it."""
 BRIEF: str
 """BRIEF is what the prompt of choice says first: which acts to keep, and how to close."""
 FILTERS: list[Filter]
 """FILTERS are the filters that compact applies in order when it is given none: latest(), then recent(8)."""
+
+def automatic() -> str:
+  """automatic() gives the actor of automatic work: the first model of the list automatic of .furb/config.json in the directory of the standing that the roster holds, else the first cheap model of the roster, else an empty str."""
 
 def together(*filters: Filter) -> Filter:
   """together(*filters) gives each filter what the one before it kept, in order, and gives what the last one kept."""
