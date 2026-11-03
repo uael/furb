@@ -34,15 +34,13 @@ use furb::{
   ear::{hear, hearing, reactor},
   life::Opening,
   verbs, wire,
+  world::Asked,
 };
 use futures::channel::mpsc;
 use serde_json::{Value, json, value::RawValue};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
-use crate::{
-  console::Asked,
-  life::{self, Life},
-};
+use crate::life::{self, Life};
 
 /// A life served on stdin and stdout, until stdin ends, on the record it keeps when it is given one. It wakes
 /// nothing: what an earlier life left paused or pending waits for the wake of the client.

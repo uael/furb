@@ -28,6 +28,7 @@ import { part } from "./part.ts";
 import {
   type BlockOptions,
   chipColors,
+  gutterOf,
   gutterWidth,
   noBorder,
   STATE,
@@ -467,9 +468,8 @@ export const blocks = part({
     return node;
   },
 
-  /** Markdown on a surface, whose code blocks stand out from it on the surface of a code block, or on the surface
-   * that a code block takes in a panel. */
-  markdown(content: string, surface = c.panel): MarkdownRenderable {
+  /** Markdown, whose code blocks stand on the one surface that the blocks of a word stand on. */
+  markdown(content: string): MarkdownRenderable {
     return new MarkdownRenderable(this.renderer, {
       content: safeText(content),
       syntaxStyle: this.bodyStyle,
@@ -479,35 +479,26 @@ export const blocks = part({
       renderNode: Object.assign(
         (token: Token, context: RenderNodeContext) =>
           token.type === "code"
-            ? this.codeBlock(
-                token as Tokens.Code,
-                context,
-                surface,
-                !content.trimEnd().endsWith(token.raw.trimEnd()),
-              )
+            ? this.codeBlock(token as Tokens.Code, context, !content.trimEnd().endsWith(token.raw.trimEnd()))
             : undefined,
         { codeBlockOnly: true },
       ),
     });
   },
 
-  /** A code block: a surface of its own with an inset, its language as a label, the colors of its grammar, and its
-   * lines as they are. A line too long for the block does not wrap, so that it keeps the indentation of each line. */
-  codeBlock(
-    { text, lang }: Tokens.Code,
-    context: RenderNodeContext,
-    surface: RGBA,
-    followed: boolean,
-  ): BoxRenderable {
+  /** A code block: the surface of the blocks of a word, with no inset at its left, so that its numbers stand where
+   * theirs stand, its language as a label, the colors of its grammar, and its lines as they are. A line too long for
+   * the block does not wrap, so that it keeps the indentation of each line. */
+  codeBlock({ text, lang }: Tokens.Code, context: RenderNodeContext, followed: boolean): BoxRenderable {
     const language = lang?.trim().split(/\s+/)[0] ?? "";
     const block = this.box({
-      backgroundColor: surface,
-      paddingX: space.inset,
+      backgroundColor: c.raised,
+      paddingRight: space.inset,
       marginBottom: followed ? space.section : 0,
     });
     const filetype = infoStringToFiletype(language);
     // A code block numbers its lines as the block of a word does. It keeps the same blank column of the states at the
-    // left of the numbers, so both blocks have the same columns. Its language heads the code as a model heads a word.
+    // right of the numbers, so both blocks have the same columns. Its language heads the code as a model heads a word.
     const count = text.split("\n").length;
     const digits = String(count).length;
     if (language) {
@@ -537,10 +528,7 @@ export const blocks = part({
     block.add(
       new LineNumberRenderable(this.renderer, {
         target: code,
-        paddingRight: space.inset,
-        fg: c.faint,
-        minWidth: gutterWidth(digits),
-        lineSigns: stateSigns(new Map(), count),
+        ...gutterOf(digits, stateSigns(new Map(), count)),
       }),
     );
     return block;

@@ -110,8 +110,9 @@ first line of each step says how long the step ran and what the answers of its m
 work that the TUI saw run, since the record holds no time. The line that runs is lit, with a mark in the gutter and,
 after a second, its time, which only the clock moves, and the last lines that its command prints stream under it. Each
 word stands in a block on the raised surface, under its label, `word · rungN`, with the time, the cost and the model of
-the whole word at the right of the label. A column of two cells at the left of the numbers holds the state of a line:
-`◉` on the line that runs, and a red cross on the line that failed, whose reason stands under it as a comment. One
+the whole word at the right of the label. The numbers stand at the left edge of the block. The number of the line that
+runs fades out into the loader and back, in its own cell, and that line is lit. A column of one cell at the right of
+the numbers holds a red cross on the line that failed, whose reason stands under it as a comment. One
 column at the right edge of the block holds what the acts of each line came to, in a faint color. A time that this life
 did not measure shows nothing. A message that you send to the thread, and each notice of
 the chain, stands as a comment among the steps. While the model of the thread works on a step, each line of its word
@@ -172,7 +173,9 @@ or a ... once the window rolled, the line that runs stands second to last, and t
 come, or the row where the model writes. A click on a ... opens the lines in a block that scrolls, up to four
 hundred, and Roll up closes it. The feed shows one line in place of its earlier threads, as "28 earlier messages". A
 click on the line shows them. A long message shows its first rows, with a line that shows the rest. A jump to an act
-opens each fold over it. In the sidebar, a workspace lists the session shown and
+opens each fold over it. In the sidebar, the marks of a row and of the head count what concerns you: a question that
+waits anywhere, and the failure or the pause of a thread that you started. The failure of an agent does not count,
+and no mark counts the work in progress. A workspace lists the session shown and
 each session that works, asks or failed, then its newest other sessions until it lists three, and the older ones fold
 under Earlier.
 
@@ -301,9 +304,9 @@ footer says where the answer went and how many questions still wait.
 ![Answer dialog of one question](screenshots/09-operator-dialog.png)
 
 A message, a question, a notice, and an answer show as markdown, with no marks left: headings, emphasis, links,
-lists, quotes, and tables. A code block stands on a surface of its own, with its language as a label above it. The
-TUI colors the code of Python, TypeScript, JavaScript, and JSON. The code of another language keeps its lines and
-its indentation, and a line too long for the block does not wrap.
+lists, quotes, and tables. A code block stands on the surface of the blocks of a word, with its numbers in the same
+column as theirs and its language as a label above it. The TUI colors the code of Python, TypeScript, JavaScript, and
+JSON. The code of another language keeps its lines and its indentation, and a line too long for the block does not wrap.
 
 ![Markdown](screenshots/51-markdown.png)
 

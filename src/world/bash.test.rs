@@ -10,7 +10,7 @@ use std::fs;
 
 #[cfg(unix)]
 use super::asked_path;
-use super::{Kept, git_sh, merged_path, signalled};
+use super::{Kept, Running, git_sh, merged_path, signalled};
 
 /// A program at a path, which this machine runs.
 fn made(at: &std::path::Path) {
@@ -129,4 +129,16 @@ fn the_folders_of_the_login_path_come_first_and_the_current_ones_follow_with_no_
     &join(&["/usr/bin", "/bin", "/opt/homebrew/bin"]),
   );
   assert_eq!(got, join(&["/opt/homebrew/bin", "/usr/bin", "/bin"]));
+}
+
+#[test]
+fn a_text_fed_to_a_command_that_reads_no_more_is_refused_and_its_close_is_not() {
+  let (stdin, fed) = unsync::spsc::unbounded();
+  let (stop, _stopped) = unsync::oneshot::channel();
+  let mut one = Running { stdin, _stop: stop };
+  assert!(one.feed(Some("one\n".to_owned())).is_ok());
+  drop(fed);
+  let refused = one.feed(Some("two\n".to_owned())).unwrap_err();
+  assert_eq!(refused.message(), "the command reads no more");
+  assert!(one.feed(None).is_ok());
 }

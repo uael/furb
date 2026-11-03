@@ -15,7 +15,7 @@ interface Palette {
   selected: string;
   border: string;
   text: string;
-  /** The body of Markdown, about 9:1 against the panel, a step softer than the text of the chrome and of a heading. */
+  /** The body of Markdown, about 8:1 against the panel, a step softer than the text of the chrome and of a heading. */
   prose: string;
   muted: string;
   /** Line numbers, separators, and connectors. */
@@ -48,7 +48,7 @@ export const palettes = {
     selected: "#262c37",
     border: "#2c3039",
     text: "#bbc1ca",
-    prose: "#b9bfc7",
+    prose: "#aeb4be",
     muted: "#8f96a1",
     faint: "#70767f",
     accent: "#82a7d8",
@@ -74,7 +74,7 @@ export const palettes = {
     selected: "#1c2d42",
     border: "#30363d",
     text: "#e6edf3",
-    prose: "#b5bcc2",
+    prose: "#a9b1b8",
     muted: "#8b949e",
     faint: "#6e7681",
     accent: "#58a6ff",
@@ -100,7 +100,7 @@ export const palettes = {
     selected: "#243a30",
     border: "#2c4238",
     text: "#e3e9df",
-    prose: "#bac1b9",
+    prose: "#aeb7ad",
     muted: "#91a697",
     faint: "#66796b",
     accent: "#b7d89b",
@@ -126,7 +126,7 @@ export const palettes = {
     selected: "#dbe5d2",
     border: "#c9cfbf",
     text: "#243329",
-    prose: "#323f35",
+    prose: "#39483c",
     muted: "#56685a",
     faint: "#79877d",
     accent: "#3c673c",
@@ -152,7 +152,7 @@ export const palettes = {
     selected: "#2e3955",
     border: "#36405a",
     text: "#e4e9f4",
-    prose: "#bdc2cd",
+    prose: "#b1b7c4",
     muted: "#9daec7",
     faint: "#6d7a93",
     accent: "#bbc3ff",
@@ -178,7 +178,7 @@ export const palettes = {
     selected: "#35332f",
     border: "#3b3935",
     text: "#ecebe6",
-    prose: "#c8c7c2",
+    prose: "#bdbcb5",
     muted: "#9a978e",
     faint: "#7a7871",
     accent: "#d4835f",
@@ -204,7 +204,7 @@ export const palettes = {
     selected: "#e8e5db",
     border: "#e0ddd2",
     text: "#1f1e1c",
-    prose: "#42403e",
+    prose: "#4a4845",
     muted: "#6e6b63",
     faint: "#8b887e",
     accent: "#b85a3c",
@@ -497,6 +497,22 @@ export const motion = { still: false };
 export function spin(now = clock()): string {
   if (motion.still) return glyph.thinks;
   return spinner[Math.floor(now / frame) % spinner.length] ?? "⠋";
+}
+const fadeSteps = [0.7, 0.4, 0.15];
+/** The frames of the cell of the number of a line that runs: the number holds, fades out, the loader fades in, holds
+ * and fades out, and the number fades in. Each frame is what the cell shows and its share of color against the line. */
+const pulses: readonly (readonly [loader: boolean, share: number])[] = [
+  ...Array.from({ length: 6 }, () => [false, 1] as const),
+  ...fadeSteps.map((share) => [false, share] as const),
+  ...[...fadeSteps].reverse().map((share) => [true, share] as const),
+  ...Array.from({ length: 8 }, () => [true, 1] as const),
+  ...fadeSteps.map((share) => [true, share] as const),
+  ...[...fadeSteps].reverse().map((share) => [false, share] as const),
+];
+/** The frame of the cell of the number of a line that runs at a time. A view that holds still shows the loader. */
+export function pulse(now = clock()): readonly [loader: boolean, share: number] {
+  if (motion.still) return [true, 1];
+  return pulses[Math.floor(now / frame) % pulses.length] ?? [true, 1];
 }
 /** Whether the view shows no color, as NO_COLOR asks when it is set and not empty: each role takes the default color
  * of the terminal, and a state shows by its glyph, its words and its weight alone. */
