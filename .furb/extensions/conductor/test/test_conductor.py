@@ -500,6 +500,20 @@ def test_a_report_that_names_a_mistake_is_a_notice_of_its_own_and_not_a_line(con
   assert len([message for message, _ in conductor.prompts if "names a mistake" in message]) == 1
 
 
+
+def test_a_plain_report_of_a_change_is_no_mistake_and_a_report_of_a_push_to_main_is(conductor: Round) -> None:
+  plain = ["markdown() lost its fg argument", "its regex are deleted", "restore the config file", "a rung restores its source"]
+  reports = [*plain, "I pushed my commits to main."]
+  for n, said in enumerate(reports, 1):
+    name = f"prompt{n}"
+    conductor.working[name] = f"item{n}"
+    conductor.facts[name] = ("prompt", name, "rung1", "chain5", "tuple[int, str]", "brief", "")
+    conductor.done[name] = (10 + n, said)
+  conductor.tend()
+  told = [message for message, _ in conductor.prompts if "names a mistake" in message]
+  assert len(told) == 1 and told[0].startswith("The report of the worker item5 (prompt5) names a mistake")
+
+
 @POSIX
 @JQ
 async def test_a_notice_carries_its_context_and_each_other_event_is_a_line(conductor: Round) -> None:
