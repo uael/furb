@@ -278,19 +278,20 @@ pub fn projected(project: &Path) -> [PathBuf; 2] {
 }
 
 /// The official extensions, in the order a life runs them, each with the file of its word, the
-/// [`copy`] in the home of this process.
+/// [`copy`] in the config directory of this process.
 pub fn official() -> Vec<Extension> {
-  officials(Places::here().home.as_deref())
+  officials(&Places::here())
 }
 
-/// The official extensions, each with the [`copy`] of its word in this home.
-fn officials(home: Option<&Path>) -> Vec<Extension> {
+/// The official extensions, each with the [`copy`] of its word in the config directory of these
+/// places.
+fn officials(places: &Places) -> Vec<Extension> {
   let whole = "an official extension is whole";
   OFFICIAL
     .iter()
     .map(|(manifest, word, _)| {
       let mut one = manifested(manifest, |_| Ok(word)).expect(whole);
-      one.file = copy(&one.name, &one.file, &one.word, home);
+      one.file = copy(&one.name, &one.file, &one.word, places);
       one
     })
     .collect()
@@ -302,32 +303,34 @@ fn names() -> Vec<String> {
   named.collect()
 }
 
-/// The path of the copy of the word of an extension, `.furb/extensions/<name>/<file>` in the home, which it writes
-/// from the word when that copy differs, or nothing when the home takes no copy. The setup reads this copy and not the
-/// file of the source, since the source imports from `furb.engine`, and a word of a chain imports nothing of furb.
-fn copy(name: &str, file: &str, text: &str, home: Option<&Path>) -> String {
-  let at = Path::new("extensions").join(name).join(file);
-  let Some(official) = home.map(|one| one.join(".furb").join(&at)) else { return String::new() };
-  if fs::read_to_string(&official).ok().as_deref() != Some(text)
-    && official
+/// The path of the copy of the word of an extension, `words/<name>/<file>` in the config directory,
+/// with `~` for the home, which it writes from the word when that copy differs, or nothing when the
+/// directory takes no copy. The setup reads this copy and not the file of the source, since the
+/// source imports from `furb.engine`, and a word of a chain imports nothing of furb. Each life of a
+/// config directory shares the copy, so a life of another build in the same directory can write
+/// another word there: a host or a test that runs builds at once gives each a directory of its own.
+fn copy(name: &str, file: &str, text: &str, places: &Places) -> String {
+  let copied = places.config.join("words").join(name).join(file);
+  if fs::read_to_string(&copied).ok().as_deref() != Some(text)
+    && copied
       .parent()
-      .is_none_or(|one| fs::create_dir_all(one).is_err() || fs::write(&official, text).is_err())
+      .is_none_or(|one| fs::create_dir_all(one).is_err() || fs::write(&copied, text).is_err())
   {
     return String::new();
   }
-  files::tilded(&official, home)
+  files::tilded(&copied, places.home.as_deref())
 }
 
 /// The extension in a folder, under the name that its config gives it: its manifest, whose name
 /// must be that name, and the word of the file that the manifest names, with the [`copy`] of that
-/// word in this home.
-pub fn load(name: &str, root: &Path, home: Option<&Path>) -> Result<Extension, Fault> {
+/// word in the config directory of these places.
+pub fn load(name: &str, root: &Path, places: &Places) -> Result<Extension, Fault> {
   let file = root.join(MANIFEST);
   let refused = |why: String| Fault::refused(format!("{why}: {}", file.display()));
   let text = fs::read_to_string(&file).map_err(|no| refused(no.to_string()))?;
   let read = |word: &str| fs::read_to_string(root.join(word)).map_err(|no| format!("{word}: {no}"));
   let mut one = manifested(&text, read).map_err(refused)?;
-  one.file = copy(&one.name, &one.file, &one.word, home);
+  one.file = copy(&one.name, &one.file, &one.word, places);
   let lawful = name.starts_with(|one: char| one.is_ascii_lowercase())
     && name.chars().all(|one| one.is_ascii_lowercase() || one.is_ascii_digit() || one == '-');
   if !lawful || one.name != name {
@@ -379,15 +382,14 @@ fn manifested<T: AsRef<str>>(
 /// gives the folder of an extension that is not official by its path, which resolves against the folder of the
 /// config, `~` being the home, and `true` keeps the path that an earlier config gave.
 pub fn configured(places: &Places, project: &Path) -> Result<Vec<Extension>, Fault> {
-  let home = places.home.as_deref();
-  let official = officials(home);
+  let official = officials(places);
   let on = turned_on(places, project)?.into_iter();
   on.map(|(name, path)| match path {
-    Some(root) => load(&name, &root, home),
+    Some(root) => load(&name, &root, places),
     // A copy of an official extension in the folder of the extensions of the project prevails over the one that furb
     // carries, for its word and for the file that a chain reads.
     None if project.join(".furb").join("extensions").join(&name).join(MANIFEST).is_file() => {
-      load(&name, &project.join(".furb").join("extensions").join(&name), home)
+      load(&name, &project.join(".furb").join("extensions").join(&name), places)
     }
     None => {
       Ok(official.iter().find(|one| one.name == name).cloned().expect("an official extension"))
@@ -506,8 +508,7 @@ fn turned(file: &Path, text: &str, places: &Places) -> Vec<Extension> {
     return Vec::new();
   };
   let folder = |form: &Value| form.as_str().map(|path| beside(file, path, places));
-  let home = places.home.as_deref();
-  let found = extensions.iter().filter_map(|(name, form)| load(name, &folder(form)?, home).ok());
+  let found = extensions.iter().filter_map(|(name, form)| load(name, &folder(form)?, places).ok());
   found.collect()
 }
 
@@ -729,8 +730,7 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
             let folders = turned_on(&places, &project).unwrap_or_default().into_iter();
             let mine =
               folders.filter(|(name, root)| root.as_deref() == file.parent() && runs_name(name));
-            let home = places.home.as_deref();
-            let found = mine.filter_map(|(name, root)| load(&name, &root?, home).ok());
+            let found = mine.filter_map(|(name, root)| load(&name, &root?, &places).ok());
             found.filter(|one| !enabled.contains(one)).collect()
           }
         }

@@ -63,10 +63,16 @@ fn skill(name: &str, fields: &[(&str, &str)]) -> String {
   text + "---\nThe body of the skill.\n"
 }
 
-/// The extension that a folder loads, with the file of its word: the copy of that word in the home
-/// that the test gives, whatever the folder.
-fn filed(one: Extension, _root: &Path) -> Extension {
-  Extension { file: "~/.furb/extensions/note/note.py".to_owned(), ..one }
+/// The places of a test: the config directory `user` of its directory, and no home.
+fn places(at: &Path) -> Places {
+  Places { config: at.join("user"), home: None }
+}
+
+/// The extension that a folder loads, with the file of its word: the copy of that word in the
+/// config directory of the test, whatever the folder.
+fn filed(one: Extension, at: &Path) -> Extension {
+  let copy = at.join("user").join("words").join("note").join("note.py");
+  Extension { file: copy.display().to_string(), ..one }
 }
 
 #[test]
@@ -122,15 +128,11 @@ fn the_word_of_a_file_is_the_file_less_its_imports_of_furb_and_its_runs_of_empty
 fn a_folder_loads_under_the_name_its_manifest_gives_with_the_word_of_its_file() {
   let at = place("load");
   folder(&at.join("good"), &skill("note", &[("word", "note.py"), ("life", "note()")]), "x = 1\n");
-  assert_eq!(
-    load("note", &at.join("good"), Some(&at.join("home"))).unwrap(),
-    filed(note("x = 1"), &at.join("good"))
-  );
+  assert_eq!(load("note", &at.join("good"), &places(&at)).unwrap(), filed(note("x = 1"), &at));
   folder(&at.join("bare"), &skill("note", &[("word", "note.py")]), "x = 1\n");
-  assert_eq!(load("note", &at.join("bare"), Some(&at.join("home"))).unwrap().life, "");
-  let refused = |root: &str, name: &str| {
-    load(name, &at.join(root), Some(&at.join("home"))).unwrap_err().message()
-  };
+  assert_eq!(load("note", &at.join("bare"), &places(&at)).unwrap().life, "");
+  let refused =
+    |root: &str, name: &str| load(name, &at.join(root), &places(&at)).unwrap_err().message();
   let manifest = |root: &str| at.join(root).join("SKILL.md").display().to_string();
   let named = "The manifest must give the name ";
   assert_eq!(
@@ -237,14 +239,14 @@ fn a_manifest_names_the_view_of_an_extension_for_a_tui_and_no_other_field_of_fur
   let at = place("tui");
   folder(&at.join("good"), &skill("note", &[("word", "note.py"), ("view", "tui.ts")]), "x = 1\n");
   assert_eq!(
-    load("note", &at.join("good"), Some(&at.join("home"))).unwrap(),
-    filed(Extension { life: String::new(), ..note("x = 1") }, &at.join("good"))
+    load("note", &at.join("good"), &places(&at)).unwrap(),
+    filed(Extension { life: String::new(), ..note("x = 1") }, &at)
   );
   folder(&at.join("bad"), &skill("note", &[("word", "note.py"), ("tui", "tui.ts")]), "x = 1\n");
   let manifest = at.join("bad").join("SKILL.md").display().to_string();
   let fields = "furb-word, furb-life, furb-interface, furb-default, furb-plays, furb-view";
   assert_eq!(
-    load("note", &at.join("bad"), Some(&at.join("home"))).unwrap_err().message(),
+    load("note", &at.join("bad"), &places(&at)).unwrap_err().message(),
     format!("The manifest gives furb-tui, and the fields of furb are {fields}: {manifest}")
   );
   folder(
@@ -253,7 +255,7 @@ fn a_manifest_names_the_view_of_an_extension_for_a_tui_and_no_other_field_of_fur
     "x = 1\n",
   );
   assert_eq!(
-    load("note", &at.join("unsure"), Some(&at.join("home"))).unwrap_err().message(),
+    load("note", &at.join("unsure"), &places(&at)).unwrap_err().message(),
     format!(
       "The manifest gives furb-default \"maybe\", and it is \"true\" or \"false\": {}",
       at.join("unsure").join("SKILL.md").display()
@@ -493,17 +495,13 @@ fn a_manifest_says_whether_its_extension_plays_on_every_chain_or_on_the_root_alo
   let manifest =
     |plays: &str| skill("note", &[("word", "note.py"), ("life", "note()"), ("plays", plays)]);
   folder(&at.join("every"), &manifest("every"), "x = 1\n");
-  assert_eq!(
-    load("note", &at.join("every"), Some(&at.join("home"))).unwrap(),
-    filed(note("x = 1"), &at.join("every"))
-  );
+  assert_eq!(load("note", &at.join("every"), &places(&at)).unwrap(), filed(note("x = 1"), &at));
   folder(&at.join("root"), &manifest("root"), "x = 1\n");
   assert_eq!(
-    load("note", &at.join("root"), Some(&at.join("home"))).unwrap(),
-    filed(Extension { root: true, ..note("x = 1") }, &at.join("root"))
+    load("note", &at.join("root"), &places(&at)).unwrap(),
+    filed(Extension { root: true, ..note("x = 1") }, &at)
   );
-  let refused =
-    |root: &str| load("note", &at.join(root), Some(&at.join("home"))).unwrap_err().message();
+  let refused = |root: &str| load("note", &at.join(root), &places(&at)).unwrap_err().message();
   let file = |root: &str| at.join(root).join("SKILL.md").display().to_string();
   folder(&at.join("some"), &manifest("some"), "x = 1\n");
   assert_eq!(
@@ -848,7 +846,7 @@ fn a_write_of_the_life_in_the_folder_of_an_extension_that_a_config_turns_on_relo
   let root = at.join(".furb").join("extensions").join("note");
   folder(&root, &skill("note", &[("word", "note.py"), ("life", "note()")]), NOTE);
   config(&at.join(".furb").join("config.json"), r#"{"extensions": {"note": "extensions/note"}}"#);
-  let mut engine = lived(&at, vec![load("note", &root, Some(&at.join("home"))).unwrap()]);
+  let mut engine = lived(&at, vec![load("note", &root, &places(&at)).unwrap()]);
   let newer = "def note(on=\"\"):\n  return read(\"other.txt\", on=on)\n";
   let file = root.join("note.py").display().to_string();
   engine
