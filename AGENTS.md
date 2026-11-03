@@ -248,6 +248,20 @@ pattern matches the windows of the owner, the processes of other workers and you
 the pattern. Start a process that you may need to end with its pid written to `$TMPDIR`, or in a process group of its
 own, and end that pid or that group alone.
 
+The faults below come back on this machine:
+
+- When git refuses a push over SSH, push over HTTPS with the credential helper of gh and a lease on the full sha of the
+  remote branch: `git -c credential.helper= -c credential.helper='!gh auth git-credential' push
+  --force-with-lease=<branch>:<sha> https://github.com/<owner>/<repo>.git HEAD:refs/heads/<branch>`. A push to a URL
+  moves no tracking ref, so fetch the branch after it.
+- `gh run view --log-failed` refuses while the run still runs. Take the id of a job from `gh run view <run> --json
+  jobs`, then read `gh api repos/<owner>/<repo>/actions/jobs/<id>/logs`.
+- macOS has no `timeout` and no `flock`, and its `sed` needs `sed -i ''` to edit in place.
+- Every worktree of the clone shares one git stash and one set of ref locks. Run no `git stash`, since a pop can take
+  the entry of another branch: to run a check on the old code, save your change with `git diff > $TMPDIR/p.patch`, run
+  `git checkout -- <file>`, run the check, then `git apply $TMPDIR/p.patch`. A git command that fails with `cannot lock
+  ref` met another worker: run it again after a few seconds.
+
 Make a small change, run the checks that it touches, and compare a check that fails with the base before the change:
 fix what your change broke, and report what was broken before.
 
@@ -392,8 +406,7 @@ fix what your change broke, and report what was broken before.
   Both draw in process, with the test renderer of `@opentui/core` and the rasterizer `tui/script/raster.ts`, and open no
   window.
 - `python script/budgets.py`: set the budget of time of each job of the gates in `.github/budgets.json`, from its last
-  green runs on `main`. The round of the conductor, an extension of the project in `.furb/extensions/conductor`, queues
-  an item for a job that passes its budget.
+  green runs on `main`.
 
 Every pull request and every push to `main` runs the gates in `.github/workflows/gates.yml`: the hooks, which
 include the gates of the crate and the type check. The suite runs on Linux, on macOS and on Windows, and the gates
