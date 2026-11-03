@@ -329,7 +329,7 @@ fn standing(at: PathBuf) -> Box<dyn Ear> {
 fn lived(at: &Path, given: Vec<Extension>) -> Engine {
   let (record, store) = world::store(at.join("record.jsonl")).unwrap();
   let ears = [
-    ("extensions", extensions(given)),
+    ("extensions", extensions(given, places(at))),
     ("stand", standing(at.to_owned())),
     ("files", world::files(world::Scratch::own(), None)),
     ("store", store),
@@ -605,7 +605,7 @@ fn set_up_in(at: &Path, given: Vec<Extension>, directory: &Path) -> Engine {
   });
   let (record, store) = world::store(at.join("record.jsonl")).unwrap();
   let ears = [
-    ("extensions", extensions(given)),
+    ("extensions", extensions(given, places(at))),
     ("stand", stand),
     ("files", world::files(world::Scratch::own(), None)),
     ("store", store),

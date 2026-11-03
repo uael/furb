@@ -625,7 +625,7 @@ pub fn enabled(root: &[Fact]) -> Vec<Extension> {
 /// reloads it: each chain plays the definitions of its new word and each name of state that it lacks, so each name of
 /// state that it holds keeps its value, and its life word does not run again. The ear plays the rungs from the fact alone, so a later life plays the same rungs
 /// where the journal says the fact again.
-pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
+pub fn extensions(given: Vec<Extension>, places: Places) -> Box<dyn Ear> {
   hearing(&["chain", "stand", "rung", "write", ENABLE, TEACH], move |mut co| async move {
     // What the life enabled, in order, and each chain in the order of its birth, with the extensions it has.
     let (mut enabled, mut chains) = (Vec::<Extension>::new(), Vec::<(String, Vec<String>)>::new());
@@ -723,7 +723,6 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
           else {
             continue;
           };
-          let places = Places::here();
           if projected(&project).contains(&file) {
             turned(&file, &text.content, &places).into_iter().filter(|one| !runs(one)).collect()
           } else {
