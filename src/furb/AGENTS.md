@@ -159,7 +159,7 @@ meanings. The entry of such a name here gives only its form in the engine.
   no reply, makes crafted rungs of its default actor: the read of the doctrine, the turn
   `rung(read('<file>', HIDDEN).content)` of each extension of every chain that has a file, in the order of the life,
   whose rung tells the code of the file alone in the turn after it and runs that code in the module of the root, the
-  file being the copy of the word in `~/.furb/extensions/<name>/`, then one turn of their life words, which read the
+  file being the copy of the word in `words/<name>/` of the config directory, then one turn of their life words, which read the
   place against the directory of the standing, as every chain that ran no cd, then the fact setup,
   `("setup", "chain1", "chain1")`, then the same turns for the extensions of the root alone. No ear makes a rung of the
   setup, so the transcript shows each word that ran, and the record holds only the standing that the World gave. Then
@@ -222,12 +222,16 @@ meanings. The entry of such a name here gives only its form in the engine.
   engine alone, and a life on another engine refuses it. A build keeps the version while each record of the corpus,
   `tests/corpus`, replays on it with no drift. After a checkpoint, only the fact made of the segment after it counts,
   and the store says it again at the root of the first life that goes on from the checkpoint.
-- checkpoint: the fact by which a record carries the state of its life to a later life of any build, at its tip:
-  the facts that the journal of any engine replays, of each chain that lives, its turns, its module and its open
-  prompts, and the names that each kind took. `src/checkpoint.rs` holds its shape. A later life boots on these facts
-  and on the record after the checkpoint, and replays nothing before it. Each name of the past stays taken, an act
-  that a value names keeps its name and its answer, each chain with an open prompt opens paused, and its prompt asks
-  its model again at a wake. A name of the module whose value the record cannot hold is lost, and the chain is told.
+- checkpoint: the fact by which a record carries the state of its life to a later life of any build of its major, at
+  its tip: plain data with a version of its own shape, `schema`, apart from the version of the record. It holds each
+  chain that lives with its label, its source, its turns, the text of its definitions, its plain values and whether
+  it is paused, each act that a value names with its answer, each open prompt, and the names that each kind took,
+  and no word of a verb by its place. `src/checkpoint.rs` holds its shape. `seed`, a function of the engine, makes
+  from that data the entries that a later life boots on, before the record after the checkpoint, so the engine that
+  opens it, and not the one that wrote it, says how its own journal makes each chain again. Each name of the past
+  stays taken, an act that a value names stands known with its answer and runs nothing, each chain with an open
+  prompt opens paused, and its prompt asks its model again at a wake. A name of the module whose value the record
+  cannot hold is lost, and the chain is told.
 - life word: the python of an extension that its rung runs after its word, and that the World plays alone on a chain
   whose origin had the extension, since that chain made the rung of its origin again. In a setup, the life words of
   the extensions run as one turn of the default actor, after the turns of their files.

@@ -4,11 +4,6 @@ on:
   workflow_dispatch:
   pull_request:
     branches: [main]
-    # A render of the gallery changes only these files, which no gate reads, so it runs no gate, by the ruling of
-    # the owner on 10-29.
-    paths-ignore:
-      - docs/screenshots/**
-      - docs/furb.gif
   push:
     branches: [main]
 
@@ -41,6 +36,8 @@ jobs:
     # The commit of a pull request is the merge of its branch into the base, whose first parent is the base, so two
     # commits of history hold the change. The whole history took 4 minutes to fetch, and the other jobs fetch one commit
     # in under 40 seconds.
+    # A render of the gallery changes only files that no gate reads, so it runs this job and the job of the gates, by
+    # the ruling of the owner on 10-29, which script/scope.py holds.
     name: the scope
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -50,6 +47,7 @@ jobs:
       crate: ${{ steps.scope.outputs.crate }}
       gui: ${{ steps.scope.outputs.gui }}
       code: ${{ steps.scope.outputs.code }}
+      hooks: ${{ steps.scope.outputs.hooks }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -65,6 +63,8 @@ jobs:
 
   hooks:
     name: the hooks
+    needs: scope
+    if: needs.scope.outputs.hooks == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -306,3 +306,20 @@ jobs:
       - uses: ./.github/actions/clear
         with:
           key: app
+
+  gates:
+    # The one check that reports on each pull request and stands for all the gates, so that a ruleset of main requires
+    # this check alone. A job that its if skips reports under its raw name, as the suite does for each system, which no
+    # ruleset can require, and a render of the gallery runs the scope alone. This job runs always. It fails when a job
+    # that it needs failed or was cancelled, and it passes when each of them succeeded or was skipped.
+    name: the gates
+    needs: [scope, hooks, suite, crate, typescript, bench, app]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key) \(.value.result)"'
+          echo "$NEEDS" | jq -e 'all(.[]; .result == "success" or .result == "skipped")' >/dev/null

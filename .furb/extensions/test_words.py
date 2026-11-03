@@ -26,8 +26,10 @@ ENGINE = {**vars(furb.python), **dict.fromkeys(BOOTED)}
 def word(name: str) -> str:
   """The word of an extension of the project: its file less the imports of furb, as the crate plays it."""
   folder = PROJECT / CONFIG["extensions"][name]
-  manifest = json.loads((folder / "furb.json").read_text(encoding="utf-8"))
-  return IMPORT.sub("", (folder / manifest["word"]).read_text(encoding="utf-8"))
+  manifest = (folder / "SKILL.md").read_text(encoding="utf-8")
+  file = re.search(r"^  furb-word: (\S+)$", manifest, re.M)
+  assert file, f"the manifest of {name} names no word"
+  return IMPORT.sub("", (folder / file[1]).read_text(encoding="utf-8"))
 
 
 @pytest.mark.parametrize("name", NAMES)

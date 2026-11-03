@@ -639,9 +639,9 @@
       "type": "string",
       "enum": [
         "window",
-        "kit"
+        "skill"
       ],
-      "description": "What a peer is: a window of an operator, or the process of a kit."
+      "description": "What a peer is: a window of an operator, or the process of a skill."
     },
     "Hello": {
       "type": "object",
@@ -665,20 +665,24 @@
         "protocol",
         "kind"
       ],
-      "description": "The first frame of a peer: the protocol that it speaks, its kind, and the name of a kit."
+      "description": "The first frame of a peer: the protocol that it speaks, its kind, and the name of a skill."
     },
     "Slot": {
       "oneOf": [
         {
           "type": "object",
           "properties": {
+            "on": {
+              "type": "string"
+            },
             "slot": {
               "type": "string",
               "const": "dock"
             }
           },
           "required": [
-            "slot"
+            "slot",
+            "on"
           ]
         },
         {
@@ -691,12 +695,13 @@
           },
           "required": [
             "slot"
-          ]
+          ],
+          "description": "A section of the sidebar."
         },
         {
           "type": "object",
           "properties": {
-            "kind": {
+            "act": {
               "type": "string"
             },
             "slot": {
@@ -706,14 +711,14 @@
           },
           "required": [
             "slot",
-            "kind"
+            "act"
           ],
-          "description": "The row of each act of a kind."
+          "description": "The row of one act, of a kind that the skill draws."
         },
         {
           "type": "object",
           "properties": {
-            "kind": {
+            "act": {
               "type": "string"
             },
             "slot": {
@@ -723,21 +728,26 @@
           },
           "required": [
             "slot",
-            "kind"
+            "act"
           ],
-          "description": "The detail of each act of a kind."
+          "description": "The detail of one act, of a kind that the skill draws."
         },
         {
           "type": "object",
           "properties": {
+            "act": {
+              "type": "string"
+            },
             "slot": {
               "type": "string",
               "const": "mark"
             }
           },
           "required": [
-            "slot"
-          ]
+            "slot",
+            "act"
+          ],
+          "description": "A mark in the feed, after one act, of a kind that the skill marks."
         },
         {
           "type": "object",
@@ -776,7 +786,7 @@
           ]
         }
       ],
-      "description": "Where a window shows a view."
+      "description": "Where a window shows a view. The dock follows the chain that it names, and the row, the detail\nand the mark follow the chain of the act that they name. The sidebar, the footer, a screen and\nan overlay follow the life."
     },
     "Mount": {
       "type": "object",
@@ -784,19 +794,23 @@
         "viewer": {
           "type": "string"
         },
+        "life": {
+          "type": "string"
+        },
         "slot": {
           "$ref": "#/definitions/Slot"
         },
-        "kit": {
+        "skill": {
           "type": "string"
         }
       },
       "required": [
         "viewer",
+        "life",
         "slot",
-        "kit"
+        "skill"
       ],
-      "description": "A view that a window mounts in a slot, which the process of a kit serves."
+      "description": "A view that a window mounts in a slot of a life, which the process of a skill serves."
     },
     "Node": {
       "type": "object",
@@ -1179,7 +1193,7 @@
           ]
         }
       ],
-      "description": "What a kit asks of a window."
+      "description": "What a skill asks of a window."
     },
     "ViewEffect": {
       "type": "object",
@@ -1195,7 +1209,7 @@
         "viewer",
         "effect"
       ],
-      "description": "What a kit asks of the one window of a view."
+      "description": "What a skill asks of the one window of a view."
     },
     "Dispose": {
       "type": "object",
@@ -1567,7 +1581,7 @@
         "role",
         "kind"
       ],
-      "description": "A peer as the daemon knows it after its hello: the login that its transport proved, its role,\nits kind, and the name of a kit."
+      "description": "A peer as the daemon knows it after its hello: the login that its transport proved, its role,\nits kind, and the name of a skill."
     },
     "Role": {
       "type": "string",
@@ -1754,7 +1768,7 @@
             "event",
             "data"
           ],
-          "description": "An act as it stands after a fact about it, which takes the place of each earlier event of the\nsame act."
+          "description": "An act with its meaning as it stands after a fact about it, which takes the place of each\nearlier event of the same act."
         },
         {
           "type": "object",
@@ -1863,17 +1877,87 @@
           "type": "string"
         },
         "on": {
-          "type": "string"
+          "type": "string",
+          "description": "What the act is on: a chain, or the prompt of a thread for a prompt on a thread."
         },
         "chain": {
-          "type": "string"
+          "type": "string",
+          "description": "The chain that the act stands in."
         },
         "words": {
           "type": "array",
-          "items": true
+          "items": true,
+          "description": "The words of the act after its kind, its name, its maker and what it is on."
+        },
+        "phase": {
+          "$ref": "#/definitions/Phase"
+        },
+        "operator": {
+          "type": "boolean",
+          "description": "Whether the console of the operator took the act: a question to him, or a notice."
+        },
+        "pause": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Pause"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The pause that holds the act while it lives."
+        },
+        "run": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RunState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How the word of a rung ran, for a rung alone."
+        },
+        "word": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The word of a rung, once its chain took it to run or to refuse."
+        },
+        "began": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "description": "How many facts the life had said when the act was made, which is its place in time."
+        },
+        "ended": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0,
+          "description": "How many facts the life had said when the act was done."
+        },
+        "spend": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Spend"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What the models cost: the answers that wrote the word of a rung, or each answer on a chain."
         },
         "state": {
-          "$ref": "#/definitions/State"
+          "description": "The state of the act, or of the work of a chain for a chain.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/State"
+            }
+          ]
         }
       },
       "required": [
@@ -1883,52 +1967,187 @@
         "on",
         "chain",
         "words",
+        "phase",
+        "operator",
+        "began",
         "state"
       ],
-      "description": "One act of a life: its kind, its name, who made it, what it is on, the chain it is in, its words\nafter these, and its state."
+      "description": "One act of a life with its meaning, as it stands after the last fact about it."
     },
-    "State": {
+    "Phase": {
       "oneOf": [
         {
           "type": "object",
           "properties": {
-            "state": {
+            "phase": {
               "type": "string",
               "const": "asked"
             }
           },
           "required": [
-            "state"
+            "phase"
           ]
         },
         {
           "type": "object",
           "properties": {
-            "state": {
+            "phase": {
               "type": "string",
               "const": "started"
             }
           },
           "required": [
-            "state"
+            "phase"
           ]
         },
         {
           "type": "object",
           "properties": {
-            "state": {
+            "phase": {
               "type": "string",
               "const": "done"
             },
             "value": true
           },
           "required": [
-            "state",
+            "phase",
             "value"
           ]
         }
       ],
       "description": "Where an act stands: asked, started by the ear that owns it, or done, with what it came to."
+    },
+    "Pause": {
+      "type": "object",
+      "properties": {
+        "by": {
+          "type": "string"
+        },
+        "why": true
+      },
+      "required": [
+        "by"
+      ],
+      "description": "A pause, as its fact holds it: who said it, and the cause that it gave."
+    },
+    "RunState": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "run": {
+              "type": "string",
+              "const": "running"
+            }
+          },
+          "required": [
+            "run"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "run": {
+              "type": "string",
+              "const": "done"
+            }
+          },
+          "required": [
+            "run"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "run": {
+              "type": "string",
+              "const": "failed"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "run",
+            "reason"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "run": {
+              "type": "string",
+              "const": "cancelled"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "run",
+            "reason"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "run": {
+              "type": "string",
+              "const": "refused"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "run",
+            "reason"
+          ],
+          "description": "The findings of the gate, one for each line."
+        }
+      ],
+      "description": "How the word of a rung ran: it runs or waits for its word, it ran, a fault or a cancel ended it,\nor the gate refused it, each with what a person reads."
+    },
+    "Spend": {
+      "type": "object",
+      "properties": {
+        "dollars": {
+          "type": "number",
+          "format": "double"
+        },
+        "answers": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "actor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "dollars",
+        "answers"
+      ],
+      "description": "What the answers of models cost: their dollars, how many they are, and the actor of the last."
+    },
+    "State": {
+      "type": "string",
+      "enum": [
+        "asks",
+        "unread",
+        "failed",
+        "paused",
+        "thinks",
+        "runs",
+        "delegates",
+        "done",
+        "cancelled",
+        "idle"
+      ],
+      "description": "The state of work: it asks the operator, it ended while the operator looked away, it failed, a\npause holds it, its model thinks or writes its word, a word or a command of it runs, its word\nawaits a prompt on another chain, it ended well, a cancel ended it, or it rests. The order is\nthe order of the roll-up. Only a window says unread, since only it knows what its operator saw."
     }
   },
   "x-protocol": 1

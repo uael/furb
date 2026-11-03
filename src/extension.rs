@@ -1,9 +1,13 @@
 //! The extensions: what an extension is, and where a host finds the ones that a life runs.
 //!
-//! An extension stands in a folder that holds a manifest, `furb.json`, which gives its name, the file of its word,
-//! its life word, where it plays and the file of its part for a TUI, and that file: a python module that imports what it uses from `furb.engine`, so an editor
-//! reads it. The word is that file less those imports. The official extensions are the crate's own, which it
-//! carries in the same form.
+//! An extension stands in a folder that holds a manifest, `SKILL.md`, the file of a skill, so
+//! Claude Code reads the folder as an ordinary skill. Its frontmatter gives the name and the
+//! description, and the fields of furb under `metadata`, where the open format of skills puts the
+//! fields of a client: the file of its word, its life word, the file of its interface, whether it
+//! plays by default, where it plays, and the file of its view for a TUI. The file of the word is a
+//! python module that imports what it uses from `furb.engine`, so an editor reads it. The word is
+//! that file less those imports. The official extensions are the crate's own, which it carries in
+//! the same form.
 //!
 //! A host finds the extensions in the configs that [`configs`] gives, in its order, each `{"extensions": {name:
 //! true, false, or a path}}`: `config.json` in the config directory of the user, `.furb/config.json` in the directory
@@ -51,6 +55,36 @@ const JOURNAL: &str = "journal";
 /// where the journal says the fact. A chain born later reads it at its birth, from the standing alone.
 const TEACH: &str = "teach";
 
+/// The manifest of an extension, which is the file of a skill.
+pub const MANIFEST: &str = "SKILL.md";
+
+/// The field of the manifest that names the file of the word. Each field of furb stands in the map
+/// `metadata` of the frontmatter, with the prefix `furb-`, so that no field of another client
+/// clashes with one.
+const WORD: &str = "furb-word";
+
+/// The field of the manifest that gives the life word.
+const LIFE: &str = "furb-life";
+
+/// The field of the manifest that names the file of the interface of the extension, its contract.
+const INTERFACE: &str = "furb-interface";
+
+/// The field of the manifest that says whether the extension plays by default, `"true"` or
+/// `"false"`.
+const DEFAULT: &str = "furb-default";
+
+/// The field of the manifest that says where the extension plays.
+const PLAYS: &str = "furb-plays";
+
+/// The field of the manifest that names the file of the view of the extension for a TUI.
+const VIEW: &str = "furb-view";
+
+/// Each field of furb that a manifest can give.
+const FIELDS: [&str; 6] = [WORD, LIFE, INTERFACE, DEFAULT, PLAYS, VIEW];
+
+/// The marks that open a block of lines as the value of a key of a frontmatter.
+const BLOCKS: [&str; 6] = ["|", "|-", "|+", ">", ">-", ">+"];
+
 /// What the manifest gives under `plays` for an extension that plays on every chain, which is the default.
 const EVERY: &str = "every";
 
@@ -62,42 +96,104 @@ const ROOTED: &str = "root";
 /// manifest names, in the order a life runs them.
 const OFFICIAL: [(&str, &str, Option<&str>); 8] = [
   (
-    include_str!("../extensions/catchup/furb.json"),
+    include_str!("../extensions/catchup/SKILL.md"),
     include_str!("../extensions/catchup/catchup.py"),
     None,
   ),
   (
-    include_str!("../extensions/memory/furb.json"),
+    include_str!("../extensions/memory/SKILL.md"),
     include_str!("../extensions/memory/memory.py"),
     None,
   ),
   (
-    include_str!("../extensions/skills/furb.json"),
+    include_str!("../extensions/skills/SKILL.md"),
     include_str!("../extensions/skills/skills.py"),
     None,
   ),
   (
-    include_str!("../extensions/compaction/furb.json"),
+    include_str!("../extensions/compaction/SKILL.md"),
     include_str!("../extensions/compaction/compaction.py"),
     Some(include_str!("../extensions/compaction/tui.ts")),
   ),
   (
-    include_str!("../extensions/naming/furb.json"),
+    include_str!("../extensions/naming/SKILL.md"),
     include_str!("../extensions/naming/naming.py"),
     None,
   ),
   (
-    include_str!("../extensions/ouroboros/furb.json"),
+    include_str!("../extensions/ouroboros/SKILL.md"),
     include_str!("../extensions/ouroboros/ouroboros.py"),
     None,
   ),
-  (include_str!("../extensions/web/furb.json"), include_str!("../extensions/web/web.py"), None),
+  (include_str!("../extensions/web/SKILL.md"), include_str!("../extensions/web/web.py"), None),
   (
-    include_str!("../extensions/mcp/furb.json"),
+    include_str!("../extensions/mcp/SKILL.md"),
     include_str!("../extensions/mcp/mcp.py"),
     Some(include_str!("../extensions/mcp/tui.ts")),
   ),
 ];
+
+/// The frontmatter of a `SKILL.md` file: each field at its top, and each field of the map under
+/// `metadata`, in their order, each value on one line. A file that opens with no `---` has none.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Frontmatter {
+  pub fields: Vec<(String, String)>,
+  pub metadata: Vec<(String, String)>,
+}
+
+impl Frontmatter {
+  /// The value of a field at the top, or none when it is absent or empty.
+  pub fn field(&self, key: &str) -> Option<&str> {
+    valued(&self.fields, key)
+  }
+
+  /// The value of a field of `metadata`, or none when it is absent or empty.
+  pub fn meta(&self, key: &str) -> Option<&str> {
+    valued(&self.metadata, key)
+  }
+}
+
+fn valued<'a>(fields: &'a [(String, String)], key: &str) -> Option<&'a str> {
+  let found = fields.iter().find(|one| one.0 == key).map(|one| one.1.as_str());
+  found.filter(|one| !one.is_empty())
+}
+
+/// The frontmatter of the text of a `SKILL.md` file. A value is the text after its key and the
+/// lines under the key that are indented, less the mark of a block and the quotes around it. Under
+/// `metadata`, each indented line is a field of its own.
+pub fn frontmatter(text: &str) -> Frontmatter {
+  let mut out = Frontmatter::default();
+  let mut lines = text.lines();
+  if lines.next().map(str::trim_end) != Some("---") {
+    return out;
+  }
+  for line in lines.take_while(|one| one.trim_end() != "---") {
+    let under = line.starts_with([' ', '\t']);
+    match out.fields.last_mut() {
+      Some((key, _)) if under && key.as_str() == "metadata" => {
+        if let Some((key, value)) = line.split_once(':') {
+          out.metadata.push((key.trim().to_owned(), value.to_owned()));
+        }
+      }
+      Some((_, value)) if under => {
+        value.push(' ');
+        value.push_str(line.trim());
+      }
+      _ => {
+        if let Some((key, value)) = line.split_once(':') {
+          let value = if BLOCKS.contains(&value.trim()) { "" } else { value };
+          out.fields.push((key.trim().to_owned(), value.to_owned()));
+        }
+      }
+    }
+  }
+  for one in out.fields.iter_mut().chain(out.metadata.iter_mut()) {
+    let value = one.1.trim();
+    let bare = ['"', '\''].iter().find_map(|mark| value.strip_prefix(*mark)?.strip_suffix(*mark));
+    one.1 = bare.unwrap_or(value).split_whitespace().collect::<Vec<_>>().join(" ");
+  }
+  out
+}
 
 /// Whether a line imports furb or a module of it, as `from furb import`, `from furb.engine import` or `import
 /// furb`, which the word of a file leaves out. A module whose name only starts with furb is another module.
@@ -181,45 +277,60 @@ pub fn projected(project: &Path) -> [PathBuf; 2] {
   [furb.join("config.json"), furb.join("config.local.json")]
 }
 
-/// The official extensions, in the order a life runs them, each with the file of its word, the [`copy`] in the home.
+/// The official extensions, in the order a life runs them, each with the file of its word, the
+/// [`copy`] in the config directory of this process.
 pub fn official() -> Vec<Extension> {
+  officials(&Places::here())
+}
+
+/// The official extensions, each with the [`copy`] of its word in the config directory of these
+/// places.
+fn officials(places: &Places) -> Vec<Extension> {
   let whole = "an official extension is whole";
-  let home = std::env::home_dir();
   OFFICIAL
     .iter()
     .map(|(manifest, word, _)| {
       let mut one = manifested(manifest, |_| Ok(word)).expect(whole);
-      one.file = copy(&one.name, &one.file, &one.word, home.as_deref());
+      one.file = copy(&one.name, &one.file, &one.word, places);
       one
     })
     .collect()
 }
 
-/// The path of the copy of the word of an extension, `.furb/extensions/<name>/<file>` in the home, which it writes
-/// from the word when that copy differs, or nothing when the home takes no copy. The setup reads this copy and not the
-/// file of the source, since the source imports from `furb.engine`, and a word of a chain imports nothing of furb.
-fn copy(name: &str, file: &str, text: &str, home: Option<&Path>) -> String {
-  let at = Path::new("extensions").join(name).join(file);
-  let Some(official) = home.map(|one| one.join(".furb").join(&at)) else { return String::new() };
-  if fs::read_to_string(&official).ok().as_deref() != Some(text)
-    && official
+/// The name of each official extension, in the order a life runs them.
+fn names() -> Vec<String> {
+  let named = OFFICIAL.iter().filter_map(|one| frontmatter(one.0).field("name").map(str::to_owned));
+  named.collect()
+}
+
+/// The path of the copy of the word of an extension, `words/<name>/<file>` in the config directory,
+/// with `~` for the home, which it writes from the word when that copy differs, or nothing when the
+/// directory takes no copy. The setup reads this copy and not the file of the source, since the
+/// source imports from `furb.engine`, and a word of a chain imports nothing of furb. Each life of a
+/// config directory shares the copy, so a life of another build in the same directory can write
+/// another word there: a host or a test that runs builds at once gives each a directory of its own.
+fn copy(name: &str, file: &str, text: &str, places: &Places) -> String {
+  let copied = places.config.join("words").join(name).join(file);
+  if fs::read_to_string(&copied).ok().as_deref() != Some(text)
+    && copied
       .parent()
-      .is_none_or(|one| fs::create_dir_all(one).is_err() || fs::write(&official, text).is_err())
+      .is_none_or(|one| fs::create_dir_all(one).is_err() || fs::write(&copied, text).is_err())
   {
     return String::new();
   }
-  files::tilded(&official, home)
+  files::tilded(&copied, places.home.as_deref())
 }
 
-/// The extension in a folder, under the name that its config gives it: its manifest, whose name must be that
-/// name, and the word of the file that the manifest names.
-pub fn load(name: &str, root: &Path) -> Result<Extension, Fault> {
-  let file = root.join("furb.json");
+/// The extension in a folder, under the name that its config gives it: its manifest, whose name
+/// must be that name, and the word of the file that the manifest names, with the [`copy`] of that
+/// word in the config directory of these places.
+pub fn load(name: &str, root: &Path, places: &Places) -> Result<Extension, Fault> {
+  let file = root.join(MANIFEST);
   let refused = |why: String| Fault::refused(format!("{why}: {}", file.display()));
   let text = fs::read_to_string(&file).map_err(|no| refused(no.to_string()))?;
   let read = |word: &str| fs::read_to_string(root.join(word)).map_err(|no| format!("{word}: {no}"));
   let mut one = manifested(&text, read).map_err(refused)?;
-  one.file = copy(&one.name, &one.file, &one.word, std::env::home_dir().as_deref());
+  one.file = copy(&one.name, &one.file, &one.word, places);
   let lawful = name.starts_with(|one: char| one.is_ascii_lowercase())
     && name.chars().all(|one| one.is_ascii_lowercase() || one.is_ascii_digit() || one == '-');
   if !lawful || one.name != name {
@@ -235,12 +346,22 @@ fn manifested<T: AsRef<str>>(
   text: &str,
   read: impl FnOnce(&str) -> Result<T, String>,
 ) -> Result<Extension, String> {
-  let manifest: Value = serde_json::from_str(text).map_err(|no| no.to_string())?;
-  let (Some(name), Some(file)) = (field(&manifest, "name")?, field(&manifest, "word")?) else {
-    return Err("A manifest gives a name and a word".to_owned());
+  let manifest = frontmatter(text);
+  let (Some(name), Some(file)) = (manifest.field("name"), manifest.meta(WORD)) else {
+    return Err(format!(
+      "A manifest gives a name, and the file of a word under metadata as {WORD}"
+    ));
   };
-  let life = field(&manifest, "life")?.unwrap_or_default().to_owned();
-  let root = match field(&manifest, "plays")? {
+  let foreign =
+    |key: &&(String, String)| key.0.starts_with("furb-") && !FIELDS.contains(&key.0.as_str());
+  if let Some((key, _)) = manifest.metadata.iter().find(foreign) {
+    return Err(format!(
+      "The manifest gives {key}, and the fields of furb are {}",
+      FIELDS.join(", ")
+    ));
+  }
+  let life = manifest.meta(LIFE).unwrap_or_default().to_owned();
+  let root = match manifest.meta(PLAYS) {
     None | Some(EVERY) => false,
     Some(ROOTED) => true,
     Some(other) => {
@@ -249,18 +370,11 @@ fn manifested<T: AsRef<str>>(
       ));
     }
   };
-  field(&manifest, "tui")?;
+  if let Some(other) = manifest.meta(DEFAULT).filter(|one| !["true", "false"].contains(one)) {
+    return Err(format!("The manifest gives {DEFAULT} {other:?}, and it is \"true\" or \"false\""));
+  }
   let word = word(read(file)?.as_ref());
   Ok(Extension { name: name.to_owned(), word, life, root, file: file.to_owned() })
-}
-
-/// The text that a manifest gives under a key, or none when it gives none, and a refusal when it is not text.
-fn field<'a>(manifest: &'a Value, key: &str) -> Result<Option<&'a str>, String> {
-  match manifest.get(key) {
-    None => Ok(None),
-    Some(Value::String(one)) => Ok(Some(one.as_str())),
-    Some(_) => Err(format!("The {key} of the manifest is no text")),
-  }
 }
 
 /// The extensions that the configs of the user and of the project turn on, in the order a life runs them: each
@@ -268,14 +382,14 @@ fn field<'a>(manifest: &'a Value, key: &str) -> Result<Option<&'a str>, String> 
 /// gives the folder of an extension that is not official by its path, which resolves against the folder of the
 /// config, `~` being the home, and `true` keeps the path that an earlier config gave.
 pub fn configured(places: &Places, project: &Path) -> Result<Vec<Extension>, Fault> {
-  let official = official();
+  let official = officials(places);
   let on = turned_on(places, project)?.into_iter();
   on.map(|(name, path)| match path {
-    Some(root) => load(&name, &root),
+    Some(root) => load(&name, &root, places),
     // A copy of an official extension in the folder of the extensions of the project prevails over the one that furb
     // carries, for its word and for the file that a chain reads.
-    None if project.join(".furb").join("extensions").join(&name).join("furb.json").is_file() => {
-      load(&name, &project.join(".furb").join("extensions").join(&name))
+    None if project.join(".furb").join("extensions").join(&name).join(MANIFEST).is_file() => {
+      load(&name, &project.join(".furb").join("extensions").join(&name), places)
     }
     None => {
       Ok(official.iter().find(|one| one.name == name).cloned().expect("an official extension"))
@@ -287,9 +401,9 @@ pub fn configured(places: &Places, project: &Path) -> Result<Vec<Extension>, Fau
 /// The name of each extension that the configs turn on, in the order a life runs them, with the path of its folder,
 /// which an official extension has not.
 fn turned_on(places: &Places, project: &Path) -> Result<Vec<(String, Option<PathBuf>)>, Fault> {
-  let official = official();
+  let official = names();
   let mut named: Vec<(String, Option<PathBuf>, bool)> =
-    official.iter().map(|one| (one.name.clone(), None, true)).collect();
+    official.iter().map(|one| (one.clone(), None, true)).collect();
   for file in configs(&places.config, project) {
     let refused = |why: String| Fault::refused(format!("{why}: {}", file.display()));
     let text = match fs::read_to_string(&file) {
@@ -349,12 +463,11 @@ pub fn parts(places: &Places, project: &Path) -> Result<Vec<Part>, Fault> {
       out.extend(carried(&name));
       continue;
     };
-    let file = root.join("furb.json");
-    let refused = |why: String| Fault::refused(format!("{why}: {}", file.display()));
-    let text = fs::read_to_string(&file).map_err(|no| refused(no.to_string()))?;
-    let manifest: Value = serde_json::from_str(&text).map_err(|no| refused(no.to_string()))?;
-    if let Some(tui) = field(&manifest, "tui").map_err(refused)? {
-      out.push(Part { name, file: root.join(tui).display().to_string(), text: None });
+    let file = root.join(MANIFEST);
+    let text = fs::read_to_string(&file)
+      .map_err(|no| Fault::refused(format!("{no}: {}", file.display())))?;
+    if let Some(view) = frontmatter(&text).meta(VIEW) {
+      out.push(Part { name, file: root.join(view).display().to_string(), text: None });
     }
   }
   Ok(out)
@@ -363,10 +476,9 @@ pub fn parts(places: &Places, project: &Path) -> Result<Vec<Part>, Fault> {
 /// The part that the crate carries for an official extension, when its manifest names one.
 fn carried(name: &str) -> Option<Part> {
   OFFICIAL.iter().find_map(|(manifest, _, text)| {
-    let manifest: Value = serde_json::from_str(manifest).expect("an official extension is whole");
-    let tui = field(&manifest, "tui").ok()??;
-    let file = format!("extensions/{name}/{tui}");
-    (manifest["name"] == name).then(|| Part {
+    let manifest = frontmatter(manifest);
+    let file = format!("extensions/{name}/{}", manifest.meta(VIEW)?);
+    (manifest.field("name") == Some(name)).then(|| Part {
       name: name.to_owned(),
       file,
       text: text.map(str::to_owned),
@@ -396,7 +508,7 @@ fn turned(file: &Path, text: &str, places: &Places) -> Vec<Extension> {
     return Vec::new();
   };
   let folder = |form: &Value| form.as_str().map(|path| beside(file, path, places));
-  let found = extensions.iter().filter_map(|(name, form)| load(name, &folder(form)?).ok());
+  let found = extensions.iter().filter_map(|(name, form)| load(name, &folder(form)?, places).ok());
   found.collect()
 }
 
@@ -513,7 +625,7 @@ pub fn enabled(root: &[Fact]) -> Vec<Extension> {
 /// reloads it: each chain plays the definitions of its new word and each name of state that it lacks, so each name of
 /// state that it holds keeps its value, and its life word does not run again. The ear plays the rungs from the fact alone, so a later life plays the same rungs
 /// where the journal says the fact again.
-pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
+pub fn extensions(given: Vec<Extension>, places: Places) -> Box<dyn Ear> {
   hearing(&["chain", "stand", "rung", "write", ENABLE, TEACH], move |mut co| async move {
     // What the life enabled, in order, and each chain in the order of its birth, with the extensions it has.
     let (mut enabled, mut chains) = (Vec::<Extension>::new(), Vec::<(String, Vec<String>)>::new());
@@ -602,7 +714,7 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
           let Some(text) = a.word(0).and_then(Text::of) else { continue };
           let Ok(file) = files::placed(Path::new(""), &text.path) else { continue };
           let config = projected(Path::new("")).iter().any(|one| file.ends_with(one));
-          if !config && !file.parent().is_some_and(|one| one.join("furb.json").is_file()) {
+          if !config && !file.parent().is_some_and(|one| one.join(MANIFEST).is_file()) {
             continue;
           }
           let got = co.call("standing", vec![], vec![]).await?;
@@ -611,14 +723,13 @@ pub fn extensions(given: Vec<Extension>) -> Box<dyn Ear> {
           else {
             continue;
           };
-          let places = Places::here();
           if projected(&project).contains(&file) {
             turned(&file, &text.content, &places).into_iter().filter(|one| !runs(one)).collect()
           } else {
             let folders = turned_on(&places, &project).unwrap_or_default().into_iter();
             let mine =
               folders.filter(|(name, root)| root.as_deref() == file.parent() && runs_name(name));
-            let found = mine.filter_map(|(name, root)| load(&name, &root?).ok());
+            let found = mine.filter_map(|(name, root)| load(&name, &root?, &places).ok());
             found.filter(|one| !enabled.contains(one)).collect()
           }
         }
