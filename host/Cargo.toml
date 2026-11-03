@@ -1,0 +1,26 @@
+[package]
+name = "furb-host"
+version.workspace = true
+edition = "2024"
+rust-version = "1.95"
+description = "The host of furb: each life on a thread of its own, behind a handle that any thread holds."
+license = "AGPL-3.0-only"
+repository = "https://github.com/uael/furb"
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+# The engine, the ears of the World and the provider of models, through the public API of the crate alone.
+furb = { path = ".." }
+# The runtime of the thread of each life, and the channels between that thread and the handles of the life.
+tokio = { version = "1", features = ["rt", "sync", "macros"] }
+# The stream of the events of a life.
+futures = "0.3"
+# A fact, an act and the reply of a query as JSON, as the record keeps a value.
+serde_json = "1"
+thiserror = "2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros", "time"] }
