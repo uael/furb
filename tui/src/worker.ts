@@ -518,7 +518,8 @@ function read(data: { target: string; method: string; args: unknown[] }): unknow
       throw new Error(`There is no file at ${path}.`);
     }
   }
-  if (data.target === "session" && (data.method === "dispose" || data.method === "end")) return open.dispose();
+  if (data.target === "session" && (data.method === "dispose" || data.method === "end"))
+    return open.dispose();
   if (data.target === "engine" && views.includes(data.method)) {
     const method = Reflect.get(open, data.method) as (...args: unknown[]) => unknown;
     return Reflect.apply(method, open, data.args);
@@ -530,7 +531,8 @@ self.onmessage = async ({ data }) => {
   // The end of the life is the dispose of its session: a window of its own ends it so, and a window of a host ends it
   // by end, since a dispose there only detaches the window. A host that hands the life over to another build ends it
   // with its checkpoint, so the host of that build goes on from it with no replay of what this build made.
-  if (data.target === "session" && data.method === "end") data.method = data.args?.[0]?.handover ? "end" : "dispose";
+  if (data.target === "session" && data.method === "end")
+    data.method = data.args?.[0]?.handover ? "end" : "dispose";
   let reply: { value?: unknown; error?: string; name?: string };
   try {
     reply = { value: await answer(data) };
