@@ -376,6 +376,51 @@ test("the context stands in the corner beside the input, under a row of space, a
     { width: 140, height: 40 },
   ));
 
+test("the keys of the footer stand under the context, on the row of the footer, while the sidebar stands", () =>
+  composing(
+    async ({ app, session, frame }) => {
+      const rows = (await frame()).split("\n");
+      const left = 140 - session.preferences.sidebarWidth;
+      const last = rows.findLastIndex((row) => row.trim());
+      expect((rows[last] ?? "").slice(left)).toContain("commands");
+      expect((rows[last] ?? "").slice(0, left)).not.toContain("commands");
+      // The context ends where the input ends, and the row under both is the row of the footer.
+      expect(app.cornerKeys.y).toBe(last);
+      expect(app.context.y + app.context.height).toBe(app.cornerKeys.y);
+      expect(app.cornerKeys.y).toBe(app.lower.y + app.lower.height - 1);
+    },
+    { width: 140, height: 40 },
+  ));
+
+test("the sidebar ends as far above the context as the last thread of the feed ends above the input", () =>
+  composing(
+    async ({ app, frame }) => {
+      await frame();
+      const gap = app.corner.y - (app.railSlot.y + app.railSlot.height);
+      expect(gap).toBeGreaterThan(0);
+      const last = app.scroll.content.getChildren().at(-1);
+      expect(last).toBeDefined();
+      expect(app.scroll.y + app.scroll.height - ((last?.y ?? 0) + (last?.height ?? 0))).toBe(gap);
+    },
+    { width: 140, height: 20 },
+    true,
+  ));
+
+test("on a narrow terminal and with the sidebar hidden, the keys stay in the footer beside its state", async () => {
+  for (const [width, hidden] of [
+    [80, false],
+    [140, true],
+  ] as const)
+    await composing(
+      async ({ session, frame }) => {
+        if (hidden) session.preferences.sidebar = false;
+        const rows = (await frame()).split("\n");
+        expect(rows.findLast((row) => row.trim()) ?? "").toContain("commands");
+      },
+      { width, height: 40 },
+    );
+});
+
 test("on a narrow terminal and with the sidebar hidden, the context folds into a line of the footer", async () => {
   for (const [width, hidden] of [
     [80, false],

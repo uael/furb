@@ -73,9 +73,12 @@ row, Resolved, which a click opens. The threads that the ladder of a thread made
 with their count, Agents, which a click opens, each agent one step deeper, and a question in an agent shows on the row
 of the thread over it. After ⌥T the arrows move in the sidebar, Enter opens the workspace, the session or
 the thread under them, → peeks at a workspace, Space folds, r resolves, o replies, and Esc gives the keys back to the
-input. Under the sidebar, in the corner beside the input and one row under the list, Context says how full the window
-of the chain shown is and where a grant pauses it, its tokens, and what it spent. It says No answer yet before the first
-answer. On a narrow terminal, or with the sidebar hidden, it folds into a short line of the footer, as `8% · $0.16`.
+input. Under the sidebar, in the corner beside the input, Context says how full the window of the chain shown is and where a
+grant pauses it, its tokens, and what it spent. It says No answer yet before the first answer. The list ends as far above
+it as the last thread of the feed ends above the input, and the context ends on the row where the input ends. The keys of
+the footer, as ^P commands and F1 help, stand under it, on the row of the footer. A set of keys that is wider than the
+corner stands in the footer. On a narrow terminal, or with the sidebar hidden, the context folds into a short line of
+the footer, as `8% · $0.16`, and the keys stay there.
 
 `/sidebar outline` and `/sidebar inbox` give the other shapes, and the flag `FURB_SIDEBAR` does the same at the start.
 The outline lists all workspaces in one tree: the workspace shown is open, with its sessions and, under the session
