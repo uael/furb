@@ -214,7 +214,8 @@ export default function (furb) {
 - `furb.status(draw)` adds a status to the footer: `draw(seen)` gives a line, which shows after the state of the
   session only when it is not empty. A status that throws shows its error in its place.
 - `seen` gives the chain on screen, every act of the life, `compactions`, each compaction of a chain as the model of
-  a life gives it, and `of(kind)` for the acts of a kind. It acts in the life too, and each of its acts goes through
+  a life gives it, `extensions()` for the names of the extensions that the life runs, and `of(kind)` for the acts of a
+  kind. It acts in the life too, and each of its acts goes through
   the record:
   - `run(word)` runs Python on the chain through the gate, as `/run` does, and gives the value of the last act that
     the word made on the chain, once that act is done, as the record holds it. A word that makes no act gives

@@ -194,17 +194,20 @@ export const palette = part({
       },
     });
     this.overlay.add(this.paletteList);
-    // A label that starts with the filter comes first, then a label that holds it, then a detail that holds it.
+    // A command that the filter names whole comes first, then a label that starts with it, then a label that holds it,
+    // then a detail that holds it.
     const filter = (value: string) => {
       const wanted = value.toLowerCase();
       const rank = (choice: Choice) => {
         const label = choice.label.trim().toLowerCase();
         const command = choice.command?.toLowerCase() ?? "";
-        return label.startsWith(wanted) || command.startsWith(wanted) || command.startsWith(`/${wanted}`)
+        return command.split(" ")[0] === `/${wanted}`
           ? 0
-          : label.includes(wanted)
+          : label.startsWith(wanted) || command.startsWith(wanted) || command.startsWith(`/${wanted}`)
             ? 1
-            : 2;
+            : label.includes(wanted)
+              ? 2
+              : 3;
       };
       return choices
         .filter((choice) =>

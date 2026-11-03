@@ -161,6 +161,7 @@ export class Host {
       chain,
       acts: session.acts,
       compactions,
+      extensions: async () => (await session.extensionsRun()).map(({ name }) => name),
       of: (kind) => session.acts.filter((act) => act.kind === kind),
       run: (word) => session.runWord(word),
       say: (text) => {

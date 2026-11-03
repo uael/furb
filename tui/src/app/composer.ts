@@ -380,11 +380,12 @@ export const composer = part({
       return;
     }
     if (token.kind === "/") {
-      // The command that the token names whole comes first. A command that its other name matches shows that name, and
-      // completes to the command.
+      // The command that the token names whole comes first, whatever its source, then each command in the order of its
+      // source: the commands of the TUI, and the commands of the parts, as the life gives them now. A command that its
+      // other name matches shows that name, and completes to the command.
+      const whole = `/${token.text} `;
       this.suggestions = slashes
         .filter(({ name, alias }) => name.startsWith(token.text) || alias.startsWith(token.text))
-        .sort((one, other) => Number(other.name === token.text) - Number(one.name === token.text))
         .map(({ name, argument, detail, usage, aliasUsage }): Suggestion => {
           const other = !name.startsWith(token.text);
           return {
@@ -398,7 +399,6 @@ export const composer = part({
           };
         })
         .concat(
-          // The commands of the parts, as the life gives them now, follow the commands of the TUI.
           this.parts
             .commands(this.seen())
             .filter((one) => !one.error && one.name.startsWith(token.text))
@@ -411,7 +411,8 @@ export const composer = part({
                 this.action(`/${one.name}`);
               },
             })),
-        );
+        )
+        .sort((one, other) => Number(other.text === whole) - Number(one.text === whole));
     } else if (token.kind === "value") {
       const command = token.command ?? "";
       const wanted = token.text.toLowerCase();
