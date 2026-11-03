@@ -53,6 +53,8 @@ interface InspectedState {
   pending: number;
   error?: string;
   reading?: boolean;
+  /** The name that the record gives its session, when it gives one. */
+  name?: string;
 }
 function readInspected(path: string): Map<string, InspectedState> {
   try {
@@ -288,7 +290,6 @@ export class Workspaces extends EventEmitter {
         entry.modified = info.mtimeMs;
         entry.size = info.size;
         const { view } = savedView(entry.path);
-        if (typeof view.sessionName === "string") entry.name = view.sessionName;
         entry.cost = typeof view.cost === "number" ? view.cost : 0;
       }),
     );
@@ -312,8 +313,12 @@ export class Workspaces extends EventEmitter {
     return found?.key === key ? found : undefined;
   }
   /** The state of a saved row that a replay told, unless the session of the row runs. */
-  private apply(entry: SessionEntry, state: Pick<InspectedState, "pending" | "error" | "reading">): void {
+  private apply(
+    entry: SessionEntry,
+    state: Pick<InspectedState, "pending" | "error" | "reading" | "name">,
+  ): void {
     if (entry.session) return;
+    if (state.name) entry.name = state.name;
     // A record that a build of another version made drifts, and opens to read: that is no error.
     entry.error = state.reading ? undefined : state.error;
     entry.status = state.reading ? "reading" : state.error ? "failed" : state.pending ? "paused" : "saved";
@@ -559,7 +564,7 @@ export class Workspaces extends EventEmitter {
     }
     if (entry.session) {
       entry.session.sessionName = label;
-      entry.session.sessionNamed = name !== undefined;
+      if (name !== undefined) void entry.session.rename(name);
       entry.name = label;
       entry.session.save();
     }
@@ -646,20 +651,21 @@ export class Workspaces extends EventEmitter {
     await session.dispose(true);
     return true;
   }
-  /** Give a session or a workspace the name that the operator chose. The saved view of a session keeps its name,
-   * whether the session is open or not, and the list keeps the name of a workspace. */
-  rename(item: SessionEntry | Workspace, name: string): void {
+  /** Give a session or a workspace the name that the operator chose. The record of a session keeps its name, as a fact
+   * that each window reads, and a session that is not open opens for as long as that takes. The list keeps the name
+   * of a workspace. */
+  async rename(item: SessionEntry | Workspace, name: string): Promise<void> {
     item.name = name;
     if ("sessions" in item) this.save({ directory: item.directory, name });
-    else if (item.session) {
-      item.session.sessionName = name;
-      item.session.sessionNamed = true;
-      item.session.save();
-    } else
-      saveFile(
-        `${item.path}.ui.json`,
-        JSON.stringify({ ...savedView(item.path).view, sessionName: name, sessionNamed: true }),
-      );
+    else if (item.session) void item.session.rename(name);
+    else {
+      const group = this.groups.find((one) => one.sessions.includes(item));
+      const opened = group ? (await this.load(item, group).catch(() => undefined))?.session : undefined;
+      if (opened) {
+        await Promise.race([opened.rename(name), Bun.sleep(10000)]);
+        await this.release(item);
+      }
+    }
     this.emit("change");
   }
   /** Take a workspace off the list. Its folder and its records stay, and /workspace adds it back. The current
