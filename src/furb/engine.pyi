@@ -234,10 +234,11 @@ def standing() -> Standing:
   It reads the transcript of the root as it stands where the call is made, so a grant reads the window of an actor off the standing where the answer of its reply lands, and a later life reads at each place of the record the standing that the record held there.
   """
 
-def stand(on: str = "") -> Standing:
-  """stand asks the World what the chains stand on and gives the answer, which boot does on the root at the tip of every life.
+def stand(on: str = "") -> Act[Standing]:
+  """stand asks the World what the chains stand on and gives the act, whose answer is the standing, which boot does on the root at the tip of every life.
+  The World may answer a stand later, as when it reads its settings again, and no chain waits for that answer.
   Only a stand on the root changes the standing, since the standing has one home.
-  A stand from inside an act tells its answer under its own name, with the roster and the actor of the standing, as stand2_roster and stand2_actor, and no directory, which a cd tells, and no path of the doctrine and no extensions, which the root reads in turns of its own.
+  A stand from inside an act that the World answers at once tells its answer under its own name, with the roster and the actor of the standing, as stand2_roster and stand2_actor, and no directory, which a cd tells, and no path of the doctrine and no extensions, which the root reads in turns of its own.
   A stand from outside an act tells nothing, so the stand that boot makes tells nothing.
   A stand that names no chain is on the chain of the act that makes it, as every verb, so the operator names the root, as boot does.
   """

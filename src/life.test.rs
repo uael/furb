@@ -260,6 +260,12 @@ fn closed(engine: &mut Engine, word: &str) -> Object {
   futures::executor::block_on(rung).unwrap()
 }
 
+/// The standing that a stand on the root gives, once the World answered it, or why it refused it.
+fn stood(engine: &mut Engine) -> Result<Object, crate::Fault> {
+  let stand = engine.stand(verbs::Stand { on: Some("chain1".to_owned()) })?;
+  futures::executor::block_on(stand)
+}
+
 /// The kind and the name of each fact of the log of a record, after the facts that a number of them leave out.
 fn heads(record: &Path, after: usize) -> Vec<String> {
   let facts = world::logged(record).unwrap().expect("the log agrees with the record");
@@ -666,7 +672,7 @@ fn the_boot_of_a_life_asks_the_claude_command_line_its_models_once_and_a_later_s
     1,
     "the opening asked the models, and the stand of the boot holds what it found"
   );
-  engine.stand(verbs::Stand { on: Some("chain1".to_owned()) }).unwrap();
+  stood(&mut engine).unwrap();
   assert_eq!(asked(), 2, "a later stand asks the command line again");
 }
 
@@ -699,18 +705,18 @@ fn a_stand_reloads_provider_settings_and_a_refused_reload_keeps_the_life() {
   );
   fs::write(&path, r#"{"providers":{"bench":{"models":{"two":{"window":131072,"images":true}}}}}"#)
     .unwrap();
-  engine.stand(verbs::Stand { on: Some("chain1".to_owned()) }).unwrap();
+  stood(&mut engine).unwrap();
   assert_eq!(closed(&mut engine, names).py_repr(), "['bench:two']");
   assert_eq!(
     closed(&mut engine, "close(marker + await prompt(int, to='bench:two'))").as_ref().as_int(),
     Some(46)
   );
   fs::write(&path, r#"{"providers":{"bench":{"models":{"bad":{"window":0}}}}}"#).unwrap();
-  assert!(engine.stand(verbs::Stand { on: Some("chain1".to_owned()) }).is_err());
+  assert!(stood(&mut engine).is_err());
   assert_eq!(closed(&mut engine, names).py_repr(), "['bench:two']");
   assert_eq!(closed(&mut engine, "close(marker)").as_ref().as_int(), Some(17));
   fs::write(&path, r#"{"providers":{"bench":false}}"#).unwrap();
-  engine.stand(verbs::Stand { on: Some("chain1".to_owned()) }).unwrap();
+  stood(&mut engine).unwrap();
   assert_eq!(closed(&mut engine, names).py_repr(), "[]");
   drop(engine);
   fs::remove_dir_all(at).unwrap();
