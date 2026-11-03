@@ -375,14 +375,15 @@ type Answers =
 
 /// The class of a model, which automatic work reads: a cheap model takes the work that no one waits on, and a dear one
 /// the work of the operator.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Class {
   Cheap,
   Dear,
 }
 
 impl Class {
-  /// The name of the class, as the roster and `.furb/config.json` say it.
+  /// The name of the class, as the roster, the catalog and `.furb/config.json` say it.
   pub fn name(self) -> &'static str {
     match self {
       Class::Cheap => "cheap",
@@ -403,21 +404,37 @@ impl Class {
 /// The most that a cheap model costs, in dollars for a million tokens that it reads.
 pub const CHEAP: f64 = 1.0;
 
-/// The key of `.furb/config.json` whose map gives a model the class that it names, over the one of the catalog.
+/// The key of a config whose map gives a model the class that it names, over the one of the
+/// catalog.
 pub(super) const KEY_CLASSES: &str = "classes";
 
-/// The classes that the config of a project in a directory gives, by the name of the model, the later file over the
-/// earlier one. A word that names no class gives none.
-pub(super) fn classes(directory: &std::path::Path) -> HashMap<String, Class> {
-  let mut given = HashMap::new();
-  for file in crate::extension::projected(directory) {
+/// The key of a config whose list names the models of automatic work, the first first.
+pub(super) const KEY_AUTOMATIC: &str = "automatic";
+
+/// What the configs say of the models: the class of each model that a config names, and the models
+/// of automatic work.
+#[derive(Default)]
+pub(super) struct Configured {
+  classes: HashMap<String, Class>,
+  automatic: Vec<String>,
+}
+
+/// What the configs of the user, in the config directory, and of the project, in a directory, say
+/// of the models, in the order of [`crate::extension::configs`]: a later file gives a model another
+/// class over an earlier one, and its list of automatic work replaces the list of an earlier one. A
+/// word that names no class, and a name of the list that is no string, give nothing.
+pub(super) fn configured(user: &Path, directory: &Path) -> Configured {
+  let mut given = Configured::default();
+  for file in crate::extension::configs(user, directory) {
     let Ok(text) = std::fs::read_to_string(file) else { continue };
     let Ok(config) = serde_json::from_str::<Value>(&text) else { continue };
-    let Some(map) = config.get(KEY_CLASSES).and_then(Value::as_object) else { continue };
-    for (name, class) in map {
+    for (name, class) in config.get(KEY_CLASSES).and_then(Value::as_object).into_iter().flatten() {
       if let Some(class) = class.as_str().and_then(Class::named) {
-        given.insert(name.clone(), class);
+        given.classes.insert(name.clone(), class);
       }
+    }
+    if let Some(list) = config.get(KEY_AUTOMATIC).and_then(Value::as_array) {
+      given.automatic = list.iter().filter_map(Value::as_str).map(str::to_owned).collect();
     }
   }
   given
@@ -456,8 +473,7 @@ pub struct Model {
   hosted: bool,
   /// How it takes the most tokens of thought of one turn, when it takes one.
   thought: Option<Thought>,
-  /// Its class, which code fixes for a model whose provider says no price, as a model of the claude command line, and
-  /// which its price gives otherwise.
+  /// Its class, which the catalog gives, else its price.
   class: Option<Class>,
   /// Whether it reads its earlier turns with no thought, as a model of a local server, whose own template drops the
   /// thought of each earlier turn, and whose thought of each turn would else fill its window in a few turns.
@@ -603,14 +619,14 @@ impl Model {
     self.price
   }
 
-  /// The model, of a class that code fixes, which its price no longer gives.
+  /// The model, of a class that the catalog gives, which its price no longer gives.
   pub fn classed(mut self, class: Class) -> Model {
     self.class = Some(class);
     self
   }
 
-  /// The class of the model: the one that code fixed, else cheap when a million tokens that it reads cost [`CHEAP`]
-  /// dollars or less, else dear, as a model that says no price is.
+  /// The class of the model: the one that the catalog gave, else cheap when a million tokens that
+  /// it reads cost [`CHEAP`] dollars or less, else dear, as a model that says no price is.
   pub fn class(&self) -> Class {
     self.class.unwrap_or(match self.price {
       Some([input, ..]) if input <= CHEAP => Class::Cheap,
@@ -808,6 +824,7 @@ impl Provider {
             &directory,
             &actor,
             extensions.as_deref(),
+            &crate::extension::Places::here().config,
           );
           say(&mut co, Fact::says("done", &about, [given]));
           // A stand reads the settings again, as after a change of the command line or of its
@@ -1364,24 +1381,30 @@ fn written(id: &str, tells: &mpsc::UnboundedSender<Replied>) -> Told {
   })
 }
 
-/// What the chains stand on: the models and the operator, the directory, the default actor, and the path of the
-/// doctrine that a chain reads, which [`catalog::doctrine`] gives, each path as [`super::files::tilded`] writes it, then
-/// the extensions that the engine seeds the root with, each as `[name, file, life word, root alone]`. A standing with
-/// no doctrine, or of a provider that advertises no extensions, gives none, and the engine seeds no root then.
+/// What the chains stand on: the models and the operator, the directory, the default actor, and the
+/// path of the doctrine that a chain reads, which [`catalog::doctrine`] gives, each path as
+/// [`super::files::tilded`] writes it, then the extensions that the engine seeds the root with,
+/// each as `[name, file, life word, root alone]`. A standing with no doctrine, or of a provider
+/// that advertises no extensions, gives none, and the engine seeds no root then. Each model of the
+/// roster gives its class, and a model of the list of automatic work its place in that list, which
+/// the configs of the user, in the config directory, and of the project give, as [`configured`]
+/// reads them.
 fn standing(
   models: &[Model],
   directory: &str,
   actor: &str,
   extensions: Option<&[Advertised]>,
+  user: &Path,
 ) -> Object {
-  // The config of the project gives a model another class than the one of the catalog.
-  let given = classes(Path::new(directory));
+  let given = configured(user, Path::new(directory));
   let offered = models.iter().map(|model| {
     let efforts = model.efforts.iter().map(|(effort, _)| Object::string(effort));
     let window = i64::try_from(model.window).unwrap_or(i64::MAX);
-    let class = given.get(&model.name).copied().unwrap_or_else(|| model.class());
+    let class = given.classes.get(&model.name).copied().unwrap_or_else(|| model.class());
+    let place = given.automatic.iter().position(|one| *one == model.name);
+    let place = place.and_then(|at| i64::try_from(at).ok()).map(Object::int);
     let fields = [Object::string(&model.name), Object::list(efforts), Object::int(window)];
-    Object::list(fields.into_iter().chain([Object::string(class.name())]))
+    Object::list(fields.into_iter().chain([Object::string(class.name())]).chain(place))
   });
   // The operator answers in person, with no effort, reads the window of the engine, and costs no dollar.
   let operator = Object::list([

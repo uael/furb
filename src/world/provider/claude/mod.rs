@@ -261,12 +261,11 @@ impl Claude {
         let mut model = model.searches(search::claude(self.program.clone(), one.alias.clone()));
         model.apart = true;
         model.thought = Some(super::Thought::Told);
-        // The command line says no price, so its haiku is the one cheap model of its family.
-        let model = model.classed(if one.alias.contains("haiku") {
-          super::Class::Cheap
-        } else {
-          super::Class::Dear
-        });
+        // The command line says no price, so the catalog gives the class of each of its models.
+        let model = match super::catalog::family(CLAUDE, &one.alias) {
+          Some(class) => model.classed(class),
+          None => model,
+        };
         one.efforts.iter().fold(model.images(), |model, effort| {
           model.effort(effort.as_str(), json!({"effort": effort}))
         })

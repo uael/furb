@@ -32,20 +32,25 @@ An **actor** is a model and an effort, which is how hard the model thinks: `off`
 
 ## Classes and automatic work
 
-Each model has a class, `cheap` or `dear`. The class of a model of the claude command line and of Codex is fixed:
-`haiku`, and a `mini` or `nano` model of Codex, are cheap, and the others are dear. The class of another model comes
-from its price: a model that costs 1 dollar or less for a million tokens that it reads is cheap. A model with no price
-is dear. Each entry of the roster gives the class as its fourth field, as `["claude-cli:haiku", ["low"], 200000,
-"cheap"]`.
+Each model has a class, `cheap` or `dear`, which the catalog of furb gives. A model of the catalog is cheap when it
+costs 1 dollar or less for a million tokens that it reads, and dear when it costs more or has no price. The claude
+command line and Codex say no price, so the catalog gives the class of each of their models: a model of Codex takes
+the class of the model of OpenAI with its name, and `claude-cli:haiku` the class of the newest haiku of Anthropic. A
+model that the catalog does not list takes the class of its price, and is dear with no price. Each entry of the roster
+gives the class as its fourth field, as `["claude-cli:haiku", ["low"], 200000, "cheap"]`.
 
-`classes` in `.furb/config.json` gives a model another class, and `automatic` lists the models of automatic work, as a
-compaction, in order:
+`classes` in a config gives a model another class, and `automatic` lists the models of automatic work, as a
+compaction, in order. furb reads the config of the user, `config.json` in the config directory of furb
+(`~/.config/furb` by default), then `.furb/config.json` and `.furb/config.local.json` of the project. A later config
+gives a model another class over an earlier one, and its list `automatic` replaces the list of an earlier one:
 
 ```json
 {"classes": {"openai:gpt-5": "cheap"}, "automatic": ["claude-cli:haiku", "codex:gpt-5-mini"]}
 ```
 
-Automatic work asks the first model of `automatic` that the roster holds, else the first cheap model of the roster.
+Each entry of the roster that the list names gives its place in the list, from 0, as its fifth field, as
+`["claude-cli:haiku", ["low"], 200000, "cheap", 0]`. Automatic work asks the model of the roster with the first place,
+else the first cheap model of the roster.
 
 ## Provider settings
 
