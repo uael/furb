@@ -1,6 +1,11 @@
 //! A life on its thread, as a client of the host holds it: its commands, its events in order, and
 //! its end.
 
+#![expect(
+  clippy::disallowed_methods,
+  reason = "the tests block on the runtime that tokio starts for them"
+)]
+
 use std::{
   fs,
   path::{Path, PathBuf},

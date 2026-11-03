@@ -1,6 +1,10 @@
 //! The catalog of models, read from a snapshot of the tests and from the snapshot the crate carries, with the
 //! credentials a test gives, so no test reads the environment or the network.
 
+#![expect(
+  clippy::disallowed_methods,
+  reason = "debt: a call that blocks: block_on, where a test drives a future on the reactor"
+)]
 #![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
 #![cfg_attr(
   unix,

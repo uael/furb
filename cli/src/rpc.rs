@@ -44,6 +44,10 @@ use crate::life::{self, Life};
 
 /// A life served on stdin and stdout, until stdin ends, on the record it keeps when it is given one. It wakes
 /// nothing: what an earlier life left paused or pending waits for the wake of the client.
+#[expect(
+  clippy::disallowed_methods,
+  reason = "debt: a call that blocks: block_on, where the host waits for the life on the reactor"
+)]
 pub fn serve(opening: Opening, record: Option<&Path>) -> Result<(), String> {
   let (events, heard) = mpsc::unbounded();
   let facts = events.clone();

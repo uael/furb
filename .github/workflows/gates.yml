@@ -38,6 +38,9 @@ jobs:
     # the whole proof of the logic; the jobs on macOS and on Windows prove the system alone, so a pull request runs them
     # only when a path that it changes can behave in another way there, which script/scope.py says. A run on main, or
     # by hand, runs every job.
+    # The commit of a pull request is the merge of its branch into the base, whose first parent is the base, so two
+    # commits of history hold the change. The whole history took 4 minutes to fetch, and the other jobs fetch one commit
+    # in under 40 seconds.
     name: the scope
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -50,12 +53,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          fetch-depth: 2
           persist-credentials: false
       - id: scope
         run: |
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
-            git diff --name-only "origin/$GITHUB_BASE_REF...HEAD" | python3 script/scope.py
+            git diff --name-only HEAD^1 HEAD | python3 script/scope.py
           else
             python3 script/scope.py --all
           fi | tee -a "$GITHUB_OUTPUT"

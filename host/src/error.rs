@@ -1,6 +1,13 @@
-//! The errors of a life that the host holds.
+//! The errors of the host: of a life, of the protocol, and of a transport.
 
+use std::{io, path::PathBuf};
+
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tokio_util::codec::LinesCodecError;
+
+use crate::protocol::Role;
 
 /// Why a life gave no reply to a command.
 #[derive(Debug, Error)]
@@ -13,11 +20,70 @@ pub enum LifeError {
   Ended,
   /// The machine gave the life no thread.
   #[error("the life has no thread: {0}")]
-  Thread(#[source] std::io::Error),
+  Thread(#[source] io::Error),
 }
 
 impl From<furb::Fault> for LifeError {
   fn from(fault: furb::Fault) -> Self {
     LifeError::Refused(fault.to_string())
   }
+}
+
+/// Why the daemon refuses a frame of a peer. It crosses the protocol as data, beside its text.
+#[derive(Debug, Clone, PartialEq, Eq, Error, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "error", rename_all = "snake_case")]
+pub enum ProtocolError {
+  /// The hello names another protocol, and the daemon closes the peer.
+  #[error("the daemon speaks protocol {ours}, and the peer speaks protocol {theirs}")]
+  Protocol { ours: u32, theirs: u32 },
+  /// The first frame of the peer was no hello, and the daemon closes the peer.
+  #[error("the first frame of a peer is its hello")]
+  First,
+  /// A second hello of the same peer.
+  #[error("a peer says its hello once")]
+  Again,
+  #[error("the verb needs the role {needs:?}, and the peer holds the role {has:?}")]
+  Role { needs: Role, has: Role },
+  /// A frame that is no frame of the protocol, with what the reader found.
+  #[error("the frame is no frame of the protocol: {why}")]
+  Unread { why: String },
+  /// A frame past the bound, and the daemon closes the peer.
+  #[error("a frame holds more than {bound} bytes")]
+  Large { bound: usize },
+  /// The daemon or the life refused the verb, with why.
+  #[error("{why}")]
+  Refused { why: String },
+}
+
+impl From<LifeError> for ProtocolError {
+  fn from(no: LifeError) -> Self {
+    ProtocolError::Refused { why: no.to_string() }
+  }
+}
+
+/// Why a transport gives no peer, or loses one.
+#[derive(Debug, Error)]
+pub enum TransportError {
+  #[error("the folder {} of the socket cannot be made", folder.display())]
+  Folder { folder: PathBuf, source: io::Error },
+  /// The folder of the socket is open to another user, so the daemon puts no socket in it.
+  #[error("the folder {} is not of mode 0700 and of this user alone", folder.display())]
+  Exposed { folder: PathBuf },
+  #[error("a daemon already listens at {place}")]
+  Taken { place: String },
+  #[error("the daemon cannot listen at {place}")]
+  Listen { place: String, source: io::Error },
+  #[error("no daemon answers at {place}")]
+  Dial { place: String, source: io::Error },
+  #[error("the transport accepts no peer")]
+  Accept(#[source] io::Error),
+  /// A peer of another user reached the socket.
+  #[error("a peer of the user {uid} is not of this user")]
+  Stranger { uid: u32 },
+  #[error("the login of the user cannot be read")]
+  Login(#[source] io::Error),
+  #[error("the stream of a peer broke")]
+  Peer(#[from] LinesCodecError),
+  #[error("a frame cannot be written as JSON")]
+  Unwritten(#[from] serde_json::Error),
 }

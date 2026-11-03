@@ -65,7 +65,10 @@ API of its own:
   `Life::spawn` opens a life on a thread of its own, which owns the engine, and gives a `LifeHandle` that any thread
   holds: it says a command to the life and reads the events of the life in order, from any place of its log. The
   crate holds the one list of the ears of the host that each life hears: the console of the operator, and the ear
-  that tells each fact as events.
+  that tells each fact as events. `protocol` holds the one protocol of the daemon, a `Verb` and a `Frame` of JSON
+  lines with the version `PROTOCOL`, `transport` the socket or the pipe of the machine behind a `Dialer` and an
+  `Identity`, and `serve` the door to one peer, which checks the role of each verb. `docs/protocol.md` says the
+  protocol, and `bun run protocol` makes `bind/typescript/src/protocol.ts` again from `host/protocol.schema.json`.
 
 The suite runs on both engines, but for the tests that `MONTY_SKIPS` in `test/conftest.py` names: these boot on a Kernel
 of this interpreter, and the engine of monty holds its own. The suite of each extension, `extensions/<name>/test/`, runs
