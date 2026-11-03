@@ -287,7 +287,7 @@ export const keys = [
         run: "help",
         chord: "F1",
         hint: "help",
-        choice: { label: "Help", detail: "Keys, marks, and slash commands", before: "exit" },
+        command: "help",
       },
       { on: ["ctrl+q"], run: "quit", chord: "⌃Q", command: "exit", always: true },
     ],
