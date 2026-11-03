@@ -20,7 +20,7 @@ use super::{
   Endpoints, Filed, Keychain, Tokens, Vault, authority, challenged, protected, refreshed, store,
   stored,
 };
-use crate::{ear::reactor, extension::mcp::fixture};
+use crate::{ear::reactor, world::mcp::fixture};
 
 /// A directory of its own for one test, and empty.
 fn place(name: &str) -> PathBuf {

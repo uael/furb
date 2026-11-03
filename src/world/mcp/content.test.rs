@@ -13,7 +13,7 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::json;
 
 use super::{LONGEST, called, cut, prompted, read};
-use crate::{extension::mcp::fixture::PICTURE, world::images};
+use crate::{world::images, world::mcp::fixture::PICTURE};
 
 /// A directory of images of its own for one test, and empty.
 fn gallery(name: &str) -> PathBuf {
