@@ -413,17 +413,57 @@ export type Event =
 /**
  * Where an act stands: asked, started by the ear that owns it, or done, with what it came to.
  */
-export type State =
+export type Phase =
   | {
-      state: "asked";
+      phase: "asked";
     }
   | {
-      state: "started";
+      phase: "started";
     }
   | {
-      state: "done";
+      phase: "done";
       value: unknown;
     };
+/**
+ * How the word of a rung ran: it runs or waits for its word, it ran, a fault or a cancel ended it,
+ * or the gate refused it, each with what a person reads.
+ */
+export type RunState =
+  | {
+      run: "running";
+    }
+  | {
+      run: "done";
+    }
+  | {
+      run: "failed";
+      reason: string;
+    }
+  | {
+      run: "cancelled";
+      reason: string;
+    }
+  | {
+      run: "refused";
+      reason: string;
+    };
+/**
+ * The state of work: it asks the operator, it ended while the operator looked away, it failed, a
+ * pause holds it, its model thinks or writes its word, a word or a command of it runs, its word
+ * awaits a prompt on another chain, it ended well, a cancel ended it, or it rests. The order is
+ * the order of the roll-up. Only a window says unread, since only it knows what its operator saw.
+ */
+export type State =
+  | "asks"
+  | "unread"
+  | "failed"
+  | "paused"
+  | "thinks"
+  | "runs"
+  | "delegates"
+  | "done"
+  | "cancelled"
+  | "idle";
 
 /**
  * Both ways of the protocol, which its schema holds.
@@ -505,17 +545,72 @@ export interface Listed {
   open: boolean;
 }
 /**
- * One act of a life: its kind, its name, who made it, what it is on, the chain it is in, its words
- * after these, and its state.
+ * One act of a life with its meaning, as it stands after the last fact about it.
  */
 export interface Act {
   kind: string;
   id: string;
   by: string;
+  /**
+   * What the act is on: a chain, or the prompt of a thread for a prompt on a thread.
+   */
   on: string;
+  /**
+   * The chain that the act stands in.
+   */
   chain: string;
+  /**
+   * The words of the act after its kind, its name, its maker and what it is on.
+   */
   words: unknown[];
+  phase: Phase;
+  /**
+   * Whether the console of the operator took the act: a question to him, or a notice.
+   */
+  operator: boolean;
+  /**
+   * The pause that holds the act while it lives.
+   */
+  pause?: Pause | null;
+  /**
+   * How the word of a rung ran, for a rung alone.
+   */
+  run?: RunState | null;
+  /**
+   * The word of a rung, once its chain took it to run or to refuse.
+   */
+  word?: string | null;
+  /**
+   * How many facts the life had said when the act was made, which is its place in time.
+   */
+  began: number;
+  /**
+   * How many facts the life had said when the act was done.
+   */
+  ended?: number | null;
+  /**
+   * What the models cost: the answers that wrote the word of a rung, or each answer on a chain.
+   */
+  spend?: Spend | null;
+  /**
+   * The state of the act, or of the work of a chain for a chain.
+   */
   state: State;
+}
+/**
+ * A pause, as its fact holds it: who said it, and the cause that it gave.
+ */
+export interface Pause {
+  by: string;
+  why?: unknown;
+}
+/**
+ * What the answers of models cost: their dollars, how many they are, and the actor of the last.
+ */
+export interface Spend {
+  dollars: number;
+  answers: number;
+  actor?: string | null;
 }
 
 export const PROTOCOL = 1;
