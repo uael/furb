@@ -21,11 +21,8 @@
 use std::{
   collections::HashMap,
   fs,
-  future::Future,
   path::{Path, PathBuf},
-  pin::pin,
   sync::Arc,
-  task::{Context, Poll, Wake, Waker},
   thread,
   time::{Duration, Instant},
 };
@@ -106,27 +103,7 @@ fn settings(at: &Path, variables: &[(&str, &str)]) -> Settings {
   }
 }
 
-/// A waker that unparks the thread of the test.
-struct Parked(thread::Thread);
-
-impl Wake for Parked {
-  fn wake(self: Arc<Self>) {
-    self.0.unpark();
-  }
-}
-
-/// One future driven to its end on this thread.
-fn block_on<T>(fut: impl Future<Output = T>) -> T {
-  let waker = Waker::from(Arc::new(Parked(thread::current())));
-  let mut cx = Context::from_waker(&waker);
-  let mut fut = pin!(fut);
-  loop {
-    if let Poll::Ready(got) = fut.as_mut().poll(&mut cx) {
-      return got;
-    }
-    thread::park_timeout(Duration::from_millis(20));
-  }
-}
+use crate::testing::block_on;
 
 /// The ear that answers a stand with the operator alone, in the directory of the project.
 fn standing(at: &Path) -> Box<dyn Ear> {

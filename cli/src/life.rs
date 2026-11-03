@@ -150,6 +150,10 @@ impl Life {
   /// loop; or why it never will be: a pause over the act or over the root, which no one wakes while one command
   /// runs, or work that an earlier life left and that the act awaits alone, which no wake runs while one command
   /// runs.
+  #[expect(
+    clippy::disallowed_methods,
+    reason = "debt: a call that blocks: block_on, where the host waits for the life on the reactor"
+  )]
   pub fn settled(&mut self, id: &str) -> Result<Object, String> {
     let facts = self.engine.transcript(verbs::Transcript { on: Some(self.root.clone()), of: None });
     let facts = facts.map_err(|no| no.to_string())?;

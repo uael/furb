@@ -4,6 +4,10 @@ use std::error::Error;
 
 use furb::life::Life;
 
+#[expect(
+  clippy::disallowed_methods,
+  reason = "main blocks on the runtime that tokio starts for it"
+)]
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn Error>> {
   let mut life = Life::open("notes.jsonl").roster(["claude-cli:opus", "claude-cli:sonnet"]).await?;

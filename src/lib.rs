@@ -18,6 +18,8 @@ pub mod gate;
 pub mod life;
 mod sand;
 mod snapshot;
+#[cfg(test)]
+mod testing;
 pub mod value;
 pub mod wire;
 pub mod world;

@@ -8,14 +8,9 @@
 #![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
 
 use std::{
-  future::Future,
   io::{Read, Write},
   net::TcpListener,
-  pin::pin,
-  sync::Arc,
-  task::{Context, Poll, Wake, Waker},
   thread,
-  time::Duration,
 };
 
 use super::{fetch, markdown, page};
@@ -44,27 +39,7 @@ fn the_markdown_of_a_page_has_no_space_at_the_end_of_a_line_and_no_run_of_empty_
   assert_eq!(markdown("<p>one</p><div><br><br><br></div><p>two</p>"), "one\n\ntwo");
 }
 
-/// A waker that unparks the thread of the test.
-struct Parked(thread::Thread);
-
-impl Wake for Parked {
-  fn wake(self: Arc<Self>) {
-    self.0.unpark();
-  }
-}
-
-/// One future driven to its end on this thread.
-fn block_on<T>(fut: impl Future<Output = T>) -> T {
-  let waker = Waker::from(Arc::new(Parked(thread::current())));
-  let mut cx = Context::from_waker(&waker);
-  let mut fut = pin!(fut);
-  loop {
-    if let Poll::Ready(got) = fut.as_mut().poll(&mut cx) {
-      return got;
-    }
-    thread::park_timeout(Duration::from_millis(20));
-  }
-}
+use crate::testing::block_on;
 
 /// The ear that answers a stand with the operator alone, in the directory of the tests.
 fn standing() -> Box<dyn Ear> {
