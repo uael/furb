@@ -100,9 +100,7 @@ async def test_a_rung_of_the_operator_on_each_chain_binds_its_definitions_and_it
   root = engine.module("chain1")
   assert (root["f"](), root["shell"], engine.module("chain3").get("SIZE")) == (6, "bash2", None)
   told = [x[3][0] for x in said(log, "tell") if "debugged" in x[3][0] and x[1].startswith("rung")]
-  assert any(
-    "It lost ['gone'], and it cut no act. It runs again from its top each word that ran: ['rung9']." in x for x in told
-  ), told
+  assert any("It lost ['gone'], and it cut no act." in x for x in told), told
   assert [x for x in said(log, "prefix") if x[1] == "chain3"]
   engine.wake("chain3")
   await settle()

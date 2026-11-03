@@ -444,6 +444,12 @@ def seeded(id, last, to):
     (w := "\n".join(y[2] for y in last[4] if y[3] == k and y[2])) and rung(w, to=to)
 
 
+HEARD = (
+  "say('prefix', scope(acting()), [*transcript(of='module')[-1:], *transcript(of='carried')[-1][3], "
+  "*transcript(of='stand')[-1:], *transcript(of='pause'), *[x for x in transcript() if acting() in x[1::3]]])"
+)
+
+
 def seed(data):
   entries, numbers = [], Counter()
 
@@ -468,21 +474,14 @@ def seed(data):
       [((x["kind"], i, "journal", x["on"]),), (("started", i, "journal"),), (("done", i, "journal", x["value"]),)]
     )
   for c in data["chains"]:
-    i, lost, cut, again = c["id"], c["lost"], c["cut"], c["again"]
-    heard = (
-      f"[*transcript({i!r}, 'module')[-1:], *transcript({i!r}, 'carried')[-1][3], *transcript({i!r}, 'stand')[-1:],"
-      f" *transcript({i!r}, 'pause'), *[x for x in transcript({i!r}) if acting() in x[1::3]]]"
-    )
-    said = f"A new build goes on from a checkpoint. It lost {lost or 'no name'}, and it cut {cut or 'no act'}." + (
-      f" It runs again from its top each word that ran: {[y['rung'] for y in again]}." if again else ""
-    )
+    i = c["id"]
     word = "\n".join(
       [
         c["definitions"],
         *(f"{named} = {text}" for named, text in c["values"].items()),
-        f"say('prefix', {i!r}, {heard})",
-        f'debug(t"{{{said!r}}}")',
-        *(f"with site.set({y['by']!r}):\n  rung({y['word']!r}, on={i!r})" for y in again),
+        HEARD,
+        f'debug(t"A new build goes on from a checkpoint. It lost {c["lost"] or "no name"}, and it cut {c["cut"] or "no act"}.")',
+        *(f"with site.set({y['by']!r}):\n  rung({y['word']!r}, on={i!r})" for y in c["again"]),
       ]
     ).strip()
     put("rung", f"rung{numbers['rung'] + 1}", OPERATOR, i, word, "", "")
