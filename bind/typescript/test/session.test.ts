@@ -180,7 +180,14 @@ test("a session offers the models its host names, and keeps the model and the ef
     await second.dispose();
   }
   expect((await inspectRecord(record)).pending).toEqual([]);
-  expect(() => new Session({ cwd, roster: ["nothing"] }).open()).toThrow("No model is nothing.");
+  // A name that the catalog lacks is dropped from the roster, and the life opens on the operator alone.
+  const gone = new Session({ cwd, roster: ["nothing"] });
+  try {
+    const [roster, , actor] = gone.open().standing() as [[string][], string, string];
+    expect([roster.map(([name]) => name), actor]).toEqual([["operator"], "operator"]);
+  } finally {
+    await gone.dispose();
+  }
   await rm(cwd, { recursive: true, force: true });
 });
 
