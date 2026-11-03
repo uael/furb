@@ -1,5 +1,5 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { compactedRun, type Exit, type LiveAct, reason, type Thread } from "furb/life";
+import { type Exit, type LiveAct, reason, type Thread } from "furb/life";
 import { ChevronRight, CornerDownRight } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { actorName } from "../data.ts";
@@ -118,10 +118,9 @@ export function ThreadView({
   const directory = life?.directory ?? "";
   const live = Boolean(life && !life.reading && !life.recorded);
   const ladder = steps(moment, thread.act, directory);
-  const run = compactedRun(thread.chain, moment.compactions);
   const marks = placed(
     ladder,
-    (life?.marks ?? []).filter((mark) => run.includes(mark.chain)),
+    (life?.marks ?? []).filter((mark) => mark.chain === thread.chain),
     (id) => moment.rows.get(id)?.began ?? 0,
   );
   const last = ladder.at(-1)?.id;

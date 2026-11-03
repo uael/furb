@@ -258,20 +258,24 @@ export const feed = part({
       // The thread of now is read from the index, in the time of what it shows, and that of a moment of the past whole.
       const owed = new Set(w.host.prompts.keys());
       const word = (rung: ActRow) => this.subject(rung);
-      // A run of compactions into new chains shows as one feed: the feed of each chain of the run in its order, which
-      // the rule of each compaction parts.
-      const run = w.runOf(w.selected);
-      const continuing = new Set(run.slice(1));
-      const own = run.flatMap((chain) =>
-        index && chain === w.selected
-          ? thread(chain, word, w.host.streams, owed, opened, index)
-          : condense(ladder(chain, shown, word, w.host.streams, owed), opened),
-      );
+      const own = index
+        ? thread(w.selected, word, w.host.streams, owed, opened, index)
+        : condense(ladder(w.selected, shown, word, w.host.streams, owed), opened);
       // A branch takes from its source each message before the word that made it, which the word does not leave out,
       // with what answered it. Its feed shows these threads as they stood when the branch began, after the line that
       // names the source and before its own acts, since its model reads them as its own turns.
       const branch = rows.get(w.selected);
-      const source = run.length === 1 && branch?.kind === "chain" ? String(branch.words[1] ?? "") : "";
+      const source = branch?.kind === "chain" ? String(branch.words[1] ?? "") : "";
+      // A chain that an older compaction made has a word on it that restores its source, and no chain is joined to
+      // its source now.
+      const older =
+        source !== "" &&
+        shown.some(
+          (one) =>
+            one.kind === "rung" &&
+            one.on === w.selected &&
+            /^restore\((['"])(\w+)\1\)/.exec(String(one.words[0] ?? ""))?.[2] === source,
+        );
       const maker = branch && (w.actOf(String(branch.by)) ?? branch);
       const taken = new Set(
         source && maker
@@ -418,7 +422,7 @@ export const feed = part({
         for (const line of program) {
           if (line.kind === "code" && line.step !== stepped) {
             stepped = line.step;
-            const marked = due(line.step.began, line.step.on);
+            const marked = due(line.step.began);
             if (marked.length) {
               if (segments.at(-1)?.length) segments.push([]);
               cuts.set(segments.length - 1, [...(cuts.get(segments.length - 1) ?? []), ...marked]);
@@ -503,13 +507,10 @@ export const feed = part({
       // A mark waits until the first act that began at its place or later, and shows before it: before a line of the
       // feed, or inside a program, between two of its steps.
       const pending = [...marks].sort((one, other) => one.at - other.at);
-      // A mark of a later chain of the run waits for the feed of that chain, since the feed of an earlier chain ends
-      // where the compaction cut it, whatever began after in time.
-      const due = (began: number, on: string) => {
+      const due = (began: number) => {
         const out: PartMark[] = [];
-        const here = run.indexOf(on);
         for (const one of [...pending])
-          if (one.at <= began && (here < 0 || run.indexOf(one.chain) <= here)) {
+          if (one.at <= began) {
             pending.splice(pending.indexOf(one), 1);
             out.push(one);
           }
@@ -856,7 +857,7 @@ export const feed = part({
             for (const line of window.lines) {
               if (line.kind === "code" && line.step !== stepped) {
                 stepped = line.step as ActRow;
-                const marked = due(line.step.began, line.step.on);
+                const marked = due(line.step.began);
                 if (marked.length) {
                   if (segments.at(-1)?.length) segments.push([]);
                   cuts.set(segments.length - 1, [...(cuts.get(segments.length - 1) ?? []), ...marked]);
@@ -1021,7 +1022,7 @@ export const feed = part({
         // The answer of a thread stands in its box.
         if (line.type === "value" && threadsOwn.by.has(line.act.id)) continue;
         // Only a line that the feed shows places a mark: a step under a step stands folded, whenever it began.
-        if (placing(line)) for (const mark of due(line.act.began, (line.act as ActRow).on)) showMark(mark);
+        if (placing(line)) for (const mark of due(line.act.began)) showMark(mark);
         const depth = line.depth;
         const act = line.act as ActRow;
         const indent = line.depth * space.between;
@@ -1029,7 +1030,7 @@ export const feed = part({
           const code = this.subject(act);
           // The words that a chain wrote to retell its source stand as one line, which names the source.
           if (rows.get(act.by)?.kind === "chain") {
-            if (retold || continuing.has(act.by)) continue;
+            if (retold) continue;
             retold = true;
             const source = String(rows.get(act.by)?.words[1] ?? "");
             // The branch says what it takes of its source: each message before the moment it starts at, which the
@@ -1045,25 +1046,34 @@ export const feed = part({
             if (source)
               add(
                 `retold-${act.by}`,
-                `${source}:${name}:${messages}:${w.watching}:${this.theme}`,
+                `${source}:${name}:${messages}:${older}:${w.watching}:${this.theme}`,
                 [],
                 (box) => {
                   box.add(
                     this.link(
-                      w.watching
+                      older
                         ? [
                             ["↳ ", c.secondary],
-                            [branchStart(name), c.muted],
-                          ]
-                        : [
-                            ["↳ ", c.secondary],
-                            ["Branched from ", c.muted],
+                            [
+                              "This chain goes on from a compaction of an older form that is not joined: ",
+                              c.muted,
+                            ],
                             [name, c.text, bold],
-                          ],
+                          ]
+                        : w.watching
+                          ? [
+                              ["↳ ", c.secondary],
+                              [branchStart(name), c.muted],
+                            ]
+                          : [
+                              ["↳ ", c.secondary],
+                              ["Branched from ", c.muted],
+                              [name, c.text, bold],
+                            ],
                       () => void w.select(source).catch(w.fail),
                     ),
                   );
-                  if (messages !== undefined)
+                  if (messages !== undefined && !older)
                     box.add(this.text(branchTakes(messages), c.faint, { paddingLeft: space.between }));
                 },
               );

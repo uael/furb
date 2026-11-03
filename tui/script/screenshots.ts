@@ -1217,8 +1217,8 @@ try {
   app().dispose();
   await library.dispose();
 
-  // An older compaction went on in a new chain, as Main -> compacted: the run shows as one row of the sidebar and as one
-  // feed, with the rule of the compaction between the feed of each chain.
+  // A chain that an older compaction made, as a record of before holds it: its feed says in one note that it goes on
+  // from a compaction of an older form that is not joined.
   await show(await demoSession({ cwd: await project("compacted") }));
   const root = session.engine.root;
   await session.command(
@@ -1229,6 +1229,8 @@ try {
     `/run newer = chain("compacted", "${root}")\nrung("restore('${root}')\\n<s:summary>\\nThe plan stands in README.md, and the parser is done.\\nThe docs wait.</s:summary>\\nreground()", on=newer)\nrung('docs = "The docs of the parser"', on=newer)`,
   );
   await settle();
+  await session.refresh();
+  await session.select(session.chains.find((chain) => chain.words[0] === "compacted")?.id ?? root);
   await rest();
   await capture("75-compaction-chains");
   app().dispose();

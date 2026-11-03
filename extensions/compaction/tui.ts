@@ -20,25 +20,22 @@ async function ready(name: string, argument: string, seen: Seen): Promise<boolea
 
 /** The part of the extension compaction: in the feed of a chain, a rule at the place of each compaction, with its
  * summary under it, which parts what the model of the chain no longer reads from what it reads now. A cut that
- * regrounds nothing is a clear, and its rule says Cleared. A run of compactions into new chains shows as one feed, and
- * its compactions count as one series. The command /compact compacts the chain on screen at once, to what a model
- * chooses, with its summary, and the command /clear, or /reset, cuts it to nothing. */
+ * regrounds nothing is a clear, and its rule says Cleared. The command /compact compacts the chain on screen at once,
+ * to what a model chooses, with its summary, and the command /clear, or /reset, cuts it to nothing. */
 export default function compaction(furb: Furb): void {
   furb.mark((seen) => {
-    const run = furb.life.compactedRun(seen.chain, seen.compactions);
     const cuts = seen.compactions
-      .filter((one) => run.includes(one.chain))
+      .filter((one) => one.chain === seen.chain)
       .sort((one, other) => one.at - other.at);
-    return cuts.map(({ chain, at, from }, index): Mark => {
+    return cuts.map(({ chain, at }, index): Mark => {
       const count = cuts.length > 1 ? ` ${index + 1} of ${cuts.length}` : "";
       const word = regrounding(seen, chain, at);
       const lines = (/^<s:(summary_*)>\n([\s\S]*?)<\/s:\1>$/m.exec(word ?? "")?.[2]?.trim() ?? "")
         .split("\n")
         .filter((line) => line.trim())
         .map((line): Line => [[line, "muted"]]);
-      const where = from ? "goes on in a new chain" : "reads on";
       const what = word === undefined ? "Cleared" : "Compaction";
-      return { chain, at, title: `${what}${count}: the model ${where} from here`, lines };
+      return { chain, at, title: `${what}${count}: the model reads on from here`, lines };
     });
   });
   furb.command(
