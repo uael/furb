@@ -18,9 +18,9 @@ async def test_text_act_is_the_act_of_text_that_web_search_and_web_fetch_share(t
   """text_act(kind, on, show, word, *words) is the act of Text that web_search and web_fetch share: it puts the words to the World, its open tells the first of them under the word, unless the word that made the act holds it, and binds the act to Act[Text], and its done tells under the word text the lines of the text that its show picks."""
   root, heard = webbed(tmp_path, {URL: PAGE})
   assert (
-    await engine.rung(f"close(await text_act('web_fetch', '', span(1, 1), 'page', 'https://' + {URL[8:]!r}))", on=root)
+    await engine.rung(f"close(await text_act('fetch', '', span(1, 1), 'page', 'https://' + {URL[8:]!r}))", on=root)
     == PAGE
   )
   assert [a[4:] for a in heard] == [(URL,)]
-  opened = f"#web_fetch1\nweb_fetch1_page = {URL!r}\nweb_fetch1: Act[Text] = Act('web_fetch1')"
-  assert of(engine.turns(on=root), "web_fetch") == [opened, "#web_fetch1 done\nweb_fetch1_text = '# Rust'"]
+  opened = f"#fetch1\nfetch1_page = {URL!r}\nfetch1: Act[Text] = Act('fetch1')"
+  assert of(engine.turns(on=root), "fetch") == [opened, "#fetch1 done\nfetch1_text = '# Rust'"]

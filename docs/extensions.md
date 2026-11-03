@@ -63,7 +63,8 @@ Eight extensions come with furb, and each life runs them unless a config turns t
   the chain, or of the actor that `to` names: the web search of the APIs of Anthropic, OpenAI and xAI, Gemini grounded
   in Google Search, and the search of DeepSeek. For a provider with no search, it uses the free search of Parallel for
   agents, which needs no key. `web_fetch(url)` reads a page, as Markdown when it is HTML. Each is an act to await, as a
-  command is, since a page takes seconds. The extension has no life word.
+  command is, since a page takes seconds. The extension has no life word and no ear of its own: `web_search` asks the
+  question `search`, which the provider answers, and `web_fetch` asks the question `fetch`, which the World answers.
 - **`mcp`** connects the chain to the servers of the Model Context Protocol. A server comes from three configs, and the
   later wins for a name: `mcp.json` in the config directory of the user, `.mcp.json` of the project, which has the form
   of Claude Code, and `.furb/mcp.json`. Each holds `{"mcpServers": {name: server}}`: a command, its `args`, `env` and
@@ -155,7 +156,7 @@ that a model limit tells a chain names the same two calls.
 
 An official extension also has a contract, `<name>.pyi`, whose laws its suite in `test/` holds, as [the hygiene
 laws](../AGENTS.md#the-hygiene-laws) say, and an ear of the World in `src/extension/<name>.rs` when it reads the disk or
-the network, as `memory`, `skills`, `web`, `compaction` and `mcp` do. Its part for the TUI, `tui.ts` beside its word as
+the network, as `memory`, `skills` and `compaction` do. The search and the fetch of `web` are questions of the World, which the provider and the ear `fetch` answer, and the client of `mcp` is an ear of the World. Its part for the TUI, `tui.ts` beside its word as
 `compaction` and `mcp` have, is in the crate, so the TUI loads it from an installed package too, where no checkout of
 furb stands. It changes with a build of furb, and not live.
 

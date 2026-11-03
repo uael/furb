@@ -20,7 +20,6 @@
 pub mod compaction;
 pub mod memory;
 pub mod skills;
-pub mod web;
 
 use std::{
   fs,

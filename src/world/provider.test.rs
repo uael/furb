@@ -60,10 +60,10 @@ use jiff::{Zoned, civil};
 
 use super::{
   Backoff, CHEAP, Class, Hosted, Model, Provider, Retries, Retry, Thinking, Writes, budgeted,
-  catalog::Catalog, images, limit, local::Server, messages, passing, recoverable, resets, tail,
-  thinking, unclosed, unfenced,
+  catalog::Catalog, images, limit, local::Server, messages, passing, recoverable, resets,
+  search::Searches, tail, thinking, unclosed, unfenced,
 };
-use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, verbs, world};
+use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, Text, verbs, world};
 
 /// A waker that unparks the thread of the test, so what an ear waits for wakes the poll when it is ready.
 struct Parked(thread::Thread);
@@ -2585,4 +2585,37 @@ fn an_id_is_a_uuid_of_version_4_and_variant_1() {
     Ok(())
   });
   assert_eq!(ones.unwrap(), "ffffffff-ffff-4fff-bfff-ffffffffffff");
+}
+
+/// The native search of the tests, which answers with its query.
+fn found_by_native() -> Searches {
+  Arc::new(|query| -> futures::future::BoxFuture<'static, Result<String, String>> {
+    Box::pin(async move { Ok(format!("Found {query}.")) })
+  })
+}
+
+/// What a word that a rung runs on the root of a life closes with, or why it raised.
+fn closed(engine: &mut Engine, word: &str) -> Result<Object, String> {
+  let root = engine.root().to_owned();
+  let rung = verbs::Rung { word: Some(word.to_owned()), on: Some(root), ..Default::default() };
+  block_on(engine.rung(rung).unwrap()).map_err(|no| format!("{no:?}"))
+}
+
+#[test]
+fn a_search_is_answered_with_the_native_search_of_its_actor_as_a_text_at_the_path_of_its_query() {
+  let model = streaming(&[]);
+  let model = scripted(&model).searches(found_by_native());
+  let mut engine = lived(Provider::new(yard("searched").display().to_string(), vec![model]));
+  let got = closed(&mut engine, "close(await act('search', '', None, 'rust', 'm'))").unwrap();
+  assert_eq!(Text::of(got.as_ref()).unwrap(), Text::new("rust", "Found rust."));
+}
+
+#[test]
+fn a_provider_that_searches_no_more_refuses_a_search() {
+  let model = streaming(&[]);
+  let model = scripted(&model).searches(found_by_native());
+  let provider = Provider::new(yard("inspected").display().to_string(), vec![model]);
+  let mut engine = lived(provider.searching(false));
+  let no = closed(&mut engine, "close(await act('search', '', None, 'rust', 'm'))").unwrap_err();
+  assert!(no.contains("a life that inspects searches nothing"), "{no}");
 }

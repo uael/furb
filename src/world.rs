@@ -38,12 +38,11 @@ pub(crate) use bash::{Group, grouped};
 pub use bash::{bash, program, shell};
 pub use builds::{build, shelve, stored};
 pub use fetch::fetch;
-pub(crate) use fetch::fetched;
 pub use files::files;
 pub(crate) use log::continued;
 pub use log::{log, logged};
 pub use operator::{Asked, SHAPES, answered, answers};
-pub(crate) use provider::search::{posted, spawned};
+pub(crate) use provider::search::spawned;
 pub use provider::{
   Advertised, BACKOFF, Backoff, Hosted, Model, Provider, Retries, Retry, Search, Told, Writes,
   catalog::{self, Catalog},

@@ -83,7 +83,7 @@ def bench() -> Generator[tuple | None, tuple | None]:
     a = yield None
     if not a or not engine.question(a):
       continue
-    if a[0] in ("bash", "write", "cd", "web_search", "web_fetch"):
+    if a[0] in ("bash", "write", "cd", "search", "fetch"):
       yield "done", a[1], Refused("the bench runs no command and writes nothing")
     elif a[0] == "prompt" and a[6] == OPERATOR:
       yield "started", a[1]
