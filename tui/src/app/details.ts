@@ -1,6 +1,7 @@
 import { isAbsolute, relative } from "node:path";
 import {
   type BoxRenderable,
+  type CodeRenderable,
   type LineNumberOptions,
   LineNumberRenderable,
   type LineSign,
@@ -11,9 +12,7 @@ import {
   type ScrollBoxOptions,
   ScrollBoxRenderable,
   type SimpleHighlight,
-  StyledText,
-  type TextChunk,
-  TextRenderable,
+  type TextRenderable,
 } from "@opentui/core";
 import { actorParts, display, safeText, TIMEOUT, unmarked } from "furb";
 import {
@@ -952,30 +951,31 @@ export const details = part({
     }
   },
 
-  /** The python of a user turn: a header is `#` and the name of an act or the kind of a query, a comment is `#` and
-   * a space, and a header that names an act and an image attachment are references. */
-  transcriptText(source: string): TextRenderable {
+  /** The python of a turn. A quote is a string region: its two tags are keywords, and its body is a string, or plain
+   * when it is long. The rest of the turn is python, which the parser colors with the quotes left blank. */
+  turnCode(source: string): CodeRenderable {
     const text = safeText(source);
-    const chunks: TextChunk[] = [];
-    let at = 0;
-    for (const match of text.matchAll(/^#(?! |$)\S+|^#(?: .*)?$|furb-image:\/\/[\w.]+/gm)) {
-      if (match.index > at) chunks.push({ __isChunk: true, text: text.slice(at, match.index), fg: c.text });
-      chunks.push({
-        __isChunk: true,
-        text: match[0],
-        fg: match[0].startsWith("furb-image://")
-          ? c.syntaxString
-          : /^#(?! |$)/.test(match[0])
-            ? c.syntaxKeyword
-            : c.syntaxComment,
-      });
-      at = match.index + match[0].length;
-    }
-    chunks.push({ __isChunk: true, text: text.slice(at), fg: c.text });
-    return this.pointable(
-      new TextRenderable(this.renderer, { content: new StyledText(chunks), wrapMode: "word", flexShrink: 0 }),
-      text,
-    );
+    const quotes: SimpleHighlight[] = [];
+    const blank = text.replace(/^<s:(\w+)>\n?([\s\S]*?)<\/s:\1>$/gm, (whole, _name, body, at) => {
+      const open = whole.length - body.length - `</s:${_name}>`.length;
+      quotes.push(
+        [at, at + open, "keyword"],
+        [at + whole.length - `</s:${_name}>`.length, at + whole.length, "keyword"],
+      );
+      if (body.length <= 1000) quotes.push([at + open, at + open + body.length, "string"]);
+      return whole.replace(/[^\n]/g, " ");
+    });
+    return this.code(text, undefined, undefined, async () => {
+      const groups = await this.groupsOf(blank);
+      const out: SimpleHighlight[] = [];
+      for (let start = 0, at = 1; at <= groups.length; at++) {
+        if (at < groups.length && groups[at] === groups[start]) continue;
+        const group = groups[start];
+        if (group) out.push([start, at, group]);
+        start = at;
+      }
+      return [...out, ...quotes];
+    });
   },
 });
 
