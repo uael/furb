@@ -810,7 +810,9 @@ def notice(key: str, message: str) -> None:
 
 
 MISTAKE = re.compile(
-  r"\bmistakes?\b|\b(?:restor(?:e|ed|es|ing)|lost|deleted)\b"
+  r"\bmistakes?\b"
+  r"|\b(?:lost|deleted)\b(?: [\w/.-]+){0,2} (?:commits?|work|branch(?:es)?|stash(?:es)?)\b"
+  r"|\brestor(?:e|ed|es|ing)\b(?: [\w/.-]+){0,2} (?:origin/)?main\b"
   r"|\bpush(?:ed|es)?\b(?: [\w/.-]+){0,3} (?:to|onto) (?:origin/)?main\b"
   r"|\bchang(?:ed|es?)\b(?: to)? (?:origin/)?main\b|\bforce[- ]push",
   re.I,
