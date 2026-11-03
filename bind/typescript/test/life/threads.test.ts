@@ -83,7 +83,7 @@ test("the order in which the acts land changes no verdict: each read with what a
   expect(read(all)).toEqual([["prompt1", ["prompt2", "prompt3", "prompt9"]]]);
 });
 
-test("the threads that the ladder of a thread made nest under it, and a question in an agent waits on each thread over it", () => {
+test("the threads that the ladder of a thread made nest under it, and a question in an agent sets the state of each thread over it to asks", () => {
   const thread = (one: LiveAct, asks: string[] = []): ChainThread => ({
     act: one,
     title: one.id,
@@ -110,7 +110,12 @@ test("the threads that the ladder of a thread made nest under it, and a question
   expect(tree.map((one) => one.thread.act.id)).toEqual(["prompt1", "prompt30"]);
   expect(tree[0]?.agents.map((one) => one.thread.act.id)).toEqual(agents.map((one) => one.id));
   expect(tree[0]?.agents.at(-1)?.agents.map((one) => one.thread.act.id)).toEqual(["prompt20"]);
-  expect([tree[0]?.asks, tree[1]?.asks]).toEqual([["prompt21"], []]);
+  expect([tree[0]?.thread.state, tree[0]?.agents.at(-1)?.thread.state, tree[1]?.thread.state]).toEqual([
+    "asks",
+    "asks",
+    "running",
+  ]);
+  expect(tree[0]?.thread.asks).toEqual([]);
 });
 
 test("a question waits for the operator in any thread, and a failure or a pause concerns them only in a thread that they started", () => {

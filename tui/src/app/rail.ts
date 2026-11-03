@@ -656,10 +656,10 @@ export const rail = part({
     };
 
     // A thread of the session shown, on one row.
-    const threadRow = (thread: ChainThread, indent: number, agentAsks = false) => {
+    const threadRow = (thread: ChainThread, indent: number) => {
       const id = `th:${thread.act.id}`;
       const lit = active === thread;
-      const [mark, tone] = threadMarks(agentAsks ? { ...thread, state: "asks" } : thread);
+      const [mark, tone] = threadMarks(thread);
       order(id, {
         enter: () => this.chooseThread(thread),
         space: () => this.foldThread(thread.act.id),
@@ -684,10 +684,10 @@ export const rail = part({
     };
 
     // A thread of the session shown, as a card of its own.
-    const card = (thread: ChainThread, agentAsks = false) => {
+    const card = (thread: ChainThread) => {
       const id = `th:${thread.act.id}`;
       const lit = active === thread || cursor === id;
-      const [mark, tone] = threadMarks(agentAsks ? { ...thread, state: "asks" } : thread);
+      const [mark, tone] = threadMarks(thread);
       order(id, {
         enter: () => this.chooseThread(thread),
         space: () => this.foldThread(thread.act.id),
@@ -830,17 +830,25 @@ export const rail = part({
       }
     };
 
-    // A thread with the agents that its ladder made folded under it to a count, which a click opens, each agent one
-    // step deeper. A question that waits in an agent shows on the row of the thread over it.
-    const nodeRow = (node: ThreadNode, indent: number) => {
-      threadRow(node.thread, indent, node.asks.length > node.thread.asks.length);
+    // A thread, as a row or as a card, with the agents that its ladder made folded under it to a count, which a click
+    // opens, each agent one step deeper as a row. A question that waits in an agent marks the thread over it, since
+    // `nestThreads` rolls it into the state of that thread.
+    const nodeRow = (node: ThreadNode, indent: number, carded = false) => {
+      if (carded) card(node.thread);
+      else threadRow(node.thread, indent);
       if (!node.agents.length) return;
       const fold = `agents:${node.thread.act.id}`;
-      const label = `${" ".repeat(indent + 2 - LEFT)}${node.agents.length === 1 ? "Agent" : "Agents"}`;
+      const label = `${" ".repeat(carded ? 2 : indent + 2 - LEFT)}${node.agents.length === 1 ? "Agent" : "Agents"}`;
       this.railSpaces.add(this.foldRow(fold, label, node.agents.length, padding));
       step(1);
-      if (this.unfolded.has(fold)) for (const one of node.agents) nodeRow(one, indent + 2);
+      if (this.unfolded.has(fold))
+        for (const one of node.agents) nodeRow(one, carded ? LEFT + 4 : indent + 2);
     };
+    const shows = (node: ThreadNode): boolean => node.thread === active || node.agents.some(shows);
+    const unresolved = tree.filter(
+      (one) => !one.thread.resolved || one.thread.state === "asks" || shows(one),
+    );
+    const resolvedNodes = tree.filter((one) => !unresolved.includes(one));
 
     // The threads that a session holds: those that live, and the resolved ones folded under a row of their own, each
     // with its agents nested under it.
@@ -850,15 +858,12 @@ export const rail = part({
         step(1);
         return;
       }
-      const lit = (node: ThreadNode): boolean => node.thread === active || node.agents.some(lit);
-      const shown = tree.filter((one) => !one.thread.resolved || one.asks.length || lit(one));
-      const done = tree.filter((one) => !shown.includes(one));
-      for (const one of shown) nodeRow(one, LEFT + 4);
-      if (!done.length) return;
+      for (const one of unresolved) nodeRow(one, LEFT + 4);
+      if (!resolvedNodes.length) return;
       const fold = `resolved:${entry.path}`;
-      this.railSpaces.add(this.foldRow(fold, "      Resolved", done.length, padding));
+      this.railSpaces.add(this.foldRow(fold, "      Resolved", resolvedNodes.length, padding));
       step(1);
-      if (this.unfolded.has(fold)) for (const one of done) nodeRow(one, LEFT + 4);
+      if (this.unfolded.has(fold)) for (const one of resolvedNodes) nodeRow(one, LEFT + 4);
     };
 
     if (style === "cards") {
@@ -877,25 +882,6 @@ export const rail = part({
         step(1);
         for (const entry of shown) sessionRow(group, entry);
         folds(group, earlier);
-        const lit = (node: ThreadNode): boolean => node.thread === active || node.agents.some(lit);
-        const open = tree.filter((one) => !one.thread.resolved || one.asks.length || lit(one));
-        const done = tree.filter((one) => !open.includes(one));
-        // A card holds a thread, and the agents that its ladder made fold under it as rows.
-        const cardOf = (node: ThreadNode) => {
-          card(node.thread, node.asks.length > node.thread.asks.length);
-          if (!node.agents.length) return;
-          const fold = `agents:${node.thread.act.id}`;
-          this.railSpaces.add(
-            this.foldRow(
-              fold,
-              `  ${node.agents.length === 1 ? "Agent" : "Agents"}`,
-              node.agents.length,
-              padding,
-            ),
-          );
-          step(1);
-          if (this.unfolded.has(fold)) for (const one of node.agents) nodeRow(one, LEFT + 4);
-        };
         const heading = this.row({ paddingLeft: LEFT, paddingRight: RIGHT, marginTop: space.section });
         heading.add(this.text("Threads", c.text, { attributes: bold, flexGrow: 1 }));
         heading.add(this.text(this.badges(this.threadAttention(threads)), c.muted));
@@ -905,14 +891,14 @@ export const rail = part({
           plainRow([["No thread yet", c.faint]], () => this.composer.focus());
           step(1);
         }
-        for (const one of open) cardOf(one);
-        if (done.length) {
+        for (const one of unresolved) nodeRow(one, 0, true);
+        if (resolvedNodes.length) {
           const fold = `resolved:${lib.current?.path}`;
           this.railSpaces.add(
-            this.foldRow(fold, " Resolved", done.length, { ...padding, marginTop: space.section }),
+            this.foldRow(fold, " Resolved", resolvedNodes.length, { ...padding, marginTop: space.section }),
           );
           step(1, undefined, space.section);
-          if (this.unfolded.has(fold)) for (const one of done) cardOf(one);
+          if (this.unfolded.has(fold)) for (const one of resolvedNodes) nodeRow(one, 0, true);
         }
       }
     } else {
