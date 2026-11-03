@@ -81,9 +81,9 @@ export declare class Engine {
   /** Every name the module of a chain binds, the root when none is given, in the order it bound them. */
   names(chain?: string | undefined | null): Array<string>
   /**
-   * The life ends with its checkpoint at the tip of its record, from which a later life on the record opens, as the
-   * engine of the crate writes it; then the engine is gone, as after a dispose. A life that keeps no record refuses
-   * it, and ends too.
+   * The life ends with its checkpoint at the tip of its record, from which a later life on the
+   * record opens, as the engine of the crate writes it; then the engine is gone, as after a
+   * dispose. A life that keeps no record refuses it, and ends too.
    */
   checkpoint(): void
   /**
