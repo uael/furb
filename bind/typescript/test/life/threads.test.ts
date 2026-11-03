@@ -128,7 +128,12 @@ test("a question waits for the operator in any thread, and a failure or a pause 
     act(id, "prompt", "chain1", by, began, undefined, { words: ["str", `${id} says`, ""], ...more });
   const base = [prompt("prompt1", 1), word, agent];
   const read = (acts: LiveAct[], owed: string[] = []) =>
-    threads([...base, ...acts], owed).map((one) => [one.act.id, one.origin, one.yours, concerns(one)]);
+    threads([...base, ...acts], owed).map((one) => [
+      one.act.id,
+      one.origin,
+      one.yours,
+      concerns(one) !== undefined,
+    ]);
   // A question that waits in a thread of an agent concerns the operator.
   const step = act("rung3", "rung", "chain1", "prompt2", 5);
   const ask = act("prompt9", "prompt", "chain1", "rung3", 9, undefined, {

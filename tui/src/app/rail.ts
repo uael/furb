@@ -1,6 +1,14 @@
 import { basename } from "node:path";
 import { type BoxOptions, type BoxRenderable, InputRenderable, InputRenderableEvents } from "@opentui/core";
-import { type Ask, type ChainThread, chainThreads, gist, nestThreads, type ThreadNode } from "furb/life";
+import {
+  type Ask,
+  type ChainThread,
+  chainThreads,
+  concerns,
+  gist,
+  nestThreads,
+  type ThreadNode,
+} from "furb/life";
 import { checkoutOf } from "../checkout.ts";
 import { clock } from "../clock.ts";
 import { shortenHome, shortenHomes } from "../files.ts";
@@ -977,10 +985,11 @@ export const rail = part({
   /** What the threads of the session shown say, counted as the marks of a row: a question anywhere, and the failure
    * or the pause of a thread that the operator started. The failure of an agent counts for nothing. */
   threadAttention(threads: readonly ChainThread[]): Attention {
+    const kinds = threads.map(concerns);
     return {
-      asks: threads.filter((one) => one.asks.length).length,
-      held: threads.filter((one) => one.yours && one.state === "held" && !one.asks.length).length,
-      failed: threads.filter((one) => one.yours && one.state === "failed" && !one.asks.length).length,
+      asks: kinds.filter((one) => one === "asks").length,
+      held: kinds.filter((one) => one === "held").length,
+      failed: kinds.filter((one) => one === "failed").length,
       unread: 0,
     };
   },
