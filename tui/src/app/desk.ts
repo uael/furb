@@ -208,17 +208,21 @@ export const desk = part({
           }
       }
     }
-    const visible = shown.length > 0;
+    const trees = w.view === "feed" && !this.tree ? this.dockTrees() : [];
+    const visible = shown.length > 0 || trees.length > 0;
     if (this.dock.visible !== visible) this.dock.visible = visible;
     if (!visible) {
       this.dockKey = "";
+      this.viewSpinners.clear();
       return;
     }
-    const key = JSON.stringify([shown, this.feedWidth, this.theme]);
+    // A spinner moves at the tick of the App, so the key holds no frame of it, and an input keeps its focus.
+    const key = JSON.stringify([shown, trees, w.host.role, this.feedWidth, this.theme]);
     if (key === this.dockKey) return;
     this.dockKey = key;
     this.dock.backgroundColor = c.panel;
     this.clear(this.dock);
+    this.viewSpinners.clear();
     for (const one of shown) {
       const box = this.box();
       const mark: Part[] = one.error ? [[`${glyph.failed} `, c.danger]] : [];
@@ -228,6 +232,11 @@ export const desk = part({
       for (const line of lines) box.add(this.line(this.partLine(line), c.text, { truncate: true }));
       if (one.lines.length > lines.length)
         box.add(this.line(`${one.lines.length - lines.length} more lines`, c.faint));
+      this.dock.add(box);
+    }
+    for (const { viewer, tree } of trees) {
+      const box = this.box();
+      box.add(this.viewNode(viewer, tree));
       this.dock.add(box);
     }
   },
