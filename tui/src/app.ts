@@ -154,10 +154,8 @@ export class App {
   /** The keys of the footer while the sidebar stands: they stand under the context, where the footer has no room for
    * them beside the state. */
   readonly cornerKeys: BoxRenderable;
-  /** The column of the sidebar: the list, and half a row of its panel under it, as a thread of the feed ends. */
+  /** The column of the sidebar: the list, which ends where the feed ends. */
   readonly railSlot: BoxRenderable;
-  /** The half row of the panel under the list of the sidebar, which a sidebar in place of the feed does not draw. */
-  readonly railEdge: BoxRenderable;
   /** The row at the top of the sidebar that says how to go back to the feed: a narrow terminal shows the sidebar in
    * place of the feed, which the screen holds. */
   readonly railBack: BoxRenderable;
@@ -505,6 +503,7 @@ export class App {
       onSizeChange: this.schedule,
       // The feed keeps a row of space under the top line, however far it scrolls.
       marginTop: space.section,
+      marginBottom: space.rest,
       contentOptions: { gap: space.stack, paddingBottom: space.section },
     });
     // The ScrollBar constructor resets manual visibility; set it after construction.
@@ -605,14 +604,14 @@ export class App {
     this.hints = this.row();
     footer.add(this.hints);
     below.add(footer);
-    // The sidebar ends with half a row of its panel and a row of space parts it from the context, as a thread of the
-    // feed ends and a row of space parts it from the input: the two gaps are one.
+    // The sidebar ends where the feed ends, and the top row of the context and the top row of the input are one shape,
+    // so the gap above each is the same: `space.rest` and the half row that the box under it draws.
     this.railSlot = this.box({
       id: "sidebar-slot",
       flexDirection: "column",
       width: session.preferences.sidebarWidth,
       flexShrink: 0,
-      marginBottom: space.section,
+      marginBottom: space.rest,
     });
     this.rail = this.box({
       id: "sidebar",
@@ -652,13 +651,6 @@ export class App {
     this.railSpaces.horizontalScrollBar.visible = false;
     this.rail.add(this.railSpaces);
     this.railSlot.add(this.rail);
-    this.railEdge = this.box({
-      height: space.bar,
-      border: ["top"],
-      borderColor: c.panel,
-      customBorderChars: { ...noBorder, horizontal: glyph.halfBottom },
-    });
-    this.railSlot.add(this.railEdge);
     upper.add(this.railSlot);
     // The context starts and ends with half a row of its panel, as the panel of the input does, so that their tops
     // and their bottoms meet. The keys of the footer stand under it, on the row of the footer.
@@ -954,9 +946,6 @@ export class App {
     this.rail.width = this.sideWidth || w.preferences.sidebarWidth;
     this.railSlot.visible = this.sidebarShown;
     this.railSlot.width = this.rail.width;
-    // A sidebar in place of the feed has no context under it, so it takes the whole height.
-    this.railSlot.marginBottom = this.drawerOpen ? 0 : space.section;
-    this.railEdge.visible = !this.drawerOpen;
     this.screen.visible = !this.drawerOpen;
     this.lower.visible = !this.drawerOpen;
     // On a narrow terminal, or with the sidebar hidden, the context folds into a line of the footer.
