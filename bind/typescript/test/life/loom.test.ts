@@ -60,7 +60,7 @@ test("a chain whose model answers and a chain whose command runs both show work 
     // The rung of the prompt waits for the turn of its model, whose reply is in flight.
     act("rung2", "rung", "chain2", "prompt1", 7),
     act("prompt2", "prompt", "chain3", "rung1", 8),
-    act("rung3", "rung", "chain3", "prompt2", 9),
+    { ...act("rung3", "rung", "chain3", "prompt2", 9), word: 'await bash("make")' },
     act("bash1", "bash", "chain3", "rung3", 10),
     act("prompt3", "prompt", "chain4", "rung1", 11, 14),
     act("rung4", "rung", "chain4", "prompt3", 12, 13),
@@ -68,8 +68,8 @@ test("a chain whose model answers and a chain whose command runs both show work 
   ];
   const { rows } = loomOf(acts);
   const of = (id: string) => rows.find((thread) => thread.id === id);
-  expect(of("chain2")?.state).toBe("working");
-  expect(of("chain3")?.state).toBe("working");
+  expect(of("chain2")?.state).toBe("thinks");
+  expect(of("chain3")?.state).toBe("runs");
   expect(of("chain3")?.waits).toBe("bash1");
   expect(of("chain2")?.waits).toBe("rung2");
   expect(of("chain2")?.cells.at(-1)).toEqual({ mark: "▁", tone: "work" });
@@ -98,7 +98,7 @@ test("the loom stands each worker under the chain whose rung made it, and a fold
   ]);
   const folded = loomOf(acts, { folds: ["chain1"] });
   expect(folded.rows.map((thread) => thread.id)).toEqual(["operator", "chain1", "chain5"]);
-  expect(folded.rows[1]).toMatchObject({ folded: true, workers: 2, tally: { working: 1, done: 1 } });
+  expect(folded.rows[1]).toMatchObject({ folded: true, workers: 2, tally: { runs: 1, done: 1 } });
 });
 
 test("the operator owes the prompts that wait for it, the oldest first, and no prompt whose act is done, and its thread and the thread of each asks", () => {
@@ -186,7 +186,7 @@ test("the rungs in a row that an ear made on a chain stand on one line, with the
     ["rung", "rung3", []],
   ]);
   expect(lines[0]?.type === "ear" && lines[0].acts.map((chip) => [chip.label, chip.state])).toEqual([
-    ["remember1", "stands"],
+    ["remember1", "delegates"],
   ]);
 });
 

@@ -2,10 +2,11 @@ import { inspectRecord } from "furb";
 
 declare const self: Worker & { close(): void };
 self.onmessage = async ({ data }: MessageEvent<string[]>) => {
-  const states: Record<string, { pending: number; error?: string; reading?: boolean }> = {};
+  const states: Record<string, { pending: number; error?: string; reading?: boolean; name?: string }> = {};
   for (const path of data) {
     try {
-      states[path] = { pending: (await inspectRecord(path)).pending.length };
+      const { pending, name } = await inspectRecord(path);
+      states[path] = { pending: pending.length, ...(name ? { name } : {}) };
     } catch (error) {
       const why = error instanceof Error ? error.message : String(error);
       // A drift is a record that another build made, which opens to read.

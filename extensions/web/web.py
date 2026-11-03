@@ -19,8 +19,8 @@ def text_act(kind: str, on: str, show: Show, word: str, *words: str) -> Act:
 
 
 def web_search(query: str, to: str = "", show: Show = HEAD, on: str = "") -> Act:
-  return text_act("web_search", on, show, "query", query, to or str(module(on).get("actor", "")))
+  return text_act("search", on, show, "query", query, to or str(module(on).get("actor", "")))
 
 
 def web_fetch(url: str, show: Show = HEAD, on: str = "") -> Act:
-  return text_act("web_fetch", on, show, "url", url)
+  return text_act("fetch", on, show, "url", url)

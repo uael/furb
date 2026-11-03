@@ -74,7 +74,11 @@ use serde_json::{Map, Value, json};
 use tokio::sync::{mpsc, watch as holding};
 use unsync::oneshot;
 
-use self::{images::Images, search::Searches, watch::Watch};
+use self::{
+  images::Images,
+  search::{Searches, free},
+  watch::Watch,
+};
 use crate::{
   SYSTEM,
   ear::{Co, Ear, Next, hearing, runtime, say},
@@ -479,7 +483,8 @@ pub struct Model {
   /// thought of each earlier turn, and whose thought of each turn would else fill its window in a few turns.
   forgets: bool,
   answers: Answers,
-  /// The native search of the web of its provider, which the extension web asks for an actor that names it.
+  /// The native search of the web of its provider, which the provider asks for an actor that
+  /// names it.
   search: Option<Searches>,
 }
 
@@ -660,6 +665,7 @@ pub struct Provider {
   retries: Option<Retries>,
   refresh: Option<Refresh>,
   gone: Vec<String>,
+  searching: bool,
 }
 
 /// An extension as the standing gives it: its name, the file of its word, its life word, and whether it plays on the
@@ -688,12 +694,19 @@ impl Provider {
       retries: None,
       refresh: None,
       gone: Vec::new(),
+      searching: true,
     }
   }
 
   /// The most tokens of thought of a model in one turn.
   pub fn thinking(mut self, thinking: Thinking) -> Provider {
     self.thinking = thinking;
+    self
+  }
+
+  /// Whether the provider answers the question search. A life that inspects searches nothing.
+  pub(crate) fn searching(mut self, on: bool) -> Provider {
+    self.searching = on;
     self
   }
 
@@ -798,6 +811,7 @@ impl Provider {
   /// A pause over the chain of a reply holds the next call of its model: the call that waits for a retry, or that a
   /// stand asks again, is made at the wake, and not at the end of its wait. A call that runs returns.
   pub fn ear(self) -> Box<dyn Ear> {
+    let native = self.search();
     let Provider {
       directory,
       extensions,
@@ -810,6 +824,7 @@ impl Provider {
       retries,
       refresh,
       gone,
+      searching,
     } = self;
     let mut actor = actor.unwrap_or_else(|| {
       models
@@ -819,10 +834,12 @@ impl Provider {
         .map_or_else(|| OPERATOR.to_owned(), |model| model.at(None))
     });
     let mut images = Images::new(images);
-    hearing(&["stand", "reply", RAN], move |mut co: Co<Replied>| async move {
+    hearing(&["stand", "reply", "search", RAN], move |mut co: Co<Replied>| async move {
       // The ids of chains repeat in every life, so a conversation of this life is keyed by the life too.
       let life = uuid().map_err(|no| Fault::refused(no.to_string()))?;
       let mut replies: HashMap<String, Reply> = HashMap::new();
+      // The stops of the searches that work, which end a search that a control ended first.
+      let mut searches: HashMap<String, oneshot::Sender<()>> = HashMap::new();
       // The actor whose last reply on each chain the ear refused.
       let mut mute: HashMap<String, String> = HashMap::new();
       // The opening of the life loaded the settings just now, so the first stand, which the boot asks, reads them
@@ -1037,6 +1054,14 @@ impl Provider {
             }
             continue;
           }
+          // What a search came to: its text, or why it gives none, unless a control ended it first.
+          Next::Worked(Replied::Searched { id, got }) => {
+            if searches.remove(&id).is_some() {
+              let got = got.map_or_else(|no| Fault::refused(no).object(), |one| one.object());
+              say(&mut co, Fact::says("done", &id, [got]));
+            }
+            continue;
+          }
           // What the model of a reply that still stands came to.
           Next::Worked(Replied::Came { id, got, dropped }) => {
             let Some(reply) = replies.get(&id) else { continue };
@@ -1204,6 +1229,7 @@ impl Provider {
             }
           }
           "done" => {
+            searches.remove(&about);
             let Some(Reply { chain, actor, .. }) = replies.remove(&about) else { continue };
             // A done that the ear said of its own reply ends the row of refusals on the chain with a turn, or adds
             // to it with a refusal, which is what the ear says when it says no turn; a done that a control said
@@ -1223,6 +1249,31 @@ impl Provider {
           }
           // A pause or a wake changes what holds a reply, so each reply that stands reads whether a pause holds it
           // now, and a call that waits to be made again goes on at the wake.
+          // A search of the web: the native search of the provider of its actor, else the free
+          // search, as a work of the ear, so every chain of the life goes on meanwhile. A life
+          // that inspects searches nothing.
+          "search" if a.question() => {
+            let word = |at: usize| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
+            let (query, actor) = (word(1).unwrap_or_default(), word(2).unwrap_or_default());
+            if !searching {
+              let no = "a life that inspects searches nothing";
+              say(&mut co, Fact::says("done", &about, [Fault::refused(no).object()]));
+              continue;
+            }
+            say(&mut co, Fact::says("started", &about, []));
+            let search = native(&actor).unwrap_or_else(free);
+            let (stop, stopped) = oneshot::channel();
+            let id = about.clone();
+            let work = async move {
+              let got = search(query.clone()).await;
+              Replied::Searched {
+                id,
+                got: got.map(|answer| crate::value::Text::new(query, answer)),
+              }
+            };
+            co.work(stream::once(work).take_until(stopped));
+            searches.insert(about, stop);
+          }
           "pause" | "wake" => {
             let ids: Vec<String> = replies.keys().cloned().collect();
             for id in ids {
@@ -1314,6 +1365,7 @@ enum Replied {
   Retried { id: String, retry: Retry, limit: bool },
   Came { id: String, got: Result<Object, CompletionError>, dropped: Option<String> },
   Refreshed { about: String, got: Result<Settings, String> },
+  Searched { id: String, got: Result<crate::value::Text, String> },
 }
 
 /// What the chain is told after the rung of a turn whose model wrote a fault after the part of its word that ran.

@@ -35,7 +35,6 @@ test("a view that cannot be read opens the record with the default view and name
   let session: Session | undefined;
   try {
     session = await demoSession({ record });
-    session.sessionName = "Named";
     await session.engine.result(await session.engine.rung({ word: "kept = 7", on: session.engine.root }));
     await session.dispose();
     for (const damaged of ["", '{"sessionName": "cut', "[1, 2]"]) {
@@ -61,15 +60,12 @@ test("a view whose field has another form opens that field empty and names it, a
     session = await demoSession({ record });
     await session.dispose();
     const view = JSON.parse(await readFile(`${record}.ui.json`, "utf8"));
-    await writeFile(
-      `${record}.ui.json`,
-      JSON.stringify({ ...view, sessionName: "Kept", queued: "one", models: [1] }),
-    );
+    await writeFile(`${record}.ui.json`, JSON.stringify({ ...view, queued: "one", models: [1] }));
     session = await demoSession({ record });
     expect(session.notice).toBe(
       `${record}.ui.json holds queued, models in a form this release does not read: each opened empty.`,
     );
-    expect([session.sessionName, session.queued, session.models]).toEqual(["Kept", [], []]);
+    expect([session.queued, session.models]).toEqual([[], []]);
     await session.dispose();
     session = undefined;
   } finally {

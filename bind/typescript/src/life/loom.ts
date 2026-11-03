@@ -2,10 +2,10 @@ import { cancelled, failed, type LiveAct, type Measure, WORK } from "./acts.js";
 import { gist } from "./asks.js";
 import { valueText } from "./ladder.js";
 import { unmarked } from "./marks.js";
+import { busy, type State, working } from "./states.js";
 
 /** What a row of the loom does now: it asks the operator, it failed, it works, a pause holds it, its prompts are
  * all closed, or it rests. */
-export type RowState = "asks" | "failed" | "working" | "paused" | "done" | "idle";
 /** What a cell of a row shows: work that ran, work of the past, a question to the operator, a failure, or
  * nothing. */
 export type Tone = "work" | "past" | "asks" | "failed" | "none";
@@ -20,12 +20,12 @@ export interface Row {
   label: string;
   /** The lines of the tree before the label, as ├ and └. */
   lines: string;
-  state: RowState;
+  state: State;
   /** The chains under it in the tree, and whether the loom folds them into it. */
   workers: number;
   folded: boolean;
   /** The states of the chains that a folded row holds, by state. */
-  tally: Partial<Record<RowState, number>>;
+  tally: Partial<Record<State, number>>;
   /** The act that the chain waits on while it works. */
   waits?: string;
   cells: Cell[];
@@ -146,13 +146,14 @@ export function rowState(
   work: readonly LiveAct[],
   owes: boolean,
   pending: ReadonlyMap<string, string>,
-): RowState {
+  remote: readonly LiveAct[] = [],
+): State {
   if (owes) return "asks";
   const live = work.filter((act) => WORK.includes(act.kind) && !act.unfinished);
   if (live.some((act) => pending.has(act.id) || (act.paused && !act.done))) return "paused";
-  if (live.some((act) => !act.done)) return "working";
+  if (live.some((act) => !act.done)) return working(live, remote);
   const latest = live.at(-1);
-  if (latest && cancelled(latest)) return "idle";
+  if (latest && cancelled(latest)) return "cancelled";
   if (latest && failed(latest)) return "failed";
   const prompts = live.filter((act) => act.kind === "prompt");
   return prompts.length && prompts.every((act) => act.done) ? "done" : "idle";
@@ -216,6 +217,7 @@ export function weave({ acts, prompts, measures, folds, width, pending, label, i
       (byChain.get(id) ?? []).filter((act) => act.kind !== "chain"),
       owing.has(id),
       pending,
+      open.filter((act) => act.kind === "prompt" && act.on !== id && byId.get(act.by)?.on === id),
     );
   const operatorActs = acts.filter(asksOperator);
   // The acts that run, which each row that works reads for what it waits on.
@@ -235,7 +237,7 @@ export function weave({ acts, prompts, measures, folds, width, pending, label, i
   const visit = (chain: LiveAct, lines: string, last: boolean, depth: number): void => {
     const below = under(chain.id);
     const fold = folds.has(chain.id) && below.length > 0;
-    const tally: Partial<Record<RowState, number>> = {};
+    const tally: Partial<Record<State, number>> = {};
     if (fold)
       for (const id of below) {
         const one = stateOf(id);
@@ -253,7 +255,7 @@ export function weave({ acts, prompts, measures, folds, width, pending, label, i
       workers: below.length,
       folded: fold,
       tally,
-      waits: state === "working" ? waitsOn(chain.id, open, byId) : undefined,
+      waits: busy(state) ? waitsOn(chain.id, open, byId) : undefined,
       cells: cells(own, times, stretch),
       measure: measures[chain.id],
     });
@@ -293,7 +295,7 @@ interface Boarding {
   owes: boolean;
   held: string;
   asks: string;
-  state: RowState;
+  state: State;
   waits?: string;
 }
 const boarded = new WeakMap<object, Boarded>();
@@ -307,20 +309,20 @@ export interface BoardOrder {
   looking: Row[];
   resting(count: number): Row[];
   place: ReadonlyMap<string, number>;
-  counts: ReadonlyMap<RowState, number>;
+  counts: ReadonlyMap<State, number>;
 }
 /** The chains that ask and that need a look, and how many rows hold each state, which a board keeps as rows change. */
 interface Ordering {
   asking: Set<string>;
   looking: Set<string>;
-  counts: Map<RowState, number>;
+  counts: Map<State, number>;
 }
 /** The states of a row that needs a look. */
-const looks: readonly RowState[] = ["failed", "paused", "working"];
+const looks: readonly State[] = ["failed", "paused", "thinks", "runs", "delegates"];
 const orders = new WeakMap<Loom, BoardOrder>();
 
 /** A row of a chain that holds a new state, or no state when it is gone, in an ordering. */
-function reorder(order: Ordering, id: string, was: RowState | undefined, now: RowState | undefined): void {
+function reorder(order: Ordering, id: string, was: State | undefined, now: State | undefined): void {
   if (was === now) return;
   if (was !== undefined) order.counts.set(was, (order.counts.get(was) ?? 1) - 1);
   if (now !== undefined) order.counts.set(now, (order.counts.get(now) ?? 0) + 1);
@@ -435,33 +437,32 @@ function board(
     );
     const acts = on.get(id) ?? [];
     const latest = acts.findLast(work);
-    const state: RowState = owes
+    const state: State = owes
       ? "asks"
       : waiting.some((act) => pending.has(act.id) || (act.paused && !act.done))
         ? "paused"
         : waiting.some((act) => !act.done)
-          ? "working"
+          ? working(waiting, asked.get(id) ?? [])
           : latest && cancelled(latest)
-            ? "idle"
+            ? "cancelled"
             : latest && failed(latest)
               ? "failed"
               : acts.some((act) => act.kind === "prompt")
                 ? "done"
                 : "idle";
     const local = openOn.get(id) ?? [];
-    const waits =
-      state === "working"
-        ? (local.findLast((act) => act.kind === "bash" || act.kind === "wait")?.id ??
-          asked.get(id)?.at(-1)?.id ??
-          local.findLast((act) => act.kind === "rung")?.id)
-        : undefined;
+    const waits = busy(state)
+      ? (local.findLast((act) => act.kind === "bash" || act.kind === "wait")?.id ??
+        asked.get(id)?.at(-1)?.id ??
+        local.findLast((act) => act.kind === "rung")?.id)
+      : undefined;
     const made = { stamp: changed, owes, held: pend, asks, state, waits };
     states.set(id, made);
     return made;
   };
   const rowOf = ({ chain, lines, below }: (typeof tree)[number]): Row => {
     const fold = folds.has(chain.id) && below.length > 0;
-    const tally: Partial<Record<RowState, number>> = {};
+    const tally: Partial<Record<State, number>> = {};
     if (fold)
       for (const id of below) {
         const one = stateOf(id).state;
@@ -716,8 +717,7 @@ export function nowOf(
   const waits = row.waits
     ? (index?.ids.get(row.waits) ?? acts.find((act) => act.id === row.waits))
     : undefined;
-  if (row.state === "working" && waits)
-    return { tone: "work", act: waits.id, more: 0, text: subjectOf(waits, word) };
+  if (busy(row.state) && waits) return { tone: "work", act: waits.id, more: 0, text: subjectOf(waits, word) };
   const work = (index?.on.get(row.id) ?? acts).filter((act) => act.on === row.id && WORK.includes(act.kind));
   if (row.state === "failed") {
     const fault = work.findLast((act) => failed(act) && !cancelled(act));

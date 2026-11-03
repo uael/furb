@@ -27,8 +27,8 @@ async def test_its_open_tells_the_address_and_its_done_tells_the_lines_of_the_pa
   """Its open tells the address, unless the word that made the act holds it, and binds the act to Act[Text], and its done tells under the word text the lines of the page that its show picks."""
   root, _ = webbed(tmp_path, {URL: PAGE})
   await engine.rung(f"await web_fetch('https://' + {URL[8:]!r}, span(-1, -1))", on=root)
-  opened = f"#web_fetch1\nweb_fetch1_url = {URL!r}\nweb_fetch1: Act[Text] = Act('web_fetch1')"
-  assert of(engine.turns(on=root), "web_fetch") == [opened, "#web_fetch1 done\nweb_fetch1_text = 'A language.'"]
+  opened = f"#fetch1\nfetch1_url = {URL!r}\nfetch1: Act[Text] = Act('fetch1')"
+  assert of(engine.turns(on=root), "fetch") == [opened, "#fetch1 done\nfetch1_text = 'A language.'"]
 
 
 async def test_a_fetch_that_the_world_refuses_completes_with_refused(tmp_path: Path) -> None:
@@ -36,5 +36,5 @@ async def test_a_fetch_that_the_world_refuses_completes_with_refused(tmp_path: P
   root, _ = webbed(tmp_path, {})
   with pytest.raises(Refused, match=r"No page answers https://rust-lang\.org\."):
     await engine.rung(f"await web_fetch({URL!r})", on=root)
-  opened = f"#web_fetch1\nweb_fetch1_url = {URL!r}\nweb_fetch1: Act[Text] = Act('web_fetch1')"
-  assert of(engine.turns(on=root), "web_fetch") == [opened]
+  opened = f"#fetch1\nfetch1_url = {URL!r}\nfetch1: Act[Text] = Act('fetch1')"
+  assert of(engine.turns(on=root), "fetch") == [opened]

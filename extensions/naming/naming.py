@@ -2,8 +2,9 @@ from furb.engine import Act, act, automatic, chain, controlled, operated, over, 
 
 naming = """name_session() names the session once, at the first message of the operator. It asks a name of the actor that
 automatic() gives, on a chain of its own labelled naming, and with no such actor, or
-with no name from it, the name is the first line of that message. The act of name_session() is done with the name,
-which the TUI shows in place of the name that it gave the session. The extension plays on the root alone."""
+with no name from it, the name is the first line of that message. The act of name_session() is done with the name.
+rename_session(name) says the name that the operator chose, and its name wins over the name of name_session().
+A client shows the name of the session that its record holds. The extension plays on the root alone."""
 NAME_LONGEST = 60
 NAME_BRIEF = """Give a name to a session of work, from the first message of its operator below: at most six words, in the
 language of the message, that say what the work is, with no quotes and no period. Close with the name alone, as
@@ -36,3 +37,10 @@ def name_session(on: str = "") -> Act:
     yield "done", id, (isinstance(given, str) and name_of(given)) or name_of(message)
 
   return act("name_session", on, controlled(ear))
+
+
+def rename_session(name: str, on: str = "") -> Act:
+  def ear(id):
+    yield "done", id, name.strip()
+
+  return act("rename_session", on, ear)

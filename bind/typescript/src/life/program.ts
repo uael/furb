@@ -1,8 +1,9 @@
 import { type Exit, failed, type LiveAct } from "./acts.js";
-import { actState, type Chip, tailOf, valueText } from "./ladder.js";
+import { type Chip, tailOf, valueText } from "./ladder.js";
 import { unmarked } from "./marks.js";
 import { reason } from "./plain.js";
 import { placed } from "./source.js";
+import { actState } from "./states.js";
 
 /** One line of the program of a thread, as the feed shows it.
  *
@@ -58,7 +59,7 @@ function said(act: LiveAct, owed: ReadonlySet<string>, label: (chain: string) =>
   if (state === "asks") return "asks you";
   if (state === "failed") return first(reason(act) ?? "") || "failed";
   if (state === "cancelled") return "cancelled";
-  if (state === "held") return "paused";
+  if (state === "paused") return "paused";
   if (act.kind === "bash") {
     if (!act.done) return "runs";
     const exit = act.value as Exit | undefined;
@@ -164,7 +165,7 @@ export function stepLines(
   }
   const children = made.get(step.id) ?? [];
   const on = placed(text, children);
-  const running = actState(step, owed) === "running";
+  const running = ["thinks", "runs"].includes(actState(step, owed));
   const open = running ? children.findLast((act) => !act.done && followed.has(act.kind)) : undefined;
   const source = text.split("\n");
   // A line that awaits the act of the name that an earlier line binds, as `b = await build` after
@@ -383,7 +384,8 @@ export function earProgram(
         display: out.length,
         text: source[at] ?? "",
         acts: at === source.length - 1 ? acts : [],
-        runs: at === source.length - 1 && acts.some((one) => actState(one, owed) === "running"),
+        runs:
+          at === source.length - 1 && acts.some((one) => ["thinks", "runs"].includes(actState(one, owed))),
         hint: at === source.length - 1 ? hintOf(acts, owed, label) : "",
       });
   }
@@ -408,7 +410,7 @@ export function actLines(
   const words = act.kind === "bash" ? act.words.slice(0, 1) : [...act.words];
   while (words.length && (words.at(-1) === "" || words.at(-1) === null || words.at(-1) === undefined))
     words.pop();
-  const runs = actState(act, owed) === "running";
+  const runs = ["thinks", "runs"].includes(actState(act, owed));
   const out: ProgramLine[] = [
     {
       kind: "code",

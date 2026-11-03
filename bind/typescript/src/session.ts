@@ -6,7 +6,7 @@ import { Activity } from "./activity.js";
 import { FileChanges } from "./changes.js";
 import { Console, type ConsoleOptions } from "./console.js";
 import { call, type Ear } from "./ears.js";
-import { type PauseCause, WORK } from "./life/acts.js";
+import { type PauseCause, sessionNamed, WORK } from "./life/acts.js";
 import { furbDirectory, saveFile } from "./project.js";
 import { actorParts, type Entry, type Fact, isQuestion, standingOf } from "./types.js";
 
@@ -378,12 +378,16 @@ export class Session extends EventEmitter {
 }
 
 /** Read pending work through the real replay path, without taking a lock or writing the record. */
-export async function inspectRecord(record: string): Promise<{ pending: [string, string][] }> {
+export async function inspectRecord(record: string): Promise<{ pending: [string, string][]; name?: string }> {
   const session = new Session({ record, readOnly: true });
   try {
     session.open();
     await Promise.resolve();
-    return { pending: [...session.pending] };
+    const root = session.engine?.root;
+    return {
+      pending: [...session.pending],
+      name: root ? sessionNamed(session.activity.acts.values(), root) : undefined,
+    };
   } finally {
     await session.dispose();
   }
