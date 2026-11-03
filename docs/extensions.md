@@ -33,9 +33,14 @@ Eight extensions come with furb, and each life runs them unless a config turns t
   `.agents/skills` and `.claude/skills` of the working directory and of each folder above it, then in `skills` of the
   config directory, then each extension of the project and of the configs and each official one, which is a skill with
   code: its line marks `code`, `on` when the life runs it on the chain, and `default` when it plays by default. The
-  first line of the list says how to read a skill. `skill(name)` reads the `SKILL.md` of a skill with no code, or the
-  word of a skill with code, and `read("skills://<name>/<file>")` reads a file of its folder. Its life word, `await
-  listed()`, reads `skills://`
+  first line of the list says how to load and read a skill. `await skill(name)` loads a skill on the chain: it tells
+  the `SKILL.md` of a skill with no code, and it tells the prose and the interface of a skill with code, or its word
+  when it ships no interface, after the life enables it, once for each word, so it plays as an extension that a config
+  turns on. `await skill()` plays each skill with code that says `furb-default: "true"`. `read("skills://<name>")`
+  gives the word of a skill with code, and `read("skills://<name>/<file>")` a file of its folder. A write of
+  `skills://<name>` writes the word in `.furb/extensions/<name>` of the project, after a copy of the folder there
+  when it stands elsewhere, and reloads the skill when the life runs it. Its life word, `await listed()`, reads
+  `skills://`
   in the setup of the root, which every new chain holds. It carries one skill of its own, `extending`, which shows a
   model how to extend furb, with an example for each way. A skill named `extending` in a folder takes its place. The TUI
   lists each skill after `/`, and its command reads the skill for the chain. `/skills`, or `/reload-skills`, reads the

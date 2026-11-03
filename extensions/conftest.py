@@ -38,10 +38,11 @@ EXTENDING = (
 
 
 USE = (
-  'skill(name) reads a skill: the word of a skill with code, else its SKILL.md. read("skills://<name>/<file>") reads'
-  " a file of its folder."
+  "skill(name) loads a skill: a skill with code plays its word and tells its interface, and any other tells its"
+  ' SKILL.md. skill() plays each default skill. read("skills://<name>") gives the word of a skill with code, and'
+  ' read("skills://<name>/<file>") a file of its folder.'
 )
-"""USE is the first line of the list of the skills, which says how a chain reads a skill."""
+"""USE is the first line of the list of the skills, which says how a chain loads and reads a skill."""
 
 
 def official_lines(on: Sequence[str]) -> list[str]:

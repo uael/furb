@@ -2119,7 +2119,7 @@ export class Session extends EventEmitter {
         this.notice = `Skills read again: ${this.skillList.length || "none"} found.`;
         break;
       default: {
-        // A skill is a command that reads its SKILL.md for the chain, as skill(name) does.
+        // A skill is a command that loads the skill on the chain, as skill(name) does.
         if (!this.skills.some(({ name }) => name === command))
           throw new Error(`Unknown command /${command}. Press F1 for the command list.`);
         this.track(await this.engine.rung({ word: `skill(${JSON.stringify(command)})`, on: this.selected }));

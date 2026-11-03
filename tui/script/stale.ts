@@ -15,6 +15,7 @@ const crate = [
   "src/**/*.{rs,py,pyi,json}",
   "extensions/*/SKILL.md",
   "extensions/*/*.py",
+  "extensions/*/*.pyi",
   "extensions/*/tui.ts",
   "extensions/*/*/SKILL.md",
 ];

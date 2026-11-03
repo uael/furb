@@ -1,6 +1,8 @@
 //! The ear of the skills, which answers a read of `skills://` with one finder for each skill, with
 //! code or with none: the folders of skills on the disk, the extensions of the project and of the
-//! configs, and the official extensions that the crate carries.
+//! configs, and the official extensions that the crate carries. It answers the act `skill`, which
+//! loads a skill on a chain, and a write of `skills://` and a name, which writes the word of a
+//! skill.
 
 use std::{
   fs,
@@ -11,8 +13,8 @@ use crate::{
   ear::{Co, Ear, hear, hearing, say},
   engine::ROOT,
   extension::{
-    DEFAULT, ENABLE, Extension, MANIFEST, Places, WORD, enabled, frontmatter, manifests, shipped,
-    turned_on, word,
+    DEFAULT, ENABLE, Extension, INTERFACE, MANIFEST, Places, WORD, copy, enabled, frontmatter,
+    imports_furb, load, manifested, manifests, shipped, turned_on, word,
   },
   fact::Fact,
   value::{Fault, Object, Text, entry},
@@ -25,12 +27,14 @@ use crate::{
 /// The scheme of the paths that the ear serves.
 const SCHEME: &str = "skills://";
 
-/// The first line of the index, which says how a chain reads a skill.
-const USE: &str = "skill(name) reads a skill: the word of a skill with code, else its SKILL.md. \
-                   read(\"skills://<name>/<file>\") reads a file of its folder.";
+/// The first line of the index, which says how a chain loads and reads a skill.
+const USE: &str = "skill(name) loads a skill: a skill with code plays its word and tells its \
+                   interface, and any other tells its SKILL.md. skill() plays each default skill. \
+                   read(\"skills://<name>\") gives the word of a skill with code, and \
+                   read(\"skills://<name>/<file>\") a file of its folder.";
 
-/// The skill that the extension carries, which says how a model extends furb, and which a skill of its name in a
-/// folder replaces.
+/// The skill that the extension carries, which says how a model extends furb, and which a skill of
+/// its name in a folder replaces.
 const EXTENDING: &str = include_str!("../../extensions/skills/extending/SKILL.md");
 
 /// Where the files of a skill stand: a folder on the disk, the files that the crate carries of an
@@ -42,12 +46,13 @@ enum Place {
 }
 
 /// One skill that the ear found: its name, what it is for, the file of its word when it has code,
-/// whether it plays by default, and where its files stand.
+/// whether it plays by default, the text of its manifest, and where its files stand.
 struct Skill {
   name: String,
   description: String,
   word: Option<String>,
   default: bool,
+  manifest: String,
   place: Place,
 }
 
@@ -59,11 +64,12 @@ impl Skill {
     let name = front.field("name").unwrap_or(folder).to_owned();
     let description = front.field("description").unwrap_or_default().to_owned();
     let word = front.meta(WORD).map(str::to_owned);
-    Skill { name, description, word, default: front.meta(DEFAULT) == Some("true"), place }
+    let default = front.meta(DEFAULT) == Some("true");
+    Skill { name, description, word, default, manifest: text.to_owned(), place }
   }
 
-  /// The line of the index of the skill: its name, the marks that hold of code, on and default, and
-  /// what it is for.
+  /// The line of the index of the skill: its name, the marks that hold of code, on and default,
+  /// and what it is for.
   fn line(&self, on: bool) -> String {
     let marks: Vec<&str> = [(self.word.is_some(), "code"), (on, "on"), (self.default, "default")]
       .into_iter()
@@ -72,55 +78,207 @@ impl Skill {
     let marked = if marks.is_empty() { String::new() } else { format!(" ({})", marks.join(", ")) };
     format!("{}{marked}: {}", self.name, self.description)
   }
+
+  /// The extension of a skill with code, as its manifest and the files of its folder give it, with
+  /// the copy of its word in the config directory of these places.
+  fn extension(&self, places: &Places) -> Result<Extension, Fault> {
+    let read = |file: &str| filed(self, file, "").map(|got| got.content).map_err(|no| no.message());
+    let mut one = manifested(&self.manifest, read).map_err(Fault::refused)?;
+    one.file = copy(&one.name, &one.file, &one.word, places);
+    Ok(one)
+  }
 }
 
-/// The ear of the skills: it answers a read of `skills://` with the index of the skills of the
+/// What the ear holds to answer one act: the chain that asked, the skills that it finds, the
+/// extensions that the life runs, and the places of the user and of the project.
+struct Seen {
+  chain: String,
+  found: Vec<Skill>,
+  runs: Vec<Extension>,
+  places: Places,
+  project: PathBuf,
+}
+
+impl Seen {
+  /// Whether the life runs a skill on the chain.
+  fn on(&self, one: &Skill) -> bool {
+    self.runs.iter().any(|two| two.name == one.name && (!two.root || self.chain == ROOT))
+  }
+
+  /// The skill of a name, or the refusal that names it.
+  fn named(&self, name: &str) -> Result<&Skill, Fault> {
+    let found = self.found.iter().find(|one| one.name == name);
+    found.ok_or_else(|| Fault::refused(format!("There is no skill {name}.")))
+  }
+}
+
+/// The ear of the skills. It answers a read of `skills://` with the index of the skills of the
 /// chain, a read of `skills://` and a name with the word of a skill with code, which the life last
 /// enabled or else its file holds, or with the SKILL.md file of a skill with none, and a read of
-/// `skills://`, a name, a slash and a file with that file of the folder of the skill, or with the
-/// refusal. It finds the skills in
-/// `.furb/skills`, `.agents/skills` and `.claude/skills` of the working directory of the chain and
-/// of each folder above it, nearest first, then in
-/// `skills` of the config directory of the user, then in the folders of the extensions of the
-/// project in
-/// `.furb/extensions` and of each folder that a config turns on, then in the official extensions,
-/// and then the skill
-/// `extending` that the extension carries.
+/// `skills://`, a name, a slash and a file with that file of the folder of the skill. It answers
+/// the act `skill` of a name with the prose and the interface of a skill with code, or its code
+/// when it ships no interface, after it says the fact enable the first time that the life plays
+/// that word, and with the SKILL.md file of a skill with none. The act with no name plays each
+/// default skill that the life does not run. A write of `skills://` and a name writes the word of a
+/// skill with code in `.furb/extensions` of the project, and says the fact enable again when the
+/// life runs it, which reloads it. It finds the skills in `.furb/skills`, `.agents/skills` and
+/// `.claude/skills` of the working directory of the chain and of each folder above it, nearest
+/// first, then in `skills` of the config directory of the user, then in the folders of the
+/// extensions of the project in `.furb/extensions` and of each folder that a config turns on, then
+/// in the official extensions, and then the skill `extending` that the extension carries.
 pub fn skills(config: PathBuf) -> Box<dyn Ear> {
-  hearing(&["read"], move |mut co| async move {
+  hearing(&["read", "write", "skill"], move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
-      if a.kind() != "read" || !a.question() {
+      if !a.question() || !matches!(a.kind(), "read" | "write" | "skill") {
         continue;
       }
-      let path = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
-      let Some(asked) = path.strip_prefix(SCHEME) else { continue };
+      let path = match a.kind() {
+        "read" => a.word(1).and_then(|one| one.as_str().map(str::to_owned)),
+        "write" => a.word(1).and_then(Text::of).map(|one| one.path),
+        _ => Some(SCHEME.to_owned()),
+      };
+      let Some(asked) = path.as_deref().and_then(|one| one.strip_prefix(SCHEME)) else { continue };
+      let asked = asked.to_owned();
       let here = here(&mut co, a.on()).await?;
       let project = project(&mut co).await?.unwrap_or_else(|| here.clone());
       let places = Places { config: config.clone(), home: std::env::home_dir() };
       let found = found(&here, &project, &places);
       let runs = enables(&mut co).await?;
-      let on =
-        |one: &Skill| runs.iter().any(|two| two.name == one.name && (!two.root || a.on() == ROOT));
-      let (name, file) = asked.split_once('/').map_or((asked, None), |(one, two)| (one, Some(two)));
-      let answer = match (found.iter().find(|one| one.name == name), file) {
-        _ if asked.is_empty() => {
-          let lines = found.iter().map(|one| one.line(on(one)));
-          Ok(Text::new(
-            SCHEME,
-            [USE.to_owned()].into_iter().chain(lines).collect::<Vec<_>>().join("\n"),
-          ))
+      let seen = Seen { chain: a.on().to_owned(), found, runs, places, project };
+      let answer = match a.kind() {
+        "read" => answered(&seen, &asked),
+        "skill" => {
+          let name = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
+          loaded(&mut co, &seen, &name)
         }
-        (Some(one), Some(file)) => filed(one, file, &path),
-        (Some(one @ Skill { word: Some(_), .. }), None) => worded(one, &runs, &path),
-        (Some(Skill { place: Place::Folder(folder), .. }), None) => read(&folder.join(MANIFEST)),
-        (Some(_), None) => Ok(Text::new(path.clone(), EXTENDING)),
-        (None, _) => Err(Fault::refused(format!("There is no skill {name}."))),
+        _ => {
+          let content = a.word(1).and_then(Text::of).map(|one| one.content).unwrap_or_default();
+          written(&mut co, &seen, &asked, &content)
+        }
       };
       let answer = answer.map_or_else(|no| no.object(), |one| one.object());
       say(&mut co, Fact::says("done", a.about(), [answer]));
     }
   })
+}
+
+/// The answer of a read of `skills://` and what follows it: the index, the word or the manifest of
+/// a skill, or a file of its folder.
+fn answered(seen: &Seen, asked: &str) -> Result<Text, Fault> {
+  let path = format!("{SCHEME}{asked}");
+  if asked.is_empty() {
+    let lines = seen.found.iter().map(|one| one.line(seen.on(one)));
+    return Ok(Text::new(
+      SCHEME,
+      [USE.to_owned()].into_iter().chain(lines).collect::<Vec<_>>().join("\n"),
+    ));
+  }
+  let (name, file) = asked.split_once('/').map_or((asked, None), |(one, two)| (one, Some(two)));
+  let one = seen.named(name)?;
+  match (file, &one.place) {
+    (Some(file), _) => filed(one, file, &path),
+    (None, _) if one.word.is_some() => worded(one, &seen.runs, &path),
+    (None, Place::Folder(folder)) => read(&folder.join(MANIFEST)),
+    (None, _) => Ok(Text::new(path, EXTENDING)),
+  }
+}
+
+/// The answer of the act `skill`: the prose and the interface or the code of a skill with code,
+/// once the fact enable plays its word, the SKILL.md file of a skill with none, or, with no name,
+/// the line of each default skill, once each that the life does not run plays.
+fn loaded(co: &mut Co, seen: &Seen, name: &str) -> Result<Text, Fault> {
+  if name.is_empty() {
+    let defaults: Vec<&Skill> =
+      seen.found.iter().filter(|one| one.default && one.word.is_some()).collect();
+    for one in &defaults {
+      if !seen.runs.iter().any(|two| two.name == one.name) {
+        say(co, one.extension(&seen.places)?.enable());
+      }
+    }
+    let lines = defaults.iter().map(|one| one.line(true)).collect::<Vec<_>>().join("\n");
+    return Ok(Text::new(SCHEME, lines));
+  }
+  let one = seen.named(name)?;
+  let path = format!("{SCHEME}{name}");
+  if one.word.is_none() {
+    return answered(seen, name);
+  }
+  let extension = one.extension(&seen.places)?;
+  if !seen.runs.iter().any(|two| two.name == name && two.word == extension.word) {
+    say(co, extension.enable());
+  }
+  let shown = match frontmatter(&one.manifest).meta(INTERFACE) {
+    Some(file) => filed(one, file, &path)?.content,
+    None => extension.word,
+  };
+  let prose = body(&one.manifest).trim().to_owned();
+  Ok(Text::new(
+    path,
+    [prose, shown].into_iter().filter(|one| !one.is_empty()).collect::<Vec<_>>().join("\n\n"),
+  ))
+}
+
+/// The answer of a write of `skills://` and a name: the word of a skill with code written in the
+/// folder of the skill in `.furb/extensions` of the project, after a copy of its folder there when
+/// it stands elsewhere, with the imports of furb that the top of its file holds. The fact enable
+/// with the new word reloads the skill when the life runs it.
+fn written(co: &mut Co, seen: &Seen, name: &str, content: &str) -> Result<Text, Fault> {
+  let one = seen.named(name)?;
+  let Some(file) = one.word.as_deref() else {
+    return Err(Fault::refused(format!("The skill {name} has no code to write.")));
+  };
+  let target = seen.project.join(".furb").join("extensions").join(name);
+  let stays = matches!(&one.place, Place::Folder(folder) if *folder == target);
+  if !stays {
+    copied(one, &target)?;
+  }
+  let at = target.join(file);
+  let before = fs::read_to_string(&at).unwrap_or_default();
+  let imports: Vec<&str> = before
+    .lines()
+    .take_while(|line| line.is_empty() || imports_furb(line) || line.starts_with([' ', ')']))
+    .collect();
+  let imports = imports.join("\n").trim_end().to_owned();
+  let given = content.trim_matches('\n');
+  let whole =
+    if imports.is_empty() { format!("{given}\n") } else { format!("{imports}\n\n\n{given}\n") };
+  fs::write(&at, whole).map_err(|no| Fault::refused(format!("{no}: {}", at.display())))?;
+  if seen.runs.iter().any(|two| two.name == name) {
+    say(co, load(name, &target, &seen.places)?.enable());
+  }
+  Ok(Text::new(format!("{SCHEME}{name}"), given))
+}
+
+/// Each file of the folder of a skill, and the files that the crate carries of an official one,
+/// copied in a folder.
+fn copied(one: &Skill, target: &Path) -> Result<(), Fault> {
+  let failed = |no: std::io::Error| Fault::refused(format!("{no}: {}", target.display()));
+  fs::create_dir_all(target).map_err(failed)?;
+  match &one.place {
+    Place::Folder(folder) => {
+      for file in fs::read_dir(folder).map_err(failed)?.filter_map(Result::ok) {
+        if file.path().is_file() {
+          fs::copy(file.path(), target.join(file.file_name())).map_err(failed)?;
+        }
+      }
+    }
+    Place::Shipped(files) => {
+      for (file, text) in files {
+        fs::write(target.join(file), text).map_err(failed)?;
+      }
+    }
+    Place::Carried => fs::write(target.join(MANIFEST), EXTENDING).map_err(failed)?,
+  }
+  Ok(())
+}
+
+/// The body of a manifest: its text after its frontmatter.
+fn body(text: &str) -> &str {
+  let Some(rest) = text.strip_prefix("---\n").or_else(|| text.strip_prefix("---\r\n")) else {
+    return text;
+  };
+  rest.split_once("\n---").map_or("", |(_, after)| after.split_once('\n').map_or("", |two| two.1))
 }
 
 /// The folder of the project that the standing names, or none while it names none.
