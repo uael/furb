@@ -194,7 +194,7 @@ export const keys = [
     bindings: [{ on: ["ctrl+y"], run: "copy" }],
   },
   { chord: "Click / right-click an act", action: "Fold or expand it / inspect its value or prompt program" },
-  { chord: "Pointer / click on an underlined ...", action: "Show a folded string whole / open it in place" },
+  { chord: "Pointer / click on an underlined …", action: "Show a folded string whole / open it in place" },
   {
     chord: "Pointer on a line of a program",
     action: "Show what its acts came to, the act that it awaits, a message whole, or why the line failed",

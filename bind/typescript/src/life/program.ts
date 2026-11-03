@@ -711,7 +711,7 @@ function uncut(part: string): string {
 }
 
 /** The marks that stand for the end of a string that a line folds. */
-export const FOLD = "...";
+export const FOLD = "…";
 /** How many characters of a string stay before its fold. */
 const KEEP = 12;
 
