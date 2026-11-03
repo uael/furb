@@ -1,4 +1,4 @@
-//! The keeper of a snapshot: when a life asks it for one.
+//! The keeper of a snapshot: whether a life said something new, and how it writes one.
 
 #![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
 #![expect(
@@ -11,13 +11,9 @@
   reason = "debt: a subtraction of times that can underflow"
 )]
 
-use std::{
-  fs,
-  path::PathBuf,
-  time::{Duration, Instant},
-};
+use std::{fs, path::PathBuf, time::Instant};
 
-use super::{INTERVAL, Keeper, aside, fits, path};
+use super::{Keeper, aside, fits, path};
 use crate::engine::Table;
 
 /// A new folder of the test, empty.
@@ -40,19 +36,6 @@ fn a_keeper_says_that_the_life_said_nothing_new_from_the_length_of_its_log_alone
   assert!(!keeper.grew(), "a log of the length that the last snapshot covers holds nothing new");
   fs::write(&log, "one\ntwo\n").unwrap();
   assert!(keeper.grew(), "a log that grew since the last snapshot holds something new");
-}
-
-#[test]
-fn a_keeper_waits_longer_after_a_snapshot_that_took_long() {
-  let mut keeper = Keeper::new(place("paced").join("record.jsonl"), "build".to_owned());
-  assert!(keeper.due(false), "a life with no snapshot yet is due one");
-  assert!(!keeper.due(false), "a snapshot is not due again before the interval");
-  assert!(keeper.due(true), "a snapshot is due now when the life asks now");
-  keeper.last = Some(Instant::now() - INTERVAL);
-  keeper.spent = Duration::from_secs(2);
-  assert!(!keeper.due(false), "a snapshot that took 2 s waits 40 s before the next");
-  keeper.last = Some(Instant::now() - 2 * INTERVAL);
-  assert!(keeper.due(false));
 }
 
 #[test]
@@ -86,7 +69,6 @@ fn a_snapshot_that_fails_to_land_leaves_no_part_of_it_on_the_disk() {
   // A folder in the place of the snapshot refuses the new one.
   fs::create_dir_all(path(&record).join("held")).unwrap();
   let mut keeper = Keeper::new(record.clone(), "build".to_owned());
-  assert!(keeper.due(true));
   let table: Table = serde_json::from_str(
     r#"{"root":"chain1","ears":[],"kept":[],"opened":[],"given":"","working":[]}"#,
   )

@@ -903,41 +903,63 @@ fn a_replay_of_the_corpus_shows_each_file_of_an_extension_as_the_rung_of_its_rea
 #[test]
 #[ignore = "a measure, which a person runs in release"]
 fn measure_how_long_a_life_opens_from_its_snapshot_and_by_a_replay() {
-  let at = place("measure");
-  let open = |snapshot: bool| {
-    let opening =
-      Opening { extensions: Some(false), snapshot: Some(snapshot), ..opening(&at, true) };
+  let open = |at: &Path, snapshot: bool| {
+    let opening = Opening { snapshot: Some(snapshot), ..scripted(at, &[]) };
     opening.boot::<String>([]).unwrap().0
   };
-  let n: usize = std::env::var("RUNGS").ok().and_then(|one| one.parse().ok()).unwrap_or(200);
-  let size: usize = std::env::var("CHARS").ok().and_then(|one| one.parse().ok()).unwrap_or(0);
-  let mut engine = open(true);
-  for i in 0..n {
-    let word = match size {
-      0 => format!("x{i} = [{i}] * 50\nclose(len(x{i}))"),
-      // A rung that closes with a large text weighs on the record, the log and the snapshot, as a command does.
-      _ => format!("x{i} = '{i} ' * {}\nclose(x{i})", size / 2),
-    };
-    closed(&mut engine, &word);
+  let number = |name: &str, or: usize| -> usize {
+    std::env::var(name).ok().and_then(|one| one.parse().ok()).unwrap_or(or)
+  };
+  let (n, size, tail) = (number("RUNGS", 200), number("CHARS", 0), number("TAIL", 20));
+  let word = |name: &str, i: usize| match size {
+    0 => format!("{name}{i} = [{i}] * 50\nclose(len({name}{i}))"),
+    // A rung that closes with a large text weighs on the record, the log and the snapshot, as a
+    // command does.
+    _ => format!("{name}{i} = '{i} ' * {}\nclose({name}{i})", size / 2),
+  };
+  // One record that a life of n rungs made, and one where that life ended with its checkpoint and a
+  // later life added a tail of TAIL rungs: each later life opens from the snapshot that the last
+  // life kept as it ended, from the checkpoint and the tail, or by a replay of the whole record.
+  let (whole, cut) = (place("measure"), place("measure-checkpoint"));
+  for at in [&whole, &cut] {
+    let mut engine = open(at, true);
+    for i in 0..n {
+      closed(&mut engine, &word("x", i));
+    }
+    if *at == cut {
+      engine.checkpoint().unwrap();
+      engine = open(at, true);
+      for i in 0..tail {
+        closed(&mut engine, &word("y", i));
+      }
+    }
+    // A life that works always holds work of the outside that runs, as a wait.
+    let wait = verbs::Wait { seconds: Some(3600.0), on: Some("chain1".to_owned()) };
+    drop(engine.wait(&[], wait).unwrap());
+    drop(engine);
   }
-  // A life that works always holds work of the outside that runs, as a wait.
-  drop(
-    engine.wait(&[], verbs::Wait { seconds: Some(3600.0), on: Some("chain1".to_owned()) }).unwrap(),
-  );
-  drop(engine);
-  let entries = world::kept(at.join("record.jsonl")).unwrap().len();
-  let size = fs::metadata(at.join("record.jsonl.snapshot")).unwrap().len();
-  let t = std::time::Instant::now();
-  let restored = open(true);
-  let from = t.elapsed();
-  assert!(restored.restored());
-  drop(restored);
-  let t = std::time::Instant::now();
-  drop(open(false));
-  eprintln!(
-    "rungs {n}, entries {entries}, snapshot {size} bytes: from the snapshot {from:?}, by a replay {:?}",
-    t.elapsed()
-  );
+  let timed = |at: &Path, snapshot: bool| {
+    let t = std::time::Instant::now();
+    let engine = open(at, snapshot);
+    let spent = t.elapsed();
+    assert_eq!(engine.restored(), snapshot);
+    spent
+  };
+  for at in [&whole, &cut] {
+    let kept = world::kept(at.join("record.jsonl")).unwrap();
+    let after = kept.len() - crate::checkpoint::last(&kept).map_or(0, |one| one + 1);
+    let bytes = fs::metadata(at.join("record.jsonl")).unwrap().len();
+    // A life that a checkpoint cut keeps no snapshot, so that record opens from its checkpoint
+    // alone.
+    let snapshot = fs::metadata(at.join("record.jsonl.snapshot")).map(|one| one.len()).ok();
+    let from = snapshot.map(|_| timed(at, true));
+    eprintln!(
+      "rungs {n}, tail {tail}, entries {}, {after} to replay, record {bytes} bytes, snapshot {snapshot:?} bytes: \
+       from the snapshot {from:?}, with no snapshot {:?}",
+      kept.len(),
+      timed(at, false)
+    );
+  }
 }
 
 #[test]

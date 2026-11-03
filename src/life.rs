@@ -364,7 +364,7 @@ impl Opening {
   ///
   /// A life opens from the snapshot of its record when the snapshot agrees with the record, its log, this build and
   /// these ears, as [`crate::snapshot`] says, and stands again at its tip, as boot does; else it replays the record.
-  /// A life that keeps its record keeps its snapshot: after it opens, as it goes on, and when it ends. A snapshot
+  /// A life that keeps its record keeps its snapshot when it ends. A snapshot
   /// that agrees and that the ears of this host cannot take, as an ear that speaks at its birth, is dropped, and the
   /// life is refused, so the next life on the record replays.
   pub fn boot<N: Into<String>>(
