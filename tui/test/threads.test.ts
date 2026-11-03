@@ -296,7 +296,7 @@ test("a line that awaits a command lights the line that made it, names it, and s
       keep("awaits", rows.join("\n"));
       expect(ready()).toBe(true);
       expect(rows.find((row) => row.includes("b = await build"))).toMatch(
-        /(?:\d|[\u2800-\u28ff✻])  b = await build/,
+        /(?:\d|[\u2800-\u28ff✻]) {2}b = await build/,
       );
       await session.engine.cancel(rung);
     },
@@ -683,7 +683,7 @@ test("the marks of the threads count a question anywhere and the failure or paus
   composing(async ({ app }) => {
     const base = { title: "", messages: [], asked: [], resolved: false } as const;
     const one = (
-      state: "asks" | "failed" | "held" | "running",
+      state: "asks" | "failed" | "paused" | "runs",
       yours: boolean,
       asks: string[] = [],
     ): Parameters<typeof app.threadAttention>[0][number] => ({
@@ -695,12 +695,12 @@ test("the marks of the threads count a question anywhere and the failure or paus
       attention: app.threadAttention(threads),
       tip: app.badgeTip(app.threadAttention(threads))[0]?.[0],
     });
-    expect(marks([one("asks", false, ["prompt2"]), one("failed", false), one("running", true)])).toEqual({
-      attention: { asks: 1, held: 0, failed: 0, unread: 0 },
+    expect(marks([one("asks", false, ["prompt2"]), one("failed", false), one("runs", true)])).toEqual({
+      attention: { asks: 1, paused: 0, failed: 0, unread: 0 },
       tip: "1 question waits for you",
     });
-    expect(marks([one("failed", true), one("held", true), one("running", false)])).toEqual({
-      attention: { asks: 0, held: 1, failed: 1, unread: 0 },
+    expect(marks([one("failed", true), one("paused", true), one("runs", false)])).toEqual({
+      attention: { asks: 0, paused: 1, failed: 1, unread: 0 },
       tip: "1 failed  ·  1 paused",
     });
   }, size));

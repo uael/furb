@@ -1,5 +1,5 @@
 import type { BoxRenderable, RGBA, TextRenderable } from "@opentui/core";
-import { gist } from "furb/life";
+import { busy, gist } from "furb/life";
 import { shortenHome, shortenHomes } from "../files.ts";
 import { clip, count, modelName, retryLine } from "../format.ts";
 import { readOnly } from "../reading.ts";
@@ -321,9 +321,14 @@ export const chrome = part({
     const written =
       !retry &&
       w.acts.some((act) => act.kind === "rung" && !act.done && act.on === w.selected && !w.program[act.id]);
-    const moving = (status === "working" || status === "opening" || Boolean(retry)) && !written;
+    const moving = (busy(status) || status === "opening" || Boolean(retry)) && !written;
     this.statusMoves = moving;
-    const [mark, color] = retry ? [`${markOf("paused")[0]} `, markOf("paused")[1]] : statusMark(status);
+    // While the block of the word holds the loader, the footer shows the still mark of a model that thinks.
+    const [mark, color] = retry
+      ? [`${markOf("paused")[0]} `, markOf("paused")[1]]
+      : written && status === "thinks"
+        ? [`${glyph.thinks} `, markOf("thinks")[1]]
+        : statusMark(status);
     const label = loading
       ? "Loading"
       : retry
@@ -332,7 +337,7 @@ export const chrome = part({
           ? readOnly(w.host.reading)
           : w.host.lost
             ? "The life is not open"
-            : status === "error"
+            : status === "failed"
               ? w.damagedJournal
                 ? "The journal of file changes is damaged"
                 : w.error

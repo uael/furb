@@ -38,7 +38,7 @@ test("a replay that began before an open of its record leaves the row as the ope
     const replay = new Promise((resolve) => second.once("change", resolve));
     land();
     await replay;
-    expect(row.status).toBe("error");
+    expect(row.status).toBe("failed");
     expect(row.error).toContain("Another process owns");
   } finally {
     lease.dispose();

@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, delimiter, join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
-import type { Exit } from "furb/life";
+import { busy, type Exit } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
@@ -543,8 +543,8 @@ try {
     library,
     () =>
       entries.Changelog?.status === "done" &&
-      entries["Offline mode"]?.status === "blocked" &&
-      entries["Pagination bug"]?.status === "working" &&
+      entries["Offline mode"]?.status === "asks" &&
+      busy(entries["Pagination bug"]?.status ?? "") &&
       entries.Research?.status === "paused",
   );
   await capture("28-workspace-tree");

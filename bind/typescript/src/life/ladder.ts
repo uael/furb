@@ -1,8 +1,6 @@
-import { cancelled, type Exit, failed, type LiveAct, WORK } from "./acts.js";
+import { cancelled, type Exit, failed, type LiveAct } from "./acts.js";
+import { actState, type State } from "./states.js";
 
-/** What an act of a thread is: it runs, it ended well, it failed, a cancel ended it, a pause holds it, or it asks the
- * operator. */
-export type ActState = "running" | "stands" | "done" | "failed" | "cancelled" | "held" | "asks";
 /** One line of the thread of a chain.
  *
  * - `prompt`: a prompt on the chain, with its shape, its message and its actor.
@@ -17,10 +15,10 @@ export type ActState = "running" | "stands" | "done" | "failed" | "cancelled" | 
  *   line until it opens, with how many it holds.
  */
 export type Line =
-  | { type: "prompt"; act: LiveAct; depth: number; state: ActState }
-  | { type: "rung"; act: LiveAct; depth: number; state: ActState; word: string; more: number; acts: Chip[] }
-  | { type: "act"; act: LiveAct; depth: number; state: ActState }
-  | { type: "ear"; act: LiveAct; depth: number; state: ActState; rungs: LiveAct[]; acts: Chip[] }
+  | { type: "prompt"; act: LiveAct; depth: number; state: State }
+  | { type: "rung"; act: LiveAct; depth: number; state: State; word: string; more: number; acts: Chip[] }
+  | { type: "act"; act: LiveAct; depth: number; state: State }
+  | { type: "ear"; act: LiveAct; depth: number; state: State; rungs: LiveAct[]; acts: Chip[] }
   | { type: "tail"; act: LiveAct; depth: number; text: string; model: boolean }
   | { type: "value"; act: LiveAct; depth: number; text: string }
   | {
@@ -37,17 +35,7 @@ export type Line =
 export interface Chip {
   ids: string[];
   label: string;
-  state: ActState;
-}
-
-/** The state of an act, with the prompts that the operator owes. */
-export function actState(act: LiveAct, owed: ReadonlySet<string>): ActState {
-  if (owed.has(act.id)) return "asks";
-  if ((act.paused || act.unfinished) && !act.done) return "held";
-  if (cancelled(act)) return "cancelled";
-  if (failed(act)) return "failed";
-  if (!act.done && !WORK.includes(act.kind)) return "stands";
-  return act.done && (act.kind !== "rung" || act.run?.status !== "running") ? "done" : "running";
+  state: State;
 }
 
 /** The acts of a rung as chips: a run of acts of one kind and one state stands as one chip, by its first and its last
@@ -57,7 +45,13 @@ export function chips(acts: readonly LiveAct[], owed: ReadonlySet<string>): Chip
   for (const act of acts) {
     const state = actState(act, owed);
     const last = out.at(-1);
-    if (last && state !== "running" && last.state === state && kindOf(last.ids[0] ?? "") === act.kind)
+    if (
+      last &&
+      state !== "thinks" &&
+      state !== "runs" &&
+      last.state === state &&
+      kindOf(last.ids[0] ?? "") === act.kind
+    )
       last.ids.push(act.id);
     else out.push({ ids: [act.id], label: act.id, state });
   }
@@ -345,7 +339,10 @@ export function thread(
   // it up to the top, through the lines that the thread makes of it, in the level of the step above it.
   const alive = new Map<string, string[]>();
   for (const act of [...index.live, ...[...owed].flatMap((id) => ids.get(id) ?? [])]) {
-    if ((act.kind !== "prompt" && act.kind !== "rung") || !["asks", "running"].includes(actState(act, owed)))
+    if (
+      (act.kind !== "prompt" && act.kind !== "rung") ||
+      !["asks", "thinks", "runs"].includes(actState(act, owed))
+    )
       continue;
     const path: string[] = [];
     for (let at: LiveAct | undefined = act; at && path.length <= ids.size; ) {
@@ -507,7 +504,8 @@ function level(
   const stays = (group: Line[]) =>
     !heads(group[0] as Line) ||
     group.some(
-      (line) => (line.type === "prompt" || line.type === "rung") && ["asks", "running"].includes(line.state),
+      (line) =>
+        (line.type === "prompt" || line.type === "rung") && ["asks", "thinks", "runs"].includes(line.state),
     );
   const rungs = key.startsWith("rungs:");
   const keep = rungs ? shown.rungs : shown.prompts;

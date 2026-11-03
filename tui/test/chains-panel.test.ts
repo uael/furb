@@ -28,7 +28,7 @@ const loom: Loom = {
   rows: [
     row("operator", "you", "asks"),
     row("chain1", "Main", "asks"),
-    row("chain2", "w/search", "working", "├─ "),
+    row("chain2", "w/search", "runs", "├─ "),
     row("chain3", "w/types", "done", "├─ ", "past"),
     row("chain4", "w/release", "done", "╰─ ", "past"),
   ],

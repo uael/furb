@@ -113,8 +113,8 @@ test("workspaces keep sessions alive, report background completion and input, an
       stdin: null,
       on: worker.root,
     });
-    await until(library, () => first.status === "working");
-    expect(library.groupStatus(alpha)).toBe("working");
+    await until(library, () => ["thinks", "runs", "delegates"].includes(first.status));
+    expect(library.groupStatus(alpha)).toBe("runs");
     expect(library.current).toBe(third);
     await worker.write({ path: `${command}/stdin`, content: "\n" }, { on: worker.root });
     await worker.result(command);
@@ -129,8 +129,8 @@ test("workspaces keep sessions alive, report background completion and input, an
       to: "operator",
       on: second.session.engine.root,
     });
-    await until(library, () => second.status === "blocked");
-    expect(library.groupStatus(alpha)).toBe("blocked");
+    await until(library, () => second.status === "asks");
+    expect(library.groupStatus(alpha)).toBe("asks");
     await second.session.host.answer(question, "v1");
     await until(library, () => second.status === "done");
 
@@ -139,7 +139,7 @@ test("workspaces keep sessions alive, report background completion and input, an
     await first.session.submit("/wake");
     await until(library, () => first.status === "idle");
     const waiting = await first.session.engine.wait([], { seconds: 60, on: first.session.engine.root });
-    await until(library, () => first.status === "working");
+    await until(library, () => ["thinks", "runs", "delegates"].includes(first.status));
     library.preferences.sidebar = false;
     library.preferences.save("paper");
     expect(second.session.theme).toBe("paper");
@@ -501,7 +501,7 @@ test("deleting the current session moves to the next session that opens, and to 
       const sibling = group.sessions.find((entry) => entry.path === held.path);
       expect(group.sessions.map((entry) => entry.name)).toEqual(["Delete me", "Held elsewhere"]);
       await library.delete(current);
-      expect(sibling?.status).toBe("error");
+      expect(sibling?.status).toBe("failed");
       expect(sibling?.error).toContain("Another process owns");
       expect(library.current?.session).toBeDefined();
       expect(library.current).not.toBe(current);
@@ -524,7 +524,7 @@ test("a workspace whose newest session cannot open opens on a new session that n
       const group = await library.add(directory);
       const row = group.sessions.find((entry) => entry.path === held.path);
       const made = await library.enter(group, row);
-      expect(row?.status).toBe("error");
+      expect(row?.status).toBe("failed");
       expect(made).not.toBe(row);
       expect(library.current).toBe(made);
       expect(made.session?.notice).toStartWith("“Held elsewhere” did not open, so this is a new session. ");

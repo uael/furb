@@ -1,9 +1,9 @@
 import type { BoxRenderable, CliRenderer, KeyEvent, Renderable, RGBA, TextOptions } from "@opentui/core";
 import type { Keymap } from "@opentui/keymap";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
-import type { ChainThread, Chip } from "furb/life";
+import { busy, type ChainThread, type Chip } from "furb/life";
 import { ago, clip, dollars, kibibytes } from "../format.ts";
-import type { ActRow, SessionStatus, View } from "../session.ts";
+import type { ActRow, Status, View } from "../session.ts";
 import { statusLabels } from "../session.ts";
 import { theme as c, markOf, spacing as space, terminalThemes, themeLabels } from "../theme.ts";
 import { bold, type Part } from "../ui.ts";
@@ -30,10 +30,10 @@ export const title = (text: string) => text.charAt(0).toUpperCase() + text.slice
 export type State = { word: string; mark: string; color: RGBA };
 
 /** The state of an act that failed, that a cancel ended, that is done, or that a pause holds. */
-export const stateOf = (state: "failed" | "cancelled" | "done" | "held"): State => {
-  const [mark, color] = markOf(state === "held" ? "paused" : state);
+export const stateOf = (state: "failed" | "cancelled" | "done" | "paused"): State => {
+  const [mark, color] = markOf(state);
   return {
-    word: { failed: "failed", cancelled: "cancelled", done: "", held: "waits for a wake" }[state],
+    word: { failed: "failed", cancelled: "cancelled", done: "", paused: "waits for a wake" }[state],
     mark,
     color,
   };
@@ -41,19 +41,10 @@ export const stateOf = (state: "failed" | "cancelled" | "done" | "held"): State 
 
 /** The mark of the status of a session in its color, with the space after it: at work, waiting on the operator,
  * paused, failed, finished and not yet seen, and at rest. */
-export const statusMark = (status: SessionStatus): Part => {
+export const statusMark = (status: Status): Part => {
+  // A state of the window shows as the state of work that it stands for: a session that opens runs, and the others rest.
   const [mark, color, attributes] = markOf(
-    status === "working" || status === "opening"
-      ? "runs"
-      : status === "blocked"
-        ? "asks"
-        : status === "error"
-          ? "failed"
-          : status === "done"
-            ? "unread"
-            : status === "paused"
-              ? "paused"
-              : "idle",
+    status === "opening" ? "runs" : status === "reading" || status === "saved" ? "idle" : status,
   );
   return [`${mark} `, color, attributes];
 };
@@ -83,17 +74,13 @@ export type ChainRead = {
  * cancel ended it, it is resolved and seen, or it runs. */
 export const threadMarks = (thread: ChainThread, state: ChainThread["state"] = thread.state): Part =>
   markOf(
-    state === "asks"
-      ? "asks"
-      : state === "held"
-        ? "paused"
-        : state === "failed"
-          ? "failed"
-          : state === "cancelled"
-            ? "cancelled"
-            : thread.resolved
-              ? "seen"
-              : "runs",
+    state === "asks" || state === "paused" || state === "failed" || state === "cancelled"
+      ? state
+      : thread.resolved
+        ? "seen"
+        : busy(state)
+          ? state
+          : "runs",
   );
 
 /** How many of the last steps of a thread its program shows until a click shows the earlier ones. */
@@ -149,13 +136,16 @@ export function wrapped(text: string, width: number, most: number): string[] {
 
 /** The color of the state of an act on a chip. */
 export const chipColors: Record<Chip["state"], () => RGBA> = {
-  running: () => c.accent,
-  stands: () => c.muted,
-  done: () => c.faint,
-  failed: () => c.danger,
-  cancelled: () => c.faint,
-  held: () => c.warning,
   asks: () => c.warning,
+  unread: () => c.accent,
+  failed: () => c.danger,
+  paused: () => c.warning,
+  thinks: () => c.accent,
+  runs: () => c.accent,
+  delegates: () => c.muted,
+  done: () => c.faint,
+  cancelled: () => c.faint,
+  idle: () => c.faint,
 };
 
 export const steps: Record<string, number> = {
@@ -272,7 +262,7 @@ export interface Choice {
   /** The keys that do what the choice does. */
   keys?: string;
   /** The state of a session or a chain that the choice names, which its mark shows. */
-  status?: SessionStatus;
+  status?: Status;
   /** The title of the part of the list that the choice opens, which the list shows above it. */
   heading?: string;
   /** The lines that show under the choice while it is selected, in a list that is not rich. */
