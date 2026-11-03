@@ -63,7 +63,7 @@ Each round sends each new comment of the owner on a PR or on his issue to the wo
 Each round sets one status label on each open PR and on each issue of the owner that it took: s:queued, s:working, s:checks, s:red, s:boxes, s:held, s:conflict, s:stacked, s:ready, or s:owner (green, waits for the owner).
 Before it hires, each round folds into one item each queued item that is like an earlier one, by the ruling of the owner on 10-29: the same thread, kind and model, and the same PR or a brief whose long lines that fewer than 3 briefs of queue and backlog hold are half the same, and never an item of the kind audit. The earlier item keeps its key and its place, takes the lines of the later one that it lacks, and covers its key, and each after[...] that named the later key names the earlier one, so a flake, an order or a step of converge for it goes to its worker. Each round reads the gates: when the median time of a job in its last five green runs on main passes its budget in .github/budgets.json, which script/budgets.py sets from measures, it queues an item budget-<job>, once until five new runs measure the job; and when the gates fail, then pass on the same commit, it puts each test that failed in the ledger of the flakes, flaky, and at once queues an item flake-<test>, or tells the worker that holds that item. An item names in covering[key] the tests, the measures and the keys of the items of flakes or budgets that it covers, as covering["tui-bench-new-act"] = ["flake-bench-a-new-act-growth"]: taken() gives its worker for each of them, so a flake or a budget that it covers goes to that worker and queues no item.
 Every twelfth round audits the work against its measure, the open items, writes its line in the digest, and tells you the open entries of TOOLING, the most repeated first, each with its id: turn the worst into the next item. TOOLING is untracked, so a worker in a worktree cannot read it: put ledger_text(id, ...), the text of the entries that the item names, in its brief. Each entry has a stable id and one state of STATES, and a state of another form moves to its note. The audit prunes what the work left behind, and loses no work: a worktree of the round whose item is not in working, queue or backlog and whose branch merged, closed, or holds nothing that main lacks, or whose work is all committed and pushed, with its local branch, once its changes that are not committed are a patch and its commits that only this machine holds are a bundle, in the folder of the day in ARCHIVE; a remote branch whose PR closed at its head and that no item names, written first to TRASHED; a scratch directory of a life that no process and no item uses, older than 2 days; and a folder /tmp/furb-* older than 2 days. It tells you what went and the room that df saw freed.
-The round counts the PRs that merged since the last alignment audit, and ALIGN_EVERY = 8 of them start one: align() queues the audit alignN, of kind audit, with the window of the commits since the audit before it, and each row of its register is queued as the item alignN-<key>.
+The round counts the PRs that merged since the last alignment audit, and ALIGN_EVERY = 8 of them start one: align() queues the audit alignN, of kind audit, with the window of the commits since the audit before it, and each row of its register is queued as the item alignN-<key>. The coordinator no longer starts alignment audits by hand: the round is the one home of the cadence, and it counts from the highest alignN that kinds, ends, queue, backlog or working already hold, so the keys never collide.
 threads() gives the tree of the threads: the brief prompt of each worker and the prompts under it, with their state, their PRs, their queued items and each question that waits.
 debrief(name) asks the chain of a worker that ended for the frictions that it met in furb.
 Each act of the round is made through quietly(verb, ...), so its end wakes nobody: you hear only a notice, and each merge rides on the next one. Make each act that you do not await the same way.
@@ -113,6 +113,8 @@ RUNNING = ("", "PENDING", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED", "EXPE
 UPSTREAM = "uael/monty"
 TOOLING = ".furb/tooling.json"
 ASKS = "scratch://owner/asks.json"
+OWNER_WORDS = "scratch://owner/words.md"
+OWNER_PICKS = "scratch://owner/picks.md"
 STATES = ("open", "queued", "closed", "dropped")
 ARCHIVE = ".furb/archive"
 TRASHED = ".furb/trashed-branches.tsv"
@@ -751,7 +753,8 @@ def hire(key: str, what: str, thread: str = "", brief: str = "", model: str = ""
     text += "\n\n{workspace}"
   text, slot = placed(key, text, where)
   if kind_of(key) == "audit" and key.startswith("align"):
-    text += "\n\n" + ALIGNED.replace("{asks}", ASKS)
+    if align_text() not in text:
+      text += "\n\n" + align_text()
   text = ruled(key) + text + ("" if "carries the asks" in text else carried(key))
   name = str(quietly(prompt, tuple[int, str], text, to=model, on=where))
   working[name] = key
@@ -1510,7 +1513,7 @@ async def restack_forced() -> set[int]:
 SERIAL = re.compile(r"^(src/furb/engine\.py|DOCTRINE\.md|\.github/budgets\.json)$")
 
 
-ALIGNED = """This audit checks the work against the words of the owner. Check each ask of the ledger of his asks, {asks} ($TMPDIR/owner/asks.json), against origin/main, as a claim: set its state to done, open, partly or missing, with its evidence, the file and the line or the command and the lines that it printed, and its gap, and write the ledger back in the same shape. List in your register each ask that is partly or missing and that no item carries."""
+ALIGNED = """This audit checks the work against the words of the owner, and his words are the one source of truth: {words} (his messages), {picks} (the options that he picked) and the ledger of his asks, {asks}. Read all three first: each one lives in $TMPDIR/owner/. Check each ask of the ledger, {asks} ($TMPDIR/owner/asks.json), against origin/main, as a claim: set its state to done, open, partly or missing, with its evidence, the file and the line or the command and the lines that it printed, and its gap, and write the ledger back in the same shape. List in your register each ask that is partly or missing and that no item carries."""
 RULED = """The words of the owner, which rule this item, quoted as he wrote them. Each other line of this brief is the reading of the coordinator, and it serves his words: where a line bends them, his words rule."""
 RULER = limits["models"]["ruler"]
 RULER_USD = 5.0
@@ -2139,6 +2142,25 @@ async def audit(red: bool) -> None:
   )
 
 
+def align_text() -> str:
+  return ALIGNED.replace("{asks}", ASKS).replace("{words}", OWNER_WORDS).replace("{picks}", OWNER_PICKS)
+
+
+def align_floor() -> int:
+  keys = [*kinds, *ends, *homes, *working.values(), *(q[0] for q in queue), *(q[0] for q in backlog)]
+  return max([int(m[1]) for k in keys if (m := re.match(r"align(\d+)(?:-|$)", k))] or [0])
+
+
+def align_keys() -> str:
+  rows = [
+    ("queue", [q[0] for q in queue]),
+    ("backlog", [q[0] for q in backlog]),
+    ("working", sorted(set(working.values()))),
+    ("ended", [*ends][-80:]),
+  ]
+  return "\n".join(f"{kind}: {', '.join(found) or 'none'}" for kind, found in rows)
+
+
 async def align() -> None:
   async def origin_sha() -> str:
     got = await shell("git fetch -q origin main; git rev-parse origin/main", timeout=120, ok=True)
@@ -2149,12 +2171,13 @@ async def align() -> None:
     return
   if "n" not in align_state:
     audited.update(merged)
-    align_state.update(n="0", sha=await origin_sha())
+    align_state.update(n=str(align_floor()), sha=await origin_sha())
     return
   fresh = sorted(merged - audited)
   if len(fresh) < ALIGN_EVERY:
     return
-  key, sha, since = f"align{int(align_state['n']) + 1}", await origin_sha(), align_state.get("sha", "")
+  last = max(int(align_state["n"]), align_floor())
+  key, sha, since = f"align{last + 1}", await origin_sha(), align_state.get("sha", "")
   window = f"git log --oneline {since}..{sha}" if since and sha else "git log --oneline -40 origin/main"
   merges = " ".join(f"#{x}" for x in fresh)
   kinds[key] = "audit"
@@ -2163,12 +2186,15 @@ async def align() -> None:
       key,
       f"The alignment audit {key}: {len(fresh)} PRs merged since the last one, {merges}. Its window of commits is"
       f" `{window}`. Read that window and the diff of each of those PRs, and check the work against the words of the"
-      " owner.",
+      " owner.\n\n"
+      + align_text()
+      + f"\n\nThe decisions of the owner are in {DECISIONS} at the root of the repository: read it. The round holds"
+      f" these keys, so name no item of your register after one of them:\n{align_keys()}",
       "align",
     )
   )
   audited.update(fresh)
-  align_state.update(n=key.removeprefix("align"), sha=sha or since)
+  align_state.update(n=str(last + 1), sha=sha or since)
   heard.append(f"{len(fresh)} PRs merged since the last alignment audit, so the round queued {key}: {merges}.")
 
 

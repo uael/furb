@@ -4345,7 +4345,7 @@ def test_hire_names_the_asks_that_an_item_carries_and_an_align_audit_checks_the_
   )
   conductor.kinds["align2"] = "audit"
   conductor.real_hire("align2", "check main", "defects")
-  assert conductor.ALIGNED.replace("{asks}", conductor.ASKS) in conductor.prompts[-1][0]
+  assert conductor.align_text() in conductor.prompts[-1][0]
   assert "carries the asks" not in conductor.prompts[-1][0]
 
 
@@ -4393,3 +4393,60 @@ def test_the_eighth_merged_pr_since_the_last_alignment_audit_starts_one_audit(co
   conductor.files["scratch://audit/align1.md"] = "| D1 | Gap one | sonnet/high | tui | Close the gap. |"
   conductor.register("align1", "prompt1")
   assert [item[0] for item in conductor.queue] == ["align1", "align1-gap-one"]
+
+
+def audit_repo(conductor: Round) -> str:
+  def git(*words: str) -> str:
+    got = subprocess.run(["git", *words], cwd=conductor.tmp, env=conductor.env, check=True, capture_output=True, text=True)
+    return got.stdout.strip()
+
+  git("init", "-q")
+  git("commit", "-q", "--allow-empty", "-m", "one")
+  git("update-ref", "refs/remotes/origin/main", "HEAD")
+  conductor.timers["sweep"] = 1.0
+  return git("rev-parse", "HEAD")
+
+
+@POSIX
+def test_eight_merges_queue_align8_when_align1_to_align7_ended_and_its_register_rows_are_queued(conductor: Round) -> None:
+  audit_repo(conductor)
+  for n in range(1, 8):
+    conductor.ends[f"align{n}"] = [("prompt1", 0)]
+  conductor.merged.update(range(1, 11))
+  asyncio.run(conductor.align())
+  assert conductor.align_state["n"] == "7"
+  conductor.merged.update(range(11, 19))
+  asyncio.run(conductor.align())
+  assert [item[0] for item in conductor.queue] == ["align8"]
+  assert conductor.kinds["align8"] == "audit" and "align1" not in conductor.kinds
+  conductor.files["scratch://audit/align8.md"] = "| D1 | Gap one | sonnet/high | tui | Close the gap. |"
+  conductor.register("align8", "prompt1")
+  assert [item[0] for item in conductor.queue] == ["align8", "align8-gap-one"]
+
+
+@POSIX
+def test_a_counter_that_lags_behind_the_audits_that_ran_gives_the_next_free_key(conductor: Round) -> None:
+  first = audit_repo(conductor)
+  conductor.align_state.update(n="0", sha=first)
+  conductor.ends["align7"] = [("prompt1", 0)]
+  conductor.queue.append(("align9-gap", "x", "y"))
+  conductor.merged.update(range(1, 9))
+  asyncio.run(conductor.align())
+  assert [item[0] for item in conductor.queue] == ["align9-gap", "align10"]
+  assert conductor.align_state["n"] == "10"
+
+
+@POSIX
+def test_the_queued_brief_of_an_alignment_audit_names_his_words_his_picks_his_asks_and_the_keys_that_the_round_holds(
+  conductor: Round,
+) -> None:
+  audit_repo(conductor)
+  conductor.align_state.update(n="0", sha="")
+  conductor.queue.append(("guard", "x", "y"))
+  conductor.backlog.append(("later", "x", "y"))
+  conductor.merged.update(range(1, 9))
+  asyncio.run(conductor.align())
+  brief = conductor.queue[-1][1]
+  assert "scratch://owner/words.md" in brief and "scratch://owner/picks.md" in brief
+  assert "scratch://owner/asks.json" in brief and "DECISIONS.md" in brief
+  assert "queue: guard\nbacklog: later\nworking: none\nended: none" in brief
