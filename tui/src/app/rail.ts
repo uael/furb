@@ -3,6 +3,7 @@ import { type BoxOptions, type BoxRenderable, InputRenderable, InputRenderableEv
 import {
   type Ask,
   attentionOf,
+  busy,
   type ChainThread,
   chainThreads,
   gist,
@@ -24,7 +25,7 @@ import { type ChainRead, inputColors, statusMark, threadMarks, wrapped } from ".
 /** What waits in a part of the library, counted where the operator should look. */
 export interface Attention {
   asks: number;
-  held: number;
+  paused: number;
   failed: number;
   unread: number;
 }
@@ -90,15 +91,15 @@ export const rail = part({
 
   /** What waits in some sessions: each question, each session held, failed, or finished and not seen. */
   attentionOf(entries: readonly SessionEntry[]): Attention {
-    const out: Attention = { asks: 0, held: 0, failed: 0, unread: 0 };
+    const out: Attention = { asks: 0, paused: 0, failed: 0, unread: 0 };
     for (const entry of entries) {
       if (entry.archived) continue;
       const asks = entry.session ? entry.session.desk.asks.filter((ask) => !ask.notice).length : 0;
       if (asks) out.asks += asks;
-      else if (entry.status === "blocked") out.asks += 1;
-      if (entry.status === "paused") out.held += 1;
-      else if (entry.status === "error") out.failed += 1;
-      else if (entry.status === "done") out.unread += 1;
+      else if (entry.status === "asks") out.asks += 1;
+      if (entry.status === "paused") out.paused += 1;
+      else if (entry.status === "failed") out.failed += 1;
+      else if (entry.status === "unread") out.unread += 1;
     }
     return out;
   },
@@ -114,7 +115,7 @@ export const rail = part({
     };
     add(a.asks, "asks");
     add(a.failed, "failed");
-    add(a.held, "paused");
+    add(a.paused, "paused");
     add(a.unread, "unread");
     return parts;
   },
@@ -124,7 +125,7 @@ export const rail = part({
     const said = [
       a.asks ? `${a.asks} ${a.asks === 1 ? "question waits" : "questions wait"} for you` : "",
       a.failed ? `${a.failed} failed` : "",
-      a.held ? `${a.held} paused` : "",
+      a.paused ? `${a.paused} paused` : "",
       a.unread ? `${a.unread} finished and not seen` : "",
     ].filter(Boolean);
     return [[said.join("  ·  "), c.text]];
@@ -233,11 +234,11 @@ export const rail = part({
   /** The state of a thread in a word and its color. */
   stateWord(thread: ChainThread, state: ChainThread["state"] = thread.state): Part {
     if (state === "asks") return ["asks you", c.warning, bold];
-    if (state === "held") return ["paused", c.warning];
+    if (state === "paused") return ["paused", c.warning];
     if (state === "failed") return ["failed", c.danger];
     if (state === "cancelled") return ["cancelled", c.faint];
     if (thread.resolved) return ["resolved", c.faint];
-    return ["working", c.accent];
+    return [statusLabels[busy(state) ? state : "runs"].toLowerCase(), c.accent];
   },
 
   /** When a thread last changed, as this session saw it: the latest change of its prompt and of its messages, which
@@ -251,7 +252,7 @@ export const rail = part({
 
   /** What a row of a thread says at its right: why it needs a look, and how long ago it last changed. */
   threadMeta(thread: ChainThread, state: ChainThread["state"] = thread.state): Part[] {
-    const live = state === "running" || state === "done";
+    const live = busy(state) || state === "done";
     const at = this.threadChanged(thread);
     const minutes = at === undefined ? 0 : Math.floor((clock() - at) / 60000);
     const age =
@@ -767,7 +768,9 @@ export const rail = part({
       const kept = group.sessions.filter((entry) => !entry.archived);
       const live = (entry: SessionEntry) =>
         lib.current === entry ||
-        ["working", "opening", "blocked", "paused", "error", "done"].includes(entry.status);
+        ["thinks", "runs", "delegates", "opening", "asks", "paused", "failed", "unread"].includes(
+          entry.status,
+        );
       const resting = kept.filter((entry) => !live(entry));
       const room = Math.max(0, 3 - (kept.length - resting.length));
       const shown = new Set([...kept.filter(live), ...resting.slice(0, room)]);

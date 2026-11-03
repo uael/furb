@@ -1,7 +1,7 @@
 import {
-  type ActState,
   actState,
   type Compaction,
+  type State as LifeState,
   type LiveAct,
   outline,
   owedAt,
@@ -106,16 +106,19 @@ export function useMoment(held: Held): Moment {
 }
 
 /** The state of an act, as a glyph shows it. */
-export function glyphOf(state: ActState): State {
+export function glyphOf(state: LifeState): State {
   return (
     {
-      running: "runs",
-      stands: "rest",
-      done: "done",
-      failed: "failed",
-      cancelled: "rest",
-      held: "paused",
       asks: "asks",
+      unread: "done",
+      failed: "failed",
+      paused: "paused",
+      thinks: "runs",
+      runs: "runs",
+      delegates: "waits",
+      done: "done",
+      cancelled: "rest",
+      idle: "rest",
     } as const
   )[state];
 }
@@ -134,10 +137,7 @@ export function threadState(moment: Moment, thread: Thread): State {
 export function chainState(moment: Moment, chain: string): State {
   const work = moment.acts.filter((act) => act.on === chain && act.kind !== "chain");
   const owes = work.some((act) => moment.owed.has(act.id));
-  const state = rowState(work, owes, new Map());
-  return (
-    { asks: "asks", failed: "failed", working: "runs", paused: "paused", done: "done", idle: "rest" } as const
-  )[state];
+  return glyphOf(rowState(work, owes, new Map()));
 }
 
 /** The name of a chain as a person reads it: its label, or its id, and You for the operator. */

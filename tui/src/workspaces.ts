@@ -11,13 +11,13 @@ import { type EngineOptions, roster } from "./models.ts";
 import { Preferences } from "./preferences.ts";
 import type { Carry } from "./reading.ts";
 import { inspectRecords } from "./records.ts";
-import { Session, type SessionStatus, savedView } from "./session.ts";
+import { Session, type Status, savedView } from "./session.ts";
 
 export interface SessionEntry {
   path: string;
   name: string;
   session?: Session;
-  status: SessionStatus;
+  status: Status;
   unread: boolean;
   error?: string;
   modified?: number;
@@ -223,15 +223,20 @@ export class Workspaces extends EventEmitter {
   groupOf(entry = this.current): Workspace | undefined {
     return this.groups.find((group) => group.sessions.includes(entry as SessionEntry));
   }
-  groupStatus(group: Workspace): SessionStatus {
-    const order: SessionStatus[] = [
-      "blocked",
-      "error",
+  groupStatus(group: Workspace): Status {
+    // The roll-up of the one set of states, with the states of the window among them.
+    const order: Status[] = [
+      "asks",
+      "unread",
+      "failed",
       "reading",
       "paused",
-      "working",
-      "done",
+      "thinks",
+      "runs",
+      "delegates",
       "opening",
+      "done",
+      "cancelled",
       "idle",
       "saved",
     ];
@@ -311,7 +316,7 @@ export class Workspaces extends EventEmitter {
     if (entry.session) return;
     // A record that a build of another version made drifts, and opens to read: that is no error.
     entry.error = state.reading ? undefined : state.error;
-    entry.status = state.reading ? "reading" : state.error ? "error" : state.pending ? "paused" : "saved";
+    entry.status = state.reading ? "reading" : state.error ? "failed" : state.pending ? "paused" : "saved";
   }
   /** Keep what the replays told in a file beside the list, so that the next run replays only the records that changed
    * since. */
@@ -428,7 +433,7 @@ export class Workspaces extends EventEmitter {
         this.subscriptions.delete(session);
         if (entry.session === session) entry.session = undefined;
         if (this.closed) return false;
-        entry.status = "error";
+        entry.status = "failed";
         entry.error = error instanceof Error ? error.message : String(error);
         session.fail(error);
         this.save({ directory: group.directory, remove: entry.path });
@@ -469,7 +474,7 @@ export class Workspaces extends EventEmitter {
       } catch (error) {
         if (session) await session.dispose();
         else await opened?.host.dispose();
-        entry.status = "error";
+        entry.status = "failed";
         entry.error = error instanceof Error ? error.message : String(error);
         this.emit("change");
         throw error;

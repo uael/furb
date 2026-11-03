@@ -19,7 +19,21 @@ import {
   WORK,
 } from "furb";
 import type { PauseCause } from "furb/life";
-import { type ActIndex, type Ask, aimed, beside, cancelled, type Desk, desk, failed } from "furb/life";
+import {
+  type ActIndex,
+  type Ask,
+  actState,
+  aimed,
+  beside,
+  busy,
+  cancelled,
+  type Desk,
+  desk,
+  failed,
+  rollUp,
+  type State,
+  working as workOf,
+} from "furb/life";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { clock } from "./clock.ts";
 import { expandHome, fileReferences, fromDirectory, projectFiles, shortenHome } from "./files.ts";
@@ -69,26 +83,26 @@ const skillsIn = (got: unknown): Skill[] => {
 /** A path as a word of the shell, between single quotes. */
 const quoted = (path: string) => `'${path.replaceAll("'", "'\\''")}'`;
 
-export type SessionStatus =
-  | "saved"
-  | "idle"
-  | "working"
-  | "blocked"
-  | "paused"
-  | "done"
-  | "error"
-  | "reading"
-  | "opening";
-export const statusLabels: Record<SessionStatus, string> = {
-  saved: "Saved",
-  idle: "Ready",
-  working: "Working",
-  blocked: "Input needed",
+/** What a window shows of a session that is no state of its work: a record open to read, a session that opens, and a
+ * session that no window holds open. */
+export type Window = "reading" | "opening" | "saved";
+/** The state of a session in a window: the state of its work, as every act, thread and chain takes it, or a state of
+ * the window. */
+export type Status = State | Window;
+export const statusLabels: Record<Status, string> = {
+  asks: "Input needed",
+  unread: "Finished, unread",
+  failed: "Error",
   paused: "Paused",
-  done: "Finished, unread",
-  error: "Error",
+  thinks: "Thinking",
+  runs: "Working",
+  delegates: "Waiting on another chain",
+  done: "Done",
+  cancelled: "Cancelled",
+  idle: "Ready",
   reading: "Read only",
   opening: "Opening",
+  saved: "Saved",
 };
 /** Whether an act is at work: it lives, no pause holds it, and its kind is one whose work takes time. */
 export const working = (act: ActRow): boolean =>
@@ -812,20 +826,20 @@ export class Session extends EventEmitter {
   /** What the session is doing, over the acts of the selected chain or of every chain: the view failed, the queue or
    * a question waits for the operator, a reopened record holds work, or what the acts do. A pause of the chain holds
    * it while none of its acts runs or asks. */
-  status(chain?: string): SessionStatus {
+  status(chain?: string): Status {
     if (this.host.reading) return "reading";
     // A damaged journal of file changes fails the view that shows it, and not the session that the list marks.
     if (chain ? this.error : Object.entries(this.errors).some(([key, error]) => error && !this.damaged[key]))
-      return "error";
-    if (this.queueHeld && this.queued.length) return "blocked";
+      return "failed";
+    if (this.queueHeld && this.queued.length) return "asks";
     if (this.host.pending.size) return "paused";
-    if (!chain && this.host.prompts.size) return "blocked";
+    if (!chain && this.host.prompts.size) return "asks";
     const state = this.actStatus(chain);
-    return this.paused && (state === "idle" || state === "error") ? "paused" : state;
+    return this.paused && (state === "idle" || state === "failed") ? "paused" : state;
   }
   /** What the acts of a chain do, or the acts of every chain: one asks the operator, one waits for the resume of a
    * reopened record, one runs, a pause holds one, or the last act failed. */
-  private actStatus(chain?: string): SessionStatus {
+  private actStatus(chain?: string): Status {
     // The state holds while no act starts, ends, pauses or wakes, and the prompts and the held work stay as they are.
     if (this.states.version !== this.version) this.states = { version: this.version, of: new Map() };
     const key = `${chain ?? ""}\n${[...this.host.prompts.keys()].join(" ")}\n${[...this.host.pending.keys()].join(" ")}`;
@@ -849,40 +863,73 @@ export class Session extends EventEmitter {
     return on;
   }
   /** The state of the acts of each chain, or of every chain, as actStatus read it at a version of the acts. */
-  private states = { version: -1, of: new Map<string, SessionStatus>() };
-  private statusOf(chain?: string): SessionStatus {
+  private states = { version: -1, of: new Map<string, Status>() };
+  private statusOf(chain?: string): Status {
     const index = this.indexed();
     const mine = (act?: ActRow): act is ActRow =>
       act !== undefined && act.kind !== "chain" && act.kind !== "grant" && (!chain || act.on === chain);
     const asked = (ids: Iterable<string>) => [...ids].some((id) => mine(index.ids.get(id)));
-    if (asked(this.host.prompts.keys())) return "blocked";
+    if (asked(this.host.prompts.keys())) return "asks";
     if (asked(this.host.pending.keys())) return "paused";
     // Only an act that is not done works or waits under a pause, and the index holds each such act.
     const live = (chain ? (this.liveOn().get(chain) ?? []) : [...index.live.values()]).filter(
       (act) => mine(act) && !act.unfinished,
     );
-    if (live.some(working)) return "working";
+    // A model that writes a word thinks, a command or a wait runs, and a word that awaits only another chain delegates.
+    if (live.some(working)) {
+      const remote = chain
+        ? [...index.live.values()].filter(
+            (act) => act.kind === "prompt" && act.on !== chain && index.ids.get(act.by)?.on === chain,
+          )
+        : [];
+      return workOf(live.filter(working), remote);
+    }
     if (live.some((act) => act.paused && !act.done)) return "paused";
     const latest = chain ? index.latest.get(chain) : this.acts.findLast(mine);
-    return latest && failed(latest) ? "error" : "idle";
+    return latest && failed(latest) ? "failed" : "idle";
+  }
+  /** The state of an act, a thread, a chain or the session, by its id, from the one set of states, and the session for
+   * no id. A thread rolls up the state of its prompt with the work of its ladder that is not done: a model that writes
+   * its word thinks, a command or a wait of it runs, and a word that awaits only a prompt on another chain delegates. */
+  stateOf(id = ""): Status {
+    if (!id) return this.status();
+    const index = this.indexed();
+    const act = index.ids.get(id);
+    if (!act) return "idle";
+    if (act.kind === "chain") return this.chainStatus(id);
+    const owed = new Set(this.host.prompts.keys());
+    const own = actState(act, owed);
+    if (act.kind !== "prompt" || !busy(own)) return own;
+    const open = [...index.live.values()];
+    const rungs = open.filter((one) => one.kind === "rung" && one.by === id);
+    const made = new Set(rungs.map((one) => one.id));
+    const local = [
+      ...rungs,
+      ...open.filter((one) => made.has(one.by) && one.on === act.on && one.kind !== "prompt"),
+    ];
+    const remote = open.filter((one) => made.has(one.by) && one.kind === "prompt");
+    return rollUp([
+      own === "runs" ? "idle" : own,
+      ...(rungs.length ? [workOf(local, remote)] : ["runs" as const]),
+    ]);
   }
   /** The state of a chain. A chain that the operator started, directly or by a word of their own, and that finished
    * its work while another chain was shown, is finished and not yet seen until the operator opens it. */
-  chainStatus(id: string): SessionStatus {
+  chainStatus(id: string): Status {
     const status = this.actStatus(id);
     const before = this.phases.get(id);
     this.phases.set(id, status);
     const chain = this.indexed().ids.get(id);
     const mine = chain?.by === "operator" || this.actOf(chain?.by ?? "")?.by === "operator";
     if (id === this.selected || status !== "idle") this.unread.delete(id);
-    else if (before === "working" && mine) this.unread.add(id);
-    return status === "idle" && this.unread.has(id) ? "done" : status;
+    else if (before && busy(before as State) && mine) this.unread.add(id);
+    return status === "idle" && this.unread.has(id) ? "unread" : status;
   }
   /** The chains that a view of the chains shows apart, each with its state: the root, the chain shown, and each chain
    * whose state is not idle, in the order of the chains, and how many other chains rest. It reads the state of each
    * chain that can be other than idle: one with work that is not done or held, a question of the operator, a last act
    * that failed, or a state that was not idle when it was read last, and no other chain. */
-  activeChains(): { active: [ActRow, SessionStatus][]; resting: number } {
+  activeChains(): { active: [ActRow, Status][]; resting: number } {
     const index = this.indexed();
     const restless = new Set([
       this.engine.root,
@@ -898,7 +945,7 @@ export class Session extends EventEmitter {
     const active = [...restless]
       .flatMap((id) => {
         const chain = index.ids.get(id);
-        return chain?.kind === "chain" ? [[chain, this.chainStatus(id)] as [ActRow, SessionStatus]] : [];
+        return chain?.kind === "chain" ? [[chain, this.chainStatus(id)] as [ActRow, Status]] : [];
       })
       .filter(
         ([chain, status]) => chain.id === this.engine.root || chain.id === this.selected || status !== "idle",
@@ -932,7 +979,7 @@ export class Session extends EventEmitter {
   /** The chains that the operator started and that finished their work while another chain was shown, which wait for
    * the operator to look at them, and the state that each chain had when the view last read it. */
   private readonly unread = new Set<string>();
-  private readonly phases = new Map<string, SessionStatus>();
+  private readonly phases = new Map<string, Status>();
   get chains(): ActRow[] {
     return this.indexed().chains;
   }

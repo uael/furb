@@ -83,7 +83,7 @@ test("a life that fails to open after its window drew it leaves its row with the
     expect(entry.session).toBeDefined();
     expect(String(await failed)).toContain("Invalid config at");
     expect(await entry.ready).toBe(false);
-    expect(entry.status).toBe("error");
+    expect(entry.status).toBe("failed");
     expect(entry.error).toContain("Invalid config at");
     expect(entry.session).toBeUndefined();
     app().dispose();

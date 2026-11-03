@@ -37,7 +37,7 @@ test("a word of the operator stands as his messages stand, as its program in a p
       await session.refresh();
       const done = line(await frame());
       expect(done).not.toContain("◉");
-      expect(done).toMatch(/ 1  await wait\(60\) +woke/);
+      expect(done).toMatch(/ 1 {2}await wait\(60\) +woke/);
       session.show("transcript");
       await session.refresh();
       await frame();
@@ -66,7 +66,7 @@ test("a word of the operator stands as his messages stand, as its program in a p
     async ({ frame }) => {
       const shown = line(await frame());
       expect(shown).not.toContain("◉");
-      expect(shown).toMatch(/ 1  await wait\(60\) +woke/);
+      expect(shown).toMatch(/ 1 {2}await wait\(60\) +woke/);
     },
     { width: 140, height: 42, useMouse: true },
     session,

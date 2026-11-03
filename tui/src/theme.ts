@@ -1,5 +1,5 @@
 import { RGBA, SyntaxStyle, type ThemeMode } from "@opentui/core";
-import type { RowState } from "furb/life";
+import type { State } from "furb/life";
 import { clock } from "./clock.ts";
 
 /** The roles of a palette. Surfaces go from the background up: the panel of the sidebars and the composer, then the
@@ -375,18 +375,7 @@ export const glyph = {
   thinks: "✻",
 } as const;
 /** The states that a mark shows. Each has one mark, one color and one weight in every view, dialog and sidebar. */
-export type MarkState =
-  | "asks"
-  | "unread"
-  | "failed"
-  | "paused"
-  | "thinks"
-  | "runs"
-  | "delegates"
-  | "done"
-  | "seen"
-  | "cancelled"
-  | "idle";
+export type MarkState = State | "seen";
 /** The attributes of the text of a mark: bold, or dim. */
 const heavy = 1,
   dim = 2;
@@ -476,7 +465,7 @@ export const marks: Record<
   },
 };
 /** The mark of the state of a chain, as every view marks it. */
-export const rowMark = (state: RowState) => markOf(state === "working" ? "runs" : state);
+export const rowMark = (state: State) => markOf(state);
 /** The mark of a state: its glyph, the spinner for a model that thinks, its color in the theme shown, and its weight. */
 export function markOf(
   state: MarkState,

@@ -1,6 +1,5 @@
 import type { RGBA } from "@opentui/core";
 import {
-  type ActState,
   actState,
   type Loom,
   messages,
@@ -8,9 +7,9 @@ import {
   outline,
   type Place,
   places,
-  type RowState,
   route,
   type SourceLine,
+  type State,
   source,
   type Thread,
   threads,
@@ -57,12 +56,8 @@ const columnWidth = 30,
   sidebarWidth = 38;
 /** The glyph of the lines that meet in a cell, by the sides they reach: up 1, right 2, down 4, left 8. */
 const joins = ["", "│", "─", "└", "│", "│", "┌", "├", "─", "┘", "─", "┴", "┐", "┤", "┬", "┼"];
-/** The mark of the state of an act, from the one table of marks: an act that stands lives until something ends it,
- * as a chain does, and work waits on it. */
-const actMark = (state: ActState): Part =>
-  markOf(
-    state === "running" ? "runs" : state === "stands" ? "delegates" : state === "held" ? "paused" : state,
-  );
+/** The mark of the state of an act, from the one table of marks. */
+const actMark = (state: State): Part => markOf(state);
 
 /** A grid of cells that the map draws on, and gives as rows of parts. */
 class Canvas {
@@ -486,7 +481,7 @@ export class Graph {
       const row = byId.get(id);
       const lit = id === you || held.has(id);
       const tone = (one: RGBA) => (lit ? one : mix(c.background, one, 0.4));
-      const state: RowState = id === you ? (loom.owed.length ? "asks" : "idle") : (row?.state ?? "idle");
+      const state: State = id === you ? (loom.owed.length ? "asks" : "idle") : (row?.state ?? "idle");
       const [mark, color] = rowMark(state);
       const selected = id === this.node;
       const label = labelOf(id);
@@ -670,7 +665,7 @@ export class Graph {
     const marginWidth = Math.min(46, Bun.stringWidth(plain(margin)) + extra.length);
     const runs = line.runs && !this.stage.frozen;
     const number = String(line.number).padStart(4);
-    const text = line.text || (line.state === "running" ? "the model writes its word" : "");
+    const text = line.text || (line.state === "thinks" ? "the model writes its word" : "");
     const code = highlight(clip(text, width - marginWidth - 8), !line.text);
     return [
       pad(
