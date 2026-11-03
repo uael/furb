@@ -2793,7 +2793,7 @@ def owner_asks() -> list[dict]:
 
 
 def owner_messages() -> list[str]:
-  return [str(x[1]) for x in transcript(lead.get("home") or ROOT) if x[0] == "prompt" and x[2] == OPERATOR]
+  return [str(x[1]) for x in transcript(lead.get("home") or ROOT) if x[0] == "prompt" and str(x[2]).split("/")[0] == OPERATOR]
 
 
 def unasked() -> list[str]:
