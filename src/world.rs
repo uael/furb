@@ -3,7 +3,8 @@
 //! The contract makes the World the ears of the outside that serve the machine, one or many. These
 //! are the ones every host shares, written once in rust: [`files`] reads and writes a path, the
 //! files of the [`Scratch`] directory of the life among them, [`bash`] runs a command, [`fetch`]
-//! gets a page of the web, [`time`] reads the clock, draws a chance and ends a wait, [`store`]
+//! gets a page of the web, [`mcp`] speaks to the MCP servers that a user adds,
+//! [`time`] reads the clock, draws a chance and ends a wait, [`store`]
 //! keeps the record on the disk under a lease, as a file of lines or a database of SQLite, the
 //! store of builds holds the program of each version that ran on this machine, which [`stored`]
 //! finds, [`log`] writes the log of the life beside the record, which [`logged`] reads, [`retold`]
@@ -20,6 +21,7 @@ mod builds;
 mod fetch;
 pub(crate) mod files;
 mod log;
+pub mod mcp;
 mod operator;
 mod provider;
 mod reader;

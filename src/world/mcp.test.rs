@@ -47,7 +47,8 @@ use crate::{
 };
 
 /// The name of the test that runs the server of the tests over stdio, which the test program runs as a process.
-const SERVING: &str = "extension::mcp::test::the_test_program_is_the_server_of_the_tests_over_stdio_when_it_is_asked_to_be";
+const SERVING: &str =
+  "world::mcp::test::the_test_program_is_the_server_of_the_tests_over_stdio_when_it_is_asked_to_be";
 
 #[test]
 fn the_test_program_is_the_server_of_the_tests_over_stdio_when_it_is_asked_to_be() {

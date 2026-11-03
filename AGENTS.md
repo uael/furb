@@ -14,7 +14,7 @@ API of its own:
 - `src/lib.rs` says what the crate gives: `Engine`, whose methods are the verbs of the contract, which `build.rs`
   makes from the contract, and `Ear`, the one trait of an ear, which a host writes as a generator of rust with `ear`.
 - `src/world/` holds the ears of the World that the crate writes, one file for each concern: the files, the commands,
-  the pages of the web, the time, the store of the record and the store of builds, the log of a life, the reader of a record with no life, the
+  the pages of the web, the client of the MCP servers, the time, the store of the record and the store of builds, the log of a life, the reader of a record with no life, the
   scratch directory, the rules by which a console reads the operator, and the provider of models, which asks each model
   through rig and streams what it writes. The doc comments of `src/world.rs` and of each module say what each does, the
   tables of [`CONTRIBUTING.md`](CONTRIBUTING.md#the-world-and-the-life) list its files, and `docs/models.md` tells a
@@ -24,7 +24,7 @@ API of its own:
   chain or the root alone, and plays the setup of the root on a new record. `parts` gives the part of each extension for
   the TUI, which `tui/src/parts.ts` loads. `extensions/` holds the official extensions, `catchup`, `memory`, `skills`,
   `compaction`, `ouroboros`, `web` and `mcp`, each a word, a contract and a suite, and `src/extension/` holds the ear of
-  the World of each that has one, as `compaction.rs` and `mcp.rs`. `docs/extensions.md` says how an extension works.
+  the World of each that has one, as `compaction.rs`. `docs/extensions.md` says how an extension works.
 - `src/life.rs` opens a life as every host opens one, from one `Opening`: the record, the ears of the crate after the
   ears of the host, the default actor, the roster that the host names or every model of the catalog, and the extensions.
   A host adds only its own ears, as the console of its operator. A life on a record of another version is refused before

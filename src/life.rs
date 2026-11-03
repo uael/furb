@@ -25,11 +25,9 @@ use std::{
 use crate::{
   Ear, Engine, Fault, Object, checkpoint,
   ear::{hear, hearing, lasting},
-  extension::{
-    self, Places, compaction::compaction, mcp::mcp, memory::memory, skills::skills, web::web,
-  },
+  extension::{self, Places, compaction::compaction, memory::memory, skills::skills, web::web},
   snapshot::{self, Keeper},
-  world::{self, Catalog, Retries, Scratch, Writes},
+  world::{self, Catalog, Retries, Scratch, Writes, mcp::mcp},
 };
 
 /// The ears of a life, each under the name the engine hears it by, in the order of boot.
@@ -241,7 +239,7 @@ impl Opening {
     // An ear that holds nothing that a fresh one lacks starts again after it raises. A fresh ear of the commands
     // reads no record, since the first one ended each command that the record left open.
     let held = config.clone();
-    let servers = extension::mcp::Settings::of(project, config.clone(), gallery.clone());
+    let servers = world::mcp::Settings::of(project, config.clone(), gallery.clone());
     let mut ears = vec![
       ("provider", provider),
       ("extensions", extension::extensions(extensions)),
