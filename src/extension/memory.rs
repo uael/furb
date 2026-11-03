@@ -1,6 +1,8 @@
 //! The ear of the memory extension, which answers a memory question from the AGENTS.md and CLAUDE.md files on the
 //! disk, and from their local files, AGENTS.local.md and CLAUDE.local.md.
 
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+
 use std::{
   collections::HashMap,
   fs,

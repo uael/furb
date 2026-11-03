@@ -20,6 +20,33 @@
 //! the words after the last full module stand with the word: a reading costs about the new words, and not the whole
 //! program, which held a life still for minutes on a program of hours.
 
+#![expect(
+  clippy::clone_on_ref_ptr,
+  reason = "debt: a clone of an Arc or an Rc that hides its kind"
+)]
+#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
+#![expect(clippy::explicit_iter_loop, reason = "debt: a loop on .iter() where a borrow serves")]
+#![expect(
+  clippy::format_collect,
+  reason = "debt: a format! for each item, collected into a String"
+)]
+#![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
+#![expect(clippy::redundant_clone, reason = "debt: a clone of a value that is not used again")]
+#![expect(
+  clippy::redundant_closure_for_method_calls,
+  reason = "debt: a closure where a method path serves"
+)]
+#![expect(
+  clippy::semicolon_if_nothing_returned,
+  reason = "debt: a unit expression with no semicolon"
+)]
+#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
+#![expect(
+  clippy::single_match_else,
+  reason = "debt: a match of one arm and else, where if let serves"
+)]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+
 use std::{
   cell::RefCell,
   collections::{HashMap, HashSet},

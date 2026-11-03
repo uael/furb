@@ -149,6 +149,8 @@ Read the whole of `src/furb/engine.py` and list each incoherence: a truth with t
 part held by the wrong owner. Probe each, build its reshape, and measure its size and the suite. Keep what adds
 coherence, then read it again.
 
+Before you write or change a Rust file, read the skill rust.
+
 ## Questions of the owner
 
 A question of the owner about a state or a delay, as "Why is it not built yet?", "Is it fine?" or "Why is this chain

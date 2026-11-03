@@ -11,6 +11,8 @@
 //! So an instance of a class of the engine goes in as its name and its fields, in a map marked `is`, and the
 //! engine makes the instance in the sandbox. That is the one rule of the crossing that is not monty's own.
 
+#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
+
 use monty_types::unstable::{self, MontyGraph, MontyNode, NodeId};
 pub use monty_types::{MontyObject as Object, ObjectRef};
 

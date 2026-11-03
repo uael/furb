@@ -1,3 +1,9 @@
+#![expect(
+  clippy::disallowed_methods,
+  reason = "debt: a call that blocks: sleep, block_on or try_wait"
+)]
+#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
+
 use std::error::Error;
 
 use furb::life::Life;

@@ -8,6 +8,20 @@
 //! no entry carries. A later life boots on the entries, each reserve said as a question of the root that the journal
 //! skips, so each name of the past stays taken, then on the entries of the record after the fact.
 
+#![expect(clippy::match_bool, reason = "debt: a match on a bool")]
+#![expect(
+  clippy::needless_pass_by_value,
+  reason = "debt: an argument taken by value and only borrowed"
+)]
+#![expect(
+  clippy::needless_raw_string_hashes,
+  reason = "debt: a raw string with hashes that it does not need"
+)]
+#![expect(
+  clippy::redundant_closure_for_method_calls,
+  reason = "debt: a closure where a method path serves"
+)]
+
 use std::{
   collections::{HashMap, HashSet},
   path::Path,

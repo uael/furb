@@ -1,6 +1,8 @@
 //! The accounts of the claude command line: which one serves a turn, when one is parked, and what an account gives to
 //! a process.
 
+#![expect(clippy::redundant_clone, reason = "debt: a clone of a value that is not used again")]
+
 use std::{
   fs,
   process::Command,

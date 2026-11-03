@@ -9,6 +9,13 @@
 //! extensions off enables nothing new, and runs what its record enables all the same. The ears are named as every host names them, so the record of one
 //! host opens in another.
 
+#![expect(
+  clippy::clone_on_ref_ptr,
+  reason = "debt: a clone of an Arc or an Rc that hides its kind"
+)]
+#![expect(clippy::match_bool, reason = "debt: a match on a bool")]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+
 use std::{
   path::{Path, PathBuf},
   sync::Arc,

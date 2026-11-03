@@ -7,6 +7,22 @@
 //! each source, the time of its last good fetch, and the error of its last failed one. Each catalog is read again from
 //! the caches when a life stands again, so a running life uses an update with no restart.
 
+#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
+#![expect(
+  clippy::duration_suboptimal_units,
+  reason = "debt: a Duration in a unit that is not the largest"
+)]
+#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(
+  clippy::redundant_closure_for_method_calls,
+  reason = "debt: a closure where a method path serves"
+)]
+
 use std::{
   collections::HashMap,
   fs,

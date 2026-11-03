@@ -1,6 +1,13 @@
 //! A session with a server of MCP: its start, which agrees on a version of the protocol, and what the server offers,
 //! each list read whole across its pages.
 
+#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
+#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
+#![expect(
+  clippy::semicolon_if_nothing_returned,
+  reason = "debt: a unit expression with no semicolon"
+)]
+
 use std::time::Duration;
 
 use serde_json::{Value, json};

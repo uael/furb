@@ -1,6 +1,12 @@
 //! The answers of a server as the acts give them: each kind of block, an image, an error, structured content, a
 //! prompt, and the cut of a long text.
 
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+
 use std::{fs, path::PathBuf};
 
 use base64::{Engine, engine::general_purpose::STANDARD};

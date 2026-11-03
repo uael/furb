@@ -1,5 +1,16 @@
 //! The keeper of a snapshot: when a life asks it for one.
 
+#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(
+  clippy::unchecked_time_subtraction,
+  reason = "debt: a subtraction of times that can underflow"
+)]
+
 use std::{
   fs,
   path::PathBuf,

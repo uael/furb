@@ -1,5 +1,16 @@
 //! The reader of a record, proved where no life reaches it: the facts that it says of what a record kept.
 
+#![expect(
+  clippy::format_collect,
+  reason = "debt: a format! for each item, collected into a String"
+)]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::redundant_clone, reason = "debt: a clone of a value that is not used again")]
+
 use std::{fs, path::PathBuf};
 
 use super::{retold, told};

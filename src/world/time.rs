@@ -1,5 +1,11 @@
 //! Time: a reading of the clock, a chance drawn, and a wait, which ends when its time is up.
 
+#![expect(clippy::cast_precision_loss, reason = "debt: an as cast that loses precision")]
+#![expect(
+  clippy::single_match_else,
+  reason = "debt: a match of one arm and else, where if let serves"
+)]
+
 use std::{
   collections::HashMap,
   future,

@@ -10,6 +10,31 @@
 //! acts.
 //! `FURB_GUI_HIDDEN` starts the window hidden.
 
+#![expect(
+  clippy::disallowed_methods,
+  reason = "debt: a call that blocks: sleep, block_on or try_wait"
+)]
+#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
+#![expect(
+  clippy::multiple_unsafe_ops_per_block,
+  reason = "debt: an unsafe block of more than one operation"
+)]
+#![expect(
+  clippy::needless_pass_by_value,
+  reason = "debt: an argument taken by value and only borrowed"
+)]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+#![expect(
+  clippy::undocumented_unsafe_blocks,
+  reason = "debt: an unsafe block with no SAFETY comment"
+)]
+
 mod host;
 
 #[cfg(test)]

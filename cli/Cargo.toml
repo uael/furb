@@ -11,6 +11,9 @@ repository = "https://github.com/uael/furb"
 name = "furb"
 path = "src/main.rs"
 
+[lints]
+workspace = true
+
 [dependencies]
 # The engine, the ears of the World and the provider of models, at the version of this program.
 furb = { path = "..", version = "0.4.2", features = ["allocator"] }

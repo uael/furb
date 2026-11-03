@@ -15,6 +15,16 @@
 //! [`PACE`] lets, and a snapshot that fails to land leaves no part of it on the disk. A life writes none when the disk holds
 //! less than twice its size free, since the record and the log need room to grow.
 
+#![expect(
+  clippy::format_collect,
+  reason = "debt: a format! for each item, collected into a String"
+)]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+
 use std::{
   fs,
   path::{Path, PathBuf},

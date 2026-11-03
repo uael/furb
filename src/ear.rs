@@ -32,6 +32,17 @@
 //! the operator, and takes no prompt; and the commands, the time and the web call none. The extensions, memory and
 //! compaction do no work, so they call each verb while they hear, where the life answers it in their place.
 
+#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(
+  clippy::redundant_closure_for_method_calls,
+  reason = "debt: a closure where a method path serves"
+)]
+
 use std::{
   cell::Cell,
   collections::VecDeque,
@@ -94,7 +105,10 @@ pub struct Call {
 impl Step {
   /// What a generator of a host yielded, as a step: nothing is a wait, a map that names a verb under `call` is that
   /// verb, with its words under `args` and `kwargs`, and a list or a tuple is a saying.
-  #[cfg_attr(not(any(feature = "python", feature = "typescript")), allow(dead_code))]
+  #[cfg_attr(
+    not(any(feature = "python", feature = "typescript")),
+    expect(dead_code, reason = "only a door calls it")
+  )]
   pub(crate) fn of(yielded: &Object) -> Result<Step, Fault> {
     let got = yielded.as_ref();
     if got.type_name() == "NoneType" {

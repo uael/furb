@@ -1,5 +1,9 @@
 //! The Responses API of a ChatGPT subscription, on the sign-in that furb keeps.
 
+#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
+#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+
 use std::{future::Future, path::PathBuf};
 
 use bytes::Bytes;

@@ -1,6 +1,9 @@
 //! The clients of rig that ask the providers of the catalog: each client that rig or a crate of rig gives, the chat
 //! completions of OpenAI at the address of a provider or of a local server, and the protocol of pi-ai.
 
+#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+
 use std::future::Future;
 
 use bytes::Bytes;

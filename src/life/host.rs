@@ -7,6 +7,17 @@
 //! that does not agree with the record at its place makes a new act, and the act of the record goes on as pending
 //! work.
 
+#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
+#![expect(
+  clippy::return_self_not_must_use,
+  reason = "debt: a method that returns Self with no must_use"
+)]
+#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
+#![expect(
+  clippy::single_match_else,
+  reason = "debt: a match of one arm and else, where if let serves"
+)]
+
 use std::{
   collections::VecDeque,
   future::{IntoFuture, Ready, poll_fn, ready},

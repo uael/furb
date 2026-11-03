@@ -2,6 +2,14 @@
 //! configs of the user and of the project. Then the ear of the extensions, in lives of the real engine on the
 //! record that the store keeps.
 
+#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::redundant_clone, reason = "debt: a clone of a value that is not used again")]
+
 use std::{
   fs,
   path::{Path, PathBuf},

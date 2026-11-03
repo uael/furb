@@ -1,6 +1,16 @@
 //! The ear of the compaction extension, which answers a carry with what a chain of another record holds, read with
 //! no life, so that a chain of this life goes on from it.
 
+#![expect(
+  clippy::needless_pass_by_value,
+  reason = "debt: an argument taken by value and only borrowed"
+)]
+#![expect(
+  clippy::semicolon_if_nothing_returned,
+  reason = "debt: a unit expression with no semicolon"
+)]
+#![expect(clippy::struct_field_names, reason = "debt: fields that repeat the name of their struct")]
+
 use std::{
   collections::{HashMap, HashSet},
   path::Path,

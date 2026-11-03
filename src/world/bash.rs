@@ -1,6 +1,20 @@
 //! Commands: each runs in a shell of the machine, in the working directory of its chain, says what it writes as it
 //! writes it, and ends at its exit, at its timeout, or at the done that a control said of it first.
 
+#![expect(clippy::cast_precision_loss, reason = "debt: an as cast that loses precision")]
+#![expect(
+  clippy::disallowed_methods,
+  reason = "debt: a call that blocks: sleep, block_on or try_wait"
+)]
+#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
+#![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+
 use std::{
   collections::{HashMap, HashSet},
   env,
@@ -457,7 +471,7 @@ fn coded(status: std::process::ExitStatus) -> Option<i32> {
 
 /// The code of an exit of the sh of Git for Windows, which a signal ends with the number of the signal times 256, as
 /// 128 and that number, as a shell gives; and every other code as it is.
-#[cfg_attr(unix, allow(dead_code))]
+#[cfg_attr(all(unix, not(test)), expect(dead_code, reason = "only Windows and the tests call it"))]
 pub(super) fn signalled(code: i32) -> i32 {
   if code % 256 == 0 && (1..=64).contains(&(code / 256)) { 128 + code / 256 } else { code }
 }

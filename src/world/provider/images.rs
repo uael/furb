@@ -3,6 +3,11 @@
 //! The provider hands a model each image that the message of a prompt of a user turn names, and each image that a read
 //! of a user turn gives, as an image of rig, and reads it once while its file stays the same.
 
+#![expect(
+  clippy::format_collect,
+  reason = "debt: a format! for each item, collected into a String"
+)]
+
 use std::{
   collections::{HashMap, HashSet},
   fs::{self, OpenOptions},

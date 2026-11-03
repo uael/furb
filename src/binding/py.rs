@@ -3,6 +3,32 @@
 //! comes out as the instance of `furb.python` it is, an exception as the one object it is for the life, a generator
 //! of python goes in as an ear, and a function as one the sandbox calls back.
 
+#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
+#![expect(
+  clippy::clone_on_ref_ptr,
+  reason = "debt: a clone of an Arc or an Rc that hides its kind"
+)]
+#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(
+  clippy::single_match_else,
+  reason = "debt: a match of one arm and else, where if let serves"
+)]
+#![expect(clippy::too_many_arguments, reason = "debt: more than 4 parameters is a struct")]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+#![expect(
+  clippy::unnecessary_wraps,
+  reason = "debt: a Result or an Option that is always Ok or Some"
+)]
+#![cfg_attr(
+  not(test),
+  expect(clippy::wildcard_imports, reason = "debt: an import of * that hides what it takes")
+)]
+
 use indexmap::IndexMap;
 use std::{
   cell::{OnceCell, RefCell},

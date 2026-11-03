@@ -24,6 +24,14 @@
 //! the record about such an act that no line shows, in the order of the record, and the log still holds every act of
 //! its record.
 
+#![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::map_unwrap_or, reason = "debt: map then unwrap_or, where map_or serves")]
+
 use std::{
   cell::Cell,
   collections::HashSet,

@@ -26,6 +26,19 @@
 //! model for chat with no window, after which the server is asked again once a delay passed. A host that lists the
 //! models waits for the server, five seconds at most and once in each delay while the server does not answer.
 
+#![expect(
+  clippy::disallowed_methods,
+  reason = "debt: a call that blocks: sleep, block_on or try_wait"
+)]
+#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
+#![expect(clippy::match_bool, reason = "debt: a match on a bool")]
+
 use std::{
   error::Error,
   sync::{Mutex, PoisonError},

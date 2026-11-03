@@ -1,6 +1,17 @@
 //! The scratch directory of a life: a folder of the machine for the notes and the scratch files of its words, which a
 //! word names as `scratch://` and a command as `$TMPDIR`, so no text that the World answers names its place.
 
+#![expect(
+  clippy::format_collect,
+  reason = "debt: a format! for each item, collected into a String"
+)]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
+
 use std::{
   collections::HashMap,
   fs, io,

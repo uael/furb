@@ -20,6 +20,18 @@
 //! no ear of the crate writes it again. The engine is read here too, and [`minified`] makes of it the system prompt of
 //! every model.
 
+#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::map_unwrap_or, reason = "debt: map then unwrap_or, where map_or serves")]
+#![expect(
+  clippy::semicolon_if_nothing_returned,
+  reason = "debt: a unit expression with no semicolon"
+)]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+
 use std::{env, fmt::Write as _, fs, path::Path};
 
 use ruff_python_ast::{

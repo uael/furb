@@ -1,6 +1,12 @@
 //! The suite that each store of a record passes, run on each store of the crate. A store of a host passes the same
 //! laws: the macro `conformance` holds them, on the function that opens the store and on the name of its record.
 
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+
 use std::{
   fs,
   path::{Path, PathBuf},

@@ -8,6 +8,24 @@
 //! request that waits for it, and hands each notification on. A wire that drops ends what it holds: the process and
 //! every process that it started, and each stream.
 
+#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
+#![expect(
+  clippy::assigning_clones,
+  reason = "debt: an assignment of a clone, where clone_from serves"
+)]
+#![expect(
+  clippy::clone_on_ref_ptr,
+  reason = "debt: a clone of an Arc or an Rc that hides its kind"
+)]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
+#![expect(clippy::match_bool, reason = "debt: a match on a bool")]
+#![expect(clippy::ref_option, reason = "debt: &Option<T> where Option<&T> serves")]
+
 use std::{
   collections::{HashMap, VecDeque},
   path::PathBuf,

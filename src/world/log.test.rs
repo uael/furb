@@ -1,5 +1,11 @@
 //! The log of a life, proved where no life reaches it: what a reader takes of it.
 
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+
 use std::{fs, io::Write, path::PathBuf};
 
 use serde_json::json;
