@@ -36,12 +36,23 @@ act("notes", "", notes)
 ## An extension
 
 An extension is a folder that a host enables on each chain of a life, and on each chain born later, or on the root
-alone when its manifest says `"plays": "root"`. The record keeps that it is on, so a later life runs it again.
+alone when its manifest says `furb-plays: root`. The record keeps that it is on, so a later life runs it again.
 
 ```text
 notes/
-  furb.json   { "name": "notes", "word": "notes.py", "life": "act('notes', '', notes)" }
+  SKILL.md    the manifest, a skill whose metadata holds the fields of furb
   notes.py    the word: a python module that imports from furb.engine what it uses, and only defines
+```
+
+```markdown
+---
+name: notes
+description: Keeps the notes of a chain.
+metadata:
+  furb-word: notes.py
+  furb-life: act('notes', '', notes)
+---
+What the notes are for.
 ```
 
 The life word starts the work of the extension on each chain. The file `.furb/config.json` of a project turns it on, or
@@ -53,13 +64,13 @@ The life word starts the work of the extension on each chain. The file `.furb/co
 
 ## A part for the TUI
 
-An extension can also give the TUI a part: a module of TypeScript beside its word, which `furb.json` names under
-`tui`. The TUI loads it at its start, and again when its file changes or when a write of the extension lands, with
+An extension can also give the TUI a part: a module of TypeScript beside its word, which its manifest names under
+`furb-view`. The TUI loads it at its start, and again when its file changes or when a write of the extension lands, with
 no restart. The module imports no value: it exports a function, which the TUI calls with `furb`.
 
 ```text
 todo/
-  furb.json   { "name": "todo", "word": "todo.py", "tui": "tui.ts" }
+  SKILL.md    its metadata gives furb-word: todo.py and furb-view: tui.ts
   todo.py     def todo(item: str, *, done: bool = False, on: str = "") -> Act:
                 def ear(name: str) -> Iterator[tuple]:
                   yield "done", name, None

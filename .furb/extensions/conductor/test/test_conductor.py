@@ -1012,8 +1012,8 @@ def play(conductor: Round) -> None:
 
 def test_the_round_plays_on_the_root_alone_and_pr_on_every_chain_before_it() -> None:
   furb = HERE.parent.parent
-  manifest = lambda name: json.loads((furb / "extensions" / name / "furb.json").read_text(encoding="utf-8"))
-  assert [manifest(name).get("plays", "every") for name in ("pr", "conductor", "converge")] == ["every", "root", "root"]
+  plays = lambda name: re.findall(r"^  furb-plays: (\w+)$", (furb / "extensions" / name / "SKILL.md").read_text(encoding="utf-8"), re.M) or ["every"]
+  assert [plays(name)[0] for name in ("pr", "conductor", "converge")] == ["every", "root", "root"]
   order = list(json.loads((furb / "config.json").read_text(encoding="utf-8"))["extensions"])
   assert order.index("pr") < order.index("conductor")
   assert re.findall(r"^(?:async )?def (\w+)", PULL.read_text(encoding="utf-8"), re.M) == ["pr_box", "pr_body", "prcheck", "pr", "checked", "shq"]

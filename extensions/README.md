@@ -17,8 +17,8 @@ write your own.
 
 Each folder holds these parts:
 
-- `furb.json`, the manifest, which names the word, and the life word and the part for the TUI when the extension has
-  them.
+- `SKILL.md`, the manifest: a skill, whose metadata names the word and the interface, and the life word, whether it
+  plays by default and the part for the TUI when the extension has them.
 - `tui.ts`, the part for the TUI, in `compaction` and `mcp`.
 - `<name>.py`, the word: the Python that each chain runs.
 - `<name>.pyi`, the contract: the laws of the extension, one sentence on each line.

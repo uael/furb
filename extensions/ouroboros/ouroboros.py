@@ -52,8 +52,16 @@ def extend(name: str, *rungs: str, tui: str = "") -> Text:
       tui = read(f"{folder}/tui.ts", HIDDEN).content
     except Refused:
       tui = ""
-  manifest = {"name": name, "word": f"{name}.py", **({"tui": "tui.ts"} if tui else {})}
-  write(Text(f"{folder}/furb.json", json.dumps(manifest) + "\n"))
+  try:
+    skill = read(f"{folder}/SKILL.md", HIDDEN).content
+  except Refused:
+    skill = f"---\nname: {name}\ndescription: The extension {name} of this project.\n---\nThe extension {name} of this project.\n"
+  head, _, body = skill[4:].partition("\n---\n") if skill.startswith("---\n") else ("", "", skill)
+  kept = [x for x in head.splitlines() if not x.strip().startswith(("furb-word:", "furb-view:"))]
+  kept = kept if "metadata:" in kept else [*kept, "metadata:"]
+  at = kept.index("metadata:") + 1
+  kept[at:at] = [f"  furb-word: {name}.py", *(["  furb-view: tui.ts"] if tui else [])]
+  write(Text(f"{folder}/SKILL.md", "---\n" + "\n".join(kept) + "\n---\n" + body))
   landed = write(
     Text(f"{folder}/{name}.py", "\n\n".join([held.strip("\n"), *(words[one] for one in rungs)]).strip("\n") + "\n")
   )
