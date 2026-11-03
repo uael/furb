@@ -67,6 +67,7 @@ import {
   defaultTheme,
   frame,
   glyph,
+  markdownSyntax,
   motion,
   setTheme,
   spacing as space,
@@ -125,6 +126,8 @@ export class App {
   readonly composer: GhostTextarea;
   readonly scroll: ScrollBoxRenderable;
   style: ReturnType<typeof syntax>;
+  /** The style of Markdown, whose body takes the prose. */
+  bodyStyle: ReturnType<typeof markdownSyntax>;
   theme: ThemeName = defaultTheme;
   draftKey = "";
   hover?: BoxRenderable;
@@ -393,6 +396,7 @@ export class App {
     this.theme = session.theme;
     this.firstRun = !session.preferences.setupSeen;
     this.style = syntax();
+    this.bodyStyle = markdownSyntax();
     this.root = this.box({
       id: "furb",
       width: "100%",

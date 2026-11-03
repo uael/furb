@@ -633,6 +633,7 @@ export const input = part({
     this.renderer.off("blur", this.focusLost);
     this.root.destroyRecursively();
     this.style.destroy();
+    this.bodyStyle.destroy();
   },
 
   /** The scopes of the review of the changes: the one shown in bold, and each other one a link to it. */

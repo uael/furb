@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { palettes, setTheme, syntax, terminalPalette, theme } from "../src/theme.ts";
+import { markdownSyntax, palettes, setTheme, syntax, terminalPalette, theme } from "../src/theme.ts";
 
 afterEach(() => setTheme("ink"));
 
@@ -42,6 +42,28 @@ test("the text of Ink is no bright white, and the answer stays a step softer tha
   expect(light(ink.prose)).toBeLessThan(light(ink.text));
   expect(light(ink.muted)).toBeLessThan(light(ink.prose));
   expect(light(ink.faint)).toBeLessThan(light(ink.muted));
+});
+
+test("the body of Markdown stands in one role, prose, about 9:1 against the panel and a step softer than the text, in each palette", () => {
+  const terminal = terminalPalette("#d0d0d0", "#1c1c1c");
+  for (const palette of [...Object.values(palettes), ...(terminal ? [terminal] : [])]) {
+    expect(contrast(palette.prose, palette.panel)).toBeLessThan(contrast(palette.text, palette.panel));
+    expect(contrast(palette.prose, palette.panel)).toBeGreaterThan(contrast(palette.muted, palette.panel));
+  }
+  for (const palette of Object.values(palettes)) {
+    expect(contrast(palette.prose, palette.panel)).toBeGreaterThanOrEqual(8.9);
+    expect(contrast(palette.prose, palette.panel)).toBeLessThanOrEqual(9.2);
+  }
+});
+
+test("Markdown draws its body in prose, and its headings and bold words in the text", () => {
+  setTheme("ink");
+  const body = markdownSyntax();
+  const fg = (group: string) => body.getStyle(group)?.fg;
+  expect(fg("default")?.equals(theme.prose)).toBe(true);
+  expect(fg("markup.heading.1")?.equals(theme.text)).toBe(true);
+  expect(fg("markup.strong")?.equals(theme.text)).toBe(true);
+  expect(syntax().getStyle("default")?.fg?.equals(theme.text)).toBe(true);
 });
 
 test("the syntax colors of Ink are no pastel: each shows its hue, and reads on each surface of the feed", () => {

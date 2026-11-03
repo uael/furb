@@ -14,7 +14,7 @@ interface Palette {
   selected: string;
   border: string;
   text: string;
-  /** The text of an answer, a step softer than the text of the chrome. */
+  /** The body of Markdown, about 9:1 against the panel, a step softer than the text of the chrome and of a heading. */
   prose: string;
   muted: string;
   /** Line numbers, separators, and connectors. */
@@ -47,7 +47,7 @@ export const palettes = {
     selected: "#262c37",
     border: "#2c3039",
     text: "#bbc1ca",
-    prose: "#aeb4bd",
+    prose: "#b9bfc7",
     muted: "#8f96a1",
     faint: "#70767f",
     accent: "#82a7d8",
@@ -73,7 +73,7 @@ export const palettes = {
     selected: "#1c2d42",
     border: "#30363d",
     text: "#e6edf3",
-    prose: "#c9d1d9",
+    prose: "#b5bcc2",
     muted: "#8b949e",
     faint: "#6e7681",
     accent: "#58a6ff",
@@ -99,7 +99,7 @@ export const palettes = {
     selected: "#243a30",
     border: "#2c4238",
     text: "#e3e9df",
-    prose: "#c9d1c4",
+    prose: "#bac1b9",
     muted: "#91a697",
     faint: "#66796b",
     accent: "#b7d89b",
@@ -125,7 +125,7 @@ export const palettes = {
     selected: "#dbe5d2",
     border: "#c9cfbf",
     text: "#243329",
-    prose: "#324237",
+    prose: "#323f35",
     muted: "#56685a",
     faint: "#79877d",
     accent: "#3c673c",
@@ -151,7 +151,7 @@ export const palettes = {
     selected: "#2e3955",
     border: "#36405a",
     text: "#e4e9f4",
-    prose: "#c6cee0",
+    prose: "#bdc2cd",
     muted: "#9daec7",
     faint: "#6d7a93",
     accent: "#bbc3ff",
@@ -177,7 +177,7 @@ export const palettes = {
     selected: "#35332f",
     border: "#3b3935",
     text: "#ecebe6",
-    prose: "#cfcdc5",
+    prose: "#c8c7c2",
     muted: "#9a978e",
     faint: "#7a7871",
     accent: "#d4835f",
@@ -203,7 +203,7 @@ export const palettes = {
     selected: "#e8e5db",
     border: "#e0ddd2",
     text: "#1f1e1c",
-    prose: "#3d3b36",
+    prose: "#42403e",
     muted: "#6e6b63",
     faint: "#8b887e",
     accent: "#b85a3c",
@@ -298,7 +298,7 @@ export function terminalPalette(foreground: string | null, background: string | 
     selected: blend(background, base.accent, 0.16),
     border: toward(0.14),
     text: toward(0.84),
-    prose: toward(0.8),
+    prose: toward(0.78),
     muted: toward(0.56),
     faint,
     added: blend(background, base.success, 0.16),
@@ -410,8 +410,8 @@ export const theme = Object.fromEntries(
 export function setTheme(name: ThemeName): void {
   for (const role of Object.keys(theme) as (keyof Palette)[]) theme[role] = colorOf(name, role);
 }
-export function syntax(): SyntaxStyle {
-  return SyntaxStyle.fromStyles({
+function styles(): Parameters<typeof SyntaxStyle.fromStyles>[0] {
+  return {
     default: { fg: theme.text },
     keyword: { fg: theme.syntaxKeyword },
     string: { fg: theme.syntaxString },
@@ -450,5 +450,13 @@ export function syntax(): SyntaxStyle {
     "markup.link.label": { fg: theme.link },
     "markup.link.url": { fg: theme.faint, underline: true },
     "markup.quote": { fg: theme.muted, italic: true },
-  });
+  };
+}
+export function syntax(): SyntaxStyle {
+  return SyntaxStyle.fromStyles(styles());
+}
+/** The style of Markdown: its body takes the prose, and a heading, a bold word and a code block take what syntax()
+ * gives them. */
+export function markdownSyntax(): SyntaxStyle {
+  return SyntaxStyle.fromStyles({ ...styles(), default: { fg: theme.prose } });
 }
