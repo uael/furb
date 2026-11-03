@@ -11,9 +11,10 @@
 //! other ears could give another life.
 //!
 //! The session holds each fact that the life said and each value that its facts hold, so a snapshot weighs about as
-//! much as the record and its log together: a long life writes one of gigabytes. A life writes it only as often as
-//! [`PACE`] lets, and a snapshot that fails to land leaves no part of it on the disk. A life writes none when the disk holds
-//! less than twice its size free, since the record and the log need room to grow.
+//! much as the record and its log together: a long life writes one of gigabytes. A life writes it
+//! only when it ends, and a snapshot that fails to land leaves no part of it on the disk. A life
+//! writes none when the disk holds less than twice its size free, since the record and the log
+//! need room to grow.
 
 #![expect(
   clippy::format_collect,
@@ -28,7 +29,6 @@
 use std::{
   fs,
   path::{Path, PathBuf},
-  time::{Duration, Instant},
 };
 
 use serde::{Deserialize, Serialize};
@@ -59,13 +59,6 @@ fn free(_: &Path) -> Option<u64> {
 fn fits(room: Option<u64>, size: usize) -> bool {
   room.is_none_or(|room| room >= (size as u64).saturating_mul(ROOM))
 }
-
-/// How long a life waits at least after it wrote its snapshot before it writes it again, but when it ends.
-const INTERVAL: Duration = Duration::from_secs(30);
-
-/// How many times the time that the last snapshot took a life waits before it writes the next, but when it ends, so a
-/// large life spends a twentieth of its time on its snapshot at most.
-const PACE: u32 = 20;
 
 /// The head of a snapshot, as a life reads it.
 #[derive(Deserialize)]
@@ -146,13 +139,10 @@ fn log(record: &Path) -> Option<(u64, String)> {
   Some((u64::try_from(bytes.len()).ok()?, hex(&Sha256::digest(&bytes))))
 }
 
-/// Where a life keeps its snapshot, and when it wrote it last.
+/// Where a life keeps its snapshot.
 pub(crate) struct Keeper {
   record: PathBuf,
   build: String,
-  last: Option<Instant>,
-  /// How long the last snapshot took to write.
-  spent: Duration,
   /// The length of the log that the last snapshot covers, so a life that said nothing since writes none.
   covered: Option<u64>,
 }
@@ -160,7 +150,7 @@ pub(crate) struct Keeper {
 impl Keeper {
   /// The keeper of the snapshot of the record at a path, for a life of a build.
   pub(crate) fn new(record: PathBuf, build: String) -> Keeper {
-    Keeper { record, build, last: None, spent: Duration::ZERO, covered: None }
+    Keeper { record, build, covered: None }
   }
 
   /// Whether the life said a fact since the last snapshot, which the length of its log says alone: a life writes its
@@ -170,25 +160,12 @@ impl Keeper {
     size.map_or(true, |size| self.covered != Some(size))
   }
 
-  /// Whether a snapshot is due: now, or when the interval passed since the last one, which starts again. The interval
-  /// grows with the time that the last snapshot took.
-  pub(crate) fn due(&mut self, now: bool) -> bool {
-    let wait = INTERVAL.max(self.spent * PACE);
-    let due = now || self.last.is_none_or(|last| last.elapsed() >= wait);
-    if due {
-      self.last = Some(Instant::now());
-    }
-    due
-  }
-
   /// The snapshot written, on the record and the log as they stand now. A snapshot is written whole under another name, which then takes its name, so a crash leaves the old snapshot or
   /// the new one. A failure writes nothing, since a snapshot is a cache, and removes what it wrote under the other name.
   pub(crate) fn write(&mut self, table: &Table, dump: &[u8]) {
-    let start = Instant::now();
     if self.written(table, dump).is_none() {
       let _ = fs::remove_file(aside(&self.record));
     }
-    self.spent = start.elapsed();
   }
 
   fn written(&mut self, table: &Table, dump: &[u8]) -> Option<()> {

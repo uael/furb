@@ -1405,7 +1405,6 @@ impl Engine {
   ) -> Result<T, Fault> {
     let got = self.fed(body)?;
     let ran = self.outside.ran();
-    self.kept_now(false);
     got.and_then(|got| ran.map(|()| got))
   }
 
@@ -1651,28 +1650,9 @@ impl Engine {
     self.restored
   }
 
-  /// The life keeps its snapshot where the keeper says, now and as it goes on.
+  /// The life keeps its snapshot where the keeper says, when it ends.
   pub(crate) fn keep(&mut self, keeper: Keeper) {
     self.keeper = Some(keeper);
-    self.kept_now(true);
-  }
-
-  /// The snapshot of the life, written where its keeper says when one is due, or now, and only when the life said a
-  /// fact since the last one, which is known before the sandbox dumps its session: a failure leaves the snapshot
-  /// before it, since a snapshot is a cache. A life writes none while an ear is behind, since the record or its log
-  /// lacks a fact that the sandbox holds.
-  fn kept_now(&mut self, now: bool) {
-    if self.outside.behind() {
-      return;
-    }
-    if !self.keeper.as_mut().is_some_and(|keeper| keeper.due(now) && keeper.grew()) {
-      return;
-    }
-    if let Some((table, dump)) = self.snapshot()
-      && let Some(keeper) = self.keeper.as_mut()
-    {
-      keeper.write(&table, &dump);
-    }
   }
 
   /// The highest number that each kind took in the record that the life opened on.
@@ -1902,9 +1882,20 @@ include!(concat!(env!("OUT_DIR"), "/methods.rs"));
 include!(concat!(env!("OUT_DIR"), "/constants.rs"));
 
 impl Drop for Engine {
-  /// A life that ends keeps its snapshot, when it keeps one.
+  /// A life that ends keeps its snapshot where its keeper says, only when it said a fact since the
+  /// last one, which is known before the sandbox dumps its session: a failure leaves the snapshot
+  /// before it, since a snapshot is a cache. A life writes none while an ear is behind, since the
+  /// record or its log lacks a fact that the sandbox holds. No run of a life writes one, so the
+  /// thread of the life writes no large file while it goes on.
   fn drop(&mut self) {
-    self.kept_now(true);
+    if self.outside.behind() || !self.keeper.as_ref().is_some_and(Keeper::grew) {
+      return;
+    }
+    if let Some((table, dump)) = self.snapshot()
+      && let Some(keeper) = self.keeper.as_mut()
+    {
+      keeper.write(&table, &dump);
+    }
   }
 }
 
