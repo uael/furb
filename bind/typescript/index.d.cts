@@ -436,11 +436,14 @@ export interface Opening {
   config?: string
   /**
    * The actor a prompt goes to when it names none, as the catalog names a model, and an effort after a slash, at its
-   * level as [`world::Model::at`] moves it; the first model of the roster when unsaid.
+   * level as [`world::Model::at`] moves it; the first model of the roster when unsaid, and
+   * the first when the catalog lacks the model of the actor.
    */
   actor?: string
   /**
-   * The models the provider offers beside the model of the actor, as the catalog names them. When it is unsaid, the
+   * The models the provider offers beside the model of the actor, as the catalog names them;
+   * a name that the catalog lacks is dropped, and each chain is told so once.
+   * When it is unsaid, the
    * provider offers every model that the catalog offers, after the model of the actor; a roster that names none
    * offers the model of the actor alone, and, with no actor, the operator alone.
    */
