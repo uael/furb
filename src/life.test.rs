@@ -1050,6 +1050,30 @@ fn a_checkpoint_holds_data_alone_and_a_later_engine_seeds_a_life_from_it_with_no
 }
 
 #[test]
+fn a_checkpoint_of_a_later_schema_is_refused_with_both_schemas() {
+  let at = place("checkpoint-schema");
+  let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  closed(&mut first, "kept = 1\nclose(kept)");
+  first.checkpoint().unwrap();
+  crossing(&at.join("record.jsonl"));
+  let text = fs::read_to_string(at.join("record.jsonl")).unwrap();
+  let schema = format!("\"schema\":{}", crate::checkpoint::SCHEMA);
+  assert!(text.contains(&schema), "the checkpoint names its schema");
+  let later = format!("\"schema\":{}", crate::checkpoint::SCHEMA + 1);
+  fs::write(at.join("record.jsonl"), text.replace(&schema, &later)).unwrap();
+  let refused = scripted(&at, &[]).boot::<String>([]).unwrap_err();
+  assert_eq!(
+    refused.message(),
+    format!(
+      "the checkpoint of the record holds the schema {}, and this build reads the schema {} at most: open the \
+       record with a later build",
+      crate::checkpoint::SCHEMA + 1,
+      crate::checkpoint::SCHEMA
+    )
+  );
+}
+
+#[test]
 fn a_checkpoint_of_the_form_before_its_schema_opens_on_this_build() {
   let at = place("checkpoint-1034");
   fs::copy(corpus().join("handover").join("checkpoint.jsonl"), at.join("record.jsonl")).unwrap();
