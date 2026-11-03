@@ -150,6 +150,21 @@ class Round:
     ns.update(act=lambda kind, on, ear, *words: kind, close=lambda value, id="": self.closed.append((id, value)))
     ns.update(grant=lambda usd=None, share=None, on="": "grant")
     ns.update(filled=lambda about: None, gate=lambda word, on="": [], wait=self.wait)
+    # Existing behavior tests use an explicit multi-family room map.
+    ns["limits"] = {
+      "room": {"opus": 1, "sonnet": 3, "opus/high": 1},
+      "fixer": "claude-cli:sonnet/high",
+      "models": {
+        "actor": "claude-cli:opus/medium",
+        "handover": "claude-cli:sonnet/medium",
+        "editor": "claude-cli:sonnet/high",
+        "patcher": "claude-cli:opus/medium",
+        "ruler": "claude-cli:opus/medium",
+        "stronger": "claude-cli:opus/high",
+        "audit": "claude-cli:opus/medium",
+      },
+      "model_version": 1,
+    }
     # The root plays pr before the conductor, which uses its names, as .furb/config.json orders them.
     exec(compile(IMPORT.sub("", PULL.read_text(encoding="utf-8")), str(PULL), "exec"), ns)  # noqa: S102
     exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), ns)  # noqa: S102
@@ -867,18 +882,30 @@ TOP = "claude-cli:opus/high"
 SONNET_HIGH = "claude-cli:sonnet/high"
 
 
+def test_the_default_round_uses_codex_luna_for_each_role(conductor: Round) -> None:
+  luna = "codex:gpt-6-luna/medium"
+  assert conductor.LIMITS["fixer"] == luna
+  assert conductor.LIMITS["room"] == {"gpt-6-luna": 5}
+  assert conductor.LIMITS["models"] == dict.fromkeys(
+    ("actor", "handover", "editor", "patcher", "ruler", "stronger", "audit"), luna
+  )
+
+
 def test_the_rulings_of_the_owner_stand_in_conducting_in_his_words(conductor: Round) -> None:
-  for words in (
-    "opus/medium should be your default, not opus/high",
-    "xhigh for the coordination and my rulings only",
-    "From now on: 2 opus workers, 3 sonnet ones. max.",
-    "add one opus/high worker for the most complex stuff",
-  ):
+  for words in ('limits["models"]', 'actor, handover, editor, patcher, ruler, stronger and audit', "reload keeps your choices"):
     assert words in conductor.CONDUCTING
   assert conductor.ACTOR == OPUS
-  assert conductor.limits == {"room": {"opus": 1, "sonnet": 3, "opus/high": 1}, "fixer": SONNET_HIGH}
+  assert conductor.limits == {
+    "room": {"opus": 1, "sonnet": 3, "opus/high": 1},
+    "fixer": SONNET_HIGH,
+    "models": {
+      "actor": OPUS, "handover": SONNET, "editor": SONNET_HIGH, "patcher": OPUS,
+      "ruler": OPUS, "stronger": TOP, "audit": OPUS,
+    },
+    "model_version": 1,
+  }
   assert conductor.cap() == 5
-  for words in ('limits["room"] gives the room', 'limits["fixer"], sonnet/high', "a reload of the extension keeps it"):
+  for words in ('limits["room"] gives the room', 'limits["fixer"]', "a reload keeps your choices"):
     assert words in conductor.CONDUCTING
 
 
@@ -889,16 +916,49 @@ def test_a_fixer_runs_on_sonnet_high_unless_its_effort_says_otherwise(conductor:
   assert conductor.model_of("fix50") == SONNET_HIGH
 
 
+def test_a_reload_moves_an_existing_claude_fixer_and_room_to_luna(conductor: Round) -> None:
+  conductor.limits["fixer"] = "claude-cli:sonnet/high"
+  conductor.limits["room"] = {"opus": 1, "sonnet": 3, "opus/high": 1}
+  conductor.limits.pop("model_version")
+  exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), conductor.ns)
+  assert conductor.limits["fixer"] == "codex:gpt-6-luna/medium"
+  assert conductor.limits["room"] == {"gpt-6-luna": 5}
+
+
+def test_a_reload_adds_model_roles_to_a_round_that_predates_them(conductor: Round) -> None:
+  conductor.limits.pop("models")
+  conductor.limits.pop("model_version")
+  exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), conductor.ns)  # noqa: S102
+  luna = "codex:gpt-6-luna/medium"
+  assert conductor.limits["fixer"] == luna
+  assert conductor.limits["room"] == {"gpt-6-luna": 5}
+  assert conductor.limits["models"] == dict.fromkeys(
+    ("actor", "handover", "editor", "patcher", "ruler", "stronger", "audit"), luna
+  )
+
+
 def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(conductor: Round) -> None:
   conductor.limits["room"]["opus"] = 2
   conductor.limits["fixer"] = OPUS
+  luna = "codex:gpt-6-luna/medium"
+  conductor.limits["models"] = dict.fromkeys(conductor.limits["models"], luna)
+  conductor.limits["room"] = {"gpt-6-luna": 5}
   exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), conductor.ns)  # noqa: S102
-  assert conductor.limits == {"room": {"opus": 2, "sonnet": 3, "opus/high": 1}, "fixer": OPUS}
-  assert (conductor.cap(), conductor.model_of("box8")) == (6, OPUS)
-  conductor.busy("p1", "a", OPUS)
-  assert conductor.room(OPUS)
-  conductor.busy("p2", "b", OPUS)
-  assert not conductor.room(OPUS)
+  assert conductor.ACTOR == conductor.HANDOVER == conductor.EDITOR == luna
+  assert conductor.PATCHER == conductor.RULER == conductor.STRONGER == luna
+  assert conductor.KINDS == {"audit": luna, "edit": luna}
+  assert luna in conductor.MODELS
+  assert conductor.limits["room"] == {"gpt-6-luna": 5}
+  assert (conductor.cap(), conductor.model_of("box8")) == (5, OPUS)
+  conductor.busy("p1", "a", luna)
+  assert conductor.room(luna)
+  conductor.busy("p2", "b", luna)
+  assert conductor.room(luna)
+  conductor.busy("p3", "c", luna)
+  conductor.busy("p4", "d", luna)
+  conductor.busy("p5", "e", luna)
+  assert not conductor.room(luna)
+  assert conductor.family(luna) == "gpt-6-luna"
 
 
 STATE = (
@@ -957,7 +1017,13 @@ def test_the_word_plays_on_a_module_of_the_previous_conductor_that_binds_no_name
   for name in STATE:
     del conductor.ns[name]
   play(conductor)
-  assert conductor.limits == {"room": {"opus": 1, "sonnet": 3, "opus/high": 1}, "fixer": SONNET_HIGH}
+  luna = "codex:gpt-6-luna/medium"
+  assert conductor.limits == {
+    "room": {"gpt-6-luna": 5},
+    "fixer": luna,
+    "models": dict.fromkeys(("actor", "handover", "editor", "patcher", "ruler", "stronger", "audit"), luna),
+    "model_version": 1,
+  }
   assert conductor.cap() == 5
   for name in STATE[1:]:
     assert conductor.ns[name] in ([], {}, set()), name
