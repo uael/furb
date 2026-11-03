@@ -611,7 +611,7 @@ export const feed = part({
         };
         // A message to the thread shows as its sender wrote it, with each image that it attached named by a mark.
         const said = (text: string) =>
-          imageReferences(text).length ? this.message(text) : this.markdown(text, c.text, c.background);
+          imageReferences(text).length ? this.message(text) : this.markdown(text, c.background);
         const sent = user ? "" : this.sender(act);
         // A message that asks no answer, as a message that a rung adds to a thread, names no type.
         const state = this.promptState(act).filter(([text]) => text !== "None");
@@ -641,7 +641,7 @@ export const feed = part({
             ];
             // A folded thread stands as its message, the first rows of it, in the block of a message: the bar of the
             // thread at its left, and at its right how much it holds and the control that opens it. A click opens it.
-            const text = user ? said(shortened) : this.markdown(shortened, c.text, c.background);
+            const text = user ? said(shortened) : this.markdown(shortened, c.background);
             const controls = this.threadControls(act);
             const row = this.sided(
               {
@@ -697,7 +697,7 @@ export const feed = part({
               const row = this.box({ flexDirection: "row" });
               // A column, and not a row, holds the answer, so that its paragraphs wrap at the width of the feed.
               const answer = this.box({ flexGrow: 1, flexShrink: 1 });
-              answer.add(this.markdown(value, c.prose, c.background));
+              answer.add(this.markdown(value, c.background));
               row.add(answer);
               row.add(
                 this.text(
@@ -767,7 +767,7 @@ export const feed = part({
                   c.text,
                 ),
               );
-              box.add(this.markdown(shortened, c.text, c.background));
+              box.add(this.markdown(shortened, c.background));
               if (rest)
                 box.add(
                   this.link(
@@ -1174,7 +1174,7 @@ export const feed = part({
               const row = this.box({ flexDirection: "row" });
               // A column, and not a row, holds the answer, so that its paragraphs wrap at the width of the feed.
               const answer = this.box({ flexGrow: 1, flexShrink: 1 });
-              answer.add(this.markdown(value, c.prose, c.background));
+              answer.add(this.markdown(value, c.background));
               row.add(answer);
               row.add(
                 this.text(
@@ -1296,7 +1296,7 @@ export const feed = part({
             (box) => {
               const row = this.box({ flexDirection: "row" });
               const text = opened
-                ? this.markdown(message, c.text, c.background)
+                ? this.markdown(message, c.background)
                 : this.link([[clip(shortenHomes(gist(message)), room), c.muted]], toggle);
               text.flexGrow = 1;
               text.flexShrink = 1;
@@ -1320,9 +1320,7 @@ export const feed = part({
               [`  ${act.by === "operator" ? "for you" : `from ${act.by}`}`, c.faint],
             ],
             (box) => {
-              this.panel(box, waiting ? c.warning : c.border).add(
-                this.markdown(message, c.text, c.background),
-              );
+              this.panel(box, waiting ? c.warning : c.border).add(this.markdown(message, c.background));
               // The question that the input answers says so, and a click on another one points the input at it.
               if (ask)
                 box.add(

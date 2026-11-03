@@ -459,11 +459,10 @@ export const blocks = part({
 
   /** Markdown on a surface, whose code blocks stand out from it on the surface of a code block, or on the surface
    * that a code block takes in a panel. */
-  markdown(content: string, fg = c.prose, surface = c.panel): MarkdownRenderable {
+  markdown(content: string, surface = c.panel): MarkdownRenderable {
     return new MarkdownRenderable(this.renderer, {
       content: safeText(content),
-      syntaxStyle: this.style,
-      fg,
+      syntaxStyle: this.bodyStyle,
       // OpenTUI draws a code block as bare lines in the color of the prose, so the TUI draws each one as a block. A
       // renderer that OpenTUI does not mark as one of code blocks alone parts the rest into blocks with no space
       // between them, so the mark keeps the prose as OpenTUI draws it.
@@ -502,7 +501,7 @@ export const blocks = part({
       new CodeRenderable(this.renderer, {
         content: text,
         filetype,
-        syntaxStyle: context.syntaxStyle,
+        syntaxStyle: this.style,
         treeSitterClient: context.treeSitterClient,
         fg: c.text,
         wrapMode: "none",
@@ -510,7 +509,7 @@ export const blocks = part({
         width: "100%",
         ...(filetype
           ? {
-              initialStyledText: this.painted(text, filetype, context.syntaxStyle),
+              initialStyledText: this.painted(text, filetype, this.style),
               onHighlight: (highlights: SimpleHighlight[]) => {
                 this.paint(text, filetype, highlights);
                 return highlights;
