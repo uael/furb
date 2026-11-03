@@ -655,6 +655,8 @@ export class App {
     session.on("compose", this.compose);
     session.on("resume", this.resume);
     session.on("shared", this.shared);
+    session.on("copied", this.copied);
+    session.on("status", this.statusShown);
     session.on("confirm", this.confirm);
     session.on("authentication", this.authentication);
     session.on("codexModels", this.codexModels);

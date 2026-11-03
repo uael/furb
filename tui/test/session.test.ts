@@ -352,3 +352,17 @@ test("an undo leaves out of its branch a grant that came after the message it ta
     expect(told).not.toContain(`#${grant.id}`);
     expect(session.activity.some((act) => act.kind === "grant")).toBe(false);
   }));
+
+test("/copy takes the last answer of the chain and says how many characters", () =>
+  withDemo(async (session) => {
+    await session.submit("hello");
+    await idle(session);
+    await session.refresh();
+    const copied: string[] = [];
+    session.on("copied", (text: string) => copied.push(text));
+    await session.command("/copy");
+    const answer = session.turns.findLast(([role]) => role === "assistant")?.[1];
+    expect(answer).toBeTruthy();
+    expect(copied).toEqual([answer ?? ""]);
+    expect(session.notice).toBe(`Copied ${answer?.length} characters.`);
+  }));

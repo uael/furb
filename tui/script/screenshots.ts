@@ -1147,6 +1147,12 @@ try {
   await opens("/mcp");
   await capture("75h-mcp-servers");
   app().closeOverlay();
+  // The dialog of /status, on a chain that holds a budget and the two servers.
+  await session.engine.grant({ usd: 5, share: 0.5, on: session.selected });
+  await session.refresh();
+  await opens("/status");
+  await capture("75i-status");
+  app().closeOverlay();
   app().dispose();
   await library.dispose();
 

@@ -194,3 +194,26 @@ test("@ completes the resources of the connected servers, and a call of a tool h
     session,
   );
 });
+
+test("/status tells the budget and the servers that the session holds, and no ceiling and no server when it holds none", async () => {
+  const session = await demoSession({ cwd: project() });
+  const seen: [string, string][][] = [];
+  session.on("status", (rows: [string, string][]) => seen.push(rows));
+  try {
+    await session.command("/status");
+    const bare = Object.fromEntries(seen[0] ?? []);
+    expect(Object.keys(bare)).toEqual(["Actor", "Context", "Directory", "Budget", "MCP"]);
+    expect(bare.Context).toBe("No answer yet");
+    expect(bare.Budget).toMatch(/^no ceiling, \$[\d.]+ spent$/);
+    expect(bare.MCP).toBe("no server");
+    await session.engine.grant({ usd: 5, share: 0.5, on: session.selected });
+    await session.command(`/run ${WORD}\nmcp_servers()`);
+    await until(() => session.acts.some((act) => act.kind === "mcp_servers" && act.done));
+    await session.command("/status");
+    const held = Object.fromEntries(seen[1] ?? []);
+    expect(held.Budget).toMatch(/^\$[\d.]+ of \$5\.00, pauses at 50% of the window$/);
+    expect(held.MCP).toBe("github connected, slack failed");
+  } finally {
+    await session.dispose();
+  }
+});
