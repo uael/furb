@@ -53,6 +53,19 @@ export interface Restore {
   files: FileChange[];
   commands: number;
 }
+/** A skill that the chain was told by a read of skills://: its name, and what it is for. */
+export interface Skill {
+  name: string;
+  detail: string;
+}
+/** The skills in the text of a read of skills://, which holds one line, name: what it is for, for each skill. */
+const skillsIn = (got: unknown): Skill[] => {
+  const text = got && typeof got === "object" && "content" in got ? String(got.content) : "";
+  return text.split("\n").flatMap((line): Skill[] => {
+    const found = /^([\w.-]+): (.*)$/.exec(line.trim());
+    return found ? [{ name: found[1] ?? "", detail: found[2] ?? "" }] : [];
+  });
+};
 /** A path as a word of the shell, between single quotes. */
 const quoted = (path: string) => `'${path.replaceAll("'", "'\\''")}'`;
 
@@ -118,6 +131,8 @@ interface Index {
   touched: string[];
   /** The writes that are done, in the order that the session saw them done. */
   written: ActRow[];
+  /** The last read of skills:// that is done, on any chain. */
+  skills?: ActRow;
   /** The acts on each chain but its chains, as activity reads them, which only grows. */
   work: Map<string, ActRow[]>;
   /** The last act on each chain that is no chain and no grant, and the chains whose last act failed. */
@@ -172,6 +187,10 @@ function placed(index: Index, act: ActRow): void {
     index.latest.set(act.on, act);
     if (failed(act)) index.failing.add(act.on);
     else index.failing.delete(act.on);
+  }
+  if (act.kind === "read" && act.done && act.words[0] === "skills://") {
+    const past = index.skills;
+    if (!past || (index.at.get(past.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.skills = act;
   }
   if (act.kind !== "rung" || act.by !== "operator") return;
   const word = index.words.get(act.on);
@@ -944,6 +963,24 @@ export class Session extends EventEmitter {
   /** The writes that are done, in the order that the session saw them done. */
   get written(): readonly ActRow[] {
     return this.indexed().written;
+  }
+  /** The skills that the latest read of skills:// gave, each with what it is for, for the list of the slash commands.
+   * The text of that read comes from the engine once for each read, so the list changes when a read gives a new one. */
+  private skillList: Skill[] = [];
+  private skillsFrom = "";
+  get skills(): readonly Skill[] {
+    const read = this.indexed().skills;
+    if (read && read.id !== this.skillsFrom) {
+      this.skillsFrom = read.id;
+      void this.engine
+        .result(read.id)
+        .then((got) => {
+          this.skillList = skillsIn(got);
+          this.emit("change");
+        })
+        .catch(() => {});
+    }
+    return this.skillList;
   }
   /** The acts of the chain shown, but its chains, as the index holds them: a list that grows as acts come, in which an
    * act that changed takes its place. */
@@ -1966,8 +2003,19 @@ export class Session extends EventEmitter {
         this.emit("shared", path, shareMarkdown(this));
         break;
       }
-      default:
-        throw new Error(`Unknown command /${command}. Press F1 for the command list.`);
+      case "skills":
+        if (argument) throw new Error("/skills takes no argument.");
+        this.skillList = skillsIn(await this.runWord("skills()"));
+        this.skillsFrom = this.indexed().skills?.id ?? "";
+        this.notice = `Skills read again: ${this.skillList.length || "none"} found.`;
+        break;
+      default: {
+        // A skill is a command that reads its SKILL.md for the chain, as skill(name) does.
+        if (!this.skills.some(({ name }) => name === command))
+          throw new Error(`Unknown command /${command}. Press F1 for the command list.`);
+        this.track(await this.engine.rung({ word: `skill(${JSON.stringify(command)})`, on: this.selected }));
+        this.view = "feed";
+      }
     }
   }
 

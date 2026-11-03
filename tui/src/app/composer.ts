@@ -412,6 +412,23 @@ export const composer = part({
               },
             })),
         )
+        .concat(
+          this.session.skills
+            .filter(
+              (one) =>
+                one.name.startsWith(token.text) &&
+                !slashes.some(({ name, alias }) => name === one.name || alias === one.name),
+            )
+            .map((one) => ({
+              label: `/${one.name}`,
+              detail: `${one.detail} (skill)`,
+              text: `/${one.name} `,
+              submit: () => {
+                this.composer.setText("");
+                this.action(`/${one.name}`);
+              },
+            })),
+        )
         .sort((one, other) => Number(other.text === whole) - Number(one.text === whole));
     } else if (token.kind === "value") {
       const command = token.command ?? "";

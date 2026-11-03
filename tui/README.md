@@ -335,6 +335,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/providers` | Add or remove a provider for this project |
 | `/provider <add\|remove> <name> [URL model window key_env protocol]` | Save a provider in the project settings and use it now |
 | `/reload` | Read provider settings again and update the standing of this life |
+| `/skills or /reload-skills` | Read the skills of the disk again; each shows in the list of / commands, and its command reads its SKILL.md |
 | `/retry` | Ask again at once each model that waits to retry, as at a usage limit, on the provider settings of now |
 | `/effort [level]` | Set the reasoning effort of the selected model |
 | `/shape [type]` | Choose the result type of the next prompt |
