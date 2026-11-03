@@ -2474,7 +2474,7 @@ def rival(key: str, brief: str) -> tuple[int, list[str]] | None:
     if f"w:{key}" in pr["labels"] or pr["n"] in owns.get(key, []) or re.search(rf"#{pr['n']}\b", brief):
       continue
     paths = touched.get(pr["n"], {}).get("paths", [])
-    hit = sorted({p for p in paths for x in mine if p == x or x.endswith("/" + p) or p.startswith(x + "/")})
+    hit = sorted({p for p in paths for x in mine if p == x or "/" in p and x.endswith("/" + p) or p.startswith(x + "/")})
     if hit:
       return pr["n"], hit
   return None
