@@ -488,7 +488,7 @@ export const composer = part({
           : (token.kind === "@" || pathCommands.has(token.command ?? "")) && files?.error
             ? files.error
             : (token.kind === "@" || pathCommands.has(token.command ?? "")) && !files?.paths
-              ? "Finding project files..."
+              ? "Finding project files…"
               : shown.length
                 ? ""
                 : token.kind === "/"

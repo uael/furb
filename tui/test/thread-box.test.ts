@@ -208,15 +208,15 @@ test("a window of code shows seven rows: the first line or a ..., the line that 
     expect(rows(app.rolling(code(5), "w1", false).lines)).toEqual([1, 2, 3, 4, 5]);
     expect(rows(app.rolling(code(7), "w2", false).lines)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     // Lines that are over show the last seven, and a ... stands first.
-    expect(rows(app.rolling(code(12), "w3", false).lines)).toEqual(["...", 7, 8, 9, 10, 11, 12]);
+    expect(rows(app.rolling(code(12), "w3", false).lines)).toEqual(["…", 7, 8, 9, 10, 11, 12]);
     // The line that runs stands second to last, with a ... after it, while lines come after.
-    expect(rows(app.rolling(code(12, 8), "w4", false).lines)).toEqual(["...", 4, 5, 6, 7, 8, "..."]);
+    expect(rows(app.rolling(code(12, 8), "w4", false).lines)).toEqual(["…", 4, 5, 6, 7, 8, "…"]);
     // The first line stands first while the line that runs is near it.
-    expect(rows(app.rolling(code(12, 3), "w5", false).lines)).toEqual([1, 2, 3, 4, 5, 6, "..."]);
+    expect(rows(app.rolling(code(12, 3), "w5", false).lines)).toEqual([1, 2, 3, 4, 5, 6, "…"]);
     // The last row is where the model writes.
-    expect(rows(app.rolling(code(12), "w6", true).lines)).toEqual(["...", 8, 9, 10, 11, 12]);
+    expect(rows(app.rolling(code(12), "w6", true).lines)).toEqual(["…", 8, 9, 10, 11, 12]);
     expect(rows(app.rolling(code(6), "w7", true).lines)).toEqual([1, 2, 3, 4, 5, 6]);
-    expect(rows(app.rolling(code(7), "w8", true).lines)).toEqual(["...", 3, 4, 5, 6, 7]);
+    expect(rows(app.rolling(code(7), "w8", true).lines)).toEqual(["…", 3, 4, 5, 6, 7]);
     // An opened window shows its lines, the last four hundred at most.
     app.session.folds["window:w9"] = false;
     expect(app.rolling(code(12), "w9", false)).toMatchObject({ opened: true });
@@ -235,9 +235,7 @@ test("a click on a ... of a window of code opens it in a block that fits its lin
       );
       const gaps = async () => {
         const shown = (await frame()).split("\n").map((row) => feedOf(session, row));
-        return shown.flatMap((row, y) =>
-          /^[\s┃]+\.\.\.\s*$/.test(row) ? [{ x: row.indexOf("..."), y }] : [],
-        );
+        return shown.flatMap((row, y) => (/^[\s┃]+…\s*$/.test(row) ? [{ x: row.indexOf("…"), y }] : []));
       };
       const first = (await gaps())[0];
       if (!first) throw new Error("No window is rolled.");
