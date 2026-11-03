@@ -639,9 +639,9 @@
       "type": "string",
       "enum": [
         "window",
-        "kit"
+        "skill"
       ],
-      "description": "What a peer is: a window of an operator, or the process of a kit."
+      "description": "What a peer is: a window of an operator, or the process of a skill."
     },
     "Hello": {
       "type": "object",
@@ -665,20 +665,24 @@
         "protocol",
         "kind"
       ],
-      "description": "The first frame of a peer: the protocol that it speaks, its kind, and the name of a kit."
+      "description": "The first frame of a peer: the protocol that it speaks, its kind, and the name of a skill."
     },
     "Slot": {
       "oneOf": [
         {
           "type": "object",
           "properties": {
+            "on": {
+              "type": "string"
+            },
             "slot": {
               "type": "string",
               "const": "dock"
             }
           },
           "required": [
-            "slot"
+            "slot",
+            "on"
           ]
         },
         {
@@ -691,12 +695,13 @@
           },
           "required": [
             "slot"
-          ]
+          ],
+          "description": "A section of the sidebar."
         },
         {
           "type": "object",
           "properties": {
-            "kind": {
+            "act": {
               "type": "string"
             },
             "slot": {
@@ -706,14 +711,14 @@
           },
           "required": [
             "slot",
-            "kind"
+            "act"
           ],
-          "description": "The row of each act of a kind."
+          "description": "The row of one act, of a kind that the skill draws."
         },
         {
           "type": "object",
           "properties": {
-            "kind": {
+            "act": {
               "type": "string"
             },
             "slot": {
@@ -723,21 +728,26 @@
           },
           "required": [
             "slot",
-            "kind"
+            "act"
           ],
-          "description": "The detail of each act of a kind."
+          "description": "The detail of one act, of a kind that the skill draws."
         },
         {
           "type": "object",
           "properties": {
+            "act": {
+              "type": "string"
+            },
             "slot": {
               "type": "string",
               "const": "mark"
             }
           },
           "required": [
-            "slot"
-          ]
+            "slot",
+            "act"
+          ],
+          "description": "A mark in the feed, after one act, of a kind that the skill marks."
         },
         {
           "type": "object",
@@ -776,7 +786,7 @@
           ]
         }
       ],
-      "description": "Where a window shows a view."
+      "description": "Where a window shows a view. The dock follows the chain that it names, and the row, the detail\nand the mark follow the chain of the act that they name. The sidebar, the footer, a screen and\nan overlay follow the life."
     },
     "Mount": {
       "type": "object",
@@ -784,19 +794,23 @@
         "viewer": {
           "type": "string"
         },
+        "life": {
+          "type": "string"
+        },
         "slot": {
           "$ref": "#/definitions/Slot"
         },
-        "kit": {
+        "skill": {
           "type": "string"
         }
       },
       "required": [
         "viewer",
+        "life",
         "slot",
-        "kit"
+        "skill"
       ],
-      "description": "A view that a window mounts in a slot, which the process of a kit serves."
+      "description": "A view that a window mounts in a slot of a life, which the process of a skill serves."
     },
     "Node": {
       "type": "object",
@@ -1179,7 +1193,7 @@
           ]
         }
       ],
-      "description": "What a kit asks of a window."
+      "description": "What a skill asks of a window."
     },
     "ViewEffect": {
       "type": "object",
@@ -1195,7 +1209,7 @@
         "viewer",
         "effect"
       ],
-      "description": "What a kit asks of the one window of a view."
+      "description": "What a skill asks of the one window of a view."
     },
     "Dispose": {
       "type": "object",
@@ -1567,7 +1581,7 @@
         "role",
         "kind"
       ],
-      "description": "A peer as the daemon knows it after its hello: the login that its transport proved, its role,\nits kind, and the name of a kit."
+      "description": "A peer as the daemon knows it after its hello: the login that its transport proved, its role,\nits kind, and the name of a skill."
     },
     "Role": {
       "type": "string",
