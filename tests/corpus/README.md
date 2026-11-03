@@ -45,3 +45,9 @@ the first build with the data must open it: `a_checkpoint_of_the_form_before_its
 `src/life.test.rs` opens it on a build of another engine. It stands apart from the corpus, since its crafted word
 says a prefix that no turn shows. It and the reader of that form in `src/checkpoint.rs` go once each life of that form
 crossed to the data, which the next checkpoint of each life does.
+`handover/relife.jsonl` is a life of that form whose second life, born from the first checkpoint, ended with a
+checkpoint too. It is cut to its last checkpoint, and each text of a turn over 2000 characters to 300. That form writes
+the turns of a chain after the stand of the root, so the root seeded itself again at that stand and the next open
+drifted at `gate1`. The reader of that form puts the turns of each chain just after the chain, which
+`a_checkpoint_of_the_form_before_its_schema_that_a_later_life_wrote_opens_and_seeds_no_root_again` in
+`src/life.test.rs` proves.
