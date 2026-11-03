@@ -319,6 +319,7 @@ def pause(id: str, why: object = None) -> None:
   A pause stands over what is made after it, until the wake.
   A control is on the scope of what it is over, so it takes no chain of its own.
   A pause of a name of no act of the life raises Refused, which names it, and says nothing.
+  A word that pauses its own rung, or an act whose pause covers that rung, raises Refused before the pause is entered, so the model can read the error and continue.
   """
 
 def wake(id: str) -> None:
@@ -749,6 +750,7 @@ class Act[T = object](str):
     The operator, which awaits from outside a run, is given the Exit of a command whatever its code, since the codes that a command accepts rule the word that awaits it.
     A word that awaits a chain raises Refused where it waited, since a chain never settles and the word could go no further.
     A word that awaits a name of no act of the life raises Refused where it waited, since no done can settle it, and so does the operator.
+    A word that awaits its own rung or its own run raises Refused where it waited, since its completion depends on that word ending.
     The awaiter of the prompt raises that exception.
     A run that awaits it hands it to whoever steps the run, since the engine owns the order of every run; the operator, which the engine does not step, waits on its own loop.
     """

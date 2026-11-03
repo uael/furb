@@ -5,7 +5,7 @@ from asyncio import CancelledError
 
 import pytest
 
-from conftest import born, heads, paragraphs, posed, said, settle, slow, stalled
+from conftest import born, heads, paragraphs, plain, posed, relived, said, settle, slow, stalled
 from furb import engine
 from furb.engine import Exit, Refused, Text
 
@@ -133,3 +133,21 @@ async def test_a_run_that_awaits_it_hands_it_to_whoever_steps_the_run() -> None:
     await asyncio.wait_for(slow, 0.01)
   sand.exits(slow, 0)
   assert engine.peek(slow) == Exit(0, Text(f"{slow}/stdout"), Text(f"{slow}/stderr"))
+
+
+@pytest.mark.parametrize("word", ["await Act(acting())", "await Act(transcript('', 'run')[-1][1])"])
+async def test_a_word_cannot_await_its_own_completion(word: str) -> None:
+  """A word that awaits its own rung or its own run raises Refused where it waited, since its completion depends on that word ending."""
+  sand, log, root = born(word, "close(2)")
+  task = engine.prompt(int, "finish", on=root)
+  await settle()
+  assert engine.peek(task, ...) == 2
+  assert paragraphs(engine.turns(on=root))[3] == (
+    "#rung1 raised\nrung1_raised = Refused('rung1 cannot await its own completion through "
+    + ("rung1" if word == "await Act(acting())" else "run2")
+    + "')"
+  )
+  assert said(log, "wants") == []
+  before = engine.turns(on=root)
+  await relived(sand, plain(sand.record))
+  assert engine.turns(on=root) == before and engine.peek(task, ...) == 2
