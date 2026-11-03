@@ -2415,6 +2415,12 @@ def triage() -> None:
 
 
 PATH = r"(?:[\w.~-]+/)+[\w.-]+\.(?:py|pyi|rs|tsx?|json|toml|md|ya?ml|sh)\b"
+TESTING = re.compile(r".*\.test\..*|.*_test\..*|test_.*\.py|conftest\.py")
+
+
+def is_test(path: str) -> bool:
+  *folders, name = path.split("/")
+  return bool({"test", "tests", "__tests__"} & set(folders)) or bool(TESTING.fullmatch(name))
 
 
 async def changed_files() -> None:
@@ -2431,7 +2437,7 @@ def rival(key: str, brief: str) -> tuple[int, list[str]] | None:
   for pr in prs.values() if mine else []:
     if f"w:{key}" in pr["labels"] or pr["n"] in owns.get(key, []) or re.search(rf"#{pr['n']}\b", brief):
       continue
-    paths = touched.get(pr["n"], {}).get("paths", [])
+    paths = [p for p in touched.get(pr["n"], {}).get("paths", []) if not is_test(p)]
     hit = sorted({p for p in paths for x in mine if p == x or "/" in p and x.endswith("/" + p) or p.startswith(x + "/")})
     if hit:
       return pr["n"], hit
@@ -2440,7 +2446,7 @@ def rival(key: str, brief: str) -> tuple[int, list[str]] | None:
 
 def files_of(key: str, brief: str) -> set[str]:
   held = {a.strip("/") for a in areas.get(key, []) if a.strip("/")}
-  return held or set(re.findall(PATH, brief))
+  return {x for x in held or set(re.findall(PATH, brief)) if not is_test(x)}
 
 
 def overlap(mine: set[str], other: set[str]) -> list[str]:
