@@ -203,6 +203,7 @@ export type Scroll = number | "end";
 /** The fields of a session that `<record>.ui.json` keeps, so that a later open shows the session as it was left. */
 const kept = [
   "sessionName",
+  "sessionNamed",
   "demo",
   "selected",
   "actor",
@@ -232,6 +233,7 @@ export type SavedView = Partial<Pick<Session, (typeof kept)[number]>> & { cost?:
  * number, a map, a list of texts, or a list of maps. */
 const forms: Record<(typeof kept)[number] | "cost", "text" | "flag" | "number" | "map" | "texts" | "maps"> = {
   sessionName: "text",
+  sessionNamed: "flag",
   demo: "flag",
   selected: "text",
   actor: "text",
@@ -308,6 +310,9 @@ export class Session extends EventEmitter {
   view: View = "feed";
   actor: string;
   sessionName: string;
+  /** Whether the session has a name that the operator or the extension naming gave it, which a later name of the
+   * extension does not replace. */
+  sessionNamed = false;
   acts: ActRow[] = [];
   /** The count of the changes of the acts that a view of the whole life reads: an act that comes, or an act that
    * starts, ends, pauses or wakes. An act whose output grows alone keeps it, so the board and the desk of a life
@@ -532,8 +537,31 @@ export class Session extends EventEmitter {
   /** Each batch of facts that the host hears reads the view again, whatever kind of act, of the engine or of an
    * extension, they are about. */
   private factsChanged = () => {
-    void this.refresh().catch(this.fail);
+    void this.refresh()
+      .then(() => this.named())
+      .catch(this.fail);
   };
+  /** The name that the extension naming gave the session: the value of the act name_session on the root, once it is
+   * done. */
+  get givenName(): string | undefined {
+    const act = this.activityByChain.get(this.engine.root)?.find((one) => one.kind === "name_session");
+    return act?.done && typeof act.value === "string" && act.value ? act.value : undefined;
+  }
+  /** Whether a chain is the one where the extension naming asks a model for the name of the session, which the
+   * sidebar hides. */
+  naming(chain: string): boolean {
+    const ids = this.indexed().ids;
+    return ids.get(ids.get(chain)?.by ?? "")?.kind === "name_session";
+  }
+  /** The session takes the name that the extension naming gave it, once, unless the operator named it. */
+  private named(): void {
+    const name = this.givenName;
+    if (!name || this.sessionNamed) return;
+    this.sessionName = name;
+    this.sessionNamed = true;
+    this.save();
+    this.emit("change");
+  }
   fail = (error: unknown) => {
     this.error = error instanceof Error ? error.message : String(error);
     // A damaged journal is no failure of the view alone: the view offers to repair it or to start a new one.
@@ -1747,6 +1775,7 @@ export class Session extends EventEmitter {
       }
       case "name":
         this.sessionName = argument || basename(this.host.directory);
+        this.sessionNamed = Boolean(argument);
         this.save();
         break;
       case "pause":

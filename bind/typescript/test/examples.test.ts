@@ -15,6 +15,9 @@ async function yard(...words: string[]) {
   const [at, home] = [join(root, "work"), join(root, "fake")];
   await mkdir(at);
   await mkdir(home);
+  // The life of a test names no session, since a name asks the fake claude out of the order of its words.
+  await mkdir(join(root, "config"));
+  await writeFile(join(root, "config", "config.json"), '{"extensions": {"naming": false}}');
   const claude = executable(fake, home, "claude");
   for (const [n, word] of words.entries()) await writeFile(join(home, `word.${n + 1}`), JSON.stringify(word));
   const env: Record<string, string> = {};

@@ -85,6 +85,7 @@ def extended(  # noqa: PLR0913
   sand: Sand | None = None,
   doctrine: str = "",
   also: Sequence[str] = (),
+  roster: Sequence[Sequence[object]] = (),
 ) -> tuple[Sand, str]:
   """A life on a record, whose chains stand in the folder work of a directory, which enables at its tip the official
   extension of that name, with its life word when it lives: it hears the ear of the extension when it has one, whose
@@ -92,7 +93,8 @@ def extended(  # noqa: PLR0913
   of the suite, or after the World it is given. A standing that names a doctrine, which the folder holds as
   DOCTRINE.md with that text, and each extension that the life enables, as the World of a life gives them, sets up
   the root as a new record of this build does. Before it, the life enables each
-  official extension that also names, with its life word. It gives the World and the root."""
+  official extension that also names, with its life word. The life stands on the roster of the suite, or on the roster
+  that it is given. It gives the World and the root."""
   one = next(x for x in _monty.official() if x["name"] == name)
   (at / "work").mkdir(exist_ok=True)
   before = [x for x in _monty.official() if x["name"] in also]
@@ -106,9 +108,17 @@ def extended(  # noqa: PLR0913
       str(path),
       [[x["name"], str(dict(x)["file"]) if x["word"].strip() else "", x["life"], x["root"]] for x in plays],
     ]
-  sand = replace(sand or sown(), stands=[STANDS[0], str(at / "work"), STANDS[2], *taught])
+  sand = replace(sand or sown(), stands=[list(roster) or STANDS[0], str(at / "work"), STANDS[2], *taught])
   files = _monty.files(str(at / "scratch"))
   return sand, life(sand, record, extensions=given, **({name: ear(str(at / "config"))} if ear else {}), files=files)[1]
+
+
+def naming(at: Path, roster: Sequence[Sequence[object]] = (), record: Sequence[tuple] = ()) -> tuple[Sand, str]:
+  """A life of a new record that runs the extension compaction, then the extension naming with its life word, on a
+  roster whose model h has the first place in the list of automatic work, or on the roster that it is given, and on
+  the record that it is given: the World and the root."""
+  given = roster or [*STANDS[0], ["h", ["low"], 200000, "cheap", 0]]
+  return extended("naming", at, lives=True, doctrine="Read first.\n", also=("compaction",), roster=given, record=record)
 
 
 CATCHUP = next(x for x in _monty.official() if x["name"] == "catchup")

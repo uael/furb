@@ -421,6 +421,7 @@ async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> 
     "memory",
     "skills",
     "compaction",
+    "naming",
     "ouroboros",
     "web",
     "mcp",

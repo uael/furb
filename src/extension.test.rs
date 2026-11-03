@@ -112,7 +112,7 @@ fn the_configs_turn_on_each_extension_they_give_a_folder_the_project_after_the_u
   let names = |got: Vec<Extension>| got.into_iter().map(|one| one.name).collect::<Vec<_>>();
   assert_eq!(
     names(configured(&places, &project).unwrap()),
-    ["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"],
+    ["catchup", "memory", "skills", "compaction", "naming", "ouroboros", "web", "mcp"],
     "the official ones are on"
   );
   folder(&at.join("home").join("tilde"), r#"{"name": "tilde", "word": "note.py"}"#, "t = 1");
@@ -124,7 +124,7 @@ fn the_configs_turn_on_each_extension_they_give_a_folder_the_project_after_the_u
   );
   assert_eq!(
     names(configured(&places, &project).unwrap()),
-    ["catchup", "memory", "compaction", "ouroboros", "web", "mcp", "tilde", "near"]
+    ["catchup", "memory", "compaction", "naming", "ouroboros", "web", "mcp", "tilde", "near"]
   );
   config(
     &project.join(".furb").join("config.json"),
@@ -132,7 +132,18 @@ fn the_configs_turn_on_each_extension_they_give_a_folder_the_project_after_the_u
   );
   assert_eq!(
     names(configured(&places, &project).unwrap()),
-    ["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp", "tilde", "far"],
+    [
+      "catchup",
+      "memory",
+      "skills",
+      "compaction",
+      "naming",
+      "ouroboros",
+      "web",
+      "mcp",
+      "tilde",
+      "far"
+    ],
     "each stands where a config first names it, after the official ones"
   );
 }
@@ -148,7 +159,7 @@ fn a_config_that_is_not_of_the_form_is_refused_with_its_path() {
   };
   let refused = |text: &str| read(text).unwrap_err().message();
   let shown = file.display();
-  assert_eq!(read(r#"{"theme": "dark"}"#).unwrap().len(), 7, "a config may name no extension");
+  assert_eq!(read(r#"{"theme": "dark"}"#).unwrap().len(), 8, "a config may name no extension");
   assert_eq!(refused("[]"), format!("A config is a map, whose extensions is a map: {shown}"));
   assert_eq!(
     refused(r#"{"extensions": []}"#),
@@ -809,7 +820,7 @@ fn the_local_config_of_a_project_comes_after_its_config_and_wins_for_a_name() {
   let names = |got: Vec<Extension>| got.into_iter().map(|one| one.name).collect::<Vec<_>>();
   assert_eq!(
     names(configured(&places, &project).unwrap()),
-    ["catchup", "memory", "compaction", "ouroboros", "web", "mcp", "near"]
+    ["catchup", "memory", "compaction", "naming", "ouroboros", "web", "mcp", "near"]
   );
   config(
     &furb.join("config.local.json"),
@@ -817,7 +828,7 @@ fn the_local_config_of_a_project_comes_after_its_config_and_wins_for_a_name() {
   );
   assert_eq!(
     names(configured(&places, &project).unwrap()),
-    ["catchup", "memory", "skills", "compaction", "ouroboros", "web"],
+    ["catchup", "memory", "skills", "compaction", "naming", "ouroboros", "web"],
     "the local config wins for a name"
   );
   let shown = parts(&places, &project).unwrap().into_iter().map(|one| one.name).collect::<Vec<_>>();

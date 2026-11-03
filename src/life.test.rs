@@ -75,7 +75,7 @@ fn a_life_enables_what_the_configs_turn_on_and_a_later_life_runs_what_its_record
   let (mut first, _) = opening(&at, true).boot::<String>([]).unwrap();
   assert_eq!(
     names(&mut first),
-    ["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"]
+    ["catchup", "memory", "skills", "compaction", "naming", "ouroboros", "web", "mcp"]
   );
   drop(first);
   fs::create_dir_all(at.join("config")).unwrap();
@@ -83,7 +83,7 @@ fn a_life_enables_what_the_configs_turn_on_and_a_later_life_runs_what_its_record
   let (mut later, record) = opening(&at, true).boot::<String>([]).unwrap();
   assert_eq!(
     names(&mut later),
-    ["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"],
+    ["catchup", "memory", "skills", "compaction", "naming", "ouroboros", "web", "mcp"],
     "the record wins over the configs"
   );
   drop(later);
@@ -93,7 +93,7 @@ fn a_life_enables_what_the_configs_turn_on_and_a_later_life_runs_what_its_record
   let (mut fresh, _) = Opening { record: fresh, ..opening(&at, true) }.boot::<String>([]).unwrap();
   assert_eq!(
     names(&mut fresh),
-    ["catchup", "memory", "compaction", "ouroboros", "web", "mcp"],
+    ["catchup", "memory", "compaction", "naming", "ouroboros", "web", "mcp"],
     "a life on a new record enables what the configs turn on"
   );
 }

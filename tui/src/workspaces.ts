@@ -554,6 +554,7 @@ export class Workspaces extends EventEmitter {
     }
     if (entry.session) {
       entry.session.sessionName = label;
+      entry.session.sessionNamed = name !== undefined;
       entry.name = label;
       entry.session.save();
     }
@@ -647,9 +648,13 @@ export class Workspaces extends EventEmitter {
     if ("sessions" in item) this.save({ directory: item.directory, name });
     else if (item.session) {
       item.session.sessionName = name;
+      item.session.sessionNamed = true;
       item.session.save();
     } else
-      saveFile(`${item.path}.ui.json`, JSON.stringify({ ...savedView(item.path).view, sessionName: name }));
+      saveFile(
+        `${item.path}.ui.json`,
+        JSON.stringify({ ...savedView(item.path).view, sessionName: name, sessionNamed: true }),
+      );
     this.emit("change");
   }
   /** Take a workspace off the list. Its folder and its records stay, and /workspace adds it back. The current
