@@ -5,7 +5,6 @@ import { Composer } from "../src/components/Composer.tsx";
 import { Picker } from "../src/components/Picker.tsx";
 import { Rule } from "../src/components/ThreadView.tsx";
 import { empty, type Held } from "../src/held.ts";
-import { chainName, type Moment } from "../src/life.ts";
 import { placed } from "../src/steps.ts";
 import type { Life } from "../src/wire.ts";
 
@@ -159,14 +158,4 @@ test("a mark stands before the first step of a thread that began after its place
   expect(
     placed(ladder, [mark(0), mark(3), mark(9)], began).map((marks) => marks.map((one) => one.at)),
   ).toEqual([[0], [3], [9]]);
-});
-
-test("the last chain of a run of compactions into new chains names the run, as its first chain and itself", () => {
-  const chain = (id: string, label: string) => [id, { id, kind: "chain", words: [label] }] as const;
-  const moment = {
-    rows: new Map([chain("chain1", "root"), chain("chain4", "compacted")]),
-    compactions: [{ chain: "chain4", from: "chain1", by: "rung9", at: 7 }],
-  } as unknown as Moment;
-  expect(chainName(moment, "chain4")).toBe("root -> compacted");
-  expect(chainName(moment, "chain1")).toBe("root");
 });

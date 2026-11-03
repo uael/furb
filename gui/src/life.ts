@@ -2,7 +2,6 @@ import {
   type ActState,
   actState,
   type Compaction,
-  compactedRun,
   type LiveAct,
   outline,
   owedAt,
@@ -141,13 +140,9 @@ export function chainState(moment: Moment, chain: string): State {
   )[state];
 }
 
-/** The name of a chain as a person reads it: its label, or its id, and You for the operator. The last chain of a run
- * of compactions into new chains names the run, as the first chain and the last one: root -> compacted. */
+/** The name of a chain as a person reads it: its label, or its id, and You for the operator. */
 export function chainName(moment: Moment, id: string): string {
-  if (id === "operator") return "You";
-  const own = (name: string) => String(moment.rows.get(name)?.words[0] ?? "") || name;
-  const run = compactedRun(id, moment.compactions);
-  return run.length > 1 && run.at(-1) === id ? `${own(run[0] ?? id)} -> ${own(id)}` : own(id);
+  return id === "operator" ? "You" : String(moment.rows.get(id)?.words[0] ?? "") || id;
 }
 
 /** The chain whose rung made a chain, and nothing for the root. */

@@ -381,7 +381,7 @@ test("a mark of a part stands at its place in the feed of its chain, and a mark 
   ]);
 });
 
-test("a run of compactions into new chains, as an older compaction made them, shows as one chain: one row named first -> last, and one feed with the rule of each compaction", async () => {
+test("a chain that an older compaction made shows as a chain of its own, with one note that it goes on from a compaction of an older form that is not joined", async () => {
   const { directory } = project();
   const session = await demoSession({ cwd: directory });
   const root = session.engine.root;
@@ -393,29 +393,21 @@ test("a run of compactions into new chains, as an older compaction made them, sh
       await session.command(
         `/run older = chain("compacted", "${root}")\nrung("restore('${root}')\\n${summary}", on=older)\nrung('after = "the step after"', on=older)`,
       );
-      const shown = await shows(
-        frame,
-        "the step after",
-        (now) => session.runOf(root).length > 1 && now.includes("goes on in a new chain from here"),
-      );
+      await session.refresh();
       const newer = session.chains.find((chain) => chain.words[0] === "compacted")?.id ?? "";
-      expect(session.runOf(root)).toEqual([root, newer]);
-      expect(session.labelOf(newer)).toBe("Main -> compacted");
-      expect(session.activeChains().active.map(([chain]) => chain.id)).not.toContain(root);
-      // A link or the graph that names the first chain of the run puts the operator on its last chain, which the headline
-      // names and which a message, a command and a grant go on.
       await session.select(root);
+      expect(session.selected).toBe(root);
+      expect(session.labelOf(newer)).toBe("compacted");
+      await session.select(newer);
       expect(session.selected).toBe(newer);
-      expect(session.label).toBe("Main -> compacted");
-      expect(shown).toContain("Main -> compacted");
-      expect(shown).toContain("It read the plan.");
-      expect(shown.indexOf("the first step")).toBeLessThan(shown.indexOf("goes on in a new chain from here"));
-      // The word of the operator that made the step stands in the feed too, so the step is its last line.
-      expect(shown.indexOf("goes on in a new chain from here")).toBeLessThan(
-        shown.lastIndexOf("the step after"),
-      );
+      const note = "This chain goes on from a compaction of an older form that is not joined";
+      const shown = await shows(frame, "the step after", (now) => now.includes(note));
+      expect(shown.split(note).length).toBe(2);
+      expect(shown).not.toContain("Branched from");
+      expect(shown).not.toContain("goes on in a new chain");
+      expect(shown.indexOf(note)).toBeLessThan(shown.lastIndexOf("the step after"));
     },
-    { width: 132, height: 60 },
+    { width: 180, height: 60 },
     session,
   );
 });
