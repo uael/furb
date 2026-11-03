@@ -406,6 +406,24 @@ test("a session that keeps a record keeps a snapshot of its life, and a later se
   }
 });
 
+test("a session that ends keeps the checkpoint of its life at the tip of its record, and a later session opens on it", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-checkpoint-"));
+  const record = join(cwd, "life.jsonl");
+  const first = new Session({ cwd, record, extensions: false });
+  const engine = first.open();
+  engine.prompt("None", { message: "noted", to: "operator", on: engine.root });
+  await first.end();
+  const second = new Session({ cwd, record, extensions: false });
+  try {
+    expect((await kinds(record)).at(-1)).toBe("checkpoint");
+    second.open();
+    expect(second.activity.acts.get("prompt1")?.kind).toBe("prompt");
+  } finally {
+    await second.dispose();
+    await rm(cwd, { recursive: true });
+  }
+});
+
 test("a later session on a record holds no stream of the life before it", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-saved-streams-"));
   const record = join(cwd, "life.jsonl");

@@ -1391,6 +1391,10 @@ pub struct Engine {
   keeper: Option<Keeper>,
   /// Whether the life opened from a snapshot.
   restored: bool,
+  /// The highest number that each kind took in the record that the life opened on, as a map, which
+  /// a checkpoint of the life keeps taken: the journal does not make again an act that an ear of
+  /// the outside made, so the transcripts of the life do not hold each of those names.
+  taken: Object,
 }
 
 impl Engine {
@@ -1517,6 +1521,7 @@ impl Engine {
       parked,
       keeper: None,
       restored: false,
+      taken: crate::checkpoint::taken(&record),
     };
     let (root, raised) = engine.run(|sand, outside| {
       outside.bound(sand)?;
@@ -1597,6 +1602,7 @@ impl Engine {
       parked,
       keeper: None,
       restored: true,
+      taken: crate::checkpoint::taken(record),
     };
     engine.run(|sand, outside| {
       outside.bound(sand)?;
@@ -1667,6 +1673,16 @@ impl Engine {
     {
       keeper.write(&table, &dump);
     }
+  }
+
+  /// The highest number that each kind took in the record that the life opened on.
+  pub(crate) fn taken(&self) -> &Object {
+    &self.taken
+  }
+
+  /// Whether an ear of the host hears under a name.
+  pub(crate) fn hears(&self, name: &str) -> bool {
+    self.outside.handed.ears.contains_key(name)
   }
 
   /// The root chain of the life, which is the first act of any record.

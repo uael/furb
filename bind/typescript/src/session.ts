@@ -330,15 +330,31 @@ export class Session extends EventEmitter {
   /** Save what the next life needs, then end the life whatever the save came to: its commands, its waits, its
    * requests and its prompts end with it, and the store lets its record go. */
   async dispose(): Promise<void> {
+    this.ended(false);
+  }
+
+  /** End the life as a dispose ends it, with its checkpoint at the tip of its record, from which the next life on the
+   * record opens with no replay of what came before it. A session that only reads its record, or keeps none, ends
+   * with no checkpoint. */
+  async end(): Promise<void> {
+    this.ended(true);
+  }
+
+  /** The life ended, with its checkpoint when it keeps one. */
+  private ended(checkpoint: boolean): void {
     if (this.stopped) return;
     this.stopped = true;
     try {
       this.save();
     } finally {
-      this.engine?.dispose();
-      this.console.dispose();
-      this.removeAllListeners();
-      this.changes.dispose();
+      try {
+        if (checkpoint && this.record && !this.options.readOnly) this.engine?.checkpoint();
+        else this.engine?.dispose();
+      } finally {
+        this.console.dispose();
+        this.removeAllListeners();
+        this.changes.dispose();
+      }
     }
   }
 

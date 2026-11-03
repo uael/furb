@@ -7,6 +7,11 @@
 //! engine that writes them, and `("reserve", kind, "store", n)`, which stands for each name of that kind up to n that
 //! no entry carries. A later life boots on the entries, each reserve said as a question of the root that the journal
 //! skips, so each name of the past stays taken, then on the entries of the record after the fact.
+//!
+//! A life ends with its checkpoint, which the ear of its store keeps, since a life born from a
+//! checkpoint makes acts of its own at its birth; [`keep`] writes one on a record that no life
+//! holds. A life of the engine that made each segment of its record boots on no checkpoint: it
+//! replays the record whole, as [`crossed`] says, and loses nothing that a checkpoint drops.
 
 #![expect(clippy::match_bool, reason = "debt: a match on a bool")]
 #![expect(
@@ -146,11 +151,13 @@ def checkpoint(define, floor):
   clocks = [v for x in transcript(ROOT, "clock") if isinstance(v := peek(x[1]), float)]
   for x in stands[-1:]:
     take("stand", _number(x[1]) - 1)
-    take("clock", counts.get("clock", 0))
-    n = reserved.get("clock", 0) + 1
-    entries += [x, ("done", x[1], "store", peek(x[1])), ("clock", f"clock{n}", ROOT, ROOT)]
-    entries.append(("done", f"clock{n}", "store", clocks[-1] if clocks else __import__("time").time()))
-    reserved["stand"], reserved["clock"] = _number(x[1]), n
+    entries += [x, ("done", x[1], "store", peek(x[1]))]
+    reserved["stand"] = _number(x[1])
+    for v in clocks[-1:]:
+      take("clock", counts.get("clock", 0))
+      n = reserved.get("clock", 0) + 1
+      entries += [("clock", f"clock{n}", ROOT, ROOT), ("done", f"clock{n}", "store", v)]
+      reserved["clock"] = n
   verbs = ("prompt", "bash", "read", "write", "wait", "cd", "chance")
   carried = sorted((one for one in named if get(one)[0] in verbs), key=lambda one: (get(one)[0], _number(one)))
   paused = sorted({scope(one) for one in carried if get(one)[0] == "prompt"}, key=_number)
@@ -212,14 +219,14 @@ def checkpoint(define, floor):
 const WRITE: &str =
   "(exec(__source, __names := {**globals()}), __names['checkpoint'](__define, __floor))[1]";
 
-/// The entry of the checkpoint of a life at its tip, as the store keeps it, on the record that the life stands on.
-pub fn written(engine: &mut Engine, record: &[Object]) -> Result<Object, Fault> {
+/// The entry of the checkpoint of a life at its tip, as the store keeps it.
+pub fn written(engine: &mut Engine) -> Result<Object, Fault> {
   let define = callable(|args: Vec<Object>| {
     let word = args.first().and_then(|one| one.as_ref().as_str().map(str::to_owned));
     Ok(Object::string(definitions(&word.unwrap_or_default())))
   });
-  let words =
-    vec![("__source", Object::string(SOURCE)), ("__define", define), ("__floor", taken(record))];
+  let floor = engine.taken().clone();
+  let words = vec![("__source", Object::string(SOURCE)), ("__define", define), ("__floor", floor)];
   let entries = engine.word(WRITE, words)?;
   let carried = Object::dict([
     (Object::string("version"), Object::int(VERSION)),
@@ -230,7 +237,23 @@ pub fn written(engine: &mut Engine, record: &[Object]) -> Result<Object, Fault> 
   Ok(Object::list([Object::list(fact)]))
 }
 
-/// An entry kept after the last entry of the record at a path, as the store of a life keeps one.
+impl Engine {
+  /// The checkpoint of the life at its tip, as the last entry of its record: the ear of its store
+  /// keeps it after each entry that it kept, as it keeps each fact, and the life ends with it, so a
+  /// later life on the record opens from it. A life that is born from a checkpoint makes acts of
+  /// its own at its birth, so a fact that this life said after the checkpoint would not replay
+  /// there. The life ends too when it keeps no record, which it refuses.
+  pub fn checkpoint(mut self) -> Result<(), Fault> {
+    if !self.hears("store") {
+      return Err(Fault::refused("a life that keeps no record keeps no checkpoint"));
+    }
+    let entry = written(&mut self)?;
+    self.word("say('keep', '', __entry)", vec![("__entry", entry)]).map(drop)
+  }
+}
+
+/// An entry kept after the last entry of the record at a path, as the store of a life keeps one,
+/// for a record that no life holds.
 pub fn keep(path: &Path, one: Object) -> Result<(), Fault> {
   match world::database(path) {
     true => Sqlite::open(path)?.keep(one.as_ref()),
@@ -252,9 +275,17 @@ fn unmarked(one: ObjectRef<'_>) -> Option<Object> {
 /// The highest number that each kind took in a record, its checkpoints among them, as a map. A later life makes again
 /// no act that an ear of the outside made, as the merged of a command, so its transcripts do not hold each name that the
 /// record took, and the checkpoint keeps each of them taken.
-fn taken(record: &[Object]) -> Object {
+pub(crate) fn taken(record: &[Object]) -> Object {
+  let opened;
+  let record = match last(record) {
+    Some(_) => {
+      opened = booted(record.to_vec());
+      opened.as_slice()
+    }
+    None => record,
+  };
   let mut most: Vec<(String, i64)> = Vec::new();
-  for a in booted(record.to_vec()).iter().filter_map(fact).filter(Fact::question) {
+  for a in record.iter().filter_map(fact).filter(Fact::question) {
     let Some(n) = a.about().strip_prefix(a.kind()).and_then(|one| one.parse::<i64>().ok()) else {
       continue;
     };
@@ -282,11 +313,49 @@ pub fn segment(record: &[Object]) -> &[Object] {
   &record[last(record).map_or(0, |at| at + 1)..]
 }
 
-/// The record as a life boots on it: the entries of its last checkpoint, each reserve as the questions of the root
-/// that it stands for, then the entries after the checkpoint; or the record as it is when it holds none.
+/// Where the checkpoint that a life of this engine boots on stands: the last checkpoint that
+/// follows a segment of another engine, as a fact made or the engine of a checkpoint names it.
+/// Nothing when this engine made each segment, so the life replays the record whole and loses
+/// nothing that a checkpoint drops.
+pub fn crossed(record: &[Object]) -> Option<usize> {
+  let ours = world::engine();
+  let (mut foreign, mut at) = (false, None);
+  for (here, a) in record.iter().enumerate().filter_map(|(here, one)| Some((here, fact(one)?))) {
+    let word = a.word(0);
+    let engine = match a.kind() {
+      world::MADE => word.and_then(|one| one.as_str().map(str::to_owned)),
+      CHECKPOINT => word.and_then(|one| one.pairs()).and_then(|pairs| {
+        let found = pairs.into_iter().find(|(key, _)| key.as_str() == Some("engine"));
+        found.and_then(|(_, one)| one.as_str().map(str::to_owned))
+      }),
+      _ => continue,
+    };
+    foreign |= engine.is_some_and(|one| one != ours);
+    if a.kind() == CHECKPOINT && foreign {
+      (foreign, at) = (false, Some(here));
+    }
+  }
+  at
+}
+
+/// The record as a life boots on it: the entries of the checkpoint where [`crossed`] says, each
+/// reserve as the questions of the root that it stands for, then the entries after it, with no
+/// fact of a later checkpoint; or the record with no fact of a checkpoint when no segment crosses.
 pub fn booted(record: Vec<Object>) -> Vec<Object> {
-  let Some(at) = last(&record) else { return record };
-  let Some(a) = fact(&record[at]) else { return record };
+  if last(&record).is_none() {
+    return record;
+  }
+  let from = crossed(&record);
+  let mut out = from.map(|at| carried(&record[at])).unwrap_or_default();
+  let later = record.into_iter().skip(from.map_or(0, |at| at + 1));
+  out.extend(later.filter(|one| fact(one).is_none_or(|a| a.kind() != CHECKPOINT)));
+  out
+}
+
+/// The entries that a checkpoint carries, each reserve as the questions of the root that it
+/// stands for.
+fn carried(checkpoint: &Object) -> Vec<Object> {
+  let Some(a) = fact(checkpoint) else { return Vec::new() };
   let held = a.word(0).and_then(|one| one.pairs()).and_then(|pairs| {
     pairs
       .into_iter()
@@ -314,6 +383,5 @@ pub fn booted(record: Vec<Object>) -> Vec<Object> {
     }
     reserved.insert(kind.to_owned(), from.max(n));
   }
-  out.extend(record.into_iter().skip(at + 1));
   out
 }

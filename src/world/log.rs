@@ -202,11 +202,11 @@ fn owed(held: &[Object]) -> Vec<(String, Value)> {
 
 impl Log {
   /// The log of the record at a path, which holds these entries, written again from its first line, or from the
-  /// lines of the log before it that come before the last checkpoint of the record.
+  /// lines of the log before it that come before the checkpoint that the life boots on.
   fn open(record: &Path, held: &[Object]) -> Log {
     let path = PathBuf::from(format!("{}.log", record.display()));
     let fresh = PathBuf::from(format!("{}.log.new", record.display()));
-    let earlier = crate::checkpoint::last(held)
+    let earlier = crate::checkpoint::crossed(held)
       .and_then(|at| earlier(&path, &held[..at]).map(|(text, seen)| (at, text, seen)));
     let file = OpenOptions::new().create(true).write(true).truncate(true).open(&fresh).ok();
     let entries = held.len();

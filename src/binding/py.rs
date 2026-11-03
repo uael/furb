@@ -869,6 +869,19 @@ impl PyEngine {
     self.call(|engine| engine.names(chain.as_deref()))
   }
 
+  /// The life ends with its checkpoint at the tip of its record, from which a later life on the
+  /// record opens, as the engine of the crate writes it; then the engine is gone, as after a
+  /// dispose. A life that keeps no record refuses it, and ends too.
+  fn checkpoint(&self) -> Result<(), Fault> {
+    let life = self
+      .home
+      .engine
+      .try_borrow_mut()
+      .map_err(|_| Fault::refused("the engine is in a call of the host"))?
+      .take();
+    life.ok_or_else(|| Fault::refused("the engine is disposed"))?.checkpoint()
+  }
+
   /// The engine is gone, and its ears with it: a command of the crate ends, a wait ends, and the store lets its
   /// record go.
   fn dispose(&self) -> Result<(), Fault> {
