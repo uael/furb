@@ -479,7 +479,7 @@ pub fn enabled(root: Vec<Said>) -> Vec<Extension> {
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn extensions(given: Vec<Extension>) -> NativeEar {
-  NativeEar::of(extension::extensions(given))
+  NativeEar::of(extension::extensions(given, extension::Places::here()))
 }
 
 /// The part for a TUI of each extension that a life in the directory of a project runs and whose manifest names

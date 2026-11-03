@@ -251,7 +251,7 @@ test("what a model writes streams into the session under its rung until its repl
               "assistant",
               expect.stringMatching(
                 new RegExp(
-                  `^rung\\(read\\('.*[/\\\\]+extensions[/\\\\]+${name}[/\\\\]+${name}\\.py', HIDDEN\\)\\.content\\)$`,
+                  `^rung\\(read\\('.*[/\\\\]+words[/\\\\]+${name}[/\\\\]+${name}\\.py', HIDDEN\\)\\.content\\)$`,
                 ),
               ),
             ),
@@ -269,7 +269,7 @@ test("what a model writes streams into the session under its rung until its repl
           turn(
             "assistant",
             expect.stringMatching(
-              /^rung\(read\('.*[/\\]+extensions[/\\]+naming[/\\]+naming\.py', HIDDEN\)\.content\)$/,
+              /^rung\(read\('.*[/\\]+words[/\\]+naming[/\\]+naming\.py', HIDDEN\)\.content\)$/,
             ),
           ),
           turn("user", expect.stringMatching(/^(?!#)[\s\S]*\ndef \w+\(/)),

@@ -380,14 +380,14 @@ test("the setup of the root stands as code: a comment that names the setup, then
           ...["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"].map((name) =>
             expect.stringMatching(
               new RegExp(
-                `^rung\\(read\\('.*[/\\\\]+extensions[/\\\\]+${name}[/\\\\]+${name}\\.py', HIDDEN\\)\\.content\\)$`,
+                `^rung\\(read\\('.*[/\\\\]+words[/\\\\]+${name}[/\\\\]+${name}\\.py', HIDDEN\\)\\.content\\)$`,
               ),
             ),
           ),
           "catchup()\nawait recall()\nawait listed()\nawait mcp_index()",
           // An extension that plays on the root alone comes after the others, with its life word.
           expect.stringMatching(
-            /^rung\(read\('.*[/\\]+extensions[/\\]+naming[/\\]+naming\.py', HIDDEN\)\.content\)$/,
+            /^rung\(read\('.*[/\\]+words[/\\]+naming[/\\]+naming\.py', HIDDEN\)\.content\)$/,
           ),
           "name_session()",
           expect.stringMatching(/^stand\(\)\ncd\('.*'\)$/),
