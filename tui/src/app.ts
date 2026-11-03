@@ -504,7 +504,7 @@ export class App {
       // The feed keeps a row of space under the top line, however far it scrolls.
       marginTop: space.section,
       marginBottom: space.rest,
-      contentOptions: { gap: space.stack, paddingBottom: space.section },
+      contentOptions: { gap: space.stack },
     });
     // The ScrollBar constructor resets manual visibility; set it after construction.
     this.scroll.verticalScrollBar.visible = false;
