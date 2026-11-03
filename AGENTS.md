@@ -279,6 +279,9 @@ fix what your change broke, and report what was broken before.
   `.furb/extensions/test_words.py` holds to a definition. Run the tests of an extension of the project alone with
   `uv run --no-sync pytest -q <folder> -p no:cacheprovider --no-cov`, since the coverage of 100 applies to the whole
   suite only.
+- `python3 script/rustwidth.py [base]`: fail on a comment line of a `.rs` file that the change adds past 100
+  characters, which rustfmt does not wrap. The lines that main holds are no debt of a change: wrap them when you change
+  their file.
 - `uv run ty check --error-on-warning`: the type check. The tests are checked against `engine.pyi`, and the words of
   `.furb/extensions` too, less their tests.
 - `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`:

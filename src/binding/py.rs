@@ -599,9 +599,10 @@ impl Wake for Wakes {
   }
 }
 
-/// Whether the interpreter is on its way out. The thread of a waker holds this lock while it attaches to python, so
-/// once the exit of the interpreter took it, no thread of a waker attaches again: a thread that attached while the
-/// interpreter finalized read the state that the finalization frees, and the process died with a segmentation fault.
+/// Whether the interpreter is on its way out. The thread of a waker holds this lock while it
+/// attaches to python, so once the exit of the interpreter took it, no thread of a waker attaches
+/// again: a thread that attached while the interpreter finalized read the state that the
+/// finalization frees, and the process died with a segmentation fault.
 static LEAVING: Mutex<bool> = Mutex::new(false);
 static EXIT: PyOnceLock<()> = PyOnceLock::new();
 

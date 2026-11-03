@@ -51,6 +51,12 @@ repos:
         language: system
         types_or: [rust]
         pass_filenames: false
+      - id: rustwidth
+        name: no comment of rust goes past 100 characters
+        entry: python3 script/rustwidth.py
+        language: system
+        files: (\.rs|^script/rustwidth\.py)$
+        pass_filenames: false
       - id: clippy
         name: clippy
         entry: cargo clippy --workspace --all-targets -- -D warnings

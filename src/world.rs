@@ -1,14 +1,16 @@
 //! The World that the crate writes: ears of the outside that serve the machine, one for each concern.
 //!
-//! The contract makes the World the ears of the outside that serve the machine, one or many. These are the ones
-//! every host shares, written once in rust: [`files`] reads and writes a path, the files of the [`Scratch`] directory
-//! of the life among them, [`bash`] runs a command, [`fetch`] gets a page of the web, [`time`] reads the clock, draws a chance and ends a wait,
-//! [`store`] keeps the record on the disk under a lease, as a file of lines or a database of SQLite, the store of
-//! builds holds the program of each version that ran on this machine, which [`stored`] finds, [`log`] writes
-//! the log of the life beside the record, which [`logged`] reads, [`retold`] reads a record with no life, and the
-//! [`Provider`] answers what the chains stand on and asks the models of rig for their turns, which the [`Catalog`]
-//! knows, the claude command line among them. The host names the models it offers, and gives the rest, its
-//! console, which reads what the operator answers by the rules of [`answered`].
+//! The contract makes the World the ears of the outside that serve the machine, one or many. These
+//! are the ones every host shares, written once in rust: [`files`] reads and writes a path, the
+//! files of the [`Scratch`] directory of the life among them, [`bash`] runs a command, [`fetch`]
+//! gets a page of the web, [`time`] reads the clock, draws a chance and ends a wait, [`store`]
+//! keeps the record on the disk under a lease, as a file of lines or a database of SQLite, the
+//! store of builds holds the program of each version that ran on this machine, which [`stored`]
+//! finds, [`log`] writes the log of the life beside the record, which [`logged`] reads, [`retold`]
+//! reads a record with no life, and the [`Provider`] answers what the chains stand on and asks the
+//! models of rig for their turns, which the [`Catalog`] knows, the claude command line among them.
+//! The host names the models it offers, and gives the rest, its console, which reads what the
+//! operator answers by the rules of [`answered`].
 //!
 //! Each is an ear like any other, so an ear that comes before one of them in the order of boot takes a question in
 //! its place, and an ear that takes a question and asks it again wraps it.

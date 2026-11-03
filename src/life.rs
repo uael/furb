@@ -145,10 +145,10 @@ impl Opening {
     self.inspecting != Some(true)
   }
 
-  /// The record the life opens on, and the ears of the crate, in the order of boot: the provider, the extensions,
-  /// each official extension, the files, the commands and time, and the store and the log of the life when the life
-  /// keeps. The ears of the web, of the servers of MCP, of the compaction and of the fetch do work, so a life that inspects hears
-  /// them silent.
+  /// The record the life opens on, and the ears of the crate, in the order of boot: the provider,
+  /// the extensions, each official extension, the files, the commands and time, and the store and
+  /// the log of the life when the life keeps. The ears of the web, of the servers of MCP, of the
+  /// compaction and of the fetch do work, so a life that inspects hears them silent.
   ///
   /// The files and the commands share the scratch directory of the life: the one of its record when it keeps the
   /// record, and else one of its own, which goes with the life. A new record starts with an empty scratch directory,

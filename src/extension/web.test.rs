@@ -1,5 +1,6 @@
-//! The ear of the web: what a server of MCP answers comes to the answer of the free search, and in a life of the real engine a search goes to the native search of its actor and a fetch reads a page
-//! of a server of this machine.
+//! The ear of the web: what a server of MCP answers comes to the answer of the free search, and in
+//! a life of the real engine a search goes to the native search of its actor and a fetch reads a
+//! page of a server of this machine.
 
 #![expect(
   clippy::let_underscore_must_use,
