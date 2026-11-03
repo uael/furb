@@ -172,7 +172,9 @@ or a ... once the window rolled, the line that runs stands second to last, and t
 come, or the row where the model writes. A click on a ... opens the lines in a block that scrolls, up to four
 hundred, and Roll up closes it. The feed shows one line in place of its earlier threads, as "28 earlier messages". A
 click on the line shows them. A long message shows its first rows, with a line that shows the rest. A jump to an act
-opens each fold over it. In the sidebar, a workspace lists the session shown and
+opens each fold over it. In the sidebar, the marks of a row and of the head count what concerns you: a question that
+waits anywhere, and the failure or the pause of a thread that you started. The failure of an agent does not count,
+and no mark counts the work in progress. A workspace lists the session shown and
 each session that works, asks or failed, then its newest other sessions until it lists three, and the older ones fold
 under Earlier.
 

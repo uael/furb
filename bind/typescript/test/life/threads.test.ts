@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { LiveAct } from "../../src/life/acts.ts";
-import { type ChainThread, chainThreads, nestThreads } from "../../src/life/threads.ts";
+import { type ChainThread, chainThreads, concerns, nestThreads } from "../../src/life/threads.ts";
 import { act } from "./acts.ts";
 
 const prompt = (id: string, began: number, more: Partial<LiveAct> = {}) =>
@@ -92,6 +92,8 @@ test("the threads that the ladder of a thread made nest under it, and a question
     asks,
     state: asks.length ? "asks" : "running",
     resolved: false,
+    origin: "rung",
+    yours: false,
   });
   const lead = prompt("prompt1", 1);
   const agents = Array.from({ length: 8 }, (_, n) =>
@@ -109,4 +111,61 @@ test("the threads that the ladder of a thread made nest under it, and a question
   expect(tree[0]?.agents.map((one) => one.thread.act.id)).toEqual(agents.map((one) => one.id));
   expect(tree[0]?.agents.at(-1)?.agents.map((one) => one.thread.act.id)).toEqual(["prompt20"]);
   expect([tree[0]?.asks, tree[1]?.asks]).toEqual([["prompt21"], []]);
+});
+
+test("a question waits for the operator in any thread, and a failure or a pause concerns them only in a thread that they started", () => {
+  const error = { is: "Refused", args: ["no"] };
+  const threads = (acts: LiveAct[], owed: string[] = []) =>
+    chainThreads(acts, new Map(acts.map((one) => [one.id, one])), new Set(owed));
+  const word = act("rung1", "rung", "chain1", "operator", 1);
+  const agent = act("rung2", "rung", "chain1", "prompt1", 3);
+  const made = (id: string, by: string, began: number, more: Partial<LiveAct> = {}) =>
+    act(id, "prompt", "chain1", by, began, undefined, { words: ["str", `${id} says`, ""], ...more });
+  const base = [prompt("prompt1", 1), word, agent];
+  const read = (acts: LiveAct[], owed: string[] = []) =>
+    threads([...base, ...acts], owed).map((one) => [one.act.id, one.origin, one.yours, concerns(one)]);
+  // A question that waits in a thread of an agent concerns the operator.
+  const step = act("rung3", "rung", "chain1", "prompt2", 5);
+  const ask = act("prompt9", "prompt", "chain1", "rung3", 9, undefined, {
+    words: ["bool", "Keep it?", "operator"],
+  });
+  expect(read([made("prompt2", "rung2", 4), step, ask], ["prompt9"])).toContainEqual([
+    "prompt2",
+    "rung",
+    false,
+    true,
+  ]);
+  // A failed agent thread does not concern them, and a thread of their word does when it fails or is held.
+  expect(read([made("prompt2", "rung2", 4, { done: true, ended: 5, value: error })])).toContainEqual([
+    "prompt2",
+    "rung",
+    false,
+    false,
+  ]);
+  expect(read([made("prompt2", "rung1", 4, { done: true, ended: 5, value: error })])).toContainEqual([
+    "prompt2",
+    "rung",
+    true,
+    true,
+  ]);
+  expect(read([made("prompt2", "rung1", 4, { paused: true })])).toContainEqual([
+    "prompt2",
+    "rung",
+    true,
+    true,
+  ]);
+  expect(read([made("prompt2", "rung2", 4, { paused: true })])).toContainEqual([
+    "prompt2",
+    "rung",
+    false,
+    false,
+  ]);
+  // The operator's own message is theirs, and a thread that finished is no concern.
+  expect(read([made("prompt2", "operator", 4)])).toContainEqual(["prompt2", "operator", true, false]);
+  expect(read([made("prompt2", "ear7", 4, { done: true, ended: 5, value: error })])).toContainEqual([
+    "prompt2",
+    "ear",
+    false,
+    false,
+  ]);
 });
