@@ -4,7 +4,6 @@ import {
   CodeRenderable,
   getTreeSitterClient,
   infoStringToFiletype,
-  LineNumberRenderable,
   MarkdownRenderable,
   type MouseEvent,
   type Renderable,
@@ -24,18 +23,17 @@ import { clip } from "../format.ts";
 import { type ActRow, working } from "../session.ts";
 import { theme as c, glyph, type MarkState, markOf, spacing as space } from "../theme.ts";
 import { type Part, plain, styled } from "../ui.ts";
+import { Gutter } from "./gutter.ts";
 import { part } from "./part.ts";
 import {
   type BlockOptions,
   blockLabel,
   chipColors,
-  gutterOf,
   gutterWidth,
   noBorder,
   STATE,
   type State,
   stateOf,
-  stateSigns,
 } from "./shared.ts";
 
 /** The match of a pattern that covers a column of a line, as a terminal draws the line. The scan adds the width of
@@ -544,12 +542,7 @@ export const blocks = part({
           }
         : {}),
     });
-    block.add(
-      new LineNumberRenderable(this.renderer, {
-        target: code,
-        ...gutterOf(digits, stateSigns(new Map(), count)),
-      }),
-    );
+    block.add(new Gutter(this.renderer, { target: code, digits }));
     return block;
   },
 
