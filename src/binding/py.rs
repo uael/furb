@@ -7,7 +7,7 @@ use indexmap::IndexMap;
 use std::{
   cell::{OnceCell, RefCell},
   sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
     mpsc,
   },
@@ -573,12 +573,29 @@ impl Wake for Wakes {
   }
 }
 
+/// Whether the interpreter is on its way out. The thread of a waker holds this lock while it attaches to python, so
+/// once the exit of the interpreter took it, no thread of a waker attaches again: a thread that attached while the
+/// interpreter finalized read the state that the finalization frees, and the process died with a segmentation fault.
+static LEAVING: Mutex<bool> = Mutex::new(false);
+static EXIT: PyOnceLock<()> = PyOnceLock::new();
+
 /// What wakes the running loop to drive, as `drive` does: a thread of its own, which puts the drive on that loop at
-/// each wake, and ends when the waker goes.
+/// each wake, and ends when the waker goes or when the interpreter exits.
 fn waker(
   py: Python<'_>,
   drive: impl Fn(Python<'_>) -> PyResult<()> + Send + Sync + 'static,
 ) -> PyResult<Waker> {
+  EXIT.get_or_try_init(py, || {
+    let leave = PyCFunction::new_closure(py, None, None, |args, _| {
+      args.py().detach(|| {
+        if let Ok(mut leaving) = LEAVING.lock() {
+          *leaving = true;
+        }
+      });
+      PyResult::Ok(())
+    })?;
+    py.import("atexit")?.call_method1("register", (leave,)).map(|_| ())
+  })?;
   let running = py.import("asyncio")?.call_method0("get_running_loop")?.unbind();
   let drive =
     PyCFunction::new_closure(py, None, None, move |args, _| drive(args.py()))?.into_any().unbind();
@@ -588,6 +605,10 @@ fn waker(
   let woken = move || {
     while wakes.recv().is_ok() {
       seen.store(false, Ordering::Release);
+      let Ok(leaving) = LEAVING.lock() else { break };
+      if *leaving {
+        break;
+      }
       Python::attach(|py| {
         // A loop that is closed drives nothing more, and the engine is gone with it.
         let _ = running.bind(py).call_method1("call_soon_threadsafe", (drive.bind(py),));
