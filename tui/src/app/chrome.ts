@@ -376,6 +376,8 @@ export const chrome = part({
       ["   ", c.text],
       ...this.partLine(line),
     ]);
+    // On a narrow terminal, or with the sidebar hidden, the context of the corner folds into the end of the state.
+    if (!this.sidebarShown || this.drawerOpen) statuses.push(["   ", c.text], [this.contextLine(), c.muted]);
     // The keys that have no room beside the whole state leave the footer from the last one, so the state is never cut.
     const shown = [...keys];
     const buttonsOf = (list: typeof keys) =>

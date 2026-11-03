@@ -9,13 +9,27 @@ import { part } from "./part.ts";
 import type { TextShape, ThreadList } from "./shared.ts";
 
 export const sidebar = part({
-  /** The context of the chain shown, at the foot of the sidebar: how full its window is and where a grant pauses it,
+  /** The context of the chain shown, in one short line for the footer: how full its window is, or the size of its
+   * prompt, and what it spent. */
+  contextLine(): string {
+    const w = this.session;
+    const window = w.filled;
+    const known = window !== undefined && Number.isFinite(window);
+    const share = known
+      ? `${Math.round((window ?? 0) * 100)}%`
+      : w.context === undefined
+        ? "No answer yet"
+        : count(w.context);
+    return known || w.spend.dollars ? `${share} · ${dollars(w.spend.dollars)}` : share;
+  },
+
+  /** The context of the chain shown, in the corner under the sidebar: how full its window is and where a grant pauses it,
    * its tokens, and what it spent. */
   renderRailUsage(): void {
     const w = this.session;
     const window = w.filled;
     const grant = w.open.find((act) => act.kind === "grant");
-    const width = this.rail.width || w.preferences.sidebarWidth;
+    const width = w.preferences.sidebarWidth;
     if (
       !this.paneChanged(this.railUsage, [this.theme, w.spend, window, width, w.context, grant?.words, w.demo])
     )
@@ -38,62 +52,57 @@ export const sidebar = part({
         ? undefined
         : Number(unmarked(grant.words[1]));
     const known = window !== undefined && Number.isFinite(window);
-    const tokens = spend.input + spend.output + spend.cacheRead + spend.cacheWrite;
-    // A chain with a source reads the prompt of its origin before it answers once, so its context shows from its birth.
-    this.railUsage.visible = tokens > 0 || spend.dollars > 0 || Boolean(grant) || w.context !== undefined;
-    if (this.railUsage.visible) {
-      // The share of the window leads the header, with the size of the window when the answer tells it.
-      const prompt = w.context;
-      const size = known && prompt !== undefined && window ? count(Math.round(prompt / window)) : "";
-      spread(
-        ["Context", c.text, bold],
-        w.demo ? "  simulated" : "",
-        known
-          ? [`${Number(((window ?? 0) * 100).toFixed(1))}%${size ? ` of ${size}` : ""}`, c.text]
-          : [prompt === undefined ? "No answer yet" : count(prompt), prompt === undefined ? c.faint : c.text],
-      );
-      // The meter fills with the share of the window that the last answer used, and marks the ceiling of a grant. It
-      // stands empty until an answer tells the share, and a hover over it says the share and where the chain pauses.
-      const part = known ? (window ?? 0) : 0;
-      const used = Math.min(inner, Math.max(part > 0 ? 1 : 0, Math.round(part * inner)));
-      const mark = ceiling === undefined ? -1 : Math.min(inner - 1, Math.round(ceiling * inner));
-      const tone = part >= 0.9 ? c.danger : part >= 0.7 ? c.warning : c.accent;
-      const cells: Part[] = [];
-      for (let at = 0; at < inner; at++)
-        cells.push(at === mark ? ["╋", c.warning] : [glyph.meter, at < used ? tone : c.border]);
-      const tip: Part[] = [
-        [known ? `${Number((part * 100).toFixed(1))}%` : "No answer yet", c.text, bold],
-        [known ? " of the context window" : "", c.muted],
-        [ceiling === undefined ? "" : `, pauses at ${Number((ceiling * 100).toFixed(1))}%`, c.warning],
-      ];
-      this.tipped(add(cells), tip);
-      // One line holds the numbers: the whole prompt of the last answer, what the cache gave it, and what the chain
-      // spent against its ceiling. A hover over it names each number of the chain, each token counted once.
-      const limit = grant?.words[0];
-      const spent =
-        limit === null || limit === undefined
-          ? dollars(spend.dollars)
-          : `${dollars(spend.dollars)}/${dollars(Number(unmarked(limit)))}`;
-      // The numbers lose their words one by one before they lose their room, so that the line shows whole.
-      const cached = spend.cacheRead ? ` · ${count(spend.cacheRead)} cached` : "";
-      const forms =
-        prompt === undefined
-          ? [cached.slice(3)]
-          : [`${count(prompt)} prompt${cached}`, `${count(prompt)}${cached}`, count(prompt)];
-      const left = forms.find((one) => Bun.stringWidth(one + spent) + 1 <= inner) ?? forms.at(-1) ?? "";
-      const numbers = add([
-        [left, c.muted],
-        [" ".repeat(Math.max(1, inner - Bun.stringWidth(left + spent)))],
-        [spent, c.text],
-      ]);
-      this.tipped(numbers, [
-        [`Prompt ${prompt === undefined ? "none" : count(prompt)}`, c.text, bold],
-        [`  fresh input ${count(spend.input)}`, c.muted],
-        [`  output ${count(spend.output)}`, c.muted],
-        [`  cache read ${count(spend.cacheRead)}`, c.muted],
-        [`  cache write ${count(spend.cacheWrite)}`, c.muted],
-      ]);
-    }
+    // The share of the window leads the header, with the size of the window when the answer tells it.
+    const prompt = w.context;
+    const size = known && prompt !== undefined && window ? count(Math.round(prompt / window)) : "";
+    spread(
+      ["Context", c.text, bold],
+      w.demo ? "  simulated" : "",
+      known
+        ? [`${Number(((window ?? 0) * 100).toFixed(1))}%${size ? ` of ${size}` : ""}`, c.text]
+        : [prompt === undefined ? "No answer yet" : count(prompt), prompt === undefined ? c.faint : c.text],
+    );
+    // The meter fills with the share of the window that the last answer used, and marks the ceiling of a grant. It
+    // stands empty until an answer tells the share, and a hover over it says the share and where the chain pauses.
+    const part = known ? (window ?? 0) : 0;
+    const used = Math.min(inner, Math.max(part > 0 ? 1 : 0, Math.round(part * inner)));
+    const mark = ceiling === undefined ? -1 : Math.min(inner - 1, Math.round(ceiling * inner));
+    const tone = part >= 0.9 ? c.danger : part >= 0.7 ? c.warning : c.accent;
+    const cells: Part[] = [];
+    for (let at = 0; at < inner; at++)
+      cells.push(at === mark ? ["╋", c.warning] : [glyph.meter, at < used ? tone : c.border]);
+    const tip: Part[] = [
+      [known ? `${Number((part * 100).toFixed(1))}%` : "No answer yet", c.text, bold],
+      [known ? " of the context window" : "", c.muted],
+      [ceiling === undefined ? "" : `, pauses at ${Number((ceiling * 100).toFixed(1))}%`, c.warning],
+    ];
+    this.tipped(add(cells), tip);
+    // One line holds the numbers: the whole prompt of the last answer, what the cache gave it, and what the chain
+    // spent against its ceiling. A hover over it names each number of the chain, each token counted once.
+    const limit = grant?.words[0];
+    const spent =
+      limit === null || limit === undefined
+        ? dollars(spend.dollars)
+        : `${dollars(spend.dollars)}/${dollars(Number(unmarked(limit)))}`;
+    // The numbers lose their words one by one before they lose their room, so that the line shows whole.
+    const cached = spend.cacheRead ? ` · ${count(spend.cacheRead)} cached` : "";
+    const forms =
+      prompt === undefined
+        ? [cached.slice(3)]
+        : [`${count(prompt)} prompt${cached}`, `${count(prompt)}${cached}`, count(prompt)];
+    const left = forms.find((one) => Bun.stringWidth(one + spent) + 1 <= inner) ?? forms.at(-1) ?? "";
+    const numbers = add([
+      [left, c.muted],
+      [" ".repeat(Math.max(1, inner - Bun.stringWidth(left + spent)))],
+      [spent, c.text],
+    ]);
+    this.tipped(numbers, [
+      [`Prompt ${prompt === undefined ? "none" : count(prompt)}`, c.text, bold],
+      [`  fresh input ${count(spend.input)}`, c.muted],
+      [`  output ${count(spend.output)}`, c.muted],
+      [`  cache read ${count(spend.cacheRead)}`, c.muted],
+      [`  cache write ${count(spend.cacheWrite)}`, c.muted],
+    ]);
   },
 
   /** The threads of the chain shown, and each by its id. */
