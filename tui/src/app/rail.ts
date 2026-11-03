@@ -1,11 +1,5 @@
 import { basename } from "node:path";
-import {
-  type BoxOptions,
-  type BoxRenderable,
-  InputRenderable,
-  InputRenderableEvents,
-  type RGBA,
-} from "@opentui/core";
+import { type BoxOptions, type BoxRenderable, InputRenderable, InputRenderableEvents } from "@opentui/core";
 import { type Ask, type ChainThread, chainThreads, gist } from "furb/life";
 import { checkoutOf } from "../checkout.ts";
 import { clock } from "../clock.ts";
@@ -13,7 +7,7 @@ import { shortenHome, shortenHomes } from "../files.ts";
 import { clip, dollars, recordLabel } from "../format.ts";
 import { isRailStyle, type RailStyle } from "../preferences.ts";
 import { type Session, statusLabels } from "../session.ts";
-import { theme as c, glyph, spacing as space, threadTone } from "../theme.ts";
+import { theme as c, glyph, type MarkState, markOf, spacing as space, threadTone } from "../theme.ts";
 import { bold, type Part, plain } from "../ui.ts";
 import type { SessionEntry, Workspace } from "../workspaces.ts";
 import { part } from "./part.ts";
@@ -106,16 +100,17 @@ export const rail = part({
   /** The marks of what needs a look, in the order of their weight: a question first. */
   badges(a: Attention): Part[] {
     const parts: Part[] = [];
-    const add = (n: number, mark: string, tone: RGBA, attributes = 0) => {
+    const add = (n: number, state: MarkState) => {
       if (!n) return;
       if (parts.length) parts.push(["  "]);
+      const [mark, tone, attributes] = markOf(state);
       parts.push([`${mark} ${n}`, tone, attributes]);
     };
-    add(a.asks, glyph.asks, c.warning, bold);
-    add(a.failed, glyph.failed, c.danger);
-    add(a.held, glyph.held, c.warning);
-    add(a.working, glyph.running, c.accent);
-    add(a.unread, glyph.dot, c.success);
+    add(a.asks, "asks");
+    add(a.failed, "failed");
+    add(a.held, "paused");
+    add(a.working, "runs");
+    add(a.unread, "unread");
     return parts;
   },
 
@@ -654,7 +649,7 @@ export const rail = part({
       const folded = this.threadFolded(id);
       link(folded ? glyph.closed : glyph.open, folded ? "Expand" : "Collapse", () => this.foldThread(id));
       link(glyph.reply, "Reply", () => this.replyTo(id));
-      if (!thread.resolved) link("✓", "Resolve", () => this.resolveThread(thread));
+      if (!thread.resolved) link(glyph.done, "Resolve", () => this.resolveThread(thread));
       const ask = thread.asks[0];
       if (ask) link(glyph.asks, "Answer", () => void w.point(ask).catch(this.report), c.warning);
       return row;

@@ -3,7 +3,7 @@ import type { Measure, Owed, Row, RowState, Tone } from "furb/life";
 import { asksOperator, gist, type Loom } from "furb/life";
 import { clip } from "./format.ts";
 import type { ActRow } from "./session.ts";
-import { theme as c, spin } from "./theme.ts";
+import { theme as c, rowMark, spin } from "./theme.ts";
 import { bold, mix, type Part } from "./ui.ts";
 
 /** The views of a life that the TUI holds side by side, which a key, a command and a setting switch at run time: the
@@ -54,14 +54,6 @@ const waitsWidth = 22;
 /** An actor with no provider, as opus/high for claude-cli:opus/high. */
 export const shortActor = (actor: string): string => actor.replace(/^[\w.-]+:/, "");
 /** The mark and the color of each state of a row. */
-export const rowMarks: Record<RowState, [string, () => RGBA]> = {
-  asks: ["◆", () => c.warning],
-  failed: ["✗", () => c.danger],
-  working: ["◉", () => c.accent],
-  paused: ["◌", () => c.warning],
-  done: ["✓", () => c.success],
-  idle: ["○", () => c.faint],
-};
 const toneColor = (tone: Tone): RGBA =>
   ({ work: c.accent, past: c.muted, asks: c.warning, failed: c.danger, none: c.faint })[tone];
 
@@ -173,12 +165,11 @@ export class LoomPane {
   private row(row: Row, input: LoomInput): Part[] {
     const { loom, width, frozen } = input;
     const selected = row.id === input.selected;
-    const [mark, color] = rowMarks[row.state];
-    const live = row.state === "working" && !frozen ? spin() : mark;
+    const [live, color] = rowMark(row.state);
     const ground = selected ? (input.steering ? c.selected : c.panel) : undefined;
     const tally = row.folded
       ? ` ${Object.entries(row.tally)
-          .map(([state, n]) => `${n}${rowMarks[state as RowState][0]}`)
+          .map(([state, n]) => `${n}${rowMark(state as RowState)[0]}`)
           .join(" ")}`
       : "";
     const fold = row.workers ? (row.folded ? "▸ " : "▾ ") : "";
@@ -206,7 +197,7 @@ export class LoomPane {
     const parts: Part[] = [
       [selected ? "▎" : " ", c.accent],
       [" "],
-      [live, color()],
+      [live, color],
       [" "],
       [label, selected ? c.text : row.state === "idle" ? c.muted : c.text, selected ? bold : 0],
       [" "],

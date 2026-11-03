@@ -33,7 +33,7 @@ import { conversation } from "../conversation.ts";
 import { shortenHomes } from "../files.ts";
 import { clip, dollars, modelName, share } from "../format.ts";
 import type { ActRow } from "../session.ts";
-import { theme as c, glyph, spacing as space, spin } from "../theme.ts";
+import { theme as c, glyph, markOf, spacing as space, spin } from "../theme.ts";
 import { bold, type Part, styled, underline } from "../ui.ts";
 import { part } from "./part.ts";
 import { gutterWidth, saidOf, seconds, spell, stateOf } from "./shared.ts";
@@ -148,7 +148,7 @@ export const details = part({
   promptState(act: ActRow): Part[] {
     const shape: Part = [String(act.words[0] ?? ""), c.faint];
     if (act.unfinished && !act.done)
-      return [shape, [`   ${glyph.ring} not finished when the record ends`, c.faint]];
+      return [shape, [`   ${markOf("idle")[0]} not finished when the record ends`, c.faint]];
     const state = act.done
       ? failed(act)
         ? stateOf("failed")
@@ -544,8 +544,8 @@ export const details = part({
             col: Bun.stringWidth(body) - TIME,
             act: line.awaits?.act ?? line.acts.at(-1),
           });
-        if (line.fails) states.set(at, [glyph.failed, c.danger]);
-        else if (line.runs) states.set(at, [glyph.running, c.accent]);
+        if (line.fails) states.set(at, markOf("failed"));
+        else if (line.runs) states.set(at, markOf("runs"));
         for (const row of rows.slice(1)) push(row.text, undefined, line);
         const base = program.length;
         program += `${line.text}\n`;
@@ -576,7 +576,7 @@ export const details = part({
       } else if (line.kind === "writes") {
         const row = push(fit(line.text, room - 2));
         comment(row);
-        states.set(row, [glyph.running, c.accent]);
+        states.set(row, markOf("thinks"));
       } else if (line.kind === "earlier") ellipses.push(push(line.text, undefined, line));
       else comment(push(fit(line.text, room - 2)));
     }
@@ -765,7 +765,7 @@ export const details = part({
         const held = await this.actPreview(act);
         const state = act.done
           ? stateOf(failed(act) ? "failed" : "done")
-          : { word: "runs", mark: glyph.running, color: c.accent };
+          : { word: "runs", mark: markOf("runs")[0], color: markOf("runs")[1] };
         const head: Part[] = [
           [act.id, c.link, bold],
           [`  ${act.kind}  `, c.secondary],

@@ -1,8 +1,8 @@
 import type { RGBA } from "@opentui/core";
 import type { Loom, Row, Tone } from "furb/life";
 import { clip } from "./format.ts";
-import { measureParts, pad, questionOf, rowMarks, shortActor } from "./overview.ts";
-import { theme as c, spin } from "./theme.ts";
+import { measureParts, pad, questionOf, shortActor } from "./overview.ts";
+import { theme as c, rowMark, spin, markOf as stateMark } from "./theme.ts";
 import { bold, mix, type Part } from "./ui.ts";
 
 /** What the panel of the chains reads to draw itself. */
@@ -172,9 +172,8 @@ function stateInk(row: Row, input: ChainsInput): RGBA {
 }
 
 function markOf(shown: Shown): Part {
-  if (shown.rest) return ["✓", c.faint];
-  const [mark, color] = rowMarks[shown.node.row.state];
-  return [shown.node.row.state === "working" ? spin() : mark, color()];
+  if (shown.rest) return stateMark("seen");
+  return rowMark(shown.node.row.state);
 }
 
 /** The label of a row: its elbows, its fold arrow, and its name. */
@@ -248,7 +247,7 @@ function footer(input: ChainsInput, shown: Shown[]): Line[] {
     ];
   const crumbs: string[] = [];
   for (let node: Node | undefined = at.node; node; node = node.parent) crumbs.unshift(node.row.label);
-  const [mark, color] = rowMarks[row.state];
+  const [mark, color] = rowMark(row.state);
   const ask = questionOf(row.id, input.loom.owed);
   const doing = row.state === "working" ? `working${row.waits ? `, waits on ${row.waits}` : ""}` : row.state;
   return [
@@ -269,7 +268,7 @@ function footer(input: ChainsInput, shown: Shown[]): Line[] {
     {
       parts: pad(
         [
-          [` ${mark} `, color()],
+          [` ${mark} `, color],
           [ask || doing, ask || row.state === "paused" ? c.warning : c.muted],
         ],
         width,
@@ -285,7 +284,10 @@ function ribbon(row: Row, width: number): Part[] {
   const offset = width - cells.length;
   const out: Part[] = Array.from({ length: width }, () => [" "] as Part);
   for (const [index, cell] of cells.entries()) {
-    const glyph = { work: "━", past: "─", asks: "◆", failed: "✗", none: " " }[cell.tone];
+    const glyph =
+      cell.tone === "asks" || cell.tone === "failed"
+        ? stateMark(cell.tone)[0]
+        : { work: "━", past: "─", none: " " }[cell.tone];
     const fade = 0.45 + (0.55 * (index + 1)) / cells.length;
     out[offset + index] =
       index === cells.length - 1 && row.state === "working"

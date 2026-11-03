@@ -58,11 +58,11 @@ test("the mode of a screen reader draws one column of text, with no box, no spin
   );
 });
 
-test("reduced motion stops the spinner, which shows the mark of work that runs", () => {
+test("reduced motion stops the spinner, which shows its still frame", () => {
   expect(spin(0)).not.toBe(spin(100));
   motion.still = true;
-  expect(spin(0)).toBe(glyph.running);
-  expect(spin(100)).toBe(glyph.running);
+  expect(spin(0)).toBe(glyph.thinks);
+  expect(spin(100)).toBe(glyph.thinks);
 });
 
 test("/access turns reduced motion and the mode of a screen reader on and off, and a new view follows the mode", async () => {

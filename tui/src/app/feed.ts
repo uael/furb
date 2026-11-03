@@ -23,7 +23,7 @@ import { clip, dollars, plainFailure } from "../format.ts";
 import type { Mark as PartMark } from "../parts.ts";
 import { hunkPatch, type Scope } from "../review.ts";
 import type { ActRow, View } from "../session.ts";
-import { theme as c, glyph, spacing as space, spin, threadTone } from "../theme.ts";
+import { theme as c, glyph, markOf, spacing as space, spin, threadTone } from "../theme.ts";
 import { bold, italic, type Part, plain } from "../ui.ts";
 import { asOf, branchMessages, branchStart, branchTaken, branchTakes, earlierSteps } from "../watching.ts";
 import { part } from "./part.ts";
@@ -635,7 +635,9 @@ export const feed = part({
           body: (box) => {
             // A right click on a message opens its menu, as on the heading of any other act.
             const beside: Part[] = [
-              ...(news ? [[`${glyph.dot} `, c.accent] as Part] : []),
+              ...(news
+                ? [[`${markOf("unread")[0]} `, markOf("unread")[1], markOf("unread")[2]] as Part]
+                : []),
               ...(sent && !folded ? [[`${sent}  `, c.faint] as Part] : []),
               ...(folded ? state.slice(1) : state),
               ...(foldedNote ? [[`  ${foldedNote}`, c.faint] as Part] : []),
@@ -1403,7 +1405,8 @@ export const feed = part({
           text,
           [
             [
-              turn[0] === "assistant" ? `${glyph.dot} ` : `${glyph.ring} `,
+              // A turn takes no mark of a state: the model speaks, or the chain tells it.
+              turn[0] === "assistant" ? `${glyph.chip} ` : `${glyph.prompt} `,
               turn[0] === "assistant" ? c.secondary : c.faint,
             ],
             [turn[0], c.text, bold],
@@ -1465,7 +1468,7 @@ export const feed = part({
         const tail = `+${change.added} -${change.removed} `;
         const fill = Math.max(
           1,
-          this.feedWidth - Bun.stringWidth(` ${glyph.dot} ${path}  ${what}`) - Bun.stringWidth(tail),
+          this.feedWidth - Bun.stringWidth(` ${glyph.chip} ${path}  ${what}`) - Bun.stringWidth(tail),
         );
         // Two sides need room for two lines of code side by side, and one side reads better below that.
         const split = this.renderer.width >= 140;
@@ -1473,7 +1476,7 @@ export const feed = part({
           `change:${path}`,
           `${w.scope}:${change.before.length}:${change.after.length}:${change.added}:${change.removed}:${split}:${this.theme}`,
           [
-            [` ${glyph.dot} `, color, 0, c.panel],
+            [` ${glyph.chip} `, color, 0, c.panel],
             [path, c.text, bold, c.panel],
             [`  ${what}`, c.muted, 0, c.panel],
             [" ".repeat(fill), c.text, 0, c.panel],

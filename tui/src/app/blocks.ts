@@ -21,7 +21,7 @@ import type { Token, Tokens } from "marked";
 import { shortenHomes } from "../files.ts";
 import { clip } from "../format.ts";
 import { type ActRow, working } from "../session.ts";
-import { theme as c, glyph, spacing as space, spin } from "../theme.ts";
+import { theme as c, glyph, type MarkState, markOf, spacing as space } from "../theme.ts";
 import { type Part, plain, styled } from "../ui.ts";
 import { part } from "./part.ts";
 import { type BlockOptions, chipColors, noBorder, type State, stateOf } from "./shared.ts";
@@ -570,18 +570,25 @@ export const blocks = part({
     const w = this.session;
     // At a moment of the past, an act that had not ended yet shows so, with no spinner and no time, since nothing runs
     // there.
+    const as = (word: string, state: MarkState): State => {
+      const [mark, color] = markOf(state);
+      return { word, mark, color };
+    };
+    // A rung whose word has not come yet waits on its model, which thinks, and other work runs.
     const running = () =>
       w.moment === undefined
-        ? { word: `running ${this.progress(act.id)}`, mark: spin(), color: c.accent }
-        : { word: "not done yet", mark: glyph.ring, color: c.faint };
-    if (act.kind === "grant" && act.done) return { word: "ended", mark: glyph.ring, color: c.faint };
+        ? as(
+            `running ${this.progress(act.id)}`,
+            act.kind === "rung" && !w.program[act.id] ? "thinks" : "runs",
+          )
+        : as("not done yet", "idle");
+    if (act.kind === "grant" && act.done) return as("ended", "idle");
     // Only work moves: an act of another kind that lives, as a grant or the watcher of an extension, lives until
-    // something ends it, as a chain does, and shows a dot.
-    if (!act.done && !WORK.includes(act.kind)) return { word: "", mark: glyph.dot, color: c.accent };
+    // something ends it, as a chain does, and work waits on it.
+    if (!act.done && !WORK.includes(act.kind)) return as("", "delegates");
     // In a record open to read, the work that had no end when the record ended has none to come: it neither runs nor
     // waits for a wake.
-    if (act.unfinished && !act.done)
-      return { word: "not finished when the record ends", mark: glyph.ring, color: c.faint };
+    if (act.unfinished && !act.done) return as("not finished when the record ends", "idle");
     // A rung that a pause holds waits for the wake, and says so, where it would otherwise seem to run.
     if (act.kind === "rung")
       return cancelled(act)
@@ -596,8 +603,8 @@ export const blocks = part({
               ? stateOf("held")
               : running();
     if (act.done) return stateOf(failed(act) ? "failed" : cancelled(act) ? "cancelled" : "done");
-    if (w.host.pending.has(act.id)) return { word: "pending", mark: glyph.ring, color: c.faint };
-    if (w.host.prompts.has(act.id)) return { word: "needs input", mark: glyph.asks, color: c.warning };
+    if (w.host.pending.has(act.id)) return as("pending", "idle");
+    if (w.host.prompts.has(act.id)) return as("needs input", "asks");
     if (act.paused && act.kind !== "bash") return stateOf("held");
     return running();
   },

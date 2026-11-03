@@ -419,10 +419,10 @@ A command that runs shows as it runs at the level of one act, since its card in 
 
 ## Keys, marks, and commands
 
-One mark means one state in every view, dialog, and sidebar: a spinner for work that runs, `◉` for a chain or a
-session at work, `◆` for a question that waits for you, `◇` for a notice, `◌` for paused
-work, `✓` for a done act, `✗` for a failure, `●` for a chain you started or a session that finished while you were
-away, and `○` for rest. F1 lists the chords that the terminal in use sends, what each mark means, and every slash
+One mark means one state in every view, dialog, and sidebar, from one table: `◆` for a question that waits for you,
+`●` for what ended or changed while you were away, `✗` for a failure, `◌` for paused work, a spinner for a model that
+thinks, which stands still as `✻`, `◉` for a command that runs or a word that awaits one, `◎` for work that waits on
+another chain, `✓` for a done act, a faint `✓` for a done thread that you saw, `⊘` for a cancel, and `○` for rest. F1 lists the chords that the terminal in use sends, what each mark means, and every slash
 command.
 
 ![Help](screenshots/16-help.png)
