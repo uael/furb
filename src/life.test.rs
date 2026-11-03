@@ -1135,7 +1135,7 @@ fn a_life_of_the_engine_that_wrote_a_checkpoint_replays_the_record_whole_and_los
   let kept = world::kept(at.join("record.jsonl")).unwrap();
   let booted = crate::checkpoint::booted(kept.clone());
   assert_eq!(crate::checkpoint::crossed(&kept), None);
-  assert_eq!(booted.len(), kept.len() - 1, "the life replays each entry but the checkpoint");
+  assert_eq!(booted, kept, "the life replays each entry, the checkpoint too");
   let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
   assert_eq!(
     closed(&mut later, "close(peek('bash1').stdout.content)").as_ref().as_str(),

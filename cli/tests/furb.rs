@@ -282,13 +282,17 @@ fn a_command_on_a_record_of_an_older_version_has_its_build_write_a_checkpoint_an
   let ours = format!("\"{}\",{}]", furb::world::engine(), furb::world::VERSION);
   let theirs = format!("\"{}\",{older}]", "0".repeat(64));
   fs::write(yard.record(), text.replace(&ours, &theirs)).unwrap();
-  // The build of the older version in the store: it says how it was asked, and writes the checkpoint as that build
-  // would, with this program on the record as that build made it.
+  // The build of the older version in the store: it says how it was asked, and writes the
+  // checkpoint as that build would, with this program on the record as that build made it, which
+  // then names that build in its fact made and in its checkpoint.
   let store = yard.at.join(format!("cache/furb/builds/{older}"));
   fs::create_dir_all(&store).unwrap();
   let script = format!(
-    "#!/bin/sh\nprintf '%s\\n' \"$@\" > asked.txt\nperl -pi -e 's/\\Q{theirs}\\E/{ours}/' \"$3\"\nexec {} \"$@\"\n",
-    env!("CARGO_BIN_EXE_furb")
+    "#!/bin/sh\nprintf '%s\\n' \"$@\" > asked.txt\nperl -pi -e 's/\\Q{theirs}\\E/{ours}/' \"$3\"\n{} \"$@\" || exit $?\n\
+     perl -pi -e 's/\\Q{ours}\\E/{theirs}/; s/\\Q\"engine\":\"{}\"\\E/\"engine\":\"{}\"/' \"$3\"\n",
+    env!("CARGO_BIN_EXE_furb"),
+    furb::world::engine(),
+    "0".repeat(64)
   );
   program(&store.join("furb"), &script);
   assert_eq!(

@@ -308,7 +308,7 @@ async function handOver(build: string): Promise<void> {
   if (ending) return;
   ending = true;
   why = `A window of the build ${build} took the life over, and a host of that build goes on with it. Open the life again in a window of that build.`;
-  ask("session", "end", [{ handover: true }], { id: 0 });
+  ask("session", "end", [], { id: 0 });
 }
 
 /** A warning of a kind: a window hears it once when it begins, in one notice with each warning that stands, since a later

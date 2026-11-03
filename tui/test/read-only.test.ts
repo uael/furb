@@ -65,9 +65,13 @@ async function drifting(record: string): Promise<void> {
   await writeFile(record, text.replace('"echo hi",""', '"echo hi",false'));
 }
 
-/** The record as another engine made it, which it names, or which it does not name. */
+/** The record as another engine made it, which it names, or which it does not name, as a crash of its life leaves it:
+ * with no checkpoint at its tip, from which this build would go on. A life that ends writes its checkpoint. */
 async function made(record: string, named: boolean): Promise<void> {
-  const text = await readFile(record, "utf8");
+  const text = (await readFile(record, "utf8"))
+    .split("\n")
+    .filter((line) => !line.startsWith('[["checkpoint",'))
+    .join("\n");
   const fact = /\["made","chain1","store","[0-9a-f]{64}",\d+\]/.exec(text)?.[0];
   if (!fact) throw new Error("The record names no engine.");
   const without = text

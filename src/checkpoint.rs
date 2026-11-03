@@ -321,17 +321,13 @@ pub fn crossed(record: &[Object]) -> Option<usize> {
   at
 }
 
-/// The record as a life boots on it: the entries of the checkpoint where [`crossed`] says, each
-/// reserve as the questions of the root that it stands for, then the entries after it, with no
-/// fact of a later checkpoint; or the record with no fact of a checkpoint when no segment crosses.
+/// The record as a life boots on it: the entries of the checkpoint where [`crossed`] says, then the
+/// entries after it; or the record as it stands when no segment crosses, so a life of the engine
+/// that wrote each checkpoint replays the record whole, each checkpoint a fact that it says again.
 pub fn booted(record: Vec<Object>) -> Vec<Object> {
-  if last(&record).is_none() {
-    return record;
-  }
-  let from = crossed(&record);
-  let mut out = from.map(|at| carried(&record[at])).unwrap_or_default();
-  let later = record.into_iter().skip(from.map_or(0, |at| at + 1));
-  out.extend(later.filter(|one| fact(one).is_none_or(|a| a.kind() != CHECKPOINT)));
+  let Some(at) = crossed(&record) else { return record };
+  let mut out = carried(&record[at]);
+  out.extend(record.into_iter().skip(at + 1));
   out
 }
 

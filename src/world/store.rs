@@ -199,9 +199,11 @@ pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>
   let entries: Vec<Object> = store.store.entries()?.into_iter().map(streamed).collect();
   let store = Rc::new(RefCell::new(store));
   let held = Rc::clone(&store);
-  // A record whose last checkpoint has no fact made after it is new to the build that goes on from it.
+  // A record whose life goes on from a checkpoint that no fact made follows is new to the build
+  // that goes on from it. A life of the engine that wrote each segment replays the record whole,
+  // which names its build already.
   let new = entries.is_empty()
-    || crate::checkpoint::last(&entries).is_some_and(|at| made(&entries[at + 1..]).is_none());
+    || crate::checkpoint::crossed(&entries).is_some_and(|at| made(&entries[at + 1..]).is_none());
   let kept = hearing(&["keep", "chain"], move |mut co: Co<()>| async move {
     // Whether the ear told the operator that the record stopped, and whether a try waits for its time.
     let (mut stopped, mut again) = (false, false);
