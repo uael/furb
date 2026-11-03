@@ -4215,3 +4215,18 @@ def test_the_staff_counts_only_the_items_of_the_queue_that_it_can_hire_now(condu
   conductor.staff()
   assert [key for key, _ in conductor.hired] == ["ready"]
   assert conductor.queue == held and conductor.backlog == []
+
+
+def test_a_test_file_holds_no_item_for_an_open_pr_or_a_live_worker(conductor: Round) -> None:
+  names = ["src/life.test.rs", "test/test_x.py", "ext/test/conftest.py", "tests/a.rs", "web/__tests__/a.ts"]
+  names += ["a/b_test.rs", "a/test_c.py"]
+  conductor.prs[7] = conductor.pr(n=7)
+  conductor.touched[7] = {"sha": "abc", "paths": [*names, "src/real.rs"]}
+  conductor.busy("p1", "k0", conductor.model_of("k0"))
+  conductor.briefed["k0"] = "Add tests to " + ", ".join(names) + "."
+  conductor.queue[:] = [("k1", "Fix " + ", ".join(names) + ".", "defects"), ("k2", "Fix src/real.rs.", "defects")]
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["k1"] and conductor.serial == {"k2": 7}
+  assert conductor.heard == [
+    "k2 waits for #7, which changes src/real.rs that it names, so two designs of one file do not race."
+  ]
