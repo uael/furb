@@ -1,8 +1,4 @@
 #![expect(
-  clippy::clone_on_ref_ptr,
-  reason = "debt: a clone of an Arc or an Rc that hides its kind"
-)]
-#![expect(
   clippy::disallowed_methods,
   reason = "debt: a call that blocks: sleep, block_on or try_wait"
 )]
@@ -11,24 +7,24 @@
   reason = "debt: a let _ drops a value that must be used"
 )]
 #![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(clippy::redundant_clone, reason = "debt: a clone of a value that is not used again")]
 
 use std::{
   io::{Read, Write},
   net::{TcpListener, TcpStream},
   path::PathBuf,
-  sync::{Arc, atomic::AtomicBool},
+  sync::mpsc,
   thread,
   time::Duration,
 };
 
 use indexmap::IndexMap;
+use tokio::sync::watch;
 
 use super::{
   Catalog as Account, Credential, Effort, Listing, callback_code, directory, now, random, save,
   status,
 };
-use crate::world::Catalog;
+use crate::{ear::reactor, world::Catalog};
 
 struct Scope(PathBuf);
 
@@ -132,9 +128,9 @@ fn the_browser_callback_rejects_another_state_and_reads_a_split_request() {
   let listener = TcpListener::bind("127.0.0.1:0").expect("callback port");
   listener.set_nonblocking(true).expect("nonblocking listener");
   let address = listener.local_addr().expect("address");
-  let canceled = Arc::new(AtomicBool::new(false));
-  let stopping = canceled.clone();
-  let callback = thread::spawn(move || callback_code(listener, "expected", &stopping));
+  let (_stop, canceled) = watch::channel(false);
+  let (send, callback) = mpsc::channel();
+  reactor().spawn(async move { send.send(callback_code(listener, "expected", canceled).await) });
   let mut wrong = TcpStream::connect(address).expect("first browser");
   wrong
     .write_all(b"GET /auth/callback?code=wrong&state=another HTTP/1.1\r\n\r\n")
@@ -149,5 +145,6 @@ fn the_browser_callback_rejects_another_state_and_reads_a_split_request() {
   let mut response = String::new();
   browser.read_to_string(&mut response).expect("response");
   assert!(response.starts_with("HTTP/1.1 200 OK"));
-  assert_eq!(callback.join().expect("callback thread").expect("code"), "accepted");
+  let code = callback.recv_timeout(Duration::from_secs(10)).expect("the callback ends");
+  assert_eq!(code.expect("code"), "accepted");
 }

@@ -493,7 +493,8 @@ fn a_cancel_of_a_command_ends_the_process_that_it_started_and_not_only_its_shell
   while std::fs::read_to_string(&pid).map_or(true, |text| text.trim().is_empty()) {
     assert!(started.elapsed() < Duration::from_secs(20), "the command never started its process");
     thread::sleep(Duration::from_millis(10));
-    let _ = lived.engine.peek("bash1", verbs::Peek::default());
+    // A command starts in a work of its ear, which goes on while the life is driven.
+    lived.engine.pump(Waker::noop()).unwrap();
   }
   let sleeper = std::fs::read_to_string(&pid).unwrap().trim().to_owned();
   lived.engine.cancel(&cancelled, Default::default()).unwrap();

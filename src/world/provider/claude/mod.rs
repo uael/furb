@@ -16,10 +16,6 @@
   reason = "debt: an assignment of a clone, where clone_from serves"
 )]
 #![expect(
-  clippy::disallowed_methods,
-  reason = "debt: a call that blocks: sleep, block_on or try_wait"
-)]
-#![expect(
   clippy::duration_suboptimal_units,
   reason = "debt: a Duration in a unit that is not the largest"
 )]
@@ -319,29 +315,19 @@ impl Program {
     Ok(command)
   }
 
-  /// Whether this program, as its account, is signed in.
+  /// Whether this program, as its account, is signed in. It waits for the command on the runtime of the ears, so it
+  /// never runs on a thread of that runtime nor on the thread of a life, and the command is ended after ten seconds.
   fn signed(&self) -> bool {
-    let Ok(mut tokio) = self.command() else { return false };
-    let Ok(mut child) = tokio
-      .as_std_mut()
+    let Ok(mut command) = self.command() else { return false };
+    command
       .args(["auth", "status"])
       .stdin(std::process::Stdio::null())
       .stdout(std::process::Stdio::piped())
       .stderr(std::process::Stdio::piped())
-      .spawn()
-    else {
-      return true;
-    };
-    let until = std::time::Instant::now() + Duration::from_secs(10);
-    while matches!(child.try_wait(), Ok(None)) {
-      if std::time::Instant::now() >= until {
-        let _ = child.kill();
-        let _ = child.wait();
-        return true;
-      }
-      std::thread::sleep(Duration::from_millis(20));
-    }
-    let Ok(out) = child.wait_with_output() else { return true };
+      .kill_on_drop(true);
+    let asked =
+      async move { tokio::time::timeout(Duration::from_secs(10), command.output()).await };
+    let Ok(Ok(out)) = reactor().block_on(asked) else { return true };
     let said = String::from_utf8_lossy(&out.stdout);
     let logged =
       serde_json::from_str::<Value>(&said).ok().and_then(|one| one["loggedIn"].as_bool());

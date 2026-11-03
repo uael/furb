@@ -26,10 +26,6 @@
 //! model for chat with no window, after which the server is asked again once a delay passed. A host that lists the
 //! models waits for the server, five seconds at most and once in each delay while the server does not answer.
 
-#![expect(
-  clippy::disallowed_methods,
-  reason = "debt: a call that blocks: sleep, block_on or try_wait"
-)]
 #![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
 #![expect(
   clippy::let_underscore_must_use,
@@ -260,7 +256,8 @@ impl Server {
     model
   }
 
-  /// The models that the server lists now, or why it lists none.
+  /// The models that the server lists now, or why it lists none, which it waits for on the runtime of the ears, so it
+  /// never runs on a thread of that runtime nor on the thread of a life.
   fn list(&self) -> Result<Vec<Offer>, String> {
     let client = ReqwestClient::builder().connect_timeout(CONNECT).build();
     let client = client.map_err(|no| no.to_string())?;
@@ -278,7 +275,7 @@ impl Server {
       .await;
       Ok::<_, String>(offers)
     });
-    let got = futures::executor::block_on(listing).map_err(|no| no.to_string()).and_then(|got| got);
+    let got = reactor().block_on(listing).map_err(|no| no.to_string()).and_then(|got| got);
     got.map_err(|why| format!("the local server at {} lists no model: {why}", self.root))
   }
 }
