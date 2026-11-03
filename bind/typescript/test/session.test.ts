@@ -1132,9 +1132,12 @@ test("a session enables the extensions of the configs, and a later session on it
     ]);
     // The life words of the setup read each memory file, after the reads of the doctrine and of the files of the
     // extensions, and the user turn after them shows what each read gave.
-    const read = (first.engine?.transcript({ on: ROOT }) ?? []).find(
-      (fact) => fact[0] === "read" && fact[4] === tilded(join(cwd, "CLAUDE.md")),
-    )?.[1];
+    const found = (first.engine?.transcript({ on: ROOT }) ?? []).find(
+      (fact) =>
+        fact[0] === "read" &&
+        String(fact[4]).replaceAll("\\", "/") === tilded(join(cwd, "CLAUDE.md")).replaceAll("\\", "/"),
+    );
+    const read = found?.[1];
     expect(read).toMatch(/^read\d+$/);
     // The stand and the cd come after the life words, and the extension naming, which plays on the root alone, comes
     // after the others with its life word, so the turn of the life words is the eighth from the end.
@@ -1142,7 +1145,7 @@ test("a session enables the extensions of the configs, and a later session on it
     expect(turns.at(-8)).toBe("catchup()\nawait recall()\nawait listed()\nawait mcp_index()");
     expect(turns.at(-2)).toMatch(/^stand\(\)\ncd\('.*'\)$/);
     expect(turns.at(-7)).toContain(
-      `#${read}\n${read}_path = '${tilded(join(cwd, "CLAUDE.md")).replaceAll("\\", "\\\\")}'\n${read}_text = 'Use two spaces.'`,
+      `#${read}\n${read}_path = '${String(found?.[4]).replaceAll("\\", "\\\\")}'\n${read}_text = 'Use two spaces.'`,
     );
   } finally {
     await first.dispose();
