@@ -619,6 +619,8 @@ export const input = part({
     this.session.off("compose", this.compose);
     this.session.off("resume", this.resume);
     this.session.off("shared", this.shared);
+    this.session.off("copied", this.copied);
+    this.session.off("status", this.statusShown);
     this.session.off("confirm", this.confirm);
     this.session.off("authentication", this.authentication);
     this.session.off("codexModels", this.codexModels);

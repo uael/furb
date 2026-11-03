@@ -54,6 +54,12 @@ export const commands = {
   details: ["Details", "", "Expand or collapse an act in the current view"],
   grant: ["Set budget", "<dollars>", "Pause at a dollar ceiling"],
   context: ["Set context ceiling", "<fraction>", "Pause at a share of the model window"],
+  status: [
+    "Status",
+    "",
+    "Show the actor, the context, the directory, the budget and the MCP servers of this chain",
+  ],
+  copy: ["Copy the answer", "", "Copy the last answer of this chain to the clipboard"],
   pause: ["Pause", "[act or chain]", "Hold delivery while work completes"],
   wake: ["Wake", "[act or chain]", "Wake every paused chain, or one"],
   cancel: ["Cancel work", "[id]", "End an act, or what you sent last on this chain"],

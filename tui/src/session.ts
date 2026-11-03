@@ -15,6 +15,7 @@ import {
   ROOT,
   saveFile,
   shapes,
+  unmarked,
   WORK,
 } from "furb";
 import type { PauseCause } from "furb/life";
@@ -22,7 +23,7 @@ import { type ActIndex, type Ask, aimed, beside, cancelled, type Desk, desk, fai
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { clock } from "./clock.ts";
 import { expandHome, fileReferences, fromDirectory, projectFiles, shortenHome } from "./files.ts";
-import { dollars } from "./format.ts";
+import { count, dollars } from "./format.ts";
 import { append, modeOf, seed, sentIn, workspaceRoot } from "./history.ts";
 import { Preferences } from "./preferences.ts";
 import { type Hunk, type Reviewed, revertWord, reviewed, type Scope, scopes } from "./review.ts";
@@ -979,6 +980,39 @@ export class Session extends EventEmitter {
   get context(): number | undefined {
     return this.turns.findLast(([role, , used]) => role === "assistant" && used)?.[2]?.[0];
   }
+  /** The rows of /status, each from what the session holds: the actor, the context, the directory, the budget and
+   * the servers of the last mcp_servers that is done. */
+  statusRows(): [string, string][] {
+    const grant = this.open.find((act) => act.kind === "grant");
+    const usd = grant?.words[0] == null ? undefined : Number(unmarked(grant.words[0]));
+    const share = grant?.words[1] == null ? undefined : Number(unmarked(grant.words[1]));
+    const { filled, context } = this;
+    const known = filled !== undefined && Number.isFinite(filled) && context !== undefined && filled > 0;
+    const budget = [
+      usd === undefined
+        ? `${dollars(this.spend.dollars)} spent`
+        : `${dollars(this.spend.dollars)} of ${dollars(usd)}`,
+      share === undefined ? "" : `pauses at ${Number((share * 100).toFixed(1))}% of the window`,
+    ].filter(Boolean);
+    const listed = this.acts.findLast(
+      (act) => act.kind === "mcp_servers" && act.done && Array.isArray(act.value),
+    );
+    const servers = ((listed?.value ?? []) as { name: string; state: string }[]).map(
+      ({ name, state }) => `${name} ${state}`,
+    );
+    return [
+      ["Actor", this.actor],
+      [
+        "Context",
+        known
+          ? `${Number((filled * 100).toFixed(1))}% of ${count(Math.round(context / filled))} tokens, ${count(context)} used`
+          : "No answer yet",
+      ],
+      ["Directory", shortenHome(this.workingDirectory)],
+      ["Budget", usd === undefined && share === undefined ? `no ceiling, ${budget[0]}` : budget.join(", ")],
+      ["MCP", servers.length ? servers.join(", ") : "no server"],
+    ];
+  }
   /** The name of the chain shown. */
   get label(): string {
     return this.labelOf(this.selected);
@@ -1801,6 +1835,16 @@ export class Session extends EventEmitter {
         await this.engine.grant({ share: amount, on: this.selected });
         break;
       }
+      case "copy": {
+        const answer = this.turns.findLast(([role]) => role === "assistant")?.[1];
+        if (!answer) throw new Error("This chain has no answer to copy yet.");
+        this.emit("copied", answer);
+        this.notice = `Copied ${answer.length} characters.`;
+        break;
+      }
+      case "status":
+        this.emit("status", this.statusRows());
+        break;
       case "model": {
         if (!argument) throw new Error("Use /model followed by a model name.");
         const name = this.roster.some(([candidate]) => candidate === argument)

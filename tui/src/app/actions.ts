@@ -130,6 +130,26 @@ export const actions = part({
     return false;
   },
 
+  /** The last answer of the chain, copied by the path of the key ⌃Y. */
+  copied(text: string): void {
+    this.renderer.copyToClipboardOSC52(text);
+  },
+
+  /** The rows of /status, one for each field, which a click copies. */
+  statusShown(rows: [string, string][]): void {
+    this.openPalette(
+      "Status",
+      rows.map(([label, value]) => ({
+        label,
+        detail: value,
+        run: () => {
+          this.renderer.copyToClipboardOSC52(value);
+          this.session.notice = `${label} copied.`;
+        },
+      })),
+    );
+  },
+
   /** The views of the life to choose from, the one that shows marked. */
   viewPicker(): void {
     this.openPalette(
@@ -380,4 +400,11 @@ export const actions = part({
 
 export type ActionsPart = typeof actions;
 
-export const actionsBound = ["filesPicker", "queuePicker", "shared", "report"] as const;
+export const actionsBound = [
+  "filesPicker",
+  "queuePicker",
+  "shared",
+  "report",
+  "copied",
+  "statusShown",
+] as const;
