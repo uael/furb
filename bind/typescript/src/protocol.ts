@@ -31,10 +31,6 @@ export type Request1 =
     }
   | {
       life: string;
-      verb: "end";
-    }
-  | {
-      life: string;
       holder: string;
       verb: "pin";
     }

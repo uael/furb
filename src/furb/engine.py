@@ -480,7 +480,7 @@ def seed(data):
         c["definitions"],
         *(f"{named} = {text}" for named, text in c["values"].items()),
         HEARD,
-        f'debug(t"A new build goes on from a checkpoint. It lost {c["lost"] or "no name"}, and it cut {c["cut"] or "no act"}.")',
+        f'debug(t"The life goes on from a checkpoint. It lost {c["lost"] or "no name"}, and it cut {c["cut"] or "no act"}.")',
         *(f"with site.set({y['by']!r}):\n  rung({y['word']!r}, on={i!r})" for y in c["again"]),
       ]
     ).strip()
