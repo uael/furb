@@ -48,8 +48,8 @@ Eight extensions come with furb, and each life runs them unless a config turns t
   A project changes `SHARE`, `FILTERS`, `CHOOSER`, `LISTED` or `BRIEF` in an extension of its own. In the TUI, a rule
   with the summary marks each compaction in the feed, and `/compact` runs `await condense()` on the chain on screen.
 - **`naming`** gives the session a name from the first message of the operator. Its life word, `name_session()`, plays
-  on the root alone. At the first prompt that the operator makes in the life, it asks the actor that `automatic()` of
-  `compaction` gives for a name of a few words, on a chain of its own labelled `naming`. With no such actor, or with no
+  on the root alone. At the first prompt that the operator makes in the life, it asks the actor that `automatic()` of the
+  engine gives for a name of a few words, on a chain of its own labelled `naming`. With no such actor, or with no
   name from it, the name is the first line of the message. The act is done with the name, and the record keeps the
   prompt and its answer, so a later life gives the same name and asks no model. The TUI shows the name in place of the
   name that it gave the session, unless the operator named the session, and the sidebar hides the chain `naming`. A

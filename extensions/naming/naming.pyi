@@ -15,7 +15,7 @@ def name_of(text: str) -> str:
 def name_session(on: str = "") -> Act:
   """The name of the session: an act on the root that waits for the first prompt that the operator makes in the life, and that is done with a name of the session that its message gives.
   The life word of the extension is name_session(), and the extension plays on the root alone, so a life names its session once.
-  It asks the name of the actor that automatic() of the extension compaction gives on the root, with a prompt of str on a new chain of its own labelled naming, which reads NAME_BRIEF and then the message.
-  With no such actor, as in a life that runs no compaction, or when that prompt gives no name, the name is name_of the message.
+  It asks the name of the actor that automatic() gives, with a prompt of str on a new chain of its own labelled naming, which reads NAME_BRIEF and then the message.
+  With no such actor, or when that prompt gives no name, the name is name_of the message.
   The journal keeps the prompt and its answer, so a later life on the same record gives the same name and asks no model.
   """

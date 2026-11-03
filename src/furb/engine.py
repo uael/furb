@@ -92,6 +92,18 @@ def standing():
   return answer("stand", ROOT, [])
 
 
+def automatic():
+  models = [one for one in (standing()[:1] or [[]])[0] if one[0] != OPERATOR]
+  placed = {}
+  for entry in models:
+    isinstance(place := (entry[4:] or [None])[0], int) and placed.setdefault(place, entry[0])
+  return next(iter([placed[k] for k in sorted(placed)] + [two[0] for two in models if two[3:4] == ["cheap"]]), "")
+
+
+def operated(where):
+  return where.split("/")[0] == OPERATOR
+
+
 def stand(on=""):
   isinstance(got := peek(a := act("stand", on, None)), list) and tell(on, roster=got[0], actor=got[2])
   return a
