@@ -26,12 +26,13 @@ const EXCERPT: usize = 1500;
 /// What a work of the ear came to: the act, and its text or why it has none.
 type Worked = (String, Result<Text, String>);
 
-/// The ear of the web: it takes a web_search and a web_fetch, says each started, and says it done later with its
-/// text or with the refusal. A web_search, of a query and an actor, is answered by the native search of the provider
-/// of that actor, which `native` gives, or by the free search when the provider has none; its text stands at the
-/// path of the query. A web_fetch of an address is answered with the page at that address, as Markdown when it is
-/// HTML and as it is when it is other text, at the path of that address, by the same code as the question fetch of
-/// the World. A control that ends an act first ends its work, and the ear says nothing more of it.
+/// The ear of the web: it takes a web_search and a web_fetch, says each started, and says it done
+/// later with its text or with the refusal. A web_search, of a query and an actor, is answered by
+/// the native search of the provider of that actor, which `native` gives, or by the free search
+/// when the provider has none; its text stands at the path of the query. A web_fetch of an address
+/// is answered with the page at that address, as Markdown when it is HTML and as it is when it is
+/// other text, at the path of that address, by the same code as the question fetch of the World. A
+/// control that ends an act first ends its work, and the ear says nothing more of it.
 pub fn web(native: Search) -> Box<dyn Ear> {
   hearing(&["web_search", "web_fetch"], move |mut co: Co<Worked>| async move {
     let mut stops: HashMap<String, oneshot::Sender<()>> = HashMap::new();

@@ -525,8 +525,8 @@ pub fn begin(config: Option<&Path>) -> Result<Status, String> {
   Ok(status)
 }
 
-/// The code of the sign-in that the browser gives back on the callback of furb, awaited on the runtime of the ears
-/// until it comes, the sign-in is canceled or ten minutes pass.
+/// The code of the sign-in that the browser gives back on the callback of furb, awaited on the
+/// runtime of the ears until it comes, the sign-in is canceled or ten minutes pass.
 async fn callback_code(
   listener: TcpListener,
   state: &str,

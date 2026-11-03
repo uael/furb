@@ -173,4 +173,6 @@ A module that does not meet the lints yet says so at its top, one line for each 
     unwrap_used = "deny"
     ```
 
-The width of a line of Rust is 100, as `rustfmt.toml` says. `cargo fmt --all` writes it.
+The width of a line of Rust is 100, as `rustfmt.toml` says. `cargo fmt --all` writes it for code and wraps no
+comment, so wrap each comment that you write to 100 by hand. `script/rustwidth.py`, which the hooks run, fails on
+a comment line that your change adds past it.

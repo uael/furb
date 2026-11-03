@@ -237,8 +237,8 @@ fn passing(no: &CompletionError) -> Option<String> {
   Some(why)
 }
 
-/// Whether a failed call can be corrected by another turn of the model: a transient provider fault, a cut turn, or
-/// a request that does not fit the model's context.
+/// Whether a failed call can be corrected by another turn of the model: a transient provider fault,
+/// a cut turn, or a request that does not fit the model's context.
 pub(super) fn recoverable(no: &CompletionError) -> bool {
   if passing(no).is_some() {
     return true;
@@ -585,7 +585,8 @@ pub struct Provider {
 /// root alone.
 pub type Advertised = (String, String, String, bool);
 
-/// The models of a provider, its default actor and the most tokens of thought of a turn, as the settings give them.
+/// The models of a provider, its default actor and the most tokens of thought of a turn, as the
+/// settings give them.
 type Settings = (Vec<Model>, Option<String>, Thinking);
 
 type Refresh = Arc<dyn Fn() -> Result<Settings, String> + Send + Sync>;
@@ -679,12 +680,13 @@ impl Provider {
   /// directory the life stands on, and the default actor; and it takes a reply, which the model of its actor
   /// answers.
   ///
-  /// A reply reads the turns of its chain: the system prompt is the engine, a user turn goes as its python and the
-  /// images that the prompts it opens name, and an assistant turn as the blocks its provider gave. It is done with
-  /// the turn of the model, or with a refusal; a recoverable refusal gives the model another turn with its cause, and
-  /// never pauses the chain. A turn whose word lost the marks of a fence or of a tool call around it, or the line of three
-  /// backticks at its end, tells its chain so once, before its done. A
-  /// done of a reply that the ear did not say ends the call of its model.
+  /// A reply reads the turns of its chain: the system prompt is the engine, a user turn goes as its
+  /// python and the images that the prompts it opens name, and an assistant turn as the blocks its
+  /// provider gave. It is done with the turn of the model, or with a refusal; a recoverable refusal
+  /// gives the model another turn with its cause, and never pauses the chain. A turn whose word
+  /// lost the marks of a fence or of a tool call around it, or the line of three backticks at its
+  /// end, tells its chain so once, before its done. A done of a reply that the ear did not say ends
+  /// the call of its model.
   ///
   /// The ear says each part of a word that the model finished and that the gate finds nothing against as a writing of
   /// its rung, unless a pause holds the rung. A reply whose part ran is done with the word that ran when the Kernel
@@ -692,9 +694,10 @@ impl Provider {
   /// then made no more; and with its turn when the gate finds nothing against the whole word, which holds the word
   /// that ran.
   ///
-  /// A stand from outside an act reads the settings again, after the first: it starts, and the ear reads them on the
-  /// runtime of the ears, so every chain of the life goes on meanwhile, and it is done with the standing once they
-  /// come, or refused with why they did not. A stand that a word makes, or the first, is done at once.
+  /// A stand from outside an act reads the settings again, after the first: it starts, and the ear
+  /// reads them on the runtime of the ears, so every chain of the life goes on meanwhile, and it is
+  /// done with the standing once they come, or refused with why they did not. A stand that a word
+  /// makes, or the first, is done at once.
   ///
   /// A stand ends the wait of each reply whose call waits for a retry, a usage limit among them, and asks its model
   /// again at once, on the models that stand then: so a change of the command line or of its account, or the operator
@@ -743,9 +746,10 @@ impl Provider {
             extensions.as_deref(),
           );
           say(&mut co, Fact::says("done", &about, [given]));
-          // A stand reads the settings again, as after a change of the command line or of its account, or when the
-          // operator asks to retry now, so a reply whose call waits for a retry, which can wait for days at a usage
-          // limit, ends its wait and asks again at once, on the models that stand now.
+          // A stand reads the settings again, as after a change of the command line or of its
+          // account, or when the operator asks to retry now, so a reply whose call waits for a
+          // retry, which can wait for days at a usage limit, ends its wait and asks again at once,
+          // on the models that stand now.
           let waiting: Vec<String> = replies
             .iter()
             .filter(|(_, reply)| reply.waits && !word)
@@ -777,7 +781,8 @@ impl Provider {
         }
         let a = match co.next().await {
           Next::Heard(a) => a,
-          // The settings that a refresh read, on which the provider stands from now on, or why it read none.
+          // The settings that a refresh read, on which the provider stands from now on, or why it
+          // read none.
           Next::Worked(Replied::Refreshed { about, got }) => {
             match got {
               Ok((fresh, default, budget)) => {
@@ -1026,8 +1031,9 @@ impl Provider {
             let word = crate::fact::named(a.by(), "rung");
             let first = !std::mem::replace(&mut stood, true);
             if let Some(refresh) = refresh.as_ref().filter(|_| !first && !word) {
-              // Reading the settings asks each program of a model, which can take seconds, so the stand reads them
-              // on the runtime of the ears, and every chain of the life goes on meanwhile.
+              // Reading the settings asks each program of a model, which can take seconds, so the
+              // stand reads them on the runtime of the ears, and every chain of the life goes on
+              // meanwhile.
               say(&mut co, Fact::says("started", &about, []));
               let refresh = Arc::clone(refresh);
               let read = reactor().spawn_blocking(move || refresh());
@@ -1128,9 +1134,10 @@ impl Provider {
   }
 }
 
-/// A reply the ear took: its chain, its actor, the rung it answers, whether a prior refusal of it pauses its chain, the
-/// watch over its word while its model writes it, when the model streams its word, and the stop of its work, which
-/// ends the call of its model, and what the host is told of it, when the reply goes.
+/// A reply the ear took: its chain, its actor, the rung it answers, whether a prior refusal of it
+/// pauses its chain, the watch over its word while its model writes it, when the model streams its
+/// word, and the stop of its work, which ends the call of its model, and what the host is told of
+/// it, when the reply goes.
 struct Reply {
   chain: String,
   actor: String,

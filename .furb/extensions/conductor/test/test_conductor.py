@@ -4187,7 +4187,7 @@ async def test_a_pr_whose_failed_lines_stay_unread_gets_its_fixer_after_the_unre
   assert [key for key, _ in conductor.hired] == ["fix4"] and conductor.onmain == {4: ("sha4", "m1", False)}
 
 
-CRATE_GATES = "fmt (cargo fmt --all --check); clippy (cargo clippy --workspace --all-targets -- -D warnings); cargo test (cargo test --workspace)"
+CRATE_GATES = "fmt (cargo fmt --all --check); no comment of rust goes past 100 characters (python3 script/rustwidth.py); clippy (cargo clippy --workspace --all-targets -- -D warnings); cargo test (cargo test --workspace)"
 
 
 def gated(conductor: Round, files: list[str]) -> None:

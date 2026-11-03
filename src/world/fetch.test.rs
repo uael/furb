@@ -1,5 +1,5 @@
-//! The ear of the fetch: a page comes to its text, and in a life of the real engine a fetch reads a page of a server
-//! of this machine.
+//! The ear of the fetch: a page comes to its text, and in a life of the real engine a fetch reads a
+//! page of a server of this machine.
 
 #![expect(
   clippy::let_underscore_must_use,
@@ -81,8 +81,9 @@ fn standing() -> Box<dyn Ear> {
   })
 }
 
-/// A server of this machine that answers each request for a page by its path: a page of HTML, a page that is not
-/// there, an image, and a page of text that tells no length and never ends. Its address.
+/// A server of this machine that answers each request for a page by its path: a page of HTML, a
+/// page that is not there, an image, and a page of text that tells no length and never ends. Its
+/// address.
 fn served() -> String {
   let listener = TcpListener::bind("127.0.0.1:0").unwrap();
   let at = format!("http://{}", listener.local_addr().unwrap());
@@ -116,7 +117,8 @@ fn served() -> String {
   at
 }
 
-/// What a word that a rung runs on the root of a life on the fetch ear closes with, or why it raised.
+/// What a word that a rung runs on the root of a life on the fetch ear closes with, or why it
+/// raised.
 fn closed(engine: &mut Engine, word: &str) -> Result<Object, String> {
   let root = engine.root().to_owned();
   let rung = verbs::Rung { word: Some(word.to_owned()), on: Some(root), ..Default::default() };

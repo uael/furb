@@ -838,10 +838,9 @@ mod console {
     ending()
       .send(Ending::Callback(callback))
       .map_err(|_| Fault::refused("the keeper of the console callback is gone"))?;
-    // The system calls the handlers from the last added to the first, so this one comes before those of the
-    // runtime, which end the process at once.
-    // SAFETY: `heard` is a handler routine with the signature that the system calls, and it stays valid as long
-    // as the process.
+    // The system calls the handlers from the last added to the first, so this one comes before
+    // those of the runtime, which end the process at once. SAFETY: `heard` is a handler routine
+    // with the signature that the system calls, and it stays valid as long as the process.
     if *ADDED.get_or_init(|| unsafe { SetConsoleCtrlHandler(Some(heard), 1) } != 0) {
       Ok(())
     } else {

@@ -315,8 +315,9 @@ impl Program {
     Ok(command)
   }
 
-  /// Whether this program, as its account, is signed in. It waits for the command on the runtime of the ears, so it
-  /// never runs on a thread of that runtime nor on the thread of a life, and the command is ended after ten seconds.
+  /// Whether this program, as its account, is signed in. It waits for the command on the runtime of
+  /// the ears, so it never runs on a thread of that runtime nor on the thread of a life, and the
+  /// command is ended after ten seconds.
   fn signed(&self) -> bool {
     let Ok(mut command) = self.command() else { return false };
     command

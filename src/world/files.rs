@@ -31,18 +31,19 @@ use crate::{
   value::{Fault, Object, Text},
 };
 
-/// The ear of the files: it answers a cd with the directory that the path names, a read with the text at the path,
-/// or with one line for each entry of a folder, in order of name, with a slash after a folder and no walk below it,
-/// and a write with the text as it stands after, but a write of a door of a command, which the ear of the commands
-/// answers, each resolved against the working directory of the chain, or with
-/// the refusal. The path of a cd, a read or a write that is `~` or starts with `~/`, or with `~\\` on Windows, resolves
-/// against the home of the user,
-/// and one of `scratch://` against the scratch directory of the life, which no chain stands in. A file whose every
-/// line ends with CRLF reads with LF, and a write to it writes CRLF. A path whose first part is the name of an act
-/// of the life is a door that no ear of the engine served, and never a file, so the ear refuses it with the chain of
-/// that act. The path of each text, of each refusal and of each cd that it gives is as [`tilded`] writes it. A write
-/// puts the whole text in place in one step, as `stored` says, so no reader sees a torn file. A read
-/// of an image keeps it in the directory of the images of the life, the gallery, as `seen` says.
+/// The ear of the files: it answers a cd with the directory that the path names, a read with the
+/// text at the path, or with one line for each entry of a folder, in order of name, with a slash
+/// after a folder and no walk below it, and a write with the text as it stands after, but a write
+/// of a door of a command, which the ear of the commands answers, each resolved against the working
+/// directory of the chain, or with the refusal. The path of a cd, a read or a write that is `~` or
+/// starts with `~/`, or with `~\\` on Windows, resolves against the home of the user, and one of
+/// `scratch://` against the scratch directory of the life, which no chain stands in. A file whose
+/// every line ends with CRLF reads with LF, and a write to it writes CRLF. A path whose first part
+/// is the name of an act of the life is a door that no ear of the engine served, and never a file,
+/// so the ear refuses it with the chain of that act. The path of each text, of each refusal and of
+/// each cd that it gives is as [`tilded`] writes it. A write puts the whole text in place in one
+/// step, as `stored` says, so no reader sees a torn file. A read of an image keeps it in the
+/// directory of the images of the life, the gallery, as `seen` says.
 pub fn files(scratch: Scratch, gallery: Option<PathBuf>) -> Box<dyn Ear> {
   hearing(&["cd", "read", "write"], move |mut co| async move {
     loop {
@@ -278,8 +279,9 @@ fn seen(at: &Path, name: &str, bytes: &[u8], gallery: Option<&Path>) -> Result<T
   Ok(Text::new(name, images::reference(&kept.name, &kept.uri)))
 }
 
-/// The text of a folder: one line for each entry, in order of name, with a slash after a folder, and no walk below it.
-/// A link counts as what it points at, and a link that points at nothing counts as a file.
+/// The text of a folder: one line for each entry, in order of name, with a slash after a folder,
+/// and no walk below it. A link counts as what it points at, and a link that points at nothing
+/// counts as a file.
 fn listed(at: &Path, name: &str) -> Result<Text, Fault> {
   let mut names = Vec::new();
   for entry in fs::read_dir(at).map_err(|no| failed(&no, name))? {

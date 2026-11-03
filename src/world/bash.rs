@@ -70,8 +70,9 @@ async fn login_path() -> Option<&'static OsString> {
   FOUND.get_or_init(|| found).await.as_ref()
 }
 
-/// What the login shell `shell` says its PATH is, between two marks that a profile which writes to its output cannot
-/// forge by accident, or none when it fails, gives no path, or runs past five seconds, when it is ended.
+/// What the login shell `shell` says its PATH is, between two marks that a profile which writes to
+/// its output cannot forge by accident, or none when it fails, gives no path, or runs past five
+/// seconds, when it is ended.
 async fn asked_path(shell: &Path) -> Option<OsString> {
   let mut command = tokio::process::Command::new(shell);
   command
@@ -174,8 +175,8 @@ pub fn bash(scratch: Scratch, record: &[Object]) -> Box<dyn Ear> {
             Said::Exit { about, exit } if running.remove(&about).is_some() => {
               Fact::says("done", &about, [exit.object()])
             }
-            // The machine would not start it, so the ear closes it with why, as a prompt that the operator cannot
-            // answer is closed, and the chain is told why.
+            // The machine would not start it, so the ear closes it with why, as a prompt that the
+            // operator cannot answer is closed, and the chain is told why.
             Said::Failed { about, fault } if running.remove(&about).is_some() => {
               co.call("close", vec![fault.object()], vec![("id", Object::string(&about))]).await?;
               continue;
@@ -294,15 +295,17 @@ impl Running {
   }
 }
 
-/// What a command says: a text that one of its streams wrote, its exit, or why the machine would not start it.
+/// What a command says: a text that one of its streams wrote, its exit, or why the machine would
+/// not start it.
 enum Said {
   Out { about: String, text: String, stream: &'static str },
   Exit { about: String, exit: Exit },
   Failed { about: String, fault: Fault },
 }
 
-/// A command ready to start: its act, its shell with its words, how it is shown, its directory, its timeout, and the text that its
-/// stdin is given, or nothing when its stdin stays open for what is fed to it.
+/// A command ready to start: its act, its shell with its words, how it is shown, its directory, its
+/// timeout, and the text that its stdin is given, or nothing when its stdin stays open for what is
+/// fed to it.
 struct Begun {
   about: String,
   command: Command,
@@ -312,7 +315,8 @@ struct Begun {
   given: Option<String>,
 }
 
-/// A command begun: its shell made ready in the directory of its chain, with the scratch directory as its `TMPDIR`.
+/// A command begun: its shell made ready in the directory of its chain, with the scratch directory
+/// as its `TMPDIR`.
 async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, Fault> {
   let about = a.about().to_owned();
   let on = a.on().to_owned();
@@ -346,8 +350,8 @@ async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, 
   Ok(Begun { about, command, shown, dir, timeout, given })
 }
 
-/// The shell of a command spawned with the PATH of the login shell of the user, and the group of its processes, or
-/// why the machine would not start it or hold it.
+/// The shell of a command spawned with the PATH of the login shell of the user, and the group of
+/// its processes, or why the machine would not start it or hold it.
 async fn spawned(mut command: Command, shown: &str, dir: &Path) -> Result<(Shell, Group), Fault> {
   if let Some(login) = login_path().await {
     command.env("PATH", merged_path(login, &env::var_os("PATH").unwrap_or_default()));

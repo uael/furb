@@ -256,8 +256,8 @@ impl Server {
     model
   }
 
-  /// The models that the server lists now, or why it lists none, which it waits for on the runtime of the ears, so it
-  /// never runs on a thread of that runtime nor on the thread of a life.
+  /// The models that the server lists now, or why it lists none, which it waits for on the runtime
+  /// of the ears, so it never runs on a thread of that runtime nor on the thread of a life.
   fn list(&self) -> Result<Vec<Offer>, String> {
     let client = ReqwestClient::builder().connect_timeout(CONNECT).build();
     let client = client.map_err(|no| no.to_string())?;

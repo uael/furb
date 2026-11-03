@@ -10,8 +10,8 @@ use std::{
 
 /// What a process did, or nothing when it still ran after the bound and was killed.
 ///
-/// Both streams are read while the process runs: a process that fills one pipe waits for a reader, so a wait
-/// that reads none waits for ever.
+/// Both streams are read while the process runs: a process that fills one pipe waits for a reader,
+/// so a wait that reads none waits for ever.
 pub(crate) fn finished(mut child: Child, bound: Duration) -> Option<Output> {
   let (done, ended) = mpsc::channel();
   let out = drained(child.stdout.take().expect("the stdout is piped"), done.clone());
