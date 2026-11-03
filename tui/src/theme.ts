@@ -498,6 +498,22 @@ export function spin(now = clock()): string {
   if (motion.still) return glyph.thinks;
   return spinner[Math.floor(now / frame) % spinner.length] ?? "⠋";
 }
+const fadeSteps = [0.7, 0.4, 0.15];
+/** The frames of the cell of the number of a line that runs: the number holds, fades out, the loader fades in, holds
+ * and fades out, and the number fades in. Each frame is what the cell shows and its share of color against the line. */
+const pulses: readonly (readonly [loader: boolean, share: number])[] = [
+  ...Array.from({ length: 6 }, () => [false, 1] as const),
+  ...fadeSteps.map((share) => [false, share] as const),
+  ...[...fadeSteps].reverse().map((share) => [true, share] as const),
+  ...Array.from({ length: 8 }, () => [true, 1] as const),
+  ...fadeSteps.map((share) => [true, share] as const),
+  ...[...fadeSteps].reverse().map((share) => [false, share] as const),
+];
+/** The frame of the cell of the number of a line that runs at a time. A view that holds still shows the loader. */
+export function pulse(now = clock()): readonly [loader: boolean, share: number] {
+  if (motion.still) return [true, 1];
+  return pulses[Math.floor(now / frame) % pulses.length] ?? [true, 1];
+}
 /** Whether the view shows no color, as NO_COLOR asks when it is set and not empty: each role takes the default color
  * of the terminal, and a state shows by its glyph, its words and its weight alone. */
 export const colorless = { on: Boolean(process.env.NO_COLOR) };

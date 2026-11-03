@@ -1232,16 +1232,19 @@ async def test_the_sweep_reads_the_plan_keys_of_the_open_design_issues_once(cond
   conductor.say(r"pr list --state open", "[]")
   conductor.say(r"pr list --state merged", "[]")
   conductor.say(r"run list --branch main", json.dumps([{"headSha": "m1", "conclusion": "success", "databaseId": 9}]))
+  table = "| key | model |\n|---|---|\n| view-tui | x |\n| tui-client | y |\n"
+  heading = "### 1. `engine-open-async`\n\n- Model: x\n"
+  newest = "| key | model |\n|---|---|\n| fresh-design-item | z |\n"
+  conductor.say(r"issue list --label design", json.dumps([{"body": table}, {"body": heading}, {"body": newest}]))
   conductor.say(r"issue list", "[]")
   conductor.say(r"pr list --repo uael/monty", "[]")
-  table = "| key | model |\n|---|---|\n| view-tui | x |\n| tui-client | y |\n"
-  conductor.say(r"issue view 984 ", json.dumps({"state": "OPEN", "body": table}))
-  heading = "### 1. `engine-open-async`\n\n- Model: x\n"
-  conductor.say(r"issue view 983 ", json.dumps({"state": "OPEN", "body": heading}))
-  conductor.say(r"issue view 985 ", json.dumps({"state": "CLOSED", "body": "| old-key | m |\n"}))
   await conductor.sweep(300)
-  assert conductor.planned == {"view-tui", "tui-client", "engine-open-async"}
-  assert conductor.log().count("issue view 984") == 1
+  assert conductor.planned == {"view-tui", "tui-client", "engine-open-async", "fresh-design-item"}
+  assert conductor.log().count("issue list --label design") == 1
+  conductor.queue[:] = [("plain", "", ""), ("fresh-design-item", "", "")]
+  conductor.efforts.update(plain=SONNET_HIGH, **{"fresh-design-item": SONNET_HIGH})
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["fresh-design-item", "plain"]
 
 
 def test_the_round_moves_the_items_of_backlog_in_the_order_of_their_priority(conductor: Round) -> None:
