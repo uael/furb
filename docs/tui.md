@@ -109,15 +109,16 @@ and the count of the lines that it printed, a question its answer or what it wai
 first line of each step says how long the step ran and what the answers of its model cost. The time is known for the
 work that the TUI saw run, since the record holds no time. The line that runs is lit, with a mark in the gutter and,
 after a second, its time, which only the clock moves, and the last lines that its command prints stream under it. Each
-word stands in a block on the raised surface, under its label, `word · rungN`, with the time, the cost and the model of
-the whole word at the right of the label. The numbers stand at the left edge of the block. The number of the line that
-runs fades out into the loader and back, in its own cell, and that line is lit. A column of one cell at the right of
+word stands in a block on the raised surface, under its label, the model that wrote it, as `opus/high`, or `operator`
+for a word of the operator, with the time and the cost of the whole word at the right of the label. The numbers stand at
+the left edge of the block. The number of the line that runs fades out into the loader and back, in its own cell, and
+that line is lit. A column of one cell at the right of
 the numbers holds a red cross on the line that failed, whose reason stands under it as a comment. One
 column at the right edge of the block holds what the acts of each line came to, in a faint color. A time that this life
 did not measure shows nothing. A message that you send to the thread, and each notice of
 the chain, stands as a comment among the steps. While the model of the thread works on a step, each line of its word
 that it finished stands above as Python in its colors, and the loader stands in the column of the states, on the line
-that the model still writes. While no line is written, the label says `word · rungN · thinking 4s`. The footer turns no
+that the model still writes. While no line is written, the label says `opus/high · thinking 4s`. The footer turns no
 second loader for that step. The answer of the thread stands under its program, with the
 model that gave it and its effort at its right. A thread that you fold stands as one line, with the line of its color
 half a row above and under it. A word that you run stands as your messages stand, as its program in a panel of its own
