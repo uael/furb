@@ -111,20 +111,30 @@ export const PROGRAM_STEPS = 6;
  * each thread of under a hundred lines starts at one column. */
 export const gutterWidth = (digits: number) => Math.max(2, digits) + space.inset;
 
-/** The cells of the column of the states, at the left of the numbers of a block of code. They show the loader while
- * the model writes, and the mark of the line that failed. A code block of markdown keeps the column blank. So the
- * numbers and the code of every block have the same columns. */
-export const STATE = 2;
+/** The cells of the column of the states, at the right of the numbers of a block of code, so the numbers stand at the
+ * left edge of the block. They show the loader while the model writes, and the mark of the line that failed. A code
+ * block of markdown keeps the column blank. So the numbers and the code of every block have the same columns. */
+export const STATE = 1;
+
+/** The options of the gutter of a block of code, which both blocks take: the numbers at the left edge in a column of
+ * their own, then the column of the states, then one blank cell before the code, so two cells part a number from its
+ * code. */
+export const gutterOf = (digits: number, lineSigns: Map<number, LineSign>) => ({
+  fg: c.faint,
+  paddingRight: space.inset,
+  minWidth: gutterWidth(digits),
+  lineSigns,
+});
 
 /** The column of the states, as signs of the gutter. It holds the mark of each row that has one. The first row gets
  * blanks, so that the column stands when no row has a mark. */
 export const stateSigns = (states: ReadonlyMap<number, Part>, rows: number): Map<number, LineSign> => {
   const signs = new Map<number, LineSign>();
-  if (rows) signs.set(0, { before: " ".repeat(STATE) });
+  if (rows) signs.set(0, { after: " ".repeat(STATE) });
   for (const [row, [mark, color]] of states)
     signs.set(row, {
-      before: `${mark}${" ".repeat(Math.max(0, STATE - Bun.stringWidth(mark)))}`,
-      beforeColor: color,
+      after: `${" ".repeat(Math.max(0, STATE - Bun.stringWidth(mark)))}${mark}`,
+      afterColor: color,
     });
   return signs;
 };
