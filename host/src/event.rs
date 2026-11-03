@@ -1,13 +1,16 @@
 //! The events of a life: one scheme of deltas, which each client of the host reads in the same
 //! order.
 
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// The place of an event in the log of its life, counted from 0 with no gap.
 pub type Seq = u64;
 
 /// What a life tells its clients, in the order of its log.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "event", content = "data", rename_all = "snake_case")]
 pub enum Event {
   /// One fact that the life said, as JSON reads it: each fact of the record that the life said
   /// again as it opened, then each fact that it said after.
@@ -29,7 +32,7 @@ pub enum Event {
 
 /// One act of a life: its kind, its name, who made it, what it is on, the chain it is in, its words
 /// after these, and its state.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Act {
   pub kind: String,
   pub id: String,
@@ -41,7 +44,8 @@ pub struct Act {
 }
 
 /// Where an act stands: asked, started by the ear that owns it, or done, with what it came to.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "state", content = "value", rename_all = "snake_case")]
 pub enum State {
   Asked,
   Started,

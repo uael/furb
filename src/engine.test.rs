@@ -35,12 +35,10 @@ use std::{
   cell::RefCell,
   collections::VecDeque,
   fs,
-  future::Future,
   path::PathBuf,
-  pin::pin,
   rc::Rc,
   sync::Arc,
-  task::{Context, Poll, Wake, Waker},
+  task::{Wake, Waker},
   thread,
   time::{Duration, Instant},
 };
@@ -60,27 +58,7 @@ use crate::{
   verbs, world,
 };
 
-/// A waker that unparks the thread of the test, so what an ear waits for wakes the poll when it is ready.
-struct Parked(thread::Thread);
-
-impl Wake for Parked {
-  fn wake(self: Arc<Self>) {
-    self.0.unpark();
-  }
-}
-
-/// One future driven to its end on this thread.
-fn block_on<T>(fut: impl Future<Output = T>) -> T {
-  let waker = Waker::from(Arc::new(Parked(thread::current())));
-  let mut cx = Context::from_waker(&waker);
-  let mut fut = pin!(fut);
-  loop {
-    if let Poll::Ready(got) = fut.as_mut().poll(&mut cx) {
-      return got;
-    }
-    thread::park_timeout(Duration::from_millis(20));
-  }
-}
+use crate::testing::{block_on, waker};
 
 /// A fact of a done of an act with a value.
 fn done(about: &str, value: Object) -> Fact {
@@ -634,7 +612,7 @@ fn a_command_an_earlier_life_did_not_end_runs_no_more_and_ends_as_interrupted_at
     let with = verbs::Bash { stdin: Some(None), on: on(&root), ..Default::default() };
     let id = first.engine.bash(line, with).unwrap().id().to_owned();
     let door = || verbs::Read { on: on(&root), ..Default::default() };
-    let waker = Waker::from(Arc::new(Parked(thread::current())));
+    let waker = waker();
     while first.engine.read(&format!("{id}/stdout"), door()).unwrap().content != "ready" {
       first.engine.pump(&waker).unwrap();
       thread::park_timeout(Duration::from_millis(20));
@@ -1575,7 +1553,7 @@ fn a_statement_that_a_model_streams_and_that_prompts_another_chain_has_its_reply
   let with =
     verbs::Prompt { message: Some("count".to_owned()), on: on(&root), ..Default::default() };
   let id = engine.prompt(Object::string("int"), with).expect("a prompt is made").id().to_owned();
-  let waker = Waker::from(Arc::new(Parked(thread::current())));
+  let waker = waker();
   let end = Instant::now() + Duration::from_secs(10);
   let answered = |engine: &mut Engine| {
     engine.peek(&id, verbs::Peek::default()).is_ok_and(|one| one.as_ref().as_int() == Some(3))
