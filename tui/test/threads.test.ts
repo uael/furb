@@ -338,6 +338,39 @@ test("the Context part of the sidebar holds three lines: its share, its meter an
     true,
   ));
 
+test("the context stands in the corner beside the input, under a row of space, and says No answer yet before the first answer", () =>
+  composing(
+    async ({ session, frame }) => {
+      const shown = await frame();
+      keep("corner-wide", shown);
+      const left = 140 - session.preferences.sidebarWidth;
+      const rows = shown.split("\n");
+      const y = rows.findIndex((row) => row.slice(left).trim().startsWith("Context"));
+      expect(y).toBeGreaterThan(0);
+      expect(rows[y]).toContain("No answer yet");
+      // The text of the input starts on the row of the header of the context.
+      expect((rows[y] ?? "").slice(0, left)).toContain("Ask anything");
+      expect((rows[y - 2] ?? "").slice(left).trim()).toBe("");
+    },
+    { width: 140, height: 40 },
+  ));
+
+test("on a narrow terminal and with the sidebar hidden, the context folds into a line of the footer", async () => {
+  for (const [width, hidden] of [
+    [80, false],
+    [140, true],
+  ] as const)
+    await composing(
+      async ({ session, frame }) => {
+        if (hidden) session.preferences.sidebar = false;
+        const rows = (await frame()).split("\n");
+        expect(rows.join("\n")).not.toContain("Context");
+        expect(rows.findLast((row) => row.trim()) ?? "").toContain("No answer yet");
+      },
+      { width, height: 40 },
+    );
+});
+
 test("a string of three marks over many lines shows as one string with its escapes, folded to its start and an underlined ..., and its statement keeps its colors", () =>
   composing(
     async ({ session, screen, frame }) => {
