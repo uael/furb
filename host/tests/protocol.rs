@@ -47,7 +47,6 @@ mod protocol {
       Verb::Open { life: life(), cwd: None },
       Verb::Attach { life: life(), from: 0 },
       Verb::Detach { life: life() },
-      Verb::End { life: life() },
       Verb::Pin { life: life(), holder: "job".to_owned() },
       Verb::Unpin { life: life(), holder: "job".to_owned() },
       Verb::Presence { life: life() },
@@ -181,9 +180,8 @@ mod protocol {
     let writes: Vec<_> = verbs().into_iter().filter(|verb| verb.needs() == Role::Write).collect();
     let names: Vec<_> =
       writes.iter().map(|verb| serde_json::to_value(verb).unwrap()["verb"].clone()).collect();
-    let expected = [
-      "open", "end", "pin", "unpin", "prompt", "answer", "pause", "wake", "cancel", "chain", "run",
-    ];
+    let expected =
+      ["open", "pin", "unpin", "prompt", "answer", "pause", "wake", "cancel", "chain", "run"];
     assert_eq!(names, expected.map(|name| json!(name)));
   }
 

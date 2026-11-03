@@ -127,22 +127,6 @@
             "life": {
               "type": "string"
             },
-            "verb": {
-              "type": "string",
-              "const": "end"
-            }
-          },
-          "required": [
-            "verb",
-            "life"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "life": {
-              "type": "string"
-            },
             "holder": {
               "type": "string"
             },
