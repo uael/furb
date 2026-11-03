@@ -4,6 +4,7 @@ import {
   CodeRenderable,
   getTreeSitterClient,
   infoStringToFiletype,
+  LineNumberRenderable,
   MarkdownRenderable,
   type MouseEvent,
   type Renderable,
@@ -24,7 +25,16 @@ import { type ActRow, working } from "../session.ts";
 import { theme as c, glyph, type MarkState, markOf, spacing as space } from "../theme.ts";
 import { type Part, plain, styled } from "../ui.ts";
 import { part } from "./part.ts";
-import { type BlockOptions, chipColors, noBorder, type State, stateOf } from "./shared.ts";
+import {
+  type BlockOptions,
+  chipColors,
+  gutterWidth,
+  noBorder,
+  STATE,
+  type State,
+  stateOf,
+  stateSigns,
+} from "./shared.ts";
 
 /** The match of a pattern that covers a column of a line, as a terminal draws the line. The scan adds the width of
  * each part once and stops past the column, so a pointer over a line of half a million characters costs one pass. */
@@ -495,27 +505,43 @@ export const blocks = part({
       paddingX: space.inset,
       marginBottom: followed ? space.section : 0,
     });
-    if (language) block.add(this.text(language, c.faint));
     const filetype = infoStringToFiletype(language);
+    // A code block numbers its lines as the block of a word does, with the same blank column of the states at the left
+    // of the numbers, so both stand in the same columns, and its language heads it over its code as a model heads a
+    // word.
+    const count = text.split("\n").length;
+    const digits = String(count).length;
+    if (language) {
+      const head = this.box({ paddingLeft: STATE + gutterWidth(digits) });
+      head.add(this.text(language, c.faint));
+      block.add(head);
+    }
+    const code = new CodeRenderable(this.renderer, {
+      content: text,
+      filetype,
+      syntaxStyle: this.style,
+      treeSitterClient: context.treeSitterClient,
+      fg: c.text,
+      wrapMode: "none",
+      drawUnstyledText: true,
+      width: "100%",
+      ...(filetype
+        ? {
+            initialStyledText: this.painted(text, filetype, this.style),
+            onHighlight: (highlights: SimpleHighlight[]) => {
+              this.paint(text, filetype, highlights);
+              return highlights;
+            },
+          }
+        : {}),
+    });
     block.add(
-      new CodeRenderable(this.renderer, {
-        content: text,
-        filetype,
-        syntaxStyle: this.style,
-        treeSitterClient: context.treeSitterClient,
-        fg: c.text,
-        wrapMode: "none",
-        drawUnstyledText: true,
-        width: "100%",
-        ...(filetype
-          ? {
-              initialStyledText: this.painted(text, filetype, this.style),
-              onHighlight: (highlights: SimpleHighlight[]) => {
-                this.paint(text, filetype, highlights);
-                return highlights;
-              },
-            }
-          : {}),
+      new LineNumberRenderable(this.renderer, {
+        target: code,
+        paddingRight: space.inset,
+        fg: c.faint,
+        minWidth: gutterWidth(digits),
+        lineSigns: stateSigns(new Map(), count),
       }),
     );
     return block;

@@ -295,7 +295,7 @@ test("a line that awaits a command lights the line that made it, names it, and s
       }
       keep("awaits", rows.join("\n"));
       expect(ready()).toBe(true);
-      expect(rows.find((row) => row.includes("b = await build"))).toContain(glyph.running);
+      expect(rows.find((row) => row.includes("b = await build"))).toMatch(/[\u2800-\u28ff✻] b = await build/);
       await session.engine.cancel(rung);
     },
     size,
