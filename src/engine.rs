@@ -1455,7 +1455,7 @@ impl Engine {
   /// The engine driven: each ear is polled with the waker of whoever drives, and what the ears say of their own accord
   /// is said into it, in one entry, which it makes only when an ear says something. An awaited act drives the engine
   /// so, and a door that awaits in the loop of its own language drives it so too.
-  pub(crate) fn pump(&mut self, waker: &Waker) -> Result<(), Fault> {
+  pub fn pump(&mut self, waker: &Waker) -> Result<(), Fault> {
     if !self.outside.waker.will_wake(waker) {
       self.outside.waker = waker.clone();
     }

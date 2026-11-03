@@ -16,7 +16,6 @@ import { type ChainRead, inputColors, statusMark, threadMarks, wrapped } from ".
 /** What waits in a part of the library, counted where the operator should look. */
 export interface Attention {
   asks: number;
-  working: number;
   held: number;
   failed: number;
   unread: number;
@@ -81,16 +80,15 @@ export const rail = part({
     this.render();
   },
 
-  /** What waits in some sessions: each question, each session at work, held, failed, or finished and not seen. */
+  /** What waits in some sessions: each question, each session held, failed, or finished and not seen. */
   attentionOf(entries: readonly SessionEntry[]): Attention {
-    const out: Attention = { asks: 0, working: 0, held: 0, failed: 0, unread: 0 };
+    const out: Attention = { asks: 0, held: 0, failed: 0, unread: 0 };
     for (const entry of entries) {
       if (entry.archived) continue;
       const asks = entry.session ? entry.session.desk.asks.filter((ask) => !ask.notice).length : 0;
       if (asks) out.asks += asks;
       else if (entry.status === "blocked") out.asks += 1;
-      if (entry.status === "working" || entry.status === "opening") out.working += 1;
-      else if (entry.status === "paused") out.held += 1;
+      if (entry.status === "paused") out.held += 1;
       else if (entry.status === "error") out.failed += 1;
       else if (entry.status === "done") out.unread += 1;
     }
@@ -109,7 +107,6 @@ export const rail = part({
     add(a.asks, "asks");
     add(a.failed, "failed");
     add(a.held, "paused");
-    add(a.working, "runs");
     add(a.unread, "unread");
     return parts;
   },
@@ -120,7 +117,6 @@ export const rail = part({
       a.asks ? `${a.asks} ${a.asks === 1 ? "question waits" : "questions wait"} for you` : "",
       a.failed ? `${a.failed} failed` : "",
       a.held ? `${a.held} paused` : "",
-      a.working ? `${a.working} at work` : "",
       a.unread ? `${a.unread} finished and not seen` : "",
     ].filter(Boolean);
     return [[said.join("  ·  "), c.text]];
@@ -406,10 +402,7 @@ export const rail = part({
           [`${glyph.done} `, c.success],
           ["Nothing waits for you", c.muted],
         ];
-    const tail: Part[] = [
-      ...(total.working ? [[`${glyph.running} ${total.working} at work`, c.accent] as Part] : []),
-      ...(total.asks ? [["  ⌥A", c.faint] as Part] : []),
-    ];
+    const tail: Part[] = [...(total.asks ? [["  ⌥A", c.faint] as Part] : [])];
     this.railSession.add(
       this.railSplit(head, tail, () => void this.nextAttention().catch(this.report), edge),
     );
@@ -995,13 +988,13 @@ export const rail = part({
     }
   },
 
-  /** What the threads of the session shown say, counted as the marks of a row. */
+  /** What the threads of the session shown say, counted as the marks of a row: a question anywhere, and the failure
+   * or the pause of a thread that the operator started. The failure of an agent counts for nothing. */
   threadAttention(threads: readonly ChainThread[]): Attention {
     return {
-      asks: threads.filter((one) => one.state === "asks").length,
-      working: threads.filter((one) => !one.resolved && one.state !== "asks").length,
-      held: 0,
-      failed: threads.filter((one) => one.state === "failed").length,
+      asks: threads.filter((one) => one.asks.length).length,
+      held: threads.filter((one) => one.yours && one.state === "held" && !one.asks.length).length,
+      failed: threads.filter((one) => one.yours && one.state === "failed" && !one.asks.length).length,
       unread: 0,
     };
   },

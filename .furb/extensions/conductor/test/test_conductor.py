@@ -978,7 +978,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 STATE = (
   "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed assigned silent"
-  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas touched serial round_faults vetoes rulings judged tips shifted parents redmain onmain hired paced landed heard bindings handled ends requeued"
+  " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas planned touched serial round_faults vetoes rulings judged tips shifted parents redmain onmain hired paced landed heard bindings handled ends requeued"
   " statused secret updated budgeted flaky runs_read deferred"
 ).split()
 
@@ -1193,11 +1193,55 @@ def test_the_round_runs_one_on_opus_medium_three_on_sonnet_and_one_on_opus_high(
   assert [key for key, _ in conductor.hired][6:] == ["o2"]
 
 
-def test_the_round_hires_the_core_first_then_the_others_then_polish_and_the_stronger_model_first_in_each(conductor: Round) -> None:
+def test_the_round_hires_the_core_first_then_the_others_and_the_stronger_model_first_in_each(conductor: Round) -> None:
   conductor.efforts.update({"tui-x": SONNET_HIGH, "misc": SONNET_HIGH, "engine-y": SONNET, "host-z": TOP})
   conductor.queue[:] = [("tui-x", "", "tui"), ("misc", "", "defects"), ("engine-y", "", "defects"), ("host-z", "", "defects")]
   conductor.staff()
-  assert [key for key, _ in conductor.hired] == ["host-z", "engine-y", "misc", "tui-x"]
+  assert [key for key, _ in conductor.hired] == ["host-z", "misc", "engine-y", "tui-x"]
+
+
+def test_an_item_whose_key_stands_in_a_plan_table_ranks_before_a_polish_item_whatever_its_name(conductor: Round) -> None:
+  conductor.planned.update({"view-tui", "tui-client", "close-message-tui"})
+  keys = ["polish-a", "view-tui", "tui-client", "close-message-tui"]
+  conductor.efforts.update(dict.fromkeys(keys, SONNET_HIGH))
+  conductor.queue[:] = [(key, "", "polish") for key in keys]
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["view-tui", "tui-client", "close-message-tui"]
+  assert conductor.queue == [("polish-a", "", "polish")]
+
+
+def test_an_item_of_the_thread_defects_ranks_with_the_core(conductor: Round) -> None:
+  keys = ["a", "b", "c", "d"]
+  conductor.efforts.update(dict.fromkeys(keys, SONNET_HIGH))
+  conductor.queue[:] = [("a", "", "tui"), ("b", "", "tui"), ("c", "", "tui"), ("d", "", "defects")]
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["d", "a", "b"]
+
+
+def test_a_substring_of_the_key_demotes_no_item(conductor: Round) -> None:
+  keys = ["tui-kit-core", "plain"]
+  conductor.efforts.update(dict.fromkeys(keys, SONNET_HIGH))
+  conductor.planned.add("tui-kit-core")
+  assert conductor.priority(("tui-kit-core", "", "gui")) < conductor.priority(("plain", "", "gui"))
+  assert conductor.priority(("plain", "", "undefects")) == conductor.priority(("plain", "", ""))
+
+
+@POSIX
+@JQ
+async def test_the_sweep_reads_the_plan_keys_of_the_open_design_issues_once(conductor: Round) -> None:
+  conductor.say(r"pr list --state open", "[]")
+  conductor.say(r"pr list --state merged", "[]")
+  conductor.say(r"run list --branch main", json.dumps([{"headSha": "m1", "conclusion": "success", "databaseId": 9}]))
+  conductor.say(r"issue list", "[]")
+  conductor.say(r"pr list --repo uael/monty", "[]")
+  table = "| key | model |\n|---|---|\n| view-tui | x |\n| tui-client | y |\n"
+  conductor.say(r"issue view 984 ", json.dumps({"state": "OPEN", "body": table}))
+  heading = "### 1. `engine-open-async`\n\n- Model: x\n"
+  conductor.say(r"issue view 983 ", json.dumps({"state": "OPEN", "body": heading}))
+  conductor.say(r"issue view 985 ", json.dumps({"state": "CLOSED", "body": "| old-key | m |\n"}))
+  await conductor.sweep(300)
+  assert conductor.planned == {"view-tui", "tui-client", "engine-open-async"}
+  assert conductor.log().count("issue view 984") == 1
 
 
 def test_the_round_moves_the_items_of_backlog_in_the_order_of_their_priority(conductor: Round) -> None:
@@ -4215,3 +4259,18 @@ def test_the_staff_counts_only_the_items_of_the_queue_that_it_can_hire_now(condu
   conductor.staff()
   assert [key for key, _ in conductor.hired] == ["ready"]
   assert conductor.queue == held and conductor.backlog == []
+
+
+def test_a_test_file_holds_no_item_for_an_open_pr_or_a_live_worker(conductor: Round) -> None:
+  names = ["src/life.test.rs", "test/test_x.py", "ext/test/conftest.py", "tests/a.rs", "web/__tests__/a.ts"]
+  names += ["a/b_test.rs", "a/test_c.py"]
+  conductor.prs[7] = conductor.pr(n=7)
+  conductor.touched[7] = {"sha": "abc", "paths": [*names, "src/real.rs"]}
+  conductor.busy("p1", "k0", conductor.model_of("k0"))
+  conductor.briefed["k0"] = "Add tests to " + ", ".join(names) + "."
+  conductor.queue[:] = [("k1", "Fix " + ", ".join(names) + ".", "defects"), ("k2", "Fix src/real.rs.", "defects")]
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["k1"] and conductor.serial == {"k2": 7}
+  assert conductor.heard == [
+    "k2 waits for #7, which changes src/real.rs that it names, so two designs of one file do not race."
+  ]
