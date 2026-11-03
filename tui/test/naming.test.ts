@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { demoSession, removeDemoDirectories } from "../src/demo.ts";
@@ -74,6 +75,73 @@ test("a rename of the operator is a fact of the record, which a second session o
     expect(session.sessionName).toBe("Mine again");
     await session.rename("");
     expect(session.sessionName).toBe(basename(session.host.directory));
+  } finally {
+    await session?.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+/** The values of the acts rename_session on the root of a session, in the order of the record. */
+function renames(session: Session) {
+  return (session.activityByChain.get(session.engine.root) ?? [])
+    .filter((one) => one.kind === "rename_session")
+    .map((one) => one.value);
+}
+
+test("a rename of the operator is a fact of the record whatever extension plays, with none playing", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-name-"));
+  const record = join(directory, "life.jsonl");
+  let session: Session | undefined;
+  try {
+    session = await demoSession({ record });
+    expect(await session.rename("Mine")).toBe(true);
+    expect([session.sessionName, session.notice]).toEqual(["Mine", ""]);
+    await session.dispose();
+    await rm(`${record}.ui.json`, { force: true });
+    session = await demoSession({ record });
+    expect([session.sessionName, renames(session)]).toEqual(["Mine", ["Mine"]]);
+  } finally {
+    await session?.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a rename that the record does not take keeps the old name and says why in a notice", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-name-"));
+  const record = join(directory, "life.jsonl");
+  let session: Session | undefined;
+  try {
+    session = await demoSession({ record });
+    await session.rename("First");
+    await session.dispose(true);
+    expect(await session.rename("Second")).toBe(false);
+    expect(session.sessionName).toBe("First");
+    expect(session.notice).toStartWith("The name was not kept: ");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a name that an older ui.json holds moves into a record with no rename once, and the ui.json then holds no name", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-name-"));
+  const record = join(directory, "life.jsonl");
+  const path = `${record}.ui.json`;
+  const held = () => JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+  let session: Session | undefined;
+  try {
+    session = await demoSession({ record });
+    await session.dispose();
+    await writeFile(path, JSON.stringify({ ...held(), sessionName: "Old name" }));
+    session = await demoSession({ record });
+    for (let tries = 0; tries < 400 && "sessionName" in held(); tries++) await Bun.sleep(25);
+    expect("sessionName" in held()).toBe(false);
+    await session.refresh();
+    expect([session.sessionName, renames(session)]).toEqual(["Old name", ["Old name"]]);
+    await session.dispose();
+    await writeFile(path, JSON.stringify({ ...held(), sessionName: "Stale name" }));
+    session = await demoSession({ record });
+    for (let tries = 0; tries < 400 && "sessionName" in held(); tries++) await Bun.sleep(25);
+    await session.refresh();
+    expect([session.sessionName, renames(session)]).toEqual(["Old name", ["Old name"]]);
   } finally {
     await session?.dispose();
     await rm(directory, { recursive: true, force: true });

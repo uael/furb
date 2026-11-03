@@ -512,6 +512,27 @@ test("deleting the current session moves to the next session that opens, and to 
     }
   }));
 
+test("a rename of a session that cannot open keeps the old name and shows the reason in its row", () =>
+  withLibrary(async ({ directory, open }) => {
+    let library = open();
+    let lease: NativeEar | undefined;
+    try {
+      const held = await library.create(await library.add(directory), "Held elsewhere");
+      await library.dispose();
+      lease = store(held.path)[1];
+      library = open();
+      const group = await library.add(directory);
+      const row = group.sessions.find((entry) => entry.path === held.path);
+      if (!row) throw new Error("No row for the record.");
+      const before = row.name;
+      await library.rename(row, "Another name");
+      expect([row.name, row.status]).toEqual([before, "failed"]);
+      expect(row.error).toContain("Another process owns");
+    } finally {
+      lease?.dispose();
+    }
+  }));
+
 test("a workspace whose newest session cannot open opens on a new session that names the refusal", () =>
   withLibrary(async ({ directory, open }) => {
     let library = open();
