@@ -42,7 +42,7 @@ from furb.engine import (
 
 CONDUCTING = """Conduct the work in one loop, and plan no further than the next step.
 The round is autonomous, by the ruling of the owner on 10-31: "#916 should have never been queued. Make it clear in conductor doc that it's designed to be autonomous. The word of the owner (me) can be asynchronous". So the round never makes work wait for the owner by a rule of its own: no cap, no count of rounds and no hold of the round ends in "the owner decides", and such a rule is a defect of the round, never a design. The owner speaks asynchronously: by his own labels on a PR (owner-merge, hold, hold:owner-review, paused), which the round obeys as they stand, and by his comments and rulings, each of which changes what the round does from then on. Until his word comes, the round decides from the rulings and goes on.
-Put each item in queue as (key, brief, thread), or in backlog to wait behind queue, then await conduct(). Each round tends the workers and the open PRs, hires a worker for each item, cap() at once, and waits every seconds or until a worker ends. It hires no item of a model family while an open PR in trouble has no worker and needs one of that family. A PR in trouble takes the first model of the handover role, the model of its maker, limits["fixer"] and the actor role that has room, so it waits only when no family has room. So the fixers take the free slots of their family first, the round merges before it starts new work there, and each other family hires on its own room. It tells you once when such a PR waits for a fixer whose family has no room at all. It moves the first item of backlog to queue while queue and working hold fewer than cap() items.
+Put each item in queue as (key, brief, thread), or in backlog to wait behind queue, then await conduct(). Each round tends the workers and the open PRs, hires a worker for each item, cap() at once, and waits every seconds or until a worker ends. It hires no item of a model family while an open PR in trouble has no worker and needs one of that family. A PR in trouble takes the first model of the handover role, the model of its maker, limits["fixer"] and the actor role that has room, so it waits only when no family has room. So the fixers take the free slots of their family first, the round merges before it starts new work there, and each other family hires on its own room. It tells you once when such a PR waits for a fixer whose family has no room at all. It moves the first item of backlog to queue while queue and working hold fewer than cap() items. It counts only the items of queue that it can hire now, so held items do not starve backlog.
 When you find a defect, a wrong state or a gap in your own work, or the owner points at one, fix the state at once, then make its durable fix at once: a PR, through patch() for the word of the conductor, or an item at the head of the queue. Never keep it as a note for later, and never fix it only with a live patch. When a message of the owner asks whether a state is right, that is a sign that it is not: read the whole state, list each thing that is off, fix all of them in one go, read the state again to verify it, and do this again until nothing is off. Only then report, with what you verified.
 The owner rules, on 10-23, that the model of an item depends on its kind, and that the default, handover and editor roles use the efforts he chose. So a debrief asks the model of its worker, and a worker runs efforts[key], or the model of its kind. An item has a kind, kinds[key], by the ruling of the owner on 10-28 on dedicated audit and edit workers: audit reads and writes a register in scratch, with no worktree and no PR, on the audit model in limits["models"], with the brief AUDIT; edit makes a worktree and a PR, on the editor model there, with the brief WORKER; fix mends one red PR on limits["fixer"]. An item with no kind is a fix when its key is fixN or boxN, else an edit. An auditor that ends with 0 and its report is a line in the next notice, and each row of the table | Dn | key | model | area | brief | in its register is queued once as the item triage-<key>, at the end of queue, on the model of its row. A fixer (fixN, boxN) runs on limits["fixer"], by the ruling of the operator. A worker runs only a model of MODELS: sonnet/medium, sonnet/high, opus/medium or opus/high. hire() refuses xhigh and max, and the round starts no item that asks for one and tells you. You choose sonnet for an item where it makes sense, as efforts[key] = "claude-cli:sonnet/medium" before you queue it.
 limits["room"] gives the room of each model family, and limits["models"] gives the model for each role: actor, handover, editor, patcher, ruler, stronger and audit. Both live in the state of the round, so a reload keeps your choices. Change limits["models"] once to switch every worker, judge and patcher. The default for every role is codex:gpt-6-luna/medium, and its room is five. A model family is its full name after the provider when limits["room"] has that name, or its name before the effort otherwise, as gpt-6-luna for codex:gpt-6-luna/medium. cap() gives the sum of the room. A fixer goes before a new item. A worker that ended and whose PR needs a fixer goes on in its own chain on the handover model in limits["models"], with a new prompt there, when that model has room, else on the model of its last prompt when that has room; else a fixer starts on limits["fixer"].
@@ -62,7 +62,7 @@ Each round queues each open issue that the owner opened, or that he assigned to 
 Each round tells you once each fork PR of UPSTREAM that holds the label upstream-ready and not upstreamed: by the ruling of the owner, you then open its PR on pydantic/monty with the body that he reviewed, and put the label upstreamed on the fork PR.
 Each round sends each new comment of the owner on a PR or on his issue to the worker that owns it, puts the label hold on that PR, and tells you only the comments that no worker owns. The label hold:owner-review, which the owner puts on a PR to iterate with its worker, holds it like hold and keeps its worker on it: the round puts no hold of its own on it, and sends each new comment of the owner to the chain of its maker even when the prompt of the maker ended, as a handover on that chain on the model of the maker. A text on GitHub counts only when the owner wrote it with no 🤖 at its start, or when he put a 👍 on it; each worker starts what it writes there with 🤖.
 Each round sets one status label on each open PR and on each issue of the owner that it took: s:queued, s:working, s:checks, s:red, s:boxes, s:held, s:conflict, s:stacked, s:ready, or s:owner (green, waits for the owner).
-Before it hires, each round folds into one item each queued item that is like an earlier one, by the ruling of the owner on 10-29: the same thread, kind and model, and the same PR or a brief whose long lines are half the same, and never an item of the kind audit. The earlier item keeps its key and its place, takes the lines of the later one that it lacks, and covers its key, and each after[...] that named the later key names the earlier one, so a flake, an order or a step of converge for it goes to its worker. Each round reads the gates: when the median time of a job in its last five green runs on main passes its budget in .github/budgets.json, which script/budgets.py sets from measures, it queues an item budget-<job>, once until five new runs measure the job; and when the gates fail, then pass on the same commit, it puts each test that failed in the ledger of the flakes, flaky, and at once queues an item flake-<test>, or tells the worker that holds that item. An item names in covering[key] the tests, the measures and the keys of the items of flakes or budgets that it covers, as covering["tui-bench-new-act"] = ["flake-bench-a-new-act-growth"]: taken() gives its worker for each of them, so a flake or a budget that it covers goes to that worker and queues no item.
+Before it hires, each round folds into one item each queued item that is like an earlier one, by the ruling of the owner on 10-29: the same thread, kind and model, and the same PR or a brief whose long lines that fewer than 3 briefs of queue and backlog hold are half the same, and never an item of the kind audit. The earlier item keeps its key and its place, takes the lines of the later one that it lacks, and covers its key, and each after[...] that named the later key names the earlier one, so a flake, an order or a step of converge for it goes to its worker. Each round reads the gates: when the median time of a job in its last five green runs on main passes its budget in .github/budgets.json, which script/budgets.py sets from measures, it queues an item budget-<job>, once until five new runs measure the job; and when the gates fail, then pass on the same commit, it puts each test that failed in the ledger of the flakes, flaky, and at once queues an item flake-<test>, or tells the worker that holds that item. An item names in covering[key] the tests, the measures and the keys of the items of flakes or budgets that it covers, as covering["tui-bench-new-act"] = ["flake-bench-a-new-act-growth"]: taken() gives its worker for each of them, so a flake or a budget that it covers goes to that worker and queues no item.
 Every twelfth round audits the work against its measure, the open items, writes its line in the digest, and tells you the open entries of TOOLING, the most repeated first, each with its id: turn the worst into the next item. TOOLING is untracked, so a worker in a worktree cannot read it: put ledger_text(id, ...), the text of the entries that the item names, in its brief. Each entry has a stable id and one state of STATES, and a state of another form moves to its note. The audit prunes what the work left behind, and loses no work: a worktree of the round whose item is not in working, queue or backlog and whose branch merged, closed, or holds nothing that main lacks, or whose work is all committed and pushed, with its local branch, once its changes that are not committed are a patch and its commits that only this machine holds are a bundle, in the folder of the day in ARCHIVE; a remote branch whose PR closed at its head and that no item names, written first to TRASHED; a scratch directory of a life that no process and no item uses, older than 2 days; and a folder /tmp/furb-* older than 2 days. It tells you what went and the room that df saw freed.
 threads() gives the tree of the threads: the brief prompt of each worker and the prompts under it, with their state, their PRs, their queued items and each question that waits.
 debrief(name) asks the chain of a worker that ended for the frictions that it met in furb.
@@ -71,7 +71,7 @@ An item that takes a PR by its brief, and not by a label or a push, names it in 
 At each round a watchdog reads each open command of each worker, with no model: a wait on CI (gh pr checks --watch, gh run watch, or a loop of sleep around gh) that runs over 10 minutes is cancelled, and its reason tells the worker to stay on its PR, wait for the checks again with await checked(number) and close only when the PR merged. Any other command whose output did not grow for 15 minutes is a line in the next notice, and at 30 minutes it is cancelled with its reason and told to you. It ends a wait or a command, never a task. It also reads every chain of the life, not the workers alone: when a wait or a run of a word has held a chain for HELD seconds while a prompt of the operator on it is not over and no reply of a rung of it was said, the round cancels that wait (else that run, and says done with CancelledError when the cancel left it open), tells the chain once to await nothing over 60 s and to peek at the next advance, and names the chain in the next notice. It leaves the home of the round alone.
 DEBRIEFS is on by default and lives in the state of the round: DEBRIEFS = False in a word turns off the debrief of each worker that ends, which saves tokens.
 An item waits for others with after[key] = [keys], set before you queue it: staff() hires it only once each PR that those keys ended with merged, an item of backlog whose keys merged goes to queue, and the round lists in a notice each key that no item holds. The entries of held_items in the module of the root move into backlog at each round, so a dict of your own chain is not needed.
-An item that names a file which an open PR of the round changes waits for that PR, as an after on it, by the defect e372: each sweep reads the files that each open PR changes, in touched[n], and staff() holds an item whose brief or areas[key] names a path with a folder that one changes, in serial[key], until that PR is no longer open, so two designs of one file never race. A PR that the item names as #N, labels w:key, or owns, holds nothing.
+An item that names a file which an open PR of the round changes waits for that PR, as an after on it, by the defect e372: each sweep reads the files that each open PR changes, in touched[n], and staff() holds an item whose brief or areas[key] names a path with a folder that one changes, in serial[key], until that PR is no longer open. It holds an item also while a live worker holds an item whose files overlap its files, so two designs of one file never race and no after is needed for a shared file. The files of an item are areas[key] when it holds any, else the paths that its brief names. A PR that the item names as #N, labels w:key, or owns, holds nothing.
 main changes only through the merge of a PR, by the incident of 11-01, when a worker pushed the commits of its tests straight to main: each sweep reads the activity of main on GitHub and tells you at once, in one notice, each change of main that is not a pr_merge, with its kind, its actor, its time, and its before and after.
 Method, at each notice: read the whole state, fix every thing that is off in one go, read the state again to verify, and go on until nothing is off. Only then report. Each round also checks the state in invariants(): it gives each open PR that the round tends a home, from the chain that pushed its head, wakes no chain, and lists in the next notice what code cannot fix.
 A PR waits on a decision of the owner while awaited[decision] names one of its labels, or its number as #N, and the decision is an act that is not over, as the prompt that asked him: a failed check of that PR gets no order, no handover and no fixer, a conflict of it still does, and the round names the decision once. When the act ends, the round drops it and tends the PR again.
@@ -2432,13 +2432,17 @@ def triage() -> None:
   def lines(text: str) -> set[str]:
     return {x.strip() for x in text.splitlines() if len(x.strip()) >= 40}
 
+  def rare(text: str) -> set[str]:
+    others = [lines(one[1]) for one in [*queue, *backlog]]
+    return {x for x in lines(text) if sum(x in one for one in others) < 3}
+
   def alike(a: tuple, b: tuple) -> bool:
     if a[2] != b[2] or kind_of(a[0]) != kind_of(b[0]) or model_of(a[0]) != model_of(b[0]) or kind_of(a[0]) == "audit":
       return False
     if after.get(a[0]) or after.get(b[0]) or taken(a[0]) not in ("", "queued") or taken(b[0]) not in ("", "queued"):
       return False
     near = set(re.findall(r"#(\d+)", a[1])) & set(re.findall(r"#(\d+)", b[1]))
-    la, lb = lines(a[1]), lines(b[1])
+    la, lb = rare(a[1]), rare(b[1])
     return bool(near) or bool(la and lb and len(la & lb) * 2 >= min(len(la), len(lb)))
 
   for b in list(queue):
@@ -2480,6 +2484,18 @@ def rival(key: str, brief: str) -> tuple[int, list[str]] | None:
   return None
 
 
+def files_of(key: str, brief: str) -> set[str]:
+  held = {a.strip("/") for a in areas.get(key, []) if a.strip("/")}
+  return held or set(re.findall(PATH, brief))
+
+
+def overlap(mine: set[str], other: set[str]) -> list[str]:
+  def same(x: str, y: str) -> bool:
+    return x == y or x.startswith(y + "/") or y.startswith(x + "/") or ("/" in x and y.endswith("/" + x))
+
+  return sorted(x for x in mine if any(same(x, y) or same(y, x) for y in other))
+
+
 def serialized(key: str, brief: str) -> bool:
   if serial.get(key) in prs:
     return True
@@ -2490,7 +2506,21 @@ def serialized(key: str, brief: str) -> bool:
     heard.append(
       f"{key} waits for #{found[0]}, which changes {', '.join(found[1][:4])} that it names, so two designs of one file do not race."
     )
-  return bool(found)
+    return True
+  mine = files_of(key, brief)
+  for worker, item in working.items():
+    if item == key or over(worker):
+      continue
+    hit = overlap(mine, files_of(item, briefed.get(item, "")))
+    if hit:
+      if f"holds {key} {item}" not in noticed:
+        noticed.add(f"holds {key} {item}")
+        heard.append(
+          f"{key} waits for the worker of {item}, which holds {', '.join(hit[:4])} that it names,"
+          " so two items of one file do not start at once."
+        )
+      return True
+  return False
 
 
 def staff() -> None:
@@ -2530,7 +2560,10 @@ def staff() -> None:
   for item in [one for one in backlog if one[0] in after and met(one[0])]:
     backlog.remove(item)
     queue.append(item)
-  while len(working) + len(queue) < cap():
+  def hireable() -> int:
+    return sum(met(one[0]) and not serialized(one[0], one[1]) for one in queue)
+
+  while len(working) + hireable() < cap():
     ready = [i for i, one in enumerate(backlog) if met(one[0])]
     if not ready:
       break

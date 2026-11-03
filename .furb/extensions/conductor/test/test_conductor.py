@@ -2800,7 +2800,7 @@ def test_the_triage_folds_like_items_into_the_earlier_one_before_a_hire(conducto
     ("converge-pr1", f"The open PR #1.\n{words}\nGap: the first row is cut off at column eighty of the screen.", "tui"),
     ("other", "Fix the flake of the TUI in the bench of a new act, which fails one run in ten.", "tui"),
     ("converge-pr2", f"The open PR #2.\n{words}\nGap: the second row has the wrong tone in the dark theme.", "tui"),
-    ("converge-pr3", f"The open PR #3.\n{words}\nGap: a third row.", "gui"),
+    ("converge-pr3", "The open PR #3.\nGap: a third row.", "gui"),
   ]
   conductor.triage()
   folded = conductor.queue[0][1]
@@ -4252,3 +4252,41 @@ async def test_a_gh_that_fails_alone_in_a_call_of_the_sweep_ends_no_step(conduct
   await conductor.sweep(300)
   assert "repos/uael/ops/issues/comments" in conductor.log() and "pr list --repo uael/monty" in conductor.log()
   assert "ops" not in conductor.timers and conductor.prs[4]["state"] == "main"
+
+
+def test_an_item_waits_for_a_live_worker_whose_files_overlap_its_own_and_starts_once_it_ended(conductor: Round) -> None:
+  conductor.busy("p1", "k0", conductor.model_of("k0"))
+  conductor.briefed["k0"] = "Make src/world/reader.rs stream its facts."
+  conductor.queue[:] = [("k1", "Fix src/world/reader.rs and docs/x.md.", "defects"), ("k2", "Fix src/life.rs.", "defects")]
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["k2"] and [x[0] for x in conductor.queue] == ["k1"]
+  assert conductor.heard == [
+    "k1 waits for the worker of k0, which holds src/world/reader.rs that it names, so two items of one file do not start at once."
+  ]
+  conductor.staff()
+  assert [x[0] for x in conductor.queue] == ["k1"] and len(conductor.heard) == 1
+  conductor.done["p1"] = None
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["k2", "k1"]
+
+
+def test_the_triage_counts_only_the_long_lines_that_fewer_than_three_briefs_hold(conductor: Round) -> None:
+  rules = "\n".join(f"Rule {i}: keep each comment of the code to one sentence that says why." for i in range(6))
+  conductor.queue[:] = [
+    ("a", f"{rules}\nFix the width of the comment lines in the engine of the crate for each file.", "docs"),
+    ("b", f"{rules}\nRender the held chains of the conductor in the notice of the round with a mark.", "docs"),
+    ("c", f"{rules}\nOpen the PR of the audit with the label of its thread and its owner.", "docs"),
+  ]
+  conductor.triage()
+  assert [x[0] for x in conductor.queue] == ["a", "b", "c"] and conductor.heard == []
+
+
+def test_the_staff_counts_only_the_items_of_the_queue_that_it_can_hire_now(conductor: Round) -> None:
+  conductor.prs[7] = conductor.pr(n=7)
+  conductor.touched[7] = {"sha": "abc", "paths": ["src/life.rs"]}
+  held = [(f"h{i}", "Fix src/life.rs.", "defects") for i in range(conductor.cap())]
+  conductor.queue[:] = held
+  conductor.backlog[:] = [("ready", "Fix src/other.rs.", "defects")]
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["ready"]
+  assert conductor.queue == held and conductor.backlog == []
