@@ -245,3 +245,21 @@ def test_a_kit_that_goes_since_the_release_is_a_break_and_a_kit_that_is_more_is_
   out = capsys.readouterr().out
   assert "break: extensions/web/web.pyi: the contract goes" in out
   assert "minor: extensions/mcp/mcp.pyi: the contract is more" in out
+
+
+def test_a_break_that_the_base_holds_already_fails_no_later_pull_request(
+  tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+  tagged(tmp_path, "def a(x: int) -> int: ...\ndef b(y: int) -> int: ...\n")
+  edit(tmp_path, "def a() -> int: ...\ndef b(y: int) -> int: ...\n")
+  git(tmp_path, "add", "-A")
+  git(tmp_path, "commit", "-q", "-m", "base")
+  assert contract.main([], root=tmp_path) == 1
+  assert contract.main(["--since", "HEAD"], root=tmp_path) == 0
+  edit(tmp_path, "def a() -> int: ...\ndef b() -> int: ...\n")
+  capsys.readouterr()
+  assert contract.main(["--since", "HEAD"], root=tmp_path) == 1
+  out = capsys.readouterr().out
+  assert "a: the parameter x goes" not in out
+  assert "break: src/furb/engine.pyi b: the parameter y goes" in out
+  assert "1 changes already stand on HEAD." in out

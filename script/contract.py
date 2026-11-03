@@ -20,7 +20,10 @@ the names of the working tree rule before the first release that holds the line.
 With a title, the breaks are declared when the title holds `!` before its colon, and the script says so and passes.
 Without a title, it fails on each break.
 
-Usage: python3 script/contract.py [--base TAG] [--title TITLE] [--wording]
+With --since REF, a change that stands already at REF is known: a pull request declares its own breaks, and a break that
+its base holds, declared by an earlier pull request, fails no later one until the next release.
+
+Usage: python3 script/contract.py [--base TAG] [--since REF] [--title TITLE] [--wording]
 """
 
 import argparse
@@ -325,19 +328,37 @@ def last_tag(root: Path) -> str:
   return next(iter(out.split()), "")
 
 
-def paths(root: Path, tag: str) -> list[str]:
+def paths(root: Path, *refs: str) -> list[str]:
   here = {x.relative_to(root).as_posix() for x in root.glob("extensions/*/*.pyi")}
-  _, out = git(root, "ls-tree", "-r", "--name-only", tag, "--", "extensions")
-  return [ENGINE, *sorted(here | {x for x in out.split() if KIT.fullmatch(x)})]
+  there: set[str] = set()
+  for ref in refs:
+    _, out = git(root, "ls-tree", "-r", "--name-only", ref, "--", "extensions")
+    there |= {x for x in out.split() if KIT.fullmatch(x)}
+  return [ENGINE, *sorted(here | there)]
 
 
 def declared(title: str) -> bool:
   return re.match(r"[^:\n]*!:", title) is not None
 
 
+def compared(root: Path, tag: str, files: list[str], ref: str = "") -> list[Finding]:
+  found: list[Finding] = []
+  for path in files:
+    code, old = git(root, "show", f"{tag}:{path}")
+    if ref:
+      kept, text = git(root, "show", f"{ref}:{path}")
+      new = text if kept == 0 else None
+    else:
+      file = root / path
+      new = file.read_text(encoding="utf-8") if file.exists() else None
+    found += diff(path, old if code == 0 else None, new)
+  return found
+
+
 def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
   parser = argparse.ArgumentParser(description="Compare the contract with the one of the last release.")
   parser.add_argument("--base", default="", help="The tag to compare with, the last release when it is empty.")
+  parser.add_argument("--since", default="", help="A ref whose changes against the tag are known, as a base.")
   parser.add_argument("--title", default=None, help="The title of the pull request, whose ! declares the breaks.")
   parser.add_argument("--wording", action="store_true", help="The pull request holds the label wording.")
   args = parser.parse_args(argv)
@@ -345,17 +366,16 @@ def main(argv: list[str] | None = None, root: Path = ROOT) -> int:
   if not tag:
     sys.stdout.write("No release to compare with: nothing is a break yet.\n")
     return 0
-  found: list[Finding] = []
-  for path in paths(root, tag):
-    code, old = git(root, "show", f"{tag}:{path}")
-    file = root / path
-    found += diff(path, old if code == 0 else None, file.read_text(encoding="utf-8") if file.exists() else None)
+  files = paths(root, tag, *([args.since] if args.since else []))
+  known = {str(x) for x in compared(root, tag, files, args.since)} if args.since else set()
+  found = [x for x in compared(root, tag, files) if str(x) not in known]
   for one in found:
     sys.stdout.write(f"{one}\n")
   blocking = [x for x in found if x.level == "break" or (x.level == "wording" and not args.wording)]
   counts = Counter(x.level for x in found)
+  stand = f" {len(known)} changes already stand on {args.since}." if args.since else ""
   sys.stdout.write(
-    f"Against {tag}: {counts['break']} breaks, {counts['wording']} sentences that change, {counts['minor']} minors.\n"
+    f"Against {tag}: {counts['break']} breaks, {counts['wording']} sentences that change, {counts['minor']} minors.{stand}\n"
   )
   if not blocking:
     return 0

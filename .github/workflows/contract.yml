@@ -41,13 +41,17 @@ jobs:
           TITLE: ${{ github.event.pull_request.title }}
           LABELS: ${{ join(github.event.pull_request.labels.*.name, ' ') }}
           BRANCH: ${{ github.ref_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
           GH_TOKEN: ${{ github.token }}
         run: |
           git fetch --no-tags --depth=1 origin '+refs/tags/v*:refs/tags/v*'
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
             TITLE=$(gh pr view "$BRANCH" --repo "$GITHUB_REPOSITORY" --json title --jq .title)
             LABELS=$(gh pr view "$BRANCH" --repo "$GITHUB_REPOSITORY" --json labels --jq '[.labels[].name] | join(" ")')
+            BASE=main
           fi
+          # A break that the base holds already was declared by the pull request that made it.
+          git fetch --no-tags --depth=1 origin "$BASE"
           flags=
           case " $LABELS " in *" wording "*) flags=--wording ;; esac
-          python3 -I script/contract.py --title "$TITLE" $flags
+          python3 -I script/contract.py --since FETCH_HEAD --title "$TITLE" $flags
