@@ -119,6 +119,7 @@ export const desk = part({
       chain: w.selected,
       acts: w.acts,
       compactions: w.host.compactions,
+      extensions: async () => (await w.extensionsRun()).map(({ name }) => name),
       of: (kind) =>
         kindsOf(w.acts)
           .get(kind)

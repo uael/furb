@@ -100,6 +100,8 @@ export interface Seen {
   compactions: readonly Compaction[];
   /** The acts of a kind, in the order of the record. */
   of(kind: string): LiveAct[];
+  /** The names of the extensions that the life runs, in the order that it enabled them. */
+  extensions(): Promise<string[]>;
   /** Runs python on the chain on screen, through the gate, as `/run` does, and gives, once the word ended, the value
    * of the last act that the word made on that chain, as the record holds it once that act is done. A word that makes
    * no act gives undefined, and a word that raises or that the gate refuses rejects with its error. */

@@ -35,14 +35,8 @@ export default function compaction(furb: Furb): void {
     "Compact this chain now: a model keeps what the work still needs and sums up the rest",
     async (argument, seen) => {
       if (argument.trim()) return seen.say("/compact takes no argument");
-      // A life that runs no word of the extension on this chain has no condense(), and the gate would refuse the word.
-      const runs = seen.acts.some(
-        (act) =>
-          act.kind === "rung" &&
-          act.on === seen.chain &&
-          String(act.words[0] ?? "").includes("def condense("),
-      );
-      if (!runs) return seen.say("This chain has no compaction");
+      // A life that does not run the extension has no condense(), and the gate would refuse the word.
+      if (!(await seen.extensions()).includes("compaction")) return seen.say("This chain has no compaction");
       // The footer shows a short notice whole; the rule of the compaction says the rest once the model chose. The run
       // ends only once the model chose, so the notice comes first.
       seen.say("A model compacts this chain");
