@@ -37,7 +37,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 use super::{Cached, Listed};
-use crate::{ear::reactor, world::cache};
+use crate::{
+  ear::{reactor, runtime},
+  world::cache,
+};
 
 /// Where models.dev serves its catalog.
 const URL: &str = "https://models.dev/api.json";
@@ -188,7 +191,7 @@ pub(super) fn background(at: &Path) {
     return;
   }
   *last = Some(Instant::now());
-  reactor().spawn(async {
+  runtime().spawn(async {
     update().await;
   });
 }

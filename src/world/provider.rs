@@ -82,7 +82,7 @@ use unsync::oneshot;
 use self::{images::Images, search::Searches, watch::Watch};
 use crate::{
   SYSTEM,
-  ear::{Co, Ear, Next, hearing, reactor, say},
+  ear::{Co, Ear, Next, hearing, runtime, say},
   engine::{OPERATOR, WINDOW},
   fact::Fact,
   value::{Fault, Object, ObjectRef, entry},
@@ -1030,7 +1030,7 @@ impl Provider {
               // on the runtime of the ears, and every chain of the life goes on meanwhile.
               say(&mut co, Fact::says("started", &about, []));
               let refresh = Arc::clone(refresh);
-              let read = reactor().spawn_blocking(move || refresh());
+              let read = runtime().spawn_blocking(move || refresh());
               co.work(stream::once(read.map(move |got| {
                 let got = got.map_err(|no| no.to_string()).and_then(|got| got);
                 Replied::Refreshed { about, got }

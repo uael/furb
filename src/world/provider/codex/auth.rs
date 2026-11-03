@@ -38,7 +38,7 @@ use tokio::{
   sync::watch,
 };
 
-use crate::{ear::reactor, extension::Places};
+use crate::{ear::runtime, extension::Places};
 
 /// The provider of models paid for by a ChatGPT subscription.
 pub const NAME: &str = "codex";
@@ -487,7 +487,7 @@ pub fn begin(config: Option<&Path>) -> Result<Status, String> {
     .lock()
     .unwrap_or_else(|no| no.into_inner())
     .insert(path.clone(), Flow { status: status.clone(), canceled: stop });
-  reactor().spawn(async move {
+  runtime().spawn(async move {
     let result = async {
       let credential = match callback {
         Some((listener, state, verifier)) => {

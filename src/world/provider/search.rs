@@ -20,7 +20,7 @@ use super::{
   claude::Program,
   clients::{Client, Reach},
 };
-use crate::ear::reactor;
+use crate::ear::runtime;
 
 /// A search of the web: given a query, the answer in Markdown with its sources, or why it gives none.
 pub type Searches = Arc<dyn Fn(String) -> BoxFuture<'static, Result<String, String>> + Send + Sync>;
@@ -35,7 +35,7 @@ const BRIEF: &str = "Search the web to answer the query of the user. Answer in M
 /// The most a model writes in the answer of one search.
 const TOKENS: u64 = 4096;
 
-/// The work of a search or a fetch, on the reactor, so that a client of HTTP and a process have the runtime they
+/// The work of a search or a fetch, on the runtime of the ears, so that a client of HTTP and a process have the runtime they
 /// need, which ends after [`TIMEOUT`], and when what awaits it goes.
 pub(crate) fn spawned<T: Send + 'static>(
   work: impl Future<Output = Result<T, String>> + Send + 'static,
@@ -47,7 +47,7 @@ pub(crate) fn spawned<T: Send + 'static>(
       self.0.abort();
     }
   }
-  let task = reactor().spawn(async move { tokio::time::timeout(TIMEOUT, work).await });
+  let task = runtime().spawn(async move { tokio::time::timeout(TIMEOUT, work).await });
   let aborted = Aborted(task.abort_handle());
   Box::pin(async move {
     let got = task.await;

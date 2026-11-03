@@ -48,7 +48,7 @@ use super::{
   session::{self, Changed, Info, Offered, Session},
   wire::{Failure, Heard},
 };
-use crate::ear::reactor;
+use crate::ear::runtime;
 
 /// How many times in a row a server whose connection ended may fail to connect again.
 const RETRIES: u32 = 5;
@@ -200,7 +200,7 @@ impl Hub {
     if let Some(keeper) = entry.keeper.take() {
       keeper.abort();
     }
-    let task = reactor().spawn(keep(self.clone(), entry.server.name.clone(), generation));
+    let task = runtime().spawn(keep(self.clone(), entry.server.name.clone(), generation));
     entry.keeper = Some(task.abort_handle());
   }
 
