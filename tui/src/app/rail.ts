@@ -160,7 +160,7 @@ export const rail = part({
     const reads = kept?.session === w && kept.owed === owed ? kept.chains : new Map<string, ChainRead>();
     const chains = new Map<string, ChainRead>();
     for (const [chain, acts] of w.activityByChain) {
-      if (!acts.length) continue;
+      if (!acts.length || w.naming(chain)) continue;
       const stamp = w.threadStamp(chain);
       const read = reads.get(chain);
       // The chain shown has its threads read already, for the feed, at this version.

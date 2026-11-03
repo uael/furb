@@ -4,6 +4,7 @@ import { conductor } from "./conductor.ts";
 import { extending } from "./extend.ts";
 import { guide } from "./guide.ts";
 import { more } from "./more.ts";
+import { naming } from "./naming.ts";
 import { rivals } from "./rivals.ts";
 import type { Script } from "./script.ts";
 import { search } from "./search.ts";
@@ -13,6 +14,7 @@ import { storage } from "./storage.ts";
 
 /** Every script of the models of the demo life, which the worker of a demo session answers from. */
 export const scripts: readonly Script[] = [
+  ...naming,
   ...conductor,
   ...storage,
   ...search,

@@ -33,9 +33,9 @@ time, open the record again, and the work goes on from where it stopped.
 - **You stay in control.** The model can ask you a question and wait for your answer. You can pause any work, set a
   dollar ceiling, rewind a chain to an earlier point, or change the plan of a model while it works.
 - **Extensions are Python too.** An extension is a word that each chain runs, so the model reads it as it reads its
-  own work. furb comes with [seven extensions](https://github.com/uael/furb/blob/main/docs/extensions.md): what
-  changed on the machine since the last run, the memory of a project, its skills, compaction, a guide to extend furb,
-  the web, and the servers of MCP.
+  own work. furb comes with [eight extensions](https://github.com/uael/furb/blob/main/docs/extensions.md): what
+  changed on the machine since the last run, the memory of a project, its skills, compaction, the name of a session, a guide to
+  extend furb, the web, and the servers of MCP.
 
 ## Install
 
