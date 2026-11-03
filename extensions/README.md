@@ -10,7 +10,7 @@ write your own.
 | [`memory`](memory) | The `AGENTS.md` or `CLAUDE.md` files of the project that apply to the files that the chain reads. |
 | [`skills`](skills) | The skills of the project and of the user, which `skills()` lists and `skill(name)` reads. |
 | [`compaction`](compaction) | `compact()`, `condense()` and `compacted()`, which cut a chain in place to the work that it still needs. |
-| [`naming`](naming) | `name_session()`, which names the session from the first message of the operator, on the root alone. |
+| [`naming`](naming) | `name_session()`, which names the session from the first message of the operator, and `rename_session(name)`, which says the name that the operator chose, on the root alone. |
 | [`ouroboros`](ouroboros) | How a model extends furb, and `extend()`, which writes an extension of the project. |
 | [`web`](web) | `web_search(query)` and `web_fetch(url)`. |
 | [`mcp`](mcp) | The tools, resources and prompts of the servers of MCP, as `await github.create_issue(...)`. |

@@ -265,7 +265,7 @@ export const spaces = part({
     if (!renaming) return;
     this.renaming = undefined;
     const name = renaming.value.trim();
-    if (keep && name && name !== renaming.item.name) this.options.workspaces.rename(renaming.item, name);
+    if (keep && name && name !== renaming.item.name) void this.options.workspaces.rename(renaming.item, name);
     if (this.session.notice.startsWith("Enter keeps the new name")) this.session.notice = "";
     // The input gives its focus back to the composer, and a part that took the focus from it keeps it.
     const focused = this.renderer.currentFocusedRenderable;

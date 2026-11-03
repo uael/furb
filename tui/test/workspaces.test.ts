@@ -499,7 +499,7 @@ test("deleting the current session moves to the next session that opens, and to 
       const current = await library.create(group, "Delete me");
       lease = store(held.path)[1];
       const sibling = group.sessions.find((entry) => entry.path === held.path);
-      expect(group.sessions.map((entry) => entry.name)).toEqual(["Delete me", "Held elsewhere"]);
+      expect(group.sessions.map((entry) => entry.name)).toEqual(["Delete me", basename(held.path, ".jsonl")]);
       await library.delete(current);
       expect(sibling?.status).toBe("failed");
       expect(sibling?.error).toContain("Another process owns");
@@ -527,7 +527,9 @@ test("a workspace whose newest session cannot open opens on a new session that n
       expect(row?.status).toBe("failed");
       expect(made).not.toBe(row);
       expect(library.current).toBe(made);
-      expect(made.session?.notice).toStartWith("“Held elsewhere” did not open, so this is a new session. ");
+      expect(made.session?.notice).toStartWith(
+        `“${basename(held.path, ".jsonl")}” did not open, so this is a new session. `,
+      );
       expect(made.session?.notice).toContain("Another process owns");
     } finally {
       lease?.dispose();
@@ -691,7 +693,6 @@ test("a right click on a session row opens its menu at the pointer, and Rename t
     screen.mockInput.pressEnter();
     lines = await frame();
     expect(first.name).toBe("notes");
-    expect(savedView(first.path).view.sessionName).toBe("notes");
     expect(row("notes")).toBeGreaterThan(0);
     // Escape leaves the name as it was.
     const notesRow = row("notes");
@@ -705,10 +706,11 @@ test("a right click on a session row opens its menu at the pointer, and Rename t
     lines = await frame();
     expect(first.name).toBe("notes");
     expect(app().composer.focused).toBe(true);
-    // A session that is not open keeps its new name in its saved view.
+    // A session that is not open takes its new name through its record, and its saved view keeps no name.
     await library.archive(first);
-    library.rename(first, "old notes");
-    expect(savedView(first.path).view.sessionName).toBe("old notes");
+    await library.rename(first, "old notes");
+    expect(first.name).toBe("old notes");
+    expect("sessionName" in savedView(first.path).view).toBe(false);
   }));
 
 test("Move to trash in the menu of a session row asks what its remove button asks, as /delete does, and moves nothing before a choice", () =>
@@ -858,7 +860,7 @@ test("a worktree belongs to the workspace of its main checkout, with its session
       [inA.path, inB.path, inMain.path].sort(),
     );
     // The settings of the workspace are one: the name that the operator gave it reaches it from a worktree.
-    later.rename(again, "Furb");
+    await later.rename(again, "Furb");
     expect((await later.add(a)).name).toBe("Furb");
   }));
 

@@ -51,8 +51,9 @@ Eight extensions come with furb, and each life runs them unless a config turns t
   on the root alone. At the first prompt that the operator makes in the life, it asks the actor that `automatic()` of the
   engine gives for a name of a few words, on a chain of its own labelled `naming`. With no such actor, or with no
   name from it, the name is the first line of the message. The act is done with the name, and the record keeps the
-  prompt and its answer, so a later life gives the same name and asks no model. The TUI shows the name in place of the
-  name that it gave the session, unless the operator named the session, and the sidebar hides the chain `naming`. A
+  prompt and its answer, so a later life gives the same name and asks no model. `rename_session(name)` says the
+  name that the operator chose, as an act of the root, and it wins over the name of `name_session()`. Each client
+  shows the name that the record holds, and the sidebar hides the chain `naming`. A
   config that turns `naming` off, as `{"extensions": {"naming": false}}`, saves the call of that model.
 - **`ouroboros`** teaches a model to extend furb. Its file holds the lore, which every chain reads in the setup, so it
   has no life word. The lore says the three ways to extend furb and when to take each: a def in a word, which lives with

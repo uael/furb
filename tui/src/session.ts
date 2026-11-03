@@ -32,6 +32,7 @@ import {
   failed,
   rollUp,
   type State,
+  sessionNamed,
   working as workOf,
 } from "furb/life";
 import type { Engine, HostView, Usage } from "./bridge.ts";
@@ -235,8 +236,6 @@ export type Scroll = number | "end";
 
 /** The fields of a session that `<record>.ui.json` keeps, so that a later open shows the session as it was left. */
 const kept = [
-  "sessionName",
-  "sessionNamed",
   "demo",
   "selected",
   "actor",
@@ -265,8 +264,6 @@ export type SavedView = Partial<Pick<Session, (typeof kept)[number]>> & { cost?:
 /** The form of each field that `<record>.ui.json` keeps, which a field must have to be read: a text, a flag, a
  * number, a map, a list of texts, or a list of maps. */
 const forms: Record<(typeof kept)[number] | "cost", "text" | "flag" | "number" | "map" | "texts" | "maps"> = {
-  sessionName: "text",
-  sessionNamed: "flag",
   demo: "flag",
   selected: "text",
   actor: "text",
@@ -342,10 +339,8 @@ export class Session extends EventEmitter {
   selected: string;
   view: View = "feed";
   actor: string;
+  /** The name of the session: the name that its record holds, else the name of its directory. */
   sessionName: string;
-  /** Whether the session has a name that the operator or the extension naming gave it, which a later name of the
-   * extension does not replace. */
-  sessionNamed = false;
   acts: ActRow[] = [];
   /** The count of the changes of the acts that a view of the whole life reads: an act that comes, or an act that
    * starts, ends, pauses or wakes. An act whose output grows alone keeps it, so the board and the desk of a life
@@ -570,15 +565,14 @@ export class Session extends EventEmitter {
   /** Each batch of facts that the host hears reads the view again, whatever kind of act, of the engine or of an
    * extension, they are about. */
   private factsChanged = () => {
-    void this.refresh()
-      .then(() => this.named())
-      .catch(this.fail);
+    void this.refresh().catch(this.fail);
   };
-  /** The name that the extension naming gave the session: the value of the act name_session on the root, once it is
-   * done. */
-  get givenName(): string | undefined {
-    const act = this.activityByChain.get(this.engine.root)?.find((one) => one.kind === "name_session");
-    return act?.done && typeof act.value === "string" && act.value ? act.value : undefined;
+  /** The name that the record gives the session, which no file of the window keeps: the name that the operator said
+   * with rename_session, else the name that the extension naming gave with name_session. An empty name from the
+   * operator gives the name of the directory again. */
+  get recordName(): string | undefined {
+    const name = sessionNamed(this.activityByChain.get(this.engine.root) ?? [], this.engine.root);
+    return name === undefined ? undefined : name || basename(this.host.directory);
   }
   /** Whether a chain is the one where the extension naming asks a model for the name of the session, which the
    * sidebar hides. */
@@ -586,14 +580,29 @@ export class Session extends EventEmitter {
     const ids = this.indexed().ids;
     return ids.get(ids.get(chain)?.by ?? "")?.kind === "name_session";
   }
-  /** The session takes the name that the extension naming gave it, once, unless the operator named it. */
+  /** The session takes the name that its record gives it. */
   private named(): void {
-    const name = this.givenName;
-    if (!name || this.sessionNamed) return;
+    const name = this.recordName;
+    if (name === undefined || name === this.sessionName) return;
     this.sessionName = name;
-    this.sessionNamed = true;
-    this.save();
     this.emit("change");
+  }
+  /** The operator names the session. The name stands at once, and the act rename_session of the extension naming
+   * says it in the record, where each window reads it. With that extension off, the name stands in this window
+   * alone. It gives when the record holds the name, and never fails. */
+  async rename(name: string): Promise<void> {
+    const said = name.trim();
+    this.sessionName = said || basename(this.host.directory);
+    this.emit("change");
+    const on = this.engine.root;
+    try {
+      if (!enabled(await this.engine.transcript({ on })).some((one) => one.name === "naming")) return;
+      await this.engine.result(
+        await this.engine.rung({ word: `rename_session(${JSON.stringify(said)})`, on }),
+      );
+    } catch (error) {
+      this.notice = `The name stands in this window only: ${error instanceof Error ? error.message : String(error)}`;
+    }
   }
   fail = (error: unknown) => {
     this.error = error instanceof Error ? error.message : String(error);
@@ -710,6 +719,7 @@ export class Session extends EventEmitter {
           if (moved) this.version++;
         }
         this.counted = count;
+        this.named();
         // The acts and the actor of one snapshot are of one moment: the choice holds until its rung is done there.
         const choice = this.choices.get(selected);
         if (choice?.rung && this.actOf(choice.rung)?.done) this.choices.delete(selected);
@@ -1858,9 +1868,7 @@ export class Session extends EventEmitter {
         break;
       }
       case "name":
-        this.sessionName = argument || basename(this.host.directory);
-        this.sessionNamed = Boolean(argument);
-        this.save();
+        void this.rename(argument);
         break;
       case "pause":
         await this.engine.pause(argument || this.selected);
