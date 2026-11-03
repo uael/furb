@@ -15,7 +15,9 @@ for (const name of readdirSync(official).sort()) {
   const part = await loadPart(name, file);
   if (part.error) throw new Error(part.error);
   for (const one of part.commands)
-    parted.push(`| \`/${one.name}\` | ${one.detail} (the extension ${name}) |`);
+    parted.push(
+      `| \`/${one.name}${one.alias ? ` or /${one.alias}` : ""}\` | ${one.detail} (the extension ${name}) |`,
+    );
 }
 
 const path = new URL("../README.md", import.meta.url);

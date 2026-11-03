@@ -401,16 +401,23 @@ export const composer = part({
         .concat(
           this.parts
             .commands(this.seen())
-            .filter((one) => !one.error && one.name.startsWith(token.text))
-            .map((one) => ({
-              label: `/${one.name}`,
-              detail: `${one.detail} (${one.part})`,
-              text: `/${one.name} `,
-              submit: () => {
-                this.composer.setText("");
-                this.action(`/${one.name}`);
-              },
-            })),
+            .filter(
+              (one) => !one.error && (one.name.startsWith(token.text) || one.alias?.startsWith(token.text)),
+            )
+            .map((one) => {
+              const other = !one.name.startsWith(token.text);
+              return {
+                label: `/${other ? one.alias : one.name}`,
+                detail: other
+                  ? `Same as /${one.name}: ${one.detail} (${one.part})`
+                  : `${one.detail} (${one.part})`,
+                text: `/${one.name} `,
+                submit: () => {
+                  this.composer.setText("");
+                  this.action(`/${one.name}`);
+                },
+              };
+            }),
         )
         .concat(
           this.session.skills
