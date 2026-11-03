@@ -977,7 +977,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 
 STATE = (
-  "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed assigned silent"
+  "limits queue backlog working results relays bases efforts homes models lead custom prs merged audited align_state noticed assigned silent"
   " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas planned touched serial round_faults vetoes rulings judged tips shifted parents redmain onmain hired paced landed heard bindings handled ends requeued"
   " statused secret updated budgeted flaky runs_read deferred"
 ).split()
@@ -4341,3 +4341,37 @@ def test_the_audit_of_the_work_tells_each_lost_ask_and_each_message_with_no_ask(
   told = conductor.prompts[-1][0]
   assert f"The asks of the owner in {conductor.ASKS} that are partly or missing with no item:\n- A4 [partly] keep it\n" in told
   assert "The messages of the owner that no ask names: prompt7\n" in told
+
+
+@POSIX
+def test_the_eighth_merged_pr_since_the_last_alignment_audit_starts_one_audit(conductor: Round) -> None:
+  def git(*words: str) -> str:
+    got = subprocess.run(["git", *words], cwd=conductor.tmp, env=conductor.env, check=True, capture_output=True, text=True)
+    return got.stdout.strip()
+
+  git("init", "-q")
+  git("commit", "-q", "--allow-empty", "-m", "one")
+  git("update-ref", "refs/remotes/origin/main", "HEAD")
+  first = git("rev-parse", "HEAD")
+  conductor.timers["sweep"] = 1.0
+  conductor.merged.update(range(1, 11))
+  asyncio.run(conductor.align())
+  assert conductor.align_state == {"n": "0", "sha": first}
+  conductor.merged.update(range(11, 18))
+  asyncio.run(conductor.align())
+  assert conductor.queue == [] and conductor.heard == []
+  git("commit", "-q", "--allow-empty", "-m", "two")
+  git("update-ref", "refs/remotes/origin/main", "HEAD")
+  last = git("rev-parse", "HEAD")
+  conductor.merged.add(18)
+  asyncio.run(conductor.align())
+  assert [item[0] for item in conductor.queue] == ["align1"]
+  assert conductor.kind_of("align1") == "audit"
+  assert "8 PRs merged since the last one, #11 #12 #13 #14 #15 #16 #17 #18." in conductor.queue[0][1]
+  assert f"`git log --oneline {first}..{last}`" in conductor.queue[0][1]
+  assert conductor.align_state == {"n": "1", "sha": last}
+  asyncio.run(conductor.align())
+  assert len(conductor.queue) == 1
+  conductor.files["scratch://audit/align1.md"] = "| D1 | Gap one | sonnet/high | tui | Close the gap. |"
+  conductor.register("align1", "prompt1")
+  assert [item[0] for item in conductor.queue] == ["align1", "align1-gap-one"]
