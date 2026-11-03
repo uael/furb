@@ -27,7 +27,7 @@ test("a word of the operator stands as his messages stand, as its program in a p
       await session.refresh();
       const running = await frame();
       expect(running).not.toContain("You ran");
-      expect(line(running)).toMatch(/1 await wait\(60\) +◉ # waits 60s/);
+      expect(line(running)).toMatch(/◉ +1 await wait\(60\) +waits 60s/);
       expect(app.scroll.getChildren().some((card) => card.id === rung)).toBe(true);
       expect(line(running)).toMatch(/^ +┃ /);
       const wait = session.acts.find((act) => act.kind === "wait" && act.by === rung);
@@ -37,7 +37,7 @@ test("a word of the operator stands as his messages stand, as its program in a p
       await session.refresh();
       const done = line(await frame());
       expect(done).not.toContain("◉");
-      expect(done).toMatch(/ 1 await wait\(60\) +# woke/);
+      expect(done).toMatch(/ 1 await wait\(60\) +woke/);
       session.show("transcript");
       await session.refresh();
       await frame();
@@ -53,7 +53,7 @@ test("a word of the operator stands as his messages stand, as its program in a p
       expect(session.findings.join("\n")).toContain("line 1");
       await session.refresh();
       const rows = (await frame()).split("\n");
-      const at = rows.findIndex((row) => /1 this is invalid python !!! +✗/.test(row));
+      const at = rows.findIndex((row) => /✗ +1 this is invalid python !!!/.test(row));
       expect(at).toBeGreaterThan(0);
       expect(rows[at + 1]).toMatch(/^ +┃ +# \S/);
       record = session.host.record;
@@ -66,7 +66,7 @@ test("a word of the operator stands as his messages stand, as its program in a p
     async ({ frame }) => {
       const shown = line(await frame());
       expect(shown).not.toContain("◉");
-      expect(shown).toMatch(/ 1 await wait\(60\) +# woke/);
+      expect(shown).toMatch(/ 1 await wait\(60\) +woke/);
     },
     { width: 140, height: 42, useMouse: true },
     session,
@@ -401,7 +401,18 @@ test("the setup of the root stands as code: a comment that names the setup, then
         const at = rows.findIndex((row) => /# setup/.test(row));
         expect(at).toBeGreaterThanOrEqual(0);
         expect(rows[at]?.trim().replace(/\s{2,}.*$/, "")).toBe("# setup");
-        const shown = rows.slice(at + 1, at + 17).map((row) => row.trim().replace(/\s{2,}.*$/, ""));
+        // Each word stands in a block under its label, so the lines of the setup are read past the labels and the blank
+        // rows between the blocks.
+        const shown = rows
+          .slice(at + 1)
+          .map((row) =>
+            row
+              .slice(0, 80)
+              .trim()
+              .replace(/\s{2,}.*$/, ""),
+          )
+          .filter((row) => row && !/^word · rung\d+/.test(row))
+          .slice(0, 16);
         expect(shown[0]).toBe('1 debug(t"{standing()[4]=}")');
         expect(shown[1]).toMatch(/^2 read\('.*DOCTRINE\.md'\)$/);
         expect(
@@ -420,7 +431,7 @@ test("the setup of the root stands as code: a comment that names the setup, then
         expect(shown[15]).not.toMatch(/^16 /);
         expect(rows.join("\n")).not.toMatch(/rung\d+…\d+|remember1|ouroboros1|catchup1/);
       },
-      { width: 140, height: 42 },
+      { width: 140, height: 90 },
       new Session(opened.engine, opened.host, true),
     );
   } finally {

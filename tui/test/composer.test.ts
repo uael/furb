@@ -735,7 +735,9 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
     expect(shown).not.toContain("CancelledError");
     // The first message says its cancel at its right, above the second message, and the rung that the cancel ended
     // before it wrote a word shows nothing.
-    const lines = shown.split("\n");
+    // The sidebar names the threads too, so the lines are read in the feed alone.
+    const feed = screen.renderer.width - session.preferences.sidebarWidth;
+    const lines = shown.split("\n").map((line) => line.slice(0, feed));
     const first = lines.findIndex((line) => line.includes("Think until I"));
     // A folded thread stands as its message in the block of a message, with no mark before it, no id of a rung and no
     // type, and its state, its count of steps and its control at its right.
@@ -762,7 +764,7 @@ test("a word that the gate refused shows a cross on the line that the refusal na
       await idle(session);
       await session.refresh();
       const lines = (await frame()).split("\n");
-      const refused = lines.findIndex((line) => /1 ```python +✗/.test(line));
+      const refused = lines.findIndex((line) => /✗ +1 ```python/.test(line));
       expect(refused).toBeGreaterThan(0);
       expect(lines[refused + 1]).toMatch(/^[ ┃]+# error\[invalid-syntax\].*Got unexpected token/);
       // The numbers of the thread go on from the refused word to the word that replaced it.

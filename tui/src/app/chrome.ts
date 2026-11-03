@@ -316,7 +316,12 @@ export const chrome = part({
     const retry = loading
       ? undefined
       : (retries.find((stream) => stream.chain === w.selected) ?? retries[0])?.retry;
-    const moving = status === "working" || status === "opening" || Boolean(retry);
+    // The block of the word that a model writes on the chain shown holds the loader of the step, so the footer turns
+    // no second loader for it.
+    const written =
+      !retry &&
+      w.acts.some((act) => act.kind === "rung" && !act.done && act.on === w.selected && !w.program[act.id]);
+    const moving = (status === "working" || status === "opening" || Boolean(retry)) && !written;
     this.statusMoves = moving;
     const [mark, color] = retry ? [`${glyph.held} `, c.warning] : statusMark(status);
     const label = loading

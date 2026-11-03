@@ -263,7 +263,7 @@ test("a window whose life ended says so in plain words, and offers to open the l
       expect(shown).toContain("Stop the host");
       expect(shown).not.toContain("view could not load");
     },
-    { width: 152, height: 40 },
+    { width: 152, height: 52 },
     true,
   ));
 
