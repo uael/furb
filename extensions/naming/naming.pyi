@@ -19,3 +19,8 @@ def name_session(on: str = "") -> Act:
   With no such actor, or when that prompt gives no name, the name is name_of the message.
   The journal keeps the prompt and its answer, so a later life on the same record gives the same name and asks no model.
   """
+
+def rename_session(name: str, on: str = "") -> Act:
+  """The name that the operator gives the session: an act on the root that is done at once with the name, less the spaces around it.
+  Its value is empty when the name holds only spaces, which gives the session its default name again.
+  """
