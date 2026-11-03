@@ -18,7 +18,7 @@ def brewed(tmp_path: Path) -> tuple[str, Path]:
 
 
 async def test_a_skill_read_into_a_chain(tmp_path: Path) -> None:
-  """A skill read into a chain: the SKILL.md file of the skill of that name, which the chain tells as a read."""
+  """A skill read into a chain: the SKILL.md file of the skill of that name, or the word of a skill with code, which the chain tells as a read."""
   root, path = brewed(tmp_path)
   assert await engine.rung('close(skill("brew"))', on=root) == Text(tilded(path), path.read_text(encoding="utf-8"))
 
@@ -40,6 +40,21 @@ async def test_the_world_answers_it_with_the_text_of_the_skill_md_file(tmp_path:
   carried = Path(__file__).parent.parent / "extending" / "SKILL.md"
   got = await engine.rung('close(skill("extending"))', on=root)
   assert got == Text("skills://extending", carried.read_text(encoding="utf-8"))
+
+
+async def test_the_world_answers_a_skill_with_code_with_its_word(tmp_path: Path) -> None:
+  """The World answers a skill with code with the word that the life last enabled for it, else with the word of its file, at the path skills:// and the name."""
+  folder = skilled(
+    tmp_path / "work" / ".furb" / "skills", "note", "description: A note.\nmetadata:\n  furb-word: note.py"
+  ).parent
+  (folder / "note.py").write_text(
+    "from furb.engine import Text, read\n\n\ndef note() -> Text:\n  return read('n')\n", encoding="utf-8"
+  )
+  _, root = extended("skills", tmp_path, _monty.skills)
+  got = await engine.rung('close(skill("note"))', on=root)
+  assert got == Text("skills://note", "def note() -> Text:\n  return read('n')")
+  enabled = [a[4] for a in engine.transcript(on=root) if a[0] == "enable" and a[3] == "skills"]
+  assert await engine.rung('close(skill("skills"))', on=root) == Text("skills://skills", str(enabled[-1]))
 
 
 async def test_a_skill_of_a_name_that_no_skill_has_raises_refused(tmp_path: Path) -> None:

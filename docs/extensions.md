@@ -31,7 +31,11 @@ Eight extensions come with furb, and each life runs them unless a config turns t
   the chain works. `memory(path)` tells the memory of one path.
 - **`skills`** gives a chain the skills that it can read. `skills()` lists each skill that it finds in `.furb/skills`,
   `.agents/skills` and `.claude/skills` of the working directory and of each folder above it, then in `skills` of the
-  config directory. `skill(name)` reads the `SKILL.md` of one skill. Its life word, `await listed()`, reads `skills://`
+  config directory, then each extension of the project and of the configs and each official one, which is a skill with
+  code: its line marks `code`, `on` when the life runs it on the chain, and `default` when it plays by default. The
+  first line of the list says how to read a skill. `skill(name)` reads the `SKILL.md` of a skill with no code, or the
+  word of a skill with code, and `read("skills://<name>/<file>")` reads a file of its folder. Its life word, `await
+  listed()`, reads `skills://`
   in the setup of the root, which every new chain holds. It carries one skill of its own, `extending`, which shows a
   model how to extend furb, with an example for each way. A skill named `extending` in a folder takes its place. The TUI
   lists each skill after `/`, and its command reads the skill for the chain. `/skills`, or `/reload-skills`, reads the
