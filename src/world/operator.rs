@@ -13,6 +13,8 @@ use indexmap::IndexMap;
 use serde_json::value::RawValue;
 
 use crate::{
+  ear::{Co, say},
+  fact::Fact,
   value::{Fault, IS, Object, marked},
   wire::inward,
 };
@@ -21,6 +23,48 @@ use crate::{
 /// of JSON. The operator answers each shape that they make too: a list, a dict or a tuple of shapes that it answers,
 /// as a line of JSON, and a union, as `int | None`.
 pub const SHAPES: [&str; 7] = ["str", "None", "bool", "int", "float", "list", "dict"];
+
+/// A prompt put to the operator: its act, the chain it is on, which is the chain of its thread for
+/// a prompt on a thread, its shape and its message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Asked {
+  pub about: String,
+  pub on: String,
+  pub shape: String,
+  pub message: String,
+}
+
+impl Asked {
+  /// The prompt a fact asks the operator, when it is one that no ear before the console took, as a
+  /// console takes it: the console says its started, and closes at once a prompt of a shape it
+  /// answers not, with the refusal of that shape, and gives it not. So every console of furb puts
+  /// to the operator the same shapes. A prompt of None asks nothing, so the console closes it with
+  /// None at once and gives it, as a notice that the operator reads and answers not.
+  pub async fn taken<W: 'static>(co: &mut Co<W>, a: &Fact) -> Result<Option<Asked>, Fault> {
+    if a.kind() != "prompt" || !a.question() {
+      return Ok(None);
+    }
+    let word = |at: usize| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
+    let scope = co.call("scope", vec![Object::string(a.about())], vec![]).await?;
+    let asked = Asked {
+      about: a.about().to_owned(),
+      on: scope.as_ref().as_str().unwrap_or(a.on()).to_owned(),
+      shape: word(1).unwrap_or_default(),
+      message: word(2).unwrap_or_default(),
+    };
+    say(co, Fact::says("started", &asked.about, []));
+    if asked.shape == "None" {
+      co.call("close", vec![Object::none()], vec![("id", Object::string(&asked.about))]).await?;
+      return Ok(Some(asked));
+    }
+    if answers(&asked.shape) {
+      return Ok(Some(asked));
+    }
+    let no = answered(&asked.shape, "").unwrap_or_else(|no| no.object());
+    co.call("close", vec![no], vec![("id", Object::string(&asked.about))]).await?;
+    Ok(None)
+  }
+}
 
 /// A shape that the operator answers, as its name reads.
 enum Shape {

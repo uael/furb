@@ -1585,6 +1585,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "furb-host"
+version = "0.4.2"
+dependencies = [
+ "furb",
+ "futures",
+ "serde_json",
+ "thiserror 2.0.20",
+ "tokio",
+]
+
+[[package]]
 name = "futures"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
