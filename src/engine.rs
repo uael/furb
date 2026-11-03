@@ -359,6 +359,32 @@ pub(crate) fn looping(record: &[Object]) -> Vec<(String, String)> {
   lives.into_iter().filter(|(_, n)| *n >= CRASHES).filter_map(|(id, _)| parks(id)).collect()
 }
 
+/// The record as boot is given it: a checkpoint that stands first is the data from which `seed`, a
+/// function of this engine, makes the entries that the life boots on, before the entries after it.
+fn seeded(
+  sand: &mut Sand,
+  outside: &mut Outside,
+  record: Vec<Object>,
+) -> Result<Vec<Object>, Fault> {
+  let first = record.first().and_then(|one| entry(&one.as_ref(), 0)).and_then(Fact::of);
+  let Some(data) = first
+    .filter(|a| a.kind() == crate::checkpoint::CHECKPOINT)
+    .and_then(|a| a.word(0).map(|one| one.to_owned()))
+  else {
+    return Ok(record);
+  };
+  let made = sand.enter(outside, |sand, outside| {
+    outside.bound(sand)?;
+    let data = outside.inward(sand, &data)?;
+    let got = outside.named_call(sand, "seed", vec![data], vec![])?;
+    outside.outward(sand, &got)
+  })??;
+  let mut entries: Vec<Object> =
+    made.as_ref().items().unwrap_or_default().into_iter().map(|one| one.to_owned()).collect();
+  entries.extend(record.into_iter().skip(1));
+  Ok(entries)
+}
+
 /// A template string, as a host says one: each expression beside its value.
 fn templated(pairs: &[(&str, Object)]) -> Object {
   crate::value::paired(
@@ -1493,7 +1519,7 @@ impl Engine {
     inputs.push("__gate", Object::function(GATE, None));
     inputs.push("__again", Object::function(AGAIN, None));
     let opened = sand.run(OPENING, inputs, &mut Nobody("the opening"))?;
-    let outside = Outside::new(given, &opened);
+    let mut outside = Outside::new(given, &opened);
     let got = opened.as_ref();
     let (kernel, gate) = (entry(&got, 2), entry(&got, 3));
     let (kernel, gate) = (
@@ -1506,7 +1532,7 @@ impl Engine {
       parking.expect("the opening gives the park").to_owned(),
       park.expect("and its names").to_owned(),
     );
-    let record: Vec<Object> = record.into_iter().collect();
+    let record = seeded(&mut sand, &mut outside, record.into_iter().collect())?;
     let (watchers, holding, parked) = (HashMap::new(), left(&record), looping(&record));
     let names_parked = Object::list(parked.iter().map(|(id, _)| Object::string(id)));
     let parks = !parked.is_empty();
