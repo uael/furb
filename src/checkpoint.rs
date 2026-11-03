@@ -90,6 +90,10 @@ def _shown(value):
   return repr(value)
 
 
+def _debug(text):
+  return '"' + text.replace(chr(92), chr(92) * 2).replace(chr(34), chr(92) + chr(34)) + '"'
+
+
 def _lives():
   chains = []
   while get(f"chain{len(chains) + 1}") is not None:
@@ -178,7 +182,7 @@ def checkpoint(define, floor):
       entries += [x for x in transcript(scope(one)) if x[0] == "started" and x[1] == one and get(x[2]) is None]
     else:
       cut.append(one)
-      why = f"{act[4]!r} was interrupted: the life that ran it ended before it did" if act[0] == "bash" else f"{one} was cut by the checkpoint"
+      why = _debug(act[4]) + " was interrupted: the life that ran it ended before it did" if act[0] == "bash" else f"{one} was cut by the checkpoint"
       entries += [("started", one, "store"), ("done", one, "store", Refused(why))]
   for kind, n in counts.items():
     take(kind, n)

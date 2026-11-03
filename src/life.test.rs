@@ -1040,7 +1040,7 @@ fn a_command_that_ran_at_a_checkpoint_ends_in_the_life_that_goes_on_from_it_as_i
   assert!(later.pending().unwrap().is_empty(), "the checkpoint left nothing to wake");
   assert_eq!(
     closed(&mut later, "close(str(peek('bash1')))").as_ref().as_str(),
-    Some("'sleep 60' was interrupted: the life that ran it ended before it did"),
+    Some("\"sleep 60\" was interrupted: the life that ran it ended before it did"),
     "the command ends as the ear of commands ends one that a life left"
   );
 }
