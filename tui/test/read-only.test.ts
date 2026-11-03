@@ -62,7 +62,11 @@ async function lived(directory: string, name: string): Promise<string> {
 async function drifting(record: string): Promise<void> {
   const text = await readFile(record, "utf8");
   expect(text).toContain('"echo hi",""');
-  await writeFile(record, text.replace('"echo hi",""', '"echo hi",false'));
+  const crashed = text
+    .split("\n")
+    .filter((line) => !line.startsWith('[["checkpoint",'))
+    .join("\n");
+  await writeFile(record, crashed.replace('"echo hi",""', '"echo hi",false'));
 }
 
 /** The record as another engine made it, which it names, or which it does not name, as a crash of its life leaves it:

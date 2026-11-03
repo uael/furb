@@ -212,7 +212,7 @@ impl Opening {
     };
     let path = self.record.as_deref().unwrap_or_default();
     drifts(path, &record)?;
-    let cut = checkpoint::crossed(&record).is_some();
+    let cut = checkpoint::last(&record).is_some();
     // The log reads the record whole, so a life after a checkpoint writes on after the log of the lives before it.
     let logs = self.record.as_ref().filter(|_| keeps).map(|path| match continued && !cut {
       true => world::continued(path, record.len()),
