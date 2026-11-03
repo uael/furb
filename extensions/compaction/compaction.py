@@ -1,5 +1,4 @@
 from furb.engine import (
-  OPERATOR,
   Act,
   Exit,
   Filter,
@@ -7,6 +6,7 @@ from furb.engine import (
   Text,
   act,
   acting,
+  automatic,
   chain,
   controlled,
   differs,
@@ -22,7 +22,6 @@ from furb.engine import (
   say,
   scope,
   site,
-  standing,
   take,
   told,
   transcript,
@@ -48,24 +47,10 @@ compaction = """Compaction cuts this chain to the work that it still needs, and 
 - imported(record, source) makes a chain that goes on from the chain source of another record: its turns, and each
   of its open prompts under a new name. No value of its module, no word that ran and no command that was open comes
   with it.
-- automatic() gives the model of automatic work, which an empty CHOOSER asks: the model of the roster with the first
-  place in the list of automatic work, else the first cheap model of the roster.
 - A project changes the defaults in an extension of its own, whose word rebinds SHARE, FILTERS, CHOOSER, LISTED or
   BRIEF."""
 SHARE = 0.6
 CHOOSER = ""
-
-
-def automatic() -> str:
-  """The actor of automatic work: the model of the roster with the first place in the list of automatic work, which
-  each entry of that list gives as its fifth field, else the first cheap model of the roster, else none."""
-  roster = [x for x in (standing()[:1] or [[]])[0] if x[0] != OPERATOR]
-  placed: dict[int, str] = {}
-  for entry in roster:
-    if isinstance(place := (entry[4:] or [None])[0], int):
-      placed.setdefault(place, str(entry[0]))
-  cheap = [str(x[0]) for x in roster if x[3:4] == ["cheap"]]
-  return next(iter([placed[k] for k in sorted(placed)] + cheap), "")
 
 
 LISTED = 40

@@ -6,6 +6,7 @@ from pathlib import Path
 from conftest import STANDS, plain, settle
 from extensions.conftest import naming
 from furb import engine
+from furb.engine import site
 from furb_monty import _monty
 
 NAMING = next(x for x in _monty.official() if x["name"] == "naming")
@@ -34,6 +35,16 @@ async def test_name_session_is_the_name_of_the_session(tmp_path: Path) -> None:
   await settle(300)
   assert names(root) == ["Fix the login form"]
   assert [a[3] for a in engine.transcript(root) if a[0] == "chain"] == [root]
+  (tmp_path / "member").mkdir()
+  sand, root = naming(tmp_path / "member")
+  sand.script.update({root: ["close(1)"], "chain2": ["close('Fix the login form')"]})
+  token = site.set("operator/uael")
+  try:
+    assert await engine.prompt(int, "the login form fails", on=root) == 1
+  finally:
+    site.reset(token)
+  await settle(300)
+  assert names(root) == ["Fix the login form"]
 
 
 async def test_the_life_word_of_the_extension_is_name_session(tmp_path: Path) -> None:
@@ -50,7 +61,7 @@ async def test_the_life_word_of_the_extension_is_name_session(tmp_path: Path) ->
 
 
 async def test_it_asks_the_name_of_the_actor_that_automatic_gives(tmp_path: Path) -> None:
-  """It asks the name of the actor that automatic() of the extension compaction gives on the root, with a prompt of str on a new chain of its own labelled naming, which reads NAME_BRIEF and then the message."""
+  """It asks the name of the actor that automatic() gives, with a prompt of str on a new chain of its own labelled naming, which reads NAME_BRIEF and then the message."""
   sand, root = naming(tmp_path)
   sand.script[root] = ["close(1)"]
   await engine.prompt(int, "the login form fails", on=root)
@@ -62,7 +73,7 @@ async def test_it_asks_the_name_of_the_actor_that_automatic_gives(tmp_path: Path
 
 
 async def test_with_no_such_actor_the_name_is_name_of_the_message(tmp_path: Path) -> None:
-  """With no such actor, as in a life that runs no compaction, or when that prompt gives no name, the name is name_of the message."""
+  """With no such actor, or when that prompt gives no name, the name is name_of the message."""
   sand, root = naming(tmp_path, STANDS[0])
   sand.script[root] = ["close(1)"]
   await engine.prompt(int, "\n  'the login form fails.'\nit says 500", on=root)

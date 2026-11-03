@@ -13,9 +13,6 @@ BRIEF: str
 FILTERS: list[Filter]
 """FILTERS are the filters that compact applies in order when it is given none: latest(), then recent(8)."""
 
-def automatic() -> str:
-  """automatic() gives the actor of automatic work: the model of the roster with the first place in the list of automatic work, which the entry of each model of that list gives as its fifth field, else the first cheap model of the roster, else an empty str."""
-
 def together(*filters: Filter) -> Filter:
   """together(*filters) gives each filter what the one before it kept, in order, and gives what the last one kept."""
 

@@ -989,6 +989,14 @@ def under(name: str, of: str) -> bool:
   Nothing is under a name of nothing.
   """
 
+def automatic() -> str:
+  """automatic gives the actor of automatic work: the model of the roster of the standing with the first place in the list of automatic work, which the entry of each model of that list gives as its fifth field, else the first cheap model of the roster, else an empty str.
+  The operator is no such model.
+  """
+
+def operated(site: str) -> bool:
+  """operated tells whether a site is the operator or a member of the operator: the site operator, or a site of the form operator/id."""
+
 def acting() -> str:
   """The run a fact speaks from, which is the name the site holds when that name is an act's, and nothing at all for the operator and for the World, since a fact of theirs is said from no run."""
 
