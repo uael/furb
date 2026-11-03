@@ -654,3 +654,26 @@ test("the agents that a thread hires fold under it to their count in the sidebar
     { width: 152, height: 60 },
     true,
   ));
+
+test("the marks of the threads count a question anywhere and the failure or pause of a thread the operator started, and say nothing of work", () =>
+  composing(async ({ app }) => {
+    const base = { title: "", messages: [], asked: [], resolved: false } as const;
+    const one = (
+      state: "asks" | "failed" | "held" | "running",
+      yours: boolean,
+      asks: string[] = [],
+    ): Parameters<typeof app.threadAttention>[0][number] =>
+      ({ ...base, act: { id: "prompt1" }, state, yours, asks, origin: "rung" }) as never;
+    const marks = (threads: Parameters<typeof app.threadAttention>[0]) => ({
+      attention: app.threadAttention(threads),
+      tip: app.badgeTip(app.threadAttention(threads))[0]?.[0],
+    });
+    expect(marks([one("asks", false, ["prompt2"]), one("failed", false), one("running", true)])).toEqual({
+      attention: { asks: 1, held: 0, failed: 0, unread: 0 },
+      tip: "1 question waits for you",
+    });
+    expect(marks([one("failed", true), one("held", true), one("running", false)])).toEqual({
+      attention: { asks: 0, held: 1, failed: 1, unread: 0 },
+      tip: "1 failed  ·  1 paused",
+    });
+  }, size));

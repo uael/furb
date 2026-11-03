@@ -218,6 +218,17 @@ export interface ChainThread {
   asks: string[];
   state: ActState;
   resolved: boolean;
+  /** Who made its prompt: the operator, a rung of a word, or an ear. */
+  origin: "operator" | "rung" | "ear";
+  /** Whether the operator started it, directly or by a word of their own. */
+  yours: boolean;
+}
+
+/** Whether a thread concerns the operator: a question waits for them in it, or they started it and it failed or is
+ * held. The failure of an agent does not concern them: it rolls into the thread that made it, and only a question
+ * escalates. */
+export function concerns(thread: ChainThread): boolean {
+  return thread.asks.length > 0 || (thread.yours && (thread.state === "failed" || thread.state === "held"));
 }
 
 /** The threads of one chain, in the order they began: each prompt to a model on the chain that is no message of
@@ -263,6 +274,9 @@ export function chainThreads(
       if (seen.message) later.push([act, seen.message]);
       continue;
     }
+    const by = act.by === "operator" || act.by.startsWith("operator/");
+    const maker = rows.get(act.by);
+    const origin = by ? "operator" : maker?.kind === "rung" ? "rung" : "ear";
     out.set(act.id, {
       act,
       title: seen.title,
@@ -271,6 +285,9 @@ export function chainThreads(
       asks: [],
       state: "done",
       resolved: true,
+      origin,
+      yours:
+        by || (origin === "rung" && (maker?.by === "operator" || maker?.by.startsWith("operator/") === true)),
     });
   }
   for (const [act, id] of later) out.get(id)?.messages.push(act);
