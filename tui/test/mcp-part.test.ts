@@ -65,15 +65,19 @@ test("the part of mcp says the servers in the footer, and /mcp opens their dialo
       expect(await frame()).not.toContain("MCP: ");
       await session.command(`/run ${WORD}\nmcp_servers()`);
       await shows(frame, "MCP: 2 servers, 1 failed");
+      // The feed can show the same words in its last rows, so the dialog adds one to the count of this text.
+      const error = "spawn slack-mcp ENOENT";
+      const count = (text: string) => text.split(error).length - 1;
+      const fed = count(await frame());
       app.composer.setText("/mcp");
       await app.submit();
       let shown = await shows(frame, "MCP servers");
       expect(shown).toContain("connected · project · stdio · 1 tool");
       expect(shown).toContain("npx github-mcp");
       expect(shown).toContain("version 1.2.0");
-      expect(shown).not.toContain("spawn slack-mcp ENOENT");
+      expect(count(shown)).toBe(fed);
       screen.mockInput.pressArrow("down");
-      shown = await shows(frame, "spawn slack-mcp ENOENT");
+      shown = await shows(frame, error, (now) => count(now) > fed);
       screen.mockInput.pressKey("r");
       await shows(frame, "MCP: slack is connected.");
       await shows(frame, "MCP servers", (now) => !now.includes("failed"));
