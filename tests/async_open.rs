@@ -28,6 +28,10 @@ fn opening(at: &Path) -> Opening {
   }
 }
 
+#[expect(
+  clippy::disallowed_methods,
+  reason = "the test blocks on the runtime that tokio starts for it"
+)]
 #[tokio::test(flavor = "current_thread")]
 async fn a_life_opens_and_runs_its_ears_on_the_runtime_of_the_thread_that_awaits_it() {
   let at = std::env::temp_dir().join(format!("furb-async-open-{}", std::process::id()));
