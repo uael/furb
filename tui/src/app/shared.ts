@@ -89,15 +89,15 @@ export type ChainRead = {
 
 /** The mark of a thread in the list of the threads of a chain: it asks the operator, a pause holds it, it failed, a
  * cancel ended it, it is resolved and seen, or it runs. */
-export const threadMarks = (thread: ChainThread): Part =>
+export const threadMarks = (thread: ChainThread, state: ChainThread["state"] = thread.state): Part =>
   markOf(
-    thread.state === "asks"
+    state === "asks"
       ? "asks"
-      : thread.state === "held"
+      : state === "held"
         ? "paused"
-        : thread.state === "failed"
+        : state === "failed"
           ? "failed"
-          : thread.state === "cancelled"
+          : state === "cancelled"
             ? "cancelled"
             : thread.resolved
               ? "seen"
