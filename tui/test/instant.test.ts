@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, open, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, open, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
@@ -72,7 +72,8 @@ test("a new life draws its first frame with the composer before its life opens, 
   }));
 
 test("a life that fails to open after its window drew it leaves its row with the error and tells so", () =>
-  withProject(["claude-cli:nope"], async ({ directory, library, screen }) => {
+  withProject(["claude-cli:sonnet"], async ({ directory, library, screen }) => {
+    await writeFile(join(directory, "project/.furb/config.json"), "{");
     const group = await library.add(join(directory, "project"), false);
     const failed = new Promise<unknown>((resolve) =>
       library.once("failed", (_entry, error) => resolve(error)),
@@ -80,10 +81,10 @@ test("a life that fails to open after its window drew it leaves its row with the
     const entry = await library.create(group, undefined, undefined, false, group.directory, true);
     const app = follow(screen.renderer, { quit() {}, workspaces: library });
     expect(entry.session).toBeDefined();
-    expect(String(await failed)).toContain("No model is claude-cli:nope");
+    expect(String(await failed)).toContain("Invalid config at");
     expect(await entry.ready).toBe(false);
     expect(entry.status).toBe("error");
-    expect(entry.error).toContain("No model is claude-cli:nope");
+    expect(entry.error).toContain("Invalid config at");
     expect(entry.session).toBeUndefined();
     app().dispose();
   }));

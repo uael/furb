@@ -62,12 +62,13 @@ async def test_the_world_hands_the_provider_a_stream_that_hears_what_a_model_wri
   assert heard == [(step, root, "a part", "")]
 
 
-def test_the_world_refuses_a_model_that_the_catalog_knows_no_model_by(yard: Path) -> None:
-  """A name that the catalog of the crate knows no model by is no model, and the World cannot offer it."""
+async def test_the_world_drops_a_model_that_the_catalog_knows_no_model_by(yard: Path) -> None:
+  """A name that the catalog of the crate knows no model by is dropped from the roster, and the life opens."""
   live = world(yard, scripted([]))
   live.roster = ["nothing"]
-  with pytest.raises(Refused, match=r"No model is nothing\. Name one as provider:id\."):
-    live.opened()
+  root = life(live)
+  with pytest.raises(Refused, match="nothing no actor"):
+    await engine.prompt(int, "count", to="nothing", on=root)
 
 
 async def test_a_fault_that_stands_pauses_the_chain_and_the_world_tells_the_operator_why(

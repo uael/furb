@@ -400,6 +400,22 @@ impl Catalog {
     Some((self.served(name)?, Some(level)))
   }
 
+  /// What the catalog still holds of the roster and the actor that a host names, as [`Kept`] says.
+  /// A name that no model of the catalog answers to is dropped from the roster and from the actor,
+  /// and named in `left`, in the order the host named them, each once.
+  pub fn keep(&self, names: Option<&[String]>, actor: Option<&str>) -> Kept {
+    let (found, mut left): (Vec<String>, Vec<String>) =
+      names.unwrap_or_default().iter().cloned().partition(|name| self.find(name).is_some());
+    let held = actor.filter(|name| self.actor(name).is_some());
+    let gone = actor.filter(|_| held.is_none()).map(str::to_owned);
+    if let Some(name) = gone
+      && !left.contains(&name)
+    {
+      left.push(name);
+    }
+    Kept { names: names.map(|_| found), actor: held.map(str::to_owned), left }
+  }
+
   /// The models of a roster, and its default actor: the model of the actor first, then the models the host names, or,
   /// when the host names no roster, every model the catalog offers, in the order of [`Catalog::offered`], whose first
   /// stands for the actor when there is no actor. The actor is named as the catalog names its model, at its level as
@@ -408,16 +424,17 @@ impl Catalog {
     &self,
     names: Option<&[String]>,
     actor: Option<&str>,
-  ) -> Result<(Vec<Model>, Option<String>), String> {
+  ) -> Result<(Vec<Model>, Option<String>), Unknown> {
     let unknown = |name: &str| {
       let unnamed = self.local.is_none() && name.starts_with(&format!("{LOCAL}:"));
       let why = unnamed.then(|| format!("no local server is named: set {ENV_URL}"));
       let heard = || self.asks(name).then(|| self.heard(Some(name))).flatten();
       let why = why.or_else(|| Some(heard()?.why(name)?.to_owned()));
-      why.map_or_else(
-        || format!("No model is {name}. Name one as provider:id."),
-        |why| format!("No model is {name}: {why}."),
-      )
+      let name = name.to_owned();
+      match why {
+        Some(why) => Unknown::Why { name, why },
+        None => Unknown::Name { name },
+      }
     };
     let mut models = match names {
       Some(names) => names
@@ -449,7 +466,7 @@ impl Catalog {
     names: Option<&[String]>,
     actor: Option<&str>,
     host: Option<Hosted>,
-  ) -> Result<Provider, String> {
+  ) -> Result<Provider, Unknown> {
     let (models, actor) = self.roster(names, actor)?;
     let models = match host {
       Some(host) => models.into_iter().map(|model| model.hosted(Arc::clone(&host))).collect(),
@@ -459,6 +476,24 @@ impl Catalog {
     let thinking = super::thinking(self.thinking.as_deref(), std::path::Path::new(&directory));
     Ok(Provider::new(directory, models).actor(actor).thinking(thinking))
   }
+}
+
+/// The roster and the actor that a catalog still holds of what a host named, and the names that
+/// left it. A roster that the host did not name stays unnamed. An actor that left is none, which
+/// gives the first model of the roster.
+pub struct Kept {
+  pub names: Option<Vec<String>>,
+  pub actor: Option<String>,
+  pub left: Vec<String>,
+}
+
+/// Why a name is no model of the catalog: the reason that its server gives, or none to give.
+#[derive(Debug, thiserror::Error)]
+pub enum Unknown {
+  #[error("No model is {name}: {why}.")]
+  Why { name: String, why: String },
+  #[error("No model is {name}. Name one as provider:id.")]
+  Name { name: String },
 }
 
 /// The model that a name names among these models: the one of that name, or the one model of that id.

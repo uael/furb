@@ -659,6 +659,7 @@ pub struct Provider {
   backoff: Backoff,
   retries: Option<Retries>,
   refresh: Option<Refresh>,
+  gone: Vec<String>,
 }
 
 /// An extension as the standing gives it: its name, the file of its word, its life word, and whether it plays on the
@@ -686,6 +687,7 @@ impl Provider {
       backoff: BACKOFF,
       retries: None,
       refresh: None,
+      gone: Vec::new(),
     }
   }
 
@@ -697,6 +699,13 @@ impl Provider {
 
   pub(crate) fn refreshing(mut self, refresh: Refresh) -> Provider {
     self.refresh = Some(refresh);
+    self
+  }
+
+  /// The names of the roster and of the actor that the catalog lacked when the life opened. The ear
+  /// tells each chain once, at its first stand, and the standing leaves them out.
+  pub fn gone(mut self, names: Vec<String>) -> Provider {
+    self.gone = names;
     self
   }
 
@@ -779,6 +788,9 @@ impl Provider {
   /// done with the standing once they come, or refused with why they did not. A stand that a word
   /// makes, or the first, is done at once.
   ///
+  /// The first stand on each chain tells it which names of the roster and of the actor the
+  /// catalog lacked when the life opened, once, before its done.
+  ///
   /// A stand ends the wait of each reply whose call waits for a retry, a usage limit among them, and asks its model
   /// again at once, on the models that stand then: so a change of the command line or of its account, or the operator
   /// who asks to retry now, ends a wait at once.
@@ -797,6 +809,7 @@ impl Provider {
       backoff,
       retries,
       refresh,
+      gone,
     } = self;
     let mut actor = actor.unwrap_or_else(|| {
       models
@@ -817,6 +830,8 @@ impl Provider {
       let mut stood = false;
       // The stand that the ear answers next with the standing, and whether a word made it.
       let mut stands: Option<(String, bool)> = None;
+      // The chains that the ear told which names left the catalog.
+      let mut lacked: std::collections::HashSet<String> = std::collections::HashSet::new();
       loop {
         if let Some((about, word)) = stands.take() {
           let given = standing(
@@ -1131,6 +1146,9 @@ impl Provider {
               })));
               continue;
             }
+            if !gone.is_empty() && lacked.insert(a.on().to_owned()) {
+              told(&mut co, a.on(), &departed(&about, &gone));
+            }
             stands = Some((about, word));
           }
           "reply" if a.question() => {
@@ -1358,6 +1376,14 @@ async fn writing(co: &mut Co<Replied>, rung: &str, part: &str, before: usize) ->
 /// A note told to a chain.
 fn told(co: &mut Co<Replied>, chain: &str, note: &str) {
   say(co, Fact::says("tell", chain, [Object::list([Object::string(note)])]));
+}
+
+/// The note that tells a chain which names of the roster and of the actor left the catalog, as a
+/// stand names it.
+fn departed(about: &str, names: &[String]) -> String {
+  let quote = |name: &String| format!("'{}'", name.replace('\\', "\\\\").replace('\'', "\\'"));
+  let list = names.iter().map(quote).collect::<Vec<_>>().join(", ");
+  format!("#{about} names left the catalog\n{about}_left = [{list}]")
 }
 
 /// A note of the chain about the turn of a rung: its header, then each text that the gate or the call gave, which the
