@@ -63,6 +63,16 @@ fn names(engine: &mut Engine) -> Vec<String> {
   enabled(&root).into_iter().map(|one| one.name).collect()
 }
 
+/// The record at a path with its last checkpoint marked as of another engine, as a build of
+/// another engine leaves it at a handover, so a later life boots on that checkpoint.
+fn crossing(record: &Path) {
+  let text = fs::read_to_string(record).unwrap();
+  let ours = format!("\"engine\":\"{}\"", world::engine());
+  let at = text.rfind(&ours).expect("the checkpoint names the engine that wrote it");
+  let theirs = format!("\"engine\":\"{}\"", "0".repeat(64));
+  fs::write(record, format!("{}{theirs}{}", &text[..at], &text[at + ours.len()..])).unwrap();
+}
+
 /// The kind of each fact of a record.
 fn kinds(record: &[Object]) -> Vec<String> {
   let fact = |one: &Object| entry(&one.as_ref(), 0).and_then(Fact::of).unwrap().kind().to_owned();
@@ -929,6 +939,7 @@ fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_promp
   let written = crate::checkpoint::written(&mut inspected).unwrap();
   drop(inspected);
   crate::checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  crossing(&at.join("record.jsonl"));
   let mut later = scripted(&at, &["close('again')"]).boot::<String>([]).unwrap().0;
   let word = format!(
     "wake('chain2')\nclose([str(ran), queue, f(), get('{waiting}')[:2], await waiting, str(chain('more')), str(bash('echo two'))])"
@@ -974,6 +985,7 @@ fn a_life_ends_with_its_checkpoint_and_a_later_life_boots_on_it_and_on_the_tail_
   let turns = "close(len(turns('chain2')))";
   let told = closed(&mut first, turns).as_ref().as_int();
   first.checkpoint().unwrap();
+  crossing(&at.join("record.jsonl"));
   let mut second = scripted(&at, &[]).boot::<String>([]).unwrap().0;
   assert_eq!(closed(&mut second, "after = f() + 1\nclose(after)").as_ref().as_int(), Some(7));
   drop(second);
@@ -996,6 +1008,24 @@ fn a_life_ends_with_its_checkpoint_and_a_later_life_boots_on_it_and_on_the_tail_
     closed(&mut later, &word).as_ref().py_repr(),
     format!("[6, 7, ('prompt', '{waiting}'), 'round 2']"),
     "the module of each chain and its open prompt go on, with what the tail added"
+  );
+}
+
+#[test]
+fn a_life_of_the_engine_that_wrote_a_checkpoint_replays_the_record_whole_and_loses_no_act() {
+  let at = place("checkpoint-same");
+  let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  closed(&mut first, "await bash('echo kept')\nclose(None)");
+  first.checkpoint().unwrap();
+  let kept = world::kept(at.join("record.jsonl")).unwrap();
+  let booted = crate::checkpoint::booted(kept.clone());
+  assert_eq!(crate::checkpoint::crossed(&kept), None);
+  assert_eq!(booted.len(), kept.len() - 1, "the life replays each entry but the checkpoint");
+  let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  assert_eq!(
+    closed(&mut later, "close(peek('bash1').stdout.content)").as_ref().as_str(),
+    Some("kept\n"),
+    "a command that no value names stands with its outcome"
   );
 }
 
@@ -1077,6 +1107,7 @@ fn a_word_that_ran_at_a_checkpoint_runs_again_and_asks_again_the_prompt_that_it_
   let written = crate::checkpoint::written(&mut inspected).unwrap();
   drop(inspected);
   crate::checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  crossing(&at.join("record.jsonl"));
   let mut later = scripted(&at, &["close('fresh')"]).boot::<String>([]).unwrap().0;
   let word = format!(
     "wake('chain2')\ngot = await Act('{waiting}')\nclose([got, [x[1] for c in ['chain1', 'chain2', 'chain3', 'chain4'] for x in transcript(c, 'prompt') if not over(x[1])], str(chain('more'))])"
