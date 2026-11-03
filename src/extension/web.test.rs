@@ -2,6 +2,12 @@
 //! text, and in a life of the real engine a search goes to the native search of its actor and a fetch reads a page
 //! of a server of this machine.
 
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+
 use std::{
   future::Future,
   io::{Read, Write},

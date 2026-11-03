@@ -4,6 +4,11 @@
 //! JSON holds plain data, and the wire keeps the rest whole: a value that JSON holds only in part crosses as a map
 //! that names its type under `is`, with what that type is made again from, so it comes back in as it went out.
 
+#![expect(clippy::cast_possible_truncation, reason = "debt: an as cast that can truncate")]
+#![expect(clippy::cast_precision_loss, reason = "debt: an as cast that loses precision")]
+#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+
 use crate::{
   Fault, Object, ObjectRef, Text,
   value::{DEEPEST, IS, marked},

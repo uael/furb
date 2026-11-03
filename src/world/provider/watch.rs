@@ -18,6 +18,17 @@
 //! as the parts that ran, whatever the model wrote after them that the chain would refuse, since a later life runs
 //! the word of the rung and a statement of it must run there as it ran.
 
+#![expect(
+  clippy::assigning_clones,
+  reason = "debt: an assignment of a clone, where clone_from serves"
+)]
+#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
+#![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
+#![expect(
+  clippy::single_match_else,
+  reason = "debt: a match of one arm and else, where if let serves"
+)]
+
 use ruff_python_ast::{
   Expr, Stmt,
   visitor::{self, Visitor},

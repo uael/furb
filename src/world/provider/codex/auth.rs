@@ -1,5 +1,34 @@
 //! OpenAI models on a ChatGPT subscription, with credentials kept outside the project.
 
+#![expect(clippy::cast_possible_truncation, reason = "debt: an as cast that can truncate")]
+#![expect(
+  clippy::clone_on_ref_ptr,
+  reason = "debt: a clone of an Arc or an Rc that hides its kind"
+)]
+#![expect(
+  clippy::disallowed_methods,
+  reason = "debt: a call that blocks: sleep, block_on or try_wait"
+)]
+#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
+#![expect(clippy::items_after_statements, reason = "debt: an item declared after a statement")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
+#![expect(clippy::map_unwrap_or, reason = "debt: map then unwrap_or, where map_or serves")]
+#![expect(
+  clippy::needless_pass_by_value,
+  reason = "debt: an argument taken by value and only borrowed"
+)]
+#![expect(
+  clippy::redundant_closure_for_method_calls,
+  reason = "debt: a closure where a method path serves"
+)]
+#![expect(clippy::struct_field_names, reason = "debt: fields that repeat the name of their struct")]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+
 use std::{
   collections::HashMap,
   fs::{self, File, OpenOptions},

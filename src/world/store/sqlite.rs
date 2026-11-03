@@ -1,5 +1,7 @@
 //! The store of a record as a database of SQLite: one row for each entry, in the table `entries`.
 
+#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
+
 use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OpenFlags};

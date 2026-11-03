@@ -20,6 +20,20 @@
 //! A question that the reader says names its maker, as the engine names it, and each other fact that it says is said
 //! by [`READER`].
 
+#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
+#![cfg_attr(
+  test,
+  expect(clippy::needless_for_each, reason = "debt: for_each where a for loop serves")
+)]
+#![cfg_attr(
+  test,
+  expect(
+    clippy::needless_pass_by_value,
+    reason = "debt: an argument taken by value and only borrowed"
+  )
+)]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};

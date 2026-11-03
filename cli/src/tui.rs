@@ -5,6 +5,8 @@
 //! furb becomes the TUI, so the TUI holds the terminal and its signals alone. On Windows, which has no such call,
 //! furb waits for the TUI and ends with its code.
 
+#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
+
 use std::{
   convert::Infallible,
   env,

@@ -1,6 +1,16 @@
 //! The parts of the ears of the World that stand apart from a life: how a path resolves, how the store holds and
 //! mends its record, and how the stream of a command is read whole. The tests of the engine drive each ear in a life.
 
+#![expect(
+  clippy::clone_on_ref_ptr,
+  reason = "debt: a clone of an Arc or an Rc that hides its kind"
+)]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+
 use std::{
   fs,
   path::{Path, PathBuf},

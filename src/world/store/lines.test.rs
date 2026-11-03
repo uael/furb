@@ -1,5 +1,11 @@
 //! The file of lines, proved where no life reaches it: the line it keeps of an entry, and the record it reads again.
 
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+
 use std::{fs, io::Write, path::PathBuf};
 
 use serde_json::json;

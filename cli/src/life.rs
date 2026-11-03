@@ -1,6 +1,17 @@
 //! One life of the engine, as the operator holds it: the World of this machine it stands on, the record it keeps,
 //! and what the operator hears of it.
 
+#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(
+  clippy::redundant_closure_for_method_calls,
+  reason = "debt: a closure where a method path serves"
+)]
+
 use std::{
   collections::HashSet,
   future::{Future, poll_fn},

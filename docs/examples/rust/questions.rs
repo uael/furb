@@ -1,3 +1,9 @@
+#![expect(
+  clippy::disallowed_methods,
+  reason = "debt: a call that blocks: sleep, block_on or try_wait"
+)]
+#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
+
 use std::{error::Error, io::Write};
 
 use furb::life::Life;

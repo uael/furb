@@ -1,5 +1,21 @@
 //! The opening of a life: what it enables, what it keeps, and the ears it hears, on the record that the store keeps.
 
+#![expect(
+  clippy::clone_on_ref_ptr,
+  reason = "debt: a clone of an Arc or an Rc that hides its kind"
+)]
+#![expect(
+  clippy::disallowed_methods,
+  reason = "debt: a call that blocks: sleep, block_on or try_wait"
+)]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
+#![expect(clippy::single_char_pattern, reason = "debt: a string of one char as a pattern")]
+
 use std::{
   cell::RefCell,
   collections::VecDeque,

@@ -12,6 +12,43 @@
 //! ends the reply with the word that ran. A writing is no act that the ear awaits, since a part that prompts makes a
 //! chain ask this ear for a reply, which it takes only at a yield.
 
+#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
+#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
+#![expect(clippy::cast_precision_loss, reason = "debt: an as cast that loses precision")]
+#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
+#![expect(
+  clippy::format_collect,
+  reason = "debt: a format! for each item, collected into a String"
+)]
+#![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
+#![expect(clippy::implicit_clone, reason = "debt: to_owned or to_string where clone serves")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::map_unwrap_or, reason = "debt: map then unwrap_or, where map_or serves")]
+#![expect(clippy::option_option, reason = "debt: an Option of an Option, where an enum serves")]
+#![expect(
+  clippy::return_self_not_must_use,
+  reason = "debt: a method that returns Self with no must_use"
+)]
+#![expect(
+  clippy::semicolon_if_nothing_returned,
+  reason = "debt: a unit expression with no semicolon"
+)]
+#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
+#![expect(
+  clippy::single_match_else,
+  reason = "debt: a match of one arm and else, where if let serves"
+)]
+#![expect(
+  clippy::struct_excessive_bools,
+  reason = "debt: a struct of many bools, where an enum serves"
+)]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+#![expect(clippy::used_underscore_binding, reason = "debt: a binding named with _ that is used")]
+
 pub mod catalog;
 pub mod claude;
 mod clients;
@@ -1088,7 +1125,7 @@ struct Reply {
 
 /// The call of the model of a reply, begun on the turns of its chain and the models that stand now, as a work of the
 /// ear; whether its model streams its word, which the ear reads as it comes; and what ends the call once dropped.
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments, reason = "debt: more than 4 parameters is a struct")]
 async fn asking(
   co: &mut Co<Replied>,
   about: &str,
@@ -1673,7 +1710,7 @@ fn ended(provider: &str, response: CompletionResponse) -> StreamFinal {
 /// attempts are spent. A call that a usage limit refused is made again at the reset that the limit names, however
 /// long that takes, and each such wait is no attempt. A call that a failed sign in refused is made again every minute
 /// until it succeeds or a stand asks it at once, since a sign in outside furb ends the failure.
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments, reason = "debt: more than 4 parameters is a struct")]
 fn answered(
   id: String,
   asked: Result<(Model, Asked), CompletionError>,

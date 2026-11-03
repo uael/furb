@@ -1,6 +1,17 @@
 //! The ear of the compaction, proved on a record that a life of a test made: a carry gives the turns and the open
 //! prompts of one of its chains, and a later life reads the carry from its own record.
 
+#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
+#![expect(
+  clippy::disallowed_methods,
+  reason = "debt: a call that blocks: sleep, block_on or try_wait"
+)]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+
 use std::{
   collections::VecDeque,
   fs,

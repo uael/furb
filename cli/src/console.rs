@@ -4,6 +4,13 @@
 //! There is one terminal and one operator, so the prompts are shown and answered one at a time, in the order they
 //! asked, and never two at once on one stream. Stdout is left to what the command prints.
 
+#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+
 use std::{
   collections::VecDeque,
   io::{self, Write},

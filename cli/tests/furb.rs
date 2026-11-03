@@ -5,6 +5,17 @@
 //! a script stands in for the models, so no test asks one. The fake answers each line of input with the next word the
 //! test gave it, and it counts what it answered.
 
+#![expect(
+  clippy::disallowed_methods,
+  reason = "debt: a call that blocks: sleep, block_on or try_wait"
+)]
+#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
 #![cfg(unix)]
 
 use std::{

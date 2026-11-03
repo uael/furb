@@ -10,6 +10,13 @@
 //! any depth, since the session holds each call of the host that waits. A value of the sandbox with no data form, and
 //! a class of the sandbox, crosses to the host as a handle, which the session holds until the host releases it.
 
+#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+
 use std::{sync::atomic::Ordering, time::Duration};
 
 use monty::{MontyRepl, ReplFunctionCall, ReplProgress, ReplStartError};
@@ -133,7 +140,7 @@ impl Sand {
   }
 
   /// How many runs the session began.
-  #[cfg_attr(not(test), allow(dead_code))]
+  #[cfg_attr(not(test), expect(dead_code, reason = "only the tests call it"))]
   pub(crate) fn fed(&self) -> usize {
     self.fed
   }
@@ -297,7 +304,10 @@ fn count() {
 /// What the sandboxes of the program hold of the memory that bounds them, in bytes: what the counting allocator holds
 /// above the least that the program held when a sandbox began. It is nothing before a sandbox began, and in a
 /// program with no counting allocator. A host reads it from any thread, to warn before the [`bound`].
-#[cfg_attr(not(any(feature = "python", feature = "typescript")), allow(dead_code))]
+#[cfg_attr(
+  not(any(test, feature = "python", feature = "typescript")),
+  expect(dead_code, reason = "only a door and the tests call it")
+)]
 pub(crate) fn held() -> usize {
   let base = monty_types::BASELINE_MEMORY.load(Ordering::Relaxed);
   if base == usize::MAX {
@@ -307,7 +317,10 @@ pub(crate) fn held() -> usize {
 }
 
 /// The memory at which a sandbox raises a `MemoryError`, in bytes: [`MEMORY`], or what `FURB_SANDBOX_MEMORY` gives.
-#[cfg_attr(not(any(feature = "python", feature = "typescript")), allow(dead_code))]
+#[cfg_attr(
+  not(any(test, feature = "python", feature = "typescript")),
+  expect(dead_code, reason = "only a door and the tests call it")
+)]
 pub(crate) fn bound() -> usize {
   memory()
 }

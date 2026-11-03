@@ -5,6 +5,33 @@
 //! value it threw, which the engine reads as the fault it is: a map that names its class under `is` with what it
 //! was made with, or an error by its message.
 
+#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
+#![expect(clippy::borrow_as_ptr, reason = "debt: a borrow cast to a pointer, where &raw serves")]
+#![expect(
+  clippy::let_underscore_must_use,
+  reason = "debt: a let _ drops a value that must be used"
+)]
+#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
+#![expect(
+  clippy::needless_pass_by_value,
+  reason = "debt: an argument taken by value and only borrowed"
+)]
+#![expect(
+  clippy::redundant_closure_for_method_calls,
+  reason = "debt: a closure where a method path serves"
+)]
+#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
+#![expect(
+  clippy::single_match_else,
+  reason = "debt: a match of one arm and else, where if let serves"
+)]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+#![expect(
+  clippy::trivially_copy_pass_by_ref,
+  reason = "debt: a small Copy value taken by reference"
+)]
+
 use std::{
   cell::{OnceCell, RefCell},
   ptr,

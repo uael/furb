@@ -1,5 +1,10 @@
 //! The stream of pi-ai, read from chunks that a test gives, so no test asks the network.
 
+#![expect(
+  clippy::disallowed_methods,
+  reason = "debt: a call that blocks: sleep, block_on or try_wait"
+)]
+
 use std::collections::VecDeque;
 
 use bytes::Bytes;
