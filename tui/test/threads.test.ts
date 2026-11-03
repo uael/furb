@@ -686,8 +686,11 @@ test("the marks of the threads count a question anywhere and the failure or paus
       state: "asks" | "failed" | "held" | "running",
       yours: boolean,
       asks: string[] = [],
-    ): Parameters<typeof app.threadAttention>[0][number] =>
-      ({ ...base, act: { id: "prompt1" }, state, yours, asks, origin: "rung" }) as never;
+    ): Parameters<typeof app.threadAttention>[0][number] => ({
+      thread: { ...base, act: { id: "prompt1" }, state, yours, asks, origin: "rung" } as never,
+      agents: [],
+      state,
+    });
     const marks = (threads: Parameters<typeof app.threadAttention>[0]) => ({
       attention: app.threadAttention(threads),
       tip: app.badgeTip(app.threadAttention(threads))[0]?.[0],

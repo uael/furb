@@ -2466,6 +2466,10 @@ PATH = r"(?:[\w.~-]+/)+[\w.-]+\.(?:py|pyi|rs|tsx?|json|toml|md|ya?ml|sh)\b"
 TESTING = re.compile(r".*\.test\..*|.*_test\..*|test_.*\.py|conftest\.py")
 
 
+def paths_of(brief: str) -> set[str]:
+  return set(re.findall(PATH, re.sub(r"\b[a-z][a-z0-9+.-]*://\S+", " ", brief)))
+
+
 def is_test(path: str) -> bool:
   *folders, name = path.split("/")
   return bool({"test", "tests", "__tests__"} & set(folders)) or bool(TESTING.fullmatch(name))
@@ -2481,7 +2485,7 @@ async def changed_files() -> None:
 
 
 def rival(key: str, brief: str) -> tuple[int, list[str]] | None:
-  mine = set(re.findall(PATH, brief)) | {a.strip("/") for a in areas.get(key, []) if "/" in a.strip("/")}
+  mine = paths_of(brief) | {a.strip("/") for a in areas.get(key, []) if "/" in a.strip("/")}
   for pr in prs.values() if mine else []:
     if f"w:{key}" in pr["labels"] or pr["n"] in owns.get(key, []) or re.search(rf"#{pr['n']}\b", brief):
       continue
@@ -2494,7 +2498,7 @@ def rival(key: str, brief: str) -> tuple[int, list[str]] | None:
 
 def files_of(key: str, brief: str) -> set[str]:
   held = {a.strip("/") for a in areas.get(key, []) if a.strip("/")}
-  return {x for x in held or set(re.findall(PATH, brief)) if not is_test(x)}
+  return {x for x in held or paths_of(brief) if not is_test(x)}
 
 
 def overlap(mine: set[str], other: set[str]) -> list[str]:

@@ -1,12 +1,4 @@
-import type {
-  BoxRenderable,
-  CliRenderer,
-  KeyEvent,
-  LineSign,
-  Renderable,
-  RGBA,
-  TextOptions,
-} from "@opentui/core";
+import type { BoxRenderable, CliRenderer, KeyEvent, Renderable, RGBA, TextOptions } from "@opentui/core";
 import type { Keymap } from "@opentui/keymap";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import type { ChainThread, Chip } from "furb/life";
@@ -89,15 +81,15 @@ export type ChainRead = {
 
 /** The mark of a thread in the list of the threads of a chain: it asks the operator, a pause holds it, it failed, a
  * cancel ended it, it is resolved and seen, or it runs. */
-export const threadMarks = (thread: ChainThread): Part =>
+export const threadMarks = (thread: ChainThread, state: ChainThread["state"] = thread.state): Part =>
   markOf(
-    thread.state === "asks"
+    state === "asks"
       ? "asks"
-      : thread.state === "held"
+      : state === "held"
         ? "paused"
-        : thread.state === "failed"
+        : state === "failed"
           ? "failed"
-          : thread.state === "cancelled"
+          : state === "cancelled"
             ? "cancelled"
             : thread.resolved
               ? "seen"
@@ -113,35 +105,13 @@ export const gutterWidth = (digits: number) => Math.max(2, digits) + space.inset
 
 /** The cells of the column of the states, at the right of the numbers of a block of code, so the numbers stand at the
  * left edge of the block. They show the loader while the model writes, and the mark of the line that failed. A code
- * block of markdown keeps the column blank. So the numbers and the code of every block have the same columns. */
+ * block of markdown keeps the column blank. So the numbers and the code of every block have the same columns, which
+ * the one gutter of furb, `Gutter` in `gutter.ts`, draws for both. */
 export const STATE = 1;
-
-/** The options of the gutter of a block of code, which both blocks take: the numbers at the left edge in a column of
- * their own, then the column of the states, then one blank cell before the code, so two cells part a number from its
- * code. */
-export const gutterOf = (digits: number, lineSigns: Map<number, LineSign>) => ({
-  fg: c.faint,
-  paddingRight: space.inset,
-  minWidth: gutterWidth(digits),
-  lineSigns,
-});
 
 /** The label that heads a block of code: the model that wrote a word, or the language of a code block of Markdown. A
  * word draws it with the group word.label of the syntax style, which holds this color and this weight. */
 export const blockLabel = (text: string): Part => [text, c.muted, bold];
-
-/** The column of the states, as signs of the gutter. It holds the mark of each row that has one. The first row gets
- * blanks, so that the column stands when no row has a mark. */
-export const stateSigns = (states: ReadonlyMap<number, Part>, rows: number): Map<number, LineSign> => {
-  const signs = new Map<number, LineSign>();
-  if (rows) signs.set(0, { after: " ".repeat(STATE) });
-  for (const [row, [mark, color]] of states)
-    signs.set(row, {
-      after: `${" ".repeat(Math.max(0, STATE - Bun.stringWidth(mark)))}${mark}`,
-      afterColor: color,
-    });
-  return signs;
-};
 
 /** A row that a model writes as the tick compares it: its number, and its text with the color of each part. */
 export const saidOf = (number: number, parts: readonly Part[]) =>

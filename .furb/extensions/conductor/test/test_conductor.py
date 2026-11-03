@@ -2399,6 +2399,16 @@ def test_a_file_with_no_folder_in_an_open_pr_holds_no_item_that_names_another_fi
   assert conductor.rival("k2", "Change tui/foo.ts.") == (7, ["tui/foo.ts"])
 
 
+def test_a_url_in_a_brief_names_no_file_of_the_repository(conductor: Round) -> None:
+  brief = "Read scratch://owner/words.md and scratch://owner/picks.md, then change nothing else."
+  conductor.prs[7] = conductor.pr(n=7)
+  conductor.touched[7] = {"sha": "abc", "paths": ["owner/words.md"]}
+  conductor.working["w1"] = "k1"
+  conductor.briefed["k1"] = brief
+  assert conductor.files_of("k1", brief) == set() and conductor.rival("k1", brief) is None
+  assert not conductor.serialized("k2", brief) and conductor.serial == {}
+
+
 @JQ
 def test_a_sweep_reads_the_files_of_each_open_pr_of_the_round_once_for_each_head(conductor: Round) -> None:
   conductor.say(r"pr view 7 --json files", json.dumps({"files": [{"path": "a/b.py"}, {"path": "c.md"}]}))

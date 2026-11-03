@@ -1,9 +1,10 @@
 import { afterAll, expect, setSystemTime, test } from "bun:test";
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { RGBA } from "@opentui/core";
+import { LineNumberRenderable, type Renderable, RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { until } from "../../bind/typescript/test/until.ts";
+import { Gutter } from "../src/app/gutter.ts";
 import { App, sessionDetail } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { demoLibrary, demoSession, removeDemoDirectories, seedDemo } from "../src/demo.ts";
@@ -456,9 +457,7 @@ test("a message between two words of one model parts them into two blocks", () =
       heads as never,
       1,
     );
-    const text = String(
-      Reflect.get(Reflect.get(view.getChildren()[0] as object, "target") as object, "content") ?? "",
-    );
+    const text = String(Reflect.get(Reflect.get(view, "target") as object, "content") ?? "");
     expect(text.split("\n").filter((row) => row.startsWith("opus/high")).length).toBe(2);
     expect(text).toMatch(/x = 1\ny = 2\n# Between them\.\n\nopus\/high +\nz = 3/);
   }));
@@ -1004,39 +1003,60 @@ test("each line of a word says what its acts did as a quiet hint: a read its lin
     { width: 160, height: 40 },
   ));
 
-test("the number of the line that runs fades out into the loader and back in its own cell, on the colors of the theme", () =>
+test("one gutter of furb draws the cells of each block of code: the number, the loader and the frames of its fade in a word that runs, and the numbers of a code block of markdown in the same column", () =>
   composing(
     async ({ session, screen, frame }) => {
       const base = (Math.floor(Date.now() / 2600) + 1) * 2600;
       try {
         const id = await session.engine.wait([], { seconds: 60, on: session.engine.root });
+        const note = await session.engine.prompt("None", {
+          message: ["```python", "gamma = 3", "```"].join("\n"),
+          to: "operator",
+          on: session.engine.root,
+        });
+        await until(session.host, () => session.acts.some((act) => act.id === note && act.done));
+        session.folds[note] = false;
         await session.refresh();
-        const cell = async (index: number) => {
+        const nodes: Renderable[] = [];
+        const walk = (node: Renderable) => {
+          nodes.push(node);
+          for (const child of node.getChildren()) walk(child as Renderable);
+        };
+        const cell = async (index: number, text: string) => {
           setSystemTime(new Date(base + index * 100));
           const rows = (await frame()).split("\n");
-          const y = rows.findIndex((row) => row.includes(`${id} = wait(60)`));
-          const x = (rows[y] ?? "").indexOf(`  ${id} = wait(60)`) - 1;
-          return { text: rows[y]?.[x] ?? "", fg: cellAt(screen.captureSpans(), x, y).fg };
+          const y = rows.findIndex((row) => row.includes(text));
+          const x = (rows[y] ?? "").indexOf(`  ${text}`) - 1;
+          const spans = screen.captureSpans();
+          return { text: rows[y]?.[x] ?? "", state: rows[y]?.[x + 1], x, fg: cellAt(spans, x, y).fg };
         };
         const near = (got: RGBA | undefined, want: RGBA) =>
           expect([got?.r, got?.g, got?.b].map((one) => Math.round((one ?? -1) * 255))).toEqual(
             [want.r, want.g, want.b].map((one) => Math.round(one * 255)),
           );
-        const faint = (share: number) => mix(theme.selected, theme.faint, share);
-        const accent = (share: number) => mix(theme.selected, theme.accent, share);
-        const frames: [index: number, text: string, color: RGBA][] = [
-          [0, "1", faint(1)],
-          [7, "1", faint(0.4)],
-          [10, spin(base + 1000), accent(0.4)],
-          [12, spin(base + 1200), accent(1)],
-          [21, spin(base + 2100), accent(0.4)],
-          [24, "1", faint(0.4)],
-        ];
-        for (const [index, text, color] of frames) {
-          const got = await cell(index);
+        const word = `${id} = wait(60)`;
+        for (const [index, text, color] of [
+          [0, "1", theme.faint],
+          [7, "1", mix(theme.selected, theme.faint, 0.4)],
+          [10, spin(base + 1000), mix(theme.selected, theme.accent, 0.4)],
+          [12, spin(base + 1200), theme.accent],
+          [21, spin(base + 2100), mix(theme.selected, theme.accent, 0.4)],
+          [24, "1", mix(theme.selected, theme.faint, 0.4)],
+        ] as const) {
+          const got = await cell(index, word);
           expect(got.text).toBe(text);
+          expect(got.state).toBe(" ");
           near(got.fg, color);
         }
+        const running = await cell(0, word);
+        const block = await cell(0, "gamma = 3");
+        expect(block.text).toBe("1");
+        expect(block.state).toBe(" ");
+        expect(block.x).toBe(running.x);
+        near(block.fg, theme.faint);
+        walk(screen.renderer.root);
+        expect(nodes.some((node) => node instanceof LineNumberRenderable)).toBe(false);
+        expect(nodes.filter((node) => node instanceof Gutter).length).toBeGreaterThanOrEqual(2);
       } finally {
         setSystemTime();
       }
