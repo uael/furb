@@ -174,12 +174,14 @@ MEMORIES = ("AGENTS.md", "CLAUDE.md", "AGENTS.local.md", "CLAUDE.local.md")
 def recalled(chain: str, at: Path) -> list[str]:
   """Every paragraph that a read told a chain of a memory file under a directory or in the config directory, in order,
   since a folder above that directory belongs to the machine, each with read in place of the name of its read."""
-  return [
-    re.sub(r"\bread\d+", "read", one)
-    for one in of(engine.turns(on=chain), "read")
-    if (path := one.split("\n")[1].partition(" = ")[2].strip("'")).rsplit("/", 1)[-1].rsplit("\\", 1)[-1] in MEMORIES
-    and (path.startswith((tilded(at), "config://")))
-  ]
+  told = []
+  for one in of(engine.turns(on=chain), "read"):
+    head, _, value = one.split("\n")[1].partition(" = ")
+    path = ast.literal_eval(value) if head.endswith("_path") else ""
+    name = str(path).replace("\\", "/").rsplit("/", 1)[-1]
+    if name in MEMORIES and str(path).startswith((tilded(at), "config://")):
+      told.append(re.sub(r"\bread\d+", "read", one))
+  return told
 
 
 def memorized(path: Path | str, text: str) -> str:

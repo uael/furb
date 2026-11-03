@@ -90,10 +90,10 @@ async def test_memory_finds_the_folders_with_reads_alone(tmp_path: Path) -> None
   reads = [a[4] for a in engine.transcript(root) if a[0] == "read" and a[2] == ran]
   work = tilded(tmp_path / "work")
   assert reads[:3] == ["./", f"{work}/../", f"{tilded(tmp_path)}/../"]
-  assert reads[-3:] == [f"{work}/a/", "config://", f"{work}/a/AGENTS.md"]
+  assert reads[-3:] == [f"{work}/a/", "config://", f"{tilded(tmp_path / 'work' / 'a')}/AGENTS.md"]
   told = {a[1] for a in engine.transcript(root) if a[0] == "tell"}
   assert [a[4] for a in engine.transcript(root) if a[0] == "read" and a[2] == ran and a[1] in told] == [
-    f"{work}/a/AGENTS.md"
+    f"{tilded(tmp_path / 'work' / 'a')}/AGENTS.md"
   ]
 
 
