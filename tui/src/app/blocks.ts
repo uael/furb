@@ -27,6 +27,7 @@ import { type Part, plain, styled } from "../ui.ts";
 import { part } from "./part.ts";
 import {
   type BlockOptions,
+  blockLabel,
   chipColors,
   gutterOf,
   gutterWidth,
@@ -403,12 +404,14 @@ export const blocks = part({
     }
   },
 
-  /** The group of each character of a program, as the parser of python highlights it, kept for the last programs. */
-  groupsOf(source: string): Promise<(string | undefined)[]> {
-    const kept = this.sourceGroups.get(source);
+  /** The group of each character of a source, as the parser of its language highlights it, kept for the last sources.
+   * A group that a later highlight gives a character rules it over an earlier one. */
+  groupsOf(source: string, filetype = "python"): Promise<(string | undefined)[]> {
+    const key = `${filetype}\n${source}`;
+    const kept = this.sourceGroups.get(key);
     if (kept) return kept;
     const made = getTreeSitterClient()
-      .highlightOnce(source, "python")
+      .highlightOnce(source, filetype)
       .then(
         (result) => {
           const groups: (string | undefined)[] = new Array(source.length);
@@ -420,8 +423,22 @@ export const blocks = part({
       );
     const oldest = this.sourceGroups.keys().next();
     if (this.sourceGroups.size >= 64 && !oldest.done) this.sourceGroups.delete(oldest.value);
-    this.sourceGroups.set(source, made);
+    this.sourceGroups.set(key, made);
     return made;
+  },
+
+  /** The colors of a source, one run for each stretch of one group, which a word and a code block of Markdown both
+   * take, so that one character has one color in both. */
+  async runsOf(source: string, filetype = "python"): Promise<SimpleHighlight[]> {
+    const groups = await this.groupsOf(source, filetype);
+    const out: SimpleHighlight[] = [];
+    for (let start = 0, at = 1; at <= groups.length; at++) {
+      if (at < groups.length && groups[at] === groups[start]) continue;
+      const group = groups[start];
+      if (group) out.push([start, at, group]);
+      start = at;
+    }
+    return out;
   },
 
   /** Python under the pointer. A name shows what it holds in a card once the pointer rests on it, and a click with ⌃
@@ -503,7 +520,7 @@ export const blocks = part({
     const digits = String(count).length;
     if (language) {
       const head = this.box({ paddingLeft: STATE + gutterWidth(digits) });
-      head.add(this.text(language, c.faint));
+      head.add(this.text([blockLabel(language)], c.muted));
       block.add(head);
     }
     const code = new CodeRenderable(this.renderer, {
@@ -518,9 +535,11 @@ export const blocks = part({
       ...(filetype
         ? {
             initialStyledText: this.painted(text, filetype, this.style),
-            onHighlight: (highlights: SimpleHighlight[]) => {
-              this.paint(text, filetype, highlights);
-              return highlights;
+            onHighlight: async (highlights: SimpleHighlight[]) => {
+              const runs = await this.runsOf(text, filetype);
+              const made = runs.length ? runs : highlights;
+              this.paint(text, filetype, made);
+              return made;
             },
           }
         : {}),

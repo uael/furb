@@ -997,14 +997,7 @@ export const details = part({
       return whole.replace(/[^\n]/g, " ");
     });
     return this.code(text, undefined, undefined, async () => {
-      const groups = await this.groupsOf(blank);
-      const out: SimpleHighlight[] = [];
-      for (let start = 0, at = 1; at <= groups.length; at++) {
-        if (at < groups.length && groups[at] === groups[start]) continue;
-        const group = groups[start];
-        if (group) out.push([start, at, group]);
-        start = at;
-      }
+      const out = await this.runsOf(blank);
       return [...out, ...quotes];
     });
   },

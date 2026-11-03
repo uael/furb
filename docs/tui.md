@@ -305,8 +305,8 @@ footer says where the answer went and how many questions still wait.
 
 A message, a question, a notice, and an answer show as markdown, with no marks left: headings, emphasis, links,
 lists, quotes, and tables. A code block stands on the surface of the blocks of a word, with its numbers in the same
-column as theirs and its language as a label above it. The TUI colors the code of Python, TypeScript, JavaScript, and
-JSON. The code of another language keeps its lines and its indentation, and a line too long for the block does not wrap.
+column as theirs and its language as a label above it, in the color and the weight of the label of a word. The TUI colors
+the code of Python, TypeScript, JavaScript, and JSON, and the code of Python in the colors of a word. The code of another language keeps its lines and its indentation, and a line too long for the block does not wrap.
 
 ![Markdown](screenshots/51-markdown.png)
 

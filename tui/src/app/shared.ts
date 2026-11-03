@@ -14,7 +14,7 @@ import { ago, clip, dollars, kibibytes } from "../format.ts";
 import type { ActRow, SessionStatus, View } from "../session.ts";
 import { statusLabels } from "../session.ts";
 import { theme as c, markOf, spacing as space, terminalThemes, themeLabels } from "../theme.ts";
-import type { Part } from "../ui.ts";
+import { bold, type Part } from "../ui.ts";
 import type { SessionEntry } from "../workspaces.ts";
 
 export const exitNotice = "Press ⌃D again to exit.";
@@ -125,6 +125,10 @@ export const gutterOf = (digits: number, lineSigns: Map<number, LineSign>) => ({
   minWidth: gutterWidth(digits),
   lineSigns,
 });
+
+/** The label that heads a block of code: the model that wrote a word, or the language of a code block of Markdown. A
+ * word draws it with the group word.label of the syntax style, which holds this color and this weight. */
+export const blockLabel = (text: string): Part => [text, c.muted, bold];
 
 /** The column of the states, as signs of the gutter. It holds the mark of each row that has one. The first row gets
  * blanks, so that the column stands when no row has a mark. */
