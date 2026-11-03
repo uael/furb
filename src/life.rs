@@ -90,10 +90,13 @@ pub struct Opening {
   #[cfg_attr(feature = "python", pyo3(default))]
   pub config: Option<String>,
   /// The actor a prompt goes to when it names none, as the catalog names a model, and an effort after a slash, at its
-  /// level as [`world::Model::at`] moves it; the first model of the roster when unsaid.
+  /// level as [`world::Model::at`] moves it; the first model of the roster when unsaid, and
+  /// the first when the catalog lacks the model of the actor.
   #[cfg_attr(feature = "python", pyo3(default))]
   pub actor: Option<String>,
-  /// The models the provider offers beside the model of the actor, as the catalog names them. When it is unsaid, the
+  /// The models the provider offers beside the model of the actor, as the catalog names them;
+  /// a name that the catalog lacks is dropped, and each chain is told so once.
+  /// When it is unsaid, the
   /// provider offers every model that the catalog offers, after the model of the actor; a roster that names none
   /// offers the model of the actor alone, and, with no actor, the operator alone.
   #[cfg_attr(feature = "python", pyo3(default))]
@@ -328,9 +331,11 @@ impl Opening {
       Arc::new(|_, _| Box::pin(async { Err("a life that inspects asks no model".to_owned()) }));
     let answer =
       if works { self.answer.as_ref().map(|one| Arc::clone(&one.0)) } else { Some(asks) };
-    let (roster, actor) = (self.roster.as_deref(), self.actor.as_deref());
-    let mut provider =
-      catalog.provider(directory.clone(), roster, actor, answer.clone()).map_err(Fault::refused)?;
+    let kept = catalog.keep(self.roster.as_deref(), self.actor.as_deref());
+    let mut provider = catalog
+      .provider(directory.clone(), kept.names.as_deref(), kept.actor.as_deref(), answer.clone())
+      .map_err(|no| Fault::refused(no.to_string()))?
+      .gone(kept.left);
     let names = self.roster.clone();
     let preferred = self.actor.clone();
     provider = provider.refreshing(Arc::new(move || {
@@ -338,12 +343,10 @@ impl Opening {
       let fresh = Catalog::load()
         .claude(claude.clone(), stall)
         .configured(Path::new(&directory), config.as_deref())?;
-      let offered = names.as_ref().map(|names| {
-        names.iter().filter(|name| fresh.find(name).is_some()).cloned().collect::<Vec<_>>()
-      });
-      let actor = preferred.as_deref().filter(|name| fresh.roster(Some(&[]), Some(name)).is_ok());
-      let candidate =
-        fresh.provider(directory.clone(), offered.as_deref(), actor, answer.clone())?;
+      let kept = fresh.keep(names.as_deref(), preferred.as_deref());
+      let candidate = fresh
+        .provider(directory.clone(), kept.names.as_deref(), kept.actor.as_deref(), answer.clone())
+        .map_err(|no| no.to_string())?;
       Ok(candidate.into_settings())
     }));
     provider = provider.advertises(advertised);

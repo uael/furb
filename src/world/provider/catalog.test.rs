@@ -276,8 +276,20 @@ fn a_roster_holds_the_model_of_its_actor_first_and_the_models_a_host_names_or_ev
     Some("anthropic:claude-opus-5/high"),
     "an actor that names no effort takes high"
   );
-  let no = catalog.roster(Some(&["nothing".to_owned()]), None).err();
+  let no = catalog.roster(Some(&["nothing".to_owned()]), None).err().map(|no| no.to_string());
   assert_eq!(no.as_deref(), Some("No model is nothing. Name one as provider:id."));
+}
+
+#[test]
+fn a_catalog_keeps_the_names_it_finds_and_names_each_one_that_left_once() {
+  let catalog = catalog(&[]);
+  let named = ["openai:gpt-5".to_owned(), "nothing".to_owned()];
+  let kept = catalog.keep(Some(&named), Some("nothing"));
+  assert_eq!(kept.names, Some(vec!["openai:gpt-5".to_owned()]));
+  assert_eq!((kept.actor, kept.left), (None, vec!["nothing".to_owned()]));
+  let kept = catalog.keep(None, Some("openai:gpt-5/medium"));
+  assert_eq!((kept.names, kept.actor), (None, Some("openai:gpt-5/medium".to_owned())));
+  assert!(kept.left.is_empty());
 }
 
 #[test]
@@ -462,8 +474,8 @@ fn the_catalog_asks_the_local_server_only_when_a_name_needs_it_or_a_host_lists_w
   );
   let high = catalog.roster(None, Some("local:qwen/high")).map(|(_, actor)| actor);
   assert_eq!(
-    high,
-    Ok(Some("local:qwen/high".to_owned())),
+    high.ok(),
+    Some(Some("local:qwen/high".to_owned())),
     "a level after a slash is an effort of the model"
   );
   assert_eq!(catalog.find("local:qwen").map(|one| one.window), Some(1000));
@@ -516,24 +528,23 @@ fn a_roster_that_the_host_does_not_name_offers_every_model_of_the_claude_command
 fn a_roster_that_names_a_model_of_the_local_server_that_the_catalog_does_not_offer_says_why() {
   let port = dropping();
   let gone = catalog(&[&format!("FURB_LOCAL_URL=http://127.0.0.1:{port}")]);
-  let no = gone.roster(Some(&["local:qwen".to_owned()]), None).err().unwrap_or_default();
+  let said = |no: Option<super::Unknown>| no.map(|no| no.to_string()).unwrap_or_default();
+  let no = said(gone.roster(Some(&["local:qwen".to_owned()]), None).err());
   let why =
     format!("No model is local:qwen: the local server at http://127.0.0.1:{port} lists no model: ");
   assert!(no.starts_with(&why), "{no}");
-  let bare = gone.roster(None, Some("qwen3:8b")).err().unwrap_or_default();
+  let bare = said(gone.roster(None, Some("qwen3:8b")).err());
   assert!(bare.starts_with("No model is qwen3:8b: the local server at "), "{bare}");
   assert_eq!(
-    catalog(&[]).roster(None, Some("local:qwen")).err().as_deref(),
-    Some("No model is local:qwen: no local server is named: set FURB_LOCAL_URL.")
+    said(catalog(&[]).roster(None, Some("local:qwen")).err()),
+    "No model is local:qwen: no local server is named: set FURB_LOCAL_URL."
   );
   let (address, _) =
     fake(|request| request.starts_with("GET /v1/models ").then(|| json!({"data": [{"id": "z"}]})));
   let windowless = catalog(&[&format!("FURB_LOCAL_URL={address}")]);
   assert_eq!(
-    windowless.roster(None, Some("local:z/high")).err().as_deref(),
-    Some(
-      "No model is local:z/high: the local server gives no window of it: set FURB_LOCAL_WINDOW."
-    )
+    said(windowless.roster(None, Some("local:z/high")).err()),
+    "No model is local:z/high: the local server gives no window of it: set FURB_LOCAL_WINDOW."
   );
 }
 

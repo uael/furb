@@ -678,6 +678,30 @@ fn the_boot_of_a_life_asks_the_claude_command_line_its_models_once_and_a_later_s
 }
 
 #[test]
+fn a_life_opens_when_its_actor_and_a_roster_name_left_the_catalog_and_tells_each_chain_once() {
+  let at = place("catalog-left");
+  let (mut engine, _) = Opening {
+    extensions: Some(false),
+    snapshot: Some(false),
+    roster: Some(vec!["claude-cli:opus".to_owned(), "claude-cli:gone".to_owned()]),
+    actor: Some("claude-cli:vanished/high".to_owned()),
+    ..scripted(&at, &[])
+  }
+  .boot::<String>([])
+  .unwrap();
+  let roster = "close([a[0] for a in standing()[0]])";
+  assert_eq!(closed(&mut engine, roster).py_repr(), "['claude-cli:opus', 'operator']");
+  let actor = "close(standing()[2])";
+  assert_eq!(closed(&mut engine, actor).py_repr(), "'claude-cli:opus/high'");
+  let left = r#"close(len([1 for x in transcript('chain1') if x[0] == 'tell' and x[2] == 'provider' and "_left = ['claude-cli:gone', 'claude-cli:vanished/high']" in x[3][0]]))"#;
+  assert_eq!(closed(&mut engine, left).as_ref().as_int(), Some(1));
+  stood(&mut engine).unwrap();
+  assert_eq!(closed(&mut engine, left).as_ref().as_int(), Some(1), "a later stand tells nothing");
+  let refused = "try:\n  await prompt(int, 'which', to='claude-cli:gone')\nexcept Refused as no:\n  close(str(no))";
+  assert_eq!(closed(&mut engine, refused).py_repr(), "'claude-cli:gone no actor'");
+}
+
+#[test]
 fn a_stand_reloads_provider_settings_and_a_refused_reload_keeps_the_life() {
   let at = place("provider-settings");
   fs::create_dir_all(at.join("config")).unwrap();
