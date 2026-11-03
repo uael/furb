@@ -4,11 +4,6 @@
 #![expect(clippy::cast_precision_loss, reason = "debt: an as cast that loses precision")]
 #![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
 #![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
 #![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
 
 use std::{
@@ -27,7 +22,7 @@ use std::{
 
 use futures::{
   Stream, StreamExt,
-  channel::mpsc::{UnboundedSender, unbounded},
+  channel::mpsc::{TrySendError, UnboundedSender, unbounded},
   stream,
 };
 use tokio::{
@@ -207,8 +202,8 @@ pub fn bash(scratch: Scratch, record: &[Object]) -> Box<dyn Ear> {
               let mut one = Running { stdin, _stop: stop };
               // A stdin of text goes in whole at the start, and then it closes.
               if let Some(text) = begun.given.take().filter(|text| !text.is_empty()) {
-                one.feed(Some(text));
-                one.feed(None);
+                one.feed(Some(text))?;
+                one.feed(None)?;
               }
               co.work(command(begun, fed_in, stopped));
               running.insert(about, one);
@@ -233,8 +228,10 @@ pub fn bash(scratch: Scratch, record: &[Object]) -> Box<dyn Ear> {
             && !closed.contains(&command)
             && !cut.contains_key(&command);
           let answer = if open {
-            written(&mut running, &mut closed, &command, &text.content);
-            text.object()
+            match written(&mut running, &mut closed, &command, &text.content) {
+              Ok(()) => text.object(),
+              Err(fault) => fault.object(),
+            }
           } else {
             Fault::refused(format!("{} takes no write", text.path)).object()
           };
@@ -272,14 +269,12 @@ fn written(
   closed: &mut HashSet<String>,
   command: &str,
   content: &str,
-) {
+) -> Result<(), Fault> {
   let text = (!content.is_empty()).then(|| content.to_owned());
   if text.is_none() {
     closed.insert(command.to_owned());
   }
-  if let Some(one) = running.get_mut(command) {
-    one.feed(text);
-  }
+  running.get_mut(command).map_or(Ok(()), |one| one.feed(text))
 }
 
 /// One command that runs, as the ear holds it: the door to its stdin, and its stop, which ends it when it drops.
@@ -289,9 +284,14 @@ struct Running {
 }
 
 impl Running {
-  /// One text into its stdin, or nothing to close it.
-  fn feed(&mut self, text: Option<String>) {
-    let _ = self.stdin.try_send(text);
+  /// One text into its stdin, or nothing to close it. A command that reads no more refuses a text.
+  /// A stdin that reads no more is closed already.
+  fn feed(&mut self, text: Option<String>) -> Result<(), Fault> {
+    let closing = text.is_none();
+    match self.stdin.try_send(text) {
+      Err(_) if !closing => Err(Fault::refused("the command reads no more")),
+      _ => Ok(()),
+    }
   }
 }
 
@@ -368,8 +368,11 @@ async fn spawned(mut command: Command, shown: &str, dir: &Path) -> Result<(Shell
   match Group::of(&child) {
     Ok(group) => Ok((Shell(Some(child)), group)),
     Err(no) => {
-      let _ = child.start_kill();
-      Err(Fault::refused(format!("{shown} could not be held: {no}")))
+      let ended = match child.start_kill() {
+        Ok(()) => String::new(),
+        Err(late) => format!(", and it could not be ended: {late}"),
+      };
+      Err(Fault::refused(format!("{shown} could not be held: {no}{ended}")))
     }
   }
 }
@@ -383,7 +386,7 @@ fn command(
   let (says, said) = unbounded();
   let ran = ran(begun, fed, stopped, says);
   // The command says through the channel alone, so its exit comes after all it wrote.
-  stream::select(said, stream::once(ran).filter_map(|()| future::ready(None)))
+  stream::select(said, stream::once(ran).filter_map(future::ready))
 }
 
 /// A command run to its end: what its streams write is said as it comes, what is fed goes into its stdin, and its
@@ -395,18 +398,22 @@ fn command(
 /// process is left to run, with no reader on its stream. The shell is reaped as it exits, and its group keeps its
 /// number for as long as a process of it lives, so an end signals no group that another took, but in the moment
 /// after the last process of the group ended and before that end.
+///
+/// What the channel cannot take, because its stream is going, comes back for that stream to give.
 async fn ran(
   begun: Begun,
   fed: spsc::Receiver<Option<String>>,
   stopped: oneshot::Receiver<()>,
   says: UnboundedSender<Said>,
-) {
+) -> Option<Said> {
   let Begun { about, command, shown, dir, timeout, .. } = begun;
   let (mut child, mut group) = match spawned(command, &shown, &dir).await {
     Ok(one) => one,
     Err(fault) => {
-      let _ = says.unbounded_send(Said::Failed { about, fault });
-      return;
+      return says
+        .unbounded_send(Said::Failed { about, fault })
+        .err()
+        .map(TrySendError::into_inner);
     }
   };
   let (stdout, stderr, stdin) = (child.stdout.take(), child.stderr.take(), child.stdin.take());
@@ -433,7 +440,7 @@ async fn ran(
     loop {
       tokio::select! {
         biased;
-        _ = &mut stopped => return,
+        _ = &mut stopped => return None,
         got = &mut shell, if status.is_none() => {
           status = Some(got);
           until = Some(tokio::time::Instant::now() + DRAIN);
@@ -441,7 +448,10 @@ async fn ran(
         () = &mut streams, if !drained => drained = true,
         () = &mut expired, if !late => {
           late = true;
-          group.slay();
+          if let Err(no) = group.slay() {
+            let fault = Fault::refused(format!("{shown} outlived its timeout and could not be ended: {no}"));
+            return says.unbounded_send(Said::Failed { about: about.clone(), fault }).err().map(TrySendError::into_inner);
+          }
         }
         () = &mut feeding, if !closed => closed = true,
         // A process that the command started can hold a stream for longer than the shell lives, so the streams have
@@ -462,7 +472,7 @@ async fn ran(
     stdout: Text::new(format!("{about}/stdout"), out.finish()),
     stderr: Text::new(format!("{about}/stderr"), err.finish()),
   };
-  let _ = says.unbounded_send(Said::Exit { about: about.clone(), exit });
+  says.unbounded_send(Said::Exit { about: about.clone(), exit }).err().map(TrySendError::into_inner)
 }
 
 /// The code of an exit, and for a command that a signal ended, 128 and the number of the signal, as a shell gives, so
@@ -592,7 +602,10 @@ async fn read(
     let text = whole(&mut held, n == 0);
     let text = if text.is_empty() { text } else { all.push(&text) };
     if !text.is_empty() {
-      let _ = says.unbounded_send(Said::Out { about: about.to_owned(), text, stream: name });
+      // The stream that holds the receiver is going, and this read goes with it.
+      if says.unbounded_send(Said::Out { about: about.to_owned(), text, stream: name }).is_err() {
+        return;
+      }
     }
     if n == 0 {
       return;
@@ -682,14 +695,20 @@ impl Group {
     }
   }
 
-  /// Every process of the group, ended.
-  fn slay(&mut self) {
+  /// Every process of the group, ended, or why a signal did not reach them.
+  #[cfg_attr(windows, expect(clippy::unnecessary_wraps, reason = "only a signal of Unix can fail"))]
+  fn slay(&mut self) -> std::io::Result<()> {
     #[cfg(unix)]
     if let Some(leader) = self.leader {
-      let _ = rustix::process::kill_process_group(leader, rustix::process::Signal::KILL);
+      match rustix::process::kill_process_group(leader, rustix::process::Signal::KILL) {
+        // The group has no process left, so no process is left to end.
+        Ok(()) | Err(rustix::io::Errno::SRCH) => {}
+        Err(no) => return Err(no.into()),
+      }
     }
     #[cfg(windows)]
     self.job.take();
+    Ok(())
   }
 
   /// The group let go once the command is over, and every process of it that outlives the command left to run.
@@ -697,15 +716,19 @@ impl Group {
     #[cfg(unix)]
     self.leader.take();
     #[cfg(windows)]
-    if let Some(job) = self.job.take() {
-      let _ = job.set_extended_limit_info(&win32job::ExtendedLimitInfo::new());
+    if let Some(job) = self.job.take()
+      && job.set_extended_limit_info(&win32job::ExtendedLimitInfo::new()).is_err()
+    {
+      // A job that cannot be let go keeps its limit, so it ends each process when it drops.
+      self.job = Some(job);
     }
   }
 }
 
 impl Drop for Group {
   fn drop(&mut self) {
-    self.slay();
+    // A drop has no caller to tell a failure to.
+    drop(self.slay());
   }
 }
 
