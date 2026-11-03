@@ -48,6 +48,12 @@ def compact(filters: list[Filter] | None = None, summary: str = "", on: str = ""
   The next word of that chain binds the summary that compact is given as the quote summary when there is one, and regrounds the chain.
   """
 
+def clear(on: str = "") -> str:
+  """clear() supersedes the chain of the caller with a filter that keeps nothing, with no summary and no regrounding, and gives that chain.
+  So the model of the chain reads from zero, and the chain keeps its name, its module, its open prompts and its threads.
+  The record keeps each act of the chain.
+  """
+
 def compacted(on: str = "") -> Act:
   """compacted() wraps a chain: after an answer that reads more than SHARE of the window of its actor, it asks choice() of the chain, and at the next reply on the chain once that came, it compacts the chain, which it wraps still.
   The chain keeps the acts that the model chose, each act said on the chain after it asked, and of each path only the last read or write, and the summary of the model.

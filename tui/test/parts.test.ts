@@ -341,6 +341,28 @@ test("the command /compact of the part of compaction asks a model what the chain
   );
 });
 
+test("the commands /clear and /reset of the part of compaction cut the chain on screen to nothing, and the rule of each cut says Cleared", async () => {
+  const { directory } = project();
+  const session = await demoSession({ cwd: directory, extensions: true });
+  await composing(
+    async ({ app, frame }) => {
+      for (let tries = 0; tries < 400 && !app.parts.command("clear"); tries++) await Bun.sleep(25);
+      expect(app.parts.command("reset")?.detail).toStartWith("Same as /clear: ");
+      await session.command(`/run before = "the first step"`);
+      app.composer.setText("/clear");
+      await app.submit();
+      const shown = await shows(frame, "Cleared: the model reads on from here");
+      expect(shown.indexOf("the first step")).toBeLessThan(shown.indexOf("Cleared:"));
+      app.composer.setText("/reset");
+      await app.submit();
+      await shows(frame, "Cleared 2 of 2: the model reads on from here");
+      expect(await frame()).toContain("Cleared 1 of 2: the model reads on from here");
+    },
+    { width: 132, height: 60 },
+    session,
+  );
+});
+
 test("a mark of a part stands at its place in the feed of its chain, and a mark that throws shows its error", async () => {
   const { file } = project(
     'export default (furb) => furb.mark((seen) => { if (seen.chain === "none") throw new Error("No marks."); return [{ chain: seen.chain, at: 2, title: "Here" }, { chain: "other", at: 1, title: "Not here" }] })\n',
@@ -528,11 +550,13 @@ test("a part gives commands from the life, which the palette and /name read agai
       await shows(frame, "Todo: 2 open");
       expect(app.parts.commands(app.seen()).map((one) => one.name)).toEqual([
         "compact",
+        "clear",
+        "reset",
         "mcp",
         "todos",
         "pick",
         "add",
-        "clear",
+        "sweep",
         "ask",
         "docs",
         "finish-1",
@@ -641,12 +665,12 @@ test("a confirm that a part awaits gives true for yes, and false for no or a clo
     async ({ app, frame, screen }) => {
       await session.command(`/run ${TODO}\ntodo("write the part")`);
       await shows(frame, "Todo: 1 open");
-      app.composer.setText("/clear");
+      app.composer.setText("/sweep");
       await app.submit();
       await shows(frame, "Mark 1 items done?");
       await pressEscape(screen);
       await shows(frame, "The list stays as it is.");
-      app.composer.setText("/clear");
+      app.composer.setText("/sweep");
       await app.submit();
       await shows(frame, "Mark 1 items done?");
       screen.mockInput.pressEnter();

@@ -21,7 +21,9 @@ async def test_compaction_is_the_doctrine_of_the_extension(tmp_path: Path) -> No
     "together(",
     "compacted()",
     "condense()",
+    "clear()",
     "/compact",
+    "/clear",
     "SHARE",
     "FILTERS",
   ]
