@@ -18,7 +18,7 @@ EVERY = ["ubuntu-latest", "macos-latest", "windows-latest"]
 # own proof.
 INERT = re.compile(
   r"(.*\.md|docs/(?!examples/).*|LICENSE|\.gitignore|\.furb/(?!extensions/|config\.json$).*|\.agents/.*|\.claude/.*|script/.*|reserve/.*"
-  r"|\.github/(ISSUE_TEMPLATE/.*|budgets\.json|workflows/(publish|release|titles)\.yml)"
+  r"|\.github/(ISSUE_TEMPLATE/.*|budgets\.json|workflows/(publish|release|titles|contract)\.yml)"
   r"|release-please-config\.json|\.release-please-manifest\.json)"
 )
 # A path that only the suite of python reads.
