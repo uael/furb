@@ -2,11 +2,7 @@ import { isAbsolute, relative } from "node:path";
 import {
   type BoxRenderable,
   type CodeRenderable,
-  type LineNumberOptions,
-  LineNumberRenderable,
-  type LineSign,
   type MouseEvent,
-  type OptimizedBuffer,
   parseColor,
   type Renderable,
   type RGBA,
@@ -35,9 +31,10 @@ import { shortenHomes } from "../files.ts";
 import { clip, dollars, modelName, share } from "../format.ts";
 import type { ActRow } from "../session.ts";
 import { theme as c, glyph, markOf, pulse, spacing as space, spin } from "../theme.ts";
-import { bold, mix, type Part, styled, underline } from "../ui.ts";
+import { bold, type Part, styled, underline } from "../ui.ts";
+import { Gutter } from "./gutter.ts";
 import { part } from "./part.ts";
-import { gutterOf, STATE, saidOf, seconds, spell, stateOf, stateSigns } from "./shared.ts";
+import { STATE, saidOf, seconds, spell, stateOf } from "./shared.ts";
 
 /** A reason of the gate or of a raise as one line says it: without the line that the row already shows, and
  * without the place that the parser names, `(<string>, line 2), in 'x = = 1'`, which repeats the line. */
@@ -50,10 +47,6 @@ const TIME = 8;
 /** The columns of the facts of a word, at the right edge of its block: what the acts of each line came to. Each block
  * keeps the same column, so the facts of every word stand one under the other. */
 const FACTS = 30;
-
-/** The column of the states of the rows of a step that a model writes, with the loader on its last row. */
-const loaderSigns = (rows: number): Map<number, LineSign> =>
-  stateSigns(new Map([[Math.max(0, rows - 1), [spin(), c.accent]]]), rows);
 
 /** The text of the rows of a step that a model writes: the label of the word, then the line that comes. */
 const thinkingText = (label: Part[], tail?: Part[]): Part[] => [
@@ -349,19 +342,19 @@ export const details = part({
 
   /** The rows of a step while its model works on it: the label of the word until a line is written, then the line
    * that comes, with the loader in the column of the states, which the tick draws again. */
-  thinkingRow(step: string, display: number, digits: number, room: number): LineNumberRenderable {
+  thinkingRow(step: string, display: number, digits: number, room: number): Gutter {
     const { number, label, tail } = this.thinkingParts(step, display, room);
     const rows = (label.length ? 1 : 0) + (tail ? 1 : 0);
     const numbered = tail?.[0]?.[0] ? new Map([[rows - 1, number]]) : new Map<number, number>();
     const all = Array.from({ length: rows }, (_, at) => at);
     const text = this.text(thinkingText(label, tail), c.muted, { wrapMode: "none" });
-    const view = new LineNumberRenderable(this.renderer, {
+    const view = new Gutter(this.renderer, {
       target: text,
-      // The loader stands in the column of the states, on the last row, as the mark of a line that failed does.
-      ...gutterOf(digits, loaderSigns(rows)),
-      lineNumbers: numbered,
-      hideLineNumbers: new Set(all.filter((at) => !numbered.has(at))),
-      lineColors: new Map(all.map((at) => [at, { content: c.raised, gutter: c.raised }])),
+      digits,
+      numbers: numbered,
+      colors: new Map(all.map((at) => [at, c.raised])),
+      // The loader turns in the column of the states, on the last row, where a line that failed shows its mark.
+      loaders: new Set(rows ? [rows - 1] : []),
     });
     // The loader is drawn by each frame, the first one too, so no tick is needed before it shows.
     this.thinkingRows.set(step, {
@@ -383,7 +376,6 @@ export const details = part({
         this.thinkingRows.delete(step);
         continue;
       }
-      row.view.setLineSigns(loaderSigns(Number(row.shape.split(":")[0])));
       row.view.requestRender();
       this.followThinking(step);
     }
@@ -423,7 +415,7 @@ export const details = part({
     const said = saidOf(number, parts);
     if (said === row.said) return;
     row.said = said;
-    if (numbered) row.view.setLineNumbers(new Map([[rows - 1, number]]));
+    if (numbered) row.view.numbers = new Map([[rows - 1, number]]);
     row.text.content = styled(parts);
   },
 
@@ -444,8 +436,7 @@ export const details = part({
     const texts: string[] = [];
     const ellipses: number[] = [];
     const numbers = new Map<number, number>();
-    const hidden = new Set<number>();
-    const colors = new Map<number, { content: RGBA; gutter: RGBA }>();
+    const colors = new Map<number, RGBA>();
     // The mark of each row in the column of the states: the line that runs, and the line that failed.
     const states = new Map<number, Part>();
     // A line that failed says its reason under it, so its hint does not say the same reason again.
@@ -469,21 +460,20 @@ export const details = part({
     const pieces: [row: number, from: number, to: number, at: number][] = [];
     // The lines that run: where the time of each stands in its row, and the act that it counts.
     const live: { row: number; col: number; act: Parameters<typeof since>[0] }[] = [];
-    const spinning: { row: number; number: number; width: number }[] = [];
+    // The lines that run, whose numbers fade into the loader and back.
+    const running = new Set<number>();
     const fixed: [row: number, from: number, to: number, group: string][] = [];
     const comment = (row: number, from = 0) => fixed.push([row, from, texts[row]?.length ?? 0, "comment"]);
     const push = (text: string, number?: number, source?: ProgramLine) => {
       const at = texts.length;
       texts.push(text);
       sources.push(source);
-      if (number === undefined) hidden.add(at);
-      else numbers.set(at, number);
+      if (number !== undefined) numbers.set(at, number);
       return at;
     };
     // The rows of a word stand on the raised surface of its block, which a label heads and a blank row parts from the
     // block above it.
-    const raised = { content: c.raised, gutter: c.raised };
-    const block = (at: number) => colors.has(at) || colors.set(at, raised);
+    const block = (at: number) => colors.has(at) || colors.set(at, c.raised);
     let first = true;
     // The model of the block that the last row stands in. The words that one model wrote one after another, with no
     // message and no note between them, stand in one block under one label, and their numbers run on.
@@ -540,12 +530,9 @@ export const details = part({
             col: Bun.stringWidth(body) - TIME,
             act: line.awaits?.act ?? line.acts.at(-1),
           });
-        // The line that runs shows the loader in the place of its number, so it reads apart from a model that thinks.
+        // The number of the line that runs fades into the loader and back, so it reads apart from a model that thinks.
         if (line.fails) states.set(at, markOf("failed"));
-        else if (line.runs) {
-          spinning.push({ row: at, number: line.display, width: String(line.display).length });
-          hidden.add(at);
-        }
+        else if (line.runs) running.add(at);
         for (const row of rows.slice(1)) push(row.text, undefined, line);
         const base = program.length;
         program += `${line.text}\n`;
@@ -556,8 +543,7 @@ export const details = part({
           whole.set(at + k, row.parts);
         }
         // The line that runs is lit, and so is the line that made the act that a running line awaits.
-        if (line.runs || line.awaited !== undefined)
-          colors.set(at, { content: c.selected, gutter: c.selected });
+        if (line.runs || line.awaited !== undefined) colors.set(at, c.selected);
         for (let k = at; k < texts.length; k++) block(k);
         if (line.fails) {
           for (const why of line.fails
@@ -688,14 +674,13 @@ export const details = part({
     const target = this.code(texts.join("\n"), marks, hover, highlights);
     // Each row is cut to its room already, so none wraps: a row that is too long loses its end, and no mark falls under it.
     target.wrapMode = "none";
-    const view = new LineNumberRenderable(this.renderer, {
+    const view = new Gutter(this.renderer, {
       target,
-      // The marks of the states stand in a column of signs at the right of the numbers, which every row keeps, so the
-      // numbers and the code of each block stand in the same columns.
-      ...gutterOf(digits, stateSigns(states, texts.length)),
-      lineNumbers: numbers,
-      hideLineNumbers: hidden,
-      lineColors: colors,
+      digits,
+      numbers,
+      colors,
+      states,
+      running,
       // The time of a line that runs is written over the blanks that its row keeps, so that a tick moves it and the text
       // of the program stays as it was laid out.
       renderAfter(buffer) {
@@ -708,32 +693,10 @@ export const details = part({
           );
       },
     });
-    // The view draws its gutter after its own hook, so a sibling of the view draws over the gutter. It stands beside the
-    // view with no size, and each frame draws the cell of the number of each line that runs, which the gutter hides: the
-    // number fades out into the loader and back, on the light of the line.
-    const cells = this.box({
-      position: "absolute",
-      left: 0,
-      top: 0,
-      width: 0,
-      height: 0,
-      renderAfter(buffer) {
-        for (const { row, number, width } of spinning) {
-          const [loader, share] = pulse();
-          buffer.drawText(
-            (loader ? spin() : String(number)).padStart(width),
-            target.x - STATE - space.inset - width,
-            view.y + row,
-            parseColor(mix(c.selected, loader ? c.accent : c.faint, share)),
-            parseColor(c.selected),
-          );
-        }
-      },
-    });
     // The cell of the number turns with the tick, so the program draws again at each frame of the fade while a line
     // runs.
     const times = () =>
-      [spinning.length ? `${pulse().join()}${spin()}` : "", ...live.map((one) => since(one.act))].join("|");
+      [running.size ? `${pulse().join()}${spin()}` : "", ...live.map((one) => since(one.act))].join("|");
     if (live.length) this.liveLines.set(view, { times, shown: times() });
     // The gutter of the numbers takes the events of the pointer over the program, so it shows the string of a fold.
     view.onMouseMove = (event) => {
@@ -761,10 +724,7 @@ export const details = part({
       if (literal >= 0) return this.openString(line, literal);
       if (line.acts.length || Bun.stringWidth(line.text) > column) this.openLine(line);
     };
-    const stack = this.box({});
-    stack.add(view);
-    if (spinning.length) stack.add(cells);
-    return stack;
+    return view;
   },
 
   /** The card of a line of a program under the pointer: the reason of a line that failed whole, in the color of a
@@ -888,12 +848,8 @@ export const details = part({
   },
 
   /** Python with the number of each line. */
-  numbered(word: string, options: LineNumberOptions = { fg: c.faint, minWidth: 3 }): LineNumberRenderable {
-    return new LineNumberRenderable(this.renderer, {
-      target: this.code(word),
-      paddingRight: space.inset,
-      ...options,
-    });
+  numbered(word: string, options: { fg?: () => RGBA; offset?: number } = {}): Gutter {
+    return new Gutter(this.renderer, { target: this.code(word), ...options });
   },
 
   /** A text of a dialog, which scrolls past the rows it takes. */

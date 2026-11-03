@@ -8,7 +8,6 @@ import {
   InputRenderable,
   InputRenderableEvents,
   type KeyEvent,
-  type LineNumberRenderable,
   type MouseEvent,
   type Renderable,
   ScrollBoxRenderable,
@@ -27,6 +26,7 @@ import { type DetailsPart, details } from "./app/details.ts";
 import { type DialogsPart, dialogs } from "./app/dialogs.ts";
 import { type FeedPart, feed } from "./app/feed.ts";
 import { GhostTextarea } from "./app/ghost.ts";
+import type { Gutter } from "./app/gutter.ts";
 import { type InputPart, input, inputBound } from "./app/input.ts";
 import { type ChainsPanel, type LoomsPart, looms } from "./app/looms.ts";
 import { type PalettePart, palette } from "./app/palette.ts";
@@ -172,13 +172,13 @@ export class App {
   /** What each thread showed when it was last seen open, which tells a folded thread that new work came. */
   readonly seenThreads = new Map<string, { seen: string; folded: boolean }>();
   /** The programs that have a line which runs, each with the times of those lines as it drew them last. */
-  liveLines = new Map<LineNumberRenderable, { times: () => string; shown: string }>();
+  liveLines = new Map<Gutter, { times: () => string; shown: string }>();
   /** The rows that a model writes, by the step that it writes, which the tick draws again, each with the lines that
    * the card above it shows. */
   thinkingRows = new Map<
     string,
     {
-      view: LineNumberRenderable;
+      view: Gutter;
       text: TextRenderable;
       display: number;
       room: number;
