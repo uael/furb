@@ -93,9 +93,8 @@ def standing():
 
 
 def stand(on=""):
-  got = ask("stand", on)
-  tell(on, roster=got[0], actor=got[2])
-  return got
+  isinstance(got := peek(a := act("stand", on, None)), list) and tell(on, roster=got[0], actor=got[2])
+  return a
 
 
 def clock(on="") -> float:

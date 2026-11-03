@@ -393,12 +393,12 @@ async function answer(data: { target: string; method: string; args: unknown[] })
             throw new Error(status.message || "OpenAI sign-in did not complete.");
         }
       }
-      changeProvider(session.directory, String(data.args[0]), data.args[1], () => {
-        running.stand({ on: "chain1" });
-      });
+      await changeProvider(session.directory, String(data.args[0]), data.args[1], () =>
+        running.stand({ on: "chain1" }),
+      );
     } else {
       await refreshCodex(session.directory);
-      engine.stand({ on: "chain1" });
+      await engine.stand({ on: "chain1" });
     }
     return true;
   }

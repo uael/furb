@@ -2,21 +2,68 @@
 
 import pytest
 
-from conftest import LATER, STANDS, Sand, born, chained, of, paragraphs, relived, said, settle, stood
+from conftest import (
+  LATER,
+  STANDS,
+  Sand,
+  World,
+  born,
+  chained,
+  life,
+  of,
+  paragraphs,
+  relived,
+  said,
+  settle,
+  stood,
+  world_says,
+)
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
 
 async def test_stand_asks_the_world_what_the_chains_stand_on_and_gives_the_answer() -> None:
-  """stand asks the World what the chains stand on and gives the answer, which boot does on the root at the tip of every life."""
+  """stand asks the World what the chains stand on and gives the act, whose answer is the standing, which boot does on the root at the tip of every life."""
   sand, _, root = born()
   assert [(a[1], a[2], a[3]) for a in said(sand.calls, "stand")] == [("stand1", OPERATOR, root)]
   sand.stands = LATER
-  assert engine.stand(engine.ROOT) == LATER and engine.standing() == LATER
+  assert await engine.stand(engine.ROOT) == LATER and engine.standing() == LATER
   await settle()
   later = Sand()
   await relived(later, list(sand.record))
   assert [(a[1], a[2], a[3]) for a in said(later.calls, "stand")] == [("stand3", OPERATOR, root)]
+
+
+class Slow(Sand):
+  """A World that answers each stand after the first later, as when it reads its settings again."""
+
+  slow = False
+
+  def hear(self, a: tuple) -> World:
+    match a:
+      case ("stand", qid, *_) if self.slow:
+        yield "started", qid
+      case _:
+        yield from self.hear_of_sand(a)
+
+  def hear_of_sand(self, a: tuple) -> World:
+    return Sand.hear(self, a)
+
+
+async def test_the_world_may_answer_a_stand_later() -> None:
+  """The World may answer a stand later, as when it reads its settings again, and no chain waits for that answer."""
+  sand = Slow()
+  life(sand)
+  two = await chained("two")
+  sand.script[two] = ["close(7)"]
+  sand.slow = True
+  stand = engine.stand(engine.ROOT)
+  assert not engine.over(stand)
+  assert await engine.prompt(int, "count", on=two) == 7
+  assert not engine.over(stand) and engine.standing() == STANDS
+  sand.stands = LATER
+  world_says("done", stand, sand.standing())
+  assert await stand == LATER and engine.standing() == LATER
 
 
 async def test_only_a_stand_on_the_root_changes_the_standing() -> None:
@@ -24,18 +71,20 @@ async def test_only_a_stand_on_the_root_changes_the_standing() -> None:
   sand, _, root = born()
   two = engine.chain("two")
   sand.stands = LATER
-  assert engine.stand(on=two) == LATER
+  assert await engine.stand(on=two) == LATER
   assert engine.standing() == STANDS and engine.module(two)["actor"] == engine.module(root)["actor"] == "m/low"
-  assert engine.stand(engine.ROOT) == LATER and engine.module(two)["actor"] == engine.module(root)["actor"] == "o/low"
+  assert (
+    await engine.stand(engine.ROOT) == LATER and engine.module(two)["actor"] == engine.module(root)["actor"] == "o/low"
+  )
 
 
 async def test_a_stand_from_inside_an_act_tells_its_answer_under_its_own_name() -> None:
-  """A stand from inside an act tells its answer under its own name, with the roster and the actor of the standing, as stand2_roster and stand2_actor, and no directory, which a cd tells, and no path of the doctrine and no extensions, which the root reads in turns of its own."""
+  """A stand from inside an act that the World answers at once tells its answer under its own name, with the roster and the actor of the standing, as stand2_roster and stand2_actor, and no directory, which a cd tells, and no path of the doctrine and no extensions, which the root reads in turns of its own."""
   taught = [*STANDS, "/w/DOCTRINE.md", [["one", "/w/one.py", "", False]]]
   _, log, root = born(stands=taught, files={"/w/DOCTRINE.md": "Read first.\n", "/w/one.py": "x = 41\n"})
   two = await chained("two")
   was = paragraphs(engine.turns(on=root))
-  step = engine.rung("got = stand()", on=two)
+  step = engine.rung("got = await stand()", on=two)
   assert await step is None
   (asked,) = [a[1] for a in said(log, "stand") if a[2] == step]
   # The root played its stand, stand2, after its setup, and chain two its own, stand3, at its birth, so the stand of
@@ -58,7 +107,7 @@ async def test_a_stand_from_outside_an_act_tells_nothing() -> None:
   assert [a for a in engine.transcript(root) if a[0] == "tell" and a[1] == "stand1"] == []
   was = engine.transcript(root)
   sand.stands = LATER
-  assert engine.stand(engine.ROOT) == LATER
+  assert await engine.stand(engine.ROOT) == LATER
   assert said(log, "stand")[-1][1] == "stand2"
   assert [a for a in engine.transcript(root) if a[0] == "tell"] == [a for a in was if a[0] == "tell"]
 

@@ -208,7 +208,9 @@ impl Answer {
       "list[Turn]" => Answer::Turns,
       "Text" => Answer::Text,
       "object" | "Show" | "Filter" | "dict" | "dict[str, str]" | "Standing" => Answer::Object,
-      "Act" | "Act[object]" | "Act[T]" | "Act[Never]" => Answer::Act(Came::Object),
+      "Act" | "Act[object]" | "Act[T]" | "Act[Never]" | "Act[Standing]" => {
+        Answer::Act(Came::Object)
+      }
       "Act[None]" => Answer::Act(Came::Unit),
       "Act[Exit]" => Answer::Act(Came::Exit),
       "Act[str | None]" => Answer::Act(Came::MaybeStr),

@@ -117,8 +117,8 @@ export declare class Engine {
   program(options?: { on?: string } | null): unknown
   /** standing gives what the chains stand on: the answer of the last stand that the transcript of the root holds, and an empty standing before the first. */
   standing(): unknown
-  /** stand asks the World what the chains stand on and gives the answer, which boot does on the root at the tip of every life. */
-  stand(options?: { on?: string } | null): unknown
+  /** stand asks the World what the chains stand on and gives the act, whose answer is the standing, which boot does on the root at the tip of every life. */
+  stand(options?: { on?: string } | null): Act & PromiseLike<unknown>
   /** clock gives one reading of the wall clock of the World. */
   clock(options?: { on?: string } | null): number
   /** chance gives a number that is at least zero and under one. */

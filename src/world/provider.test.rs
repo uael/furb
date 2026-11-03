@@ -2445,3 +2445,40 @@ fn a_local_model_reads_the_end_of_a_thought_that_the_provider_cut_in_its_next_tu
   assert_eq!(tail("abcdé", 2), "dé", "the end of a thought counts characters");
   assert_eq!(tail("ab", 5), "ab");
 }
+
+#[test]
+fn a_stand_that_reads_the_settings_slowly_holds_no_chain_while_it_reads() {
+  let (answer, login) = std::sync::mpsc::channel::<()>();
+  let login = Mutex::new(login);
+  let (host, _) = failing(&[]);
+  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let fresh = model.clone();
+  let provider = Provider::new(yard("slow-stand").display().to_string(), vec![model]).refreshing(
+    Arc::new(move || {
+      // A login of a command line that answers only once the test lets it.
+      login.lock().expect("the login").recv().expect("the login answers");
+      Ok((vec![fresh.clone()], None, Thinking::default()))
+    }),
+  );
+  let mut engine = lived(provider);
+  let root = engine.root().to_owned();
+  let stand = engine.stand(verbs::Stand { on: Some(root) }).expect("the life stands");
+  let stand = stand.id().to_owned();
+  let other = verbs::Chain { label: Some("other".to_owned()), ..Default::default() };
+  let other = engine.chain(other).expect("a chain is made").id().to_owned();
+  let with =
+    verbs::Prompt { message: Some("count".to_owned()), on: on(&other), ..Default::default() };
+  let id = engine.prompt(Object::string("int"), with).expect("a prompt is made").id().to_owned();
+  let done = |engine: &mut Engine| {
+    engine.peek(&id, verbs::Peek::default()).is_ok_and(|one| one.as_ref().as_int() == Some(7))
+  };
+  assert!(until(&mut engine, done), "the other chain goes on while the stand reads");
+  let stood = move |engine: &mut Engine| {
+    engine
+      .peek(&stand, verbs::Peek::default())
+      .is_ok_and(|one| one.as_ref().type_name() != "NoneType")
+  };
+  assert!(!stood(&mut engine), "the stand still reads the settings");
+  answer.send(()).expect("the login is waited for");
+  assert!(until(&mut engine, stood), "the stand is done once the login answers");
+}

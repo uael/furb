@@ -66,7 +66,7 @@ use std::{
   time::Duration,
 };
 
-use futures::{Stream, StreamExt, future::BoxFuture, stream};
+use futures::{FutureExt, Stream, StreamExt, future::BoxFuture, stream};
 use jiff::{Timestamp, Zoned, civil, tz::TimeZone};
 use rig_core::{
   completion::{
@@ -82,7 +82,7 @@ use unsync::oneshot;
 use self::{images::Images, search::Searches, watch::Watch};
 use crate::{
   SYSTEM,
-  ear::{Co, Ear, Next, hearing, say},
+  ear::{Co, Ear, Next, hearing, reactor, say},
   engine::{OPERATOR, WINDOW},
   fact::Fact,
   value::{Fault, Object, ObjectRef, entry},
@@ -585,8 +585,10 @@ pub struct Provider {
 /// root alone.
 pub type Advertised = (String, String, String, bool);
 
-type Refresh =
-  Arc<dyn Fn() -> Result<(Vec<Model>, Option<String>, Thinking), String> + Send + Sync>;
+/// The models of a provider, its default actor and the most tokens of thought of a turn, as the settings give them.
+type Settings = (Vec<Model>, Option<String>, Thinking);
+
+type Refresh = Arc<dyn Fn() -> Result<Settings, String> + Send + Sync>;
 
 impl Provider {
   /// A provider of these models, on a directory, whose model thinks [`THINKING`] tokens at most in one turn.
@@ -690,6 +692,10 @@ impl Provider {
   /// then made no more; and with its turn when the gate finds nothing against the whole word, which holds the word
   /// that ran.
   ///
+  /// A stand from outside an act reads the settings again, after the first: it starts, and the ear reads them on the
+  /// runtime of the ears, so every chain of the life goes on meanwhile, and it is done with the standing once they
+  /// come, or refused with why they did not. A stand that a word makes, or the first, is done at once.
+  ///
   /// A stand ends the wait of each reply whose call waits for a retry, a usage limit among them, and asks its model
   /// again at once, on the models that stand then: so a change of the command line or of its account, or the operator
   /// who asks to retry now, ends a wait at once.
@@ -726,9 +732,68 @@ impl Provider {
       // The opening of the life loaded the settings just now, so the first stand, which the boot asks, reads them
       // again only after it: a refresh there asks each program of a model, as the claude command line, a second time.
       let mut stood = false;
+      // The stand that the ear answers next with the standing, and whether a word made it.
+      let mut stands: Option<(String, bool)> = None;
       loop {
+        if let Some((about, word)) = stands.take() {
+          let given = standing(
+            &models.read().unwrap_or_else(PoisonError::into_inner),
+            &directory,
+            &actor,
+            extensions.as_deref(),
+          );
+          say(&mut co, Fact::says("done", &about, [given]));
+          // A stand reads the settings again, as after a change of the command line or of its account, or when the
+          // operator asks to retry now, so a reply whose call waits for a retry, which can wait for days at a usage
+          // limit, ends its wait and asks again at once, on the models that stand now.
+          let waiting: Vec<String> = replies
+            .iter()
+            .filter(|(_, reply)| reply.waits && !word)
+            .map(|(id, _)| id.clone())
+            .collect();
+          for id in waiting {
+            let Some(reply) = replies.get(&id) else { continue };
+            let (chain, actor) = (reply.chain.clone(), reply.actor.clone());
+            let (watch, stop, hold) = asking(
+              &mut co,
+              &id,
+              &chain,
+              &actor,
+              &life,
+              &models,
+              &mut images,
+              thinking,
+              backoff,
+              true,
+            )
+            .await?;
+            if let Some(reply) = replies.get_mut(&id) {
+              reply.waits = false;
+              reply.watch = watch.then(Watch::default);
+              reply.hold = hold;
+              reply._stop = stop;
+            }
+          }
+        }
         let a = match co.next().await {
           Next::Heard(a) => a,
+          // The settings that a refresh read, on which the provider stands from now on, or why it read none.
+          Next::Worked(Replied::Refreshed { about, got }) => {
+            match got {
+              Ok((fresh, default, budget)) => {
+                if !fresh.iter().any(|model| model.settings(&actor).is_some()) {
+                  actor = default
+                    .or_else(|| fresh.first().map(|model| model.at(None)))
+                    .unwrap_or_else(|| OPERATOR.to_owned());
+                }
+                *models.write().unwrap_or_else(PoisonError::into_inner) = fresh;
+                thinking = budget;
+                stands = Some((about, false));
+              }
+              Err(why) => say(&mut co, Fact::says("done", &about, [Fault::refused(why).object()])),
+            }
+            continue;
+          }
           // What the model of a reply that still stands writes, told to the host under the rung it writes for.
           Next::Worked(Replied::Wrote { id, text, thinking }) => {
             if let Some(reply) = replies.get_mut(&id) {
@@ -961,60 +1026,18 @@ impl Provider {
             let word = crate::fact::named(a.by(), "rung");
             let first = !std::mem::replace(&mut stood, true);
             if let Some(refresh) = refresh.as_ref().filter(|_| !first && !word) {
-              match refresh() {
-                Ok((fresh, default, budget)) => {
-                  if !fresh.iter().any(|model| model.settings(&actor).is_some()) {
-                    actor = default
-                      .or_else(|| fresh.first().map(|model| model.at(None)))
-                      .unwrap_or_else(|| OPERATOR.to_owned());
-                  }
-                  *models.write().unwrap_or_else(PoisonError::into_inner) = fresh;
-                  thinking = budget;
-                }
-                Err(why) => {
-                  say(&mut co, Fact::says("done", &about, [Fault::refused(why).object()]));
-                  continue;
-                }
-              }
+              // Reading the settings asks each program of a model, which can take seconds, so the stand reads them
+              // on the runtime of the ears, and every chain of the life goes on meanwhile.
+              say(&mut co, Fact::says("started", &about, []));
+              let refresh = Arc::clone(refresh);
+              let read = reactor().spawn_blocking(move || refresh());
+              co.work(stream::once(read.map(move |got| {
+                let got = got.map_err(|no| no.to_string()).and_then(|got| got);
+                Replied::Refreshed { about, got }
+              })));
+              continue;
             }
-            let stood = standing(
-              &models.read().unwrap_or_else(PoisonError::into_inner),
-              &directory,
-              &actor,
-              extensions.as_deref(),
-            );
-            say(&mut co, Fact::says("done", &about, [stood]));
-            // A stand reads the settings again, as after a change of the command line or of its account, or when the
-            // operator asks to retry now, so a reply whose call waits for a retry, which can wait for days at a usage
-            // limit, ends its wait and asks again at once, on the models that stand now.
-            let waiting: Vec<String> = replies
-              .iter()
-              .filter(|(_, reply)| reply.waits && !word)
-              .map(|(id, _)| id.clone())
-              .collect();
-            for id in waiting {
-              let Some(reply) = replies.get(&id) else { continue };
-              let (chain, actor) = (reply.chain.clone(), reply.actor.clone());
-              let (watch, stop, hold) = asking(
-                &mut co,
-                &id,
-                &chain,
-                &actor,
-                &life,
-                &models,
-                &mut images,
-                thinking,
-                backoff,
-                true,
-              )
-              .await?;
-              if let Some(reply) = replies.get_mut(&id) {
-                reply.waits = false;
-                reply.watch = watch.then(Watch::default);
-                reply.hold = hold;
-                reply._stop = stop;
-              }
-            }
+            stands = Some((about, word));
           }
           "reply" if a.question() => {
             say(&mut co, Fact::says("started", &about, []));
@@ -1170,6 +1193,7 @@ enum Replied {
   Wrote { id: String, text: String, thinking: String },
   Retried { id: String, retry: Retry, limit: bool },
   Came { id: String, got: Result<Object, CompletionError>, dropped: Option<String> },
+  Refreshed { about: String, got: Result<Settings, String> },
 }
 
 /// What the chain is told after the rung of a turn whose model wrote a fault after the part of its word that ran.

@@ -170,7 +170,7 @@ async def test_every_chain_hears_the_done_of_every_stand() -> None:
   assert engine.turns(on=over) == was and engine.module(root)["actor"] == "o/low"
   later.stands = Refused("no standing now")
   with pytest.raises(Refused):
-    engine.stand(engine.ROOT)
+    await engine.stand(engine.ROOT)
   assert engine.standing() == LATER and engine.module(root)["actor"] == "o/low"
   two = await chained("two")
   told = [paragraphs(engine.turns(on=one)) for one in (over, two)]

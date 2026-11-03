@@ -29,7 +29,12 @@ function read(path: string): Record<string, unknown> {
 }
 
 /** Save one project provider and apply it. A refused change restores the previous file. */
-export function changeProvider(directory: string, name: string, value: unknown, apply: () => void): void {
+export async function changeProvider(
+  directory: string,
+  name: string,
+  value: unknown,
+  apply: () => PromiseLike<unknown>,
+): Promise<void> {
   if (!name || /[:/\s]/.test(name)) throw new Error("A provider name must contain no space, colon or slash.");
   const path = join(directory, ".furb", "config.json");
   let before: string | undefined;
@@ -46,7 +51,7 @@ export function changeProvider(directory: string, name: string, value: unknown, 
   mkdirSync(dirname(path), { recursive: true });
   saveFile(path, `${JSON.stringify(config, null, 2)}\n`);
   try {
-    apply();
+    await apply();
   } catch (error) {
     if (before === undefined) rmSync(path);
     else saveFile(path, before);
