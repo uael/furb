@@ -242,9 +242,10 @@ class Engine:
 
   def __getattr__(self, name: str) -> Callable[..., object]: ...
 
-def files(scratch: str) -> NativeEar:
-  """The ear of the files, which reads and writes a path, and a path of `scratch://` in the scratch directory that
-  the host names, which the ear of commands is given too."""
+def files(scratch: str, config: str | None = None) -> NativeEar:
+  """The ear of the files, which reads and writes a path, a path of `scratch://` in the scratch directory that the
+  host names, which the ear of commands is given too, and a path of `config://` in the config directory of the user,
+  the one of this process when the host names none."""
 
 def bash(scratch: str, record: Iterable[object]) -> NativeEar:
   """The ear of commands, which runs each in a shell of this machine, with `TMPDIR` set to the scratch directory that
@@ -319,9 +320,6 @@ def extensions(given: list[Extension]) -> NativeEar:
 def parts(project: str) -> list[Part]:
   """The part for a TUI of each extension that a life in the directory of a project runs and whose manifest names
   one, as the configs of the user and of the project say it now, which a TUI loads beside the life."""
-
-def memory(config: str) -> NativeEar:
-  """The ear of the memory extension, which finds the memory of a path in its folders and in the config directory."""
 
 def skills(config: str) -> NativeEar:
   """The ear of the skills extension, which finds skills in the folders of a chain and in the config directory."""

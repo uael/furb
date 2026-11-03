@@ -253,10 +253,11 @@ export interface Extension {
 export declare function extensions(given: Array<Extension>): NativeEar
 
 /**
- * The ear of the files, which reads and writes a path, and a path of `scratch://` in the scratch directory that the
- * host names, which the ear of commands is given too.
+ * The ear of the files, which reads and writes a path, a path of `scratch://` in the scratch directory that the host
+ * names, which the ear of commands is given too, and a path of `config://` in the config directory of the user, the
+ * one of this process when the host names none.
  */
-export declare function files(scratch: string): NativeEar
+export declare function files(scratch: string, config?: string | undefined | null): NativeEar
 
 /**
  * The gate of the crate: what the type checker of monty found on a sheet, each error by its line, and no warning.
@@ -347,9 +348,6 @@ export declare function log(path: string): NativeEar
  * the record has no log, or a log that does not agree with it.
  */
 export declare function logged(path: string): unknown[] | null
-
-/** The ear of the memory extension, which finds the memory of a path in its folders and in the config directory. */
-export declare function memory(config: string): NativeEar
 
 /**
  * The model the catalog knows by a name, as `provider:id` or as an id that one model alone holds, which for a model of

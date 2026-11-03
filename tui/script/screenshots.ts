@@ -1038,7 +1038,7 @@ try {
   await quietSession.command('/run read("a.txt")');
   await until(quietSession, () =>
     quietSession.activity.some(
-      (act) => act.kind === "memory" && String(act.words[0]).endsWith("a.txt") && act.done,
+      (act) => act.kind === "read" && String(act.words[0]).endsWith("/") && act.done,
     ),
   );
   // The extensions stand on one quiet row: the file of markdown that memory told shows no row for each heading, and

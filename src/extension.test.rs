@@ -265,7 +265,7 @@ fn lived(at: &Path, given: Vec<Extension>) -> Engine {
   let ears = [
     ("extensions", extensions(given)),
     ("stand", standing(at.to_owned())),
-    ("files", world::files(world::Scratch::own(), None)),
+    ("files", world::files(world::Scratch::own(), crate::extension::Places::here().config, None)),
     ("store", store),
   ];
   let engine = Engine::boot(record, ears).unwrap();
@@ -544,7 +544,7 @@ fn set_up_in(at: &Path, given: Vec<Extension>, directory: &Path) -> Engine {
   let ears = [
     ("extensions", extensions(given)),
     ("stand", stand),
-    ("files", world::files(world::Scratch::own(), None)),
+    ("files", world::files(world::Scratch::own(), crate::extension::Places::here().config, None)),
     ("store", store),
   ];
   let engine = Engine::boot(record, ears).unwrap();

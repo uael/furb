@@ -237,3 +237,16 @@ async def test_the_world_refuses_a_write_of_a_path_whose_first_part_is_the_name_
   live.end()
   assert str(one.value) == f"{asked} is no file, since {asked} is an act of {away}: write it on {away}."
   assert not (tmp_path / asked).exists()
+
+
+async def test_a_write_of_config_puts_its_text_in_that_file_of_the_config_directory_of_the_user(
+  tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+  """A write of config://AGENTS.md puts its text in that file of the config directory of the user, and makes the directory and the folders of the file first when they are not there."""
+  config = tmp_path / "config"
+  monkeypatch.setenv("FURB_CONFIG_DIR", str(config))
+  live, root = machine(tmp_path)
+  wrote = engine.write(Text("config://deep/AGENTS.md", "user\n"), on=root)
+  live.end()
+  assert wrote == Text("config://deep/AGENTS.md", "user\n")
+  assert (config / "deep" / "AGENTS.md").read_text() == "user\n"

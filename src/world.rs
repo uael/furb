@@ -39,7 +39,7 @@ pub use bash::{bash, program, shell};
 pub use builds::{build, shelve, stored};
 pub use fetch::fetch;
 pub(crate) use fetch::fetched;
-pub use files::files;
+pub use files::{CONFIG, files};
 pub(crate) use log::continued;
 pub use log::{log, logged};
 pub use operator::{Asked, SHAPES, answered, answers};

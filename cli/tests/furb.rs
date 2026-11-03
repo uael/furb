@@ -433,8 +433,11 @@ fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs
   let mut turns = yard.furb(&["turns", "--record"]);
   turns.arg(yard.record());
   let said = printed(turns, "");
-  // The doctrine and the file of each official extension take the first eight reads, and the memory file is the next.
-  assert!(said.contains("\nread9_text = 'Use two spaces.'"), "{said}");
+  // The memory file comes after the reads of the folders that memory lists.
+  assert!(
+    said.contains("/CLAUDE.md'\nread") && said.contains("_text = 'Use two spaces.'"),
+    "{said}"
+  );
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
   fs::write(yard.at.join(".furb/config.json"), r#"{"extensions": {"memory": false}}"#)
     .expect("a config of the project");

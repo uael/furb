@@ -332,12 +332,15 @@ pub struct Inspection {
   pub value: Value,
 }
 
-/// The ear of the files, which reads and writes a path, and a path of `scratch://` in the scratch directory that the
-/// host names, which the ear of commands is given too.
+/// The ear of the files, which reads and writes a path, a path of `scratch://` in the scratch
+/// directory that the host names, which the ear of commands is given too, and a path of `config://`
+/// in the config directory of the user, the one of this process when the host names none.
 #[cfg_attr(feature = "python", pyfunction)]
+#[cfg_attr(feature = "python", pyo3(signature = (scratch, config = None)))]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn files(scratch: String) -> NativeEar {
-  NativeEar::of(world::files(world::Scratch::at(scratch), None))
+pub fn files(scratch: String, config: Option<String>) -> NativeEar {
+  let config = config.map_or_else(|| extension::Places::here().config, Into::into);
+  NativeEar::of(world::files(world::Scratch::at(scratch), config, None))
 }
 
 /// The ear of commands, which runs each in a shell of this machine, with `TMPDIR` set to the scratch directory that
@@ -488,13 +491,6 @@ pub fn extensions(given: Vec<Extension>) -> NativeEar {
 #[cfg_attr(feature = "typescript", napi)]
 pub fn parts(project: String) -> Result<Vec<Part>, Fault> {
   extension::parts(&extension::Places::here(), std::path::Path::new(&project))
-}
-
-/// The ear of the memory extension, which finds the memory of a path in its folders and in the config directory.
-#[cfg_attr(feature = "python", pyfunction)]
-#[cfg_attr(feature = "typescript", napi)]
-pub fn memory(config: String) -> NativeEar {
-  NativeEar::of(extension::memory::memory(config.into()))
 }
 
 /// The ear of the skills extension, which finds skills in the folders of a chain and in the config directory.

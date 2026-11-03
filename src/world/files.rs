@@ -24,7 +24,15 @@ use std::{
   sync::atomic::{AtomicU32, Ordering},
 };
 
-use super::{SCRATCH, Scratch, bash::door, here, images, resolved};
+use super::{
+  SCRATCH, Scratch,
+  bash::door,
+  here, images, resolved,
+  scratch::{Beneath, beneath},
+};
+
+/// The scheme of the paths of the config directory of the user.
+pub const CONFIG: &str = "config://";
 use crate::{
   ear::{Co, Ear, hear, hearing, say},
   fact::Fact,
@@ -36,15 +44,16 @@ use crate::{
 /// after a folder and no walk below it, and a write with the text as it stands after, but a write
 /// of a door of a command, which the ear of the commands answers, each resolved against the working
 /// directory of the chain, or with the refusal. The path of a cd, a read or a write that is `~` or
-/// starts with `~/`, or with `~\\` on Windows, resolves against the home of the user, and one of
-/// `scratch://` against the scratch directory of the life, which no chain stands in. A file whose
-/// every line ends with CRLF reads with LF, and a write to it writes CRLF. A path whose first part
-/// is the name of an act of the life is a door that no ear of the engine served, and never a file,
-/// so the ear refuses it with the chain of that act. The path of each text, of each refusal and of
-/// each cd that it gives is as [`tilded`] writes it. A write puts the whole text in place in one
-/// step, as `stored` says, so no reader sees a torn file. A read of an image keeps it in the
-/// directory of the images of the life, the gallery, as `seen` says.
-pub fn files(scratch: Scratch, gallery: Option<PathBuf>) -> Box<dyn Ear> {
+/// starts with `~/`, or with `~\\` on Windows, resolves against the home of the user, one of
+/// `scratch://` against the scratch directory of the life, and one of `config://` against the
+/// config directory of the user, in neither of which a chain stands. A file whose every line ends
+/// with CRLF reads with LF, and a write to it writes CRLF. A path whose first part is the name of
+/// an act of the life is a door that no ear of the engine served, and never a file, so the ear
+/// refuses it with the chain of that act. The path of each text, of each refusal and of each cd
+/// that it gives is as [`tilded`] writes it. A write puts the whole text in place in one step, as
+/// `stored` says, so no reader sees a torn file. A read of an image keeps it in the directory of
+/// the images of the life, the gallery, as `seen` says.
+pub fn files(scratch: Scratch, config: PathBuf, gallery: Option<PathBuf>) -> Box<dyn Ear> {
   hearing(&["cd", "read", "write"], move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
@@ -61,7 +70,9 @@ pub fn files(scratch: Scratch, gallery: Option<PathBuf>) -> Box<dyn Ear> {
       }
       let answer = match a.kind() {
         "cd" => moved(&mut co, &a).await.map(Object::string),
-        _ => served(&mut co, &a, &scratch, gallery.as_deref()).await.map(|text| text.object()),
+        _ => {
+          served(&mut co, &a, &scratch, &config, gallery.as_deref()).await.map(|text| text.object())
+        }
       };
       let answer = answer.unwrap_or_else(|fault| fault.object());
       say(&mut co, Fact::says("done", a.about(), [answer]));
@@ -74,9 +85,11 @@ pub fn files(scratch: Scratch, gallery: Option<PathBuf>) -> Box<dyn Ear> {
 async fn moved(co: &mut Co, a: &Fact) -> Result<String, Fault> {
   let path = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
   let path = native(&path, cfg!(windows));
-  if path.starts_with("scratch:") {
+  if let Some(scheme) =
+    [SCRATCH, CONFIG].into_iter().find(|one| path.starts_with(&one[..one.len() - 2]))
+  {
     return Err(Fault::refused(format!(
-      "A chain cannot stand in {path}, since {SCRATCH} has no path to stand in."
+      "A chain cannot stand in {path}, since {scheme} has no path to stand in."
     )));
   }
   let at = placed(&here(co, a.on()).await?, &path)?;
@@ -92,6 +105,7 @@ async fn served(
   co: &mut Co,
   a: &Fact,
   scratch: &Scratch,
+  config: &Path,
   gallery: Option<&Path>,
 ) -> Result<Text, Fault> {
   let (path, content) = match a.kind() {
@@ -106,9 +120,15 @@ async fn served(
   if let Some(path) = path.strip_prefix(SCRATCH) {
     return scratch.served(path, content, gallery);
   }
-  if path.starts_with("scratch:") {
+  if let Some(path) = path.strip_prefix(CONFIG) {
+    let dir = Beneath { root: config, scheme: CONFIG, place: "the config directory" };
+    return beneath(dir, path, content, gallery, || Ok(()));
+  }
+  if let Some(scheme) =
+    [SCRATCH, CONFIG].into_iter().find(|one| path.starts_with(&one[..one.len() - 2]))
+  {
     return Err(Fault::refused(format!(
-      "{path} is no path of {SCRATCH}, which starts with two slashes."
+      "{path} is no path of {scheme}, which starts with two slashes."
     )));
   }
   if path.contains("://") {

@@ -25,7 +25,7 @@ use std::{
 use crate::{
   Ear, Engine, Fault, Object, checkpoint,
   ear::{hear, hearing, lasting},
-  extension::{self, Places, compaction::compaction, memory::memory, skills::skills, web::web},
+  extension::{self, Places, compaction::compaction, skills::skills, web::web},
   snapshot::{self, Keeper},
   world::{self, Catalog, Retries, Scratch, Writes, mcp::mcp},
 };
@@ -185,7 +185,6 @@ impl Opening {
     let mut names = vec![
       "provider",
       "extensions",
-      "memory",
       "skills",
       "web",
       "mcp",
@@ -241,12 +240,11 @@ impl Opening {
     let config = places.config;
     // An ear that holds nothing that a fresh one lacks starts again after it raises. A fresh ear of the commands
     // reads no record, since the first one ended each command that the record left open.
-    let held = config.clone();
+    let user = config.clone();
     let servers = world::mcp::Settings::of(project, config.clone(), gallery.clone());
     let mut ears = vec![
       ("provider", provider),
       ("extensions", extension::extensions(extensions)),
-      ("memory", lasting(memory(config.clone()), move || memory(held.clone()))),
       ("skills", lasting(skills(config.clone()), move || skills(config.clone()))),
       ("web", working(works.then(|| lasting(web(search.clone()), move || web(search.clone()))))),
       (
@@ -261,9 +259,9 @@ impl Opening {
       (
         "files",
         working(scratch.clone().map(|one| {
-          let again = gallery.clone();
-          lasting(world::files(one.clone(), gallery.clone()), move || {
-            world::files(one.clone(), again.clone())
+          let (again, home) = (gallery.clone(), user.clone());
+          lasting(world::files(one.clone(), user.clone(), gallery.clone()), move || {
+            world::files(one.clone(), home.clone(), again.clone())
           })
         })),
       ),

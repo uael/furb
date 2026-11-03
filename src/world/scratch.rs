@@ -121,36 +121,14 @@ impl Scratch {
     content: Option<String>,
     gallery: Option<&Path>,
   ) -> Result<Text, Fault> {
-    let at = resolved(&self.0.at, path);
-    let outside = || Fault::refused(format!("{SCRATCH}{path} is outside the scratch directory."));
-    let under = at.strip_prefix(&self.0.at).map_err(|_| outside())?.to_path_buf();
-    if !self.inside(&at) {
-      return Err(outside());
-    }
-    let name = format!("{SCRATCH}{}", slashed(&under));
-    if let Some(content) = content {
-      self.made()?;
-      if let Some(parent) = at.parent() {
-        fs::create_dir_all(parent).map_err(|no| failed(&no, &name))?;
-      }
-      stored(&at, ended(&at, content).as_bytes()).map_err(|no| failed(&no, &name))?;
-    }
-    if under.as_os_str().is_empty() || fs::symlink_metadata(&at).is_ok_and(|one| one.is_dir()) {
-      return Ok(Text::new(name, entries(&at).join("\n")));
-    }
-    text(&at, name, gallery)
-  }
-
-  /// Whether a path stands in the directory as the machine finds it: the deepest part of the path that stands,
-  /// with every link read, is under the directory, or the directory is not made yet.
-  fn inside(&self, at: &Path) -> bool {
-    let Ok(root) = fs::canonicalize(&self.0.at) else { return true };
-    let mut probe = at;
-    while fs::symlink_metadata(probe).is_err() {
-      let Some(up) = probe.parent() else { return false };
-      probe = up;
-    }
-    fs::canonicalize(probe).is_ok_and(|real| real.starts_with(&root))
+    let at = &self.0.at;
+    beneath(
+      Beneath { root: at, scheme: SCRATCH, place: "the scratch directory" },
+      path,
+      content,
+      gallery,
+      || self.made().map(|_| ()),
+    )
   }
 
   /// The directory as a life opens on its record. A new record starts with an empty directory. A directory that is
@@ -226,6 +204,66 @@ fn put(root: &Path, path: &str, content: &str) -> io::Result<()> {
     fs::create_dir_all(parent)?;
   }
   fs::write(&at, content)
+}
+
+/// A directory that a scheme names: its place on the machine, the scheme, and how a refusal names
+/// the directory.
+#[derive(Clone, Copy)]
+pub(crate) struct Beneath<'a> {
+  /// The place of the directory on the machine.
+  pub root: &'a Path,
+  /// The scheme of its paths, as `scratch://`.
+  pub scheme: &'a str,
+  /// The directory as a refusal names it, as `the scratch directory`.
+  pub place: &'a str,
+}
+
+/// What a read or a write of a path of a scheme came to: the file at that path under the directory
+/// of the scheme, with the content of the write put there first once `make` made the directory, or
+/// the entries of a folder, one on each line, each folder with `/` at its end. Each text and each
+/// refusal names the path under the scheme, and never as the machine names it, and a path that
+/// leaves the directory, by `..` or by a link, is refused.
+pub(crate) fn beneath(
+  dir: Beneath<'_>,
+  path: &str,
+  content: Option<String>,
+  gallery: Option<&Path>,
+  make: impl FnOnce() -> Result<(), Fault>,
+) -> Result<Text, Fault> {
+  let Beneath { root, scheme, place } = dir;
+  let at = resolved(root, path);
+  let outside = || Fault::refused(format!("{scheme}{path} is outside {place}."));
+  let under = at.strip_prefix(root).map_err(|_| outside())?.to_path_buf();
+  if !inside(root, &at) {
+    return Err(outside());
+  }
+  let name = format!("{scheme}{}", slashed(&under));
+  if let Some(content) = content {
+    make()?;
+    if let Some(parent) = at.parent() {
+      fs::create_dir_all(parent).map_err(|no| failed(&no, &name))?;
+    }
+    stored(&at, ended(&at, content).as_bytes()).map_err(|no| failed(&no, &name))?;
+  }
+  // The scratch directory is a folder before anything made it, and a directory of another scheme
+  // only when it stands.
+  let unmade = under.as_os_str().is_empty() && scheme == SCRATCH;
+  if unmade || fs::symlink_metadata(&at).is_ok_and(|one| one.is_dir()) {
+    return Ok(Text::new(name, entries(&at).join("\n")));
+  }
+  text(&at, name, gallery)
+}
+
+/// Whether a path stands in a directory as the machine finds it: the deepest part of the path that
+/// stands, with every link read, is under the directory, or the directory is not made yet.
+fn inside(root: &Path, at: &Path) -> bool {
+  let Ok(root) = fs::canonicalize(root) else { return true };
+  let mut probe = at;
+  while fs::symlink_metadata(probe).is_err() {
+    let Some(up) = probe.parent() else { return false };
+    probe = up;
+  }
+  fs::canonicalize(probe).is_ok_and(|real| real.starts_with(&root))
 }
 
 /// The entries of a folder, in order, each folder with `/` at its end, and no link read as a folder, as `ls` gives

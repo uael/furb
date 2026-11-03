@@ -3,6 +3,7 @@ the suite of each extension only through a conftest above it, and the helpers th
 
 import ast
 import asyncio
+import re
 import sys
 import tempfile
 from collections.abc import Callable, Generator, Mapping, Sequence
@@ -109,7 +110,7 @@ def extended(  # noqa: PLR0913
       [[x["name"], str(dict(x)["file"]) if x["word"].strip() else "", x["life"], x["root"]] for x in plays],
     ]
   sand = replace(sand or sown(), stands=[list(roster) or STANDS[0], str(at / "work"), STANDS[2], *taught])
-  files = _monty.files(str(at / "scratch"))
+  files = _monty.files(str(at / "scratch"), str(at / "config"))
   return sand, life(sand, record, extensions=given, **({name: ear(str(at / "config"))} if ear else {}), files=files)[1]
 
 
@@ -166,19 +167,27 @@ def noted(folder: Path, text: str, name: str = "AGENTS.md") -> Path:
   return path
 
 
+MEMORIES = ("AGENTS.md", "CLAUDE.md", "AGENTS.local.md", "CLAUDE.local.md")
+"""MEMORIES is the names of the memory files of a folder."""
+
+
 def recalled(chain: str, at: Path) -> list[str]:
-  """Every paragraph of memory that a chain was told of a file under a directory, in order, since a folder above
-  that directory belongs to the machine."""
-  return [one for one in of(engine.turns(on=chain), "memory") if f"_path = {tilded(at)!r}"[:-1] in one.split("\n")[1]]
+  """Every paragraph that a read told a chain of a memory file under a directory or in the config directory, in order,
+  since a folder above that directory belongs to the machine, each with read in place of the name of its read."""
+  return [
+    re.sub(r"\bread\d+", "read", one)
+    for one in of(engine.turns(on=chain), "read")
+    if (path := one.split("\n")[1].partition(" = ")[2].strip("'")).rsplit("/", 1)[-1].rsplit("\\", 1)[-1] in MEMORIES
+    and (path.startswith((tilded(at), "config://")))
+  ]
 
 
-def memorized(question: str, path: Path, text: str) -> str:
-  """The paragraph that a memory question tells of one memory file: its header, the binding of the path of the file,
-  and the binding of its text, as a quote when it holds more than one line."""
+def memorized(path: Path | str, text: str) -> str:
+  """The paragraph that a read tells of one memory file, with read in place of the name of the read: its header, the
+  binding of the path of the file, and the binding of its text, as a quote when it holds more than one line."""
   lines = text.splitlines()
-  name = question + "_text"
-  told = f"<s:{name}>\n{'\n'.join(lines)}</s:{name}>" if len(lines) > 1 else f"{name} = {lines[0]!r}"
-  return f"#{question}\n{question}_path = {tilded(path)!r}\n{told}"
+  told = f"<s:read_text>\n{'\n'.join(lines)}</s:read_text>" if len(lines) > 1 else f"read_text = {lines[0]!r}"
+  return f"#read\nread_path = {path if isinstance(path, str) else tilded(path)!r}\n{told}"
 
 
 def skilled(skills: Path, folder: str, head: str) -> Path:

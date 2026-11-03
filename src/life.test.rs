@@ -135,7 +135,6 @@ fn the_ears_of_the_crate_come_after_the_ears_of_the_host_each_under_the_name_eve
     [
       "provider",
       "extensions",
-      "memory",
       "skills",
       "web",
       "mcp",
@@ -901,7 +900,7 @@ fn a_replay_of_the_corpus_shows_each_file_of_an_extension_as_the_rung_of_its_rea
   let enables = engine.word("len(transcript('chain1', 'enable'))", vec![]).unwrap();
   assert_eq!(
     enables.as_ref().as_int(),
-    Some(7),
+    Some(8),
     "each official extension runs on the life of the corpus"
   );
   let unseeded = engine.word(UNSEEDED, vec![]).unwrap();

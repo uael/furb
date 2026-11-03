@@ -106,7 +106,7 @@ fn seeing(provider: Provider, gallery: Option<PathBuf>) -> Engine {
   let scratch = world::Scratch::own();
   let ears: [(&str, Box<dyn Ear>); 4] = [
     ("provider", provider.ear()),
-    ("files", world::files(scratch.clone(), gallery)),
+    ("files", world::files(scratch.clone(), crate::extension::Places::here().config, gallery)),
     ("bash", world::bash(scratch, &[])),
     ("time", world::time()),
   ];
