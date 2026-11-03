@@ -4274,3 +4274,67 @@ def test_a_test_file_holds_no_item_for_an_open_pr_or_a_live_worker(conductor: Ro
   assert conductor.heard == [
     "k2 waits for #7, which changes src/real.rs that it names, so two designs of one file do not race."
   ]
+
+
+def asked(conductor: Round, *messages: str) -> None:
+  conductor.lead["home"] = "chain1"
+  facts = [("prompt", m, "operator", "prompt1", "str", f"words {m}", "") for m in messages]
+  conductor.ns["transcript"] = lambda on="", of="": facts if on == "chain1" else []
+
+
+def test_a_message_with_two_asks_and_one_item_leaves_one_ask_flagged(conductor: Round) -> None:
+  asked(conductor, "prompt7")
+  conductor.files[conductor.ASKS] = json.dumps(
+    [
+      {"id": "A1", "prompt": "prompt7", "quote": "fix the gate", "items": ["gate-fix"], "prs": [], "state": "missing"},
+      {"id": "A2", "prompt": "prompt7", "quote": "and the docs", "items": [], "prs": [], "state": "missing"},
+    ]
+  )
+  conductor.queue.append(("gate-fix", "Fix the gate.", "defects"))
+  conductor.invariants()
+  assert [x["id"] for x in conductor.lost_asks()] == ["A2"]
+  assert conductor.heard == ["The ask of the owner A2 is missing, and no item carries it:\n- A2 [missing] and the docs"]
+  conductor.invariants()
+  assert len(conductor.heard) == 1
+
+
+def test_a_message_of_the_owner_that_no_ask_names_is_told_once(conductor: Round) -> None:
+  asked(conductor, "prompt7", "prompt8")
+  conductor.files[conductor.ASKS] = json.dumps([{"id": "A1", "prompt": "prompt6 + prompt7", "items": [], "state": "none"}])
+  conductor.invariants()
+  conductor.invariants()
+  assert conductor.unasked() == ["prompt8"]
+  assert conductor.heard == [
+    f"The message prompt8 of the owner holds no ask in {conductor.ASKS}: write each ask that it holds, with his quote"
+    " and the items that carry it, or one entry with the state none, before any reply closes it."
+  ]
+
+
+def test_hire_names_the_asks_that_an_item_carries_and_an_align_audit_checks_the_ledger(conductor: Round) -> None:
+  conductor.ns["quietly"] = lambda verb, *args, **words: (
+    asyncio.run(verb(*args, **words)) if getattr(verb, "__name__", "") in ("bash", "shell") else verb(*args, **words)
+  )
+  conductor.files[conductor.ASKS] = json.dumps(
+    [{"id": "A3", "prompt": "prompt9", "quote": "never again", "items": ["guard"], "state": "missing"}]
+  )
+  conductor.real_hire("guard", "x", "defects", "A brief.")
+  assert conductor.prompts[-1][0].endswith(
+    '\n\nThis item carries the asks A3 of the owner, in his words:\n- A3: "never again" (prompt9)\nServe each of them'
+    ' whole. End your report with the line "Served: <ids>" and, for each part that stays undone, "Left: <id> (why)".'
+  )
+  conductor.kinds["align2"] = "audit"
+  conductor.real_hire("align2", "check main", "defects")
+  assert conductor.ALIGNED.replace("{asks}", conductor.ASKS) in conductor.prompts[-1][0]
+  assert "carries the asks" not in conductor.prompts[-1][0]
+
+
+def test_the_audit_of_the_work_tells_each_lost_ask_and_each_message_with_no_ask(conductor: Round) -> None:
+  asked(conductor, "prompt7")
+  conductor.files[conductor.ASKS] = json.dumps(
+    [{"id": "A4", "prompt": "prompt5", "quote": "keep it", "items": ["gone"], "state": "partly"}]
+  )
+  conductor.ns["prune"] = lambda: asyncio.sleep(0, "The prune found nothing to remove.")
+  asyncio.run(conductor.audit(False))
+  told = conductor.prompts[-1][0]
+  assert f"The asks of the owner in {conductor.ASKS} that are partly or missing with no item:\n- A4 [partly] keep it\n" in told
+  assert "The messages of the owner that no ask names: prompt7\n" in told

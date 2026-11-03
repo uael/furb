@@ -79,6 +79,7 @@ The owner rules, on 10-29: "we should use more gh stacks in conductor, because t
 reload(path, on) loads the definitions of the file of an extension into the module of a chain: it runs, in the order of the file, each top-level definition whose binding in the module now is not its text in the file, and ends the load with seal(path). Before it starts the load, it gates the load word, and it raises Refused with one line when a name that the file imports from furb.engine does not fit the engine that the life runs, as a call with a parameter that the bash of the life lacks: the file needs the engine of a newer build, and a restart of the life on that build loads it. Monty gives a function no source, so seal keeps in bindings the object that each name of the load bound and its text, and a binding has that text only while the module holds that same object: a later word that binds the name again, an older word or another extension, makes the next reload run it again, and a load that was cancelled or failed before its end loads again. Then seal raises Refused with each name of the file that the module binds with another text, so a load that leaves the round on old code fails and says which names. reload gives (rung, names): the rung that runs the load, which quietly starts so that no end of the caller cancels it, and the names. The load is done only when that rung is over and peek(rung) is no exception: await it. Use it after a PR that changed the conductor merged.
 The owner rules, on 10-31, after #816 and #859 merged green and wrong, since no gate compared a PR with his words: an item may hold his exact words in rulings[key], a list of str, each quoted as he wrote it. hire puts them at the top of the brief, under RULED, before any line of yours. Before its merge, each green PR whose item, by its label w:key or by owns, holds rulings passes the veto bent: a blind judge on a chain of its own, the ruler model in limits["models"] under a grant of RULER_USD dollars, reads his words and the diff alone, and closes with each way that the diff fails or bends them, each with his exact words. A head with a gap does not merge, and its worker gets the gaps, or a worker on its chain when it ended, and a comment on the PR names them; a head that the judge cleared merges, and each new head is judged again, with the gaps of the earlier heads and the commits that answered them, so that the judge names only a gap that the newest head made or left open; the round never holds a PR for the owner by itself, by his ruling on 10-31: "it's not supposed to be on me to remove the flag. And it should be fixed until judged ok, automatically", so each new head is judged until the judge finds no gap, and only a label hold of the owner stops the loop. Each order to fix holds the gaps of every head that a judge held, the oldest first and each once, so that the worker fixes each once and trades no gap for another, and after JUDGE_ROUNDS (3) heads with gaps each fix goes to the stronger model in limits["models"] (opus/high), so the loop converges. A hold that an earlier word put after JUDGE_ROUNDS heads comes off at the next sweep, and its PR is judged again. A judge that fails twice, with no answer or with a quote that is not his, tells you and holds the PR: judge it yourself, then set judged["n sha"]["state"] to "cleared", or give the gaps to its worker. judged keeps the state of each head.
 The owner rules again, on 10-31, after #905 merged two minutes after a judge cleared its head, with no word on the 4 gaps that a judge found at its earlier head: "WTF is wrong with you ?????????????? Please stop doing shit now and think of the proper action frist time", and of #912: "and same for 912 ! if it get merged, then follow ups are needed." So the judge of a head after heads with gaps closes with an account of each earlier gap, ACCOUNT: fixed at a file and a line of the head, or open. accounted() reads it: an account that leaves out an earlier gap fails the judge as a clear would, and an open gap holds the head as a new gap does. Before such a head merges, posted() reads the line of the head that the account names for each fix: a gap whose line is not there, or whose text differs from the text that the judge copied, sends the head back to its worker with that gap, and seconded() then gives each gap, the line that the account names and the diff to a second blind judge, SECOND, in one prompt for each head: a gap that it does not see fixed sends the head back to its worker with that gap, a judge that fails twice holds the head and tells the coordinator, and the head merges only once each gap shows fixed, the second judge saw each fix, and the comment of the account stands on the PR. When a PR whose heads had gaps merges, by the round or by any hand, followed() takes the gaps from the judged entries of the PR, reads each fix of the account in main at the merge commit, and queues at once one follow-up item gapN-i for each gap that main does not show fixed, with the gap, the PR and the words of the owner in its brief, on the model of the worker of that PR.
+The owner rules, after his words went to no item: "What are you doing if my words were not properly dispatched ? This whole life will fail if this is your default behavior. ... IT MUST NEVER HAPPEN AGAIN". So ASKS is the ledger of his asks, a list of {id, prompt, quote, ask, items, prs, state, evidence, gap}, whose state is one of ASK_STATES. Write the asks of each message of the owner on lead["home"] there before any reply closes it: each ask with his exact quote, the id of the message in prompt, and the keys of the items that carry it in items, or one entry with the state none for a message that asks nothing. Each round tells you once each message of the owner that no entry names, and each ask that is partly or missing with no item in queue, backlog, working or an open PR. hire adds to the brief of each item the asks whose items name its key, in his words. An audit item whose key starts with align checks each ask against origin/main and writes back its state, its evidence and its gap, and when it ends, and at every audit of the work, the round tells you each ask that is partly or missing with no item.
 A statement of yours to the owner states only what a command of the same word proved, and names each other part as a hypothesis.
 A review blocks only on a defect that a command reproduces, or on a false sentence of a contract."""
 
@@ -110,6 +111,7 @@ GREEN = ("SUCCESS", "SKIPPED", "NEUTRAL")
 RUNNING = ("", "PENDING", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED", "EXPECTED")
 UPSTREAM = "uael/monty"
 TOOLING = ".furb/tooling.json"
+ASKS = "scratch://owner/asks.json"
 STATES = ("open", "queued", "closed", "dropped")
 ARCHIVE = ".furb/archive"
 TRASHED = ".furb/trashed-branches.tsv"
@@ -744,7 +746,9 @@ def hire(key: str, what: str, thread: str = "", brief: str = "", model: str = ""
   if kind_of(key) != "audit" and "{workspace}" not in text:
     text += "\n\n{workspace}"
   text, slot = placed(key, text, where)
-  text = ruled(key) + text
+  if kind_of(key) == "audit" and key.startswith("align"):
+    text += "\n\n" + ALIGNED.replace("{asks}", ASKS)
+  text = ruled(key) + text + ("" if "carries the asks" in text else carried(key))
   name = str(quietly(prompt, tuple[int, str], text, to=model, on=where))
   working[name] = key
   models[name] = model
@@ -1039,6 +1043,8 @@ def tend() -> None:
       heard.append(f"The auditor {key} ({name}) ended, and results[{name!r}] keeps its report.")
       confessed(key, name, got)
       register(key, name)
+      if key.startswith("align"):
+        heard.append(f"After the audit {key}, the asks of the owner that are partly or missing with no item:\n{asks_text(lost_asks())}")
     else:
       quietly(prompt, None, f"The worker {key} ({name}) ended with no PR:\n\n{str(got)[:2000]}" + merged_since())
   for asked, key in list(debriefs.items()):
@@ -1499,6 +1505,7 @@ async def restack_forced() -> set[int]:
 SERIAL = re.compile(r"^(src/furb/engine\.py|DOCTRINE\.md|\.github/budgets\.json)$")
 
 
+ALIGNED = """This audit checks the work against the words of the owner. Check each ask of the ledger of his asks, {asks} ($TMPDIR/owner/asks.json), against origin/main, as a claim: set its state to done, open, partly or missing, with its evidence, the file and the line or the command and the lines that it printed, and its gap, and write the ledger back in the same shape. List in your register each ask that is partly or missing and that no item carries."""
 RULED = """The words of the owner, which rule this item, quoted as he wrote them. Each other line of this brief is the reading of the coordinator, and it serves his words: where a line bends them, his words rule."""
 RULER = limits["models"]["ruler"]
 RULER_USD = 5.0
@@ -2119,6 +2126,8 @@ async def audit(red: bool) -> None:
     prompt,
     None,
     f"Audit of the work, with the measures {measures[-6:]}:\n{line}\nIssues: {'; '.join(issues) or 'none'}\n"
+    f"The asks of the owner in {ASKS} that are partly or missing with no item:\n{asks_text(lost_asks())}\n"
+    f"The messages of the owner that no ask names: {', '.join(unasked()) or 'none'}\n"
     f"The open defects of the tooling in {TOOLING}, {len(entries)} in all, the most repeated first:\n{flaws}\n"
     f"{pruned}\nCheck each worker and each PR against it, fix what is off, turn the worst defect of the tooling into"
     " the next item, and go on." + merged_since(),
@@ -2629,6 +2638,17 @@ def invariants() -> None:
     if paused(where) and f"paused {where}" not in noticed:
       noticed.add(f"paused {where}")
       heard.append(f"The chain {where} of {item} stays paused after the round woke it.")
+  for m in unasked():
+    if f"unasked {m}" not in noticed:
+      noticed.add(f"unasked {m}")
+      heard.append(
+        f"The message {m} of the owner holds no ask in {ASKS}: write each ask that it holds, with his quote and the"
+        " items that carry it, or one entry with the state none, before any reply closes it."
+      )
+  for x in lost_asks():
+    if f"lost ask {x.get('id')} {x.get('state')}" not in noticed:
+      noticed.add(f"lost ask {x.get('id')} {x.get('state')}")
+      heard.append(f"The ask of the owner {x.get('id')} is {x.get('state')}, and no item carries it:\n{asks_text([x])}")
   chains = open_chains()
   for c in chains[cap():]:
     name = next((n for n in working if str(get(n)[3]) == c), "")
@@ -2724,6 +2744,52 @@ def settle_flaw(part: str, pr: int) -> int:
   if hit:
     quietly(write, Text(TOOLING, json.dumps(entries, indent=1) + "\n"))
   return len(hit)
+
+
+ASK_STATES = ("open", "partly", "missing", "done", "none")
+
+
+def owner_asks() -> list[dict]:
+  try:
+    got = json.loads(read(ASKS, HIDDEN).content)
+  except (Refused, ValueError):
+    return []
+  return [x for x in got if isinstance(x, dict)] if isinstance(got, list) else []
+
+
+def owner_messages() -> list[str]:
+  return [str(x[1]) for x in transcript(lead.get("home") or ROOT) if x[0] == "prompt" and x[2] == OPERATOR]
+
+
+def unasked() -> list[str]:
+  named = {p for x in owner_asks() for p in re.findall(r"prompt\d+", str(x.get("prompt", "")))}
+  return [m for m in owner_messages() if m not in named]
+
+
+def lost_asks() -> list[dict]:
+  live = {q[0] for q in [*queue, *backlog]} | set(working.values())
+  live |= {m[2:] for p in prs.values() for m in p["labels"] if m[:2] == "w:"}
+  return [
+    x
+    for x in owner_asks()
+    if x.get("state") in ("partly", "missing") and not live & {str(i) for i in x.get("items") or []}
+  ]
+
+
+def asks_text(found: list[dict]) -> str:
+  return "\n".join(f"- {x.get('id')} [{x.get('state')}] {str(x.get('quote', ''))[:200]}" for x in found) or "none"
+
+
+def carried(key: str) -> str:
+  held = [x for x in owner_asks() if key in [str(i) for i in x.get("items") or []]]
+  if not held:
+    return ""
+  ids = ", ".join(str(x.get("id")) for x in held)
+  lines = "\n".join(f"- {x.get('id')}: \"{x.get('quote', '')}\" ({x.get('prompt', '')})" for x in held)
+  return (
+    f"\n\nThis item carries the asks {ids} of the owner, in his words:\n{lines}\nServe each of them whole. End your"
+    ' report with the line "Served: <ids>" and, for each part that stays undone, "Left: <id> (why)".'
+  )
 
 
 PRUNE_PY = """import hashlib, json, os, shutil, subprocess, sys, time
