@@ -148,6 +148,16 @@ export class App {
   readonly context: BoxRenderable;
   /** The row under the feed and the sidebar: the input with the footer, and the context. */
   readonly lower: BoxRenderable;
+  /** The column of the corner, as wide as the sidebar: the context beside the input, and under it the keys of the
+   * footer, on the row of the footer. */
+  readonly corner: BoxRenderable;
+  /** The keys of the footer while the sidebar stands: they stand under the context, where the footer has no room for
+   * them beside the state. */
+  readonly cornerKeys: BoxRenderable;
+  /** The column of the sidebar: the list, and half a row of its panel under it, as a thread of the feed ends. */
+  readonly railSlot: BoxRenderable;
+  /** The half row of the panel under the list of the sidebar, which a sidebar in place of the feed does not draw. */
+  readonly railEdge: BoxRenderable;
   /** The row at the top of the sidebar that says how to go back to the feed: a narrow terminal shows the sidebar in
    * place of the feed, which the screen holds. */
   readonly railBack: BoxRenderable;
@@ -595,11 +605,21 @@ export class App {
     this.hints = this.row();
     footer.add(this.hints);
     below.add(footer);
+    // The sidebar ends with half a row of its panel and a row of space parts it from the context, as a thread of the
+    // feed ends and a row of space parts it from the input: the two gaps are one.
+    this.railSlot = this.box({
+      id: "sidebar-slot",
+      flexDirection: "column",
+      width: session.preferences.sidebarWidth,
+      flexShrink: 0,
+      marginBottom: space.section,
+    });
     this.rail = this.box({
       id: "sidebar",
       width: session.preferences.sidebarWidth,
-      // A row of space parts the list of the sidebar from the context under it.
-      marginBottom: space.section,
+      flexGrow: 1,
+      flexShrink: 1,
+      minHeight: 0,
       backgroundColor: c.panel,
       overflow: "hidden",
     });
@@ -631,14 +651,24 @@ export class App {
     this.railSpaces.verticalScrollBar.visible = false;
     this.railSpaces.horizontalScrollBar.visible = false;
     this.rail.add(this.railSpaces);
-    upper.add(this.rail);
-    // The context starts with half a row of its panel, as the panel of the input does, so that their tops meet.
-    this.context = this.box({
-      id: "context",
+    this.railSlot.add(this.rail);
+    this.railEdge = this.box({
+      height: space.bar,
+      border: ["top"],
+      borderColor: c.panel,
+      customBorderChars: { ...noBorder, horizontal: glyph.halfBottom },
+    });
+    this.railSlot.add(this.railEdge);
+    upper.add(this.railSlot);
+    // The context starts and ends with half a row of its panel, as the panel of the input does, so that their tops
+    // and their bottoms meet. The keys of the footer stand under it, on the row of the footer.
+    this.corner = this.box({
+      id: "corner",
       width: session.preferences.sidebarWidth,
       flexShrink: 0,
       visible: false,
     });
+    this.context = this.box({ id: "context", flexGrow: 1 });
     this.context.add(
       this.box({
         height: space.bar,
@@ -649,7 +679,18 @@ export class App {
     );
     this.railUsage = this.box({ flexGrow: 1, paddingX: space.inset, backgroundColor: c.panel });
     this.context.add(this.railUsage);
-    this.lower.add(this.context);
+    this.context.add(
+      this.box({
+        height: space.bar,
+        border: ["top"],
+        borderColor: c.panel,
+        customBorderChars: { ...noBorder, horizontal: glyph.halfBottom },
+      }),
+    );
+    this.corner.add(this.context);
+    this.cornerKeys = this.row({ height: 1, flexShrink: 0, paddingX: space.inset, overflow: "hidden" });
+    this.corner.add(this.cornerKeys);
+    this.lower.add(this.corner);
     session.on("change", this.schedule);
     options.workspaces.on("change", this.schedule);
     session.on("compose", this.compose);
@@ -909,11 +950,16 @@ export class App {
       this.drawer = false;
     this.rail.visible = this.sidebarShown;
     this.rail.width = this.sideWidth || w.preferences.sidebarWidth;
+    this.railSlot.visible = this.sidebarShown;
+    this.railSlot.width = this.rail.width;
+    // A sidebar in place of the feed has no context under it, so it takes the whole height.
+    this.railSlot.marginBottom = this.drawerOpen ? 0 : space.section;
+    this.railEdge.visible = !this.drawerOpen;
     this.screen.visible = !this.drawerOpen;
     this.lower.visible = !this.drawerOpen;
     // On a narrow terminal, or with the sidebar hidden, the context folds into a line of the footer.
-    this.context.visible = this.sidebarShown && !this.drawerOpen;
-    this.context.width = w.preferences.sidebarWidth;
+    this.corner.visible = this.sidebarShown && !this.drawerOpen;
+    this.corner.width = w.preferences.sidebarWidth;
     this.railBack.visible = this.drawerOpen;
     this.renderTop();
     const pending = w.operatorPrompt;
@@ -1031,7 +1077,7 @@ export class App {
     this.renderStatus();
     this.renderContent();
     this.renderRail();
-    if (this.context.visible) this.renderRailUsage();
+    if (this.corner.visible) this.renderRailUsage();
     this.suggest();
     this.ghosting();
     const diagnostics = JSON.stringify([w.rejectedWord, w.findings]);

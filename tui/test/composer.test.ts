@@ -647,9 +647,8 @@ test("a paused chain names the act that paused it and its own error, and no olde
 test("the footer offers the keys of the top layer that acts, and a click on one does what its key does", () =>
   composing(
     async ({ session, app, screen, frame, click }) => {
-      // The last row holds the usage of the chain at the right, in the sidebar, so the footer is the row to the end of the feed.
-      const footer = async () =>
-        ((await frame()).trimEnd().split("\n").at(-1) ?? "").slice(0, app.feedWidth + 2).trim();
+      // The last row holds the state at the left, and the keys under the context in the sidebar.
+      const footer = async () => ((await frame()).trimEnd().split("\n").at(-1) ?? "").trim();
       await idle(session);
       expect(await footer()).toEndWith("⌃P commands   F1 help");
       const id = await session.engine.prompt("bool", {
