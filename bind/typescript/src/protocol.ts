@@ -145,28 +145,32 @@ export type Request1 =
       verb: "view.dispose";
     });
 /**
- * What a peer is: a window of an operator, or the process of a kit.
+ * What a peer is: a window of an operator, or the process of a skill.
  */
-export type Kind = "window" | "kit";
+export type Kind = "window" | "skill";
 /**
- * Where a window shows a view.
+ * Where a window shows a view. The dock follows the chain that it names, and the row, the detail
+ * and the mark follow the chain of the act that they name. The sidebar, the footer, a screen and
+ * an overlay follow the life.
  */
 export type Slot =
   | {
+      on: string;
       slot: "dock";
     }
   | {
       slot: "sidebar";
     }
   | {
-      kind: string;
+      act: string;
       slot: "row";
     }
   | {
-      kind: string;
+      act: string;
       slot: "detail";
     }
   | {
+      act: string;
       slot: "mark";
     }
   | {
@@ -244,7 +248,7 @@ export type Tone = "text" | "muted" | "faint" | "accent" | "success" | "warning"
  */
 export type Gesture = "press" | "change" | "submit";
 /**
- * What a kit asks of a window.
+ * What a skill asks of a window.
  */
 export type Effect =
   | {
@@ -429,7 +433,7 @@ export interface Protocol {
   frame: Frame;
 }
 /**
- * The first frame of a peer: the protocol that it speaks, its kind, and the name of a kit.
+ * The first frame of a peer: the protocol that it speaks, its kind, and the name of a skill.
  */
 export interface Hello {
   protocol: number;
@@ -437,12 +441,13 @@ export interface Hello {
   name?: string | null;
 }
 /**
- * A view that a window mounts in a slot, which the process of a kit serves.
+ * A view that a window mounts in a slot of a life, which the process of a skill serves.
  */
 export interface Mount {
   viewer: string;
+  life: string;
   slot: Slot;
-  kit: string;
+  skill: string;
 }
 /**
  * The tree of a view, which takes the place of each tree of a lower version.
@@ -470,7 +475,7 @@ export interface ViewEvent {
   value?: string | null;
 }
 /**
- * What a kit asks of the one window of a view.
+ * What a skill asks of the one window of a view.
  */
 export interface ViewEffect {
   viewer: string;
@@ -484,7 +489,7 @@ export interface Dispose {
 }
 /**
  * A peer as the daemon knows it after its hello: the login that its transport proved, its role,
- * its kind, and the name of a kit.
+ * its kind, and the name of a skill.
  */
 export interface Peer {
   login: string;

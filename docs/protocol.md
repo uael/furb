@@ -1,6 +1,6 @@
 # The protocol of the host
 
-`furb-host` is the daemon of a machine: it holds each life, and each window or kit reaches it over one protocol. This
+`furb-host` is the daemon of a machine: it holds each life, and each window or skill reaches it over one protocol. This
 page says that protocol. Its version is `PROTOCOL`, now 1. The crate gives its JSON Schema in
 `host/protocol.schema.json`, and `bind/typescript/src/protocol.ts` holds the types that `bun run protocol` makes from
 that schema. A test of each side fails when the schema or the types do not agree with the code.
@@ -30,7 +30,7 @@ The first frame of a peer is its hello:
 {"id": 0, "verb": "hello", "protocol": 1, "kind": "window", "name": null}
 ```
 
-- `kind` is `window` or `kit`, and a kit gives its `name`.
+- `kind` is `window` or `skill`, and a skill gives its `name`.
 - The daemon answers with its protocol and the peer as it knows it: its login, its role, its kind and its name.
 
   ```json
@@ -77,14 +77,21 @@ it is not given. The daemon answers requests in any order.
 
 ## Views
 
-A view is a tree of nodes that the process of a kit serves, and a window draws.
+A view is a tree of nodes that the process of a skill with code serves, and a window draws. The types of this section
+are versioned with the protocol, and `@uael/furb/protocol` gives them to TypeScript.
 
-- `view.mount {viewer, slot, kit}`: a window mounts a view of a kit in a slot: `dock`, `sidebar`, `row` or `detail`
-  of a kind of act, `mark`, `footer`, `screen` or `overlay`.
+- `view.mount {viewer, life, slot, skill}`: a window mounts a view of a skill in a slot of a life. A slot follows a
+  chain or the life:
+  - `dock {on}` follows the chain `on`.
+  - `row {act}`, `detail {act}` and `mark {act}` follow the chain of the act: its row, its detail, or a mark in the
+    feed after it, for an act of a kind that the skill draws.
+  - `sidebar`, a section of the sidebar, `footer`, `screen` and `overlay` follow the life. An overlay takes the place of
+    a choice, a form or a confirmation.
 - `view.tree {viewer, slot, version, tree}`: the tree of a view, which takes the place of each tree of a lower
   version.
-- `view.event {viewer, node, kind, value}`: a person pressed, changed or submitted a node, with the value of an input.
-- `view.effect {viewer, effect}`: the kit asks the one window of the view to open a URL, to set the draft, or to show a
+- `view.event {viewer, node, kind, value}`: a person pressed, changed or submitted a node, by its `id`, with the value
+  of an input.
+- `view.effect {viewer, effect}`: the skill asks the one window of the view to open a URL, to set the draft, or to show a
   notice.
 - `view.dispose {viewer}`: the view ends in its window.
 
