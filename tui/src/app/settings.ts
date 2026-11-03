@@ -6,6 +6,7 @@ import { clip, modelName } from "../format.ts";
 import {
   theme as c,
   colorless,
+  markdownSyntax,
   paletteOf,
   palettes,
   setTheme,
@@ -244,10 +245,11 @@ export const settings = part({
     for (const input of [this.composer, this.search]) Object.assign(input, inputColors(c.panel));
     this.clear(this.scroll);
     this.cards.clear();
-    const previous = this.style;
+    const previous = [this.style, this.bodyStyle];
     this.style = syntax();
+    this.bodyStyle = markdownSyntax();
     this.composer.syntaxStyle = this.style;
-    previous.destroy();
+    for (const one of previous) one.destroy();
   },
 
   async highlightEditor(): Promise<void> {

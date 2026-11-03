@@ -1350,8 +1350,8 @@ async def mend(pr: dict, now: float, red: bool) -> str:
 
 
 async def failed_lines(pr: dict) -> list[str]:
-  got = await shell(PRLINES.replace("{sha}", pr["sha"]), timeout=300)
-  return [x for x in got.stdout.lines if x.strip()][:30]
+  got = await shell(PRLINES.replace("{sha}", pr["sha"]), timeout=300, ok=True)
+  return [x for x in got.stdout.lines if x.strip()][:30] if got.code == 0 else []
 
 
 def alike(line: str) -> str:
@@ -1506,8 +1506,9 @@ async def probe(pr: dict) -> None:
     f"git fetch -q origin {spec(pr['base'])}; git fetch -q origin refs/pull/{pr['n']}/head;"
     f" git merge-tree --write-tree {shq('origin/' + pr['base'])} {shq(pr['sha'])} >/dev/null 2>&1; echo $?",
     timeout=180,
+    ok=True,
   )
-  if got.stdout.lines[-1:] == ["1"]:
+  if got.code == 0 and got.stdout.lines[-1:] == ["1"]:
     pr["mergeable"] = "CONFLICTING"
 
 
@@ -1528,7 +1529,11 @@ async def restack_forced() -> set[int]:
     got = await shell(
       f"git fetch -q origin {spec(parent['head'])}; git merge-base --is-ancestor {shq(old)} {shq(new)}; echo $?",
       timeout=180,
+      ok=True,
     )
+    if got.code != 0:
+      noticed.discard(key)
+      continue
     if got.stdout.lines[-1:] == ["0"]:
       continue
     moved.add(n)
@@ -1737,12 +1742,12 @@ async def bent(pr: dict) -> bool:
   if past:
     rounds = []
     for (old, found), nxt in zip(past, [*(s for s, _ in past[1:]), sha]):
-      said = await shell(f"git log --format='  - %s' {old}..{nxt} 2>/dev/null | head -10", timeout=60)
+      said = await shell(f"git log --format='  - %s' {old}..{nxt} 2>/dev/null | head -10", timeout=60, ok=True)
       rounds.append(
         f"At {old[:7]} the judge found:\n"
         + "\n".join(f"  - {x}" for x in found)
         + "\nThe worker pushed up to the next head:\n"
-        + (said.stdout.content.rstrip() or "  (no commit is known)")
+        + ((said.stdout.content.rstrip() if said.code == 0 else "") or "  (no commit is known)")
       )
     history = HISTORY.replace("{rounds}", "\n".join(rounds))
   where = str(quietly(chain, f"judge/{keys[0]}/{n}"))
@@ -1837,6 +1842,7 @@ async def posted(pr: dict, held: dict) -> bool:
       f"git fetch -q origin refs/pull/{n}/head 2>/dev/null; "
       + "".join(f"echo \"$(git show {shq(sha + ':' + hit[1])} 2>/dev/null | sed -n {int(hit[2])}p)\"; " for hit in fixed.values()),
       timeout=120,
+      ok=True,
     )
     if got.code != 0:
       return False
@@ -1860,7 +1866,7 @@ async def posted(pr: dict, held: dict) -> bool:
     f"🤖 The judge cleared {sha[:7]}, and a second blind judge saw each fix below in the diff. The account of each gap"
     f" that a judge found at an earlier head of #{n}:\n\n" + "\n".join(rows)
   )
-  got = await shell(f"gh pr comment {n} --body-file -", stdin=marked(body) + "\n", timeout=120)
+  got = await shell(f"gh pr comment {n} --body-file -", stdin=marked(body) + "\n", timeout=120, ok=True)
   if got.code != 0:
     return False
   held.update(posted=True, shown=shown)
@@ -1876,6 +1882,7 @@ async def followed(n: int) -> None:
     got = await shell(
       f"gh pr view {n} --json state,mergeCommit,labels --jq '[.state, (.mergeCommit.oid // \"-\"), ([.labels[].name] | join(\",\"))] | join(\" \")'",
       timeout=120,
+      ok=True,
     )
     if got.code != 0:
       return
@@ -1893,6 +1900,7 @@ async def followed(n: int) -> None:
           "git fetch -q origin main || exit 9; "
           + "".join(f"git show {shq(merge + ':' + shown[gap][0])} 2>/dev/null | grep -qF -- {shq(shown[gap][1])} && echo yes || echo no; " for gap in checks),
           timeout=180,
+          ok=True,
         )
         if out.code != 0:
           return
@@ -2043,7 +2051,9 @@ def owner_review(pr: dict, line: str) -> bool:
 
 
 async def review(seed: bool) -> None:
-  got = await shell(REVIEWS, timeout=600)
+  got = await shell(REVIEWS, timeout=600, ok=True)
+  if got.code != 0:
+    return
   rows = [p for p in (x.split("\t", 5) for x in got.stdout.content.splitlines()) if len(p) == 6 and p[1] not in comments]
   mine = [p for p in rows if p[2] == OWNER and not by_round(p[5])]
   kinds = {"c": "pulls", "i": "issues"}
@@ -2054,8 +2064,8 @@ async def review(seed: bool) -> None:
       + "/reactions --jq '[.[] | select(.content == \"+1\") | .user.login] | index(\"" + OWNER + "\") != null' 2>/dev/null)"
       for p in others
     ]
-    seen = await shell("; ".join(asks), timeout=300)
-    yes = {x.split(" ")[0] for x in seen.stdout.content.splitlines() if x.endswith(" true")}
+    seen = await shell("; ".join(asks), timeout=300, ok=True)
+    yes = {x.split(" ")[0] for x in seen.stdout.content.splitlines() if x.endswith(" true")} if seen.code == 0 else set()
     mine += [p for p in others if p[1] in yes]
   comments.update(p[1] for p in rows if p[2] == OWNER)
   comments.update(p[1] for p in mine)
@@ -2191,8 +2201,8 @@ async def take_issues() -> None:
     if key in handled and not fresh:
       continue
     if by_round(body):
-      yes = await shell("gh api repos/{owner}/{repo}/issues/" + str(it["n"]) + "/reactions --jq '[.[] | select(.content == \"+1\") | .user.login] | index(\"" + OWNER + "\") != null'", timeout=120)
-      if yes.stdout.content.strip() != "true":
+      yes = await shell("gh api repos/{owner}/{repo}/issues/" + str(it["n"]) + "/reactions --jq '[.[] | select(.content == \"+1\") | .user.login] | index(\"" + OWNER + "\") != null'", timeout=120, ok=True)
+      if yes.code != 0 or yes.stdout.content.strip() != "true":
         continue
     handled.add(key)
     if taken(key) or any(q[0] == key for q in backlog) or any(f"w:{key}" in pr["labels"] for pr in prs.values()):
@@ -2453,7 +2463,7 @@ async def changed_files() -> None:
   for n in [n for n in touched if n not in prs]:
     del touched[n]
   for pr in [p for p in prs.values() if p["head"].startswith("w/") and touched.get(p["n"], {}).get("sha") != p["sha"]]:
-    got = await shell(f"gh pr view {pr['n']} --json files --jq '.files[].path'", timeout=120)
+    got = await shell(f"gh pr view {pr['n']} --json files --jq '.files[].path'", timeout=120, ok=True)
     if got.code == 0:
       touched[pr["n"]] = {"sha": pr["sha"], "paths": [x.strip() for x in got.stdout.lines if x.strip()]}
 
@@ -2608,7 +2618,9 @@ def invariants() -> None:
 
 
 async def upstream_watch() -> None:
-  got = await shell(UPSTREAMING.replace("{upstream}", UPSTREAM), timeout=120)
+  got = await shell(UPSTREAMING.replace("{upstream}", UPSTREAM), timeout=120, ok=True)
+  if got.code != 0:
+    return
   for line in got.stdout.lines:
     n, head, title, url = [*line.split("\t"), "", "", ""][:4]
     if n and f"upstream-ready {n}" not in noticed:
@@ -2884,6 +2896,7 @@ async def prune() -> str:
     's=$(dirname "$TMPDIR"); [ "$(basename "$s")" = scratch ] || s=/nonexistent; python3 -I - "$TMPDIR/prune.json" "$s"',
     stdin=PRUNE_PY,
     timeout=1800,
+    ok=True,
   )
   return (got.stdout.lines[-1:] or [f"The prune failed: {got.stderr.content[-300:]}"])[0]
 
@@ -3156,7 +3169,7 @@ MAIN_ACTIVITY = """gh api 'repos/{owner}/{repo}/activity?ref=refs/heads/main&per
 
 
 async def main_pushes() -> None:
-  got = await shell(MAIN_ACTIVITY, timeout=120)
+  got = await shell(MAIN_ACTIVITY, timeout=120, ok=True)
   try:
     events = json.loads(got.stdout.content) if got.code == 0 else []
   except ValueError:
@@ -3225,10 +3238,10 @@ async def sweep(every: float) -> None:
     red, tip = True, next(iter(redmain))
   if not red:
     redmain.clear()
-  elif tip not in redmain:
-    failed = await shell(REDLINES.replace("{sha}", tip), timeout=300)
+  elif not redmain.get(tip):
+    failed = await shell(REDLINES.replace("{sha}", tip), timeout=300, ok=True)
     redmain.clear()
-    redmain[tip] = list(failed.stdout.lines)
+    redmain[tip] = list(failed.stdout.lines) if failed.code == 0 else []
   if red:
     # A PR whose failed lines all fail on main too waits on main: no order and no fixer can fix them.
     for one in [p for p in prs.values() if p["verdict"] == "fail" and p["head"].startswith("w/")]:
@@ -3265,8 +3278,9 @@ async def sweep(every: float) -> None:
       continue
     if pr.get("files") == 0 and not pr["draft"]:
       said = marked("🤖 This PR changes no file: main holds all of its change, so the round closes it.")
-      await shell(f"gh pr close {n} --comment {shq(said)}", timeout=120)
-      heard.append(f"#{n} ({pr['head']}) changed no file, so the round closed it.")
+      closed = await shell(f"gh pr close {n} --comment {shq(said)}", timeout=120, ok=True)
+      if closed.code == 0:
+        heard.append(f"#{n} ({pr['head']}) changed no file, so the round closed it.")
       continue
     pr["state"] = await mend(pr, now, red)
     if "owner-merge" in pr["labels"]:
@@ -3312,9 +3326,11 @@ async def sweep(every: float) -> None:
   await upstream_watch()
   repo = ops()[0]
   if repo:
-    watched = await shell(OPS_WATCH.replace("{ops}", repo), timeout=300)
+    watched = await shell(OPS_WATCH.replace("{ops}", repo), timeout=300, ok=True)
     wrote = [
-      p for p in (x.split("\t", 3) for x in watched.stdout.content.splitlines()) if len(p) == 4 and p[1] not in comments
+      p
+      for p in (x.split("\t", 3) for x in watched.stdout.content.splitlines() if watched.code == 0)
+      if len(p) == 4 and p[1] not in comments
     ]
     comments.update(p[1] for p in wrote)
     fresh = [p for p in wrote if p[2] == OWNER and not by_round(p[3])]
@@ -3326,7 +3342,8 @@ async def sweep(every: float) -> None:
         + "\n".join(f"ops#{p[0]} {p[3][:1500]}" for p in fresh)
         + merged_since(),
       )
-    timers["ops"] = clock()
+    if watched.code == 0:
+      timers["ops"] = clock()
   await mark()
   await watch_ci()
   if now - timers.get("review", now - every) >= every:

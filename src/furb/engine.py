@@ -70,11 +70,11 @@ def turns(on="") -> list[tuple]:
         sent = []
       case ("tell", *_, notes):
         user.append("\n".join(notes))
-  return [*folded, ("user", "\n\n".join(sent + user), None, None)]
+  return folded + [("user", "\n\n".join(sent + user), None, None)]  # noqa: RUF005
 
 
 def module(on="") -> dict:
-  return (transcript(on, "module") or [[{}] * 4])[-1][3]
+  return (transcript(on, "module") or [[{}]])[-1][-1]
 
 
 def program(on="") -> dict[str, str]:
@@ -367,7 +367,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
             seat = placed(last[1])
         case ("rung", rid, _, _, "", *_):
           waiting[rid] = running[rid] = ""
-        case ("tell", *_, notes) if notes not in (["chain()"], [*r[4:5]]):
+        case ("tell", *_, notes) if notes not in (["chain()"], list(r[4:5])):
           heard.append("\n".join(notes))
           ran = ""
           if a is note:
@@ -398,7 +398,11 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
         continue
       waits = [c for *_, c in transcript(id, "wants") if not over(c)]
       if step not in waiting and (
-        step := next((x for x in waiting if not (paused(x) or over(x) or (ran and waits))), "")
+        step := min(
+          (x for x in waiting if not (paused(x) or over(x) or (ran and waits))),
+          key=lambda x: len(transcript(id, get(x)[2])),
+          default="",
+        )
       ):
         maker, to = get(step)[2::4]
         if offered(last[0], to) is None:
@@ -418,11 +422,11 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
 
 def seeded(id, last, to):
   rung('debug(t"{standing()[4]=}")', to=to)
-  rung(f"read({last[3]!r})", to=to)
+  rung("read(" + repr(last[3]) + ")", to=to)
   for k in 0, 1:
     k and (yield "setup", id)
     for x in last[4]:
-      x[1] and x[3] == k and rung(f"rung(read({x[1]!r}, HIDDEN).content)", to=to)
+      x[1] and x[3] == k and rung("rung(read(" + repr(x[1]) + ", HIDDEN).content)", to=to)
     (w := "\n".join(y[2] for y in last[4] if y[3] == k and y[2])) and rung(w, to=to)
 
 
@@ -641,7 +645,7 @@ def shown(text, show):
 def unquoted(word):
   made, at, stray = [], 0, set()
   for o in re.finditer(r"(?m)^<s:(\w+)>\n?", word):
-    if o.start() >= at and o[1] not in stray:
+    if not (o.start() < at or o[1] in stray):
       if m := re.compile("(?m)</s:" + o[1] + ">$").search(word, o.end()):
         made += [
           word[at : o.start()],
@@ -746,7 +750,7 @@ def boot(record=(), **outside):
               if by in outside or by in kept or (on and not get(on)):
                 born.setdefault(kind, {})[name] = name
                 continue
-              if not callable(verb := (module(on) or globals()).get(kind)) or re.fullmatch(r"\w+?\d+", by):
+              if not callable(verb := (module(on) or globals()).get(kind)) or re.fullmatch(r"\w+\d", by):
                 raise drift(name)
               with site.set(by):
                 try:
@@ -762,7 +766,7 @@ def boot(record=(), **outside):
           ):
             if not by and (owed() or about in first):
               raise drift(about)
-            if by not in known and by not in driven:
+            if not (by in known or by in driven):
               about in kept or (yield "keep", "", (kept.setdefault(about, q),))
               if a is not q:
                 b is last and kind not in ("started", "done") and (
@@ -804,7 +808,7 @@ def boot(record=(), **outside):
       busy.add(id(a))
       try:
         for n, g in ears(a):
-          ear or n in heard or n == "journal" or n in busy or name in taken or hears(n, g, a) or heard.add(n)
+          ear or n in heard | busy | {"journal"} or name in taken or hears(n, g, a) or heard.add(n)
         if ear:
           heard.add(name)
           drive(ear(name), name)
@@ -817,7 +821,7 @@ def boot(record=(), **outside):
               taken[name] = True
           if kind in ("run", "chain") or not owed():
             offers(a)
-        if name not in taken and not busy & set(outside) & set(dict(ears(a))):
+        if not (name in taken or busy & set(outside) & set(dict(ears(a)))):
           with site.set(""):
             say("done", name, Refused("nothing takes " + kind))
       finally:

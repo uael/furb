@@ -577,6 +577,13 @@ test("the markdown of a message draws each element with no marks, and a code blo
       // The notice stands on a panel, as a message of the operator does, and its code block on the ground, inset in it.
       expect(cellAt(spans, x - 1, label + 1).bg?.equals(RGBA.fromHex(palette.background))).toBe(true);
       expect(cellAt(spans, x, label - 2).bg?.equals(RGBA.fromHex(palette.panel))).toBe(true);
+      // Its body draws in prose, and its heading in the text.
+      const body = rows.findIndex((row) => row.includes("Press Ctrl+K"));
+      const bodyColumn = rows[body]?.indexOf("Press Ctrl+K") ?? -1;
+      expect(cellAt(spans, bodyColumn, body).fg?.equals(RGBA.fromHex(palette.prose))).toBe(true);
+      const heading = rows.findIndex((row) => row.includes("The shortcut"));
+      const headingColumn = rows[heading]?.indexOf("The shortcut") ?? -1;
+      expect(cellAt(spans, headingColumn, heading).fg?.equals(RGBA.fromHex(palette.text))).toBe(true);
     },
     { width: 140, height: 60 },
   ));

@@ -130,6 +130,7 @@ fn the_ears_of_the_crate_come_after_the_ears_of_the_host_each_under_the_name_eve
       "web",
       "mcp",
       "compaction",
+      "fetch",
       "files",
       "bash",
       "time",

@@ -916,11 +916,11 @@ try {
   await session.refresh();
   ({ library, app } = await mount(session, test.renderer));
   await capture("02-feed");
-  // A string too long for its line folds to an underlined ..., which a hover shows whole and a click opens in place.
+  // A string too long for its line folds to an underlined …, which a hover shows whole and a click opens in place.
   const folded = test.captureCharFrame().split("\n");
-  const foldRow = folded.findIndex((row) => /\.\.\.["']/.test(row));
+  const foldRow = folded.findIndex((row) => /…["']/.test(row));
   if (foldRow < 0) throw new Error("No string folds in the feed.");
-  const foldColumn = (folded[foldRow] ?? "").search(/\.\.\.["']/) + 1;
+  const foldColumn = (folded[foldRow] ?? "").search(/…["']/) + 1;
   await test.mockMouse.moveTo(foldColumn, foldRow);
   await new Promise((done) => setTimeout(done, 400));
   await capture("82-string-hover");

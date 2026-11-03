@@ -1,5 +1,4 @@
-//! The ear of the web: what a server of MCP answers comes to the answer of the free search, a page comes to its
-//! text, and in a life of the real engine a search goes to the native search of its actor and a fetch reads a page
+//! The ear of the web: what a server of MCP answers comes to the answer of the free search, and in a life of the real engine a search goes to the native search of its actor and a fetch reads a page
 //! of a server of this machine.
 
 #![expect(
@@ -21,7 +20,7 @@ use std::{
 
 use futures::future::BoxFuture;
 
-use super::{found, markdown, page, web};
+use super::{found, web};
 use crate::{
   Ear, Engine, Fact, Object, Text,
   ear::{ear, hear, say},
@@ -61,25 +60,6 @@ fn the_free_search_refuses_with_the_error_of_its_server_and_gives_a_text_that_is
   let plain = serde_json::json!({"result": {"content": [{"type": "text", "text": "Plain."}]}});
   assert_eq!(found(&plain.to_string()).unwrap(), "Plain.");
   assert!(found("<html>").unwrap_err().starts_with("the free search answered no JSON"));
-}
-
-#[test]
-fn a_page_of_html_is_its_markdown_other_text_is_itself_and_a_page_of_no_text_is_refused() {
-  let html = "<html><head><title>T</title><style>p{}</style></head><body><h1>Rust</h1>\n\n\n<p>Is <b>fast</b>.</p><script>x()</script></body></html>";
-  assert_eq!(page("text/html; charset=utf-8", html).unwrap(), "# Rust\n\nIs **fast**.");
-  assert_eq!(
-    page("", html).unwrap(),
-    "# Rust\n\nIs **fast**.",
-    "a page of no kind that opens with a tag is HTML"
-  );
-  assert_eq!(page("application/json", "{\"a\": 1}").unwrap(), "{\"a\": 1}");
-  assert_eq!(page("text/plain", "plain  \n").unwrap(), "plain  \n");
-  assert_eq!(page("image/png", "\u{89}PNG").unwrap_err(), "is no text: image/png");
-}
-
-#[test]
-fn the_markdown_of_a_page_has_no_space_at_the_end_of_a_line_and_no_run_of_empty_lines() {
-  assert_eq!(markdown("<p>one</p><div><br><br><br></div><p>two</p>"), "one\n\ntwo");
 }
 
 /// A waker that unparks the thread of the test.

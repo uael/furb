@@ -4223,3 +4223,25 @@ async def test_a_fixer_brief_and_the_order_to_a_maker_name_the_gates_that_the_fi
   conductor.busy("p1", "k5", SONNET)
   await conductor.mend(conductor.pr(checks=("FAILURE",), sha=sha, labels=["w:k5"]), 0.0, False)
   assert line in conductor.prompts[-1][0] and conductor.hired == []
+
+
+@POSIX
+@JQ
+async def test_a_gh_that_fails_alone_in_a_call_of_the_sweep_ends_no_step(conductor: Round) -> None:
+  failing(conductor, "failure")
+  conductor.secret.update({"repo": "uael/ops", "digest": "d"})
+  timeout = "HTTP 504: 504 Gateway Timeout\n"
+  conductor.says[:0] = [(r"uael/ops", timeout, 1), (r"pr list --repo uael/monty", timeout, 1)]
+  conductor.say(r"^$", "")
+  fetch = conductor.bash
+
+  async def strict(command: str, stdin: str | None = "", timeout: float = 600, show: object = None, ok: object = None, **_: object) -> Exit:
+    got = await fetch(command, stdin, timeout, show)
+    if got.code != 0 and ok is not True:
+      raise Refused(command[:80])
+    return got
+
+  conductor.ns["bash"] = strict
+  await conductor.sweep(300)
+  assert "repos/uael/ops/issues/comments" in conductor.log() and "pr list --repo uael/monty" in conductor.log()
+  assert "ops" not in conductor.timers and conductor.prs[4]["state"] == "main"
