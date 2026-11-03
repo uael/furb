@@ -27,7 +27,7 @@ import { theme as c, glyph, spacing as space, spin, threadTone } from "../theme.
 import { bold, italic, type Part, plain } from "../ui.ts";
 import { asOf, branchMessages, branchStart, branchTaken, branchTakes, earlierSteps } from "../watching.ts";
 import { part } from "./part.ts";
-import { type BlockOptions, MESSAGE_ROWS, PROGRAM_STEPS, spell, threadMarks, viewLabels } from "./shared.ts";
+import { type BlockOptions, MESSAGE_ROWS, PROGRAM_STEPS, spell, viewLabels } from "./shared.ts";
 import { SCROLL } from "./thread.ts";
 
 export const feed = part({
@@ -349,7 +349,8 @@ export const feed = part({
         step.kind !== "rung" || !step.done
           ? ""
           : [
-              w.took[step.id] === undefined ? "" : spell(w.took[step.id] ?? 0),
+              // A time under a millisecond is one that this life did not measure, as a step that it replayed.
+              (w.took[step.id] ?? 0) < 1 ? "" : spell(w.took[step.id] ?? 0),
               step.cost ? dollars(step.cost) : "",
             ]
               .filter(Boolean)
@@ -392,18 +393,6 @@ export const feed = part({
                 (box) => box.add(this.inset(space.between, this.code(lines))),
                 { indent, same: [lines] },
               );
-            add(
-              `writes-${line.step.id}`,
-              `${line.display}:${digits}:${this.feedWidth}:${this.theme}`,
-              [],
-              (box) => {
-                // The row stands in the column of the program above it.
-                const row = this.box({ paddingLeft: space.between });
-                row.add(this.thinkingRow(line.step.id, line.display, digits, this.feedWidth - indent - 13));
-                box.add(row);
-              },
-              { indent },
-            );
           }
         };
         if (!all.length) return tails();

@@ -3,6 +3,7 @@ import {
   type BoxRenderable,
   type LineNumberOptions,
   LineNumberRenderable,
+  type LineSign,
   type MouseEvent,
   parseColor,
   type Renderable,
@@ -33,10 +34,10 @@ import { conversation } from "../conversation.ts";
 import { shortenHomes } from "../files.ts";
 import { clip, dollars, modelName, share } from "../format.ts";
 import type { ActRow } from "../session.ts";
-import { theme as c, frame, glyph, motion, spacing as space, spin } from "../theme.ts";
-import { bold, italic, type Part, styled, underline } from "../ui.ts";
+import { theme as c, glyph, spacing as space, spin } from "../theme.ts";
+import { bold, type Part, styled, underline } from "../ui.ts";
 import { part } from "./part.ts";
-import { gutterWidth, saidOf, seconds, stateOf } from "./shared.ts";
+import { gutterWidth, saidOf, seconds, spell, stateOf } from "./shared.ts";
 
 /** A reason of the gate or of a raise as one line says it: without the line that the row already shows, and
  * without the place that the parser names, `(<string>, line 2), in 'x = = 1'`, which repeats the line. */
@@ -45,6 +46,46 @@ const plainReason = (why: string) =>
 
 /** The columns that a line which runs keeps for its time. The tick draws them, so no layout of the text holds them. */
 const TIME = 8;
+
+/** The cells of the column of the states, at the left of the numbers of a word: the loader while the model writes, the
+ * mark of the line that runs, and the mark of the line that failed. */
+const STATE = 2;
+
+/** The columns of the facts of a word, at the right edge of its block: what the acts of each line came to. Each block
+ * keeps the same column, so the facts of every word stand one under the other. */
+const FACTS = 30;
+
+/** The column of the states, as signs of the gutter: the mark of each row that has one, and blanks on the first row so
+ * that the column stands when no row has a mark. */
+const stateSigns = (states: ReadonlyMap<number, Part>, rows: number): Map<number, LineSign> => {
+  const signs = new Map<number, LineSign>();
+  if (rows) signs.set(0, { before: " ".repeat(STATE) });
+  for (const [row, [mark, color]] of states)
+    signs.set(row, {
+      before: `${mark}${" ".repeat(Math.max(0, STATE - Bun.stringWidth(mark)))}`,
+      beforeColor: color,
+    });
+  return signs;
+};
+
+/** The column of the states of the rows of a step that a model writes, with the loader on its last row. */
+const loaderSigns = (rows: number): Map<number, LineSign> =>
+  stateSigns(new Map([[Math.max(0, rows - 1), [spin(), c.accent]]]), rows);
+
+/** The text of the rows of a step that a model writes: the label of the word, then the line that comes. */
+const thinkingText = (label: Part[], tail?: Part[]): Part[] => [
+  ...label,
+  ...(label.length && tail ? [["\n"] as Part] : []),
+  ...(tail ?? []),
+];
+
+/** The model that wrote the word of a rung, by the name that the line under the input gives it, or nothing for a word
+ * of the operator. */
+const modelOf = (step: { kind: string; words: readonly unknown[] }) => {
+  const actor = step.kind === "rung" && typeof step.words[2] === "string" ? step.words[2] : "";
+  const { id } = modelName(actor);
+  return actor && id !== "operator" ? id : "";
+};
 
 export const details = part({
   /** The rung that took the place of a rung of a model that failed: a later rung for the same prompt, which the model
@@ -293,52 +334,50 @@ export const details = part({
       }, this.report);
   },
 
-  /** What the last row of a thread shows while its model works on a step: the line that it still writes, at its
-   * number after the lines it finished, else the last line that it thinks, as a comment, else `# thinking`, whose
-   * letters a light crosses while the view moves. */
-  thinkingParts(step: string, display: number, room: number): { number: number; parts: Part[] } {
-    const stream = this.session.host.streams.get(step);
-    // The lines that the model finished stand above as python, so the row takes the number after them.
+  /** What the rows of a step show while its model works on it: until the model finished a line, the label of the word,
+   * which says how long the model has thought, and the line that the model still writes, at its number after the
+   * lines that it finished. */
+  thinkingParts(
+    step: string,
+    display: number,
+    room: number,
+  ): { number: number; label: Part[]; tail?: Part[] } {
+    const w = this.session;
+    const stream = w.host.streams.get(step);
+    // The lines that the model finished stand above as python, under the label of the word, so the row takes the
+    // number after them.
     const { lines, tail } = writing(stream);
     const done = lines ? lines.split("\n").length : 0;
-    if (stream?.text.trim()) return { number: display + done, parts: [[clip(tail || "…", room), c.muted]] };
-    const thought = (stream?.thinking ?? "").trimEnd().split("\n").at(-1)?.trim();
-    if (thought)
-      return { number: display, parts: [[`# ${clip(thought, room - 2)}`, c.syntaxComment, italic]] };
-    const word = "thinking";
-    if (motion.still) return { number: display, parts: [[`# ${word}`, c.syntaxComment]] };
-    // The light rests for a few frames after it crosses the word, so the row breathes and does not flicker.
-    const lit = Math.floor(clock() / frame) % (word.length + 8);
-    return {
-      number: display,
-      parts: [
-        ["# ", c.syntaxComment],
-        ...[...word].map(
-          (letter, at): Part => [
-            letter,
-            at === lit ? c.text : Math.abs(at - lit) === 1 ? c.muted : c.syntaxComment,
-          ],
-        ),
-      ],
-    };
+    const began = w.started[step];
+    const ms = began ? clock() - began : 0;
+    const label: Part[] = done
+      ? []
+      : [
+          [`word · ${step}`, c.muted, bold],
+          [` · thinking${ms >= 1000 ? ` ${spell(Math.floor(ms / 1000) * 1000)}` : ""}`, c.faint],
+        ];
+    const text = stream?.text.trim() ? clip(tail, room - STATE) : "";
+    return { number: display + done, label, ...(text || done ? { tail: [[text, c.muted] as Part] } : {}) };
   },
 
-  /** The last row of a thread while its model works on a step: a loader, the number of the line that comes, then what
-   * the model thinks or writes, which the tick draws again. */
+  /** The rows of a step while its model works on it: the label of the word until a line is written, then the line
+   * that comes, with the loader in the column of the states, which the tick draws again. */
   thinkingRow(step: string, display: number, digits: number, room: number): LineNumberRenderable {
-    const { number, parts } = this.thinkingParts(step, display, room);
-    const text = this.text(parts, c.muted, { wrapMode: "none" });
+    const { number, label, tail } = this.thinkingParts(step, display, room);
+    const rows = (label.length ? 1 : 0) + (tail ? 1 : 0);
+    const numbered = tail?.[0]?.[0] ? new Map([[rows - 1, number]]) : new Map<number, number>();
+    const all = Array.from({ length: rows }, (_, at) => at);
+    const text = this.text(thinkingText(label, tail), c.muted, { wrapMode: "none" });
     const view = new LineNumberRenderable(this.renderer, {
       target: text,
       paddingRight: space.inset,
       fg: c.faint,
       minWidth: gutterWidth(digits),
-      lineNumbers: new Map([[0, number]]),
-      // A sign of the gutter widens the gutter by its width, which moves the number and the code of this row off the
-      // columns of the rows above it: the loader takes the first column of the gutter, which no number reaches.
-      renderAfter(buffer) {
-        buffer.drawText(spin(), this.x, this.y, parseColor(c.accent));
-      },
+      lineNumbers: numbered,
+      hideLineNumbers: new Set(all.filter((at) => !numbered.has(at))),
+      lineColors: new Map(all.map((at) => [at, { content: c.raised, gutter: c.raised }])),
+      // The loader stands in the column of the states, on the last row, as the mark of a line that runs does.
+      lineSigns: loaderSigns(rows),
     });
     // The loader is drawn by each frame, the first one too, so no tick is needed before it shows.
     this.thinkingRows.set(step, {
@@ -346,7 +385,8 @@ export const details = part({
       text,
       display,
       room,
-      said: saidOf(number, parts),
+      said: saidOf(number, thinkingText(label, tail)),
+      shape: `${rows}:${label.length}:${numbered.size}`,
       wrote: number - display,
     });
     return view;
@@ -359,6 +399,7 @@ export const details = part({
         this.thinkingRows.delete(step);
         continue;
       }
+      row.view.setLineSigns(loaderSigns(Number(row.shape.split(":")[0])));
       row.view.requestRender();
       this.followThinking(step);
     }
@@ -386,15 +427,19 @@ export const details = part({
     const row = this.thinkingRows.get(step);
     if (!row || row.view.isDestroyed) return;
     if (wrote !== undefined) row.wrote = wrote;
-    const { number, parts } = this.thinkingParts(step, row.display, row.room);
-    if (number - row.display !== row.wrote) {
+    const { number, label, tail } = this.thinkingParts(step, row.display, row.room);
+    const rows = (label.length ? 1 : 0) + (tail ? 1 : 0);
+    const numbered = tail?.[0]?.[0] ? 1 : 0;
+    // A row that comes or goes changes the numbers and the colors of the rows, which a new card draws.
+    if (number - row.display !== row.wrote || `${rows}:${label.length}:${numbered}` !== row.shape) {
       this.schedule();
       return;
     }
+    const parts = thinkingText(label, tail);
     const said = saidOf(number, parts);
     if (said === row.said) return;
     row.said = said;
-    row.view.setLineNumbers(new Map([[0, number]]));
+    if (numbered) row.view.setLineNumbers(new Map([[rows - 1, number]]));
     row.text.content = styled(parts);
   },
 
@@ -403,54 +448,31 @@ export const details = part({
    * marked, with its reason under it as a comment. */
   programView(
     lines: readonly ProgramLine[],
-    room: number,
+    width: number,
     took: (step: ActRow) => string,
     since: (act?: ActRow) => string,
     heads: ReadonlySet<ProgramLine>,
     digits = 1,
     options: { more?: (line: ProgramLine) => void } = {},
   ): Renderable {
+    // The column of the states takes its cells from the room of the code.
+    const room = width - STATE;
     const texts: string[] = [];
     const ellipses: number[] = [];
     const numbers = new Map<number, number>();
     const hidden = new Set<number>();
     const colors = new Map<number, { content: RGBA; gutter: RGBA }>();
-    // The mark of a line stands at the right end of its row: it runs, it is awaited, or it failed.
-    const markGroups = {
-      [glyph.running]: "mark.running",
-      [glyph.awaited]: "mark.awaits",
-      [glyph.failed]: "mark.failed",
-    };
-    const marked = (body: string, mark: string) => `${body}  ${mark}`;
-    const flag = (at: number, from: number) =>
-      fixed.push([
-        at,
-        from,
-        from + 1,
-        markGroups[(texts[at] ?? "")[from] as keyof typeof markGroups] ?? "default",
-      ]);
-    const markOf = (line: Extract<ProgramLine, { kind: "code" }>) =>
-      line.fails ? glyph.failed : line.awaited !== undefined ? glyph.awaited : line.runs ? glyph.running : "";
-    const widest = Math.max(
-      0,
-      ...lines.map((line) => (line.kind === "code" ? Bun.stringWidth(line.text) : 0)),
-    );
+    // The mark of each row in the column of the states: the line that runs, and the line that failed.
+    const states = new Map<number, Part>();
     // A line that failed says its reason under it, so its hint does not say the same reason again.
     const hintOf = (line: Extract<ProgramLine, { kind: "code" }>) => {
       const hint = this.lineHint(line);
       return line.fails && plainReason(line.fails).includes(hint.replace(/…$/, "")) ? "" : hint;
     };
-    const noteOf = (line: Extract<ProgramLine, { kind: "code" }>) =>
-      shortenHomes([hintOf(line), heads.has(line) ? took(line.step) : ""].filter(Boolean).join("  "));
-    // The code takes the room that its hints leave, and the hints take 30 columns at most: a longer hint is cut.
-    const notes = Math.max(
-      0,
-      ...lines.map((line) => (line.kind === "code" ? Bun.stringWidth(noteOf(line)) : 0)),
-    );
-    const slot = lines.some((line) => line.kind === "code" && line.runs) ? TIME + 2 : 0;
-    const column = Math.max(24, Math.min(100, widest, room - slot - (notes ? Math.min(notes, 26) + 4 : 0)));
+    const noteOf = (line: Extract<ProgramLine, { kind: "code" }>) => shortenHomes(hintOf(line));
+    // The code takes the room that the column of the facts leaves, and 100 columns at most.
+    const column = Math.max(24, Math.min(100, room - FACTS - space.between));
     const fit = (text: string, most: number) => clip(text, Math.max(4, most));
-    const lane = lines.some((line) => line.kind === "code" && markOf(line)) ? 2 : 0;
     // The line of the program that each row shows, which a click opens or folds.
     const sources: (ProgramLine | undefined)[] = [];
     // The strings that each row folds, and the rows that show the strings of a line whole, each with where it starts
@@ -473,32 +495,58 @@ export const details = part({
       else numbers.set(at, number);
       return at;
     };
+    // The rows of a word stand on the raised surface of its block, which a label heads and a blank row parts from the
+    // block above it.
+    const raised = { content: c.raised, gutter: c.raised };
+    const block = (at: number) => colors.has(at) || colors.set(at, raised);
+    let first = true;
     for (const line of lines) {
       if (line.kind === "code") {
+        // The watch speaks in common words, so it names no word and no rung.
+        if (heads.has(line) && line.step.kind === "rung" && !this.session.watching) {
+          if (!first) push("");
+          const name = `word · ${line.step.id}`;
+          const facts = [took(line.step as ActRow), modelOf(line.step)].filter(Boolean).join("  ");
+          const label = `${name}${" ".repeat(Math.max(2, room - Bun.stringWidth(name + facts)))}${facts}`;
+          const at = push(label);
+          block(at);
+          fixed.push([at, 0, name.length, "word.label"]);
+          if (facts) fixed.push([at, label.length - facts.length, label.length, "fact"]);
+        }
+        first = false;
         const note = noteOf(line);
         // An open line shows its whole text. Another line folds its longest strings, but those that the operator
         // opened, until it fits one row, and a line that still does not fit lays out in rows as ruff format would.
-        // The code takes 100 columns at most, and its hint counts in them as a comment does in ruff format: a line
-        // that fits beside the column of the hints stands in it, and a longer one takes the room that its hint leaves.
-        const width = Math.min(
-          100,
-          Math.max(column, room - lane - (line.runs ? TIME + 2 : 0) - (note ? Bun.stringWidth(note) + 6 : 0)),
+        // A line takes the row but the room of its fact, which stands at the right edge, and 100 columns at most.
+        const width = Math.max(
+          24,
+          Math.min(
+            100,
+            room -
+              (note ? Math.min(Bun.stringWidth(note), FACTS) + space.between : 0) -
+              (line.runs ? TIME + 1 + space.between : 0),
+          ),
         );
         const rows = layout(line.text, width, this.lineOpen(line) ? undefined : this.openStrings(line));
         const code = rows[0]?.text ?? "";
-        const mark = markOf(line);
-        // The mark stands in a lane of its own after the code, before the comment, so that no line is longer for it.
-        const hint = note
-          ? `# ${fit(note, room - Math.max(column, Bun.stringWidth(code)) - 4 - lane - (line.runs ? TIME + 2 : 0))}`
-          : "";
-        const left = `${code}${" ".repeat(Math.max(0, column - Bun.stringWidth(code)))}`;
-        const front = hint || mark ? `${left}  ${lane ? (mark ? `${mark} ` : "  ") : ""}${hint}` : code;
-        const body = line.runs ? `${front}  ${" ".repeat(TIME)}` : front;
+        // The fact of a line stands at the right edge of the block, and the time of a line that runs after it.
+        const slot = line.runs ? TIME + 1 : 0;
+        const fact = note ? fit(note, FACTS) : "";
+        const right = `${fact}${" ".repeat(slot)}`;
+        const body =
+          right.trim() || slot
+            ? `${code}${" ".repeat(Math.max(space.between, room - Bun.stringWidth(code + right)))}${right}`
+            : code;
         const at = push(body, line.display, line);
-        if (hint) fixed.push([at, front.length - hint.length, front.length, "comment"]);
+        if (fact) fixed.push([at, body.length - right.length, body.length - slot, "fact"]);
         if (line.runs)
-          live.push({ row: at, col: Bun.stringWidth(front) + 2, act: line.awaits?.act ?? line.acts.at(-1) });
-        if (mark) flag(at, left.length + 2);
+          live.push({
+            row: at,
+            col: Bun.stringWidth(body) - TIME,
+            act: line.awaits?.act ?? line.acts.at(-1),
+          });
+        if (line.fails) states.set(at, [glyph.failed, c.danger]);
+        else if (line.runs) states.set(at, [glyph.running, c.accent]);
         for (const row of rows.slice(1)) push(row.text, undefined, line);
         const base = program.length;
         program += `${line.text}\n`;
@@ -508,26 +556,28 @@ export const details = part({
           for (const [from, to, source] of row.parts) pieces.push([at + k, from, to, base + source]);
           whole.set(at + k, row.parts);
         }
-        if (line.runs) {
+        // The line that runs is lit, and so is the line that made the act that a running line awaits.
+        if (line.runs || line.awaited !== undefined)
           colors.set(at, { content: c.selected, gutter: c.selected });
-        }
-        // The line that made the act that a running line awaits is lit too, with a link to the line that awaits it.
-        if (line.awaited !== undefined) {
-          colors.set(at, { content: c.selected, gutter: c.selected });
-        }
+        for (let k = at; k < texts.length; k++) block(k);
         if (line.fails) {
           for (const why of line.fails
             .split("\n")
             .filter((one) => one.trim())
-            .slice(0, 3))
-            comment(push(`# ${fit(shortenHomes(plainReason(why)), room - 4)}`));
+            .slice(0, 3)) {
+            const row = push(`# ${fit(shortenHomes(plainReason(why)), room - 4)}`);
+            comment(row);
+            block(row);
+          }
         }
-      } else if (line.kind === "output") comment(push(`#   ${fit(line.text, room - 6)}`));
-      else if (line.kind === "writes") {
-        const body = `# ${fit(line.text, room - 7)}`;
-        const at = push(marked(body, glyph.running));
-        fixed.push([at, 0, body.length, "comment"]);
-        flag(at, body.length + 2);
+      } else if (line.kind === "output") {
+        const row = push(`#   ${fit(line.text, room - 6)}`);
+        comment(row);
+        if (!first) block(row);
+      } else if (line.kind === "writes") {
+        const row = push(fit(line.text, room - 2));
+        comment(row);
+        states.set(row, [glyph.running, c.accent]);
       } else if (line.kind === "earlier") ellipses.push(push(line.text, undefined, line));
       else comment(push(fit(line.text, room - 2)));
     }
@@ -641,15 +691,18 @@ export const details = part({
       lineNumbers: numbers,
       hideLineNumbers: hidden,
       lineColors: colors,
+      // The marks of the states stand in a column of signs at the left of the numbers, which every row keeps, so the
+      // numbers and the code of each block stand in the same columns.
+      lineSigns: stateSigns(states, texts.length),
       // The time of a line that runs is written over the blanks that its row keeps, so that a tick moves it and the
       // text of the program stays as it was laid out.
       renderAfter(buffer) {
         for (const { row, col, act } of live)
           buffer.drawText(
-            since(act).slice(0, TIME).padEnd(TIME),
+            since(act).slice(0, TIME).padStart(TIME),
             target.x + col,
             this.y + row,
-            parseColor(c.syntaxComment),
+            parseColor(c.faint),
           );
       },
     });

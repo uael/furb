@@ -168,6 +168,8 @@ export class App {
       display: number;
       room: number;
       said: string;
+      /** The rows that the card holds and which of them is numbered, which a new card draws again when they change. */
+      shape: string;
       wrote: number;
     }
   >();

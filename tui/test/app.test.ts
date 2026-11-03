@@ -82,16 +82,18 @@ test("the real native life drives the feed, the transcript, and responsive views
       expect(ids).toContain("program-prompt1");
       expect(ids.some((id) => /^(rung|bash|read)\d+$/.test(id))).toBe(false);
       const program = await drawn(frame, screen.renderer.root);
-      expect(program).toMatch(/ 1 notes = read\("README\.md"\) +# 7 lines/);
-      expect(program).toMatch(/ 2 check = await bash\(.*# exit 0, 3 lines/);
+      expect(program).toMatch(/ 1 notes = read\("README\.md"\) +7 lines/);
+      expect(program).toMatch(/ 2 check = await bash\(.* +exit 0, 3 lines/);
       // A command that is over shows its output no more: its hint says what it came to.
       expect(program).not.toMatch(/# {3}✓ search/);
       // The control on the header of a thread folds it to its header, and a click on that header opens it again.
       const control = async () => {
         const rows = (await frame()).split("\n");
         const at = /▾ Collapse|▸ Expand/;
-        const y = rows.findIndex((row) => at.test(row));
-        const x = rows[y]?.search(at) ?? -1;
+        // The cards of the sidebar hold controls of the same name, so the search stays in the feed.
+        const feed = screen.renderer.width - session.preferences.sidebarWidth;
+        const y = rows.findIndex((row) => at.test(row.slice(0, feed)));
+        const x = rows[y]?.slice(0, feed).search(at) ?? -1;
         if (y < 0 || x < 0) throw new Error("No control on the header of the thread.");
         await screen.mockMouse.click(x + 2, y);
         await screen.flush();
@@ -343,19 +345,19 @@ test("a question of a choice offers its values as a list in place of the input, 
     { width: 120, height: 40 },
   ));
 
-test("the last row of a thread whose model works shows a loader left of the number of the line that comes, and # thinking until the model shows a thought, then the last line of that thought", () =>
+test("the block of a word whose model works holds the loader in the column of the states, and its label says that the model thinks, with no line of thinking", () =>
   composing(async ({ session, app, frame }) => {
     app.composer.setText("Think until I cancel.");
     await app.submit();
     await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
     await session.refresh();
-    const row = async () =>
-      (await frame()).split("\n").find((line) => /1 +# (?:thinking|Then)/.test(line)) ?? "";
-    // The loader takes the first column of the gutter, so the number and the text keep the columns of the rows above,
-    // and no second loader follows the text.
-    expect(await row()).toMatch(/^[ ┃]+[\u2800-\u28ff]1 +# thinking +[^\u2800-\u28ff ]/);
     const step = session.activity.find((act) => act.kind === "rung" && !act.done)?.id ?? "";
-    // The thought streams in the worker, since each state of the worker replaces the streams that the host holds.
+    const rows = (await frame()).split("\n");
+    const label = rows.find((row) => row.includes(`word · ${step} · thinking`)) ?? "";
+    expect(label).toMatch(/[\u2800-\u28ff] +word · rung\d+ · thinking/);
+    expect(rows.join("\n")).not.toContain("# thinking");
+    // The block holds the one loader of the step, so the footer turns none.
+    expect(rows.findLast((row) => row.trim()) ?? "").not.toMatch(/[\u2800-\u28ff]/);
     const think = Reflect.get(session.host, "ask") as (
       target: string,
       method: string,
@@ -366,11 +368,51 @@ test("the last row of a thread whose model works shows a loader left of the numb
       session.host,
       () => session.host.streams.get(step)?.thinking === "First I read.\nThen I wait.",
     );
-    // The tick draws the row again from the stream, and no other part of the feed.
     await new Promise((done) => setTimeout(done, 250));
-    expect(await row()).toMatch(/^[ ┃]+[\u2800-\u28ff]1 +# Then I wait\. +[^\u2800-\u28ff ]/);
+    const thought = await frame();
+    expect(thought).toContain(`word · ${step} · thinking`);
+    expect(thought).not.toContain("Then I wait.");
     await session.submit("/cancel");
   }));
+
+test("each word stands in a block under its label, with the mark of the line that runs or failed at the left of its number, and what an act came to at the right edge, with no comment mark", () =>
+  composing(
+    async ({ session, frame }) => {
+      await session.command("/run ready = True\nnext = = 2").catch(() => {});
+      await idle(session);
+      let shown = await frame();
+      expect(shown).toMatch(/✗ +2 next = = 2/);
+      expect(shown).toMatch(/word · rung\d+/);
+      void session.command('/run build = bash("sleep 3")\nsize = 1\nbuilt = await build').catch(() => {});
+      await until(session, () => session.activity.some((act) => act.kind === "bash" && !act.done));
+      for (let tries = 0; tries < 50 && !shown.includes("waits on"); tries++) {
+        await new Promise((done) => setTimeout(done, 50));
+        shown = await frame();
+      }
+      const rows = shown.split("\n");
+      const waits = rows.find((row) => row.includes("built = await build")) ?? "";
+      expect(waits).toMatch(/◉ +3 built = await build +waits on bash\d+/);
+      expect(waits).not.toContain("#");
+      const runs = rows.find((row) => row.includes('build = bash("sleep 3")')) ?? "";
+      expect(runs).toMatch(/1 build = bash\("sleep 3"\) {4,}runs/);
+      await idle(session);
+    },
+    { width: 120, height: 40 },
+  ));
+
+test("a word whose time this life measured as no time shows no time in its label", () =>
+  composing(
+    async ({ session, frame }) => {
+      await session.command('/run notes = "quick"');
+      await until(session, () => Object.values(session.program).some((word) => word.includes('"quick"')));
+      await idle(session);
+      await session.refresh();
+      const shown = await frame();
+      expect(shown).toMatch(/word · rung\d+/);
+      expect(shown).not.toMatch(/\\b0ms\\b/);
+    },
+    { width: 120, height: 40 },
+  ));
 
 test("a prompt of None to the operator is a notice that settles as a quiet line, which no key dismisses", () =>
   composing(
@@ -661,7 +703,7 @@ test("an act that no word made stands as a lit line of python in a panel, which 
         setSystemTime(new Date(start + 1300));
         await frame();
         expect(app.scroll.getChildren().some((node) => node.id === id)).toBe(true);
-        expect(screen.captureCharFrame()).toMatch(new RegExp(`${id} = wait\\(60\\) +◉ # waits 60s +1\\.0s`));
+        expect(screen.captureCharFrame()).toMatch(new RegExp(`◉ .*${id} = wait\\(60\\) +waits 60s +1\\.0s`));
       } finally {
         setSystemTime();
       }
@@ -687,7 +729,7 @@ test("a tick writes only the time of a line that runs, and the text of its progr
         const first = (await frame()).split("\n");
         const built = layouts;
         expect(first.filter((line) => line.includes(`${id} = wait(60)`)).length).toBe(1);
-        expect(first.join("\n")).toMatch(/# waits 60s +1\.0s/);
+        expect(first.join("\n")).toMatch(/waits 60s +1\.0s/);
         // The tick reads the time of the line again, and asks for a frame when it changed.
         const view = [...app.liveLines.keys()][0];
         if (!view) throw new Error("No program view holds a line that runs.");
@@ -700,8 +742,8 @@ test("a tick writes only the time of a line that runs, and the text of its progr
         // Only the time moved: the frames differ in that row alone, and by the time alone.
         const moved = second.flatMap((line, row) => (line === first[row] ? [] : [row]));
         expect(moved.length).toBe(1);
-        const time = /(# waits 60s) +\d+\.\ds/;
-        expect(second[moved[0] ?? 0]).toMatch(/# waits 60s +2\.0s/);
+        const time = /(waits 60s) +\d+\.\ds/;
+        expect(second[moved[0] ?? 0]).toMatch(/waits 60s +2\.0s/);
         expect(second[moved[0] ?? 0]?.replace(time, "$1")).toBe(first[moved[0] ?? 0]?.replace(time, "$1"));
         expect(layouts).toBe(built);
       } finally {
@@ -843,9 +885,9 @@ test("each line of a word says what its acts did as a quiet hint: a read its lin
       await session.refresh();
       session.folds[id] = false;
       const shown = await drawn(frame, screen.renderer.root);
-      expect(shown).toMatch(/ 1 write\(Text\("notes\.md".*# \+2 -0/);
-      expect(shown).toMatch(/ 2 write\(read\("notes\.md"\).*# 2 lines {2}\+2 -1/);
-      expect(shown).toMatch(/ 3 await bash\("true"\) +# exit 0/);
+      expect(shown).toMatch(/ 1 write\(Text\("notes\.md".* +\+2 -0/);
+      expect(shown).toMatch(/ 2 write\(read\("notes\.md"\).* +2 lines {2}\+2 -1/);
+      expect(shown).toMatch(/ 3 await bash\("true"\) +exit 0/);
     },
     { width: 160, height: 40 },
   ));
