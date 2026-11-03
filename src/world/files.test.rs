@@ -64,7 +64,7 @@ fn a_path_that_a_chain_names_is_placed_against_the_home_or_else_against_its_dire
 }
 
 #[test]
-fn a_read_gives_the_whole_text_of_a_file_of_any_size_and_refuses_what_is_no_file() {
+fn a_read_gives_the_whole_text_of_a_file_of_any_size_and_the_entries_of_a_folder() {
   let at = std::env::temp_dir().join(format!("furb-files-large-{}", std::process::id()));
   let _ = fs::remove_dir_all(&at);
   fs::create_dir_all(&at).unwrap();
@@ -72,12 +72,11 @@ fn a_read_gives_the_whole_text_of_a_file_of_any_size_and_refuses_what_is_no_file
   fs::write(at.join("large.txt"), &content).unwrap();
   assert_eq!(read(&at.join("large.txt")).unwrap().content, content);
   let shown = tilded(&at, std::env::home_dir().as_deref());
-  assert_eq!(
-    read(&at).unwrap_err().message(),
-    format!(
-      "Read needs a text file, and {shown} is a directory: await bash(\"ls {shown}\") lists it"
-    )
-  );
+  fs::create_dir(at.join("sub")).unwrap();
+  fs::create_dir(at.join("sub").join("deep")).unwrap();
+  fs::write(at.join("B.txt"), "b").unwrap();
+  let listing = read(&at).unwrap();
+  assert_eq!((listing.path, listing.content), (shown, "B.txt\nlarge.txt\nsub/".to_owned()));
   fs::remove_dir_all(&at).unwrap();
 }
 
