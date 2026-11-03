@@ -22,7 +22,11 @@ test("a record whose fact drifts opens to read, with what it kept, and a dialog 
     // The record keeps the command with a word that this engine does not make, as an earlier engine kept it.
     const kept = await readFile(record, "utf8");
     expect(kept).toContain('"echo hi",""');
-    await writeFile(record, kept.replace('"echo hi",""', '"echo hi",false'));
+    const crashed = kept
+      .split("\n")
+      .filter((line) => !line.startsWith('[["checkpoint",'))
+      .join("\n");
+    await writeFile(record, crashed.replace('"echo hi",""', '"echo hi",false'));
     const log = await readFile(`${record}.log`, "utf8");
     const library = new Workspaces(new Preferences(), { demo: true });
     try {

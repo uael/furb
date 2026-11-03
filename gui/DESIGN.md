@@ -98,5 +98,12 @@ their layout or their look.
 - Rail: at the left, the life and what it spent, the questions that wait for you, and the tree of threads, each with
   its whole title and what its steps came to in a tip.
 - Header: the thread, the last notice of the session, and the mark Read only on a record of another engine.
+- View: the tree of a view that the process of a skill serves, as the protocol gives it (`docs/protocol.md`), drawn
+  in the DOM by `gui/src/components/View.tsx` from the same tree that the TUI draws. A box is a flex row or column, a
+  text is runs in the colors of the theme, and a table, a list, an input, a button, a progress, code, a diff and a
+  markdown are the elements of their names. A markdown makes elements and never HTML, and a link goes only to http or
+  https. A view that reads is inert: its buttons are disabled, its inputs are read only, and it sends no event.
+  `ViewSlot` places a view in its slot and says what the slot follows, the chain of a dock or of an act, or the life.
+  The window does not mount a view yet: that waits for the client of a skill and the views of the host.
 - Menu of an act: its controls. A dialog asks the operator to confirm a cancel that ends running work, and shows what
   a rewind gives back.
