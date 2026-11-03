@@ -9,7 +9,8 @@ import { openEngine } from "../src/bridge.ts";
 import { demoLibrary, demoSession, removeDemoDirectories, seedDemo } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
 import type { Session } from "../src/session.ts";
-import { palettes } from "../src/theme.ts";
+import { palettes, spin, theme } from "../src/theme.ts";
+import { mix } from "../src/ui.ts";
 import { type SessionEntry, Workspaces } from "../src/workspaces.ts";
 import { cellAt, composing, drawn, withDemo } from "./composing.ts";
 import { idle } from "./idle.ts";
@@ -82,8 +83,8 @@ test("the real native life drives the feed, the transcript, and responsive views
       expect(ids).toContain("program-prompt1");
       expect(ids.some((id) => /^(rung|bash|read)\d+$/.test(id))).toBe(false);
       const program = await drawn(frame, screen.renderer.root);
-      expect(program).toMatch(/ 1 notes = read\("README\.md"\) +7 lines/);
-      expect(program).toMatch(/ 2 check = await bash\(.* +exit 0, 3 lines/);
+      expect(program).toMatch(/ 1  notes = read\("README\.md"\) +7 lines/);
+      expect(program).toMatch(/ 2  check = await bash\(.* +exit 0, 3 lines/);
       // A command that is over shows its output no more: its hint says what it came to.
       expect(program).not.toMatch(/# {3}✓ search/);
       // The control on the header of a thread folds it to its header, and a click on that header opens it again.
@@ -134,7 +135,7 @@ test("a click on a line of a program opens it in place, with its whole text and 
       await seedDemo(session);
       const row = async () => {
         const rows = (await drawn(frame, screen.renderer.root)).split("\n");
-        const y = rows.findIndex((one) => / 2 check = await bash\(/.test(one));
+        const y = rows.findIndex((one) => / 2  check = await bash\(/.test(one));
         return { rows, y, x: rows[y]?.indexOf("check") ?? -1 };
       };
       await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
@@ -376,13 +377,13 @@ test("the block of a word whose model works holds the loader in the column of th
     await session.submit("/cancel");
   }));
 
-test("each word stands in a block under its label, with the mark of the line that failed at the left of its number, the loader in the place of the number of the line that runs, and what an act came to at the right edge, with no comment mark", () =>
+test("each word stands in a block under its label, with the mark of the line that failed at the right of its number, the loader in the place of the number of the line that runs, and what an act came to at the right edge, with no comment mark", () =>
   composing(
     async ({ session, frame }) => {
       await session.command("/run ready = True\nnext = = 2").catch(() => {});
       await idle(session);
       let shown = await frame();
-      expect(shown).toMatch(/✗ +2 next = = 2/);
+      expect(shown).toMatch(/2✗ next = = 2/);
       expect(shown).toMatch(/┃ +operator +$/m);
       expect(shown).not.toMatch(/word · rung\d+/);
       void session.command('/run build = bash("sleep 3")\nsize = 1\nbuilt = await build').catch(() => {});
@@ -393,10 +394,10 @@ test("each word stands in a block under its label, with the mark of the line tha
       }
       const rows = shown.split("\n");
       const waits = rows.find((row) => row.includes("built = await build")) ?? "";
-      expect(waits).toMatch(/[\u2800-\u28ff✻] built = await build +waits on bash\d+/);
+      expect(waits).toMatch(/(?:\d|[\u2800-\u28ff✻])  built = await build +waits on bash\d+/);
       expect(waits).not.toContain("#");
       const runs = rows.find((row) => row.includes('build = bash("sleep 3")')) ?? "";
-      expect(runs).toMatch(/1 build = bash\("sleep 3"\) {4,}runs/);
+      expect(runs).toMatch(/1  build = bash\("sleep 3"\) {4,}runs/);
       await idle(session);
     },
     { width: 120, height: 40 },
@@ -415,6 +416,52 @@ test("a word whose time this life measured as no time shows no time in its label
     },
     { width: 120, height: 40 },
   ));
+
+test("the words that one model wrote one after another stand in one block under one label, and their numbers run on", () =>
+  composing(
+    async ({ session, frame }) => {
+      // A word of the operator ends the setup of the chain, so its words stand whole above it.
+      await session.command('/run first = "one"');
+      await idle(session);
+      await session.refresh();
+      const rows = (await frame()).split("\n");
+      const setup = rows.findIndex((row) => row.includes("# setup"));
+      const steps = rows.slice(setup + 1, setup + 8);
+      expect(steps[0]).toMatch(/^ +\S+\/\S+ +/);
+      expect(steps.slice(1, 5).map((row) => row.match(/^ +(\d+) /)?.[1])).toEqual(["1", "2", "3", "4"]);
+      expect(steps.slice(1).filter((row) => /^ +\S+\/high +/.test(row))).toEqual([]);
+    },
+    { width: 120, height: 40 },
+  ));
+
+test("a message between two words of one model parts them into two blocks", () =>
+  composing(async ({ app }) => {
+    const step = (id: string) =>
+      ({ id, kind: "rung", by: "chain1", words: ["", "", "claude-cli:opus/high"], done: true }) as never;
+    const code = (one: unknown, display: number, text: string) =>
+      ({ kind: "code", step: one, text, display, number: 1, acts: [], hint: "" }) as never;
+    const [a, b, c] = [step("rung1"), step("rung2"), step("rung3")];
+    const lines = [
+      code(a, 1, "x = 1"),
+      code(b, 2, "y = 2"),
+      { kind: "note", step: b, text: "# Between them." } as never,
+      code(c, 3, "z = 3"),
+    ];
+    const heads = new Set([lines[0], lines[1], lines[3]]);
+    const view = app.programView(
+      lines,
+      100,
+      () => "",
+      () => "",
+      heads as never,
+      1,
+    );
+    const text = String(
+      Reflect.get(Reflect.get(view.getChildren()[0] as object, "target") as object, "content") ?? "",
+    );
+    expect(text.split("\n").filter((row) => row.startsWith("opus/high")).length).toBe(2);
+    expect(text).toMatch(/x = 1\ny = 2\n# Between them\.\n\nopus\/high +\nz = 3/);
+  }));
 
 test("a prompt of None to the operator is a notice that settles as a quiet line, which no key dismisses", () =>
   composing(
@@ -514,7 +561,7 @@ test("many questions wait on the desk, which says which one the input answers, a
     { width: 120, height: 40 },
   ));
 
-test("the markdown of a message draws each element with no marks, and a code block on a surface of its own", () =>
+test("the markdown of a message draws each element with no marks, and a code block on the surface of the blocks of a word", () =>
   composing(
     async ({ session, screen, frame }) => {
       const long = `    return ${"note + ".repeat(20)}note`;
@@ -576,8 +623,9 @@ test("the markdown of a message draws each element with no marks, and a code blo
       const spans = screen.captureSpans();
       const palette = palettes.ink;
       expect(cellAt(spans, x, label + 1).fg?.equals(RGBA.fromHex(palette.syntaxKeyword))).toBe(true);
-      // The notice stands on a panel, as a message of the operator does, and its code block on the ground, inset in it.
-      expect(cellAt(spans, x - 1, label + 1).bg?.equals(RGBA.fromHex(palette.background))).toBe(true);
+      // The notice stands on a panel, as a message of the operator does, and its code block on the surface of the blocks
+      // of a word.
+      expect(cellAt(spans, x - 1, label + 1).bg?.equals(RGBA.fromHex(palette.raised))).toBe(true);
       expect(cellAt(spans, x, label - 2).bg?.equals(RGBA.fromHex(palette.panel))).toBe(true);
       // Its body draws in prose, and its heading in the text.
       const body = rows.findIndex((row) => row.includes("Press Ctrl+K"));
@@ -713,7 +761,7 @@ test("an act that no word made stands as a lit line of python in a panel, which 
         await frame();
         expect(app.scroll.getChildren().some((node) => node.id === id)).toBe(true);
         expect(screen.captureCharFrame()).toMatch(
-          new RegExp(`[\\u2800-\\u28ff✻] +${id} = wait\\(60\\) +waits 60s +1\\.0s`),
+          new RegExp(`(?:\\d|[\\u2800-\\u28ff✻]) +${id} = wait\\(60\\) +waits 60s +1\\.0s`),
         );
       } finally {
         setSystemTime();
@@ -730,6 +778,7 @@ test("a tick writes only the time of a line that runs, and the text of its progr
       try {
         const id = await session.engine.wait([], { seconds: 60, on: session.engine.root });
         await session.refresh();
+        session.preferences.reducedMotion = true;
         let layouts = 0;
         const layout = app.programView.bind(app);
         Reflect.set(app, "programView", (...args: Parameters<typeof layout>) => {
@@ -758,6 +807,7 @@ test("a tick writes only the time of a line that runs, and the text of its progr
         expect(second[moved[0] ?? 0]?.replace(time, "$1")).toBe(first[moved[0] ?? 0]?.replace(time, "$1"));
         expect(layouts).toBe(built);
       } finally {
+        session.preferences.reducedMotion = false;
         setSystemTime();
       }
     },
@@ -947,9 +997,85 @@ test("each line of a word says what its acts did as a quiet hint: a read its lin
       await session.refresh();
       session.folds[id] = false;
       const shown = await drawn(frame, screen.renderer.root);
-      expect(shown).toMatch(/ 1 write\(Text\("notes\.md".* +\+2 -0/);
-      expect(shown).toMatch(/ 2 write\(read\("notes\.md"\).* +2 lines {2}\+2 -1/);
-      expect(shown).toMatch(/ 3 await bash\("true"\) +exit 0/);
+      expect(shown).toMatch(/ 1  write\(Text\("notes\.md".* +\+2 -0/);
+      expect(shown).toMatch(/ 2  write\(read\("notes\.md"\).* +2 lines {2}\+2 -1/);
+      expect(shown).toMatch(/ 3  await bash\("true"\) +exit 0/);
     },
     { width: 160, height: 40 },
+  ));
+
+test("the number of the line that runs fades out into the loader and back in its own cell, on the colors of the theme", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      const base = (Math.floor(Date.now() / 2600) + 1) * 2600;
+      try {
+        const id = await session.engine.wait([], { seconds: 60, on: session.engine.root });
+        await session.refresh();
+        const cell = async (index: number) => {
+          setSystemTime(new Date(base + index * 100));
+          const rows = (await frame()).split("\n");
+          const y = rows.findIndex((row) => row.includes(`${id} = wait(60)`));
+          const x = (rows[y] ?? "").indexOf(`  ${id} = wait(60)`) - 1;
+          return { text: rows[y]?.[x] ?? "", fg: cellAt(screen.captureSpans(), x, y).fg };
+        };
+        const near = (got: RGBA | undefined, want: RGBA) =>
+          expect([got?.r, got?.g, got?.b].map((one) => Math.round((one ?? -1) * 255))).toEqual(
+            [want.r, want.g, want.b].map((one) => Math.round(one * 255)),
+          );
+        const faint = (share: number) => mix(theme.selected, theme.faint, share);
+        const accent = (share: number) => mix(theme.selected, theme.accent, share);
+        const frames: [index: number, text: string, color: RGBA][] = [
+          [0, "1", faint(1)],
+          [7, "1", faint(0.4)],
+          [10, spin(base + 1000), accent(0.4)],
+          [12, spin(base + 1200), accent(1)],
+          [21, spin(base + 2100), accent(0.4)],
+          [24, "1", faint(0.4)],
+        ];
+        for (const [index, text, color] of frames) {
+          const got = await cell(index);
+          expect(got.text).toBe(text);
+          near(got.fg, color);
+        }
+      } finally {
+        setSystemTime();
+      }
+    },
+    { width: 120, height: 40 },
+  ));
+
+test("the blocks of a word and of a code block of markdown stand alike in each palette: one background, and their numbers in one column with the code two cells after them", () =>
+  composing(
+    async ({ session, screen, frame }) => {
+      await session.command("/run alpha = 1\nbeta = 2");
+      await idle(session);
+      const id = await session.engine.prompt("None", {
+        message: ["```python", "gamma = 3", "delta = 4", "```"].join("\n"),
+        to: "operator",
+        on: session.engine.root,
+      });
+      await until(session.host, () => session.acts.some((act) => act.id === id && act.done));
+      session.folds[id] = false;
+      for (const name of Object.keys(palettes) as (keyof typeof palettes)[]) {
+        session.theme = name;
+        await session.refresh();
+        await drawn(frame, screen.renderer.root);
+        const rows = (await frame()).split("\n");
+        const spans = screen.captureSpans();
+        const find = (text: string) => {
+          const y = rows.findIndex((one) => one.includes(text));
+          const x = (rows[y] ?? "").indexOf(text);
+          return { x, number: (rows[y] ?? "").slice(x - 3, x), bg: cellAt(spans, x - 3, y).bg };
+        };
+        const word = find("alpha = 1");
+        const block = find("gamma = 3");
+        expect(word.x).toBeGreaterThan(0);
+        expect(block.x).toBe(word.x);
+        for (const one of [word, block]) {
+          expect(one.number).toMatch(/^\d {2}$/);
+          expect(one.bg?.equals(RGBA.fromHex(palettes[name].raised))).toBe(true);
+        }
+      }
+    },
+    { width: 120, height: 40 },
   ));

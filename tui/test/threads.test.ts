@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { RGBA } from "@opentui/core";
 import { chainThreads } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
-import { glyph, palettes } from "../src/theme.ts";
+import { glyph, palettes, spacing as space } from "../src/theme.ts";
 import { type Composing, cellAt, composing } from "./composing.ts";
 import { idle } from "./idle.ts";
 
@@ -295,7 +295,9 @@ test("a line that awaits a command lights the line that made it, names it, and s
       }
       keep("awaits", rows.join("\n"));
       expect(ready()).toBe(true);
-      expect(rows.find((row) => row.includes("b = await build"))).toMatch(/[\u2800-\u28ff✻] b = await build/);
+      expect(rows.find((row) => row.includes("b = await build"))).toMatch(
+        /(?:\d|[\u2800-\u28ff✻])  b = await build/,
+      );
       await session.engine.cancel(rung);
     },
     size,
@@ -392,15 +394,20 @@ test("the keys of the footer stand under the context, on the row of the footer, 
     { width: 140, height: 40 },
   ));
 
-test("the sidebar ends as far above the context as the last thread of the feed ends above the input", () =>
+test("the sidebar ends as far above the context as the feed ends above the input, on a feed that fills the screen", () =>
   composing(
     async ({ app, frame }) => {
       await frame();
-      const gap = app.corner.y - (app.railSlot.y + app.railSlot.height);
-      expect(gap).toBeGreaterThan(0);
-      const last = app.scroll.content.getChildren().at(-1);
-      expect(last).toBeDefined();
-      expect(app.scroll.y + app.scroll.height - ((last?.y ?? 0) + (last?.height ?? 0))).toBe(gap);
+      app.scroll.scrollTo(0);
+      const rows = (await frame()).split("\n");
+      expect(app.scroll.scrollHeight).toBeGreaterThan(app.scroll.height);
+      const feed = app.lower.y - (app.scroll.y + app.scroll.height);
+      const side = app.corner.y - (app.railSlot.y + app.railSlot.height);
+      expect(feed).toBe(space.rest);
+      expect(side).toBe(space.rest);
+      const left = 140 - app.corner.width;
+      expect((rows[app.lower.y] ?? "").slice(3, 4)).toBe(glyph.halfTop);
+      expect((rows[app.corner.y] ?? "").slice(left + 2, left + 3)).toBe(glyph.halfTop);
     },
     { width: 140, height: 20 },
     true,
@@ -649,3 +656,26 @@ test("the agents that a thread hires fold under it to their count in the sidebar
     { width: 152, height: 60 },
     true,
   ));
+
+test("the marks of the threads count a question anywhere and the failure or pause of a thread the operator started, and say nothing of work", () =>
+  composing(async ({ app }) => {
+    const base = { title: "", messages: [], asked: [], resolved: false } as const;
+    const one = (
+      state: "asks" | "failed" | "held" | "running",
+      yours: boolean,
+      asks: string[] = [],
+    ): Parameters<typeof app.threadAttention>[0][number] =>
+      ({ ...base, act: { id: "prompt1" }, state, yours, asks, origin: "rung" }) as never;
+    const marks = (threads: Parameters<typeof app.threadAttention>[0]) => ({
+      attention: app.threadAttention(threads),
+      tip: app.badgeTip(app.threadAttention(threads))[0]?.[0],
+    });
+    expect(marks([one("asks", false, ["prompt2"]), one("failed", false), one("running", true)])).toEqual({
+      attention: { asks: 1, held: 0, failed: 0, unread: 0 },
+      tip: "1 question waits for you",
+    });
+    expect(marks([one("failed", true), one("held", true), one("running", false)])).toEqual({
+      attention: { asks: 0, held: 1, failed: 1, unread: 0 },
+      tip: "1 failed  ·  1 paused",
+    });
+  }, size));

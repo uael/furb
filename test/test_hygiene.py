@@ -131,6 +131,22 @@ def test_the_module_docstring_is_empty() -> None:
     assert ast.get_docstring(ast.parse(contract.read_text(encoding="utf-8"))) is None
 
 
+def test_every_name_of_the_policy_line_is_defined_in_the_contract() -> None:
+  tree = ast.parse(PYI.read_text(encoding="utf-8"))
+  lines = [
+    n.value.value
+    for n in tree.body
+    if isinstance(n, ast.Expr)
+    and isinstance(n.value, ast.Constant)
+    and isinstance(n.value.value, str)
+    and n.value.value.startswith("A minor may change the default of each policy:")
+  ]
+  assert len(lines) == 1
+  named = re.findall(r"[A-Z][A-Z_]*[A-Z]", lines[0].split(":", 1)[1].split(".", 1)[0])
+  assert named
+  assert [name for name in named if name not in defs(tree)] == []
+
+
 def test_the_engine_fits_the_window_it_is_meant_to_be_read_in() -> None:
   spent = engine_tokens(SYSTEM)
   assert spent < BUDGET, f"the engine the model reads costs {spent} tokens, over the {BUDGET} budget"

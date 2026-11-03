@@ -43,8 +43,9 @@ done
 unpack "$CARGO_TARGET_DIR/package/furb-$version.crate"
 cargo new --quiet --vcs none "$work/demo"
 cd "$work/demo"
-# cargo add reads the index of crates.io and no patch, so the line that it would write for furb is written here.
-cargo add --quiet futures
+# cargo add reads the index of crates.io and no patch, so the line that it would write for furb is written here. The
+# example runs its life on the runtime of tokio that its main awaits on.
+cargo add --quiet tokio --features rt,macros
 sed -i.new "/^\[dependencies\]$/a\\
 furb = \"$version\"
 " Cargo.toml

@@ -42,7 +42,7 @@ pub(crate) use fetch::fetched;
 pub use files::files;
 pub(crate) use log::continued;
 pub use log::{log, logged};
-pub use operator::{SHAPES, answered, answers};
+pub use operator::{Asked, SHAPES, answered, answers};
 pub(crate) use provider::search::{posted, spawned};
 pub use provider::{
   Advertised, BACKOFF, Backoff, Hosted, Model, Provider, Retries, Retry, Search, Told, Writes,

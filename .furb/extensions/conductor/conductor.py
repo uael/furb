@@ -41,7 +41,7 @@ from furb.engine import (
 
 CONDUCTING = """Conduct the work in one loop, and plan no further than the next step.
 The round is autonomous, by the ruling of the owner on 10-31: "#916 should have never been queued. Make it clear in conductor doc that it's designed to be autonomous. The word of the owner (me) can be asynchronous". So the round never makes work wait for the owner by a rule of its own: no cap, no count of rounds and no hold of the round ends in "the owner decides", and such a rule is a defect of the round, never a design. The owner speaks asynchronously: by his own labels on a PR (owner-merge, hold, hold:owner-review, paused), which the round obeys as they stand, and by his comments and rulings, each of which changes what the round does from then on. Until his word comes, the round decides from the rulings and goes on.
-Put each item in queue as (key, brief, thread), or in backlog to wait behind queue, then await conduct(). Each round tends the workers and the open PRs, hires a worker for each item, cap() at once, and waits every seconds or until a worker ends. It hires no item of a model family while an open PR in trouble has no worker and needs one of that family. A PR in trouble takes the first model of the handover role, the model of its maker, limits["fixer"] and the actor role that has room, so it waits only when no family has room. So the fixers take the free slots of their family first, the round merges before it starts new work there, and each other family hires on its own room. It tells you once when such a PR waits for a fixer whose family has no room at all. It moves the first item of backlog to queue while queue and working hold fewer than cap() items. It counts only the items of queue that it can hire now, so held items do not starve backlog.
+Put each item in queue as (key, brief, thread), or in backlog to wait behind queue, then await conduct(). Each round tends the workers and the open PRs, hires a worker for each item, cap() at once, and waits every seconds or until a worker ends. It hires no item of a model family while an open PR in trouble has no worker and needs one of that family. A PR in trouble takes the first model of the handover role, the model of its maker, limits["fixer"] and the actor role that has room, so it waits only when no family has room. So the fixers take the free slots of their family first, the round merges before it starts new work there, and each other family hires on its own room. It tells you once when such a PR waits for a fixer whose family has no room at all. It moves the first item of backlog to queue while queue and working hold fewer than cap() items. It counts only the items of queue that it can hire now, so held items do not starve backlog. By the ruling of the owner on 11-03, "prioritize complex stuff, because refactor and big changes might changes how to approach the simpler ones, so better doing the hard work first, thne polishing and simpler items", each round orders queue and backlog by priority(item) before it hires: first the items of the core, which are the items whose key stands in the plan table of an open design issue (#983, #984, #985 and #988, which each sweep reads once into planned) and the items whose thread names defects, then the others; inside each group the model of the item, opus/high first, then opus/medium, sonnet/high and sonnet/medium; and items alike keep their order of arrival.
 When you find a defect, a wrong state or a gap in your own work, or the owner points at one, fix the state at once, then make its durable fix at once: a PR, through patch() for the word of the conductor, or an item at the head of the queue. Never keep it as a note for later, and never fix it only with a live patch. When a message of the owner asks whether a state is right, that is a sign that it is not: read the whole state, list each thing that is off, fix all of them in one go, read the state again to verify it, and do this again until nothing is off. Only then report, with what you verified.
 The owner rules, on 10-23, that the model of an item depends on its kind, and that the default, handover and editor roles use the efforts he chose. So a debrief asks the model of its worker, and a worker runs efforts[key], or the model of its kind. An item has a kind, kinds[key], by the ruling of the owner on 10-28 on dedicated audit and edit workers: audit reads and writes a register in scratch, with no worktree and no PR, on the audit model in limits["models"], with the brief AUDIT; edit makes a worktree and a PR, on the editor model there, with the brief WORKER; fix mends one red PR on limits["fixer"]. An item with no kind is a fix when its key is fixN or boxN, else an edit. An auditor that ends with 0 and its report is a line in the next notice, and each row of the table | Dn | key | model | area | brief | in its register is queued once as the item triage-<key>, at the end of queue, on the model of its row. A fixer (fixN, boxN) runs on limits["fixer"], by the ruling of the operator. A worker runs only a model of MODELS: sonnet/medium, sonnet/high, opus/medium or opus/high. hire() refuses xhigh and max, and the round starts no item that asks for one and tells you. You choose sonnet for an item where it makes sense, as efforts[key] = "claude-cli:sonnet/medium" before you queue it.
 limits["room"] gives the room of each model family, and limits["models"] gives the model for each role: actor, handover, editor, patcher, ruler, stronger and audit. Both live in the state of the round, so a reload keeps your choices. Change limits["models"] once to switch every worker, judge and patcher. The default for every role is codex:gpt-6-luna/medium, and its room is five. A model family is its full name after the provider when limits["room"] has that name, or its name before the effort otherwise, as gpt-6-luna for codex:gpt-6-luna/medium. cap() gives the sum of the room. A fixer goes before a new item. A worker that ended and whose PR needs a fixer goes on in its own chain on the handover model in limits["models"], with a new prompt there, when that model has room, else on the model of its last prompt when that has room; else a fixer starts on limits["fixer"].
@@ -146,6 +146,7 @@ kinds: dict[str, str] = globals().setdefault("kinds", {})
 pool: dict[str, dict] = globals().setdefault("pool", {})
 slots: dict[str, str] = globals().setdefault("slots", {})
 areas: dict[str, list[str]] = globals().setdefault("areas", {})
+planned: set[str] = globals().setdefault("planned", set())
 touched: dict[int, dict] = globals().setdefault("touched", {})
 serial: dict[str, int] = globals().setdefault("serial", {})
 round_faults: dict[str, int] = globals().setdefault("round_faults", {})
@@ -2415,6 +2416,12 @@ def triage() -> None:
 
 
 PATH = r"(?:[\w.~-]+/)+[\w.-]+\.(?:py|pyi|rs|tsx?|json|toml|md|ya?ml|sh)\b"
+TESTING = re.compile(r".*\.test\..*|.*_test\..*|test_.*\.py|conftest\.py")
+
+
+def is_test(path: str) -> bool:
+  *folders, name = path.split("/")
+  return bool({"test", "tests", "__tests__"} & set(folders)) or bool(TESTING.fullmatch(name))
 
 
 async def changed_files() -> None:
@@ -2431,7 +2438,7 @@ def rival(key: str, brief: str) -> tuple[int, list[str]] | None:
   for pr in prs.values() if mine else []:
     if f"w:{key}" in pr["labels"] or pr["n"] in owns.get(key, []) or re.search(rf"#{pr['n']}\b", brief):
       continue
-    paths = touched.get(pr["n"], {}).get("paths", [])
+    paths = [p for p in touched.get(pr["n"], {}).get("paths", []) if not is_test(p)]
     hit = sorted({p for p in paths for x in mine if p == x or "/" in p and x.endswith("/" + p) or p.startswith(x + "/")})
     if hit:
       return pr["n"], hit
@@ -2440,7 +2447,7 @@ def rival(key: str, brief: str) -> tuple[int, list[str]] | None:
 
 def files_of(key: str, brief: str) -> set[str]:
   held = {a.strip("/") for a in areas.get(key, []) if a.strip("/")}
-  return held or set(re.findall(PATH, brief))
+  return {x for x in held or set(re.findall(PATH, brief)) if not is_test(x)}
 
 
 def overlap(mine: set[str], other: set[str]) -> list[str]:
@@ -2477,7 +2484,36 @@ def serialized(key: str, brief: str) -> bool:
   return False
 
 
+PLANS = (983, 984, 985, 988)
+PLAN = "gh issue view {n} --json state,body --jq 'select(.state == \"OPEN\") | .body'"
+RANKS = ("opus/high", "opus/medium", "sonnet/high", "sonnet/medium")
+
+
+async def plans() -> None:
+  """The keys of the plan tables of the open design issues, read once for each sweep: the one home of the core that priority() ranks first. A gh that fails leaves the keys as they stood."""
+  keys: set[str] = set()
+  for n in PLANS:
+    got = await shell(PLAN.format(n=n), timeout=120, ok=True)
+    if got.code != 0:
+      return
+    text = got.stdout.content
+    keys |= set(re.findall(r"(?m)^\| ([a-z][a-z0-9-]*) \|", text))
+    keys |= set(re.findall(r"(?m)^### \d+\. `([a-z][a-z0-9-]*)`", text))
+  keys.discard("key")
+  planned.clear()
+  planned.update(keys)
+
+
+def priority(item: tuple[str, str, str]) -> tuple[int, int]:
+  key, _, thread = item
+  core = key in planned or "defects" in re.split(r"[^a-z0-9]+", thread.lower())
+  tail = model_of(key).split(":")[-1]
+  return 0 if core else 1, RANKS.index(tail) if tail in RANKS else len(RANKS)
+
+
 def staff() -> None:
+  queue.sort(key=priority)
+  backlog.sort(key=priority)
   under = tree()
   for c in list(parked):
     entry = parked[c]
@@ -3198,6 +3234,7 @@ async def sweep(every: float) -> None:
     pr["verdict"] = verdict(pr)
     prs[pr["n"]] = pr
   merged.update(json.loads(parts[1]))
+  await plans()
   await unheld()
   await main_pushes()
   for one in [x for x in pool.values() if x["pr"] and x["folders"] is None]:
