@@ -522,6 +522,10 @@ pub fn runtime() -> Handle {
 
 /// The reactor of the process, for a door that drives a life with no runtime of tokio: one runtime, driven by a
 /// thread of its own, while every ear runs on the thread of its life.
+#[expect(
+  clippy::disallowed_methods,
+  reason = "the thread of the reactor blocks on the runtime that it drives, which waits for nothing"
+)]
 pub fn reactor() -> &'static Handle {
   static REACTOR: OnceLock<Handle> = OnceLock::new();
   REACTOR.get_or_init(|| {

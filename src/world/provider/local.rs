@@ -259,6 +259,10 @@ impl Server {
 
   /// The models that the server lists now, or why it lists none, which it waits for on the runtime
   /// of the ears, so it never runs on a thread of that runtime nor on the thread of a life.
+  #[expect(
+    clippy::disallowed_methods,
+    reason = "debt: a call that blocks: block_on, where the catalog asks for the list with no await"
+  )]
   fn list(&self) -> Result<Vec<Offer>, String> {
     let client = ReqwestClient::builder().connect_timeout(CONNECT).build();
     let client = client.map_err(|no| no.to_string())?;

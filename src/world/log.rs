@@ -206,7 +206,7 @@ impl Log {
   fn open(record: &Path, held: &[Object]) -> Log {
     let path = PathBuf::from(format!("{}.log", record.display()));
     let fresh = PathBuf::from(format!("{}.log.new", record.display()));
-    let earlier = crate::checkpoint::crossed(held)
+    let earlier = crate::checkpoint::last(held)
       .and_then(|at| earlier(&path, &held[..at]).map(|(text, seen)| (at, text, seen)));
     let file = OpenOptions::new().create(true).write(true).truncate(true).open(&fresh).ok();
     let entries = held.len();

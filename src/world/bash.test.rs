@@ -1,5 +1,12 @@
 //! The shell of the commands, proved on every machine.
 
+#![cfg_attr(
+  unix,
+  expect(
+    clippy::disallowed_methods,
+    reason = "debt: a call that blocks: block_on, where a test drives a future on the reactor"
+  )
+)]
 #![expect(
   clippy::let_underscore_must_use,
   reason = "debt: a let _ drops a value that must be used"

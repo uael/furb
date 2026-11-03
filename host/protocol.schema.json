@@ -1,0 +1,1935 @@
+{
+  "type": "object",
+  "properties": {
+    "request": {
+      "$ref": "#/definitions/Request"
+    },
+    "frame": {
+      "$ref": "#/definitions/Frame"
+    }
+  },
+  "required": [
+    "request",
+    "frame"
+  ],
+  "title": "Protocol",
+  "description": "Both ways of the protocol, which its schema holds.",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "Request": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "verb"
+          ],
+          "type": "object",
+          "properties": {
+            "verb": {
+              "type": "string",
+              "const": "hello"
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/Hello"
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "verb": {
+              "type": "string",
+              "const": "list"
+            }
+          },
+          "required": [
+            "verb"
+          ],
+          "description": "The lives and the records of the machine."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "cwd": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "open"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "The life of a record opened, in a folder or in the folder of its record."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "from": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "verb": {
+              "type": "string",
+              "const": "attach"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "from"
+          ],
+          "description": "The events of a life from a place in its log, which the daemon pushes to the peer."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "detach"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "holder": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "pin"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "holder"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "holder": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "unpin"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "holder"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "presence"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "Who is attached to a life now."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "act": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "get"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "act"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "act": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "peek"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "act"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "of": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "transcript"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "turns"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "program"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "standing"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "cwd"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "inspect"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "name"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "pending"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "The prompts of a life that wait for an operator."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "shape": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "to": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "prompt"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "shape",
+            "message"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "act": {
+              "type": "string"
+            },
+            "line": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "answer"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "act",
+            "line"
+          ],
+          "description": "The close of a prompt to the operator, with a line that the operator wrote."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "act": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "pause"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "act"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "act": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "wake"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "act"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "act": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "cancel"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "act"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "chain"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "word": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "run"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "word"
+          ],
+          "description": "A word that runs on a chain as a turn of the operator."
+        },
+        {
+          "required": [
+            "verb"
+          ],
+          "type": "object",
+          "properties": {
+            "verb": {
+              "type": "string",
+              "const": "view.mount"
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/Mount"
+            }
+          ]
+        },
+        {
+          "required": [
+            "verb"
+          ],
+          "type": "object",
+          "properties": {
+            "verb": {
+              "type": "string",
+              "const": "view.tree"
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/Tree"
+            }
+          ]
+        },
+        {
+          "required": [
+            "verb"
+          ],
+          "type": "object",
+          "properties": {
+            "verb": {
+              "type": "string",
+              "const": "view.event"
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/ViewEvent"
+            }
+          ]
+        },
+        {
+          "required": [
+            "verb"
+          ],
+          "type": "object",
+          "properties": {
+            "verb": {
+              "type": "string",
+              "const": "view.effect"
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/ViewEffect"
+            }
+          ]
+        },
+        {
+          "required": [
+            "verb"
+          ],
+          "type": "object",
+          "properties": {
+            "verb": {
+              "type": "string",
+              "const": "view.dispose"
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/Dispose"
+            }
+          ]
+        }
+      ],
+      "description": "One request of a peer: an id that the reply gives back, and the verb. A verb names an act as\n`act`, since `id` is the key of the request."
+    },
+    "Kind": {
+      "type": "string",
+      "enum": [
+        "window",
+        "kit"
+      ],
+      "description": "What a peer is: a window of an operator, or the process of a kit."
+    },
+    "Hello": {
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "kind": {
+          "$ref": "#/definitions/Kind"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "protocol",
+        "kind"
+      ],
+      "description": "The first frame of a peer: the protocol that it speaks, its kind, and the name of a kit."
+    },
+    "Slot": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "slot": {
+              "type": "string",
+              "const": "dock"
+            }
+          },
+          "required": [
+            "slot"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "slot": {
+              "type": "string",
+              "const": "sidebar"
+            }
+          },
+          "required": [
+            "slot"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "slot": {
+              "type": "string",
+              "const": "row"
+            }
+          },
+          "required": [
+            "slot",
+            "kind"
+          ],
+          "description": "The row of each act of a kind."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string"
+            },
+            "slot": {
+              "type": "string",
+              "const": "detail"
+            }
+          },
+          "required": [
+            "slot",
+            "kind"
+          ],
+          "description": "The detail of each act of a kind."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "slot": {
+              "type": "string",
+              "const": "mark"
+            }
+          },
+          "required": [
+            "slot"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "slot": {
+              "type": "string",
+              "const": "footer"
+            }
+          },
+          "required": [
+            "slot"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "slot": {
+              "type": "string",
+              "const": "screen"
+            }
+          },
+          "required": [
+            "slot"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "slot": {
+              "type": "string",
+              "const": "overlay"
+            }
+          },
+          "required": [
+            "slot"
+          ]
+        }
+      ],
+      "description": "Where a window shows a view."
+    },
+    "Mount": {
+      "type": "object",
+      "properties": {
+        "viewer": {
+          "type": "string"
+        },
+        "slot": {
+          "$ref": "#/definitions/Slot"
+        },
+        "kit": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "viewer",
+        "slot",
+        "kit"
+      ],
+      "description": "A view that a window mounts in a slot, which the process of a kit serves."
+    },
+    "Node": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "axis": {
+              "$ref": "#/definitions/Axis"
+            },
+            "gap": {
+              "type": "integer",
+              "format": "uint16",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "border": {
+              "type": "boolean"
+            },
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Node"
+              }
+            },
+            "node": {
+              "type": "string",
+              "const": "box"
+            }
+          },
+          "required": [
+            "node",
+            "axis",
+            "gap",
+            "border",
+            "children"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "runs": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Run"
+              }
+            },
+            "node": {
+              "type": "string",
+              "const": "text"
+            }
+          },
+          "required": [
+            "node",
+            "runs"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Node"
+              }
+            },
+            "node": {
+              "type": "string",
+              "const": "list"
+            }
+          },
+          "required": [
+            "node",
+            "items"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "header": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/Node"
+                }
+              }
+            },
+            "node": {
+              "type": "string",
+              "const": "table"
+            }
+          },
+          "required": [
+            "node",
+            "header",
+            "rows"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string"
+            },
+            "hint": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "node": {
+              "type": "string",
+              "const": "input"
+            }
+          },
+          "required": [
+            "node",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "node": {
+              "type": "string",
+              "const": "button"
+            }
+          },
+          "required": [
+            "node",
+            "label"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "done": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "node": {
+              "type": "string",
+              "const": "progress"
+            }
+          },
+          "required": [
+            "node"
+          ],
+          "description": "The share of the work that is done, from 0 to 1, or none while it is not known."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "language": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "node": {
+              "type": "string",
+              "const": "code"
+            }
+          },
+          "required": [
+            "node",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "node": {
+              "type": "string",
+              "const": "diff"
+            }
+          },
+          "required": [
+            "node",
+            "text"
+          ],
+          "description": "A diff in the unified form."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "node": {
+              "type": "string",
+              "const": "markdown"
+            }
+          },
+          "required": [
+            "node",
+            "text"
+          ]
+        }
+      ],
+      "description": "One node of a view, under an id that an event names."
+    },
+    "Axis": {
+      "type": "string",
+      "enum": [
+        "row",
+        "column"
+      ],
+      "description": "The way a box lays out its children."
+    },
+    "Run": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "tone": {
+          "default": "text",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Tone"
+            }
+          ]
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "description": "A run of a text, in a tone."
+    },
+    "Tone": {
+      "type": "string",
+      "enum": [
+        "text",
+        "muted",
+        "faint",
+        "accent",
+        "success",
+        "warning",
+        "danger"
+      ],
+      "description": "The tone of a run, which each window gives its own color."
+    },
+    "Tree": {
+      "type": "object",
+      "properties": {
+        "viewer": {
+          "type": "string"
+        },
+        "slot": {
+          "$ref": "#/definitions/Slot"
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "tree": {
+          "$ref": "#/definitions/Node"
+        }
+      },
+      "required": [
+        "viewer",
+        "slot",
+        "version",
+        "tree"
+      ],
+      "description": "The tree of a view, which takes the place of each tree of a lower version."
+    },
+    "Gesture": {
+      "type": "string",
+      "enum": [
+        "press",
+        "change",
+        "submit"
+      ],
+      "description": "What a person does to a node."
+    },
+    "ViewEvent": {
+      "type": "object",
+      "properties": {
+        "viewer": {
+          "type": "string"
+        },
+        "node": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/definitions/Gesture"
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "viewer",
+        "node",
+        "kind"
+      ],
+      "description": "What a person did to a node of a view, with the value of an input."
+    },
+    "Effect": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string"
+            },
+            "effect": {
+              "type": "string",
+              "const": "open"
+            }
+          },
+          "required": [
+            "effect",
+            "url"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "effect": {
+              "type": "string",
+              "const": "draft"
+            }
+          },
+          "required": [
+            "effect",
+            "text"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "effect": {
+              "type": "string",
+              "const": "notice"
+            }
+          },
+          "required": [
+            "effect",
+            "text"
+          ]
+        }
+      ],
+      "description": "What a kit asks of a window."
+    },
+    "ViewEffect": {
+      "type": "object",
+      "properties": {
+        "viewer": {
+          "type": "string"
+        },
+        "effect": {
+          "$ref": "#/definitions/Effect"
+        }
+      },
+      "required": [
+        "viewer",
+        "effect"
+      ],
+      "description": "What a kit asks of the one window of a view."
+    },
+    "Dispose": {
+      "type": "object",
+      "properties": {
+        "viewer": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "viewer"
+      ],
+      "description": "The end of a view in its window."
+    },
+    "Frame": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "answer": {
+              "$ref": "#/definitions/Answer"
+            },
+            "frame": {
+              "type": "string",
+              "const": "reply"
+            }
+          },
+          "required": [
+            "frame",
+            "id",
+            "answer"
+          ],
+          "description": "The answer to the request of an id."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "error": {
+              "$ref": "#/definitions/ProtocolError"
+            },
+            "why": {
+              "type": "string"
+            },
+            "frame": {
+              "type": "string",
+              "const": "refused"
+            }
+          },
+          "required": [
+            "frame",
+            "error",
+            "why"
+          ],
+          "description": "A refusal of the request of an id, or of a frame with no id that could be read, with the\ntext that a person reads."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "seq": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "event": {
+              "$ref": "#/definitions/Event"
+            },
+            "frame": {
+              "type": "string",
+              "const": "event"
+            }
+          },
+          "required": [
+            "frame",
+            "life",
+            "seq",
+            "event"
+          ],
+          "description": "One event of a life that the peer attached, under its place in the log of the life."
+        },
+        {
+          "required": [
+            "frame"
+          ],
+          "type": "object",
+          "properties": {
+            "frame": {
+              "type": "string",
+              "const": "view.mount"
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/Mount"
+            }
+          ]
+        },
+        {
+          "required": [
+            "frame"
+          ],
+          "type": "object",
+          "properties": {
+            "frame": {
+              "type": "string",
+              "const": "view.tree"
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/Tree"
+            }
+          ]
+        },
+        {
+          "required": [
+            "frame"
+          ],
+          "type": "object",
+          "properties": {
+            "frame": {
+              "type": "string",
+              "const": "view.event"
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/ViewEvent"
+            }
+          ]
+        },
+        {
+          "required": [
+            "frame"
+          ],
+          "type": "object",
+          "properties": {
+            "frame": {
+              "type": "string",
+              "const": "view.effect"
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/ViewEffect"
+            }
+          ]
+        },
+        {
+          "required": [
+            "frame"
+          ],
+          "type": "object",
+          "properties": {
+            "frame": {
+              "type": "string",
+              "const": "view.dispose"
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/Dispose"
+            }
+          ]
+        }
+      ],
+      "description": "What the daemon says to a peer."
+    },
+    "Answer": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "done"
+            }
+          },
+          "required": [
+            "answer"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "welcome"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "protocol": {
+                  "type": "integer",
+                  "format": "uint32",
+                  "minimum": 0
+                },
+                "peer": {
+                  "$ref": "#/definitions/Peer"
+                }
+              },
+              "required": [
+                "protocol",
+                "peer"
+              ]
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "The answer to a hello: the protocol of the daemon, and the peer as the daemon knows it."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "lives"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Listed"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "act"
+            },
+            "data": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "The name of the act that the verb made."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "value"
+            },
+            "data": true
+          },
+          "required": [
+            "answer",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "values"
+            },
+            "data": {
+              "type": "array",
+              "items": true
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "inspected"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "repr": {
+                  "type": "string"
+                },
+                "value": true
+              },
+              "required": [
+                "kind",
+                "repr",
+                "value"
+              ]
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "A name of a module: the name of its type, its representation, and its value as JSON."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "presence"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Peer"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ]
+        }
+      ],
+      "description": "What a verb comes to."
+    },
+    "Peer": {
+      "type": "object",
+      "properties": {
+        "login": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/definitions/Role"
+        },
+        "kind": {
+          "$ref": "#/definitions/Kind"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "login",
+        "role",
+        "kind"
+      ],
+      "description": "A peer as the daemon knows it after its hello: the login that its transport proved, its role,\nits kind, and the name of a kit."
+    },
+    "Role": {
+      "type": "string",
+      "enum": [
+        "read",
+        "write"
+      ],
+      "description": "What a peer may do: read a life, or read and write it. Write holds each right of read."
+    },
+    "Listed": {
+      "type": "object",
+      "properties": {
+        "life": {
+          "type": "string"
+        },
+        "open": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "life",
+        "open"
+      ],
+      "description": "A record of the machine, and whether a life of the daemon holds it now."
+    },
+    "ProtocolError": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ours": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "theirs": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            },
+            "error": {
+              "type": "string",
+              "const": "protocol"
+            }
+          },
+          "required": [
+            "error",
+            "ours",
+            "theirs"
+          ],
+          "description": "The hello names another protocol, and the daemon closes the peer."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "error": {
+              "type": "string",
+              "const": "first"
+            }
+          },
+          "required": [
+            "error"
+          ],
+          "description": "The first frame of the peer was no hello, and the daemon closes the peer."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "error": {
+              "type": "string",
+              "const": "again"
+            }
+          },
+          "required": [
+            "error"
+          ],
+          "description": "A second hello of the same peer."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "needs": {
+              "$ref": "#/definitions/Role"
+            },
+            "has": {
+              "$ref": "#/definitions/Role"
+            },
+            "error": {
+              "type": "string",
+              "const": "role"
+            }
+          },
+          "required": [
+            "error",
+            "needs",
+            "has"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "why": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "unread"
+            }
+          },
+          "required": [
+            "error",
+            "why"
+          ],
+          "description": "A frame that is no frame of the protocol, with what the reader found."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "bound": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "error": {
+              "type": "string",
+              "const": "large"
+            }
+          },
+          "required": [
+            "error",
+            "bound"
+          ],
+          "description": "A frame past the bound, and the daemon closes the peer."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "why": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "refused"
+            }
+          },
+          "required": [
+            "error",
+            "why"
+          ],
+          "description": "The daemon or the life refused the verb, with why."
+        }
+      ],
+      "description": "Why the daemon refuses a frame of a peer. It crosses the protocol as data, beside its text."
+    },
+    "Event": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "fact"
+            },
+            "data": true
+          },
+          "required": [
+            "event",
+            "data"
+          ],
+          "description": "One fact that the life said, as JSON reads it: each fact of the record that the life said\nagain as it opened, then each fact that it said after."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "act"
+            },
+            "data": {
+              "$ref": "#/definitions/Act"
+            }
+          },
+          "required": [
+            "event",
+            "data"
+          ],
+          "description": "An act as it stands after a fact about it, which takes the place of each earlier event of the\nsame act."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "text"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "rung": {
+                  "type": "string"
+                },
+                "chain": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "thinking": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "rung",
+                "chain",
+                "text",
+                "thinking"
+              ]
+            }
+          },
+          "required": [
+            "event",
+            "data"
+          ],
+          "description": "What a model added to its text and to its thought, as it writes the reply of a rung on a\nchain. It is no fact, and the turn of the reply holds all of it."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "notice"
+            },
+            "data": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "event",
+            "data"
+          ],
+          "description": "A report of the life that no model reads, one line."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "changed"
+            },
+            "data": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "event",
+            "data"
+          ],
+          "description": "A chain whose queries give another answer now, once each fact that changed it was told."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "ended"
+            },
+            "data": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "event",
+            "data"
+          ],
+          "description": "The end of the life, with the fault that ended it, or none when a client ended it. It is the\nlast event."
+        }
+      ],
+      "description": "What a life tells its clients, in the order of its log."
+    },
+    "Act": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "by": {
+          "type": "string"
+        },
+        "on": {
+          "type": "string"
+        },
+        "chain": {
+          "type": "string"
+        },
+        "words": {
+          "type": "array",
+          "items": true
+        },
+        "state": {
+          "$ref": "#/definitions/State"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "by",
+        "on",
+        "chain",
+        "words",
+        "state"
+      ],
+      "description": "One act of a life: its kind, its name, who made it, what it is on, the chain it is in, its words\nafter these, and its state."
+    },
+    "State": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "const": "asked"
+            }
+          },
+          "required": [
+            "state"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "const": "started"
+            }
+          },
+          "required": [
+            "state"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "const": "done"
+            },
+            "value": true
+          },
+          "required": [
+            "state",
+            "value"
+          ]
+        }
+      ],
+      "description": "Where an act stands: asked, started by the ear that owns it, or done, with what it came to."
+    }
+  },
+  "x-protocol": 1
+}

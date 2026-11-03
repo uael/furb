@@ -33,16 +33,13 @@
 
 use std::{
   fs,
-  future::Future,
   io::{BufRead, BufReader, Read, Write},
   net::TcpListener,
   path::{Path, PathBuf},
-  pin::pin,
   sync::{
     Arc, Mutex,
     atomic::{AtomicBool, AtomicUsize, Ordering},
   },
-  task::{Context, Poll, Wake, Waker},
   thread,
   time::{Duration, Instant},
 };
@@ -65,27 +62,7 @@ use super::{
 };
 use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, Text, verbs, world};
 
-/// A waker that unparks the thread of the test, so what an ear waits for wakes the poll when it is ready.
-struct Parked(thread::Thread);
-
-impl Wake for Parked {
-  fn wake(self: Arc<Self>) {
-    self.0.unpark();
-  }
-}
-
-/// One future driven to its end on this thread.
-fn block_on<T>(fut: impl Future<Output = T>) -> T {
-  let waker = Waker::from(Arc::new(Parked(thread::current())));
-  let mut cx = Context::from_waker(&waker);
-  let mut fut = pin!(fut);
-  loop {
-    if let Poll::Ready(got) = fut.as_mut().poll(&mut cx) {
-      return got;
-    }
-    thread::park_timeout(Duration::from_millis(20));
-  }
-}
+use crate::testing::{block_on, waker};
 
 /// A yard of one test, empty.
 fn yard(name: &str) -> PathBuf {
@@ -169,7 +146,7 @@ fn until(engine: &mut Engine, holds: impl Fn(&mut Engine) -> bool) -> bool {
 
 /// The engine driven until a condition of it holds, or a time is up.
 fn within(engine: &mut Engine, time: Duration, holds: impl Fn(&mut Engine) -> bool) -> bool {
-  let waker = Waker::from(Arc::new(Parked(thread::current())));
+  let waker = waker();
   let end = Instant::now() + time;
   while Instant::now() < end {
     engine.pump(&waker).expect("the engine is driven");
