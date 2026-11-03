@@ -34,17 +34,12 @@
 
 #![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
 #![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(
   clippy::redundant_closure_for_method_calls,
   reason = "debt: a closure where a method path serves"
 )]
 
 use std::{
-  cell::Cell,
+  cell::{Cell, RefCell},
   collections::VecDeque,
   future::{Future, poll_fn},
   pin::Pin,
@@ -55,11 +50,10 @@ use std::{
 };
 
 use futures::{
-  FutureExt, Stream, StreamExt,
+  Stream, StreamExt,
   stream::{LocalBoxStream, SelectAll},
 };
 use tokio::runtime::Handle;
-use unsync::spsc;
 
 use crate::{
   engine::Life,
@@ -146,15 +140,12 @@ pub trait Ear {
   /// What the ear says of its own accord, when its work came to something: a saying, or a verb. The ear heard every
   /// fact before it spoke, and it hears its saying as every ear does. A generator of a host says nothing but at a
   /// resume.
-  fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
-    let _ = cx;
+  fn poll(&mut self, _cx: &mut Context<'_>) -> Poll<Spoken> {
     Poll::Pending
   }
 
   /// What a verb that [`Ear::poll`] gave came to, which the ear takes at its next poll.
-  fn answered(&mut self, got: Result<Object, Fault>) {
-    let _ = got;
-  }
+  fn answered(&mut self, _got: Result<Object, Fault>) {}
 
   /// What the ear does with what it heard, as [`Ear::resume`] does, with the life lent to it until it is done: code
   /// of a host that calls a verb of the life while it runs calls it through the life. The life comes back with the
@@ -196,6 +187,16 @@ pub enum Next<W> {
   Worked(W),
 }
 
+/// What one side of an ear leaves for the other, in order. Both sides stand in the one ear and
+/// end together, so a side that leaves something never finds the other gone, and what it left
+/// waits to be taken.
+type Queue<T> = Rc<RefCell<VecDeque<T>>>;
+
+/// The first thing of a queue, taken.
+fn take<T>(queue: &Queue<T>) -> Option<T> {
+  queue.borrow_mut().pop_front()
+}
+
 /// What the coroutine of an ear tells its body: a fact heard, what a verb it called came to, or that the life drives
 /// the ear, which lets its works go on until it hears again.
 enum Event {
@@ -209,8 +210,8 @@ enum Event {
 /// heard and has not taken, whether the life drives it, and whether it began a work while it heard. `W` is what each
 /// of its works gives.
 pub struct Co<W = ()> {
-  events: spsc::Receiver<Event>,
-  spoken: spsc::Sender<Spoken>,
+  events: Queue<Event>,
+  spoken: Queue<Spoken>,
   unsaid: Rc<Cell<usize>>,
   works: SelectAll<LocalBoxStream<'static, W>>,
   heard: VecDeque<Fact>,
@@ -254,7 +255,7 @@ impl<W: 'static> Co<W> {
   /// polls the body each time it tells it something, so the body takes what it was told then, and waits for no event.
   fn told(&mut self) -> Option<Result<Object, Fault>> {
     let mut back = None;
-    while let Some(Some(event)) = self.events.recv().now_or_never() {
+    while let Some(event) = take(&self.events) {
       back = self.took(event).or(back);
     }
     back
@@ -291,7 +292,7 @@ impl<W: 'static> Co<W> {
   /// What the ear says or tells, to the coroutine, which counts it until it gives it to the life.
   fn spoke(&mut self, spoken: Spoken) {
     self.unsaid.set(self.unsaid.get() + 1);
-    let _ = self.spoken.try_send(spoken);
+    self.spoken.borrow_mut().push_back(spoken);
   }
 }
 
@@ -306,8 +307,8 @@ struct Coroutine {
   body: Option<Body>,
   /// The names and kinds the ear waits for, as a set, or nothing for every fact.
   hears: Option<Object>,
-  events: spsc::Sender<Event>,
-  spoken: spsc::Receiver<Spoken>,
+  events: Queue<Event>,
+  spoken: Queue<Spoken>,
   unsaid: Rc<Cell<usize>>,
   accord: VecDeque<Spoken>,
   answer: Option<Result<Object, Fault>>,
@@ -341,7 +342,7 @@ impl Ear for Coroutine {
       self.tell(Event::Answer(got));
     }
     let got = self.stepped(cx).map(|spoken| self.given(spoken));
-    while let Some(Some(more)) = self.spoken.recv().now_or_never() {
+    while let Some(more) = take(&self.spoken) {
       self.accord.push_back(more);
     }
     got
@@ -355,7 +356,7 @@ impl Ear for Coroutine {
 impl Coroutine {
   /// One event, told to the body.
   fn tell(&mut self, event: Event) {
-    let _ = self.events.try_send(event);
+    self.events.borrow_mut().push_back(event);
   }
 
   /// What the body said, given to the life, which says it before it polls the body again.
@@ -382,7 +383,7 @@ impl Coroutine {
   /// What the body said and the coroutine has not taken, or what it says when it is polled once; and how it ended
   /// when it ended.
   fn stepped(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
-    if let Some(Some(spoken)) = self.spoken.recv().now_or_never() {
+    if let Some(spoken) = take(&self.spoken) {
       return Poll::Ready(spoken);
     }
     let Some(body) = self.body.as_mut() else { return Poll::Pending };
@@ -396,10 +397,7 @@ impl Coroutine {
       self.body = None;
       self.ended = Some(done.map_or_else(Step::Raised, |()| Step::Over));
     }
-    match self.spoken.recv().now_or_never() {
-      Some(Some(spoken)) => Poll::Ready(spoken),
-      _ => Poll::Pending,
-    }
+    take(&self.spoken).map_or(Poll::Pending, Poll::Ready)
   }
 }
 
@@ -475,12 +473,11 @@ where
   B: FnOnce(Co<W>) -> F,
   F: Future<Output = Result<(), Fault>> + 'static,
 {
-  let (told, events) = spsc::unbounded();
-  let (spoken, said) = spsc::unbounded();
+  let (events, spoken) = (Queue::default(), Queue::default());
   let unsaid = Rc::new(Cell::new(0));
   let co = Co {
-    events,
-    spoken,
+    events: Rc::clone(&events),
+    spoken: Rc::clone(&spoken),
     unsaid: Rc::clone(&unsaid),
     works: SelectAll::new(),
     heard: VecDeque::new(),
@@ -491,8 +488,8 @@ where
   Box::new(Coroutine {
     body: Some(body),
     hears,
-    events: told,
-    spoken: said,
+    events,
+    spoken,
     unsaid,
     accord: VecDeque::new(),
     answer: None,
