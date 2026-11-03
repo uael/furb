@@ -1768,11 +1768,11 @@ async def test_pr_gives_the_url_of_a_pr_that_stands_when_gh_fails_late(conductor
 
 def test_prcheck_gives_the_words_and_names_the_part_that_is_too_long(conductor: Round) -> None:
   check = conductor.ns["prcheck"]
-  assert check("feat(tui): Show records", "one two", ["three"], ["four"]) == len("one two three four".split())
+  assert check("feat(tui): Show records", "One two.", ["Three."], ["Four."]) == len("one two three four".split())
   with pytest.raises(Refused, match=r"301 words, over 300 \(why 300, outcome 1, breaking 0\)"):
-    check("feat(tui): Show records", "w " * 300, ["x"])
+    check("feat(tui): Show records", "w " * 299 + "w.", ["X."])
   with pytest.raises(Refused, match="70 characters"):
-    check("feat(tui): " + "A" * 70, "why", ["x"])
+    check("feat(tui): " + "A" * 70, "Why.", ["X."])
 
 
 
@@ -2163,12 +2163,12 @@ async def test_pr_creates_each_label_that_it_adds_and_raises_refused_with_what_g
   boxes = ["checked"] * 6
   conductor.say(r"pr create", "could not add label: not found", 1)
   with pytest.raises(Refused) as caught:
-    await open_pr("feat(x): Y", "why", ["out"], boxes, labels=["w:k", "thread:t"], where=str(tmp_path))
+    await open_pr("feat(x): Y", "Why.", ["Out."], boxes, labels=["w:k", "thread:t"], where=str(tmp_path))
   assert "not found" in str(caught.value)
   assert "label create w:k --force" in conductor.log() and "label create thread:t --force" in conductor.log()
   conductor.says.clear()
   conductor.say(r"pr create", "https://github.com/o/r/pull/9\n")
-  got = await open_pr("feat(x): Y", "why", ["out"], boxes, labels=" --label w:k", where=str(tmp_path))
+  got = await open_pr("feat(x): Y", "Why.", ["Out."], boxes, labels=" --label w:k", where=str(tmp_path))
   assert got.stdout.content.strip() == "https://github.com/o/r/pull/9"
 
 
