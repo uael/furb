@@ -226,7 +226,10 @@ async function dialog(seen: Seen, selected = ""): Promise<void> {
   );
   const chosen = await seen.choose("MCP servers", items, {
     note: "Enter opens the menu of a server.",
-    actions: [...actions, ...lists].map(({ key, label }) => ({ key, label })),
+    actions: [...actions, ...lists, { key: "c", label: "reconnect all" }].map(({ key, label }) => ({
+      key,
+      label,
+    })),
     selected: Math.max(
       0,
       all.findIndex((one) => one.name === selected),
@@ -241,6 +244,7 @@ async function act(seen: Seen, one: Server, key: string): Promise<void> {
   if (key === "t") return tools(seen, one);
   if (key === "s") return resources(seen, one);
   if (key === "p") return prompts(seen, one);
+  if (key === "c") return reconnectAll(seen, one.name);
   const action = actions.find((each) => each.key === key);
   if (!action) return menu(seen, one);
   if (action.action === "approve") {
@@ -262,6 +266,42 @@ async function act(seen: Seen, one: Server, key: string): Promise<void> {
     );
   }
   return dialog(seen, one.name);
+}
+
+/** The states of a server that `reconnect` serves and that are not connected: a server in another state needs another
+ * action first, as enable or approve. */
+const down = actions[0].when.filter((state) => state !== "connected") as readonly string[];
+
+/** Reconnects each server of the last `mcp_servers` that is down, in one word that awaits them all, and says the state
+ * of each after. */
+async function reconnectAll(seen: Seen, selected = ""): Promise<void> {
+  const names = servers(seen)
+    .filter((one) => down.includes(one.state ?? ""))
+    .map((one) => one.name);
+  if (!names.length) {
+    seen.say("MCP: each server is connected, or needs enable or approve first.");
+    return dialog(seen, selected);
+  }
+  seen.say(`MCP: reconnect ${names.join(", ")}…`);
+  const word = [
+    `acts = [(name, mcp_control("reconnect", name)) for name in ${JSON.stringify(names)}]`,
+    "for name, one in acts:",
+    "  try:",
+    "    await one",
+    "  except Refused:",
+    "    pass",
+  ].join("\n");
+  try {
+    await seen.run(word);
+    const now = new Map(servers(seen).map((one) => [one.name, one]));
+    for (const name of names) {
+      const one = now.get(name);
+      seen.say(`MCP: ${name} is ${one?.state ?? "done"}${one?.error ? `: ${gist(one.error)}` : ""}.`);
+    }
+  } catch (error) {
+    seen.say(`MCP: reconnect all failed: ${gist(error instanceof Error ? error.message : error, 300)}`);
+  }
+  return dialog(seen, selected);
 }
 
 /** The menu of a server: each action that serves its state, and its lists. */
@@ -488,8 +528,8 @@ function cut(text: string, most: number, tone: Tone): Line[] {
  * connected server, and the resources of the servers after `@` in the input. It reads the servers from the acts that
  * the record holds, and acts through words that the record keeps. */
 export default function mcp(furb: Furb): void {
-  furb.command("mcp", "Manage the MCP servers: state, tools, resources, prompts, login", (_, seen) =>
-    dialog(seen),
+  furb.command("mcp", "Manage the MCP servers: state, tools, resources, prompts, login", (argument, seen) =>
+    argument.trim() === "reconnect all" ? reconnectAll(seen) : dialog(seen),
   );
   furb.status((seen) => {
     const all = servers(seen);

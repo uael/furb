@@ -71,8 +71,9 @@ the thread lit, Collapse folds it in the feed to its box on one line, Resolve cl
 and Reply makes it the target of the input, as Reply at the end of its box does. The resolved threads fold under one
 row, Resolved, which a click opens. After ⌥T the arrows move in the sidebar, Enter opens the workspace, the session or
 the thread under them, → peeks at a workspace, Space folds, r resolves, o replies, and Esc gives the keys back to the
-input. At the foot of the sidebar, Context says how full the window of the chain shown is and where a grant pauses it,
-its tokens, and what it spent.
+input. Under the sidebar, in the corner beside the input and one row under the list, Context says how full the window
+of the chain shown is and where a grant pauses it, its tokens, and what it spent. It says No answer yet before the first
+answer. On a narrow terminal, or with the sidebar hidden, it folds into a short line of the footer, as `8% · $0.16`.
 
 `/sidebar outline` and `/sidebar inbox` give the other shapes, and the flag `FURB_SIDEBAR` does the same at the start.
 The outline lists all workspaces in one tree: the workspace shown is open, with its sessions and, under the session

@@ -86,6 +86,25 @@ test("the part of mcp says the servers in the footer, and /mcp opens their dialo
   );
 });
 
+test("/mcp reconnect all reconnects each server that is down in one word, and the action c of the dialog does the same", async () => {
+  const session = await demoSession({ cwd: project() });
+  await composing(
+    async ({ app, frame, screen }) => {
+      await session.command(`/run ${WORD}\nmcp_servers()`);
+      await shows(frame, "MCP: 2 servers, 1 failed");
+      app.composer.setText("/mcp reconnect all");
+      await app.submit();
+      const control = () => session.acts.filter((act) => act.kind === "mcp_control").map((act) => act.words);
+      await until(() => control().length > 0);
+      expect(control()).toEqual([["reconnect", "slack"]]);
+      await shows(frame, "MCP servers", (now) => !now.includes("failed"));
+      await pressEscape(screen);
+    },
+    { width: 180, height: 50 },
+    session,
+  );
+});
+
 test("the menu of a server lists its tools, each with its signature, and the parameters of a tool", async () => {
   const session = await demoSession({ cwd: project() });
   await composing(

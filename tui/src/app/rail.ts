@@ -341,7 +341,6 @@ export const rail = part({
     if (!this.rail.visible) return;
     this.renderRailTop();
     this.renderWorkspaces();
-    this.renderRailUsage();
   },
 
   /** The top of the sidebar: one line that says whether something waits for you, anywhere, and what a click goes to.

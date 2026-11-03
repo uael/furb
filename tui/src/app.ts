@@ -141,6 +141,10 @@ export class App {
   readonly railHeading: BoxRenderable;
   readonly railSpaces: ScrollBoxRenderable;
   readonly railUsage: BoxRenderable;
+  /** The context of the chain in the corner at the bottom right, beside the input, as wide as the sidebar. */
+  readonly context: BoxRenderable;
+  /** The row under the feed and the sidebar: the input with the footer, and the context. */
+  readonly lower: BoxRenderable;
   /** The row at the top of the sidebar that says how to go back to the feed: a narrow terminal shows the sidebar in
    * place of the feed, which the screen holds. */
   readonly railBack: BoxRenderable;
@@ -391,7 +395,7 @@ export class App {
       id: "furb",
       width: "100%",
       height: "100%",
-      flexDirection: "row",
+      flexDirection: "column",
       backgroundColor: c.background,
       // Every press reaches the root, which keeps what it pressed for the release that makes it a click.
       onMouseDown: (event) => {
@@ -400,6 +404,14 @@ export class App {
       },
     });
     renderer.root.add(this.root);
+    // The root is a column of two rows: the feed and the sidebar on top, and the input and the context below, so that
+    // the context stands in the corner beside the input and the list of the sidebar does not move it.
+    const upper = this.box({ flexDirection: "row", flexGrow: 1, flexShrink: 1, minHeight: 0 });
+    this.root.add(upper);
+    this.lower = this.box({ id: "lower", flexDirection: "row" });
+    this.root.add(this.lower);
+    const below = this.box({ flexGrow: 1, flexShrink: 1, minWidth: 0, paddingX: space.gutter });
+    this.lower.add(below);
     const center = this.box({
       flexGrow: 1,
       flexShrink: 1,
@@ -408,7 +420,7 @@ export class App {
       paddingX: space.gutter,
       gap: space.stack,
     });
-    this.root.add(center);
+    upper.add(center);
     this.screen = center;
     // The top line says where the operator is at its left, and holds the toggle of the views at its right.
     const top = this.row({ gap: space.between });
@@ -514,8 +526,8 @@ export class App {
     center.add(this.suggestionBox);
     this.modeBox = this.row();
     // The composer is a panel, whose three rows the mode colors.
-    this.composeBox = this.panel(center, c.accent, { id: "composer-box" });
-    this.composeEdges = this.reader ? [] : (center.getChildren().slice(-3) as BoxRenderable[]);
+    this.composeBox = this.panel(below, c.accent, { id: "composer-box" });
+    this.composeEdges = this.reader ? [] : (below.getChildren().slice(-3) as BoxRenderable[]);
     this.composer = new GhostTextarea(renderer, {
       id: "composer",
       flexGrow: 1,
@@ -576,10 +588,12 @@ export class App {
     footer.add(this.status);
     this.hints = this.row();
     footer.add(this.hints);
-    center.add(footer);
+    below.add(footer);
     this.rail = this.box({
       id: "sidebar",
       width: session.preferences.sidebarWidth,
+      // A row of space parts the list of the sidebar from the context under it.
+      marginBottom: space.section,
       backgroundColor: c.panel,
       overflow: "hidden",
     });
@@ -611,16 +625,25 @@ export class App {
     this.railSpaces.verticalScrollBar.visible = false;
     this.railSpaces.horizontalScrollBar.visible = false;
     this.rail.add(this.railSpaces);
-    // The usage of the chain stands at the foot of the sidebar, under a rule, where the list above it does not move it.
-    this.railUsage = this.box({
-      paddingX: space.inset,
-      border: ["top"],
-      borderColor: c.border,
-      customBorderChars: { ...noBorder, horizontal: glyph.rule },
+    upper.add(this.rail);
+    // The context starts with half a row of its panel, as the panel of the input does, so that their tops meet.
+    this.context = this.box({
+      id: "context",
+      width: session.preferences.sidebarWidth,
+      flexShrink: 0,
       visible: false,
     });
-    this.rail.add(this.railUsage);
-    this.root.add(this.rail);
+    this.context.add(
+      this.box({
+        height: space.bar,
+        border: ["bottom"],
+        borderColor: c.panel,
+        customBorderChars: { ...noBorder, horizontal: glyph.halfTop },
+      }),
+    );
+    this.railUsage = this.box({ flexGrow: 1, paddingX: space.inset, backgroundColor: c.panel });
+    this.context.add(this.railUsage);
+    this.lower.add(this.context);
     session.on("change", this.schedule);
     options.workspaces.on("change", this.schedule);
     session.on("compose", this.compose);
@@ -881,6 +904,10 @@ export class App {
     this.rail.visible = this.sidebarShown;
     this.rail.width = this.sideWidth || w.preferences.sidebarWidth;
     this.screen.visible = !this.drawerOpen;
+    this.lower.visible = !this.drawerOpen;
+    // On a narrow terminal, or with the sidebar hidden, the context folds into a line of the footer.
+    this.context.visible = this.sidebarShown && !this.drawerOpen;
+    this.context.width = w.preferences.sidebarWidth;
     this.railBack.visible = this.drawerOpen;
     this.renderTop();
     const pending = w.operatorPrompt;
@@ -998,6 +1025,7 @@ export class App {
     this.renderStatus();
     this.renderContent();
     this.renderRail();
+    if (this.context.visible) this.renderRailUsage();
     this.suggest();
     this.ghosting();
     const diagnostics = JSON.stringify([w.rejectedWord, w.findings]);

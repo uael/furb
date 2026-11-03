@@ -40,6 +40,7 @@ function still(chain: string): Seen {
     chain,
     acts: [],
     compactions: [],
+    extensions: async () => [],
     of: () => [],
     run: async () => undefined,
     say: () => {},
@@ -217,20 +218,88 @@ test("the part of compaction, which the crate carries, marks each compaction in 
   );
 });
 
-test("the command /compact of the part of compaction asks a model what the chain on screen keeps, compacts it with the summary, and says so", async () => {
+test("a command of a part that the typed text names whole comes first among the suggestions, before the commands of the TUI that it starts", async () => {
+  const { directory } = project(
+    'export default (furb) => furb.command("ed", "A command of a part", () => {})\n',
+  );
+  const session = await demoSession({ cwd: directory });
+  await composing(
+    async ({ app, frame, screen }) => {
+      for (let tries = 0; tries < 400 && !app.parts.command("ed"); tries++) await Bun.sleep(25);
+      await screen.mockInput.typeText("/ed");
+      const shown = await shows(frame, "A command of a part");
+      const rows = shown.split("\n").filter((line) => /\/ed/.test(line) && !line.includes("│"));
+      expect(rows[0]).toContain("A command of a part");
+      expect(rows[1]).toContain("/editor");
+      expect(rows[2]).toContain("/edit [prompt id]");
+      screen.mockInput.pressTab();
+      expect(app.composer.plainText).toBe("/ed ");
+    },
+    { width: 132, height: 60 },
+    session,
+  );
+});
+
+test("the palette ranks a command of a part that the filter names whole before the commands of the TUI that it starts", async () => {
+  const { directory } = project(
+    'export default (furb) => furb.command("ed", "A command of a part", () => {})\n',
+  );
+  const session = await demoSession({ cwd: directory });
+  await composing(
+    async ({ app, frame, screen }) => {
+      for (let tries = 0; tries < 400 && !app.parts.command("ed"); tries++) await Bun.sleep(25);
+      app.palette();
+      await screen.mockInput.typeText("ed");
+      await frame();
+      expect(app.filtered.slice(0, 3).map((choice) => choice.command)).toEqual([
+        "/ed",
+        "/editor",
+        "/edit [prompt id]",
+      ]);
+    },
+    { width: 132, height: 60 },
+    session,
+  );
+});
+
+test("the command /compact tells that a life that does not run the extension compaction has no compaction, whatever a word of its chain holds", async () => {
   const { directory } = project();
   const session = await demoSession({ cwd: directory });
+  await composing(
+    async ({ app, frame }) => {
+      for (let tries = 0; tries < 400 && !app.parts.command("compact"); tries++) await Bun.sleep(25);
+      app.composer.setText("/compact");
+      await app.submit();
+      await shows(frame, "This chain has no compaction");
+      // A word that holds the text of condense() does not make the extension run.
+      await session.command('/run note = "def condense("');
+      const holds = () =>
+        app
+          .seen()
+          .acts.some((act) => act.kind === "rung" && String(act.words[0] ?? "").includes("def condense("));
+      for (let tries = 0; tries < 400 && !holds(); tries++) await Bun.sleep(25);
+      session.notice = "";
+      app.composer.setText("/compact");
+      await app.submit();
+      for (let tries = 0; tries < 400 && !session.notice; tries++) await Bun.sleep(25);
+      expect(session.notice).toBe("This chain has no compaction");
+    },
+    { width: 132, height: 60 },
+    session,
+  );
+});
+
+test("the command /compact of the part of compaction asks a model what the chain on screen keeps, compacts it with the summary, and says so", async () => {
+  const { directory } = project();
+  const session = await demoSession({ cwd: directory, extensions: true });
   await composing(
     async ({ app, frame }) => {
       for (let tries = 0; tries < 400 && !app.parts.command("compact"); tries++) await Bun.sleep(25);
       expect(app.parts.command("compact")?.detail).toBe(
         "Compact this chain now: a model keeps what the work still needs and sums up the rest",
       );
-      app.composer.setText("/compact");
-      await app.submit();
-      await shows(frame, "This chain has no compaction");
       // The operator plays the model that chooses, so the test asks no model.
-      await session.command(`/run ${COMPACTION}\nCHOOSER = OPERATOR\nbefore = "the first step"`);
+      await session.command(`/run CHOOSER = OPERATOR\nbefore = "the first step"`);
       // The acts of the life reach the view a moment after the word ran. The read of the doctrine is a rung of the chain
       // already, so the view waits for the rung that defines condense().
       const defines = () =>
@@ -247,6 +316,7 @@ test("the command /compact of the part of compaction asks a model what the chain
       session.on("change", hear);
       app.composer.setText("/compact");
       await app.submit();
+      for (let tries = 0; tries < 400 && !said.length; tries++) await Bun.sleep(25);
       session.off("change", hear);
       expect(said).toContain("A model compacts this chain");
       let asked = "";

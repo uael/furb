@@ -143,6 +143,7 @@ class Round:
       module=lambda on="": self.modules.get(on, {}),
     )
     ns.update(chain=lambda label="", source="": f"chain-{label}", rung=self.rung)
+    ns.update(cd=lambda path, on="": path)
     ns.update(program=lambda on="": self.words)
     ns.update(cancel=lambda name: self.cancelled.append(name), say=lambda *fact: self.said.append(fact))
     ns.update(pause=lambda name: self.paused_chains.append(name), paused=lambda name: name in self.paused_chains)
@@ -178,7 +179,7 @@ class Round:
 
   def quietly(self, verb: object, *args: object, **words: object) -> object:
     got = verb(*args, **words)
-    if asyncio.iscoroutine(got) and verb == self.bash:
+    if asyncio.iscoroutine(got) and getattr(verb, "__name__", "") in ("bash", "shell"):
       got.close()
     return got
 
@@ -759,7 +760,7 @@ def answered(conductor: Round, key: str, gaps: list, answer: str = "open") -> ob
 
 def test_hire_puts_the_words_of_the_owner_at_the_top_of_the_brief(conductor: Round) -> None:
   conductor.ns["quietly"] = lambda verb, *args, **words: (
-    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+    asyncio.run(verb(*args, **words)) if getattr(verb, "__name__", "") in ("bash", "shell") else verb(*args, **words)
   )
   conductor.kinds["look"] = "audit"
   conductor.rulings["look"] = ['say "no"\nthen stop', "one more"]
@@ -1129,7 +1130,7 @@ def branch(conductor: Round, name: str = "w/k") -> None:
 @JQ
 def test_a_worker_runs_only_sonnet_or_opus_at_medium_or_high(conductor: Round) -> None:
   conductor.ns["quietly"] = lambda verb, *args, **words: (
-    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+    asyncio.run(verb(*args, **words)) if getattr(verb, "__name__", "") in ("bash", "shell") else verb(*args, **words)
   )
   for model in ("claude-cli:opus/xhigh", "claude-cli:opus/max", "claude-cli:sonnet/max", "claude-cli:haiku/medium"):
     conductor.efforts["k"] = model
@@ -1305,8 +1306,8 @@ def test_the_round_follows_the_compaction_of_its_orchestrator(conductor: Round, 
   conductor.ns.update(tend=lambda: calls.append("tend"), staff=lambda: None, wait=waits, sweep=swept)
   assert asyncio.run(conductor.conduct()) == {}
   assert calls == ["tend", "sweep"]
-  assert conductor.lead == {"home": "chain2"}
-  assert new.lead == {"home": "chain2"}
+  assert conductor.lead == {"home": "chain2", "shell": "chain-commands"}
+  assert new.lead == {"home": "chain2", "shell": "chain-commands"}
   assert conductor.prompts == []
 
 
@@ -2546,7 +2547,7 @@ async def test_a_flake_that_a_working_item_covers_goes_to_its_worker_by_its_test
 
 def test_an_item_has_a_kind_whose_model_and_brief_it_takes(conductor: Round) -> None:
   conductor.ns["quietly"] = lambda verb, *args, **words: (
-    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+    asyncio.run(verb(*args, **words)) if getattr(verb, "__name__", "") in ("bash", "shell") else verb(*args, **words)
   )
   conductor.kinds.update(look="audit", odd="nonsense")
   assert [conductor.kind_of(key) for key in ("look", "odd", "k", "fix5")] == ["audit", "edit", "edit", "fix"]
@@ -2575,7 +2576,7 @@ REGISTER = """# Register of the audit look
 
 def test_an_auditor_that_ends_queues_the_rows_of_its_register_once_at_the_end_of_the_queue(conductor: Round) -> None:
   conductor.ns["quietly"] = lambda verb, *args, **words: (
-    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+    asyncio.run(verb(*args, **words)) if getattr(verb, "__name__", "") in ("bash", "shell") else verb(*args, **words)
   )
   conductor.kinds["look"] = "audit"
   conductor.queue.append(("early", "", ""))
@@ -2602,7 +2603,7 @@ def test_an_auditor_that_ends_queues_the_rows_of_its_register_once_at_the_end_of
 
 def test_an_auditor_whose_register_is_missing_or_has_no_table_queues_nothing(conductor: Round) -> None:
   conductor.ns["quietly"] = lambda verb, *args, **words: (
-    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+    asyncio.run(verb(*args, **words)) if getattr(verb, "__name__", "") in ("bash", "shell") else verb(*args, **words)
   )
   conductor.kinds["look"] = "audit"
   name = conductor.real_hire("look", "find the leaks", "defects")
@@ -2621,7 +2622,7 @@ def test_an_ended_worker_takes_the_next_item_of_its_area_until_half_of_its_windo
   made: list[tuple[str, str]] = []
   conductor.ns["chain"] = lambda label="", source="": (made.append((label, source)), f"chain-{label}")[1]
   conductor.ns["quietly"] = lambda verb, *args, **words: (
-    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+    asyncio.run(verb(*args, **words)) if getattr(verb, "__name__", "") in ("bash", "shell") else verb(*args, **words)
   )
   share = {"reply1": 0.3}
   conductor.ns["filled"] = share.get
@@ -2651,7 +2652,7 @@ def test_an_ended_worker_takes_the_next_item_of_its_area_until_half_of_its_windo
 
 def test_a_worker_takes_a_free_workspace_at_its_hire_and_gives_it_back_when_it_ends(conductor: Round) -> None:
   conductor.ns["quietly"] = lambda verb, *args, **words: (
-    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+    asyncio.run(verb(*args, **words)) if getattr(verb, "__name__", "") in ("bash", "shell") else verb(*args, **words)
   )
   repo = str(conductor.tmp)
   first = conductor.real_hire("k1", "one", "tui")
@@ -2736,7 +2737,7 @@ async def test_each_chain_of_stacked_prs_is_linked_as_one_gh_stack_once(conducto
   assert conductor.heard == ["The stack #7 <- #8 is linked on GitHub."]
 def seated(conductor: Round) -> tuple[str, str, str]:
   conductor.ns["quietly"] = lambda verb, *args, **words: (
-    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+    asyncio.run(verb(*args, **words)) if getattr(verb, "__name__", "") in ("bash", "shell") else verb(*args, **words)
   )
   conductor.ns["DEBRIEFS"] = False
   first, second = conductor.real_hire("k1", "one", "tui"), conductor.real_hire("k2", "two", "gui")
@@ -3551,7 +3552,7 @@ def test_threads_reads_each_transcript_once_and_fits_300_chains(conductor: Round
 
 def test_the_round_writes_the_new_chain_into_the_holder_file_of_the_workspace_it_gives(conductor: Round) -> None:
   conductor.ns["quietly"] = lambda verb, *args, **words: (
-    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+    asyncio.run(verb(*args, **words)) if getattr(verb, "__name__", "") in ("bash", "shell") else verb(*args, **words)
   )
   folder = Path(f"{conductor.tmp}-w1")
   subprocess.run(["git", "init", "-q", str(folder)], check=True, env=conductor.env)
@@ -3568,7 +3569,7 @@ def test_the_round_writes_the_new_chain_into_the_holder_file_of_the_workspace_it
 
 def test_the_round_saves_the_work_of_an_earlier_item_before_it_gives_a_workspace(conductor: Round) -> None:
   conductor.ns["quietly"] = lambda verb, *args, **words: (
-    asyncio.run(verb(*args, **words)) if verb == conductor.bash else verb(*args, **words)
+    asyncio.run(verb(*args, **words)) if getattr(verb, "__name__", "") in ("bash", "shell") else verb(*args, **words)
   )
   env = conductor.env
 
