@@ -1144,8 +1144,9 @@ test("a session enables the extensions of the configs, and a later session on it
     const turns = (first.engine?.turns({ on: "chain1" }) ?? []).map((turn) => String(turn[1]));
     expect(turns.at(-8)).toBe("catchup()\nawait recall()\nawait listed()\nawait mcp_index()");
     expect(turns.at(-2)).toMatch(/^stand\(\)\ncd\('.*'\)$/);
-    expect(turns.at(-7)).toContain(
-      `#${read}\n${read}_path = '${String(found?.[4]).replaceAll("\\", "\\\\")}'\n${read}_text = 'Use two spaces.'`,
+    // The turn writes the path with the separators of the platform, and the transcript keeps its last one as `/`.
+    expect(turns.at(-7)?.replaceAll("\\\\", "/")).toContain(
+      `#${read}\n${read}_path = '${String(found?.[4]).replaceAll("\\", "/")}'\n${read}_text = 'Use two spaces.'`,
     );
   } finally {
     await first.dispose();
