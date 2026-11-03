@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { LiveAct } from "../../src/life/acts.ts";
-import { chainThreads } from "../../src/life/threads.ts";
+import { type ChainThread, chainThreads, nestThreads } from "../../src/life/threads.ts";
 import { act } from "./acts.ts";
 
 const prompt = (id: string, began: number, more: Partial<LiveAct> = {}) =>
@@ -81,4 +81,32 @@ test("the order in which the acts land changes no verdict: each read with what a
   }
   expect(checked).toBe(5040 * 7);
   expect(read(all)).toEqual([["prompt1", ["prompt2", "prompt3", "prompt9"]]]);
+});
+
+test("the threads that the ladder of a thread made nest under it, and a question in an agent waits on each thread over it", () => {
+  const thread = (one: LiveAct, asks: string[] = []): ChainThread => ({
+    act: one,
+    title: one.id,
+    messages: [],
+    asked: [],
+    asks,
+    state: asks.length ? "asks" : "running",
+    resolved: false,
+  });
+  const lead = prompt("prompt1", 1);
+  const agents = Array.from({ length: 8 }, (_, n) =>
+    act(`prompt${n + 2}`, "prompt", "chain1", "rung1", n + 3),
+  );
+  const deep = act("prompt20", "prompt", "chain1", "rung2", 20);
+  const other = prompt("prompt30", 30);
+  const steps = [act("rung1", "rung", "chain1", "prompt1", 2), act("rung2", "rung", "chain1", "prompt9", 19)];
+  const rows = new Map([lead, ...steps, ...agents, deep, other].map((one) => [one.id, one]));
+  const tree = nestThreads(
+    [thread(lead), ...agents.map((one) => thread(one)), thread(deep, ["prompt21"]), thread(other)],
+    rows,
+  );
+  expect(tree.map((one) => one.thread.act.id)).toEqual(["prompt1", "prompt30"]);
+  expect(tree[0]?.agents.map((one) => one.thread.act.id)).toEqual(agents.map((one) => one.id));
+  expect(tree[0]?.agents.at(-1)?.agents.map((one) => one.thread.act.id)).toEqual(["prompt20"]);
+  expect([tree[0]?.asks, tree[1]?.asks]).toEqual([["prompt21"], []]);
 });
