@@ -500,6 +500,20 @@ def test_a_report_that_names_a_mistake_is_a_notice_of_its_own_and_not_a_line(con
   assert len([message for message, _ in conductor.prompts if "names a mistake" in message]) == 1
 
 
+
+def test_a_plain_report_of_a_change_is_no_mistake_and_a_report_of_a_push_to_main_is(conductor: Round) -> None:
+  plain = ["markdown() lost its fg argument", "its regex are deleted", "restore the config file", "a rung restores its source"]
+  reports = [*plain, "I pushed my commits to main."]
+  for n, said in enumerate(reports, 1):
+    name = f"prompt{n}"
+    conductor.working[name] = f"item{n}"
+    conductor.facts[name] = ("prompt", name, "rung1", "chain5", "tuple[int, str]", "brief", "")
+    conductor.done[name] = (10 + n, said)
+  conductor.tend()
+  told = [message for message, _ in conductor.prompts if "names a mistake" in message]
+  assert len(told) == 1 and told[0].startswith("The report of the worker item5 (prompt5) names a mistake")
+
+
 @POSIX
 @JQ
 async def test_a_notice_carries_its_context_and_each_other_event_is_a_line(conductor: Round) -> None:
@@ -1754,11 +1768,11 @@ async def test_pr_gives_the_url_of_a_pr_that_stands_when_gh_fails_late(conductor
 
 def test_prcheck_gives_the_words_and_names_the_part_that_is_too_long(conductor: Round) -> None:
   check = conductor.ns["prcheck"]
-  assert check("feat(tui): Show records", "one two", ["three"], ["four"]) == len("one two three four".split())
+  assert check("feat(tui): Show records", "One two.", ["Three."], ["Four."]) == len("one two three four".split())
   with pytest.raises(Refused, match=r"301 words, over 300 \(why 300, outcome 1, breaking 0\)"):
-    check("feat(tui): Show records", "w " * 300, ["x"])
+    check("feat(tui): Show records", "w " * 299 + "w.", ["X."])
   with pytest.raises(Refused, match="70 characters"):
-    check("feat(tui): " + "A" * 70, "why", ["x"])
+    check("feat(tui): " + "A" * 70, "Why.", ["X."])
 
 
 
@@ -2149,12 +2163,12 @@ async def test_pr_creates_each_label_that_it_adds_and_raises_refused_with_what_g
   boxes = ["checked"] * 6
   conductor.say(r"pr create", "could not add label: not found", 1)
   with pytest.raises(Refused) as caught:
-    await open_pr("feat(x): Y", "why", ["out"], boxes, labels=["w:k", "thread:t"], where=str(tmp_path))
+    await open_pr("feat(x): Y", "Why.", ["Out."], boxes, labels=["w:k", "thread:t"], where=str(tmp_path))
   assert "not found" in str(caught.value)
   assert "label create w:k --force" in conductor.log() and "label create thread:t --force" in conductor.log()
   conductor.says.clear()
   conductor.say(r"pr create", "https://github.com/o/r/pull/9\n")
-  got = await open_pr("feat(x): Y", "why", ["out"], boxes, labels=" --label w:k", where=str(tmp_path))
+  got = await open_pr("feat(x): Y", "Why.", ["Out."], boxes, labels=" --label w:k", where=str(tmp_path))
   assert got.stdout.content.strip() == "https://github.com/o/r/pull/9"
 
 

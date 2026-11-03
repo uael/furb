@@ -261,12 +261,11 @@ impl Claude {
         let mut model = model.searches(search::claude(self.program.clone(), one.alias.clone()));
         model.apart = true;
         model.thought = Some(super::Thought::Told);
-        // The command line says no price, so its haiku is the one cheap model of its family.
-        let model = model.classed(if one.alias.contains("haiku") {
-          super::Class::Cheap
-        } else {
-          super::Class::Dear
-        });
+        // The command line says no price, so the catalog gives the class of each of its models.
+        let model = match super::catalog::family(CLAUDE, &one.alias) {
+          Some(class) => model.classed(class),
+          None => model,
+        };
         one.efforts.iter().fold(model.images(), |model, effort| {
           model.effort(effort.as_str(), json!({"effort": effort}))
         })
@@ -420,7 +419,10 @@ impl Claude {
     }
     let thinking = settings.get(super::KEY_THINKING).and_then(Value::as_u64);
     let spend = Spend { effort, thinking };
-    let session = settings.get("session").and_then(Value::as_str).map_or_else(uuid, str::to_owned);
+    let session = match settings.get("session").and_then(Value::as_str) {
+      Some(session) => session.to_owned(),
+      None => uuid()?,
+    };
     let system = request.preamble.unwrap_or_default();
     let messages: Vec<Message> = request
       .chat_history
@@ -429,7 +431,12 @@ impl Claude {
       .collect();
     let key = json!([name, system, session]).to_string();
     let (lent, borrowed) = oneshot::channel();
-    let asked = Kept::Lend { key: key.clone(), name, system, messages: messages.clone(), lent };
+    let asked = Kept::Lend {
+      key: key.clone(),
+      fresh: Box::new(Conversation::new(&name, &system, uuid()?)),
+      messages: messages.clone(),
+      lent,
+    };
     let gone = || failed("the keeper of the conversations of claude is gone");
     self.keeper.send(asked).map_err(|_| gone())?;
     let conversation = borrowed.await.map_err(|_| gone())?;
@@ -443,7 +450,7 @@ impl Claude {
         let Some(at) = accounts.pick(now) else { return Err(self.exhausted(now)) };
         if held.account.is_some() {
           // The conversation of a parked account stays in its config dir, so this one begins again.
-          *held = Conversation::new(&held.name, &held.system);
+          *held = Conversation::new(&held.name, &held.system, uuid()?);
         }
         held.account = Some(at);
         at
@@ -518,8 +525,7 @@ fn epoch(at: SystemTime) -> u64 {
 enum Kept {
   Lend {
     key: String,
-    name: String,
-    system: String,
+    fresh: Box<Conversation>,
     messages: Vec<Message>,
     lent: oneshot::Sender<Box<Conversation>>,
   },
@@ -568,8 +574,8 @@ async fn kept(mut asked: mpsc::UnboundedReceiver<Kept>, accounts: Arc<Accounts>)
     tokio::select! {
       one = asked.recv() => match one {
         None => return,
-        Some(Kept::Lend { key, name, system, messages, lent }) => {
-          lend(&mut held, &accounts, key, &name, &system, &messages, lent);
+        Some(Kept::Lend { key, fresh, messages, lent }) => {
+          lend(&mut held, &accounts, key, fresh, &messages, lent);
         }
         Some(Kept::Back { key, conversation }) => {
           back(&mut held, key, conversation);
@@ -589,8 +595,7 @@ fn lend(
   held: &mut HashMap<String, Slot>,
   accounts: &Accounts,
   key: String,
-  name: &str,
-  system: &str,
+  fresh: Box<Conversation>,
   messages: &[Message],
   lent: oneshot::Sender<Box<Conversation>>,
 ) {
@@ -603,7 +608,7 @@ fn lend(
     }
     None => {
       let incoming: Vec<String> = messages.iter().map(canonical).collect();
-      let mut made = Conversation::new(name, system);
+      let mut made = fresh;
       made.account = accounts.pick(SystemTime::now());
       let store = accounts.store(made.account);
       let donor = held
@@ -615,8 +620,8 @@ fn lend(
         .filter(|one| {
           let chain = one.chain.len();
           chain > 0
-            && one.name == name
-            && one.system == system
+            && one.name == made.name
+            && one.system == made.system
             && accounts.store(one.account) == store
             && chain < incoming.len()
             && incoming[..chain] == one.chain[..]
@@ -627,7 +632,7 @@ fn lend(
         made.parent = Some(donor.id.clone());
         made.chain = donor.chain.clone();
       }
-      Box::new(made)
+      made
     }
   };
   match lent.send(conversation) {
@@ -703,7 +708,7 @@ fn prompt_file(system: &str) -> Result<PathBuf, CompletionError> {
   if !file.is_file() {
     std::fs::create_dir_all(&folder)
       .map_err(|no| failed(format!("{} was not made: {no}", folder.display())))?;
-    let part = folder.join(format!("{}.part", uuid()));
+    let part = folder.join(format!("{}.part", uuid()?));
     std::fs::write(&part, system)
       .and_then(|()| std::fs::rename(&part, &file))
       .map_err(|no| failed(format!("{} was not written: {no}", file.display())))?;
@@ -743,11 +748,11 @@ struct Conversation {
 }
 
 impl Conversation {
-  fn new(name: &str, system: &str) -> Conversation {
+  fn new(name: &str, system: &str, id: String) -> Conversation {
     Conversation {
       name: name.to_owned(),
       system: system.to_owned(),
-      id: uuid(),
+      id,
       account: None,
       parent: None,
       resumed: false,
@@ -763,11 +768,13 @@ impl Conversation {
   }
 
   /// A new conversation under a new id, on the same account and in the same config dir.
-  fn renew(&mut self) {
+  fn renew(&mut self) -> Result<(), CompletionError> {
+    let id = uuid()?;
     let (account, store) = (self.account, self.store.take());
-    *self = Conversation::new(&self.name, &self.system);
+    *self = Conversation::new(&self.name, &self.system, id);
     self.account = account;
     self.store = store;
+    Ok(())
   }
 
   /// Write the turns before the last message as a conversation of the command line under the id of this one, with the
@@ -815,7 +822,7 @@ impl Conversation {
       if blocks.is_empty() {
         continue;
       }
-      let id = uuid();
+      let id = uuid()?;
       let message = json!({"role": kind, "content": blocks});
       let entry = json!({"type": kind, "uuid": id, "parentUuid": parent, "sessionId": self.id, "cwd": cwd,
         "isSidechain": false, "userType": "external", "timestamp": now, "message": message});
@@ -827,7 +834,7 @@ impl Conversation {
     }
     let folder = store.join("projects").join(name);
     let file = folder.join(format!("{}.jsonl", self.id));
-    let part = folder.join(format!("{}.part", uuid()));
+    let part = folder.join(format!("{}.part", uuid()?));
     std::fs::create_dir_all(&folder)
       .and_then(|()| std::fs::write(&part, lines))
       .and_then(|()| std::fs::rename(&part, &file))
@@ -881,7 +888,7 @@ impl Conversation {
       (Some(_), Some(one)) if !anew => std::slice::from_ref(one),
       (Some(at), None) if !anew => &messages[if again { last } else { at }..],
       _ => {
-        self.renew();
+        self.renew()?;
         messages
       }
     };
@@ -907,7 +914,7 @@ impl Conversation {
       match (got, &lost) {
         (Err(no), None) if no.to_string().contains(LOST) => {
           lost = Some(self.id.clone());
-          self.renew();
+          self.renew()?;
           (delta, again) = (messages, false);
         }
         (Err(no), Some(old)) => {

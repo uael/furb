@@ -22,11 +22,6 @@
 )]
 #![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
 #![expect(clippy::implicit_clone, reason = "debt: to_owned or to_string where clone serves")]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
 #![expect(clippy::map_unwrap_or, reason = "debt: map then unwrap_or, where map_or serves")]
 #![expect(clippy::option_option, reason = "debt: an Option of an Option, where an enum serves")]
 #![expect(
@@ -380,14 +375,15 @@ type Answers =
 
 /// The class of a model, which automatic work reads: a cheap model takes the work that no one waits on, and a dear one
 /// the work of the operator.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Class {
   Cheap,
   Dear,
 }
 
 impl Class {
-  /// The name of the class, as the roster and `.furb/config.json` say it.
+  /// The name of the class, as the roster, the catalog and `.furb/config.json` say it.
   pub fn name(self) -> &'static str {
     match self {
       Class::Cheap => "cheap",
@@ -408,21 +404,37 @@ impl Class {
 /// The most that a cheap model costs, in dollars for a million tokens that it reads.
 pub const CHEAP: f64 = 1.0;
 
-/// The key of `.furb/config.json` whose map gives a model the class that it names, over the one of the catalog.
+/// The key of a config whose map gives a model the class that it names, over the one of the
+/// catalog.
 pub(super) const KEY_CLASSES: &str = "classes";
 
-/// The classes that the config of a project in a directory gives, by the name of the model, the later file over the
-/// earlier one. A word that names no class gives none.
-pub(super) fn classes(directory: &std::path::Path) -> HashMap<String, Class> {
-  let mut given = HashMap::new();
-  for file in crate::extension::projected(directory) {
+/// The key of a config whose list names the models of automatic work, the first first.
+pub(super) const KEY_AUTOMATIC: &str = "automatic";
+
+/// What the configs say of the models: the class of each model that a config names, and the models
+/// of automatic work.
+#[derive(Default)]
+pub(super) struct Configured {
+  classes: HashMap<String, Class>,
+  automatic: Vec<String>,
+}
+
+/// What the configs of the user, in the config directory, and of the project, in a directory, say
+/// of the models, in the order of [`crate::extension::configs`]: a later file gives a model another
+/// class over an earlier one, and its list of automatic work replaces the list of an earlier one. A
+/// word that names no class, and a name of the list that is no string, give nothing.
+pub(super) fn configured(user: &Path, directory: &Path) -> Configured {
+  let mut given = Configured::default();
+  for file in crate::extension::configs(user, directory) {
     let Ok(text) = std::fs::read_to_string(file) else { continue };
     let Ok(config) = serde_json::from_str::<Value>(&text) else { continue };
-    let Some(map) = config.get(KEY_CLASSES).and_then(Value::as_object) else { continue };
-    for (name, class) in map {
+    for (name, class) in config.get(KEY_CLASSES).and_then(Value::as_object).into_iter().flatten() {
       if let Some(class) = class.as_str().and_then(Class::named) {
-        given.insert(name.clone(), class);
+        given.classes.insert(name.clone(), class);
       }
+    }
+    if let Some(list) = config.get(KEY_AUTOMATIC).and_then(Value::as_array) {
+      given.automatic = list.iter().filter_map(Value::as_str).map(str::to_owned).collect();
     }
   }
   given
@@ -461,8 +473,7 @@ pub struct Model {
   hosted: bool,
   /// How it takes the most tokens of thought of one turn, when it takes one.
   thought: Option<Thought>,
-  /// Its class, which code fixes for a model whose provider says no price, as a model of the claude command line, and
-  /// which its price gives otherwise.
+  /// Its class, which the catalog gives, else its price.
   class: Option<Class>,
   /// Whether it reads its earlier turns with no thought, as a model of a local server, whose own template drops the
   /// thought of each earlier turn, and whose thought of each turn would else fill its window in a few turns.
@@ -608,14 +619,14 @@ impl Model {
     self.price
   }
 
-  /// The model, of a class that code fixes, which its price no longer gives.
+  /// The model, of a class that the catalog gives, which its price no longer gives.
   pub fn classed(mut self, class: Class) -> Model {
     self.class = Some(class);
     self
   }
 
-  /// The class of the model: the one that code fixed, else cheap when a million tokens that it reads cost [`CHEAP`]
-  /// dollars or less, else dear, as a model that says no price is.
+  /// The class of the model: the one that the catalog gave, else cheap when a million tokens that
+  /// it reads cost [`CHEAP`] dollars or less, else dear, as a model that says no price is.
   pub fn class(&self) -> Class {
     self.class.unwrap_or(match self.price {
       Some([input, ..]) if input <= CHEAP => Class::Cheap,
@@ -797,7 +808,7 @@ impl Provider {
     let mut images = Images::new(images);
     hearing(&["stand", "reply", RAN], move |mut co: Co<Replied>| async move {
       // The ids of chains repeat in every life, so a conversation of this life is keyed by the life too.
-      let life = uuid();
+      let life = uuid().map_err(|no| Fault::refused(no.to_string()))?;
       let mut replies: HashMap<String, Reply> = HashMap::new();
       // The actor whose last reply on each chain the ear refused.
       let mut mute: HashMap<String, String> = HashMap::new();
@@ -813,6 +824,7 @@ impl Provider {
             &directory,
             &actor,
             extensions.as_deref(),
+            &crate::extension::Places::here().config,
           );
           say(&mut co, Fact::says("done", &about, [given]));
           // A stand reads the settings again, as after a change of the command line or of its
@@ -1083,9 +1095,16 @@ impl Provider {
             if let (Err(why), true) = (&got, reply.again)
               && !recoverable
             {
-              let _ = co
+              let paused = co
                 .call("pause", vec![Object::string(&reply.chain), Object::string(why)], vec![])
                 .await;
+              if let Err(no) = paused {
+                told(
+                  &mut co,
+                  &reply.chain,
+                  &format!("#{} could not pause the chain: {}", reply.rung, no.message()),
+                );
+              }
             }
             let got = got.map_err(Fault::refused).unwrap_or_else(|fault| fault.object());
             say(&mut co, Fact::says("done", &id, [got]));
@@ -1256,9 +1275,16 @@ async fn asking(
 }
 
 /// The wait of a call of a model to be made again while a pause holds its reply, which the wake ends. A reply that
-/// went has no pause to wait for.
-async fn released(hold: &mut holding::Receiver<bool>) {
-  let _ = hold.wait_for(|paused| !*paused).await;
+/// went has no pause to wait for, so its call ends.
+async fn released(hold: &mut holding::Receiver<bool>) -> Result<(), CompletionError> {
+  hold.wait_for(|paused| !*paused).await.map(drop).map_err(reply_gone)
+}
+
+/// The failure of a call of a model whose reply went: no one reads what it would give.
+fn reply_gone(why: impl std::fmt::Display) -> CompletionError {
+  CompletionError::ProviderError(format!(
+    "the reply went before its call of the model ended: {why}"
+  ))
 }
 
 /// What the work of a reply gives: a part that its model wrote, a retry of the call of its model, or what the reply
@@ -1350,28 +1376,35 @@ fn written(id: &str, tells: &mpsc::UnboundedSender<Replied>) -> Told {
   let (id, tells) = (id.to_owned(), tells.clone());
   Arc::new(move |text, thinking| {
     let (text, thinking) = (text.to_owned(), thinking.to_owned());
-    let _ = tells.send(Replied::Wrote { id: id.clone(), text, thinking });
+    // A reply that went has no reader for what its model still writes.
+    drop(tells.send(Replied::Wrote { id: id.clone(), text, thinking }));
   })
 }
 
-/// What the chains stand on: the models and the operator, the directory, the default actor, and the path of the
-/// doctrine that a chain reads, which [`catalog::doctrine`] gives, each path as [`super::files::tilded`] writes it, then
-/// the extensions that the engine seeds the root with, each as `[name, file, life word, root alone]`. A standing with
-/// no doctrine, or of a provider that advertises no extensions, gives none, and the engine seeds no root then.
+/// What the chains stand on: the models and the operator, the directory, the default actor, and the
+/// path of the doctrine that a chain reads, which [`catalog::doctrine`] gives, each path as
+/// [`super::files::tilded`] writes it, then the extensions that the engine seeds the root with,
+/// each as `[name, file, life word, root alone]`. A standing with no doctrine, or of a provider
+/// that advertises no extensions, gives none, and the engine seeds no root then. Each model of the
+/// roster gives its class, and a model of the list of automatic work its place in that list, which
+/// the configs of the user, in the config directory, and of the project give, as [`configured`]
+/// reads them.
 fn standing(
   models: &[Model],
   directory: &str,
   actor: &str,
   extensions: Option<&[Advertised]>,
+  user: &Path,
 ) -> Object {
-  // The config of the project gives a model another class than the one of the catalog.
-  let given = classes(Path::new(directory));
+  let given = configured(user, Path::new(directory));
   let offered = models.iter().map(|model| {
     let efforts = model.efforts.iter().map(|(effort, _)| Object::string(effort));
     let window = i64::try_from(model.window).unwrap_or(i64::MAX);
-    let class = given.get(&model.name).copied().unwrap_or_else(|| model.class());
+    let class = given.classes.get(&model.name).copied().unwrap_or_else(|| model.class());
+    let place = given.automatic.iter().position(|one| *one == model.name);
+    let place = place.and_then(|at| i64::try_from(at).ok()).map(Object::int);
     let fields = [Object::string(&model.name), Object::list(efforts), Object::int(window)];
-    Object::list(fields.into_iter().chain([Object::string(class.name())]))
+    Object::list(fields.into_iter().chain([Object::string(class.name())]).chain(place))
   });
   // The operator answers in person, with no effort, reads the window of the engine, and costs no dollar.
   let operator = Object::list([
@@ -1837,7 +1870,7 @@ fn answered(
       let mut limited = false;
       let mut signed = false;
       if retry {
-        released(&mut hold).await;
+        released(&mut hold).await?;
       }
       loop {
         let no = match (model.answers)(asked.clone()).await {
@@ -1857,39 +1890,45 @@ fn answered(
             reset.map_or(String::new(), |at| at.strftime(" until %Y-%m-%d %H:%M (%Q)").to_string());
           let why = format!("usage limit{until}");
           let retry = Retry { attempt: attempt + 1, most: backoff.most, wait, why };
-          let _ = tells.send(Replied::Retried { id: id.clone(), retry, limit: !limited });
+          tells
+            .send(Replied::Retried { id: id.clone(), retry, limit: !limited })
+            .map_err(reply_gone)?;
           limited = true;
           tokio::time::sleep(wait).await;
-          released(&mut hold).await;
+          released(&mut hold).await?;
           continue;
         }
         if claude::signed_out(&no) {
           let why = "signed out, sign in again".to_owned();
           let retry = Retry { attempt: attempt + 1, most: backoff.most, wait: SIGN_POLL, why };
-          let _ = tells.send(Replied::Retried { id: id.clone(), retry, limit: !signed });
+          tells
+            .send(Replied::Retried { id: id.clone(), retry, limit: !signed })
+            .map_err(reply_gone)?;
           signed = true;
           tokio::time::sleep(SIGN_POLL).await;
-          released(&mut hold).await;
+          released(&mut hold).await?;
           continue;
         }
         let Some(why) = passing(&no).filter(|_| attempt < backoff.most) else { return Err(no) };
         attempt += 1;
         let wait = backoff.wait(attempt);
         let retry = Retry { attempt, most: backoff.most, wait, why };
-        let _ = tells.send(Replied::Retried { id: id.clone(), retry, limit: false });
+        tells.send(Replied::Retried { id: id.clone(), retry, limit: false }).map_err(reply_gone)?;
         tokio::time::sleep(wait).await;
-        released(&mut hold).await;
+        released(&mut hold).await?;
       }
     };
     let (got, dropped) = match got.await {
       Ok((turn, dropped)) => (Ok(turn), dropped),
       Err(no) => (Err(no), None),
     };
-    let _ = tells.send(Replied::Came { id, got, dropped });
+    // The stream holds the receiver, so a send that fails means the stream is going.
+    // The stream then gives the reply itself.
+    tells.send(Replied::Came { id, got, dropped }).err().map(|no| no.0)
   };
   // The reply comes through the channel alone, so it comes after all that its model wrote before it.
   let told = stream::poll_fn(move |cx| told.poll_recv(cx));
-  let came = stream::once(came).filter_map(|()| std::future::ready(None));
+  let came = stream::once(came).filter_map(std::future::ready);
   stream::select(told, came).take_until(stopped)
 }
 
@@ -2080,13 +2119,23 @@ fn hosted(turn: ObjectRef<'_>) -> Result<Object, CompletionError> {
 }
 
 /// A new random id, a uuid of version 4, as the claude command line takes one for a conversation.
-fn uuid() -> String {
+/// A machine that gives no random bytes fails the call that needs the id.
+fn uuid() -> Result<String, CompletionError> {
+  uuid_from(getrandom::fill)
+}
+
+/// The uuid that the bytes of `fill` make.
+fn uuid_from(
+  fill: impl FnOnce(&mut [u8]) -> Result<(), getrandom::Error>,
+) -> Result<String, CompletionError> {
   let mut bytes = [0u8; 16];
-  let _ = getrandom::fill(&mut bytes);
+  fill(&mut bytes).map_err(|no| {
+    CompletionError::ProviderError(format!("the machine gave no random bytes: {no}"))
+  })?;
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   let hex: String = bytes.iter().map(|one| format!("{one:02x}")).collect();
-  format!("{}-{}-{}-{}-{}", &hex[..8], &hex[8..12], &hex[12..16], &hex[16..20], &hex[20..])
+  Ok(format!("{}-{}-{}-{}-{}", &hex[..8], &hex[8..12], &hex[12..16], &hex[16..20], &hex[20..]))
 }
 
 #[cfg(test)]

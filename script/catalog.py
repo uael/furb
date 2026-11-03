@@ -96,6 +96,16 @@ PIS: dict[str, dict] = {
 }
 """PIS is each provider that models.dev does not list, whose models the data of pi-ai holds; `pi` is the protocol of
 pi-ai itself."""
+CHEAP = 1.0
+"""CHEAP is the most that a cheap model costs, in dollars for a million tokens that it reads. A model of the catalog
+takes the class cheap at that price or less, and the class dear above it or with no price."""
+FAMILIES = {"claude-cli": "anthropic", "codex": "openai"}
+"""FAMILIES is each family of models that a program of its own serves, with no price, and the provider of the catalog
+whose models give the class of each of its models: a model of Codex takes the class of the model of OpenAI with its
+name, and an alias of the claude command line, as haiku, the class of the newest model of Anthropic with that alias in
+its name."""
+ALIASES = ("fable", "haiku", "opus", "sonnet")
+"""ALIASES is each alias of a model that the claude command line serves."""
 FIELDS = ("reasoning", "reasoning_options", "limit", "cost", "modalities", "status", "last_updated", "provider")
 """FIELDS is what the crate reads of a model: `provider` names the package and the address of a model that its
 provider serves apart."""
@@ -139,6 +149,46 @@ def pi(listing: dict) -> dict:
   }
 
 
+def classed(one: dict) -> str:
+  """The class of a model of the catalog, from the price of a million tokens that it reads."""
+  price = (one.get("cost") or {}).get("input")
+  return "cheap" if price is not None and price <= CHEAP else "dear"
+
+
+def families(providers: dict[str, tuple[dict, dict]]) -> dict[str, tuple[dict, dict]]:
+  """The families of FAMILIES, each with the class of each of its models and no client, since no client of rig asks
+  them."""
+  made = {}
+  for family, source in FAMILIES.items():
+    models = providers[source][1]
+    if family == "codex":
+      made[family] = ({}, {name: {"class": one["class"]} for name, one in models.items()})
+      continue
+    newest = {}
+    for alias in ALIASES:
+      named = [one for name, one in models.items() if name.startswith(f"claude-{alias}-")]
+      if named:
+        newest[alias] = {"class": max(named, key=lambda one: one.get("last_updated", ""))["class"]}
+    made[family] = ({}, newest)
+  return made
+
+
+def written(providers: dict[str, tuple[dict, dict]]) -> str:
+  """The text of the snapshot: each provider with its head, then one model on each line."""
+  lines = ["{"]
+  for at, (name, (head, models)) in enumerate(providers.items()):
+    opened = json.dumps(head)[:-1] + ", " if head else "{"
+    lines.append(f'{json.dumps(name)}: {opened}"models": {{')
+    ordered = sorted(models.items())
+    lines.extend(
+      f"{json.dumps(named)}: {json.dumps(one)}" + ("," if n + 1 < len(ordered) else "")
+      for n, (named, one) in enumerate(ordered)
+    )
+    lines.append("}}" + ("," if at + 1 < len(providers) else ""))
+  lines.append("}")
+  return "\n".join(lines) + "\n"
+
+
 def main() -> None:
   """The snapshot, written again, one model on each line."""
   catalog = json.loads(fetched(URL))
@@ -155,7 +205,10 @@ def main() -> None:
   for name, served in SERVED.items():
     listed = catalog[name]
     api = served.get("api", listed.get("api"))
-    models = {key: {field: one[field] for field in FIELDS if field in one} for key, one in listed["models"].items()}
+    models: dict[str, dict] = {
+      key: {field: one[field] for field in FIELDS if field in one} | {"class": classed(one)}
+      for key, one in listed["models"].items()
+    }
     places = placed(api) | {place for one in models.values() for place in placed(one.get("provider", {}).get("api"))}
     env = served.get("only") or [one for one in served.get("env", []) + listed["env"] if one not in places]
     head = {"rig": served["rig"], "env": list(dict.fromkeys(env))}
@@ -163,18 +216,8 @@ def main() -> None:
     head |= {key: value for key, value in extra if value}
     providers[name] = (head, models)
   for name, served in PIS.items():
-    providers[name] = (served, {one["id"]: pi(one) for one in extras[name]})
-  lines = ["{"]
-  for at, (name, (head, models)) in enumerate(providers.items()):
-    lines.append(f'{json.dumps(name)}: {json.dumps(head)[:-1]}, "models": {{')
-    ordered = sorted(models.items())
-    lines.extend(
-      f"{json.dumps(named)}: {json.dumps(one)}" + ("," if n + 1 < len(ordered) else "")
-      for n, (named, one) in enumerate(ordered)
-    )
-    lines.append("}}" + ("," if at + 1 < len(providers) else ""))
-  lines.append("}")
-  text = "\n".join(lines) + "\n"
+    providers[name] = (served, {one["id"]: pi(one) | {"class": classed(pi(one))} for one in extras[name]})
+  text = written(providers | families(providers))
   old = SNAPSHOT.read_text(encoding="utf-8") if SNAPSHOT.exists() else ""
   held = json.loads(SOURCES.read_text(encoding="utf-8")) if SOURCES.exists() else {}
   if text == old and held.get("pi-ai", {}).get("version") == version and held["pi-ai"].get("providers") == list(PIS):

@@ -209,14 +209,16 @@ function scriptedSession(options: SessionOptions, watch = false): Session {
       // A message that says to ask first gets a question to the operator and no close, so the model answers again
       // once the operator has answered.
       const asks = !first && last.includes("Ask me first");
-      // A message that hires workers makes a life as a conductor makes it: a prompt to a worker on each of two chains of
-      // its own, each of which thinks until a cancel, under a wait that holds the thread of the message open.
-      const hires = last.includes("Hire two workers");
+      // A message that hires workers makes a life as a conductor makes it: a prompt to a worker on each of two or eight
+      // chains of its own, each of which thinks until a cancel, under a wait that holds the thread of the message open.
+      const hires = /Hire (two|eight) workers/.exec(last)?.[1];
       // A message that adds the search shortcut writes the README, so a rewind to a point before it can give the file
       // back as it was.
       const shortcut = !first && last.includes("Add the search shortcut");
       const fallback = hires
-        ? 'for label in ("w/one", "w/two"):\n  prompt(str, "Think until I cancel.", on=chain(label))\nawait wait(3600)'
+        ? hires === "two"
+          ? 'for label in ("w/one", "w/two"):\n  prompt(str, "Think until I cancel.", on=chain(label))\nawait wait(3600)'
+          : 'for n in range(8):\n  prompt(str, "Think until I cancel.", on=chain(f"w/{n}"))\nawait wait(3600)'
         : shortcut
           ? 'notes = read("README.md")\nwrite(notes.replace("- Find it when it matters", "- Find it when it matters, with Ctrl+K"))\nclose("Ctrl+K opens the search now, and the README says so.")'
           : fenced

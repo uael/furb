@@ -43,7 +43,7 @@ def command_of(labels: str | list[str]) -> str:
     "HIDDEN": "hidden",
   }
   exec(compile(IMPORT.sub("", (HERE / "pr.py").read_text(encoding="utf-8")), "pr.py", "exec"), ns)  # noqa: S102
-  asyncio.run(ns["pr"]("fix(pr): Take flags", "why", ["x"], ["checked"] * 6, labels=labels))
+  asyncio.run(ns["pr"]("fix(pr): Take flags", "Why.", ["X."], ["checked"] * 6, labels=labels))
   return commands[0]
 
 

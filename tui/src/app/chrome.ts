@@ -392,15 +392,27 @@ export const chrome = part({
         [` ${action}`, c.faint],
       ]);
     let buttons = buttonsOf(shown);
-    const stateWidth = Bun.stringWidth(plain(state)) + Bun.stringWidth(plain(statuses)) + space.between * 2;
-    while (shown.length && Bun.stringWidth(plain(buttons.flat())) + stateWidth > this.feedWidth) {
+    // While the sidebar stands, the keys stand under the context, on the row of the footer, and the state keeps the
+    // whole footer. A set of keys that is wider than that column stands in the footer, so that none is lost.
+    const cornered =
+      this.sidebarShown &&
+      !this.drawerOpen &&
+      Bun.stringWidth(plain(buttons.flat())) <= w.preferences.sidebarWidth - space.inset * 2;
+    const stateWidth = cornered
+      ? 0
+      : Bun.stringWidth(plain(state)) + Bun.stringWidth(plain(statuses)) + space.between * 2;
+    while (
+      !cornered &&
+      shown.length &&
+      Bun.stringWidth(plain(buttons.flat())) + stateWidth > this.feedWidth
+    ) {
       shown.pop();
       buttons = buttonsOf(shown);
     }
     const hints = buttons.flat();
     const room =
       this.feedWidth -
-      Bun.stringWidth(plain(hints)) -
+      (cornered ? 0 : Bun.stringWidth(plain(hints))) -
       Bun.stringWidth(plain(state)) -
       Bun.stringWidth(plain(statuses)) -
       space.between * 2;
@@ -414,13 +426,15 @@ export const chrome = part({
         [clip(notice, room - 3), [exitNotice, rewindNotice].includes(notice) ? c.warning : c.text],
       );
     state.push(...statuses);
-    const key = JSON.stringify([plain(state), plain(hints), color, this.theme]);
+    const key = JSON.stringify([plain(state), plain(hints), color, this.theme, cornered]);
     if (key === this.statusKey) return;
     this.statusKey = key;
     this.status.content = styled(state);
     this.clear(this.hints);
+    this.clear(this.cornerKeys);
+    const stand = cornered ? this.cornerKeys : this.hints;
     for (const [index, [, , run]] of shown.entries())
-      this.hints.add(this.line(buttons[index] ?? [], c.faint, { run }));
+      stand.add(this.line(buttons[index] ?? [], c.faint, { run }));
   },
 });
 

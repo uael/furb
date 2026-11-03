@@ -205,7 +205,7 @@ pub(super) fn applied(listed: &mut IndexMap<String, Listed>, text: Option<&str>)
   }
   for (name, one) in copy.providers {
     if let Some(held) = listed.get_mut(&name).filter(|_| !one.models.is_empty()) {
-      held.models = one.models;
+      held.renew(one.models);
     }
   }
 }

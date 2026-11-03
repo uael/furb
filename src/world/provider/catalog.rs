@@ -1,23 +1,32 @@
-//! The catalog of models: the models that this machine can ask, and of each its window, its efforts, its price, and
-//! whether it takes an image.
+//! The catalog of models: the models that this machine can ask, and of each its window, its
+//! efforts, its price, its class, and whether it takes an image.
 //!
 //! The crate carries a snapshot of the catalog, cut down to the providers that pi-ai serves, which
-//! `script/catalog.py` makes again from models.dev and, for the two providers that models.dev does not list, from the
-//! data of pi-ai. A life reads the models of a provider from the caches of furb when they hold them newer than the
-//! snapshot, and a life updates the caches in the background when they are a day old, so no life waits on the network
-//! and a life with no network reads the snapshot. [`update`] says how a source is fetched and kept. The claude command line is the provider
-//! `claude-cli`, whose models are opus, sonnet, haiku and fable.
+//! `script/catalog.py` makes again from models.dev and, for the two providers that models.dev does
+//! not list, from the data of pi-ai. A life reads the models of a provider from the caches of furb
+//! when they hold them newer than the snapshot, and a life updates the caches in the background
+//! when they are a day old, so no life waits on the network and a life with no network reads the
+//! snapshot. [`update`] says how a source is fetched and kept. The claude command line is the
+//! provider `claude-cli`, whose models are opus, sonnet, haiku and fable.
 //!
-//! A model is named `provider:id`. The catalog offers the models of a provider when its credential stands in the
-//! environment, with every name that its address holds a place for, and the models of the claude command line when
-//! it finds the program. An effort is one of [`LEVELS`], which each provider reads in its own words, an actor that
-//! names none takes [`LEVEL`], and a level that a model does not take moves to the nearest one it takes.
+//! The snapshot gives each model its class, cheap or dear. It lists the families that a program of
+//! their own serves, the claude command line and Codex, with the class of each of their models
+//! alone, since they say no price, and [`family`] gives it. A list of the network says no class, so
+//! a model that it lists keeps the class that the snapshot gives a model of its name, and a model
+//! that the snapshot does not list takes the class of its price.
 //!
-//! The models of the local server that the environment names are the provider `local`, which [`local`] lists. The
-//! catalog asks that server only when a roster or an actor names a model of the provider local, or of a provider
-//! that the catalog does not know, and when a host lists the models that the catalog offers, as a roster that the
-//! host does not name does. It offers them after the claude command line and the providers of the network, so the
-//! default actor is a model of the local server only when the catalog offers no other model.
+//! A model is named `provider:id`. The catalog offers the models of a provider when its credential
+//! stands in the environment, with every name that its address holds a place for, and the models of
+//! the claude command line when it finds the program. An effort is one of [`LEVELS`], which each
+//! provider reads in its own words, an actor that names none takes [`LEVEL`], and a level that a
+//! model does not take moves to the nearest one it takes.
+//!
+//! The models of the local server that the environment names are the provider `local`, which
+//! [`local`] lists. The catalog asks that server only when a roster or an actor names a model of
+//! the provider local, or of a provider that the catalog does not know, and when a host lists the
+//! models that the catalog offers, as a roster that the host does not name does. It offers them
+//! after the claude command line and the providers of the network, so the default actor is a model
+//! of the local server only when the catalog offers no other model.
 //!
 //! [`local`]: super::local
 
@@ -53,7 +62,7 @@ use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 use super::{
-  Hosted, Model, Provider, Streams,
+  Class, Hosted, Model, Provider, Streams,
   claude::{self, Claude},
   clients::{Client, Reach},
   local::{self, ENV_URL, Heard, LOCAL, Server},
@@ -131,6 +140,8 @@ struct Cached {
 #[derive(Clone, Deserialize, Default)]
 #[serde(default)]
 struct Listing {
+  /// The class that the snapshot gives the model.
+  class: Option<Class>,
   reasoning: bool,
   reasoning_options: Vec<Reasoning>,
   limit: Limit,
@@ -719,6 +730,9 @@ fn model(
   model.images = listing.modalities.input.iter().any(|one| one == "image");
   model.price =
     listing.cost.map(|cost| [cost.input, cost.output, cost.cache_read, cost.cache_write]);
+  if let Some(class) = listing.class {
+    model = model.classed(class);
+  }
   model.apart = matches!(client, Client::Anthropic | Client::Bedrock | Client::Pi);
   let told = matches!(client, Client::Anthropic | Client::Bedrock) && listing.limit.output > 0;
   model.tokens = told.then_some(listing.limit.output);
@@ -774,8 +788,17 @@ fn listed(cached: Option<&PathBuf>) -> Arc<IndexMap<String, Listed>> {
 /// The providers of a snapshot, each with the models of the cache when the cache holds models of it as new as those
 /// of the snapshot or newer. The last day that a model of a list changed says how new the list is.
 pub(super) fn parsed(snapshot: &str, cached: Option<&str>) -> IndexMap<String, Listed> {
-  let mut listed: IndexMap<String, Listed> = serde_json::from_str(snapshot)
+  let entries: IndexMap<String, Value> = serde_json::from_str(snapshot)
     .expect("the snapshot of the catalog is the JSON of its providers");
+  // A family that a program of its own serves names no client, and gives only the classes of its
+  // models.
+  let mut listed: IndexMap<String, Listed> = entries
+    .into_iter()
+    .filter(|(_, one)| one.get("rig").is_some())
+    .map(|(name, one)| {
+      (name, serde_json::from_value(one).expect("a provider of the snapshot is whole"))
+    })
+    .collect();
   let cached = cached.and_then(|text| serde_json::from_str::<HashMap<String, Cached>>(text).ok());
   let newest = |models: &IndexMap<String, Listing>| {
     models.values().filter_map(|one| one.last_updated.clone()).max()
@@ -783,10 +806,35 @@ pub(super) fn parsed(snapshot: &str, cached: Option<&str>) -> IndexMap<String, L
   for (provider, one) in cached.into_iter().flatten() {
     let Some(held) = listed.get_mut(&provider) else { continue };
     if !one.models.is_empty() && newest(&one.models) >= newest(&held.models) {
-      held.models = one.models;
+      held.renew(one.models);
     }
   }
   listed
+}
+
+impl Listed {
+  /// The models of a list in place of those that the provider holds, each with the class that the
+  /// provider gave the model of its name, since a list of the network says no class.
+  fn renew(&mut self, mut models: IndexMap<String, Listing>) {
+    for (id, one) in &mut models {
+      one.class = one.class.or_else(|| self.models.get(id).and_then(|was| was.class));
+    }
+    self.models = models;
+  }
+}
+
+/// The class that the snapshot gives a model of a family that a program of its own serves, by the
+/// name of the family, as `claude-cli` or `codex`, and the name of the model in it, and nothing for
+/// a model that it does not list.
+pub(super) fn family(name: &str, model: &str) -> Option<Class> {
+  static FAMILIES: OnceLock<HashMap<String, Cached>> = OnceLock::new();
+  let families = FAMILIES.get_or_init(|| {
+    let entries: HashMap<String, Value> = serde_json::from_str(SNAPSHOT)
+      .expect("the snapshot of the catalog is the JSON of its providers");
+    let families = entries.into_iter().filter(|(_, one)| one.get("rig").is_none());
+    families.filter_map(|(name, one)| Some((name, serde_json::from_value(one).ok()?))).collect()
+  });
+  families.get(name)?.models.get(model)?.class
 }
 
 #[cfg(test)]

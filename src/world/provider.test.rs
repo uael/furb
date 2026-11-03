@@ -2483,11 +2483,14 @@ fn a_stand_that_reads_the_settings_slowly_holds_no_chain_while_it_reads() {
 }
 
 #[test]
-fn a_model_takes_the_class_that_code_fixes_else_the_one_of_its_price_else_dear() {
+fn a_model_takes_the_class_of_the_catalog_else_the_one_of_its_price_else_dear() {
   let catalog = Catalog::of(&indexmap::IndexMap::new(), None, None, |_| None);
   let class = |name: &str| catalog.find(name).map(|one| one.class());
   assert_eq!(class("claude-cli:haiku"), Some(Class::Cheap));
   assert_eq!(class("claude-cli:opus"), Some(Class::Dear));
+  assert_eq!(super::catalog::family("codex", "gpt-5-mini"), Some(Class::Cheap));
+  assert_eq!(super::catalog::family("codex", "gpt-5"), Some(Class::Dear));
+  assert_eq!(super::catalog::family("codex", "ghost"), None);
   let model = || Model::new("p:m", 1000, MockCompletionModel::new([]));
   let priced = |input: f64| model().price(input, 1.0, 0.0, 0.0).class();
   assert_eq!([priced(0.25), priced(CHEAP), priced(3.0)], [Class::Cheap, Class::Cheap, Class::Dear]);
@@ -2514,4 +2517,72 @@ fn the_config_of_a_project_gives_a_model_another_class_in_the_roster() {
     ),
     "{standing}"
   );
+}
+
+#[test]
+fn the_configs_of_the_user_and_of_the_project_give_the_classes_and_the_list_of_automatic_work() {
+  let at = yard("configured");
+  let (user, project) = (at.join("user"), at.join("project"));
+  fs::create_dir_all(project.join(".furb")).unwrap();
+  fs::create_dir_all(&user).unwrap();
+  let mine = r#"{"classes": {"claude-cli:haiku": "dear", "claude-cli:opus": "cheap"},
+    "automatic": ["claude-cli:sonnet", "ghost", "claude-cli:opus"]}"#;
+  fs::write(user.join("config.json"), mine).unwrap();
+  fs::write(
+    project.join(".furb").join("config.json"),
+    r#"{"classes": {"claude-cli:opus": "dear"}}"#,
+  )
+  .unwrap();
+  let catalog = Catalog::of(&indexmap::IndexMap::new(), None, None, |_| None);
+  let models: Vec<Model> =
+    ["claude-cli:haiku", "claude-cli:opus", "claude-cli:sonnet", "claude-cli:fable"]
+      .iter()
+      .map(|name| catalog.find(name).expect("the catalog holds the claude command line").clone())
+      .collect();
+  let roster = |directory: &Path| {
+    let given = super::standing(&models, &directory.display().to_string(), "a", None, &user);
+    let names = given.py_repr();
+    names
+      .split("], ['")
+      .map(|one| one.rsplit("], ").next().unwrap_or_default().to_owned())
+      .collect::<Vec<_>>()
+  };
+  // The catalog gives haiku the class cheap and the others dear, the user turns haiku dear and opus
+  // cheap, and the project turns opus dear again; the list of the user ranks sonnet first and opus
+  // after it.
+  assert_eq!(
+    roster(&project)[..4],
+    ["200000, 'dear'", "1000000, 'dear', 2", "1000000, 'dear', 0", "1000000, 'dear'"]
+      .map(str::to_owned)
+  );
+  assert_eq!(
+    roster(&at)[..4],
+    ["200000, 'dear'", "1000000, 'cheap', 2", "1000000, 'dear', 0", "1000000, 'dear'"]
+      .map(str::to_owned)
+  );
+  fs::remove_dir_all(&user).unwrap();
+  assert_eq!(roster(&at)[..2], ["200000, 'cheap'", "1000000, 'dear'"].map(str::to_owned));
+}
+
+#[test]
+fn a_machine_with_no_random_bytes_fails_the_call_that_needs_an_id() {
+  let got = super::uuid_from(|_| Err(getrandom::Error::UNSUPPORTED));
+  let Err(CompletionError::ProviderError(why)) = got else {
+    panic!("a machine with no random bytes gave an id")
+  };
+  assert!(why.starts_with("the machine gave no random bytes"), "{why}");
+}
+
+#[test]
+fn an_id_is_a_uuid_of_version_4_and_variant_1() {
+  let zeros = super::uuid_from(|bytes| {
+    bytes.fill(0);
+    Ok(())
+  });
+  assert_eq!(zeros.unwrap(), "00000000-0000-4000-8000-000000000000");
+  let ones = super::uuid_from(|bytes| {
+    bytes.fill(0xff);
+    Ok(())
+  });
+  assert_eq!(ones.unwrap(), "ffffffff-ffff-4fff-bfff-ffffffffffff");
 }

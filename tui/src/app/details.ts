@@ -6,6 +6,7 @@ import {
   LineNumberRenderable,
   type LineSign,
   type MouseEvent,
+  type OptimizedBuffer,
   parseColor,
   type Renderable,
   type RGBA,
@@ -36,7 +37,7 @@ import type { ActRow } from "../session.ts";
 import { theme as c, glyph, markOf, spacing as space, spin } from "../theme.ts";
 import { bold, type Part, styled, underline } from "../ui.ts";
 import { part } from "./part.ts";
-import { gutterWidth, saidOf, seconds, spell, stateOf } from "./shared.ts";
+import { gutterWidth, STATE, saidOf, seconds, spell, stateOf, stateSigns } from "./shared.ts";
 
 /** A reason of the gate or of a raise as one line says it: without the line that the row already shows, and
  * without the place that the parser names, `(<string>, line 2), in 'x = = 1'`, which repeats the line. */
@@ -46,26 +47,9 @@ const plainReason = (why: string) =>
 /** The columns that a line which runs keeps for its time. The tick draws them, so no layout of the text holds them. */
 const TIME = 8;
 
-/** The cells of the column of the states, at the left of the numbers of a word: the loader while the model writes, the
- * mark of the line that runs, and the mark of the line that failed. */
-const STATE = 2;
-
 /** The columns of the facts of a word, at the right edge of its block: what the acts of each line came to. Each block
  * keeps the same column, so the facts of every word stand one under the other. */
 const FACTS = 30;
-
-/** The column of the states, as signs of the gutter: the mark of each row that has one, and blanks on the first row so
- * that the column stands when no row has a mark. */
-const stateSigns = (states: ReadonlyMap<number, Part>, rows: number): Map<number, LineSign> => {
-  const signs = new Map<number, LineSign>();
-  if (rows) signs.set(0, { before: " ".repeat(STATE) });
-  for (const [row, [mark, color]] of states)
-    signs.set(row, {
-      before: `${mark}${" ".repeat(Math.max(0, STATE - Bun.stringWidth(mark)))}`,
-      beforeColor: color,
-    });
-  return signs;
-};
 
 /** The column of the states of the rows of a step that a model writes, with the loader on its last row. */
 const loaderSigns = (rows: number): Map<number, LineSign> =>
@@ -85,6 +69,10 @@ const modelOf = (step: { kind: string; words: readonly unknown[] }) => {
   const { id } = modelName(actor);
   return actor && id !== "operator" ? id : "";
 };
+
+/** The label of the block of a word: the model that wrote it, as opus/high, or the operator. */
+const writerOf = (step?: { kind: string; by?: string; words: readonly unknown[] }) =>
+  (step?.by !== "operator" && step && modelOf(step)) || "operator";
 
 export const details = part({
   /** The rung that took the place of a rung of a model that failed: a later rung for the same prompt, which the model
@@ -352,7 +340,7 @@ export const details = part({
     const label: Part[] = done
       ? []
       : [
-          [`word · ${step}`, c.muted, bold],
+          [writerOf(w.actOf(step)), c.muted, bold],
           [` · thinking${ms >= 1000 ? ` ${spell(Math.floor(ms / 1000) * 1000)}` : ""}`, c.faint],
         ];
     const text = stream?.text.trim() ? clip(tail, room - STATE) : "";
@@ -484,6 +472,7 @@ export const details = part({
     const pieces: [row: number, from: number, to: number, at: number][] = [];
     // The lines that run: where the time of each stands in its row, and the act that it counts.
     const live: { row: number; col: number; act: Parameters<typeof since>[0] }[] = [];
+    const spinning: { row: number; digits: number }[] = [];
     const fixed: [row: number, from: number, to: number, group: string][] = [];
     const comment = (row: number, from = 0) => fixed.push([row, from, texts[row]?.length ?? 0, "comment"]);
     const push = (text: string, number?: number, source?: ProgramLine) => {
@@ -504,8 +493,8 @@ export const details = part({
         // The watch speaks in common words, so it names no word and no rung.
         if (heads.has(line) && line.step.kind === "rung" && !this.session.watching) {
           if (!first) push("");
-          const name = `word · ${line.step.id}`;
-          const facts = [took(line.step as ActRow), modelOf(line.step)].filter(Boolean).join("  ");
+          const name = writerOf(line.step);
+          const facts = took(line.step as ActRow);
           const label = `${name}${" ".repeat(Math.max(2, room - Bun.stringWidth(name + facts)))}${facts}`;
           const at = push(label);
           block(at);
@@ -544,8 +533,9 @@ export const details = part({
             col: Bun.stringWidth(body) - TIME,
             act: line.awaits?.act ?? line.acts.at(-1),
           });
+        // The line that runs shows the loader in the place of its number, so it reads apart from a model that thinks.
         if (line.fails) states.set(at, markOf("failed"));
-        else if (line.runs) states.set(at, markOf("runs"));
+        else if (line.runs) spinning.push({ row: at, digits: String(line.display).length });
         for (const row of rows.slice(1)) push(row.text, undefined, line);
         const base = program.length;
         program += `${line.text}\n`;
@@ -705,7 +695,26 @@ export const details = part({
           );
       },
     });
-    const times = () => live.map((one) => since(one.act)).join("|");
+    // The gutter draws its numbers into a buffer of its own, after the program, and it has no render hook. So the
+    // loader is drawn into that buffer after it is filled. It covers the number of the line that runs, at the right of
+    // its column, on the color of the line.
+    const gutter = Reflect.get(view, "gutter") as { width: number } | undefined;
+    const fill =
+      gutter && (Reflect.get(gutter, "refreshFrameBuffer") as (buffer: unknown, start: number) => void);
+    if (gutter && fill && spinning.length)
+      Reflect.set(gutter, "refreshFrameBuffer", (buffer: OptimizedBuffer, start: number) => {
+        fill.call(gutter, buffer, start);
+        for (const { row, digits } of spinning)
+          buffer.drawText(
+            spin().padStart(digits),
+            gutter.width - space.inset - digits,
+            row - start,
+            parseColor(c.accent),
+            parseColor(c.selected),
+          );
+      });
+    // The loader turns with the tick, so the program draws again at each frame of the spinner while a line runs.
+    const times = () => [spinning.length ? spin() : "", ...live.map((one) => since(one.act))].join("|");
     if (live.length) this.liveLines.set(view, { times, shown: times() });
     // The gutter of the numbers takes the events of the pointer over the program, so it shows the string of a fold.
     view.onMouseMove = (event) => {

@@ -74,6 +74,11 @@ def prcheck(title: str, why: str, outcome: list[str], breaking: list[str] | None
   ]
   if long:
     raise Refused(f"{len(long)} sentences over {PR_SENTENCE} words, split each one:\n" + "\n".join(long))
+  bare = [
+    " ".join(x.split())[:60] for x in [*why.split("\n\n"), *outcome] if x.strip() and not re.search(r"[.!?][)`']*\s*$", x)
+  ]
+  if bare:
+    raise Refused(f"{len(bare)} lines hold no sentence, as a command does: end each with a full stop: " + "; ".join(bare))
   return sum(parts)
 
 

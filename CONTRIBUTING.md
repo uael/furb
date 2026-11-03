@@ -87,6 +87,7 @@ contract needs a request of the owner.
 | `src/world/scratch.rs` | The scratch directory of a life: its place in the cache of furb for each record, the paths of `scratch://`, and the files that a record makes again in it. |
 | `src/world/bash.rs` | The commands: each runs in a shell of the machine, in the working directory of its chain, with `TMPDIR` set to the scratch directory. |
 | `src/world/fetch.rs` | The fetch: a page over HTTP as a text, as Markdown when it is HTML, which the question `fetch` asks. |
+| `src/world/mcp.rs`, `src/world/mcp/` | The client of the MCP servers: the ear `mcp`, which answers the acts `mcp_*` and says the fact `mcp_changed`, and the servers, their config, their sign-in and their tools. |
 | `src/world/time.rs` | The clock, a chance, and a wait. |
 | `src/world/store.rs` | The store: the record on the disk, as a file of lines, one fact on each line with the time the store kept it, or as a database of SQLite, which one process at a time owns, and the engine and the version of the build that made it, which the record names. |
 | `src/world/log.rs` | The log of a life beside its record: every fact that the life said, which `logged` reads while it agrees with the record. |
