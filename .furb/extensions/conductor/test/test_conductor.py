@@ -4301,6 +4301,14 @@ def test_a_message_with_two_asks_and_one_item_leaves_one_ask_flagged(conductor: 
   assert len(conductor.heard) == 1
 
 
+def test_a_message_from_the_site_of_a_member_of_the_owner_with_no_ask_is_flagged(conductor: Round) -> None:
+  conductor.lead["home"] = "chain1"
+  facts = [("prompt", "prompt9", "operator/uael", "prompt1", "str", "words prompt9", "")]
+  conductor.ns["transcript"] = lambda on="", of="": facts if on == "chain1" else []
+  conductor.files[conductor.ASKS] = json.dumps([])
+  assert conductor.unasked() == ["prompt9"]
+
+
 def test_a_message_of_the_owner_that_no_ask_names_is_told_once(conductor: Round) -> None:
   asked(conductor, "prompt7", "prompt8")
   conductor.files[conductor.ASKS] = json.dumps([{"id": "A1", "prompt": "prompt6 + prompt7", "items": [], "state": "none"}])
