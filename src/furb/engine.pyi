@@ -797,7 +797,7 @@ The engine sends the response to the provider again whole.
 The python of an assistant turn is the word the model wrote, quotes and all, and the python of a user turn is the paragraphs told since the reply before it, and nothing else.
 """
 type Actor = list[str | list[str] | int]
-"""An actor the World offers: the name of a model, the efforts it takes, the window it reads and its class, cheap or dear, which a World may leave unsaid.
+"""An actor the World offers: the name of a model, the efforts it takes, the window it reads, its class, cheap or dear, and its place from 0 in the list of automatic work when that list names it, and a World may leave the class and the place unsaid.
 The window that a roster entry leaves unsaid is the window that the file names.
 What a prompt names is one of these names and one effort of that range.
 An actor takes an effort of its own, and any actor takes the effort that is not named.
