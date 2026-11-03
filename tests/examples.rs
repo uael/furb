@@ -46,6 +46,11 @@ impl Yard {
     let (at, fake) = (root.join("work"), root.join("fake"));
     fs::create_dir_all(&at).expect("the yard");
     fs::create_dir_all(&fake).expect("the home of the fake");
+    // The life of a test names no session, since a name asks the fake claude out of the order
+    // of its words.
+    fs::create_dir_all(root.join("config")).expect("the config directory");
+    fs::write(root.join("config").join("config.json"), r#"{"extensions": {"naming": false}}"#)
+      .expect("the config");
     fs::write(fake.join("claude"), FAKE).expect("the fake");
     fs::set_permissions(fake.join("claude"), fs::Permissions::from_mode(0o755))
       .expect("the fake runs");

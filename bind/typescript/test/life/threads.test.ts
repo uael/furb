@@ -1,6 +1,12 @@
 import { expect, test } from "bun:test";
 import type { LiveAct } from "../../src/life/acts.ts";
-import { type ChainThread, chainThreads, concerns, nestThreads } from "../../src/life/threads.ts";
+import {
+  attentionOf,
+  type ChainThread,
+  chainThreads,
+  concerns,
+  nestThreads,
+} from "../../src/life/threads.ts";
 import { act } from "./acts.ts";
 
 const prompt = (id: string, began: number, more: Partial<LiveAct> = {}) =>
@@ -110,12 +116,49 @@ test("the threads that the ladder of a thread made nest under it, and a question
   expect(tree.map((one) => one.thread.act.id)).toEqual(["prompt1", "prompt30"]);
   expect(tree[0]?.agents.map((one) => one.thread.act.id)).toEqual(agents.map((one) => one.id));
   expect(tree[0]?.agents.at(-1)?.agents.map((one) => one.thread.act.id)).toEqual(["prompt20"]);
-  expect([tree[0]?.thread.state, tree[0]?.agents.at(-1)?.thread.state, tree[1]?.thread.state]).toEqual([
+  expect([tree[0]?.state, tree[0]?.agents.at(-1)?.state, tree[1]?.state]).toEqual([
     "asks",
     "asks",
     "running",
   ]);
   expect(tree[0]?.thread.asks).toEqual([]);
+  expect(tree[0]?.thread.state).toBe("running");
+});
+
+test("nesting changes no thread of its list, so a question that is answered leaves the parent in its own state on a cached list, and a failed thread of the operator whose agent asks keeps failed", () => {
+  const thread = (one: LiveAct, asks: string[] = [], more: Partial<ChainThread> = {}): ChainThread => ({
+    act: one,
+    title: one.id,
+    messages: [],
+    asked: [],
+    asks,
+    state: asks.length ? "asks" : "running",
+    resolved: false,
+    origin: "rung",
+    yours: false,
+    ...more,
+  });
+  const lead = prompt("prompt1", 1);
+  const agent = act("prompt2", "prompt", "chain1", "rung1", 3);
+  const rows = new Map(
+    [lead, act("rung1", "rung", "chain1", "prompt1", 2), agent].map((one) => [one.id, one]),
+  );
+  // The thread of the lead is one object that a cache keeps from list to list.
+  const parent = thread(lead);
+  const asking = nestThreads([parent, thread(agent, ["prompt9"])], rows);
+  expect([asking[0]?.state, asking[0]?.agents[0]?.state, parent.state]).toEqual(["asks", "asks", "running"]);
+  const answered = nestThreads([parent, thread(agent)], rows);
+  expect([answered[0]?.state, answered[0]?.agents[0]?.state, parent.state]).toEqual([
+    "running",
+    "running",
+    "running",
+  ]);
+  // A failed thread of the operator whose agent asks counts as asks in its node and stays failed in its own record.
+  const failed = thread(lead, [], { state: "failed", yours: true });
+  const node = nestThreads([failed, thread(agent, ["prompt9"])], rows);
+  expect([node[0]?.state, failed.state, node[0] && concerns(node[0])]).toEqual(["asks", "failed", "asks"]);
+  expect(attentionOf(node)).toEqual({ asks: 1, failed: 0, held: 0 });
+  expect(attentionOf(nestThreads([failed, thread(agent)], rows))).toEqual({ asks: 0, failed: 1, held: 0 });
 });
 
 test("a question waits for the operator in any thread, and a failure or a pause concerns them only in a thread that they started", () => {
@@ -132,7 +175,7 @@ test("a question waits for the operator in any thread, and a failure or a pause 
       one.act.id,
       one.origin,
       one.yours,
-      concerns(one) !== undefined,
+      concerns({ thread: one, state: one.state }) !== undefined,
     ]);
   // A question that waits in a thread of an agent concerns the operator.
   const step = act("rung3", "rung", "chain1", "prompt2", 5);

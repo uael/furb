@@ -977,7 +977,7 @@ def test_the_limits_of_the_round_live_in_its_state_and_a_reload_keeps_them(condu
 
 
 STATE = (
-  "limits queue backlog working results relays bases efforts homes models lead custom prs merged noticed assigned silent"
+  "limits queue backlog working results relays bases efforts homes models lead custom prs merged audited align_state noticed assigned silent"
   " comments measures timers noted debriefs briefed owns watched after parked awaited covering kinds pool slots areas planned touched serial round_faults vetoes rulings judged tips shifted parents redmain onmain hired paced landed heard bindings handled ends requeued"
   " statused secret updated budgeted flaky runs_read deferred"
 ).split()
@@ -2397,6 +2397,16 @@ def test_a_file_with_no_folder_in_an_open_pr_holds_no_item_that_names_another_fi
   conductor.touched[7] = {"sha": "abc", "paths": ["AGENTS.md", "tui/foo.ts"]}
   assert conductor.rival("k1", "Change src/furb/AGENTS.md.") is None
   assert conductor.rival("k2", "Change tui/foo.ts.") == (7, ["tui/foo.ts"])
+
+
+def test_a_url_in_a_brief_names_no_file_of_the_repository(conductor: Round) -> None:
+  brief = "Read scratch://owner/words.md and scratch://owner/picks.md, then change nothing else."
+  conductor.prs[7] = conductor.pr(n=7)
+  conductor.touched[7] = {"sha": "abc", "paths": ["owner/words.md"]}
+  conductor.working["w1"] = "k1"
+  conductor.briefed["k1"] = brief
+  assert conductor.files_of("k1", brief) == set() and conductor.rival("k1", brief) is None
+  assert not conductor.serialized("k2", brief) and conductor.serial == {}
 
 
 @JQ
@@ -4301,6 +4311,14 @@ def test_a_message_with_two_asks_and_one_item_leaves_one_ask_flagged(conductor: 
   assert len(conductor.heard) == 1
 
 
+def test_a_message_from_the_site_of_a_member_of_the_owner_with_no_ask_is_flagged(conductor: Round) -> None:
+  conductor.lead["home"] = "chain1"
+  facts = [("prompt", "prompt9", "operator/uael", "prompt1", "str", "words prompt9", "")]
+  conductor.ns["transcript"] = lambda on="", of="": facts if on == "chain1" else []
+  conductor.files[conductor.ASKS] = json.dumps([])
+  assert conductor.unasked() == ["prompt9"]
+
+
 def test_a_message_of_the_owner_that_no_ask_names_is_told_once(conductor: Round) -> None:
   asked(conductor, "prompt7", "prompt8")
   conductor.files[conductor.ASKS] = json.dumps([{"id": "A1", "prompt": "prompt6 + prompt7", "items": [], "state": "none"}])
@@ -4341,3 +4359,37 @@ def test_the_audit_of_the_work_tells_each_lost_ask_and_each_message_with_no_ask(
   told = conductor.prompts[-1][0]
   assert f"The asks of the owner in {conductor.ASKS} that are partly or missing with no item:\n- A4 [partly] keep it\n" in told
   assert "The messages of the owner that no ask names: prompt7\n" in told
+
+
+@POSIX
+def test_the_eighth_merged_pr_since_the_last_alignment_audit_starts_one_audit(conductor: Round) -> None:
+  def git(*words: str) -> str:
+    got = subprocess.run(["git", *words], cwd=conductor.tmp, env=conductor.env, check=True, capture_output=True, text=True)
+    return got.stdout.strip()
+
+  git("init", "-q")
+  git("commit", "-q", "--allow-empty", "-m", "one")
+  git("update-ref", "refs/remotes/origin/main", "HEAD")
+  first = git("rev-parse", "HEAD")
+  conductor.timers["sweep"] = 1.0
+  conductor.merged.update(range(1, 11))
+  asyncio.run(conductor.align())
+  assert conductor.align_state == {"n": "0", "sha": first}
+  conductor.merged.update(range(11, 18))
+  asyncio.run(conductor.align())
+  assert conductor.queue == [] and conductor.heard == []
+  git("commit", "-q", "--allow-empty", "-m", "two")
+  git("update-ref", "refs/remotes/origin/main", "HEAD")
+  last = git("rev-parse", "HEAD")
+  conductor.merged.add(18)
+  asyncio.run(conductor.align())
+  assert [item[0] for item in conductor.queue] == ["align1"]
+  assert conductor.kind_of("align1") == "audit"
+  assert "8 PRs merged since the last one, #11 #12 #13 #14 #15 #16 #17 #18." in conductor.queue[0][1]
+  assert f"`git log --oneline {first}..{last}`" in conductor.queue[0][1]
+  assert conductor.align_state == {"n": "1", "sha": last}
+  asyncio.run(conductor.align())
+  assert len(conductor.queue) == 1
+  conductor.files["scratch://audit/align1.md"] = "| D1 | Gap one | sonnet/high | tui | Close the gap. |"
+  conductor.register("align1", "prompt1")
+  assert [item[0] for item in conductor.queue] == ["align1", "align1-gap-one"]

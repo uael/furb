@@ -13,7 +13,7 @@ caches of the chain stays valid.
 
 ## The official extensions
 
-Seven extensions come with furb, and each life runs them unless a config turns them off.
+Eight extensions come with furb, and each life runs them unless a config turns them off.
 
 - **`catchup`** keeps a chain up to date with the machine. At each stand, as when a later life opens on a record, it
   reads again each file that the chain read or wrote, and tells the chain in one paragraph headed caught up the lines
@@ -47,6 +47,13 @@ Seven extensions come with furb, and each life runs them unless a config turns t
   record whose log does not agree, only the open prompts that no model worked on come. The extension has no life word.
   A project changes `SHARE`, `FILTERS`, `CHOOSER`, `LISTED` or `BRIEF` in an extension of its own. In the TUI, a rule
   with the summary marks each compaction in the feed, and `/compact` runs `await condense()` on the chain on screen.
+- **`naming`** gives the session a name from the first message of the operator. Its life word, `name_session()`, plays
+  on the root alone. At the first prompt that the operator makes in the life, it asks the actor that `automatic()` of
+  `compaction` gives for a name of a few words, on a chain of its own labelled `naming`. With no such actor, or with no
+  name from it, the name is the first line of the message. The act is done with the name, and the record keeps the
+  prompt and its answer, so a later life gives the same name and asks no model. The TUI shows the name in place of the
+  name that it gave the session, unless the operator named the session, and the sidebar hides the chain `naming`. A
+  config that turns `naming` off, as `{"extensions": {"naming": false}}`, saves the call of that model.
 - **`ouroboros`** teaches a model to extend furb. Its file holds the lore, which every chain reads in the setup, so it
   has no life word. The lore says the three ways to extend furb and when to take each: a def in a word, which lives with
   its chain; `extend(name, *rungs)`, which writes the words of those rungs as an extension of the project and turns it
@@ -76,8 +83,8 @@ Seven extensions come with furb, and each life runs them unless a config turns t
   of a server, a status in the footer, a row for each call of a tool, and `@` in the input, which completes the
   resources of the servers.
 
-`compaction`, `web` and `mcp` each hold a short guide for the model, a quote named after the extension, which the model
-reads on each chain.
+`compaction`, `naming`, `web` and `mcp` each hold a short guide for the model, a quote named after the extension, which
+the model reads on each chain where the extension plays.
 
 ## Turn an extension on or off
 

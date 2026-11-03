@@ -86,8 +86,8 @@ export const values = part({
             this.paletteList?.add(
               this.document(
                 this.numbered(lines.slice(at, next < 0 ? undefined : at + next + 1).join("\n"), {
-                  fg: c.muted,
-                  lineNumberOffset: at,
+                  fg: () => c.muted,
+                  offset: at,
                 }),
                 { height: Math.min(24, this.renderer.height - 16) },
               ),

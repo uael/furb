@@ -63,6 +63,7 @@ Each round sends each new comment of the owner on a PR or on his issue to the wo
 Each round sets one status label on each open PR and on each issue of the owner that it took: s:queued, s:working, s:checks, s:red, s:boxes, s:held, s:conflict, s:stacked, s:ready, or s:owner (green, waits for the owner).
 Before it hires, each round folds into one item each queued item that is like an earlier one, by the ruling of the owner on 10-29: the same thread, kind and model, and the same PR or a brief whose long lines that fewer than 3 briefs of queue and backlog hold are half the same, and never an item of the kind audit. The earlier item keeps its key and its place, takes the lines of the later one that it lacks, and covers its key, and each after[...] that named the later key names the earlier one, so a flake, an order or a step of converge for it goes to its worker. Each round reads the gates: when the median time of a job in its last five green runs on main passes its budget in .github/budgets.json, which script/budgets.py sets from measures, it queues an item budget-<job>, once until five new runs measure the job; and when the gates fail, then pass on the same commit, it puts each test that failed in the ledger of the flakes, flaky, and at once queues an item flake-<test>, or tells the worker that holds that item. An item names in covering[key] the tests, the measures and the keys of the items of flakes or budgets that it covers, as covering["tui-bench-new-act"] = ["flake-bench-a-new-act-growth"]: taken() gives its worker for each of them, so a flake or a budget that it covers goes to that worker and queues no item.
 Every twelfth round audits the work against its measure, the open items, writes its line in the digest, and tells you the open entries of TOOLING, the most repeated first, each with its id: turn the worst into the next item. TOOLING is untracked, so a worker in a worktree cannot read it: put ledger_text(id, ...), the text of the entries that the item names, in its brief. Each entry has a stable id and one state of STATES, and a state of another form moves to its note. The audit prunes what the work left behind, and loses no work: a worktree of the round whose item is not in working, queue or backlog and whose branch merged, closed, or holds nothing that main lacks, or whose work is all committed and pushed, with its local branch, once its changes that are not committed are a patch and its commits that only this machine holds are a bundle, in the folder of the day in ARCHIVE; a remote branch whose PR closed at its head and that no item names, written first to TRASHED; a scratch directory of a life that no process and no item uses, older than 2 days; and a folder /tmp/furb-* older than 2 days. It tells you what went and the room that df saw freed.
+The round counts the PRs that merged since the last alignment audit, and ALIGN_EVERY = 8 of them start one: align() queues the audit alignN, of kind audit, with the window of the commits since the audit before it, and each row of its register is queued as the item alignN-<key>.
 threads() gives the tree of the threads: the brief prompt of each worker and the prompts under it, with their state, their PRs, their queued items and each question that waits.
 debrief(name) asks the chain of a worker that ended for the frictions that it met in furb.
 Each act of the round is made through quietly(verb, ...), so its end wakes nobody: you hear only a notice, and each merge rides on the next one. Make each act that you do not await the same way.
@@ -129,6 +130,9 @@ lead: dict[str, str] = globals().setdefault("lead", {})
 custom: dict[str, str] = globals().setdefault("custom", {})
 prs: dict[int, dict] = globals().setdefault("prs", {})
 merged: set[int] = globals().setdefault("merged", set())
+audited: set[int] = globals().setdefault("audited", set())
+align_state: dict[str, str] = globals().setdefault("align_state", {})
+ALIGN_EVERY = 8
 noticed: set[str] = globals().setdefault("noticed", set())
 assigned: dict[int, dict] = globals().setdefault("assigned", {})
 silent: dict[str, tuple[int, float]] = globals().setdefault("silent", {})
@@ -987,8 +991,9 @@ def register(key: str, name: str) -> None:
   made: list[str] = []
   for line in rows:
     found = ROW.match(line.strip())
-    item = "triage-" + slug_of(found[2]) if found else ""
-    if not found or item == "triage-" or item in made or item in ends or taken(item):
+    stem = key if key.startswith("align") else "triage"
+    item = stem + "-" + slug_of(found[2]) if found else ""
+    if not found or item == stem + "-" or item in made or item in ends or taken(item):
       continue
     rank, _, model, area, brief = found.groups()
     full = model if ":" in model else f"claude-cli:{model}"
@@ -2134,6 +2139,39 @@ async def audit(red: bool) -> None:
   )
 
 
+async def align() -> None:
+  async def origin_sha() -> str:
+    got = await shell("git fetch -q origin main; git rev-parse origin/main", timeout=120, ok=True)
+    words = got.stdout.content.split()
+    return words[-1] if got.code == 0 and words else ""
+
+  if "sweep" not in timers:
+    return
+  if "n" not in align_state:
+    audited.update(merged)
+    align_state.update(n="0", sha=await origin_sha())
+    return
+  fresh = sorted(merged - audited)
+  if len(fresh) < ALIGN_EVERY:
+    return
+  key, sha, since = f"align{int(align_state['n']) + 1}", await origin_sha(), align_state.get("sha", "")
+  window = f"git log --oneline {since}..{sha}" if since and sha else "git log --oneline -40 origin/main"
+  merges = " ".join(f"#{x}" for x in fresh)
+  kinds[key] = "audit"
+  queue.append(
+    (
+      key,
+      f"The alignment audit {key}: {len(fresh)} PRs merged since the last one, {merges}. Its window of commits is"
+      f" `{window}`. Read that window and the diff of each of those PRs, and check the work against the words of the"
+      " owner.",
+      "align",
+    )
+  )
+  audited.update(fresh)
+  align_state.update(n=key.removeprefix("align"), sha=sha or since)
+  heard.append(f"{len(fresh)} PRs merged since the last alignment audit, so the round queued {key}: {merges}.")
+
+
 ISSUES = """gh issue list --state open --limit 100 --json number,title,body,author,assignees,labels,url --jq '[.[] | select(.author.login == "uael" or ([.assignees[].login] | index("uael"))) | {n: .number, title, body, url, labels: [.labels[].name]}]'"""
 
 ISSUE = """The issue #{n} of the owner: {url}
@@ -2428,6 +2466,10 @@ PATH = r"(?:[\w.~-]+/)+[\w.-]+\.(?:py|pyi|rs|tsx?|json|toml|md|ya?ml|sh)\b"
 TESTING = re.compile(r".*\.test\..*|.*_test\..*|test_.*\.py|conftest\.py")
 
 
+def paths_of(brief: str) -> set[str]:
+  return set(re.findall(PATH, re.sub(r"\b[a-z][a-z0-9+.-]*://\S+", " ", brief)))
+
+
 def is_test(path: str) -> bool:
   *folders, name = path.split("/")
   return bool({"test", "tests", "__tests__"} & set(folders)) or bool(TESTING.fullmatch(name))
@@ -2443,7 +2485,7 @@ async def changed_files() -> None:
 
 
 def rival(key: str, brief: str) -> tuple[int, list[str]] | None:
-  mine = set(re.findall(PATH, brief)) | {a.strip("/") for a in areas.get(key, []) if "/" in a.strip("/")}
+  mine = paths_of(brief) | {a.strip("/") for a in areas.get(key, []) if "/" in a.strip("/")}
   for pr in prs.values() if mine else []:
     if f"w:{key}" in pr["labels"] or pr["n"] in owns.get(key, []) or re.search(rf"#{pr['n']}\b", brief):
       continue
@@ -2456,7 +2498,7 @@ def rival(key: str, brief: str) -> tuple[int, list[str]] | None:
 
 def files_of(key: str, brief: str) -> set[str]:
   held = {a.strip("/") for a in areas.get(key, []) if a.strip("/")}
-  return {x for x in held or set(re.findall(PATH, brief)) if not is_test(x)}
+  return {x for x in held or paths_of(brief) if not is_test(x)}
 
 
 def overlap(mine: set[str], other: set[str]) -> list[str]:
@@ -2755,7 +2797,7 @@ def owner_asks() -> list[dict]:
 
 
 def owner_messages() -> list[str]:
-  return [str(x[1]) for x in transcript(lead.get("home") or ROOT) if x[0] == "prompt" and x[2] == OPERATOR]
+  return [str(x[1]) for x in transcript(lead.get("home") or ROOT) if x[0] == "prompt" and str(x[2]).split("/")[0] == OPERATOR]
 
 
 def unasked() -> list[str]:
@@ -3439,6 +3481,7 @@ async def sweep(every: float) -> None:
   if now - timers.setdefault("audit", now) >= 12 * every:
     await audit(red)
     timers["audit"] = now
+  await align()
 
 
 def ended(here: str, cause: str) -> None:
