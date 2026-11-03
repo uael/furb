@@ -44,15 +44,15 @@ test("the text of Ink is no bright white, and the answer stays a step softer tha
   expect(light(ink.faint)).toBeLessThan(light(ink.muted));
 });
 
-test("the body of Markdown stands in one role, prose, about 9:1 against the panel and a step softer than the text, in each palette", () => {
+test("the body of Markdown stands in one role, prose, about 8:1 against the panel and a step softer than the text, in each palette", () => {
   const terminal = terminalPalette("#d0d0d0", "#1c1c1c");
   for (const palette of [...Object.values(palettes), ...(terminal ? [terminal] : [])]) {
     expect(contrast(palette.prose, palette.panel)).toBeLessThan(contrast(palette.text, palette.panel));
     expect(contrast(palette.prose, palette.panel)).toBeGreaterThan(contrast(palette.muted, palette.panel));
   }
   for (const palette of Object.values(palettes)) {
-    expect(contrast(palette.prose, palette.panel)).toBeGreaterThanOrEqual(8.9);
-    expect(contrast(palette.prose, palette.panel)).toBeLessThanOrEqual(9.2);
+    expect(contrast(palette.prose, palette.panel)).toBeGreaterThanOrEqual(7.9);
+    expect(contrast(palette.prose, palette.panel)).toBeLessThanOrEqual(8.2);
   }
 });
 
