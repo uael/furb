@@ -21,7 +21,7 @@ import { clock } from "./clock.ts";
 import { clip, dollars } from "./format.ts";
 import { questionOf, shortActor } from "./overview.ts";
 import type { ActRow } from "./session.ts";
-import { theme as c, spin } from "./theme.ts";
+import { theme as c, markOf, rowMark } from "./theme.ts";
 import { bold, mix, type Part, plain } from "./ui.ts";
 
 /** How near the graph stands to the life: the tree of threads, the map of the programs, the source of one program,
@@ -57,27 +57,12 @@ const columnWidth = 30,
   sidebarWidth = 38;
 /** The glyph of the lines that meet in a cell, by the sides they reach: up 1, right 2, down 4, left 8. */
 const joins = ["", "│", "─", "└", "│", "│", "┌", "├", "─", "┘", "─", "┴", "┐", "┤", "┬", "┼"];
-const stateMarks: Record<RowState, [string, () => RGBA]> = {
-  asks: ["◆", () => c.warning],
-  failed: ["✗", () => c.danger],
-  working: ["◉", () => c.accent],
-  paused: ["◌", () => c.warning],
-  done: ["✓", () => c.success],
-  idle: ["○", () => c.faint],
-};
-const actMarks: Record<ActState, [string, () => RGBA]> = {
-  running: ["", () => c.accent],
-  stands: ["◇", () => c.muted],
-  done: ["✓", () => c.success],
-  failed: ["✗", () => c.danger],
-  cancelled: ["⊘", () => c.faint],
-  held: ["◌", () => c.warning],
-  asks: ["◆", () => c.warning],
-};
-const markOf = (state: ActState): Part => {
-  const [glyph, color] = actMarks[state];
-  return [glyph || spin(), color()];
-};
+/** The mark of the state of an act, from the one table of marks: an act that stands lives until something ends it,
+ * as a chain does, and work waits on it. */
+const actMark = (state: ActState): Part =>
+  markOf(
+    state === "running" ? "runs" : state === "stands" ? "delegates" : state === "held" ? "paused" : state,
+  );
 
 /** A grid of cells that the map draws on, and gives as rows of parts. */
 class Canvas {
@@ -322,7 +307,7 @@ export class Graph {
         [
           [" "],
           [indent],
-          markOf(thread.state),
+          actMark(thread.state),
           [fold, c.faint],
           [clip(title, room), asks ? c.warning : thread.act.done ? c.muted : c.text, selected ? bold : 0],
           [" ".repeat(Math.max(0, room - Bun.stringWidth(clip(title, room))))],
@@ -351,7 +336,7 @@ export class Graph {
     const left: Part[] = [
       [selected ? " ▎" : "  ", c.accent],
       [indent],
-      markOf(thread.state),
+      actMark(thread.state),
       [fold, c.faint],
       [titled, asks ? c.warning : thread.act.done ? c.muted : c.text, selected ? bold : 0],
       [anchor ? `  ↳ ${anchor}` : "", c.secondary],
@@ -502,10 +487,10 @@ export class Graph {
       const lit = id === you || held.has(id);
       const tone = (one: RGBA) => (lit ? one : mix(c.background, one, 0.4));
       const state: RowState = id === you ? (loom.owed.length ? "asks" : "idle") : (row?.state ?? "idle");
-      const [mark, color] = stateMarks[state];
+      const [mark, color] = rowMark(state);
       const selected = id === this.node;
       const label = labelOf(id);
-      canvas.put(x, y, state === "working" && !this.stage.frozen ? spin() : mark, tone(color()));
+      canvas.put(x, y, mark, tone(color ?? c.faint));
       canvas.put(
         x + 2,
         y,
@@ -638,7 +623,7 @@ export class Graph {
         pad(
           [
             bar,
-            markOf(line.state),
+            actMark(line.state),
             [" "],
             [line.act.id, c.muted],
             ["  "],
@@ -669,7 +654,7 @@ export class Graph {
             ["  "],
             [act.id, c.muted],
             [" "],
-            markOf(state),
+            actMark(state),
             [" "],
             [
               clip(

@@ -1,4 +1,5 @@
 import { RGBA, SyntaxStyle, type ThemeMode } from "@opentui/core";
+import type { RowState } from "furb/life";
 import { clock } from "./clock.ts";
 
 /** The roles of a palette. Surfaces go from the background up: the panel of the sidebars and the composer, then the
@@ -349,7 +350,6 @@ export const glyph = {
   asks: "◆",
   /** The mark of a reply, which names the thread that the input sends to. */
   reply: "↳",
-  notice: "◇",
   done: "✓",
   failed: "✗",
   cancelled: "⊘",
@@ -369,7 +369,121 @@ export const glyph = {
   mark: "▎",
   rename: "✎",
   remove: "×",
+  delegates: "◎",
+  /** The still frame of the spinner, where the view holds still. */
+  thinks: "✻",
 } as const;
+/** The states that a mark shows. Each has one mark, one color and one weight in every view, dialog and sidebar. */
+export type MarkState =
+  | "asks"
+  | "unread"
+  | "failed"
+  | "paused"
+  | "thinks"
+  | "runs"
+  | "delegates"
+  | "done"
+  | "seen"
+  | "cancelled"
+  | "idle";
+/** The attributes of the text of a mark: bold, or dim. */
+const heavy = 1,
+  dim = 2;
+/** The one table of marks, which every surface reads: the glyph of each state, the role of its color, its weight, and
+ * the words that the help gives it. `●` means unread alone. The spinner turns for a model that thinks, and its glyph
+ * here is its still frame. */
+export const marks: Record<
+  MarkState,
+  { glyph: string; role: keyof Palette; attributes: number; label: string; means: string }
+> = {
+  asks: {
+    glyph: glyph.asks,
+    role: "warning",
+    attributes: heavy,
+    label: "Input needed",
+    means: "A question waits for your answer",
+  },
+  unread: {
+    glyph: glyph.dot,
+    role: "accent",
+    attributes: heavy,
+    label: "Unread",
+    means: "Something ended or changed while you were away",
+  },
+  failed: {
+    glyph: glyph.failed,
+    role: "danger",
+    attributes: 0,
+    label: "Failed",
+    means: "The act raised, or the gate refused its Python",
+  },
+  paused: {
+    glyph: glyph.held,
+    role: "warning",
+    attributes: 0,
+    label: "Paused",
+    means: "Work waits until you wake it",
+  },
+  thinks: {
+    glyph: glyph.thinks,
+    role: "accent",
+    attributes: 0,
+    label: "Thinking",
+    means: "A model thinks or writes",
+  },
+  runs: {
+    glyph: glyph.running,
+    role: "accent",
+    attributes: dim,
+    label: "Running",
+    means: "A command runs, or a word awaits one",
+  },
+  delegates: {
+    glyph: glyph.delegates,
+    role: "faint",
+    attributes: 0,
+    label: "Delegates",
+    means: "Work waits on another chain",
+  },
+  done: {
+    glyph: glyph.done,
+    role: "success",
+    attributes: 0,
+    label: "Done",
+    means: "The act ended and gave its value",
+  },
+  seen: {
+    glyph: glyph.done,
+    role: "faint",
+    attributes: 0,
+    label: "Done and seen",
+    means: "A thread that you saw is done",
+  },
+  cancelled: {
+    glyph: glyph.cancelled,
+    role: "faint",
+    attributes: 0,
+    label: "Cancelled",
+    means: "A cancel ended the work",
+  },
+  idle: {
+    glyph: glyph.ring,
+    role: "faint",
+    attributes: 0,
+    label: "Ready",
+    means: "Nothing runs, or the work is saved or pending",
+  },
+};
+/** The mark of the state of a chain, as every view marks it. */
+export const rowMark = (state: RowState) => markOf(state === "working" ? "runs" : state);
+/** The mark of a state: its glyph, the spinner for a model that thinks, its color in the theme shown, and its weight. */
+export function markOf(
+  state: MarkState,
+  now?: number,
+): readonly [text: string, fg: RGBA, attributes: number] {
+  const one = marks[state];
+  return [state === "thinks" ? spin(now) : one.glyph, theme[one.role], one.attributes];
+}
 const spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 /** The frames that the renderer draws in a second, which bun run bench holds each frame to. */
 export const fps = 60;
@@ -380,7 +494,7 @@ export const frame = 100;
 export const motion = { still: false };
 /** The frame of the spinner at a time, or the mark of work that runs when the view holds still. */
 export function spin(now = clock()): string {
-  if (motion.still) return glyph.running;
+  if (motion.still) return glyph.thinks;
   return spinner[Math.floor(now / frame) % spinner.length] ?? "⠋";
 }
 /** Whether the view shows no color, as NO_COLOR asks when it is set and not empty: each role takes the default color

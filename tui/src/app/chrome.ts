@@ -4,10 +4,10 @@ import { shortenHome, shortenHomes } from "../files.ts";
 import { clip, count, modelName, retryLine } from "../format.ts";
 import { readOnly } from "../reading.ts";
 import { statusLabels, views } from "../session.ts";
-import { theme as c, glyph, spacing as space, spin, threadTone } from "../theme.ts";
+import { theme as c, glyph, markOf, spacing as space, spin, threadTone } from "../theme.ts";
 import { bold, type Part, plain, styled } from "../ui.ts";
 import { part } from "./part.ts";
-import { exitNotice, type Hint, rewindNotice, statusMark, viewLabels } from "./shared.ts";
+import { exitNotice, type Hint, rewindNotice, statusMark } from "./shared.ts";
 
 export const chrome = part({
   /** A switch between a few choices, which the views and the mode of the input share. A track in a color of its own
@@ -323,7 +323,7 @@ export const chrome = part({
       w.acts.some((act) => act.kind === "rung" && !act.done && act.on === w.selected && !w.program[act.id]);
     const moving = (status === "working" || status === "opening" || Boolean(retry)) && !written;
     this.statusMoves = moving;
-    const [mark, color] = retry ? [`${glyph.held} `, c.warning] : statusMark(status);
+    const [mark, color] = retry ? [`${markOf("paused")[0]} `, markOf("paused")[1]] : statusMark(status);
     const label = loading
       ? "Loading"
       : retry

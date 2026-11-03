@@ -5,7 +5,7 @@ import { shortenHome } from "../files.ts";
 import { clip, dollars, modelName } from "../format.ts";
 import type { View } from "../session.ts";
 import { answering, type Check, checks } from "../setup.ts";
-import { theme as c, glyph, spacing as space } from "../theme.ts";
+import { theme as c, glyph, markOf, spacing as space } from "../theme.ts";
 import { bold, logo, mix, type Part } from "../ui.ts";
 import { modelsRead, watchBar } from "../watching.ts";
 import { part } from "./part.ts";
@@ -49,7 +49,7 @@ export const welcome = part({
     let rest = text;
     for (const image of images) {
       const at = rest.indexOf(image.text);
-      parts.push([rest.slice(0, at), c.text], [`${glyph.dot} ${image.name || "image"}`, c.secondary]);
+      parts.push([rest.slice(0, at), c.text], [`${glyph.chip} ${image.name || "image"}`, c.secondary]);
       rest = rest.slice(at + image.text.length);
     }
     parts.push([rest, c.text]);
@@ -269,14 +269,11 @@ export const welcome = part({
         c.text,
       ),
     );
-    const marks: Record<Check["state"], Part> = {
-      ready: [glyph.done, c.success],
-      missing: [glyph.failed, c.danger],
-      optional: [glyph.ring, c.faint],
-    };
     // A check and its fix stand together, and a line of space stands between two checks.
     for (const check of found) {
-      const [mark, color] = marks[check.state];
+      const [mark, color] = markOf(
+        check.state === "ready" ? "done" : check.state === "missing" ? "failed" : "idle",
+      );
       const one = this.box({});
       one.add(
         this.text(

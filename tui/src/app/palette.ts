@@ -3,7 +3,7 @@ import { commands, slashes } from "../commands.ts";
 import { clip } from "../format.ts";
 import { bindings, chords, keys, shown } from "../keys.ts";
 import { type View, views } from "../session.ts";
-import { theme as c, glyph, spacing as space, spin } from "../theme.ts";
+import { theme as c, glyph, type MarkState, markOf, marks, spacing as space } from "../theme.ts";
 import { bold, type Part } from "../ui.ts";
 import { part } from "./part.ts";
 import { type Choice, inputColors, statusMark, title, viewLabels, wrapped } from "./shared.ts";
@@ -494,21 +494,11 @@ export const palette = part({
 
   /** The keys that this terminal sends, what each mark means, and the commands. */
   help(): void {
-    const legend: [string, RGBA, string][] = [
-      [`${spin(0)} Working`, c.accent, "A model or a command runs"],
-      [`${glyph.running} Running`, c.accent, "A chain or a session has work in progress"],
-      [`${glyph.asks} Input needed`, c.warning, "A question waits for your answer"],
-      [`${glyph.notice} Notice`, c.faint, "A notice tells you something and asks nothing"],
-      [`${glyph.held} Paused`, c.warning, "Work waits until you wake it"],
-      [`${glyph.done} Done`, c.success, "The act ended and gave its value"],
-      [
-        `${glyph.dot} Finished, unread`,
-        c.success,
-        "A chain you started, or a session, ended while you were away",
-      ],
-      [`${glyph.failed} Failed`, c.danger, "The act raised, or the gate refused its Python"],
-      [`${glyph.ring} Ready`, c.faint, "Nothing runs, or the work is saved or pending"],
-    ];
+    // The legend reads the one table of marks, so it says what each mark means in every view.
+    const legend: [string, RGBA, string][] = (Object.keys(marks) as MarkState[]).map((state) => {
+      const [mark, color] = markOf(state, 0);
+      return [`${mark} ${marks[state].label}`, color, marks[state].means];
+    });
     this.openPalette(
       "Keys and commands",
       keys

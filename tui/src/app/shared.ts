@@ -1,11 +1,11 @@
 import type { BoxRenderable, CliRenderer, KeyEvent, Renderable, RGBA, TextOptions } from "@opentui/core";
 import type { Keymap } from "@opentui/keymap";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
-import type { ChainThread, Chip, RowState } from "furb/life";
+import type { ChainThread, Chip } from "furb/life";
 import { ago, clip, dollars, kibibytes } from "../format.ts";
 import type { ActRow, SessionStatus, View } from "../session.ts";
 import { statusLabels } from "../session.ts";
-import { theme as c, glyph, spacing as space, terminalThemes, themeLabels } from "../theme.ts";
+import { theme as c, markOf, spacing as space, terminalThemes, themeLabels } from "../theme.ts";
 import type { Part } from "../ui.ts";
 import type { SessionEntry } from "../workspaces.ts";
 
@@ -30,44 +30,34 @@ export const title = (text: string) => text.charAt(0).toUpperCase() + text.slice
 export type State = { word: string; mark: string; color: RGBA };
 
 /** The state of an act that failed, that a cancel ended, that is done, or that a pause holds. */
-export const stateOf = (state: "failed" | "cancelled" | "done" | "held"): State =>
-  ({
-    failed: { word: "failed", mark: glyph.failed, color: c.danger },
-    cancelled: { word: "cancelled", mark: glyph.cancelled, color: c.faint },
-    done: { word: "", mark: glyph.done, color: c.success },
-    held: { word: "waits for a wake", mark: glyph.held, color: c.warning },
-  })[state];
-
-/** The mark of a state in its color, one shape for each: at work, waiting on the operator, paused, failed, finished
- * and not yet seen, and at rest. */
-export const statusMark = (status: SessionStatus): Part =>
-  (
-    ({
-      working: [`${glyph.running} `, c.accent],
-      opening: [`${glyph.running} `, c.accent],
-      blocked: [`${glyph.asks} `, c.warning],
-      paused: [`${glyph.held} `, c.warning],
-      error: [`${glyph.failed} `, c.danger],
-      reading: [`${glyph.ring} `, c.warning],
-      done: [`${glyph.dot} `, c.success],
-      idle: [`${glyph.ring} `, c.faint],
-      saved: [`${glyph.ring} `, c.faint],
-    }) satisfies Record<SessionStatus, Part>
-  )[status];
-
-/** The rows that a key moves the pointer of a list by, in the rewind tree and in a dialog. */
-/** The mark and the color of the state of a chain, as every view marks it. */
-export const chainMarks: Record<RowState, [() => string, () => RGBA]> = {
-  asks: [() => glyph.asks, () => c.warning],
-  failed: [() => glyph.failed, () => c.danger],
-  working: [() => glyph.running, () => c.accent],
-  paused: [() => glyph.held, () => c.warning],
-  done: [() => glyph.done, () => c.success],
-  idle: [() => glyph.ring, () => c.faint],
+export const stateOf = (state: "failed" | "cancelled" | "done" | "held"): State => {
+  const [mark, color] = markOf(state === "held" ? "paused" : state);
+  return {
+    word: { failed: "failed", cancelled: "cancelled", done: "", held: "waits for a wake" }[state],
+    mark,
+    color,
+  };
 };
 
-/** The mark of a thread in the list of the threads of a chain, and its color: it asks the operator, a pause holds it,
- * it failed, it is resolved, or it runs. */
+/** The mark of the status of a session in its color, with the space after it: at work, waiting on the operator,
+ * paused, failed, finished and not yet seen, and at rest. */
+export const statusMark = (status: SessionStatus): Part => {
+  const [mark, color, attributes] = markOf(
+    status === "working" || status === "opening"
+      ? "runs"
+      : status === "blocked"
+        ? "asks"
+        : status === "error"
+          ? "failed"
+          : status === "done"
+            ? "unread"
+            : status === "paused"
+              ? "paused"
+              : "idle",
+  );
+  return [`${mark} `, color, attributes];
+};
+
 /** The threads of the chain shown: in order, each by its id, and the thread of each message, by the id of the message. */
 export type ThreadList = {
   /** The session, the chain and the version of its acts that the list was read from, which a new list replaces. */
@@ -89,18 +79,22 @@ export type ChainRead = {
   key?: { minute: number; text: string };
 };
 
-export const threadMarks = (thread: ChainThread): [string, RGBA] =>
-  thread.state === "asks"
-    ? [glyph.asks, c.warning]
-    : thread.state === "held"
-      ? [glyph.held, c.warning]
-      : thread.state === "failed"
-        ? [glyph.failed, c.danger]
-        : thread.state === "cancelled"
-          ? [glyph.cancelled, c.faint]
-          : thread.resolved
-            ? [glyph.done, c.faint]
-            : [glyph.running, c.accent];
+/** The mark of a thread in the list of the threads of a chain: it asks the operator, a pause holds it, it failed, a
+ * cancel ended it, it is resolved and seen, or it runs. */
+export const threadMarks = (thread: ChainThread): Part =>
+  markOf(
+    thread.state === "asks"
+      ? "asks"
+      : thread.state === "held"
+        ? "paused"
+        : thread.state === "failed"
+          ? "failed"
+          : thread.state === "cancelled"
+            ? "cancelled"
+            : thread.resolved
+              ? "seen"
+              : "runs",
+  );
 
 /** How many of the last steps of a thread its program shows until a click shows the earlier ones. */
 export const PROGRAM_STEPS = 6;
