@@ -52,7 +52,6 @@ it is not given. The daemon answers requests in any order.
 | `open` | `life`, `cwd` | write |
 | `attach` | `life`, `from` | read |
 | `detach` | `life` | read |
-| `end` | `life` | write |
 | `pin`, `unpin` | `life`, `holder` | write |
 | `presence` | `life` | read |
 | `get`, `peek` | `life`, `act` | read |
