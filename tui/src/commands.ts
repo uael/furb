@@ -11,6 +11,12 @@ export const commands = {
     "Save a provider in the project settings and use it now",
   ],
   reload: ["Reload settings", "", "Read provider settings again and update the standing of this life"],
+  skills: [
+    "Reload skills",
+    "",
+    "Read the skills of the disk again; each shows in the list of / commands, and its command reads its SKILL.md",
+    "reload-skills",
+  ],
   retry: [
     "Retry now",
     "",

@@ -32,7 +32,9 @@ Seven extensions come with furb, and each life runs them unless a config turns t
   `.agents/skills` and `.claude/skills` of the working directory and of each folder above it, then in `skills` of the
   config directory. `skill(name)` reads the `SKILL.md` of one skill. Its life word, `await listed()`, reads `skills://`
   in the setup of the root, which every new chain holds. It carries one skill of its own, `extending`, which shows a
-  model how to extend furb, with an example for each way. A skill named `extending` in a folder takes its place.
+  model how to extend furb, with an example for each way. A skill named `extending` in a folder takes its place. The TUI
+  lists each skill after `/`, and its command reads the skill for the chain. `/skills`, or `/reload-skills`, reads the
+  skills of the disk again.
 - **`compaction`** cuts a chain to the work that it still needs, and the chain goes on under its name. `compact()` keeps
   what `FILTERS` keep, binds a summary in its next word, and reads again with `reground()` each file that it kept,
   showing only what changed. The filters are `latest()`, the last read or write of each path, `quiet()`, which drops the
