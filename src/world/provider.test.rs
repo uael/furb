@@ -2515,3 +2515,26 @@ fn the_config_of_a_project_gives_a_model_another_class_in_the_roster() {
     "{standing}"
   );
 }
+
+#[test]
+fn a_machine_with_no_random_bytes_fails_the_call_that_needs_an_id() {
+  let got = super::uuid_from(|_| Err(getrandom::Error::UNSUPPORTED));
+  let Err(CompletionError::ProviderError(why)) = got else {
+    panic!("a machine with no random bytes gave an id")
+  };
+  assert!(why.starts_with("the machine gave no random bytes"), "{why}");
+}
+
+#[test]
+fn an_id_is_a_uuid_of_version_4_and_variant_1() {
+  let zeros = super::uuid_from(|bytes| {
+    bytes.fill(0);
+    Ok(())
+  });
+  assert_eq!(zeros.unwrap(), "00000000-0000-4000-8000-000000000000");
+  let ones = super::uuid_from(|bytes| {
+    bytes.fill(0xff);
+    Ok(())
+  });
+  assert_eq!(ones.unwrap(), "ffffffff-ffff-4fff-bfff-ffffffffffff");
+}
