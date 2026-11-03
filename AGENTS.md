@@ -31,7 +31,8 @@ API of its own:
   any replay, and `tests/corpus` holds the records that each build must replay with no drift. Each door gives it as
   `opened` and as `Engine.open`.
 - `src/checkpoint.rs` holds the checkpoint of a life: a fact at the tip of its record with each chain that lives, its
-  turns, its module and its open prompts, from which a later life of any build goes on. A life ends with one through
+  turns, its module and its open prompts, from which a later life of any build goes on: the fact, its store and the
+  boot, while `gathered` and `seed` of `engine.py` write and read its data. A life ends with one through
   `Engine::checkpoint`, which its store keeps as it keeps each fact, as the TUI does at a handover, and
   `furb checkpoint` writes one on a record that no life holds. A life boots on the last checkpoint of its record,
   whatever engine wrote it, and replays the entries after it alone.
@@ -211,7 +212,7 @@ is the folder `test` beside it.
 2. Every test carries a sentence of the contract.
 3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
 4. The module docstring of each contract is empty.
-5. `engine.py`, minified with its program kept as it is, costs fewer than 8000 tokens of `o200k_base`, the
+5. `engine.py`, minified with its program kept as it is, costs fewer than 9300 tokens of `o200k_base`, the
    tokenizer of OpenAI, and the doctrine of furb, `DOCTRINE.md`, costs at most 1000. The test counts with `o200k_base`
    because it is local and the same on each machine: the tokenizer of Claude is not public, and only the network
    counts with it. The wall is a proxy for the cost to Claude, which reads about 1.5 tokens for each token of

@@ -490,6 +490,121 @@ def seed(data):
   return entries
 
 
+def gathered(define, floor):
+  def number(called):
+    return int(re.sub("^[a-z_]+", "", called) or 0)
+
+  def plain(v, into):
+    isinstance(v, str) and get(v) and into.add(v)
+    match v:
+      case Act():
+        return f"Act({str(v)!r})"
+      case None | bool() | int() | float() | str() | Text() | Exit() | BaseException():
+        return repr(v)
+      case dict():
+        s = [(plain(k, into), plain(y, into)) for k, y in v.items()]
+        return all(p and o for p, o in s) and "{" + ", ".join(f"{p}: {o}" for p, o in s) + "}"
+      case list() | tuple() | set():
+        s = [plain(y, into) for y in v]
+        j = ", ".join(s)
+        return all(s) and (
+          f"[{j}]"
+          if isinstance(v, list)
+          else f"({j}{',' * (len(s) == 1)})"
+          if isinstance(v, tuple)
+          else "{" + j + "}"
+          if s
+          else "set()"
+        )
+    return ""
+
+  chains = []
+  while get(f"chain{len(chains) + 1}"):
+    chains.append(f"chain{len(chains) + 1}")
+  asked = [get(h) for h in chains] + [x for h in chains for x in transcript(h) if question(x) and x[0] != "chain"]
+  asks = [x[1] for x in asked if x[0] == "prompt" and not over(x[1])]
+  waits = {x[2]: x[4] for x in asked if x[0] == "wants" and not over(x[1])}
+  resumed, dropped = [], set()
+  for run in sorted((x for x in asked if x[0] == "run" and not over(x[1]) and get(x[4])), key=lambda r: number(r[1])):
+    m = get(run[4])[2]
+    if m == OPERATOR or question(("chain", m)) or (prompted(m) and not over(m) and m not in dropped):
+      resumed.append(run)
+      prompted(q := waits.get(run[1], "")) and dropped.add(q)
+  asks = [x for x in asks if x not in dropped]
+  live, values, lost, named = {ROOT, *map(scope, asks)}, {}, {}, set(asks)
+  while live - values.keys():
+    for c in sorted(live - values.keys(), key=number):
+      here, values[c], lost[c] = module(c), {}, []
+      for key, value in here.items():
+        if not (key.startswith("__") or callable(value) or globals().get(key, here) is value):
+          found = set()
+          if text := plain(value, found):
+            values[c][key] = text
+            named |= found
+          else:
+            lost[c].append(key)
+    live |= {*map(scope, named)}
+  live = sorted(live, key=number)
+  taken = dict(floor)
+  for one in asked:
+    taken[one[0]] = max(taken.get(one[0], 0), number(one[1]))
+  verbs = ("prompt", "bash", "read", "write", "wait", "cd", "chance")
+  done = {x[1] for x in asked if x[0] == "bash" and scope(x[1]) in live}
+  carried = sorted((x for x in named | done if get(x)[0] in verbs), key=lambda r: (get(r)[0], number(r)))
+  stands = [x[1] for x in transcript(ROOT, "stand") if question(x) and over(x[1])][-1:]
+  clocks = [x[1] for x in transcript(ROOT, "clock") if question(x) and isinstance(peek(x[1]), float)][-1:]
+  acts, cut, asking = [], [], {scope(x) for x in carried if prompted(x)}
+  for one in [*stands, *clocks, *carried]:
+    a = get(one)
+    d = {"kind": a[0], "id": one, "on": a[3]}
+    if prompted(one) and not over(one):
+      held = next((x[2] for x in transcript(scope(one), "started") if x[1] == one and get(x[2]) is None), "")
+      acts.append({**d, "shape": a[4], "message": a[5], "to": a[6], "held": held})
+    elif over(one):
+      plain(peek(one), set()) and acts.append({**d, "value": peek(one)})
+    else:
+      cut.append(one)
+      cmd = a[4] if a[0] == "bash" else ""
+      why = (
+        '"'
+        + cmd.replace("\\", "\\\\").replace('"', '\\"')
+        + '" was interrupted: the life that ran it ended before it did'
+      )
+      acts.append({**d, "value": Refused(why if cmd else one + " was cut by the checkpoint")})
+  out = []
+  for c in live:
+    a = get(c)
+    said = {x[1]: x[3] for x in transcript(c, "ready")}
+    kept = [
+      x
+      for x in transcript(c)
+      if x[0] not in ("module", "carried")
+      and plain(x, set())
+      and (not question(x) or x[0] == "reply" or x[1] in carried)
+    ]
+    held = {ROOT, *live, *carried, *(x[1] for x in kept if question(x))}
+    out.append(
+      {
+        "id": c,
+        "on": a[3] if a[3] in live else "",
+        "label": a[4],
+        "source": a[5],
+        "paused": c in asking or paused(c),
+        "turns": [x for x in kept if x[0] not in ("started", "done") or x[1] in held],
+        "definitions": "\n\n".join(
+          filter(None, [define(w) for r, w in program(c).items() if (get(r) or [0] * 3)[2] != "extensions"])
+        ),
+        "values": values[c],
+        "lost": lost[c],
+        "cut": [x for x in cut if scope(x) == c],
+        "again": [
+          {"rung": x[4], "by": get(x[4])[2], "word": said.get(x[4], x[5])} for x in resumed if scope(x[1]) == c
+        ],
+      }
+    )
+  return {"taken": taken, "chains": out, "acts": acts}
+
+
 def grant(usd: float | None = None, share: float | None = None, on="") -> Act[None]:
   def ear(id):
     here = scope(id)
