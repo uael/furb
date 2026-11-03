@@ -775,6 +775,48 @@ test("a name inside a transcript tag opens the same live inspector as Python cod
     { width: 120, height: 44, useMouse: true },
   ));
 
+test("a quote in a turn of the transcript takes the colors of a string region", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      await session.engine.result(
+        await session.engine.rung({
+          word: "<s:note>\nquoted body\n</s:note>\nanswer = 17",
+          on: session.engine.root,
+        }),
+      );
+      await session.refresh();
+      session.show("transcript");
+      await frame();
+      app.scroll.scrollTo(app.scroll.scrollHeight);
+      const lines = (await frame()).split("\n");
+      // The turn of the rung quotes the word that it ran, so its tags are the keywords and the word is the string.
+      const open = lines.findIndex((line) => line.includes("<s:rung"));
+      const body = lines.findIndex((line) => line.includes("quoted body"));
+      expect(open).toBeGreaterThanOrEqual(0);
+      expect(body).toBeGreaterThan(open);
+      const palette = palettes.ink;
+      const column = lines[open]?.indexOf("<s:rung") ?? -1;
+      const at = lines[body]?.indexOf("quoted") ?? -1;
+      const colored = () => {
+        const spans = screen.captureSpans();
+        return (
+          cellAt(spans, column, open).fg?.equals(RGBA.fromHex(palette.syntaxKeyword)) === true &&
+          cellAt(spans, at, body).fg?.equals(RGBA.fromHex(palette.syntaxString)) === true
+        );
+      };
+      await until(
+        screen.renderer,
+        () => {
+          screen.renderer.requestRender();
+          return colored();
+        },
+        "frame",
+      );
+      expect(colored()).toBe(true);
+    },
+    { width: 120, height: 44 },
+  ));
+
 test("a delayed snapshot cannot restore the chain selected before a switch", () =>
   withDemo(async (session) => {
     const child = await session.engine.chain({ label: "next" });

@@ -1403,7 +1403,7 @@ export const feed = part({
           ],
           (box) => {
             const inner = this.box({ paddingLeft: space.between });
-            inner.add(turn[0] === "assistant" ? this.code(text) : this.transcriptText(text));
+            inner.add(this.turnCode(text));
             box.add(inner);
           },
           { group: turn[0], shown: text },
