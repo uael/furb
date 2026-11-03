@@ -15,9 +15,12 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from "node:pat
 import { parts as configured, type LiveAct, type Part } from "furb";
 import type { Compaction } from "furb/life";
 import * as model from "furb/life";
-import { commands } from "./commands.ts";
+import { commands, slashes } from "./commands.ts";
 import { openFile } from "./editor.ts";
 import { expandHome } from "./files.ts";
+
+/** Whether a name is a command of the TUI, by its name or by its other name. */
+const ours = (name: string) => Object.hasOwn(commands, name) || slashes.some(({ alias }) => alias === name);
 
 /** The tone of a run of text, which the theme colors. */
 export type Tone = "text" | "muted" | "faint" | "accent" | "success" | "warning" | "danger";
@@ -72,6 +75,8 @@ export interface Field {
 export interface Command {
   name: string;
   detail: string;
+  /** Its other name, as `/clear` has `/reset`, or none. */
+  alias?: string;
   run: (argument: string, seen: Seen) => unknown;
 }
 /** A command of a part as the life gives it now, with its part, or the error of a list of commands that threw, which
@@ -148,8 +153,9 @@ export interface Furb {
   /** A key, as `ctrl+t`, which acts while no dialog is open. A key with no ctrl, meta or alt acts on an empty input
    * alone, and a key of the TUI wins. */
   key(on: string, run: (seen: Seen) => unknown): void;
-  /** A command of the palette and of the input, as `/name`, with what it does. A command of the TUI wins. */
-  command(name: string, detail: string, run: (argument: string, seen: Seen) => unknown): void;
+  /** A command of the palette and of the input, as `/name`, with what it does, and its other name when it has one.
+   * A command of the TUI wins, and a part that names a command of the TUI as its name or its other name fails. */
+  command(name: string, detail: string, run: (argument: string, seen: Seen) => unknown, alias?: string): void;
   /** Commands that the part gives from the life: the palette, the input and `/name` read them again at each use, so
    * a part adds and drops commands as the life changes. A command that the TUI or a part names already wins, and a
    * listed command whose name holds a space or a slash is dropped. */
@@ -272,9 +278,17 @@ export async function loadPart(name: string, file: string, text?: string): Promi
     },
     mark: (draw) => void part.marks.push(draw),
     key: (on, run) => void part.keys.push({ on: String(on), run }),
-    command: (title, detail, run) => {
-      if (Object.hasOwn(commands, title)) throw new Error(`The command /${title} is the TUI's own.`);
-      part.commands.push({ name: String(title), detail: String(detail), run });
+    command: (title, detail, run, alias) => {
+      if (ours(title)) throw new Error(`The command /${title} is the TUI's own.`);
+      const other = alias === undefined ? "" : String(alias);
+      if (other && (ours(other) || other === title || !/^[^\s/]+$/.test(other)))
+        throw new Error(`The alias /${other} is the TUI's own, or the name of the command, or no name.`);
+      part.commands.push({
+        name: String(title),
+        detail: String(detail),
+        run,
+        ...(other ? { alias: other } : {}),
+      });
     },
     commands: (draw) => void part.lists.push(draw),
     complete: (trigger, list) => {
@@ -413,6 +427,7 @@ export class Parts {
     for (const part of this.loaded)
       for (const one of part.commands) {
         taken.add(one.name);
+        if (one.alias) taken.add(one.alias);
         out.push({ ...one, part: part.name });
       }
     if (!seen) return out;
@@ -423,10 +438,20 @@ export class Parts {
           if (!Array.isArray(given)) throw new Error("Its commands give no list.");
           for (const one of given as readonly Command[]) {
             const name = String(one?.name ?? "");
-            if (!/^[^\s/]+$/.test(name) || Object.hasOwn(commands, name) || taken.has(name)) continue;
+            if (!/^[^\s/]+$/.test(name) || ours(name) || taken.has(name)) continue;
             if (typeof one.run !== "function") continue;
+            const alias = String(one.alias ?? "");
+            const other =
+              /^[^\s/]+$/.test(alias) && alias !== name && !ours(alias) && !taken.has(alias) ? alias : "";
             taken.add(name);
-            out.push({ name, detail: String(one.detail ?? ""), run: one.run, part: part.name });
+            if (other) taken.add(other);
+            out.push({
+              name,
+              detail: String(one.detail ?? ""),
+              run: one.run,
+              ...(other ? { alias: other } : {}),
+              part: part.name,
+            });
           }
         } catch (error) {
           const said = plainError(error);
@@ -444,7 +469,7 @@ export class Parts {
   /** The command of a part of that name: one that a part names, or, with what a component reads, one that a list
    * gives now. */
   command(name: string, seen?: Seen): Listed | undefined {
-    return this.commands(seen).find((one) => !one.error && one.name === name);
+    return this.commands(seen).find((one) => !one.error && (one.name === name || one.alias === name));
   }
 
   /** The triggers of the completions of the parts, each once. */

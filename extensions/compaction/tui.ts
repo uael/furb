@@ -51,10 +51,12 @@ export default function compaction(furb: Furb): void {
   );
   const clear =
     "Clear this chain: its model reads from zero, and the chain keeps its name, its prompts and its module";
-  furb.command("clear", clear, async (argument, seen) => {
-    if (await ready("clear", argument, seen)) await seen.run("clear()");
-  });
-  furb.command("reset", `Same as /clear: ${clear}`, async (argument, seen) => {
-    if (await ready("reset", argument, seen)) await seen.run("clear()");
-  });
+  furb.command(
+    "clear",
+    clear,
+    async (argument, seen) => {
+      if (await ready("clear", argument, seen)) await seen.run("clear()");
+    },
+    "reset",
+  );
 }

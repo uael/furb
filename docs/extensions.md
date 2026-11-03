@@ -201,9 +201,11 @@ export default function (furb) {
   moment. A mark that throws shows its error as its title.
 - `furb.key(on, run)` adds a key, as `ctrl+e` or `+`, which acts while no dialog is open. A key with no ctrl, meta or
   alt acts only on an empty input.
-- `furb.command(name, detail, run)` adds a command to the palette, which `/name` runs too. A key of the TUI wins over
-  a key of a part, and a part that names a command of the TUI fails.
-- `furb.commands(draw)` gives commands from the life: `draw(seen)` gives a list of `{ name, detail, run }`, which the
+- `furb.command(name, detail, run, alias)` adds a command to the palette, which `/name` runs too. The optional `alias`
+  is its other name, as `/reset` is for `/clear`: the input completes it to the command, and the palette shows both
+  names. A key of the TUI wins over a key of a part, and a part that names a command of the TUI, or an alias that is
+  one, fails.
+- `furb.commands(draw)` gives commands from the life: `draw(seen)` gives a list of `{ name, detail, run, alias }`, whose `alias` is optional, which the
   palette, the suggestions of the input and `/name` read again at each use. So a part adds and drops commands as the
   life changes, as the part of `mcp` gives a command for each prompt of each server that is connected. A command that
   the TUI or a part names already wins, and a listed command whose name holds a space or a slash is dropped. A list

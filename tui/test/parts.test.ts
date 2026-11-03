@@ -240,6 +240,41 @@ test("a command of a part that the typed text names whole comes first among the 
   );
 });
 
+test("a command of a part takes an alias, which runs it, and a part that gives the alias of a command of the TUI fails to load", async () => {
+  const { file } = project(
+    'export default (furb) => furb.command("ed", "A command of a part", () => {}, "edd")\n',
+  );
+  const part = await loadPart("todo", file);
+  expect(part.commands.map((one) => [one.name, one.alias])).toEqual([["ed", "edd"]]);
+  for (const alias of ["quit", "model", "ed", "a b", "/x"]) {
+    writeFileSync(
+      file,
+      `export default (furb) => furb.command("ed", "", () => {}, ${JSON.stringify(alias)})\n`,
+    );
+    expect((await loadPart("todo", file)).error).toStartWith("tui.ts of todo: The alias /");
+  }
+});
+
+test("the input completes the alias of a command of a part to the command, and says that it is the same", async () => {
+  const { directory } = project(
+    'export default (furb) => furb.command("ed", "A command of a part", () => {}, "zed")\n',
+  );
+  const session = await demoSession({ cwd: directory });
+  await composing(
+    async ({ app, frame, screen }) => {
+      for (let tries = 0; tries < 400 && !app.parts.command("zed"); tries++) await Bun.sleep(25);
+      expect(app.parts.command("zed")?.name).toBe("ed");
+      await screen.mockInput.typeText("/zed");
+      const shown = await shows(frame, "Same as /ed: A command of a part");
+      expect(shown).toContain("/zed");
+      screen.mockInput.pressTab();
+      expect(app.composer.plainText).toBe("/ed ");
+    },
+    { width: 132, height: 60 },
+    session,
+  );
+});
+
 test("the palette ranks a command of a part that the filter names whole before the commands of the TUI that it starts", async () => {
   const { directory } = project(
     'export default (furb) => furb.command("ed", "A command of a part", () => {})\n',
@@ -347,7 +382,8 @@ test("the commands /clear and /reset of the part of compaction cut the chain on 
   await composing(
     async ({ app, frame }) => {
       for (let tries = 0; tries < 400 && !app.parts.command("clear"); tries++) await Bun.sleep(25);
-      expect(app.parts.command("reset")?.detail).toStartWith("Same as /clear: ");
+      expect(app.parts.command("reset")?.name).toBe("clear");
+      expect(app.parts.commands().filter((one) => one.name === "reset")).toEqual([]);
       await session.command(`/run before = "the first step"`);
       app.composer.setText("/clear");
       await app.submit();
@@ -543,7 +579,6 @@ test("a part gives commands from the life, which the palette and /name read agai
       expect(app.parts.commands(app.seen()).map((one) => one.name)).toEqual([
         "compact",
         "clear",
-        "reset",
         "mcp",
         "todos",
         "pick",

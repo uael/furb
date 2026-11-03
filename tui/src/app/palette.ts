@@ -74,7 +74,7 @@ export const palette = part({
           : {
               label: title(one.name),
               detail: `${one.detail} (${one.part})`,
-              command: `/${one.name}`,
+              command: one.alias ? `/${one.name} or /${one.alias}` : `/${one.name}`,
               run: () => this.action(`/${one.name}`),
             },
       );
