@@ -147,6 +147,7 @@ TAIL: Final[Show] = span(-250, -1)
 """TAIL is the span of the last 250 lines, which the stdout of a command without a show is told as."""
 HIDDEN: Final[Show] = span(0, 0)
 """HIDDEN is the span of no line, which an act takes to tell nothing of itself but its header and its binding."""
+"""A minor may change the default of each policy: WINDOW, TIMEOUT, LARGEST, HEAD, TAIL. A change of any other constant or default is a major."""
 
 def take(*ids: str, inside: bool = True) -> Filter:
   """take keeps the acts it names and everything they made.

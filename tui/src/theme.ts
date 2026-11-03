@@ -336,8 +336,9 @@ export const themeLabels: Record<ThemeName, [string, string]> = {
   day: ["Day", "Light"],
 };
 /** The rhythm of the layout, in cells: the inset of a panel, the gutter of the feed, the space between the parts of a
- * stack, between sections, and between items of a row, and the height of a bar. */
-export const spacing = { inset: 1, gutter: 2, stack: 0, section: 1, bar: 1, between: 2 } as const;
+ * stack, between sections, and between items of a row, the height of a bar, and the rest: the rows of space that a
+ * column keeps above the top row of the panel under it, as the feed above the input and the sidebar above the context. */
+export const spacing = { inset: 1, gutter: 2, stack: 0, section: 1, rest: 0, bar: 1, between: 2 } as const;
 /** The glyphs of the TUI, so that one shape says one thing everywhere. */
 export const glyph = {
   open: "▾",

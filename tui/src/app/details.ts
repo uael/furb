@@ -488,21 +488,31 @@ export const details = part({
     const raised = { content: c.raised, gutter: c.raised };
     const block = (at: number) => colors.has(at) || colors.set(at, raised);
     let first = true;
+    // The model of the block that the last row stands in. The words that one model wrote one after another, with no
+    // message and no note between them, stand in one block under one label, and their numbers run on.
+    let writing: string | undefined;
     for (const line of lines) {
       if (line.kind === "code") {
+        // The time and the cost of a word that joins the block above it stand beside its first line, since the label
+        // of the block says those of the first word alone.
+        let joined = "";
         // The watch speaks in common words, so it names no word and no rung.
         if (heads.has(line) && line.step.kind === "rung" && !this.session.watching) {
-          if (!first) push("");
           const name = writerOf(line.step);
           const facts = took(line.step as ActRow);
-          const label = `${name}${" ".repeat(Math.max(2, room - Bun.stringWidth(name + facts)))}${facts}`;
-          const at = push(label);
-          block(at);
-          fixed.push([at, 0, name.length, "word.label"]);
-          if (facts) fixed.push([at, label.length - facts.length, label.length, "fact"]);
-        }
+          if (!first && writing === name) joined = facts;
+          else {
+            if (!first) push("");
+            const label = `${name}${" ".repeat(Math.max(2, room - Bun.stringWidth(name + facts)))}${facts}`;
+            const at = push(label);
+            block(at);
+            fixed.push([at, 0, name.length, "word.label"]);
+            if (facts) fixed.push([at, label.length - facts.length, label.length, "fact"]);
+          }
+          writing = name;
+        } else if (heads.has(line)) writing = undefined;
         first = false;
-        const note = noteOf(line);
+        const note = [noteOf(line), joined].filter(Boolean).join("  ");
         // An open line shows its whole text. Another line folds its longest strings, but those that the operator
         // opened, until it fits one row, and a line that still does not fit lays out in rows as ruff format would.
         // A line takes the row but the room of its fact, which stands at the right edge, and 100 columns at most.
@@ -564,11 +574,17 @@ export const details = part({
         comment(row);
         if (!first) block(row);
       } else if (line.kind === "writes") {
+        writing = undefined;
         const row = push(fit(line.text, room - 2));
         comment(row);
         states.set(row, markOf("thinks"));
-      } else if (line.kind === "earlier") ellipses.push(push(line.text, undefined, line));
-      else comment(push(fit(line.text, room - 2)));
+      } else if (line.kind === "earlier") {
+        writing = undefined;
+        ellipses.push(push(line.text, undefined, line));
+      } else {
+        writing = undefined;
+        comment(push(fit(line.text, room - 2)));
+      }
     }
     // Each fold is underlined, at its place in the text of the program.
     const starts: number[] = [];
