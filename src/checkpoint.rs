@@ -61,6 +61,10 @@ pub const SCHEMA: i64 = 1;
 /// a kind that no entry carries.
 const RESERVE: &str = "reserve";
 
+/// The kind of an entry of a checkpoint of the form before [`SCHEMA`] that holds the turns of a
+/// chain.
+const CARRIED: &str = "carried";
+
 /// The python that gathers the data of a checkpoint, in a copy of the names of the engine, with the
 /// definitions of a word as [`definitions`] gives them: a view, which makes nothing and says
 /// nothing. Each value that it gives is plain, so a build of any version reads it.
@@ -316,7 +320,7 @@ pub fn booted(record: Vec<Object>) -> Vec<Object> {
 
 /// The entries that a checkpoint carries: the fact itself when it holds data, which boot gives
 /// `seed` of the engine, or, for the form before [`SCHEMA`], its entries, each reserve as the
-/// questions of the root that it stands for.
+/// questions of the root that it stands for, and the turns of each chain just after that chain.
 fn carried(checkpoint: &Object) -> Vec<Object> {
   let Some(a) = fact(checkpoint) else { return Vec::new() };
   let pairs = a.word(0).and_then(|one| one.pairs()).unwrap_or_default();
@@ -333,9 +337,16 @@ fn carried(checkpoint: &Object) -> Vec<Object> {
     .map(|a| a.about().to_owned())
     .collect();
   let (mut out, mut reserved) = (Vec::new(), HashMap::<String, i64>::new());
-  for a in &facts {
+  // A later life of that form wrote the turns of a chain after the stand of the root, and the
+  // root seeds itself at its first stand unless it holds its turns, so it ran its seed again and
+  // drifted: the turns of each chain come at once after the chain.
+  for a in facts.iter().filter(|a| a.kind() != CARRIED) {
     if a.kind() != RESERVE {
       out.push(Object::list([a.0.clone()]));
+      let turns = facts
+        .iter()
+        .filter(|b| a.kind() == "chain" && b.kind() == CARRIED && b.about() == a.about());
+      out.extend(turns.map(|b| Object::list([b.0.clone()])));
       continue;
     }
     let (kind, n) = (a.about(), a.word(0).and_then(|one| one.as_int()).unwrap_or_default());

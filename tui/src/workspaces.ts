@@ -564,7 +564,9 @@ export class Workspaces extends EventEmitter {
     }
     if (entry.session) {
       entry.session.sessionName = label;
-      if (name !== undefined) void entry.session.rename(name);
+      // A session that opens in the background says its name when its life opens, and the others wait for the record.
+      const said = name === undefined ? undefined : entry.session.rename(name);
+      if (!lazy) await said;
       entry.name = label;
       entry.session.save();
     }
@@ -652,19 +654,29 @@ export class Workspaces extends EventEmitter {
     return true;
   }
   /** Give a session or a workspace the name that the operator chose. The record of a session keeps its name, as a fact
-   * that each window reads, and a session that is not open opens for as long as that takes. The list keeps the name
-   * of a workspace. */
+   * that each window reads, and a session that is not open opens for as long as that takes. When it does not open, or
+   * the record does not take the name, the row keeps its old name and shows the reason. The list keeps the name of a
+   * workspace. */
   async rename(item: SessionEntry | Workspace, name: string): Promise<void> {
+    const before = item.name;
     item.name = name;
     if ("sessions" in item) this.save({ directory: item.directory, name });
     else if (item.session) void item.session.rename(name);
     else {
       const group = this.groups.find((one) => one.sessions.includes(item));
-      const opened = group ? (await this.load(item, group).catch(() => undefined))?.session : undefined;
-      if (opened) {
-        await Promise.race([opened.rename(name), Bun.sleep(10000)]);
-        await this.release(item);
+      try {
+        if (!group) throw new Error("This session has no workspace.");
+        const opened = (await this.load(item, group)).session;
+        if (!opened) throw new Error("The session did not open.");
+        if (!(await opened.rename(name))) {
+          item.name = before;
+          item.error = opened.notice;
+        }
+      } catch (error) {
+        item.name = before;
+        item.error ??= error instanceof Error ? error.message : String(error);
       }
+      await this.release(item);
     }
     this.emit("change");
   }

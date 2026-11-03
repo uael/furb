@@ -55,7 +55,8 @@ Eight extensions come with furb, and each life runs them unless a config turns t
   prompt and its answer, so a later life gives the same name and asks no model. `rename_session(name)` says the
   name that the operator chose, as an act of the root, and it wins over the name of `name_session()`. Each client
   shows the name that the record holds, and the sidebar hides the chain `naming`. A
-  config that turns `naming` off, as `{"extensions": {"naming": false}}`, saves the call of that model.
+  config that turns `naming` off, as `{"extensions": {"naming": false}}`, saves the call of that model. A rename in a
+  client is the same act, which the client makes with an ear of its own, so it lasts whatever extension plays.
 - **`ouroboros`** teaches a model to extend furb. Its file holds the lore, which every chain reads in the setup, so it
   has no life word. The lore says the three ways to extend furb and when to take each: a def in a word, which lives with
   its chain; `extend(name, *rungs)`, which writes the words of those rungs as an extension of the project and turns it

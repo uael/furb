@@ -309,7 +309,7 @@ function formed(value: unknown, form: (typeof forms)[keyof typeof forms]): boole
 
 /** The saved view of a record: nothing when it has none, the defaults with the reason when its file holds no view
  * that can be read, and the view less each field of another form, with the names of those fields. */
-export function savedView(record: string): { view: SavedView; damage?: string } {
+export function savedView(record: string): { view: SavedView; name?: string; damage?: string } {
   const path = `${record}.ui.json`;
   try {
     const view: unknown = JSON.parse(readFileSync(path, "utf8"));
@@ -319,10 +319,14 @@ export function savedView(record: string): { view: SavedView; damage?: string } 
       key in held && !formed(held[key], form) ? [key] : [],
     );
     for (const key of wrong) delete held[key];
-    if (!wrong.length) return { view: held };
+    // The name of the session that an older release kept here: the record holds it now, and this one is read once.
+    const name =
+      typeof held.sessionName === "string" && held.sessionName.trim() ? held.sessionName.trim() : undefined;
+    if (!wrong.length) return { view: held, name };
     const fields = wrong.join(", ");
     return {
       view: held,
+      name,
       damage: `${path} holds ${fields} in a form this release does not read: each opened empty.`,
     };
   } catch (error) {
@@ -443,6 +447,8 @@ export class Session extends EventEmitter {
   private held = 0;
   private dirty = false;
   private closed = false;
+  /** The name that `<record>.ui.json` held, which moves into the record at the first read of the life. */
+  private legacyName?: string;
   /** The scope, the writes and the count of changes that `changes` was read at. */
   private changesRead = "";
   /** Whether the dialog of a record open to read was shown, so it shows once for each life of the session. */
@@ -467,7 +473,8 @@ export class Session extends EventEmitter {
         demo && path && !host.recorded ? join(dirname(path), "ui-preferences.json") : undefined,
       );
     if (path) {
-      const { view, damage } = savedView(path);
+      const { view, name, damage } = savedView(path);
+      this.legacyName = name;
       Object.assign(this, Object.fromEntries(kept.flatMap((key) => (key in view ? [[key, view[key]]] : []))));
       this.savedCost = view.cost ?? 0;
       // A saved queue waits for the choice of the operator before it sends.
@@ -587,22 +594,38 @@ export class Session extends EventEmitter {
     this.sessionName = name;
     this.emit("change");
   }
-  /** The operator names the session. The name stands at once, and the act rename_session of the extension naming
-   * says it in the record, where each window reads it. With that extension off, the name stands in this window
-   * alone. It gives when the record holds the name, and never fails. */
-  async rename(name: string): Promise<void> {
+  /** The operator names the session. The name stands at once, and the act rename_session says it in the record, where
+   * each window reads it, whatever extension plays: its word makes the act with an ear of its own. It tells whether
+   * the record holds the name. A record that does not keeps the old name and shows why in a notice. */
+  async rename(name: string): Promise<boolean> {
     const said = name.trim();
+    const before = this.sessionName;
     this.sessionName = said || basename(this.host.directory);
     this.emit("change");
-    const on = this.engine.root;
+    const word = `act("rename_session", "", lambda id: (yield "done", id, ${JSON.stringify(said)}))`;
     try {
-      if (!enabled(await this.engine.transcript({ on })).some((one) => one.name === "naming")) return;
-      await this.engine.result(
-        await this.engine.rung({ word: `rename_session(${JSON.stringify(said)})`, on }),
-      );
+      await this.engine.result(await this.engine.rung({ word, on: this.engine.root }));
+      return true;
     } catch (error) {
-      this.notice = `The name stands in this window only: ${error instanceof Error ? error.message : String(error)}`;
+      this.sessionName = before;
+      this.notice = `The name was not kept: ${error instanceof Error ? error.message : String(error)}`;
+      this.emit("change");
+      return false;
     }
+  }
+  /** A name that an older release kept in `<record>.ui.json` moves into the record once the record is read: when the
+   * record holds no rename_session, the name is said as one, and the save that follows writes the view without it. */
+  private carryName(): void {
+    const name = this.legacyName;
+    if (name === undefined) return;
+    this.legacyName = undefined;
+    if (this.closed || this.host.role === "read" || this.host.recorded || this.host.reading) return;
+    const said = (this.activityByChain.get(this.engine.root) ?? []).some(
+      (one) => one.kind === "rename_session",
+    );
+    void (said ? Promise.resolve(true) : this.rename(name)).then((kept) => {
+      if (kept) this.save();
+    });
   }
   fail = (error: unknown) => {
     this.error = error instanceof Error ? error.message : String(error);
@@ -720,6 +743,7 @@ export class Session extends EventEmitter {
         }
         this.counted = count;
         this.named();
+        this.carryName();
         // The acts and the actor of one snapshot are of one moment: the choice holds until its rung is done there.
         const choice = this.choices.get(selected);
         if (choice?.rung && this.actOf(choice.rung)?.done) this.choices.delete(selected);
