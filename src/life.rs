@@ -236,14 +236,14 @@ impl Opening {
     let project = PathBuf::from(&self.directory);
     let provider = provider.ear();
     let working = |made: Option<Box<dyn Ear>>| made.unwrap_or_else(silent);
-    let config = places.config;
+    let config = places.config.clone();
     // An ear that holds nothing that a fresh one lacks starts again after it raises. A fresh ear of the commands
     // reads no record, since the first one ended each command that the record left open.
     let held = config.clone();
     let servers = world::mcp::Settings::of(project, config.clone(), gallery.clone());
     let mut ears = vec![
       ("provider", provider),
-      ("extensions", extension::extensions(extensions)),
+      ("extensions", extension::extensions(extensions, places)),
       ("memory", lasting(memory(config.clone()), move || memory(held.clone()))),
       ("skills", lasting(skills(config.clone()), move || skills(config.clone()))),
       (

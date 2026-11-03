@@ -1,23 +1,29 @@
 //! The ears that the host gives each life, before the ears of the crate: one list, so each life of
 //! a machine opens the same way, and the record of one host opens in another.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use furb::{
-  Ear, Fact, Object,
-  ear::{ear, hear, hearing},
+  Ear, Fact, Fault, Object,
+  ear::{Co, ear, hear, hearing},
   wire::outward,
   world::Asked,
 };
-use serde_json::json;
+use serde_json::{Value, json};
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::event::{Act, Event, State};
+use crate::{
+  event::Event,
+  view::{Fold, Pause, followed},
+};
+
+/// The name of the console of the operator, whose start of a prompt makes it a question to him.
+pub(crate) const CONSOLE: &str = "console";
 
 /// The ears of the host, each under its name, in the order of boot: the console of the operator,
 /// and the ear that tells each fact as events.
 pub(crate) fn ears(told: UnboundedSender<Event>) -> Vec<(&'static str, Box<dyn Ear>)> {
-  vec![("console", console()), ("events", events(told))]
+  vec![(CONSOLE, console()), ("events", events(told))]
 }
 
 /// The console of the operator, which takes each prompt to the operator as every console of furb
@@ -31,12 +37,13 @@ fn console() -> Box<dyn Ear> {
   })
 }
 
-/// The ear that hears each fact, and tells it, the act that it changes, and the chain that it
-/// changes. An act that an ear of the engine took is said to no other ear, so its first fact tells
-/// it first, as the log of a life shows it.
+/// The ear that hears each fact, and tells it, each act that it changes with its meaning, and the
+/// chain that it changes. An act that an ear of the engine took is said to no other ear, so its
+/// first fact tells it first, as the log of a life shows it.
 fn events(told: UnboundedSender<Event>) -> Box<dyn Ear> {
   ear(move |mut co| async move {
-    let mut acts: HashMap<String, Act> = HashMap::new();
+    let mut fold = Fold::default();
+    let mut controls: Vec<Fact> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
     loop {
       let a = hear(&mut co).await;
@@ -46,50 +53,62 @@ fn events(told: UnboundedSender<Event>) -> Box<dyn Ear> {
         facts.extend(Fact::owned(made));
       }
       facts.push(a);
-      for one in facts.iter().flat_map(|one| heard(&mut acts, one)) {
-        if told.send(one).is_err() {
-          return Ok(());
+      for one in &facts {
+        let (covered, born) = covered(&mut co, &fold, &mut controls, one).await?;
+        let fact = json_of(one);
+        let acts = fold.hear(&fact, &covered, born);
+        let chain = fold.chain_of(one.about()).map(|chain| Event::Changed(chain.to_owned()));
+        let events = [Event::Fact(fact)]
+          .into_iter()
+          .chain(acts.into_iter().map(|act| Event::Act(Box::new(act))));
+        for event in events.chain(chain) {
+          if told.send(event).is_err() {
+            return Ok(());
+          }
         }
       }
     }
   })
 }
 
-/// What one fact tells: itself, the act that it asks or whose state it moves, and the chain of the
-/// act that it is about. The fact of a module tells no words, since a module is no plain value.
-fn heard(acts: &mut HashMap<String, Act>, a: &Fact) -> Vec<Event> {
-  let fact = match a.kind() {
+/// A fact as JSON reads it. The fact of a module tells no words, since a module is no plain value.
+fn json_of(a: &Fact) -> Value {
+  match a.kind() {
     "module" => json!(["module", a.about(), a.by()]),
     _ => outward(a.0.as_ref()),
-  };
-  let mut told = vec![Event::Fact(fact)];
-  let moved = matches!(a.kind(), "started" | "done");
-  if a.question() {
-    let chain = match a.kind() {
-      "chain" => a.about().to_owned(),
-      _ => acts.get(a.on()).map_or_else(|| a.on().to_owned(), |on| on.chain.clone()),
-    };
-    let act = Act {
-      kind: a.kind().to_owned(),
-      id: a.about().to_owned(),
-      by: a.by().to_owned(),
-      on: a.on().to_owned(),
-      chain,
-      words: (1..).map_while(|at| a.word(at)).map(outward).collect(),
-      state: State::Asked,
-    };
-    acts.insert(act.id.clone(), act);
-  } else if let Some(act) = acts.get_mut(a.about()).filter(|_| moved) {
-    act.state = match a.word(0) {
-      Some(value) if a.kind() == "done" => State::Done(outward(value)),
-      _ => State::Started,
-    };
   }
-  if let Some(act) = acts.get(a.about()) {
-    if a.question() || moved {
-      told.push(Event::Act(act.clone()));
+}
+
+/// What the engine alone says of a fact: each live act that a pause or a wake covers, and the pause
+/// that holds a new act, which is the last control that covers it when that control is a pause.
+async fn covered<W: 'static>(
+  co: &mut Co<W>,
+  fold: &Fold,
+  controls: &mut Vec<Fact>,
+  a: &Fact,
+) -> Result<(Vec<String>, Option<Pause>), Fault> {
+  let mut found = Vec::new();
+  if !a.question() && matches!(a.kind(), "pause" | "wake") {
+    controls.retain(|one| one.about() != a.about());
+    controls.push(a.clone());
+    for id in fold.open(a.kind() == "pause") {
+      if covers(co, a, &id).await? {
+        found.push(id);
+      }
     }
-    told.push(Event::Changed(act.chain.clone()));
+  } else if a.question() && followed(a.kind()) {
+    let oldest = controls.iter().position(|one| one.kind() == "pause").unwrap_or(controls.len());
+    for control in controls[oldest..].iter().rev() {
+      if covers(co, control, a.about()).await? {
+        return Ok((found, Pause::of(&json_of(control))));
+      }
+    }
   }
-  told
+  Ok((found, None))
+}
+
+/// Whether a pause or a wake covers an act, as the engine reads it.
+async fn covers<W: 'static>(co: &mut Co<W>, control: &Fact, id: &str) -> Result<bool, Fault> {
+  let got = co.call("covers", vec![control.0.clone(), Object::string(id)], vec![]).await?;
+  Ok(got.as_ref().as_bool().unwrap_or_default())
 }

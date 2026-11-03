@@ -17,6 +17,7 @@ import {
 import type { Keymap } from "@opentui/keymap";
 import { safeText, type Turn } from "furb";
 import { type ChainThread, type LiveAct, type Loom, type ProgramLine, wants } from "furb/life";
+import type { Tree, ViewEvent } from "furb/protocol";
 import { type ActionsPart, actions, actionsBound } from "./app/actions.ts";
 import { type BlocksPart, blocks } from "./app/blocks.ts";
 import { type ChromePart, chrome } from "./app/chrome.ts";
@@ -52,6 +53,7 @@ import { type StagePart, stage } from "./app/stage.ts";
 import { type ThreadPart, thread } from "./app/thread.ts";
 import { type TreePart, tree, treeBound } from "./app/tree.ts";
 import { type ValuesPart, values, valuesBound } from "./app/values.ts";
+import { type ViewPart, view } from "./app/view.ts";
 import { type WelcomePart, welcome, welcomeBound } from "./app/welcome.ts";
 import { graphemes, kibibytes } from "./format.ts";
 import { Graph } from "./graph.ts";
@@ -296,6 +298,12 @@ export class App {
   readonly parts: Parts;
   /** The first load of the parts, which ends once each part that the configs give is loaded or has its error. */
   readonly partsReady: Promise<void>;
+  /** The trees of the views that this window shows, by viewer, each the one of the highest version that came. */
+  readonly views = new Map<string, Tree>();
+  /** Where the window says what a person did to a node of a view: the client of the daemon sets it. */
+  viewEvents: (event: ViewEvent) => void = () => {};
+  /** The spinners of the views on screen, which move with the clock of the TUI. */
+  readonly viewSpinners = new Set<TextRenderable>();
   /** The panels of the parts over the input, the key of what it shows, and what takes the keys of the parts away. */
   readonly dock: BoxRenderable;
   dockKey = "";
@@ -713,6 +721,7 @@ export class App {
       if (this.stage.visible && this.cursor === undefined && this.moves()) this.renderStage();
       if (this.thinkingRows.size) this.tickThinking();
       if (this.liveLines.size) this.tickLive();
+      if (this.viewSpinners.size) this.tickViews();
       if (this.tree?.panel?.live) this.renderChains();
     }, frame);
     this.render();
@@ -1256,6 +1265,7 @@ export interface App
     TreePart,
     ThreadPart,
     LoomsPart,
+    ViewPart,
     InputPart {}
 assemble(
   App,
@@ -1279,5 +1289,6 @@ assemble(
   tree,
   thread,
   looms,
+  view,
   input,
 );

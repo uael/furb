@@ -330,7 +330,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
           if not was:
             yield ("tell", id, ["chain()"]) if last[3:] else top
             top *= bool(last[3:])
-            if last[4:] and id == ROOT and not transcript(id, "reply"):
+            if last[4:] and id == ROOT and not transcript(id, "reply") and not transcript(id, "carried"):
               yield from seeded(id, last, stood)
           elif last[3:] and not top:
             placed(last[1] * (was[1] != last[1]) * all(all(get(x[2])[4::2]) for x in transcript(id, "cd")))
@@ -442,6 +442,52 @@ def seeded(id, last, to):
     for x in last[4]:
       x[1] and x[3] == k and rung(f"rung(read({x[1]!r}, HIDDEN).content)", to=to)
     (w := "\n".join(y[2] for y in last[4] if y[3] == k and y[2])) and rung(w, to=to)
+
+
+HEARD = (
+  "say('prefix', scope(acting()), [*transcript(of='module')[-1:], *transcript(of='carried')[-1][3], "
+  "*transcript(of='stand')[-1:], *transcript(of='pause'), *[x for x in transcript() if acting() in x[1::3]]])"
+)
+
+
+def seed(data):
+  entries, numbers = [], Counter()
+
+  def put(sort, called, *words):
+    last = int(called[len(sort) :])
+    entries.extend(((sort, f"{sort}{n}", ROOT, ""),) for n in range(numbers[sort] + 1, last))
+    numbers[sort] = max(numbers[sort], last - 1) + bool(words)
+    words and entries.append(((sort, called, *words),))
+
+  for c in data["chains"]:
+    put("chain", c["id"], OPERATOR, c["on"], c["label"], "")
+    entries.append((("carried", c["id"], "journal", c["turns"]),))
+    c["paused"] and entries.append((("pause", c["id"], OPERATOR),))
+  for x in data["acts"]:
+    "value" in x or put("prompt", x["id"], OPERATOR, x["on"], x["shape"], x["message"], x["to"])
+    "value" in x or (x["held"] and entries.append((("started", x["id"], x["held"]),)))
+  for kind, most in data["taken"].items():
+    put(kind, f"{kind}{most + 1}")
+  for x in data["acts"]:
+    i = x["id"]
+    "value" in x and entries.extend(
+      [((x["kind"], i, "journal", x["on"]),), (("started", i, "journal"),), (("done", i, "journal", x["value"]),)]
+    )
+  for c in data["chains"]:
+    i = c["id"]
+    word = "\n".join(
+      [
+        c["definitions"],
+        *(f"{named} = {text}" for named, text in c["values"].items()),
+        HEARD,
+        f'debug(t"The life goes on from a checkpoint. It lost {c["lost"] or "no name"}, and it cut {c["cut"] or "no act"}.")',
+        *(f"with site.set({y['by']!r}):\n  rung({y['word']!r}, on={i!r})" for y in c["again"]),
+      ]
+    ).strip()
+    put("rung", f"rung{numbers['rung'] + 1}", OPERATOR, i, word, "", "")
+    put("gate", gated := f"gate{numbers['gate'] + 1}", i, i, word)
+    entries.append((("done", gated, "gate", []),))
+  return entries
 
 
 def grant(usd: float | None = None, share: float | None = None, on="") -> Act[None]:
@@ -763,7 +809,12 @@ def boot(record=(), **outside):
         ):
           match due.pop():
             case (kind, name, by, on, *words) if question((kind, name)):
-              if by in outside or by in kept or (on and not get(on)):
+              if (
+                by in outside
+                or by in kept
+                or (on and not get(on))
+                or (by == "journal" and not holds(scope(on), [known.setdefault(name, (kind, name, by, on))]))
+              ):
                 born.setdefault(kind, {})[name] = name
                 continue
               if not callable(verb := (module(on) or globals()).get(kind)) or re.fullmatch(r"\w+?\d+", by):

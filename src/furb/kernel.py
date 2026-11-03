@@ -228,7 +228,8 @@ class Running:
     """What a word that awaits the act made is given of what that act came to: a Refused in the place of the Exit of a
     command whose code it does not accept, which the command keeps for peek, and else that value. The codes come from
     the ok of the command, and with none from accepts, the policy that the module of its chain binds, which is None
-    until a word binds it, so the default policy rules."""
+    until a word binds it, so the default policy rules. A command that a checkpoint carries holds no command, so the
+    policy reads its code alone."""
     asked, shape = verb(self.names, "get")(made), self.names["Exit"]
     assert isinstance(shape, type)
     if not (isinstance(asked, tuple) and asked[0] == "bash" and isinstance(value, shape)):
@@ -237,7 +238,7 @@ class Running:
     if ok is None:
       held = verb(self.names, "module")(str(asked[3]))
       assert isinstance(held, dict)
-      ok = (held.get("accepts") or accepted)(str(asked[4]), value)
+      ok = (held.get("accepts") or accepted)(str((*asked[4:], "")[0]), value)
     elif ok is not True:
       ok = code in ok
     if ok:

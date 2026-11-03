@@ -433,6 +433,15 @@ test("a session that opens keeps its row through a refresh that comes before its
     expect(created.session?.sessionName).toBe("Second");
   }));
 
+/** A record that a build of another version made, as a crash of its life leaves it: with no checkpoint at its tip, from
+ * which this build would go on. A life that ends writes its checkpoint, so the record of each test holds one. */
+function crashed(text: string): string {
+  return text
+    .split("\n")
+    .filter((line) => !line.startsWith('[["checkpoint",'))
+    .join("\n");
+}
+
 test("a session whose record a build of another version made opens to read before any replay, and names both versions", () =>
   withLibrary(async ({ directory, open }) => {
     let library = open();
@@ -442,7 +451,10 @@ test("a session whose record a build of another version made opens to read befor
     const found = /\["made","chain1","store","([0-9a-f]{64})",(\d+)\]/.exec(text);
     if (!found?.[1] || !found[2]) throw new Error("The record names no build.");
     const [named, engine, version] = [found[0], found[1], Number(found[2])];
-    const other = text.replace(named, `["made","chain1","store","${"0".repeat(64)}",${version + 1}]`);
+    const other = crashed(text).replace(
+      named,
+      `["made","chain1","store","${"0".repeat(64)}",${version + 1}]`,
+    );
     await writeFile(made.path, other);
     library = open();
     const group = await library.add(directory);
@@ -473,7 +485,10 @@ test("a saved record that a build of another version made shows as read only bef
     if (!found?.[1] || !found[2]) throw new Error("The record names no build.");
     await writeFile(
       made.path,
-      text.replace(found[0], `["made","chain1","store","${"0".repeat(64)}",${Number(found[2]) + 1}]`),
+      crashed(text).replace(
+        found[0],
+        `["made","chain1","store","${"0".repeat(64)}",${Number(found[2]) + 1}]`,
+      ),
     );
     library = open();
     const row = (await library.add(directory)).sessions.find((entry) => entry.path === made.path);

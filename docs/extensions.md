@@ -6,14 +6,15 @@ and the model reads the extension in its turns as it reads its own work. In the 
 holds, each extension is two turns: a turn of the model whose word is `rung(read('<file>', HIDDEN).content)`, and the
 turn of the rung that this word made, which holds the code of the file alone, since that rung runs it. The engine
 crafts these turns itself from the extensions that the World gives in the standing. The file is a copy of the
-word of the extension in `~/.furb/extensions/<name>/`, which holds no import of furb.
+word of the extension in `words/<name>/` of the config directory of the user, which holds no import of furb.
 
 An extension never goes into the system prompt. So a chain that takes one only grows at its end, and what a provider
 caches of the chain stays valid.
 
 ## The official extensions
 
-Eight extensions come with furb, and each life runs them unless a config turns them off.
+Eight extensions come with furb, and each life runs them unless a config turns them off. `catchup`, `memory` and
+`compaction` play by default, as their manifests say.
 
 - **`catchup`** keeps a chain up to date with the machine. At each stand, as when a later life opens on a record, it
   reads again each file that the chain read or wrote, and tells the chain in one paragraph headed caught up the lines
@@ -118,32 +119,53 @@ is a folder.
 
 ```text
 .furb/extensions/<name>/
-  furb.json     the manifest
+  SKILL.md      the manifest
   <name>.py     the word
+  <name>.pyi    the interface, which it can have
   tui.ts        the part for the TUI, which it can have
 ```
 
-The manifest is a JSON map:
+The manifest is the file of a skill, so Claude Code reads the folder as an ordinary skill. Its frontmatter gives the
+name and the description, and the fields of furb under `metadata`, each with the prefix `furb-`. The [open format of
+skills](https://agentskills.io/specification) puts there the fields of a client: "Arbitrary key-value mapping for
+additional metadata (a map from string keys to string values)." Its body is the prose of the extension.
 
-```json
-{ "name": "notes", "word": "notes.py", "life": "notes()", "plays": "every", "tui": "tui.ts" }
+```markdown
+---
+name: notes
+description: Keeps the notes of a chain.
+metadata:
+  furb-word: notes.py
+  furb-life: notes()
+  furb-interface: notes.pyi
+  furb-default: "false"
+  furb-plays: every
+  furb-view: tui.ts
+---
+What the notes are for.
 ```
 
 - `name` is the name of the extension: a lower case letter, then lower case letters, digits and `-`. It must be the
   key that the config gives it.
-- `word` is the file of the word, relative to the folder. It is a Python module that imports what it uses from
+- `description` says what the extension does and when to use it, as for any skill.
+- `furb-word` is the file of the word, relative to the folder. It is a Python module that imports what it uses from
   `furb.engine`, so an editor, ruff and ty read it. The word that a chain runs is that file less its imports of furb.
   It only defines: it holds no comment and binds no name of the engine. It can hold one quote of guidance for the
   model, which holds no law.
-- `life` is the life word, a line of Python that starts the work of the extension, such as `await recall()`. It
+- `furb-interface` is the file of the interface of the extension, its contract. It can be absent.
+- `furb-default` is `"true"` for an extension that plays by default, as `catchup`, `memory` and `compaction`. It can be
+  absent, which is `"false"`.
+- `furb-life` is the life word, a line of Python that starts the work of the extension, such as `await recall()`. It
   awaits each act that it starts whose first answer comes later, as `await mcp_index()` does, so what that act tells
   stands in the turn of the life words of the setup. It can be absent.
-- `plays` says where the extension plays: `"every"`, on every chain, which is the default, or `"root"`, on the root
+- `furb-plays` says where the extension plays: `"every"`, on every chain, which is the default, or `"root"`, on the root
   chain alone. A chain with a source keeps what its source played, so a chain that goes on from the root has an
   extension of the root, and a new chain with no source has none. Give `"root"` to an extension whose names only the
   work of the root needs, as a loop that conducts workers: each other chain then reads none of its words, and a model
   there is free to bind each name that it defines.
-- `tui` is the file of the [part for the TUI](#a-part-for-the-tui). It can be absent.
+- `furb-view` is the file of the [part for the TUI](#a-part-for-the-tui). It can be absent.
+
+A field of furb that the manifest does not know is refused with its path, so a typo does not pass.
 
 A word reaches the machine only through the acts that furb has already: a read, a write, a command, a wait, the
 clock, a chance, and a prompt to the operator. It can also make acts that an ear of its own answers, written in
@@ -152,8 +174,8 @@ a change of furb. The skill `extending` gives an example of each.
 
 A word sets the actor of a chain that it made, or of a chain that waits, with a rung on that chain: `rung("actor =
 'claude-cli:sonnet/medium'", on=chain)` rebinds the default actor, and `wake(chain)` lets a paused chain go on. The next
-prompt on the chain with no `to` goes to the new actor. `hire()` and `resume()` of the conductor do this, and the note
-that a model limit tells a chain names the same two calls.
+prompt on the chain with no `to` goes to the new actor. `hire()` of the conductor does this, and the note that a model
+limit tells a chain names the same two calls.
 
 An official extension also has a contract, `<name>.pyi`, whose laws its suite in `test/` holds, as [the hygiene
 laws](../AGENTS.md#the-hygiene-laws) say, and an ear of the World in `src/extension/<name>.rs` when it reads the disk or
@@ -180,7 +202,7 @@ def accepts(command, exit):
 
 ## A part for the TUI
 
-An extension can give the TUI a part: a module of TypeScript, which its manifest names under `tui`. A part can add a
+An extension can give the TUI a part: a module of TypeScript, which its manifest names under `furb-view`. A part can add a
 panel over the input, a row in the feed for each act of a kind, keys, and commands. Nothing builds it: Bun loads the
 module as it stands, and loads it again when it changes, with no restart.
 
