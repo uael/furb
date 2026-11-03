@@ -506,9 +506,8 @@ export const blocks = part({
       marginBottom: followed ? space.section : 0,
     });
     const filetype = infoStringToFiletype(language);
-    // A code block numbers its lines as the block of a word does, with the same blank column of the states at the left
-    // of the numbers, so both stand in the same columns, and its language heads it over its code as a model heads a
-    // word.
+    // A code block numbers its lines as the block of a word does. It keeps the same blank column of the states at the
+    // left of the numbers, so both blocks have the same columns. Its language heads the code as a model heads a word.
     const count = text.split("\n").length;
     const digits = String(count).length;
     if (language) {

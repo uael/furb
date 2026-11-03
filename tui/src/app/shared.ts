@@ -111,13 +111,13 @@ export const PROGRAM_STEPS = 6;
  * each thread of under a hundred lines starts at one column. */
 export const gutterWidth = (digits: number) => Math.max(2, digits) + space.inset;
 
-/** The cells of the column of the states, at the left of the numbers of a block of code: the loader while the model
- * writes, and the mark of the line that failed. A code block of markdown keeps the column blank, so the numbers and
- * the code of every block stand in the same columns. */
+/** The cells of the column of the states, at the left of the numbers of a block of code. They show the loader while
+ * the model writes, and the mark of the line that failed. A code block of markdown keeps the column blank. So the
+ * numbers and the code of every block have the same columns. */
 export const STATE = 2;
 
-/** The column of the states, as signs of the gutter: the mark of each row that has one, and blanks on the first row so
- * that the column stands when no row has a mark. */
+/** The column of the states, as signs of the gutter. It holds the mark of each row that has one. The first row gets
+ * blanks, so that the column stands when no row has a mark. */
 export const stateSigns = (states: ReadonlyMap<number, Part>, rows: number): Map<number, LineSign> => {
   const signs = new Map<number, LineSign>();
   if (rows) signs.set(0, { before: " ".repeat(STATE) });

@@ -695,9 +695,9 @@ export const details = part({
           );
       },
     });
-    // The gutter draws its numbers into a buffer of its own, after the program and with no hook of its render, so the
-    // loader is drawn into that buffer once it is filled: over the number of the line that runs, at the right of its
-    // column, on the color of the line.
+    // The gutter draws its numbers into a buffer of its own, after the program, and it has no render hook. So the
+    // loader is drawn into that buffer after it is filled. It covers the number of the line that runs, at the right of
+    // its column, on the color of the line.
     const gutter = Reflect.get(view, "gutter") as { width: number } | undefined;
     const fill =
       gutter && (Reflect.get(gutter, "refreshFrameBuffer") as (buffer: unknown, start: number) => void);
