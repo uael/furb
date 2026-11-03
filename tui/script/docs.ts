@@ -29,7 +29,7 @@ const tables = {
   commands: [
     "| Command | Action |",
     "| --- | --- |",
-    ...slashes.map(({ usage, detail }) => `| \`${usage.replaceAll("|", "\\|")}\` | ${cell(detail)} |`),
+    ...slashes.map(({ forms, detail }) => `| \`${forms.replaceAll("|", "\\|")}\` | ${cell(detail)} |`),
     ...parted,
   ],
 };

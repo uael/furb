@@ -30,6 +30,7 @@ export const actions = part({
       effort: this.effortPicker,
       shape: this.shapes,
       theme: () => this.themes(),
+      help: () => this.help(),
       exit: () => this.options.quit(),
       end: () => this.options.quit(true),
       reopen: () => this.session.reopen(),
