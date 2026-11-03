@@ -1352,6 +1352,17 @@ async def test_the_chain_advances_first_the_rung_whose_maker_said_the_fewest_fac
   assert engine.get(said(log, "reply")[2][2])[2] == three
 
 
+async def test_the_chain_asks_a_new_prompt_while_a_word_awaits_a_wait_that_is_not_over() -> None:
+  """A new prompt on a chain is asked while a word of the chain awaits a wait that is not over, so no wait holds a prompt."""
+  _, log, root = born("w = wait(600)\nawait w", "close(1)", auto=False)
+  engine.prompt(int, "one", on=root)
+  await settle()
+  two = engine.prompt(int, "two", on=root)
+  await settle()
+  await settle()
+  assert two in [engine.get(a[2])[2] for a in said(log, "reply")]
+
+
 async def test_the_chain_tells_a_word_that_told_nothing_before_the_advance() -> None:
   """When nothing was told on the chain since the word of the last rung that the chain did not make was ready, the chain tells that rung under the header told nothing before the advance, so the model sees that the word showed it nothing."""
   _, log, root = born("x = read('/w/a.txt', show=HIDDEN)", "x = read('/w/a.txt')", "close(1)")
