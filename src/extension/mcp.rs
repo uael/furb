@@ -66,7 +66,7 @@ use self::{
   wire::{Failure, seconds},
 };
 use crate::{
-  ear::{Co, Ear, Next, hearing, reactor, say},
+  ear::{Co, Ear, Next, hearing, runtime, say},
   fact::Fact,
   value::{Fault, Object, ObjectRef},
 };
@@ -164,7 +164,7 @@ pub fn mcp(settings: Settings) -> Box<dyn Ear> {
   })
 }
 
-/// A work on the reactor, which ends when what awaits it goes.
+/// A work on the runtime of the ears, which ends when what awaits it goes.
 fn running<T: Send + 'static>(
   work: impl Future<Output = Result<T, String>> + Send + 'static,
 ) -> impl Future<Output = Result<T, String>> {
@@ -175,7 +175,7 @@ fn running<T: Send + 'static>(
       self.0.abort();
     }
   }
-  let task = reactor().spawn(work);
+  let task = runtime().spawn(work);
   let aborted = Aborted(task.abort_handle());
   async move {
     let got = task.await;

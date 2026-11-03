@@ -50,7 +50,7 @@ use super::{
   catalog::{LEVELS, reached},
   clients::{Client, Reach},
 };
-use crate::ear::reactor;
+use crate::ear::runtime;
 
 /// The provider of the models of a local server.
 pub(super) const LOCAL: &str = "local";
@@ -177,7 +177,8 @@ impl Server {
   /// What the server lists, as the catalog offers it: the list it gave, or the list it gives now when it gave none
   /// yet, or a delay ago or more when it listed nothing, when it gave no model of the name that the catalog wants, or,
   /// when the catalog wants no name, when it gave no window of a model for chat. It waits for the answer of the server
-  /// on the reactor, so it never runs on the thread of the reactor.
+  /// on the runtime of the ears, so it never runs on a thread of that runtime: an open waits for it on a blocking
+  /// thread.
   pub(super) fn heard(&self, wanted: Option<&str>) -> Heard {
     let lists = |offers: &[Offer]| {
       let windowed = |one: &&Offer| self.window.or(one.window).is_some();
@@ -264,7 +265,7 @@ impl Server {
     let asking = Asking { client, root: self.root.clone(), key: self.key.clone() };
     // The windows that the server gives apart from its list take what is left of the deadline, and a list keeps its
     // models when they do not come in time.
-    let listing = reactor().spawn(async move {
+    let listing = runtime().spawn(async move {
       let began = Instant::now();
       let listed = tokio::time::timeout(DEADLINE, asking.offers()).await;
       let mut offers = listed.map_err(|_| format!("it listed nothing in {DEADLINE:?}"))??;
@@ -275,7 +276,7 @@ impl Server {
       .await;
       Ok::<_, String>(offers)
     });
-    let got = reactor().block_on(listing).map_err(|no| no.to_string()).and_then(|got| got);
+    let got = runtime().block_on(listing).map_err(|no| no.to_string()).and_then(|got| got);
     got.map_err(|why| format!("the local server at {} lists no model: {why}", self.root))
   }
 }

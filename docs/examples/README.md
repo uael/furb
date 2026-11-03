@@ -57,15 +57,13 @@ console.log(await life.prompt("str", "Plan the release of version 2."));
 use std::error::Error;
 
 use furb::life::Life;
-use futures::executor::block_on;
 
-fn main() -> Result<(), Box<dyn Error>> {
-  block_on(async {
-    let mut life = Life::open("release.jsonl").await?;
-    let plan = life.prompt::<String>("Plan the release of version 2.")?;
-    println!("{}", life.wait(plan).await?);
-    Ok(())
-  })
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), Box<dyn Error>> {
+  let mut life = Life::open("release.jsonl").await?;
+  let plan = life.prompt::<String>("Plan the release of version 2.")?;
+  println!("{}", life.wait(plan).await?);
+  Ok(())
 }
 ```
 
@@ -107,25 +105,23 @@ for (const chain of life.chains()) console.log(chain.label, "under", chain.paren
 use std::error::Error;
 
 use furb::life::Life;
-use futures::executor::block_on;
 
-fn main() -> Result<(), Box<dyn Error>> {
-  block_on(async {
-    let mut life =
-      Life::open("notes.jsonl").roster(["anthropic:claude-opus-5-5", "anthropic:claude-sonnet-5-5"]).await?;
-    let reviewer = life.chain("reviewer")?;
-    life.model(&reviewer, "anthropic:claude-sonnet-5-5")?;
-    let draft = life.prompt::<String>("Write the release notes of version 2.")?;
-    let draft = life.wait(draft).await?;
-    let review =
-      life.prompt_on::<String>(&reviewer, &format!("Review these release notes:\n{draft}"))?;
-    println!("{}", life.wait(review).await?);
-    for chain in life.chains()? {
-      let parent = life.parent(&chain)?.expect("a chain under the root");
-      println!("{} under {}", life.label(&chain)?, life.label(&parent)?);
-    }
-    Ok(())
-  })
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), Box<dyn Error>> {
+  let mut life =
+    Life::open("notes.jsonl").roster(["anthropic:claude-opus-5-5", "anthropic:claude-sonnet-5-5"]).await?;
+  let reviewer = life.chain("reviewer")?;
+  life.model(&reviewer, "anthropic:claude-sonnet-5-5")?;
+  let draft = life.prompt::<String>("Write the release notes of version 2.")?;
+  let draft = life.wait(draft).await?;
+  let review =
+    life.prompt_on::<String>(&reviewer, &format!("Review these release notes:\n{draft}"))?;
+  println!("{}", life.wait(review).await?);
+  for chain in life.chains()? {
+    let parent = life.parent(&chain)?.expect("a chain under the root");
+    println!("{} under {}", life.label(&chain)?, life.label(&parent)?);
+  }
+  Ok(())
 }
 ```
 
@@ -170,22 +166,20 @@ console.log(await deploy);
 use std::{error::Error, io::Write};
 
 use furb::life::Life;
-use futures::executor::block_on;
 
-fn main() -> Result<(), Box<dyn Error>> {
-  block_on(async {
-    let mut life = Life::open("deploy.jsonl").await?;
-    let deploy = life.prompt::<String>("Deploy version 2. Ask me before you deploy.")?;
-    while let Some(question) = life.question(&deploy).await? {
-      print!("{} ", question.message);
-      std::io::stdout().flush()?;
-      let mut line = String::new();
-      std::io::stdin().read_line(&mut line)?;
-      question.answer(&mut life, line.trim())?;
-    }
-    println!("{}", life.wait(deploy).await?);
-    Ok(())
-  })
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), Box<dyn Error>> {
+  let mut life = Life::open("deploy.jsonl").await?;
+  let deploy = life.prompt::<String>("Deploy version 2. Ask me before you deploy.")?;
+  while let Some(question) = life.question(&deploy).await? {
+    print!("{} ", question.message);
+    std::io::stdout().flush()?;
+    let mut line = String::new();
+    std::io::stdin().read_line(&mut line)?;
+    question.answer(&mut life, line.trim())?;
+  }
+  println!("{}", life.wait(deploy).await?);
+  Ok(())
 }
 ```
 
@@ -232,21 +226,19 @@ console.log(await count);
 use std::error::Error;
 
 use furb::life::Life;
-use futures::executor::block_on;
 
-fn main() -> Result<(), Box<dyn Error>> {
-  block_on(async {
-    let mut life = Life::open("budget.jsonl").await?;
-    let budget = life.chain("budget")?;
-    life.grant(&budget, 0.50)?;
-    let count = life.prompt_on::<i64>(&budget, "Count the lines of python in this directory.")?;
-    life.paused(&budget).await?;
-    println!("paused at {:.2} dollars", life.spent(&budget)?);
-    life.grant(&budget, 2.00)?;
-    life.wake(&budget)?;
-    println!("{}", life.wait(count).await?);
-    Ok(())
-  })
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), Box<dyn Error>> {
+  let mut life = Life::open("budget.jsonl").await?;
+  let budget = life.chain("budget")?;
+  life.grant(&budget, 0.50)?;
+  let count = life.prompt_on::<i64>(&budget, "Count the lines of python in this directory.")?;
+  life.paused(&budget).await?;
+  println!("paused at {:.2} dollars", life.spent(&budget)?);
+  life.grant(&budget, 2.00)?;
+  life.wake(&budget)?;
+  println!("{}", life.wait(count).await?);
+  Ok(())
 }
 ```
 
@@ -288,18 +280,16 @@ console.log(await release);
 use std::error::Error;
 
 use furb::life::Life;
-use futures::executor::block_on;
 
-fn main() -> Result<(), Box<dyn Error>> {
-  block_on(async {
-    let mut life = Life::open("door.jsonl").await?;
-    let release = life.prompt::<String>("Release version 2 in one hour.")?;
-    life.step(&release).await?;
-    let plan = life.plan(&release)?;
-    println!("{plan}");
-    life.edit(&release, &plan.replace("await wait(3600)\n", ""))?;
-    println!("{}", life.wait(release).await?);
-    Ok(())
-  })
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), Box<dyn Error>> {
+  let mut life = Life::open("door.jsonl").await?;
+  let release = life.prompt::<String>("Release version 2 in one hour.")?;
+  life.step(&release).await?;
+  let plan = life.plan(&release)?;
+  println!("{plan}");
+  life.edit(&release, &plan.replace("await wait(3600)\n", ""))?;
+  println!("{}", life.wait(release).await?);
+  Ok(())
 }
 ```

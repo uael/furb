@@ -7,7 +7,6 @@
 //! that does not agree with the record at its place makes a new act, and the act of the record goes on as pending
 //! work.
 
-#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
 #![expect(
   clippy::return_self_not_must_use,
   reason = "debt: a method that returns Self with no must_use"
@@ -19,12 +18,15 @@
 )]
 
 use std::{
+  cell::RefCell,
   collections::VecDeque,
-  future::{IntoFuture, Ready, poll_fn, ready},
+  future::{IntoFuture, poll_fn},
   marker::PhantomData,
-  sync::{Arc, Mutex},
+  rc::Rc,
   task::Poll,
 };
+
+use futures::future::{FutureExt, LocalBoxFuture};
 
 use super::Opening;
 use crate::{
@@ -117,7 +119,8 @@ pub struct LifeAct {
   pub done: bool,
 }
 
-/// What [`Life::open`] opens a life with, which it opens when it is awaited.
+/// What [`Life::open`] opens a life with, which it opens when it is awaited on a runtime of tokio, as
+/// [`Opening::open`] opens it.
 pub struct Open(Opening);
 
 impl Open {
@@ -151,14 +154,14 @@ impl Open {
     self
   }
 
-  fn opened(self) -> Result<Life, Fault> {
+  async fn opened(self) -> Result<Life, Fault> {
     let mut opening = self.0;
     if opening.directory.is_empty() {
       let here = std::env::current_dir().map_err(|no| Fault::refused(no.to_string()))?;
       opening.directory = here.display().to_string();
     }
-    let asked = Arc::new(Mutex::new(VecDeque::new()));
-    let (mut engine, record) = opening.boot([("console", console(Arc::clone(&asked)))])?;
+    let asked = Rc::new(RefCell::new(VecDeque::new()));
+    let (mut engine, record) = opening.open([("console", console(Rc::clone(&asked)))]).await?;
     let made = record
       .iter()
       .filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of))
@@ -175,15 +178,15 @@ impl Open {
 
 impl IntoFuture for Open {
   type Output = Result<Life, Fault>;
-  type IntoFuture = Ready<Result<Life, Fault>>;
+  type IntoFuture = LocalBoxFuture<'static, Result<Life, Fault>>;
 
   fn into_future(self) -> Self::IntoFuture {
-    ready(self.opened())
+    self.opened().boxed_local()
   }
 }
 
 /// The ear that takes each prompt to the operator as a question.
-fn console(asked: Arc<Mutex<VecDeque<Question>>>) -> Box<dyn crate::Ear> {
+fn console(asked: Rc<RefCell<VecDeque<Question>>>) -> Box<dyn crate::Ear> {
   ear(move |mut co| async move {
     loop {
       let fact = hear(&mut co).await;
@@ -197,7 +200,7 @@ fn console(asked: Arc<Mutex<VecDeque<Question>>>) -> Box<dyn crate::Ear> {
           shape: word(1),
           message: word(2),
         };
-        asked.lock().expect("the questions").push_back(question);
+        asked.borrow_mut().push_back(question);
         say(&mut co, Fact::says("started", fact.about(), []));
       }
     }
@@ -208,11 +211,12 @@ fn console(asked: Arc<Mutex<VecDeque<Question>>>) -> Box<dyn crate::Ear> {
 pub struct Life {
   engine: Engine,
   made: VecDeque<Fact>,
-  asked: Arc<Mutex<VecDeque<Question>>>,
+  asked: Rc<RefCell<VecDeque<Question>>>,
 }
 
 impl Life {
-  /// A life on its record, or a new one when the record holds nothing, which the program awaits.
+  /// A life on its record, or a new one when the record holds nothing, which the program awaits on the runtime of tokio
+  /// that the life runs on.
   pub fn open(record: impl Into<String>) -> Open {
     Open(Opening { record: Some(record.into()), ..Opening::default() })
   }
@@ -393,11 +397,9 @@ impl Life {
 
   /// The next question to the operator, or none once the thread named is done.
   pub async fn question<T>(&mut self, until: &Thread<T>) -> Result<Option<Question>, Fault> {
-    let asked = Arc::clone(&self.asked);
-    self
-      .until(|life| Ok(!asked.lock().expect("the questions").is_empty() || life.done(until)?))
-      .await?;
-    Ok(asked.lock().expect("the questions").pop_front())
+    let asked = Rc::clone(&self.asked);
+    self.until(|life| Ok(!asked.borrow().is_empty() || life.done(until)?)).await?;
+    Ok(asked.borrow_mut().pop_front())
   }
 
   /// The words of the rungs of a thread, as python, in order.

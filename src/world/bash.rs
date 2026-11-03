@@ -38,7 +38,7 @@ use unsync::{oneshot, spsc};
 
 use super::{Scratch, here};
 use crate::{
-  ear::{Co, Ear, Next, hearing, reactor, say},
+  ear::{Co, Ear, Next, hearing, runtime, say},
   engine::left,
   fact::{Fact, named},
   value::{Exit, Fault, Object, Text},
@@ -712,9 +712,9 @@ impl Drop for Group {
 /// The shell of a command, which the life reaps once it ends, so no shell stays a zombie of the process of the life.
 ///
 /// A `Child` of tokio that drops before it is reaped waits in a queue that tokio drains only when the signal of a
-/// child wakes its reactor. A command that drops before it is over ends its group as it drops, so the signal of its
-/// shell can wake the reactor in the moment after tokio found the shell alive and before the shell is in that queue.
-/// The shell then stays a zombie until another child of the process ends. So the reactor probes a shell that drops
+/// child wakes its runtime. A command that drops before it is over ends its group as it drops, so the signal of its
+/// shell can wake the runtime in the moment after tokio found the shell alive and before the shell is in that queue.
+/// The shell then stays a zombie until another child of the process ends. So the runtime probes a shell that drops
 /// alive until it reaps it.
 struct Shell(Option<Child>);
 
@@ -736,7 +736,7 @@ impl Drop for Shell {
   fn drop(&mut self) {
     let Some(mut child) = self.0.take() else { return };
     if matches!(child.try_wait(), Ok(None)) {
-      reactor().spawn(async move {
+      runtime().spawn(async move {
         while let Ok(None) = child.try_wait() {
           tokio::time::sleep(PROBE).await;
         }

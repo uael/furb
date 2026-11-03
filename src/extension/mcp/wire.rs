@@ -49,7 +49,7 @@ use tokio::{
 
 use super::{config::Transport, oauth::challenged};
 use crate::{
-  ear::reactor,
+  ear::runtime,
   world::{Group, grouped},
 };
 
@@ -151,7 +151,7 @@ impl Peer {
     let (told, heard) = mpsc::unbounded_channel();
     let pending: Pending = Arc::default();
     let mut tasks = JoinSet::new();
-    tasks.spawn_on(dispatch(wire.clone(), pending.clone(), inbound, told, roots), reactor());
+    tasks.spawn_on(dispatch(wire.clone(), pending.clone(), inbound, told, roots), &runtime());
     Ok((Peer { wire, pending, next: AtomicI64::new(1), tasks: Mutex::new(tasks) }, heard))
   }
 
@@ -224,7 +224,7 @@ impl Drop for Waiting {
       let send = self
         .wire
         .send(json!({"jsonrpc": "2.0", "method": "notifications/cancelled", "params": params}));
-      reactor().spawn(async move {
+      runtime().spawn(async move {
         let _ = send.await;
       });
     }
@@ -326,7 +326,8 @@ impl Process {
     let mut spawning = tokio::process::Command::from(made);
     spawning.kill_on_drop(true);
     let mut child = {
-      let _inside = reactor().enter();
+      let runtime = runtime();
+      let _inside = runtime.enter();
       spawning.spawn().map_err(|no| Failure::Broken(format!("{command} did not start: {no}")))?
     };
     let group = Group::of(&child).ok();
@@ -349,7 +350,7 @@ impl Process {
           }
         }
       },
-      reactor(),
+      &runtime(),
     );
     tasks.spawn_on(
       async move {
@@ -366,7 +367,7 @@ impl Process {
         let _ =
           inbox.send(Inbound::Closed(format!("the process of the server ended{status}{said}")));
       },
-      reactor(),
+      &runtime(),
     );
     Ok(Process { stdin: Arc::new(tokio::sync::Mutex::new(stdin)), tasks: Mutex::new(tasks), group })
   }
@@ -507,7 +508,7 @@ impl Wire for Streamable {
         .and_then(|one| one.to_str().ok())
         .unwrap_or_default();
       if kind.starts_with("text/event-stream") {
-        locked(&tasks).spawn_on(streamed(response, inbox), reactor());
+        locked(&tasks).spawn_on(streamed(response, inbox), &runtime());
         return Ok(());
       }
       let text = response.text().await.map_err(|no| Failure::Broken(format!("{url}: {no}")))?;
@@ -539,7 +540,7 @@ impl Wire for Streamable {
           streamed(response, inbox).await;
         }
       },
-      reactor(),
+      &runtime(),
     );
   }
 }
@@ -550,7 +551,7 @@ impl Drop for Streamable {
     locked(&self.tasks).abort_all();
     if locked(&self.session).is_some() {
       let request = self.request(self.client.delete(&self.url));
-      reactor().spawn(async move {
+      runtime().spawn(async move {
         let _ = tokio::time::timeout(Duration::from_secs(5), request.send()).await;
       });
     }
@@ -600,7 +601,7 @@ impl Legacy {
         }
         let _ = inbox.send(Inbound::Closed("the stream of events of the server ended".to_owned()));
       },
-      reactor(),
+      &runtime(),
     );
     let named = named
       .await

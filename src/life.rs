@@ -35,6 +35,13 @@ use crate::{
 /// The ears of a life, each under the name the engine hears it by, in the order of boot.
 pub type Ears = Vec<(String, Box<dyn Ear>)>;
 
+/// What a life waits for before it boots, as [`Opening::prepared`] gives it.
+struct Prepared {
+  places: Places,
+  extensions: Vec<extension::Extension>,
+  provider: world::Provider,
+}
+
 /// A function of the host that answers each request in place of the models: it is given the request and a function
 /// that tells what it writes as it writes it, and it gives the turn.
 pub struct Answer(pub world::Hosted);
@@ -154,7 +161,8 @@ impl Opening {
   /// record, and else one of its own, which goes with the life. A new record starts with an empty scratch directory,
   /// and the files of the record are made again in one that is missing.
   pub fn parts(self) -> Result<(Vec<Object>, Ears), Fault> {
-    self.parted(false).map(|(record, ears, _)| (record, ears))
+    let prepared = self.prepared()?;
+    self.parted(false, prepared).map(|(record, ears, _)| (record, ears))
   }
 
   /// Whether the life keeps what it says to its record.
@@ -194,17 +202,9 @@ impl Opening {
 
   /// The record and the ears of the crate, as [`Opening::parts`] gives them, with an ear of the log that writes it on
   /// after the lines that it holds when the life is `continued` from a snapshot.
-  fn parted(self, continued: bool) -> Result<(Vec<Object>, Ears, bool), Fault> {
+  fn parted(self, continued: bool, prepared: Prepared) -> Result<(Vec<Object>, Ears, bool), Fault> {
     let works = self.works();
     let keeps = self.keeps != Some(false) && works;
-    if let Some(path) = self.record.as_deref().filter(|_| keeps) {
-      upgraded(Path::new(path), &self.directory, world::stored)?;
-    }
-    // A record that another build made is refused from the entries that name its build, read from the head of each
-    // line, before the life reads the record whole or takes its lease.
-    if let Some(path) = &self.record {
-      drifts(path, &world::heads(path, &[world::MADE, checkpoint::CHECKPOINT])?)?;
-    }
     let (record, store) = match (&self.record, keeps) {
       (Some(path), true) => world::store(path).map(|(held, store)| (held, Some(store)))?,
       (Some(path), false) => (world::kept(path)?, None),
@@ -231,24 +231,11 @@ impl Opening {
       scratch.remade(&record, &told);
       scratch
     });
-    let here = Places::here();
-    let places = Places { config: self.config.clone().map_or(here.config, PathBuf::from), ..here };
-    let extensions = match self.extensions != Some(false) && works {
-      true => extension::configured(&places, self.directory.as_ref())?,
-      false => Vec::new(),
-    };
+    let Prepared { places, extensions, provider } = prepared;
     let gallery = self.gallery();
     let project = PathBuf::from(&self.directory);
-    // The standing gives each extension whose word or life word plays, with the file of a word that is not blank.
-    let advertised = extensions
-      .iter()
-      .filter(|one| !(one.word.trim().is_empty() && one.life.is_empty()))
-      .map(|one| {
-        let file = if one.word.trim().is_empty() { String::new() } else { one.file.clone() };
-        (one.name.clone(), file, one.life.clone(), one.root)
-      })
-      .collect();
-    let (provider, search) = self.provider(advertised)?;
+    let search = provider.search();
+    let provider = provider.ear();
     let working = |made: Option<Box<dyn Ear>>| made.unwrap_or_else(silent);
     let config = places.config;
     // An ear that holds nothing that a fresh one lacks starts again after it raises. A fresh ear of the commands
@@ -292,31 +279,62 @@ impl Opening {
     Ok((record, ears.into_iter().map(|(name, ear)| (name.to_owned(), ear)).collect(), cut))
   }
 
-  /// The ear of the provider: the models of the roster that the catalog makes, which the function of the host
-  /// answers when it gives one, and which a life that inspects asks nothing; and the native search of the web of
-  /// each of them, which the ear of the web asks.
-  fn provider(
-    self,
-    advertised: Vec<world::Advertised>,
-  ) -> Result<(Box<dyn Ear>, world::Search), Fault> {
+  /// What the life waits for before it boots: the record of an older build upgraded, a record of another build
+  /// refused, the extensions that the configs turn on, and the provider of the models, whose catalog asks the servers
+  /// and the command lines of the models. A host with a runtime waits for it on a blocking thread.
+  fn prepared(&self) -> Result<Prepared, Fault> {
+    let works = self.works();
+    let keeps = self.keeps != Some(false) && works;
+    if let Some(path) = self.record.as_deref().filter(|_| keeps) {
+      upgraded(Path::new(path), &self.directory, world::stored)?;
+    }
+    // A record that another build made is refused from the entries that name its build, read from the head of each
+    // line, before the life reads the record whole or takes its lease.
+    if let Some(path) = &self.record {
+      drifts(path, &world::heads(path, &[world::MADE, checkpoint::CHECKPOINT])?)?;
+    }
+    let here = Places::here();
+    let places = Places { config: self.config.clone().map_or(here.config, PathBuf::from), ..here };
+    let extensions = match self.extensions != Some(false) && works {
+      true => extension::configured(&places, self.directory.as_ref())?,
+      false => Vec::new(),
+    };
+    // The standing gives each extension whose word or life word plays, with the file of a word that is not blank.
+    let advertised = extensions
+      .iter()
+      .filter(|one| !(one.word.trim().is_empty() && one.life.is_empty()))
+      .map(|one| {
+        let file = if one.word.trim().is_empty() { String::new() } else { one.file.clone() };
+        (one.name.clone(), file, one.life.clone(), one.root)
+      })
+      .collect();
+    let provider = self.provider(advertised)?;
+    Ok(Prepared { places, extensions, provider })
+  }
+
+  /// The provider: the models of the roster that the catalog makes, which the function of the host answers when it
+  /// gives one, and which a life that inspects asks nothing; and the native search of the web of each of them, which
+  /// the ear of the web asks.
+  fn provider(&self, advertised: Vec<world::Advertised>) -> Result<world::Provider, Fault> {
     let works = self.works();
     let gallery = self.gallery();
     let stall = self.stall.and_then(|seconds| Duration::try_from_secs_f64(seconds).ok());
-    let claude = self.claude.map(PathBuf::from);
-    let config = self.config.map(PathBuf::from);
-    let directory = self.directory;
+    let claude = self.claude.as_ref().map(PathBuf::from);
+    let config = self.config.as_ref().map(PathBuf::from);
+    let directory = self.directory.clone();
     let catalog = Catalog::load()
       .claude(claude.clone(), stall)
       .configured(Path::new(&directory), config.as_deref())
       .map_err(Fault::refused)?;
     let asks: world::Hosted =
       Arc::new(|_, _| Box::pin(async { Err("a life that inspects asks no model".to_owned()) }));
-    let answer = if works { self.answer.map(|one| one.0) } else { Some(asks) };
+    let answer =
+      if works { self.answer.as_ref().map(|one| Arc::clone(&one.0)) } else { Some(asks) };
     let (roster, actor) = (self.roster.as_deref(), self.actor.as_deref());
     let mut provider =
       catalog.provider(directory.clone(), roster, actor, answer.clone()).map_err(Fault::refused)?;
-    let names = self.roster;
-    let preferred = self.actor;
+    let names = self.roster.clone();
+    let preferred = self.actor.clone();
     provider = provider.refreshing(Arc::new(move || {
       world::claude::refresh();
       let fresh = Catalog::load()
@@ -334,14 +352,13 @@ impl Opening {
     if let Some(gallery) = gallery {
       provider = provider.images(gallery);
     }
-    if let Some(stream) = self.stream {
-      provider = provider.writes(stream.0);
+    if let Some(stream) = &self.stream {
+      provider = provider.writes(Arc::clone(&stream.0));
     }
-    if let Some(retrying) = self.retrying {
-      provider = provider.retries(retrying.0);
+    if let Some(retrying) = &self.retrying {
+      provider = provider.retries(Arc::clone(&retrying.0));
     }
-    let search = provider.search();
-    Ok((provider.ear(), search))
+    Ok(provider)
   }
 
   /// The life, booted on the ears of the host and then on the ears of the crate, and the record it opened on. A life
@@ -356,6 +373,38 @@ impl Opening {
     self,
     host: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
   ) -> Result<(Engine, Vec<Object>), Fault> {
+    let prepared = self.prepared()?;
+    self.booted(host, prepared)
+  }
+
+  /// The life, booted as [`Opening::boot`] boots it, on the runtime of tokio of the thread that awaits it: each ear of
+  /// the crate registers its IO on that runtime, and what the life waits for before it boots runs on a blocking thread
+  /// of that runtime, so the thread of the life waits on no command and no server. A panic of that wait goes on in the
+  /// task that awaits.
+  pub async fn open<N: Into<String>>(
+    self,
+    host: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
+  ) -> Result<(Engine, Vec<Object>), Fault> {
+    let waited = tokio::task::spawn_blocking(move || {
+      let prepared = self.prepared();
+      (self, prepared)
+    });
+    let (opening, prepared) = match waited.await {
+      Ok(both) => both,
+      Err(no) => match no.try_into_panic() {
+        Ok(panic) => std::panic::resume_unwind(panic),
+        Err(no) => return Err(Fault::refused(format!("the life did not open: {no}"))),
+      },
+    };
+    opening.booted(host, prepared?)
+  }
+
+  /// The life booted on the ears of the host, on what it waited for, and then on the ears of the crate.
+  fn booted<N: Into<String>>(
+    self,
+    host: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
+    prepared: Prepared,
+  ) -> Result<(Engine, Vec<Object>), Fault> {
     let host: Vec<(String, Box<dyn Ear>)> =
       host.into_iter().map(|(name, ear)| (name.into(), ear)).collect();
     let mut names: Vec<String> = host.iter().map(|(name, _)| name.clone()).collect();
@@ -364,7 +413,7 @@ impl Opening {
     let (keeps, snapshots) = (self.keeps(), self.snapshot != Some(false));
     let path = self.record.clone().filter(|_| snapshots).map(PathBuf::from);
     let restore = path.as_ref().and_then(|path| snapshot::restore(path, &build));
-    let (record, ears, cut) = self.parted(restore.is_some() && keeps)?;
+    let (record, ears, cut) = self.parted(restore.is_some() && keeps, prepared)?;
     let ears = host.into_iter().chain(ears);
     let mut engine = match restore {
       // A life that goes on from a checkpoint boots on more entries than its record holds, and keeps no snapshot.

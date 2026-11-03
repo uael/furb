@@ -386,9 +386,10 @@ impl Coroutine {
       return Poll::Ready(spoken);
     }
     let Some(body) = self.body.as_mut() else { return Poll::Pending };
-    // What the body waits for, a pipe, a timer, a socket, the reactor wakes.
+    // What the body waits for, a pipe, a timer, a socket, the runtime of the thread wakes, or the reactor when the
+    // thread runs none.
     let polled = {
-      let _inside = reactor().enter();
+      let _inside = Handle::try_current().is_err().then(|| reactor().enter());
       body.as_mut().poll(cx)
     };
     if let Poll::Ready(done) = polled {
@@ -516,8 +517,14 @@ pub fn say<W: 'static>(co: &mut Co<W>, saying: Fact) {
   co.spoke(Spoken::Saying(saying));
 }
 
-/// The reactor that wakes an ear when what it waits for is ready: a pipe, a timer, a socket. It is one runtime of
-/// tokio, driven by a thread of its own for the process, and every ear runs on the thread of its life.
+/// The runtime that wakes an ear when what it waits for is ready, a pipe, a timer, a socket, and that its work runs
+/// on: the runtime of the thread that drives the life, or the reactor when that thread runs none.
+pub fn runtime() -> Handle {
+  Handle::try_current().unwrap_or_else(|_| reactor().clone())
+}
+
+/// The reactor of the process, for a door that drives a life with no runtime of tokio: one runtime, driven by a
+/// thread of its own, while every ear runs on the thread of its life.
 pub fn reactor() -> &'static Handle {
   static REACTOR: OnceLock<Handle> = OnceLock::new();
   REACTOR.get_or_init(|| {

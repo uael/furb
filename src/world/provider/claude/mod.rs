@@ -67,7 +67,7 @@ use futures::{FutureExt, StreamExt};
 use sha2::{Digest, Sha256};
 
 use super::{Model, ended, search, uuid};
-use crate::ear::reactor;
+use crate::ear::runtime;
 
 mod accounts;
 mod discover;
@@ -211,7 +211,7 @@ impl Claude {
     });
     let accounts = Arc::new(Accounts::new(accounts, switch));
     let (keeper, asked) = mpsc::unbounded_channel();
-    reactor().spawn(kept(asked, Arc::clone(&accounts)));
+    runtime().spawn(kept(asked, Arc::clone(&accounts)));
     Claude { program: Program::with(bin, args, accounts), stall, gone: patience(), keeper }
   }
 
@@ -328,7 +328,7 @@ impl Program {
       .kill_on_drop(true);
     let asked =
       async move { tokio::time::timeout(Duration::from_secs(10), command.output()).await };
-    let Ok(Ok(out)) = reactor().block_on(asked) else { return true };
+    let Ok(Ok(out)) = runtime().block_on(asked) else { return true };
     let said = String::from_utf8_lossy(&out.stdout);
     let logged =
       serde_json::from_str::<Value>(&said).ok().and_then(|one| one["loggedIn"].as_bool());
