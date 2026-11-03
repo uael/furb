@@ -1,0 +1,107 @@
+//! The local transport on a Unix system: a socket in a folder of mode 0700 that the user owns.
+
+use std::{
+  ffi::CStr,
+  fs::{self, DirBuilder},
+  io,
+  mem::MaybeUninit,
+  os::unix::fs::{DirBuilderExt, MetadataExt},
+  path::{Path, PathBuf},
+  ptr,
+};
+
+use tokio::net::{UnixListener, UnixStream};
+
+use crate::error::TransportError;
+
+pub(crate) type Accepted = UnixStream;
+pub(crate) type Dialed = UnixStream;
+
+pub(crate) struct Listener(UnixListener);
+
+const SOCKET: &str = "host.sock";
+
+pub(crate) async fn listen(folder: &Path) -> Result<Listener, TransportError> {
+  guarded(folder)?;
+  let socket = folder.join(SOCKET);
+  match UnixListener::bind(&socket) {
+    Err(no) if no.kind() == io::ErrorKind::AddrInUse => {
+      if UnixStream::connect(&socket).await.is_ok() {
+        return Err(TransportError::Taken { place: shown(&socket) });
+      }
+      fs::remove_file(&socket).map_err(|source| listening(&socket, source))?;
+      UnixListener::bind(&socket).map(Listener).map_err(|source| listening(&socket, source))
+    }
+    bound => bound.map(Listener).map_err(|source| listening(&socket, source)),
+  }
+}
+
+impl Listener {
+  pub(crate) async fn accept(&self) -> Result<Accepted, TransportError> {
+    let (stream, _) = self.0.accept().await.map_err(TransportError::Accept)?;
+    Ok(stream)
+  }
+}
+
+pub(crate) async fn dial(folder: &Path) -> Result<Dialed, TransportError> {
+  let socket = folder.join(SOCKET);
+  UnixStream::connect(&socket)
+    .await
+    .map_err(|source| TransportError::Dial { place: shown(&socket), source })
+}
+
+/// The login of the peer, who must be the user of the daemon.
+pub(crate) fn login(stream: &Accepted) -> Result<String, TransportError> {
+  let uid = stream.peer_cred().map_err(TransportError::Accept)?.uid();
+  if uid != user() {
+    return Err(TransportError::Stranger { uid });
+  }
+  named(uid)
+}
+
+/// The folder of the socket made, of mode 0700, and refused when another user owns it or may
+/// enter it.
+fn guarded(folder: &Path) -> Result<(), TransportError> {
+  let made = |source| TransportError::Folder { folder: folder.to_owned(), source };
+  DirBuilder::new().recursive(true).mode(0o700).create(folder).map_err(made)?;
+  let held = fs::metadata(folder).map_err(made)?;
+  if !held.is_dir() || held.uid() != user() || held.mode() & 0o077 != 0 {
+    return Err(TransportError::Exposed { folder: folder.to_owned() });
+  }
+  Ok(())
+}
+
+fn user() -> u32 {
+  // SAFETY: geteuid has no precondition and cannot fail.
+  unsafe { libc::geteuid() }
+}
+
+/// The login of a user, from the database of the users.
+fn named(uid: u32) -> Result<String, TransportError> {
+  let mut entry = MaybeUninit::<libc::passwd>::uninit();
+  let mut buffer = vec![0; 4096];
+  let mut found: *mut libc::passwd = ptr::null_mut();
+  // SAFETY: each pointer is valid for the call, and the call writes at most the length of buffer.
+  let code = unsafe {
+    libc::getpwuid_r(uid, entry.as_mut_ptr(), buffer.as_mut_ptr(), buffer.len(), &raw mut found)
+  };
+  if code != 0 {
+    return Err(TransportError::Login(io::Error::from_raw_os_error(code)));
+  }
+  if found.is_null() {
+    return Err(TransportError::Login(io::ErrorKind::NotFound.into()));
+  }
+  // SAFETY: found points at entry, which the call filled.
+  let name = unsafe { (*found).pw_name };
+  // SAFETY: the name is a C string in buffer, which lives until the copy below.
+  let name = unsafe { CStr::from_ptr(name) };
+  Ok(name.to_string_lossy().into_owned())
+}
+
+fn listening(socket: &Path, source: io::Error) -> TransportError {
+  TransportError::Listen { place: shown(socket), source }
+}
+
+fn shown(socket: &Path) -> String {
+  PathBuf::from(socket).display().to_string()
+}
