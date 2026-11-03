@@ -1,5 +1,5 @@
 /** Names, labels, arguments, and help for every slash command. An argument in angle brackets is needed, and one in
- * square brackets may be left out. */
+ * square brackets may be left out. A last entry is another name that the command takes, and it completes to it. */
 export const commands = {
   new: ["New session", "", "Start a fresh life"],
   watch: ["Watch a life", "", "Play a short life that asks no model and costs nothing"],
@@ -59,10 +59,10 @@ export const commands = {
   cancel: ["Cancel work", "[id]", "End an act, or what you sent last on this chain"],
   feed: ["Feed command", "<id> [text]", "Send a line of input to a command; no text closes its input"],
   close: ["Answer an act", "<id> <json>", "Close an act with a JSON value"],
-  name: ["Name this session", "<name>", "Set a name in the session picker"],
+  name: ["Name this session", "<name>", "Set a name in the session picker", "rename"],
   share: ["Share conversation", "[path]", "Export a standalone HTML conversation"],
   export: ["Export transcript", "<path>", "Write the transcript and program to a new JSON file"],
-  workspace: ["Open workspace", "[path]", "Choose a workspace or add a project folder"],
+  workspace: ["Open workspace", "[path]", "Choose a workspace or add a project folder", "resume"],
   view: ["View of the life", "[main|loom|graph]", "Show the life as main, the loom, or the graph"],
   sidebar: [
     "Toggle sidebar",
@@ -97,13 +97,28 @@ export const commands = {
     "",
     "End by force the process that holds this life, when the end of the life does not reach it",
   ],
-  exit: ["Exit", "", "Save every session and quit, while a life in a host of its own goes on"],
-} as const;
-/** Each slash command with its name, and as it is typed with its arguments. */
-export const slashes = Object.entries(commands).map(([name, [label, argument, detail]]) => ({
-  name,
-  label,
-  argument,
-  detail,
-  usage: `/${name}${argument ? ` ${argument}` : ""}`,
-}));
+  help: ["Help", "", "Keys, marks, and slash commands"],
+  exit: ["Exit", "", "Save every session and quit, while a life in a host of its own goes on", "quit"],
+} as const satisfies Record<string, readonly [string, string, string, string?]>;
+const typed = (name: string, argument: string) => `/${name}${argument ? ` ${argument}` : ""}`;
+/** Each slash command with its name, its other name or none, and as it is typed with its arguments: `usage` by its
+ * name, `aliasUsage` by its other name, and `forms` by each name that it takes. */
+export const slashes = Object.entries<readonly [string, string, string, string?]>(commands).map(
+  ([name, [label, argument, detail, alias = ""]]) => ({
+    name,
+    label,
+    argument,
+    detail,
+    alias,
+    usage: typed(name, argument),
+    aliasUsage: alias ? typed(alias, argument) : "",
+    forms: alias ? `${typed(name, argument)} or ${typed(alias, argument)}` : typed(name, argument),
+  }),
+);
+
+/** The text with the other name of a command, when it starts with one, written as the name of the command. */
+export const canonical = (text: string): string => {
+  const [, word = "", rest = ""] = text.match(/^\/([\w-]+)( .*|)$/s) ?? [];
+  const found = word ? slashes.find(({ alias }) => alias === word) : undefined;
+  return found ? `/${found.name}${rest}` : text;
+};

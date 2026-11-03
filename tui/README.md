@@ -367,10 +367,10 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/cancel [id]` | End an act, or what you sent last on this chain |
 | `/feed <id> [text]` | Send a line of input to a command; no text closes its input |
 | `/close <id> <json>` | Close an act with a JSON value |
-| `/name <name>` | Set a name in the session picker |
+| `/name <name> or /rename <name>` | Set a name in the session picker |
 | `/share [path]` | Export a standalone HTML conversation |
 | `/export <path>` | Write the transcript and program to a new JSON file |
-| `/workspace [path]` | Choose a workspace or add a project folder |
+| `/workspace [path] or /resume [path]` | Choose a workspace or add a project folder |
 | `/view [main\|loom\|graph]` | Show the life as main, the loom, or the graph |
 | `/sidebar [outline\|cards\|inbox]` | Show or hide the workspaces with the threads of the session shown and the context, or give the sidebar a shape |
 | `/delete` | Archive a session, or move it and its files to the workspace trash |
@@ -381,7 +381,8 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/end` | End each open life, its commands and its models, then quit |
 | `/reopen` | Reach the life again after it ended in another window or its host was lost, in a host of this machine |
 | `/stop` | End by force the process that holds this life, when the end of the life does not reach it |
-| `/exit` | Save every session and quit, while a life in a host of its own goes on |
+| `/help` | Keys, marks, and slash commands |
+| `/exit or /quit` | Save every session and quit, while a life in a host of its own goes on |
 | `/compact` | Compact this chain now: a model keeps what the work still needs and sums up the rest (the extension compaction) |
 | `/mcp` | Manage the MCP servers: state, tools, resources, prompts, login (the extension mcp) |
 

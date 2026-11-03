@@ -55,14 +55,14 @@ export const palette = part({
         keys: toggle && shown(toggle.key, toggle.binding, this.kitty).replace("1-3", String(index + 1)),
         run: () => this.showView(view),
       });
-    for (const { name, label, argument, detail, usage } of slashes) {
+    for (const { name, label, argument, detail, forms } of slashes) {
       if (name === "new") continue;
       const aside = before.get(name);
       if (aside) choices.push(aside);
       choices.push({
         label,
         detail,
-        command: usage,
+        command: forms,
         keys: keysOf.get(name),
         run: this.command(name, argument),
       });
@@ -527,8 +527,8 @@ export const palette = part({
           })),
         )
         .concat(
-          slashes.map(({ usage, detail }) => ({
-            label: usage,
+          slashes.map(({ forms, detail }) => ({
+            label: forms,
             detail,
             heading: "Slash commands",
             run: () => {},

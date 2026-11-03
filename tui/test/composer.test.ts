@@ -114,6 +114,37 @@ test("a command that the text names whole comes first among its suggestions", ()
     true,
   ));
 
+test("each other name of a command completes to the command and shows it, a typed one runs the command, and /help opens what F1 opens", () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      for (const [alias, command] of [
+        ["rename", "name"],
+        ["quit", "exit"],
+        ["resume", "workspace"],
+      ]) {
+        app.composer.setText("");
+        await screen.mockInput.typeText(`/${alias}`);
+        const rows = (await frame())
+          .split("\n")
+          .filter((line) => line.includes(`/${alias}`) && !line.includes("│"));
+        expect(rows[0]).toContain(`Same as /${command}`);
+        screen.mockInput.pressTab();
+        expect(app.composer.plainText).toBe(`/${command} `);
+      }
+      app.composer.setText("/rename renamed");
+      await app.submit();
+      expect(session.sessionName).toBe("renamed");
+      app.composer.setText("");
+      await screen.mockInput.typeText("/help");
+      await frame();
+      screen.mockInput.pressEnter();
+      await frame();
+      expect(await frame()).toContain("Keys and commands");
+    },
+    undefined,
+    true,
+  ));
+
 test("the shape picker marks the shape of the next prompt and runs /shape, and /edit and its picker offer each prompt with a program", () =>
   composing(
     async ({ session, app, screen, frame }) => {

@@ -1,6 +1,6 @@
 import { shapes } from "furb";
 import { takesNothing } from "furb/life";
-import { slashes } from "../commands.ts";
+import { canonical, slashes } from "../commands.ts";
 import { emojiNamed, emojis } from "../emoji.ts";
 import { shortenHome } from "../files.ts";
 import { clip, count, dollars, graphemes, modelName, share } from "../format.ts";
@@ -128,7 +128,7 @@ export const composer = part({
   async submit(): Promise<void> {
     if (this.submitting) return;
     if (this.session.host.reading) {
-      const typed = this.composer.plainText.trim();
+      const typed = canonical(this.composer.plainText.trim());
       this.composer.setText("");
       let ran = false;
       try {
@@ -146,7 +146,7 @@ export const composer = part({
     this.submitting = true;
     const key = this.draftKey;
     const base = this.session.draftKey;
-    const content = this.composer.plainText;
+    const content = canonical(this.composer.plainText);
     const python = this.session.mode === "python" && !this.session.editing && !content.startsWith("/");
     // The text leaves its draft as it is sent, so what is typed while it is sent stays in the composer.
     this.composer.setText("");
@@ -380,21 +380,23 @@ export const composer = part({
       return;
     }
     if (token.kind === "/") {
-      // The command that the token names whole comes first.
+      // The command that the token names whole comes first. A command that its other name matches shows that name, and
+      // completes to the command.
       this.suggestions = slashes
-        .filter(({ name }) => name.startsWith(token.text))
+        .filter(({ name, alias }) => name.startsWith(token.text) || alias.startsWith(token.text))
         .sort((one, other) => Number(other.name === token.text) - Number(one.name === token.text))
-        .map(
-          ({ name, argument, detail, usage }): Suggestion => ({
-            label: usage,
-            detail,
+        .map(({ name, argument, detail, usage, aliasUsage }): Suggestion => {
+          const other = !name.startsWith(token.text);
+          return {
+            label: other ? aliasUsage : usage,
+            detail: other ? `Same as ${usage}: ${detail}` : detail,
             text: `/${name} `,
             submit: () => {
               this.composer.setText("");
               this.command(name, argument)();
             },
-          }),
-        )
+          };
+        })
         .concat(
           // The commands of the parts, as the life gives them now, follow the commands of the TUI.
           this.parts
