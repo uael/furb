@@ -1182,15 +1182,28 @@ def test_the_round_runs_one_on_opus_medium_three_on_sonnet_and_one_on_opus_high(
   conductor.efforts.update(models)
   conductor.queue[:] = [(key, "", "") for key in models]
   conductor.staff()
-  assert [key for key, _ in conductor.hired] == ["o1", "t1", "s1", "s2", "s3"]
-  assert conductor.queue == [("o2", "", ""), ("t2", "", ""), ("s4", "", "")]
+  assert [key for key, _ in conductor.hired] == ["t1", "o1", "s4", "s1", "s2"]
+  assert conductor.queue == [("t2", "", ""), ("o2", "", ""), ("s3", "", "")]
   conductor.done["worker1"] = None
   conductor.staff()
-  assert [key for key, _ in conductor.hired][5:] == ["o2"]
-  assert conductor.queue == [("t2", "", ""), ("s4", "", "")]
+  assert [key for key, _ in conductor.hired][5:] == ["t2"]
+  assert conductor.queue == [("o2", "", ""), ("s3", "", "")]
   conductor.done["worker2"] = None
   conductor.staff()
-  assert [key for key, _ in conductor.hired][6:] == ["t2"]
+  assert [key for key, _ in conductor.hired][6:] == ["o2"]
+
+
+def test_the_round_hires_the_core_first_then_the_others_then_polish_and_the_stronger_model_first_in_each(conductor: Round) -> None:
+  conductor.efforts.update({"tui-x": SONNET_HIGH, "misc": SONNET_HIGH, "engine-y": SONNET, "host-z": TOP})
+  conductor.queue[:] = [("tui-x", "", "tui"), ("misc", "", "defects"), ("engine-y", "", "defects"), ("host-z", "", "defects")]
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["host-z", "engine-y", "misc", "tui-x"]
+
+
+def test_the_round_moves_the_items_of_backlog_in_the_order_of_their_priority(conductor: Round) -> None:
+  conductor.backlog[:] = [("tui-a", "", "tui"), ("engine-b", "", "defects")]
+  conductor.staff()
+  assert [key for key, _ in conductor.hired] == ["engine-b", "tui-a"]
 
 
 def test_an_item_hires_on_its_own_room_while_a_pr_waits_for_a_fixer_that_no_room_allows(conductor: Round) -> None:
