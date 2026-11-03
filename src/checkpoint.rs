@@ -159,7 +159,7 @@ def checkpoint(define, floor):
       entries += [("clock", f"clock{n}", ROOT, ROOT), ("done", f"clock{n}", "store", v)]
       reserved["clock"] = n
   verbs = ("prompt", "bash", "read", "write", "wait", "cd", "chance")
-  done = {x[1] for x in asked if x[0] == "bash" and over(x[1]) and scope(x[1]) in live}
+  done = {x[1] for x in asked if x[0] == "bash" and scope(x[1]) in live}
   carried = sorted((one for one in named | done if get(one)[0] in verbs), key=lambda one: (get(one)[0], _number(one)))
   paused = sorted({scope(one) for one in carried if get(one)[0] == "prompt"}, key=_number)
   entries += [("pause", c, OPERATOR) for c in paused]
@@ -178,7 +178,8 @@ def checkpoint(define, floor):
       entries += [x for x in transcript(scope(one)) if x[0] == "started" and x[1] == one and get(x[2]) is None]
     else:
       cut.append(one)
-      entries += [("started", one, "store"), ("done", one, "store", Refused(f"{one} was cut by the checkpoint"))]
+      why = f"{act[4]!r} was interrupted: the life that ran it ended before it did" if act[0] == "bash" else f"{one} was cut by the checkpoint"
+      entries += [("started", one, "store"), ("done", one, "store", Refused(why))]
   for kind, n in counts.items():
     take(kind, n)
   for c in live:

@@ -1031,6 +1031,22 @@ fn a_later_life_of_the_engine_that_wrote_a_checkpoint_boots_on_it_and_on_the_tai
 }
 
 #[test]
+fn a_command_that_ran_at_a_checkpoint_ends_in_the_life_that_goes_on_from_it_as_interrupted() {
+  let at = place("checkpoint-running");
+  let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  let with = verbs::Bash { on: Some("chain1".to_owned()), ..Default::default() };
+  drop(first.bash("sleep 60", with).unwrap());
+  first.checkpoint().unwrap();
+  let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  assert!(later.pending().unwrap().is_empty(), "the checkpoint left nothing to wake");
+  assert_eq!(
+    closed(&mut later, "close(str(peek('bash1')))").as_ref().as_str(),
+    Some("'sleep 60' was interrupted: the life that ran it ended before it did"),
+    "the command ends as the ear of commands ends one that a life left"
+  );
+}
+
+#[test]
 fn a_life_that_keeps_no_record_refuses_a_checkpoint() {
   let at = place("checkpoint-unkept");
   let life = Opening { keeps: Some(false), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
