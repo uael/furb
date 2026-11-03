@@ -372,12 +372,12 @@ async def patch(title: str, why: str, ask: str) -> tuple[str, str, str]:
       out, end = out + text[end:at] + new, stop
     return out + text[end:]
 
+  heads = r"^(?:(?:async )?def |class )(\w+)|^(\w+)(?:: [^=\n]+)? = "
+
+  def names(part: str) -> list[str]:
+    return [a or b for a, b in re.findall(heads, part, re.M)]
+
   def changed(text: str, edits: list[tuple[str, str]]) -> list[str]:
-    heads = r"^(?:(?:async )?def |class )(\w+)|^(\w+)(?:: [^=\n]+)? = "
-
-    def names(part: str) -> list[str]:
-      return [a or b for a, b in re.findall(heads, part, re.M)]
-
     said: list[str] = []
     for old, new in edits:
       at = text.index(old)
@@ -389,6 +389,15 @@ async def patch(title: str, why: str, ask: str) -> tuple[str, str, str]:
       lines = [f"{n} line" + ("s" if n != 1 else "") for n in (len(old.splitlines()), len(new.splitlines()))]
       said.append(f"Line {line}{after}: the pair changes {lines[0]} into {lines[1]}{adds}.")
     return said
+
+  def summed(text: str, edits: list[tuple[str, str]]) -> str:
+    near = [names(text[: text.index(old)])[-1:] for old, _ in sorted(edits, key=lambda e: text.index(e[0]))]
+    found = list(dict.fromkeys(x for one in near for x in one)) or ["the top of the file"]
+    if found[12:]:
+      said = ", ".join(found[:12]) + f" and {len(found) - 12} more"
+    else:
+      said = " and ".join([", ".join(found[:-1]), found[-1]] if found[1:] else found)
+    return f"{len(edits)} pairs change {said}."
 
   if len(title) > 70 or not re.fullmatch(PR_TITLE, title):
     raise Refused(f"the title {title!r} is not type(area): What changed, in 70 characters or fewer")
@@ -454,6 +463,12 @@ async def patch(title: str, why: str, ask: str) -> tuple[str, str, str]:
       )
     else:
       raise Refused(f"{where} gave no pairs and checks that pass in {TRIES + 1} answers. {brief}")
+    outcome = [*changed(was, pairs), PROOF, *gaps]
+    try:
+      prcheck(title, why, outcome)
+    except Refused:
+      outcome = [summed(was, pairs), PROOF, *gaps]
+      prcheck(title, why, outcome)
     pushed = await bash(
       f"cd {tree} && git commit -q --no-verify -am {shq(title)}"
       f" && (git fetch -q origin w/{key} 2>/dev/null; true) && git push -q --force-with-lease -u origin w/{key}"
@@ -463,7 +478,7 @@ async def patch(title: str, why: str, ask: str) -> tuple[str, str, str]:
     )
     if pushed.code != 0:
       raise Refused(f"no push of w/{key}: {pushed.stderr.content[-500:]}")
-    opened = await pr(title, why, [*changed(was, pairs), PROOF, *gaps], checks, where=place, labels=f" --label w:{key}")
+    opened = await pr(title, why, outcome, checks, where=place, labels=f" --label w:{key}")
     assert isinstance(opened, Exit)
     url = (opened.stdout.content.strip().splitlines() or [""])[-1]
     if opened.code != 0 or not url.startswith("https://"):
