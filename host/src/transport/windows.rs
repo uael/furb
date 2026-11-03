@@ -1,7 +1,7 @@
 //! The local transport on Windows: a named pipe, which only the user of the daemon reaches, and
 //! which takes no peer of another machine.
 
-use std::{io, path::Path, ptr, time::Duration};
+use std::{future, io, path::Path, ptr, time::Duration};
 
 use tokio::net::windows::named_pipe::{
   ClientOptions, NamedPipeClient, NamedPipeServer, ServerOptions,
@@ -30,10 +30,11 @@ pub(crate) struct Listener {
 /// another.
 const OWNER_ALONE: &str = "D:P(A;;GA;;;OW)";
 
-pub(crate) async fn listen(folder: &Path) -> Result<Listener, TransportError> {
+pub(crate) fn listen(
+  folder: &Path,
+) -> impl Future<Output = Result<Listener, TransportError>> + use<> {
   let place = piped(folder);
-  let next = instance(&place, true)?;
-  Ok(Listener { place, next })
+  future::ready(instance(&place, true).map(|next| Listener { place, next }))
 }
 
 impl Listener {
