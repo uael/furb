@@ -277,7 +277,19 @@ export const rail = part({
       this.row({ backgroundColor: selected ? c.selected : c.panel, onMouseUp: this.click(run), ...options }),
       selected ? c.selected : c.raised,
     );
-    row.add(this.text(head, c.muted, { truncate: true, flexGrow: 1, flexShrink: 1 }));
+    const margins = [options.paddingLeft, options.paddingRight, options.marginLeft, options.marginRight];
+    const room =
+      this.sideWidth -
+      margins.reduce<number>((sum, one) => sum + (typeof one === "number" ? one : 0), 0) -
+      (tail.length ? Bun.stringWidth(plain(tail)) + space.between : 0);
+    const fits = Bun.stringWidth(plain(head)) <= room;
+    row.add(
+      this.text(fits ? head : this.clipParts(head, room), c.muted, {
+        truncate: true,
+        flexGrow: 1,
+        flexShrink: 1,
+      }),
+    );
     if (tail.length) row.add(this.text(tail, c.muted, { marginLeft: space.between, flexShrink: 0 }));
     return row;
   },

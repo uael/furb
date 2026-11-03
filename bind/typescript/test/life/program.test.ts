@@ -240,11 +240,11 @@ test("an act that no word made stands as one line of python, its call bound to i
 test("a line too wide for its room folds its longest strings first, each to its start and a fold", () => {
   const line = 'b = bash("git fetch -q origin && git log --oneline -5 origin/main", timeout=60)  # "a quote"';
   const { text, folds } = foldStrings(line, 60);
-  expect(text).toBe('b = bash("git fetch -q origin...", timeout=60)  # "a quote"');
+  expect(text).toBe('b = bash("git fetch -q origin &&…", timeout=60)  # "a quote"');
   expect(folds).toEqual([
-    { literal: 0, at: 29, whole: "git fetch -q origin && git log --oneline -5 origin/main" },
+    { literal: 0, at: 32, whole: "git fetch -q origin && git log --oneline -5 origin/main" },
   ]);
-  expect(foldStrings(line, 50).text).toBe('b = bash("git fetch -q...", timeout=60)  # "a quote"');
+  expect(foldStrings(line, 50).text).toBe('b = bash("git fetch -q…", timeout=60)  # "a quote"');
   expect(foldStrings(line, 60, new Set([0])).text).toBe(line);
   expect(foldStrings(line, 200).folds).toEqual([]);
 });
@@ -324,8 +324,8 @@ test("a line too wide wraps between tokens in rows of a width at most, and the r
 
 test("a fold never cuts an escape of the string that it folds", () => {
   const line = 'x = "aaaaaaaaaaa\\nbbbb cccc dddd eeee"';
-  expect(foldStrings(line, 20).text).toBe('x = "aaaaaaaaaaa..."');
-  expect(foldStrings('x = "aaaaaaaaaa\\u00e9bbbb cccc dddd eeee"', 20).text).toBe('x = "aaaaaaaaaa..."');
+  expect(foldStrings(line, 20).text).toBe('x = "aaaaaaaaaaa\\n…"');
+  expect(foldStrings('x = "aaaaaaaaaa\\u00e9bbbb cccc dddd eeee"', 20).text).toBe('x = "aaaaaaaaaa…"');
 });
 
 test("a quote that ran stands in its word as one binding, and the blank lines that keep the numbers below it stand in its line", () => {
@@ -372,9 +372,9 @@ test("a line too wide for one row lays out as ruff format lays it out, and its r
 test("a line that a layout folds keeps each fold in its row, and a string that the operator opened stays whole", () => {
   const line = 'x = f("a long string that runs on and on past its room", "short")';
   const [row] = layout(line, 40, new Set());
-  expect(row?.text).toBe('x = f("a long string that...", "short")');
+  expect(row?.text).toBe('x = f("a long string that ru…", "short")');
   expect(row?.folds).toEqual([
-    { literal: 0, at: 25, whole: "a long string that runs on and on past its room" },
+    { literal: 0, at: 28, whole: "a long string that runs on and on past its room" },
   ]);
   expect(layout(line, 56, new Set([0])).map((one) => one.text)).toEqual([
     "x = f(",
