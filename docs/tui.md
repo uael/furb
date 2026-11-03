@@ -69,7 +69,9 @@ on a thread shows it in the feed, on its chain, and the input then sends each me
 on=thread)`, which its model reads at its next step and answers. A message to a resolved thread opens it again. Under
 the thread lit, Collapse folds it in the feed to its box on one line, Resolve closes it, as `close(None, thread)` does,
 and Reply makes it the target of the input, as Reply at the end of its box does. The resolved threads fold under one
-row, Resolved, which a click opens. After ⌥T the arrows move in the sidebar, Enter opens the workspace, the session or
+row, Resolved, which a click opens. The threads that the ladder of a thread made, its agents, fold under it to one row
+with their count, Agents, which a click opens, each agent one step deeper, and a question in an agent shows on the row
+of the thread over it. After ⌥T the arrows move in the sidebar, Enter opens the workspace, the session or
 the thread under them, → peeks at a workspace, Space folds, r resolves, o replies, and Esc gives the keys back to the
 input. Under the sidebar, in the corner beside the input and one row under the list, Context says how full the window
 of the chain shown is and where a grant pauses it, its tokens, and what it spent. It says No answer yet before the first

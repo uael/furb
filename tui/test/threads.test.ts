@@ -576,3 +576,31 @@ test("a line that failed says its reason once, under it, and not again beside it
     size,
     false,
   ));
+
+test("the agents that a thread hires fold under it to their count in the sidebar, and a click lists each one row deeper", () =>
+  composing(
+    async (use) => {
+      const { session, app, frame } = use;
+      app.composer.setText("Hire eight workers.");
+      await app.submit();
+      // The prompts of the agents stand on chains of their own, so the frames are read until the sidebar folds them.
+      let rows: string[] = [];
+      for (let step = 0; step < 100 && !rows.some((row) => /Agents +8/.test(row)); step++) {
+        await session.refresh();
+        rows = rail(session, await frame());
+        await Bun.sleep(50);
+      }
+      const fold = rows.findIndex((row) => /▸ +Agents +8/.test(row));
+      expect(fold).toBeGreaterThan(rows.findIndex((row) => row.includes("Hire eight workers")));
+      expect(rows.filter((row) => row.includes("Think until I cancel"))).toHaveLength(0);
+      await railClick(use, "Agents");
+      rows = rail(session, await frame());
+      const agents = rows.filter((row) => row.includes("Think until I cancel"));
+      expect(agents).toHaveLength(8);
+      const lead = rows.find((row) => row.includes("Hire eight workers")) ?? "";
+      expect((agents[0] ?? "").search(/\S/)).toBeGreaterThan(lead.search(/\S/));
+      await session.submit("/cancel");
+    },
+    { width: 152, height: 60 },
+    true,
+  ));
