@@ -617,13 +617,23 @@ fn the_boot_of_a_life_asks_the_claude_command_line_its_models_once_and_a_later_s
   }
   .boot::<String>([])
   .unwrap();
+  // This test failed once in 20 full runs, with no log that said why. Each check says what the
+  // fake saw, so the next failure names its cause.
+  let saw = || {
+    let heard = |name: &str| fs::read_to_string(at.join(name)).unwrap_or_else(|no| no.to_string());
+    format!("discoveries: {:?}, model: {:?}", heard("discoveries"), heard("model"))
+  };
   assert_eq!(
     asked(),
     1,
-    "the opening asked the models, and the stand of the boot holds what it found"
+    "the opening asked the models, and the stand of the boot holds what it found; {}",
+    saw()
   );
-  stood(&mut engine).unwrap();
-  assert_eq!(asked(), 2, "a later stand asks the command line again");
+  let started = std::time::Instant::now();
+  let stand = stood(&mut engine);
+  let took = started.elapsed();
+  assert!(stand.is_ok(), "the stand took {took:?} and failed: {stand:?}; {}", saw());
+  assert_eq!(asked(), 2, "a later stand asks the command line again, in {took:?}; {}", saw());
 }
 
 #[test]
