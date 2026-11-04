@@ -6,12 +6,16 @@
 use std::{
   io,
   net::{IpAddr, Ipv4Addr, SocketAddr},
-  path::PathBuf,
+  path::{Path, PathBuf},
   pin::Pin,
+  sync::Arc,
   task::{Context, Poll, ready},
 };
 
-use base64::{Engine, engine::general_purpose::STANDARD};
+use base64::{
+  Engine,
+  engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+};
 use futures::{SinkExt, StreamExt};
 use http_body_util::{BodyExt, Empty};
 use hyper::{
@@ -20,21 +24,28 @@ use hyper::{
   header::{AUTHORIZATION, HOST},
 };
 use hyper_util::rt::TokioIo;
-use serde::{Deserialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::{
-  io::{AsyncRead, AsyncWrite, ReadBuf},
+  fs,
+  io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf},
   net::{TcpListener, TcpStream},
 };
 use tokio_tungstenite::{
   WebSocketStream,
-  tungstenite::{Message, protocol::WebSocketConfig},
+  tungstenite::{
+    Error as Broken, Message,
+    handshake::server::{
+      ErrorResponse, Request as HandshakeRequest, Response as HandshakeResponse,
+    },
+    protocol::WebSocketConfig,
+  },
 };
 
 use super::{Dialer, Identity, Who};
 use crate::{
   access::Access,
   error::{AccessError, TransportError},
-  protocol::BOUND,
+  protocol::{BOUND, Role},
 };
 
 /// The transport of TCP at an address on loopback or on the tailnet. A listener of WebSocket is a
@@ -276,15 +287,13 @@ impl LocalApi {
 }
 
 #[cfg(unix)]
-async fn connected(socket: &std::path::Path) -> io::Result<tokio::net::UnixStream> {
+async fn connected(socket: &Path) -> io::Result<tokio::net::UnixStream> {
   tokio::net::UnixStream::connect(socket).await
 }
 
 #[cfg(windows)]
 #[expect(clippy::unused_async, reason = "the same signature as the unix one, which awaits")]
-async fn connected(
-  socket: &std::path::Path,
-) -> io::Result<tokio::net::windows::named_pipe::NamedPipeClient> {
+async fn connected(socket: &Path) -> io::Result<tokio::net::windows::named_pipe::NamedPipeClient> {
   tokio::net::windows::named_pipe::ClientOptions::new().open(socket)
 }
 
@@ -330,6 +339,100 @@ impl Identity for Tailscale {
     let role = self.access.role(&whois.profile.login)?;
     Ok(Who { login: whois.profile.login, role })
   }
+}
+
+/// The door of the windows of this machine: WebSocket on loopback, since a web view reaches no
+/// socket and no pipe. A page of any origin reaches loopback too, so the door lets in only a peer
+/// that gives the token of the daemon in its query. Only the user reads the token, in the file of
+/// the folder of the daemon that [`Door::open`] writes, and a peer that gives it is the user, who
+/// writes.
+pub(crate) struct Door {
+  listener: TcpListener,
+  ticket: Ticket,
+}
+
+/// What a peer of the door must give, and who it is once it gave it.
+#[derive(Clone)]
+pub(crate) struct Ticket {
+  token: Arc<str>,
+  login: Arc<str>,
+}
+
+/// What the file of the door says: the address that a window dials, with its token.
+#[derive(Serialize)]
+struct Said<'a> {
+  url: &'a str,
+}
+
+impl Door {
+  /// The door listening on a free port of loopback, with a new token, and its address written in
+  /// a file that only the user reads.
+  pub(crate) async fn open(file: &Path) -> Result<Door, TransportError> {
+    let listener = Tcp::new(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0)).listen().await?;
+    let at = listener.local_addr().map_err(TransportError::Accept)?;
+    let mut drawn = [0u8; 32];
+    getrandom::fill(&mut drawn).map_err(TransportError::Random)?;
+    let token = URL_SAFE_NO_PAD.encode(drawn);
+    let url = format!("ws://{at}/?token={token}");
+    written(file, &serde_json::to_vec(&Said { url: &url })?)
+      .await
+      .map_err(|source| TransportError::Door { file: file.to_owned(), source })?;
+    let ticket = Ticket { token: token.into(), login: super::local::own()?.into() };
+    Ok(Door { listener, ticket })
+  }
+
+  /// The next peer of the door, and what it must give.
+  pub(crate) async fn accept(&self) -> Result<(TcpStream, Ticket), TransportError> {
+    let (stream, _) = self.listener.accept().await.map_err(TransportError::Accept)?;
+    Ok((stream, self.ticket.clone()))
+  }
+}
+
+impl Ticket {
+  /// The WebSocket of a peer that gave the token in the query of its upgrade, and who it is. A
+  /// peer that gives no token, or another, gets a refusal of HTTP and no socket.
+  pub(crate) async fn admitted(
+    self,
+    stream: TcpStream,
+  ) -> Result<(Messages<TcpStream>, Who), TransportError> {
+    #[expect(clippy::result_large_err, reason = "the refusal is the type that tungstenite asks")]
+    let checked = |asked: &HandshakeRequest, answer: HandshakeResponse| {
+      let query = asked.uri().query().unwrap_or_default();
+      let token = form_urlencoded::parse(query.as_bytes()).find(|(key, _)| key == "token");
+      if token.is_some_and(|(_, value)| same(value.as_bytes(), self.token.as_bytes())) {
+        return Ok(answer);
+      }
+      let mut refused = ErrorResponse::new(Some("This door needs the token of the daemon.".into()));
+      *refused.status_mut() = StatusCode::FORBIDDEN;
+      Err(refused)
+    };
+    let opened = tokio_tungstenite::accept_hdr_async_with_config(stream, checked, Some(config()));
+    let socket = opened.await.map_err(|no| match no {
+      Broken::Http(refused) if refused.status() == StatusCode::FORBIDDEN => {
+        TransportError::Tokenless
+      }
+      no => TransportError::Upgrade(Box::new(no)),
+    })?;
+    Ok((Messages::new(socket), Who { login: self.login.to_string(), role: Role::Write }))
+  }
+}
+
+/// Whether two tokens are the same, in a time that does not tell how much of them is.
+fn same(one: &[u8], other: &[u8]) -> bool {
+  one.len() == other.len() && one.iter().zip(other).fold(0, |differ, (a, b)| differ | (a ^ b)) == 0
+}
+
+/// A file written whole or not at all, which only the user reads: a reader never sees a part.
+async fn written(file: &Path, bytes: &[u8]) -> io::Result<()> {
+  let draft = file.with_extension("draft");
+  let mut options = fs::OpenOptions::new();
+  options.write(true).create(true).truncate(true);
+  #[cfg(unix)]
+  options.mode(0o600);
+  let mut out = options.open(&draft).await?;
+  out.write_all(bytes).await?;
+  out.sync_all().await?;
+  fs::rename(&draft, file).await
 }
 
 #[cfg(test)]

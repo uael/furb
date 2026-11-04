@@ -69,6 +69,11 @@ pub(crate) async fn dial(folder: &Path) -> Result<Dialed, TransportError> {
 
 /// The login of the user of the daemon, the one user whom the access list of the pipe lets in.
 pub(crate) fn login(_: &Accepted) -> Result<String, TransportError> {
+  own()
+}
+
+/// The login of the user of the daemon.
+pub(crate) fn own() -> Result<String, TransportError> {
   let mut name = [0u16; 257];
   let mut size: u32 = 257;
   // SAFETY: name holds size units, and the call writes at most that many.

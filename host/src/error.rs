@@ -140,6 +140,13 @@ pub enum TransportError {
   /// Plain TCP listens only where `WireGuard` or the machine keeps the frames.
   #[error("plain TCP listens only on loopback or on the tailnet, not on {addr}")]
   Open { addr: SocketAddr },
+  #[error("the door of the windows draws no token")]
+  Random(#[source] getrandom::Error),
+  #[error("the address of the door of the windows cannot be written in {}", file.display())]
+  Door { file: PathBuf, source: io::Error },
+  /// A peer of the door of the windows gave no token of the daemon, or another.
+  #[error("a peer of the door of the windows gave no token of the daemon")]
+  Tokenless,
   #[error("the WebSocket of a peer did not open")]
   Upgrade(#[source] Box<tokio_tungstenite::tungstenite::Error>),
   #[error(transparent)]

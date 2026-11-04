@@ -239,6 +239,7 @@ mod net {
       opening,
       grace: Duration::from_secs(1),
       tailnet: Some(Tailnet { identity, ports }),
+      door: None,
     };
     let local = Local::new(folder().join("host"));
     let listener = local.listen().await.unwrap();
@@ -264,5 +265,47 @@ mod net {
       ws.ask(1, Verb::List).await,
       Some(Frame::Reply { id: 1, answer: Answer::Lives(vec![]) })
     );
+  }
+  #[tokio::test]
+  async fn the_door_of_the_windows_lets_in_only_the_peer_that_gives_its_token() {
+    use futures::{SinkExt, StreamExt};
+    use tokio_tungstenite::{client_async, tungstenite::Message};
+
+    let file = folder().join("window.json");
+    let opening = Opening { extensions: Some(false), ..Opening::default() };
+    let settings =
+      Settings { opening, grace: Duration::from_secs(1), tailnet: None, door: Some(file.clone()) };
+    let local = Local::new(folder().join("host"));
+    let listener = local.listen().await.unwrap();
+    tokio::spawn(async move { run(&local, listener, settings).await });
+    let mut tries = 0..250;
+    let said: serde_json::Value = loop {
+      match std::fs::read(&file) {
+        Ok(bytes) => break serde_json::from_slice(&bytes).unwrap(),
+        Err(no) if tries.next().is_none() => panic!("the daemon never opened its door: {no}"),
+        Err(_) => tokio::time::sleep(Duration::from_millis(20)).await,
+      }
+    };
+    #[cfg(unix)]
+    {
+      use std::os::unix::fs::PermissionsExt;
+      assert_eq!(std::fs::metadata(&file).unwrap().permissions().mode() & 0o777, 0o600);
+    }
+    let url = said["url"].as_str().unwrap().to_owned();
+    let (base, token) = url.split_once("?token=").unwrap();
+    let addr = base.trim_start_matches("ws://").trim_end_matches('/').to_owned();
+    for refused in [base.to_owned(), format!("{base}?token=0{}", &token[1..])] {
+      let stream = tokio::net::TcpStream::connect(&addr).await.unwrap();
+      let no = client_async(refused.as_str(), stream).await.unwrap_err();
+      assert!(no.to_string().contains("403"), "{refused}: {no}");
+    }
+    let stream = tokio::net::TcpStream::connect(&addr).await.unwrap();
+    let (mut socket, _) = client_async(url.as_str(), stream).await.unwrap();
+    let hello = Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Window, name: None });
+    let request = serde_json::to_string(&Request { id: 0, verb: hello }).unwrap();
+    socket.send(Message::text(request)).await.unwrap();
+    let Some(Ok(Message::Text(heard))) = socket.next().await else { panic!("no welcome") };
+    let login = std::env::var("USER").unwrap();
+    assert_eq!(serde_json::from_str::<Frame>(&heard).unwrap(), welcomed(&login, Role::Write));
   }
 }
