@@ -567,10 +567,13 @@ export const feed = part({
         // A message that a branch took shows what its thread held when the branch began.
         const mine = taken.has(act.id);
         const made = mine ? (takenMade().get(act.id) ?? []) : madeBy(act.id);
-        const seen = `${made.length}:${made.filter((one) => one.done).length}:${thread?.messages.length ?? 0}:${thread?.asked.length ?? 0}:${thread?.state}`;
         const folded = Boolean(thread && this.threadFolded(act.id));
         if (folded) collapsed = depth;
-        const news = this.unread(act.id, seen, folded);
+        // A thread that stands open shows its work, which the operator read once he leaves it. A folded thread shows
+        // the work past the place up to which he read it as unread.
+        const work = [act, ...made, ...(thread?.messages ?? []), ...(thread?.asked ?? [])];
+        if (thread && !folded) w.shows(act.id, work);
+        const news = folded && w.unreadThread(act.id, work);
         const steps = made.length + (thread?.messages.length ?? 0);
         // A folded thread keeps its header alone, drawn as the open thread draws it, with how many steps it holds.
         // Its state stands beside its shape, as the open thread says it.

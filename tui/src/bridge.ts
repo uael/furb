@@ -126,6 +126,8 @@ export interface HostState extends Plain {
   facts: number;
   prompts: Prompt[];
   notices: Notice[];
+  /** The place up to which the operator read each chain or thread, as the facts seen of the record say it. */
+  seen?: [string, number][];
   streams: [string, Stream][];
   pending: [string, string][];
 }
@@ -146,6 +148,7 @@ export class HostView extends EventEmitter implements Plain {
   seq = 0;
   prompts = new Map<string, Prompt>();
   notices = new Map<string, Notice>();
+  seen = new Map<string, number>();
   streams = new Map<string, Stream>();
   pending = new Map<string, string>();
   constructor(private request: (target: string, method: string, args: unknown[]) => Promise<unknown>) {
@@ -165,6 +168,7 @@ export class HostView extends EventEmitter implements Plain {
     facts,
     prompts,
     notices,
+    seen = [],
     streams,
     pending,
     measures = {},
@@ -178,6 +182,8 @@ export class HostView extends EventEmitter implements Plain {
       this.prompts = new Map(prompts.map((prompt) => [prompt.id, prompt]));
     if (this.changed("notices", notices))
       this.notices = new Map(notices.map((notice) => [notice.id, notice]));
+    if (this.changed("seen", seen)) this.seen = new Map(seen);
+    if (this.changed("seen", seen)) this.seen = new Map(seen);
     this.streams = new Map(streams);
     if (this.changed("pending", pending)) this.pending = new Map(pending);
     if (facts) this.emit("facts");
@@ -224,6 +230,8 @@ export class HostView extends EventEmitter implements Plain {
   decline = (id: string, words: string) => this.ask<unknown>("console", "decline", id, words);
   /** The notice that the operator read, which the TUI shows no more as unread. */
   dismiss = (id: string) => this.ask<unknown>("console", "dismiss", id);
+  /** The operator read a chain or a thread up to a place, which the record keeps as a fact seen. */
+  see = (about: string, place: number) => this.ask<null>("library", "seen", about, place);
   attachImage = (path: string) => this.ask<ImageAttachment>("session", "attachImage", path);
   sendQueued = (entry: FollowUp) => this.ask<string>("library", "queue", entry);
   resume = () => this.ask<unknown>("session", "resume");

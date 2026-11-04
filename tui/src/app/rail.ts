@@ -9,6 +9,7 @@ import {
   gist,
   nestThreads,
   type ThreadNode,
+  threadWork,
 } from "furb/life";
 import { checkoutOf } from "../checkout.ts";
 import { clock } from "../clock.ts";
@@ -229,6 +230,11 @@ export const rail = part({
       this.schedule();
     }
     return open ?? own.at(-1);
+  },
+
+  /** Whether a thread holds work that the operator did not read, as the facts seen of the record say. */
+  unreadThread(thread: ChainThread): boolean {
+    return this.session.unreadThread(thread.act.id, threadWork(thread));
   },
 
   /** The state of a thread in a word and its color. */
@@ -595,6 +601,7 @@ export const rail = part({
         ]),
       ]),
       this.threadsKey(threads),
+      threads.map((thread) => this.unreadThread(thread)),
       active?.act.id,
       [...this.unfolded],
       this.renaming && this.itemKey(this.renaming.item),
@@ -671,7 +678,7 @@ export const rail = part({
     const threadRow = (thread: ChainThread, indent: number, state = thread.state) => {
       const id = `th:${thread.act.id}`;
       const lit = active === thread;
-      const [mark, tone] = threadMarks(thread, state);
+      const [mark, tone] = threadMarks(thread, state, this.unreadThread(thread));
       order(id, {
         enter: () => this.chooseThread(thread),
         space: () => this.foldThread(thread.act.id),
@@ -699,7 +706,7 @@ export const rail = part({
     const card = (thread: ChainThread, state = thread.state) => {
       const id = `th:${thread.act.id}`;
       const lit = active === thread || cursor === id;
-      const [mark, tone] = threadMarks(thread, state);
+      const [mark, tone] = threadMarks(thread, state, this.unreadThread(thread));
       order(id, {
         enter: () => this.chooseThread(thread),
         space: () => this.foldThread(thread.act.id),
