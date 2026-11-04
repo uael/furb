@@ -238,10 +238,11 @@ impl Provider {
   /// A reply reads the turns of its chain: the system prompt is the engine, a user turn goes as its
   /// python and the images that the prompts it opens name, and an assistant turn as the blocks its
   /// provider gave. It is done with the turn of the model, or with a refusal; a recoverable refusal
-  /// gives the model another turn with its cause, and never pauses the chain. A turn whose word
-  /// lost the marks of a fence or of a tool call around it, or the line of three backticks at its
-  /// end, tells its chain so once, before its done. A done of a reply that the ear did not say ends
-  /// the call of its model.
+  /// gives the model another turn with its cause, and never pauses the chain. A prompt too long for
+  /// the context of the model is no recoverable refusal, so a second one in a row pauses the chain.
+  /// A turn whose word lost the marks of a fence or of a tool call around it, or the line of three
+  /// backticks at its end, tells its chain so once, before its done. A done of a reply that the ear
+  /// did not say ends the call of its model.
   ///
   /// The ear says each part of a word that the model finished and that the gate finds nothing
   /// against as a writing of its rung, unless a pause holds the rung. A reply whose part ran is
