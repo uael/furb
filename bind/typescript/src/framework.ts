@@ -277,11 +277,10 @@ export class Life extends Chain {
 }
 
 /** A life on its record, or a new one when the record holds nothing, whose prompts go to the model named, or to the
- * default actor of the crate. Its pending work resumes at once. */
+ * default actor of the crate. Its pending work resumes at once, since the open of the engine resumes it (#1193). */
 export async function open(record?: string, options: LifeOptions = {}): Promise<Life> {
   const { model, roster, directory, claude, extensions } = options;
   const session = new Session({ record, model, roster, cwd: directory, claude, extensions });
   session.open();
-  await session.resume();
   return new Life(session);
 }

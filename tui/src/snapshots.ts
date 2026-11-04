@@ -263,7 +263,7 @@ export class Snapshots {
       selected,
       acts: acts.map((act) => row(act, this.lines.get(act.id), this.took.get(act.id))),
       count,
-      paused: this.session.isPaused(selected) || this.session.pending.size > 0,
+      paused: this.session.isPaused(selected),
       cause: this.session.pauseOf(selected) ?? null,
       dispatched: this.dispatched,
       ...(given?.roster === view.roster ? {} : { roster: view.roster }),
