@@ -575,6 +575,26 @@ async def test_a_command_accepts_the_codes_that_its_ok_names_and_every_code_when
   assert [a[7] for a in said(log, "bash")] == [(0, 1), True, (0,)]
 
 
+async def test_what_an_ok_or_an_accepts_raises_the_word_that_awaits_the_command_raises_and_every_other_word_goes_on() -> (
+  None
+):
+  """What an ok or an accepts raises as it judges the code of a command, the word that awaits the command raises at its await, and every other word goes on."""
+  sand, log, root = born(
+    "x = bash('one', ok=lambda e: True)\ntry:\n  await x\nexcept TypeError:\n  got = ['type']\n"
+    "accepts = lambda command, exit: 1 / 0\ny = bash('two')\ntry:\n  await y\nexcept ZeroDivisionError:\n  got.append('zero')\n"
+    "close(got)",
+    "close(3)",
+    auto=False,
+  )
+  asked = engine.prompt(list, "run them", on=root)
+  await settle()
+  sand.exits(said(log, "bash")[0][1], 0)
+  await settle()
+  sand.exits(said(log, "bash")[1][1], 0)
+  assert await asked == ["type", "zero"]
+  assert await engine.prompt(int, "then", on=root) == 3
+
+
 def judged(plan: Sequence[tuple[str, int | None, str]], head: str = "") -> str:
   """A word that runs each command of the plan in turn, and closes with those whose code it accepted."""
   return (

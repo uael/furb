@@ -26,6 +26,12 @@ use crate::value::Object;
 /// checkpoint around them are the engine's own work, which the host runs unbounded. The bound is
 /// the crate's, so the opening sets it, and the Kernel, which python runs too, holds none.
 ///
+/// A Kernel that raises loses the frame of each word that it stepped, so before a fresh Kernel
+/// takes the next act, each run that is not over ends with a refusal that says its word was
+/// lost, each open wants of it first, so the chain holds no rung as running and takes its next
+/// step. A rung that awaited an act through a wants hears only that act, so it is closed with
+/// that refusal, and a rung of any other run hears the done of its run.
+///
 /// The module of the engine holds the names python gives a module before the engine runs, so a word
 /// reads them in a chain as it reads them in python, and as the gate reads them. No loader made the
 /// module here, so it has no spec and no loader. Python binds `__debug__` among its builtins, and
@@ -110,6 +116,19 @@ def __lasting(name, ear):
       if isinstance(heard, tuple) and isinstance(wait, (set, frozenset)) and heard[0] in wait:
         if get(heard[1]) is heard and not over(heard[1]):
           yield "done", heard[1], __engine["Refused"](why)
+      if name == "kernel":
+        lost = f"{why}, so the word of the rung of this run was lost and runs no more"
+        n, refused = 1, __engine["Refused"]
+        while get(on := f"chain{n}"):
+          n += 1
+          for run in [x[1] for x in __engine["transcript"](on, "run") if get(x[1]) is x and not over(x[1])]:
+            wants = [x[1] for x in __engine["transcript"](on, "wants") if get(x[1]) is x and x[2] == run]
+            wants = [x for x in wants if not over(x)]
+            for one in wants:
+              yield "done", one, refused(lost)
+            yield "done", run, refused(lost)
+            if wants and get(rung := get(run)[4]) and not over(rung):
+              __engine["close"](refused(lost), rung)
       ear = __fresh[name]() if name in __fresh else ear if __again(name) else None
       if not told:
         told = True

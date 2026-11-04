@@ -235,12 +235,17 @@ class Running:
     if not (isinstance(asked, tuple) and asked[0] == "bash" and isinstance(value, shape)):
       return value
     code, ok = getattr(value, "code"), next(iter(asked[7:]), None)  # noqa: B009
-    if ok is None:
-      held = verb(self.names, "module")(str(asked[3]))
-      assert isinstance(held, dict)
-      ok = (held.get("accepts") or accepted)(str((*asked[4:], "")[0]), value)
-    elif ok is not True:
-      ok = code in ok
+    try:
+      if ok is None:
+        held = verb(self.names, "module")(str(asked[3]))
+        assert isinstance(held, dict)
+        ok = (held.get("accepts") or accepted)(str((*asked[4:], "")[0]), value)
+      elif ok is not True:
+        ok = code in ok
+    # An ok or an accepts of the word is the word's own code, so what it raises is what the word awaited, and the
+    # Kernel, which serves every chain, goes on: ok=lambda e: True raised in the Kernel on 11-04, and lost each word.
+    except Exception as raised:
+      return raised
     if ok:
       return value
     ended = f"timed out after {asked[6]}s" if code is None else f"exited {code}"
