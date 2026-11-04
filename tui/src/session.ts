@@ -1089,13 +1089,10 @@ export class Session extends EventEmitter {
     return out;
   }
   /** A message or a word that the operator sends to a paused chain wakes the chain first, since the operator who
-   * writes to it wants it to go on: work that a reopened record held starts again, and the pause over the chain ends.
-   * It says whether the chain was paused. */
+   * writes to it wants it to go on: the pause over the chain ends. It says whether the chain was paused. */
   async wakeForInput(): Promise<boolean> {
     if (!this.paused) return false;
-    if (this.host.pending.size) await this.host.resume();
-    await this.refresh();
-    if (this.paused) await this.engine.wake(this.selected);
+    await this.engine.wake(this.selected);
     await this.refresh();
     return true;
   }
@@ -1861,10 +1858,8 @@ export class Session extends EventEmitter {
     if (!input.trim() || this.host.reading) return;
     this.error = "";
     this.notice = "";
-    const pending = this.host.pending.size > 0;
     const id = await this.engine.prompt(this.lineShape(thread), { message: input.trim(), on: thread });
     this.notice = `Your message went to the thread ${thread}.`;
-    if (pending) this.emit("resume");
     this.track(id);
     await this.refresh();
   }
@@ -1892,7 +1887,6 @@ export class Session extends EventEmitter {
       else {
         await this.attachFiles(input);
         this.redo = [];
-        const pending = this.host.pending.size > 0;
         const thread = this.target;
         this.fresh = false;
         this.pinned = undefined;
@@ -1903,7 +1897,6 @@ export class Session extends EventEmitter {
         this.sentTo.set(id, thread);
         delete this.images[this.selected];
         this.save();
-        if (pending) this.emit("resume");
         this.track(id);
       }
     }
@@ -1987,10 +1980,6 @@ export class Session extends EventEmitter {
         this.notice = "Paused. In-flight work can finish.";
         break;
       case "wake": {
-        if (this.host.pending.size) {
-          this.emit("resume");
-          break;
-        }
         // With no chain named, the wake goes to the whole life: a pause of one chain holds the chains it made, and the
         // chains that stand outside it, so a wake of the selected chain alone leaves them paused.
         const stopped = argument

@@ -523,7 +523,6 @@ export class Workspaces extends EventEmitter {
     await this.select(entry);
     const session = entry.session;
     if (!session) return;
-    if (session.host.pending.size) await session.host.resume();
     await session.command(command);
   }
   /** A new session. It selects after its life opens, unless lazy is set: the session then stands and selects at once,

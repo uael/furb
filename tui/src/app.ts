@@ -704,7 +704,6 @@ export class App {
     session.on("change", this.schedule);
     options.workspaces.on("change", this.schedule);
     session.on("compose", this.compose);
-    session.on("resume", this.resume);
     session.on("shared", this.shared);
     session.on("copied", this.copied);
     session.on("status", this.statusShown);
@@ -753,7 +752,6 @@ export class App {
         void this.highlightEditor();
       })
       .catch(session.fail);
-    if (session.host.pending.size) this.resume();
     if (session.host.reading && !session.readingTold) this.readOrRenew();
   }
 
