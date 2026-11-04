@@ -25,7 +25,7 @@ use std::{
 use crate::{
   Ear, Engine, Fault, Object, checkpoint,
   ear::{hear, hearing, lasting},
-  extension::{self, Places, compaction::compaction, skills::skills},
+  extension::{self, Places, skills::skills},
   snapshot::{self, Keeper},
   world::{self, Catalog, Retries, Scratch, Writes, mcp::mcp},
 };
@@ -158,8 +158,8 @@ impl Opening {
 
   /// The record the life opens on, and the ears of the crate, in the order of boot: the provider,
   /// the extensions, each official extension, the files, the commands and time, and the store and
-  /// the log of the life when the life keeps. The ears of the servers of MCP, of the
-  /// compaction and of the fetch do work, so a life that inspects hears them silent.
+  /// the log of the life when the life keeps. The ears of the servers of MCP and of
+  /// the fetch do work, so a life that inspects hears them silent.
   ///
   /// The files and the commands share the scratch directory of the life: the one of its record when it keeps the
   /// record, and else one of its own, which goes with the life. A new record starts with an empty scratch directory,
@@ -185,17 +185,8 @@ impl Opening {
 
   /// The names of the ears of the crate, in the order of boot.
   fn names(&self) -> Vec<String> {
-    let mut names = vec![
-      "provider",
-      "extensions",
-      "skills",
-      "mcp",
-      "compaction",
-      "fetch",
-      "files",
-      "bash",
-      "time",
-    ];
+    let mut names =
+      vec!["provider", "extensions", "skills", "mcp", "fetch", "files", "bash", "time"];
     if self.keeps() {
       names.extend(["store", "log"]);
     }
@@ -253,7 +244,6 @@ impl Opening {
           lasting(mcp(servers), move || mcp(again.clone()))
         })),
       ),
-      ("compaction", working(works.then(|| lasting(compaction(), compaction)))),
       ("fetch", working(works.then(|| lasting(world::fetch(), world::fetch)))),
       (
         "files",

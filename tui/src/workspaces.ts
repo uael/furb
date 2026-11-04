@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { mkdir, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { enabled, furbDirectory, ROOT, saveFile, scratch, store } from "furb";
+import { furbDirectory, saveFile, scratch, store } from "furb";
 import { openEngine, openingEngine } from "./bridge.ts";
 import { checkoutOf, checkouts, mainCheckout } from "./checkout.ts";
 import { expandHome } from "./files.ts";
@@ -534,7 +534,6 @@ export class Workspaces extends EventEmitter {
     group = this.groupOf(),
     name?: string,
     carry?: Carry,
-    resume = false,
     checkout = group?.directory,
     lazy = false,
   ): Promise<SessionEntry> {
@@ -548,19 +547,11 @@ export class Workspaces extends EventEmitter {
     const entry: SessionEntry = { path, name: label, status: "opening", unread: false };
     group.sessions.unshift(entry);
     await this.load(entry, group, lazy);
-    // A life that starts from a record opens with the earlier work of that record in its first word, or resumes the
-    // record: it goes on from the turns of its root chain and asks again its open prompts.
+    // A life that starts from a record opens with the earlier work of that record in its first word.
     if (carry && entry.session) {
       if (entry.ready && !(await entry.ready)) throw new Error(entry.error ?? "The session did not open.");
       const { engine } = entry.session;
-      // The resume is the word of the compaction extension, so a life that runs none carries the text instead.
-      const goes =
-        resume && enabled(await engine.transcript({ on: ROOT })).some((one) => one.name === "compaction");
-      await engine.result(await engine.rung({ word: goes ? carry.resume : carry.word, on: engine.root }));
-      if (resume)
-        entry.session.notice = goes
-          ? "Resumed from the turns of the record."
-          : "The extension compaction is off, so the earlier work came as text.";
+      await engine.result(await engine.rung({ word: carry.word, on: engine.root }));
     }
     if (entry.session) {
       entry.session.sessionName = label;
@@ -619,13 +610,7 @@ export class Workspaces extends EventEmitter {
       await this.select(entry);
       return entry;
     } catch (error) {
-      const made = await this.create(
-        group,
-        undefined,
-        undefined,
-        false,
-        checkoutOf(entry.path, group.directory),
-      );
+      const made = await this.create(group, undefined, undefined, checkoutOf(entry.path, group.directory));
       const why = error instanceof Error ? error.message : String(error);
       if (made.session)
         made.session.notice = `“${entry.name}” did not open, so this is a new session. ${why}`;
@@ -640,7 +625,7 @@ export class Workspaces extends EventEmitter {
       await this.select(next).catch(() => {});
     }
     if (this.current === entry)
-      await this.create(group, undefined, undefined, false, checkoutOf(entry.path, group.directory));
+      await this.create(group, undefined, undefined, checkoutOf(entry.path, group.directory));
   }
   /** End the life of the open session of an entry, and tell whether it was open. */
   private async release(entry: SessionEntry): Promise<boolean> {

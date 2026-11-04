@@ -24,7 +24,7 @@ API of its own:
   chain or the root alone, and plays the setup of the root on a new record. `parts` gives the part of each extension for
   the TUI, which `tui/src/parts.ts` loads. `extensions/` holds the official extensions, `catchup`, `memory`, `skills`,
   `compaction`, `naming`, `ouroboros`, `web` and `mcp`, each a word, a contract and a suite, and `src/extension/` holds the ear of
-  the World of each that has one, as `compaction.rs`. `docs/extensions.md` says how an extension works.
+  the World of each that has one, as `skills.rs`. `docs/extensions.md` says how an extension works.
 - `src/life.rs` opens a life as every host opens one, from one `Opening`: the record, the ears of the crate after the
   ears of the host, the default actor, the roster that the host names or every model of the catalog, and the extensions.
   A host adds only its own ears, as the console of its operator. A life on a record of another version with no

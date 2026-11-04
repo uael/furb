@@ -51,10 +51,7 @@ Eight extensions come with furb, and each life runs them unless a config turns t
   commands, `recent(n)`, the acts of the last `n` replies, and `await chosen()`, which asks a model.
   `together(*filters)` joins them, and `supersede(keep)` applies one. `await condense()` asks a model what to keep and
   compacts at once. `compacted()` does the same for one chain each time an answer fills more than `SHARE`, 0.6, of the
-  window, and moves, stops and pauses nothing. `imported(record, source)` makes a chain that goes on from the chain
-  `source`, `chain1` by default, of another record: its turns and its open prompts come, and the values of its module,
-  its words and its open commands do not. Only the log of a record shows the close of a prompt by a word, so from a
-  record whose log does not agree, only the open prompts that no model worked on come. The extension has no life word.
+  window, and moves, stops and pauses nothing. The extension has no life word.
   A project changes `SHARE`, `FILTERS`, `CHOOSER`, `LISTED` or `BRIEF` in an extension of its own. In the TUI, a rule
   with the summary marks each compaction in the feed, and `/compact` runs `await condense()` on the chain on screen.
 - **`naming`** gives the session a name from the first message of the operator. Its life word, `name_session()`, plays
