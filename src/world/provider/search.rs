@@ -115,9 +115,8 @@ pub(super) fn claude(program: Program, model: String) -> Searches {
   Arc::new(move |query| {
     let (program, model) = (program.clone(), model.clone());
     spawned(async move {
-      let mut command = program.command()?;
-      command.args(["-p", "--model", &model, "--output-format", "text", "--system-prompt", BRIEF]);
-      command.args(["--setting-sources", "", "--strict-mcp-config", "--disable-slash-commands"]);
+      let first = ["-p", "--model", &model, "--output-format", "text", "--system-prompt", BRIEF];
+      let mut command = program.base_command(&first)?;
       command.args([
         "--no-session-persistence",
         "--allowedTools",
@@ -125,8 +124,6 @@ pub(super) fn claude(program: Program, model: String) -> Searches {
         "--tools",
         "WebSearch",
       ]);
-      command.env("CLAUDE_CODE_DISABLE_BUNDLED_SKILLS", "1");
-      command.env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1");
       command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

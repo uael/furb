@@ -201,26 +201,11 @@ fn plain(alias: &str) -> bool {
 /// Ask the program of its models, with one process that spends no model prompt and that is
 /// killed once it answered, or once [`WITHIN`] passed.
 async fn probe(program: &Program) -> Option<Vec<Found>> {
-  let mut command = program.command().ok()?;
-  command.args([
-    "-p",
-    "--input-format",
-    "stream-json",
-    "--output-format",
-    "stream-json",
-    "--verbose",
-  ]);
-  command.args([
-    "--tools",
-    "",
-    "--strict-mcp-config",
-    "--disable-slash-commands",
-    "--setting-sources",
-    "",
-  ]);
+  let print =
+    ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"];
+  let mut command = program.base_command(&print).ok()?;
+  command.args(["--tools", ""]);
   command.env("FURB_CLAUDE_DISCOVER", "1");
-  command.env("CLAUDE_CODE_DISABLE_BUNDLED_SKILLS", "1");
-  command.env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1");
   command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).kill_on_drop(true);
   let mut child = command.spawn().ok()?;
   let (stdin, stdout) = child.stdin.take().zip(child.stdout.take())?;
