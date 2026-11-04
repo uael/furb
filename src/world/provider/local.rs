@@ -50,7 +50,6 @@ use super::{
   catalog::{LEVELS, reached},
   clients::{Client, Reach},
 };
-use crate::ear::runtime;
 
 /// The provider of the models of a local server.
 pub(super) const LOCAL: &str = "local";
@@ -176,10 +175,8 @@ impl Server {
 
   /// What the server lists, as the catalog offers it: the list it gave, or the list it gives now when it gave none
   /// yet, or a delay ago or more when it listed nothing, when it gave no model of the name that the catalog wants, or,
-  /// when the catalog wants no name, when it gave no window of a model for chat. It waits for the answer of the server
-  /// on the runtime of the ears, so it never runs on a thread of that runtime: an open waits for it on a blocking
-  /// thread.
-  pub(super) fn heard(&self, wanted: Option<&str>) -> Heard {
+  /// when the catalog wants no name, when it gave no window of a model for chat.
+  pub(super) async fn heard(&self, wanted: Option<&str>) -> Heard {
     let lists = |offers: &[Offer]| {
       let windowed = |one: &&Offer| self.window.or(one.window).is_some();
       let offered = || offers.iter().filter(|one| one.chat).all(|one| windowed(&one));
@@ -190,9 +187,10 @@ impl Server {
     };
     let held = |(at, got): &Answered| got.as_deref().is_ok_and(lists) || at.elapsed() < AGAIN;
     let lock = || self.listed.lock().unwrap_or_else(PoisonError::into_inner);
-    if !lock().as_ref().is_some_and(held) {
+    let fresh = lock().as_ref().is_some_and(held);
+    if !fresh {
       // The server is asked outside the lock, so what it listed already stays at hand meanwhile.
-      let got = self.list();
+      let got = self.list().await;
       *lock() = Some((Instant::now(), got));
     }
     let listed = lock();
@@ -257,19 +255,14 @@ impl Server {
     model
   }
 
-  /// The models that the server lists now, or why it lists none, which it waits for on the runtime
-  /// of the ears, so it never runs on a thread of that runtime nor on the thread of a life.
-  #[expect(
-    clippy::disallowed_methods,
-    reason = "debt: a call that blocks: block_on, where the catalog asks for the list with no await"
-  )]
-  fn list(&self) -> Result<Vec<Offer>, String> {
+  /// The models that the server lists now, or why it lists none.
+  async fn list(&self) -> Result<Vec<Offer>, String> {
     let client = ReqwestClient::builder().connect_timeout(CONNECT).build();
     let client = client.map_err(|no| no.to_string())?;
     let asking = Asking { client, root: self.root.clone(), key: self.key.clone() };
     // The windows that the server gives apart from its list take what is left of the deadline, and a list keeps its
     // models when they do not come in time.
-    let listing = runtime().spawn(async move {
+    let listing = async move {
       let began = Instant::now();
       let listed = tokio::time::timeout(DEADLINE, asking.offers()).await;
       let mut offers = listed.map_err(|_| format!("it listed nothing in {DEADLINE:?}"))??;
@@ -279,9 +272,8 @@ impl Server {
       )
       .await;
       Ok::<_, String>(offers)
-    });
-    let got = runtime().block_on(listing).map_err(|no| no.to_string()).and_then(|got| got);
-    got.map_err(|why| format!("the local server at {} lists no model: {why}", self.root))
+    };
+    listing.await.map_err(|why| format!("the local server at {} lists no model: {why}", self.root))
   }
 }
 

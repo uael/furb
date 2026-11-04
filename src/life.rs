@@ -328,15 +328,22 @@ impl Opening {
     let names = self.roster.clone();
     let preferred = self.actor.clone();
     provider = provider.refreshing(Arc::new(move || {
-      world::claude::refresh();
-      let fresh = Catalog::load()
-        .claude(claude.clone(), stall)
-        .configured(Path::new(&directory), config.as_deref())?;
-      let kept = fresh.keep(names.as_deref(), preferred.as_deref());
-      let candidate = fresh
-        .provider(directory.clone(), kept.names.as_deref(), kept.actor.as_deref(), answer.clone())
-        .map_err(|no| no.to_string())?;
-      Ok(candidate.into_settings())
+      let (claude, config, directory) = (claude.clone(), config.clone(), directory.clone());
+      let (names, preferred, answer) = (names.clone(), preferred.clone(), answer.clone());
+      Box::pin(async move {
+        world::claude::refresh();
+        let fresh = Catalog::loaded()
+          .await
+          .discovered(claude, stall)
+          .await
+          .configure(Path::new(&directory), config.as_deref())
+          .await?;
+        let kept = fresh.keeping(names.as_deref(), preferred.as_deref()).await;
+        let (names, actor) = (kept.names.as_deref(), kept.actor.as_deref());
+        let candidate =
+          fresh.provided(directory, names, actor, answer).await.map_err(|no| no.to_string())?;
+        Ok(candidate.into_settings())
+      })
     }));
     provider = provider.advertises(advertised).searching(works).config(user);
     if let Some(gallery) = gallery {

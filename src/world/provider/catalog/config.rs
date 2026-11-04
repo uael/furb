@@ -163,6 +163,16 @@ impl Catalog {
   /// the project, then the local config of the project. A false entry removes a provider.
   /// Invalid settings give an error. A running provider keeps its previous settings when a reload fails.
   pub fn configured(
+    self,
+    directory: &std::path::Path,
+    config: Option<&std::path::Path>,
+  ) -> Result<Catalog, String> {
+    super::blocking(self.configure(directory, config))
+  }
+
+  /// The catalog with the provider settings of the configs, as [`Catalog::configured`] gives
+  /// it, for a caller that awaits.
+  pub async fn configure(
     mut self,
     directory: &std::path::Path,
     config: Option<&std::path::Path>,
@@ -250,7 +260,7 @@ impl Catalog {
           let at =
             self.models.iter().position(|(model, _)| model.name.starts_with(&prefix)).unwrap_or(0);
           self.models.retain(|(model, _)| !model.name.starts_with(&prefix));
-          self.models.splice(at..at, command.models().into_iter().map(|model| (model, true)));
+          self.models.splice(at..at, command.models().await.into_iter().map(|model| (model, true)));
           self.providers.retain(|(id, _, _)| id != &name);
         }
         continue;
