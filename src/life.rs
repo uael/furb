@@ -214,8 +214,6 @@ impl Opening {
       (None, _) => (Vec::new(), None),
     };
     record.extend(crossed);
-    let path = self.record.as_deref().unwrap_or_default();
-    drifts(path, &record)?;
     let cut = checkpoint::last(&record).is_some();
     // The log reads the record whole, so a life after a checkpoint writes on after the log of the lives before it.
     let logs = self.record.as_ref().filter(|_| keeps).map(|path| match continued && !cut {
@@ -279,15 +277,12 @@ impl Opening {
     Ok((record, ears.into_iter().map(|(name, ear)| (name.to_owned(), ear)).collect(), cut))
   }
 
-  /// What the life waits for before it boots: the record of an older build upgraded, a record of another build
-  /// refused, the extensions that the configs turn on, and the provider of the models, whose catalog asks the servers
-  /// and the command lines of the models. A host with a runtime waits for it on a blocking thread.
+  /// What the life waits for before it boots: the tail of another build carried, the extensions
+  /// that the configs turn on, and the provider of the models, whose catalog asks the servers and
+  /// the command lines of the models. A host with a runtime waits for it on a blocking thread.
   fn prepared(&self) -> Result<Prepared, Fault> {
     let works = self.works();
     let keeps = self.keeps != Some(false) && works;
-    if let Some(path) = self.record.as_deref().filter(|_| keeps) {
-      upgraded(Path::new(path), &self.directory, world::stored)?;
-    }
     // The tail that another build made after the last checkpoint is carried at the tip of the
     // record, before the life takes its lease, so the life goes on from it and replays no fact of
     // another engine.
@@ -297,13 +292,6 @@ impl Opening {
       checkpoint::keep(path, one.clone())?;
     }
     let crossed = crossed.filter(|_| !keeps);
-    // A record that another build made is refused from the entries that name its build, read from the head of each
-    // line, before the life reads the record whole or takes its lease.
-    if let Some(path) = &self.record {
-      let mut heads = world::heads(path, &[world::MADE, checkpoint::CHECKPOINT])?;
-      heads.extend(crossed.clone());
-      drifts(path, &heads)?;
-    }
     let here = Places::here();
     let places = Places { config: self.config.clone().map_or(here.config, PathBuf::from), ..here };
     let extensions = match self.extensions != Some(false) && works {
@@ -465,46 +453,6 @@ impl Opening {
   }
 }
 
-/// A record whose last segment an older version made, upgraded at a stand: the build of that version, which the store
-/// of builds holds, writes a checkpoint at its tip, so a life of this build goes on from it. A record of this version
-/// or of a newer one, and one of a version whose build the store lacks, stay as they are, and the life says why it
-/// refuses them.
-fn upgraded(
-  path: &Path,
-  directory: &str,
-  stored: impl Fn(i64) -> Option<PathBuf>,
-) -> Result<(), Fault> {
-  if !path.exists() {
-    return Ok(());
-  }
-  // The entries that name the build and the checkpoints alone tell the version of the last segment.
-  let record = world::heads(path, &[world::MADE, checkpoint::CHECKPOINT])?;
-  let older = world::version(checkpoint::segment(&record)).filter(|one| *one < world::VERSION);
-  let Some((theirs, program)) = older.and_then(|one| Some((one, stored(one)?))) else {
-    return Ok(());
-  };
-  let ran = std::process::Command::new(&program)
-    .arg("checkpoint")
-    .arg("--record")
-    .arg(path)
-    .arg("--cwd")
-    .arg(directory)
-    .output();
-  match ran {
-    Ok(done) if done.status.success() => Ok(()),
-    Ok(done) => Err(Fault::refused(format!(
-      "the build of version {theirs} at {} wrote no checkpoint of {}: {}",
-      program.display(),
-      path.display(),
-      String::from_utf8_lossy(&done.stderr).trim()
-    ))),
-    Err(no) => Err(Fault::refused(format!(
-      "the build of version {theirs} at {} does not run: {no}",
-      program.display()
-    ))),
-  }
-}
-
 /// An ear that takes nothing and says nothing, which stands in the place of an ear that does work.
 fn silent() -> Box<dyn Ear> {
   hearing(&[], |mut co| async move {
@@ -516,49 +464,6 @@ fn silent() -> Box<dyn Ear> {
 
 mod host;
 pub use host::{Chain, Life, LifeAct, Open, Question, Shape, Thread};
-
-/// The refusal of a life on the record at a path, from its entries that name the build that made
-/// them and its checkpoints, when a build of another version or another engine made its last
-/// segment, so a replay would drift. A segment after a checkpoint of the schema of this build is
-/// carried as data before, as [`checkpoint::crossed`] says, so only a record with no such
-/// checkpoint is refused.
-fn drifts(path: &str, record: &[Object]) -> Result<(), Fault> {
-  let refused = |why: String, then: String| {
-    Err(Fault::new(
-      "Drift",
-      vec![Object::string(format!("{why}, so a replay would drift. {then}"))],
-    ))
-  };
-  // A record with a checkpoint goes on from it on any build, so only the build of its last segment counts.
-  let (segment, cut) = (checkpoint::segment(record), checkpoint::last(record).is_some());
-  match (world::version(segment), world::made(segment)) {
-    (Some(theirs), _) if theirs != world::VERSION => {
-      let at = world::build(theirs)
-        .map_or_else(|| "the store of builds".to_owned(), |at| at.display().to_string());
-      return refused(
-        format!(
-          "the record {path} was made by a build of version {theirs}, and this build is of version {}",
-          world::VERSION
-        ),
-        format!(
-          "Open the record with the build of version {theirs}, which stands at {at} once a build of that version ran \
-           on this machine, and which script/builds.sh {theirs} makes there. Or start a new life."
-        ),
-      );
-    }
-    (None, Some(theirs)) if theirs != world::engine() && !cut => {
-      return refused(
-        format!(
-          "the record {path} was made by the engine {theirs:.12}, and this build runs the engine {:.12}",
-          world::engine()
-        ),
-        "Open the record with the build that made it, or start a new life.".to_owned(),
-      );
-    }
-    _ => {}
-  }
-  Ok(())
-}
 
 #[cfg(test)]
 #[path = "life.test.rs"]
