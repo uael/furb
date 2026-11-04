@@ -1205,8 +1205,8 @@ try {
   app().dispose();
   await library.dispose();
 
-  // A model adds a component to a life that runs. It reads the teaching of the extension ouroboros and the skill
-  // extending, writes an extension with a part for the TUI, and the panel stands over the input with no restart. A
+  // A model adds a component to a life that runs. It reads the teaching of the skill
+  // ouroboros, writes an extension with a part for the TUI, and the panel stands over the input with no restart. A
   // change that it gets wrong shows its error in the panel, the operator tells it, and the panel draws again. The
   // dialog of /extensions says what each part gives.
   await show(await demoSession({ cwd: await project("extend"), extensions: true }));

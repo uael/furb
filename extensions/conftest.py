@@ -30,13 +30,6 @@ from furb import engine
 from furb.engine import Refused, Text
 from furb_monty import _monty
 
-EXTENDING = (
-  "extending: How to extend furb: a def in a word, which lives as long as its chain, and an extension, which a host"
-  " enables on each chain of a life."
-)
-"""EXTENDING is the line that the list of the skills holds of the skill that the extension carries."""
-
-
 USE = (
   "skill(name) loads a skill: a skill with code plays its word and tells its interface, and any other tells its"
   ' SKILL.md. skill() plays each default skill. read("skills://<name>") gives the word of a skill with code, and'
@@ -61,10 +54,10 @@ def official_lines(on: Sequence[str]) -> list[str]:
 
 def index(*lines: str, on: Sequence[str] = ("skills",)) -> list[str]:
   """The lines of the list of the skills of a chain that finds the skills of these lines in its folders: the first
-  line, then these lines, the line of each official extension, with on for each one in on, and the line of extending,
-  in the order of the names, and a line that comes earlier wins for a name."""
+  line, then these lines and the line of each official extension, with on for each one in on, in the order of the names,
+  and a line that comes earlier wins for a name."""
   kept: dict[str, str] = {}
-  for line in [*lines, *official_lines(on), EXTENDING]:
+  for line in [*lines, *official_lines(on)]:
     kept.setdefault(re.split(r"[ :]", line, maxsplit=1)[0], line)
   return [USE, *(kept[name] for name in sorted(kept))]
 

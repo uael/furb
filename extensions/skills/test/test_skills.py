@@ -42,7 +42,7 @@ async def test_skills_reads_the_path_skills_on_its_chain(tmp_path: Path) -> None
 
 
 async def test_the_world_answers_skills_with_the_skills_of_the_folders_of_the_chain(tmp_path: Path) -> None:
-  """The World answers skills:// with the skills of the folders .furb/skills, .agents/skills and .claude/skills of the working directory of the chain and of each folder above it, nearest first, then of the folder skills of the config directory of the user, then of the folders of the extensions of the project in .furb/extensions and of each folder that a config turns on, then of the official extensions, and then the skill extending, which the extension carries and which says how a model extends furb."""
+  """The World answers skills:// with the skills of the folders .furb/skills, .agents/skills and .claude/skills of the working directory of the chain and of each folder above it, nearest first, then of the folder skills of the config directory of the user, then of the folders of the extensions of the project in .furb/extensions and of each folder that a config turns on, then of the official extensions."""
   skilled(tmp_path / "work" / ".furb" / "skills", "a", "description: One.")
   skilled(tmp_path / "work" / ".agents" / "skills", "b", "description: Two.")
   skilled(tmp_path / "work" / ".claude" / "skills", "c", "description: Three.")
@@ -85,12 +85,11 @@ async def test_a_name_that_an_earlier_folder_holds_wins(tmp_path: Path) -> None:
   skilled(tmp_path / "config" / "skills", "brew", "description: Make coffee.")
   skilled(tmp_path / "config" / "skills", "all", "description: Every drink.")
   skilled(tmp_path / ".furb" / "skills", "brew", "description: Make tea.")
-  skilled(tmp_path / "config" / "skills", "extending", "description: Extend it my way.")
-  assert await lines(tmp_path) == index("all: Every drink.", "brew: Make tea.", "extending: Extend it my way.")
+  assert await lines(tmp_path) == index("all: Every drink.", "brew: Make tea.")
 
 
 async def test_a_chain_that_finds_no_skill_in_a_folder_reads_a_list_of_the_official_extensions(tmp_path: Path) -> None:
-  """A chain that finds no skill in a folder reads a list of the official extensions and of extending."""
+  """A chain that finds no skill in a folder reads a list of the official extensions."""
   assert await lines(tmp_path) == index()
 
 
@@ -153,8 +152,9 @@ async def test_a_write_of_a_skill_writes_its_word_in_the_project(tmp_path: Path)
   assert sorted(x.name for x in web.iterdir()) == ["SKILL.md", "web.py", "web.pyi"]
   assert (web / "web.py").read_text(encoding="utf-8").endswith("\n\n\nX = 1\n")
   assert (web / "web.py").read_text(encoding="utf-8").startswith("from furb.engine import ")
-  with pytest.raises(Refused, match=r"The skill extending has no code to write\."):
-    await engine.rung('close(write(Text("skills://extending", "X = 1")))', on=root)
+  skilled(tmp_path / "config" / "skills", "plain", "name: plain\ndescription: No code.")
+  with pytest.raises(Refused, match=r"The skill plain has no code to write\."):
+    await engine.rung('close(write(Text("skills://plain", "X = 1")))', on=root)
 
 
 async def test_a_write_of_a_skill_that_the_life_runs_reloads_it(tmp_path: Path) -> None:

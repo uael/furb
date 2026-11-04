@@ -33,16 +33,11 @@ const USE: &str = "skill(name) loads a skill: a skill with code plays its word a
                    read(\"skills://<name>\") gives the word of a skill with code, and \
                    read(\"skills://<name>/<file>\") a file of its folder.";
 
-/// The skill that the extension carries, which says how a model extends furb, and which a skill of
-/// its name in a folder replaces.
-const EXTENDING: &str = include_str!("../../extensions/skills/extending/SKILL.md");
-
 /// Where the files of a skill stand: a folder on the disk, the files that the crate carries of an
-/// official extension, or the one text of the skill that the extension carries.
+/// official extension.
 enum Place {
   Folder(PathBuf),
   Shipped(Vec<(String, &'static str)>),
-  Carried,
 }
 
 /// One skill that the ear found: its name, what it is for, the file of its word when it has code,
@@ -125,7 +120,7 @@ impl Seen {
 /// `.claude/skills` of the working directory of the chain and of each folder above it, nearest
 /// first, then in `skills` of the config directory of the user, then in the folders of the
 /// extensions of the project in `.furb/extensions` and of each folder that a config turns on, then
-/// in the official extensions, and then the skill `extending` that the extension carries.
+/// in the official extensions.
 pub fn skills(config: PathBuf) -> Box<dyn Ear> {
   hearing(&["read", "write", "skill"], move |mut co| async move {
     loop {
@@ -180,7 +175,7 @@ fn answered(seen: &Seen, asked: &str) -> Result<Text, Fault> {
     (Some(file), _) => filed(one, file, &path),
     (None, _) if one.word.is_some() => worded(one, &seen.runs, &path),
     (None, Place::Folder(folder)) => read(&folder.join(MANIFEST)),
-    (None, _) => Ok(Text::new(path, EXTENDING)),
+    (None, _) => Ok(Text::new(path, one.manifest.clone())),
   }
 }
 
@@ -268,7 +263,6 @@ fn copied(one: &Skill, target: &Path) -> Result<(), Fault> {
         fs::write(target.join(file), text).map_err(failed)?;
       }
     }
-    Place::Carried => fs::write(target.join(MANIFEST), EXTENDING).map_err(failed)?,
   }
   Ok(())
 }
@@ -320,14 +314,12 @@ fn filed(one: &Skill, file: &str, path: &str) -> Result<Text, Fault> {
       let text = files.iter().find(|two| two.0 == file).map(|two| two.1).ok_or_else(missing)?;
       Ok(Text::new(path, text))
     }
-    Place::Carried if file == MANIFEST => Ok(Text::new(path, EXTENDING)),
-    Place::Carried => Err(missing()),
   }
 }
 
 /// The skills of a chain that stands in `here`, in the order of their names: each folder that holds
 /// a SKILL.md file in the folders of skills, then the extensions of the project and of the configs,
-/// then the official ones, and then the skill that the extension carries. A name that an earlier
+/// then the official ones. A name that an earlier
 /// place holds wins.
 fn found(here: &Path, project: &Path, places: &Places) -> Vec<Skill> {
   let roots =
@@ -352,7 +344,6 @@ fn found(here: &Path, project: &Path, places: &Places) -> Vec<Skill> {
     let name = frontmatter(manifest).field("name").unwrap_or_default().to_owned();
     keep(Skill::of(manifest, &name, Place::Shipped(shipped(&name).unwrap_or_default())));
   }
-  keep(Skill::of(EXTENDING, "", Place::Carried));
   out.sort_by(|one, two| one.name.cmp(&two.name));
   out
 }
