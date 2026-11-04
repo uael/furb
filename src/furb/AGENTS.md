@@ -226,7 +226,7 @@ meanings. The entry of such a name here gives only its form in the engine.
   its tip: plain data with a version of its own shape, `schema`, apart from the version of the record. It holds each
   chain that lives with its label, its source, its turns, the text of its definitions, its plain values and whether
   it is paused, each act that a value names with its answer, each open prompt, and the names that each kind took,
-  and no word of a verb by its place. `src/checkpoint.rs` holds its shape. `seed`, a function of the engine, makes
+  and no word of a verb by its place. `gathered`, a function of the engine, holds its shape and gives it. `seed` makes
   from that data the entries that a later life boots on, before the record after the checkpoint, so the engine that
   opens it, and not the one that wrote it, says how its own journal makes each chain again. Each name of the past
   stays taken, an act that a value names stands known with its answer and runs nothing, each chain with an open

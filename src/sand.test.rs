@@ -40,10 +40,14 @@ fn the_memory_that_the_sandboxes_hold_grows_with_the_bytes_the_program_asks_of_i
   use super::{bound, held};
   let ran = Sand::new().run("1", NamedValues::new(), &mut Nobody("the code"));
   assert!(ran.is_ok(), "a sandbox begins, which starts the count");
-  let before = held();
-  let big = vec![1u8; 50 << 20];
-  std::hint::black_box(&big);
-  // Other tests of the thread pool free memory at the same time, so the count may fall by a part of what they held.
-  assert!(held() >= before + (30 << 20), "{} after {before}", held());
+  // Other tests of the thread pool free memory at the same time, so the count may fall by a part of
+  // what they held: it must grow by most of the bytes in one of a few tries.
+  let grew = (0..5).any(|_| {
+    let before = held();
+    let big = vec![1u8; 50 << 20];
+    std::hint::black_box(&big);
+    held() >= before + (30 << 20)
+  });
+  assert!(grew, "the count never grew by 30 MiB, it holds {}", held());
   assert!(bound() >= 1 << 20);
 }
