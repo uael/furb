@@ -60,7 +60,7 @@ pub const MANIFEST: &str = "SKILL.md";
 /// The field of the manifest that names the file of the word. Each field of furb stands in the map
 /// `metadata` of the frontmatter, with the prefix `furb-`, so that no field of another client
 /// clashes with one.
-const WORD: &str = "furb-word";
+pub(crate) const WORD: &str = "furb-word";
 
 /// The field of the manifest that gives the life word.
 const LIFE: &str = "furb-life";
@@ -70,7 +70,7 @@ const INTERFACE: &str = "furb-interface";
 
 /// The field of the manifest that says whether the extension plays by default, `"true"` or
 /// `"false"`.
-const DEFAULT: &str = "furb-default";
+pub(crate) const DEFAULT: &str = "furb-default";
 
 /// The field of the manifest that says where the extension plays.
 const PLAYS: &str = "furb-plays";
@@ -296,6 +296,25 @@ fn officials(places: &Places) -> Vec<Extension> {
     .collect()
 }
 
+/// The manifest of each official extension, in the order a life runs them.
+pub(crate) fn manifests() -> impl Iterator<Item = &'static str> {
+  OFFICIAL.iter().map(|one| one.0)
+}
+
+/// Each file that the crate carries of the official extension of a name, by its name in the folder
+/// of that extension: its manifest, its word and its view.
+pub(crate) fn shipped(name: &str) -> Option<Vec<(String, &'static str)>> {
+  OFFICIAL.iter().find_map(|(manifest, word, view)| {
+    let front = frontmatter(manifest);
+    (front.field("name") == Some(name)).then(|| {
+      let file = front.meta(WORD).unwrap_or_default().to_owned();
+      let mut files = vec![(MANIFEST.to_owned(), *manifest), (file, *word)];
+      files.extend(front.meta(VIEW).zip(*view).map(|(one, text)| (one.to_owned(), text)));
+      files
+    })
+  })
+}
+
 /// The name of each official extension, in the order a life runs them.
 fn names() -> Vec<String> {
   let named = OFFICIAL.iter().filter_map(|one| frontmatter(one.0).field("name").map(str::to_owned));
@@ -399,7 +418,10 @@ pub fn configured(places: &Places, project: &Path) -> Result<Vec<Extension>, Fau
 
 /// The name of each extension that the configs turn on, in the order a life runs them, with the path of its folder,
 /// which an official extension has not.
-fn turned_on(places: &Places, project: &Path) -> Result<Vec<(String, Option<PathBuf>)>, Fault> {
+pub(crate) fn turned_on(
+  places: &Places,
+  project: &Path,
+) -> Result<Vec<(String, Option<PathBuf>)>, Fault> {
   let official = names();
   let mut named: Vec<(String, Option<PathBuf>, bool)> =
     official.iter().map(|one| (one.clone(), None, true)).collect();

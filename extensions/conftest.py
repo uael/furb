@@ -37,6 +37,37 @@ EXTENDING = (
 """EXTENDING is the line that the list of the skills holds of the skill that the extension carries."""
 
 
+USE = (
+  'skill(name) reads a skill: the word of a skill with code, else its SKILL.md. read("skills://<name>/<file>") reads'
+  " a file of its folder."
+)
+"""USE is the first line of the list of the skills, which says how a chain reads a skill."""
+
+
+def official_lines(on: Sequence[str]) -> list[str]:
+  """The line of the list of the skills of each official extension, as its manifest gives it, with on for each one in
+  on."""
+  made = []
+  for manifest in sorted(Path(__file__).parent.glob("*/SKILL.md")):
+    text = manifest.read_text(encoding="utf-8")
+    name, said = (re.search(rf"^{key}: (.+)$", text, re.M) for key in ("name", "description"))
+    assert name, f"the manifest {manifest} gives a name"
+    assert said, f"the manifest {manifest} gives a description"
+    marks = ["code", *(["on"] if name[1] in on else []), *(["default"] if '  furb-default: "true"' in text else [])]
+    made.append(f"{name[1]} ({', '.join(marks)}): {said[1]}")
+  return made
+
+
+def index(*lines: str, on: Sequence[str] = ("skills",)) -> list[str]:
+  """The lines of the list of the skills of a chain that finds the skills of these lines in its folders: the first
+  line, then these lines, the line of each official extension, with on for each one in on, and the line of extending,
+  in the order of the names, and a line that comes earlier wins for a name."""
+  kept: dict[str, str] = {}
+  for line in [*lines, *official_lines(on), EXTENDING]:
+    kept.setdefault(re.split(r"[ :]", line, maxsplit=1)[0], line)
+  return [USE, *(kept[name] for name in sorted(kept))]
+
+
 SKILLED = (".furb/skills", ".agents/skills", ".claude/skills")
 """SKILLED is the folders of skills that the World finds in the working directory of a chain and in each folder above
 it."""

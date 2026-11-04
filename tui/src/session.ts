@@ -73,11 +73,12 @@ export interface Skill {
   name: string;
   detail: string;
 }
-/** The skills in the text of a read of skills://, which holds one line, name: what it is for, for each skill. */
+/** The skills in the text of a read of skills://, which holds one line for each skill after the line that says how to read
+ * one: name, then its marks in parentheses, as (code, on), when it has some, then : and what it is for. */
 const skillsIn = (got: unknown): Skill[] => {
   const text = got && typeof got === "object" && "content" in got ? String(got.content) : "";
   return text.split("\n").flatMap((line): Skill[] => {
-    const found = /^([\w.-]+): (.*)$/.exec(line.trim());
+    const found = /^([\w.-]+)(?: \([\w, ]+\))?: (.*)$/.exec(line.trim());
     return found ? [{ name: found[1] ?? "", detail: found[2] ?? "" }] : [];
   });
 };
