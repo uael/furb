@@ -27,10 +27,6 @@
 )]
 #![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
 #![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
-#![expect(
-  clippy::semicolon_if_nothing_returned,
-  reason = "debt: a unit expression with no semicolon"
-)]
 #![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
 #![expect(
   clippy::single_match_else,
@@ -71,10 +67,12 @@ use crate::ear::runtime;
 
 mod accounts;
 mod discover;
+mod protocol;
+use accounts::Accounts;
 pub use accounts::{Account, Source, Switch};
-use accounts::{Accounts, NO_TOKEN};
 use discover::Found;
 pub use discover::refresh;
+use protocol::{Delta, Event, Finished, Spent, Start, Stop, Streamed, Whole};
 
 /// The name of the command line as a provider: each response of it says this name, and each of its models is named
 /// by it and the alias of its family.
@@ -124,37 +122,88 @@ const PAUSE: Duration = Duration::from_secs(5);
 /// is gone.
 const LOST: &str = "No conversation found with session ID";
 
-/// The words that begin the failure of a turn whose program was missing or did not run, as while an update of claude
-/// replaces it, which the provider takes for a failure that passes.
-pub(super) const MISSING: &str = "No program to run";
-
-/// The words that begin the failure of a turn whose account was parked, which the provider takes for a failure that
-/// passes: the turn that asks again runs as another account.
-pub(super) const SWITCHED: &str = "Switched account";
-
 /// What a failed sign in of the command line says, in lower case.
-const SIGNED_OUT: [&str; 6] = [
+const SIGNED_OUT: [&str; 5] = [
   "please run /login",
   "not logged in",
   "invalid api key",
   "oauth token has expired",
   "authentication_error",
-  NO_TOKEN,
 ];
 
-/// The words that begin the failure of a turn that finds every account signed out.
-const ALL_SIGNED_OUT: &str = "Every account of the claude command line is signed out.";
-
-/// Whether a failure is a failed sign in of the command line, or that every account of it is signed out. A sign in
-/// outside furb ends it, so the provider waits and asks again.
-pub(super) fn signed_out(no: &CompletionError) -> bool {
-  let CompletionError::ProviderError(said) = no else { return false };
-  let said = said.to_lowercase();
-  said.starts_with(&ALL_SIGNED_OUT.to_lowercase()) || signed_out_words(&said)
+/// A failed turn of the command line that the provider decides on. It crosses the boundary of rig
+/// boxed in a `CompletionError::RequestError`, the one variant of rig that holds a source, and
+/// [`error`] takes it back.
+#[derive(Debug, thiserror::Error)]
+pub(super) enum Error {
+  /// A usage limit, and the moment it ends when the command line names one. The provider asks again
+  /// then.
+  #[error("Claude AI usage limit reached{}", until_text(.until.as_ref()))]
+  Limit { until: Option<SystemTime> },
+  /// A failed sign in, or every account signed out. A sign in outside furb ends it, so the provider
+  /// asks again.
+  #[error("{0}")]
+  SignedOut(String),
+  /// The program was missing or did not run, as while an update of claude replaces it, which
+  /// passes.
+  #[error("No program to run: {0}")]
+  Missing(String),
+  /// The account was parked, and the turn that asks again runs as another one, which passes.
+  #[error("Switched account {0}")]
+  Switched(String),
+  /// The command line holds no conversation under the id that the process resumed.
+  #[error("{0}")]
+  Lost(String),
 }
 
-fn signed_out_words(said: &str) -> bool {
-  SIGNED_OUT.iter().any(|one| said.contains(one))
+/// The end of a limit as a failure says it, when it is known.
+fn until_text(until: Option<&SystemTime>) -> String {
+  until
+    .and_then(|at| jiff::Timestamp::try_from(*at).ok())
+    .map_or_else(String::new, |at| format!(" until {at}"))
+}
+
+/// A failure that the provider decides on, as rig carries it.
+fn refused(why: Error) -> CompletionError {
+  CompletionError::RequestError(Box::new(why))
+}
+
+/// The failure of the command line that a failed call holds, if the provider decides on it.
+pub(super) fn error(no: &CompletionError) -> Option<&Error> {
+  let CompletionError::RequestError(source) = no else { return None };
+  source.downcast_ref()
+}
+
+/// A failure in the words of the command line, typed when the words name a usage limit, a failed
+/// sign in or a lost conversation. This is the one place that reads them, since the command line
+/// gives nothing but its text.
+pub(super) fn worded(no: CompletionError) -> CompletionError {
+  let CompletionError::ProviderError(said) = &no else { return no };
+  let lower = said.to_lowercase();
+  if lower.contains("usage limit reached") || (lower.contains("limit") && lower.contains("resets"))
+  {
+    refused(Error::Limit { until: limited(said) })
+  } else if SIGNED_OUT.iter().any(|one| lower.contains(one)) {
+    refused(Error::SignedOut(said.clone()))
+  } else if said.contains(LOST) {
+    refused(Error::Lost(said.clone()))
+  } else {
+    no
+  }
+}
+
+/// The moment a usage limit ends, from the message of the command line: the older `usage limit
+/// reached|1760000000`, or the moment after `resets`.
+fn limited(said: &str) -> Option<SystemTime> {
+  if let Some((_, epoch)) = said.rsplit_once('|')
+    && let Ok(second) = epoch.trim().parse::<u64>()
+  {
+    return Some(UNIX_EPOCH + Duration::from_secs(second));
+  }
+  let at = super::resets(said, &Zoned::now())?;
+  u64::try_from(at.timestamp().as_second())
+    .ok()
+    .map(|second| UNIX_EPOCH + Duration::from_secs(second))
 }
 
 /// The claude command line: its program, how long a turn may go with no progress, how long a process waits for a
@@ -466,13 +515,16 @@ impl Claude {
     got.map_err(|no| self.switched(at, no))
   }
 
-  /// The failure of a turn that finds every account parked: the wait for the first reset of a limit, in the words of
-  /// the command line, or that every account is signed out.
+  /// The failure of a turn that finds every account parked: the wait for the first reset of a
+  /// limit, or that every account is signed out.
   fn exhausted(&self, now: SystemTime) -> CompletionError {
-    match self.program.accounts.earliest(now) {
-      Some(end) => failed(format!("Claude AI usage limit reached|{}", epoch(end))),
-      None => failed(format!("{ALL_SIGNED_OUT} Sign one in, then run /reload.")),
-    }
+    refused(match self.program.accounts.earliest(now) {
+      Some(end) => Error::Limit { until: Some(end) },
+      None => Error::SignedOut(
+        "Every account of the claude command line is signed out. Sign one in, then run /reload."
+          .to_owned(),
+      ),
+    })
   }
 
   /// What a failed turn of an account comes to. A usage limit or a failed sign in parks the account, and the turn
@@ -483,46 +535,25 @@ impl Claude {
     if !accounts.switchable() {
       return no;
     }
-    let Some(why) = refusal(&no) else { return no };
     let now = SystemTime::now();
-    let (until, reason) = match why {
-      Refusal::Limit(end) => (Some(end.unwrap_or(now + super::LIMIT_POLL)), "its usage limit"),
-      Refusal::SignedOut => (None, "its sign in failed"),
+    let (until, reason) = match error(&no) {
+      Some(Error::Limit { until }) => {
+        (Some(until.unwrap_or(now + super::LIMIT_POLL)), "its usage limit")
+      }
+      Some(Error::SignedOut(_)) => (None, "its sign in failed"),
+      _ => return no,
     };
     accounts.park(at, until);
     match (accounts.peek(now), accounts.earliest(now)) {
-      (Some(next), _) => failed(format!(
-        "{SWITCHED} from {} to {}: {reason}",
+      (Some(next), _) => refused(Error::Switched(format!(
+        "from {} to {}: {reason}",
         accounts.name(at),
         accounts.name(next)
-      )),
+      ))),
       (None, Some(_)) => self.exhausted(now),
       (None, None) => no,
     }
   }
-}
-
-/// Why an account cannot serve: a usage limit, and the moment it ends if the message names one, or a failed sign in.
-enum Refusal {
-  Limit(Option<SystemTime>),
-  SignedOut,
-}
-
-fn refusal(no: &CompletionError) -> Option<Refusal> {
-  if let Some(reset) = super::limit(no, &Zoned::now()) {
-    let end = reset
-      .and_then(|at| u64::try_from(at.timestamp().as_second()).ok())
-      .map(|seconds| UNIX_EPOCH + Duration::from_secs(seconds));
-    return Some(Refusal::Limit(end));
-  }
-  let CompletionError::ProviderError(said) = no else { return None };
-  let said = said.to_lowercase();
-  signed_out_words(&said).then_some(Refusal::SignedOut)
-}
-
-/// A time as the seconds since 1970, which the older message of a usage limit gives.
-fn epoch(at: SystemTime) -> u64 {
-  at.duration_since(UNIX_EPOCH).map_or(0, |one| one.as_secs())
 }
 
 /// What the keeper of the conversations is asked: to lend the conversation of a key to a turn, or to take it back.
@@ -909,14 +940,15 @@ impl Conversation {
         reply: None,
         restored: None,
       };
-      let got = flight.run(delta, spend.clone(), program, stall, gone, deltas).await;
+      let got =
+        flight.run(delta, spend.clone(), program, stall, gone, deltas).await.map_err(worded);
       if let Ok(response) = &got {
         let reply = Message::Assistant { id: None, content: response.choice.clone() };
         flight.reply = Some(canonical(&reply));
       }
       drop(flight);
       match (got, &lost) {
-        (Err(no), None) if no.to_string().contains(LOST) => {
+        (Err(no), None) if matches!(error(&no), Some(Error::Lost(_))) => {
           lost = Some(self.id.clone());
           self.renew()?;
           (delta, again) = (messages, false);
@@ -942,7 +974,7 @@ impl Conversation {
     spend: Spend,
     gone: Duration,
   ) -> Result<Process, CompletionError> {
-    let mut command = program.command().map_err(failed)?;
+    let mut command = program.command().map_err(|why| refused(Error::SignedOut(why)))?;
     command.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json"]);
     command.args(["--verbose", "--include-partial-messages", "--model", &self.name]);
     let prompt = prompt_file(&self.system)?;
@@ -1005,8 +1037,8 @@ impl Conversation {
     .map_err(|no| {
       let absent =
         matches!(no.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied);
-      let missing = if absent { format!("{MISSING}: ") } else { String::new() };
-      failed(format!("{missing}{} did not start: {no}", program.name()))
+      let said = format!("{} did not start: {no}", program.name());
+      if absent { refused(Error::Missing(said)) } else { failed(said) }
     })?;
     let (Some(stdin), Some(stdout), Some(stderr)) =
       (child.stdin.take(), child.stdout.take(), child.stderr.take())
@@ -1023,7 +1055,7 @@ impl Conversation {
 /// What the stdout of a process says: an event of the stream, a line that is none, or its end, with why when the
 /// end is no exit.
 enum Line {
-  Event(Value),
+  Event(Box<Event>),
   Odd(String),
   Over(Option<String>),
 }
@@ -1081,7 +1113,12 @@ impl Out {
         Ok(_) => {
           let read = std::mem::take(&mut self.read);
           match serde_json::from_slice::<Value>(read.trim_ascii()) {
-            Ok(event) => Line::Event(event),
+            Ok(value) => match Event::read(value) {
+              Ok(event) => Line::Event(Box::new(event)),
+              Err(no) => {
+                Line::Over(Some(format!("Claude sent an event its protocol forbids: {no}")))
+              }
+            },
             Err(_) if read.trim_ascii().is_empty() => continue,
             Err(_) => Line::Odd(String::from_utf8_lossy(read.trim_ascii()).into_owned()),
           }
@@ -1165,7 +1202,7 @@ async fn exited(
   let code = code.map_or_else(|| "a signal".to_owned(), |code| code.to_string());
   if !spoke && absent(&tail.kept) {
     let said = tail.said();
-    return (failed(format!("{MISSING}: {} exited ({code}){said}", program.name())), true);
+    return (refused(Error::Missing(format!("{} exited ({code}){said}", program.name()))), true);
   }
   (failed(format!("Claude exited ({code}){}", tail.said())), false)
 }
@@ -1265,7 +1302,10 @@ impl Flight<'_> {
         let said = process.tail.said();
         if absent(&process.tail.kept) {
           self.restored = Some(before);
-          return Err(failed(format!("{MISSING}: {} took no input: {no}{said}", program.name())));
+          return Err(refused(Error::Missing(format!(
+            "{} took no input: {no}{said}",
+            program.name()
+          ))));
         }
         return Err(failed(format!("claude took no input: {no}{said}")));
       }
@@ -1294,7 +1334,7 @@ impl Flight<'_> {
         }
       };
       let event = match heard {
-        Line::Event(event) => event,
+        Line::Event(event) => *event,
         Line::Odd(text) => {
           spoke = true;
           last(&text).clone_into(&mut odd);
@@ -1316,29 +1356,28 @@ impl Flight<'_> {
         }
       };
       spoke = true;
-      let kind = event.get("type").and_then(Value::as_str).unwrap_or_default();
-      if matches!(kind, "stream_event" | "assistant" | "result") {
+      if !matches!(event, Event::Other) {
         due = tokio::time::Instant::now() + stall;
       }
-      match kind {
-        "stream_event" => reply.streamed(event.get("event").unwrap_or(&Value::Null)),
-        "assistant" => {
-          if let Some(spent) = event["message"].get("usage") {
-            reply.spent = Some(spent.clone());
+      match event {
+        Event::Stream { event } => reply.streamed(&event),
+        Event::Assistant { message } => {
+          if let Some(spent) = message.usage {
+            reply.spent = Some(spent);
           }
-          reply.settled(&event["message"]["content"]);
+          reply.settled(&message.content);
         }
-        "result" => {
-          if let Some(session) = event.get("session_id").and_then(Value::as_str) {
+        Event::Result(result) => {
+          if let Some(session) = &result.session_id {
             session.clone_into(id);
           }
-          if event.get("is_error").and_then(Value::as_bool).unwrap_or_default() {
-            let said = event.get("result").and_then(Value::as_str).filter(|one| !one.is_empty());
-            return Err(failed(said.map_or_else(|| unexplained(&event), str::to_owned)));
+          if result.is_error {
+            let said = result.result.as_deref().filter(|one| !one.is_empty());
+            return Err(failed(said.map_or_else(|| unexplained(&result), str::to_owned)));
           }
-          return Ok(reply.response(&event, name, id, process));
+          return Ok(reply.response(&result, name, id, process));
         }
-        _ => {}
+        Event::Other => {}
       }
     };
     let (no, missing) = exited(code, &mut process.tail, program, spoke).await;
@@ -1378,7 +1417,7 @@ struct Reply<'a> {
   settled: u64,
   /// The usage of the last message the command line settled, which is the one request of the turn whose answer the
   /// reply holds.
-  spent: Option<Value>,
+  spent: Option<Spent>,
   deltas: Option<&'a Deltas>,
 }
 
@@ -1443,69 +1482,57 @@ impl Reply<'_> {
   }
 
   /// One event of a message as it streams.
-  fn streamed(&mut self, update: &Value) {
-    let kind = update.get("type").and_then(Value::as_str).unwrap_or_default();
-    if kind == "message_start" {
+  fn streamed(&mut self, update: &Streamed) {
+    if matches!(update, Streamed::MessageStart) {
       self.streamed = Some(HashMap::new());
       self.settled = 0;
     }
-    let index = update.get("index").and_then(Value::as_u64).unwrap_or_default();
-    let at = self.streamed.get_or_insert_default().get(&index).copied();
-    match kind {
-      "content_block_start" => {
-        let block = &update["content_block"];
-        let text =
-          |key: &str| block.get(key).and_then(Value::as_str).unwrap_or_default().to_owned();
-        let block = match block.get("type").and_then(Value::as_str) {
-          Some("text") => Block::Text(text("text")),
-          Some("thinking") => Block::Thinking(text("thinking"), None),
-          _ => return,
+    let places = self.streamed.get_or_insert_default();
+    match update {
+      Streamed::ContentBlockStart { index, content_block } => {
+        let block = match content_block {
+          Start::Text { text } => Block::Text(text.clone()),
+          Start::Thinking { thinking } => Block::Thinking(thinking.clone(), None),
+          Start::Other => return,
         };
-        let place = self.blocks.len();
-        self.streamed.get_or_insert_default().insert(index, place);
+        places.insert(*index, self.blocks.len());
         self.opened(block);
       }
-      "content_block_delta" => {
-        let Some(at) = at else { return };
-        let delta = &update["delta"];
-        let text = |key: &str| delta.get(key).and_then(Value::as_str).unwrap_or_default();
-        let block = self.blocks.get(at);
-        match delta.get("type").and_then(Value::as_str) {
-          Some("text_delta") if matches!(block, Some(Block::Text(_))) => {
-            self.grew(at, text("text"))
+      Streamed::ContentBlockDelta { index, delta } => {
+        let Some(at) = places.get(index).copied() else { return };
+        match (delta, self.blocks.get(at)) {
+          (Delta::Text { text }, Some(Block::Text(_))) => self.grew(at, text),
+          (Delta::Thinking { thinking }, Some(Block::Thinking(..))) => {
+            self.grew(at, thinking);
           }
-          Some("thinking_delta") if matches!(block, Some(Block::Thinking(..))) => {
-            self.grew(at, text("thinking"));
-          }
-          Some("signature_delta") => {
-            if let Some(Block::Thinking(_, signature)) = self.blocks.get_mut(at) {
-              signature.get_or_insert_default().push_str(text("signature"));
+          (Delta::Signature { signature }, _) => {
+            if let Some(Block::Thinking(_, held)) = self.blocks.get_mut(at) {
+              held.get_or_insert_default().push_str(signature);
             }
           }
           _ => {}
         }
       }
-      "content_block_stop" => {
-        if let Some(at) = at {
+      Streamed::ContentBlockStop { index } => {
+        if let Some(at) = places.get(index).copied() {
           self.closed(at);
         }
       }
-      _ => {}
+      Streamed::MessageStart | Streamed::Other => {}
     }
   }
 
   /// The blocks of a message that the command line says whole. It says each block again, once it is whole, in the
   /// order it streamed them: the whole block stands over the one streamed at its place, and never twice. A message
   /// that did not stream is told as it comes.
-  fn settled(&mut self, content: &Value) {
-    let blocks = content.as_array().map(Vec::as_slice).unwrap_or_default();
-    for one in blocks {
-      let text = |key: &str| one.get(key).and_then(Value::as_str).unwrap_or_default().to_owned();
-      let signature = one.get("signature").and_then(Value::as_str).map(str::to_owned);
-      let block = match one.get("type").and_then(Value::as_str) {
-        Some("text") => Some(Block::Text(text("text"))),
-        Some("thinking") => Some(Block::Thinking(text("thinking"), signature)),
-        _ => None,
+  fn settled(&mut self, content: &[Whole]) {
+    for one in content {
+      let block = match one {
+        Whole::Text { text } => Some(Block::Text(text.clone())),
+        Whole::Thinking { thinking, signature } => {
+          Some(Block::Thinking(thinking.clone(), signature.clone()))
+        }
+        Whole::Other => None,
       };
       match &self.streamed {
         Some(streamed) => {
@@ -1539,34 +1566,33 @@ impl Reply<'_> {
   /// read of the window. A result that no message with a usage came before gives its own usage.
   fn response(
     mut self,
-    result: &Value,
+    result: &Finished,
     name: &str,
     id: &str,
     process: &mut Process,
   ) -> CompletionResponse {
     if self.blocks.is_empty()
-      && let Some(text) = result.get("result").and_then(Value::as_str).filter(|one| !one.is_empty())
+      && let Some(text) = result.result.as_deref().filter(|one| !one.is_empty())
     {
       self.blocks.push(Block::Text(text.to_owned()));
     }
-    let spent = self.spent.take().unwrap_or_else(|| result["usage"].clone());
-    let count = |key: &str| spent.get(key).and_then(Value::as_u64).unwrap_or_default();
+    let spent = self.spent.take().or_else(|| result.usage.clone()).unwrap_or_default();
     let mut usage = Usage::new();
-    usage.input_tokens = count("input_tokens");
-    usage.output_tokens = count("output_tokens");
-    usage.cached_input_tokens = count("cache_read_input_tokens");
-    usage.cache_creation_input_tokens = count("cache_creation_input_tokens");
+    usage.input_tokens = spent.input;
+    usage.output_tokens = spent.output;
+    usage.cached_input_tokens = spent.cache_read;
+    usage.cache_creation_input_tokens = spent.cache_creation;
     usage.total_tokens = usage.input_tokens
       + usage.output_tokens
       + usage.cached_input_tokens
       + usage.cache_creation_input_tokens;
-    let total = result.get("total_cost_usd").and_then(Value::as_f64).unwrap_or(process.paid);
+    let total = result.total_cost_usd.unwrap_or(process.paid);
     let cost = (total - process.paid).max(0.0);
     process.paid = total;
-    let finish = match result.get("stop_reason").and_then(Value::as_str) {
-      Some("max_tokens") => FinishReason::Length,
-      Some("refusal") => FinishReason::ContentFilter,
-      _ => FinishReason::Stop,
+    let finish = match result.stop_reason {
+      Some(Stop::MaxTokens) => FinishReason::Length,
+      Some(Stop::Refusal) => FinishReason::ContentFilter,
+      Some(Stop::Other) | None => FinishReason::Stop,
     };
     let choice = self.blocks.iter().map(Block::content).collect();
     CompletionResponse::new(choice, usage, CLAUDE)
@@ -1693,23 +1719,21 @@ fn failed(why: impl Into<String>) -> CompletionError {
 
 /// What an error result tells when its text is empty: its subtype, its status and its errors, so that a login error
 /// shows apart from a limit.
-fn unexplained(event: &Value) -> String {
+fn unexplained(event: &Finished) -> String {
   let mut facts = Vec::new();
-  if let Some(subtype) = event.get("subtype").and_then(Value::as_str).filter(|one| !one.is_empty())
-  {
+  if let Some(subtype) = event.subtype.as_deref().filter(|one| !one.is_empty()) {
     facts.push(format!("subtype {subtype}"));
   }
-  if let Some(status) = event.get("api_error_status").filter(|one| !one.is_null()) {
+  if let Some(status) = &event.api_error_status {
     facts.push(format!("api_error_status {status}"));
   }
-  let errors = match event.get("errors") {
-    Some(Value::Array(all)) => all
-      .iter()
-      .map(|one| one.as_str().map_or_else(|| one.to_string(), str::to_owned))
-      .collect::<Vec<_>>()
-      .join("; "),
-    _ => String::new(),
-  };
+  let errors = event
+    .errors
+    .iter()
+    .flatten()
+    .map(|one| one.as_str().map_or_else(|| one.to_string(), str::to_owned))
+    .collect::<Vec<_>>()
+    .join("; ");
   let head = if facts.is_empty() { String::new() } else { format!(" ({})", facts.join(", ")) };
   let tail = if errors.is_empty() { String::new() } else { format!(": {errors}") };
   format!("Claude reported an error{head}{tail}.")

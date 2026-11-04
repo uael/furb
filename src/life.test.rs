@@ -36,7 +36,9 @@ use crate::{
 
 /// A directory of its own for one test, and empty.
 fn place(name: &str) -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-life-{name}-{}", std::process::id()));
+  static MADE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+  let n = MADE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+  let at = std::env::temp_dir().join(format!("furb-life-{name}-{}-{n}", std::process::id()));
   let _ = fs::remove_dir_all(&at);
   fs::create_dir_all(&at).unwrap();
   at
@@ -906,7 +908,8 @@ fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_promp
   let written = crate::checkpoint::written(&mut inspected).unwrap();
   drop(inspected);
   crate::checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
-  let mut later = scripted(&at, &["close('again')"]).boot::<String>([]).unwrap().0;
+  let mut later =
+    scripted(&at, &["rounds += 1\nclose(f'round {rounds}')"]).boot::<String>([]).unwrap().0;
   let word = format!(
     "wake('chain2')\nclose([str(ran), queue, f(), get('{waiting}')[:2], await waiting, str(chain('more')), str(bash('echo two'))])"
   );
@@ -914,8 +917,8 @@ fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_promp
   assert_eq!(
     closed(&mut later, &word).as_ref().py_repr(),
     format!("[{exit:?}, [{exit}], 6, ('prompt', '{waiting}'), 'round 2', 'chain3', 'bash2']"),
-    "each name, value and answer of the past stands, the word that ran runs again from its top on the module that \
-     the checkpoint carries and closes the open prompt with no new turn of the model, and a new act takes the next name"
+    "each name, value and answer of the past stands, the model starts the cut word again in a turn on the module \
+     that the checkpoint carries and closes the open prompt, and a new act takes the next name"
   );
   assert_eq!(
     closed(&mut later, "close([x[1] for x in transcript('chain1', 'merged')])").as_ref().py_repr(),
@@ -971,7 +974,7 @@ fn a_checkpoint_holds_data_alone_and_a_later_engine_seeds_a_life_from_it_with_no
     !data.to_string().contains("say('prefix'"),
     "the checkpoint holds no word that the crate crafts"
   );
-  let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  let mut later = scripted(&at, &["close('late')"]).boot::<String>([]).unwrap().0;
   let word = format!(
     "wake('chain2')\nclose([await queue[0], f(), get('{waiting}')[:2], await Act('{waiting}'), str(bash('echo two'))])"
   );
@@ -1116,7 +1119,8 @@ fn a_later_life_of_the_engine_that_wrote_a_checkpoint_boots_on_it_and_on_the_tai
   );
   let tail = &kept[at_checkpoint + 1..];
   let carried = crate::checkpoint::booted(kept[..=at_checkpoint].to_vec()).len();
-  let (mut later, booted) = scripted(&at, &[]).boot::<String>([]).unwrap();
+  let again = "rounds += 1\nclose(f'round {rounds}')";
+  let (mut later, booted) = scripted(&at, &[again]).boot::<String>([]).unwrap();
   assert_eq!(
     booted.len(),
     carried + tail.len(),
@@ -1149,6 +1153,47 @@ fn a_command_that_ran_at_a_checkpoint_ends_in_the_life_that_goes_on_from_it_as_i
     Some("\"sleep 60\" was interrupted: the life that ran it ended before it did"),
     "the command ends as the ear of commands ends one that a life left"
   );
+}
+
+#[test]
+fn a_word_that_awaits_a_command_at_a_checkpoint_ends_as_cut_and_its_model_starts_it_again_in_a_turn()
+ {
+  let at = place("checkpoint-cut-word");
+  let work = "await bash('sleep 60')\nclose('late')";
+  let mut first = scripted(&at, &[work]).boot::<String>([]).unwrap().0;
+  let asked =
+    "waiting = prompt(str, 'Wait.', on=chain('work'))\nawait wait(0.3)\nclose(str(waiting))";
+  let waiting = closed(&mut first, asked).as_ref().as_str().unwrap().to_owned();
+  let open = "close([x[1] for x in transcript('chain2', 'run') if not over(x[1])])";
+  let runs = closed(&mut first, open).as_ref().py_repr();
+  let run = runs.trim_start_matches("['").trim_end_matches("']").to_owned();
+  assert!(
+    run.starts_with("run") && !run.contains(','),
+    "the word of chain2 awaits its command: {runs}"
+  );
+  first.checkpoint().unwrap();
+  let mut later = scripted(&at, &["close('again')"]).boot::<String>([]).unwrap().0;
+  let word = format!(
+    "wake('chain2')\nclose([await Act('{waiting}'), str(peek('bash1')), \
+     any(\"it cut ['{run}', 'bash1']\" in t[1] for t in turns('chain2'))])"
+  );
+  assert_eq!(
+    closed(&mut later, &word).as_ref().py_repr(),
+    "['again', '\"sleep 60\" was interrupted: the life that ran it ended before it did', True]",
+    "the command ends as interrupted, the chain is told that the checkpoint cut the word, and the model of the \
+     chain starts the word again in a turn that it reads"
+  );
+  drop(later);
+  let kept = world::kept(at.join("record.jsonl")).unwrap();
+  let ran = crate::checkpoint::segment(&kept)
+    .iter()
+    .filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of))
+    .filter(|a| {
+      (a.kind() == "started" && a.about() == "bash1")
+        || (a.kind() == "rung" && a.word(1).and_then(|one| one.as_str()) == Some(work))
+    })
+    .count();
+  assert_eq!(ran, 0, "no word that ran at the checkpoint runs again, nor its command");
 }
 
 #[test]
@@ -1215,7 +1260,7 @@ fn a_chain_that_only_a_value_names_goes_on_from_a_checkpoint_with_its_own_module
 }
 
 #[test]
-fn a_word_that_ran_at_a_checkpoint_runs_again_and_asks_again_the_prompt_that_it_awaited() {
+fn a_word_that_ran_at_a_checkpoint_is_cut_with_the_prompt_that_it_awaited() {
   let at = place("checkpoint-asked");
   let work = "got = await prompt(str, 'Ask.', on=chain('asked'))\nclose(got)";
   let mut first =
@@ -1235,8 +1280,9 @@ fn a_word_that_ran_at_a_checkpoint_runs_again_and_asks_again_the_prompt_that_it_
   );
   assert_eq!(
     closed(&mut later, &word).as_ref().py_repr(),
-    "['fresh', [], 'chain5']",
-    "the word asks its prompt again on a new chain, and the prompt that it awaited at the checkpoint is not carried"
+    "['fresh', [], 'chain4']",
+    "the model starts the cut word again in a new turn, no word runs again to make a chain, and the prompt that the \
+     cut word awaited at the checkpoint is not carried"
   );
 }
 

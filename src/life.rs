@@ -217,13 +217,20 @@ impl Opening {
       Some(log) => log(line),
       None => eprintln!("furb: {line}"),
     };
-    let scratch = works.then(|| {
-      let kept =
-        self.record.as_ref().filter(|_| keeps).and_then(|path| Scratch::of(Path::new(path)));
-      let scratch = kept.unwrap_or_else(Scratch::own);
-      scratch.remade(&record, &told);
-      scratch
-    });
+    let scratch = works
+      .then(|| -> Result<Scratch, Fault> {
+        let kept = self
+          .record
+          .as_ref()
+          .filter(|_| keeps)
+          .map(|path| Scratch::of(Path::new(path)))
+          .transpose()?
+          .flatten();
+        let scratch = kept.unwrap_or_else(Scratch::own);
+        scratch.remade(&record, &told);
+        Ok(scratch)
+      })
+      .transpose()?;
     let gallery = self.gallery();
     let project = PathBuf::from(&self.directory);
     let provider = provider.ear();
@@ -315,7 +322,7 @@ impl Opening {
     let catalog = Catalog::load()
       .claude(claude.clone(), stall)
       .configured(Path::new(&directory), config.as_deref())
-      .map_err(Fault::refused)?;
+      .map_err(|no| Fault::refused(no.to_string()))?;
     let asks: world::Hosted =
       Arc::new(|_, _| Box::pin(async { Err("a life that inspects asks no model".to_owned()) }));
     let answer =
@@ -331,7 +338,8 @@ impl Opening {
       world::claude::refresh();
       let fresh = Catalog::load()
         .claude(claude.clone(), stall)
-        .configured(Path::new(&directory), config.as_deref())?;
+        .configured(Path::new(&directory), config.as_deref())
+        .map_err(|no| no.to_string())?;
       let kept = fresh.keep(names.as_deref(), preferred.as_deref());
       let candidate = fresh
         .provider(directory.clone(), kept.names.as_deref(), kept.actor.as_deref(), answer.clone())

@@ -66,6 +66,7 @@ printf '%s' "${MAX_THINKING_TOKENS-unset}" > "$here/thinking.$$"
 who=${CLAUDE_CODE_OAUTH_TOKEN-unset}
 printf '%s' "$who" > "$here/token.$$"
 printf '%s' "${CLAUDE_CONFIG_DIR-unset}" > "$here/configdir.$$"
+if [ -f "$here/deaf" ]; then echo "$$" >> "$here/pids"; exec sleep 60; fi
 echo "$$" >> "$here/pids"
 id=none
 resumed=
@@ -81,7 +82,6 @@ settle() { printf '%s\n' "{\"type\":\"assistant\",\"message\":{\"content\":[$1]$
 part() { say "{\"type\":\"content_block_delta\",\"index\":$at,\"delta\":{\"type\":\"text_delta\",\"text\":$1}}"; }
 if [ -f "$here/loud" ]; then head -c 262144 /dev/zero | tr '\0' e >&2; fi
 if [ -f "$here/odd" ]; then echo "no line of json"; fi
-if [ -f "$here/deaf" ]; then exec sleep 60; fi
 if [ -f "$here/lost" ] && [ -n "$resumed" ]; then
   left=$(cat "$here/lost")
   if [ "${left:-1}" -le 1 ]; then rm -f "$here/lost"; else echo $((left - 1)) > "$here/lost"; fi

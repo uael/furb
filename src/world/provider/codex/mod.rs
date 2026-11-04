@@ -1,10 +1,9 @@
 //! The Responses API of a ChatGPT subscription, on the sign-in that furb keeps.
 
-#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
-#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-
-use std::{future::Future, path::PathBuf};
+use std::{
+  future::Future,
+  path::{Path, PathBuf},
+};
 
 use bytes::Bytes;
 use rig_core::{
@@ -22,7 +21,7 @@ use serde_json::{Value, json};
 
 mod auth;
 
-pub use auth::{NAME, Status, begin, cancel, refresh, status};
+pub use auth::{AuthError, NAME, SignIn, begin, cancel, refresh, status};
 
 #[derive(Clone)]
 pub(super) struct Codex {
@@ -67,7 +66,7 @@ impl CompletionModel for Codex {
     let client = openai::Client::builder()
       .api_key(credential.access)
       .base_url(auth::API)
-      .http_client(CodexHttp(ReqwestClient::default(), Some(self.config.clone())))
+      .http_client(CodexHttp(ReqwestClient::default(), self.config.clone()))
       .http_headers(headers)
       .build()
       .map_err(CompletionError::HttpError)?;
@@ -84,7 +83,7 @@ impl CompletionModel for Codex {
 
 /// Codex can stream Responses events without a Content-Type header.
 #[derive(Clone, Debug, Default)]
-struct CodexHttp(ReqwestClient, Option<PathBuf>);
+struct CodexHttp(ReqwestClient, PathBuf);
 
 impl HttpClientExt for CodexHttp {
   fn send<T, U>(
@@ -121,9 +120,7 @@ impl HttpClientExt for CodexHttp {
   {
     let mut response = self.0.send_streaming(request).await?;
     if matches!(response.status().as_u16(), 401 | 403) {
-      if let Some(config) = &self.1 {
-        auth::needs_login(config);
-      }
+      auth::needs_login(&self.1);
       return Err(rig_core::http_client::Error::InvalidStatusCodeWithMessage(
         response.status(),
         "Sign in to codex again from Providers.".to_owned(),
@@ -143,20 +140,17 @@ mod test;
 #[derive(Default, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Settings {
-  enabled: Option<bool>,
+  #[serde(rename = "enabled")]
+  _enabled: Option<bool>,
   model_context_window: Option<u64>,
 }
 
-pub(super) fn offered(
-  config: Option<&std::path::Path>,
-  form: &serde_json::Value,
-) -> Result<Vec<super::Model>, String> {
-  let settings: Settings = if *form == serde_json::Value::Bool(true) {
+pub(super) fn offered(config: Option<&Path>, form: &Value) -> Result<Vec<super::Model>, String> {
+  let settings: Settings = if *form == Value::Bool(true) {
     Settings::default()
   } else {
     serde_json::from_value(form.clone()).map_err(|no| format!("Invalid codex settings: {no}"))?
   };
-  let _ = settings.enabled;
   if settings.model_context_window == Some(0) {
     return Err("The codex model_context_window must be positive".to_owned());
   }
@@ -189,7 +183,7 @@ pub(super) fn offered(
           if super::catalog::LEVELS.contains(&effort.effort.as_str()) {
             model = model.effort(
               &effort.effort,
-              serde_json::json!({"reasoning": {"effort": effort.effort, "summary": "auto"}}),
+              json!({"reasoning": {"effort": effort.effort, "summary": "auto"}}),
             );
           }
         }

@@ -1,7 +1,6 @@
 //! Commands: each runs in a shell of the machine, in the working directory of its chain, says what it writes as it
 //! writes it, and ends at its exit, at its timeout, or at the done that a control said of it first.
 
-#![expect(clippy::cast_precision_loss, reason = "debt: an as cast that loses precision")]
 #![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
 #![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
 #![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
@@ -36,7 +35,7 @@ use crate::{
   ear::{Co, Ear, Next, hearing, runtime, say},
   engine::left,
   fact::{Fact, named},
-  value::{Exit, Fault, Object, Text},
+  value::{Exit, Fault, Given, Object, Text},
 };
 
 /// The POSIX sh that runs a command: `/bin/sh`, and on Windows, which has none of its own, the sh of Git for Windows,
@@ -328,7 +327,7 @@ async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, 
     Some(one) if one.type_name() == "NoneType" => None,
     one => Some(one.and_then(|it| it.as_str()).unwrap_or_default().to_owned()),
   };
-  let timeout = a.word(3).and_then(|one| one.as_float().or_else(|| one.as_int().map(|n| n as f64)));
+  let timeout = a.word(3).and_then(|one| one.seconds());
   // A timeout past what the machine counts runs to the end of the command, as no timeout does.
   let timeout = timeout.and_then(|seconds| Duration::try_from_secs_f64(seconds).ok());
   let dir = here(co, &on).await?;

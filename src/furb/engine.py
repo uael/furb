@@ -238,9 +238,17 @@ def prompt[T](shape: type[T] | object, message="", to="", on="") -> Act[T]:
       while crafted(id):
         yield {"rung"}
     yield opened(id, named, message=message, thread=thread)
+    a: tuple = ()
     while not says:
-      asks and not (paused(id) or any(id in x[2:4] and not over(x[1]) for x in transcript(id, "rung"))) and rung(to=to)
-      yield {id}
+      heard = a[:1] == ("done",) and prompted(a[1]) and get(a[1])[3:5] == (id, "None")
+      asks and not (
+        paused(id)
+        or any(
+          id in x[2:4] and not over(x[1]) and not (heard and any(y[2] == x[1] for y in transcript(id, "reply")))
+          for x in transcript(id, "rung")
+        )
+      ) and rung(to=to)
+      a = yield {id}
     yield "done", id, None
 
   return act("prompt", on, controlled(ear), named, message, to)
@@ -474,14 +482,13 @@ def seed(data):
       [((x["kind"], i, "journal", x["on"]),), (("started", i, "journal"),), (("done", i, "journal", x["value"]),)]
     )
   for c in data["chains"]:
-    i = c["id"]
+    i, cut = c["id"], c["cut"] + [y["rung"] for y in c.get("again", ())]
     word = "\n".join(
       [
         c["definitions"],
         *(f"{named} = {text}" for named, text in c["values"].items()),
         HEARD,
-        f'debug(t"The life goes on from a checkpoint. It lost {c["lost"] or "no name"}, and it cut {c["cut"] or "no act"}.")',
-        *(f"with site.set({y['by']!r}):\n  rung({y['word']!r}, on={i!r})" for y in c["again"]),
+        f'debug(t"The life goes on from a checkpoint. It lost {c["lost"] or "no name"}, and it cut {cut or "no act"}.")',
       ]
     ).strip()
     put("rung", f"rung{numbers['rung'] + 1}", OPERATOR, i, word, "", "")
@@ -523,13 +530,8 @@ def gathered(define, floor):
     chains.append(f"chain{len(chains) + 1}")
   asked = [get(h) for h in chains] + [x for h in chains for x in transcript(h) if question(x) and x[0] != "chain"]
   asks = [x[1] for x in asked if x[0] == "prompt" and not over(x[1])]
-  waits = {x[2]: x[4] for x in asked if x[0] == "wants" and not over(x[1])}
-  resumed, dropped = [], set()
-  for run in sorted((x for x in asked if x[0] == "run" and not over(x[1]) and get(x[4])), key=lambda r: number(r[1])):
-    m = get(run[4])[2]
-    if m == OPERATOR or question(("chain", m)) or (prompted(m) and not over(m) and m not in dropped):
-      resumed.append(run)
-      prompted(q := waits.get(run[1], "")) and dropped.add(q)
+  cut = sorted((x[1] for x in asked if x[0] == "run" and not over(x[1]) and get(x[4])), key=number)
+  dropped = {x[4] for x in asked if x[0] == "wants" and x[2] in cut and prompted(x[4]) and not over(x[1])}
   asks = [x for x in asks if x not in dropped]
   live, values, lost, named = {ROOT, *map(scope, asks)}, {}, {}, set(asks)
   while live - values.keys():
@@ -553,7 +555,7 @@ def gathered(define, floor):
   carried = sorted((x for x in named | done if get(x)[0] in verbs), key=lambda r: (get(r)[0], number(r)))
   stands = [x[1] for x in transcript(ROOT, "stand") if question(x) and over(x[1])][-1:]
   clocks = [x[1] for x in transcript(ROOT, "clock") if question(x) and isinstance(peek(x[1]), float)][-1:]
-  acts, cut, asking = [], [], {scope(x) for x in carried if prompted(x)}
+  acts, asking = [], {scope(x) for x in carried if prompted(x)}
   for one in [*stands, *clocks, *carried]:
     a = get(one)
     d = {"kind": a[0], "id": one, "on": a[3]}
@@ -574,7 +576,6 @@ def gathered(define, floor):
   out = []
   for c in live:
     a = get(c)
-    said = {x[1]: x[3] for x in transcript(c, "ready")}
     kept = [
       x
       for x in transcript(c)
@@ -597,9 +598,6 @@ def gathered(define, floor):
         "values": values[c],
         "lost": lost[c],
         "cut": [x for x in cut if scope(x) == c],
-        "again": [
-          {"rung": x[4], "by": get(x[4])[2], "word": said.get(x[4], x[5])} for x in resumed if scope(x[1]) == c
-        ],
       }
     )
   return {"taken": taken, "chains": out, "acts": acts}

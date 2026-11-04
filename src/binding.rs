@@ -338,9 +338,9 @@ pub struct Inspection {
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "python", pyo3(signature = (scratch, config = None)))]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn files(scratch: String, config: Option<String>) -> NativeEar {
+pub fn files(scratch: String, config: Option<String>) -> Result<NativeEar, Fault> {
   let config = config.map_or_else(|| extension::Places::here().config, Into::into);
-  NativeEar::of(world::files(world::Scratch::at(scratch), config, None))
+  Ok(NativeEar::of(world::files(world::Scratch::at(scratch)?, config, None)))
 }
 
 /// The ear of commands, which runs each in a shell of this machine, with `TMPDIR` set to the scratch directory that
@@ -348,17 +348,17 @@ pub fn files(scratch: String, config: Option<String>) -> NativeEar {
 /// closes as interrupted each command that the record shows started and not done, at the wake.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn bash(scratch: String, record: Vec<Value>) -> NativeEar {
+pub fn bash(scratch: String, record: Vec<Value>) -> Result<NativeEar, Fault> {
   let record: Vec<Object> = record.into_iter().map(|one| one.0).collect();
-  NativeEar::of(world::bash(world::Scratch::at(scratch), &record))
+  Ok(NativeEar::of(world::bash(world::Scratch::at(scratch)?, &record)))
 }
 
 /// The scratch directory of the record at a path, in the cache of furb, which a host removes when it deletes the
 /// record; nothing when the machine has no cache of furb.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn scratch(record: String) -> Option<String> {
-  world::Scratch::of(record.as_ref()).map(|one| one.path().display().to_string())
+pub fn scratch(record: String) -> Result<Option<String>, Fault> {
+  Ok(world::Scratch::of(record.as_ref())?.map(|one| one.path().display().to_string()))
 }
 
 /// The ear of time, which reads the clock, draws a chance, and ends a wait.
@@ -580,7 +580,7 @@ fn configured_catalog(
   world::Catalog::load()
     .claude(claude.map(Into::into), None)
     .configured(&directory, config.as_deref())
-    .map_err(Fault::refused)
+    .map_err(|no| Fault::refused(no.to_string()))
 }
 
 /// What a first run checks of this machine, as a host reads it: whether the claude command line offers a model and
@@ -680,15 +680,19 @@ pub fn codex_auth(action: Option<String>, config: Option<String>) -> Result<Code
   let path = config.map(std::path::PathBuf::from);
   let status = match action.as_deref().unwrap_or("status") {
     "status" => auth::status(path.as_deref()),
-    "start" => auth::begin(path.as_deref()).map_err(Fault::refused)?,
-    "refresh" => auth::refresh(path.as_deref()).map_err(Fault::refused)?,
+    "start" => auth::begin(path.as_deref()).map_err(|no| Fault::refused(no.to_string()))?,
+    "refresh" => auth::refresh(path.as_deref()).map_err(|no| Fault::refused(no.to_string()))?,
     "cancel" => {
       auth::cancel(path.as_deref());
       auth::status(path.as_deref())
     }
     _ => return Err(Fault::refused("Use status, start, refresh or cancel for codex")),
   };
-  Ok(CodexAuthInfo { state: status.state, url: status.url, message: status.message })
+  Ok(CodexAuthInfo {
+    state: status.state().to_owned(),
+    url: status.url().map(str::to_owned),
+    message: status.message().map(str::to_owned),
+  })
 }
 
 /// The levels of effort, from least to most, which an actor names after its model.

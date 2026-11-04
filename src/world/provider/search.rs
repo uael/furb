@@ -36,11 +36,22 @@ const BRIEF: &str = "Search the web to answer the query of the user. Answer in M
 /// The most a model writes in the answer of one search.
 const TOKENS: u64 = 4096;
 
+/// Why the work of [`spawned`] ended with no answer: it took too long, or its task failed.
+#[derive(Debug, thiserror::Error)]
+#[error("{0}")]
+pub(crate) struct Cut(String);
+
+impl From<Cut> for String {
+  fn from(cut: Cut) -> String {
+    cut.to_string()
+  }
+}
+
 /// The work of a search or a fetch, on the runtime of the ears, so that a client of HTTP and a process have the runtime they
 /// need, which ends after [`TIMEOUT`], and when what awaits it goes.
-pub(crate) fn spawned<T: Send + 'static>(
-  work: impl Future<Output = Result<T, String>> + Send + 'static,
-) -> BoxFuture<'static, Result<T, String>> {
+pub(crate) fn spawned<T: Send + 'static, E: From<Cut> + Send + 'static>(
+  work: impl Future<Output = Result<T, E>> + Send + 'static,
+) -> BoxFuture<'static, Result<T, E>> {
   /// The task, which ends when its handle goes.
   struct Aborted(AbortHandle);
   impl Drop for Aborted {
@@ -55,8 +66,8 @@ pub(crate) fn spawned<T: Send + 'static>(
     drop(aborted);
     match got {
       Ok(Ok(got)) => got,
-      Ok(Err(_)) => Err(format!("it took more than {} seconds", TIMEOUT.as_secs())),
-      Err(no) => Err(no.to_string()),
+      Ok(Err(_)) => Err(Cut(format!("it took more than {} seconds", TIMEOUT.as_secs())).into()),
+      Err(no) => Err(Cut(no.to_string()).into()),
     }
   })
 }
