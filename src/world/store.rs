@@ -24,7 +24,7 @@ use sha2::{Digest, Sha256};
 use monty_types::unstable::{MontyGraph, MontyNode};
 
 use self::error::StoreError;
-use super::beside;
+use super::{beside, free};
 use crate::{
   ENGINE, KERNEL,
   ear::{Co, Ear, Hooks, Next, With, hearing, say},
@@ -57,6 +57,21 @@ pub trait Store {
   /// power. The life syncs its store once at the end of each run of the sandbox, so a loss of power loses at most what
   /// the last run kept.
   fn sync(&mut self) -> Result<(), Fault>;
+
+  /// The folder of the record and the bytes that its disk still takes, which the life reads as it
+  /// keeps, so it can tell the operator before a keep fails. A store that does not say gives
+  /// nothing, and the life tells nothing before a keep fails.
+  fn room(&self) -> Option<(&Path, u64)> {
+    None
+  }
+}
+
+/// The room of the record at a path: the folder that holds it and the bytes that its disk still
+/// takes, nothing when the disk does not say.
+fn room(path: &Path) -> Option<(&Path, u64)> {
+  let folder =
+    path.parent().filter(|parent| !parent.as_os_str().is_empty()).unwrap_or(Path::new("."));
+  Some((folder, free(folder)?))
 }
 
 /// The record at a path, read under its lease, and the ear that keeps on it what the journal says to keep: a
@@ -209,16 +224,35 @@ fn named() -> Fact {
 /// How long the ear of the record waits before it tries again to write the entries that it could not write.
 const AGAIN: Duration = Duration::from_secs(5);
 
+/// The free bytes of the disk of the record under which the ear tells the operator that the disk is
+/// almost full. It tells again only once the disk held twice as much, so a disk that stands near
+/// the bound gives one notice.
+const LOW: u64 = 1 << 30;
+
+/// What the ear of the record told the operator last, so it tells each change once.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Told {
+  /// The record takes each entry, and its disk has room, or the operator was told nothing yet.
+  Room,
+  /// The disk of the record holds less than [`LOW`] free.
+  Low,
+  /// The record takes no entry.
+  Stopped,
+}
+
 /// The record that a store holds, and the ear that keeps in the store what the journal says to keep.
 ///
 /// A new record names the engine and the version of this build: the ear says them as it hears the root at its birth,
 /// so a later life says them again at the same place. A record of a build before the fact made names no engine, and
 /// stays so, since this engine did not make it.
 ///
-/// An entry that the store cannot keep, as on a full disk, waits in memory with each entry after it, and the ear
-/// tries again in order at each keep, at the end of each run and every few seconds, until they land: no entry is lost
-/// or kept twice, and the life goes on. The ear tells the operator once when the record stops growing, with the fault,
-/// and once when it grows again. A message that did not go is said again at the next pass.
+/// The ear tells the operator once when the disk of the record holds less than [`LOW`] free, with
+/// the folder and the space left, before a keep fails. An entry that the store cannot keep, as on a
+/// full disk, waits in memory with each entry after it, and the ear tries again in order at each
+/// keep, at the end of each run and every few seconds, until they land: no entry is lost or kept
+/// twice, and the life goes on. The ear tells the operator once when the record stops growing, with
+/// the fault, and once when it grows again. A message that did not go is said again at the next
+/// pass.
 pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
   let mut store = Held { store, waiting: VecDeque::new(), fault: None };
   let entries: Vec<Object> = store.store.entries()?.into_iter().map(streamed).collect();
@@ -228,8 +262,8 @@ pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>
   let new = entries.is_empty()
     || crate::checkpoint::last(&entries).is_some_and(|at| made(&entries[at + 1..]).is_none());
   let kept = hearing(&["keep", "chain"], move |mut co: Co<()>| async move {
-    // Whether the ear told the operator that the record stopped, and whether a try waits for its time.
-    let (mut stopped, mut again) = (false, false);
+    // What the ear told the operator last, and whether a try waits for its time.
+    let (mut said, mut again) = (Told::Room, false);
     loop {
       match co.next().await {
         Next::Heard(a) => match a.kind() {
@@ -252,27 +286,42 @@ pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>
             again = true;
             co.work(stream::once(tokio::time::sleep(AGAIN)));
           }
-          if !stopped {
-            let message = format!(
-              "The record of this life cannot be written: {}. The life goes on, and holds in memory each fact \
-               that the record does not hold yet. It tries again until the record takes them, in order, and tells \
-               you then. Until then, an end of the life loses them: give the disk room, and keep the life open.",
-              fault.message()
-            );
-            // A message that cannot go leaves `stopped` unset, so the next pass says it again.
-            stopped = told(&mut co, message).await.is_ok();
+          if said != Told::Stopped {
+            // A message that cannot go leaves what the ear said, so the next pass says it again.
+            if told(&mut co, stopped(&fault)).await.is_ok() {
+              said = Told::Stopped;
+            }
           }
         }
-        None if stopped => {
-          let message = "The record of this life is written again: it holds each fact that waited, \
-                         in order.";
-          stopped = told(&mut co, message.into()).await.is_err();
+        None if said == Told::Stopped => {
+          let message =
+            "The record of this life is written again: it holds each fact that waited, in order.";
+          if told(&mut co, message.into()).await.is_ok() {
+            said = Told::Room;
+          }
         }
-        None => {}
+        None => {
+          let low = held.borrow().low(&mut said);
+          if let Some(message) = low
+            && told(&mut co, message).await.is_ok()
+          {
+            said = Told::Low;
+          }
+        }
       }
     }
   });
   Ok((entries, With::ear(kept, store)))
+}
+
+/// The message that the record stopped growing, with the fault of the store.
+fn stopped(fault: &Fault) -> String {
+  format!(
+    "The record of this life cannot be written: {}. The life goes on, and holds in memory each fact \
+     that the record does not hold yet. It tries again until the record takes them, in order, and tells \
+     you then. Until then, an end of the life loses them: give the disk room, and keep the life open.",
+    fault.message()
+  )
 }
 
 /// A message to the operator, from the ear of the record, or why it did not go.
@@ -291,6 +340,25 @@ struct Held<S> {
 }
 
 impl<S: Store> Held<S> {
+  /// The notice that the disk of the record is almost full, when the operator knows nothing of it
+  /// yet. A disk that holds twice [`LOW`] again ends what the operator knows, so a later fall under
+  /// the bound tells again.
+  fn low(&self, said: &mut Told) -> Option<String> {
+    let (folder, free) = self.store.room()?;
+    if free >= 2 * LOW {
+      *said = Told::Room;
+    }
+    (free < LOW && *said == Told::Room).then(|| {
+      format!(
+        "The disk of the record of this life is almost full: {} has {} MB left. When it is full, the \
+         life holds each fact in memory until the record takes them again, and an end of the life then \
+         loses them: give the disk room.",
+        folder.display(),
+        free / 1_000_000
+      )
+    })
+  }
+
   /// Each entry that waits kept in order, and the fault that stops the record, if one does.
   fn flushed(&mut self) -> Option<Fault> {
     while let Some(entry) = self.waiting.front() {
@@ -337,6 +405,10 @@ impl<S: Store + ?Sized> Store for Box<S> {
 
   fn sync(&mut self) -> Result<(), Fault> {
     (**self).sync()
+  }
+
+  fn room(&self) -> Option<(&Path, u64)> {
+    (**self).room()
   }
 }
 

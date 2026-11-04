@@ -106,6 +106,10 @@ impl Store for Lines {
     }
     Ok(())
   }
+
+  fn room(&self) -> Option<(&Path, u64)> {
+    super::room(&self.path)
+  }
 }
 
 /// Each entry of the file of lines at a path, in order, read with no lease and changed in nothing, one line at a time.
