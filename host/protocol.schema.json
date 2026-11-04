@@ -1087,10 +1087,10 @@
       "type": "string",
       "enum": [
         "window",
-        "kit",
+        "skill",
         "daemon"
       ],
-      "description": "What a peer is: a window of an operator, the process of a kit, or the daemon of a new build,\nwhich asks the handover."
+      "description": "What a peer is: a window of an operator, the process of a skill, or the daemon of a new build,\nwhich asks the handover."
     },
     "Hello": {
       "type": "object",
@@ -1114,7 +1114,7 @@
         "protocol",
         "kind"
       ],
-      "description": "The first frame of a peer: the protocol that it speaks, its kind, and the name of a kit."
+      "description": "The first frame of a peer: the protocol that it speaks, its kind, and the name of a skill."
     },
     "Slot": {
       "oneOf": [
@@ -1162,7 +1162,7 @@
             "slot",
             "act"
           ],
-          "description": "The row of one act, of a kind that the kit draws."
+          "description": "The row of one act, of a kind that the skill draws."
         },
         {
           "type": "object",
@@ -1179,7 +1179,7 @@
             "slot",
             "act"
           ],
-          "description": "The detail of one act, of a kind that the kit draws."
+          "description": "The detail of one act, of a kind that the skill draws."
         },
         {
           "type": "object",
@@ -1196,7 +1196,7 @@
             "slot",
             "act"
           ],
-          "description": "A mark in the feed, after one act, of a kind that the kit marks."
+          "description": "A mark in the feed, after one act, of a kind that the skill marks."
         },
         {
           "type": "object",
@@ -1249,7 +1249,7 @@
         "slot": {
           "$ref": "#/definitions/Slot"
         },
-        "kit": {
+        "skill": {
           "type": "string"
         }
       },
@@ -1257,9 +1257,9 @@
         "viewer",
         "life",
         "slot",
-        "kit"
+        "skill"
       ],
-      "description": "A view that a window mounts in a slot of a life, which the process of a kit serves."
+      "description": "A view that a window mounts in a slot of a life, which the process of a skill serves."
     },
     "Node": {
       "type": "object",
@@ -1651,7 +1651,7 @@
           ]
         }
       ],
-      "description": "What a kit asks of a window."
+      "description": "What a skill asks of a window."
     },
     "ViewEffect": {
       "type": "object",
@@ -1667,7 +1667,7 @@
         "viewer",
         "effect"
       ],
-      "description": "What a kit asks of the one window of a view."
+      "description": "What a skill asks of the one window of a view."
     },
     "Dispose": {
       "type": "object",
@@ -2108,7 +2108,7 @@
         "role",
         "kind"
       ],
-      "description": "A peer as the daemon knows it after its hello: the login that its transport proved, its role,\nits kind, and the name of a kit."
+      "description": "A peer as the daemon knows it after its hello: the login that its transport proved, its role,\nits kind, and the name of a skill."
     },
     "Role": {
       "type": "string",
@@ -2424,7 +2424,7 @@
             "needs",
             "has"
           ],
-          "description": "A frame of a view that only a window says, or only a kit, and the peer is of another kind."
+          "description": "A frame of a view that only a window says, or only a skill, and the peer is of another kind."
         },
         {
           "type": "object",
@@ -2437,7 +2437,7 @@
           "required": [
             "error"
           ],
-          "description": "A kit says its name at its hello, since a window mounts the views of a kit by it."
+          "description": "A skill says its name at its hello, since a window mounts the views of a skill by it."
         },
         {
           "type": "object",
@@ -2445,18 +2445,18 @@
             "life": {
               "type": "string"
             },
-            "kit": {
+            "skill": {
               "type": "string"
             },
             "error": {
               "type": "string",
-              "const": "no_kit"
+              "const": "no_skill"
             }
           },
           "required": [
             "error",
             "life",
-            "kit"
+            "skill"
           ]
         },
         {
@@ -2474,7 +2474,7 @@
             "error",
             "viewer"
           ],
-          "description": "A view belongs to the window that mounted it and to the kit that serves it, and to no other\npeer."
+          "description": "A view belongs to the window that mounted it and to the skill that serves it, and to no other\npeer."
         },
         {
           "type": "object",

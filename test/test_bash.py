@@ -30,7 +30,7 @@ from conftest import (
   world_says,
 )
 from furb import engine
-from furb.engine import HEAD, HIDDEN, OPERATOR, TAIL, Act, Exit, Refused, Text, grep, span
+from furb.engine import HEAD, HIDDEN, LARGEST, OPERATOR, TAIL, Act, Exit, Refused, Text, grep, span
 from furb_monty import _monty
 
 
@@ -469,6 +469,36 @@ async def test_its_close_tells_what_its_stdout_shows() -> None:
     f"#{apart} exited 0\n{apart}_stderr = 'bad'",
     f"#{quiet} exited 0",
   ]
+
+
+async def test_of_a_stream_whose_show_picks_more_than_largest_8_characters_its_close_tells_its_ends() -> None:
+  """Of a stream whose show picks more than LARGEST // 8 characters, its close tells the first LARGEST // 16 and the last LARGEST // 16 around a line that says how many it picks, as ... (2100000 chars), so the streams that it tells hold at most LARGEST bytes besides those lines, while its Exit holds them whole, and the model narrows its show or reads a door of the command."""
+  sand, _, root = born(auto=False)
+  much = ("\N{GRINNING FACE}" * 99 + "\n") * 700
+  edge = ("z" * 99 + "\n") * 655 + "z" * 36
+  assert len(edge) == LARGEST // 8
+  merged = engine.bash("one", show=span(1, -1), on=root)
+  apart = engine.bash("two", show=span(1, -1), show_err=span(1, -1), on=root)
+  await settle()
+  for one, out, err in ((merged, much, ""), (apart, edge, much)):
+    world_says("out", one, out, "stdout")
+    err and world_says("out", one, err, "stderr")
+    sand.exits(one, 0)
+  await settle()
+  told = paragraphs(engine.turns(on=root))[-2:]
+
+  def stream(paragraph: str, one: str, part: str) -> str:
+    return paragraph.split(f"<s:{one}_{part}>\n")[1].split(f"</s:{one}_{part}>", maxsplit=1)[0]
+
+  shown = much.removesuffix("\n")
+  most = LARGEST // 16
+  ends = shown[:most] + f"\n... ({len(shown)} chars)\n" + shown[-most:]
+  assert stream(told[0], merged, "stdout") == ends
+  assert stream(told[1], apart, "stdout") == edge
+  assert stream(told[1], apart, "stderr") == ends
+  assert len((edge + shown[:most] + shown[-most:]).encode()) <= LARGEST
+  assert (await merged).stdout.content == much
+  assert (await apart).stdout.content == edge and (await apart).stderr.content == much
 
 
 async def test_the_world_asks_a_command_whether_its_stderr_flows_into_its_stdout() -> None:

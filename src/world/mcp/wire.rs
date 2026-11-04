@@ -327,7 +327,7 @@ impl Process {
       made.current_dir(cwd);
     }
     made.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
-    grouped(&mut made);
+    let lead = grouped(&mut made).ok();
     let mut spawning = tokio::process::Command::from(made);
     spawning.kill_on_drop(true);
     let mut child = {
@@ -335,7 +335,7 @@ impl Process {
       let _inside = runtime.enter();
       spawning.spawn().map_err(|no| Failure::Broken(format!("{command} did not start: {no}")))?
     };
-    let group = Group::of(&child).ok();
+    let group = lead.and_then(|lead| Group::of(&child, lead).ok());
     let (Some(stdin), Some(stdout), Some(stderr)) =
       (child.stdin.take(), child.stdout.take(), child.stderr.take())
     else {

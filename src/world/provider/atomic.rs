@@ -2,6 +2,11 @@
 //! rename puts them in its place, so a reader sees the old file or the new one and never a part of
 //! either.
 
+#![expect(
+  clippy::format_collect,
+  reason = "debt: a format! for each item, collected into a String"
+)]
+
 use std::{
   fs::{self, OpenOptions},
   io::{self, Write},

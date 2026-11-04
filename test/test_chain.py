@@ -1360,20 +1360,27 @@ async def test_the_chain_asks_a_message_at_once_while_an_act_of_a_word_runs() ->
   assert (len(said(log, "reply")), engine.over(said(log, "bash")[0][1])) == (2, False)
 
 
-async def test_the_chain_advances_first_the_rung_whose_maker_said_the_fewest_facts() -> None:
-  """Of the rungs that wait, the chain advances first the one whose maker said the fewest facts on the chain, so a new prompt waits for no turn of an older one."""
+async def test_the_chain_advances_first_the_rung_that_was_made_first() -> None:
+  """Of the rungs that wait, the chain advances first the one that was made first, so no prompt, of the operator or of a model, waits behind a prompt that came after it, and each other prompt delays a new one by one turn at most."""
   _, log, root = born()
-  engine.prompt(int, "one", on=root)
+
+  async def answer(n: int, word: str) -> None:
+    world_says("done", said(log, "reply")[n][1], ("assistant", word, (0, 0, 0, 0, 0.0), []))
+    await settle()
+
+  engine.prompt(int, "p", on=root)
   await settle()
-  engine.prompt(int, "two", on=root)
+  engine.prompt(int, "r", on=root)
   await settle()
-  world_says("done", said(log, "reply")[0][1], ("assistant", "y = 1", (0, 0, 0, 0, 0.0), []))
+  await answer(0, "y = 1")
+  await answer(1, "q = prompt(int, 'q')\nclose(0)")
+  await answer(2, "close(0)")
+  engine.prompt(int, "s", on=root)
   await settle()
-  three = engine.prompt(int, "three", on=root)
-  await settle()
-  world_says("done", said(log, "reply")[1][1], ("assistant", "y = 2", (0, 0, 0, 0, 0.0), []))
-  await settle()
-  assert engine.get(said(log, "reply")[2][2])[2] == three
+  await answer(3, "y = 3")
+  await answer(4, "t = prompt(int, 't')\nclose(0)")
+  await answer(5, "y = 5")
+  assert [engine.get(engine.get(a[2])[2])[5] for a in said(log, "reply")] == ["p", "r", "p", "q", "s", "q", "t"]
 
 
 async def test_the_chain_asks_a_new_prompt_while_a_word_awaits_a_wait_that_is_not_over() -> None:

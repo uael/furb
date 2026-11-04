@@ -92,7 +92,7 @@ mod protocol {
     ]
     .into_iter()
     .chain(acts())
-    .chain(views().into_iter().filter(|verb| verb.speaker() != Some(Kind::Kit)))
+    .chain(views().into_iter().filter(|verb| verb.speaker() != Some(Kind::Skill)))
     .collect()
   }
 
@@ -211,7 +211,7 @@ mod protocol {
         viewer: viewer(),
         life: "life.jsonl".to_owned(),
         slot,
-        kit: "k".to_owned(),
+        skill: "k".to_owned(),
       })
     });
     let tree = Verb::ViewTree(Tree {
@@ -335,7 +335,7 @@ mod protocol {
 
   #[tokio::test]
   async fn a_frame_of_a_view_is_refused_to_the_kind_of_peer_that_does_not_say_it() {
-    for (kind, name) in [(Kind::Window, None), (Kind::Kit, Some("k"))] {
+    for (kind, name) in [(Kind::Window, None), (Kind::Skill, Some("k"))] {
       let mut client = served(Role::Write);
       client.hello_as(PROTOCOL, kind, name).await;
       for (id, verb) in (1..).zip(views()) {
@@ -352,9 +352,9 @@ mod protocol {
   }
 
   #[tokio::test]
-  async fn a_kit_that_gives_no_name_is_refused_at_its_hello() {
+  async fn a_skill_that_gives_no_name_is_refused_at_its_hello() {
     let mut client = served(Role::Write);
-    let refused = client.hello_as(PROTOCOL, Kind::Kit, None).await;
+    let refused = client.hello_as(PROTOCOL, Kind::Skill, None).await;
     assert_eq!(refused, Frame::refused(Some(0), ProtocolError::Nameless));
     assert_eq!(client.heard().await, None);
   }
@@ -416,7 +416,7 @@ mod protocol {
     let door = local.clone();
     tokio::spawn(async move {
       let stream = listener.accept().await.unwrap();
-      let who = door.identify(&stream).unwrap();
+      let who = door.identify(&stream).await.unwrap();
       serve(&Echo, stream, who).await
     });
     let mut client = Client { lines: BufReader::new(local.dial().await.unwrap()) };

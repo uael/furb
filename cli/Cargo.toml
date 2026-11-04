@@ -29,6 +29,16 @@ unsync = "0.2"
 # The protocol: one command or one event per line, as JSON, whose value is read before anything rounds it.
 serde_json = { version = "1", features = ["raw_value"] }
 
+[dev-dependencies]
+# The daemon of the kill matrix as a process, its windows on its socket, and the FIFO that its
+# processes hold.
+tokio = { version = "1", features = ["process", "net", "time", "io-util", "macros", "rt-multi-thread"] }
+tokio-util = { version = "0.7", features = ["codec"] }
+
+[target.'cfg(unix)'.dev-dependencies]
+# The signals that end the daemon, and the FIFO of the test.
+libc = "0.2"
+
 [target.'cfg(windows)'.dependencies]
 # The console of Windows, whose Ctrl+C and Ctrl+Break the TUI handles while furb waits for it.
 windows-sys = { version = "0.61", features = ["Win32_System_Console"] }

@@ -15,7 +15,7 @@ HERE = Path(__file__).resolve().parent.parent
 IMPORT = re.compile(r"^from furb\.engine import \(.*?\)\n", re.S | re.M)
 WORD = "\n\n".join(IMPORT.sub("", (HERE / f).read_text(encoding="utf-8")) for f in ("../pr/pr.py", "conductor.py"))
 OPEN = '[{"n": 7, "draft": false, "labels": ["w:a"], "mergeable": "MERGEABLE", "base": "main", "head": "w/a", "sha": "s7", "checks": ["SUCCESS"], "names": ["the gates"], "open": [], "files": ["src/a.py"], "auto": false}]'
-LISTED = '{}\n--- 0\n[{}]\n--- 0\n{{"sha": "m1", "runs": ["success"]}}\n--- 0\n["the gates"]\n--- 0\n'
+LISTED = '{}\n--- 0\n[{}]\n--- 0\n{{"sha": "m1", "runs": ["success"]}}\n--- 0\n["the gates"]\n--- 0\n[]\n--- 0\n'
 
 
 class GitHub(Sand):
@@ -24,7 +24,7 @@ class GitHub(Sand):
   def hear(self, a: tuple):
     match a:
       case ("bash", about, _, _, command, *_):
-        out = ""
+        out = "64.0\n" if "MemAvailable" in command else ""
         if "gh pr list --state open" in command:
           first = not any("gh pr list --state open" in str(x[4]) for x in self.calls[:-1] if x[0] == "bash")
           out = LISTED.format(OPEN if first else "[]", "" if first else "7")
