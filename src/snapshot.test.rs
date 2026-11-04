@@ -70,7 +70,7 @@ fn a_snapshot_that_fails_to_land_leaves_no_part_of_it_on_the_disk() {
   fs::create_dir_all(path(&record).join("held")).unwrap();
   let mut keeper = Keeper::new(record.clone(), "build".to_owned());
   let table: Table = serde_json::from_str(
-    r#"{"root":"chain1","ears":[],"kept":[],"opened":[],"given":"","working":[]}"#,
+    r#"{"root":"chain1","ears":[],"kept":[],"opened":{},"given":"","working":[]}"#,
   )
   .unwrap();
   keeper.write(&table, &[0; 4096]);
