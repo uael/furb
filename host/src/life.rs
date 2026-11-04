@@ -20,7 +20,7 @@ use furb::{
   life::{Log, Opening, Stream},
   verbs,
   wire::{outward, parsed},
-  world::{self, answered},
+  world::{self, Shape, answered},
 };
 use futures::stream::{self, Stream as Streams};
 use serde_json::{Value, json};
@@ -430,7 +430,7 @@ fn answered_by(engine: &mut Engine, command: Command) -> Result<Reply, LifeError
   Ok(match command {
     Command::Prompt { shape, message, to, on: chain } => {
       let with = verbs::Prompt { message: Some(message), to, on: on(chain) };
-      id(engine.prompt(shaped(shape), with)?.id())
+      id(engine.prompt(Shape::object(&shape), with)?.id())
     }
     Command::Close { id, value } => {
       engine.close(parsed(&value)?, verbs::Close { id: Some(id) })?;
@@ -546,11 +546,6 @@ fn queried(engine: &mut Engine, query: Command, root: &str) -> Result<Reply, Lif
   })
 }
 
-/// The shape of a prompt as a client names it: `None` for a message that wants no answer.
-fn shaped(shape: String) -> Object {
-  if shape == "None" { Object::none() } else { Object::string(shape) }
-}
-
 /// The act of the prompt that a queued entry was sent as on a chain: the act of its first send,
 /// or a prompt of its shape and its message, between the facts that begin and end its send.
 fn sent(
@@ -571,7 +566,7 @@ fn sent(
   let begin = [Object::string("begin"), Object::string(entry.clone()), Object::string(hash)];
   engine.say("queue", chain, begin.into())?;
   let with = verbs::Prompt { message: Some(message), to: None, on: Some(chain.to_owned()) };
-  let made = engine.prompt(shaped(shape), with)?.id().to_owned();
+  let made = engine.prompt(Shape::object(&shape), with)?.id().to_owned();
   let sent = [Object::string("sent"), Object::string(entry), Object::string(made.clone())];
   engine.say("queue", chain, sent.into())?;
   Ok(made)

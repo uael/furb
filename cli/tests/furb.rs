@@ -396,7 +396,10 @@ fn a_prompt_of_the_operator_is_answered_at_the_terminal() {
   assert_eq!(String::from_utf8_lossy(&output.stderr), "prompt1 tells: say nothing\n");
   let said =
     refused(yard.furb(&["prompt", "count", "--to", "operator", "--shape", "int"]), "many\n");
-  assert!(said.ends_with("furb: Refused: \"many\" is no int\n"), "{said}");
+  assert!(
+    said.ends_with("furb: Refused: \"many\" is no int: invalid digit found in string\n"),
+    "{said}"
+  );
   let said = refused(yard.furb(&["prompt", "count", "--to", "operator", "--shape", "int"]), "");
   assert!(
     said.ends_with("furb: Refused: the operator cannot be read: the input is over\n"),

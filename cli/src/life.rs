@@ -173,11 +173,6 @@ fn quieted<'a>(quiet: &'a mut Quiet, heard: &mut spsc::Receiver<Fact>) -> &'a Qu
 /// its report.
 pub const SHAPE: &str = "str";
 
-/// A shape as a prompt is given it, by its name: None itself, or the name of a type.
-pub fn shape(name: &str) -> Object {
-  if name == "None" { Object::none() } else { Object::string(name) }
-}
-
 /// An actor as the roster names it, and its model: the model the catalog finds by the name, with the effort moved to
 /// the nearest one that model takes; or the name as it is, and no model, when the catalog knows no model by it, the
 /// operator among them.

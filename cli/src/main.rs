@@ -281,7 +281,12 @@ fn prompt(opening: Opening, shape: &str, message: String, to: String) -> Result<
     None => {
       let with =
         verbs::Prompt { message: Some(message), to: Some(to), on: Some(life.root.clone()) };
-      life.engine.prompt(life::shape(shape), with).map_err(|no| no.to_string())?.id().to_owned()
+      life
+        .engine
+        .prompt(furb::world::Shape::object(shape), with)
+        .map_err(|no| no.to_string())?
+        .id()
+        .to_owned()
     }
   };
   println!("{}", life.settled(&id)?.py_repr());
