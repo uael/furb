@@ -368,4 +368,43 @@ mod daemon {
     let answered = Verb::Answered { life: other.clone(), ask, turn: None, why: None };
     assert_eq!(window.ask(answered).await, Err(ProtocolError::Answerless { life: other }));
   }
+
+  #[tokio::test]
+  async fn a_command_that_a_window_feeds_reads_each_line_that_it_writes() {
+    let at = place();
+    let (local, _daemon) = started(&at, GRACE).await;
+    let mut window = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    window.attach(&life).await;
+    let bash = |command: &str, stdin: Option<&str>, feed| Verb::Bash {
+      life: life.clone(),
+      command: command.to_owned(),
+      stdin: stdin.map(str::to_owned),
+      feed,
+      on: None,
+    };
+    let Ok(Answer::Act(given)) = window.ask(bash("cat", Some("given\n"), false)).await else {
+      panic!("no command")
+    };
+    let Frame::Event { event: Event::Act(act), .. } = window.until(done(&given)).await else {
+      panic!("no act")
+    };
+    assert!(act.value().is_some_and(|exit| exit.to_string().contains("given")), "{act:?}");
+    let Ok(Answer::Act(fed)) = window.ask(bash("cat", None, true)).await else {
+      panic!("no command")
+    };
+    for content in ["fed\n", ""] {
+      let write = Verb::Write {
+        life: life.clone(),
+        path: format!("{fed}/stdin"),
+        content: content.to_owned(),
+        on: None,
+      };
+      assert_eq!(window.ask(write).await, Ok(Answer::Done));
+    }
+    let Frame::Event { event: Event::Act(act), .. } = window.until(done(&fed)).await else {
+      panic!("no act")
+    };
+    assert!(act.value().is_some_and(|exit| exit.to_string().contains("fed")), "{act:?}");
+  }
 }

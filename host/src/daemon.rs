@@ -253,7 +253,7 @@ fn routed(verb: Verb) -> Routed {
     Verb::Close { life, act, value } => (life, Command::Close { id: act, value }),
     Verb::Grant { life, usd, share, on } => (life, Command::Grant { usd, share, on }),
     Verb::Bash { life, command, stdin, feed, on } => {
-      (life, Command::Bash { command, stdin: if feed { None } else { Some(stdin) }, on })
+      (life, Command::Bash { command, stdin: if feed { Some(None) } else { stdin.map(Some) }, on })
     }
     Verb::Read { life, path, on } => (life, Command::Read { path, on }),
     Verb::Write { life, path, content, on } => (life, Command::Write { path, content, on }),
