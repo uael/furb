@@ -743,8 +743,11 @@ test("a done thread of the operator that no fact seen covers shows ●, and a se
     async ({ session, frame }) => {
       session.folds["thread:prompt1"] = true;
       await idle(session);
-      // A window that opens later on the life, with the thread folded, never showed its work.
-      (session as unknown as { showing: Map<string, number> }).showing.clear();
+      // A window that opens later on the life, with the thread folded, never showed its work. The count of the reads
+      // moves with each change of what the window showed, or the rail keeps the marks that it read.
+      const inner = session as unknown as { showing: Map<string, number>; readsCount: number };
+      inner.showing.clear();
+      inner.readsCount++;
       const row = async () =>
         rail(session, await frame()).find((line) => line.includes("Explore this project")) ?? "";
       expect(await row()).toContain("● Explore this project");
