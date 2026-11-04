@@ -2,14 +2,6 @@
 //! that furb writes for its first process to resume, and each turn, which writes to its process
 //! only what the command line has not heard and settles what that turn came to.
 
-#![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
-#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
-#![expect(
-  clippy::single_match_else,
-  reason = "debt: a match of one arm and else, where if let serves"
-)]
-#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
-
 use std::{
   env,
   path::PathBuf,
@@ -27,7 +19,7 @@ use tokio::io::AsyncWriteExt;
 use super::{
   Deltas, Error, Program, discover, error, failed,
   process::{GRACE, Line, Process, Spend, absent, exited, last, stalled},
-  protocol::{Event, Reply, unexplained},
+  protocol::{Event, Finished, Reply, unexplained},
   refused, worded,
 };
 use crate::world::provider::{
@@ -177,7 +169,8 @@ impl Conversation {
       let message = json!({"role": kind, "content": blocks});
       let entry = json!({"type": kind, "uuid": id, "parentUuid": parent, "sessionId": self.id, "cwd": cwd,
         "isSidechain": false, "userType": "external", "timestamp": now, "message": message});
-      lines.push_str(&format!("{entry}\n"));
+      lines.push_str(&entry.to_string());
+      lines.push('\n');
       parent = json!(id);
     }
     if lines.is_empty() {
@@ -239,7 +232,7 @@ impl Conversation {
     };
     let asked = messages.last();
     let mut again = again && !anew;
-    let mut lost = None;
+    let mut vanished = None;
     loop {
       let mut outcome =
         Outcome { incoming: &incoming, asked, again, unheard: None, restored: None, replied: None };
@@ -250,9 +243,9 @@ impl Conversation {
         response
       });
       self.settle(outcome);
-      match (got, &lost) {
+      match (got, &vanished) {
         (Err(no), None) if matches!(error(&no), Some(Error::Lost(_))) => {
-          lost = Some(self.id.clone());
+          vanished = Some(self.id.clone());
           self.renew()?;
           (delta, again) = (messages, false);
         }
@@ -405,6 +398,40 @@ impl Conversation {
     self.listened(process, run, outcome, before).await
   }
 
+  /// The code of a process that closed its stdout but did not end yet, once it ends before the turn
+  /// is due.
+  async fn ended_by(
+    process: &mut Process,
+    due: tokio::time::Instant,
+    stall: Duration,
+    odd: &str,
+  ) -> Result<Option<i32>, CompletionError> {
+    let waited = process.tail.beside(process.child.wait());
+    match tokio::time::timeout_at(due, waited).await {
+      Ok(status) => Ok(status.ok().and_then(|one| one.code())),
+      Err(_) => Err(stalled(stall, odd)),
+    }
+  }
+
+  /// The response that the result of a turn ends the reply with, with the process that paid for it,
+  /// or the failure that the result says.
+  fn concluded(
+    &mut self,
+    result: &Finished,
+    reply: Reply,
+    mut process: Process,
+  ) -> Result<(CompletionResponse, Process), CompletionError> {
+    if let Some(session) = &result.session_id {
+      session.clone_into(&mut self.id);
+    }
+    if result.is_error {
+      let said = result.result.as_deref().filter(|one| !one.is_empty());
+      return Err(failed(said.map_or_else(|| unexplained(result), str::to_owned)));
+    }
+    let response = reply.response(result, &self.name, &self.id, &mut process.paid);
+    Ok((response, process))
+  }
+
   /// The reply that a process streams for the line that it heard, with that process. A process that
   /// found no program to run heard nothing, and the conversation is resumed as it was before the
   /// turn.
@@ -446,17 +473,11 @@ impl Conversation {
         }
         Line::Over(Some(why)) => return Err(failed(why)),
         Line::Over(None) => {
-          let code = match ended {
-            Some(code) => code,
-            None => {
-              let waited = process.tail.beside(process.child.wait());
-              match tokio::time::timeout_at(due, waited).await {
-                Ok(status) => status.ok().and_then(|one| one.code()),
-                Err(_) => return Err(stalled(stall, &odd)),
-              }
-            }
+          break if let Some(code) = ended {
+            code
+          } else {
+            Self::ended_by(&mut process, due, stall, &odd).await?
           };
-          break code;
         }
       };
       spoke = true;
@@ -466,22 +487,10 @@ impl Conversation {
       match event {
         Event::Stream { event } => reply.streamed(&event),
         Event::Assistant { message } => {
-          if let Some(spent) = message.usage {
-            reply.spent = Some(spent);
-          }
+          reply.spent = message.usage.or_else(|| reply.spent.take());
           reply.settled(&message.content);
         }
-        Event::Result(result) => {
-          if let Some(session) = &result.session_id {
-            session.clone_into(&mut self.id);
-          }
-          if result.is_error {
-            let said = result.result.as_deref().filter(|one| !one.is_empty());
-            return Err(failed(said.map_or_else(|| unexplained(&result), str::to_owned)));
-          }
-          let response = reply.response(&result, &self.name, &self.id, &mut process.paid);
-          return Ok((response, process));
-        }
+        Event::Result(result) => return self.concluded(&result, reply, process),
         Event::Other => {}
       }
     };

@@ -1,11 +1,8 @@
 //! The search of the web, which the provider answers for the actor of a chain: the native search of
-//! each provider that has one, the claude command line with its tool WebSearch alone, the web
-//! search of the Messages API of Anthropic and of the Responses API of OpenAI and of xAI, the
-//! grounding of Gemini in Google Search, and the search API of DeepSeek; else a free search. A
+//! each provider that has one, the claude command line with its tool `WebSearch` alone, the web
+//! search of the Messages API of Anthropic and of the Responses API of `OpenAI` and of xAI, the
+//! grounding of Gemini in Google Search, and the search API of `DeepSeek`; else a free search. A
 //! search answers with text in Markdown, which ends with its sources.
-
-#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
-#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
 
 use std::{future::Future, io, process::ExitStatus, process::Stdio, sync::Arc, time::Duration};
 
@@ -140,7 +137,7 @@ pub(crate) fn sourced(text: &str, sources: &[(String, String)]) -> String {
 }
 
 /// The search of a model of the claude command line: the command line that this program starts, on that model,
-/// with its tool WebSearch alone, which is told the query on its stdin and answers on its stdout.
+/// with its tool `WebSearch` alone, which is told the query on its stdin and answers on its stdout.
 pub(super) fn claude(program: Program, model: String) -> Searches {
   Arc::new(move |query| {
     let (program, model) = (program.clone(), model.clone());
@@ -165,7 +162,7 @@ pub(super) fn claude(program: Program, model: String) -> Searches {
       // A command line that ends before it reads the query closes its stdin, and its exit says why.
       if let Some(mut stdin) = child.stdin.take()
         && let Err(no) = stdin.write_all(query.as_bytes()).await
-        && no.kind() != std::io::ErrorKind::BrokenPipe
+        && no.kind() != io::ErrorKind::BrokenPipe
       {
         return Err(no.into());
       }
@@ -201,7 +198,7 @@ pub(super) fn native(client: Client, reach: &Reach) -> Option<Searches> {
 }
 
 /// The API of a native search: the Messages API of Anthropic, the Responses API at its default address, the
-/// generation of Gemini grounded in Google Search, and the search API of DeepSeek.
+/// generation of Gemini grounded in Google Search, and the search API of `DeepSeek`.
 #[derive(Clone, Copy)]
 enum Native {
   Anthropic,
@@ -329,8 +326,8 @@ fn gemini(got: &Value) -> Option<String> {
   (!texts.trim().is_empty()).then(|| sourced(&texts, &sources))
 }
 
-/// The answer of the search API of DeepSeek: each result, with its title, its address and its summary, or a line
-/// that says it found none.
+/// The answer of the search API of `DeepSeek`: each result, with its title, its address and its
+/// summary, or a line that says it found none.
 fn deepseek(got: &Value) -> String {
   let results = items(got, "results").iter().filter(|one| !text(one, "url").is_empty());
   let lines: Vec<String> = results
@@ -355,7 +352,7 @@ const FREE: &str = "https://search.parallel.ai/mcp";
 /// The most of the excerpts of one result of the free search that an answer holds, in characters.
 const EXCERPT: usize = 1500;
 
-/// The free search, which asks the tool web_search of [`FREE`] for the query.
+/// The free search, which asks the tool `web_search` of [`FREE`] for the query.
 pub(crate) fn free() -> Searches {
   Arc::new(|query| {
     spawned(async move {
