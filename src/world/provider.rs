@@ -14,12 +14,6 @@
 //! that ran. A writing is no act that the ear awaits, since a part that prompts makes a chain ask
 //! this ear for a reply, which it takes only at a yield.
 
-#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
-#![expect(
-  clippy::return_self_not_must_use,
-  reason = "debt: a method that returns Self with no must_use"
-)]
-
 mod answer;
 mod atomic;
 pub mod catalog;
@@ -33,7 +27,7 @@ mod messages;
 mod model;
 mod pi;
 mod retry;
-pub mod search;
+pub(crate) mod search;
 mod thinking;
 mod watch;
 mod word;
@@ -141,23 +135,27 @@ impl Provider {
   /// The config directory of the user whose `config.json` the standing reads for the classes
   /// and the list of automatic work, else the one that [`crate::extension::Places::here`]
   /// names: a life that opens on a config directory of its own reads no file of the machine.
+  #[must_use]
   pub fn config(mut self, config: impl Into<PathBuf>) -> Provider {
     self.config = Some(config.into());
     self
   }
 
   /// The most tokens of thought of a model in one turn.
+  #[must_use]
   pub fn thinking(mut self, thinking: Thinking) -> Provider {
     self.thinking = thinking;
     self
   }
 
   /// Whether the provider answers the question search. A life that inspects searches nothing.
+  #[must_use]
   pub(crate) fn searching(mut self, on: bool) -> Provider {
     self.searching = on;
     self
   }
 
+  #[must_use]
   pub(crate) fn refreshing(mut self, refresh: Refresh) -> Provider {
     self.refresh = Some(refresh);
     self
@@ -165,6 +163,7 @@ impl Provider {
 
   /// The names of the roster and of the actor that the catalog lacked when the life opened. The ear
   /// tells each chain once, at its first stand, and the standing leaves them out.
+  #[must_use]
   pub fn gone(mut self, names: Vec<String>) -> Provider {
     self.gone = names;
     self
@@ -177,36 +176,42 @@ impl Provider {
 
   /// The actor a prompt goes to when it names none, which is the first model at the level of an
   /// actor that names none when none is given, and the operator when there is no model.
+  #[must_use]
   pub fn actor(mut self, actor: Option<String>) -> Provider {
     self.actor = actor;
     self
   }
 
   /// The extensions that the standing gives, from which the engine seeds the root of a new record.
+  #[must_use]
   pub fn advertises(mut self, extensions: Vec<Advertised>) -> Provider {
     self.extensions = Some(extensions);
     self
   }
 
   /// The directory of the images that a turn names.
+  #[must_use]
   pub fn images(mut self, directory: impl Into<PathBuf>) -> Provider {
     self.images = Some(directory.into());
     self
   }
 
   /// Whom the provider tells what a model writes, as it writes it.
+  #[must_use]
   pub fn writes(mut self, writes: Writes) -> Provider {
     self.writes = Some(writes);
     self
   }
 
   /// How the provider asks a model again after a failure that passes.
+  #[must_use]
   pub fn backoff(mut self, backoff: Backoff) -> Provider {
     self.backoff = backoff;
     self
   }
 
   /// Whom the provider tells each retry of a call of a model, before its wait.
+  #[must_use]
   pub fn retries(mut self, retries: Retries) -> Provider {
     self.retries = Some(retries);
     self

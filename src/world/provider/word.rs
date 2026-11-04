@@ -1,10 +1,7 @@
 //! The word of a reply as its model writes it: what the gate finds against it, and the part of it
 //! that runs.
 
-#![expect(
-  clippy::format_collect,
-  reason = "debt: a format! for each item, collected into a String"
-)]
+use std::fmt::{self, Write};
 
 use rig_core::completion::CompletionError;
 
@@ -105,7 +102,11 @@ pub(super) fn ending(ran: &str) -> String {
   let lines: Vec<(usize, &str)> =
     ran.trim_end().lines().enumerate().filter(|(_, line)| !line.trim().is_empty()).collect();
   let shown = lines[lines.len().saturating_sub(ENDING)..].iter();
-  shown.map(|(at, line)| format!("line {}: {line}\n", at + 1)).collect()
+  let ended = shown.copied().try_fold(String::new(), |mut out, (at, line)| {
+    writeln!(out, "line {}: {line}", at + 1)?;
+    Ok::<_, fmt::Error>(out)
+  });
+  ended.unwrap_or_default()
 }
 
 /// The findings of the gate on a word whose part ran. The gate says of a word that is not python
