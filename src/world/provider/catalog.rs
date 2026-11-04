@@ -48,7 +48,7 @@ mod error;
 mod update;
 
 pub use error::Error;
-pub use update::{Source, Status, status, updated};
+pub use update::{Source, Status, keep_fresh, status, updated};
 
 use std::{
   collections::{HashMap, HashSet},
@@ -294,7 +294,7 @@ impl Catalog {
   /// The catalog of this machine: the snapshot, with the models the cache holds of its providers, the claude command
   /// line when it finds one, and the local server that the environment of the process names, one for the process, so
   /// what it listed holds for every catalog after. A cache a day old is refreshed in the background, for the next
-  /// life.
+  /// life, when the host has called [`keep_fresh`].
   pub fn load() -> Catalog {
     static SERVER: OnceLock<Option<Arc<Server>>> = OnceLock::new();
     let env = |name: &str| env::var(name).ok();
@@ -859,7 +859,8 @@ pub(super) fn reached(
 /// The providers of the snapshot, with the models of each that the caches hold, read again by each catalog so that a
 /// life which stands again sees an update. The parse of the caches stays while both files hold the same text, since
 /// the cache of models.dev is several megabytes and a catalog is made at each stand, each setup and each query. The
-/// cache of models.dev is refreshed in the background when it is a day old.
+/// cache of models.dev is refreshed in the background when it is a day old and the host called
+/// [`keep_fresh`].
 fn listed(cached: Option<&PathBuf>) -> Arc<IndexMap<String, Listed>> {
   type Kept = (Option<String>, Option<String>, Arc<IndexMap<String, Listed>>);
   static KEPT: OnceLock<Mutex<HashMap<Option<PathBuf>, Kept>>> = OnceLock::new();
