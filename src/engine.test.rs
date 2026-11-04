@@ -1821,3 +1821,37 @@ fn a_life_whose_words_each_ran_within_the_bound_replays_and_keeps_its_checkpoint
   assert!(third.engine.raised().is_none(), "{:?}", third.engine.raised());
   assert_eq!(third.root(), root);
 }
+
+#[test]
+fn a_kernel_that_raises_ends_each_run_whose_word_it_lost_so_a_later_message_gets_its_step() {
+  let words =
+    ["await wait(600)\nclose(1)", "await wait(0.2)\nclose(2)", "close(7)", "close(7)", "close(7)"];
+  let mut lived = Lived::new("lost", &words, true).unwrap();
+  let root = lived.root();
+  // The Kernel asserts that Exit is a type as it carries a word past an act that it awaited,
+  // so with Exit rebound it raises at the end of the short wait, and loses the word that
+  // awaits the long one too.
+  lived.engine.word("globals().update(Exited=Exit, Exit=None)", vec![]).unwrap();
+  let ask = |lived: &mut Lived| {
+    let with = verbs::Prompt { on: on(&root), ..Default::default() };
+    lived.engine.prompt(Object::string("int"), with).unwrap().id().to_owned()
+  };
+  let first = ask(&mut lived);
+  let second = ask(&mut lived);
+  let pause = lived.engine.wait(&[], verbs::Wait { seconds: Some(1.0), on: on(&root) }).unwrap();
+  block_on(pause).unwrap();
+  lived.engine.word("globals().update(Exit=Exited)", vec![]).unwrap();
+  let told = notices(&mut lived.engine);
+  assert!(told.iter().any(|one| one.contains("The ear kernel raised AssertionError")), "{told:?}");
+  let third = ask(&mut lived);
+  let deadline =
+    lived.engine.wait(&[&third], verbs::Wait { seconds: Some(20.0), on: on(&root) }).unwrap();
+  assert_eq!(block_on(deadline).unwrap(), Some(third.clone()), "the later message gets its step");
+  for one in [third, first, second] {
+    assert_eq!(
+      lived.settled(&one).unwrap().as_ref().as_int(),
+      Some(7),
+      "{one}, asked again after the loss"
+    );
+  }
+}

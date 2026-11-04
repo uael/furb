@@ -689,6 +689,7 @@ def bash(
   A command without a timeout has the timeout TIMEOUT that the file names.
   A command accepts the codes that its ok names, as ok=(0, 1), and every code when its ok is True.
   A command with no ok is judged by accepts, the policy of its chain, and by the default policy while accepts is None.
+  What an ok or an accepts raises as it judges the code of a command, the word that awaits the command raises at its await, and every other word goes on.
   The default policy accepts the code 0, and the code 1 of a check that ends the command, since sh gives the code of the last command of a pipeline: a search, as grep, egrep, fgrep, rg, test, [ or a git command with --quiet or --is-ancestor, when the command wrote nothing or only a count of 0, since a search that finds nothing writes nothing, and a difference, as diff, cmp or a git command with --exit-code, which writes the difference.
   The default policy accepts no other code, so a timeout, a signal, and the code 1 of a search that wrote an error, as a cd that failed in front of it, fail.
   The World that takes a command answers it: it says it done with its Exit, the code and the streams it kept, since the owner of an act is the one that answers it.
