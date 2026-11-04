@@ -207,27 +207,12 @@ fn plain(alias: &str) -> bool {
 
 /// Ask the program of its models, with one process that spends no model prompt.
 fn probe(program: &Program) -> Option<Vec<Found>> {
-  let mut tokio = program.command().ok()?;
+  let print =
+    ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"];
+  let mut tokio = program.base_command(&print).ok()?;
   let command = tokio.as_std_mut();
-  command.args([
-    "-p",
-    "--input-format",
-    "stream-json",
-    "--output-format",
-    "stream-json",
-    "--verbose",
-  ]);
-  command.args([
-    "--tools",
-    "",
-    "--strict-mcp-config",
-    "--disable-slash-commands",
-    "--setting-sources",
-    "",
-  ]);
+  command.args(["--tools", ""]);
   command.env("FURB_CLAUDE_DISCOVER", "1");
-  command.env("CLAUDE_CODE_DISABLE_BUNDLED_SKILLS", "1");
-  command.env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1");
   command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
   let mut child = command.spawn().ok()?;
   let found = child.stdin.take().zip(child.stdout.take()).and_then(|(mut stdin, stdout)| {
