@@ -68,17 +68,29 @@ impl Retold {
   /// Each fact of the file, in the order that the life said them, read one line at a time, so a reader holds no more
   /// of a large record than it keeps of each fact.
   pub fn each(&self, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
-    self.lines(None, take)
+    self.lines(None, None, take)
   }
 
   /// Each fact of the file that the life said after the record kept its entry n, counted from 1,
   /// in order.
   pub fn after(&self, n: usize, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
-    self.lines(Some(&keep(n)), take)
+    self.lines(Some(&keep(n)), None, take)
   }
 
-  /// Each fact of the file after the line from, or from its start.
-  fn lines(&self, mut from: Option<&str>, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
+  /// Each fact of the file that the life said before the record kept its entry n, counted from 1,
+  /// in order.
+  pub fn before(&self, n: usize, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
+    self.lines(None, Some(&keep(n)), take)
+  }
+
+  /// Each fact of the file after the line from, or from its start, up to the line until, or to its
+  /// end.
+  fn lines(
+    &self,
+    mut from: Option<&str>,
+    until: Option<&str>,
+    take: &mut dyn FnMut(Object),
+  ) -> Result<(), Fault> {
     let failed =
       |no: std::io::Error| Fault::refused(format!("{} cannot be read: {no}", self.file.display()));
     let file = std::fs::File::open(&self.file).map_err(failed)?;
@@ -90,6 +102,9 @@ impl Retold {
         return Ok(());
       }
       let text = line.trim_end_matches('\n');
+      if until == Some(text) {
+        return Ok(());
+      }
       if from.is_some() {
         from = from.filter(|mark| *mark != text);
       } else if text.starts_with('[') && !matches!(Line::of(text), Line::Keep(_)) {

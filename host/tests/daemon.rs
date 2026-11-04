@@ -9,7 +9,7 @@
 #[cfg(test)]
 mod daemon {
   use std::{
-    collections::VecDeque,
+    collections::{HashSet, VecDeque},
     fs,
     path::{Path, PathBuf},
     sync::{
@@ -35,6 +35,7 @@ mod daemon {
     view::Phase,
   };
   use futures::{SinkExt, StreamExt};
+  use serde_json::Value;
   use serde_json::json;
   use tokio::{task::JoinHandle, time::timeout};
   use tokio_util::codec::{Framed, LinesCodec};
@@ -300,6 +301,37 @@ mod daemon {
     let inspect = Verb::Inspect { life, name: "x".to_owned(), on: None };
     let Ok(Answer::Inspected { value, .. }) = window.ask(inspect).await else { panic!() };
     assert_eq!(value, json!(42));
+  }
+
+  #[tokio::test]
+  async fn a_window_of_a_life_born_from_its_checkpoint_hears_each_fact_of_the_life_once() {
+    let at = place();
+    let (local, _daemon) = started(&at, SHORT).await;
+    let mut window = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    window.attach(&life).await;
+    let first = window.ran(&life, "x = 41 + 1").await;
+    assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+    tokio::time::sleep(PAST).await;
+    assert!(!window.lives(&life).await);
+    let mut later = Window::dialed(&local).await;
+    opened(&mut later, &at, "a.jsonl").await;
+    later.attach(&life).await;
+    later.ran(&life, "y = 1").await;
+    let facts: Vec<Value> = later
+      .pushed
+      .iter()
+      .filter_map(|frame| match frame {
+        Frame::Event { event: Event::Fact(fact), .. } => Some(fact.clone()),
+        _ => None,
+      })
+      .collect();
+    let about = |kind: &str| facts.iter().filter(|one| one[0] == kind && one[1] == first).count();
+    let mine: Vec<&Value> = facts.iter().filter(|one| one[1] == first).collect();
+    assert_eq!((about("rung"), about("done")), (1, 1), "{mine:?}");
+    let mut seen = HashSet::new();
+    let again: Vec<&Value> = facts.iter().filter(|one| !seen.insert(one.to_string())).collect();
+    assert!(again.is_empty(), "the window heard these facts twice: {again:?}");
   }
 
   #[tokio::test]
