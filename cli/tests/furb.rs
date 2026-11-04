@@ -1025,3 +1025,57 @@ fn a_prompt_to_a_model_of_a_local_server_is_answered_by_that_server() {
   assert_eq!((&body["model"], &body["max_tokens"]), (&json!("m"), &json!(250)));
   assert_eq!(yard.answered(), 0, "no claude is asked");
 }
+
+/// The first line that a program wrote on its stdout, or a failure after a minute.
+fn said_first(child: &mut Child) -> String {
+  let out = child.stdout.take().expect("the program has a stdout");
+  let (said, heard) = mpsc::channel();
+  thread::spawn(move || {
+    let mut line = String::new();
+    let read = BufReader::new(out).read_line(&mut line).map(|_| line);
+    said.send(read).ok();
+  });
+  let line = heard.recv_timeout(Duration::from_secs(60)).expect("the program says a line in time");
+  line.expect("the stdout of the program reads")
+}
+
+/// The end of a program, which a minute bounds: past it, the program is killed and the test fails.
+fn ended(mut child: Child) -> std::process::ExitStatus {
+  let pid = child.id();
+  let (said, heard) = mpsc::channel();
+  thread::spawn(move || {
+    said.send(child.wait()).ok();
+  });
+  let Ok(status) = heard.recv_timeout(Duration::from_secs(60)) else {
+    Command::new("kill").arg("-9").arg(pid.to_string()).status().ok();
+    panic!("the program {pid} did not end in time")
+  };
+  status.expect("the program is awaited")
+}
+
+#[test]
+fn furb_host_serves_one_daemon_on_the_machine_and_an_upgrade_takes_its_place() {
+  let yard = Yard::new("host");
+  // The cache of the yard is too deep for the path of a socket, which macOS bounds at 104 bytes.
+  let cache = std::env::temp_dir().join(format!("fc{}", std::process::id()));
+  let host = |words: &[&str]| {
+    let mut command = yard.furb(words);
+    command.env("XDG_CACHE_HOME", &cache);
+    command
+  };
+  let refused = |output: Output| {
+    let said = String::from_utf8_lossy(&output.stderr).into_owned();
+    assert!(!output.status.success() && said.contains("a daemon already listens"), "{said}");
+  };
+  let mut first = host(&["host"]).stdout(Stdio::piped()).spawn().expect("furb host runs");
+  let said = said_first(&mut first);
+  assert!(said.starts_with("furb host listens in "), "{said:?}");
+  refused(host(&["host"]).output().expect("furb host runs"));
+  let mut upgraded =
+    host(&["host", "upgrade"]).stdout(Stdio::null()).spawn().expect("the upgrade runs");
+  assert!(ended(first).success(), "the daemon that ran gives its place and ends");
+  refused(host(&["host"]).output().expect("furb host runs"));
+  upgraded.kill().expect("the new daemon ends");
+  ended(upgraded);
+  fs::remove_dir_all(&cache).ok();
+}

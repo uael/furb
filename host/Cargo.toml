@@ -6,7 +6,6 @@ rust-version = "1.95"
 description = "The host of furb: each life on a thread of its own, behind a handle that any thread holds."
 license = "AGPL-3.0-only"
 repository = "https://github.com/uael/furb"
-publish = false
 
 [lints]
 workspace = true

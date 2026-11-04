@@ -102,7 +102,7 @@ pub(crate) fn resolved(directory: &Path, path: &str) -> PathBuf {
 
 /// The cache of furb on this machine: under `XDG_CACHE_HOME`, `LOCALAPPDATA` on Windows, `Library/Caches` of the
 /// home on macOS, and `.cache` of the home elsewhere.
-pub(crate) fn cache() -> Option<PathBuf> {
+pub fn cache() -> Option<PathBuf> {
   let named = |name: &str| env::var_os(name).filter(|one| !one.is_empty()).map(PathBuf::from);
   let base = named("XDG_CACHE_HOME").or_else(|| {
     if cfg!(windows) {
