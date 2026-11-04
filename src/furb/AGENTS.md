@@ -221,7 +221,9 @@ meanings. The entry of such a name here gives only its form in the engine.
   its place when the store holds it. A record of a build before the versions names an
   engine alone, and a life on another engine refuses it. A build keeps the version while each record of the corpus,
   `tests/corpus`, replays on it with no drift. After a checkpoint, only the fact made of the segment after it counts,
-  and the store says it again at the root of the first life that goes on from the checkpoint.
+  and the store says it again at the root of the first life that goes on from the checkpoint. When it names another
+  engine or another version, a life replays none of that segment: it writes at the tip a checkpoint that carries the
+  segment as data, and goes on from it.
 - checkpoint: the fact by which a record carries the state of its life to a later life of any build of its major, at
   its tip: plain data with a version of its own shape, `schema`, apart from the version of the record. It holds each
   chain that lives with its label, its source, its turns, the text of its definitions, its plain values and whether
@@ -272,7 +274,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 - A chain is a function of the record, and a later boot must offer the same interpreter and the same outside, since a
   record is made again by running its words, or loaded from the snapshot that a run of those words made on the same
   record, interpreter and outside, which the opening of the life checks against the record. A record names the
-  version of the build that made it, and a life on a build of another version is refused before any replay.
+  version of the build that made it, and a life on a build of another version is refused before any replay, but for
+  the segment after a checkpoint, which it carries as data.
 - A chain is one conversation, and the transcript that a provider caches grows at one end.
 - Nothing is told twice, and nothing tells what it does not know: an act tells of itself, and a chain of the rungs it
   asks a model for, with the message of the prompt each advances, of a word that told nothing, of the prompts and the

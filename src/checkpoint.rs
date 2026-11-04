@@ -17,7 +17,9 @@
 //! A life ends with its checkpoint, which the ear of its store keeps, since a life born from a
 //! checkpoint makes acts of its own at its birth; [`keep`] writes one on a record that no life
 //! holds. A later life boots on the last checkpoint of its record, whatever engine wrote it, as
-//! [`booted`] says, so it replays the checkpoint and the entries after it alone.
+//! [`booted`] says, so it replays the checkpoint and the entries after it alone. When a build of
+//! another engine made those entries, the life first keeps the checkpoint that `crossed` gives,
+//! which carries them as data, so it replays none of them.
 //!
 //! The checkpoint of the build before the schema holds `entries` in the place of the data: facts
 //! that the journal of any engine replays, and `("reserve", kind, "store", n)`, which stands for
@@ -211,3 +213,6 @@ fn carried(checkpoint: &Object) -> Vec<Object> {
   }
   out
 }
+
+mod tail;
+pub(crate) use tail::crossed;

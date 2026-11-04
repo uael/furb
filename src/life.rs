@@ -38,6 +38,9 @@ struct Prepared {
   places: Places,
   extensions: Vec<extension::Extension>,
   provider: world::Provider,
+  /// The checkpoint that carries the tail of another build, which a life that keeps no record
+  /// holds in memory alone, since it writes nothing.
+  crossed: Option<Object>,
 }
 
 /// A function of the host that answers each request in place of the models: it is given the request and a function
@@ -204,11 +207,13 @@ impl Opening {
   fn parted(self, continued: bool, prepared: Prepared) -> Result<(Vec<Object>, Ears, bool), Fault> {
     let works = self.works();
     let keeps = self.keeps != Some(false) && works;
-    let (record, store) = match (&self.record, keeps) {
+    let Prepared { places, extensions, provider, crossed } = prepared;
+    let (mut record, store) = match (&self.record, keeps) {
       (Some(path), true) => world::store(path).map(|(held, store)| (held, Some(store)))?,
       (Some(path), false) => (world::kept(path)?, None),
       (None, _) => (Vec::new(), None),
     };
+    record.extend(crossed);
     let path = self.record.as_deref().unwrap_or_default();
     drifts(path, &record)?;
     let cut = checkpoint::last(&record).is_some();
@@ -230,7 +235,6 @@ impl Opening {
       scratch.remade(&record, &told);
       scratch
     });
-    let Prepared { places, extensions, provider } = prepared;
     let gallery = self.gallery();
     let project = PathBuf::from(&self.directory);
     let provider = provider.ear();
@@ -284,10 +288,21 @@ impl Opening {
     if let Some(path) = self.record.as_deref().filter(|_| keeps) {
       upgraded(Path::new(path), &self.directory, world::stored)?;
     }
+    // The tail that another build made after the last checkpoint is carried at the tip of the
+    // record, before the life takes its lease, so the life goes on from it and replays no fact of
+    // another engine.
+    let record = self.record.as_deref().map(Path::new);
+    let crossed = record.map(checkpoint::crossed).transpose()?.flatten();
+    if let (Some(path), Some(one)) = (record.filter(|_| keeps), &crossed) {
+      checkpoint::keep(path, one.clone())?;
+    }
+    let crossed = crossed.filter(|_| !keeps);
     // A record that another build made is refused from the entries that name its build, read from the head of each
     // line, before the life reads the record whole or takes its lease.
     if let Some(path) = &self.record {
-      drifts(path, &world::heads(path, &[world::MADE, checkpoint::CHECKPOINT])?)?;
+      let mut heads = world::heads(path, &[world::MADE, checkpoint::CHECKPOINT])?;
+      heads.extend(crossed.clone());
+      drifts(path, &heads)?;
     }
     let here = Places::here();
     let places = Places { config: self.config.clone().map_or(here.config, PathBuf::from), ..here };
@@ -305,7 +320,7 @@ impl Opening {
       })
       .collect();
     let provider = self.provider(advertised)?;
-    Ok(Prepared { places, extensions, provider })
+    Ok(Prepared { places, extensions, provider, crossed })
   }
 
   /// The provider: the models of the roster that the catalog makes, which the function of the host answers when it
@@ -502,8 +517,11 @@ fn silent() -> Box<dyn Ear> {
 mod host;
 pub use host::{Chain, Life, LifeAct, Open, Question, Shape, Thread};
 
-/// The refusal of a life on the record at a path, from its entries that name the build that made them and its
-/// checkpoints, when a build of another version or another engine made its last segment, so a replay would drift.
+/// The refusal of a life on the record at a path, from its entries that name the build that made
+/// them and its checkpoints, when a build of another version or another engine made its last
+/// segment, so a replay would drift. A segment after a checkpoint of the schema of this build is
+/// carried as data before, as [`checkpoint::crossed`] says, so only a record with no such
+/// checkpoint is refused.
 fn drifts(path: &str, record: &[Object]) -> Result<(), Fault> {
   let refused = |why: String, then: String| {
     Err(Fault::new(
