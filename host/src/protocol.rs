@@ -71,10 +71,27 @@ pub enum Verb {
   Hello(Hello),
   /// The lives and the records of the machine.
   List,
-  /// The life of a record opened, in a folder or in the folder of its record.
+  /// The life of a record opened, in a folder or in the folder of its record. A life that this
+  /// open makes stands on the actor, the roster and the extensions that the peer names, reads the
+  /// settings of the user in the folder `config` and runs the claude command line `claude` when
+  /// the peer names them, as the window of the peer reads them, and the peer answers each request
+  /// of its models in their place when it asks to, as a demo does.
+  /// With `attach`, the peer attaches the life in the same step, from that place in its log, so
+  /// the life has a holder before its grace can pass.
   Open {
     life: String,
     cwd: Option<String>,
+    actor: Option<String>,
+    roster: Option<Vec<String>>,
+    extensions: Option<bool>,
+    #[serde(default)]
+    config: Option<String>,
+    #[serde(default)]
+    claude: Option<String>,
+    #[serde(default)]
+    answers: bool,
+    #[serde(default)]
+    attach: Option<Seq>,
   },
   /// The events of a life from a place in its log, which the daemon pushes to the peer.
   Attach {
@@ -120,6 +137,12 @@ pub enum Verb {
   Standing {
     life: String,
   },
+  /// The share of the window of its model that the prompt of an answer filled, as `filled` of
+  /// the engine gives it from the reply that took that answer, and nothing before an answer.
+  Filled {
+    life: String,
+    act: String,
+  },
   Cwd {
     life: String,
     on: Option<String>,
@@ -146,21 +169,28 @@ pub enum Verb {
     act: String,
     line: String,
   },
+  /// A pause of an act or of a chain, with the cause that the operator gives.
   Pause {
     life: String,
     act: String,
+    why: Option<String>,
   },
   Wake {
     life: String,
     act: String,
   },
+  /// A cancel of an act or of a chain, with the cause that the operator gives.
   Cancel {
     life: String,
     act: String,
+    why: Option<String>,
   },
+  /// A chain made on a chain, under a label, or a fork of the chain `source` with its transcript
+  /// and its program.
   Chain {
     life: String,
     label: Option<String>,
+    source: Option<String>,
     on: Option<String>,
   },
   /// A word that runs on a chain as a turn of the operator.
@@ -168,6 +198,90 @@ pub enum Verb {
     life: String,
     word: String,
     on: Option<String>,
+  },
+  /// A close of an act with a value, written as the record writes a value: `2.0` stays a float,
+  /// and `{"is": "Refused", "args": ["why"]}` is a refusal.
+  Close {
+    life: String,
+    act: String,
+    value: String,
+  },
+  /// A ceiling of the spend of a chain, in dollars or in a share of its window.
+  Grant {
+    life: String,
+    usd: Option<f64>,
+    share: Option<f64>,
+    on: Option<String>,
+  },
+  /// A command that runs on a chain, with the text of its stdin, or with its stdin kept open for
+  /// the lines that a write to `<act>/stdin` feeds it.
+  Bash {
+    life: String,
+    command: String,
+    stdin: Option<String>,
+    #[serde(default)]
+    feed: bool,
+    on: Option<String>,
+  },
+  /// The text at a path, read where a chain stands, as an act of the operator.
+  Read {
+    life: String,
+    path: String,
+    on: Option<String>,
+  },
+  /// A text written at a path, where a chain stands, as an act of the operator.
+  Write {
+    life: String,
+    path: String,
+    content: String,
+    on: Option<String>,
+  },
+  /// The names that the module of a chain binds.
+  Names {
+    life: String,
+    on: Option<String>,
+  },
+  /// What the gate finds in a word on a chain, which runs nothing.
+  Gate {
+    life: String,
+    word: String,
+    on: Option<String>,
+  },
+  /// A stand of the life, which reads the roster and the actor again.
+  Stand {
+    life: String,
+  },
+  /// The fact that the operator read a chain or a thread up to now, which each window and each
+  /// later life reads in the record.
+  Seen {
+    life: String,
+    about: String,
+  },
+  /// A message that the operator queued, sent once as a prompt on a chain. The record keeps the
+  /// entry and the hash of its words, so a second send of the entry, from any window, gives the
+  /// act of the first.
+  Queue {
+    life: String,
+    entry: String,
+    hash: String,
+    shape: String,
+    message: String,
+    on: Option<String>,
+  },
+  /// The turn that the peer gave for a request of a model of a life that it answers, written as
+  /// the record writes a value, or why it gives none.
+  Answered {
+    life: String,
+    ask: u64,
+    turn: Option<Value>,
+    why: Option<String>,
+  },
+  /// What the peer added to the text and to the thought of the turn of a request, as it writes.
+  Wrote {
+    life: String,
+    ask: u64,
+    text: String,
+    thinking: String,
   },
   /// The place of the daemon given to the daemon of a new build: each life written to its
   /// checkpoint and ended, and the lives with their pins in the answer, once the daemon stopped to
@@ -202,9 +316,12 @@ impl Verb {
         | Self::Turns { .. }
         | Self::Program { .. }
         | Self::Standing { .. }
+        | Self::Filled { .. }
         | Self::Cwd { .. }
         | Self::Inspect { .. }
         | Self::Pending { .. }
+        | Self::Names { .. }
+        | Self::Gate { .. }
         | Self::ViewMount(_)
         | Self::ViewTree(_)
         | Self::ViewEffect(_)
@@ -238,6 +355,9 @@ pub enum Frame {
   Event { life: String, seq: Seq, event: Event },
   /// Who is attached to a life now, pushed to each of its windows after each attach and detach.
   Presence { life: String, peers: Vec<Peer> },
+  /// A request of a model of a life that the peer answers: its number, and the request with the
+  /// actor, the chain, the messages and the settings.
+  Ask { life: String, ask: u64, request: Value },
   #[serde(rename = "view.mount")]
   ViewMount(Mount),
   #[serde(rename = "view.tree")]

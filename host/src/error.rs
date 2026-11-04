@@ -66,6 +66,12 @@ pub enum ProtocolError {
   Unattached { life: String },
   #[error("no pin of the holder {holder} holds the life on the record {life}")]
   Unpinned { life: String, holder: String },
+  /// A turn or a write for a request of a model that the life does not wait for.
+  #[error("no model of the life on the record {life} waits for the turn of the request {ask}")]
+  Unasked { life: String, ask: u64 },
+  /// A turn for a life whose models no peer answers.
+  #[error("no peer answers the models of the life on the record {life}")]
+  Answerless { life: String },
   /// A frame of a view that only a window says, or only a skill, and the peer is of another kind.
   #[error("the verb is said by a peer of the kind {needs:?}, and the peer is of the kind {has:?}")]
   Speaker { needs: Kind, has: Kind },

@@ -15,6 +15,8 @@
 //! long as a window or a pin holds it, and [`upgrade`] puts the daemon of a new build in its place.
 
 pub mod access;
+mod answers;
+mod changes;
 mod daemon;
 mod ears;
 mod error;
