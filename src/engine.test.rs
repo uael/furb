@@ -53,7 +53,7 @@ use unsync::oneshot;
 use crate::{
   Act, Ear, Engine, Exit, Fact, Fault, Object, Text,
   ear::{Co, Next, ear, hear, hearing, lasting, say},
-  engine::{CRASHES, HEARING, callable},
+  engine::{CRASHES, callable, hosted::HEARING},
   verbs, world,
 };
 
@@ -1688,13 +1688,17 @@ fn what_an_ear_says_of_its_own_accord_lands_while_it_stands_at_a_yield_and_takes
 
 #[test]
 fn a_fault_that_cuts_a_run_stops_the_life_which_refuses_each_later_entry_and_keeps_no_snapshot() {
-  let mut lived = Lived::new("stopped", &["x = 'a' * (5 << 30)", "close(8)"], true).unwrap();
+  crate::sand::BOUND.set(std::time::Duration::from_millis(100));
+  let cutter = "try:\n  while True:\n    pass\nfinally:\n  while True:\n    pass";
+  let mut lived = Lived::new("stopped", &[cutter, "close(8)"], true).unwrap();
   let root = lived.root();
   let with = verbs::Prompt { on: on(&root), ..Default::default() };
-  let cut =
-    lived.engine.prompt(Object::string("int"), with).expect_err("the memory bound cuts the run");
-  assert_eq!(cut.name, "MemoryError");
-  assert_eq!(lived.engine.stopped().map(|fault| fault.name.as_str()), Some("MemoryError"));
+  let cut = lived
+    .engine
+    .prompt(Object::string("int"), with)
+    .expect_err("the second excess of the turn cuts the run");
+  assert_eq!(cut.name, "TimeoutError");
+  assert_eq!(lived.engine.stopped().map(|fault| fault.name.as_str()), Some("TimeoutError"));
   assert!(
     lived.engine.snapshot().is_none(),
     "a life that stopped keeps no snapshot of its sandbox"
@@ -1703,10 +1707,7 @@ fn a_fault_that_cuts_a_run_stops_the_life_which_refuses_each_later_entry_and_kee
   let no =
     lived.engine.prompt(Object::string("int"), with).expect_err("a life that stopped makes no act");
   assert_eq!(no.name, "Refused");
-  assert!(
-    no.message().starts_with("The life stopped at MemoryError: memory limit exceeded"),
-    "{no}"
-  );
+  assert!(no.message().starts_with("The life stopped at TimeoutError: "), "{no}");
   let view = lived.engine.word("len(transcript(ROOT))", vec![]).expect_err("nor reads one");
   assert_eq!(view.message(), no.message());
   assert_eq!(lived.read.borrow().len(), 1, "the model was asked once");
@@ -1736,7 +1737,6 @@ fn an_ear_that_ends_after_it_says_still_has_each_saying_heard() {
   let id = act.id().to_owned();
   block_on(act).unwrap();
   let facts = engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
-  let heard: Vec<&str> =
-    facts.iter().filter(|one| one.about() == id).map(|one| one.kind()).collect();
+  let heard: Vec<&str> = facts.iter().filter(|one| one.about() == id).map(Fact::kind).collect();
   assert_eq!(heard, ["wait", "started", "done"]);
 }

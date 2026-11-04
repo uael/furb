@@ -24,11 +24,11 @@ API of its own:
   chain or the root alone, and plays the setup of the root on a new record. `parts` gives the part of each extension for
   the TUI, which `tui/src/parts.ts` loads. `extensions/` holds the official extensions, `catchup`, `memory`, `skills`,
   `compaction`, `naming`, `ouroboros`, `web` and `mcp`, each a word, a contract and a suite, and `src/extension/` holds the ear of
-  the World of each that has one, as `skills.rs`. `docs/extensions.md` says how an extension works.
+  the World of the one that has one, `skills.rs`. `docs/extensions.md` says how an extension works.
 - `src/life.rs` opens a life as every host opens one, from one `Opening`: the record, the ears of the crate after the
   ears of the host, the default actor, the roster that the host names or every model of the catalog, and the extensions.
-  A host adds only its own ears, as the console of its operator. A life on a record of another version with no
-  checkpoint is refused before any replay, and `tests/replay` holds the records that each build of the version must
+  A host adds only its own ears, as the console of its operator. A life on a record that another engine or version
+  made after its last checkpoint replays none of that tail: it carries it as data, as `src/checkpoint.rs` says. `tests/replay` holds the records that each build of the version must
   replay with no drift. `tests/corpus` holds the records of each release, which each later build must open, as
   `tests/corpus/README.md` says. Each door gives it as
   `opened` and as `Engine.open`.
@@ -44,12 +44,13 @@ API of its own:
   build, which a host keeps after a fault stopped the life of that tail.
 - `src/snapshot.rs` holds the snapshot of a life beside its record: the session of the sandbox that monty dumps and
   what the engine holds of the ears, which a later life on the same record and build opens from with no replay.
-- `src/engine.rs` opens a life in the sandbox: it loads the engine, the sheet and the Kernel, each in a namespace of its
-  own, and carries each value between the sandbox and a host, whose ears the engine steps as generators. An ear that
-  raises refuses the act that it heard, and starts again from a fresh ear when it can, as the Kernel, the gate and each
-  ear that `lasting` in `src/ear.rs` made do; the life tells the operator once which ear raised and why. A fault that no
-  code of the sandbox catches, as the bound of the memory in `src/sand.rs`, cuts the run with no `finally`, so the life
-  stops: it keeps no snapshot, refuses each later entry with that fault, and gives it to a host as `stopped`.
+- `src/engine.rs` opens a life in the sandbox, with each of its concerns in a file of `src/engine/`: it loads the
+  engine, the sheet and the Kernel, each in a namespace of its own, and carries each value between the sandbox and a
+  host, whose ears the engine steps as generators. An ear that raises refuses the act that it heard, and starts again
+  from a fresh ear when it can, as the Kernel, the gate and each ear that `lasting` in `src/ear.rs` made do; the life
+  tells the operator once which ear raised and why. A fault that no code of the sandbox catches, as the bound of the
+  memory in `src/sand.rs`, cuts the run with no `finally`, so the life stops: it keeps no snapshot, refuses each later
+  entry with that fault, and gives it to a host as `stopped`.
 - The Kernel is `src/furb/kernel.py`, one module that the sandbox loads and the python package imports, each on the
   names of its engine. The gate, `src/gate.rs`, is the type checker of monty. It reads a word on the sheet of the
   engine, `src/furb/sheet.py`, against the typeshed of the sandbox, and it runs each import of the word in a sandbox
@@ -71,7 +72,7 @@ API of its own:
   `Life::spawn` opens a life on a thread of its own, which owns the engine, and gives a `LifeHandle` that any thread
   holds: it says a command to the life and reads the events of the life in order, from any place of its log. The
   thread writes the checkpoint of a life that keeps its record at its end, and opens the life again from it for the
-  same handles when its sandbox holds half of its memory bound or when it said a tail of facts, as
+  same handles when it said a tail of facts, as
   `host/src/rebirth.rs` says. After a fault that stops the sandbox, it carries the tail of the record as data and
   opens from it, since a replay would run again the word that the fault cut. The
   crate holds the one list of the ears of the host that each life hears: the console of the operator, and the ear

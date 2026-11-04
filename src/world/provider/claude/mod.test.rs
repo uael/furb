@@ -34,7 +34,7 @@ use rig_core::{
 };
 use serde_json::{Value, json};
 
-use super::{Account, Claude, Completion, Source, Switch, cached};
+use super::{Account, Claude, Completion, Source, Switch, conversation::cached};
 use crate::ear::reactor;
 
 /// The fake command line, which the tests of the command line of furb run too.

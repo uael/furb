@@ -284,6 +284,11 @@ impl Opening {
   fn prepared(&self) -> Result<Prepared, Fault> {
     let works = self.works();
     let keeps = self.keeps != Some(false) && works;
+    // A record of another major of its schema is refused before any build reads it whole or writes
+    // on it.
+    if let Some(path) = self.record.as_deref().filter(|one| Path::new(one).exists()) {
+      world::readable(&world::heads(path, &[world::MADE])?)?;
+    }
     // The tail that another build made after the last checkpoint is carried at the tip of the
     // record, before the life takes its lease, so the life goes on from it and replays no fact of
     // another engine.

@@ -5,7 +5,6 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { readdirSync, rmSync, statfsSync, statSync, writeFileSync } from "node:fs";
 import { type AddressInfo, createConnection, createServer, type Socket } from "node:net";
 import { basename, dirname, join } from "node:path";
-import { sandboxBound, sandboxHeld } from "furb";
 import type { HostState } from "./bridge.ts";
 import {
   type About,
@@ -329,11 +328,7 @@ const warn = (kind: string, line: string | undefined): void => {
  * FURB_DISK_WARN says. A full disk stops the record, the log and the snapshot, so the host says so before it is full. */
 const LOW = Number(process.env.FURB_DISK_WARN ?? 2 * 1024 ** 3);
 
-/** The share of the memory bound of the sandbox over which the host tells its windows: three quarters, or what
- * FURB_MEMORY_WARN says. At the bound the life stops, so the host says so before it does. */
-const HIGH = Number(process.env.FURB_MEMORY_WARN ?? 0.75);
-
-/** How long the host waits between two looks at the disk and at the memory, in milliseconds. */
+/** How long the host waits between two looks at the disk, in milliseconds. */
 const EVERY = Number(process.env.FURB_HOST_WATCH ?? 30000);
 
 /** The size of the files of the folder of the sessions of a project over which the host tells its windows, in bytes:
@@ -377,15 +372,6 @@ const watch = (): void => {
         : undefined,
     );
   } catch {}
-  const held = sandboxHeld();
-  const bound = sandboxBound();
-  const mib = (bytes: number) => Math.round(bytes / 2 ** 20);
-  warn(
-    "memory",
-    bound > 0 && held > bound * HIGH
-      ? `The life holds ${mib(held)} MiB of the ${mib(bound)} MiB of memory that bounds it. At the bound the life stops. Open it again, or end it, before then.`
-      : undefined,
-  );
 };
 
 /** The end of a host whose life is not open: the worker goes, which cuts the open, and each window that waits for its

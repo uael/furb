@@ -32,17 +32,18 @@ use crate::{
   engine::ROOT,
   fact::{Fact, named},
   value::{Fault, Object, ObjectRef, field},
-  world::{self, VERSION},
+  world::{self, CHECKPOINT_SCHEMA, VERSION},
 };
 
-use super::{CHECKPOINT, SCHEMA, fact, last};
+use super::{CHECKPOINT, fact, last};
 
 /// The kinds of act that the checkpoint carries when a value names one.
 const VERBS: [&str; 7] = ["prompt", "bash", "read", "write", "wait", "cd", "chance"];
 
 /// The checkpoint that this build writes at the tip of the record at a path when a build of another
 /// engine or of another version made the facts after its last checkpoint. Nothing when this build
-/// made them, or when the record holds no checkpoint of the schema that this build writes.
+/// made them, or when the record holds no checkpoint of the major of the schema that this build
+/// writes.
 pub(crate) fn crossed(path: &Path) -> Result<Option<Object>, Fault> {
   folded(path, false)
 }
@@ -68,8 +69,12 @@ fn folded(path: &Path, any: bool) -> Result<Option<Object>, Fault> {
   let theirs = world::made(tail).is_some_and(|one| one != world::engine())
     || world::version(tail).is_some_and(|one| one != VERSION);
   let data = fact(&heads[at]).and_then(|a| a.word(0).map(world::plain));
-  let schema = |one: &Object| field(&one.as_ref(), "schema").and_then(|it| it.as_int());
-  let Some(data) = data.filter(|one| (any || theirs) && schema(one) == Some(SCHEMA)) else {
+  let ours = |one: &Object| {
+    let data = one.as_ref();
+    let held = field(&data, "schema");
+    held.is_some() && CHECKPOINT_SCHEMA.opens("checkpoint", held).is_ok()
+  };
+  let Some(data) = data.filter(|one| (any || theirs) && ours(one)) else {
     return Ok(None);
   };
   let (mut entries, mut kept) = (0, 0);
@@ -240,8 +245,7 @@ impl Fold {
     let tip = Tip { live, opened, cut, ids };
     let chains = tip.live.iter().map(|c| self.chain(c, &modules[c.as_str()], &tip));
     let data = [
-      ("schema", Object::int(SCHEMA)),
-      ("version", Object::int(VERSION)),
+      ("schema", CHECKPOINT_SCHEMA.object()),
       ("engine", Object::string(world::engine())),
       ("taken", Object::dict(self.taken.iter().map(|(k, v)| (s(k), Object::int(*v))))),
       ("chains", Object::list(chains.collect::<Vec<_>>())),
