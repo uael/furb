@@ -71,6 +71,31 @@
                 "null"
               ]
             },
+            "actor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "roster": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "extensions": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "answers": {
+              "type": "boolean",
+              "default": false
+            },
             "verb": {
               "type": "string",
               "const": "open"
@@ -80,7 +105,7 @@
             "verb",
             "life"
           ],
-          "description": "The life of a record opened, in a folder or in the folder of its record."
+          "description": "The life of a record opened, in a folder or in the folder of its record. A life that this\nopen makes stands on the actor, the roster and the extensions that the peer names, and the\npeer answers each request of its models in their place when it asks to, as a demo does."
         },
         {
           "type": "object",
@@ -820,6 +845,67 @@
             "message"
           ],
           "description": "A message that the operator queued, sent once as a prompt on a chain. The record keeps the\nentry and the hash of its words, so a second send of the entry, from any window, gives the\nact of the first."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "ask": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "turn": true,
+            "why": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "answered"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "ask"
+          ],
+          "description": "The turn that the peer gave for a request of a model of a life that it answers, written as\nthe record writes a value, or why it gives none."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "ask": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "text": {
+              "type": "string"
+            },
+            "thinking": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "wrote"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "ask",
+            "text",
+            "thinking"
+          ],
+          "description": "What the peer added to the text and to the thought of the turn of a request, as it writes."
         },
         {
           "type": "object",
@@ -1617,6 +1703,31 @@
           "description": "Who is attached to a life now, pushed to each of its windows after each attach and detach."
         },
         {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "ask": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "request": true,
+            "frame": {
+              "type": "string",
+              "const": "ask"
+            }
+          },
+          "required": [
+            "frame",
+            "life",
+            "ask",
+            "request"
+          ],
+          "description": "A request of a model of a life that the peer answers: its number, and the request with the\nactor, the chain, the messages and the settings."
+        },
+        {
           "required": [
             "frame"
           ],
@@ -2169,6 +2280,46 @@
             "life",
             "holder"
           ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "ask": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "error": {
+              "type": "string",
+              "const": "unasked"
+            }
+          },
+          "required": [
+            "error",
+            "life",
+            "ask"
+          ],
+          "description": "A turn or a write for a request of a model that the life does not wait for."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "answerless"
+            }
+          },
+          "required": [
+            "error",
+            "life"
+          ],
+          "description": "A turn for a life whose models no peer answers."
         },
         {
           "type": "object",

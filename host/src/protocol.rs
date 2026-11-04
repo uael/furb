@@ -71,10 +71,17 @@ pub enum Verb {
   Hello(Hello),
   /// The lives and the records of the machine.
   List,
-  /// The life of a record opened, in a folder or in the folder of its record.
+  /// The life of a record opened, in a folder or in the folder of its record. A life that this
+  /// open makes stands on the actor, the roster and the extensions that the peer names, and the
+  /// peer answers each request of its models in their place when it asks to, as a demo does.
   Open {
     life: String,
     cwd: Option<String>,
+    actor: Option<String>,
+    roster: Option<Vec<String>>,
+    extensions: Option<bool>,
+    #[serde(default)]
+    answers: bool,
   },
   /// The events of a life from a place in its log, which the daemon pushes to the peer.
   Attach {
@@ -234,6 +241,21 @@ pub enum Verb {
     message: String,
     on: Option<String>,
   },
+  /// The turn that the peer gave for a request of a model of a life that it answers, written as
+  /// the record writes a value, or why it gives none.
+  Answered {
+    life: String,
+    ask: u64,
+    turn: Option<Value>,
+    why: Option<String>,
+  },
+  /// What the peer added to the text and to the thought of the turn of a request, as it writes.
+  Wrote {
+    life: String,
+    ask: u64,
+    text: String,
+    thinking: String,
+  },
   /// The place of the daemon given to the daemon of a new build: each life written to its
   /// checkpoint and ended, and the lives with their pins in the answer, once the daemon stopped to
   /// listen.
@@ -295,6 +317,9 @@ pub enum Frame {
   Event { life: String, seq: Seq, event: Event },
   /// Who is attached to a life now, pushed to each of its windows after each attach and detach.
   Presence { life: String, peers: Vec<Peer> },
+  /// A request of a model of a life that the peer answers: its number, and the request with the
+  /// actor, the chain, the messages and the settings.
+  Ask { life: String, ask: u64, request: Value },
   #[serde(rename = "view.mount")]
   ViewMount(Mount),
   #[serde(rename = "view.tree")]

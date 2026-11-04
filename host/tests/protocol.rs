@@ -49,7 +49,14 @@ mod protocol {
     let on = || Some("chain1".to_owned());
     vec![
       Verb::List,
-      Verb::Open { life: life(), cwd: None },
+      Verb::Open {
+        life: life(),
+        cwd: None,
+        actor: Some("claude-cli:opus/high".to_owned()),
+        roster: None,
+        extensions: Some(false),
+        answers: true,
+      },
       Verb::Attach { life: life(), from: 0 },
       Verb::Detach { life: life() },
       Verb::Pin { life: life(), holder: "job".to_owned() },
@@ -77,6 +84,20 @@ mod protocol {
       Verb::Cancel { life: life(), act: id() },
       Verb::Chain { life: life(), label: Some("work".to_owned()), on: on() },
       Verb::Run { life: life(), word: "1 + 1".to_owned(), on: on() },
+      Verb::Handover,
+    ]
+    .into_iter()
+    .chain(acts())
+    .chain(views())
+    .collect()
+  }
+
+  /// The verbs of the acts of an operator and of the models that a window answers.
+  fn acts() -> Vec<Verb> {
+    let life = || "a.jsonl".to_owned();
+    let id = || "prompt1".to_owned();
+    let on = || Some("chain1".to_owned());
+    vec![
       Verb::Close { life: life(), act: id(), value: "2.0".to_owned() },
       Verb::Grant { life: life(), usd: Some(2.0), share: None, on: on() },
       Verb::Bash { life: life(), command: "ls".to_owned(), on: on() },
@@ -94,11 +115,14 @@ mod protocol {
         message: "hi".to_owned(),
         on: on(),
       },
-      Verb::Handover,
+      Verb::Answered {
+        life: life(),
+        ask: 1,
+        turn: Some(json!(["assistant", "1", null, null])),
+        why: None,
+      },
+      Verb::Wrote { life: life(), ask: 1, text: "1".to_owned(), thinking: String::new() },
     ]
-    .into_iter()
-    .chain(views())
-    .collect()
   }
 
   /// A node of a view under an id.
@@ -270,7 +294,8 @@ mod protocol {
       writes.iter().map(|verb| serde_json::to_value(verb).unwrap()["verb"].clone()).collect();
     let expected = [
       "open", "pin", "unpin", "prompt", "answer", "pause", "wake", "cancel", "chain", "run",
-      "close", "grant", "bash", "read", "write", "stand", "seen", "queue", "handover",
+      "handover", "close", "grant", "bash", "read", "write", "stand", "seen", "queue", "answered",
+      "wrote",
     ];
     assert_eq!(names, expected.map(|name| json!(name)));
   }

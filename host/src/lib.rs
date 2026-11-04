@@ -14,6 +14,7 @@
 //! [`run`] serves the daemon of a machine, which holds each life by the path of its record for as
 //! long as a window or a pin holds it, and [`upgrade`] puts the daemon of a new build in its place.
 
+mod answers;
 mod daemon;
 mod ears;
 mod error;
