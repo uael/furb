@@ -72,7 +72,8 @@ pub fn written(engine: &mut Engine) -> Result<Object, Fault> {
     Ok(Object::string(definitions(&word.unwrap_or_default())))
   });
   let floor = engine.taken().clone();
-  let data = engine.gathered(define, floor)?;
+  // The gather is the engine's own work over the whole life, so no bound of a turn cuts it.
+  let data = engine.unbounded(|engine| engine.gathered(define, floor))?;
   let mut fields = vec![
     (Object::string("schema"), CHECKPOINT_SCHEMA.object()),
     (Object::string("engine"), Object::string(world::engine())),
