@@ -21,6 +21,8 @@ export type Request1 =
       actor?: string | null;
       roster?: string[] | null;
       extensions?: boolean | null;
+      config?: string | null;
+      claude?: string | null;
       answers?: boolean;
       attach?: number | null;
       verb: "open";
