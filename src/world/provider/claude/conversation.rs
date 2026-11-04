@@ -157,7 +157,7 @@ impl Conversation {
             && !self.marked
             && let Some(last) = blocks.last_mut()
           {
-            last["cache_control"] = json!({"type": "ephemeral", "ttl": "1h"});
+            last["cache_control"] = json!({"type": "ephemeral", "ttl": lasting()});
             self.marked = true;
           }
           ("user", blocks)
@@ -309,6 +309,7 @@ impl Conversation {
     command.env("CLAUDE_CODE_DISABLE_ATTACHMENTS", "1");
     // Else the command line adds the CLAUDE.md files of the project and of the user to the context.
     command.env("CLAUDE_CODE_DISABLE_CLAUDE_MDS", "1");
+    pinned(&mut command);
     let process = Process::spawn(command, program, spend.clone(), gone).await?;
     self.resumed = true;
     Ok(process)
@@ -583,11 +584,34 @@ fn gained(heard: &Message, now: &Message) -> Option<Message> {
   (!content.is_empty()).then_some(Message::User { content })
 }
 
+/// The life of each mark of the cache in a request of the command line: an hour, or five minutes
+/// when `FORCE_PROMPT_CACHING_5M` forces it on the command line, which no other setting overrides.
+/// The API refuses a request that puts a mark of an hour after one of minutes, and the command line
+/// marks its system prompt before the messages and the last message after them, so the mark that a
+/// conversation writes lives as long as the marks of the command line in each of its requests.
+pub(super) fn lasting() -> &'static str {
+  if env::var_os("FORCE_PROMPT_CACHING_5M").is_some_and(|one| !one.is_empty()) {
+    "5m"
+  } else {
+    "1h"
+  }
+}
+
+/// The command line pinned to the life of [`lasting`] in each of its requests. Unpinned, it marks
+/// for an hour the turns of a subscription within its limits alone, and for five minutes its
+/// compaction, its turns past the limits and every turn on a key of the API, so a mark of an hour
+/// in a message made its compaction fail.
+fn pinned(command: &mut tokio::process::Command) {
+  command.env("CLAUDE_CODE_PROMPT_CACHE_TTL", lasting());
+  command.env("CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL", lasting());
+  command.env_remove("CLAUDE_CODE_MESSAGES_PROMPT_CACHE_TTL");
+}
+
 /// The blocks of a message with the block before the first open of a chain in a conversation marked
 /// for the cache, so the setup that every chain with no source shares ends an entry of the cache,
-/// which the first turn of every later chain reads. The mark lives an hour, as the marks of the
-/// command line do, since a mark of an hour must come before one of minutes, and a conversation
-/// marks one block at most, as the command line takes four marks in all.
+/// which the first turn of every later chain reads. The mark lives as long as the marks of the
+/// command line, as [`lasting`] says, and a conversation marks one block at most, as the command
+/// line takes four marks in all.
 pub(super) fn cached(blocks: &mut [Value], marked: &mut bool) {
   let opens = |one: &Value| {
     one["text"]
@@ -595,7 +619,7 @@ pub(super) fn cached(blocks: &mut [Value], marked: &mut bool) {
       .is_some_and(|text| crate::world::provider::banner(&format!("\n\n{text}")) == Some(2))
   };
   if let Some(at) = (1..blocks.len()).find(|&at| !*marked && opens(&blocks[at])) {
-    blocks[at - 1]["cache_control"] = json!({"type": "ephemeral", "ttl": "1h"});
+    blocks[at - 1]["cache_control"] = json!({"type": "ephemeral", "ttl": lasting()});
     *marked = true;
   }
 }
