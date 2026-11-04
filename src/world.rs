@@ -60,6 +60,14 @@ use crate::{
   value::{Fault, Object},
 };
 
+/// The file that a record keeps beside it, as `<record>.log`: the name of the record with the
+/// suffix after it, byte for byte, so a name that is no text reaches its file.
+pub(crate) fn beside(record: &Path, suffix: &str) -> PathBuf {
+  let mut name = record.as_os_str().to_os_string();
+  name.push(suffix);
+  PathBuf::from(name)
+}
+
 /// The directory a chain stands in, which a path of it resolves against: where the chain went last, resolved against
 /// the directory the life stands on, each read as a path of the machine where it names the home of the user with `~`,
 /// as the World writes it.

@@ -21,7 +21,7 @@ use std::{
   collections::VecDeque,
   fmt::Display,
   fs::{File, OpenOptions, TryLockError, create_dir_all},
-  path::{Path, PathBuf},
+  path::Path,
   rc::Rc,
   task::{Context, Poll},
   time::{Duration, SystemTime, UNIX_EPOCH},
@@ -34,6 +34,7 @@ use sha2::{Digest, Sha256};
 
 use monty_types::unstable::{MontyGraph, MontyNode};
 
+use super::beside;
 use crate::{
   ENGINE, KERNEL,
   ear::{Co, Ear, Heard, Next, Spoken, Step, hearing, say},
@@ -370,7 +371,7 @@ impl Drop for Lease {
 /// leave a lock that no later process meets, and on macOS a lookup of a renamed path can go on giving the moved file
 /// to every process for seconds, so no holder moves or removes the lock file.
 fn leased(path: &Path) -> Result<Lease, Fault> {
-  let lock = PathBuf::from(format!("{}.lock", path.display()));
+  let lock = beside(path, ".lock");
   if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
     create_dir_all(parent).map_err(|no| failed(&lock, no))?;
   }
