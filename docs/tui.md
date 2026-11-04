@@ -472,14 +472,14 @@ A session that opens with unfinished work stays paused until you resume it.
 
 ## A record to read
 
-A record whose replay drifts, as a record that a build of another version made, opens to read. The TUI shows what the
-record kept: each chain, each rung with its word, and each act. No word runs again, no model is asked, and a command
-that would change the life is refused. A read leaves the record and its log as they were. It can refresh the derived
-cache, `<record>.told`.
+A record whose replay drifts, as a record that a build of another engine or version made before its first checkpoint,
+opens to read. The TUI shows what the record kept: each chain, each rung with its word, and each act. No word runs
+again, no model is asked, and a command that would change the life is refused. A read leaves the record and its log as
+they were. It can refresh the derived cache, `<record>.told`.
 
 A dialog gives the build that made the record and this build, each on a line of its own. A record of an earlier engine
-that names no engine says "an earlier engine, not named". It offers three choices: read the record, resume it in a new
-session in its workspace, or start a new life from it, as [the TUI](../tui/README.md#sessions-and-records) says.
+that names no engine says "an earlier engine, not named". It offers two choices: read the record, or start a new
+life from it in its workspace, as [the TUI](../tui/README.md#sessions-and-records) says.
 
 ![A record to read](screenshots/56-record-to-read.png)
 
