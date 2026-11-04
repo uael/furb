@@ -49,6 +49,7 @@ use crate::{
   event::{Event, Seq},
   holders::{Holders, Window},
   life::{Command, Life, LifeHandle, Reply},
+  processes::{self, Played},
   protocol::{
     Answer, BOUND, Frame, Handed, Hello, Kind, Listed, Mount, PROTOCOL, Peer, Request, Verb,
   },
@@ -75,6 +76,9 @@ pub struct Settings {
   /// The file where the daemon writes the address and the token of its door of the windows, the
   /// WebSocket on loopback that a web view dials, when it opens one.
   pub door: Option<PathBuf>,
+  /// The folder of the local transport, where the process of each skill that a life plays dials
+  /// the daemon. With none, the daemon starts no process.
+  pub host: Option<PathBuf>,
 }
 
 /// The daemon on the tailnet: who each peer is, and the ports where it listens on the address of
@@ -628,6 +632,17 @@ impl Lives {
     let handle = Life::spawn(opening)?;
     self.born += 1;
     tokio::spawn(watched(handle.clone(), life.clone(), self.born, self.asks.clone()));
+    if let Some(host) = &self.settings.host {
+      let played = Played {
+        handle: handle.clone(),
+        life: life.clone(),
+        cwd: PathBuf::from(&cwd),
+        host: host.clone(),
+        places: processes::places(&self.settings.opening),
+        log: self.settings.opening.log.clone(),
+      };
+      tokio::spawn(played.run());
+    }
     let stage = Stage::Living(Holders::new(self.settings.grace));
     self.held.insert(life, Held { handle, cwd, born: self.born, stage, answerer });
     Ok(())

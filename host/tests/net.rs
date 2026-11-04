@@ -240,6 +240,7 @@ mod net {
       grace: Duration::from_secs(1),
       tailnet: Some(Tailnet { identity, ports }),
       door: None,
+      host: None,
     };
     let local = Local::new(folder().join("host"));
     let listener = local.listen().await.unwrap();
@@ -273,8 +274,13 @@ mod net {
 
     let file = folder().join("window.json");
     let opening = Opening { extensions: Some(false), ..Opening::default() };
-    let settings =
-      Settings { opening, grace: Duration::from_secs(1), tailnet: None, door: Some(file.clone()) };
+    let settings = Settings {
+      opening,
+      grace: Duration::from_secs(1),
+      tailnet: None,
+      door: Some(file.clone()),
+      host: None,
+    };
     let local = Local::new(folder().join("host"));
     let listener = local.listen().await.unwrap();
     tokio::spawn(async move { run(&local, listener, settings).await });

@@ -170,6 +170,11 @@ once it listens. A second daemon refuses to start there.
 - A skill attaches a life as a window does, under its name, and hears its events from the place that it asks. It holds no
   life, so a life with no window and no pin ends while a skill is attached. A skill that attaches again under its name takes
   the place of the first, and its views end. A skill that detaches, or whose peer leaves, ends its views.
+- The daemon starts the process that the manifest of a skill names under `furb-process` when a life plays the skill: at
+  the end of the replay for each skill that the record enabled, then at each new fact `enable`. It ends the process
+  when the life ends, and when a new fact `enable` of the skill reloads it, which starts the process again. The
+  variables `FURB_HOST`, `FURB_LIFE` and `FURB_SKILL` of the process give the folder of the local transport, the
+  record of the life and the name of the skill. `docs/extensions.md` says the field.
 
 ## Views
 
