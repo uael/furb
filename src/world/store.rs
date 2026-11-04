@@ -119,9 +119,9 @@ pub const MADE: &str = "made";
 
 /// The version of this build, which a record names. A record replays on each build of the version that made it.
 ///
-/// The gate of the corpus holds the versions few: each record of the corpus in `tests/corpus` replays with no drift
-/// on each build of its version. A change that makes a record of the corpus drift adds one to the version, and
-/// makes the corpus again in the same change, as `tests/corpus/README.md` says.
+/// The gate of the replays holds the versions few: each record in `tests/replay` replays with no
+/// drift on each build of its version. A change that makes one of them drift adds one to the
+/// version, and makes the record again in the same change, as `tests/replay/README.md` says.
 pub const VERSION: i64 = 9;
 
 /// The engine of this build, which a record names: a digest of the engine and of the Kernel, which make each act of

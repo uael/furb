@@ -133,6 +133,30 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ fromJSON(steps.release.outputs.pr || '{}').headBranchName }}
+      # The corpus only grows: the pull request of a release copies tests/corpus/next into the folder of its version,
+      # whose files no change touches once the tag of that version stands, as tests/corpus/README.md says. A folder that
+      # no tag holds, as the one of an earlier version of this pull request, goes, so the folder holds next as it is at
+      # the release.
+      - if: steps.release.outcome == 'success' && steps.release.outputs.prs_created == 'true'
+        env:
+          BRANCH: ${{ fromJSON(steps.release.outputs.pr || '{}').headBranchName }}
+        run: |
+          version=$(jq -r '."."' .release-please-manifest.json)
+          git fetch -q --tags origin
+          for one in tests/corpus/*/; do
+            name=$(basename "$one")
+            if [ "$name" != next ] && [ -z "$(git tag --list "v$name")" ]; then
+              rm -rf "$one"
+            fi
+          done
+          cp -R tests/corpus/next "tests/corpus/$version"
+          git add -A tests/corpus
+          if ! git diff --cached --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -qm "Copy the corpus of next into the folder of $version"
+            git push origin "HEAD:$BRANCH"
+          fi
       - if: steps.release.outcome == 'success' && steps.release.outputs.prs_created == 'true'
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:

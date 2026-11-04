@@ -9,7 +9,9 @@ repos:
     hooks:
       - id: check-added-large-files
         # The animation of the TUI in the README is sharp at the cost of its size.
-        exclude: ^docs/furb\.gif$
+        # A record of the corpus holds a whole life with a checkpoint, and git keeps a copy of a record that a release
+        # does not change once.
+        exclude: ^(docs/furb\.gif|tests/corpus/.*\.jsonl)$
       - id: check-merge-conflict
       - id: check-toml
       - id: check-yaml
@@ -90,6 +92,12 @@ repos:
         entry: uv run --no-sync python script/workflows.py
         language: system
         always_run: true
+        pass_filenames: false
+      - id: corpus
+        name: no file of a folder of the corpus that a tag holds changes
+        entry: python3 script/hooks/corpus.py
+        language: system
+        files: ^tests/corpus/
         pass_filenames: false
       - id: stray
         name: no backup or reject file
