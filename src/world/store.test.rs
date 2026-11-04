@@ -12,7 +12,7 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use super::{Lines, Sqlite, Store, kept, store};
+use super::{Lines, Sqlite, Store, keeping, kept, store};
 use crate::{
   value::{Fault, Object},
   wire::parsed,
@@ -193,4 +193,55 @@ fn a_writing_that_a_record_of_an_older_build_holds_as_a_question_is_read_as_the_
   assert_eq!(shown(&kept(&older).unwrap()), shown(&kept(&newer).unwrap()));
   let (record, _ear) = store(&older).unwrap();
   assert_eq!(shown(&record), shown(&kept(&newer).unwrap()));
+}
+
+/// A store whose disk is full: it refuses each entry.
+struct Refusing;
+
+impl Store for Refusing {
+  fn entries(&mut self) -> Result<Vec<Object>, Fault> {
+    Ok(Vec::new())
+  }
+
+  fn keep(&mut self, _: crate::value::ObjectRef<'_>) -> Result<(), Fault> {
+    Err(Fault::refused("No space left on device (os error 28): the record"))
+  }
+
+  fn sync(&mut self) -> Result<(), Fault> {
+    Err(Fault::refused("No space left on device (os error 28): the record"))
+  }
+}
+
+#[test]
+fn a_stop_message_that_failed_to_reach_the_operator_is_said_again_at_the_next_pass() {
+  use std::task::Context;
+
+  use crate::{
+    ear::{Heard, Step},
+    fact::Fact,
+    testing::waker,
+  };
+
+  let (_, mut ear) = keeping(Refusing).unwrap();
+  let wake = waker();
+  let mut cx = Context::from_waker(&wake);
+  let keep = || Fact::says("keep", "", [Object::string("journal"), facts()[0].clone()]);
+  assert!(matches!(ear.resume(Heard::Born, &mut cx), Step::Wait(_)));
+  let mut asked = |ear: &mut Box<dyn crate::ear::Ear>, answer: Result<Object, Fault>| {
+    let Step::Call(call) = ear.resume(Heard::Fact(keep()), &mut cx) else {
+      panic!("a pass that finds the record stopped tells the operator")
+    };
+    assert_eq!(call.verb, "prompt");
+    let message = call.args[1].as_ref().as_str().unwrap().to_owned();
+    assert!(message.contains("cannot be written: No space left on device"), "{message}");
+    // The ear takes what the verb gave, and waits for the next fact.
+    assert!(matches!(ear.resume(Heard::Answer(answer), &mut cx), Step::Wait(_)));
+    message
+  };
+  // The first send fails, so the pass after it says the same message again.
+  let first = asked(&mut ear, Err(Fault::refused("the operator is gone")));
+  let second = asked(&mut ear, Ok(Object::string("prompt1")));
+  assert_eq!(first, second);
+  // The second send went, so the next pass says nothing.
+  assert!(matches!(ear.resume(Heard::Fact(keep()), &mut cx), Step::Wait(_)));
 }

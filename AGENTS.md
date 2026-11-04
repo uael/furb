@@ -76,8 +76,9 @@ API of its own:
   opens from it, since a replay would run again the word that the fault cut. The
   crate holds the one list of the ears of the host that each life hears: the console of the operator, and the ear
   that tells each fact as events. `protocol` holds the one protocol of the daemon, a `Verb` and a `Frame` of JSON
-  lines with the version `PROTOCOL`, `transport` the socket or the pipe of the machine behind a `Dialer` and an
-  `Identity`, `serve` the door to one peer, which checks the role of each verb, and `daemon` the daemon of the
+  lines with the version `PROTOCOL`, `transport` the socket or the pipe of the machine, and TCP and WebSocket on the
+  tailnet, behind a `Dialer` and an `Identity`, `access` the role of each login of the network from `host.json`,
+  `serve` the door to one peer, which checks the role of each verb, and `daemon` the daemon of the
   machine, which holds each life by its record while a window or a pin of `holders` holds it, and gives its place to
   a new build at a handover. `furb host` serves it, and `furb host upgrade` hands it over. `docs/protocol.md` says the
   protocol, and `bun run protocol` makes `bind/typescript/src/protocol.ts` again from `host/protocol.schema.json`.

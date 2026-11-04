@@ -1,6 +1,7 @@
-//! The errors of the host: of a life, of the protocol, and of a transport.
+//! The errors of the host: of a life, of the protocol, of a transport, and of the access of a peer
+//! of the network.
 
-use std::{io, path::PathBuf};
+use std::{io, net::SocketAddr, path::PathBuf};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -127,4 +128,36 @@ pub enum TransportError {
   Peer(#[from] LinesCodecError),
   #[error("a frame cannot be written as JSON")]
   Unwritten(#[from] serde_json::Error),
+  /// Tailscale gives this machine no address on the tailnet.
+  #[error("Tailscale gives this machine no address on the tailnet")]
+  Tailless,
+  /// Plain TCP listens only where `WireGuard` or the machine keeps the frames.
+  #[error("plain TCP listens only on loopback or on the tailnet, not on {addr}")]
+  Open { addr: SocketAddr },
+  #[error("the WebSocket of a peer did not open")]
+  Upgrade(#[source] Box<tokio_tungstenite::tungstenite::Error>),
+  #[error(transparent)]
+  Access(#[from] AccessError),
+}
+
+/// Why the daemon lets in no peer of the network, or reads no settings of the host.
+#[derive(Debug, Error)]
+pub enum AccessError {
+  #[error("{} cannot be read", path.display())]
+  Read { path: PathBuf, source: io::Error },
+  #[error("{} holds no settings of the host", path.display())]
+  Parse { path: PathBuf, source: serde_json::Error },
+  /// The access list gives no role to the login, so the daemon refuses its peer.
+  #[error("the access list gives no role to {login}")]
+  Unlisted { login: String },
+  #[error("the local API of Tailscale does not answer at {place}")]
+  Api { place: String, source: io::Error },
+  #[error("the local API of Tailscale broke the exchange")]
+  Http(#[from] hyper::Error),
+  #[error("the request to the local API of Tailscale is not valid")]
+  Asked(#[from] hyper::http::Error),
+  #[error("the local API of Tailscale refused {path} with {status}: {why}")]
+  Status { path: String, status: u16, why: String },
+  #[error("the local API of Tailscale answered {path} with no JSON that furb reads")]
+  Unread { path: String, source: serde_json::Error },
 }

@@ -1,14 +1,19 @@
 //! The transports of the protocol, each a dialer that reaches a daemon and an identity that says
 //! who a peer is. On the machine, the transport is a Unix socket in a folder of mode 0700, or a
 //! named pipe that only the user reaches on Windows, and the identity of a peer is the login of the
-//! user.
+//! user. On the network, it is TCP or WebSocket on loopback or on the tailnet, and the identity
+//! of a peer is the login that Tailscale gives, as [`net`] says.
 
-use std::{future::Future, path::PathBuf};
+use std::{
+  future::{self, Future},
+  path::PathBuf,
+};
 
 use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::{error::TransportError, protocol::Role};
 
+mod net;
 #[cfg(unix)]
 mod unix;
 #[cfg(unix)]
@@ -17,6 +22,8 @@ use unix as local;
 mod windows;
 #[cfg(windows)]
 use windows as local;
+
+pub use net::{LocalApi, Messages, Tailscale, Tcp, WebSocket, upgraded};
 
 /// Who a peer is, as its transport proved it: its login, and the role that it holds.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,7 +43,10 @@ pub trait Dialer {
 pub trait Identity {
   type Stream;
 
-  fn identify(&self, stream: &Self::Stream) -> Result<Who, TransportError>;
+  fn identify(
+    &self,
+    stream: &Self::Stream,
+  ) -> impl Future<Output = Result<Who, TransportError>> + Send;
 }
 
 /// The transport of the machine, at a folder: the socket in it, or the pipe named after it.
@@ -90,7 +100,10 @@ impl Identity for Local {
   type Stream = Accepted;
 
   /// The login of the user, who writes: no other user reaches the transport.
-  fn identify(&self, stream: &Accepted) -> Result<Who, TransportError> {
-    Ok(Who { login: local::login(stream)?, role: Role::Write })
+  fn identify(
+    &self,
+    stream: &Accepted,
+  ) -> impl Future<Output = Result<Who, TransportError>> + Send {
+    future::ready(local::login(stream).map(|login| Who { login, role: Role::Write }))
   }
 }

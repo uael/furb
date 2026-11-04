@@ -361,7 +361,7 @@ mod protocol {
     let door = local.clone();
     tokio::spawn(async move {
       let stream = listener.accept().await.unwrap();
-      let who = door.identify(&stream).unwrap();
+      let who = door.identify(&stream).await.unwrap();
       serve(&Echo, stream, who).await
     });
     let mut client = Client { lines: BufReader::new(local.dial().await.unwrap()) };
