@@ -6,14 +6,13 @@ rust-version = "1.95"
 description = "The host of furb: each life on a thread of its own, behind a handle that any thread holds."
 license = "AGPL-3.0-only"
 repository = "https://github.com/uael/furb"
-publish = false
 
 [lints]
 workspace = true
 
 [dependencies]
 # The engine, the ears of the World and the provider of models, through the public API of the crate alone.
-furb = { path = ".." }
+furb = { path = "..", version = "0.4.2" }
 # The runtime of the thread of each life, the channels between that thread and the handles of the life, and the
 # socket or the pipe of the protocol.
 tokio = { version = "1", features = ["rt", "sync", "macros", "net", "io-util", "time"] }

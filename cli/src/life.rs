@@ -20,7 +20,7 @@ use std::{
 };
 
 use furb::{
-  Act, Ear, Engine, Fact, Fault, Object,
+  Act, Engine, Fact, Fault, Object,
   ear::{ear, hear, reactor},
   engine::OPERATOR,
   extension::{self, Extension},
@@ -83,19 +83,15 @@ impl Quiet {
 }
 
 impl Life {
-  /// A life as it opens, on a console of the operator, which comes before the ears of the crate. Each ear is heard
-  /// under the name every host hears it by, so the record of one opens in another.
+  /// A life for one command of the operator, on the console of the terminal, which comes
+  /// before the ears of the crate. Each ear is heard under the name every host hears it by,
+  /// so the record of one opens in another.
   ///
   /// The journal says the whole record again before boot returns, so the life stands whole on its record here, and a
-  /// life whose record drifted is refused, since it would keep nothing more. `heard` is given every fact said after
-  /// that, as an ear of the engine hears it.
-  pub fn open(
-    opening: Opening,
-    console: Box<dyn Ear>,
-    mut heard: impl FnMut(&Fact) + 'static,
-  ) -> Result<Life, String> {
+  /// life whose record drifted is refused, since it would keep nothing more.
+  pub fn lived(opening: Opening) -> Result<Life, String> {
     let failed = |no: Fault| no.to_string();
-    let (mut engine, held) = opening.boot([("console", console)]).map_err(failed)?;
+    let (mut engine, held) = opening.boot([("console", console::terminal())]).map_err(failed)?;
     let root = engine.root().to_owned();
     let mut quiet = Quiet::default();
     let facts =
@@ -105,7 +101,6 @@ impl Life {
     let observer = ear(move |mut co| async move {
       loop {
         let a = hear(&mut co).await;
-        heard(&a);
         let _ = tells.try_send(a);
       }
     });
@@ -115,20 +110,10 @@ impl Life {
     Ok(Life { engine, root, held, quiet, heard: told })
   }
 
-  /// A life for one command of the operator, on the terminal.
-  pub fn lived(opening: Opening) -> Result<Life, String> {
-    Life::open(opening, console::terminal(), |_| {})
-  }
-
   /// The extensions that the life runs, in the order it enabled them.
   pub fn extensions(&mut self) -> Result<Vec<Extension>, String> {
     let root = self.engine.transcript(verbs::Transcript { on: Some(self.root.clone()), of: None });
     Ok(extension::enabled(&root.map_err(|no| no.to_string())?))
-  }
-
-  /// Whether a pause stands over the root.
-  pub fn paused(&mut self) -> bool {
-    quieted(&mut self.quiet, &mut self.heard).paused
   }
 
   /// The name of the prompt the record already holds for this message: of the operator, on the root, of this shape
@@ -169,7 +154,7 @@ impl Life {
         return match stranded(engine, root, id) {
           Ok(named) if named.is_empty() => Poll::Pending,
           Ok(named) => Poll::Ready(Err(format!(
-            "the word awaits {}, and no wake runs it. A wake from the TUI or from `furb --mode rpc` makes it go on.",
+            "the word awaits {}, and no wake runs it. A wake from a client of the daemon makes it go on.",
             named.join(", ")
           ))),
           Err(no) => Poll::Ready(Err(no)),
@@ -178,7 +163,7 @@ impl Life {
       let why =
         if quiet.refused.is_empty() { String::new() } else { format!(": {}", quiet.refused) };
       Poll::Ready(Err(format!(
-        "{id} is paused{why}. A wake from the TUI or from `furb --mode rpc` makes it go on."
+        "{id} is paused{why}. A wake from a client of the daemon makes it go on."
       )))
     }))
   }
@@ -238,11 +223,6 @@ pub fn shape(name: &str) -> Object {
 /// operator among them.
 pub fn actor(to: &str) -> (String, Option<String>) {
   named(to, Catalog::load().roster(Some(&[]), Some(to)))
-}
-
-/// An actor as [`actor`] gives it, for a caller on the runtime of the ears, which awaits the catalog.
-pub async fn actored(to: &str) -> (String, Option<String>) {
-  named(to, Catalog::loaded().await.rostered(Some(&[]), Some(to)).await)
 }
 
 fn named<E>(

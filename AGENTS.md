@@ -64,9 +64,10 @@ API of its own:
   `FURB_ENGINE=monty` makes `from furb import engine` give it.
 - `cli/` is `furb-cli`, the second package of the workspace of the crate, whose program is `furb`, on clap. With no
   command it hands the terminal to the TUI, which it finds in `FURB_TUI`, as `furb-tui` on PATH, or in the checkout it
-  was built from. `--mode rpc` serves one life as a JSON-RPC on stdin and stdout, which `docs/rpc.md` says. `prompt`,
+  was built from. A program that wants a life dials the daemon, as `docs/protocol.md` says. `prompt`,
   `turns`, `run` and `extensions` each open one life on a record, `facts` prints each fact of a record with no life,
-  `checkpoint` writes the checkpoint of a life, and `catalog` shows where the models came from. The package `furb`
+  `checkpoint` writes the checkpoint of a life, `catalog` shows where the models came from, and `host` serves the
+  daemon of the machine of `furb-host`. The package `furb`
   depends on the wheel of `furb-cli`, so `pip install furb` gives the command `furb`.
 - `host/` is `furb-host`, the third package of the workspace of the crate, on the public API of `furb` alone. Its
   `Life::spawn` opens a life on a thread of its own, which owns the engine, and gives a `LifeHandle` that any thread
@@ -78,7 +79,9 @@ API of its own:
   crate holds the one list of the ears of the host that each life hears: the console of the operator, and the ear
   that tells each fact as events. `protocol` holds the one protocol of the daemon, a `Verb` and a `Frame` of JSON
   lines with the version `PROTOCOL`, `transport` the socket or the pipe of the machine behind a `Dialer` and an
-  `Identity`, and `serve` the door to one peer, which checks the role of each verb. `docs/protocol.md` says the
+  `Identity`, `serve` the door to one peer, which checks the role of each verb, and `daemon` the daemon of the
+  machine, which holds each life by its record while a window or a pin of `holders` holds it, and gives its place to
+  a new build at a handover. `furb host` serves it, and `furb host upgrade` hands it over. `docs/protocol.md` says the
   protocol, and `bun run protocol` makes `bind/typescript/src/protocol.ts` again from `host/protocol.schema.json`.
 
 The suite runs on both engines, but for the tests that `MONTY_SKIPS` in `test/conftest.py` names: these boot on a Kernel
@@ -202,8 +205,9 @@ The suite drives the engine through its public API alone, end to end, from the m
   values: names, entries of `sand.record`, results through `engine.peek`, turns through `engine.turns(on=root)`,
   and the calls of the doubles. It reads a fact by position, as the contract declares it, and never weakens an
   assertion to pass: a sentence the engine fails stays red until the engine, or the sentence, is right.
-- A test of speed compares two times that it measures in one run, and takes the least of several runs of each. A bound
-  in seconds fails on a machine under load.
+- A test of speed compares two times that it measures in one run, and takes the least of several runs of each, or
+  better counts the work that the code does, which no load changes. A bound in seconds fails on a machine under load.
+  A test of a process that a timeout ends gives it a limit that a loaded machine cannot cross.
 - A helper that only one file needs lives in that file. A helper that several files need lives in
   `test/conftest.py`, and one that only the suites of the extensions need lives in `extensions/conftest.py`.
   A test folder of an extension takes no `conftest.py`: it shadows the module `conftest` that `extensions/conftest.py`

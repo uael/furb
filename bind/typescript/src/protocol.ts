@@ -129,6 +129,9 @@ export type Request1 =
       on?: string | null;
       verb: "run";
     }
+  | {
+      verb: "handover";
+    }
   | (Mount & {
       verb: "view.mount";
     })
@@ -145,9 +148,10 @@ export type Request1 =
       verb: "view.dispose";
     });
 /**
- * What a peer is: a window of an operator, or the process of a skill.
+ * What a peer is: a window of an operator, the process of a kit, or the daemon of a new build,
+ * which asks the handover.
  */
-export type Kind = "window" | "skill";
+export type Kind = "window" | "kit" | "daemon";
 /**
  * Where a window shows a view. The dock follows the chain that it names, and the row, the detail
  * and the mark follow the chain of the act that they name. The sidebar, the footer, a screen and
@@ -212,10 +216,16 @@ export type Node1 =
   | {
       value: string;
       hint?: string | null;
+      /**
+       * A node that acts is inert in the window of a peer that only reads: it draws and takes no
+       * gesture.
+       */
+      inert?: boolean;
       node: "input";
     }
   | {
       label: string;
+      inert?: boolean;
       node: "button";
     }
   | {
@@ -248,7 +258,7 @@ export type Tone = "text" | "muted" | "faint" | "accent" | "success" | "warning"
  */
 export type Gesture = "press" | "change" | "submit";
 /**
- * What a skill asks of a window.
+ * What a kit asks of a window.
  */
 export type Effect =
   | {
@@ -283,6 +293,11 @@ export type Frame =
       seq: number;
       event: Event;
       frame: "event";
+    }
+  | {
+      life: string;
+      peers: Peer[];
+      frame: "presence";
     }
   | (Mount & {
       frame: "view.mount";
@@ -340,6 +355,10 @@ export type Answer =
   | {
       answer: "presence";
       data: Peer[];
+    }
+  | {
+      answer: "handed";
+      data: Handed[];
     };
 /**
  * What a peer may do: read a life, or read and write it. Write holds each right of read.
@@ -376,6 +395,47 @@ export type ProtocolError =
   | {
       why: string;
       error: "refused";
+    }
+  | {
+      error: "stopped";
+    }
+  | {
+      life: string;
+      error: "closed";
+    }
+  | {
+      life: string;
+      error: "relative";
+    }
+  | {
+      life: string;
+      error: "unattached";
+    }
+  | {
+      life: string;
+      holder: string;
+      error: "unpinned";
+    }
+  | {
+      needs: Kind;
+      has: Kind;
+      error: "speaker";
+    }
+  | {
+      error: "nameless";
+    }
+  | {
+      life: string;
+      kit: string;
+      error: "no_kit";
+    }
+  | {
+      viewer: string;
+      error: "unmounted";
+    }
+  | {
+      viewer: string;
+      error: "mounted";
     };
 /**
  * What a life tells its clients, in the order of its log.
@@ -477,7 +537,7 @@ export interface Protocol {
   frame: Frame;
 }
 /**
- * The first frame of a peer: the protocol that it speaks, its kind, and the name of a skill.
+ * The first frame of a peer: the protocol that it speaks, its kind, and the name of a kit.
  */
 export interface Hello {
   protocol: number;
@@ -485,13 +545,13 @@ export interface Hello {
   name?: string | null;
 }
 /**
- * A view that a window mounts in a slot of a life, which the process of a skill serves.
+ * A view that a window mounts in a slot of a life, which the process of a kit serves.
  */
 export interface Mount {
   viewer: string;
   life: string;
   slot: Slot;
-  skill: string;
+  kit: string;
 }
 /**
  * The tree of a view, which takes the place of each tree of a lower version.
@@ -519,7 +579,7 @@ export interface ViewEvent {
   value?: string | null;
 }
 /**
- * What a skill asks of the one window of a view.
+ * What a kit asks of the one window of a view.
  */
 export interface ViewEffect {
   viewer: string;
@@ -533,7 +593,7 @@ export interface Dispose {
 }
 /**
  * A peer as the daemon knows it after its hello: the login that its transport proved, its role,
- * its kind, and the name of a skill.
+ * its kind, and the name of a kit.
  */
 export interface Peer {
   login: string;
@@ -547,6 +607,14 @@ export interface Peer {
 export interface Listed {
   life: string;
   open: boolean;
+}
+/**
+ * A life that a daemon gave at its handover: its record, its folder, and the holder of each pin.
+ */
+export interface Handed {
+  life: string;
+  cwd: string;
+  pins: string[];
 }
 /**
  * One act of a life with its meaning, as it stands after the last fact about it.

@@ -170,7 +170,7 @@ class Round:
     self.files[text.path] = text.content
     return text
 
-  def hire(self, key: str, what: str, thread: str = "", brief: str = "", model: str = "") -> str:
+  async def hire(self, key: str, what: str, thread: str = "", brief: str = "", model: str = "") -> str:
     self.hired.append((key, brief or what, thread))
     return self.busy(f"worker{len(self.hired)}", key, model or self.ns["model_of"](key))
 
@@ -264,68 +264,68 @@ def test_a_load_with_no_limits_binds_the_room_of_the_owner_and_caps_at_ten(tmp_p
   assert got.family("claude-cli:opus/high") == "opus/high"
 
 
-def test_staff_hires_queue_then_backlog_in_order_while_the_cap_has_room(conductor: Round) -> None:
+async def test_staff_hires_queue_then_backlog_in_order_and_keeps_one_slot_for_a_fixer(conductor: Round) -> None:
   conductor.queue.extend([("q1", "b", "t"), ("q2", "b", "t")])
   conductor.backlog.extend([("b1", "b", "t"), ("b2", "b", "t"), ("b3", "b", "t"), ("b4", "b", "t")])
   conductor.limits["room"] = {"sonnet": 5}
-  conductor.staff()
-  assert [h[0] for h in conductor.hired] == ["q1", "q2", "b1", "b2", "b3"]
-  assert conductor.backlog == [("b4", "b", "t")]
+  await conductor.staff()
+  assert [h[0] for h in conductor.hired] == ["q1", "q2", "b1", "b2"]
+  assert conductor.backlog == [("b3", "b", "t"), ("b4", "b", "t")]
 
 
-def test_an_item_waits_for_its_after_until_each_pr_of_it_merged_and_says_why_once(conductor: Round) -> None:
+async def test_an_item_waits_for_its_after_until_each_pr_of_it_merged_and_says_why_once(conductor: Round) -> None:
   conductor.queue.append(("late", "b", "t"))
   conductor.after["late"] = ["first"]
-  conductor.staff()
-  conductor.staff()
+  await conductor.staff()
+  await conductor.staff()
   assert conductor.hired == []
   assert conductor.heard == ["late waits: first has not ended, and no item holds it."]
   conductor.ends["first"] = [("prompt1", 12)]
-  conductor.staff()
+  await conductor.staff()
   assert conductor.heard[-1] == "late waits: #12 of first has not merged."
   conductor.merged.add(12)
-  conductor.staff()
+  await conductor.staff()
   assert [h[0] for h in conductor.hired] == ["late"]
 
 
-def test_an_item_waits_while_a_live_worker_holds_its_files_and_a_test_file_holds_none(conductor: Round) -> None:
+async def test_an_item_waits_while_a_live_worker_holds_a_file_that_changes_alone_and_a_test_file_holds_none(conductor: Round) -> None:
   conductor.areas.update(one=["src/furb/engine.py", "test/conftest.py"], two=["src/furb", "test/conftest.py"], three=["test/conftest.py"])
   conductor.busy("prompt1", "one")
   conductor.queue.extend([("two", "b", "t"), ("three", "b", "t")])
-  conductor.staff()
+  await conductor.staff()
   assert [h[0] for h in conductor.hired] == ["three"]
-  assert conductor.heard == ["two waits: the worker of one holds src/furb."]
+  assert conductor.heard == ["two waits: the worker of one holds src/furb/engine.py."]
 
 
-def test_an_item_waits_while_an_open_pr_of_the_round_changes_its_files_but_not_for_its_own_pr(conductor: Round) -> None:
-  conductor.areas.update(mine=["tui/src"], other=["tui/src/app.ts"])
+async def test_an_item_waits_while_an_open_pr_of_the_round_changes_a_file_that_changes_alone_but_not_for_its_own_pr(conductor: Round) -> None:
+  conductor.areas.update(mine=["DOCTRINE.md"], other=["DOCTRINE.md"], shared=["tui/src"])
   conductor.prs[9] = {"n": 9, "labels": ["w:mine"]}
-  conductor.touched[9] = {"sha": "s", "paths": ["tui/src/app.ts", "tui/test/app.test.ts"]}
-  conductor.queue.extend([("other", "b", "t"), ("mine", "b", "t")])
-  conductor.staff()
-  assert [h[0] for h in conductor.hired] == ["mine"]
-  assert conductor.heard == ["other waits: #9 changes tui/src/app.ts."]
+  conductor.touched[9] = {"sha": "s", "paths": ["DOCTRINE.md", "tui/src/app.ts"]}
+  conductor.queue.extend([("other", "b", "t"), ("mine", "b", "t"), ("shared", "b", "t")])
+  await conductor.staff()
+  assert [h[0] for h in conductor.hired] == ["mine", "shared"]
+  assert conductor.heard == ["other waits: #9 changes DOCTRINE.md."]
 
 
-def test_an_item_with_no_areas_holds_no_file_whatever_its_brief_names(conductor: Round) -> None:
+async def test_an_item_with_no_areas_holds_no_file_whatever_its_brief_names(conductor: Round) -> None:
   conductor.prs[9] = {"n": 9, "labels": ["w:x"]}
   conductor.touched[9] = {"sha": "s", "paths": ["src/furb/engine.py"]}
   conductor.queue.append(("free", "Change src/furb/engine.py, as https://github.com/a/b/blob/main/src/furb/engine.py shows.", "t"))
-  conductor.staff()
+  await conductor.staff()
   assert [h[0] for h in conductor.hired] == ["free"]
 
 
-def test_an_item_whose_model_no_worker_runs_waits_with_its_cause(conductor: Round) -> None:
+async def test_an_item_whose_model_no_worker_runs_waits_with_its_cause(conductor: Round) -> None:
   conductor.efforts["big"] = "claude-cli:opus/max"
   conductor.queue.append(("big", "b", "t"))
-  conductor.staff()
+  await conductor.staff()
   assert conductor.hired == []
   assert conductor.heard == [f"big waits: it asks claude-cli:opus/max, and a worker runs only {SONNET}, {OPUS}."]
 
 
-def test_hire_starts_a_worker_on_its_chain_with_the_asks_on_top_and_its_workspace(conductor: Round) -> None:
+async def test_hire_starts_a_worker_on_its_chain_with_the_asks_on_top_and_its_workspace(conductor: Round) -> None:
   conductor.owner_asks["A3"] = {"prompt": "prompt30", "quote": "limit to 5 max", "items": ["cap"], "state": "open"}
-  name = conductor.real_hire("cap", "Hold the cap.", "round")
+  name = await conductor.real_hire("cap", "Hold the cap.", "round")
   message, on = conductor.prompts[-1]
   path = f"{conductor.tmp}-w1"
   assert on == "chain-round/cap"
@@ -339,23 +339,23 @@ def test_hire_starts_a_worker_on_its_chain_with_the_asks_on_top_and_its_workspac
   assert conductor.slots[name] == conductor.slots["chain-round/cap"] == "w1"
 
 
-def test_a_chain_goes_on_in_its_last_workspace_unless_a_live_worker_holds_it(conductor: Round) -> None:
+async def test_a_chain_goes_on_in_its_last_workspace_unless_a_live_worker_holds_it(conductor: Round) -> None:
   conductor.slots["chain-w/again"] = "w2"
-  conductor.real_hire("again", "x")
+  await conductor.real_hire("again", "x")
   assert conductor.slots["chain-w/again"] == "w2"
   conductor.busy("prompt7", "other")
   conductor.slots["prompt7"] = "w3"
   conductor.slots["chain-w/third"] = "w3"
-  conductor.real_hire("third", "x")
+  await conductor.real_hire("third", "x")
   assert conductor.slots["chain-w/third"] == "w1"
 
 
-def test_an_audit_runs_in_no_workspace_and_a_fix_takes_its_brief_whole(conductor: Round) -> None:
+async def test_an_audit_runs_in_no_workspace_and_a_fix_takes_its_brief_whole(conductor: Round) -> None:
   conductor.kinds["look"] = "audit"
-  conductor.real_hire("look", "Count the lines.")
+  await conductor.real_hire("look", "Count the lines.")
   assert "scratch://audit/look.md" in conductor.prompts[-1][0]
   assert len(conductor.rungs) == 1
-  conductor.real_hire("fix4", "Fix #4 in {workspace}", "t")
+  await conductor.real_hire("fix4", "Fix #4 in {workspace}", "t")
   assert conductor.prompts[-1][0].startswith(f"Fix #4 in Work in the workspace {conductor.tmp}-w1,")
 
 
@@ -652,3 +652,115 @@ async def test_a_step_that_fails_is_one_notice_and_the_round_goes_on_until_it_ho
   assert len(told) == 2
   assert told[1].startswith("The round on chain1 ended: it holds no item and no open PR that it tends.")
   assert "The worker one (worker1) ended with #3: done" in told[1]
+
+
+@POSIX
+@JQ
+async def test_a_pr_that_refuses_auto_merge_merges_plainly_or_as_a_layer_of_its_stack(conductor: Round) -> None:
+  conductor.ends["a"] = []
+  conductor.github(raw(1, "a"))
+  conductor.say(r"pr merge 1 --auto", "", 1)
+  conductor.say(r"pr merge 1 --squash$", "", 1)
+  await conductor.sweep()
+  calls = [x for x in conductor.log().splitlines() if x.startswith(("pr merge", "stack merge"))]
+  assert calls == ["pr merge 1 --auto --squash", "pr merge 1 --squash", "stack merge 1 --yes --squash"]
+
+
+@POSIX
+@JQ
+async def test_a_green_pr_that_has_not_merged_after_stale_seconds_is_one_line(conductor: Round) -> None:
+  conductor.ends["a"] = []
+  conductor.github(raw(1, "a"))
+  await conductor.sweep()
+  conductor.now += conductor.STALE + 1
+  await conductor.sweep()
+  await conductor.sweep()
+  assert conductor.heard == ["#1 is green at sha1 for 45 minutes and has not merged."]
+
+
+@POSIX
+@JQ
+async def test_a_fixer_of_a_full_family_runs_on_the_next_model_of_upgrade(conductor: Round) -> None:
+  conductor.ends["a"] = [("prompt1", 1)]
+  for n in range(3):
+    conductor.busy(f"prompt{n + 10}", f"k{n}")
+  conductor.github(raw(1, "a", mergeable="CONFLICTING", checks=()))
+  await conductor.sweep()
+  assert [h[0] for h in conductor.hired] == ["fix1"]
+  assert conductor.models["worker1"] == OPUS
+
+
+async def test_an_item_of_a_full_family_moves_to_the_next_model_of_upgrade(conductor: Round) -> None:
+  conductor.busy("prompt1", "one")
+  conductor.limits["room"] = {"sonnet": 1, "opus": 2}
+  conductor.queue.append(("two", "b", "t"))
+  await conductor.staff()
+  assert [h[0] for h in conductor.hired] == ["two"]
+  assert conductor.efforts["two"] == OPUS
+
+
+async def test_a_wait_on_an_item_that_has_not_ended_is_no_line(conductor: Round) -> None:
+  conductor.efforts["dep"] = "claude-cli:opus/max"
+  conductor.queue.extend([("dep", "b", "t"), ("late", "b", "t")])
+  conductor.after["late"] = ["dep"]
+  await conductor.staff()
+  assert conductor.hired == []
+  assert conductor.heard == [f"dep waits: it asks claude-cli:opus/max, and a worker runs only {SONNET}, {OPUS}."]
+
+
+def test_a_register_with_a_column_after_sets_the_waits_of_each_row(conductor: Round) -> None:
+  conductor.ends["triage-old"] = []
+  conductor.files["scratch://audit/look.md"] = "\n".join([
+    "| Dn | key | model | area | after | brief |",
+    "| D1 | old | sonnet/high | src | | Done. |",
+    "| D2 | base | sonnet/high | src | | Build it. |",
+    "| D3 | top | sonnet/high | tui | D1, D2 | Use it. |",
+  ])
+  conductor.register("look")
+  assert [q[0] for q in conductor.queue] == ["triage-base", "triage-top"]
+  assert conductor.queue[1][1].endswith("Use it.\n\nThis item is row D3 of the register scratch://audit/look.md.")
+  assert conductor.after == {"triage-top": ["triage-old", "triage-base"]}
+
+
+def git(where: Path, *words: str) -> str:
+  return subprocess.run(["git", "-C", str(where), *words], capture_output=True, text=True, check=True).stdout.strip()
+
+
+@POSIX
+def test_settle_keeps_the_work_of_another_chain_on_a_new_branch_and_never_on_the_branch_of_a_pr(conductor: Round, tmp_path: Path) -> None:
+  origin, space = tmp_path / "origin.git", tmp_path / "w2"
+  subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
+  subprocess.run(["git", "clone", "-q", str(origin), str(space)], check=True, capture_output=True)
+  git(space, "config", "user.email", "t@t")
+  git(space, "config", "user.name", "t")
+  git(space, "switch", "-q", "-c", "w/pr")
+  (space / "a.txt").write_text("a\n", encoding="utf-8")
+  git(space, "add", "a.txt")
+  git(space, "commit", "-q", "-m", "a")
+  git(space, "push", "-q", "origin", "w/pr")
+  pushed = git(space, "rev-parse", "HEAD")
+  (space / ".git" / "furb-holder").write_text("chain-old\n", encoding="utf-8")
+  (space / "b.txt").write_text("foreign\n", encoding="utf-8")
+  subprocess.run(["sh", "-c", conductor.SETTLE, "sh", str(space), "chain-new"], check=True, capture_output=True)
+  assert git(origin, "rev-parse", "w/pr") == pushed
+  wip = [x.split()[-1] for x in git(origin, "branch", "--list", "w/wip-*").splitlines()]
+  assert len(wip) == 1 and wip[0].startswith(f"w/wip-{pushed[:7]}-")
+  assert git(origin, "show", f"{wip[0]}:b.txt") == "foreign"
+  assert (space / ".git" / "furb-holder").read_text(encoding="utf-8") == "chain-new\n"
+
+
+@POSIX
+async def test_hire_writes_the_chain_of_the_worker_in_its_workspace_before_its_prompt(conductor: Round) -> None:
+  space = Path(f"{conductor.tmp}-w1")
+  subprocess.run(["git", "init", "-q", str(space)], check=True)
+  (space / ".git" / "furb-holder").write_text("chain-old\n", encoding="utf-8")
+  seen = []
+  ask = conductor.ns["prompt"]
+
+  def prompt(shape: object, message: str = "", to: str = "", on: str = "") -> str:
+    seen.append((space / ".git" / "furb-holder").read_text(encoding="utf-8"))
+    return ask(shape, message, to, on)
+
+  conductor.ns["prompt"] = prompt
+  await conductor.real_hire("cap", "x")
+  assert seen == ["chain-w/cap\n"]

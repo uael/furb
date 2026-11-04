@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio_util::codec::LinesCodecError;
 
-use crate::protocol::Role;
+use crate::protocol::{Kind, Role};
 
 /// Why a life gave no reply to a command.
 #[derive(Debug, Error)]
@@ -53,6 +53,47 @@ pub enum ProtocolError {
   /// The daemon or the life refused the verb, with why.
   #[error("{why}")]
   Refused { why: String },
+  /// The daemon gave its place to the daemon of a new build, or stops.
+  #[error("the daemon stops")]
+  Stopped,
+  #[error("no life of the daemon lives on the record {life}")]
+  Closed { life: String },
+  /// A life is named by the absolute path of its record, the same for each peer.
+  #[error("the record {life} is not an absolute path")]
+  Relative { life: String },
+  #[error("the peer did not attach the life on the record {life}")]
+  Unattached { life: String },
+  #[error("no pin of the holder {holder} holds the life on the record {life}")]
+  Unpinned { life: String, holder: String },
+  /// A frame of a view that only a window says, or only a kit, and the peer is of another kind.
+  #[error("the verb is said by a peer of the kind {needs:?}, and the peer is of the kind {has:?}")]
+  Speaker { needs: Kind, has: Kind },
+  /// A kit says its name at its hello, since a window mounts the views of a kit by it.
+  #[error("a kit says its name at its hello")]
+  Nameless,
+  #[error("no kit {kit} is attached to the life on the record {life}")]
+  NoKit { life: String, kit: String },
+  /// A view belongs to the window that mounted it and to the kit that serves it, and to no other
+  /// peer.
+  #[error("the peer holds no view {viewer}")]
+  Unmounted { viewer: String },
+  /// A viewer names one view of the daemon.
+  #[error("a view {viewer} is mounted already")]
+  Mounted { viewer: String },
+}
+
+/// Why the daemon stops, or does not start.
+#[derive(Debug, Error)]
+pub enum DaemonError {
+  #[error(transparent)]
+  Transport(#[from] TransportError),
+  /// The daemon that runs refused the handover.
+  #[error("the daemon that runs refused the handover: {0}")]
+  Refused(#[from] ProtocolError),
+  #[error("the daemon that runs closed before it gave its lives")]
+  Unanswered,
+  #[error("the daemon that runs answered no frame of the protocol")]
+  Unread(#[source] serde_json::Error),
 }
 
 impl From<LifeError> for ProtocolError {

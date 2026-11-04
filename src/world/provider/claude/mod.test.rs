@@ -395,6 +395,34 @@ fn a_message_that_the_command_line_did_not_hear_goes_whole_at_the_next_turn() {
 }
 
 #[test]
+fn a_turn_dropped_after_the_command_line_heard_it_leaves_the_next_turn_to_send_only_what_it_gained()
+{
+  let yard = Yard::new("droppedheard");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let settings = json!({"session": "chain"});
+  let one = asked(&model, &[user("first")], settings.clone()).unwrap();
+  let answer = Message::Assistant { id: None, content: one.choice };
+  let dropped = [user("first"), answer.clone(), user("second WAIT")];
+  let turn = model.completion(request("ENGINE ONLY", &dropped, settings.clone()));
+  let heard = async {
+    while !yard.heard().iter().any(|one| one.contains("WAIT")) {
+      tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+  };
+  let raced = reactor().block_on(async {
+    tokio::time::timeout(Duration::from_secs(10), select(Box::pin(turn), Box::pin(heard))).await
+  });
+  let Ok(Either::Right(((), turn))) = raced else {
+    panic!("the turn was still in flight when the fake heard its line")
+  };
+  drop(turn);
+  let grown = [user("first"), answer, user("second WAIT\n\nthird")];
+  asked(&model, &grown, settings).unwrap();
+  let line: Value = serde_json::from_str(yard.heard().last().unwrap()).unwrap();
+  assert_eq!(line["message"]["content"], json!([{"type": "text", "text": "third"}]));
+}
+
+#[test]
 fn a_turn_given_again_grown_that_comes_to_no_reply_again_begins_a_new_conversation_at_the_next_turn()
  {
   let yard = Yard::new("regrown");

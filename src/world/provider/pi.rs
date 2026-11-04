@@ -2,11 +2,6 @@
 //! its options, which one post to `<address>/messages` carries, and the reply streams as the events of pi-ai, each a
 //! line of data of its own.
 
-#![expect(
-  clippy::redundant_closure_for_method_calls,
-  reason = "debt: a closure where a method path serves"
-)]
-
 use std::collections::VecDeque;
 
 use futures::StreamExt;
@@ -47,7 +42,7 @@ impl Pi {
           UserContent::Text(text) => Some(json!({"type": "text", "text": text.text})),
           UserContent::Image(image) => match &image.data {
             DocumentSourceKind::Base64(data) => {
-              let media = image.media_type.as_ref().map(|one| one.to_mime_type());
+              let media = image.media_type.as_ref().map(MimeType::to_mime_type);
               Some(json!({"type": "image", "data": data, "mimeType": media}))
             }
             _ => None,

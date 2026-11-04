@@ -1577,6 +1577,7 @@ version = "0.4.2"
 dependencies = [
  "clap",
  "furb",
+ "furb-host",
  "futures",
  "serde_json",
  "tokio",
