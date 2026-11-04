@@ -364,6 +364,18 @@ def test_each_brief_forbids_a_window_on_this_machine(conductor: Round) -> None:
     assert "Never open a window on this machine" in brief
 
 
+def test_conducting_and_audit_hold_the_rules_of_rank_and_of_the_frozen_fixes(conductor: Round) -> None:
+  rule = " ".join(conductor.CONDUCTING.split())
+  assert "does not become its own item or PR" in rule
+  assert "waits in scratch://round/frozen.md" in rule
+  assert "land together in one change" in rule
+  assert "in the order of the register after the items of queue" in rule
+  assert "unless the coordinator asks" in rule
+  audit = " ".join(conductor.AUDIT.split())
+  assert "the hard work first by prompt266" in audit
+  assert "reshapes a module, a contract or a protocol ranks before a row of polish or a simple row" in audit
+
+
 def test_a_worker_that_ends_with_a_pr_is_a_line_with_its_whole_report(conductor: Round) -> None:
   report = "I pushed one commit to main by mistake, then restored it."
   conductor.busy("prompt1", "k")
@@ -580,6 +592,54 @@ async def test_a_red_main_sends_no_fixer_to_a_red_pr_and_tells_once(conductor: R
   assert len(conductor.notices()) == 1
   assert conductor.notices()[0].startswith("main is red at m1: find its cause first.")
   assert conductor.heard == ["#1 is red at sha1 while main is red, so it waits for main."]
+
+
+def pushed(conductor: Round, *branches: str) -> dict[str, str]:
+  def git(*args: str, where: Path | None = None) -> str:
+    cmd = ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args]
+    return subprocess.run(cmd, cwd=where or conductor.tmp, env=conductor.env, capture_output=True, text=True, check=True).stdout.strip()  # noqa: S603
+
+  git("init", "-q", "--bare", "remote.git")
+  git("init", "-q")
+  git("remote", "add", "origin", "remote.git")
+  heads = {}
+  for n, branch in enumerate(branches):
+    git("commit", "--allow-empty", "-qm", f"c{n}")
+    git("push", "-q", "origin", f"HEAD:refs/heads/{branch}")
+    heads[branch] = git("rev-parse", "HEAD")
+  return heads
+
+
+@POSIX
+@JQ
+async def test_a_pr_whose_head_lags_its_branch_for_two_sweeps_is_closed_and_reopened_once_for_that_head(conductor: Round) -> None:
+  conductor.ends["a"] = []
+  conductor.ends["b"] = []
+  heads = pushed(conductor, "w/a", "w/b")
+  conductor.github(raw(1, "a"), raw(2, "b", headRefOid=heads["w/b"]))
+  calls = []
+  for _ in range(4):
+    await conductor.sweep()
+    calls.append([x for x in conductor.log().splitlines() if x.startswith(("pr close", "pr reopen"))])
+  assert calls[0] == []
+  assert calls[1] == calls[2] == calls[3] == ["pr close 1", "pr reopen 1"]
+  assert conductor.heard == [f"#1 kept the head sha1 for two sweeps while its branch w/a holds {heads['w/a'][:7]} on origin, so the round closed and reopened it, once for this head."]
+  conductor.github(raw(1, "a", headRefOid=heads["w/a"]), raw(2, "b", headRefOid=heads["w/b"]))
+  await conductor.sweep()
+  assert conductor.lagged == {}
+
+
+@POSIX
+@JQ
+async def test_a_red_pr_whose_failed_checks_main_fails_too_gets_no_fixer_and_one_line(conductor: Round) -> None:
+  conductor.ends["a"] = []
+  conductor.ends["b"] = []
+  conductor.github(raw(1, "a", checks=(("the gates", "FAILURE"), ("bench", "FAILURE"))), raw(2, "b", checks=(("the gates", "FAILURE"), ("ruff", "FAILURE"))))
+  conductor.say(r"commits/main/check-runs", {"check_runs": [{"name": "the gates", "conclusion": "failure"}, {"name": "bench", "conclusion": "failure"}, {"name": "ruff", "conclusion": "success"}]})
+  await conductor.sweep()
+  await conductor.sweep()
+  assert [h[0] for h in conductor.hired] == ["fix2"]
+  assert conductor.heard == ["#1 is red at sha1 only on bench, the gates, which main fails too, so the round hires no fixer for it."]
 
 
 @POSIX

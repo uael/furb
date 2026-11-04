@@ -36,12 +36,13 @@ Put each item in queue as (key, brief, thread), in the order of the work, the ha
 2. The files of an item are areas[key], which you write, and a test file holds no item. An item with no areas holds no file. A conflict on a file that need not change alone gets a fixer, by E3 of #1084. Each item that waits on a PR or a file is one line of the next notice, with its cause, once.
 3. A worker runs on a chain thread/key, at model_of(key), and an edit or a fix in a workspace {repo}-wN of its own. Its brief starts with the asks of the owner that its item carries. kinds[key] is edit (a PR), audit (a register in scratch and no PR) or fix (one red PR), and efforts[key] names its model.
 4. A worker that ends gives its report whole in the next notice. A worker that ends with no PR is a decision, and its notice wakes you.
-5. A PR of the round is an open PR whose label w:key names an item that the round holds. A red or conflicting one gets one order, to its maker while the maker lives, else to one fixer, and at most 2 fixers for a head, then a notice. A maker whose head did not move in OWNED seconds gives the PR to a fixer.
-6. While the newest run of the gates on main failed, the round sends no order and no fixer for a red PR, and tells you once.
+5. A PR of the round is an open PR whose label w:key names an item that the round holds. A red or conflicting one gets one order, to its maker while the maker lives, else to one fixer, and at most 2 fixers for a head, then a notice. A maker whose head did not move in OWNED seconds gives the PR to a fixer. A PR whose head differs from its branch on origin for two sweeps is closed and reopened once for that head, since GitHub did not read the branch.
+6. While the newest run of the gates on main failed, the round sends no order and no fixer for a red PR, and tells you once. A red PR whose failed checks all fail on main too gets no fixer either, and the round says so in one line.
 7. A green PR merges by the auto-merge of GitHub, which the round turns on for each PR of the round, else by a plain merge, else by gh stack merge for a layer of a stack, behind a ruleset of main that requires the check GATE. With no such ruleset, the round turns on no auto-merge and tells you once. A draft, an open box of its checklist, or the label hold, hold:owner-review or owner-merge keeps a PR from the merge, and the label paused takes it out of the round.
-8. At ALIGN_EVERY merged PRs since the last audit of alignment, by prompt260, the round queues the next free alignN, of kind audit, which checks main against the words of the owner, and each row of its register becomes an item.
+8. At ALIGN_EVERY merged PRs since the last audit of alignment, by prompt260, the round queues the next free alignN, of kind audit, which checks main against the words of the owner, and each row of its register becomes an item, queued in the order of the register after the items of queue, unless the coordinator asks for the rows before the items that no worker holds yet.
 9. Each message of the owner that no ask of owner_asks names is one notice, by prompt362, and so is each ask that is not done or a decision while no item in queue, in backlog, at work or on an open PR of the round carries it, by prompt361: no word of the owner drops between his message and main. A worker that ends with a line Left: <ids> queues one follow-up for each ask that no other item carries, and a follow-up that leaves it again is a decision.
 10. Each new comment of the owner on a PR of the round goes to the worker on it, else to a fixer, and the label hold comes on the PR until its worker pushes the fix and takes hold off.
+11. A fix of the round does not become its own item or PR, by pick R1 of the owner: it waits in scratch://round/frozen.md, while the live module carries it, and the waiting fixes land together in one change.
 A step that fails is one notice, and the round goes on at the next round. The whole state lives in the module of your chain, so a word that a checkpoint cuts loses nothing: await conduct() again in a turn that shows.
 Each act of the round goes through quietly(verb, ...), so its end wakes nobody: you hear only a notice. Make each act that you do not await the same way.
 A change of the round loads as the whole file, run again as a rung: each name of the state binds with setdefault and keeps its value."""
@@ -95,6 +96,8 @@ landed: list[int] = globals().setdefault("landed", [])
 align_state: dict[str, str] = globals().setdefault("align_state", {})
 comments: set[str] = globals().setdefault("comments", set())
 green_since: dict[int, float] = globals().setdefault("green_since", {})
+lagged: dict[int, str] = globals().setdefault("lagged", {})
+reopened: set[str] = globals().setdefault("reopened", set())
 
 
 def asks_kept() -> dict[str, dict]:
@@ -123,7 +126,7 @@ The item, {key}:
 
 WORKSPACE = """Work in the workspace {path}, which the round gives to you alone, and to a later item once you end, so that each build starts warm. If it does not stand, make it: {repo}/script/worktree.sh {path} <your branch>, then give cd({path!r}) in a word of your own and write your chain in it: echo {chain} > "$(git -C {path} rev-parse --absolute-git-dir)/furb-holder". If it stands, the round committed and pushed the work of the earlier item there and wrote your chain in it: git fetch origin, then git switch -C <your branch> onto origin/<your branch> when that branch is on origin, else onto origin/main. Before your first command of each prompt there, read the file furb-holder in its git dir: when it names another chain than {chain}, the round gave the workspace to another worker, so run nothing in it. Leave the workspace clean when you close, each change committed and pushed."""
 
-AUDIT = """You are an auditor on the repository {repo}. Do one item: read the code, the records and the logs that it names, find each fact that it asks for, and write each in a register, scratch://audit/{key}.md ($TMPDIR/audit/{key}.md), with its evidence: the file and the line, or the command and the lines that it printed. Check each claim of the item in the code, since it is a claim. Change no file of the repository, make no worktree, push nothing and open no PR. When your work yields items for workers, write them in that register as a table with one row for each item, in order of rank: | Dn | key | model | area | after | brief |, where Dn is its rank, key a short name in letters and dashes, model one of {models}, area the folder or the file that the item changes, after the Dn of each row that it waits for, or nothing, and brief what the worker does, as a task. The round queues each row as an item when you end. Close with a tuple: 0, and your report in 200 words at most: the path of the register, what you found, and what is left.
+AUDIT = """You are an auditor on the repository {repo}. Do one item: read the code, the records and the logs that it names, find each fact that it asks for, and write each in a register, scratch://audit/{key}.md ($TMPDIR/audit/{key}.md), with its evidence: the file and the line, or the command and the lines that it printed. Check each claim of the item in the code, since it is a claim. Change no file of the repository, make no worktree, push nothing and open no PR. When your work yields items for workers, write them in that register as a table with one row for each item, in order of rank, the hard work first by prompt266: a row that reshapes a module, a contract or a protocol ranks before a row of polish or a simple row: | Dn | key | model | area | after | brief |, where Dn is its rank, key a short name in letters and dashes, model one of {models}, area the folder or the file that the item changes, after the Dn of each row that it waits for, or nothing, and brief what the worker does, as a task. The round queues each row as an item when you end. Close with a tuple: 0, and your report in 200 words at most: the path of the register, what you found, and what is left.
 """ + RULES + """
 
 The item, {key}:
@@ -170,6 +173,11 @@ gh run list --branch main --workflow gates.yml --limit 20 --json headSha,conclus
 c=$?; echo; echo "--- $c"
 gh api 'repos/{owner}/{repo}/rules/branches/main' --jq '[.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context]'
 c=$?; echo; echo "--- $c"
+gh api 'repos/{owner}/{repo}/commits/main/check-runs?per_page=100' --jq '[.check_runs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | .name]'
+c=$?; echo; echo "--- $c"
+"""
+
+LAG = """for x in "$@"; do git ls-remote origin "refs/heads/${x#*=}" | awk -v n="${x%%=*}" '{print n "\\t" $1}'; done
 """
 
 REVIEWS = r"""for n in {prs}; do
@@ -500,7 +508,7 @@ async def mend(pr: dict, now: str) -> None:
 async def sweep() -> None:
   got = await shell(PRS, timeout=300)
   bits = re.split(r"\n--- (\d+)\n", "\n" + got.stdout.content)
-  if len(bits) != 9 or any(code != "0" for code in bits[1::2]):
+  if len(bits) != 11 or any(code != "0" for code in bits[1:8:2]):
     raise Refused(f"gh listed no PRs: {got.stderr.content.strip()[-300:] or 'it said nothing'}")
   mine = set(touched)
   prs.clear()
@@ -512,12 +520,20 @@ async def sweep() -> None:
   red = "failure" in main["runs"]
   lead["main"] = str(main["sha"])
   gated = GATE in json.loads(bits[6])
+  try:
+    broke = set(json.loads(bits[8]))
+  except ValueError:
+    broke = set()
+  heads = {n: pr for n, pr in prs.items() if ours(pr) and "paused" not in pr["labels"]}
+  sought = await shell(f"sh -c {shq(LAG)} sh " + " ".join(shq(f"{n}={pr['head']}") for n, pr in sorted(heads.items())), timeout=120) if heads else None
+  remote = {p[0]: p[1] for p in (x.split("\t") for x in sought.stdout.lines) if len(p) == 2} if sought else {}
   if red:
     notice(f"red {main['sha']}", f"main is red at {str(main['sha'])[:7]}: find its cause first. The round sends no order and no fixer for a red PR until the gates of main pass.")
   if not gated:
     notice("ruleset", f"main has no ruleset that requires the check {GATE}, so the round turns on no auto-merge and merges no PR.")
-  for gone in [k for k in [*touched, *assigned, *green_since] if k not in prs]:
+  for gone in [k for k in [*touched, *assigned, *green_since, *lagged] if k not in prs]:
     touched.pop(gone, None)
+    lagged.pop(gone, None)
     green_since.pop(gone, None)
     assigned.pop(gone, None)
   flips = []
@@ -527,6 +543,17 @@ async def sweep() -> None:
       continue
     touched[n] = {"sha": pr["sha"], "paths": pr["files"]}
     now = pr["state"] = state(pr)
+    ahead = remote.get(str(n), "")
+    if ahead and ahead == pr["sha"]:
+      lagged.pop(n, None)
+    elif ahead and lagged.get(n) != ahead:
+      lagged[n] = ahead
+    elif ahead and f"{n} {ahead}" not in reopened:
+      reopened.add(f"{n} {ahead}")
+      flips.append(f"gh pr close {n} && {{ gh pr reopen {n} || gh pr reopen {n}; }}")
+      once(f"lag {n} {ahead}", f"#{n} kept the head {pr['sha'][:7]} for two sweeps while its branch {pr['head']} holds {ahead[:7]} on origin, so the round closed and reopened it, once for this head.")
+      continue
+    failing = {name for name, end in zip(pr["names"], pr["checks"]) if end in FAILS}
     labelled = bool(set(HOLDS) & set(pr["labels"]))
     if now != "green":
       green_since.pop(n, None)
@@ -537,6 +564,8 @@ async def sweep() -> None:
       flips.append(f"gh pr merge {n} --auto --squash || gh pr merge {n} --squash || gh stack merge {n} --yes --squash" if want else f"gh pr merge {n} --disable-auto")
     if now == "red" and red:
       once(f"main waits {n} {pr['sha']}", f"#{n} is red at {pr['sha'][:7]} while main is red, so it waits for main.")
+    elif now == "red" and failing and not pr["open"] and not failing - broke:
+      once(f"main fails {n} {pr['sha']}", f"#{n} is red at {pr['sha'][:7]} only on {', '.join(sorted(failing))}, which main fails too, so the round hires no fixer for it.")
     elif now in ("red", "conflicting") and not labelled and not (pr["draft"] and maker_of(pr)):
       await mend(pr, now)
   if flips:
