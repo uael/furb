@@ -160,6 +160,57 @@ fn crossed(record: &Path) {
   fs::write(record, format!("{}{theirs}", &text[..cut])).unwrap();
 }
 
+/// The words of the record of the language: each definition that a word of a model uses, with no
+/// argument to call it by, since the module is shown by calling each function of it. The first
+/// four sit in the checkpoint, and the last three in the tail after it.
+const LANGUAGE: [&str; 7] = [
+  "def square(n: int = 3) -> int:\n  return n * n\nclass Runner:\n  async def twice(self, n: int = 21) -> int:\n    await wait(0)\n    \
+   return n * 2\nasync_got = await Runner().twice()\ndef fib_list():\n  a, b, out = 0, 1, []\n  while a < 50:\n    \
+   out.append(a)\n    a, b = b, a + b\n  return out\nclose(None)",
+  "from dataclasses import dataclass\nclass Tally:\n  def __init__(self, start: int):\n    self.n = start\n  \
+   def bump(self) -> int:\n    self.n += 1\n    return self.n\n@dataclass\nclass Point:\n  x: int\n  y: int = 0\n  \
+   def norm1(self) -> int:\n    return abs(self.x) + abs(self.y)\ndef classes():\n  c = Tally(3)\n  c.bump()\n  \
+   return [c.n, Point(2, -5).norm1(), Point(1)]\nclose(None)",
+  "def shape_of(v=None):\n  match v:\n    case {\"kind\": \"dot\", \"at\": [x, y]}:\n      \
+   return f\"dot {x},{y}\"\n    case [first, *rest] if rest:\n      return f\"seq {first}+{len(rest)}\"\n    \
+   case int() | float() as num:\n      return f\"num {num}\"\n    case Point(x=0):\n      \
+   return \"origin column\"\n    case _:\n      return \"other\"\ndef matched():\n  \
+   return [shape_of({\"kind\": \"dot\", \"at\": [1, 2]}), shape_of([1, 2, 3]), shape_of(2.5), \
+   shape_of(Point(0, 4)), shape_of(\"s\")]\nclose(None)",
+  "def comprehended():\n  squares = [n * n for n in range(6) if n % 2 == 0]\n  \
+   pairs = {k: v for k, v in zip(\"abc\", range(3))}\n  uniq = {n % 3 for n in range(10)}\n  \
+   lazy = sum(n for n in range(5))\n  return [squares, pairs, sorted(uniq), lazy, \
+   [[i * j for j in range(3)] for i in range(2)]]\nclose(None)",
+  "def formatted():\n  name, width = \"monty\", 9\n  \
+   return [f\"{name!r:>{width}}\", f\"{3.14159:.2f}\", f\"{name=}\", f\"{1_000:,}\"]\n\
+   def templated():\n  who = \"world\"\n  made = t\"hello {who!r:>9}\"\n  \
+   return [[x if isinstance(x, str) else (x.value, x.conversion, x.format_spec) for x in made], \
+   len(made.strings)]\nclose(None)",
+  "type Pair[T] = tuple[T, T]\ndef swap[T](p: Pair[T] | None = None) -> Pair[T] | None:\n  return (p[1], p[0]) if p else None\n\
+   class Box[T]:\n  def __init__(self, item: T):\n    self.item = item\n  def get(self) -> T:\n    \
+   return self.item\ndef generic():\n  return [swap((1, 2)), Box(\"x\").get(), Box(7).get()]\nclose(None)",
+  "def logged(fn=None):\n  def inner(*args):\n    return (\"logged\", fn(*args) if fn else None)\n  \
+   return inner\ndef repeat(times: int = 2):\n  def deco(fn):\n    def inner(*args):\n      \
+   return [fn(*args) for _ in range(times)]\n    return inner\n  return deco\n@logged\n\
+   def add(a: int = 1, b: int = 2) -> int:\n  return a + b\n@repeat(2)\ndef hi():\n  return \"hi\"\n\
+   def decorated():\n  return [add(1, 2), hi()]\nclose(None)",
+];
+
+/// The life of the record of the language: no kit, so no name of a kit is in it. The words sit in
+/// a checkpoint and in the tail after it, and the module gives back each of them.
+fn spoken(at: &Path) {
+  let mut first = scripted(at, false, &SCRIPT).boot::<String>([]).unwrap().0;
+  for word in &LANGUAGE[..4] {
+    closed(&mut first, word);
+  }
+  first.checkpoint().unwrap();
+  let mut later = scripted(at, false, &SCRIPT).boot::<String>([]).unwrap().0;
+  woke(&mut later);
+  for word in &LANGUAGE[4..] {
+    closed(&mut later, word);
+  }
+}
+
 /// A life that only inspects the record of a directory, or why it refused.
 fn inspected(at: &Path) -> Result<Engine, furb::Fault> {
   Ok(Opening { inspecting: Some(true), ..scripted(at, true, &SCRIPT) }.boot::<String>([])?.0)
@@ -173,9 +224,15 @@ fn make_the_corpus() {
     fs::remove_dir_all(&next).unwrap();
   }
   fs::create_dir_all(&next).unwrap();
-  for (name, kits, other) in [("work", true, false), ("crossed", false, true)] {
+  for (name, kits, other) in
+    [("work", true, false), ("crossed", false, true), ("language", false, false)]
+  {
     let at = place(&format!("make-{name}"));
-    lived(&at, kits);
+    if name == "language" {
+      spoken(&at);
+    } else {
+      lived(&at, kits);
+    }
     let record = at.join("record.jsonl");
     if other {
       crossed(&record);
@@ -302,4 +359,27 @@ fn a_record_whose_checkpoint_holds_a_field_that_no_reader_knows_still_opens() {
     text.replacen("\"schema\":", "\"later\":[1,\"a field of a later build\"],\"schema\":", 1);
   assert_ne!(more, text, "the record holds a checkpoint");
   holds("field-more", &more, &fs::read_to_string(next.join("work.modules")).unwrap());
+}
+
+#[test]
+fn the_record_of_the_language_holds_each_definition_that_a_word_uses() {
+  let shown = fs::read_to_string(corpus().join("next").join("language.modules")).unwrap();
+  let used = [
+    "Box",
+    "Pair",
+    "Point",
+    "Runner",
+    "Tally",
+    "async_got",
+    "classes",
+    "comprehended",
+    "decorated",
+    "formatted",
+    "generic",
+    "matched",
+    "templated",
+  ];
+  for name in used {
+    assert!(shown.contains(&format!("('{name}', ")), "language.modules lacks {name}");
+  }
 }
