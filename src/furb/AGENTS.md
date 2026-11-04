@@ -219,8 +219,8 @@ meanings. The entry of such a name here gives only its form in the engine.
   upgraded as it opens: the program of that version from the store writes a checkpoint at the tip of the record, and
   the life goes on from it on this build. A command on a record of a newer version runs the program of that version in
   its place when the store holds it. A record of a build before the versions names an
-  engine alone, and a life on another engine refuses it. A build keeps the version while each record of the corpus,
-  `tests/corpus`, replays on it with no drift. After a checkpoint, only the fact made of the segment after it counts,
+  engine alone, and a life on another engine refuses it. A build keeps the version while each record of
+  `tests/replay` replays on it with no drift. After a checkpoint, only the fact made of the segment after it counts,
   and the store says it again at the root of the first life that goes on from the checkpoint. When it names another
   engine or another version, a life replays none of that segment: it writes at the tip a checkpoint that carries the
   segment as data, and goes on from it.

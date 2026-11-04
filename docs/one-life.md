@@ -202,8 +202,8 @@ breaking changes."
   of the build.
 -  Few versions, by a rule that a machine checks. A gate replays a fixed corpus of records on the build of each PR and
   compares the facts with the log of each record. A change that replays each record to the same facts keeps the version.
-  A change that fails the check adds one to `VERSION` and records the corpus again, in the same PR. The corpus is
-  `tests/corpus`, which holds the records `refused`, `wake`, `work` and `writing`. So most PRs keep the version, and a
+  A change that fails the check adds one to `VERSION` and records the corpus again, in the same PR. The records are in
+  `tests/replay`, `refused`, `wake` and `writing`, and the tests make `work`. So most PRs keep the version, and a
   life goes on with them on a new build with no switch at all.
 - The store of builds: each build that a record names stands as one program in
   `<cache of furb>/builds/<version>/furb`. A build puts itself there at its first run. A build that the store lacks
