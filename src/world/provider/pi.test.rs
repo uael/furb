@@ -30,3 +30,12 @@ fn a_letter_that_two_chunks_of_the_stream_split_is_read_whole() {
   }
   assert_eq!(said, ["a", "\u{e9}"]);
 }
+#[test]
+fn an_event_that_lacks_a_field_its_protocol_gives_fails_the_reply() {
+  let events = b"data: {\"type\":\"text_delta\"}\n\n";
+  let body = futures::stream::iter([events.as_slice()].map(|one| Ok(Bytes::copy_from_slice(one))));
+  let (buffer, parts) = (Vec::new(), VecDeque::new());
+  let mut heard = Heard { body: Box::pin(body), buffer, parts, over: false };
+  assert!(matches!(futures::executor::block_on(heard.next()), Some(Err(_))));
+  assert!(futures::executor::block_on(heard.next()).is_none());
+}
