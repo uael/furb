@@ -16,6 +16,19 @@ A transport has two parts: a dialer, which reaches the daemon, and an identity, 
 - The identity of a local peer is the login of the user, and it has the role to write.
 - A second daemon cannot listen where a daemon listens. A socket that no daemon answers is stale, and gives its place.
 
+### The door of the windows
+
+A web view reaches no socket and no pipe, so `furb host` also opens a door of the windows: a WebSocket on a free port
+of loopback. A page of any origin can reach loopback, so the door lets in only a peer that gives the token of the
+daemon.
+
+- The daemon writes the address of the door, with its token, in `window.json` beside its socket, which only the user
+  reads: `{"url": "ws://127.0.0.1:52011/?token=..."}`. Each start and each upgrade draws a new port and a new token.
+- A peer that gives no token in the query of its upgrade, or another one, gets the HTTP status 403 and no socket.
+- The identity of a peer of the door is the login of the user, and it has the role to write.
+- A window dials the socket first: `window.json` stays after a daemon that a kill ended, and only a daemon that
+  answers on its socket holds the door that the file names.
+
 ### The tailnet
 
 The daemon also listens on the address of the machine on the tailnet of Tailscale when `host.json`, in the config
@@ -157,6 +170,11 @@ once it listens. A second daemon refuses to start there.
 - A skill attaches a life as a window does, under its name, and hears its events from the place that it asks. It holds no
   life, so a life with no window and no pin ends while a skill is attached. A skill that attaches again under its name takes
   the place of the first, and its views end. A skill that detaches, or whose peer leaves, ends its views.
+- The daemon starts the process that the manifest of a skill names under `furb-process` when a life plays the skill: at
+  the end of the replay for each skill that the record enabled, then at each new fact `enable`. It ends the process
+  when the life ends, and when a new fact `enable` of the skill reloads it, which starts the process again. The
+  variables `FURB_HOST`, `FURB_LIFE` and `FURB_SKILL` of the process give the folder of the local transport, the
+  record of the life and the name of the skill. `docs/extensions.md` says the field.
 
 ## Views
 

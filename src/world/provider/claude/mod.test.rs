@@ -37,7 +37,10 @@ use rig_core::{
 };
 use serde_json::{Value, json};
 
-use super::{Account, Claude, Completion, Source, Switch, conversation::cached};
+use super::{
+  Account, Claude, Completion, Source, Switch,
+  conversation::{cached, lasting},
+};
 use crate::{ear::reactor, testing};
 
 /// The fake command line, which the tests of the command line of furb run too.
@@ -1075,11 +1078,49 @@ fn the_block_before_the_first_open_of_a_chain_in_a_conversation_is_marked_for_th
   ];
   let mut marked = false;
   cached(&mut blocks, &mut marked);
-  assert_eq!(blocks[0]["cache_control"], json!({"type": "ephemeral", "ttl": "1h"}));
+  assert_eq!(blocks[0]["cache_control"], json!({"type": "ephemeral", "ttl": lasting()}));
   assert_eq!((blocks[1].get("cache_control"), marked), (None, true));
   let mut later = vec![text("#read9"), text("#chain4\nchain4: Act[object]")];
   cached(&mut later, &mut marked);
   assert_eq!(later[0].get("cache_control"), None, "a conversation marks one block at most");
+}
+
+#[test]
+fn no_request_of_the_command_line_puts_a_mark_of_an_hour_after_one_of_minutes() {
+  let yard = Yard::new("ttl");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let blocks = vec![UserContent::text("#read1"), UserContent::text("#chain2\nchain2: Act[object]")];
+  let turn = Message::User { content: blocks };
+  asked(&model, &[turn], json!({"session": "chain"})).unwrap();
+  let line: serde_json::Value = serde_json::from_str(&yard.heard()[0]).unwrap();
+  let ours: Vec<String> = line["message"]["content"]
+    .as_array()
+    .unwrap()
+    .iter()
+    .filter_map(|one| one["cache_control"]["ttl"].as_str().map(str::to_owned))
+    .collect();
+  assert_eq!(ours.len(), 1, "{line}");
+  let ttl = fs::read_to_string(yard.at.join(format!("ttl.{}", yard.pids()[0]))).unwrap();
+  let [main, helper, messages] = ttl.split(' ').collect::<Vec<_>>()[..] else { panic!("{ttl}") };
+  // The command line marks its system prompt and its last message with the life of the source of
+  // the request: its turns, which run an hour on a subscription within its limits and else five
+  // minutes, and its helpers, as its compaction, which run five minutes, each unless pinned.
+  let lives = |pin: &str, unpinned: &[&'static str]| match pin {
+    "unset" => unpinned.iter().map(|one| (*one).to_owned()).collect(),
+    one => vec![one.to_owned()],
+  };
+  for source in [lives(main, &["1h", "5m"]), lives(helper, &["5m"])] {
+    for life in source {
+      let last = if messages == "5m" { "5m".to_owned() } else { life.clone() };
+      let request: Vec<&str> = [life.as_str()]
+        .into_iter()
+        .chain(ours.iter().map(String::as_str))
+        .chain([last.as_str()])
+        .collect();
+      let after = request.windows(2).find(|two| two == &["5m", "1h"]);
+      assert!(after.is_none(), "a request of the command line marks {request:?}");
+    }
+  }
 }
 
 #[test]

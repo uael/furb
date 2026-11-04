@@ -34,9 +34,9 @@ test("the list replays a record once for each change of it, and no record past t
   const first = library();
   try {
     await first.add(directory);
-    await settle(first, "work", "paused");
+    await settle(first, "work", "runs");
     expect(asked.map((paths) => paths.map((path) => basename(path)))).toEqual([["work.jsonl"]]);
-    expect(rows(first)).toEqual({ work: "paused", long: "saved" });
+    expect(rows(first)).toEqual({ work: "runs", long: "saved" });
     await first.refresh();
     expect(asked).toHaveLength(1);
   } finally {
@@ -48,7 +48,7 @@ test("the list replays a record once for each change of it, and no record past t
     await second.add(directory);
     // A later run takes the state of a record that did not change from the file beside the list, and replays nothing.
     expect(asked).toEqual([]);
-    expect(rows(second)).toEqual({ work: "paused", long: "saved" });
+    expect(rows(second)).toEqual({ work: "runs", long: "saved" });
     await writeFile(small, "x");
     await second.refresh();
     await Bun.sleep(100);

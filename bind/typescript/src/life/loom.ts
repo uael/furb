@@ -142,15 +142,11 @@ export function parentOf(chain: LiveAct, acts: ReadonlyMap<string, LiveAct>): st
 }
 
 /** The state of the acts of a chain, with the prompts that the operator owes on it. */
-export function rowState(
-  work: readonly LiveAct[],
-  owes: boolean,
-  pending: ReadonlyMap<string, string>,
-  remote: readonly LiveAct[] = [],
-): State {
+export function rowState(work: readonly LiveAct[], owes: boolean, remote: readonly LiveAct[] = []): State {
   if (owes) return "asks";
   const live = work.filter((act) => WORK.includes(act.kind) && !act.unfinished);
-  if (live.some((act) => pending.has(act.id) || (act.paused && !act.done))) return "paused";
+  // Work that an earlier life left is work: the open of a life on its record resumes it at once.
+  if (live.some((act) => act.paused && !act.done)) return "paused";
   if (live.some((act) => !act.done)) return working(live, remote);
   const latest = live.at(-1);
   if (latest && cancelled(latest)) return "cancelled";
@@ -216,7 +212,6 @@ export function weave({ acts, prompts, measures, folds, width, pending, label, i
     rowState(
       (byChain.get(id) ?? []).filter((act) => act.kind !== "chain"),
       owing.has(id),
-      pending,
       open.filter((act) => act.kind === "prompt" && act.on !== id && byId.get(act.by)?.on === id),
     );
   const operatorActs = acts.filter(asksOperator);
@@ -439,7 +434,7 @@ function board(
     const latest = acts.findLast(work);
     const state: State = owes
       ? "asks"
-      : waiting.some((act) => pending.has(act.id) || (act.paused && !act.done))
+      : waiting.some((act) => act.paused && !act.done)
         ? "paused"
         : waiting.some((act) => !act.done)
           ? working(waiting, asked.get(id) ?? [])

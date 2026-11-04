@@ -11,7 +11,7 @@ use std::{
 
 use super::{
   Extension, Part, Places, configs, configured, definitions, enabled, extensions, frontmatter,
-  load, parts, projected, reloads, word,
+  load, parts, projected, reloads, skills::process, word,
 };
 use crate::testing::Yard;
 use crate::{
@@ -228,6 +228,29 @@ fn a_config_that_is_not_of_the_form_is_refused_with_its_path() {
 }
 
 #[test]
+fn the_process_of_a_skill_is_the_file_of_its_folder_that_its_manifest_names() {
+  let at = place("process");
+  let skills = at.join(".furb").join("skills");
+  folder(
+    &skills.join("note"),
+    &skill("note", &[("word", "note.py"), ("process", "run.ts")]),
+    "x = 1\n",
+  );
+  folder(
+    &skills.join("out"),
+    &skill("out", &[("word", "note.py"), ("process", "../run.ts")]),
+    "x = 1\n",
+  );
+  folder(&skills.join("bare"), &skill("bare", &[("word", "note.py")]), "x = 1\n");
+  let found = |name: &str| process(name, &at, &places(&at));
+  assert_eq!(found("note"), Some(skills.join("note").join("run.ts")));
+  assert_eq!(found("out"), None, "a process that leaves the folder of its skill");
+  assert_eq!(found("bare"), None, "a manifest that names no process");
+  assert_eq!(found("memory"), None, "the crate carries no process of an official skill");
+  assert_eq!(found("absent"), None);
+}
+
+#[test]
 fn a_manifest_names_the_view_of_an_extension_for_a_tui_and_no_other_field_of_furb() {
   let at = place("tui");
   folder(&at.join("good"), &skill("note", &[("word", "note.py"), ("view", "tui.ts")]), "x = 1\n");
@@ -237,7 +260,8 @@ fn a_manifest_names_the_view_of_an_extension_for_a_tui_and_no_other_field_of_fur
   );
   folder(&at.join("bad"), &skill("note", &[("word", "note.py"), ("tui", "tui.ts")]), "x = 1\n");
   let manifest = at.join("bad").join("SKILL.md").display().to_string();
-  let fields = "furb-word, furb-life, furb-interface, furb-default, furb-plays, furb-view";
+  let fields =
+    "furb-word, furb-life, furb-interface, furb-default, furb-plays, furb-view, furb-process";
   assert_eq!(
     load("note", &at.join("bad"), &places(&at)).unwrap_err().message(),
     format!("The manifest gives furb-tui, and the fields of furb are {fields}: {manifest}")

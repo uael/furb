@@ -23,6 +23,7 @@ mod windows;
 #[cfg(windows)]
 use windows as local;
 
+pub(crate) use net::{Door, Ticket};
 pub use net::{LocalApi, Messages, Tailscale, Tcp, WebSocket, upgraded};
 
 /// Who a peer is, as its transport proved it: its login, and the role that it holds.

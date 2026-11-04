@@ -15,13 +15,15 @@
 //!
 //! When the operator turns it on, the daemon also listens on the address of the machine on the
 //! tailnet, by TCP and by WebSocket, and lets in each peer whose login the access list names, with
-//! the role that it gives (#983, D6).
+//! the role that it gives (#983, D6). A web view reaches no socket of the machine, so the daemon
+//! also opens a door of the windows, a WebSocket on loopback, which lets in the user alone: the
+//! peer that gives the token that the daemon wrote in a file of its folder.
 
 use std::{
   collections::HashMap,
   fmt::Display,
   net::{IpAddr, SocketAddr},
-  path::Path,
+  path::{Path, PathBuf},
   pin::pin,
   sync::Arc,
   time::Duration,
@@ -47,11 +49,14 @@ use crate::{
   event::{Event, Seq},
   holders::{Holders, Window},
   life::{Command, Life, LifeHandle, Reply},
+  processes::{self, Played},
   protocol::{
     Answer, BOUND, Frame, Handed, Hello, Kind, Listed, Mount, PROTOCOL, Peer, Request, Verb,
   },
   serve::{Host, Outbox, serve},
-  transport::{Accepted, Dialer, Identity, Listener, Local, Tailscale, Tcp, upgraded},
+  transport::{
+    Accepted, Dialer, Door, Identity, Listener, Local, Tailscale, Tcp, Ticket, upgraded,
+  },
   views::{Skill, Views},
 };
 
@@ -68,6 +73,12 @@ pub struct Settings {
   pub grace: Duration,
   /// The daemon on the tailnet, when the operator turns it on in `host.json`.
   pub tailnet: Option<Tailnet>,
+  /// The file where the daemon writes the address and the token of its door of the windows, the
+  /// WebSocket on loopback that a web view dials, when it opens one.
+  pub door: Option<PathBuf>,
+  /// The folder of the local transport, where the process of each skill that a life plays dials
+  /// the daemon. With none, the daemon starts no process.
+  pub host: Option<PathBuf>,
 }
 
 /// The daemon on the tailnet: who each peer is, and the ports where it listens on the address of
@@ -145,6 +156,10 @@ where
     Some(tailnet) => Doors::listen(tailnet, log.as_ref()).await,
     None => None,
   };
+  let door = match &settings.door {
+    Some(file) => Some(Door::open(file).await?),
+    None => None,
+  };
   let (daemon, mut leave) = Daemon::spawn(settings, handed);
   let mut peers = JoinSet::new();
   let leaving = loop {
@@ -161,6 +176,12 @@ where
         }
         Err(no) => report(log.as_ref(), &no),
       },
+      knocked = knock(door.as_ref()) => match knocked {
+        Ok((stream, ticket)) => {
+          peers.spawn(window(daemon.clone(), ticket, stream));
+        }
+        Err(no) => report(log.as_ref(), &no),
+      },
       Some(ended) = peers.join_next() => match ended {
         Ok(Ok(())) => {}
         Ok(Err(no)) => report(log.as_ref(), &no),
@@ -169,7 +190,7 @@ where
       leaving = &mut leave => break leaving,
     }
   };
-  drop((listener, doors));
+  drop((listener, doors, door));
   if let Ok(Leaving { handed, asker, reply }) = leaving {
     reply.send(Ok(Answer::Handed(handed))).ok();
     asker.closed().await;
@@ -204,6 +225,21 @@ async fn remote(
       serve(&daemon, upgraded(stream).await?, who).await
     }
   }
+}
+
+/// The next peer of the door of the windows, or never with no door.
+async fn knock(door: Option<&Door>) -> Result<(TcpStream, Ticket), TransportError> {
+  match door {
+    Some(door) => door.accept().await,
+    None => future::pending().await,
+  }
+}
+
+/// One peer of the door of the windows, let in once it gave the token, then served until it
+/// leaves.
+async fn window(daemon: Daemon, ticket: Ticket, stream: TcpStream) -> Result<(), TransportError> {
+  let (stream, who) = ticket.admitted(stream).await?;
+  serve(&daemon, stream, who).await
 }
 
 /// The listeners of the daemon on the address of the machine on the tailnet, each where the
@@ -596,6 +632,17 @@ impl Lives {
     let handle = Life::spawn(opening)?;
     self.born += 1;
     tokio::spawn(watched(handle.clone(), life.clone(), self.born, self.asks.clone()));
+    if let Some(host) = &self.settings.host {
+      let played = Played {
+        handle: handle.clone(),
+        life: life.clone(),
+        cwd: PathBuf::from(&cwd),
+        host: host.clone(),
+        places: processes::places(&self.settings.opening),
+        log: self.settings.opening.log.clone(),
+      };
+      tokio::spawn(played.run());
+    }
     let stage = Stage::Living(Holders::new(self.settings.grace));
     self.held.insert(life, Held { handle, cwd, born: self.born, stage, answerer });
     Ok(())

@@ -1,6 +1,4 @@
-//! OpenAI models on a ChatGPT subscription, with credentials kept outside the project.
-
-#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
+//! `OpenAI` models on a `ChatGPT` subscription, with credentials kept outside the project.
 
 use std::{
   collections::HashMap,
@@ -29,7 +27,7 @@ use crate::{
   world::provider::atomic::{self, Access},
 };
 
-/// The provider of models paid for by a ChatGPT subscription.
+/// The provider of models paid for by a `ChatGPT` subscription.
 pub const NAME: &str = "codex";
 pub(super) const API: &str = "https://chatgpt.com/backend-api/codex";
 const AUTH: &str = "https://auth.openai.com";
@@ -462,7 +460,8 @@ async fn listed(path: &Path, credential: &Credential) -> Result<(), AuthError> {
   )
 }
 
-/// Start a ChatGPT sign-in, or connect with an existing sign-in. The browser address is returned to the host.
+/// Start a `ChatGPT` sign-in, or connect with an existing sign-in. The browser address is returned
+/// to the host.
 pub fn begin(config: Option<&Path>) -> Result<SignIn, AuthError> {
   let path = directory(config);
   let retry;
