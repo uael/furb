@@ -24,11 +24,12 @@ Eight extensions come with furb, and each life runs them unless a config turns t
 - **`memory`** tells a chain the memory files of its project. The memory of a folder is its `AGENTS.md`, or its
   `CLAUDE.md` when it has no `AGENTS.md`, then its `AGENTS.local.md`, or its `CLAUDE.local.md` when it has no
   `AGENTS.local.md`. A local file holds what is true on one machine alone, and git ignores it. When a chain starts, it
-  reads the memory of the user, in the config directory, then the memory of each folder from the root down to the
-  working directory. Each time the chain reads a file in a folder below, it reads the memory of each folder on the
-  way. A memory file comes whole the first time, and again only when it changed. Its life word, `await recall()`,
-  reads each memory file in the setup of the root, which every new chain holds, and then `remember()` does the rest as
-  the chain works. `memory(path)` tells the memory of one path.
+  reads the memory of the user, in the config directory that a word reads as `config://`, then the memory of each
+  folder from the root down to the working directory. It finds each file with reads of folders, in the word alone.
+  Each time the chain reads a file in a folder below, it reads the memory of each folder on the way. A memory file
+  comes whole the first time, and again only when it changed. Its life word, `await recall()`, reads each memory file
+  in the setup of the root, which every new chain holds, and then `remember()` does the rest as the chain works.
+  `memory(path)` tells the memory of one path.
 - **`skills`** gives a chain the skills that it can read. `skills()` lists each skill that it finds in `.furb/skills`,
   `.agents/skills` and `.claude/skills` of the working directory and of each folder above it, then in `skills` of the
   config directory, then each extension of the project and of the configs and each official one, which is a skill with
@@ -184,7 +185,7 @@ limit tells a chain names the same two calls.
 
 An official extension also has a contract, `<name>.pyi`, whose laws its suite in `test/` holds, as [the hygiene
 laws](../AGENTS.md#the-hygiene-laws) say, and an ear of the World in `src/extension/<name>.rs` when it reads the disk or
-the network, as `memory`, `skills` and `compaction` do. The search and the fetch of `web` are questions of the World, which the provider and the ear `fetch` answer, and the client of `mcp` is an ear of the World. Its part for the TUI, `tui.ts` beside its word as
+the network, as `skills` and `compaction` do. The search and the fetch of `web` are questions of the World, which the provider and the ear `fetch` answer, and the client of `mcp` is an ear of the World. Its part for the TUI, `tui.ts` beside its word as
 `compaction` and `mcp` have, is in the crate, so the TUI loads it from an installed package too, where no checkout of
 furb stands. It changes with a build of furb, and not live.
 

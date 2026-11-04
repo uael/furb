@@ -1,9 +1,10 @@
 from furb.engine import (
+  HIDDEN,
   Act,
+  Refused,
   Show,
   Text,
   act,
-  ask,
   controlled,
   differs,
   get,
@@ -16,45 +17,93 @@ from furb.engine import (
   transcript,
 )
 
+NAMES = ("AGENTS.md", "CLAUDE.md")
+LOCAL = ("AGENTS.local.md", "CLAUDE.local.md")
+
 
 def lacking(known: set[str]) -> Show:
   return lambda lines: [i for i, line in enumerate(lines, 1) if line not in known]
 
 
+def remembered(path: str) -> bool:
+  return path.replace("\\", "/").rsplit("/", 1)[-1] in (*NAMES, *LOCAL)
+
+
+def joined(folder: str, name: str) -> str:
+  return folder + name if folder.endswith(("/", "\\")) else folder + "/" + name
+
+
+def looked(path: str, on: str = "") -> Text | None:
+  try:
+    return read(path, HIDDEN, on)
+  except Refused:
+    return None
+
+
+def pieces(path: str) -> list[str]:
+  kept: list[str] = []
+  for one in path.replace("\\", "/").split("/"):
+    if one == ".." and kept and kept[-1] not in ("", ".."):
+      kept.pop()
+    elif one not in (".", "") or not kept:
+      kept.append(one)
+  return kept
+
+
+def folders(path: str = ".", on: str = "") -> list[Text]:
+  up: list[Text] = []
+  at = "./"
+  while (got := looked(at, on)) is not None and not (up and got.path == up[-1].path):
+    up.append(got)
+    at = joined(got.path, "../")
+  down: list[Text] = []
+  if up and "://" not in path:
+    here = pieces(up[0].path)
+    absolute = path.startswith(("/", "\\", "~")) or path[1:3] in (":/", ":\\")
+    full = pieces(path if absolute else joined(up[0].path, path))
+    held = up[0]
+    for one in full[len(here) :] if full[: len(here)] == here else []:
+      if one + "/" not in held.lines or (deeper := looked(joined(held.path, one + "/"), on)) is None:
+        break
+      down.append(held := deeper)
+  user = looked("config://", on)
+  return [*([user] if user else []), *up[::-1], *down]
+
+
 def memory(path: str = ".", on: str = "") -> list[Text]:
   was: dict[str, list[str]] = {}
+  held: set[str] = set()
   for x in transcript(on):
     match x:
-      case ("done", about, _, list(texts)) if (
-        question(("memory", about)) and get(maker := get(about)[2]) and tells(maker)
-      ):
-        for one in texts:
-          was[one.path] = one.lines
       case ("done", about, _, Text(place, content)) if (
         (question(("read", about)) or question(("write", about))) and get(maker := get(about)[2]) and tells(maker)
       ):
         was[place] = content.splitlines()
-  got = ask("memory", on, path)
-  assert isinstance(got, list)
-  for one in got:
-    mine = set(one.lines)
-    near = max(was.values(), key=lambda held: len(set(held) & mine), default=[]) if one.path not in was else []
-    kept = set(near)
-    if one.path in was:
-      show = differs(was[one.path])
-    elif mine and 2 * len(kept & mine) > len(mine):
-      show = lacking(kept)
-    else:
-      show = span(1, -1)
-    tell(on, one.path, one, show)
+        if remembered(place):
+          held.add(content)
+  got: list[Text] = []
+  for folder in folders(path, on):
+    names = set(folder.lines)
+    for group in NAMES, LOCAL:
+      name = next((one for one in group if one in names), "")
+      if not name or (found := looked(joined(folder.path, name), on)) is None:
+        continue
+      if found.content in held or any(one.path == found.path or one.content == found.content for one in got):
+        continue
+      got.append(found)
+      mine = set(found.lines)
+      near = max(was.values(), key=lambda kept: len(set(kept) & mine), default=[]) if found.path not in was else []
+      if found.path in was:
+        show = differs(was[found.path])
+      elif mine and 2 * len(set(near) & mine) > len(mine):
+        show = lacking(set(near))
+      else:
+        show = span(1, -1)
+      tell(on, found.path, found, show)
   return got
 
 
 async def recall(on: str = "") -> Act:
-  got = ask("memory", on, ".")
-  assert isinstance(got, list)
-  for one in got:
-    read(one.path, on=on)
   return remember(on)
 
 
@@ -66,7 +115,13 @@ def remember(on: str = "") -> Act:
     while True:
       match (yield {id, "read", "stand"}):
         case ("done", about, _, Text(path)) if (
-          question(("read", about)) and scope(about) == scope(id) and "://" not in path and about not in before
+          question(("read", about))
+          and scope(about) == scope(id)
+          and "://" not in path
+          and about not in before
+          and question(("rung", (made := get(about))[2]))
+          and not str(made[4]).endswith(("/", "\\"))
+          and not remembered(path)
         ):
           memory(path, on)
         case ("done", about, *_) if question(("stand", about)) and not question(("rung", get(about)[2])):

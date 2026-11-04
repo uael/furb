@@ -22,7 +22,6 @@
 #![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
 
 pub mod compaction;
-pub mod memory;
 pub mod skills;
 
 use std::{

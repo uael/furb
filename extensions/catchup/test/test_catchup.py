@@ -38,15 +38,15 @@ async def test_on_the_root_it_reads_the_clock_as_it_starts_and_at_each_stand() -
 
 
 async def test_the_catch_up_of_a_chain() -> None:
-  """The catch-up of a chain: an act on the chain that never completes, and that catches the chain up at each stand: it reads again, with a hidden show, the path of each text that the last read or write of that path on the chain gave, but a path of a scheme and a door, and it tells what changed in one paragraph headed caught up, about the chain."""
-  sand, log, root = await caught_up(files={"/w/a.txt": "one\ntwo\n", "x://y": "y\n"})
+  """The catch-up of a chain: an act on the chain that never completes, and that catches the chain up at each stand: it reads again, with a hidden show, the path of each text that the last read or write of that path on the chain gave, but a path of a scheme, a door, and a folder that a read names with / at its end, and it tells what changed in one paragraph headed caught up, about the chain."""
+  sand, log, root = await caught_up(files={"/w/a.txt": "one\ntwo\n", "x://y": "y\n", "/w/d/": "a.txt"})
   two = await chained("two")
   await engine.bash("echo hi", on=root)
-  for path in ("a.txt", "x://y", "bash1/stdout"):
+  for path in ("a.txt", "x://y", "bash1/stdout", "d/"):
     engine.read(path, on=root)
   engine.read("a.txt", on=two)
   engine.write(Text("b.txt", "b\n"), on=two)
-  sand.files.update({"/w/a.txt": "one\nthree\n", "x://y": "z\n", "/w/b.txt": "c\n"})
+  sand.files.update({"/w/a.txt": "one\nthree\n", "x://y": "z\n", "/w/b.txt": "c\n", "/w/d/": "b.txt"})
   calls = len(sand.calls)
   engine.stand(engine.ROOT)
   assert [(a[3], a[4]) for a in said(sand.calls[calls:], "read")] == [

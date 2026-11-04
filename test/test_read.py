@@ -263,3 +263,51 @@ async def test_on_windows_the_world_reads_a_path_in_the_form_that_the_sh_of_git_
   got = [engine.read(path, on=root).content for path in (f"/{drive[0].lower()}{rest}/a.txt", "/tmp/plan.md")]  # noqa: S108
   live.end()
   assert got == ["a\n", "plan\n"]
+
+
+async def test_the_world_serves_the_config_directory_of_the_user_as_config(
+  tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+  """The World serves the config directory of the user as config://, as it serves scratch://: a read of config://AGENTS.md gives that file, a read of config:// or of a folder of it gives the name of each entry of that folder, and each text and each refusal names its path under config://."""
+  config = tmp_path / "config"
+  (config / "notes").mkdir(parents=True)
+  (config / "AGENTS.md").write_text("user\n")
+  (config / "notes" / "a.md").write_text("a\n")
+  monkeypatch.setenv("FURB_CONFIG_DIR", str(config))
+  live, root = machine(tmp_path)
+  got = [engine.read(path, on=root) for path in ("config://AGENTS.md", "config://", "config://notes")]
+  with pytest.raises(Refused) as none:
+    engine.read("config://none.md", on=root)
+  live.end()
+  assert got == [
+    Text("config://AGENTS.md", "user\n"),
+    Text("config://", "AGENTS.md\nnotes/"),
+    Text("config://notes", "a.md"),
+  ]
+  assert str(none.value) == "There is no file at config://none.md."
+
+
+async def test_a_path_of_config_that_leaves_the_config_directory_is_refused(
+  tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+  """A path of config:// that leaves the config directory, by .. or by a link, is refused, and so is a read of config:// when the config directory is not there, and a path that starts with config: and not config://."""
+  (tmp_path / "away.md").write_text("away\n")
+  config = tmp_path / "config"
+  monkeypatch.setenv("FURB_CONFIG_DIR", str(config))
+  live, root = machine(tmp_path)
+  with pytest.raises(Refused) as missing:
+    engine.read("config://", on=root)
+  config.mkdir()
+  linked(tmp_path, config / "away")
+  refused = []
+  for path in ("config://../away.md", "config://away/away.md", "config:/typo.md"):
+    with pytest.raises(Refused) as one:
+      engine.read(path, on=root)
+    refused.append(str(one.value))
+  live.end()
+  assert str(missing.value) == "There is no file at config://."
+  assert refused == [
+    "config://../away.md is outside the config directory.",
+    "config://away/away.md is outside the config directory.",
+    "config:/typo.md is no path of config://, which starts with two slashes.",
+  ]

@@ -164,6 +164,8 @@ def read(path: str, show: Show = HEAD, on: str = "") -> Text:
   The World serves the scratch directory as scratch://: a read of scratch://plan.md gives that file, and a read of scratch:// or of a folder of it gives the name of each entry of that folder, one on each line, each folder with / at its end, as ls does.
   Each text and each refusal of scratch:// names its path under scratch:// and never the place of the scratch directory on the machine.
   A path of scratch:// that leaves the scratch directory, by .. or by a link, is refused, and so is a path that starts with scratch: and not scratch://, with a refusal that names scratch://.
+  The World serves the config directory of the user as config://, as it serves scratch://: a read of config://AGENTS.md gives that file, a read of config:// or of a folder of it gives the name of each entry of that folder, and each text and each refusal names its path under config://.
+  A path of config:// that leaves the config directory, by .. or by a link, is refused, and so is a read of config:// when the config directory is not there, and a path that starts with config: and not config://.
   The World gives a file whose every line ends with CRLF with LF at the end of each line, so a text holds the same lines on every machine, and a file of other line ends as it is.
   On Windows the World reads a path in the form that the sh of Git gives it as Windows names it: /c/x is C:/x, and /tmp/x is scratch://x, since the sh names the scratch directory /tmp.
   read is given a path and a show.
@@ -192,6 +194,7 @@ def write(text: Text, on: str = "") -> Text:
   A write of a door that a rung of that ladder says leaves the word of that rung out of the ladder, so the door shows it no more.
   A new file is a write of a Text made of its path and its content.
   A write of scratch://plan.md puts its text in that file of the scratch directory, and makes the directory and the folders of the file first when they are not there.
+  A write of config://AGENTS.md puts its text in that file of the config directory of the user, and makes the directory and the folders of the file first when they are not there.
   A write to a file whose every line ends with CRLF ends each line of the text with CRLF, so the file keeps its line ends, and gives the text with LF, as a read does.
   """
 

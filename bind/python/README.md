@@ -62,7 +62,7 @@ deletes the record.
 
 - `models(claude)` gives the models that the catalog of this machine offers, `model(name)` one model by its name, and
   `levels()` the levels of effort.
-- `files(scratch)`, `bash(scratch, record)`, `time()`, `extensions(given)`, `memory(config)` and `skills(config)`
+- `files(scratch, config)`, `bash(scratch, record)`, `time()`, `extensions(given)` and `skills(config)`
   give the ears one by one, as the suite of each extension boots them. `store(path)` gives the record that a path
   holds and the ear of its store, and `official()` gives the official extensions, which `extensions` takes. The files
   and the commands share the scratch directory that the host names, which a word reads as `scratch://` and a command

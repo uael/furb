@@ -447,7 +447,7 @@ test("the setup of the root stands as code: a comment that names the setup, then
   }
 });
 
-test("an act that ended and told nothing shows nothing in the feed, as a question of memory that found no file", async () => {
+test("an act that ended and told nothing shows nothing in the feed, as a read of a folder that memory made", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-untold-"));
   try {
     await writeFile(join(directory, "a.txt"), "one");
@@ -457,7 +457,7 @@ test("an act that ended and told nothing shows nothing in the feed, as a questio
         await session.command('/run read("a.txt")');
         await until(session, () =>
           session.activity.some(
-            (act) => act.kind === "memory" && String(act.words[0]).endsWith("a.txt") && act.done,
+            (act) => act.kind === "read" && String(act.words[0]).endsWith("/") && act.done,
           ),
         );
         await session.refresh();

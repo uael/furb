@@ -138,7 +138,7 @@ impl Lived {
     let scratch = world::Scratch::own();
     let ears = [
       ("provider", provider(at.clone(), words, Rc::clone(&read))),
-      ("files", world::files(scratch.clone(), None)),
+      ("files", world::files(scratch.clone(), crate::extension::Places::here().config, None)),
       ("bash", world::bash(scratch, &record)),
       ("time", world::time()),
       ("store", store),
@@ -686,7 +686,7 @@ fn a_life_syncs_its_store_at_the_end_of_each_run_and_not_after_each_entry() {
   let scratch = world::Scratch::own();
   let ears = [
     ("provider", provider(at, words, Rc::default())),
-    ("files", world::files(scratch.clone(), None)),
+    ("files", world::files(scratch.clone(), crate::extension::Places::here().config, None)),
     ("bash", world::bash(scratch, &record)),
     ("time", world::time()),
     ("store", store),
@@ -746,7 +746,7 @@ fn a_store_on_a_full_disk_loses_no_entry_keeps_none_twice_and_tells_the_operator
   let scratch = world::Scratch::own();
   let ears = [
     ("provider", provider(at, words, Rc::default())),
-    ("files", world::files(scratch.clone(), None)),
+    ("files", world::files(scratch.clone(), crate::extension::Places::here().config, None)),
     ("bash", world::bash(scratch, &record)),
     ("time", world::time()),
     ("store", store),
@@ -813,7 +813,7 @@ fn a_life_writes_no_snapshot_while_its_store_is_behind_the_sandbox() {
   let scratch = world::Scratch::own();
   let ears = [
     ("provider", provider(at.clone(), words, Rc::default())),
-    ("files", world::files(scratch.clone(), None)),
+    ("files", world::files(scratch.clone(), crate::extension::Places::here().config, None)),
     ("bash", world::bash(scratch, &record)),
     ("time", world::time()),
     ("store", store),
@@ -1542,7 +1542,7 @@ fn a_statement_that_a_model_streams_and_that_prompts_another_chain_has_its_reply
     let scratch = world::Scratch::own();
     let ears: [(&str, Box<dyn Ear>); 4] = [
       ("provider", provider.ear()),
-      ("files", world::files(scratch.clone(), None)),
+      ("files", world::files(scratch.clone(), crate::extension::Places::here().config, None)),
       ("bash", world::bash(scratch, &record)),
       ("store", store),
     ];
