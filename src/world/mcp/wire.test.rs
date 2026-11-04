@@ -2,9 +2,13 @@
 
 use std::time::Duration;
 
+#[cfg(unix)]
 use serde_json::Value;
 
-use super::{Events, Failure, Heard, Peer, seconds};
+use super::{Events, Failure, seconds};
+#[cfg(unix)]
+use super::{Heard, Peer};
+#[cfg(unix)]
 use crate::{ear::reactor, world::mcp::config::Transport};
 
 #[test]
