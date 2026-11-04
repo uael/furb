@@ -1,12 +1,6 @@
 //! The scratch directory of a life: a folder of the machine for the notes and the scratch files of its words, which a
 //! word names as `scratch://` and a command as `$TMPDIR`, so no text that the World answers names its place.
 
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-
 use std::{
   collections::HashMap,
   fs, io,
@@ -48,8 +42,9 @@ struct Held {
 
 impl Drop for Held {
   fn drop(&mut self) {
+    // A directory that cannot go stays under the temp of the machine, which the machine clears.
     if self.owned {
-      let _ = fs::remove_dir_all(&self.at);
+      fs::remove_dir_all(&self.at).unwrap_or_default();
     }
   }
 }
@@ -138,7 +133,7 @@ impl Scratch {
   pub fn remade(&self, record: &[Object], log: &dyn Fn(&str)) {
     let at = &self.0.at;
     if record.is_empty() {
-      let _ = fs::remove_dir_all(at);
+      gone(at, log);
       return;
     }
     if at.join(WHOLE).exists() {
@@ -158,7 +153,7 @@ impl Scratch {
     let mut name = at.file_name().unwrap_or_default().to_os_string();
     name.push(".new");
     let beside = Scratch::kept(at.with_file_name(name));
-    let _ = fs::remove_dir_all(beside.path());
+    gone(beside.path(), log);
     if let Err(no) = beside.made() {
       log(&format!("the scratch directory of the record was not made again: {}", no.message()));
       return;
@@ -168,11 +163,19 @@ impl Scratch {
         log(&format!("the scratch directory of the record leaves out {SCRATCH}{path}: {no}"));
       }
     }
-    let _ = fs::remove_dir_all(at);
+    gone(at, log);
     if let Err(no) = fs::rename(beside.path(), at) {
       log(&format!("the scratch directory of the record was not made again: {no}"));
-      let _ = fs::remove_dir_all(beside.path());
+      gone(beside.path(), log);
     }
+  }
+}
+
+fn gone(at: &Path, log: &dyn Fn(&str)) {
+  if let Err(no) = fs::remove_dir_all(at)
+    && no.kind() != io::ErrorKind::NotFound
+  {
+    log(&format!("{} stays: {no}", at.display()));
   }
 }
 

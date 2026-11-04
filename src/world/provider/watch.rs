@@ -18,16 +18,7 @@
 //! as the parts that ran, whatever the model wrote after them that the chain would refuse, since a later life runs
 //! the word of the rung and a statement of it must run there as it ran.
 
-#![expect(
-  clippy::assigning_clones,
-  reason = "debt: an assignment of a clone, where clone_from serves"
-)]
 #![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
-#![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
-#![expect(
-  clippy::single_match_else,
-  reason = "debt: a match of one arm and else, where if let serves"
-)]
 
 use ruff_python_ast::{
   Expr, Stmt,
@@ -110,7 +101,7 @@ impl Watch {
 
   /// The word, as python, given to the Kernel as far as where it ends in the text.
   pub(super) fn gave(&mut self, word: &str, end: usize) {
-    self.sent = word.to_owned();
+    word.clone_into(&mut self.sent);
     self.given = end;
   }
 
@@ -300,16 +291,12 @@ fn quotes(word: &str) -> Vec<(usize, &str, Option<usize>)> {
     let ends = word[text..]
       .match_indices(&close)
       .find(|(at, _)| matches!(word[text + at + close.len()..].chars().next(), None | Some('\n')));
-    match ends {
-      Some((at, _)) => {
-        from = text + at + close.len();
-        found.push((start, name, Some(from)));
-      }
-      None => {
-        found.push((start, name, None));
-        break;
-      }
-    }
+    let Some((at, _)) = ends else {
+      found.push((start, name, None));
+      break;
+    };
+    from = text + at + close.len();
+    found.push((start, name, Some(from)));
   }
   found
 }
@@ -325,7 +312,9 @@ fn unquoted(word: &str) -> String {
   for (start, name, end) in quotes(word) {
     let Some(end) = end else { break };
     made.push_str(&word[at..start]);
-    made.push_str(&format!("{name} = 0{}", "\n".repeat(word[start..end].matches('\n').count())));
+    made.push_str(name);
+    made.push_str(" = 0");
+    made.push_str(&"\n".repeat(word[start..end].matches('\n').count()));
     at = end;
   }
   made.push_str(&word[at..]);
