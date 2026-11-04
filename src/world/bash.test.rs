@@ -106,7 +106,7 @@ fn fake_shell(name: &str, body: &str) -> std::path::PathBuf {
 /// What the login shell says its PATH is, awaited on the runtime of the ears.
 #[cfg(unix)]
 fn asked(shell: &std::path::Path) -> Option<std::ffi::OsString> {
-  crate::ear::reactor().block_on(asked_path(shell))
+  crate::ear::reactor().block_on(asked_path(shell, std::time::Duration::from_secs(120)))
 }
 
 #[test]

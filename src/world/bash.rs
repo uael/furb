@@ -52,21 +52,28 @@ pub fn shell() -> &'static Path {
   })
 }
 
+/// How long the login shell of the user may take to say its PATH, which a slow profile needs.
+const LOGIN_LIMIT: Duration = Duration::from_secs(5);
+
 /// The PATH that the login shell of the user sets, read once for the process, or none on Windows, with no `SHELL`, or
 /// when that shell fails to give one. A life started from a desktop or a service has the short PATH of its parent, which
 /// lacks the folders that the profile of the user adds, as `/opt/homebrew/bin`.
 async fn login_path() -> Option<&'static OsString> {
   static FOUND: tokio::sync::OnceCell<Option<OsString>> = tokio::sync::OnceCell::const_new();
   let found = async {
-    if cfg!(windows) { None } else { asked_path(Path::new(&env::var_os("SHELL")?)).await }
+    if cfg!(windows) {
+      None
+    } else {
+      asked_path(Path::new(&env::var_os("SHELL")?), LOGIN_LIMIT).await
+    }
   };
   FOUND.get_or_init(|| found).await.as_ref()
 }
 
 /// What the login shell `shell` says its PATH is, between two marks that a profile which writes to
-/// its output cannot forge by accident, or none when it fails, gives no path, or runs past five
-/// seconds, when it is ended.
-async fn asked_path(shell: &Path) -> Option<OsString> {
+/// its output cannot forge by accident, or none when it fails, gives no path, or runs past `limit`,
+/// when it is ended.
+async fn asked_path(shell: &Path, limit: Duration) -> Option<OsString> {
   let mut command = tokio::process::Command::new(shell);
   command
     .args(["-l", "-c", "printf '<furb-path>%s</furb-path>' \"$PATH\""])
@@ -74,7 +81,7 @@ async fn asked_path(shell: &Path) -> Option<OsString> {
     .stdout(Stdio::piped())
     .stderr(Stdio::null())
     .kill_on_drop(true);
-  let out = tokio::time::timeout(Duration::from_secs(5), command.output()).await.ok()?.ok()?;
+  let out = tokio::time::timeout(limit, command.output()).await.ok()?.ok()?;
   let said = String::from_utf8_lossy(&out.stdout);
   let path = said.split_once("<furb-path>")?.1.split_once("</furb-path>")?.0;
   (out.status.success() && !path.is_empty()).then(|| OsString::from(path))
