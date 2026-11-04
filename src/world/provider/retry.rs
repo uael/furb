@@ -139,7 +139,8 @@ pub(super) fn failure(no: &CompletionError) -> String {
 }
 
 /// Whether a failed call can be corrected by another turn of the model: a transient provider fault,
-/// a cut turn, or a request that does not fit the model's context.
+/// or a cut turn. A request that does not fit the context of the model is not: the next turn holds
+/// the same turns and more, so it fails the same way, and a chain that asks again at once loops.
 pub(super) fn recoverable(no: &CompletionError) -> bool {
   if passing(no).is_some() {
     return true;
@@ -151,19 +152,9 @@ pub(super) fn recoverable(no: &CompletionError) -> bool {
     CompletionError::HttpError(error) => error.to_string().to_lowercase(),
     _ => return false,
   };
-  [
-    "reached the most it writes before its end",
-    "stopped before its end",
-    "context length",
-    "context window",
-    "maximum context",
-    "prompt is too long",
-    "too many tokens",
-    "maximum tokens",
-    "token limit",
-  ]
-  .iter()
-  .any(|phrase| text.contains(phrase))
+  ["reached the most it writes before its end", "stopped before its end"]
+    .iter()
+    .any(|phrase| text.contains(phrase))
 }
 
 /// The wait before the claude command line is asked again when its message gives no moment for the
