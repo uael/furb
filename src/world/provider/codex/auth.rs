@@ -1,5 +1,7 @@
 //! OpenAI models on a ChatGPT subscription, with credentials kept outside the project.
 
+#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
+
 use std::{
   collections::HashMap,
   fmt,

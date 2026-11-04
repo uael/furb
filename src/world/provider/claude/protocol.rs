@@ -3,6 +3,11 @@
 //! lacks it fails the turn. A kind of event, of block or of delta that this does not read is
 //! `Other`, and it is ignored. The reply of a turn is made of these events as they come.
 
+#![expect(
+  clippy::single_match_else,
+  reason = "debt: a match of one arm and else, where if let serves"
+)]
+
 use std::collections::HashMap;
 
 use rig_core::{
