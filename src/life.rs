@@ -315,7 +315,7 @@ impl Opening {
     let catalog = Catalog::load()
       .claude(claude.clone(), stall)
       .configured(Path::new(&directory), config.as_deref())
-      .map_err(Fault::refused)?;
+      .map_err(|no| Fault::refused(no.to_string()))?;
     let asks: world::Hosted =
       Arc::new(|_, _| Box::pin(async { Err("a life that inspects asks no model".to_owned()) }));
     let answer =
@@ -331,7 +331,8 @@ impl Opening {
       world::claude::refresh();
       let fresh = Catalog::load()
         .claude(claude.clone(), stall)
-        .configured(Path::new(&directory), config.as_deref())?;
+        .configured(Path::new(&directory), config.as_deref())
+        .map_err(|no| no.to_string())?;
       let kept = fresh.keep(names.as_deref(), preferred.as_deref());
       let candidate = fresh
         .provider(directory.clone(), kept.names.as_deref(), kept.actor.as_deref(), answer.clone())

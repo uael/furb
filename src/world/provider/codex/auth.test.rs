@@ -21,8 +21,8 @@ use indexmap::IndexMap;
 use tokio::sync::watch;
 
 use super::{
-  Catalog as Account, Credential, Effort, Listing, callback_code, directory, now, random, save,
-  status,
+  AuthError, Catalog as Account, Credential, Effort, Listing, SignIn, callback_code, directory,
+  now, random, save, status,
 };
 use crate::{ear::reactor, world::Catalog};
 
@@ -100,14 +100,14 @@ fn enabling_subscription_models_uses_the_account_window_and_supported_efforts() 
   assert_eq!(catalog.find("codex:account-model").expect("account model").window, 828_400);
 
   assert!(catalog.find("openai:account-model").is_none());
-  assert_eq!(status(Some(&scope.0)).state, "connected");
+  assert_eq!(status(Some(&scope.0)), SignIn::Connected);
 }
 
 #[test]
 fn a_model_cache_from_another_account_is_not_offered() {
   let scope = Scope::profile("current", "previous");
   assert!(scope.catalog(true).find("codex:account-model").is_none());
-  assert_eq!(status(Some(&scope.0)).state, "disconnected");
+  assert_eq!(status(Some(&scope.0)), SignIn::Disconnected);
 }
 
 #[cfg(unix)]
@@ -147,4 +147,38 @@ fn the_browser_callback_rejects_another_state_and_reads_a_split_request() {
   assert!(response.starts_with("HTTP/1.1 200 OK"));
   let code = callback.recv_timeout(Duration::from_secs(10)).expect("the callback ends");
   assert_eq!(code.expect("code"), "accepted");
+}
+
+#[test]
+fn a_sign_in_shows_the_words_that_the_world_shows() {
+  let url = "https://auth.openai.com/oauth/authorize".to_owned();
+  let states = [
+    SignIn::Disconnected,
+    SignIn::Waiting { url: url.clone() },
+    SignIn::Connecting,
+    SignIn::Connected,
+    SignIn::NeedsLogin("again".to_owned()),
+    SignIn::Failed("no".to_owned()),
+    SignIn::Canceled,
+  ];
+  assert_eq!(
+    states.iter().map(ToString::to_string).collect::<Vec<_>>(),
+    ["disconnected", "waiting", "connecting", "connected", "needs-login", "failed", "canceled"]
+  );
+  assert_eq!(states[1].url(), Some(url.as_str()));
+  assert_eq!(states[4].message(), Some("again"));
+  assert_eq!(states[5].message(), Some("no"));
+  assert_eq!(states[3].message(), None);
+}
+
+#[test]
+fn a_refusal_asks_for_a_new_sign_in_only_when_the_account_is_at_fault() {
+  let refused = AuthError::Rejected { status: 401 };
+  assert!(refused.login());
+  assert_eq!(refused.to_string(), "OpenAI sign-in failed (HTTP 401). Sign in again.");
+  let down = AuthError::Rejected { status: 503 };
+  assert!(!down.login());
+  assert_eq!(down.to_string(), "OpenAI sign-in failed (HTTP 503). Try again.");
+  assert!(AuthError::ListRefused { status: 403 }.login());
+  assert!(!AuthError::ListRefused { status: 500 }.login());
 }
