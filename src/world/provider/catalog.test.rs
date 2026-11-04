@@ -747,7 +747,7 @@ fn an_invalid_claude_command_is_refused_before_it_starts_a_process() {
     .unwrap();
     let result = catalog(&[]).configured(&root, Some(&root));
     let Err(no) = result else { panic!("invalid command {command} was accepted") };
-    assert!(no.contains("claude-cli"), "{no}");
+    assert!(no.to_string().contains("claude-cli"), "{no}");
   }
   fs::remove_dir_all(root).unwrap();
 }
@@ -797,7 +797,7 @@ fn a_model_of_a_chat_provider_of_the_settings_takes_the_efforts_that_it_lists_as
     let Err(no) = settings(models.clone(), protocol) else {
       panic!("{models} of {protocol} was accepted")
     };
-    assert!(no.contains("strata"), "{no}");
+    assert!(no.to_string().contains("strata"), "{no}");
   }
   fs::remove_dir_all(root).unwrap();
 }
@@ -898,7 +898,7 @@ fn invalid_claude_accounts_are_refused_before_they_start_a_process() {
     .unwrap();
     let result = catalog(&[]).configured(&root, Some(&root));
     let Err(no) = result else { panic!("invalid accounts {settings} were accepted") };
-    assert!(no.contains("claude-cli"), "{no}");
+    assert!(no.to_string().contains("claude-cli"), "{no}");
   }
   fs::remove_dir_all(root).unwrap();
 }
@@ -913,6 +913,11 @@ fn the_doctrine_of_a_project_comes_first_then_the_checkout_of_dev_mode_then_the_
     std::fs::create_dir_all(one).unwrap();
   }
   let official = home.join(".furb").join("DOCTRINE.md");
+  assert!(
+    matches!(super::doctrine_place(&project, None, Some(&home)), Some(super::Place::Official(one)) if one == official),
+    "the lookup names the official copy"
+  );
+  assert!(!official.exists(), "the lookup writes nothing");
   assert_eq!(doctrine_in(&project, None, Some(&home)), Some(official.clone()), "the official copy");
   assert_eq!(
     std::fs::read_to_string(&official).unwrap(),

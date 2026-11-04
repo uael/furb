@@ -27,10 +27,6 @@
 )]
 #![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
 #![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
-#![expect(
-  clippy::semicolon_if_nothing_returned,
-  reason = "debt: a unit expression with no semicolon"
-)]
 #![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
 #![expect(
   clippy::single_match_else,
@@ -71,10 +67,12 @@ use crate::ear::runtime;
 
 mod accounts;
 mod discover;
+mod protocol;
 pub use accounts::{Account, Source, Switch};
 use accounts::{Accounts, NO_TOKEN};
 use discover::Found;
 pub use discover::refresh;
+use protocol::{Delta, Event, Finished, Spent, Start, Stop, Streamed, Whole};
 
 /// The name of the command line as a provider: each response of it says this name, and each of its models is named
 /// by it and the alias of its family.
@@ -1015,7 +1013,7 @@ impl Conversation {
 /// What the stdout of a process says: an event of the stream, a line that is none, or its end, with why when the
 /// end is no exit.
 enum Line {
-  Event(Value),
+  Event(Box<Event>),
   Odd(String),
   Over(Option<String>),
 }
@@ -1073,7 +1071,12 @@ impl Out {
         Ok(_) => {
           let read = std::mem::take(&mut self.read);
           match serde_json::from_slice::<Value>(read.trim_ascii()) {
-            Ok(event) => Line::Event(event),
+            Ok(value) => match Event::read(value) {
+              Ok(event) => Line::Event(Box::new(event)),
+              Err(no) => {
+                Line::Over(Some(format!("Claude sent an event its protocol forbids: {no}")))
+              }
+            },
             Err(_) if read.trim_ascii().is_empty() => continue,
             Err(_) => Line::Odd(String::from_utf8_lossy(read.trim_ascii()).into_owned()),
           }
@@ -1286,7 +1289,7 @@ impl Flight<'_> {
         }
       };
       let event = match heard {
-        Line::Event(event) => event,
+        Line::Event(event) => *event,
         Line::Odd(text) => {
           spoke = true;
           last(&text).clone_into(&mut odd);
@@ -1308,29 +1311,28 @@ impl Flight<'_> {
         }
       };
       spoke = true;
-      let kind = event.get("type").and_then(Value::as_str).unwrap_or_default();
-      if matches!(kind, "stream_event" | "assistant" | "result") {
+      if !matches!(event, Event::Other) {
         due = tokio::time::Instant::now() + stall;
       }
-      match kind {
-        "stream_event" => reply.streamed(event.get("event").unwrap_or(&Value::Null)),
-        "assistant" => {
-          if let Some(spent) = event["message"].get("usage") {
-            reply.spent = Some(spent.clone());
+      match event {
+        Event::Stream { event } => reply.streamed(&event),
+        Event::Assistant { message } => {
+          if let Some(spent) = message.usage {
+            reply.spent = Some(spent);
           }
-          reply.settled(&event["message"]["content"]);
+          reply.settled(&message.content);
         }
-        "result" => {
-          if let Some(session) = event.get("session_id").and_then(Value::as_str) {
+        Event::Result(result) => {
+          if let Some(session) = &result.session_id {
             session.clone_into(id);
           }
-          if event.get("is_error").and_then(Value::as_bool).unwrap_or_default() {
-            let said = event.get("result").and_then(Value::as_str).filter(|one| !one.is_empty());
-            return Err(failed(said.map_or_else(|| unexplained(&event), str::to_owned)));
+          if result.is_error {
+            let said = result.result.as_deref().filter(|one| !one.is_empty());
+            return Err(failed(said.map_or_else(|| unexplained(&result), str::to_owned)));
           }
-          return Ok(reply.response(&event, name, id, process));
+          return Ok(reply.response(&result, name, id, process));
         }
-        _ => {}
+        Event::Other => {}
       }
     };
     let (no, missing) = exited(code, &mut process.tail, program, spoke).await;
@@ -1370,7 +1372,7 @@ struct Reply<'a> {
   settled: u64,
   /// The usage of the last message the command line settled, which is the one request of the turn whose answer the
   /// reply holds.
-  spent: Option<Value>,
+  spent: Option<Spent>,
   deltas: Option<&'a Deltas>,
 }
 
@@ -1435,69 +1437,57 @@ impl Reply<'_> {
   }
 
   /// One event of a message as it streams.
-  fn streamed(&mut self, update: &Value) {
-    let kind = update.get("type").and_then(Value::as_str).unwrap_or_default();
-    if kind == "message_start" {
+  fn streamed(&mut self, update: &Streamed) {
+    if matches!(update, Streamed::MessageStart) {
       self.streamed = Some(HashMap::new());
       self.settled = 0;
     }
-    let index = update.get("index").and_then(Value::as_u64).unwrap_or_default();
-    let at = self.streamed.get_or_insert_default().get(&index).copied();
-    match kind {
-      "content_block_start" => {
-        let block = &update["content_block"];
-        let text =
-          |key: &str| block.get(key).and_then(Value::as_str).unwrap_or_default().to_owned();
-        let block = match block.get("type").and_then(Value::as_str) {
-          Some("text") => Block::Text(text("text")),
-          Some("thinking") => Block::Thinking(text("thinking"), None),
-          _ => return,
+    let places = self.streamed.get_or_insert_default();
+    match update {
+      Streamed::ContentBlockStart { index, content_block } => {
+        let block = match content_block {
+          Start::Text { text } => Block::Text(text.clone()),
+          Start::Thinking { thinking } => Block::Thinking(thinking.clone(), None),
+          Start::Other => return,
         };
-        let place = self.blocks.len();
-        self.streamed.get_or_insert_default().insert(index, place);
+        places.insert(*index, self.blocks.len());
         self.opened(block);
       }
-      "content_block_delta" => {
-        let Some(at) = at else { return };
-        let delta = &update["delta"];
-        let text = |key: &str| delta.get(key).and_then(Value::as_str).unwrap_or_default();
-        let block = self.blocks.get(at);
-        match delta.get("type").and_then(Value::as_str) {
-          Some("text_delta") if matches!(block, Some(Block::Text(_))) => {
-            self.grew(at, text("text"))
+      Streamed::ContentBlockDelta { index, delta } => {
+        let Some(at) = places.get(index).copied() else { return };
+        match (delta, self.blocks.get(at)) {
+          (Delta::Text { text }, Some(Block::Text(_))) => self.grew(at, text),
+          (Delta::Thinking { thinking }, Some(Block::Thinking(..))) => {
+            self.grew(at, thinking);
           }
-          Some("thinking_delta") if matches!(block, Some(Block::Thinking(..))) => {
-            self.grew(at, text("thinking"));
-          }
-          Some("signature_delta") => {
-            if let Some(Block::Thinking(_, signature)) = self.blocks.get_mut(at) {
-              signature.get_or_insert_default().push_str(text("signature"));
+          (Delta::Signature { signature }, _) => {
+            if let Some(Block::Thinking(_, held)) = self.blocks.get_mut(at) {
+              held.get_or_insert_default().push_str(signature);
             }
           }
           _ => {}
         }
       }
-      "content_block_stop" => {
-        if let Some(at) = at {
+      Streamed::ContentBlockStop { index } => {
+        if let Some(at) = places.get(index).copied() {
           self.closed(at);
         }
       }
-      _ => {}
+      Streamed::MessageStart | Streamed::Other => {}
     }
   }
 
   /// The blocks of a message that the command line says whole. It says each block again, once it is whole, in the
   /// order it streamed them: the whole block stands over the one streamed at its place, and never twice. A message
   /// that did not stream is told as it comes.
-  fn settled(&mut self, content: &Value) {
-    let blocks = content.as_array().map(Vec::as_slice).unwrap_or_default();
-    for one in blocks {
-      let text = |key: &str| one.get(key).and_then(Value::as_str).unwrap_or_default().to_owned();
-      let signature = one.get("signature").and_then(Value::as_str).map(str::to_owned);
-      let block = match one.get("type").and_then(Value::as_str) {
-        Some("text") => Some(Block::Text(text("text"))),
-        Some("thinking") => Some(Block::Thinking(text("thinking"), signature)),
-        _ => None,
+  fn settled(&mut self, content: &[Whole]) {
+    for one in content {
+      let block = match one {
+        Whole::Text { text } => Some(Block::Text(text.clone())),
+        Whole::Thinking { thinking, signature } => {
+          Some(Block::Thinking(thinking.clone(), signature.clone()))
+        }
+        Whole::Other => None,
       };
       match &self.streamed {
         Some(streamed) => {
@@ -1531,34 +1521,33 @@ impl Reply<'_> {
   /// read of the window. A result that no message with a usage came before gives its own usage.
   fn response(
     mut self,
-    result: &Value,
+    result: &Finished,
     name: &str,
     id: &str,
     process: &mut Process,
   ) -> CompletionResponse {
     if self.blocks.is_empty()
-      && let Some(text) = result.get("result").and_then(Value::as_str).filter(|one| !one.is_empty())
+      && let Some(text) = result.result.as_deref().filter(|one| !one.is_empty())
     {
       self.blocks.push(Block::Text(text.to_owned()));
     }
-    let spent = self.spent.take().unwrap_or_else(|| result["usage"].clone());
-    let count = |key: &str| spent.get(key).and_then(Value::as_u64).unwrap_or_default();
+    let spent = self.spent.take().or_else(|| result.usage.clone()).unwrap_or_default();
     let mut usage = Usage::new();
-    usage.input_tokens = count("input_tokens");
-    usage.output_tokens = count("output_tokens");
-    usage.cached_input_tokens = count("cache_read_input_tokens");
-    usage.cache_creation_input_tokens = count("cache_creation_input_tokens");
+    usage.input_tokens = spent.input;
+    usage.output_tokens = spent.output;
+    usage.cached_input_tokens = spent.cache_read;
+    usage.cache_creation_input_tokens = spent.cache_creation;
     usage.total_tokens = usage.input_tokens
       + usage.output_tokens
       + usage.cached_input_tokens
       + usage.cache_creation_input_tokens;
-    let total = result.get("total_cost_usd").and_then(Value::as_f64).unwrap_or(process.paid);
+    let total = result.total_cost_usd.unwrap_or(process.paid);
     let cost = (total - process.paid).max(0.0);
     process.paid = total;
-    let finish = match result.get("stop_reason").and_then(Value::as_str) {
-      Some("max_tokens") => FinishReason::Length,
-      Some("refusal") => FinishReason::ContentFilter,
-      _ => FinishReason::Stop,
+    let finish = match result.stop_reason {
+      Some(Stop::MaxTokens) => FinishReason::Length,
+      Some(Stop::Refusal) => FinishReason::ContentFilter,
+      Some(Stop::Other) | None => FinishReason::Stop,
     };
     let choice = self.blocks.iter().map(Block::content).collect();
     CompletionResponse::new(choice, usage, CLAUDE)
@@ -1685,23 +1674,21 @@ fn failed(why: impl Into<String>) -> CompletionError {
 
 /// What an error result tells when its text is empty: its subtype, its status and its errors, so that a login error
 /// shows apart from a limit.
-fn unexplained(event: &Value) -> String {
+fn unexplained(event: &Finished) -> String {
   let mut facts = Vec::new();
-  if let Some(subtype) = event.get("subtype").and_then(Value::as_str).filter(|one| !one.is_empty())
-  {
+  if let Some(subtype) = event.subtype.as_deref().filter(|one| !one.is_empty()) {
     facts.push(format!("subtype {subtype}"));
   }
-  if let Some(status) = event.get("api_error_status").filter(|one| !one.is_null()) {
+  if let Some(status) = &event.api_error_status {
     facts.push(format!("api_error_status {status}"));
   }
-  let errors = match event.get("errors") {
-    Some(Value::Array(all)) => all
-      .iter()
-      .map(|one| one.as_str().map_or_else(|| one.to_string(), str::to_owned))
-      .collect::<Vec<_>>()
-      .join("; "),
-    _ => String::new(),
-  };
+  let errors = event
+    .errors
+    .iter()
+    .flatten()
+    .map(|one| one.as_str().map_or_else(|| one.to_string(), str::to_owned))
+    .collect::<Vec<_>>()
+    .join("; ");
   let head = if facts.is_empty() { String::new() } else { format!(" ({})", facts.join(", ")) };
   let tail = if errors.is_empty() { String::new() } else { format!(": {errors}") };
   format!("Claude reported an error{head}{tail}.")

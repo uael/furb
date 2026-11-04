@@ -1,27 +1,25 @@
 //! The provider settings of the user and the project, applied to a catalog before a life stands on it.
 
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
-#![expect(
-  clippy::needless_pass_by_value,
-  reason = "debt: an argument taken by value and only borrowed"
-)]
-#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
-
-use std::{collections::HashMap, env, fs};
+use std::{
+  collections::HashMap,
+  env, fs, io,
+  path::{Path, PathBuf},
+};
 
 use indexmap::IndexMap;
-use serde::Deserialize;
-use serde_json::Value;
+use serde::{Deserialize, de::DeserializeOwned};
+use serde_json::{Map, Value};
 
 use super::{
-  Catalog, Client, Cost, LOCAL, Limit, Listed, Listing, Modalities, cache, claude, listed,
+  super::codex, Catalog, Client, Cost, Entry, Error, LOCAL, Limit, Listed, Listing, Modalities,
+  Model, Offer, cache, claude, listed, update::MODELS,
 };
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ProviderConfig {
-  enabled: Option<bool>,
+  #[serde(rename = "enabled")]
+  _enabled: Option<bool>,
   protocol: Option<Client>,
   url: Option<String>,
   key_env: Option<String>,
@@ -32,77 +30,88 @@ struct ProviderConfig {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ClaudeConfig {
-  enabled: Option<bool>,
+  #[serde(rename = "enabled")]
+  _enabled: Option<bool>,
   command: Option<CommandPrefix>,
   accounts: Option<Vec<AccountConfig>>,
-  switch: Option<String>,
+  switch: Option<claude::Switch>,
 }
 
+/// An account of the claude command line, which names exactly one place for its credential.
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AccountConfig {
-  name: String,
-  token_file: Option<String>,
-  token_env: Option<String>,
-  config_dir: Option<String>,
+#[serde(
+  untagged,
+  deny_unknown_fields,
+  expecting = "an account with a name and exactly one of token_file, token_env and config_dir"
+)]
+enum AccountConfig {
+  File { name: String, token_file: String },
+  Env { name: String, token_env: String },
+  Dir { name: String, config_dir: String },
 }
 
-/// The accounts of the claude command line and the policy that moves among them. Each account names exactly one place
-/// for its credential, and a path is absolute or starts with `~`, since a project file has no folder to count from.
+impl AccountConfig {
+  fn name(&self) -> &str {
+    match self {
+      Self::File { name, .. } | Self::Env { name, .. } | Self::Dir { name, .. } => name,
+    }
+  }
+
+  /// The account, with the rules of its name and of its credential checked.
+  /// A path is absolute or starts with `~`, since a project file has no folder to count from.
+  fn into_account(self) -> Result<claude::Account, Error> {
+    let name = self.name();
+    if name.is_empty() || name.chars().any(|one| one.is_whitespace() || one.is_control()) {
+      return Err(Error::AccountName(name.to_owned()));
+    }
+    let (name, source) = match self {
+      Self::File { name, token_file } => {
+        let path = absolute(&name, &token_file)?;
+        (name, claude::Source::TokenFile(path))
+      }
+      Self::Env { name, token_env } => {
+        if token_env.is_empty() || token_env.contains(['=', '\0']) {
+          return Err(Error::AccountVariable(name));
+        }
+        (name, claude::Source::TokenEnv(token_env))
+      }
+      Self::Dir { name, config_dir } => {
+        let path = absolute(&name, &config_dir)?;
+        (name, claude::Source::ConfigDir(path))
+      }
+    };
+    Ok(claude::Account { name, source })
+  }
+}
+
+/// The accounts of the claude command line and the policy that moves among them.
 fn account_list(
   accounts: Option<Vec<AccountConfig>>,
-  switch: Option<String>,
-) -> Result<(Vec<claude::Account>, claude::Switch), String> {
-  let given = switch.is_some();
-  let switch = match switch.as_deref() {
-    None | Some("failover") => claude::Switch::Failover,
-    Some("spread") => claude::Switch::Spread,
-    Some(other) => {
-      return Err(format!("The claude-cli switch is failover or spread, not {other:?}"));
-    }
-  };
+  switch: Option<claude::Switch>,
+) -> Result<(Vec<claude::Account>, claude::Switch), Error> {
   let Some(list) = accounts else {
-    return if given {
-      Err("The claude-cli switch needs accounts".to_owned())
-    } else {
-      Ok((Vec::new(), switch))
+    return match switch {
+      Some(_) => Err(Error::SwitchWithoutAccounts),
+      None => Ok((Vec::new(), claude::Switch::default())),
     };
   };
   if list.is_empty() {
-    return Err("The claude-cli accounts need at least one account".to_owned());
+    return Err(Error::NoAccounts);
   }
   let mut made: Vec<claude::Account> = Vec::new();
   for one in list {
-    let name = one.name;
-    if name.is_empty() || name.chars().any(|one| one.is_whitespace() || one.is_control()) {
-      return Err(format!("An account of claude-cli needs a name with no space: {name:?}"));
+    let account = one.into_account()?;
+    if made.iter().any(|held| held.name == account.name) {
+      return Err(Error::AccountTwice(account.name));
     }
-    if made.iter().any(|held| held.name == name) {
-      return Err(format!("Two accounts of claude-cli are named {name}"));
-    }
-    let source = match (one.token_file, one.token_env, one.config_dir) {
-      (Some(file), None, None) => claude::Source::TokenFile(absolute(&name, &file)?),
-      (None, Some(var), None) if !var.is_empty() && !var.contains(['=', '\0']) => {
-        claude::Source::TokenEnv(var)
-      }
-      (None, None, Some(dir)) => claude::Source::ConfigDir(absolute(&name, &dir)?),
-      _ => {
-        return Err(format!(
-          "The account {name} of claude-cli needs exactly one of token_file, token_env and config_dir"
-        ));
-      }
-    };
-    made.push(claude::Account { name, source });
+    made.push(account);
   }
-  Ok((made, switch))
+  Ok((made, switch.unwrap_or_default()))
 }
 
 /// A path of an account, with a leading `~` taken for the home of the user.
-fn absolute(name: &str, path: &str) -> Result<std::path::PathBuf, String> {
-  let home = || {
-    env::home_dir()
-      .ok_or_else(|| format!("The account {name} of claude-cli names ~, and there is no home"))
-  };
+fn absolute(name: &str, path: &str) -> Result<PathBuf, Error> {
+  let home = || env::home_dir().ok_or_else(|| Error::NoHome(name.to_owned()));
   let full = match path.strip_prefix("~/") {
     Some(rest) => home()?.join(rest),
     None if path == "~" => home()?,
@@ -111,9 +120,7 @@ fn absolute(name: &str, path: &str) -> Result<std::path::PathBuf, String> {
   if full.is_absolute() && !path.contains('\0') {
     Ok(full)
   } else {
-    Err(format!(
-      "A path of the account {name} of claude-cli must be absolute or start with ~: {path}"
-    ))
+    Err(Error::Path { name: name.to_owned(), path: path.to_owned() })
   }
 }
 
@@ -125,16 +132,16 @@ enum CommandPrefix {
 }
 
 impl CommandPrefix {
-  fn parts(self) -> Result<(std::path::PathBuf, Vec<String>), String> {
+  fn parts(self) -> Result<(PathBuf, Vec<String>), Error> {
     let mut words = match self {
       CommandPrefix::Executable(bin) => vec![bin],
       CommandPrefix::Words(words) => words,
     };
     if words.first().is_none_or(|bin| bin.trim().is_empty()) {
-      return Err("The claude-cli command needs a nonempty executable".to_owned());
+      return Err(Error::CommandEmpty);
     }
     if words.iter().any(|word| word.contains('\0')) {
-      return Err("The claude-cli command must not contain a null byte".to_owned());
+      return Err(Error::CommandNull);
     }
     let bin = words.remove(0);
     Ok((bin.into(), words))
@@ -156,227 +163,286 @@ struct ConfiguredModel {
 }
 
 /// The levels of effort that a model of the protocol `chat` can take in the settings.
-const LEVELS: [&str; 4] = ["off", "low", "medium", "high"];
+const CHAT_LEVELS: [&str; 4] = ["off", "low", "medium", "high"];
+
+impl ConfiguredModel {
+  /// The listing of the model `id` of the provider `provider`, whose protocol is chat or not.
+  fn listing(self, provider: &str, id: &str, chat: bool) -> Result<Listing, Error> {
+    let prices = |cost: Cost| [cost.input, cost.output, cost.cache_read, cost.cache_write];
+    if self.cost.is_some_and(|cost| prices(cost).iter().any(|price| *price < 0.0)) {
+      return Err(Error::Prices(provider.to_owned()));
+    }
+    if let Some(levels) = &self.efforts
+      && (!chat
+        || levels.is_empty()
+        || levels.iter().any(|level| !CHAT_LEVELS.contains(&level.as_str())))
+    {
+      return Err(Error::Efforts(provider.to_owned()));
+    }
+    if id.is_empty() || self.window == 0 || self.output == Some(0) {
+      return Err(Error::Model(provider.to_owned()));
+    }
+    let mut input = vec!["text".to_owned()];
+    if self.images {
+      input.push("image".to_owned());
+    }
+    Ok(Listing {
+      reasoning: self.reasoning,
+      cost: self.cost,
+      limit: Limit { context: self.window, output: self.output.unwrap_or(self.window / 4).max(1) },
+      modalities: Modalities { input, output: vec!["text".to_owned()] },
+      levels: self.efforts,
+      ..Listing::default()
+    })
+  }
+}
+
+impl ProviderConfig {
+  /// The provider that these settings make of the one that the catalog lists, or of a blank one.
+  fn into_listed(self, name: &str, original: Option<&Listed>) -> Result<Listed, Error> {
+    let mut listed = original.cloned().unwrap_or_else(blank);
+    if let Some(protocol) = self.protocol {
+      listed.rig = protocol;
+      for model in listed.models.values_mut() {
+        model.provider = None;
+      }
+    }
+    if let Some(url) = self.url {
+      checked_url(name, &url)?;
+      listed.api = Some(url);
+      for own in listed.models.values_mut().filter_map(|model| model.provider.as_mut()) {
+        own.api = None;
+      }
+    }
+    if let Some(key) = self.key {
+      listed.key = Some(key);
+    }
+    if let Some(key_env) = self.key_env {
+      listed.env = vec![key_env];
+      listed.key = None;
+    }
+    if let Some(models) = self.models {
+      let chat = matches!(listed.rig, Client::Chat);
+      let one = |(id, one): (String, ConfiguredModel)| {
+        one.listing(name, &id, chat).map(|listing| (id, listing))
+      };
+      listed.models = models.into_iter().map(one).collect::<Result<_, _>>()?;
+    }
+    if listed.models.is_empty() || (original.is_none() && listed.api.is_none()) {
+      return Err(Error::Custom(name.to_owned()));
+    }
+    Ok(listed)
+  }
+}
+
+/// A provider that the catalog does not list, which the settings fill in.
+fn blank() -> Listed {
+  Listed {
+    rig: Client::Chat,
+    env: Vec::new(),
+    bearer: Vec::new(),
+    api: None,
+    aliases: HashMap::new(),
+    models: IndexMap::new(),
+    key: Some(String::new()),
+  }
+}
+
+fn checked_url(name: &str, url: &str) -> Result<(), Error> {
+  let parsed =
+    url::Url::parse(url).map_err(|source| Error::Url { name: name.to_owned(), source })?;
+  if !matches!(parsed.scheme(), "http" | "https")
+    || !parsed.username().is_empty()
+    || parsed.password().is_some()
+  {
+    return Err(Error::UrlScheme(name.to_owned()));
+  }
+  Ok(())
+}
+
+fn parse<T: DeserializeOwned>(name: &str, form: Value) -> Result<T, Error> {
+  serde_json::from_value(form).map_err(|source| Error::Invalid { name: name.to_owned(), source })
+}
+
+/// The `providers` of one config file, or none when the file is absent or has none.
+fn providers_of(file: &Path) -> Result<Option<Map<String, Value>>, Error> {
+  let text = match fs::read_to_string(file) {
+    Err(no) if no.kind() == io::ErrorKind::NotFound => return Ok(None),
+    got => got.map_err(|source| Error::Read { path: file.to_owned(), source })?,
+  };
+  let read =
+    serde_json::from_str(&text).map_err(|source| Error::Parse { path: file.to_owned(), source })?;
+  let Value::Object(mut read) = read else {
+    return Err(Error::NotObject { path: file.to_owned() });
+  };
+  match read.remove("providers") {
+    None => Ok(None),
+    Some(Value::Object(providers)) => Ok(Some(providers)),
+    Some(_) => Err(Error::ProvidersNotObject { path: file.to_owned() }),
+  }
+}
+
+/// The providers of the config files in order.
+/// A later field wins over an earlier one for each provider.
+fn merged(files: impl IntoIterator<Item = PathBuf>) -> Result<IndexMap<String, Value>, Error> {
+  let mut entries: IndexMap<String, Value> = IndexMap::new();
+  for file in files {
+    let Some(providers) = providers_of(&file)? else { continue };
+    for (name, form) in providers {
+      match (entries.get_mut(&name), form) {
+        (Some(Value::Object(held)), Value::Object(fields)) => held.extend(fields),
+        (Some(Value::Object(held)), form @ Value::Bool(_)) => {
+          held.insert("enabled".to_owned(), form);
+        }
+        (_, form) => {
+          entries.insert(name, form);
+        }
+      }
+    }
+  }
+  Ok(entries)
+}
+
+fn valid_name(name: &str) -> Result<(), Error> {
+  if name.is_empty() || name.contains([':', '/']) || name.chars().any(char::is_whitespace) {
+    return Err(Error::ProviderName);
+  }
+  Ok(())
+}
+
+fn is_of(model: &Model, provider: &str) -> bool {
+  model.name.split_once(':').is_some_and(|(id, _)| id == provider)
+}
 
 impl Catalog {
   /// The catalog with the provider settings of the configs, in the order of [`crate::extension::configs`]: the user,
   /// the project, then the local config of the project. A false entry removes a provider.
   /// Invalid settings give an error. A running provider keeps its previous settings when a reload fails.
-  pub fn configured(
-    self,
-    directory: &std::path::Path,
-    config: Option<&std::path::Path>,
-  ) -> Result<Catalog, String> {
+  pub fn configured(self, directory: &Path, config: Option<&Path>) -> Result<Catalog, Error> {
     super::blocking(self.configure(directory, config))
   }
 
-  /// The catalog with the provider settings of the configs, as [`Catalog::configured`] gives
-  /// it, for a caller that awaits.
+  /// The catalog with the provider settings of the configs, as [`Catalog::configured`] gives it,
+  /// for a caller that awaits.
   pub async fn configure(
     mut self,
-    directory: &std::path::Path,
-    config: Option<&std::path::Path>,
-  ) -> Result<Catalog, String> {
+    directory: &Path,
+    config: Option<&Path>,
+  ) -> Result<Catalog, Error> {
     let places = crate::extension::Places::here();
     let files = crate::extension::configs(config.unwrap_or(&places.config), directory);
-    let mut entries: IndexMap<String, Value> = IndexMap::new();
-    for file in files {
-      let text = match fs::read_to_string(&file) {
-        Err(no) if no.kind() == std::io::ErrorKind::NotFound => continue,
-        got => got.map_err(|no| format!("Could not read {}: {no}", file.display()))?,
-      };
-      let read: Value = serde_json::from_str(&text)
-        .map_err(|no| format!("Invalid config at {}: {no}", file.display()))?;
-      if !read.is_object() {
-        return Err(format!("The config at {} must be an object", file.display()));
-      }
-      let Some(providers) = read.get("providers") else { continue };
-      let providers = providers
-        .as_object()
-        .ok_or_else(|| format!("The providers at {} must be an object", file.display()))?;
-      for (name, form) in providers {
-        match (entries.get_mut(name), form.as_object()) {
-          (Some(Value::Object(held)), Some(fields)) => held.extend(fields.clone()),
-          (Some(Value::Object(held)), None) if form.is_boolean() => {
-            held.insert("enabled".to_owned(), form.clone());
-          }
-          _ => {
-            entries.insert(name.clone(), form.clone());
-          }
-        }
-      }
-    }
-    let cached = cache().map(|at| at.join("models.json"));
+    let entries = merged(files)?;
+    let cached = cache().map(|at| at.join(MODELS));
     let defaults = listed(cached.as_ref());
     for (name, form) in entries {
-      if name.is_empty() || name.contains([':', '/']) || name.chars().any(char::is_whitespace) {
-        return Err(
-          "A provider name must be nonempty and contain no space, colon or slash".to_owned(),
-        );
-      }
-      let enabled =
-        form.as_bool().or_else(|| form.get("enabled").and_then(Value::as_bool)).unwrap_or(true);
-      if !enabled {
-        self
-          .models
-          .retain(|(model, _)| model.name.split_once(':').is_none_or(|(id, _)| id != name));
-        if let Some(held) = self.providers.iter_mut().find(|(id, _, _)| id == &name) {
-          held.2 = false;
-        } else {
-          self.providers.push((name.clone(), Vec::new(), false));
-        }
-        if name == LOCAL {
-          self.local = None;
-        }
-        continue;
-      }
-      if name == super::super::codex::NAME {
-        self.models.retain(|(model, _)| !model.name.starts_with("codex:"));
-        self.models.extend(
-          super::super::codex::offered(config, &form)?.into_iter().map(|model| (model, true)),
-        );
-        self.providers.retain(|(id, _, _)| id != &name);
-        self.providers.push((name, Vec::new(), true));
-        continue;
-      }
-      if form == Value::Bool(true) {
-        if defaults.contains_key(&name) || name == LOCAL || name == claude::CLAUDE {
-          continue;
-        }
-        return Err(format!("No built-in provider is {name}"));
-      }
-      if name == claude::CLAUDE {
-        let settings: ClaudeConfig =
-          serde_json::from_value(form).map_err(|no| format!("Invalid provider {name}: {no}"))?;
-        let _ = settings.enabled;
-        if settings.command.is_some() || settings.accounts.is_some() || settings.switch.is_some() {
-          let (bin, args) = match settings.command {
-            Some(command) => command.parts().map(|(bin, args)| (Some(bin), args))?,
-            None => (None, Vec::new()),
-          };
-          let (accounts, switch) = account_list(settings.accounts, settings.switch)?;
-          let command = claude::Claude::with_accounts(bin, args, accounts, switch, None);
-          let prefix = format!("{name}:");
-          let at =
-            self.models.iter().position(|(model, _)| model.name.starts_with(&prefix)).unwrap_or(0);
-          self.models.retain(|(model, _)| !model.name.starts_with(&prefix));
-          self.models.splice(at..at, command.models().await.into_iter().map(|model| (model, true)));
-          self.providers.retain(|(id, _, _)| id != &name);
-        }
-        continue;
-      }
-      if name == LOCAL {
-        self.local = None;
-      }
-      let settings: ProviderConfig =
-        serde_json::from_value(form).map_err(|no| format!("Invalid provider {name}: {no}"))?;
-      let _ = settings.enabled;
-      let original = defaults.get(&name);
-      let mut listed = original.cloned().unwrap_or(Listed {
-        rig: Client::Chat,
-        env: Vec::new(),
-        bearer: Vec::new(),
-        api: None,
-        aliases: HashMap::new(),
-        models: IndexMap::new(),
-        key: Some(String::new()),
-      });
-      if let Some(protocol) = settings.protocol {
-        listed.rig = protocol;
-        for model in listed.models.values_mut() {
-          model.provider = None;
-        }
-      }
-      if let Some(url) = settings.url {
-        let parsed = url::Url::parse(&url).map_err(|_| format!("The URL of {name} is invalid"))?;
-        if !matches!(parsed.scheme(), "http" | "https")
-          || !parsed.username().is_empty()
-          || parsed.password().is_some()
-        {
-          return Err(format!("The URL of {name} must use HTTP or HTTPS with no credential"));
-        }
-        listed.api = Some(url);
-        for model in listed.models.values_mut() {
-          if let Some(own) = &mut model.provider {
-            own.api = None;
-          }
-        }
-      }
-      if let Some(key) = settings.key {
-        listed.key = Some(key);
-      }
-      if let Some(key_env) = settings.key_env {
-        listed.env = vec![key_env];
-        listed.key = None;
-      }
-      if let Some(models) = settings.models {
-        let chat = matches!(listed.rig, Client::Chat);
-        listed.models = models
-          .into_iter()
-          .map(|(id, one)| {
-            if one.cost.is_some_and(|cost| {
-              [cost.input, cost.output, cost.cache_read, cost.cache_write]
-                .iter()
-                .any(|price| *price < 0.0)
-            }) {
-              return Err(format!("The prices of each model of {name} must be nonnegative"));
-            }
-            if let Some(levels) = &one.efforts
-              && (!chat || levels.is_empty() || levels.iter().any(|level| !LEVELS.contains(&level.as_str())))
-            {
-              return Err(format!(
-                "The efforts of a model of {name} need the protocol chat and one or more of off, low, medium and high"
-              ));
-            }
-            if id.is_empty() || one.window == 0 || one.output == Some(0) {
-              return Err(format!(
-                "Each model of {name} needs an id, a positive window and a positive output limit"
-              ));
-            }
-            Ok((
-              id,
-              Listing {
-                reasoning: one.reasoning,
-                cost: one.cost,
-                limit: Limit {
-                  context: one.window,
-                  output: one.output.unwrap_or(one.window / 4).max(1),
-                },
-                modalities: Modalities {
-                  input: if one.images {
-                    vec!["text".to_owned(), "image".to_owned()]
-                  } else {
-                    vec!["text".to_owned()]
-                  },
-                  output: vec!["text".to_owned()],
-                },
-                levels: one.efforts,
-                ..Listing::default()
-              },
-            ))
-          })
-          .collect::<Result<_, _>>()?;
-      }
-      if listed.models.is_empty() || (original.is_none() && listed.api.is_none()) {
-        return Err(format!("A custom provider {name} needs a URL and at least one model"));
-      }
-      let at = self
-        .models
-        .iter()
-        .position(|(model, _)| model.name.starts_with(&format!("{name}:")))
-        .unwrap_or(self.models.len());
-      let replacement = Catalog::of(&IndexMap::from([(name.clone(), listed)]), None, None, |key| {
-        env::var(key).ok()
-      });
-      let added = replacement
-        .models
-        .into_iter()
-        .filter(|(model, _)| model.name.starts_with(&format!("{name}:")));
-      self.models.retain(|(model, _)| !model.name.starts_with(&format!("{name}:")));
-      self.models.splice(at..at, added);
-      self.providers.retain(|(id, _, _)| id != &name);
-      self.providers.extend(replacement.providers);
+      valid_name(&name)?;
+      self.apply(name, form, config, &defaults).await?;
     }
     Ok(self)
+  }
+
+  async fn apply(
+    &mut self,
+    name: String,
+    form: Value,
+    config: Option<&Path>,
+    defaults: &IndexMap<String, Listed>,
+  ) -> Result<(), Error> {
+    let enabled =
+      form.as_bool().or_else(|| form.get("enabled").and_then(Value::as_bool)).unwrap_or(true);
+    if !enabled {
+      self.disable(&name);
+      return Ok(());
+    }
+    if name == codex::NAME {
+      return self.set_codex(name, config, &form);
+    }
+    if form == Value::Bool(true) {
+      let built_in = defaults.contains_key(&name) || name == LOCAL || name == claude::CLAUDE;
+      return if built_in { Ok(()) } else { Err(Error::Builtin(name)) };
+    }
+    if name == claude::CLAUDE {
+      return self.set_claude(form).await;
+    }
+    self.set_custom(&name, form, defaults)
+  }
+
+  /// The place of the first model of a provider.
+  fn first_of(&self, provider: &str) -> Option<usize> {
+    self.models.iter().position(|offer| is_of(&offer.model, provider))
+  }
+
+  fn drop_models(&mut self, provider: &str) {
+    self.models.retain(|offer| !is_of(&offer.model, provider));
+  }
+
+  fn disable(&mut self, name: &str) {
+    self.drop_models(name);
+    match self.providers.iter_mut().find(|held| held.name == name) {
+      Some(held) => held.enabled = false,
+      None => {
+        self.providers.push(Entry { name: name.to_owned(), env: Vec::new(), enabled: false });
+      }
+    }
+    if name == LOCAL {
+      self.local = None;
+    }
+  }
+
+  fn set_codex(&mut self, name: String, config: Option<&Path>, form: &Value) -> Result<(), Error> {
+    let models = codex::offered(config, form).map_err(Error::Codex)?;
+    self.drop_models(&name);
+    self.models.extend(models.into_iter().map(|model| Offer::new(model, true)));
+    self.providers.retain(|held| held.name != name);
+    self.providers.push(Entry { name, env: Vec::new(), enabled: true });
+    Ok(())
+  }
+
+  async fn set_claude(&mut self, form: Value) -> Result<(), Error> {
+    let settings: ClaudeConfig = parse(claude::CLAUDE, form)?;
+    if settings.command.is_none() && settings.accounts.is_none() && settings.switch.is_none() {
+      return Ok(());
+    }
+    let (bin, args) = match settings.command {
+      Some(command) => {
+        let (bin, args) = command.parts()?;
+        (Some(bin), args)
+      }
+      None => (None, Vec::new()),
+    };
+    let (accounts, switch) = account_list(settings.accounts, settings.switch)?;
+    let command = claude::Claude::with_accounts(bin, args, accounts, switch, None);
+    let at = self.first_of(claude::CLAUDE).unwrap_or(0);
+    self.drop_models(claude::CLAUDE);
+    self
+      .models
+      .splice(at..at, command.models().await.into_iter().map(|model| Offer::new(model, true)));
+    self.providers.retain(|held| held.name != claude::CLAUDE);
+    Ok(())
+  }
+
+  fn set_custom(
+    &mut self,
+    name: &str,
+    form: Value,
+    defaults: &IndexMap<String, Listed>,
+  ) -> Result<(), Error> {
+    if name == LOCAL {
+      self.local = None;
+    }
+    let settings: ProviderConfig = parse(name, form)?;
+    let listed = settings.into_listed(name, defaults.get(name))?;
+    let at = self.first_of(name).unwrap_or(self.models.len());
+    let replacement =
+      Catalog::of(&IndexMap::from([(name.to_owned(), listed)]), None, None, |key| {
+        env::var(key).ok()
+      });
+    let added: Vec<Offer> =
+      replacement.models.into_iter().filter(|offer| is_of(&offer.model, name)).collect();
+    self.drop_models(name);
+    self.models.splice(at..at, added);
+    self.providers.retain(|held| held.name != name);
+    self.providers.extend(replacement.providers);
+    Ok(())
   }
 }

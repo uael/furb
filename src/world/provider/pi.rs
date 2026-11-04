@@ -3,10 +3,6 @@
 //! line of data of its own.
 
 #![expect(
-  clippy::match_wildcard_for_single_variants,
-  reason = "debt: a wildcard arm for one variant"
-)]
-#![expect(
   clippy::redundant_closure_for_method_calls,
   reason = "debt: a closure where a method path serves"
 )]
@@ -22,6 +18,7 @@ use rig_core::{
   http_client::{HttpClientExt, Request, ReqwestClient, sse::BoxedStream},
   streaming::{RawStreamingChoice, StreamFinal, StreamingCompletionResponse},
 };
+use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 /// The name that pi-ai gives the provider of each turn it keeps.
@@ -76,7 +73,7 @@ impl Pi {
           "model": self.id, "usage": usage, "stopReason": "stop", "timestamp": 0,
         }))
       }
-      _ => None,
+      Message::System { .. } => None,
     });
     json!({"systemPrompt": request.preamble, "messages": messages.collect::<Vec<_>>()})
   }
@@ -160,66 +157,132 @@ impl Heard {
       let whole = std::mem::replace(&mut self.buffer, rest);
       for block in String::from_utf8_lossy(&whole[..at]).split("\n\n") {
         let data = block.lines().find_map(|line| line.strip_prefix("data:")).map(str::trim);
-        let Some(event) =
-          data.filter(|one| *one != "[DONE]").and_then(|one| serde_json::from_str(one).ok())
-        else {
-          continue;
-        };
-        self.heard(&event);
+        let Some(data) = data.filter(|one| *one != "[DONE]") else { continue };
+        match serde_json::from_str(data) {
+          Ok(event) => self.heard(event),
+          Err(no) => {
+            self.over = true;
+            let why = format!("{NAME} sent an event its protocol forbids: {no}");
+            self.parts.push_back(Err(CompletionError::ProviderError(why)));
+            break;
+          }
+        }
       }
     }
   }
 
   /// The parts that one event of pi-ai makes.
-  fn heard(&mut self, event: &Value) {
-    let text = |key: &str| event.get(key).and_then(Value::as_str).unwrap_or_default().to_owned();
-    let id = event.get("contentIndex").and_then(Value::as_u64).unwrap_or_default().to_string();
-    let part = match event.get("type").and_then(Value::as_str).unwrap_or_default() {
-      "text_start" => RawStreamingChoice::TextStart { id: id.into(), additional_params: None },
-      "text_delta" => RawStreamingChoice::Message(text("delta")),
-      "text_end" => RawStreamingChoice::TextEnd { id: id.into() },
-      "thinking_start" => RawStreamingChoice::ReasoningStart { id: id.into(), provider_id: None },
-      "thinking_delta" => RawStreamingChoice::ReasoningDelta {
-        id: id.into(),
-        provider_id: None,
-        reasoning: text("delta"),
+  fn heard(&mut self, event: Event) {
+    let part = match event {
+      Event::TextStart { content_index } => RawStreamingChoice::TextStart {
+        id: content_index.to_string().into(),
+        additional_params: None,
       },
-      "thinking_end" => {
-        let signature = event.get("contentSignature").and_then(Value::as_str).map(str::to_owned);
-        let reasoning = Some(Reasoning::new_with_signature(&text("content"), signature));
+      Event::TextDelta { delta } => RawStreamingChoice::Message(delta),
+      Event::TextEnd { content_index } => {
+        RawStreamingChoice::TextEnd { id: content_index.to_string().into() }
+      }
+      Event::ThinkingStart { content_index } => RawStreamingChoice::ReasoningStart {
+        id: content_index.to_string().into(),
+        provider_id: None,
+      },
+      Event::ThinkingDelta { content_index, delta } => RawStreamingChoice::ReasoningDelta {
+        id: content_index.to_string().into(),
+        provider_id: None,
+        reasoning: delta,
+      },
+      Event::ThinkingEnd { content_index, content, content_signature } => {
+        let reasoning = Some(Reasoning::new_with_signature(&content, content_signature));
         RawStreamingChoice::ReasoningEnd {
-          id: id.into(),
+          id: content_index.to_string().into(),
           reasoning,
           signature: None,
           wire_sent: true,
         }
       }
-      "done" => {
+      Event::Done { usage: spent } => {
         self.over = true;
-        let spent = &event["usage"];
-        let count = |key: &str| spent.get(key).and_then(Value::as_u64).unwrap_or_default();
         let mut usage = Usage::new();
-        (usage.input_tokens, usage.output_tokens) = (count("input"), count("output"));
+        (usage.input_tokens, usage.output_tokens) = (spent.input, spent.output);
         (usage.cached_input_tokens, usage.cache_creation_input_tokens) =
-          (count("cacheRead"), count("cacheWrite"));
-        usage.total_tokens = count("totalTokens");
+          (spent.cache_read, spent.cache_write);
+        usage.total_tokens = spent.total_tokens;
         let mut end = StreamFinal::new(NAME, usage);
-        end.raw = json!({"cost": spent["cost"]["total"]});
+        end.raw = json!({"cost": spent.cost.map(|one| one.total)});
         RawStreamingChoice::FinalResponse(end)
       }
-      "error" => {
+      Event::Error { error } => {
         self.over = true;
-        let why = event["error"]
-          .get("errorMessage")
-          .and_then(Value::as_str)
-          .unwrap_or("the gateway failed");
-        self.parts.push_back(Err(CompletionError::ProviderError(why.to_owned())));
+        let why = error.error_message.unwrap_or_else(|| "the gateway failed".to_owned());
+        self.parts.push_back(Err(CompletionError::ProviderError(why)));
         return;
       }
-      _ => return,
+      Event::Other => return,
     };
     self.parts.push_back(Ok(part));
   }
+}
+
+/// One event of pi-ai. The field that an event gives is required, so an event that lacks it fails
+/// the reply. An event of a kind that this does not read is `Other`, and it is ignored.
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", rename_all_fields = "camelCase")]
+enum Event {
+  TextStart {
+    content_index: u64,
+  },
+  TextDelta {
+    delta: String,
+  },
+  TextEnd {
+    content_index: u64,
+  },
+  ThinkingStart {
+    content_index: u64,
+  },
+  ThinkingDelta {
+    content_index: u64,
+    delta: String,
+  },
+  ThinkingEnd {
+    content_index: u64,
+    content: String,
+    content_signature: Option<String>,
+  },
+  Done {
+    usage: Spent,
+  },
+  Error {
+    error: Failure,
+  },
+  #[serde(other)]
+  Other,
+}
+
+/// What a reply spent. A count that the gateway leaves out is none, since it says `{}` of a reply
+/// that spent nothing.
+#[derive(Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+struct Spent {
+  input: u64,
+  output: u64,
+  cache_read: u64,
+  cache_write: u64,
+  total_tokens: u64,
+  cost: Option<Cost>,
+}
+
+/// What a reply cost, in dollars.
+#[derive(Deserialize)]
+struct Cost {
+  total: f64,
+}
+
+/// The message of a reply that failed, which a gateway may leave out.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Failure {
+  error_message: Option<String>,
 }
 
 #[cfg(test)]
