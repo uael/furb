@@ -26,12 +26,14 @@ pub enum Role {
   Write,
 }
 
-/// What a peer is: a window of an operator, or the process of a skill.
+/// What a peer is: a window of an operator, the process of a skill, or the daemon of a new build,
+/// which asks the handover.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Kind {
   Window,
   Skill,
+  Daemon,
 }
 
 /// The first frame of a peer: the protocol that it speaks, its kind, and the name of a skill.
@@ -167,6 +169,10 @@ pub enum Verb {
     word: String,
     on: Option<String>,
   },
+  /// The place of the daemon given to the daemon of a new build: each life written to its
+  /// checkpoint and ended, and the lives with their pins in the answer, once the daemon stopped to
+  /// listen.
+  Handover,
   #[serde(rename = "view.mount")]
   ViewMount(Mount),
   #[serde(rename = "view.tree")]
@@ -220,6 +226,8 @@ pub enum Frame {
   Refused { id: Option<u64>, error: ProtocolError, why: String },
   /// One event of a life that the peer attached, under its place in the log of the life.
   Event { life: String, seq: Seq, event: Event },
+  /// Who is attached to a life now, pushed to each of its windows after each attach and detach.
+  Presence { life: String, peers: Vec<Peer> },
   #[serde(rename = "view.mount")]
   ViewMount(Mount),
   #[serde(rename = "view.tree")]
@@ -261,6 +269,16 @@ pub enum Answer {
     value: Value,
   },
   Presence(Vec<Peer>),
+  /// The lives that a daemon gave at its handover.
+  Handed(Vec<Handed>),
+}
+
+/// A life that a daemon gave at its handover: its record, its folder, and the holder of each pin.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Handed {
+  pub life: String,
+  pub cwd: String,
+  pub pins: Vec<String>,
 }
 
 /// A record of the machine, and whether a life of the daemon holds it now.

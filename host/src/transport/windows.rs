@@ -37,6 +37,15 @@ pub(crate) fn listen(
   future::ready(instance(&place, true).map(|next| Listener { place, next }))
 }
 
+/// The pipe after a handover: the daemon that gave its lives holds a peer of the pipe, so the name
+/// stands, and the first instance of it cannot be asked for.
+pub(crate) fn succeed(
+  folder: &Path,
+) -> impl Future<Output = Result<Listener, TransportError>> + use<> {
+  let place = piped(folder);
+  future::ready(instance(&place, false).map(|next| Listener { place, next }))
+}
+
 impl Listener {
   pub(crate) async fn accept(&mut self) -> Result<Accepted, TransportError> {
     self.next.connect().await.map_err(TransportError::Accept)?;

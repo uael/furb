@@ -1,7 +1,7 @@
 name: publish
 
-# A tag vX.Y.Z publishes the version X.Y.Z of furb to each registry: to crates.io the crates furb and then furb-cli,
-# once no dependency of either stands on git, which crates.io refuses; to npm the package furb and the package of its
+# A tag vX.Y.Z publishes the version X.Y.Z of furb to each registry: to crates.io the crates furb, furb-host and then
+# furb-cli, once no dependency of any stands on git, which crates.io refuses; to npm the package furb and the package of its
 # engine for each system that it runs on; and to PyPI furb, the engine, furb-cli, the command furb, which is a program
 # of rust, and furb-monty, the crate built for python. The tag comes from a merge of the pull request of
 # release-please, which release.yml starts this on, or from the owner. Each registry is told to trust this workflow of
@@ -359,12 +359,12 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           python: none
-      # crates.io takes no crate that stands on git. While a dependency of furb or of furb-cli stands on git, as monty
+      # crates.io takes no crate that stands on git. While a dependency of furb, furb-host or furb-cli stands on git, as monty
       # does until it stands on crates.io with what furb needs, the job publishes nothing there and says why.
       - id: git
         run: |
           found=$(cargo metadata --no-deps --locked --format-version 1 | jq -r '.packages[]
-            | select(.name == "furb" or .name == "furb-cli") | .name as $crate | .dependencies[]
+            | select(.name == "furb" or .name == "furb-host" or .name == "furb-cli") | .name as $crate | .dependencies[]
             | select((.source // "") | startswith("git+")) | "\($crate) depends on \(.name) from \(.source)"')
           if [ -n "$found" ]; then
             echo "::notice title=crates.io waits::crates.io takes no crate that stands on git, so nothing goes there: $(echo "$found" | paste -sd ';' -)"
@@ -375,14 +375,14 @@ jobs:
       - if: steps.git.outputs.ready == 'true' && env.FIRST != 'true'
         uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
         id: auth
-      # cargo publishes furb, waits for it in the index, then publishes furb-cli. A run again after a failure skips each
+      # cargo publishes furb, furb-host and furb-cli in turn, each after the one before stands in the index. A run again after a failure skips each
       # crate that crates.io holds at this version.
       - if: steps.git.outputs.ready == 'true'
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN || steps.auth.outputs.token }}
         run: |
           version=${GITHUB_REF_NAME#v}
-          for crate in furb furb-cli; do
+          for crate in furb furb-host furb-cli; do
             if curl -sf -A "furb release (github.com/uael/furb)" "https://crates.io/api/v1/crates/$crate/$version" >/dev/null; then
               echo "crates.io holds $crate $version"
             else

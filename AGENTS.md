@@ -66,7 +66,8 @@ API of its own:
   command it hands the terminal to the TUI, which it finds in `FURB_TUI`, as `furb-tui` on PATH, or in the checkout it
   was built from. `--mode rpc` serves one life as a JSON-RPC on stdin and stdout, which `docs/rpc.md` says. `prompt`,
   `turns`, `run` and `extensions` each open one life on a record, `facts` prints each fact of a record with no life,
-  `checkpoint` writes the checkpoint of a life, and `catalog` shows where the models came from. The package `furb`
+  `checkpoint` writes the checkpoint of a life, `catalog` shows where the models came from, and `host` serves the
+  daemon of the machine of `furb-host`. The package `furb`
   depends on the wheel of `furb-cli`, so `pip install furb` gives the command `furb`.
 - `host/` is `furb-host`, the third package of the workspace of the crate, on the public API of `furb` alone. Its
   `Life::spawn` opens a life on a thread of its own, which owns the engine, and gives a `LifeHandle` that any thread
@@ -78,7 +79,9 @@ API of its own:
   crate holds the one list of the ears of the host that each life hears: the console of the operator, and the ear
   that tells each fact as events. `protocol` holds the one protocol of the daemon, a `Verb` and a `Frame` of JSON
   lines with the version `PROTOCOL`, `transport` the socket or the pipe of the machine behind a `Dialer` and an
-  `Identity`, and `serve` the door to one peer, which checks the role of each verb. `docs/protocol.md` says the
+  `Identity`, `serve` the door to one peer, which checks the role of each verb, and `daemon` the daemon of the
+  machine, which holds each life by its record while a window or a pin of `holders` holds it, and gives its place to
+  a new build at a handover. `furb host` serves it, and `furb host upgrade` hands it over. `docs/protocol.md` says the
   protocol, and `bun run protocol` makes `bind/typescript/src/protocol.ts` again from `host/protocol.schema.json`.
 
 The suite runs on both engines, but for the tests that `MONTY_SKIPS` in `test/conftest.py` names: these boot on a Kernel
