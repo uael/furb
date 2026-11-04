@@ -6,7 +6,10 @@ use std::collections::HashMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use super::{act::Act, state::State};
+use super::{
+  act::{Act, Kind, operator},
+  state::State,
+};
 
 /// The acts of a life by their names.
 pub type Rows<'a> = HashMap<&'a str, &'a Act>;
@@ -86,9 +89,9 @@ pub fn root_of<'a>(prompt: &'a Act, rows: &Rows<'a>) -> &'a str {
 pub fn thread_of<'a>(act: &Act, rows: &Rows<'a>) -> Option<&'a str> {
   let mut maker = rows.get(act.by.as_str())?;
   for _ in 0..DEEP {
-    match maker.kind.as_str() {
-      "prompt" => return Some(root_of(maker, rows)),
-      "rung" => maker = rows.get(maker.by.as_str())?,
+    match maker.kind {
+      Kind::Prompt => return Some(root_of(maker, rows)),
+      Kind::Rung => maker = rows.get(maker.by.as_str())?,
       _ => return None,
     }
   }
@@ -111,7 +114,7 @@ fn verdict<'a>(act: &'a Act, rows: &Rows<'a>) -> Verdict<'a> {
   if act.thread().is_some() {
     return Verdict::Message(root_of(act, rows));
   }
-  let by_chain = rows.get(act.by.as_str()).is_some_and(|maker| maker.kind == "chain");
+  let by_chain = rows.get(act.by.as_str()).is_some_and(|maker| maker.kind == Kind::Chain);
   if act.words.first().is_none_or(|shape| shape != "None") || !by_chain {
     return Verdict::Own;
   }
@@ -123,16 +126,11 @@ fn verdict<'a>(act: &'a Act, rows: &Rows<'a>) -> Verdict<'a> {
   });
   match about.and_then(|about| rows.get(about)) {
     None => Verdict::Stray,
-    Some(subject) if subject.kind == "prompt" => {
+    Some(subject) if subject.kind == Kind::Prompt => {
       Verdict::Message(thread_of(subject, rows).unwrap_or(&subject.id))
     }
     Some(subject) => thread_of(subject, rows).map_or(Verdict::Own, Verdict::Message),
   }
-}
-
-/// Whether an act is the operator's own: made by him, or by one of his sessions.
-fn by_operator(by: &str) -> bool {
-  by == "operator" || by.starts_with("operator/")
 }
 
 /// The threads of one chain, from its acts in the order they began: each prompt to a model on the
@@ -140,8 +138,8 @@ fn by_operator(by: &str) -> bool {
 pub fn chain_threads(on: &[&Act], rows: &Rows<'_>) -> Vec<ChainThread> {
   let mut out: Vec<ChainThread> = Vec::new();
   let mut later: Vec<(&str, &Act)> = Vec::new();
-  for act in on.iter().copied().filter(|act| act.kind == "prompt") {
-    if act.words.get(2).is_some_and(|to| to == "operator") {
+  for act in on.iter().copied().filter(|act| act.kind == Kind::Prompt) {
+    if act.asks_operator() {
       later.extend(thread_of(act, rows).map(|thread| (thread, act)));
       continue;
     }
@@ -153,7 +151,7 @@ pub fn chain_threads(on: &[&Act], rows: &Rows<'_>) -> Vec<ChainThread> {
   }
   for (thread, act) in later {
     let Some(at) = out.iter_mut().find(|one| one.prompt == thread) else { continue };
-    if act.words.get(2).is_some_and(|to| to == "operator") {
+    if act.asks_operator() {
       at.asked.push(act.id.clone());
       at.asks.extend(act.owed().then(|| act.id.clone()));
     } else {
@@ -176,10 +174,10 @@ pub fn chain_threads(on: &[&Act], rows: &Rows<'_>) -> Vec<ChainThread> {
 /// A thread of its own, from its prompt, before its messages and its questions join it.
 fn opened(act: &Act, rows: &Rows<'_>) -> ChainThread {
   let maker = rows.get(act.by.as_str());
-  let mine = by_operator(&act.by);
+  let mine = operator(&act.by);
   let origin = match maker {
     _ if mine => Origin::Operator,
-    Some(maker) if maker.kind == "rung" => Origin::Rung,
+    Some(maker) if maker.kind == Kind::Rung => Origin::Rung,
     _ => Origin::Ear,
   };
   let message = act.words.get(1).and_then(|one| one.as_str()).unwrap_or_default();
@@ -192,7 +190,7 @@ fn opened(act: &Act, rows: &Rows<'_>) -> ChainThread {
     state: State::Done,
     resolved: true,
     origin,
-    yours: mine || (origin == Origin::Rung && maker.is_some_and(|one| by_operator(&one.by))),
+    yours: mine || (origin == Origin::Rung && maker.is_some_and(|one| operator(&one.by))),
   }
 }
 
