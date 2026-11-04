@@ -22,12 +22,12 @@ use std::{
     mpsc,
   },
   thread,
-  time::Instant,
+  time::{Duration, Instant},
 };
 
 use serde_json::{Value, json};
 
-use super::{AGAIN, DEADLINE, Heard, Server, names};
+use super::{Heard, Server, names};
 
 /// A local server on a port of this machine, which answers each request with the JSON that a function of the request
 /// gives, and with a 404 when it gives none; and its address, and each request it reads, as it reads it.
@@ -93,13 +93,17 @@ pub(in crate::world::provider) fn dropping() -> u16 {
   port
 }
 
+/// How long the servers of the tests wait for a list, and before they ask again.
+const DEADLINE: Duration = Duration::from_secs(1);
+const AGAIN: Duration = Duration::from_secs(1);
+
 /// The server at an address, with these more names of the environment.
 fn on(address: &str, more: &[(&str, &str)]) -> Server {
   let mut pairs = vec![("FURB_LOCAL_URL".to_owned(), address.to_owned())];
   pairs.extend(more.iter().map(|(name, value)| ((*name).to_owned(), (*value).to_owned())));
   let env =
     move |name: &str| pairs.iter().find(|(held, _)| held == name).map(|(_, value)| value.clone());
-  Server::named(env).expect("the environment names the server")
+  Server::named(env).expect("the environment names the server").timed(DEADLINE, AGAIN)
 }
 
 /// The first line of each request that a server read since the last call.

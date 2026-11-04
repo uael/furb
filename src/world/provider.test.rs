@@ -2568,9 +2568,12 @@ fn an_id_is_a_uuid_of_version_4_and_variant_1() {
 
 /// The native search of the tests, which answers with its query.
 fn found_by_native() -> Searches {
-  Arc::new(|query| -> futures::future::BoxFuture<'static, Result<String, String>> {
-    Box::pin(async move { Ok(format!("Found {query}.")) })
-  })
+  Arc::new(
+    |query| -> futures::future::BoxFuture<
+      'static,
+      Result<String, crate::world::provider::search::Error>,
+    > { Box::pin(async move { Ok(format!("Found {query}.")) }) },
+  )
 }
 
 /// What a word that a rung runs on the root of a life closes with, or why it raised.
