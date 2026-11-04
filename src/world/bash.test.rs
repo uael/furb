@@ -27,8 +27,11 @@ fn an_error_of_the_wait_on_the_shell_ends_the_watch_with_that_error_not_an_exit_
   use std::future;
 
   let outcome = runtime().block_on(async {
-    let child = tokio::process::Command::new("sh").arg("-c").arg("sleep 5").spawn().unwrap();
-    let mut group = Group::of(&child).unwrap();
+    let mut command = std::process::Command::new("sh");
+    command.arg("-c").arg("sleep 5");
+    let lead = crate::world::bash::group::grouped(&mut command).unwrap();
+    let child = tokio::process::Command::from(command).spawn().unwrap();
+    let mut group = Group::of(&child, lead).unwrap();
     let shell = runtime().spawn(async { Err(std::io::Error::other("wait broke")) });
     let (_stop, stopped) = unsync::oneshot::channel();
     let got = watch(

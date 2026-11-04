@@ -163,6 +163,10 @@ jobs:
           key: typescript
       - run: cargo clippy --all-targets ${{ matrix.crates }} -- -D warnings
       - run: cargo test ${{ matrix.crates }}
+      # The kill matrix of the daemon ends it with the signals of Unix, so it runs on macOS here, and on Linux in the
+      # hooks, whose cargo test holds the whole workspace.
+      - if: runner.os == 'macOS'
+        run: cargo test -p furb-cli --test kills
       - uses: ./.github/actions/clear
         with:
           key: typescript

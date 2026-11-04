@@ -1579,8 +1579,10 @@ dependencies = [
  "furb",
  "furb-host",
  "futures",
+ "libc",
  "serde_json",
  "tokio",
+ "tokio-util",
  "unsync",
  "windows-sys 0.61.2",
 ]
