@@ -728,7 +728,9 @@ fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
   let refused =
     Opening { config, ..opening(&at, true) }.boot::<String>([]).map(|_| ()).unwrap_err();
   assert!(refused.to_string().starts_with("Drift: "), "{refused}");
-  let moved = format!("stand()\\ncd('{place}-elsewhere')");
+  // The word shows the place as python writes it, and the message as Rust debugs it: four marks for each one.
+  let shown = place.replace('\\', "\\\\\\\\");
+  let moved = format!("stand()\\ncd('{shown}-elsewhere')");
   assert!(
     refused.to_string().contains(&moved),
     "the drift is at the word that the stand told: {refused}"
