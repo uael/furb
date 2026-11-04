@@ -92,6 +92,20 @@
                 "null"
               ]
             },
+            "config": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "claude": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
             "answers": {
               "type": "boolean",
               "default": false
@@ -114,7 +128,7 @@
             "verb",
             "life"
           ],
-          "description": "The life of a record opened, in a folder or in the folder of its record. A life that this\nopen makes stands on the actor, the roster and the extensions that the peer names, and the\npeer answers each request of its models in their place when it asks to, as a demo does.\nWith `attach`, the peer attaches the life in the same step, from that place in its log, so\nthe life has a holder before its grace can pass."
+          "description": "The life of a record opened, in a folder or in the folder of its record. A life that this\nopen makes stands on the actor, the roster and the extensions that the peer names, reads the\nsettings of the user in the folder `config` and runs the claude command line `claude` when\nthe peer names them, as the window of the peer reads them, and the peer answers each request\nof its models in their place when it asks to, as a demo does.\nWith `attach`, the peer attaches the life in the same step, from that place in its log, so\nthe life has a holder before its grace can pass."
         },
         {
           "type": "object",

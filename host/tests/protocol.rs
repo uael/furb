@@ -55,6 +55,8 @@ mod protocol {
         actor: Some("claude-cli:opus/high".to_owned()),
         roster: None,
         extensions: Some(false),
+        config: Some("config".to_owned()),
+        claude: Some("claude".to_owned()),
         answers: true,
         attach: Some(0),
       },

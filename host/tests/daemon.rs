@@ -228,6 +228,8 @@ mod daemon {
       actor: None,
       roster: None,
       extensions: None,
+      config: None,
+      claude: None,
       answers: false,
       attach: None,
     };
@@ -299,6 +301,8 @@ mod daemon {
       actor: None,
       roster: None,
       extensions: None,
+      config: None,
+      claude: None,
       answers: false,
       attach: Some(0),
     };
@@ -529,6 +533,8 @@ mod daemon {
       actor: None,
       roster,
       extensions: None,
+      config: None,
+      claude: None,
       answers: true,
       attach: None,
     };

@@ -72,8 +72,10 @@ pub enum Verb {
   /// The lives and the records of the machine.
   List,
   /// The life of a record opened, in a folder or in the folder of its record. A life that this
-  /// open makes stands on the actor, the roster and the extensions that the peer names, and the
-  /// peer answers each request of its models in their place when it asks to, as a demo does.
+  /// open makes stands on the actor, the roster and the extensions that the peer names, reads the
+  /// settings of the user in the folder `config` and runs the claude command line `claude` when
+  /// the peer names them, as the window of the peer reads them, and the peer answers each request
+  /// of its models in their place when it asks to, as a demo does.
   /// With `attach`, the peer attaches the life in the same step, from that place in its log, so
   /// the life has a holder before its grace can pass.
   Open {
@@ -82,6 +84,10 @@ pub enum Verb {
     actor: Option<String>,
     roster: Option<Vec<String>>,
     extensions: Option<bool>,
+    #[serde(default)]
+    config: Option<String>,
+    #[serde(default)]
+    claude: Option<String>,
     #[serde(default)]
     answers: bool,
     #[serde(default)]

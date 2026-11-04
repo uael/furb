@@ -50,7 +50,7 @@ it is not given. The daemon answers requests in any order.
 | Verb | Fields | Role |
 | --- | --- | --- |
 | `list` | | read |
-| `open` | `life`, `cwd`, `actor`, `roster`, `extensions`, `answers`, `attach` | write |
+| `open` | `life`, `cwd`, `actor`, `roster`, `extensions`, `config`, `claude`, `answers`, `attach` | write |
 | `attach` | `life`, `from` | read |
 | `detach` | `life` | read |
 | `pin`, `unpin` | `life`, `holder` | write |
@@ -90,7 +90,9 @@ it is not given. The daemon answers requests in any order.
 - A refusal is a frame `refused` with the `id`, or none for a frame that could not be read, the `error` as data, and
   `why`, the text that a person reads.
 - An `open` that makes a life gives it the `actor`, the `roster` and the `extensions` that it names, and the settings
-  of the daemon give each one that it does not name. An open of a life that lives changes none of them.
+  of the daemon give each one that it does not name. It reads the settings of the user in the folder `config` and runs
+  the claude command line `claude` that it names, as the window that opens it reads them. An open of a life that
+  lives changes none of them.
 - An `open` with `answers` makes its peer answer the models of the life in their place, as a demo or a test does. The
   daemon pushes each request of a model to that peer as a frame `ask`, with the `life`, the number `ask` and the
   `request`: its `actor`, `chain`, `messages` and `settings`. The peer tells what it writes with `wrote`, and gives the

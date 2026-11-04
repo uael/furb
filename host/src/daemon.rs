@@ -298,15 +298,18 @@ impl From<Reply> for Answer {
   }
 }
 
-/// What an open names of the life that it makes: its folder, the actor, the roster and the
-/// extensions that its peer chose, and the peer that answers its models, when one does. A choice
-/// that is unsaid takes the one of the settings of the daemon.
+/// What an open names of the life that it makes: its folder, the actor, the roster, the
+/// extensions, the folder of the settings of the user and the claude command line that its peer
+/// chose, and the peer that answers its models, when one does. A choice that is unsaid takes the
+/// one of the settings of the daemon.
 #[derive(Clone, Default)]
 struct Birth {
   cwd: String,
   actor: Option<String>,
   roster: Option<Vec<String>>,
   extensions: Option<bool>,
+  config: Option<String>,
+  claude: Option<String>,
   answerer: Option<Answerer>,
   holder: Option<Holder>,
 }
@@ -391,11 +394,11 @@ impl Lives {
 
   fn verb(&mut self, peer: Peer, verb: Verb, outbox: &Outbox, reply: Replied) {
     let answer = match verb {
-      Verb::Open { life, cwd, actor, roster, extensions, answers, attach } => {
+      Verb::Open { life, cwd, actor, roster, extensions, config, claude, answers, attach } => {
         let answerer = answers.then(|| Answerer::new(life.clone(), outbox.clone()));
         let holder = attach.map(|from| Holder { peer, outbox: outbox.clone(), from });
         let cwd = cwd.unwrap_or_default();
-        let birth = Birth { cwd, actor, roster, extensions, answerer, holder };
+        let birth = Birth { cwd, actor, roster, extensions, config, claude, answerer, holder };
         return self.open(life, birth, reply);
       }
       Verb::List => Ok(Answer::Lives(self.listed())),
@@ -466,7 +469,7 @@ impl Lives {
 
   /// A life born on a thread of its own, with no holder yet, and watched for its end.
   fn opened(&mut self, life: String, birth: Birth) -> Result<(), ProtocolError> {
-    let Birth { cwd, actor, roster, extensions, answerer, holder: _ } = birth;
+    let Birth { cwd, actor, roster, extensions, config, claude, answerer, holder: _ } = birth;
     let base = &self.settings.opening;
     let answer = answerer.as_ref().map(|one| furb::life::Answer(one.hosted()));
     let opening = Opening {
@@ -475,6 +478,8 @@ impl Lives {
       actor: actor.or_else(|| base.actor.clone()),
       roster: roster.or_else(|| base.roster.clone()),
       extensions: extensions.or(base.extensions),
+      config: config.or_else(|| base.config.clone()),
+      claude: claude.or_else(|| base.claude.clone()),
       answer: answer.or_else(|| base.answer.clone()),
       ..base.clone()
     };
