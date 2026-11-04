@@ -166,12 +166,6 @@ pub trait Ear {
   fn again(&mut self) -> bool {
     false
   }
-
-  /// Whether the ear holds a fact that it writes beside the record and could not write yet, as on a full disk: a
-  /// snapshot of the life then would hold more than the files that it covers, so the life writes none.
-  fn behind(&self) -> bool {
-    false
-  }
 }
 
 /// What an ear says of its own accord: a saying, or a verb of the engine with its words, which the life answers.
@@ -460,10 +454,6 @@ impl Ear for Lasting {
   fn again(&mut self) -> bool {
     self.ear = (self.make)();
     true
-  }
-
-  fn behind(&self) -> bool {
-    self.ear.behind()
   }
 }
 

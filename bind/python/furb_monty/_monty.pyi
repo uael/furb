@@ -136,7 +136,6 @@ class Opening(TypedDict):
   answer: NotRequired[Callable[[dict, Callable[..., None]], object] | None]
   stream: NotRequired[Callable[[str, str, str, str], None] | None]
   retrying: NotRequired[Callable[[str, str, int, int, float, str], None] | None]
-  snapshot: NotRequired[bool | None]
   log: NotRequired[Callable[[str], None] | None]
 
 type Ears = Iterable[tuple[str, object]]

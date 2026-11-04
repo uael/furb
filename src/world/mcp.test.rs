@@ -482,7 +482,6 @@ fn a_later_life_that_replays_a_record_with_acts_of_mcp_asks_no_server() {
     config: Some(at.join("config").display().to_string()),
     roster: Some(Vec::new()),
     extensions: Some(false),
-    snapshot: Some(false),
     ..Opening::default()
   };
   let (mut first, _) = opening().boot::<String>([]).unwrap();

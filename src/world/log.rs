@@ -33,20 +33,16 @@
 #![expect(clippy::map_unwrap_or, reason = "debt: map then unwrap_or, where map_or serves")]
 
 use std::{
-  cell::Cell,
   collections::HashSet,
   fs::{File, OpenOptions},
   io::{BufRead, BufReader, Seek, SeekFrom, Write},
   path::{Path, PathBuf},
-  rc::Rc,
-  task::{Context, Poll},
 };
 
 use serde_json::Value;
 
 use crate::{
-  ear::{Co, Ear, Heard, Spoken, Step, ear, hear},
-  engine::Life,
+  ear::{Co, Ear, ear, hear},
   fact::{Fact, named},
   value::{Fault, Object},
   wire::{outward, parsed},
@@ -62,16 +58,9 @@ pub fn log(record: impl AsRef<Path>, held: &[Object]) -> Box<dyn Ear> {
   heard(Log::open(record.as_ref(), held))
 }
 
-/// The ear of the log of the record at a path, for a life that opens from the snapshot of an earlier life on the
-/// record: it writes the log on after the lines that it holds, since this life says none of them again.
-pub(crate) fn continued(record: impl AsRef<Path>, entries: usize) -> Box<dyn Ear> {
-  heard(Log::continued(record.as_ref(), entries))
-}
-
 /// The ear that writes a log.
 fn heard(mut log: Log) -> Box<dyn Ear> {
-  let behind = Rc::clone(&log.behind);
-  let ear = ear(move |mut co| async move {
+  ear(move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
       match a.kind() {
@@ -79,36 +68,7 @@ fn heard(mut log: Log) -> Box<dyn Ear> {
         _ => log.heard(&mut co, &a).await,
       }
     }
-  });
-  Box::new(Logging { ear, behind })
-}
-
-/// The ear that writes a log, which says when lines of the log wait.
-struct Logging {
-  ear: Box<dyn Ear>,
-  behind: Rc<Cell<bool>>,
-}
-
-impl Ear for Logging {
-  fn resume(&mut self, heard: Heard, cx: &mut Context<'_>) -> Step {
-    self.ear.resume(heard, cx)
-  }
-
-  fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
-    self.ear.poll(cx)
-  }
-
-  fn answered(&mut self, got: Result<Object, Fault>) {
-    self.ear.answered(got);
-  }
-
-  fn lent(&mut self, heard: Heard, cx: &mut Context<'_>, life: Life) -> (Step, Life) {
-    self.ear.lent(heard, cx, life)
-  }
-
-  fn behind(&self) -> bool {
-    self.behind.get()
-  }
+  })
 }
 
 /// The log file, and what the ear knows of it.
@@ -130,8 +90,6 @@ struct Log {
   whole: u64,
   /// Whether a write failed after that length, so the file can hold a part of a line past it.
   torn: bool,
-  /// Whether lines wait, which the ear tells the life.
-  behind: Rc<Cell<bool>>,
 }
 
 /// The lines of the log at a path that come before a checkpoint, the entries before which a record holds, with its
@@ -220,7 +178,6 @@ impl Log {
       waiting: String::new(),
       whole: 0,
       torn: false,
-      behind: Rc::default(),
     };
     match earlier {
       Some((at, text, seen)) => {
@@ -229,38 +186,11 @@ impl Log {
         for n in at + 1..=entries {
           log.waiting.push_str(&format!("{}\n", serde_json::json!(["keep", "", n])));
         }
-        let failed = log.flushed().is_err();
-        log.behind.set(failed);
+        let _ = log.flushed();
       }
       None => log.line(&serde_json::json!({ "entries": entries })),
     }
     log
-  }
-
-  /// The log of the record at a path, written on after the lines that it holds, each name of which it has seen.
-  fn continued(record: &Path, entries: usize) -> Log {
-    let path = PathBuf::from(format!("{}.log", record.display()));
-    let mut seen = HashSet::new();
-    for line in std::fs::read_to_string(&path).unwrap_or_default().lines().skip(1) {
-      let about = serde_json::from_str::<Value>(line)
-        .ok()
-        .and_then(|one| one.get(1)?.as_str().map(str::to_owned));
-      seen.extend(about.filter(|one| !one.is_empty()));
-    }
-    let file = OpenOptions::new().append(true).open(&path).ok();
-    let whole = file.as_ref().and_then(|one| one.metadata().ok()).map_or(0, |one| one.len());
-    Log {
-      path,
-      file,
-      fresh: None,
-      entries,
-      seen,
-      owed: Vec::new(),
-      waiting: String::new(),
-      whole,
-      torn: false,
-      behind: Rc::default(),
-    }
   }
 
   /// A fact that the ear heard, after the act it is about when no line shows that act yet.
@@ -320,8 +250,7 @@ impl Log {
       return;
     }
     self.waiting.push_str(&format!("{value}\n"));
-    let failed = self.flushed().is_err();
-    self.behind.set(failed);
+    let _ = self.flushed();
   }
 
   /// Each line that waits, written in order after what a failed write left is cut.

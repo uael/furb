@@ -65,9 +65,7 @@ fn a_line_that_the_ear_could_not_write_waits_and_lands_after_what_the_failed_wri
   fs::OpenOptions::new().append(true).open(&fresh).unwrap().write_all(b"[\"done\",\"sta").unwrap();
   log.torn = true;
   log.waiting.push_str("[\"done\",\"stand1\",\"journal\",[]]\n");
-  log.behind.set(true);
   log.line(&json!(["stand", "stand2", "operator", "chain1"]));
-  assert!(!log.behind.get());
   assert_eq!(
     fs::read_to_string(&fresh).unwrap(),
     "{\"entries\":0}\n[\"stand\",\"stand1\",\"operator\",\"chain1\"]\n[\"done\",\"stand1\",\"journal\",[]]\n[\"stand\",\"stand2\",\"operator\",\"chain1\"]\n"

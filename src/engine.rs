@@ -26,18 +26,9 @@
 #![expect(clippy::cast_precision_loss, reason = "debt: an as cast that loses precision")]
 #![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
 #![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
-#![expect(clippy::match_bool, reason = "debt: a match on a bool")]
 #![expect(
   clippy::needless_pass_by_value,
   reason = "debt: an argument taken by value and only borrowed"
-)]
-#![expect(
-  clippy::redundant_closure_for_method_calls,
-  reason = "debt: a closure where a method path serves"
-)]
-#![expect(
-  clippy::single_match_else,
-  reason = "debt: a match of one arm and else, where if let serves"
 )]
 #![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
 #![expect(clippy::unreadable_literal, reason = "debt: a long literal with no separator")]
@@ -63,40 +54,8 @@ use crate::{
   fact::Fact,
   gate::checked,
   sand::{Answer, Host, Nobody, Sand, id, object},
-  snapshot::Keeper,
   value::{Exit, Fault, IS, Object, Text, carried, entry, inward, marked},
 };
-
-/// The views of the engine, which make nothing: the verbs that an ear calls while it hears the past at a restore,
-/// which the life answers. It answers every other verb with nothing, since the life holds what it made.
-const VIEWS: [&str; 18] = [
-  "get",
-  "peek",
-  "transcript",
-  "question",
-  "scope",
-  "under",
-  "over",
-  "tells",
-  "paused",
-  "covers",
-  "asked",
-  "answer",
-  "standing",
-  "cwd",
-  "module",
-  "program",
-  "turns",
-  "filled",
-];
-
-/// For each fact of the past, the ears of the host that wait for it, among the ears `w`, each by its name and what it
-/// waits for, as the bus of the engine gives a fact, whose `ears` this rule is word for word: an ear that waits for
-/// nothing hears it, as does an ear that waits for its kind, its act, or the kind, the maker, the chain or the thread
-/// of that act, or the chain of that maker or of that chain or thread, and every ear hears a control.
-pub(crate) const HEARING: &str = "(lambda past, w: [(lambda a: (lambda k: [n for n, x in w if x is None or k & x or a[0] in \
-  ('pause', 'wake', 'cancel', 'close')])((lambda q: {a[0], *q[:4], *map(scope, q[2:4])})(get(a[1]) or \
-  a[:1] * 4)))(a) for a in past])(past, w)";
 
 /// The prefix of the name a function of the host crosses in under: `call:` and its number.
 const CALL: &str = "call:";
@@ -115,8 +74,7 @@ const WORK: [&str; 4] = ["prompt", "rung", "bash", "wait"];
 /// Whether this life took up an act that the record shows started and not done: the outside says it started in this
 /// life, which it does once a wake that this life says puts the act to it, or the act is done. A started that the
 /// journal says again is of an earlier life.
-/// An act that a snapshot holds as work that ran is taken up only once this life puts it to the outside again.
-const TOOK: &str = "peek(__id, ...) is not ... or __id not in __restored and ('started', __id) in \
+const TOOK: &str = "peek(__id, ...) is not ... or ('started', __id) in \
   [x[:2] for x in transcript(scope(__id)) if x[2] != 'journal']";
 
 /// Whether an act waits: it is not done, and no pause holds it.
@@ -146,11 +104,6 @@ const KEYED: &str = "next((b[1] for f, k, w in [(transcript(__on), __key, __kind
 /// the ear hears, in the order of the ears, before that fact. The park waits for what its ear waits for, and for every
 /// fact while it holds an act back.
 ///
-/// The restored acts are the work of the outside that ran when a snapshot was taken, each by its name and the ear
-/// that took it, which a life that opens from the snapshot holds as a replay holds the work that its record left: the
-/// journal of a replay puts such an act to the outside again at a wake that covers it, and the ear that took it hears
-/// it so, just before that wake, unless the act is parked, which its park puts again at a retry.
-///
 /// The module of the engine holds the names python gives a module before the engine runs, so a word reads them in a
 /// chain as it reads them in python, and as the gate reads them. No loader made the module here, so it has no spec
 /// and no loader. Python binds `__debug__` among its builtins, and the sandbox binds it in its main module alone.
@@ -163,7 +116,6 @@ exec(__sheet_source, __sheet)
 __kernel = {}
 exec(__kernel_source, __kernel)
 __parked = set()
-__engine["__restored"] = __restored = {}
 
 
 def __parking(ear):
@@ -177,7 +129,7 @@ def __parking(ear):
           held.remove(a)
           at = __engine["transcript"](__engine["scope"](a[1]))
           taken = ("started", a[1]) in [x[:2] for x in at if x[2] != "journal"]
-          if not __engine["over"](a[1]) and (a[1] in __restored or not taken):
+          if not __engine["over"](a[1]) and not taken:
             said = ear.send(a)
             while isinstance(said, tuple):
               said = ear.send((yield said))
@@ -204,16 +156,6 @@ def __lasting(name, ear):
         if not isinstance(said, tuple):
           wait = said
         heard = yield said
-        if isinstance(heard, tuple) and heard[0] == "wake":
-          covered = [x for x, by in __restored.items() if by == name and x not in __parked]
-          for one in [x for x in covered if __engine["covers"](heard, x)]:
-            del __restored[one]
-            if not __engine["over"](one):
-              said = ear.send(__engine["get"](one))
-              while isinstance(said, tuple):
-                said = ear.send((yield said))
-        elif isinstance(heard, tuple) and __restored.get(heard[1]) == name and heard is __engine["get"](heard[1]):
-          del __restored[heard[1]]
         said = ear.send(heard)
     except StopIteration:
       return
@@ -429,29 +371,6 @@ struct Opened {
 }
 
 impl Opened {
-  /// The callables of the opening, each at its place in what the opening gave, and nothing at a place that boot alone
-  /// takes, as a snapshot holds them.
-  fn list(&self) -> Vec<Object> {
-    let mut held = vec![Object::none(); 16];
-    let named = [
-      (0, &self.names),
-      (1, &self.call),
-      (4, &self.site),
-      (5, &self.speaks),
-      (6, &self.spoke),
-      (7, &self.word),
-      (8, &self.template),
-      (9, &self.shown),
-      (10, &self.base),
-      (13, &self.unpark),
-      (14, &self.against),
-    ];
-    for (at, one) in named {
-      held[at] = one.clone();
-    }
-    held
-  }
-
   /// The callables of the opening, each by its place in what the opening gave.
   fn of(at: impl Fn(usize) -> Object) -> Opened {
     Opened {
@@ -503,9 +422,6 @@ struct Outside {
   waits: HashMap<MontyUuid, Object>,
   /// How many ids the host gave, which names the next.
   given: u128,
-  /// Each act that an ear of the host said started and that is not done, by its name, with the name of that ear: the
-  /// work of the outside that runs now.
-  working: HashMap<String, String>,
 }
 
 impl Default for Outside {
@@ -523,7 +439,6 @@ impl Default for Outside {
       standing: HashMap::new(),
       waits: HashMap::new(),
       given: 0,
-      working: HashMap::new(),
     }
   }
 }
@@ -581,11 +496,6 @@ impl Outside {
   /// Each ear of the host has its say at the end of a run, in turn, and the first fault of one is what they give.
   fn ran(&mut self) -> Result<(), Fault> {
     self.handed.ears.values_mut().map(|ear| ear.ran()).fold(Ok(()), Result::and)
-  }
-
-  /// Whether an ear of the host holds a fact that it writes beside the record and could not write yet.
-  fn behind(&self) -> bool {
-    self.handed.ears.values().any(|ear| ear.behind())
   }
 
   /// The side of the host, on what the opening gave.
@@ -830,10 +740,7 @@ impl Outside {
         return Answer::Value(self.waits.get(&on).cloned().unwrap_or_else(Object::none));
       }
       (At::Waiting, Some(a)) => match self.outward(sand, a).map(|a| Fact::of(a.as_ref())) {
-        Ok(Some(fact)) => {
-          self.track(&fact);
-          Heard::Fact(fact)
-        }
+        Ok(Some(fact)) => Heard::Fact(fact),
         Ok(None) => return Answer::Abort(Fault::refused("an ear hears a fact or nothing")),
         Err(fault) => return Answer::Abort(fault),
       },
@@ -865,166 +772,6 @@ impl Outside {
     self.handed.ears.insert(name.clone(), ear);
     self.standing.insert(on, (name, at));
     answer
-  }
-
-  /// The work of the outside that a fact changes: an act that an ear of the host said started runs until it is done.
-  fn track(&mut self, fact: &Fact) {
-    match fact.kind() {
-      "started" if self.standing.values().any(|(name, _)| name == fact.by()) => {
-        self.working.insert(fact.about().to_owned(), fact.by().to_owned());
-      }
-      "done" => {
-        self.working.remove(fact.about());
-      }
-      _ => {}
-    }
-  }
-
-  /// The side of the host of a life that a snapshot holds, on the ears that the host gives again: each ear stands
-  /// under the id and at the place where its earlier ear stood, and the host holds what the engine held.
-  fn restored(handed: Handed, table: &Table) -> Result<Outside, Fault> {
-    let at = |i: usize| table.opened.get(i).cloned().unwrap_or_else(Object::none);
-    let mut standing = HashMap::new();
-    for (id, name, waits) in &table.ears {
-      if !handed.ears.contains_key(name) {
-        return Err(Fault::refused(format!(
-          "the snapshot holds the ear {name}, which the host does not give"
-        )));
-      }
-      standing.insert(*id, (name.clone(), if *waits { At::Waiting } else { At::Over }));
-    }
-    let given =
-      table.given.parse().map_err(|_| Fault::refused("a snapshot counts the ids of the host"))?;
-    let kept = table.kept.iter().copied().collect();
-    Ok(Outside { handed, opened: Opened::of(at), kept, standing, given, ..Outside::default() })
-  }
-
-  /// Each ear that waits, in the order of its id, as the host gives it.
-  fn waiting(&self) -> Vec<(MontyUuid, String)> {
-    let mut ears: Vec<_> = self
-      .standing
-      .iter()
-      .filter(|(_, (_, at))| *at == At::Waiting)
-      .map(|(id, (name, _))| (*id, name.clone()))
-      .collect();
-    ears.sort_unstable();
-    ears
-  }
-
-  /// One fact or the birth, heard by one ear of the host outside the log: each verb it calls is answered, by the life
-  /// when `views` holds it or when no view is asked for, and by nothing otherwise, and each saying comes back to it as
-  /// the fact that the bus would make of it, with nothing said into the life. What it waits for after is kept as a
-  /// wait of the ear is kept. It gives whether the ear waits after, and refuses an ear that says something when
-  /// `speaks` refuses it.
-  fn told(
-    &mut self,
-    sand: &mut Sand,
-    (on, name): &(MontyUuid, String),
-    heard: Heard,
-    views: Option<&[&str]>,
-    speaks: bool,
-  ) -> Result<bool, Fault> {
-    let Some(mut ear) = self.handed.ears.remove(name) else { return Ok(false) };
-    let waker = self.waker.clone();
-    let mut heard = heard;
-    let waits = loop {
-      match self.lent(sand, |life| ear.lent(heard, &mut Context::from_waker(&waker), life)) {
-        Step::Call(call) if views.is_none_or(|views| views.contains(&call.verb.as_str())) => {
-          heard = Heard::Answer(self.asked(sand, call));
-        }
-        Step::Call(_) => heard = Heard::Answer(Ok(Object::none())),
-        Step::Say(saying) if speaks => {
-          let held = saying.0.as_ref().items().unwrap_or_default();
-          let mut made: Vec<Object> = held.iter().take(2).map(|one| one.to_owned()).collect();
-          made.push(Object::string(name));
-          made.extend(held.iter().skip(2).map(|one| one.to_owned()));
-          heard = Heard::Fact(Fact(Object::tuple(made)));
-        }
-        Step::Say(_) => {
-          self.handed.ears.insert(name.clone(), ear);
-          return Err(Fault::refused(format!(
-            "the ear {name} speaks at its birth, so no snapshot opens it"
-          )));
-        }
-        Step::Wait(wait) => {
-          self.waits.insert(*on, wait.unwrap_or_else(Object::none));
-          break true;
-        }
-        Step::Over | Step::Raised(_) => break false,
-      }
-    };
-    self.handed.ears.insert(name.clone(), ear);
-    if !waits {
-      self.standing.insert(*on, (name.clone(), At::Over));
-    }
-    Ok(waits)
-  }
-
-  /// The ears that the host gives again, each born and then told the past of the life, as a replay of the record
-  /// tells it: each fact of the log that is no act, but the birth of a chain, to each ear that waits for it, with the
-  /// journal as the speaker of each fact that no act said, since the journal says it again. What an ear says or makes
-  /// from the past reaches nothing, as the journal answers it in a replay, and the log, which holds the past, hears
-  /// none of it.
-  fn retold(&mut self, sand: &mut Sand, past: &[Object]) -> Result<(), Fault> {
-    for one in self.waiting() {
-      self.told(sand, &one, Heard::Born, None, false)?;
-    }
-    let mut acts: HashMap<String, bool> = HashMap::new();
-    let mut told = Vec::new();
-    for one in past {
-      let Some(fact) = Fact::of(one.as_ref()) else { continue };
-      if fact.question() && fact.kind() != "chain" {
-        continue;
-      }
-      let by = fact.by().to_owned();
-      let act = match acts.get(&by) {
-        Some(act) => *act,
-        None => {
-          let got = self.named_call(sand, "get", vec![Object::string(&by)], vec![])?;
-          let act = got.as_ref().type_name() != "NoneType";
-          acts.insert(by.clone(), act);
-          act
-        }
-      };
-      let held = fact.0.as_ref().items().unwrap_or_default();
-      let speaker =
-        |i: usize, one: &crate::value::ObjectRef<'_>| match i == 2 && !act && !fact.question() {
-          true => Object::string("journal"),
-          false => one.to_owned(),
-        };
-      told.push(Object::tuple(
-        held.iter().enumerate().map(|(i, one)| speaker(i, one)).collect::<Vec<_>>(),
-      ));
-    }
-    let ears: Vec<_> = self.waiting().into_iter().filter(|(_, name)| name != "log").collect();
-    let waits = ears.iter().map(|(on, name)| {
-      Object::tuple([
-        Object::string(name),
-        self.waits.get(on).cloned().unwrap_or_else(Object::none),
-      ])
-    });
-    // The rule reads the kind and the act of a fact alone, so the rest of the fact stays out of the sandbox: it can be
-    // large, and it can hold a callable that only the life that told it held.
-    let heads = told.iter().map(|one| {
-      let held = one.as_ref().items().unwrap_or_default();
-      Object::tuple(held.iter().take(2).map(|part| part.to_owned()).collect::<Vec<_>>())
-    });
-    let names = Object::dict([
-      (Object::string("past"), Object::list(heads.collect::<Vec<_>>())),
-      (Object::string("w"), Object::list(waits.collect::<Vec<_>>())),
-    ]);
-    let (word, names) = (self.opened.word.clone(), self.inward(sand, &names)?);
-    let hearing = sand.call(self, &word, vec![Object::string(HEARING), names], vec![])?;
-    let hearing = self.outward(sand, &hearing)?;
-    let hearing = hearing.as_ref().items().unwrap_or_default();
-    for (fact, names) in told.into_iter().zip(hearing) {
-      let names = names.items().unwrap_or_default();
-      let names: Vec<&str> = names.iter().filter_map(|one| one.as_str()).collect();
-      for one in ears.iter().filter(|(_, name)| names.contains(&name.as_str())) {
-        self.told(sand, one, Heard::Fact(Fact(fact.clone())), Some(&VIEWS), true)?;
-      }
-    }
-    Ok(())
   }
 
   /// What the host does in `step`, with this life lent to it, which answers at once each verb that the host calls
@@ -1390,20 +1137,6 @@ impl Outside {
   }
 }
 
-/// What a snapshot holds of the side of the host beside the session of the sandbox: the root, each ear of the host by
-/// the id of its object in the sandbox, its name and whether it waits, the handles that the engine keeps, the callables
-/// of the opening, how many ids the host gave, and the work of the outside that ran.
-#[derive(serde::Serialize, serde::Deserialize)]
-pub(crate) struct Table {
-  pub(crate) root: String,
-  pub(crate) ears: Vec<(MontyUuid, String, bool)>,
-  pub(crate) kept: Vec<MontyUuid>,
-  pub(crate) opened: Vec<Object>,
-  pub(crate) given: String,
-  /// The work of the outside that ran: each act by its name, with the name of the ear that took it.
-  pub(crate) working: Vec<(String, String)>,
-}
-
 /// One life of the engine, as a host holds it.
 ///
 /// One host holds one engine and says one thing at a time, as an operator does: its methods are the verbs of the
@@ -1424,10 +1157,6 @@ pub struct Engine {
   holding: Vec<String>,
   /// The acts that the record parks and that this life has not retried, by name and kind, in the order of the record.
   parked: Vec<(String, String)>,
-  /// Where the life keeps its snapshot, when it keeps one.
-  keeper: Option<Keeper>,
-  /// Whether the life opened from a snapshot.
-  restored: bool,
   /// The highest number that each kind took in the record that the life opened on, as a map, which
   /// a checkpoint of the life keeps taken: the journal does not make again an act that an ear of
   /// the outside made, so the transcripts of the life do not hold each of those names.
@@ -1555,8 +1284,6 @@ impl Engine {
       stopped: None,
       holding,
       parked,
-      keeper: None,
-      restored: false,
       taken: crate::checkpoint::taken(&record),
     };
     let (root, raised) = engine.run(|sand, outside| {
@@ -1605,91 +1332,6 @@ impl Engine {
     engine.root = root;
     engine.raised = raised;
     Ok(engine)
-  }
-
-  /// An engine opened from the snapshot of a life on the same record, on the ears that the host gives again under the
-  /// names that the snapshot holds: the session of the sandbox that the snapshot holds, with each ear born and told
-  /// the past of the life, so no word runs again. The work of the outside that ran when the snapshot was taken waits
-  /// for a wake, as the work that a record left waits in a replay.
-  pub(crate) fn from_snapshot<N: Into<String>>(
-    record: &[Object],
-    ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
-    table: &Table,
-    sand: Sand,
-    past: &[Object],
-  ) -> Result<Engine, Fault> {
-    let mut given = Handed::default();
-    for (name, ear) in ears {
-      let name = name.into();
-      if given.ears.insert(name.clone(), ear).is_some() {
-        return Err(Fault::refused(format!("{name} hears")));
-      }
-    }
-    let outside = Outside::restored(given, table)?;
-    let (holding, parked) = (left(record), looping(record));
-    let mut engine = Engine {
-      sand,
-      outside,
-      watchers: HashMap::new(),
-      root: table.root.clone(),
-      raised: None,
-      stopped: None,
-      holding,
-      parked,
-      keeper: None,
-      restored: true,
-      taken: crate::checkpoint::taken(record),
-    };
-    engine.run(|sand, outside| {
-      outside.bound(sand)?;
-      outside.retold(sand, past)
-    })?;
-    let ran = table.working.iter().filter(|(id, _)| engine.holding.contains(id));
-    let ran = Object::dict(ran.map(|(id, name)| (Object::string(id), Object::string(name))));
-    engine.word("__restored.update(__ran)", vec![("__ran", ran)])?;
-    Ok(engine)
-  }
-
-  /// What a snapshot holds of this life: the side of the host, and the session of the sandbox. Nothing when boot
-  /// raised, or when the sandbox holds what a later host cannot give again: a function of the host, or an ear that a
-  /// verb was given. The work of the outside that runs does not keep a snapshot from a life, since a working life
-  /// always holds some: the snapshot names it, and a later life holds it as a replay holds it.
-  pub(crate) fn snapshot(&self) -> Option<(Table, Vec<u8>)> {
-    let outside = &self.outside;
-    let foreign =
-      outside.standing.values().any(|(name, at)| name.starts_with(EAR) && *at != At::Over);
-    if self.raised.is_some()
-      || self.stopped.is_some()
-      || !outside.handed.calls.is_empty()
-      || foreign
-    {
-      return None;
-    }
-    let dump = self.sand.dump().ok()?;
-    let mut ears: Vec<_> = outside
-      .standing
-      .iter()
-      .map(|(id, (name, at))| (*id, name.clone(), *at == At::Waiting))
-      .collect();
-    ears.sort_unstable_by_key(|one| one.0);
-    let mut kept: Vec<_> = outside.kept.iter().copied().collect();
-    kept.sort_unstable();
-    let opened = outside.opened.list();
-    let mut working: Vec<_> =
-      outside.working.iter().map(|(id, name)| (id.clone(), name.clone())).collect();
-    working.sort_unstable();
-    let given = outside.given.to_string();
-    Some((Table { root: self.root.clone(), ears, kept, opened, given, working }, dump))
-  }
-
-  /// Whether the life opened from the snapshot of its record, with no replay.
-  pub fn restored(&self) -> bool {
-    self.restored
-  }
-
-  /// The life keeps its snapshot where the keeper says, when it ends.
-  pub(crate) fn keep(&mut self, keeper: Keeper) {
-    self.keeper = Some(keeper);
   }
 
   /// The highest number that each kind took in the record that the life opened on.
@@ -1917,24 +1559,6 @@ impl Engine {
 // from the contract.
 include!(concat!(env!("OUT_DIR"), "/methods.rs"));
 include!(concat!(env!("OUT_DIR"), "/constants.rs"));
-
-impl Drop for Engine {
-  /// A life that ends keeps its snapshot where its keeper says, only when it said a fact since the
-  /// last one, which is known before the sandbox dumps its session: a failure leaves the snapshot
-  /// before it, since a snapshot is a cache. A life writes none while an ear is behind, since the
-  /// record or its log lacks a fact that the sandbox holds. No run of a life writes one, so the
-  /// thread of the life writes no large file while it goes on.
-  fn drop(&mut self) {
-    if self.outside.behind() || !self.keeper.as_ref().is_some_and(Keeper::grew) {
-      return;
-    }
-    if let Some((table, dump)) = self.snapshot()
-      && let Some(keeper) = self.keeper.as_mut()
-    {
-      keeper.write(&table, &dump);
-    }
-  }
-}
 
 impl std::fmt::Debug for Engine {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

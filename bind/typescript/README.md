@@ -186,7 +186,7 @@ beside it. Keep both companions with the JSONL record. The session saves `.sessi
 text)`, which writes `<path>.tmp` and gives it the name of the file. A save that fails throws an error that names the
 file, with the error of the system as its cause. The TUI saves its own files with it.
 
-## The log and the snapshot
+## The log
 
 The ear of the log writes the log of the life beside its record, `<record>.log`, in each life that keeps its record, and
 `log(record)` gives it to a host that boots an engine by hand: every fact that the life said, in the order in which
@@ -205,16 +205,6 @@ the record, and else those that the record kept, with the facts that the engine 
 far as the kept facts show them: each chain and each rung that a kept act names, the run of the word of each rung that
 the gate let run, the findings of a word that the gate refused, and the done of each act that the operator closed or
 cancelled.
-
-A life that keeps its record keeps a snapshot of its state beside it, `<record>.snapshot`: the session of the sandbox
-and what the engine holds of its ears, with the key of the build and of the ears, and digests of the record and of the
-log that it covers. A later life on the record opens from it with no replay when it agrees with all of them, tells each
-ear the past of the life from the log, and stands again at its tip; else it replays the record, and keeps a new
-snapshot. A life writes it when it opens, while it does work, and when it ends: at most once each thirty seconds, and at
-most once each twenty times the time that the last one took. Work of the outside that runs, as a command or a reply,
-stays in it, and a later life from it holds that work as a replay holds the work that a record left: it waits for a
-wake. `snapshot: false` in the opening turns it off. A `Session` keeps one too: its observer is an ear of the outside,
-which a later process gives again by its name, and which reads by `get` each act that an ear before it took.
 
 ## Read a record
 
