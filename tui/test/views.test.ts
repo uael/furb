@@ -167,9 +167,21 @@ test("a damaged journal of file changes says what broke, with no word of the par
       await session.refresh().catch(session.fail);
       const shown = await frame();
       expect(shown).toContain("The journal of file changes is damaged");
-      // The message wraps where the path of the journal ends, which differs from one machine to the next.
+      // The message wraps where the path of the journal ends, which differs from one machine to the next, so the test
+      // joins the rows of the feed again, each cut where the sidebar starts.
       expect(session.damagedJournal).toEndWith("is damaged: change 1 cannot be read.");
-      expect(shown).toContain("cannot be read");
+      const feed = shown
+        .split("\n")
+        .filter((row) => row.startsWith("  ┃"))
+        .map(
+          (row) =>
+            row
+              .slice(3)
+              .trim()
+              .split(/\s{3,}/)[0],
+        )
+        .join(" ");
+      expect(feed).toContain("change 1 cannot be read.");
       expect(shown).toContain("Repair the journal");
       expect(shown).toContain("Start a new journal");
       expect(shown).not.toContain("JSON");
