@@ -23,7 +23,8 @@
 # that resumes a conversation says on the stderr that it holds no such conversation and ends with a failure before it
 # reads any input, as many times as the file holds, or once when it holds nothing. It lists the flag
 # --system-prompt-snapshot in its help, unless the file nosnapshot stands beside it, and it writes the
-# CLAUDE_CODE_DISABLE_CLAUDE_MDS of each process beside it too, in mds.N, or unset.
+# CLAUDE_CODE_DISABLE_CLAUDE_MDS of each process beside it too, in mds.N, or unset, and its CLAUDE_CODE_PROMPT_CACHE_TTL,
+# CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL and CLAUDE_CODE_MESSAGES_PROMPT_CACHE_TTL, each or unset, in ttl.N.
 here=$(dirname "$0")
 # When the FIFO lifeline stands beside it, each process holds its end for writing until it ends, so the reader knows
 # when no process of it lives.
@@ -65,6 +66,8 @@ for arg in "$@"; do
 done
 printf '%s\0' "$@" > "$here/args.$$"
 printf '%s' "${CLAUDE_CODE_DISABLE_CLAUDE_MDS-unset}" > "$here/mds.$$"
+printf '%s %s %s' "${CLAUDE_CODE_PROMPT_CACHE_TTL-unset}" "${CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL-unset}" \
+  "${CLAUDE_CODE_MESSAGES_PROMPT_CACHE_TTL-unset}" > "$here/ttl.$$"
 printf '%s' "${MAX_THINKING_TOKENS-unset}" > "$here/thinking.$$"
 who=${CLAUDE_CODE_OAUTH_TOKEN-unset}
 printf '%s' "$who" > "$here/token.$$"
