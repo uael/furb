@@ -13,9 +13,7 @@
 //! its lives and their pins, which the new one opens again. Each window then dials again and
 //! attaches, with no loss.
 
-use std::{
-  collections::HashMap, fmt::Display, iter, path::Path, pin::pin, sync::Arc, time::Duration,
-};
+use std::{collections::HashMap, fmt::Display, path::Path, pin::pin, sync::Arc, time::Duration};
 
 use furb::{
   life::{Log, Opening},
@@ -310,6 +308,15 @@ struct Birth {
   roster: Option<Vec<String>>,
   extensions: Option<bool>,
   answerer: Option<Answerer>,
+  holder: Option<Holder>,
+}
+
+/// The peer that attaches the life that it opens, and the place in the log that it hears from.
+#[derive(Clone)]
+struct Holder {
+  peer: Peer,
+  outbox: Outbox,
+  from: Seq,
 }
 
 /// The lives of the daemon, each under the path of its record, which one task owns: the count of
@@ -378,16 +385,18 @@ impl Lives {
           holders.present(&life);
         }
       }
-      Asked::Ended { life, born } => self.ended(life, born),
+      Asked::Ended { life, born } => self.ended(&life, born),
     }
   }
 
   fn verb(&mut self, peer: Peer, verb: Verb, outbox: &Outbox, reply: Replied) {
     let answer = match verb {
-      Verb::Open { life, cwd, actor, roster, extensions, answers } => {
+      Verb::Open { life, cwd, actor, roster, extensions, answers, attach } => {
         let answerer = answers.then(|| Answerer::new(life.clone(), outbox.clone()));
+        let holder = attach.map(|from| Holder { peer, outbox: outbox.clone(), from });
         let cwd = cwd.unwrap_or_default();
-        return self.open(life, Birth { cwd, actor, roster, extensions, answerer }, reply);
+        let birth = Birth { cwd, actor, roster, extensions, answerer, holder };
+        return self.open(life, birth, reply);
       }
       Verb::List => Ok(Answer::Lives(self.listed())),
       Verb::Attach { life, from } => self.attach(&life, from, peer, outbox),
@@ -437,17 +446,27 @@ impl Lives {
     if birth.cwd.is_empty() {
       birth.cwd = record.parent().map_or_else(String::new, |one| one.display().to_string());
     }
+    let holder = birth.holder.clone();
     let opened = match self.held.get_mut(&life).map(|held| &mut held.stage) {
-      Some(Stage::Living(_)) => Ok(Answer::Done),
+      Some(Stage::Living(_)) => Ok(()),
       Some(Stage::Ending(waiting)) => return waiting.push((birth, reply)),
-      None => self.opened(life, birth).map(|()| Answer::Done),
+      None => self.opened(life.clone(), birth),
     };
-    reply.send(opened).ok();
+    reply.send(opened.and_then(|()| self.held_by(&life, holder))).ok();
+  }
+
+  /// The life attached by the peer that opened it, when that peer asked to, before any end of
+  /// the life can pass: a life with no holder ends after the grace, which may be none.
+  fn held_by(&mut self, life: &str, holder: Option<Holder>) -> Result<Answer, ProtocolError> {
+    match holder {
+      Some(Holder { peer, outbox, from }) => self.attach(life, from, peer, &outbox),
+      None => Ok(Answer::Done),
+    }
   }
 
   /// A life born on a thread of its own, with no holder yet, and watched for its end.
   fn opened(&mut self, life: String, birth: Birth) -> Result<(), ProtocolError> {
-    let Birth { cwd, actor, roster, extensions, answerer } = birth;
+    let Birth { cwd, actor, roster, extensions, answerer, holder: _ } = birth;
     let base = &self.settings.opening;
     let answer = answerer.as_ref().map(|one| furb::life::Answer(one.hosted()));
     let opening = Opening {
@@ -574,18 +593,16 @@ impl Lives {
 
   /// A life that ended, in the birth that the daemon holds: gone, and opened again for each open
   /// that waited for its end.
-  fn ended(&mut self, life: String, born: u64) {
-    if self.held.get(&life).is_none_or(|held| held.born != born) {
+  fn ended(&mut self, life: &str, born: u64) {
+    if self.held.get(life).is_none_or(|held| held.born != born) {
       return;
     }
-    self.views.ended(&life);
-    let Some(Held { stage: Stage::Ending(waiting), .. }) = self.held.remove(&life) else { return };
-    let mut waiting = waiting.into_iter();
-    if let Some((birth, first)) = waiting.next() {
-      let opened = self.opened(life, birth).map(|()| Answer::Done);
-      for one in iter::once(first).chain(waiting.map(|(_, one)| one)) {
-        one.send(opened.clone()).ok();
-      }
+    self.views.ended(life);
+    let Some(Held { stage: Stage::Ending(waiting), .. }) = self.held.remove(life) else { return };
+    let Some((first, _)) = waiting.first() else { return };
+    let opened = self.opened(life.to_owned(), first.clone());
+    for (birth, one) in waiting {
+      one.send(opened.clone().and_then(|()| self.held_by(life, birth.holder))).ok();
     }
   }
 

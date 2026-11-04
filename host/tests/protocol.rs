@@ -56,6 +56,7 @@ mod protocol {
         roster: None,
         extensions: Some(false),
         answers: true,
+        attach: Some(0),
       },
       Verb::Attach { life: life(), from: 0 },
       Verb::Detach { life: life() },

@@ -22,6 +22,7 @@ export type Request1 =
       roster?: string[] | null;
       extensions?: boolean | null;
       answers?: boolean;
+      attach?: number | null;
       verb: "open";
     }
   | {
