@@ -44,12 +44,13 @@ API of its own:
   build, which a host keeps after a fault stopped the life of that tail.
 - `src/snapshot.rs` holds the snapshot of a life beside its record: the session of the sandbox that monty dumps and
   what the engine holds of the ears, which a later life on the same record and build opens from with no replay.
-- `src/engine.rs` opens a life in the sandbox: it loads the engine, the sheet and the Kernel, each in a namespace of its
-  own, and carries each value between the sandbox and a host, whose ears the engine steps as generators. An ear that
-  raises refuses the act that it heard, and starts again from a fresh ear when it can, as the Kernel, the gate and each
-  ear that `lasting` in `src/ear.rs` made do; the life tells the operator once which ear raised and why. A fault that no
-  code of the sandbox catches, as the bound of the memory in `src/sand.rs`, cuts the run with no `finally`, so the life
-  stops: it keeps no snapshot, refuses each later entry with that fault, and gives it to a host as `stopped`.
+- `src/engine.rs` opens a life in the sandbox, with each of its concerns in a file of `src/engine/`: it loads the
+  engine, the sheet and the Kernel, each in a namespace of its own, and carries each value between the sandbox and a
+  host, whose ears the engine steps as generators. An ear that raises refuses the act that it heard, and starts again
+  from a fresh ear when it can, as the Kernel, the gate and each ear that `lasting` in `src/ear.rs` made do; the life
+  tells the operator once which ear raised and why. A fault that no code of the sandbox catches, as the bound of the
+  memory in `src/sand.rs`, cuts the run with no `finally`, so the life stops: it keeps no snapshot, refuses each later
+  entry with that fault, and gives it to a host as `stopped`.
 - The Kernel is `src/furb/kernel.py`, one module that the sandbox loads and the python package imports, each on the
   names of its engine. The gate, `src/gate.rs`, is the type checker of monty. It reads a word on the sheet of the
   engine, `src/furb/sheet.py`, against the typeshed of the sandbox, and it runs each import of the word in a sandbox

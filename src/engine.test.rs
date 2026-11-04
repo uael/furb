@@ -53,7 +53,7 @@ use unsync::oneshot;
 use crate::{
   Act, Ear, Engine, Exit, Fact, Fault, Object, Text,
   ear::{Co, Next, ear, hear, hearing, lasting, say},
-  engine::{CRASHES, HEARING, callable},
+  engine::{CRASHES, callable, hosted::HEARING},
   verbs, world,
 };
 
@@ -1737,7 +1737,6 @@ fn an_ear_that_ends_after_it_says_still_has_each_saying_heard() {
   let id = act.id().to_owned();
   block_on(act).unwrap();
   let facts = engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
-  let heard: Vec<&str> =
-    facts.iter().filter(|one| one.about() == id).map(|one| one.kind()).collect();
+  let heard: Vec<&str> = facts.iter().filter(|one| one.about() == id).map(Fact::kind).collect();
   assert_eq!(heard, ["wait", "started", "done"]);
 }
