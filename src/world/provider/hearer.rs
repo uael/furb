@@ -1,9 +1,5 @@
 //! The ear of the provider: one method for each event that it hears, and the replies that it took.
 
-#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
-#![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
-#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
-
 use std::{
   collections::{HashMap, HashSet},
   path::PathBuf,
@@ -331,13 +327,15 @@ impl Hearer {
     if !limit {
       return;
     }
-    let mut note = format!("#{} waits on {}: {}", reply.chain, reply.actor, retry.why);
-    if retry.why.starts_with("usage limit") {
-      let chain = &reply.chain;
-      note += &format!(
+    let chain = &reply.chain;
+    let other = if retry.why.starts_with("usage limit") {
+      format!(
         ". To go on with another actor, say rung(\"actor = '<model>'\", on=\"{chain}\") and wake(\"{chain}\")."
-      );
-    }
+      )
+    } else {
+      String::new()
+    };
+    let note = format!("#{chain} waits on {}: {}{other}", reply.actor, retry.why);
     if reply.noted.as_deref() != Some(note.as_str()) {
       told(co, &reply.chain, &note);
       reply.noted = Some(note);
@@ -420,14 +418,14 @@ impl Hearer {
     let search = (self.native)(&actor).unwrap_or_else(free);
     let (stop, stopped) = oneshot::channel();
     let id = about.clone();
-    let work = async move {
+    let asked = async move {
       let got = search(query.clone()).await;
       Replied::Searched {
         id,
         got: got.map(|answer| crate::value::Text::new(query, answer)).map_err(|no| no.to_string()),
       }
     };
-    co.work(stream::once(work).take_until(stopped));
+    co.work(stream::once(asked).take_until(stopped));
     self.searches.insert(about, stop);
   }
 
@@ -590,7 +588,7 @@ fn departed(about: &str, names: &[String]) -> String {
 /// A note of the chain about the turn of a rung: its header, then each text that the gate or the
 /// call gave, which the engine binds under the rung as it binds a value of an act, so the turn that
 /// holds the note stays python. A text after the header as a line of its own is no python, and the
-/// run of the turn would raise a SyntaxError.
+/// run of the turn would raise a `SyntaxError`.
 pub(super) async fn noted(
   co: &mut Co<Replied>,
   chain: &str,

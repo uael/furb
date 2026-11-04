@@ -1,7 +1,5 @@
 //! The thought of a model in one turn: the most tokens of it, and how a model takes them.
 
-#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
-
 use serde_json::{Map, Value};
 
 use super::model::{Asked, Model};
@@ -17,7 +15,7 @@ pub(super) const KEY_THINKING: &str = "max_thinking_tokens";
 /// The most tokens of thought of a model in one turn when neither the environment nor the config
 /// gives one: a model that thinks more than this rarely writes a word in the turn. A model whose
 /// thought the provider cuts takes a share of it at a lower effort, as [`budgeted`] says.
-pub const THINKING: u64 = 32_768;
+pub(crate) const THINKING: u64 = 32_768;
 
 /// The most tokens of thought of a model in one turn, as Claude Code means it, 0 turning the
 /// thought off, and whether the environment of furb gave it, so the claude command line inherits

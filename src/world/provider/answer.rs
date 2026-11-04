@@ -1,9 +1,5 @@
 //! The call of a model for a reply, and the turn that its answer gives.
 
-#![expect(clippy::cast_precision_loss, reason = "debt: an as cast that loses precision")]
-#![expect(clippy::implicit_clone, reason = "debt: to_owned or to_string where clone serves")]
-#![expect(clippy::map_unwrap_or, reason = "debt: map then unwrap_or, where map_or serves")]
-
 use std::{collections::HashSet, time::Duration};
 
 use futures::{Stream, StreamExt, stream};
@@ -70,7 +66,7 @@ pub(super) async fn streamed(
   }
   let response = whole(stream);
   let Some((_, again)) = &budget else { return Ok(response) };
-  let blocks = untagged(response.choice.to_vec());
+  let blocks = untagged(response.choice.clone());
   if thinking.is_empty() {
     thinking = blocks
       .iter()
@@ -346,7 +342,7 @@ pub(super) fn turn(
   if let Some(why) = cut {
     return Err(CompletionError::ResponseError(format!("{why}: {}", wrote(model, response))));
   }
-  let mut choice: Vec<AssistantContent> = response.choice.to_vec();
+  let mut choice: Vec<AssistantContent> = response.choice.clone();
   if model.tagged {
     choice = untagged(choice);
   }
@@ -367,8 +363,8 @@ pub(super) fn turn(
   let output =
     spent.total_tokens.checked_sub(input).filter(|one| *one > 0).unwrap_or(spent.output_tokens);
   let priced = model.price.map(|[fresh, out, cached, cache]| {
-    let fresh = input.saturating_sub(read + wrote) as f64 * fresh;
-    (fresh + output as f64 * out + read as f64 * cached + wrote as f64 * cache) / 1e6
+    let fresh = counted(input.saturating_sub(read + wrote)) * fresh;
+    (fresh + counted(output) * out + counted(read) * cached + counted(wrote) * cache) / 1e6
   });
   let dollars = response.raw.get("cost").and_then(Value::as_f64).or(priced).unwrap_or_default();
   let failed = |why: String| CompletionError::ResponseError(why);
@@ -417,7 +413,7 @@ const END: usize = 400;
 /// the turn: the tokens it wrote, the characters of its thought and of its text, and the end of the
 /// last of the two that it wrote. A thought in the text whose close tag never came is thought.
 pub(super) fn wrote(model: &Model, response: &CompletionResponse) -> String {
-  let mut choice: Vec<AssistantContent> = response.choice.to_vec();
+  let mut choice: Vec<AssistantContent> = response.choice.clone();
   if model.tagged {
     choice = untagged(choice);
   }
@@ -480,10 +476,15 @@ fn untagged(choice: Vec<AssistantContent>) -> Vec<AssistantContent> {
   blocks
 }
 
+/// A count of tokens as a float, which holds it whole up to `u32::MAX`, more than a turn counts.
+fn counted(tokens: u64) -> f64 {
+  f64::from(u32::try_from(tokens).unwrap_or(u32::MAX))
+}
+
 /// The turn that a function of the host gave, as a turn of a model: its role, its python, its
 /// usage, whose dollars are a float however the host wrote them, and its blocks.
 pub(super) fn hosted(turn: ObjectRef<'_>) -> Result<Object, CompletionError> {
-  let part = |at: usize| entry(&turn, at).map(|one| one.to_owned()).unwrap_or_else(Object::none);
+  let part = |at: usize| entry(&turn, at).map_or_else(Object::none, |one| one.to_owned());
   let (role, python) = (entry(&turn, 0), entry(&turn, 1));
   let whole = turn.items().is_some_and(|items| items.len() == 4)
     && role.and_then(|one| one.as_str()) == Some("assistant")
@@ -497,7 +498,10 @@ pub(super) fn hosted(turn: ObjectRef<'_>) -> Result<Object, CompletionError> {
   }
   let usage = entry(&turn, 2).and_then(|one| one.items()).map(|usage| {
     let each = usage.into_iter().enumerate().map(|(at, one)| match (at, one.as_int()) {
-      (4, Some(whole)) => Object::float(whole as f64),
+      (4, Some(whole)) => Object::float(
+        i32::try_from(whole)
+          .map_or(if whole < 0 { f64::from(i32::MIN) } else { f64::from(i32::MAX) }, f64::from),
+      ),
       _ => one.to_owned(),
     });
     Object::tuple(each)
