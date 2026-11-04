@@ -115,7 +115,7 @@ pub(crate) fn build(names: &[String]) -> String {
 /// lines holds an entry on each line that holds something, and the digest is of its bytes; a database is read for its
 /// entries, and the digest is of each as the record keeps it.
 fn record(path: &Path) -> Option<(usize, String)> {
-  if world::database(path) {
+  if world::Format::of(path) == world::Format::Sqlite {
     let entries = world::kept(path).ok()?;
     let mut digest = Sha256::new();
     for one in &entries {
