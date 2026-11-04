@@ -1,24 +1,13 @@
 //! The files of the machine: a cd, a read and a write of a path that nobody of the engine serves.
 
-#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
 #![expect(
   clippy::let_underscore_must_use,
   reason = "debt: a let _ drops a value that must be used"
 )]
 #![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(clippy::match_same_arms, reason = "debt: match arms with the same body")]
-#![expect(
-  clippy::redundant_closure_for_method_calls,
-  reason = "debt: a closure where a method path serves"
-)]
-#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
-#![expect(
-  clippy::single_match_else,
-  reason = "debt: a match of one arm and else, where if let serves"
-)]
 
 use std::{
-  fs,
+  fmt, fs,
   io::{self, ErrorKind, Write},
   path::{Path, PathBuf},
   sync::atomic::{AtomicU32, Ordering},
@@ -36,7 +25,7 @@ pub const CONFIG: &str = "config://";
 use crate::{
   ear::{Co, Ear, hear, hearing, say},
   fact::Fact,
-  value::{Fault, Object, Text},
+  value::{Fault, Given, Object, Text},
 };
 
 /// The ear of the files: it answers a cd with the directory that the path names, a read with the
@@ -63,8 +52,7 @@ pub fn files(scratch: Scratch, config: PathBuf, gallery: Option<PathBuf>) -> Box
       // A write of a door of a command of the life is the ear of the commands' to answer, wherever that ear stands.
       if a.kind() == "write"
         && let Some((_, command, _)) = door(&a)
-        && co.call("get", vec![Object::string(&command)], vec![]).await?.as_ref().type_name()
-          != "NoneType"
+        && !co.call("get", vec![Object::string(&command)], vec![]).await?.as_ref().is_none()
       {
         continue;
       }
@@ -108,13 +96,12 @@ async fn served(
   config: &Path,
   gallery: Option<&Path>,
 ) -> Result<Text, Fault> {
-  let (path, content) = match a.kind() {
-    "read" => (a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default(), None),
-    _ => {
-      let text =
-        a.word(1).and_then(Text::of).ok_or_else(|| Fault::refused("a write gives a text"))?;
-      (text.path, Some(text.content))
-    }
+  let (path, content) = if a.kind() == "read" {
+    (a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default(), None)
+  } else {
+    let text =
+      a.word(1).and_then(Text::of).ok_or_else(|| Fault::refused("a write gives a text"))?;
+    (text.path, Some(text.content))
   };
   let path = native(&path, cfg!(windows));
   if let Some(path) = path.strip_prefix(SCRATCH) {
@@ -135,7 +122,7 @@ async fn served(
     return Err(Fault::refused(format!("No file at {path}.")));
   }
   let head = path.split('/').next().unwrap_or_default();
-  if co.call("get", vec![Object::string(head)], vec![]).await?.as_ref().type_name() != "NoneType" {
+  if !co.call("get", vec![Object::string(head)], vec![]).await?.as_ref().is_none() {
     let chain = co.call("scope", vec![Object::string(head)], vec![]).await?;
     let chain = chain.as_ref().as_str().unwrap_or_default().to_owned();
     return Err(Fault::refused(format!(
@@ -145,12 +132,19 @@ async fn served(
   }
   let at = placed(&here(co, a.on()).await?, &path)?;
   if let Some(content) = content {
-    if let Some(parent) = at.parent() {
-      fs::create_dir_all(parent).map_err(|no| failed(&no, at.display()))?;
-    }
-    stored(&at, ended(&at, content).as_bytes()).map_err(|no| failed(&no, at.display()))?;
+    filed(&at, content, at.display())?;
   }
   text(&at, tilded(&at, std::env::home_dir().as_deref()), gallery)
+}
+
+/// The content of a write put at a path, with the folders above it made, in one step as
+/// [`stored`] says, and with the line ends that the file there has. `name` is the path as a
+/// refusal names it.
+pub(super) fn filed(at: &Path, content: String, name: impl fmt::Display) -> Result<(), Fault> {
+  if let Some(parent) = at.parent() {
+    fs::create_dir_all(parent).map_err(|no| failed(&no, &name))?;
+  }
+  stored(at, ended(at, content).as_bytes()).map_err(|no| failed(&no, &name))
 }
 
 /// Writes bytes to the file at a path in one step, so a crash or a failure midway leaves the old file whole and a
@@ -160,15 +154,15 @@ async fn served(
 /// temporary file cannot be made, or the rename fails, as on Windows while another program holds the file open, the
 /// write is the plain write in place, which is not atomic. A hard link to the file does not see the new bytes, and a
 /// crash may leave a temporary file `.<name>.<pid>.<n>.tmp` in the folder.
-pub(super) fn stored(at: &Path, bytes: &[u8]) -> io::Result<()> {
-  replace(at, bytes, |file, bytes| file.write_all(bytes))
+fn stored(at: &Path, bytes: &[u8]) -> io::Result<()> {
+  replace(at, bytes, Write::write_all)
 }
 
 /// `stored` with the filling of the temporary file given, so a test can make it fail midway.
 fn replace(
   at: &Path,
   bytes: &[u8],
-  fill: impl FnOnce(&mut fs::File, &[u8]) -> io::Result<()>,
+  feed: impl FnOnce(&mut fs::File, &[u8]) -> io::Result<()>,
 ) -> io::Result<()> {
   static TEMPS: AtomicU32 = AtomicU32::new(0);
   let Some(target) = linked(at) else { return fs::write(at, bytes) };
@@ -177,9 +171,8 @@ fn replace(
       fs::OpenOptions::new().write(true).open(&target)?;
       Some(info.permissions())
     }
-    Ok(_) => return fs::write(&target, bytes),
     Err(no) if no.kind() == ErrorKind::NotFound => None,
-    Err(_) => return fs::write(&target, bytes),
+    _ => return fs::write(&target, bytes),
   };
   let Some(name) = target.file_name() else { return fs::write(&target, bytes) };
   let temp = target.with_file_name(format!(
@@ -191,7 +184,7 @@ fn replace(
   let Ok(mut file) = fs::OpenOptions::new().write(true).create_new(true).open(&temp) else {
     return fs::write(&target, bytes);
   };
-  let done = fill(&mut file, bytes)
+  let done = feed(&mut file, bytes)
     .and_then(|()| file.sync_all())
     .and_then(|()| mode.map_or(Ok(()), |mode| file.set_permissions(mode)));
   drop(file);
@@ -227,7 +220,7 @@ fn crlf(bytes: &[u8]) -> bool {
 
 /// The content of a write as the file at a path takes it: with CRLF at the end of each line when every line of the
 /// file there ends with CRLF, so the file keeps its line ends, and else as it is given.
-pub(super) fn ended(at: &Path, content: String) -> String {
+fn ended(at: &Path, content: String) -> String {
   if fs::read(at).is_ok_and(|held| crlf(&held)) {
     content.replace("\r\n", "\n").replace('\n', "\r\n")
   } else {
@@ -345,7 +338,7 @@ pub(crate) fn placed(directory: &Path, path: &str) -> Result<PathBuf, Fault> {
 }
 
 /// What the machine refused at a path, under its name, in plain words, which the model and the operator both read.
-pub(super) fn failed(no: &std::io::Error, name: impl std::fmt::Display) -> Fault {
+pub(super) fn failed(no: &io::Error, name: impl fmt::Display) -> Fault {
   match no.kind() {
     ErrorKind::NotFound => Fault::refused(format!("There is no file at {name}.")),
     _ => Fault::refused(format!("{no}: {name}")),

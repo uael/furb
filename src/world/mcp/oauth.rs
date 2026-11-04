@@ -17,10 +17,6 @@
 #![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
 #![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
 #![expect(
-  clippy::format_collect,
-  reason = "debt: a format! for each item, collected into a String"
-)]
-#![expect(
   clippy::let_underscore_must_use,
   reason = "debt: a let _ drops a value that must be used"
 )]
@@ -487,7 +483,7 @@ impl Vault for Keychain {
   }
 
   fn put(&self, key: &str, value: &str) -> Result<(), String> {
-    let hex: String = value.bytes().map(|one| format!("{one:02x}")).collect();
+    let hex = crate::value::hex(value.as_bytes());
     let line =
       format!("add-generic-password -U -s {SERVICE} -a {} -X {hex}\n", Keychain::account(key));
     let mut child = Command::new(KEYCHAIN)

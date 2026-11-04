@@ -48,7 +48,9 @@ fn a_record_has_one_scratch_directory_in_the_cache_of_furb_under_a_short_name_of
   fs::create_dir_all(at.join("real")).unwrap();
   #[cfg(unix)]
   std::os::unix::fs::symlink(at.join("real"), at.join("link")).unwrap();
-  let of = |path: PathBuf| Scratch::of(&path).expect("the machine of the test has a cache of furb");
+  let of = |path: PathBuf| {
+    Scratch::of(&path).unwrap().expect("the machine of the test has a cache of furb")
+  };
   let one = of(at.join("real").join("a.jsonl"));
   assert_eq!(of(at.join("real").join(".").join("a.jsonl")).path(), one.path());
   #[cfg(unix)]
@@ -58,11 +60,11 @@ fn a_record_has_one_scratch_directory_in_the_cache_of_furb_under_a_short_name_of
     "a link to the folder names the same record"
   );
   assert_ne!(of(at.join("real").join("b.jsonl")).path(), one.path());
-  let cache =
-    crate::world::cache().map(|cache| Scratch::at(cache.join("scratch")).path().to_path_buf());
+  let cache = crate::world::cache()
+    .map(|cache| Scratch::at(cache.join("scratch")).unwrap().path().to_path_buf());
   assert_eq!(one.path().parent(), cache.as_deref());
   assert_eq!(one.path().file_name().map(|name| name.len()), Some(16));
-  assert_eq!(Scratch::at("a/../b").path(), std::env::current_dir().unwrap().join("b"));
+  assert_eq!(Scratch::at("a/../b").unwrap().path(), std::env::current_dir().unwrap().join("b"));
   fs::remove_dir_all(&at).unwrap();
 }
 
@@ -70,7 +72,7 @@ fn a_record_has_one_scratch_directory_in_the_cache_of_furb_under_a_short_name_of
 fn a_path_of_the_scheme_is_a_file_of_the_directory_and_a_folder_gives_its_entries_all_named_under_the_scheme()
  {
   let at = place("served");
-  let scratch = Scratch::at(&at);
+  let scratch = Scratch::at(&at).unwrap();
   assert_eq!(scratch.served("", None, None).unwrap(), Text::new(SCRATCH, ""));
   assert!(!at.exists(), "a read makes no directory");
   let wrote = scratch.served("notes/../notes/a.md", Some("one\n".to_owned()), None).unwrap();
@@ -96,7 +98,7 @@ fn a_link_that_leads_out_of_the_directory_is_refused_and_a_listing_reads_no_link
   let away = place("away");
   fs::create_dir_all(&away).unwrap();
   fs::write(away.join("secret.md"), "secret").unwrap();
-  let scratch = Scratch::at(&at);
+  let scratch = Scratch::at(&at).unwrap();
   scratch.made().unwrap();
   std::os::unix::fs::symlink(&away, at.join("away")).unwrap();
   let refused = |path: &str, content: Option<&str>| {
@@ -127,13 +129,14 @@ fn a_missing_directory_takes_the_last_write_of_each_path_in_the_order_of_those_w
     wrote("write4", "a/b.md", "in a folder"),
     wrote("write5", "plan.md", "new"),
   ];
-  Scratch::at(&at).remade(&record, &quiet);
+  Scratch::at(&at).unwrap().remade(&record, &quiet);
   assert!(at.join(WHOLE).is_file());
-  assert_eq!(Scratch::at(&at).served("", None, None).unwrap().content, "a/\nplan.md");
+  assert_eq!(Scratch::at(&at).unwrap().served("", None, None).unwrap().content, "a/\nplan.md");
   assert_eq!(fs::read_to_string(at.join("a").join("b.md")).unwrap(), "in a folder");
   assert_eq!(fs::read_to_string(at.join("plan.md")).unwrap(), "new");
   let folded = place("folded");
   Scratch::at(&folded)
+    .unwrap()
     .remade(&[wrote("write1", "Plan.md", "first"), wrote("write2", "plan.md", "last")], &quiet);
   assert_eq!(
     fs::read_to_string(folded.join("plan.md")).unwrap(),
@@ -149,6 +152,7 @@ fn a_file_that_the_machine_refuses_is_told_to_the_log_of_the_host() {
   let at = place("refused");
   let told = std::sync::Mutex::new(Vec::new());
   Scratch::at(&at)
+    .unwrap()
     .remade(&[wrote("write1", "../out.md", "out"), wrote("write2", "plan.md", "in")], &|line| {
       told.lock().unwrap().push(line.to_owned())
     });
@@ -167,23 +171,23 @@ fn a_whole_directory_stands_a_directory_that_is_not_whole_is_made_again_and_a_ne
  {
   let at = place("whole");
   let record = [wrote("write1", "plan.md", "kept")];
-  Scratch::at(&at).remade(&record, &quiet);
+  Scratch::at(&at).unwrap().remade(&record, &quiet);
   fs::write(at.join("plan.md"), "since").unwrap();
-  Scratch::at(&at).remade(&record, &quiet);
+  Scratch::at(&at).unwrap().remade(&record, &quiet);
   assert_eq!(
     fs::read_to_string(at.join("plan.md")).unwrap(),
     "since",
     "a whole directory stands as it is"
   );
   fs::remove_file(at.join(WHOLE)).unwrap();
-  Scratch::at(&at).remade(&record, &quiet);
+  Scratch::at(&at).unwrap().remade(&record, &quiet);
   assert_eq!(
     fs::read_to_string(at.join("plan.md")).unwrap(),
     "kept",
     "a directory that is not whole is made again"
   );
   assert!(!at.with_file_name(format!("{}.new", at.file_name().unwrap().display())).exists());
-  Scratch::at(&at).remade(&[], &quiet);
+  Scratch::at(&at).unwrap().remade(&[], &quiet);
   assert!(!at.exists(), "a new record starts with an empty directory");
 }
 

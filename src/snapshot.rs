@@ -17,10 +17,6 @@
 //! need room to grow.
 
 #![expect(
-  clippy::format_collect,
-  reason = "debt: a format! for each item, collected into a String"
-)]
-#![expect(
   clippy::let_underscore_must_use,
   reason = "debt: a let _ drops a value that must be used"
 )]
@@ -34,7 +30,13 @@ use std::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::{SHEET, engine::Table, sand::Sand, value::Object, wire, world};
+use crate::{
+  SHEET,
+  engine::Table,
+  sand::Sand,
+  value::{Object, hex},
+  wire, world,
+};
 
 /// The version of the form of a snapshot.
 const VERSION: u64 = 2;
@@ -107,11 +109,6 @@ pub(crate) fn build(names: &[String]) -> String {
     digest.update(one.as_bytes());
   }
   hex(&digest.finalize())
-}
-
-/// Bytes as hexadecimal text.
-fn hex(bytes: &[u8]) -> String {
-  bytes.iter().map(|one| format!("{one:02x}")).collect()
 }
 
 /// The record at a path, read whole as the store wrote it: how many entries it holds, and a digest of them. A file of

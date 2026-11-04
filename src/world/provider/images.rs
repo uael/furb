@@ -3,11 +3,6 @@
 //! The provider hands a model each image that the message of a prompt of a user turn names, and each image that a read
 //! of a user turn gives, as an image of rig, and reads it once while its file stays the same.
 
-#![expect(
-  clippy::format_collect,
-  reason = "debt: a format! for each item, collected into a String"
-)]
-
 use std::{
   collections::{HashMap, HashSet},
   fs::{self, OpenOptions},
@@ -170,7 +165,7 @@ fn parts(uri: &str) -> Option<(&str, &str)> {
 
 /// The digest of bytes, as lowercase hex.
 fn digest(bytes: &[u8]) -> String {
-  Sha256::digest(bytes).iter().map(|one| format!("{one:02x}")).collect()
+  crate::value::hex(&Sha256::digest(bytes))
 }
 
 /// The images of one life: the directory they stand in, and the content of each that a turn named, by its file,
