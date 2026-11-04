@@ -617,7 +617,6 @@ export const input = part({
     this.session.off("change", this.schedule);
     this.options.workspaces.off("change", this.schedule);
     this.session.off("compose", this.compose);
-    this.session.off("resume", this.resume);
     this.session.off("shared", this.shared);
     this.session.off("copied", this.copied);
     this.session.off("status", this.statusShown);

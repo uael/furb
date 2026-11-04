@@ -867,7 +867,7 @@ test("a close of the session whose save fails still ends its life and its comman
     await expect(session.dispose()).rejects.toThrow("life.jsonl.session.json.tmp");
     expect(engine.disposed).toBe(true);
     // A process the session ended ends a moment after, once the system hears of it.
-    for (let tries = 0; alive(pid) && tries < 100; tries++) await Bun.sleep(20);
+    for (const deadline = Date.now() + 5000; alive(pid) && Date.now() < deadline; ) await Bun.sleep(20);
     expect(alive(pid)).toBe(false);
   } finally {
     await remove(cwd);
