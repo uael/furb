@@ -15,10 +15,10 @@ use std::{
 };
 
 use furb::{
-  Engine, Fault, Object,
+  Engine, Fault, Object, Text,
   life::{Log, Opening, Stream},
   verbs,
-  wire::outward,
+  wire::{outward, parsed},
   world::answered,
 };
 use futures::stream::{self, Stream as Streams};
@@ -45,7 +45,7 @@ use crate::{
 const BEHIND: usize = 256;
 
 /// What a client says to a life. A command that names no chain says it on the root.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Command {
   /// A prompt on a chain, of a shape, with a message, to an actor or to the actor of the chain: the
   /// act.
@@ -83,6 +83,27 @@ pub enum Command {
   Chain { label: Option<String>, on: Option<String> },
   /// The acts that wait for a wake, each as its name and its kind.
   Pending,
+  /// A close of an act with a value, as the record writes a value: `2.0` stays a float, and
+  /// `{"is": "Refused", "args": ["why"]}` is a refusal.
+  Close { id: String, value: String },
+  /// A ceiling of the spend of a chain, in dollars or in a share of its window: the act.
+  Grant { usd: Option<f64>, share: Option<f64>, on: Option<String> },
+  /// A command that runs on a chain: the act.
+  Bash { command: String, on: Option<String> },
+  /// The text at a path, read where a chain stands, as `{"path", "content"}`.
+  Read { path: String, on: Option<String> },
+  /// A text written at a path, where a chain stands.
+  Write { path: String, content: String, on: Option<String> },
+  /// The names that the module of a chain binds.
+  Names { on: Option<String> },
+  /// A stand of the life on its root, which reads the roster and the actor again: the act.
+  Stand,
+  /// The fact that the operator read a chain or a thread up to now.
+  Seen { about: String },
+  /// A message that the operator queued, sent as a prompt on a chain once: the act of the prompt.
+  /// The record keeps the entry and the hash of its words, so a second send of the entry gives the
+  /// act of the first.
+  Queue { entry: String, hash: String, shape: String, message: String, on: Option<String> },
   /// The end of the life, which replies and then ends the life.
   End,
 }
@@ -373,9 +394,35 @@ fn answered_by(engine: &mut Engine, command: Command) -> Result<Reply, LifeError
   let id = |made: &str| Reply::Act(made.to_owned());
   Ok(match command {
     Command::Prompt { shape, message, to, on: chain } => {
-      let shape = if shape == "None" { Object::none() } else { Object::string(shape) };
       let with = verbs::Prompt { message: Some(message), to, on: on(chain) };
-      id(engine.prompt(shape, with)?.id())
+      id(engine.prompt(shaped(shape), with)?.id())
+    }
+    Command::Close { id, value } => {
+      engine.close(parsed(&value)?, verbs::Close { id: Some(id) })?;
+      Reply::Done
+    }
+    Command::Grant { usd, share, on: chain } => {
+      id(engine.grant(verbs::Grant { usd, share, on: on(chain) })?.id())
+    }
+    Command::Bash { command, on: chain } => {
+      id(engine.bash(&command, verbs::Bash { on: on(chain), ..verbs::Bash::default() })?.id())
+    }
+    Command::Read { path, on: chain } => {
+      let text = engine.read(&path, verbs::Read { on: on(chain), ..verbs::Read::default() })?;
+      Reply::Value(json!({ "path": text.path, "content": text.content }))
+    }
+    Command::Write { path, content, on: chain } => {
+      engine.write(&Text { path, content }, verbs::Write { on: on(chain) })?;
+      Reply::Done
+    }
+    Command::Stand => id(engine.stand(verbs::Stand { on: on(None) })?.id()),
+    Command::Seen { about } => {
+      engine.say("seen", &about, vec![])?;
+      Reply::Done
+    }
+    Command::Queue { entry, hash, shape, message, on: chain } => {
+      let chain = chain.unwrap_or_else(|| root.clone());
+      Reply::Act(sent(engine, &chain, entry, hash, (shape, message))?)
     }
     Command::Rung { word, on: chain } => {
       let with = verbs::Rung { word: Some(word), on: on(chain), ..verbs::Rung::default() };
@@ -439,8 +486,42 @@ fn queried(engine: &mut Engine, query: Command, root: &str) -> Result<Reply, Lif
       let pending = engine.pending()?.into_iter().map(|(id, kind)| json!([id, kind]));
       Reply::Values(pending.collect())
     }
+    Command::Names { on: chain } => {
+      Reply::Values(engine.names(Some(&on(chain)))?.into_iter().map(Value::String).collect())
+    }
     acted => return Err(LifeError::Refused(format!("{acted:?} is no query"))),
   })
+}
+
+/// The shape of a prompt as a client names it: `None` for a message that wants no answer.
+fn shaped(shape: String) -> Object {
+  if shape == "None" { Object::none() } else { Object::string(shape) }
+}
+
+/// The act of the prompt that a queued entry was sent as on a chain: the act of its first send,
+/// or a prompt of its shape and its message, between the facts that begin and end its send.
+fn sent(
+  engine: &mut Engine,
+  chain: &str,
+  entry: String,
+  hash: String,
+  (shape, message): (String, String),
+) -> Result<String, LifeError> {
+  let of = verbs::Transcript { on: Some(chain.to_owned()), of: Some("queue".to_owned()) };
+  let facts = engine.transcript(of)?;
+  let held = facts.iter().map(|one| outward(one.0.as_ref())).find(|fact| {
+    fact[2] == "operator" && fact[3] == "sent" && fact[4] == entry.as_str() && fact[5].is_string()
+  });
+  if let Some(made) = held.and_then(|fact| fact[5].as_str().map(str::to_owned)) {
+    return Ok(made);
+  }
+  let begin = [Object::string("begin"), Object::string(entry.clone()), Object::string(hash)];
+  engine.say("queue", chain, begin.into())?;
+  let with = verbs::Prompt { message: Some(message), to: None, on: Some(chain.to_owned()) };
+  let made = engine.prompt(shaped(shape), with)?.id().to_owned();
+  let sent = [Object::string("sent"), Object::string(entry), Object::string(made.clone())];
+  engine.say("queue", chain, sent.into())?;
+  Ok(made)
 }
 
 impl LifeHandle {

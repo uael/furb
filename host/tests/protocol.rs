@@ -77,6 +77,23 @@ mod protocol {
       Verb::Cancel { life: life(), act: id() },
       Verb::Chain { life: life(), label: Some("work".to_owned()), on: on() },
       Verb::Run { life: life(), word: "1 + 1".to_owned(), on: on() },
+      Verb::Close { life: life(), act: id(), value: "2.0".to_owned() },
+      Verb::Grant { life: life(), usd: Some(2.0), share: None, on: on() },
+      Verb::Bash { life: life(), command: "ls".to_owned(), on: on() },
+      Verb::Read { life: life(), path: "a.txt".to_owned(), on: on() },
+      Verb::Write { life: life(), path: "a.txt".to_owned(), content: "a".to_owned(), on: on() },
+      Verb::Names { life: life(), on: on() },
+      Verb::Gate { life: life(), word: "1 + 1".to_owned(), on: on() },
+      Verb::Stand { life: life() },
+      Verb::Seen { life: life(), about: "chain1".to_owned() },
+      Verb::Queue {
+        life: life(),
+        entry: "q1".to_owned(),
+        hash: "h1".to_owned(),
+        shape: "None".to_owned(),
+        message: "hi".to_owned(),
+        on: on(),
+      },
       Verb::Handover,
     ]
     .into_iter()
@@ -253,7 +270,7 @@ mod protocol {
       writes.iter().map(|verb| serde_json::to_value(verb).unwrap()["verb"].clone()).collect();
     let expected = [
       "open", "pin", "unpin", "prompt", "answer", "pause", "wake", "cancel", "chain", "run",
-      "handover",
+      "close", "grant", "bash", "read", "write", "stand", "seen", "queue", "handover",
     ];
     assert_eq!(names, expected.map(|name| json!(name)));
   }

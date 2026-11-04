@@ -246,6 +246,18 @@ fn routed(verb: Verb) -> Routed {
     Verb::Cancel { life, act } => (life, Command::Cancel { id: act }),
     Verb::Chain { life, label, on } => (life, Command::Chain { label, on }),
     Verb::Run { life, word, on } => (life, Command::Rung { word, on }),
+    Verb::Close { life, act, value } => (life, Command::Close { id: act, value }),
+    Verb::Grant { life, usd, share, on } => (life, Command::Grant { usd, share, on }),
+    Verb::Bash { life, command, on } => (life, Command::Bash { command, on }),
+    Verb::Read { life, path, on } => (life, Command::Read { path, on }),
+    Verb::Write { life, path, content, on } => (life, Command::Write { path, content, on }),
+    Verb::Names { life, on } => (life, Command::Names { on }),
+    Verb::Gate { life, word, on } => (life, Command::Gate { word, on }),
+    Verb::Stand { life } => (life, Command::Stand),
+    Verb::Seen { life, about } => (life, Command::Seen { about }),
+    Verb::Queue { life, entry, hash, shape, message, on } => {
+      (life, Command::Queue { entry, hash, shape, message, on })
+    }
     other => return Routed::Daemon(other),
   };
   Routed::Life(life, command)

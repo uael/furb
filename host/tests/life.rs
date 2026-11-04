@@ -254,3 +254,78 @@ async fn each_act_is_told_with_its_meaning_and_each_chain_with_the_state_of_its_
   assert_eq!(root.state, State::Paused);
   fs::remove_dir_all(&at).unwrap();
 }
+#[tokio::test]
+async fn the_verbs_of_the_operator_act_on_the_life_as_a_word_of_his_would() {
+  let at = place("operator");
+  let life = Life::spawn(scripted(&at, &[])).unwrap();
+  let mut events = Box::pin(life.events(0));
+  let text = |path: &str| path.to_owned();
+  let write = Command::Write { path: text("note.txt"), content: text("hi\n"), on: None };
+  assert_eq!(life.send(write).await.unwrap(), Reply::Done);
+  let read = life.send(Command::Read { path: text("note.txt"), on: None }).await.unwrap();
+  assert!(matches!(&read, Reply::Value(got) if got["content"] == json!("hi\n")), "{read:?}");
+  let bash = made(&life, Command::Bash { command: text("cat note.txt"), on: None }).await;
+  until(&mut events, done(&bash)).await;
+  let Reply::Value(exit) = life.send(Command::Peek { id: bash }).await.unwrap() else {
+    panic!("a command comes to a value")
+  };
+  assert!(exit.to_string().contains("hi"), "{exit}");
+  let bound = made(&life, rung("x = 1")).await;
+  until(&mut events, done(&bound)).await;
+  let Reply::Values(names) = life.send(Command::Names { on: None }).await.unwrap() else {
+    panic!("the names are values")
+  };
+  assert!(names.contains(&json!("x")), "{names:?}");
+  let grant = Command::Grant { usd: Some(2.0), share: None, on: None };
+  assert!(made(&life, grant).await.starts_with("grant"));
+  let stand = made(&life, Command::Stand).await;
+  until(&mut events, done(&stand)).await;
+  fs::remove_dir_all(&at).unwrap();
+}
+
+#[tokio::test]
+async fn the_operator_closes_an_act_and_says_what_he_saw_and_what_he_queued() {
+  let at = place("operator-record");
+  let life = Life::spawn(scripted(&at, &[])).unwrap();
+  let mut events = Box::pin(life.events(0));
+  let text = |path: &str| path.to_owned();
+  let asked = |shape: &str| Command::Prompt {
+    shape: shape.to_owned(),
+    message: text("How much?"),
+    to: Some(text("operator")),
+    on: None,
+  };
+  let float = made(&life, asked("float")).await;
+  life.send(Command::Close { id: float.clone(), value: text("2.0") }).await.unwrap();
+  let got = until(&mut events, done(&float)).await;
+  let Some(Event::Act(closed)) = got.last().map(|one| &*one.1) else { panic!("an act") };
+  assert_eq!(closed.value().map(serde_json::Value::to_string), Some(text("2.0")));
+  let declined = made(&life, asked("str")).await;
+  let refusal = text(r#"{"is": "Refused", "args": ["Not now."]}"#);
+  life.send(Command::Close { id: declined.clone(), value: refusal }).await.unwrap();
+  let got = until(&mut events, done(&declined)).await;
+  let Some(Event::Act(closed)) = got.last().map(|one| &*one.1) else { panic!("an act") };
+  assert!(
+    closed.failed() && closed.value().is_some_and(|why| why.to_string().contains("Not now."))
+  );
+  assert_eq!(life.send(Command::Seen { about: text("chain1") }).await.unwrap(), Reply::Done);
+  let of = |kind: &str| Command::Transcript { on: None, of: Some(text(kind)) };
+  let Reply::Values(seen) = life.send(of("seen")).await.unwrap() else { panic!("values") };
+  assert_eq!(
+    seen.iter().map(|fact| (&fact[1], &fact[2])).collect::<Vec<_>>(),
+    [(&json!("chain1"), &json!("operator"))]
+  );
+  let queue = || Command::Queue {
+    entry: text("q1"),
+    hash: text("h1"),
+    shape: text("None"),
+    message: text("And the tests."),
+    on: None,
+  };
+  let first = made(&life, queue()).await;
+  assert_eq!(made(&life, queue()).await, first);
+  let Reply::Values(queued) = life.send(of("queue")).await.unwrap() else { panic!("values") };
+  let steps: Vec<_> = queued.iter().map(|fact| (fact[3].clone(), fact[5].clone())).collect();
+  assert_eq!(steps, [(json!("begin"), json!("h1")), (json!("sent"), json!(first))]);
+  fs::remove_dir_all(&at).unwrap();
+}

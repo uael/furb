@@ -130,6 +130,67 @@ export type Request1 =
       verb: "run";
     }
   | {
+      life: string;
+      act: string;
+      value: string;
+      verb: "close";
+    }
+  | {
+      life: string;
+      usd?: number | null;
+      share?: number | null;
+      on?: string | null;
+      verb: "grant";
+    }
+  | {
+      life: string;
+      command: string;
+      on?: string | null;
+      verb: "bash";
+    }
+  | {
+      life: string;
+      path: string;
+      on?: string | null;
+      verb: "read";
+    }
+  | {
+      life: string;
+      path: string;
+      content: string;
+      on?: string | null;
+      verb: "write";
+    }
+  | {
+      life: string;
+      on?: string | null;
+      verb: "names";
+    }
+  | {
+      life: string;
+      word: string;
+      on?: string | null;
+      verb: "gate";
+    }
+  | {
+      life: string;
+      verb: "stand";
+    }
+  | {
+      life: string;
+      about: string;
+      verb: "seen";
+    }
+  | {
+      life: string;
+      entry: string;
+      hash: string;
+      shape: string;
+      message: string;
+      on?: string | null;
+      verb: "queue";
+    }
+  | {
       verb: "handover";
     }
   | (Mount & {

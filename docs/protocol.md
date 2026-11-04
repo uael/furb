@@ -65,6 +65,16 @@ it is not given. The daemon answers requests in any order.
 | `pause`, `wake`, `cancel` | `life`, `act` | write |
 | `chain` | `life`, `label`, `on` | write |
 | `run` | `life`, `word`, `on` | write |
+| `close` | `life`, `act`, `value` (a value as the record writes it) | write |
+| `grant` | `life`, `usd`, `share`, `on` | write |
+| `bash` | `life`, `command`, `on` | write |
+| `read` | `life`, `path`, `on` | write |
+| `write` | `life`, `path`, `content`, `on` | write |
+| `names` | `life`, `on` | read |
+| `gate` | `life`, `word`, `on` | read |
+| `stand` | `life` | write |
+| `seen` | `life`, `about` | write |
+| `queue` | `life`, `entry`, `hash`, `shape`, `message`, `on` | write |
 | `handover` | | write |
 | `view.mount`, `view.tree`, `view.event`, `view.effect`, `view.dispose` | see below | read |
 
@@ -74,6 +84,8 @@ it is not given. The daemon answers requests in any order.
   `lives`, `act` (the name of the act that the verb made), `value`, `values`, `inspected` or `presence`.
 - A refusal is a frame `refused` with the `id`, or none for a frame that could not be read, the `error` as data, and
   `why`, the text that a person reads.
+- `queue` sends a message that a window queued once: the record keeps its `entry` and the `hash` of its words, so a
+  second `queue` of the same entry, from any window, gives the act of the first.
 - After `attach`, the daemon pushes each event of the life as a frame `event`, with the `life`, the `seq` of the event
   in the log of the life and the `event`: `fact`, `act`, `text`, `notice`, `changed`, `reborn` or `ended`. After
   `reborn`, the life goes on from its checkpoint, and its acts come again as they stand.

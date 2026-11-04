@@ -550,6 +550,280 @@
         {
           "type": "object",
           "properties": {
+            "life": {
+              "type": "string"
+            },
+            "act": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "close"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "act",
+            "value"
+          ],
+          "description": "A close of an act with a value, written as the record writes a value: `2.0` stays a float,\nand `{\"is\": \"Refused\", \"args\": [\"why\"]}` is a refusal."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "usd": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "share": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "grant"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "A ceiling of the spend of a chain, in dollars or in a share of its window."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "command": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "bash"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "command"
+          ],
+          "description": "A command that runs on a chain."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "read"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "path"
+          ],
+          "description": "The text at a path, read where a chain stands, as an act of the operator."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "write"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "path",
+            "content"
+          ],
+          "description": "A text written at a path, where a chain stands, as an act of the operator."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "names"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "The names that the module of a chain binds."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "word": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "gate"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "word"
+          ],
+          "description": "What the gate finds in a word on a chain, which runs nothing."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "stand"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "A stand of the life, which reads the roster and the actor again."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "about": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "seen"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "about"
+          ],
+          "description": "The fact that the operator read a chain or a thread up to now, which each window and each\nlater life reads in the record."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "entry": {
+              "type": "string"
+            },
+            "hash": {
+              "type": "string"
+            },
+            "shape": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "queue"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "entry",
+            "hash",
+            "shape",
+            "message"
+          ],
+          "description": "A message that the operator queued, sent once as a prompt on a chain. The record keeps the\nentry and the hash of its words, so a second send of the entry, from any window, gives the\nact of the first."
+        },
+        {
+          "type": "object",
+          "properties": {
             "verb": {
               "type": "string",
               "const": "handover"

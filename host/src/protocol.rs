@@ -169,6 +169,71 @@ pub enum Verb {
     word: String,
     on: Option<String>,
   },
+  /// A close of an act with a value, written as the record writes a value: `2.0` stays a float,
+  /// and `{"is": "Refused", "args": ["why"]}` is a refusal.
+  Close {
+    life: String,
+    act: String,
+    value: String,
+  },
+  /// A ceiling of the spend of a chain, in dollars or in a share of its window.
+  Grant {
+    life: String,
+    usd: Option<f64>,
+    share: Option<f64>,
+    on: Option<String>,
+  },
+  /// A command that runs on a chain.
+  Bash {
+    life: String,
+    command: String,
+    on: Option<String>,
+  },
+  /// The text at a path, read where a chain stands, as an act of the operator.
+  Read {
+    life: String,
+    path: String,
+    on: Option<String>,
+  },
+  /// A text written at a path, where a chain stands, as an act of the operator.
+  Write {
+    life: String,
+    path: String,
+    content: String,
+    on: Option<String>,
+  },
+  /// The names that the module of a chain binds.
+  Names {
+    life: String,
+    on: Option<String>,
+  },
+  /// What the gate finds in a word on a chain, which runs nothing.
+  Gate {
+    life: String,
+    word: String,
+    on: Option<String>,
+  },
+  /// A stand of the life, which reads the roster and the actor again.
+  Stand {
+    life: String,
+  },
+  /// The fact that the operator read a chain or a thread up to now, which each window and each
+  /// later life reads in the record.
+  Seen {
+    life: String,
+    about: String,
+  },
+  /// A message that the operator queued, sent once as a prompt on a chain. The record keeps the
+  /// entry and the hash of its words, so a second send of the entry, from any window, gives the
+  /// act of the first.
+  Queue {
+    life: String,
+    entry: String,
+    hash: String,
+    shape: String,
+    message: String,
+    on: Option<String>,
+  },
   /// The place of the daemon given to the daemon of a new build: each life written to its
   /// checkpoint and ended, and the lives with their pins in the answer, once the daemon stopped to
   /// listen.
@@ -205,6 +270,8 @@ impl Verb {
         | Self::Cwd { .. }
         | Self::Inspect { .. }
         | Self::Pending { .. }
+        | Self::Names { .. }
+        | Self::Gate { .. }
         | Self::ViewMount(_)
         | Self::ViewTree(_)
         | Self::ViewEvent(_)
