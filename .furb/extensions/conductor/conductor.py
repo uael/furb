@@ -37,10 +37,10 @@ Put each item in queue as (key, brief, thread), in the order of the work, the ha
 2. The files of an item are areas[key], which you write, and a test file holds no item. An item with no areas holds no file. A conflict on a file that need not change alone gets a fixer, by E3 of #1084. Each item that waits on a PR or a file is one line of the next notice, with its cause, once.
 3. A worker runs on a chain thread/key, at model_of(key), and an edit or a fix in a workspace {repo}-wN of its own. Its brief starts with the asks of the owner that its item carries. kinds[key] is edit (a PR), audit (a register in scratch and no PR) or fix (one red PR), and efforts[key] names its model. Its brief sends each build of the worker through script/build-slot.sh, which holds the slots of builds that all the workers of the machine share and caps the jobs of cargo: the tool holds that rule, and the round only briefs it.
 4. A worker that ends gives its report whole in the next notice. A worker that ends with no PR is a decision, and its notice wakes you.
-5. A PR of the round is an open PR whose label w:key names an item that the round holds. A red or conflicting one gets one order, to its maker while the maker lives, else to one fixer, and at most 2 fixers for a head, then a notice. A maker whose head did not move in OWNED seconds gives the PR to a fixer. A PR whose head differs from its branch on origin for two sweeps is closed and reopened once for that head, since GitHub did not read the branch.
+5. A PR of the round is an open PR whose label w:key names an item that the round holds. A red or conflicting one counts as handled only while a worker that knows of its head acts, by prompt1142: its live maker, which the round tells at once, once for each head and problem, to fix it before any other step, else a fixer that the round sent for that head, at most 2 for a head, then a notice. A head that such a worker has not moved in UNMOVED seconds is one notice, with the worker and its last act. handler() holds that rule for the sweep and for guard_faults(), so the guard flags what the sweep leaves. A PR whose head differs from its branch on origin for two sweeps is closed and reopened once for that head, since GitHub did not read the branch.
 6. While the newest run of the gates on main failed, the round sends no order and no fixer for a red PR, and tells you once. A red PR whose failed checks all fail on main too gets no fixer either, and the round says so in one line.
 7. A green PR merges by the auto-merge of GitHub, which the round turns on for each PR of the round, else by a plain merge, else by gh stack merge for a layer of a stack, behind a ruleset of main that requires the check GATE. With no such ruleset, the round turns on no auto-merge and tells you once. A draft, an open box of its checklist, or the label hold, hold:owner-review or owner-merge keeps a PR from the merge, and the label paused takes it out of the round.
-8. At ALIGN_EVERY merged PRs since the last audit of alignment, by prompt260, the round queues the next free alignN, of kind audit, which checks main against the words of the owner, and each row of its register becomes an item, queued in the order of the register after the items of queue, unless the coordinator asks for the rows before the items that no worker holds yet.
+8. At ALIGN_EVERY merged PRs since the last audit of alignment, by prompt260 and prompt1099, the round queues the next free alignN, of kind audit, on limits["models"]["astra"] when N is odd, else on the model of audit, which checks main against the words of the owner, and each row of its register becomes an item, queued in the order of the register after the items of queue, unless the coordinator asks for the rows before the items that no worker holds yet.
 9. Each message of the owner that no ask of owner_asks names is one line, by prompt362, and so is each ask that is not done or a decision while no item in queue, in backlog, at work or on an open PR of the round carries it, by prompt361. asked() gives the new lines in one notice, and no new notice while its last one stands open: no word of the owner drops between his message and main. A worker that ends with a line Left: <ids> queues one follow-up for each ask that no other item carries, and a follow-up that leaves it again is a decision.
 10. Each new comment of the owner on a PR of the round goes to the worker on it, else to a fixer, and the label hold comes on the PR until its worker pushes the fix and takes hold off.
 11. A fix of the round does not become its own item or PR, by pick R1 of the owner: it waits in scratch://round/frozen.md, while the live module carries it, and the waiting fixes land together in one change.
@@ -49,8 +49,8 @@ Each act of the round goes through quietly(verb, ...), so its end wakes nobody: 
 A change of the round loads as the whole file, run again as a rung: each name of the state binds with setdefault and keeps its value."""
 
 MOST = 10
-OWNED = 900.0
-ALIGN_EVERY = 8
+UNMOVED = 1800.0
+ALIGN_EVERY = 4
 # A rustc takes about 0.5 GB: a hire needs MEMORY GB free, and counts WORKER_MEMORY GB of it until the next round.
 MEMORY = 6.0
 WORKER_MEMORY = 1.0
@@ -72,9 +72,9 @@ TESTS = re.compile(r"(^|/)(tests?|__tests__)/|\.test\.[a-z]+$|_test\.[a-z]+$|(^|
 limits: dict[str, Any] = globals().setdefault(
   "limits",
   {
-    "room": {"opus/high": 2, "opus/medium": 2, "sonnet/high": 3, "sonnet/medium": 3},
+    "room": {"opus/high": 3, "opus/medium": 3, "sonnet/high": 3, "sonnet/medium": 3, "gpt-6-astra/high": 1},
     "fixer": "claude-cli:sonnet/medium",
-    "models": {"editor": "claude-cli:sonnet/high", "audit": "claude-cli:opus/high", "lead": "claude-cli:opus/medium"},
+    "models": {"editor": "claude-cli:sonnet/high", "audit": "claude-cli:opus/high", "lead": "claude-cli:opus/medium", "astra": "codex:gpt-6-astra/high"},
   },
 )
 queue: list[tuple[str, str, str]] = globals().setdefault("queue", [])
@@ -140,7 +140,7 @@ The item, {key}:
 FIX = """You fix the open PR #{n} of the repository {repo}: it {problem} at {sha}. Read it with gh pr view {n} and await checked({n}). If the head of the PR is not {sha} any more, or the PR no longer {problem}, change nothing and close with its number and a report that says so. Else work at the head of its branch {head}. {workspace} Resolve a conflict with the meaning of both sides, run the checks that the change touches, and push with --force-with-lease. Close with a tuple: the number of the PR, and your report in 200 words at most.
 """ + RULES
 
-FIXOWN = """Your open PR #{n} {problem} at {sha}. Fetch origin, fix it on your branch, resolve each conflict with the meaning of both sides, run the checks that the change touches, push with --force-with-lease, and read its checks once. A fixer takes the PR when its head does not move in {minutes} minutes."""
+FIXOWN = """Your open PR #{n} {problem} at {sha}. Fix it before any other step: fetch origin, fix it on your branch, resolve each conflict with the meaning of both sides, run the checks that the change touches, push with --force-with-lease, and read its checks once. When its head has not moved in {minutes} minutes, the round tells the coordinator."""
 
 ANSWER = """The owner commented on the open PR #{n} of the repository {repo}, at the head of its branch {head}, and no worker is on it. Do what the comment asks, answer it on GitHub with a reply that starts with 🤖, push the fix with --force-with-lease, and take the label hold off the PR. {workspace} The comment:
 {line}
@@ -513,20 +513,51 @@ def state(pr: dict) -> str:
   return "green" if GATE in pr["names"] and all(c in GREEN for c in checks) else "running"
 
 
-async def mend(pr: dict, now: str) -> None:
+def trouble(pr: dict) -> str:
+  now = state(pr)
+  if now == "conflicting":
+    return "conflicts with its base"
+  if now != "red":
+    return ""
+  return "has an open box of its checklist: " + "; ".join(x[6:] for x in pr["open"]) if pr["open"] else "has a failed check"
+
+
+def handler(pr: dict) -> str:
+  held = assigned.get(pr["n"]) or {}
+  who = str(held.get("who", ""))
+  return who if who and not over(who) and held.get("sha") == pr["sha"] and (held.get("fixer") or held.get("problem") == trouble(pr)) else ""
+
+
+def last_act(who: str) -> str:
+  facts = transcript(working_at(who))
+  return f"{facts[-1][0]} {facts[-1][1]}" if facts else "none"
+
+
+def guard_faults() -> list[str]:
+  ready = [q[0] for q in [*queue, *backlog] if not waiting(q[0])]
+  bad = [", ".join(ready[:5]) + " can start and slots are free, but the round did not hire"] if ready and len(running()) < cap() - 1 else []
+  for n, pr in sorted(prs.items()):
+    if ours(pr) and not set(HOLDS) & set(pr["labels"]) and (problem := trouble(pr)) and not handler(pr):
+      bad.append(f"#{n} {problem} at {pr['sha'][:7]}, and no worker that knows of it acts")
+  return bad
+
+
+async def mend(pr: dict, problem: str) -> None:
   n, sha = pr["n"], pr["sha"]
   held = assigned.get(n) or {}
-  turn = held if held.get("sha") == sha else {}
-  if held.get("fixer") and not over(held["who"]) or turn and not over(turn["who"]) and clock() - turn["at"] < OWNED or taken(f"fix{n}"):
+  if who := handler(pr):
+    if clock() - held["at"] >= UNMOVED:
+      how = "sent to fix it" if held["fixer"] else "told of it"
+      notice(f"stall {n} {sha} {who}", f"#{n} {problem} at {sha[:7]}, and {who}, whom the round {how}, has not moved its head in {int(UNMOVED // 60)} minutes. Its last act: {last_act(who)}.")
     return
-  problem = "conflicts with its base" if now == "conflicting" else "has an open box of its checklist: " + "; ".join(x[6:] for x in pr["open"]) if pr["open"] else "has a failed check"
-  maker = maker_of(pr)
-  if maker and not turn:
-    order = FIXOWN.replace("{n}", str(n)).replace("{problem}", problem).replace("{sha}", sha[:7]).replace("{minutes}", str(int(OWNED // 60)))
+  tries = held.get("tries", 0) if held.get("sha") == sha else 0
+  if maker := maker_of(pr):
+    order = FIXOWN.replace("{n}", str(n)).replace("{problem}", problem).replace("{sha}", sha[:7]).replace("{minutes}", str(int(UNMOVED // 60)))
     quietly(prompt, None, order, on=working_at(maker))
-    assigned[n] = {"sha": sha, "who": maker, "at": clock(), "fixer": False, "maker": maker, "tries": 0}
+    assigned[n] = {"sha": sha, "problem": problem, "who": maker, "at": clock(), "fixer": False, "tries": tries}
     return
-  tries = turn.get("tries", 0)
+  if taken(f"fix{n}"):
+    return
   if tries >= 2:
     notice(f"spent {n} {sha}", f"#{n} {problem} at {sha[:7]}, and 2 fixers ended at this head and did not move it, so the round sends no third one.")
     return
@@ -536,7 +567,7 @@ async def mend(pr: dict, now: str) -> None:
   brief = FIX.replace("{n}", str(n)).replace("{problem}", problem).replace("{sha}", sha).replace("{head}", pr["head"])
   thread = next((m[7:] for m in pr["labels"] if m.startswith("thread:")), "")
   who = await hire(f"fix{n}", "", thread, brief, fixer)
-  assigned[n] = {"sha": sha, "who": who, "at": clock(), "fixer": True, "maker": turn.get("maker", ""), "tries": tries + 1}
+  assigned[n] = {"sha": sha, "problem": problem, "who": who, "at": clock(), "fixer": True, "tries": tries + 1}
 
 
 async def sweep() -> None:
@@ -600,8 +631,8 @@ async def sweep() -> None:
       once(f"main waits {n} {pr['sha']}", f"#{n} is red at {pr['sha'][:7]} while main is red, so it waits for main.")
     elif now == "red" and failing and not pr["open"] and not failing - broke:
       once(f"main fails {n} {pr['sha']}", f"#{n} is red at {pr['sha'][:7]} only on {', '.join(sorted(failing))}, which main fails too, so the round hires no fixer for it.")
-    elif now in ("red", "conflicting") and not labelled and not (pr["draft"] and maker_of(pr)):
-      await mend(pr, now)
+    elif (problem := trouble(pr)) and not labelled:
+      await mend(pr, problem)
   if flips:
     await shell("".join(f"{{ {x}; }} >/dev/null 2>&1; " for x in flips), timeout=300)
 
@@ -682,6 +713,8 @@ def align() -> None:
   window = f"{since}..{head}" if since and head else "-40 origin/main"
   text = ALIGN.replace("{key}", key).replace("{count}", str(count)).replace("{window}", window).replace("{words}", WORDS)
   kinds[key] = "audit"
+  if n % 2 and (astra := limits["models"].get("astra")):
+    efforts[key] = astra
   queue.append((key, text.replace("{asks}", ASKS).replace("{held}", ", ".join(sorted(held_keys())) or "none"), "align"))
   align_state.update(base=str(len(merged)), n=str(n), sha=head or since)
   heard.append(f"{count} PRs merged since the last audit of alignment, so the round queued {key}.")
