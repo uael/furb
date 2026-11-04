@@ -19,7 +19,17 @@ async function life() {
   });
   const add = async (fact: unknown[], seen: () => boolean) => {
     appendFileSync(record, `${JSON.stringify(fact)}\n`);
-    while (!seen()) await new Promise<void>((done) => session.once("change", () => done()));
+    const until = Date.now() + 10_000;
+    while (!seen()) {
+      if (Date.now() > until) throw new Error(`the life heard not ${JSON.stringify(fact)} in 10s`);
+      await new Promise<void>((done) => {
+        const wake = setTimeout(done, 1000);
+        session.once("change", () => {
+          clearTimeout(wake);
+          done();
+        });
+      });
+    }
   };
   return { session, add };
 }
