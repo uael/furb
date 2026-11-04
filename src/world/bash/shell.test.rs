@@ -14,6 +14,8 @@
 #![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
 
 use std::fs;
+#[cfg(unix)]
+use std::time::Duration;
 
 #[cfg(unix)]
 use super::asked_path;
@@ -82,7 +84,7 @@ fn fake_shell(name: &str, body: &str) -> std::path::PathBuf {
 /// What the login shell says its PATH is, awaited on the runtime of the ears.
 #[cfg(unix)]
 fn asked(shell: &std::path::Path) -> Option<std::ffi::OsString> {
-  crate::ear::reactor().block_on(asked_path(shell))
+  crate::ear::reactor().block_on(asked_path(shell, Duration::from_secs(120)))
 }
 
 #[test]
@@ -93,6 +95,22 @@ fn the_path_of_the_login_shell_is_read_between_its_marks() {
     "echo noise of a profile; printf '<furb-path>/opt/homebrew/bin:/usr/bin</furb-path>'",
   );
   assert_eq!(asked(&shell), Some("/opt/homebrew/bin:/usr/bin".into()));
+}
+
+#[test]
+#[cfg(unix)]
+fn the_path_of_a_login_shell_whose_profile_leaves_a_process_on_its_output_is_read_when_the_shell_ends()
+ {
+  let release = std::env::temp_dir().join(format!("furb-login-{}-release", std::process::id()));
+  drop(fs::remove_file(&release));
+  let held = format!(
+    "(n=0; while [ ! -e '{}' ] && [ $n -lt 300 ]; do sleep 0.1; n=$((n+1)); done) & printf '<furb-path>/a:/b</furb-path>'",
+    release.display()
+  );
+  let got =
+    crate::ear::reactor().block_on(asked_path(&fake_shell("held", &held), Duration::from_secs(20)));
+  fs::write(&release, "").unwrap();
+  assert_eq!(got, Some("/a:/b".into()));
 }
 
 #[test]

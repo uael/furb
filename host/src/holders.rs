@@ -46,6 +46,11 @@ impl Holders {
     self.settle();
   }
 
+  /// Whether the peer of an outbox attached the life as a window.
+  pub(crate) fn holds(&self, outbox: &Outbox) -> bool {
+    self.windows.iter().any(|one| one.outbox.same_channel(outbox))
+  }
+
   /// The window of a peer detached, which hears no event of the life more: whether it was attached.
   pub(crate) fn detach(&mut self, outbox: &Outbox) -> bool {
     let Some(at) = self.windows.iter().position(|one| one.outbox.same_channel(outbox)) else {

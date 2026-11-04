@@ -24,10 +24,13 @@ mod daemon {
     life::{Answer as Answered, Opening},
   };
   use furb_host::{
-    DaemonError, Event, GRACE, ProtocolError, Settings,
-    protocol::{Answer, Frame, Hello, Kind, Listed, PROTOCOL, Request, Verb},
+    DaemonError, Event, GRACE, ProtocolError, Settings, TransportError,
+    protocol::{
+      Answer, Axis, Dispose, Effect, Frame, Gesture, Hello, Kind, Listed, Mount, Node, PROTOCOL,
+      Request, Role, Shape, Slot, Tree, Verb, ViewEffect, ViewEvent,
+    },
     run,
-    transport::{Dialer, Local},
+    transport::{Accepted, Dialer, Identity, Local, Who},
     upgrade,
     view::Phase,
   };
@@ -85,6 +88,35 @@ mod daemon {
     (local, tokio::spawn(async move { run(&served, listener, settings).await }))
   }
 
+  /// The identity of a test: the peers that dial in turn hold the roles of its list, so that a
+  /// window can read.
+  #[derive(Clone)]
+  struct Grants {
+    local: Local,
+    next: Arc<AtomicUsize>,
+    roles: Arc<[Role]>,
+  }
+
+  impl Identity for Grants {
+    type Stream = Accepted;
+
+    fn identify(&self, stream: &Accepted) -> Result<Who, TransportError> {
+      let who = self.local.identify(stream)?;
+      let at = self.next.fetch_add(1, Ordering::SeqCst);
+      Ok(Who { role: self.roles[at], ..who })
+    }
+  }
+
+  /// A daemon that gives each peer that dials, in turn, the role of a list.
+  async fn started_as(at: &Path, roles: &[Role]) -> Local {
+    let local = Local::new(at.join("sock"));
+    let listener = local.listen().await.unwrap();
+    let settings = Settings { opening: opening(at), grace: GRACE };
+    let identity = Grants { local: local.clone(), next: Arc::default(), roles: roles.into() };
+    tokio::spawn(async move { run(&identity, listener, settings).await });
+    local
+  }
+
   /// A window of a test: its stream, the id of its next request, and each frame that it read while
   /// it waited for another.
   struct Window {
@@ -96,9 +128,15 @@ mod daemon {
   impl Window {
     /// A window that dialed the daemon and said its hello.
     async fn dialed(local: &Local) -> Window {
+      Window::dialed_as(local, Kind::Window, None).await
+    }
+
+    /// A peer of a kind that dialed the daemon and said its hello.
+    async fn dialed_as(local: &Local, kind: Kind, name: Option<&str>) -> Window {
       let lines = Framed::new(local.dial().await.unwrap(), LinesCodec::new());
       let mut window = Window { lines, next: 0, pushed: VecDeque::new() };
-      let hello = Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Window, name: None });
+      let name = name.map(str::to_owned);
+      let hello = Verb::Hello(Hello { protocol: PROTOCOL, kind, name });
       let welcome = window.ask(hello).await;
       assert!(matches!(welcome, Ok(Answer::Welcome { .. })), "{welcome:?}");
       window
@@ -304,11 +342,110 @@ mod daemon {
     assert!(!new.is_finished());
   }
 
+  /// The view of a kit that a window mounts in the footer of a life.
+  fn mount(life: &str, viewer: &str) -> Verb {
+    let (viewer, life, kit) = (viewer.to_owned(), life.to_owned(), "k".to_owned());
+    Verb::ViewMount(Mount { viewer, life, slot: Slot::Footer, kit })
+  }
+
+  /// A tree with a button, which only a window that writes may press.
+  fn tree(viewer: &str) -> Verb {
+    let button =
+      Node { id: "go".to_owned(), shape: Shape::Button { label: "go".to_owned(), inert: false } };
+    let shape = Shape::Box { axis: Axis::Row, gap: 0, border: false, children: vec![button] };
+    let tree = Node { id: "root".to_owned(), shape };
+    Verb::ViewTree(Tree { viewer: viewer.to_owned(), slot: Slot::Footer, version: 1, tree })
+  }
+
+  /// Whether a frame is the tree of a viewer, and whether its button is inert.
+  fn inert(frame: &Frame) -> Option<bool> {
+    let Frame::ViewTree(Tree { tree: Node { shape: Shape::Box { children, .. }, .. }, .. }) = frame
+    else {
+      return None;
+    };
+    let Some(Node { shape: Shape::Button { inert, .. }, .. }) = children.first() else {
+      return None;
+    };
+    Some(*inert)
+  }
+
+  fn pressed(viewer: &str) -> Verb {
+    let (viewer, node) = (viewer.to_owned(), "go".to_owned());
+    Verb::ViewEvent(ViewEvent { viewer, node, kind: Gesture::Press, value: None })
+  }
+
+  #[tokio::test]
+  async fn a_kit_serves_a_tree_to_a_writer_and_a_reader_and_hears_the_writer_alone() {
+    let at = place();
+    let local = started_as(&at, &[Role::Write, Role::Write, Role::Read]).await;
+    let mut kit = Window::dialed_as(&local, Kind::Kit, Some("k")).await;
+    let (mut writer, mut reader) = (Window::dialed(&local).await, Window::dialed(&local).await);
+    let life = opened(&mut writer, &at, "a.jsonl").await;
+    for peer in [&mut kit, &mut writer, &mut reader] {
+      peer.attach(&life).await;
+    }
+    for (window, viewer) in [(&mut writer, "w"), (&mut reader, "r")] {
+      assert_eq!(window.ask(mount(&life, viewer)).await, Ok(Answer::Done));
+      kit.until(|frame| matches!(frame, Frame::ViewMount(one) if one.viewer == viewer)).await;
+      assert_eq!(kit.ask(tree(viewer)).await, Ok(Answer::Done));
+    }
+    assert_eq!(inert(&writer.until(|frame| inert(frame).is_some()).await), Some(false));
+    assert_eq!(inert(&reader.until(|frame| inert(frame).is_some()).await), Some(true));
+    let notice = Effect::Notice { text: "done".to_owned() };
+    let effect = Verb::ViewEffect(ViewEffect { viewer: "w".to_owned(), effect: notice });
+    assert_eq!(kit.ask(effect).await, Ok(Answer::Done));
+    writer.until(|frame| matches!(frame, Frame::ViewEffect(_))).await;
+    assert!(writer.pushed.iter().all(|frame| inert(frame).is_none()));
+    let refused = reader.ask(pressed("r")).await;
+    assert_eq!(refused, Err(ProtocolError::Role { needs: Role::Write, has: Role::Read }));
+    assert_eq!(writer.ask(pressed("w")).await, Ok(Answer::Done));
+    let heard = kit.until(|frame| matches!(frame, Frame::ViewEvent(_))).await;
+    assert_eq!(
+      heard,
+      Frame::ViewEvent(ViewEvent {
+        viewer: "w".to_owned(),
+        node: "go".to_owned(),
+        kind: Gesture::Press,
+        value: None
+      })
+    );
+  }
+
+  #[tokio::test]
+  async fn a_mount_needs_a_kit_and_a_holder_and_a_view_ends_with_its_peer() {
+    let at = place();
+    let local = started_as(&at, &[Role::Write, Role::Write]).await;
+    let (mut writer, mut kit) =
+      (Window::dialed(&local).await, Window::dialed_as(&local, Kind::Kit, Some("k")).await);
+    let life = opened(&mut writer, &at, "a.jsonl").await;
+    writer.attach(&life).await;
+    let nokit = ProtocolError::NoKit { life: life.clone(), kit: "k".to_owned() };
+    assert_eq!(writer.ask(mount(&life, "v")).await, Err(nokit));
+    kit.attach(&life).await;
+    assert_eq!(writer.ask(mount(&life, "v")).await, Ok(Answer::Done));
+    let taken = writer.ask(mount(&life, "v")).await;
+    assert_eq!(taken, Err(ProtocolError::Mounted { viewer: "v".to_owned() }));
+    let stranger = kit
+      .ask(Verb::ViewEvent(ViewEvent {
+        viewer: "v".to_owned(),
+        node: "go".to_owned(),
+        kind: Gesture::Press,
+        value: None,
+      }))
+      .await;
+    assert!(matches!(stranger, Err(ProtocolError::Speaker { .. })), "{stranger:?}");
+    drop(kit);
+    let ended = Frame::ViewDispose(Dispose { viewer: "v".to_owned() });
+    assert_eq!(writer.until(|frame| matches!(frame, Frame::ViewDispose(_))).await, ended);
+    let gone = writer.ask(pressed("v")).await;
+    assert_eq!(gone, Err(ProtocolError::Unmounted { viewer: "v".to_owned() }));
+  }
+
   #[tokio::test]
   async fn a_second_daemon_of_the_machine_refuses_to_start() {
     let at = place();
     let (local, _daemon) = started(&at, GRACE).await;
     let refused = local.listen().await;
-    assert!(matches!(refused, Err(furb_host::TransportError::Taken { .. })));
+    assert!(matches!(refused, Err(TransportError::Taken { .. })));
   }
 }

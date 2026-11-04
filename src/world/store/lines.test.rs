@@ -10,8 +10,8 @@ use std::{fs, io::Write, path::PathBuf};
 
 use serde_json::json;
 
-use super::{Lines, heads, kept, stamped};
-use crate::world::store::Store;
+use super::{Lines, heads, stamped};
+use crate::world::{kept, store::Store};
 
 /// A record of its own for one test, which does not stand yet.
 fn place(name: &str) -> PathBuf {
