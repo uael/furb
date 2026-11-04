@@ -1,7 +1,5 @@
 //! The store of a record as a database of SQLite: one row for each entry, in the table `entries`.
 
-#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
-
 use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OpenFlags};
@@ -12,7 +10,11 @@ use crate::{
   wire::record,
 };
 
-use super::{Lease, Store, entry_of, failed, leased, now};
+use super::{
+  Lease, Store, entry_of,
+  error::{At, StoreError},
+  leased, now,
+};
 
 /// The table of the entries: the number of each row, in the order that the store kept them, the entry as JSON, and
 /// the time at which the store kept it, in milliseconds since the start of 1970, which the life never reads.
@@ -34,9 +36,9 @@ impl Sqlite {
   pub fn open(path: impl AsRef<Path>) -> Result<Self, Fault> {
     let path = path.as_ref().to_path_buf();
     let lease = leased(&path)?;
-    let db = Connection::open(&path).map_err(|no| failed(&path, no))?;
+    let db = Connection::open(&path).map_err(StoreError::sqlite(&path))?;
     db.execute_batch(&format!("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; {TABLE};"))
-      .map_err(|no| failed(&path, no))?;
+      .map_err(StoreError::sqlite(&path))?;
     Ok(Self { path, db, _lease: lease })
   }
 }
@@ -54,7 +56,8 @@ impl Store for Sqlite {
       .db
       .execute("INSERT INTO entries (entry, at) VALUES (?1, ?2)", (record(entry).to_string(), at))
       .map(drop)
-      .map_err(|no| failed(&self.path, no))
+      .map_err(StoreError::sqlite(&self.path))?;
+    Ok(())
   }
 
   fn sync(&mut self) -> Result<(), Fault> {
@@ -62,29 +65,21 @@ impl Store for Sqlite {
   }
 }
 
-/// What the database at a path holds, read with no lease and changed in nothing: nothing when no database or no
-/// table of entries stands there.
-pub(super) fn kept(path: &Path) -> Result<Vec<Object>, Fault> {
-  let mut entries = Vec::new();
-  each(path, &mut |one| entries.push(one))?;
-  Ok(entries)
-}
-
 /// Each entry of the database at a path, in the order of its rows, read with no lease and changed in nothing, one row
 /// at a time: none when no database or no table of entries stands there.
-pub(super) fn each(path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
+pub(super) fn each(path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), StoreError> {
   if !path.exists() {
     return Ok(());
   }
   let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-    .map_err(|no| failed(path, no))?;
+    .map_err(StoreError::sqlite(path))?;
   let tables = db
     .query_row(
       "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'entries'",
       [],
       |row| row.get::<_, i64>(0),
     )
-    .map_err(|no| failed(path, no))?;
+    .map_err(StoreError::sqlite(path))?;
   match tables {
     0 => Ok(()),
     _ => rows(&db, path, take),
@@ -92,16 +87,15 @@ pub(super) fn each(path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), Faul
 }
 
 /// Each entry of the database, in the order of its rows, each the fact it kept in a list of one, as boot takes them.
-fn rows(db: &Connection, path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
+fn rows(db: &Connection, path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), StoreError> {
   let mut asked =
-    db.prepare("SELECT n, entry FROM entries ORDER BY n").map_err(|no| failed(path, no))?;
-  let mut rows = asked.query([]).map_err(|no| failed(path, no))?;
-  while let Some(row) = rows.next().map_err(|no| failed(path, no))? {
-    let n = row.get::<_, i64>(0).map_err(|no| failed(path, no))?;
-    let invalid =
-      || Fault::refused(format!("Invalid record entry at row {n} in {}.", path.display()));
-    let text = row.get::<_, String>(1).map_err(|_| invalid())?;
-    let held = serde_json::from_str::<Vec<&RawValue>>(&text).map_err(|_| invalid())?;
+    db.prepare("SELECT n, entry FROM entries ORDER BY n").map_err(StoreError::sqlite(path))?;
+  let mut rows = asked.query([]).map_err(StoreError::sqlite(path))?;
+  while let Some(row) = rows.next().map_err(StoreError::sqlite(path))? {
+    let n = row.get::<_, i64>(0).map_err(StoreError::sqlite(path))?;
+    let invalid = || StoreError::Invalid { path: path.to_path_buf(), at: At::Row(n) };
+    let Ok(text) = row.get::<_, String>(1) else { return Err(invalid()) };
+    let Ok(held) = serde_json::from_str::<Vec<&RawValue>>(&text) else { return Err(invalid()) };
     let [fact] = held.as_slice() else { return Err(invalid()) };
     take(entry_of(fact).ok_or_else(invalid)?);
   }

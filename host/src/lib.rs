@@ -26,6 +26,7 @@ mod rebirth;
 mod serve;
 pub mod transport;
 pub mod view;
+mod views;
 
 pub use daemon::{GRACE, Settings, Tailnet, run, upgrade};
 pub use error::{AccessError, DaemonError, LifeError, ProtocolError, TransportError};

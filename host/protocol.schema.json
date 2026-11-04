@@ -652,10 +652,10 @@
       "type": "string",
       "enum": [
         "window",
-        "skill",
+        "kit",
         "daemon"
       ],
-      "description": "What a peer is: a window of an operator, the process of a skill, or the daemon of a new build,\nwhich asks the handover."
+      "description": "What a peer is: a window of an operator, the process of a kit, or the daemon of a new build,\nwhich asks the handover."
     },
     "Hello": {
       "type": "object",
@@ -679,7 +679,7 @@
         "protocol",
         "kind"
       ],
-      "description": "The first frame of a peer: the protocol that it speaks, its kind, and the name of a skill."
+      "description": "The first frame of a peer: the protocol that it speaks, its kind, and the name of a kit."
     },
     "Slot": {
       "oneOf": [
@@ -727,7 +727,7 @@
             "slot",
             "act"
           ],
-          "description": "The row of one act, of a kind that the skill draws."
+          "description": "The row of one act, of a kind that the kit draws."
         },
         {
           "type": "object",
@@ -744,7 +744,7 @@
             "slot",
             "act"
           ],
-          "description": "The detail of one act, of a kind that the skill draws."
+          "description": "The detail of one act, of a kind that the kit draws."
         },
         {
           "type": "object",
@@ -761,7 +761,7 @@
             "slot",
             "act"
           ],
-          "description": "A mark in the feed, after one act, of a kind that the skill marks."
+          "description": "A mark in the feed, after one act, of a kind that the kit marks."
         },
         {
           "type": "object",
@@ -814,7 +814,7 @@
         "slot": {
           "$ref": "#/definitions/Slot"
         },
-        "skill": {
+        "kit": {
           "type": "string"
         }
       },
@@ -822,9 +822,9 @@
         "viewer",
         "life",
         "slot",
-        "skill"
+        "kit"
       ],
-      "description": "A view that a window mounts in a slot of a life, which the process of a skill serves."
+      "description": "A view that a window mounts in a slot of a life, which the process of a kit serves."
     },
     "Node": {
       "type": "object",
@@ -950,6 +950,11 @@
                 "null"
               ]
             },
+            "inert": {
+              "type": "boolean",
+              "description": "A node that acts is inert in the window of a peer that only reads: it draws and takes no\ngesture.",
+              "default": false
+            },
             "node": {
               "type": "string",
               "const": "input"
@@ -965,6 +970,10 @@
           "properties": {
             "label": {
               "type": "string"
+            },
+            "inert": {
+              "type": "boolean",
+              "default": false
             },
             "node": {
               "type": "string",
@@ -1207,7 +1216,7 @@
           ]
         }
       ],
-      "description": "What a skill asks of a window."
+      "description": "What a kit asks of a window."
     },
     "ViewEffect": {
       "type": "object",
@@ -1223,7 +1232,7 @@
         "viewer",
         "effect"
       ],
-      "description": "What a skill asks of the one window of a view."
+      "description": "What a kit asks of the one window of a view."
     },
     "Dispose": {
       "type": "object",
@@ -1639,7 +1648,7 @@
         "role",
         "kind"
       ],
-      "description": "A peer as the daemon knows it after its hello: the login that its transport proved, its role,\nits kind, and the name of a skill."
+      "description": "A peer as the daemon knows it after its hello: the login that its transport proved, its role,\nits kind, and the name of a kit."
     },
     "Role": {
       "type": "string",
@@ -1899,15 +1908,90 @@
         {
           "type": "object",
           "properties": {
+            "needs": {
+              "$ref": "#/definitions/Kind"
+            },
+            "has": {
+              "$ref": "#/definitions/Kind"
+            },
             "error": {
               "type": "string",
-              "const": "viewless"
+              "const": "speaker"
+            }
+          },
+          "required": [
+            "error",
+            "needs",
+            "has"
+          ],
+          "description": "A frame of a view that only a window says, or only a kit, and the peer is of another kind."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "error": {
+              "type": "string",
+              "const": "nameless"
             }
           },
           "required": [
             "error"
           ],
-          "description": "A frame of a view, which the daemon does not route yet."
+          "description": "A kit says its name at its hello, since a window mounts the views of a kit by it."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "kit": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "no_kit"
+            }
+          },
+          "required": [
+            "error",
+            "life",
+            "kit"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "unmounted"
+            }
+          },
+          "required": [
+            "error",
+            "viewer"
+          ],
+          "description": "A view belongs to the window that mounted it and to the kit that serves it, and to no other\npeer."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "mounted"
+            }
+          },
+          "required": [
+            "error",
+            "viewer"
+          ],
+          "description": "A viewer names one view of the daemon."
         }
       ],
       "description": "Why the daemon refuses a frame of a peer. It crosses the protocol as data, beside its text."

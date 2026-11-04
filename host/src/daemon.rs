@@ -44,9 +44,12 @@ use crate::{
   event::{Event, Seq},
   holders::{Holders, Window},
   life::{Command, Life, LifeHandle, Reply},
-  protocol::{Answer, BOUND, Frame, Handed, Hello, Kind, Listed, PROTOCOL, Peer, Request, Verb},
+  protocol::{
+    Answer, BOUND, Frame, Handed, Hello, Kind, Listed, Mount, PROTOCOL, Peer, Request, Verb,
+  },
   serve::{Host, Outbox, serve},
   transport::{Accepted, Dialer, Identity, Listener, Local, Tailscale, Tcp, upgraded},
+  views::{Kit, Views},
 };
 
 /// How long a life with no holder lives, unless the settings of the daemon say otherwise.
@@ -73,9 +76,12 @@ pub struct Tailnet {
 }
 
 /// The daemon of the machine served on the transport where it listens, until a daemon of a new
-/// build takes its place.
-pub async fn run(local: &Local, listener: Listener, settings: Settings) -> Result<(), DaemonError> {
-  served(local, listener, settings, Vec::new()).await
+/// build takes its place. Its identity says who each peer is and the role that it holds.
+pub async fn run<I>(identity: &I, listener: Listener, settings: Settings) -> Result<(), DaemonError>
+where
+  I: Identity<Stream = Accepted> + Clone + Send + 'static,
+{
+  served(identity, listener, settings, Vec::new()).await
 }
 
 /// This daemon in the place of the daemon that runs on the transport: that one writes the
@@ -122,12 +128,15 @@ async fn handover(stream: <Local as Dialer>::Stream) -> Result<(Vec<Handed>, Ask
 /// The daemon served from a listener, with the lives that a daemon before it gave: each peer that
 /// the transport accepts, until a handover. The listener stops first, then the peer that asked the
 /// handover gets the lives, and each other peer closes once that peer is gone.
-async fn served(
-  local: &Local,
+async fn served<I>(
+  identity: &I,
   mut listener: Listener,
   settings: Settings,
   handed: Vec<Handed>,
-) -> Result<(), DaemonError> {
+) -> Result<(), DaemonError>
+where
+  I: Identity<Stream = Accepted> + Clone + Send + 'static,
+{
   let log = settings.opening.log.clone();
   let doors = match &settings.tailnet {
     Some(tailnet) => Doors::listen(tailnet, log.as_ref()).await,
@@ -139,7 +148,7 @@ async fn served(
     tokio::select! {
       accepted = listener.accept() => match accepted {
         Ok(stream) => {
-          peers.spawn(peer(daemon.clone(), local.clone(), stream));
+          peers.spawn(peer(daemon.clone(), identity.clone(), stream));
         }
         Err(no) => report(log.as_ref(), &no),
       },
@@ -165,9 +174,13 @@ async fn served(
   Ok(())
 }
 
-/// One peer of the local transport, identified, then served until it leaves.
-async fn peer(daemon: Daemon, local: Local, stream: Accepted) -> Result<(), TransportError> {
-  let who = local.identify(&stream).await?;
+/// One peer of the transport, identified, then served until it leaves.
+async fn peer<I: Identity<Stream = Accepted>>(
+  daemon: Daemon,
+  identity: I,
+  stream: Accepted,
+) -> Result<(), TransportError> {
+  let who = identity.identify(&stream).await?;
   serve(&daemon, stream, who).await
 }
 
@@ -288,8 +301,14 @@ impl Daemon {
   fn spawn(settings: Settings, handed: Vec<Handed>) -> (Daemon, oneshot::Receiver<Leaving>) {
     let (asks, heard) = mpsc::unbounded_channel();
     let (leave, leaving) = oneshot::channel();
-    let mut lives =
-      Lives { settings, held: HashMap::new(), asks: asks.downgrade(), born: 0, leave };
+    let mut lives = Lives {
+      settings,
+      held: HashMap::new(),
+      asks: asks.downgrade(),
+      born: 0,
+      leave,
+      views: Views::default(),
+    };
     lives.adopt(handed);
     tokio::spawn(lives.kept(heard));
     (Daemon { asks }, leaving)
@@ -372,13 +391,15 @@ impl From<Reply> for Answer {
 }
 
 /// The lives of the daemon, each under the path of its record, which one task owns: the count of
-/// the births of a life, and where the task tells the listener of a handover.
+/// the births of a life, where the task tells the listener of a handover, and the views that the
+/// kits of the lives serve.
 struct Lives {
   settings: Settings,
   held: HashMap<String, Held>,
   asks: mpsc::WeakUnboundedSender<Asked>,
   born: u64,
   leave: oneshot::Sender<Leaving>,
+  views: Views,
 }
 
 /// A life of the daemon: its handle, its folder, its birth, and its stage.
@@ -426,6 +447,7 @@ impl Lives {
         reply.send(found.ok_or(ProtocolError::Closed { life })).ok();
       }
       Asked::Left { life, outbox } => {
+        self.views.left(&life, &outbox);
         if let Ok((_, holders)) = living(&mut self.held, &life)
           && holders.detach(&outbox)
         {
@@ -441,13 +463,7 @@ impl Lives {
       Verb::Open { life, cwd } => return self.open(life, cwd, reply),
       Verb::List => Ok(Answer::Lives(self.listed())),
       Verb::Attach { life, from } => self.attach(&life, from, peer, outbox),
-      Verb::Detach { life } => living(&mut self.held, &life).and_then(|(_, holders)| {
-        holders
-          .detach(outbox)
-          .then(|| holders.present(&life))
-          .map(|()| Answer::Done)
-          .ok_or(ProtocolError::Unattached { life: life.clone() })
-      }),
+      Verb::Detach { life } => self.detach(&life, outbox),
       Verb::Pin { life, holder } => living(&mut self.held, &life).map(|(_, holders)| {
         holders.pin(holder);
         Answer::Done
@@ -461,9 +477,13 @@ impl Lives {
       Verb::Presence { life } => {
         living(&mut self.held, &life).map(|(_, holders)| Answer::Presence(holders.presence()))
       }
-      // The door refuses a second hello, and each verb of a life goes to its life, so each other
-      // verb is a frame of a view.
-      _ => Err(ProtocolError::Viewless),
+      Verb::ViewMount(mount) => self.mount(mount, &peer, outbox),
+      Verb::ViewEvent(event) => self.views.event(event, outbox).map(|()| Answer::Done),
+      Verb::ViewDispose(dispose) => self.views.dispose(&dispose, outbox).map(|()| Answer::Done),
+      Verb::ViewTree(tree) => self.views.tree(tree, outbox).map(|()| Answer::Done),
+      Verb::ViewEffect(effect) => self.views.effect(effect, outbox).map(|()| Answer::Done),
+      // The door refuses a second hello, and each verb of a life goes to its life.
+      other => Err(ProtocolError::Refused { why: format!("the daemon holds no verb {other:?}") }),
     };
     reply.send(answer).ok();
   }
@@ -514,7 +534,8 @@ impl Lives {
     }
   }
 
-  /// A window attached to a life, which hears each event of the life from a place in its log.
+  /// A peer attached to a life, which hears each event of the life from a place in its log. A
+  /// window holds the life, and a kit, under its name, serves views of it and holds nothing.
   fn attach(
     &mut self,
     life: &str,
@@ -522,12 +543,41 @@ impl Lives {
     peer: Peer,
     outbox: &Outbox,
   ) -> Result<Answer, ProtocolError> {
+    let kit = match peer.kind {
+      Kind::Kit => Some(peer.name.clone().ok_or(ProtocolError::Nameless)?),
+      Kind::Window | Kind::Daemon => None,
+    };
     let (handle, holders) = living(&mut self.held, life)?;
     let teller = told(life.to_owned(), handle.events(from), outbox.clone(), self.asks.clone());
     let told = tokio::spawn(teller).abort_handle();
-    holders.attach(Window { peer, outbox: outbox.clone(), told });
-    holders.present(life);
+    if let Some(name) = kit {
+      let life = life.to_owned();
+      self.views.attach(Kit { life, name, outbox: outbox.clone(), told });
+    } else {
+      holders.attach(Window { peer, outbox: outbox.clone(), told });
+      holders.present(life);
+    }
     Ok(Answer::Done)
+  }
+
+  /// A peer that let go of a life: a window of its hold and of its views, and a kit of its views.
+  fn detach(&mut self, life: &str, outbox: &Outbox) -> Result<Answer, ProtocolError> {
+    let (_, holders) = living(&mut self.held, life)?;
+    let was = holders.detach(outbox);
+    if was {
+      holders.present(life);
+    }
+    let kit = self.views.left(life, outbox);
+    (was || kit).then_some(Answer::Done).ok_or(ProtocolError::Unattached { life: life.to_owned() })
+  }
+
+  /// A view that a window mounts in a slot of a life that it holds.
+  fn mount(&mut self, mount: Mount, peer: &Peer, outbox: &Outbox) -> Result<Answer, ProtocolError> {
+    let (_, holders) = living(&mut self.held, &mount.life)?;
+    if !holders.holds(outbox) {
+      return Err(ProtocolError::Unattached { life: mount.life });
+    }
+    self.views.mount(mount, peer, outbox).map(|()| Answer::Done)
   }
 
   /// Each life of the daemon, by the path of its record, and whether it lives or ends.
@@ -573,6 +623,7 @@ impl Lives {
     if self.held.get(&life).is_none_or(|held| held.born != born) {
       return;
     }
+    self.views.ended(&life);
     let Some(Held { stage: Stage::Ending(waiting), .. }) = self.held.remove(&life) else { return };
     let mut waiting = waiting.into_iter();
     if let Some((cwd, first)) = waiting.next() {
