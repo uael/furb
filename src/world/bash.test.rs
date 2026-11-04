@@ -13,3 +13,38 @@ fn a_text_fed_to_a_command_that_reads_no_more_is_refused_and_its_close_is_not() 
   assert_eq!(refused.message(), "the command reads no more");
   assert!(one.feed(None).is_ok());
 }
+
+#[test]
+#[cfg(unix)]
+#[expect(
+  clippy::disallowed_methods,
+  reason = "debt: a call that blocks: block_on, where a test drives a future on the reactor"
+)]
+fn an_error_of_the_wait_on_the_shell_ends_the_watch_with_that_error_not_an_exit_with_no_code() {
+  use super::{Cut, watch};
+  use crate::ear::runtime;
+  use crate::world::bash::group::Group;
+  use std::future;
+
+  let outcome = runtime().block_on(async {
+    let child = tokio::process::Command::new("sh").arg("-c").arg("sleep 5").spawn().unwrap();
+    let mut group = Group::of(&child).unwrap();
+    let shell = runtime().spawn(async { Err(std::io::Error::other("wait broke")) });
+    let (_stop, stopped) = unsync::oneshot::channel();
+    let got = watch(
+      shell,
+      future::pending::<Result<(), super::Unread>>(),
+      future::pending(),
+      future::pending(),
+      stopped,
+      &mut group,
+    )
+    .await;
+    drop(group);
+    got
+  });
+  match outcome {
+    Err(Cut::Unwaited(no)) => assert_eq!(no.to_string(), "wait broke"),
+    Err(_) | Ok(_) => panic!("an error of the wait must end the watch as Unwaited"),
+  }
+}
