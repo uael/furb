@@ -148,6 +148,7 @@ metadata:
   furb-default: "false"
   furb-plays: every
   furb-view: tui.ts
+  furb-process: notes.ts
 ---
 What the notes are for.
 ```
@@ -171,6 +172,13 @@ What the notes are for.
   work of the root needs, as a loop that conducts workers: each other chain then reads none of its words, and a model
   there is free to bind each name that it defines.
 - `furb-view` is the file of the [part for the TUI](#a-part-for-the-tui). It can be absent.
+- `furb-process` is the file of the process of the extension, relative to the folder: a module of TypeScript or of
+  JavaScript, which bun runs, or any other program. When a life plays the extension, the daemon of the machine starts
+  it in the folder of the extension, at the end of the replay of the record, and ends it when the life ends or when
+  the life plays a new word of the extension. Its variables `FURB_HOST`, `FURB_LIFE` and `FURB_SKILL` give the folder
+  where the daemon listens, the record of the life and the name of the extension, so it dials the daemon and attaches
+  the life as a skill, as [the protocol](protocol.md) says. A folder that holds the extension starts nothing: only a
+  life that plays it does. It can be absent.
 
 A field of furb that the manifest does not know is refused with its path, so a typo does not pass.
 

@@ -27,7 +27,8 @@ pub(crate) fn serve(grace: Duration, upgrading: bool) -> Result<(), String> {
     world::cache().ok_or("this machine has no cache of furb, so the daemon has no place")?;
   let folder = cache.join("host");
   let door = Some(folder.join(DOOR));
-  let settings = Settings { opening: Opening::default(), grace, tailnet: tailnet()?, door };
+  let host = Some(folder.clone());
+  let settings = Settings { opening: Opening::default(), grace, tailnet: tailnet()?, door, host };
   let local = Local::new(&folder);
   let runtime = runtime::Builder::new_multi_thread().enable_all().build();
   let runtime = runtime.map_err(|no| format!("the daemon has no runtime: {no}"))?;

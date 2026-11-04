@@ -13,6 +13,8 @@
 //!
 //! [`run`] serves the daemon of a machine, which holds each life by the path of its record for as
 //! long as a window or a pin holds it, and [`upgrade`] puts the daemon of a new build in its place.
+//! The daemon starts the process of each skill that a life plays, which reads where it dials in
+//! [`processes`].
 
 pub mod access;
 mod answers;
@@ -23,6 +25,7 @@ mod error;
 mod event;
 mod holders;
 mod life;
+pub mod processes;
 pub mod protocol;
 mod rebirth;
 mod serve;
