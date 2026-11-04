@@ -900,6 +900,13 @@ export class Session extends EventEmitter {
     this.liveRead = { version: this.version, on };
     return on;
   }
+  /** Whether a model writes a word on a chain: a rung of it that is not done and has no word in the program yet. It
+   * reads the acts of the chain that are not done, and not each act of the life. */
+  writing(chain: string): boolean {
+    return (this.liveOn().get(chain) ?? []).some(
+      (act) => act.kind === "rung" && !act.done && !this.program[act.id],
+    );
+  }
   /** The state of the acts of each chain, or of every chain, as actStatus read it at a version of the acts. */
   private states = { version: -1, of: new Map<string, Status>() };
   private statusOf(chain?: string): Status {
@@ -1001,8 +1008,21 @@ export class Session extends EventEmitter {
    * up to the place of that work. */
   shows(id: string, acts: readonly ActRow[]): void {
     const place = this.placeOf(acts);
-    if (place > this.read(id)) this.showing.set(id, place);
+    if (place <= this.read(id)) return;
+    this.showing.set(id, place);
+    this.readsCount++;
   }
+  /** A count that changes each time a place up to which the operator read a chain or a thread changes, so that a view
+   * keeps what it read of the unread threads while the count stands. */
+  get readsVersion(): number {
+    if (this.readsSeen !== this.host.seen) {
+      this.readsSeen = this.host.seen;
+      this.readsCount++;
+    }
+    return this.readsCount;
+  }
+  private readsCount = 0;
+  private readsSeen?: Map<string, number>;
   /** The operator leaves what showed new work to him, or one thread of it when an id is given: the record says up to
    * which place he read each. A window that reads only says nothing. */
   leave(id?: string): void {

@@ -315,7 +315,7 @@ impl<S: Store> Held<S> {
 /// The ear that keeps the record syncs its store at the end of each run.
 impl<S: Store> Hooks for Rc<RefCell<Held<S>>> {
   /// A fault of the store ends no run: the ear holds it, tells the operator and tries again.
-  fn ran(&mut self) -> Result<(), Fault> {
+  fn ran(&mut self, _: &mut dyn Ear) -> Result<(), Fault> {
     self.borrow_mut().synced();
     Ok(())
   }

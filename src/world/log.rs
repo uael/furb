@@ -125,7 +125,7 @@ fn heard(mut log: Log) -> Box<dyn Ear> {
 /// The ear of a log hands the lines to the file at the end of each run, and says when lines wait.
 impl Hooks for Rc<RefCell<Sink>> {
   /// A fault of the file ends no run: the lines wait and the ear writes them again.
-  fn ran(&mut self) -> Result<(), Fault> {
+  fn ran(&mut self, _: &mut dyn Ear) -> Result<(), Fault> {
     self.borrow_mut().flush();
     Ok(())
   }

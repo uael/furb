@@ -68,6 +68,8 @@ export type ChainRead = {
   stamp: number;
   list: ChainThread[];
   key?: { minute: number; text: string };
+  /** Whether each thread of the list holds work that the operator did not read, at a count of the reads. */
+  unread?: { reads: number; text: string };
 };
 
 /** The mark of a thread in the list of the threads of a chain: it asks the operator, a pause holds it, it failed, a
