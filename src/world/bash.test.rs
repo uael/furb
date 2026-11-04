@@ -167,6 +167,6 @@ impl tokio::io::AsyncRead for Broken {
 fn a_stream_that_cannot_be_read_is_a_fault_of_the_command_and_not_its_end() {
   let (says, _said) = futures::channel::mpsc::unbounded();
   let mut kept = Kept::new(HEAD, TAIL);
-  let got = crate::ear::reactor().block_on(read(Some(Broken), "stdout", "bash1", &says, &mut kept));
+  let got = crate::testing::block_on(read(Some(Broken), "stdout", "bash1", &says, &mut kept));
   assert_eq!(got.unwrap_err().to_string(), "its stdout could not be read: the pipe broke");
 }
