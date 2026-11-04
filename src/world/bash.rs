@@ -1,7 +1,6 @@
 //! Commands: each runs in a shell of the machine, in the working directory of its chain, says what it writes as it
 //! writes it, and ends at its exit, at its timeout, or at the done that a control said of it first.
 
-#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
 #![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
 #![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
 
@@ -11,7 +10,6 @@ use std::{
   ffi::{OsStr, OsString},
   future,
   io::ErrorKind,
-  ops::{Deref, DerefMut},
   path::{Path, PathBuf},
   pin::pin,
   process::{Command, Stdio},
@@ -27,6 +25,7 @@ use futures::{
 use tokio::{
   io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
   process::{Child, ChildStdin},
+  task::JoinHandle,
 };
 use unsync::{oneshot, spsc};
 
@@ -351,7 +350,7 @@ async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, 
 
 /// The shell of a command spawned with the PATH of the login shell of the user, and the group of
 /// its processes, or why the machine would not start it or hold it.
-async fn spawned(mut command: Command, shown: &str, dir: &Path) -> Result<(Shell, Group), Fault> {
+async fn spawned(mut command: Command, shown: &str, dir: &Path) -> Result<(Child, Group), Fault> {
   if let Some(login) = login_path().await {
     command.env("PATH", merged_path(login, &env::var_os("PATH").unwrap_or_default()));
   }
@@ -365,12 +364,13 @@ async fn spawned(mut command: Command, shown: &str, dir: &Path) -> Result<(Shell
     Fault::refused(format!("{shown} did not start: {why}: {}", dir.display()))
   })?;
   match Group::of(&child) {
-    Ok(group) => Ok((Shell(Some(child)), group)),
+    Ok(group) => Ok((child, group)),
     Err(no) => {
       let ended = match child.start_kill() {
         Ok(()) => String::new(),
         Err(late) => format!(", and it could not be ended: {late}"),
       };
+      drop(reaped(child));
       Err(Fault::refused(format!("{shown} could not be held: {no}{ended}")))
     }
   }
@@ -409,21 +409,19 @@ async fn ran(
   let (mut child, mut group) = match spawned(command, &shown, &dir).await {
     Ok(one) => one,
     Err(fault) => {
-      return says
-        .unbounded_send(Said::Failed { about, fault })
-        .err()
-        .map(TrySendError::into_inner);
+      return failed(&says, &about, fault);
     }
   };
   let (stdout, stderr, stdin) = (child.stdout.take(), child.stderr.take(), child.stdin.take());
   let (mut out, mut err) = (Kept::new(HEAD, TAIL), Kept::new(HEAD, TAIL));
   let streams = async {
-    tokio::join!(
+    let (one, two) = tokio::join!(
       read(stdout, "stdout", &about, &says, &mut out),
       read(stderr, "stderr", &about, &says, &mut err)
     );
+    one.and(two)
   };
-  let shell = child.wait();
+  let shell = reaped(child);
   let expired = async {
     match timeout {
       Some(left) => tokio::time::sleep(left).await,
@@ -444,12 +442,17 @@ async fn ran(
           status = Some(got);
           until = Some(tokio::time::Instant::now() + DRAIN);
         }
-        () = &mut streams, if !drained => drained = true,
+        read = &mut streams, if !drained => {
+          drained = true;
+          if let Err(no) = read {
+            return failed(&says, &about, Fault::refused(format!("{shown} failed: {no}")));
+          }
+        }
         () = &mut expired, if !late => {
           late = true;
           if let Err(no) = group.slay() {
             let fault = Fault::refused(format!("{shown} outlived its timeout and could not be ended: {no}"));
-            return says.unbounded_send(Said::Failed { about: about.clone(), fault }).err().map(TrySendError::into_inner);
+            return failed(&says, &about, fault);
           }
         }
         () = &mut feeding, if !closed => closed = true,
@@ -465,13 +468,28 @@ async fn ran(
     }
   };
   group.free();
-  let code = status.ok().and_then(coded).map(i64::from);
+  let code = status.ok().flatten().map(i64::from);
   let exit = Exit {
     code: if late { None } else { code },
     stdout: Text::new(format!("{about}/stdout"), out.finish()),
     stderr: Text::new(format!("{about}/stderr"), err.finish()),
   };
   says.unbounded_send(Said::Exit { about: about.clone(), exit }).err().map(TrySendError::into_inner)
+}
+
+/// A command that did not run to its end: the fault that ends it, said once, or what the channel
+/// cannot take.
+fn failed(says: &UnboundedSender<Said>, about: &str, fault: Fault) -> Option<Said> {
+  says
+    .unbounded_send(Said::Failed { about: about.to_owned(), fault })
+    .err()
+    .map(TrySendError::into_inner)
+}
+
+/// The shell of a command, awaited by one task of the runtime that gives its code, so the shell
+/// is reaped as it exits, whether the command still waits for it or dropped before.
+fn reaped(mut child: Child) -> JoinHandle<Option<i32>> {
+  runtime().spawn(async move { child.wait().await.ok().and_then(coded) })
 }
 
 /// The code of an exit, and for a command that a signal ended, 128 and the number of the signal, as a shell gives, so
@@ -502,9 +520,6 @@ async fn feed(stdin: Option<ChildStdin>, mut fed: spsc::Receiver<Option<String>>
     }
   }
 }
-
-/// How long the World waits between two probes of the shell of a command that dropped before its shell was reaped.
-const PROBE: Duration = Duration::from_millis(100);
 
 /// How long the streams of a command have to give what they hold once its shell exited, before the command ends with a
 /// process of it still holding one.
@@ -584,30 +599,39 @@ impl Kept {
   }
 }
 
+/// A stream of a command that its pipe could not read.
+#[derive(Debug, thiserror::Error)]
+#[error("its {stream} could not be read: {source}")]
+struct Unread {
+  stream: &'static str,
+  source: std::io::Error,
+}
+
 /// One stream of a command: each text said as it comes, whole in utf-8, as far as its head holds, and kept in `all`
 /// until the stream ends. The stream is read to its end, whatever it holds, so the command never blocks on a full pipe.
+/// A read that fails is no end of the stream: it is the fault of the command.
 async fn read(
   stream: Option<impl AsyncRead + Unpin>,
   name: &'static str,
   about: &str,
   says: &UnboundedSender<Said>,
   all: &mut Kept,
-) {
-  let Some(mut stream) = stream else { return };
+) -> Result<(), Unread> {
+  let Some(mut stream) = stream else { return Ok(()) };
   let (mut held, mut chunk) = (Vec::new(), [0u8; 8192]);
   loop {
-    let n = stream.read(&mut chunk).await.unwrap_or(0);
+    let n = stream.read(&mut chunk).await.map_err(|source| Unread { stream: name, source })?;
     held.extend_from_slice(&chunk[..n]);
     let text = whole(&mut held, n == 0);
     let text = if text.is_empty() { text } else { all.push(&text) };
     if !text.is_empty() {
       // The stream that holds the receiver is going, and this read goes with it.
       if says.unbounded_send(Said::Out { about: about.to_owned(), text, stream: name }).is_err() {
-        return;
+        return Ok(());
       }
     }
     if n == 0 {
-      return;
+      return Ok(());
     }
   }
 }
@@ -728,42 +752,6 @@ impl Drop for Group {
   fn drop(&mut self) {
     // A drop has no caller to tell a failure to.
     drop(self.slay());
-  }
-}
-
-/// The shell of a command, which the life reaps once it ends, so no shell stays a zombie of the process of the life.
-///
-/// A `Child` of tokio that drops before it is reaped waits in a queue that tokio drains only when the signal of a
-/// child wakes its runtime. A command that drops before it is over ends its group as it drops, so the signal of its
-/// shell can wake the runtime in the moment after tokio found the shell alive and before the shell is in that queue.
-/// The shell then stays a zombie until another child of the process ends. So the runtime probes a shell that drops
-/// alive until it reaps it.
-struct Shell(Option<Child>);
-
-impl Deref for Shell {
-  type Target = Child;
-
-  fn deref(&self) -> &Child {
-    self.0.as_ref().expect("a shell holds its child until it drops")
-  }
-}
-
-impl DerefMut for Shell {
-  fn deref_mut(&mut self) -> &mut Child {
-    self.0.as_mut().expect("a shell holds its child until it drops")
-  }
-}
-
-impl Drop for Shell {
-  fn drop(&mut self) {
-    let Some(mut child) = self.0.take() else { return };
-    if matches!(child.try_wait(), Ok(None)) {
-      runtime().spawn(async move {
-        while let Ok(None) = child.try_wait() {
-          tokio::time::sleep(PROBE).await;
-        }
-      });
-    }
   }
 }
 

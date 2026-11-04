@@ -17,7 +17,7 @@ use std::fs;
 
 #[cfg(unix)]
 use super::asked_path;
-use super::{Kept, Running, git_sh, merged_path, signalled};
+use super::{HEAD, Kept, Running, TAIL, git_sh, merged_path, read, signalled};
 
 /// A program at a path, which this machine runs.
 fn made(at: &std::path::Path) {
@@ -148,4 +148,25 @@ fn a_text_fed_to_a_command_that_reads_no_more_is_refused_and_its_close_is_not() 
   let refused = one.feed(Some("two\n".to_owned())).unwrap_err();
   assert_eq!(refused.message(), "the command reads no more");
   assert!(one.feed(None).is_ok());
+}
+
+/// A stream whose every read fails.
+struct Broken;
+
+impl tokio::io::AsyncRead for Broken {
+  fn poll_read(
+    self: std::pin::Pin<&mut Self>,
+    _: &mut std::task::Context<'_>,
+    _: &mut tokio::io::ReadBuf<'_>,
+  ) -> std::task::Poll<std::io::Result<()>> {
+    std::task::Poll::Ready(Err(std::io::Error::other("the pipe broke")))
+  }
+}
+
+#[test]
+fn a_stream_that_cannot_be_read_is_a_fault_of_the_command_and_not_its_end() {
+  let (says, _said) = futures::channel::mpsc::unbounded();
+  let mut kept = Kept::new(HEAD, TAIL);
+  let got = crate::ear::reactor().block_on(read(Some(Broken), "stdout", "bash1", &says, &mut kept));
+  assert_eq!(got.unwrap_err().to_string(), "its stdout could not be read: the pipe broke");
 }
