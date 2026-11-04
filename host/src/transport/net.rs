@@ -281,6 +281,7 @@ async fn connected(socket: &std::path::Path) -> io::Result<tokio::net::UnixStrea
 }
 
 #[cfg(windows)]
+#[allow(clippy::unused_async, reason = "the same signature as the unix one, which awaits")]
 async fn connected(
   socket: &std::path::Path,
 ) -> io::Result<tokio::net::windows::named_pipe::NamedPipeClient> {
