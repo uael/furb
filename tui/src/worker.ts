@@ -44,6 +44,8 @@ let demo = false;
 let timer: ReturnType<typeof setTimeout> | undefined;
 /** The watch on the file of a recorded life, which hears each line that the file adds. */
 let follower: FSWatcher | undefined;
+/** The pace at which a recorded life reads its file again, for a watch that missed an append. */
+let polling: ReturnType<typeof setInterval> | undefined;
 let sentFacts = 0;
 async function refreshCodex(directory?: string): Promise<void> {
   if (
@@ -70,7 +72,7 @@ const state = () => {
         facts: reader.facts.length,
         seq: reader.facts.length,
         prompts: [],
-        notices: [],
+        seen: [...reader.activity.seen],
         streams: [],
         pending: [],
         changes: reader.changes.length,
@@ -94,7 +96,7 @@ const state = () => {
     facts: owner.facts.length - sentFacts,
     seq: owner.facts.length,
     prompts: [...owner.console.prompts.values()].map(({ id, shape, message }) => ({ id, shape, message })),
-    notices: [...owner.console.notices.values()],
+    seen: [...owner.activity.seen],
     streams: [...owner.streams],
     pending: [...owner.pending],
     changes: owner.changes.length,
@@ -288,9 +290,12 @@ async function answer(data: { target: string; method: string; args: unknown[] })
       snapshots = new Snapshots(recorded, recorded);
       // A recorded life follows its file: each fact that a later line adds is heard as the life said it, and the view
       // hears of it as it hears of a life that runs.
-      follower = watchFile(options.record, () => {
+      const follow = () => {
         if (recorded.follow()) refresh();
-      });
+      };
+      follower = watchFile(options.record, follow);
+      // The watch of a file may miss an append when the machine is loaded, so the file is read again at a pace of its own.
+      polling = setInterval(follow, 500).unref();
       return recorded.root;
     }
     claude = options.claude;
@@ -342,6 +347,14 @@ async function answer(data: { target: string; method: string; args: unknown[] })
     const act = engine.prompt(entry.shape, { message: entry.text, on: entry.chain });
     engine.say("queue", entry.chain, ["sent", entry.id, act.id]);
     return act.id;
+  }
+  // The operator says how far he read a chain or a thread, which each window and each later life reads in the record.
+  if (data.target === "library" && data.method === "seen") {
+    if (!engine || !session) throw new Error("The session is not open.");
+    const [about, place] = data.args as [string, number];
+    // The fact covers what the record holds before it, so the window says it only for work past the last one.
+    if (place > (session.activity.seen.get(about) ?? 0)) engine.say("seen", about, []);
+    return null;
   }
   // The demo asks no model, so it offers its roster and nothing of the catalog of this machine.
   if (data.target === "library" && data.method === "catalog") {
@@ -549,6 +562,8 @@ self.onmessage = async ({ data }) => {
   if (timer) clearTimeout(timer);
   follower?.close();
   follower = undefined;
+  clearInterval(polling);
+  polling = undefined;
   session = undefined;
   engine = undefined;
   snapshots = undefined;

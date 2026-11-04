@@ -318,9 +318,7 @@ export const chrome = part({
       : (retries.find((stream) => stream.chain === w.selected) ?? retries[0])?.retry;
     // The block of the word that a model writes on the chain shown holds the loader of the step, so the footer turns
     // no second loader for it.
-    const written =
-      !retry &&
-      w.acts.some((act) => act.kind === "rung" && !act.done && act.on === w.selected && !w.program[act.id]);
+    const written = !retry && w.writing(w.selected);
     const moving = (busy(status) || status === "opening" || Boolean(retry)) && !written;
     this.statusMoves = moving;
     // While the block of the word holds the loader, the footer shows the still mark of a model that thinks.

@@ -336,7 +336,7 @@ life gets the same answer from the record. So a replay is exact, and the World i
 ## In each host
 
 - The command line: `furb extensions` prints each extension that a life on a record runs, with its life word. The
-  `state` of the JSON-RPC names them.
+  `state` of the protocol names them.
 - The TUI: `/extensions` lists what the life runs, and `/run` runs a word of one on the chain on screen, as
   `/run skill("pdf")`.
 - TypeScript: `Session` takes `extensions`, false to enable nothing new, and `config`, the config directory of the

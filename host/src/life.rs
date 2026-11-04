@@ -22,7 +22,7 @@ use furb::{
   world::answered,
 };
 use futures::stream::{self, Stream as Streams};
-use serde_json::Value;
+use serde_json::{Value, json};
 use tokio::{
   runtime,
   sync::{
@@ -73,6 +73,16 @@ pub enum Command {
   Inspect { name: String, on: Option<String> },
   /// What the gate finds in a word on a chain, which runs nothing.
   Gate { word: String, on: Option<String> },
+  /// The facts of an act, or null when no act has its name.
+  Get { id: String },
+  /// What an act came to, refused while it lives.
+  Peek { id: String },
+  /// The folder of a chain.
+  Cwd { on: Option<String> },
+  /// A chain made on a chain, under a label: the act of the chain.
+  Chain { label: Option<String>, on: Option<String> },
+  /// The acts that wait for a wake, each as its name and its kind.
+  Pending,
   /// The end of the life, which replies and then ends the life.
   End,
 }
@@ -381,6 +391,10 @@ fn answered_by(engine: &mut Engine, command: Command) -> Result<Reply, LifeError
     Command::Pause { id } => engine.pause(&id, verbs::Pause::default()).map(|()| Reply::Done)?,
     Command::Wake { id } => engine.wake(&id).map(|()| Reply::Done)?,
     Command::Cancel { id } => engine.cancel(&id, verbs::Cancel::default()).map(|()| Reply::Done)?,
+    Command::Chain { label, on: chain } => {
+      let with = verbs::Chain { label, on: on(chain), ..verbs::Chain::default() };
+      id(engine.chain(with)?.id())
+    }
     Command::End => Reply::Done,
     query => queried(engine, query, &root)?,
   })
@@ -410,6 +424,20 @@ fn queried(engine: &mut Engine, query: Command, root: &str) -> Result<Reply, Lif
     Command::Gate { word, on: chain } => {
       let found = engine.verb("gate", vec![Object::string(word)], named(chain))?;
       Reply::Value(outward(found.as_ref()))
+    }
+    Command::Get { id } => {
+      Reply::Value(engine.get(&id)?.map_or(Value::Null, |made| outward(made.0.as_ref())))
+    }
+    Command::Peek { id } => match engine.outcome(&id)? {
+      Some(got) => Reply::Value(outward(got.as_ref())),
+      None => return Err(LifeError::Refused(format!("No act named {id} is done."))),
+    },
+    Command::Cwd { on: chain } => {
+      Reply::Value(Value::String(engine.cwd(verbs::Cwd { on: Some(on(chain)) })?))
+    }
+    Command::Pending => {
+      let pending = engine.pending()?.into_iter().map(|(id, kind)| json!([id, kind]));
+      Reply::Values(pending.collect())
     }
     acted => return Err(LifeError::Refused(format!("{acted:?} is no query"))),
   })

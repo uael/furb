@@ -737,3 +737,31 @@ test("the marks of the threads count a question anywhere and the failure or paus
       tip: "1 failed  ·  1 paused",
     });
   }, size));
+
+test("a done thread of the operator that no fact seen covers shows ●, and a seen that another window says turns it into a faint ✓", () =>
+  composing(
+    async ({ session, frame }) => {
+      session.folds["thread:prompt1"] = true;
+      await idle(session);
+      // A window that opens later on the life, with the thread folded, never showed its work. The count of the reads
+      // moves with each change of what the window showed, or the rail keeps the marks that it read.
+      const inner = session as unknown as { showing: Map<string, number>; readsCount: number };
+      inner.showing.clear();
+      inner.readsCount++;
+      const row = async () =>
+        rail(session, await frame()).find((line) => line.includes("Explore this project")) ?? "";
+      expect(await row()).toContain("● Explore this project");
+      // Another window of the life said that the operator read the thread, and the host gives it to this one.
+      session.host.seen = new Map([["prompt1", Number.MAX_SAFE_INTEGER]]);
+      session.emit("change");
+      let seen = await row();
+      for (let step = 0; step < 80 && !seen.includes(`${glyph.done} Explore`); step++) {
+        await Bun.sleep(25);
+        seen = await row();
+      }
+      expect(seen).toContain(`${glyph.done} Explore this project`);
+      expect(seen).not.toContain("●");
+    },
+    size,
+    true,
+  ));

@@ -2,6 +2,14 @@
 //! that furb writes for its first process to resume, and each turn, which writes to its process
 //! only what the command line has not heard and settles what that turn came to.
 
+#![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
+#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
+#![expect(
+  clippy::single_match_else,
+  reason = "debt: a match of one arm and else, where if let serves"
+)]
+#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+
 use std::{
   env,
   path::PathBuf,
@@ -234,7 +242,7 @@ impl Conversation {
     let mut lost = None;
     loop {
       let mut outcome =
-        Outcome { incoming: &incoming, asked, again, heard: false, restored: None, replied: None };
+        Outcome { incoming: &incoming, asked, again, unheard: None, restored: None, replied: None };
       let got = self.flight(delta, &spend, run, &mut outcome).await.map_err(worded);
       let got = got.map(|(response, process)| {
         let reply = Message::Assistant { id: None, content: response.choice.clone() };
@@ -309,15 +317,12 @@ impl Conversation {
   /// What a turn leaves: the conversation holds its request, what the command line heard of it, and
   /// its reply and the process that wrote it once the turn came to one. A turn that came to no
   /// reply leaves no process, since its stream stands at no boundary that a later turn can trust.
+  /// What the command line heard is held from the moment it heard it, by [`Conversation::heard`],
+  /// so a turn that is dropped before it settles leaves it too.
   fn settle(&mut self, outcome: Outcome<'_>) {
     self.requested = outcome.incoming.to_vec();
     if let Some(resumed) = outcome.restored {
       self.resumed = resumed;
-    }
-    if outcome.heard {
-      self.chain = outcome.incoming.to_vec();
-      self.asked = outcome.asked.cloned();
-      self.again = outcome.again;
     }
     if let Some((reply, process)) = outcome.replied {
       self.chain.push(reply);
@@ -328,10 +333,23 @@ impl Conversation {
     self.used = Instant::now();
   }
 
+  /// What the command line heard of a turn whose line it took: the conversation holds it at once,
+  /// so that a turn dropped before it settles leaves it, and the next turn sends only what it
+  /// gained. It gives what the conversation held before, which it holds again when the process
+  /// found no program to run.
+  fn heard(&mut self, outcome: &Outcome<'_>) -> Heard {
+    self.requested = outcome.incoming.to_vec();
+    Heard {
+      chain: std::mem::replace(&mut self.chain, outcome.incoming.to_vec()),
+      asked: std::mem::replace(&mut self.asked, outcome.asked.cloned()),
+      again: std::mem::replace(&mut self.again, outcome.again),
+    }
+  }
+
   /// One flight of a turn: the line of the messages that the command line has not heard, written to
   /// a process at what the turn spends, and the reply that it streams, with that process. The
   /// process stands apart from the conversation until the turn settles, so a turn that is dropped
-  /// drops its process, and nothing else.
+  /// drops its process, and keeps what the command line heard.
   async fn flight(
     &mut self,
     delta: &[Message],
@@ -381,7 +399,8 @@ impl Conversation {
       }
       Err(_) => return Err(stalled(run.stall, "")),
     }
-    outcome.heard = true;
+    let was = self.heard(outcome);
+    outcome.unheard = Some(was);
     self.listened(process, run, outcome, before).await
   }
 
@@ -467,7 +486,9 @@ impl Conversation {
     };
     let (no, missing) = exited(code, &mut process.tail, run.program, spoke).await;
     if missing {
-      outcome.heard = false;
+      if let Some(was) = outcome.unheard.take() {
+        (self.chain, self.asked, self.again) = (was.chain, was.asked, was.again);
+      }
       outcome.restored = Some(before);
     }
     Err(no)
@@ -493,13 +514,22 @@ struct Outcome<'a> {
   asked: Option<&'a Message>,
   /// Whether the turn gives again the last message of a turn that came to no reply, whole or grown.
   again: bool,
-  /// Whether the command line heard the line of the turn.
-  heard: bool,
+  /// What the conversation held before the command line heard the line of the turn, once it heard
+  /// it.
+  unheard: Option<Heard>,
   /// Whether the conversation was resumed before the turn, which it is again when the process of
   /// the turn found no program to run, since the command line then holds nothing of the turn.
   restored: Option<bool>,
   /// The reply of the turn, as its meaning alone, and the process that wrote it.
   replied: Option<(String, Process)>,
+}
+
+/// What a conversation held of what the command line heard: the messages, the last message that
+/// came to no reply, and whether it was given again.
+struct Heard {
+  chain: Vec<String>,
+  asked: Option<Message>,
+  again: bool,
 }
 
 /// The one line of input that holds every message the command line has not heard: an earlier turn

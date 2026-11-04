@@ -26,12 +26,14 @@ pub enum Role {
   Write,
 }
 
-/// What a peer is: a window of an operator, or the process of a skill.
+/// What a peer is: a window of an operator, the process of a skill, or the daemon of a new build,
+/// which asks the handover.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Kind {
   Window,
   Skill,
+  Daemon,
 }
 
 /// The first frame of a peer: the protocol that it speaks, its kind, and the name of a skill.
@@ -167,6 +169,10 @@ pub enum Verb {
     word: String,
     on: Option<String>,
   },
+  /// The place of the daemon given to the daemon of a new build: each life written to its
+  /// checkpoint and ended, and the lives with their pins in the answer, once the daemon stopped to
+  /// listen.
+  Handover,
   #[serde(rename = "view.mount")]
   ViewMount(Mount),
   #[serde(rename = "view.tree")]
@@ -201,11 +207,21 @@ impl Verb {
         | Self::Pending { .. }
         | Self::ViewMount(_)
         | Self::ViewTree(_)
-        | Self::ViewEvent(_)
         | Self::ViewEffect(_)
         | Self::ViewDispose(_)
     );
     if reads { Role::Read } else { Role::Write }
+  }
+
+  /// The kind of peer that says the verb, when it is a frame of a view: a window mounts, says what
+  /// a person did and disposes, and a skill serves the trees and the effects. Any other peer is
+  /// refused it.
+  pub fn speaker(&self) -> Option<Kind> {
+    match self {
+      Self::ViewMount(_) | Self::ViewEvent(_) | Self::ViewDispose(_) => Some(Kind::Window),
+      Self::ViewTree(_) | Self::ViewEffect(_) => Some(Kind::Skill),
+      _ => None,
+    }
   }
 }
 
@@ -220,6 +236,8 @@ pub enum Frame {
   Refused { id: Option<u64>, error: ProtocolError, why: String },
   /// One event of a life that the peer attached, under its place in the log of the life.
   Event { life: String, seq: Seq, event: Event },
+  /// Who is attached to a life now, pushed to each of its windows after each attach and detach.
+  Presence { life: String, peers: Vec<Peer> },
   #[serde(rename = "view.mount")]
   ViewMount(Mount),
   #[serde(rename = "view.tree")]
@@ -261,6 +279,16 @@ pub enum Answer {
     value: Value,
   },
   Presence(Vec<Peer>),
+  /// The lives that a daemon gave at its handover.
+  Handed(Vec<Handed>),
+}
+
+/// A life that a daemon gave at its handover: its record, its folder, and the holder of each pin.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Handed {
+  pub life: String,
+  pub cwd: String,
+  pub pins: Vec<String>,
 }
 
 /// A record of the machine, and whether a life of the daemon holds it now.
@@ -364,6 +392,34 @@ pub struct Node {
   pub shape: Shape,
 }
 
+impl Node {
+  /// The node as a window that only reads gets it: each node that acts, inert.
+  #[must_use]
+  pub fn inert(self) -> Node {
+    let shape = match self.shape {
+      Shape::Input { value, hint, .. } => Shape::Input { value, hint, inert: true },
+      Shape::Button { label, .. } => Shape::Button { label, inert: true },
+      Shape::Box { axis, gap, border, children } => {
+        Shape::Box { axis, gap, border, children: inerts(children) }
+      }
+      Shape::List { items } => Shape::List { items: inerts(items) },
+      Shape::Table { header, rows } => {
+        Shape::Table { header, rows: rows.into_iter().map(inerts).collect() }
+      }
+      shape @ (Shape::Text { .. }
+      | Shape::Progress { .. }
+      | Shape::Code { .. }
+      | Shape::Diff { .. }
+      | Shape::Markdown { .. }) => shape,
+    };
+    Node { shape, ..self }
+  }
+}
+
+fn inerts(nodes: Vec<Node>) -> Vec<Node> {
+  nodes.into_iter().map(Node::inert).collect()
+}
+
 /// The closed set of the nodes of a view, which each window draws in its own way.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "node", rename_all = "snake_case")]
@@ -387,9 +443,15 @@ pub enum Shape {
   Input {
     value: String,
     hint: Option<String>,
+    /// A node that acts is inert in the window of a peer that only reads: it draws and takes no
+    /// gesture.
+    #[serde(default)]
+    inert: bool,
   },
   Button {
     label: String,
+    #[serde(default)]
+    inert: bool,
   },
   /// The share of the work that is done, from 0 to 1, or none while it is not known.
   Progress {

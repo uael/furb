@@ -167,7 +167,7 @@ export class Reader {
   readonly entries: Entry[] = [];
   readonly pending = new Map<string, string>();
   readonly streams = new Map<string, never>();
-  readonly console = { prompts: new Map<string, never>(), notices: new Map<string, never>() };
+  readonly console = { prompts: new Map<string, never>() };
   readonly changes: FileChanges;
   /** The facts of each chain, as the transcript of the chain holds them. */
   private readonly held = new Map<string, Fact[]>();

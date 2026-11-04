@@ -30,6 +30,10 @@
 //!
 //! [`local`]: super::local
 
+#![expect(
+  clippy::semicolon_if_nothing_returned,
+  reason = "debt: a unit expression with no semicolon"
+)]
 #![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
 #![expect(
   clippy::clone_on_ref_ptr,
@@ -66,7 +70,7 @@ use serde_json::{Map, Value, json};
 use super::{
   Class, Hosted, Model, Provider, Streams,
   claude::{self, Claude},
-  clients::{Client, Reach},
+  clients::{self, Client, Reach},
   local::{self, ENV_URL, Heard, LOCAL, Server},
   search,
 };
@@ -953,11 +957,14 @@ pub(super) fn reached(
   client: Client,
   reach: Result<Reach, String>,
 ) -> Model {
-  let made: Arc<OnceLock<Result<Streams, String>>> = Arc::default();
+  let made: Arc<OnceLock<Result<Streams, clients::Error>>> = Arc::default();
   let search = reach.as_ref().ok().and_then(|one| search::native(client, one));
   let model = Model::lazy(name, window, move || {
-    let got = made.get_or_init(|| reach.clone().and_then(|reach| client.streams(&reach)));
-    got.clone().map_err(CompletionError::ProviderError)
+    let got = made.get_or_init(|| {
+      let reach = reach.clone().map_err(clients::Error::Unreached)?;
+      client.streams(&reach)
+    });
+    got.clone().map_err(|no| CompletionError::ProviderError(no.to_string()))
   });
   match search {
     Some(search) => model.searches(search),

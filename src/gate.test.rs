@@ -1,8 +1,10 @@
+use std::collections::HashSet;
+
 use monty_types::NamedValues;
 
 use super::{
   MODULE, checked,
-  layout::CHUNK,
+  layout::{CHUNK, laid, program_lines, shortened},
   shallow::{DEEP, shallowed},
 };
 use crate::{
@@ -331,17 +333,35 @@ fn looped(n: usize) -> String {
   )
 }
 
+/// The lines that the gate hands to the checker for a sheet: each module that `seen` lacks, and the
+/// text of the sheet. It adds the paths of those modules to `seen`.
+fn handed(text: &str, seen: &mut HashSet<String>) -> usize {
+  let lines: Vec<&str> = text.split_inclusive('\n').collect();
+  let (first, tail) = program_lines(&lines).expect("a sheet laid out as furb.sheet writes it");
+  let short = shallowed(&shortened(&lines, first, tail));
+  let laid = laid(&lines, first, tail, &short).expect("a sheet that stands on modules");
+  let modules: usize = laid
+    .modules
+    .iter()
+    .filter(|(path, _)| seen.insert(path.clone()))
+    .map(|(_, module)| module.lines().count())
+    .sum();
+  modules + laid.main.lines().count()
+}
+
 #[test]
 fn a_name_that_each_word_binds_in_a_loop_stalls_no_word() {
-  let timed = |words: usize| {
-    let make = |run: usize| {
-      let program: Vec<String> = (0..words).map(|n| looped(run * 1000 + n)).collect();
-      sheet(&program.iter().map(String::as_str).collect::<Vec<_>>(), "close(one + label)").0
-    };
-    quickest(make, |text| assert_eq!(found(&text), vec![]))
+  let mut seen = HashSet::new();
+  let mut reading = |words: usize| {
+    let program: Vec<String> = (0..words).map(looped).collect();
+    let (text, _) =
+      sheet(&program.iter().map(String::as_str).collect::<Vec<_>>(), "close(one + label)");
+    assert_eq!(found(&text), vec![]);
+    handed(&text, &mut seen)
   };
-  let (few, many) = (timed(100), timed(400));
-  assert!(many < few * SLACK, "400 words took {many:?}, 100 words {few:?}");
+  let (_, early) = (reading(99), reading(100));
+  let (_, late) = (reading(399), reading(400));
+  assert!(late <= early, "the word 400 hands {late} lines to the checker, the word 100 {early}");
 }
 
 #[test]

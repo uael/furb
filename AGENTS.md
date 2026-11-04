@@ -48,9 +48,9 @@ API of its own:
   engine, the sheet and the Kernel, each in a namespace of its own, and carries each value between the sandbox and a
   host, whose ears the engine steps as generators. An ear that raises refuses the act that it heard, and starts again
   from a fresh ear when it can, as the Kernel, the gate and each ear that `lasting` in `src/ear.rs` made do; the life
-  tells the operator once which ear raised and why. A fault that no code of the sandbox catches, as the bound of the
-  memory in `src/sand.rs`, cuts the run with no `finally`, so the life stops: it keeps no snapshot, refuses each later
-  entry with that fault, and gives it to a host as `stopped`.
+  tells the operator once which ear raised and why. A fault that no code of the sandbox catches, as a second excess
+  of the bound of a turn in `src/sand.rs`, cuts the run with no `finally`, so the life stops: it keeps no snapshot,
+  refuses each later entry with that fault, and gives it to a host as `stopped`.
 - The Kernel is `src/furb/kernel.py`, one module that the sandbox loads and the python package imports, each on the
   names of its engine. The gate, `src/gate.rs`, is the type checker of monty. It reads a word on the sheet of the
   engine, `src/furb/sheet.py`, against the typeshed of the sandbox, and it runs each import of the word in a sandbox
@@ -64,9 +64,10 @@ API of its own:
   `FURB_ENGINE=monty` makes `from furb import engine` give it.
 - `cli/` is `furb-cli`, the second package of the workspace of the crate, whose program is `furb`, on clap. With no
   command it hands the terminal to the TUI, which it finds in `FURB_TUI`, as `furb-tui` on PATH, or in the checkout it
-  was built from. `--mode rpc` serves one life as a JSON-RPC on stdin and stdout, which `docs/rpc.md` says. `prompt`,
+  was built from. A program that wants a life dials the daemon, as `docs/protocol.md` says. `prompt`,
   `turns`, `run` and `extensions` each open one life on a record, `facts` prints each fact of a record with no life,
-  `checkpoint` writes the checkpoint of a life, and `catalog` shows where the models came from. The package `furb`
+  `checkpoint` writes the checkpoint of a life, `catalog` shows where the models came from, and `host` serves the
+  daemon of the machine of `furb-host`. The package `furb`
   depends on the wheel of `furb-cli`, so `pip install furb` gives the command `furb`.
 - `host/` is `furb-host`, the third package of the workspace of the crate, on the public API of `furb` alone. Its
   `Life::spawn` opens a life on a thread of its own, which owns the engine, and gives a `LifeHandle` that any thread
@@ -77,8 +78,11 @@ API of its own:
   opens from it, since a replay would run again the word that the fault cut. The
   crate holds the one list of the ears of the host that each life hears: the console of the operator, and the ear
   that tells each fact as events. `protocol` holds the one protocol of the daemon, a `Verb` and a `Frame` of JSON
-  lines with the version `PROTOCOL`, `transport` the socket or the pipe of the machine behind a `Dialer` and an
-  `Identity`, and `serve` the door to one peer, which checks the role of each verb. `docs/protocol.md` says the
+  lines with the version `PROTOCOL`, `transport` the socket or the pipe of the machine, and TCP and WebSocket on the
+  tailnet, behind a `Dialer` and an `Identity`, `access` the role of each login of the network from `host.json`,
+  `serve` the door to one peer, which checks the role of each verb, and `daemon` the daemon of the
+  machine, which holds each life by its record while a window or a pin of `holders` holds it, and gives its place to
+  a new build at a handover. `furb host` serves it, and `furb host upgrade` hands it over. `docs/protocol.md` says the
   protocol, and `bun run protocol` makes `bind/typescript/src/protocol.ts` again from `host/protocol.schema.json`.
 
 The suite runs on both engines, but for the tests that `MONTY_SKIPS` in `test/conftest.py` names: these boot on a Kernel
@@ -202,8 +206,9 @@ The suite drives the engine through its public API alone, end to end, from the m
   values: names, entries of `sand.record`, results through `engine.peek`, turns through `engine.turns(on=root)`,
   and the calls of the doubles. It reads a fact by position, as the contract declares it, and never weakens an
   assertion to pass: a sentence the engine fails stays red until the engine, or the sentence, is right.
-- A test of speed compares two times that it measures in one run, and takes the least of several runs of each. A bound
-  in seconds fails on a machine under load.
+- A test of speed compares two times that it measures in one run, and takes the least of several runs of each, or
+  better counts the work that the code does, which no load changes. A bound in seconds fails on a machine under load.
+  A test of a process that a timeout ends gives it a limit that a loaded machine cannot cross.
 - A helper that only one file needs lives in that file. A helper that several files need lives in
   `test/conftest.py`, and one that only the suites of the extensions need lives in `extensions/conftest.py`.
   A test folder of an extension takes no `conftest.py`: it shadows the module `conftest` that `extensions/conftest.py`
@@ -223,7 +228,7 @@ is the folder `test` beside it.
 2. Every test carries a sentence of the contract.
 3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
 4. The module docstring of each contract is empty.
-5. `engine.py`, minified with its program kept as it is, costs fewer than 9300 tokens of `o200k_base`, the
+5. `engine.py`, minified with its program kept as it is, costs fewer than 9310 tokens of `o200k_base`, the
    tokenizer of OpenAI, and the doctrine of furb, `DOCTRINE.md`, costs at most 1000. The test counts with `o200k_base`
    because it is local and the same on each machine: the tokenizer of Claude is not public, and only the network
    counts with it. The wall is a proxy for the cost to Claude, which reads about 1.5 tokens for each token of

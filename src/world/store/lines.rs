@@ -1,7 +1,5 @@
 //! The store of a record as a file of lines: one fact per line, in JSON.
 
-#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
-
 use std::{
   fs::{File, OpenOptions},
   io::{BufRead, BufReader, ErrorKind, Seek, SeekFrom, Write},
@@ -15,7 +13,11 @@ use crate::{
   wire::record,
 };
 
-use super::{Lease, Store, entry_of, failed, leased, now};
+use super::{
+  Lease, Store, entry_of,
+  error::{At, StoreError},
+  leased, now,
+};
 
 /// The record at a path as a file of lines, under its lease.
 ///
@@ -48,8 +50,8 @@ impl Lines {
       .truncate(false)
       .write(true)
       .open(&path)
-      .map_err(|no| failed(&path, no))?;
-    file.seek(SeekFrom::End(0)).map_err(|no| failed(&path, no))?;
+      .map_err(StoreError::io(&path))?;
+    file.seek(SeekFrom::End(0)).map_err(StoreError::io(&path))?;
     Ok(Self {
       path,
       file,
@@ -78,19 +80,19 @@ impl Store for Lines {
     let line = if self.unended { format!("\n{line}") } else { line };
     let whole = match self.whole {
       Some(whole) => whole,
-      None => self.file.metadata().map_err(|no| failed(&self.path, no))?.len(),
+      None => self.file.metadata().map_err(StoreError::io(&self.path))?.len(),
     };
     self.whole = Some(whole);
     // A write that failed can leave a part of its line, which goes before any line after it.
     if self.torn {
-      self.file.set_len(whole).map_err(|no| failed(&self.path, no))?;
-      self.file.seek(SeekFrom::Start(whole)).map_err(|no| failed(&self.path, no))?;
+      self.file.set_len(whole).map_err(StoreError::io(&self.path))?;
+      self.file.seek(SeekFrom::Start(whole)).map_err(StoreError::io(&self.path))?;
       self.torn = false;
     }
     self.unsynced = true;
     if let Err(no) = self.file.write_all(line.as_bytes()) {
       self.torn = true;
-      return Err(failed(&self.path, no));
+      return Err(StoreError::io(&self.path)(no).into());
     }
     self.whole = Some(whole + line.len() as u64);
     self.unended = false;
@@ -99,32 +101,25 @@ impl Store for Lines {
 
   fn sync(&mut self) -> Result<(), Fault> {
     if self.unsynced {
-      self.file.sync_data().map_err(|no| failed(&self.path, no))?;
+      self.file.sync_data().map_err(StoreError::io(&self.path))?;
       self.unsynced = false;
     }
     Ok(())
   }
 }
 
-/// What the file of lines at a path holds, read with no lease and changed in nothing.
-pub(super) fn kept(path: &Path) -> Result<Vec<Object>, Fault> {
-  let mut entries = Vec::new();
-  read(path, &mut |one| entries.push(one))?;
-  Ok(entries)
-}
-
 /// Each entry of the file of lines at a path, in order, read with no lease and changed in nothing, one line at a time.
-pub(super) fn each(path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
+pub(super) fn each(path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), StoreError> {
   read(path, take).map(drop)
 }
 
 /// The entries of the file of lines at a path whose fact is of one of some kinds, as [`kept`] reads them: a line whose
 /// head names another kind is not parsed, and a line that does not parse is passed over.
-pub(super) fn heads(path: &Path, kinds: &[&str]) -> Result<Vec<Object>, Fault> {
+pub(super) fn heads(path: &Path, kinds: &[&str]) -> Result<Vec<Object>, StoreError> {
   let data = match std::fs::read(path) {
     Ok(data) => data,
     Err(no) if no.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
-    Err(no) => return Err(failed(path, no)),
+    Err(no) => return Err(StoreError::io(path)(no)),
   };
   let starts: Vec<String> = kinds.iter().map(|kind| format!("[[\"{kind}\",")).collect();
   let mut entries = Vec::new();
@@ -166,26 +161,26 @@ enum Tail {
 /// Each entry of a record, in order, each the fact it kept in a list of one, as boot takes them, read one line at a
 /// time and changed in nothing, and how its last line ends. The time that a line holds after its fact stays out of
 /// the entry, and a line with no time, as an older store kept it, reads the same.
-fn read(path: &Path, take: &mut dyn FnMut(Object)) -> Result<Tail, Fault> {
+fn read(path: &Path, take: &mut dyn FnMut(Object)) -> Result<Tail, StoreError> {
   let file = match File::open(path) {
     Ok(file) => file,
     Err(no) if no.kind() == ErrorKind::NotFound => return Ok(Tail::Ended),
-    Err(no) => return Err(failed(path, no)),
+    Err(no) => return Err(StoreError::io(path)(no)),
   };
-  let invalid =
-    |at: usize| Fault::refused(format!("Invalid record entry at byte {at} in {}.", path.display()));
+  let invalid = |at: usize| StoreError::Invalid { path: path.to_path_buf(), at: At::Byte(at) };
   let mut lines = BufReader::with_capacity(1 << 20, file);
   let (mut start, mut line) = (0, Vec::new());
   loop {
     line.clear();
-    let read = lines.read_until(b'\n', &mut line).map_err(|no| failed(path, no))?;
+    let read = lines.read_until(b'\n', &mut line).map_err(StoreError::io(path))?;
     if read == 0 {
       break;
     }
     let ended = line.last() == Some(&b'\n');
     let next = start + read;
-    let text =
-      std::str::from_utf8(&line[..read - usize::from(ended)]).map_err(|_| invalid(start))?;
+    let Ok(text) = std::str::from_utf8(&line[..read - usize::from(ended)]) else {
+      return Err(invalid(start));
+    };
     if text.trim().is_empty() {
       start = next;
       continue;

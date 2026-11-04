@@ -548,6 +548,19 @@
           "description": "A word that runs on a chain as a turn of the operator."
         },
         {
+          "type": "object",
+          "properties": {
+            "verb": {
+              "type": "string",
+              "const": "handover"
+            }
+          },
+          "required": [
+            "verb"
+          ],
+          "description": "The place of the daemon given to the daemon of a new build: each life written to its\ncheckpoint and ended, and the lives with their pins in the answer, once the daemon stopped to\nlisten."
+        },
+        {
           "required": [
             "verb"
           ],
@@ -639,9 +652,10 @@
       "type": "string",
       "enum": [
         "window",
-        "skill"
+        "skill",
+        "daemon"
       ],
-      "description": "What a peer is: a window of an operator, or the process of a skill."
+      "description": "What a peer is: a window of an operator, the process of a skill, or the daemon of a new build,\nwhich asks the handover."
     },
     "Hello": {
       "type": "object",
@@ -936,6 +950,11 @@
                 "null"
               ]
             },
+            "inert": {
+              "type": "boolean",
+              "description": "A node that acts is inert in the window of a peer that only reads: it draws and takes no\ngesture.",
+              "default": false
+            },
             "node": {
               "type": "string",
               "const": "input"
@@ -951,6 +970,10 @@
           "properties": {
             "label": {
               "type": "string"
+            },
+            "inert": {
+              "type": "boolean",
+              "default": false
             },
             "node": {
               "type": "string",
@@ -1305,6 +1328,30 @@
           "description": "One event of a life that the peer attached, under its place in the log of the life."
         },
         {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "peers": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Peer"
+              }
+            },
+            "frame": {
+              "type": "string",
+              "const": "presence"
+            }
+          },
+          "required": [
+            "frame",
+            "life",
+            "peers"
+          ],
+          "description": "Who is attached to a life now, pushed to each of its windows after each attach and detach."
+        },
+        {
           "required": [
             "frame"
           ],
@@ -1553,6 +1600,26 @@
             "answer",
             "data"
           ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "handed"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Handed"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "The lives that a daemon gave at its handover."
         }
       ],
       "description": "What a verb comes to."
@@ -1606,6 +1673,29 @@
         "open"
       ],
       "description": "A record of the machine, and whether a life of the daemon holds it now."
+    },
+    "Handed": {
+      "type": "object",
+      "properties": {
+        "life": {
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "pins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "life",
+        "cwd",
+        "pins"
+      ],
+      "description": "A life that a daemon gave at its handover: its record, its folder, and the holder of each pin."
     },
     "ProtocolError": {
       "oneOf": [
@@ -1732,6 +1822,176 @@
             "why"
           ],
           "description": "The daemon or the life refused the verb, with why."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "error": {
+              "type": "string",
+              "const": "stopped"
+            }
+          },
+          "required": [
+            "error"
+          ],
+          "description": "The daemon gave its place to the daemon of a new build, or stops."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "closed"
+            }
+          },
+          "required": [
+            "error",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "relative"
+            }
+          },
+          "required": [
+            "error",
+            "life"
+          ],
+          "description": "A life is named by the absolute path of its record, the same for each peer."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "unattached"
+            }
+          },
+          "required": [
+            "error",
+            "life"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "holder": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "unpinned"
+            }
+          },
+          "required": [
+            "error",
+            "life",
+            "holder"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "needs": {
+              "$ref": "#/definitions/Kind"
+            },
+            "has": {
+              "$ref": "#/definitions/Kind"
+            },
+            "error": {
+              "type": "string",
+              "const": "speaker"
+            }
+          },
+          "required": [
+            "error",
+            "needs",
+            "has"
+          ],
+          "description": "A frame of a view that only a window says, or only a skill, and the peer is of another kind."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "error": {
+              "type": "string",
+              "const": "nameless"
+            }
+          },
+          "required": [
+            "error"
+          ],
+          "description": "A skill says its name at its hello, since a window mounts the views of a skill by it."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "skill": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "no_skill"
+            }
+          },
+          "required": [
+            "error",
+            "life",
+            "skill"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "unmounted"
+            }
+          },
+          "required": [
+            "error",
+            "viewer"
+          ],
+          "description": "A view belongs to the window that mounted it and to the skill that serves it, and to no other\npeer."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "viewer": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "mounted"
+            }
+          },
+          "required": [
+            "error",
+            "viewer"
+          ],
+          "description": "A viewer names one view of the daemon."
         }
       ],
       "description": "Why the daemon refuses a frame of a peer. It crosses the protocol as data, beside its text."

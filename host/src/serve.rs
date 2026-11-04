@@ -12,7 +12,7 @@ use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec, LinesCodecError};
 
 use crate::{
   error::{ProtocolError, TransportError},
-  protocol::{Answer, BOUND, Frame, PROTOCOL, Peer, Request, Verb},
+  protocol::{Answer, BOUND, Frame, Hello, Kind, PROTOCOL, Peer, Request, Verb},
   transport::Who,
 };
 
@@ -43,6 +43,9 @@ pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
   let mut out = FramedWrite::new(write, LinesCodec::new());
   let peer = match heard(&mut lines).await? {
     None => return Ok(()),
+    Some(Ok(Request { id, verb: Verb::Hello(Hello { kind: Kind::Skill, name: None, .. }) })) => {
+      return closed(&mut out, Some(id), ProtocolError::Nameless).await;
+    }
     Some(Ok(Request { id, verb: Verb::Hello(hello) })) if hello.protocol == PROTOCOL => {
       let peer = Peer { login: who.login, role: who.role, kind: hello.kind, name: hello.name };
       let answer = Answer::Welcome { protocol: PROTOCOL, peer: peer.clone() };
@@ -95,11 +98,12 @@ async fn heard<R: AsyncRead + Unpin>(
   }
 }
 
-/// Whether a peer may say a verb.
+/// Whether a peer may say a verb: it is of the kind that says it, and holds its role.
 fn allowed(peer: &Peer, verb: &Verb) -> Result<(), ProtocolError> {
-  match verb.needs() {
+  match (verb.speaker(), verb.needs()) {
     _ if matches!(verb, Verb::Hello(_)) => Err(ProtocolError::Again),
-    needs if needs > peer.role => Err(ProtocolError::Role { needs, has: peer.role }),
+    (Some(needs), _) if needs != peer.kind => Err(ProtocolError::Speaker { needs, has: peer.kind }),
+    (_, needs) if needs > peer.role => Err(ProtocolError::Role { needs, has: peer.role }),
     _ => Ok(()),
   }
 }

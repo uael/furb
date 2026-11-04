@@ -101,8 +101,9 @@ gives a turn. The host still names the models that `answer` stands in for. With 
 `session.console.prompts`; call `session.console.answer(id, text)` to read an answer by the rules that every console of
 the crate reads a line by, which `answered(shape, line)` gives, for each shape that `answers(shape)` holds for: the
 `shapes()` that the operator offers, and a `Literal` of values that a line names, as `Literal['a', 'b']`. A prompt of
-`None` asks nothing: the console closes it with `None` as it takes it, so no word waits for the operator, and keeps it
-in `session.console.notices` until `session.console.dismiss(id)`, or gives it to `operator` and waits for no answer.
+`None` asks nothing: the console closes it with `None` as it takes it, so no word waits for the operator, and gives it
+to `operator` when one is given. The record holds it, and `session.activity.seen` gives the place up to which the
+operator read each chain or thread, from the facts `seen` that a host says with `engine.say("seen", id, [])`.
 `session` emits `change` and `facts`, and `fault` tells what the life refused when the console said what an act came to.
 `session.streams` holds what a model writes for each rung, until the done of its reply. When the call of a model fails
 for a cause that passes, the provider asks the model again after a wait, and the stream of its rung holds the `retry`:

@@ -6,14 +6,13 @@ rust-version = "1.95"
 description = "The host of furb: each life on a thread of its own, behind a handle that any thread holds."
 license = "AGPL-3.0-only"
 repository = "https://github.com/uael/furb"
-publish = false
 
 [lints]
 workspace = true
 
 [dependencies]
 # The engine, the ears of the World and the provider of models, through the public API of the crate alone.
-furb = { path = ".." }
+furb = { path = "..", version = "0.4.2" }
 # The runtime of the thread of each life, the channels between that thread and the handles of the life, and the
 # socket or the pipe of the protocol.
 tokio = { version = "1", features = ["rt", "sync", "macros", "net", "io-util", "time"] }
@@ -27,6 +26,15 @@ serde = { version = "1", features = ["derive"] }
 # The JSON Schema of the protocol, from which bind/typescript/src/protocol.ts is made.
 schemars = "1"
 thiserror = "2"
+# The WebSocket transport.
+tokio-tungstenite = { version = "0.29", default-features = false, features = ["handshake"] }
+# The local API of Tailscale, an HTTP server on a socket of the machine, and the token that its app for
+# macOS asks, and the address of a peer in its query.
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+base64 = "0.22"
+form_urlencoded = "1"
 
 [target.'cfg(unix)'.dependencies]
 # The user of the daemon and of a peer of its socket.

@@ -165,6 +165,8 @@ export const sidebar = part({
   foldThread(id: string, folded?: boolean): void {
     const fold = folded ?? !this.threadFolded(id);
     const w = this.session;
+    // A thread that folds leaves the eyes of the operator, so the record says up to where he read it.
+    if (fold) w.leave(id);
     w.folds[`thread:${id}`] = fold;
     w.save();
     this.renderContent();

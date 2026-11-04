@@ -51,7 +51,7 @@ use crate::{
   extension::definitions,
   fact::Fact,
   value::{Fault, Object, ObjectRef, entry},
-  world::{self, CHECKPOINT_SCHEMA, Lines, Sqlite, Store},
+  world::{self, CHECKPOINT_SCHEMA, Store},
 };
 
 /// The kind of the fact of a checkpoint.
@@ -102,10 +102,7 @@ impl Engine {
 /// An entry kept after the last entry of the record at a path, as the store of a life keeps one,
 /// for a record that no life holds.
 pub fn keep(path: &Path, one: Object) -> Result<(), Fault> {
-  match world::database(path) {
-    true => Sqlite::open(path)?.keep(one.as_ref()),
-    false => Lines::open(path)?.keep(one.as_ref()),
-  }
+  world::Format::of(path).open(path)?.keep(one.as_ref())
 }
 
 /// An entry of a checkpoint as the record reads it: a fact, which the record holds as the mark of a

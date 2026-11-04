@@ -44,6 +44,10 @@ export class Activity {
   /** The answers of the models on each chain, in order, by the chain that the reply stands on, so that a host reads
    * the dollars of a chain and the share of the window that its last answer read. */
   readonly answers = new Map<string, Answered[]>();
+  /** The place up to which the operator read each chain or thread, by its name: the place of the last fact seen that
+   * he said of it, which covers each change that the record holds before it. An act whose place is past it, as it began
+   * or ended, is new to him. */
+  readonly seen = new Map<string, number>();
   /** How many facts the activity has heard, which is the place in time of the fact that it hears. */
   private clock = 0;
   /** The chain, the actor and the maker of each reply that is not done. The maker of a reply is the rung that waits
@@ -153,7 +157,11 @@ export class Activity {
       return;
     }
     const act = this.acts.get(id);
-    if (kind === "prefix" && by !== id) {
+    // A later life says each fact of its record again as the journal, which names no speaker, and only the operator
+    // says seen.
+    if (kind === "seen" && (by === "operator" || by.startsWith("operator/") || by === "journal")) {
+      this.seen.set(id, at);
+    } else if (kind === "prefix" && by !== id) {
       // A chain says its own prefix at its birth, as a chain with a source does, and that prefix cuts nothing.
       this.compactions.push({ chain: id, by, at });
     } else if (kind === "pause" || kind === "wake") {

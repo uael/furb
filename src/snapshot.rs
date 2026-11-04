@@ -88,12 +88,12 @@ struct Written<'a> {
 
 /// The snapshot of the record at a path.
 pub(crate) fn path(record: &Path) -> PathBuf {
-  PathBuf::from(format!("{}.snapshot", record.display()))
+  world::beside(record, ".snapshot")
 }
 
 /// Where a life writes the snapshot of the record at a path before it takes the name of the snapshot.
 fn aside(record: &Path) -> PathBuf {
-  PathBuf::from(format!("{}.tmp", path(record).display()))
+  world::beside(&path(record), ".tmp")
 }
 
 /// The key of this build, on the ears of a life in the order of boot.
@@ -115,7 +115,7 @@ pub(crate) fn build(names: &[String]) -> String {
 /// lines holds an entry on each line that holds something, and the digest is of its bytes; a database is read for its
 /// entries, and the digest is of each as the record keeps it.
 fn record(path: &Path) -> Option<(usize, String)> {
-  if world::database(path) {
+  if world::Format::of(path) == world::Format::Sqlite {
     let entries = world::kept(path).ok()?;
     let mut digest = Sha256::new();
     for one in &entries {
@@ -132,7 +132,7 @@ fn record(path: &Path) -> Option<(usize, String)> {
 
 /// The log of the record at a path, read whole: its length and the digest of its bytes.
 fn log(record: &Path) -> Option<(u64, String)> {
-  let bytes = fs::read(format!("{}.log", record.display())).ok()?;
+  let bytes = fs::read(world::beside(record, ".log")).ok()?;
   Some((u64::try_from(bytes.len()).ok()?, hex(&Sha256::digest(&bytes))))
 }
 
@@ -153,7 +153,7 @@ impl Keeper {
   /// Whether the life said a fact since the last snapshot, which the length of its log says alone: a life writes its
   /// log on at its end and never cuts it, so a log of the length that the last snapshot covers holds nothing new.
   pub(crate) fn grew(&self) -> bool {
-    let size = fs::metadata(format!("{}.log", self.record.display())).map(|one| one.len());
+    let size = fs::metadata(world::beside(&self.record, ".log")).map(|one| one.len());
     size.map_or(true, |size| self.covered != Some(size))
   }
 

@@ -4,15 +4,13 @@
 //! grounding of Gemini in Google Search, and the search API of DeepSeek; else a free search. A
 //! search answers with text in Markdown, which ends with its sources.
 
+#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
 #![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
-#![expect(
-  clippy::unnecessary_wraps,
-  reason = "debt: a Result or an Option that is always Ok or Some"
-)]
 
-use std::{future::Future, process::Stdio, sync::Arc, time::Duration};
+use std::{future::Future, io, process::ExitStatus, process::Stdio, sync::Arc, time::Duration};
 
 use futures::future::BoxFuture;
+use reqwest::StatusCode;
 use rig_core::http_client::ReqwestClient;
 use serde_json::{Value, json};
 use tokio::{io::AsyncWriteExt, task::AbortHandle};
@@ -24,7 +22,49 @@ use super::{
 use crate::ear::runtime;
 
 /// A search of the web: given a query, the answer in Markdown with its sources, or why it gives none.
-pub type Searches = Arc<dyn Fn(String) -> BoxFuture<'static, Result<String, String>> + Send + Sync>;
+pub type Searches = Arc<dyn Fn(String) -> BoxFuture<'static, Result<String, Error>> + Send + Sync>;
+
+/// Why a work of the network ended before it came to an answer.
+#[derive(Debug, thiserror::Error)]
+pub enum Cut {
+  #[error("it took more than {} seconds", TIMEOUT.as_secs())]
+  Late,
+  #[error("{0}")]
+  Lost(String),
+}
+
+impl From<Cut> for String {
+  fn from(cut: Cut) -> Self {
+    cut.to_string()
+  }
+}
+
+/// Why a search gives no answer.
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+  #[error("{0}")]
+  Command(String),
+  #[error("{program} did not start: {source}")]
+  Start { program: String, source: io::Error },
+  #[error(transparent)]
+  Io(#[from] io::Error),
+  #[error("claude {status}: {why}")]
+  Claude { status: ExitStatus, why: String },
+  #[error(transparent)]
+  Request(#[from] reqwest::Error),
+  #[error("{url} answered {status}: {text}")]
+  Status { url: String, status: StatusCode, text: String },
+  #[error("the search answered no JSON: {0}")]
+  NotJson(serde_json::Error),
+  #[error("the free search answered no JSON: {0}")]
+  FreeNotJson(serde_json::Error),
+  #[error("the search answered with no text: {0}")]
+  NoText(Value),
+  #[error("{0}")]
+  Server(String),
+  #[error(transparent)]
+  Cut(#[from] Cut),
+}
 
 /// How long a search or a fetch may take.
 const TIMEOUT: Duration = Duration::from_secs(300);
@@ -35,17 +75,6 @@ const BRIEF: &str = "Search the web to answer the query of the user. Answer in M
 
 /// The most a model writes in the answer of one search.
 const TOKENS: u64 = 4096;
-
-/// Why the work of [`spawned`] ended with no answer: it took too long, or its task failed.
-#[derive(Debug, thiserror::Error)]
-#[error("{0}")]
-pub(crate) struct Cut(String);
-
-impl From<Cut> for String {
-  fn from(cut: Cut) -> String {
-    cut.to_string()
-  }
-}
 
 /// The work of a search or a fetch, on the runtime of the ears, so that a client of HTTP and a process have the runtime they
 /// need, which ends after [`TIMEOUT`], and when what awaits it goes.
@@ -66,8 +95,8 @@ pub(crate) fn spawned<T: Send + 'static, E: From<Cut> + Send + 'static>(
     drop(aborted);
     match got {
       Ok(Ok(got)) => got,
-      Ok(Err(_)) => Err(Cut(format!("it took more than {} seconds", TIMEOUT.as_secs())).into()),
-      Err(no) => Err(Cut(no.to_string()).into()),
+      Ok(Err(_)) => Err(Cut::Late.into()),
+      Err(no) => Err(Cut::Lost(no.to_string()).into()),
     }
   })
 }
@@ -78,16 +107,17 @@ pub(crate) async fn posted(
   url: &str,
   headers: &[(&str, &str)],
   body: &Value,
-) -> Result<String, String> {
+) -> Result<String, Error> {
   let mut request = ReqwestClient::new().post(url).header("content-type", "application/json");
   for (name, value) in headers {
     request = request.header(*name, *value);
   }
-  let response = request.body(body.to_string()).send().await.map_err(|no| no.to_string())?;
+  let response = request.body(body.to_string()).send().await?;
   let status = response.status();
-  let text = response.text().await.map_err(|no| no.to_string())?;
+  let text = response.text().await?;
   if !status.is_success() {
-    return Err(format!("{url} answered {status}: {}", text.chars().take(500).collect::<String>()));
+    let text = text.chars().take(500).collect();
+    return Err(Error::Status { url: url.to_owned(), status, text });
   }
   Ok(text)
 }
@@ -116,7 +146,7 @@ pub(super) fn claude(program: Program, model: String) -> Searches {
     let (program, model) = (program.clone(), model.clone());
     spawned(async move {
       let first = ["-p", "--model", &model, "--output-format", "text", "--system-prompt", BRIEF];
-      let mut command = program.base_command(&first)?;
+      let mut command = program.base_command(&first).map_err(Error::Command)?;
       command.args([
         "--no-session-persistence",
         "--allowedTools",
@@ -129,23 +159,24 @@ pub(super) fn claude(program: Program, model: String) -> Searches {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
-      let mut child =
-        command.spawn().map_err(|no| format!("{} did not start: {no}", program.name()))?;
+      let mut child = command
+        .spawn()
+        .map_err(|source| Error::Start { program: program.name().to_string(), source })?;
       // A command line that ends before it reads the query closes its stdin, and its exit says why.
       if let Some(mut stdin) = child.stdin.take()
         && let Err(no) = stdin.write_all(query.as_bytes()).await
         && no.kind() != std::io::ErrorKind::BrokenPipe
       {
-        return Err(no.to_string());
+        return Err(no.into());
       }
-      let out = child.wait_with_output().await.map_err(|no| no.to_string())?;
+      let out = child.wait_with_output().await?;
       let text = String::from_utf8_lossy(&out.stdout).trim().to_owned();
       if out.status.success() && !text.is_empty() {
         return Ok(text);
       }
       let err = String::from_utf8_lossy(&out.stderr);
       let why = last(&err).or_else(|| last(&text)).unwrap_or_default();
-      Err(format!("claude {}: {why}", out.status))
+      Err(Error::Claude { status: out.status, why: why.to_owned() })
     })
   })
 }
@@ -181,7 +212,7 @@ enum Native {
 
 impl Native {
   /// The answer of the API to a query, on the reach of a model.
-  async fn asked(self, reach: Reach, query: String) -> Result<String, String> {
+  async fn asked(self, reach: Reach, query: String) -> Result<String, Error> {
     let api = |default: &str| reach.api.clone().unwrap_or_else(|| default.to_owned());
     let bearer = format!("Bearer {}", reach.key);
     let got = match self {
@@ -228,15 +259,14 @@ impl Native {
         posted(&format!("{root}/v1/tools/search"), &[("authorization", &bearer)], &body).await?
       }
     };
-    let got: Value =
-      serde_json::from_str(&got).map_err(|no| format!("the search answered no JSON: {no}"))?;
+    let got: Value = serde_json::from_str(&got).map_err(Error::NotJson)?;
     let answer = match self {
       Native::Anthropic => anthropic(&got),
       Native::Responses(_) => responses(&got),
       Native::Gemini => gemini(&got),
-      Native::Deepseek => deepseek(&got),
+      Native::Deepseek => Some(deepseek(&got)),
     };
-    answer.ok_or_else(|| format!("the search answered with no text: {got}"))
+    answer.ok_or(Error::NoText(got))
   }
 }
 
@@ -301,7 +331,7 @@ fn gemini(got: &Value) -> Option<String> {
 
 /// The answer of the search API of DeepSeek: each result, with its title, its address and its summary, or a line
 /// that says it found none.
-fn deepseek(got: &Value) -> Option<String> {
+fn deepseek(got: &Value) -> String {
   let results = items(got, "results").iter().filter(|one| !text(one, "url").is_empty());
   let lines: Vec<String> = results
     .enumerate()
@@ -315,7 +345,7 @@ fn deepseek(got: &Value) -> Option<String> {
       }
     })
     .collect();
-  Some(if lines.is_empty() { "No result.".to_owned() } else { lines.join("\n") })
+  if lines.is_empty() { "No result.".to_owned() } else { lines.join("\n") }
 }
 
 /// The free search, which needs no key: the server of Parallel for agents, which answers the
@@ -341,24 +371,22 @@ pub(crate) fn free() -> Searches {
 /// The answer of the free search, from what its server answered: each result under its title and
 /// its address, with its excerpts cut at [`EXCERPT`] characters; or why it gives none. A server of
 /// MCP answers in JSON, or in a stream of events whose data is that JSON.
-fn found(got: &str) -> Result<String, String> {
+fn found(got: &str) -> Result<String, Error> {
   let data: String = if got.trim_start().starts_with('{') {
     got.to_owned()
   } else {
     got.lines().filter_map(|line| line.strip_prefix("data:")).map(str::trim).collect()
   };
-  let reply: Value =
-    serde_json::from_str(&data).map_err(|no| format!("the free search answered no JSON: {no}"))?;
+  let reply: Value = serde_json::from_str(&data).map_err(Error::FreeNotJson)?;
   if let Some(error) = reply.get("error") {
-    return Err(
-      error.get("message").and_then(Value::as_str).map_or_else(|| error.to_string(), str::to_owned),
-    );
+    let said = error.get("message").and_then(Value::as_str);
+    return Err(Error::Server(said.map_or_else(|| error.to_string(), str::to_owned)));
   }
   let result = &reply["result"];
   let parts = result["content"].as_array().map_or(&[][..], Vec::as_slice);
   let said: String = parts.iter().filter_map(|one| one["text"].as_str()).collect();
   if result["isError"] == true {
-    return Err(said);
+    return Err(Error::Server(said));
   }
   let Ok(listed) = serde_json::from_str::<Value>(&said) else { return Ok(said) };
   let results = listed["results"].as_array().map_or(&[][..], Vec::as_slice);

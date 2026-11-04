@@ -77,9 +77,10 @@ mod protocol {
       Verb::Cancel { life: life(), act: id() },
       Verb::Chain { life: life(), label: Some("work".to_owned()), on: on() },
       Verb::Run { life: life(), word: "1 + 1".to_owned(), on: on() },
+      Verb::Handover,
     ]
     .into_iter()
-    .chain(views())
+    .chain(views().into_iter().filter(|verb| verb.speaker() != Some(Kind::Skill)))
     .collect()
   }
 
@@ -126,8 +127,11 @@ mod protocol {
             "tb",
             Shape::Table { header: vec!["a".to_owned()], rows: vec![vec![text("c", Tone::Text)]] },
           ),
-          node("in", Shape::Input { value: String::new(), hint: Some("name".to_owned()) }),
-          node("b", Shape::Button { label: "go".to_owned() }),
+          node(
+            "in",
+            Shape::Input { value: String::new(), hint: Some("name".to_owned()), inert: false },
+          ),
+          node("b", Shape::Button { label: "go".to_owned(), inert: false }),
           node("p", Shape::Progress { done: Some(0.5) }),
           node("spin", Shape::Progress { done: None }),
           node("co", Shape::Code { text: "x = 1".to_owned(), language: Some("python".to_owned()) }),
@@ -212,7 +216,12 @@ mod protocol {
     }
 
     async fn hello(&mut self, protocol: u32) -> Frame {
-      self.ask(0, Verb::Hello(Hello { protocol, kind: Kind::Window, name: None })).await
+      self.hello_as(protocol, Kind::Window, None).await
+    }
+
+    async fn hello_as(&mut self, protocol: u32, kind: Kind, name: Option<&str>) -> Frame {
+      let name = name.map(str::to_owned);
+      self.ask(0, Verb::Hello(Hello { protocol, kind, name })).await
     }
   }
 
@@ -250,9 +259,49 @@ mod protocol {
     let writes: Vec<_> = verbs().into_iter().filter(|verb| verb.needs() == Role::Write).collect();
     let names: Vec<_> =
       writes.iter().map(|verb| serde_json::to_value(verb).unwrap()["verb"].clone()).collect();
-    let expected =
-      ["open", "pin", "unpin", "prompt", "answer", "pause", "wake", "cancel", "chain", "run"];
+    let expected = [
+      "open",
+      "pin",
+      "unpin",
+      "prompt",
+      "answer",
+      "pause",
+      "wake",
+      "cancel",
+      "chain",
+      "run",
+      "handover",
+      "view.event",
+      "view.event",
+      "view.event",
+    ];
     assert_eq!(names, expected.map(|name| json!(name)));
+  }
+
+  #[tokio::test]
+  async fn a_frame_of_a_view_is_refused_to_the_kind_of_peer_that_does_not_say_it() {
+    for (kind, name) in [(Kind::Window, None), (Kind::Skill, Some("k"))] {
+      let mut client = served(Role::Write);
+      client.hello_as(PROTOCOL, kind, name).await;
+      for (id, verb) in (1..).zip(views()) {
+        let needs = verb.speaker().expect("a frame of a view has the kind that says it");
+        match client.ask(id, verb.clone()).await {
+          Frame::Reply { id: got, .. } if needs == kind => assert_eq!(got, id),
+          Frame::Refused { id: got, error, .. } if needs != kind => {
+            assert_eq!((got, error), (Some(id), ProtocolError::Speaker { needs, has: kind }));
+          }
+          other => panic!("{verb:?} said by {kind:?} gave {other:?}"),
+        }
+      }
+    }
+  }
+
+  #[tokio::test]
+  async fn a_skill_that_gives_no_name_is_refused_at_its_hello() {
+    let mut client = served(Role::Write);
+    let refused = client.hello_as(PROTOCOL, Kind::Skill, None).await;
+    assert_eq!(refused, Frame::refused(Some(0), ProtocolError::Nameless));
+    assert_eq!(client.heard().await, None);
   }
 
   #[tokio::test]
@@ -312,7 +361,7 @@ mod protocol {
     let door = local.clone();
     tokio::spawn(async move {
       let stream = listener.accept().await.unwrap();
-      let who = door.identify(&stream).unwrap();
+      let who = door.identify(&stream).await.unwrap();
       serve(&Echo, stream, who).await
     });
     let mut client = Client { lines: BufReader::new(local.dial().await.unwrap()) };

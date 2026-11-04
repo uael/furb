@@ -7,10 +7,9 @@
 //! fixed table of [`fallback`].
 
 #![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
+  clippy::single_match_else,
+  reason = "debt: a match of one arm and else, where if let serves"
 )]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
 
 use std::{
   collections::HashMap,
@@ -186,8 +185,9 @@ async fn help(program: &Program) -> Option<String> {
 /// Forget each discovery, so the next models ask the command line again.
 pub fn refresh() {
   seen().lock().unwrap_or_else(PoisonError::into_inner).clear();
+  // A cache that cannot go stays, and the next models read it until the program makes a new stamp.
   if let Some(file) = cached() {
-    let _ = fs::remove_file(file);
+    fs::remove_file(file).unwrap_or_default();
   }
 }
 

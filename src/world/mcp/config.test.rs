@@ -16,7 +16,7 @@ use std::{
 
 use serde_json::{Value, json};
 
-use super::{CALL, Choice, Places, Scope, Server, Transport, choose, expand, servers};
+use super::{CALL, Choice, Places, Run, Scope, Server, Transport, choose, expand, servers};
 
 /// A directory of its own for one test, and empty.
 fn place(name: &str) -> PathBuf {
@@ -61,7 +61,7 @@ fn a_variable_expands_to_its_value_or_its_default_and_one_that_is_not_set_has_no
     "$A and ${A",
     "a mark that is not whole stays as it is"
   );
-  assert_eq!(expand("${B}", &set).unwrap_err(), "the variable B is not set");
+  assert_eq!(expand("${B}", &set).unwrap_err().to_string(), "the variable B is not set");
 }
 
 #[test]
@@ -84,7 +84,9 @@ fn a_later_scope_wins_for_a_name_which_keeps_its_first_place_and_a_server_of_the
   let got = servers(&places, &variables(&[]));
   let seen: Vec<(&str, Scope, bool, String)> = got
     .iter()
-    .map(|one| (one.name.as_str(), one.scope, one.approved, one.transport.target()))
+    .map(|one| {
+      (one.name.as_str(), one.scope, one.approved, one.run.as_ref().unwrap().transport.target())
+    })
     .collect();
   assert_eq!(
     seen,
@@ -122,21 +124,22 @@ fn a_definition_gives_its_transport_with_its_variables_expanded_its_timeout_and_
   let local = Server {
     name: "local".to_owned(),
     scope: Scope::User,
-    transport: Transport::Stdio {
-      command: "node".to_owned(),
-      args: vec!["serve".to_owned(), "8080".to_owned()],
-      env: vec![("KEY".to_owned(), "k".to_owned())],
-      cwd: Some(at.join("project").join("tools")),
-    },
     disabled: false,
     approved: true,
-    timeout: Duration::from_millis(2500),
-    deny: vec!["drop".to_owned()],
-    error: String::new(),
+    run: Ok(Run {
+      transport: Transport::Stdio {
+        command: "node".to_owned(),
+        args: vec!["serve".to_owned(), "8080".to_owned()],
+        env: vec![("KEY".to_owned(), "k".to_owned())],
+        cwd: Some(at.join("project").join("tools")),
+      },
+      timeout: Duration::from_millis(2500),
+      deny: vec!["drop".to_owned()],
+    }),
   };
   assert_eq!(got[0], local);
   assert_eq!(
-    got[1].transport,
+    got[1].run.as_ref().unwrap().transport,
     Transport::Http {
       url: "https://h.dev/mcp".to_owned(),
       headers: vec![("authorization".to_owned(), "Bearer k".to_owned())],
@@ -144,10 +147,14 @@ fn a_definition_gives_its_transport_with_its_variables_expanded_its_timeout_and_
     }
   );
   assert_eq!(
-    (got[1].timeout, got[1].transport.kind(), got[0].transport.kind()),
+    (
+      got[1].run.as_ref().unwrap().timeout,
+      got[1].run.as_ref().unwrap().transport.kind(),
+      got[0].run.as_ref().unwrap().transport.kind()
+    ),
     (CALL, "http", "stdio")
   );
-  assert_eq!(got[1].transport.url(), Some("https://h.dev/mcp"));
+  assert_eq!(got[1].url(), Some("https://h.dev/mcp"));
 }
 
 #[test]
@@ -166,8 +173,12 @@ fn a_definition_that_cannot_run_and_a_file_that_is_not_of_the_form_each_say_why(
   file(&places.file(Scope::User), &user.to_string());
   file(&places.file(Scope::Project), "{not json");
   let got = servers(&places, &variables(&[]));
+  let said: Vec<String> = got
+    .iter()
+    .map(|one| one.run.as_ref().err().map(ToString::to_string).unwrap_or_default())
+    .collect();
   let errors: Vec<(&str, &str)> =
-    got.iter().map(|one| (one.name.as_str(), one.error.as_str())).collect();
+    got.iter().zip(&said).map(|(one, why)| (one.name.as_str(), why.as_str())).collect();
   let project = places.file(Scope::Project).display().to_string();
   assert_eq!(
     errors[..7],
@@ -182,11 +193,7 @@ fn a_definition_that_cannot_run_and_a_file_that_is_not_of_the_form_each_say_why(
     ]
   );
   assert_eq!(got[7].name, project);
-  assert!(
-    got[7].error.starts_with(&format!("{project}: key must be a string")),
-    "{}",
-    got[7].error
-  );
+  assert!(said[7].starts_with(&format!("{project}: key must be a string")), "{}", said[7]);
 }
 
 #[test]

@@ -3,7 +3,7 @@ name = "furb-cli"
 version.workspace = true
 edition = "2024"
 rust-version = "1.95"
-description = "furb, the command line: the TUI, a JSON-RPC on stdin and stdout, and one command on one life."
+description = "furb, the command line: the TUI, and one command on one life."
 license = "AGPL-3.0-only"
 repository = "https://github.com/uael/furb"
 
@@ -17,14 +17,27 @@ workspace = true
 [dependencies]
 # The engine, the ears of the World and the provider of models, at the version of this program.
 furb = { path = "..", version = "0.4.2" }
+# The daemon of the machine, which `furb host` serves.
+furb-host = { path = "../host", version = "0.4.2" }
 clap = { version = "4.6", features = ["derive"] }
-# The stdin of the operator, read by the console as the reactor of furb wakes it.
-tokio = { version = "1", features = ["io-std", "io-util", "macros"] }
+# The stdin of the operator, read by the console as the reactor of furb wakes it, and the runtime of
+# the daemon.
+tokio = { version = "1", features = ["io-std", "io-util", "macros", "rt-multi-thread"] }
 # The work of the console, which it streams to its ear, and the stop of a read.
 futures = "0.3"
 unsync = "0.2"
 # The protocol: one command or one event per line, as JSON, whose value is read before anything rounds it.
 serde_json = { version = "1", features = ["raw_value"] }
+
+[dev-dependencies]
+# The daemon of the kill matrix as a process, its windows on its socket, and the FIFO that its
+# processes hold.
+tokio = { version = "1", features = ["process", "net", "time", "io-util", "macros", "rt-multi-thread"] }
+tokio-util = { version = "0.7", features = ["codec"] }
+
+[target.'cfg(unix)'.dev-dependencies]
+# The signals that end the daemon, and the FIFO of the test.
+libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
 # The console of Windows, whose Ctrl+C and Ctrl+Break the TUI handles while furb waits for it.
