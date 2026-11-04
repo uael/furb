@@ -40,8 +40,6 @@
   clippy::struct_excessive_bools,
   reason = "debt: a struct of many bools, where an enum serves"
 )]
-#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
-#![expect(clippy::used_underscore_binding, reason = "debt: a binding named with _ that is used")]
 
 mod atomic;
 pub mod catalog;
@@ -862,14 +860,67 @@ impl Provider {
   /// A pause over the chain of a reply holds the next call of its model: the call that waits for a retry, or that a
   /// stand asks again, is made at the wake, and not at the end of its wait. A call that runs returns.
   pub fn ear(self) -> Box<dyn Ear> {
-    let native = self.search();
+    hearing(&["stand", "reply", "search", RAN], move |mut co: Co<Replied>| async move {
+      // The ids of chains repeat in every life, so a conversation of this life is keyed by the
+      // life too.
+      let life = uuid().map_err(|no| Fault::refused(no.to_string()))?;
+      let mut hearer = Hearer::new(self, life);
+      loop {
+        hearer.answer(&mut co).await?;
+        match co.next().await {
+          Next::Heard(a) => hearer.heard(&mut co, &a).await?,
+          Next::Worked(Replied::Refreshed { about, got }) => hearer.refreshed(&mut co, about, got),
+          Next::Worked(Replied::Wrote(wrote)) => hearer.wrote(&mut co, wrote).await,
+          Next::Worked(Replied::Retried(retried)) => hearer.retried(&mut co, retried).await,
+          Next::Worked(Replied::Came(came)) => hearer.came(&mut co, came).await,
+          Next::Worked(Replied::Searched { id, got }) => hearer.searched(&mut co, &id, got),
+        }
+      }
+    })
+  }
+}
+
+/// The ear of the provider as it hears a life: what the provider stands on, which a refresh
+/// changes, the replies that it took, and the stands and the searches that it answers.
+struct Hearer {
+  life: String,
+  directory: String,
+  config: Option<PathBuf>,
+  extensions: Option<Vec<Advertised>>,
+  models: Arc<RwLock<Vec<Model>>>,
+  actor: String,
+  thinking: Thinking,
+  images: Images,
+  writes: Option<Writes>,
+  backoff: Backoff,
+  retries: Option<Retries>,
+  refresh: Option<Refresh>,
+  gone: Vec<String>,
+  searching: bool,
+  native: Search,
+  replies: Replies,
+  /// The stops of the searches that work, which end a search that a control ended first.
+  searches: HashMap<String, oneshot::Sender<()>>,
+  /// Whether the ear heard a stand. The opening of the life loaded the settings just now, so the
+  /// first stand, which the boot asks, reads them again only after it: a refresh there asks each
+  /// program of a model, as the claude command line, a second time.
+  stood: bool,
+  /// The stand that the ear answers next with the standing, and whether a word made it.
+  stands: Option<(String, bool)>,
+  /// The chains that the ear told which names left the catalog.
+  lacked: HashSet<String>,
+}
+
+impl Hearer {
+  fn new(provider: Provider, life: String) -> Hearer {
+    let native = provider.search();
     let Provider {
       directory,
       config,
       extensions,
       models,
       actor,
-      mut thinking,
+      thinking,
       images,
       writes,
       backoff,
@@ -877,524 +928,507 @@ impl Provider {
       refresh,
       gone,
       searching,
-    } = self;
-    let mut actor = actor.unwrap_or_else(|| {
+    } = provider;
+    let actor = actor.unwrap_or_else(|| {
       models
         .read()
         .unwrap_or_else(PoisonError::into_inner)
         .first()
         .map_or_else(|| OPERATOR.to_owned(), |model| model.at(None))
     });
-    let mut images = Images::new(images);
-    hearing(&["stand", "reply", "search", RAN], move |mut co: Co<Replied>| async move {
-      // The ids of chains repeat in every life, so a conversation of this life is keyed by the life too.
-      let life = uuid().map_err(|no| Fault::refused(no.to_string()))?;
-      let mut replies: HashMap<String, Reply> = HashMap::new();
-      // The stops of the searches that work, which end a search that a control ended first.
-      let mut searches: HashMap<String, oneshot::Sender<()>> = HashMap::new();
-      // The actor whose last reply on each chain the ear refused.
-      let mut mute: HashMap<String, String> = HashMap::new();
-      // The opening of the life loaded the settings just now, so the first stand, which the boot asks, reads them
-      // again only after it: a refresh there asks each program of a model, as the claude command line, a second time.
-      let mut stood = false;
-      // The stand that the ear answers next with the standing, and whether a word made it.
-      let mut stands: Option<(String, bool)> = None;
-      // The chains that the ear told which names left the catalog.
-      let mut lacked: std::collections::HashSet<String> = std::collections::HashSet::new();
-      loop {
-        if let Some((about, word)) = stands.take() {
-          let given = standing(
-            &models.read().unwrap_or_else(PoisonError::into_inner),
-            &directory,
-            &actor,
-            extensions.as_deref(),
-            &config.clone().unwrap_or_else(|| crate::extension::Places::here().config),
-          );
-          say(&mut co, Fact::says("done", &about, [given]));
-          // A stand reads the settings again, as after a change of the command line or of its
-          // account, or when the operator asks to retry now, so a reply whose call waits for a
-          // retry, which can wait for days at a usage limit, ends its wait and asks again at once,
-          // on the models that stand now.
-          let waiting: Vec<String> = replies
-            .iter()
-            .filter(|(_, reply)| reply.waits && !word)
-            .map(|(id, _)| id.clone())
-            .collect();
-          for id in waiting {
-            let Some(reply) = replies.get(&id) else { continue };
-            let (chain, actor) = (reply.chain.clone(), reply.actor.clone());
-            let (watch, stop, hold) = asking(
-              &mut co,
-              &id,
-              &chain,
-              &actor,
-              &life,
-              &models,
-              &mut images,
-              thinking,
-              backoff,
-              true,
-            )
-            .await?;
-            if let Some(reply) = replies.get_mut(&id) {
-              reply.waits = false;
-              reply.watch = watch.then(Watch::default);
-              reply.hold = hold;
-              reply._stop = stop;
-            }
-          }
+    Hearer {
+      life,
+      directory,
+      config,
+      extensions,
+      models,
+      actor,
+      thinking,
+      images: Images::new(images),
+      writes,
+      backoff,
+      retries,
+      refresh,
+      gone,
+      searching,
+      native,
+      replies: Replies::default(),
+      searches: HashMap::new(),
+      stood: false,
+      stands: None,
+      lacked: HashSet::new(),
+    }
+  }
+
+  async fn heard(&mut self, co: &mut Co<Replied>, a: &Fact) -> Result<(), Fault> {
+    match a.kind() {
+      "stand" if a.question() => self.stand(co, a),
+      "reply" if a.question() => self.reply(co, a).await?,
+      RAN => self.ran(co, a).await,
+      "done" => self.done(a),
+      "search" if a.question() => self.search(co, a),
+      "pause" | "wake" => self.held(co).await,
+      _ => {}
+    }
+    Ok(())
+  }
+
+  /// A stand that a word makes, as the stand of a setup, reads the standing alone: only a stand
+  /// from outside an act reads the settings again, so a setup or a new standing on many chains
+  /// asks no command line.
+  fn stand(&mut self, co: &mut Co<Replied>, a: &Fact) {
+    let about = a.about().to_owned();
+    let word = crate::fact::named(a.by(), "rung");
+    let first = !std::mem::replace(&mut self.stood, true);
+    if let Some(refresh) = self.refresh.as_ref().filter(|_| !first && !word) {
+      // Reading the settings asks each program of a model, which can take seconds, so the
+      // stand awaits them as a task of the runtime of the ears, and every chain of the life
+      // goes on meanwhile.
+      say(co, Fact::says("started", &about, []));
+      let read = runtime().spawn(refresh());
+      co.work(stream::once(read.map(move |got| {
+        let got = got.map_err(|no| no.to_string()).and_then(|got| got);
+        Replied::Refreshed { about, got }
+      })));
+      return;
+    }
+    if !self.gone.is_empty() && self.lacked.insert(a.on().to_owned()) {
+      told(co, a.on(), &departed(&about, &self.gone));
+    }
+    self.stands = Some((about, word));
+  }
+
+  /// The settings that a refresh read, on which the provider stands from now on, or why it read
+  /// none.
+  fn refreshed(&mut self, co: &mut Co<Replied>, about: String, got: Result<Settings, String>) {
+    match got {
+      Ok((fresh, default, budget)) => {
+        if !fresh.iter().any(|model| model.settings(&self.actor).is_some()) {
+          self.actor = default
+            .or_else(|| fresh.first().map(|model| model.at(None)))
+            .unwrap_or_else(|| OPERATOR.to_owned());
         }
-        let a = match co.next().await {
-          Next::Heard(a) => a,
-          // The settings that a refresh read, on which the provider stands from now on, or why it
-          // read none.
-          Next::Worked(Replied::Refreshed { about, got }) => {
-            match got {
-              Ok((fresh, default, budget)) => {
-                if !fresh.iter().any(|model| model.settings(&actor).is_some()) {
-                  actor = default
-                    .or_else(|| fresh.first().map(|model| model.at(None)))
-                    .unwrap_or_else(|| OPERATOR.to_owned());
-                }
-                *models.write().unwrap_or_else(PoisonError::into_inner) = fresh;
-                thinking = budget;
-                stands = Some((about, false));
-              }
-              Err(why) => say(&mut co, Fact::says("done", &about, [Fault::refused(why).object()])),
-            }
-            continue;
-          }
-          // What the model of a reply that still stands writes, told to the host under the rung it writes for.
-          Next::Worked(Replied::Wrote { id, text, thinking }) => {
-            if let Some(reply) = replies.get_mut(&id) {
-              reply.waits = false;
-            }
-            if let (Some(writes), Some(reply)) = (&writes, replies.get(&id)) {
-              writes(&reply.rung, &reply.chain, &text, &thinking);
-            }
-            let Some((chain, rung)) =
-              replies.get(&id).map(|one| (one.chain.clone(), one.rung.clone()))
-            else {
-              continue;
-            };
-            let Some(watch) = replies.get_mut(&id).and_then(|reply| reply.watch.as_mut()) else {
-              continue;
-            };
-            let Some(end) = watch.wrote(&text).filter(|_| !text.is_empty()) else { continue };
-            let read = watch.upto(end).to_owned();
-            // The statements before the last line at the left edge, as python: each quote in them bound as a string.
-            let word = if !read.contains(watch::QUOTE) {
-              read
-            } else if watch::open(&read) {
-              continue;
-            } else {
-              let got = co.call("unquoted", vec![Object::string(&read)], vec![]).await;
-              match got.ok().and_then(|one| one.as_ref().as_str().map(str::to_owned)) {
-                Some(word) => word,
-                None => continue,
-              }
-            };
-            let (line, why) = match watch::broken(&word) {
-              Some(line) => (line, format!("line {line}: the statement there cannot be python")),
-              None => {
-                let found = findings(&mut co, &chain, &word).await;
-                if found.is_empty() {
-                  // The word holds no fault so far, so its new statements run now, as the turn holds them: from its
-                  // first line that is not blank. A statement whose clause starts at the end, as an `else`, waits.
-                  let (word, end) = match watch.clause(end).then(|| watch::last(&word)).flatten() {
-                    Some(line) => {
-                      let held: String = word.split_inclusive('\n').take(line - 1).collect();
-                      (held, watch.start(line))
-                    }
-                    None if watch.clause(end) => continue,
-                    None => (word, end),
-                  };
-                  let given = word.trim_start();
-                  let Some((part, before)) = watch.part(given) else { continue };
-                  if writing(&mut co, &rung, part, before).await {
-                    watch.gave(given, end);
-                  } else if watch.ran().is_none() {
-                    // A word whose first part a pause held is given whole, so no later part of it is given.
-                    watch.untaken();
-                  }
-                  continue;
-                }
-                let settled = watch::settled(&word);
-                let Some(line) = watch::refused(&settled, &found) else { continue };
-                (line, found.join("\n"))
-              }
-            };
-            // The word as far as the statement that cannot be python, or that the gate refuses for good, is the turn
-            // of the reply, so the gate refuses it and the chain tells why; and once a part of the word ran, the
-            // turn is the word that ran, which the chain runs as it ran, and the chain is told why before it. The
-            // model wrote no more of it that counts, and its call ends with the reply.
-            let ran = watch.ran().map(str::to_owned);
-            let wrapped = watch.note();
-            let Ok(turn) = cut(ran.as_deref().unwrap_or_else(|| watch.through(line))) else {
-              continue;
-            };
-            if let Some(Reply { chain, .. }) = replies.remove(&id) {
-              mute.remove(&chain);
-              if let Some(note) = wrapped {
-                told(&mut co, &chain, &format!("#{rung} {note}"));
-              }
-              if ran.is_some() {
-                let ran = ending(ran.as_deref().unwrap_or_default());
-                noted(
-                  &mut co,
-                  &chain,
-                  &rung,
-                  AFTER,
-                  &[("findings", &afterward(&why)), ("ran", &ran)],
-                )
-                .await;
-              }
-              say(&mut co, Fact::says("done", &id, [turn]));
-            }
-            continue;
-          }
-          // A retry of the call of the model of a reply that still stands, told to the host under its rung.
-          Next::Worked(Replied::Retried { id, retry, limit }) => {
-            // A model asked again writes another word, and a part of this one ran, so the reply ends with the word
-            // that ran, and the model is not asked again.
-            let ran =
-              replies.get(&id).and_then(|reply| reply.watch.as_ref()?.ran().map(str::to_owned));
-            if let Some(Ok(turn)) = ran.as_deref().map(cut) {
-              if let Some(Reply { chain, rung, watch, .. }) = replies.remove(&id) {
-                mute.remove(&chain);
-                if let Some(note) = watch.as_ref().and_then(Watch::note) {
-                  told(&mut co, &chain, &format!("#{rung} {note}"));
-                }
-                noted(
-                  &mut co,
-                  &chain,
-                  &rung,
-                  STOPPED,
-                  &[("why", &retry.why), ("ran", &ending(ran.as_deref().unwrap_or_default()))],
-                )
-                .await;
-                say(&mut co, Fact::says("done", &id, [turn]));
-              }
-              continue;
-            }
-            if let Some(reply) = replies.get_mut(&id) {
-              reply.waits = true;
-              if let Some(watch) = reply.watch.as_mut() {
-                watch.forget();
-              }
-            }
-            if let (Some(retries), Some(reply)) = (&retries, replies.get(&id)) {
-              retries(&reply.rung, &reply.chain, &retry);
-            }
-            // A wait for the end of a limit lasts hours, so the chain is told once, before it. A stand asks the call
-            // again, and a call that meets the same wait tells nothing more.
-            if let (true, Some(reply)) = (limit, replies.get_mut(&id)) {
-              let mut note = format!("#{} waits on {}: {}", reply.chain, reply.actor, retry.why);
-              if retry.why.starts_with("usage limit") {
-                let chain = &reply.chain;
-                note += &format!(
-                  ". To go on with another actor, say rung(\"actor = '<model>'\", on=\"{chain}\") and wake(\"{chain}\")."
-                );
-              }
-              if reply.noted.as_deref() != Some(note.as_str()) {
-                say(
-                  &mut co,
-                  Fact::says("tell", &reply.chain, [Object::list([Object::string(&note)])]),
-                );
-                reply.noted = Some(note);
-              }
-            }
-            continue;
-          }
-          // What a search came to: its text, or why it gives none, unless a control ended it first.
-          Next::Worked(Replied::Searched { id, got }) => {
-            if searches.remove(&id).is_some() {
-              let got = got.map_or_else(|no| Fault::refused(no).object(), |one| one.object());
-              say(&mut co, Fact::says("done", &id, [got]));
-            }
-            continue;
-          }
-          // What the model of a reply that still stands came to.
-          Next::Worked(Replied::Came { id, got, dropped }) => {
-            let Some(reply) = replies.get(&id) else { continue };
-            // Once a part of the word ran, the turn is a word that holds the word that ran and that the gate finds
-            // nothing against, so the chain runs it whole; any other end of the reply is the word that ran.
-            let ran = reply.watch.as_ref().and_then(Watch::ran).map(str::to_owned);
-            let got = match (ran, got) {
-              (Some(ran), got) => {
-                let (chain, rung) = (reply.chain.clone(), reply.rung.clone());
-                let word = got
-                  .as_ref()
-                  .ok()
-                  .and_then(|turn| Some(turn.as_ref().items()?.get(1)?.as_str()?.to_owned()));
-                let why = match &word {
-                  Some(word) if word.starts_with(ran.trim()) => {
-                    let python = if word.contains(watch::QUOTE) {
-                      let got = co.call("unquoted", vec![Object::string(word)], vec![]).await;
-                      got.ok().and_then(|one| one.as_ref().as_str().map(str::to_owned))
-                    } else {
-                      Some(word.clone())
-                    };
-                    match python {
-                      Some(python) => findings(&mut co, &chain, &python).await.join("\n"),
-                      None => "the word holds a quote that is not whole".to_owned(),
-                    }
-                  }
-                  Some(_) => "the turn does not hold the word that ran".to_owned(),
-                  None => match &got {
-                    Err(no) => format!("{STOPPED}: {}", failure(no)),
-                    Ok(_) => "the turn holds no word".to_owned(),
-                  },
-                };
-                if why.is_empty() {
-                  got
-                } else {
-                  let Ok(turn) = cut(&ran) else { continue };
-                  match &got {
-                    Err(no) => {
-                      noted(
-                        &mut co,
-                        &chain,
-                        &rung,
-                        STOPPED,
-                        &[("why", &failure(no)), ("ran", &ending(&ran))],
-                      )
-                      .await
-                    }
-                    Ok(_) => {
-                      let fields = [("findings", afterward(&why)), ("ran", ending(&ran))];
-                      let fields = fields.each_ref().map(|(word, text)| (*word, text.as_str()));
-                      noted(&mut co, &chain, &rung, AFTER, &fields).await
-                    }
-                  }
-                  Ok(turn)
-                }
-              }
-              (None, got) => got,
-            };
-            let Some(reply) = replies.get(&id) else { continue };
-            // The word that runs is not all the text that the model wrote, so the chain is told what went, before it.
-            let wrapped = reply.watch.as_ref().and_then(Watch::note);
-            if let Some(dropped) = dropped.or(wrapped) {
-              let note = format!("#{} {dropped}", reply.rung);
-              say(
-                &mut co,
-                Fact::says("tell", &reply.chain, [Object::list([Object::string(&note)])]),
-              );
-            }
-            let recoverable = got.as_ref().is_err_and(recoverable);
-            let got =
-              got.map_err(|no| format!("{} answered nothing: {}", reply.actor, failure(&no)));
-            if let (Err(why), true) = (&got, reply.again)
-              && !recoverable
-            {
-              let paused = co
-                .call("pause", vec![Object::string(&reply.chain), Object::string(why)], vec![])
-                .await;
-              if let Err(no) = paused {
-                told(
-                  &mut co,
-                  &reply.chain,
-                  &format!("#{} could not pause the chain: {}", reply.rung, no.message()),
-                );
-              }
-            }
-            let got = got.map_err(Fault::refused).unwrap_or_else(|fault| fault.object());
-            say(&mut co, Fact::says("done", &id, [got]));
-            continue;
-          }
-        };
-        let about = a.about().to_owned();
-        match a.kind() {
-          "stand" if a.question() => {
-            // A stand that a word makes, as the stand of a setup, reads the standing alone: only a stand from outside
-            // an act reads the settings again, so a setup or a new standing on many chains asks no command line.
-            let word = crate::fact::named(a.by(), "rung");
-            let first = !std::mem::replace(&mut stood, true);
-            if let Some(refresh) = refresh.as_ref().filter(|_| !first && !word) {
-              // Reading the settings asks each program of a model, which can take seconds, so the
-              // stand awaits them as a task of the runtime of the ears, and every chain of the life
-              // goes on meanwhile.
-              say(&mut co, Fact::says("started", &about, []));
-              let read = runtime().spawn(refresh());
-              co.work(stream::once(read.map(move |got| {
-                let got = got.map_err(|no| no.to_string()).and_then(|got| got);
-                Replied::Refreshed { about, got }
-              })));
-              continue;
-            }
-            if !gone.is_empty() && lacked.insert(a.on().to_owned()) {
-              told(&mut co, a.on(), &departed(&about, &gone));
-            }
-            stands = Some((about, word));
-          }
-          "reply" if a.question() => {
-            say(&mut co, Fact::says("started", &about, []));
-            let chain = a.on().to_owned();
-            let actor = a.word(1).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
-            let (watch, stop, hold) = asking(
-              &mut co,
-              &about,
-              &chain,
-              &actor,
-              &life,
-              &models,
-              &mut images,
-              thinking,
-              backoff,
-              false,
-            )
-            .await?;
-            let again = mute.get(&chain) == Some(&actor);
-            let rung = a.by().to_owned();
-            let watch = watch.then(Watch::default);
-            let reply = Reply {
-              chain,
-              actor,
-              rung,
-              again,
-              watch,
-              waits: false,
-              noted: None,
-              hold,
-              _stop: stop,
-            };
-            replies.insert(about, reply);
-          }
-          // A part of a word that raised ends the word where it raised, so its reply ends with the word that ran,
-          // whose run is done with that raise.
-          RAN => {
-            if a.word(1).is_none_or(|one| one.type_name() == "NoneType") {
-              continue;
-            }
-            let mine = replies.iter().find(|(_, reply)| reply.rung == about);
-            let Some(id) = mine.map(|(id, _)| id.clone()) else { continue };
-            let ran =
-              replies.get(&id).and_then(|reply| reply.watch.as_ref()?.ran().map(str::to_owned));
-            let Some(Ok(turn)) = ran.as_deref().map(cut) else { continue };
-            if let Some(Reply { chain, rung, watch, .. }) = replies.remove(&id) {
-              mute.remove(&chain);
-              if let Some(note) = watch.as_ref().and_then(Watch::note) {
-                told(&mut co, &chain, &format!("#{rung} {note}"));
-              }
-              say(&mut co, Fact::says("done", &id, [turn]));
-            }
-          }
-          "done" => {
-            searches.remove(&about);
-            let Some(Reply { chain, actor, .. }) = replies.remove(&about) else { continue };
-            // A done that the ear said of its own reply ends the row of refusals on the chain with a turn, or adds
-            // to it with a refusal, which is what the ear says when it says no turn; a done that a control said
-            // leaves the row as it is.
-            let turned = a
-              .word(0)
-              .and_then(|one| one.items())
-              .is_some_and(|turn| turn.len() == 4 && turn[0].as_str() == Some("assistant"));
-            if a.by() == about {
-              continue;
-            }
-            if turned {
-              mute.remove(&chain);
-            } else {
-              mute.insert(chain, actor);
-            }
-          }
-          // A pause or a wake changes what holds a reply, so each reply that stands reads whether a pause holds it
-          // now, and a call that waits to be made again goes on at the wake.
-          // A search of the web: the native search of the provider of its actor, else the free
-          // search, as a work of the ear, so every chain of the life goes on meanwhile. A life
-          // that inspects searches nothing.
-          "search" if a.question() => {
-            let word = |at: usize| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
-            let (query, actor) = (word(1).unwrap_or_default(), word(2).unwrap_or_default());
-            if !searching {
-              let no = "a life that inspects searches nothing";
-              say(&mut co, Fact::says("done", &about, [Fault::refused(no).object()]));
-              continue;
-            }
-            say(&mut co, Fact::says("started", &about, []));
-            let search = native(&actor).unwrap_or_else(free);
-            let (stop, stopped) = oneshot::channel();
-            let id = about.clone();
-            let work = async move {
-              let got = search(query.clone()).await;
-              Replied::Searched {
-                id,
-                got: got
-                  .map(|answer| crate::value::Text::new(query, answer))
-                  .map_err(|no| no.to_string()),
-              }
-            };
-            co.work(stream::once(work).take_until(stopped));
-            searches.insert(about, stop);
-          }
-          "pause" | "wake" => {
-            let ids: Vec<String> = replies.keys().cloned().collect();
-            for id in ids {
-              let held = co.call("paused", vec![Object::string(&id)], vec![]).await;
-              let held = held.ok().and_then(|one| one.as_ref().as_bool()).unwrap_or(false);
-              if let Some(reply) = replies.get(&id) {
-                reply.hold.send_replace(held);
-              }
-            }
-          }
-          _ => {}
-        }
+        *self.models.write().unwrap_or_else(PoisonError::into_inner) = fresh;
+        self.thinking = budget;
+        self.stands = Some((about, false));
       }
-    })
+      Err(why) => say(co, Fact::says("done", &about, [Fault::refused(why).object()])),
+    }
+  }
+
+  /// The stand that waits, answered with the standing. A stand reads the settings again, as after
+  /// a change of the command line or of its account, or when the operator asks to retry now, so a
+  /// reply whose call waits for a retry, which can wait for days at a usage limit, ends its wait
+  /// and asks again at once, on the models that stand now.
+  async fn answer(&mut self, co: &mut Co<Replied>) -> Result<(), Fault> {
+    let Some((about, word)) = self.stands.take() else { return Ok(()) };
+    let given = standing(
+      &self.models.read().unwrap_or_else(PoisonError::into_inner),
+      &self.directory,
+      &self.actor,
+      self.extensions.as_deref(),
+      &self.config.clone().unwrap_or_else(|| crate::extension::Places::here().config),
+    );
+    say(co, Fact::says("done", &about, [given]));
+    if word {
+      return Ok(());
+    }
+    let waiting: Vec<String> = self
+      .replies
+      .taken
+      .iter()
+      .filter(|(_, reply)| reply.waits)
+      .map(|(id, _)| id.clone())
+      .collect();
+    for id in waiting {
+      let Some(reply) = self.replies.taken.get(&id) else { continue };
+      let (chain, actor) = (reply.chain.clone(), reply.actor.clone());
+      let asking = Asking { about: &id, chain: &chain, actor: &actor, again: true };
+      let call = self.asking(co, asking).await?;
+      if let Some(reply) = self.replies.taken.get_mut(&id) {
+        reply.waits = false;
+        reply.call = call;
+      }
+    }
+    Ok(())
+  }
+
+  async fn reply(&mut self, co: &mut Co<Replied>, a: &Fact) -> Result<(), Fault> {
+    let about = a.about().to_owned();
+    say(co, Fact::says("started", &about, []));
+    let chain = a.on().to_owned();
+    let actor = a.word(1).and_then(|one| one.as_str()).unwrap_or_default().to_owned();
+    let asking = Asking { about: &about, chain: &chain, actor: &actor, again: false };
+    let call = self.asking(co, asking).await?;
+    let again = self.replies.mute.get(&chain) == Some(&actor);
+    let rung = a.by().to_owned();
+    let reply = Reply { chain, actor, rung, again, waits: false, noted: None, call };
+    self.replies.taken.insert(about, reply);
+    Ok(())
+  }
+
+  /// The call of the model of a reply, begun on the turns of its chain and the models that stand
+  /// now, as a work of the ear.
+  async fn asking(&mut self, co: &mut Co<Replied>, asking: Asking<'_>) -> Result<Call, Fault> {
+    let Asking { about, chain, actor, again } = asking;
+    let turns = co.call("turns", vec![], vec![("on", Object::string(chain))]).await?;
+    let (tells, told) = mpsc::unbounded_channel();
+    let wrote = written(about, &tells);
+    let key = format!("{}/{chain}", self.life);
+    let asked = {
+      let held = self.models.read().unwrap_or_else(PoisonError::into_inner);
+      requested(&held, actor, chain, turns.as_ref(), &key, &mut self.images, wrote)
+        .map(|one| thinks(one, self.thinking))
+    };
+    let streams = asked.as_ref().is_ok_and(|(model, _)| model.streams_its_word());
+    let paused = co.call("paused", vec![Object::string(about)], vec![]).await;
+    let paused = paused.ok().and_then(|one| one.as_ref().as_bool()).unwrap_or(false);
+    let (hold, holds) = holding::channel(paused);
+    let (stop, stopped) = oneshot::channel();
+    let id = about.to_owned();
+    let backoff = self.backoff;
+    co.work(answered(Answering { id, asked, backoff, tells, told, stopped, hold: holds, again }));
+    Ok(Call { watch: streams.then(Watch::default), hold, _stop: stop })
+  }
+
+  /// What the model of a reply that still stands writes, told to the host under the rung it writes
+  /// for, and each new part of its word that the gate finds nothing against, said as a writing of
+  /// that rung.
+  async fn wrote(&mut self, co: &mut Co<Replied>, wrote: Wrote) {
+    let Wrote { id, text, thinking } = wrote;
+    let Some(reply) = self.replies.taken.get_mut(&id) else { return };
+    reply.waits = false;
+    if let Some(writes) = &self.writes {
+      writes(&reply.rung, &reply.chain, &text, &thinking);
+    }
+    let (chain, rung) = (reply.chain.clone(), reply.rung.clone());
+    let Some(watch) = reply.call.watch.as_mut() else { return };
+    let Some(end) = watch.wrote(&text).filter(|_| !text.is_empty()) else { return };
+    // The statements before the last line at the left edge, as python: each quote in them bound
+    // as a string.
+    let read = watch.upto(end).to_owned();
+    if read.contains(watch::QUOTE) && watch::open(&read) {
+      return;
+    }
+    let Some(word) = unquoted(co, &read).await else { return };
+    let (line, why) = match judged(co, &chain, &word).await {
+      Found::Refused(line, why) => (line, why),
+      Found::Unsettled => return,
+      Found::Nothing => {
+        // The word holds no fault so far, so its new statements run now, as the turn holds them:
+        // from its first line that is not blank. A statement whose clause starts at the end, as
+        // an `else`, waits.
+        let (word, end) = match watch.clause(end).then(|| watch::last(&word)).flatten() {
+          Some(line) => {
+            let held: String = word.split_inclusive('\n').take(line - 1).collect();
+            (held, watch.start(line))
+          }
+          None if watch.clause(end) => return,
+          None => (word, end),
+        };
+        let given = word.trim_start();
+        let Some((part, before)) = watch.part(given) else { return };
+        if writing(co, &rung, part, before).await {
+          watch.gave(given, end);
+        } else if watch.ran().is_none() {
+          // A word whose first part a pause held is given whole, so no later part of it is given.
+          watch.untaken();
+        }
+        return;
+      }
+    };
+    // The word as far as the statement that cannot be python, or that the gate refuses for good,
+    // is the turn of the reply, so the gate refuses it and the chain tells why; and once a part of
+    // the word ran, the turn is the word that ran, which the chain runs as it ran, and the chain
+    // is told why before it. The model wrote no more of it that counts, and its call ends with the
+    // reply.
+    let ran = watch.ran().map(str::to_owned);
+    let Ok(turn) = cut(ran.as_deref().unwrap_or_else(|| watch.through(line))) else { return };
+    let note = ran.map(|ran| (AFTER, [("findings", afterward(&why)), ("ran", ending(&ran))]));
+    self.replies.end(co, &id, Ending { turn, note }).await;
+  }
+
+  /// A retry of the call of the model of a reply that still stands, told to the host under its
+  /// rung.
+  async fn retried(&mut self, co: &mut Co<Replied>, retried: Retried) {
+    let Retried { id, retry, limit } = retried;
+    let Some(reply) = self.replies.taken.get_mut(&id) else { return };
+    // A model asked again writes another word, and a part of this one ran, so the reply ends with
+    // the word that ran, and the model is not asked again.
+    if let Some(ran) = reply.call.watch.as_ref().and_then(Watch::ran).map(str::to_owned)
+      && let Ok(turn) = cut(&ran)
+    {
+      let note = Some((STOPPED, [("why", retry.why.clone()), ("ran", ending(&ran))]));
+      return self.replies.end(co, &id, Ending { turn, note }).await;
+    }
+    reply.waits = true;
+    if let Some(watch) = reply.call.watch.as_mut() {
+      watch.forget();
+    }
+    if let Some(retries) = &self.retries {
+      retries(&reply.rung, &reply.chain, &retry);
+    }
+    // A wait for the end of a limit lasts hours, so the chain is told once, before it. A stand
+    // asks the call again, and a call that meets the same wait tells nothing more.
+    if !limit {
+      return;
+    }
+    let mut note = format!("#{} waits on {}: {}", reply.chain, reply.actor, retry.why);
+    if retry.why.starts_with("usage limit") {
+      let chain = &reply.chain;
+      note += &format!(
+        ". To go on with another actor, say rung(\"actor = '<model>'\", on=\"{chain}\") and wake(\"{chain}\")."
+      );
+    }
+    if reply.noted.as_deref() != Some(note.as_str()) {
+      told(co, &reply.chain, &note);
+      reply.noted = Some(note);
+    }
+  }
+
+  /// What the model of a reply that still stands came to.
+  async fn came(&mut self, co: &mut Co<Replied>, came: Came) {
+    let Came { id, got, dropped } = came;
+    let Some(reply) = self.replies.taken.get(&id) else { return };
+    let Some(got) = kept(co, reply, got).await else { return };
+    // The word that runs is not all the text that the model wrote, so the chain is told what went,
+    // before it.
+    let wrapped = reply.call.watch.as_ref().and_then(Watch::note);
+    if let Some(dropped) = dropped.or(wrapped) {
+      told(co, &reply.chain, &format!("#{} {dropped}", reply.rung));
+    }
+    let recoverable = got.as_ref().is_err_and(recoverable);
+    let got = got.map_err(|no| format!("{} answered nothing: {}", reply.actor, failure(&no)));
+    if let (Err(why), true) = (&got, reply.again)
+      && !recoverable
+    {
+      let paused =
+        co.call("pause", vec![Object::string(&reply.chain), Object::string(why)], vec![]).await;
+      if let Err(no) = paused {
+        let note = format!("#{} could not pause the chain: {}", reply.rung, no.message());
+        told(co, &reply.chain, &note);
+      }
+    }
+    let got = got.map_err(Fault::refused).unwrap_or_else(|fault| fault.object());
+    say(co, Fact::says("done", &id, [got]));
+  }
+
+  /// A part of a word that raised ends the word where it raised, so its reply ends with the word
+  /// that ran, whose run is done with that raise.
+  async fn ran(&mut self, co: &mut Co<Replied>, a: &Fact) {
+    if a.word(1).is_none_or(|one| one.type_name() == "NoneType") {
+      return;
+    }
+    let mine = self.replies.taken.iter().find(|(_, reply)| reply.rung == a.about());
+    let Some((id, reply)) = mine else { return };
+    let Some(Ok(turn)) = reply.call.watch.as_ref().and_then(Watch::ran).map(cut) else { return };
+    let id = id.clone();
+    self.replies.end(co, &id, Ending { turn, note: None }).await;
+  }
+
+  /// A done of a reply ends it. A done that the ear said of its own reply ends the row of
+  /// refusals on the chain with a turn, or adds to it with a refusal, which is what the ear says
+  /// when it says no turn; a done that a control said leaves the row as it is.
+  fn done(&mut self, a: &Fact) {
+    self.searches.remove(a.about());
+    let Some(Reply { chain, actor, .. }) = self.replies.taken.remove(a.about()) else { return };
+    if a.by() == a.about() {
+      return;
+    }
+    let turned = a
+      .word(0)
+      .and_then(|one| one.items())
+      .is_some_and(|turn| turn.len() == 4 && turn[0].as_str() == Some("assistant"));
+    if turned {
+      self.replies.mute.remove(&chain);
+    } else {
+      self.replies.mute.insert(chain, actor);
+    }
+  }
+
+  /// A search of the web: the native search of the provider of its actor, else the free search,
+  /// as a work of the ear, so every chain of the life goes on meanwhile. A life that inspects
+  /// searches nothing.
+  fn search(&mut self, co: &mut Co<Replied>, a: &Fact) {
+    let about = a.about().to_owned();
+    let word = |at: usize| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
+    let (query, actor) = (word(1).unwrap_or_default(), word(2).unwrap_or_default());
+    if !self.searching {
+      let no = "a life that inspects searches nothing";
+      say(co, Fact::says("done", &about, [Fault::refused(no).object()]));
+      return;
+    }
+    say(co, Fact::says("started", &about, []));
+    let search = (self.native)(&actor).unwrap_or_else(free);
+    let (stop, stopped) = oneshot::channel();
+    let id = about.clone();
+    let work = async move {
+      let got = search(query.clone()).await;
+      Replied::Searched {
+        id,
+        got: got.map(|answer| crate::value::Text::new(query, answer)).map_err(|no| no.to_string()),
+      }
+    };
+    co.work(stream::once(work).take_until(stopped));
+    self.searches.insert(about, stop);
+  }
+
+  /// What a search came to: its text, or why it gives none, unless a control ended it first.
+  fn searched(&mut self, co: &mut Co<Replied>, id: &str, got: Result<crate::value::Text, String>) {
+    if self.searches.remove(id).is_some() {
+      let got = got.map_or_else(|no| Fault::refused(no).object(), |one| one.object());
+      say(co, Fact::says("done", id, [got]));
+    }
+  }
+
+  /// A pause or a wake changes what holds a reply, so each reply that stands reads whether a pause
+  /// holds it now, and a call that waits to be made again goes on at the wake.
+  async fn held(&mut self, co: &mut Co<Replied>) {
+    let ids: Vec<String> = self.replies.taken.keys().cloned().collect();
+    for id in ids {
+      let held = co.call("paused", vec![Object::string(&id)], vec![]).await;
+      let held = held.ok().and_then(|one| one.as_ref().as_bool()).unwrap_or(false);
+      if let Some(reply) = self.replies.taken.get(&id) {
+        reply.call.hold.send_replace(held);
+      }
+    }
   }
 }
 
+/// The replies that the ear took and that still stand, by id, and the actor whose last reply on
+/// each chain the ear refused.
+#[derive(Default)]
+struct Replies {
+  taken: HashMap<String, Reply>,
+  mute: HashMap<String, String>,
+}
+
+impl Replies {
+  /// The end of a reply that still stands with the word that ran: its chain is told what its model
+  /// wrote that the word lost, then why the reply ends there, and the reply is done with its turn,
+  /// which ends the row of refusals on its chain.
+  async fn end(&mut self, co: &mut Co<Replied>, id: &str, ending: Ending) {
+    let Some(Reply { chain, rung, call, .. }) = self.taken.remove(id) else { return };
+    self.mute.remove(&chain);
+    if let Some(note) = call.watch.as_ref().and_then(Watch::note) {
+      told(co, &chain, &format!("#{rung} {note}"));
+    }
+    if let Some((what, fields)) = ending.note {
+      noted(co, &chain, &rung, what, &fields).await;
+    }
+    say(co, Fact::says("done", id, [ending.turn]));
+  }
+}
+
+/// How a reply ends with the word that ran: the turn that it is done with, and the note that tells
+/// its chain why, after its rung, as what the note says and its fields.
+struct Ending {
+  turn: Object,
+  note: Option<(&'static str, [(&'static str, String); 2])>,
+}
+
 /// A reply the ear took: its chain, its actor, the rung it answers, whether a prior refusal of it
-/// pauses its chain, the watch over its word while its model writes it, when the model streams its
-/// word, and the stop of its work, which ends the call of its model, and what the host is told of
-/// it, when the reply goes.
+/// pauses its chain, whether its call waits for a retry, and the call of its model.
 struct Reply {
   chain: String,
   actor: String,
   rung: String,
   again: bool,
-  watch: Option<Watch>,
   waits: bool,
-  /// The last note that told the chain of a wait, so the same wait asked again after a stand is told once.
+  /// The last note that told the chain of a wait, so the same wait asked again after a stand is
+  /// told once.
   noted: Option<String>,
-  /// Whether a pause holds the reply, which holds the next call of its model: a call that runs returns, and a call
-  /// that waits to be made again waits for the wake.
+  call: Call,
+}
+
+/// A call of the model of a reply that the ear makes: the id of the reply, its chain, its actor,
+/// and whether it asks again a call that waits for a retry, which a pause holds until the wake.
+struct Asking<'a> {
+  about: &'a str,
+  chain: &'a str,
+  actor: &'a str,
+  again: bool,
+}
+
+/// The call of the model of a reply that works: the watch over its word while its model writes
+/// it, when the model streams its word, what tells the call whether a pause holds its reply, and
+/// what ends the call once dropped.
+struct Call {
+  watch: Option<Watch>,
+  /// Whether a pause holds the reply, which holds the next call of its model: a call that runs
+  /// returns, and a call that waits to be made again waits for the wake.
   hold: holding::Sender<bool>,
   _stop: oneshot::Sender<()>,
 }
 
-/// The call of the model of a reply, begun on the turns of its chain and the models that stand now, as a work of the
-/// ear; whether its model streams its word, which the ear reads as it comes; and what ends the call once dropped.
-#[expect(clippy::too_many_arguments, reason = "debt: more than 4 parameters is a struct")]
-async fn asking(
+/// What the gate finds against the word that a model wrote so far.
+enum Found {
+  /// Nothing, so its new statements run.
+  Nothing,
+  /// A fault that a later line of the word may still settle.
+  Unsettled,
+  /// A statement that cannot be python, or that the gate refuses for good, at this line, and why.
+  Refused(usize, String),
+}
+
+/// What the gate finds against the word that a model wrote so far, on its chain.
+async fn judged(co: &mut Co<Replied>, chain: &str, word: &str) -> Found {
+  if let Some(line) = watch::broken(word) {
+    return Found::Refused(line, format!("line {line}: the statement there cannot be python"));
+  }
+  let found = findings(co, chain, word).await;
+  if found.is_empty() {
+    return Found::Nothing;
+  }
+  match watch::refused(&watch::settled(word), &found) {
+    Some(line) => Found::Refused(line, found.join("\n")),
+    None => Found::Unsettled,
+  }
+}
+
+/// A word as python, each quote in it bound as a string by the Kernel, and nothing when the
+/// Kernel binds none.
+async fn unquoted(co: &mut Co<Replied>, word: &str) -> Option<String> {
+  if !word.contains(watch::QUOTE) {
+    return Some(word.to_owned());
+  }
+  let got = co.call("unquoted", vec![Object::string(word)], vec![]).await;
+  got.ok().and_then(|one| one.as_ref().as_str().map(str::to_owned))
+}
+
+/// What a reply came to once a part of its word ran. Its turn when the turn holds the word that
+/// ran and the gate finds nothing against it, so the chain runs it whole; any other end of the
+/// reply is the word that ran, after a note that tells the chain why, and nothing when that word
+/// is no turn.
+async fn kept(
   co: &mut Co<Replied>,
-  about: &str,
-  chain: &str,
-  actor: &str,
-  life: &str,
-  models: &RwLock<Vec<Model>>,
-  images: &mut Images,
-  thinking: Thinking,
-  backoff: Backoff,
-  retry: bool,
-) -> Result<(bool, oneshot::Sender<()>, holding::Sender<bool>), Fault> {
-  let turns = co.call("turns", vec![], vec![("on", Object::string(chain))]).await?;
-  let (tells, told) = mpsc::unbounded_channel();
-  let wrote = written(about, &tells);
-  let key = format!("{life}/{chain}");
-  let asked = {
-    let held = models.read().unwrap_or_else(PoisonError::into_inner);
-    requested(&held, actor, chain, turns.as_ref(), &key, images, wrote)
-      .map(|one| thinks(one, thinking))
+  reply: &Reply,
+  got: Result<Object, CompletionError>,
+) -> Option<Result<Object, CompletionError>> {
+  let Some(ran) = reply.call.watch.as_ref().and_then(Watch::ran) else { return Some(got) };
+  let word =
+    got.as_ref().ok().and_then(|turn| Some(turn.as_ref().items()?.get(1)?.as_str()?.to_owned()));
+  let why = match &word {
+    Some(word) if word.starts_with(ran.trim()) => match unquoted(co, word).await {
+      Some(python) => findings(co, &reply.chain, &python).await.join("\n"),
+      None => "the word holds a quote that is not whole".to_owned(),
+    },
+    Some(_) => "the turn does not hold the word that ran".to_owned(),
+    None => match &got {
+      Err(no) => format!("{STOPPED}: {}", failure(no)),
+      Ok(_) => "the turn holds no word".to_owned(),
+    },
   };
-  let streams = asked.as_ref().is_ok_and(|(model, _)| model.streams_its_word());
-  let paused = co.call("paused", vec![Object::string(about)], vec![]).await;
-  let paused = paused.ok().and_then(|one| one.as_ref().as_bool()).unwrap_or(false);
-  let (hold, holds) = holding::channel(paused);
-  let (stop, stopped) = oneshot::channel();
-  co.work(answered(about.to_owned(), asked, backoff, tells, told, stopped, holds, retry));
-  Ok((streams, stop, hold))
+  if why.is_empty() {
+    return Some(got);
+  }
+  let turn = cut(ran).ok()?;
+  let (what, fields) = match &got {
+    Err(no) => (STOPPED, [("why", failure(no)), ("ran", ending(ran))]),
+    Ok(_) => (AFTER, [("findings", afterward(&why)), ("ran", ending(ran))]),
+  };
+  noted(co, &reply.chain, &reply.rung, what, &fields).await;
+  Some(Ok(turn))
 }
 
 /// The wait of a call of a model to be made again while a pause holds its reply, which the wake ends. A reply that
@@ -1415,11 +1449,35 @@ fn reply_gone(why: impl std::fmt::Display) -> CompletionError {
 /// a break of HTML, and the name that a binding of no name lacked, which [`watch::bare`] drops and gives, or the line
 /// of three backticks at the end of its word, which [`unclosed`] drops.
 enum Replied {
-  Wrote { id: String, text: String, thinking: String },
-  Retried { id: String, retry: Retry, limit: bool },
-  Came { id: String, got: Result<Object, CompletionError>, dropped: Option<String> },
+  Wrote(Wrote),
+  Retried(Retried),
+  Came(Came),
   Refreshed { about: String, got: Result<Settings, String> },
   Searched { id: String, got: Result<crate::value::Text, String> },
+}
+
+/// A part that the model of a reply wrote: the id of the reply, and what the part added to its
+/// text and to its thought.
+struct Wrote {
+  id: String,
+  text: String,
+  thinking: String,
+}
+
+/// A retry of the call of the model of a reply: the id of the reply, the retry, and whether the
+/// chain of the reply is told of its wait.
+struct Retried {
+  id: String,
+  retry: Retry,
+  limit: bool,
+}
+
+/// What the call of the model of a reply came to: the id of the reply, its turn or why it gives
+/// none, and the marks that its turn lost.
+struct Came {
+  id: String,
+  got: Result<Object, CompletionError>,
+  dropped: Option<String>,
 }
 
 /// What the chain is told after the rung of a turn whose model wrote a fault after the part of its word that ran.
@@ -1495,9 +1553,15 @@ fn departed(about: &str, names: &[String]) -> String {
 /// A note of the chain about the turn of a rung: its header, then each text that the gate or the call gave, which the
 /// engine binds under the rung as it binds a value of an act, so the turn that holds the note stays python. A text after the
 /// header as a line of its own is no python, and the run of the turn would raise a SyntaxError.
-async fn noted(co: &mut Co<Replied>, chain: &str, rung: &str, what: &str, fields: &[(&str, &str)]) {
+async fn noted(
+  co: &mut Co<Replied>,
+  chain: &str,
+  rung: &str,
+  what: &str,
+  fields: &[(&str, String)],
+) {
   let words = vec![Object::string(rung), Object::string(what)];
-  let fields = fields.iter().map(|(word, text)| (*word, Object::string(*text))).collect();
+  let fields = fields.iter().map(|(word, text)| (*word, Object::string(text))).collect();
   let got = co.call("headed", words, fields).await;
   let note = got.ok().and_then(|one| one.as_ref().as_str().map(str::to_owned));
   told(co, chain, &note.unwrap_or_else(|| format!("#{rung} {what}")));
@@ -1509,7 +1573,7 @@ fn written(id: &str, tells: &mpsc::UnboundedSender<Replied>) -> Told {
   Arc::new(move |text, thinking| {
     let (text, thinking) = (text.to_owned(), thinking.to_owned());
     // A reply that went has no reader for what its model still writes.
-    drop(tells.send(Replied::Wrote { id: id.clone(), text, thinking }));
+    drop(tells.send(Replied::Wrote(Wrote { id: id.clone(), text, thinking })));
   })
 }
 
@@ -1733,25 +1797,31 @@ fn messages(
         model.name
       )));
     }
-    if std::mem::take(&mut joins)
-      && let Some(Message::User { content }) = messages.last_mut()
-      && let Some(UserContent::Text(was)) =
-        content.iter_mut().rev().find(|one| matches!(one, UserContent::Text(_)))
-    {
-      was.text = format!("{}\n\n{python}", was.text);
-      content.extend(seen);
-      continue;
-    }
-    // The open of a chain after the setup that it holds goes as a block of its own, so the setup that every chain
-    // with no source shares ends a block, which a provider can keep in its cache.
-    let texts = match banner(python) {
-      Some(at) => vec![&python[..at - 2], &python[at..]],
-      None => vec![python],
-    };
-    let content = texts.into_iter().map(|one| UserContent::Text(Text::new(one))).chain(seen);
-    messages.push(Message::User { content: content.collect() });
+    spoken(&mut messages, python, seen, std::mem::take(&mut joins));
   }
   Ok(messages)
+}
+
+/// A user turn as a message of rig, with the images that it names: joined to the last user turn
+/// when the turn of the model between them held nothing but marks, and else a message of its own.
+fn spoken(messages: &mut Vec<Message>, python: &str, seen: Vec<UserContent>, joins: bool) {
+  if joins
+    && let Some(Message::User { content }) = messages.last_mut()
+    && let Some(UserContent::Text(was)) =
+      content.iter_mut().rev().find(|one| matches!(one, UserContent::Text(_)))
+  {
+    was.text = format!("{}\n\n{python}", was.text);
+    content.extend(seen);
+    return;
+  }
+  // The open of a chain after the setup that it holds goes as a block of its own, so the setup
+  // that every chain with no source shares ends a block, which a provider can keep in its cache.
+  let texts = match banner(python) {
+    Some(at) => vec![&python[..at - 2], &python[at..]],
+    None => vec![python],
+  };
+  let content = texts.into_iter().map(|one| UserContent::Text(Text::new(one))).chain(seen);
+  messages.push(Message::User { content: content.collect() });
 }
 
 /// Where the open of a chain starts in a user turn, as `#chain3` alone on the line that starts a paragraph after
@@ -1986,88 +2056,116 @@ fn ended(provider: &str, response: CompletionResponse) -> StreamFinal {
 /// attempts are spent. A call that a usage limit refused is made again at the reset that the limit names, however
 /// long that takes, and each such wait is no attempt. A call that a failed sign in refused is made again every minute
 /// until it succeeds or a stand asks it at once, since a sign in outside furb ends the failure.
-#[expect(clippy::too_many_arguments, reason = "debt: more than 4 parameters is a struct")]
-fn answered(
-  id: String,
-  asked: Result<(Model, Asked), CompletionError>,
-  backoff: Backoff,
-  tells: mpsc::UnboundedSender<Replied>,
-  mut told: mpsc::UnboundedReceiver<Replied>,
-  stopped: oneshot::Receiver<()>,
-  mut hold: holding::Receiver<bool>,
-  retry: bool,
-) -> impl Stream<Item = Replied> {
+fn answered(call: Answering) -> impl Stream<Item = Replied> {
+  let Answering { id, asked, backoff, tells, mut told, stopped, hold, again } = call;
   let came = async move {
-    let got = async {
-      let (model, asked) = asked?;
-      let mut attempt = 1;
-      let mut limited = false;
-      let mut signed = false;
-      if retry {
-        released(&mut hold).await?;
-      }
-      loop {
-        let no = match (model.answers)(asked.clone()).await {
-          Ok(Answer::Response(response)) => return turn(&model, &response),
-          Ok(Answer::Turn(turn)) => return hosted(turn.as_ref()).map(|one| (one, None)),
-          Err(no) => no,
-        };
-        if let Some(claude::Error::Limit { until }) = claude::error(&no) {
-          let now = Zoned::now();
-          let reset = until
-            .and_then(|at| Timestamp::try_from(at).ok())
-            .map(|at| at.to_zoned(now.time_zone().clone()));
-          let wait = reset.as_ref().map_or(LIMIT_POLL, |at| {
-            let seconds = at.timestamp().as_second() - now.timestamp().as_second();
-            Duration::from_secs(u64::try_from(seconds).unwrap_or(0)) + LIMIT_SLACK
-          });
-          // The call that follows the end of a limit and meets it again waits a short time, not the next day.
-          let wait = if limited { wait.min(LIMIT_POLL) } else { wait };
-          let until =
-            reset.map_or(String::new(), |at| at.strftime(" until %Y-%m-%d %H:%M (%Q)").to_string());
-          let why = format!("usage limit{until}");
-          let retry = Retry { attempt: attempt + 1, most: backoff.most, wait, why };
-          tells
-            .send(Replied::Retried { id: id.clone(), retry, limit: !limited })
-            .map_err(reply_gone)?;
-          limited = true;
-          tokio::time::sleep(wait).await;
-          released(&mut hold).await?;
-          continue;
-        }
-        if let Some(claude::Error::SignedOut(_)) = claude::error(&no) {
-          let why = "signed out, sign in again".to_owned();
-          let retry = Retry { attempt: attempt + 1, most: backoff.most, wait: SIGN_POLL, why };
-          tells
-            .send(Replied::Retried { id: id.clone(), retry, limit: !signed })
-            .map_err(reply_gone)?;
-          signed = true;
-          tokio::time::sleep(SIGN_POLL).await;
-          released(&mut hold).await?;
-          continue;
-        }
-        let Some(why) = passing(&no).filter(|_| attempt < backoff.most) else { return Err(no) };
-        let why = why.to_string();
-        attempt += 1;
-        let wait = backoff.wait(attempt);
-        let retry = Retry { attempt, most: backoff.most, wait, why };
-        tells.send(Replied::Retried { id: id.clone(), retry, limit: false }).map_err(reply_gone)?;
-        tokio::time::sleep(wait).await;
-        released(&mut hold).await?;
-      }
+    let mut waits = Waits { id, backoff, tells, hold, attempt: 1, limited: false, signed: false };
+    let got = match asked {
+      Ok((model, asked)) => waits.attempted(&model, &asked, again).await,
+      Err(no) => Err(no),
     };
-    let (got, dropped) = match got.await {
+    let (got, dropped) = match got {
       Ok((turn, dropped)) => (Ok(turn), dropped),
       Err(no) => (Err(no), None),
     };
+    let Waits { id, tells, .. } = waits;
     // The stream holds the receiver, so a send that fails means the stream is going.
     // The stream then gives the reply itself.
-    tells.send(Replied::Came { id, got, dropped }).err().map(|no| no.0)
+    tells.send(Replied::Came(Came { id, got, dropped })).err().map(|no| no.0)
   };
   // The reply comes through the channel alone, so it comes after all that its model wrote before it.
   let told = stream::poll_fn(move |cx| told.poll_recv(cx));
   let came = stream::once(came).filter_map(std::future::ready);
   stream::select(told, came).take_until(stopped)
+}
+
+/// The work of the call of the model of a reply: the id of the reply, its model and what it asks,
+/// the backoff of its retries, the two ends of the channel through which it tells what the model
+/// writes, what stops it, whether a pause holds the reply, and whether it asks again a call that
+/// waited for a retry.
+struct Answering {
+  id: String,
+  asked: Result<(Model, Asked), CompletionError>,
+  backoff: Backoff,
+  tells: mpsc::UnboundedSender<Replied>,
+  told: mpsc::UnboundedReceiver<Replied>,
+  stopped: oneshot::Receiver<()>,
+  hold: holding::Receiver<bool>,
+  again: bool,
+}
+
+/// The waits of the call of the model of a reply between its attempts: the id of the reply, the
+/// backoff of its retries, where it tells each retry, whether a pause holds the reply, the attempt
+/// that runs, and whether a usage limit or a failed sign in refused an earlier attempt.
+struct Waits {
+  id: String,
+  backoff: Backoff,
+  tells: mpsc::UnboundedSender<Replied>,
+  hold: holding::Receiver<bool>,
+  attempt: u32,
+  limited: bool,
+  signed: bool,
+}
+
+impl Waits {
+  /// The turn of the model, asked again after the wait of each retry, until an attempt answers or
+  /// a failure ends the call.
+  async fn attempted(
+    &mut self,
+    model: &Model,
+    asked: &Asked,
+    again: bool,
+  ) -> Result<(Object, Option<String>), CompletionError> {
+    if again {
+      released(&mut self.hold).await?;
+    }
+    loop {
+      let no = match (model.answers)(asked.clone()).await {
+        Ok(Answer::Response(response)) => return turn(model, &response),
+        Ok(Answer::Turn(turn)) => return hosted(turn.as_ref()).map(|one| (one, None)),
+        Err(no) => no,
+      };
+      let (retry, limit) = self.retry(no)?;
+      let wait = retry.wait;
+      let retried = Retried { id: self.id.clone(), retry, limit };
+      self.tells.send(Replied::Retried(retried)).map_err(reply_gone)?;
+      tokio::time::sleep(wait).await;
+      released(&mut self.hold).await?;
+    }
+  }
+
+  /// The retry after a failed attempt, and whether the chain is told of its wait, which it is of
+  /// the first wait of a usage limit and of a failed sign in; or the failure, which ends the call.
+  fn retry(&mut self, no: CompletionError) -> Result<(Retry, bool), CompletionError> {
+    let most = self.backoff.most;
+    if let Some(claude::Error::Limit { until }) = claude::error(&no) {
+      let now = Zoned::now();
+      let reset = until
+        .and_then(|at| Timestamp::try_from(at).ok())
+        .map(|at| at.to_zoned(now.time_zone().clone()));
+      let wait = reset.as_ref().map_or(LIMIT_POLL, |at| {
+        let seconds = at.timestamp().as_second() - now.timestamp().as_second();
+        Duration::from_secs(u64::try_from(seconds).unwrap_or(0)) + LIMIT_SLACK
+      });
+      // The call that follows the end of a limit and meets it again waits a short time, not the
+      // next day.
+      let wait = if self.limited { wait.min(LIMIT_POLL) } else { wait };
+      let until =
+        reset.map_or(String::new(), |at| at.strftime(" until %Y-%m-%d %H:%M (%Q)").to_string());
+      let why = format!("usage limit{until}");
+      let retry = Retry { attempt: self.attempt + 1, most, wait, why };
+      return Ok((retry, !std::mem::replace(&mut self.limited, true)));
+    }
+    if let Some(claude::Error::SignedOut(_)) = claude::error(&no) {
+      let why = "signed out, sign in again".to_owned();
+      let retry = Retry { attempt: self.attempt + 1, most, wait: SIGN_POLL, why };
+      return Ok((retry, !std::mem::replace(&mut self.signed, true)));
+    }
+    let Some(why) = passing(&no).filter(|_| self.attempt < most) else { return Err(no) };
+    self.attempt += 1;
+    let wait = self.backoff.wait(self.attempt);
+    Ok((Retry { attempt: self.attempt, most, wait, why: why.to_string() }, false))
+  }
 }
 
 /// The turn of a model: its text, which is the word of the rung, what it read and wrote, and the blocks it gave.
