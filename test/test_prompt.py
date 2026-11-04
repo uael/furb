@@ -572,7 +572,7 @@ async def test_a_prompt_on_a_thread_tells_the_thread_it_is_on() -> None:
 
 
 async def test_a_prompt_of_none_on_a_thread_that_is_open_is_a_message_of_that_thread() -> None:
-  """A prompt of None on a thread that is open and that a model answers is a message of that thread: it tells its message, makes no rung, and is done with None at once, so the model of the thread reads it at its next step."""
+  """A prompt of None on a thread that is open and that a model answers is a message of that thread: it tells its message, makes no rung of its own, and is done with None at once, so the model of the thread reads it at its next step."""
   sand, log, root = born("await bash('slow')", "close(prompt2_message)", auto=False)
   first = engine.prompt(str, "work", on=root)
   await settle()
@@ -581,9 +581,23 @@ async def test_a_prompt_of_none_on_a_thread_that_is_open_is_a_message_of_that_th
   sand.exits(said(log, "bash")[0][1], 0)
   assert await first == "use this"
   assert [a for a in said(log, "rung") if a[2] == note] == []
-  told = paragraphs(engine.turns(on=root))
+  told = [one.split("\n")[0] for one in paragraphs(engine.turns(on=root))]
   later = [a[1] for a in said(log, "rung") if a[2] == first][1]
-  assert told.index(prompted(note, "None", "use this", first)) < told.index(f"#{later} advance on {first}")
+  assert told.index(f"#{note}") < told.index(f"#{later} advance on {first}")
+
+
+async def test_a_message_makes_a_rung_of_its_thread_while_a_word_of_the_thread_awaits() -> None:
+  """When a message lands and each open rung of its thread has advanced, the prompt of the thread makes a rung for it, even while a word of the thread awaits, so its model reads the message before that wait ends."""
+  _, log, root = born("await wait(60)", "close(prompt2_message)", auto=False)
+  first = engine.prompt(str, "work", on=root)
+  await settle()
+  (pause,) = [a[1] for a in said(log, "wait")]
+  assert engine.prompt(None, "use this", on=first) == "prompt2"
+  assert await first == "use this"
+  assert not engine.over(pause)
+  (_, later) = [a[1] for a in said(log, "rung") if a[2] == first]
+  told = [one.split("\n")[0] for one in paragraphs(engine.turns(on=root))]
+  assert told.index("#prompt2") < told.index(f"#{later} advance on {first}")
 
 
 async def test_every_other_prompt_on_a_thread_is_answered_in_steps() -> None:
@@ -637,7 +651,7 @@ async def test_the_turns_of_the_chain_hold_the_result_of_the_command_the_acknowl
   ack = said(log, "prompt")[-1][1]
   assert said(log, "prompt")[-1][5] == f"{command} done"
   told = paragraphs(engine.turns(on=root))
-  answered = [one for one in told if one.startswith("#") and one.endswith(f" advance on {task}")]
+  answered = [one for one in told if one.startswith("#") and one.split("\n")[0].endswith(f" advance on {task}")]
   assert told.index(f"#{command} exited 0") < told.index(answered[-1])
   assert told.index(prompted(ack, "None", f"{command} done", task)) < told.index(answered[-1])
 
