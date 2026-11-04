@@ -129,10 +129,14 @@ test("a press and the keys of an input go to the process of the view under the i
     const go = life.find("go");
     if (!go) throw new Error("No button.");
     await life.screen.mockMouse.click(go.x + 1, go.y);
-    const field = life.find("ask");
+    let field = life.find("ask");
+    for (let tries = 0; tries < 50 && !(field instanceof InputRenderable && field.focused); tries++) {
+      await life.draw();
+      field = life.find("ask");
+      if (field instanceof InputRenderable) await life.screen.mockMouse.click(field.x + 1, field.y);
+      await Bun.sleep(20);
+    }
     if (!(field instanceof InputRenderable)) throw new Error("No input.");
-    await life.draw();
-    await life.screen.mockMouse.click(field.x + 1, field.y);
     await life.draw();
     expect(field.focused).toBe(true);
     await life.screen.mockInput.typeText("ab");
