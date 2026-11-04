@@ -396,6 +396,7 @@ def wait(seconds: float = 0, *acts: str, on: str = "") -> Act[str | None]:
   It tells nothing, since a wait is no work of a model.
   wait(seconds, *acts) is done at the first of two events: with the name of the first of its acts that is done, or, of those that are done already when the wait is made, the first in the order it is given them, or with None when its seconds pass first.
   The ear of a wait says it done when one of its acts is done, and the World stops its timer when it hears that done, as when a control ends it.
+  A wait with no act after its seconds is refused, with a refusal that says to await the act itself or to give the act as its second argument, since a wait on no act holds a word for no fact.
   """
 
 def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:

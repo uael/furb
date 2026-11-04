@@ -106,13 +106,13 @@ const SCRIPT: [(&str, &str); 6] = [
   (
     "Corpus: work in the directory.",
     "write(Text(\"notes.md\", \"one\\ntwo\\n\"))\nnotes = read(\"notes.md\")\nsaid = await bash(\"echo hi\")\n\
-     await wait(0.01)\nhelper = chain(\"helper\")\ngot = await prompt(int, \"Corpus: give 2.\", on=helper)\nclose(got + \
+     await wait(0.01, __name__)\nhelper = chain(\"helper\")\ngot = await prompt(int, \"Corpus: give 2.\", on=helper)\nclose(got + \
      len(notes.lines) + int(clock() > 0) + int(0 <= chance() < 1))",
   ),
   ("Corpus: give 2.", "close(2)"),
   ("Corpus: wait.", CUT),
   ("Corpus: say done.", "close('done')"),
-  ("Corpus: ask.", "await wait(3600)\nclose('late')"),
+  ("Corpus: ask.", "await wait(3600, __name__)\nclose('late')"),
   ("Corpus: one more.", "close('more')"),
 ];
 
@@ -124,7 +124,7 @@ fn lived(at: &Path, kits: bool) {
   let asks = "close(await prompt(int, 'Corpus: work in the directory.'))";
   assert_eq!(closed(&mut first, asks).as_ref().as_int(), Some(6));
   let defines = "SIZE = 6\nqueue = [1, 'two']\ndef size():\n  return SIZE\nwork = chain('work')\n\
-                 waiting = prompt(str, 'Corpus: wait.', on=work)\nawait wait(0.3)\nclose(str(waiting))";
+                 waiting = prompt(str, 'Corpus: wait.', on=work)\nawait wait(0.3, __name__)\nclose(str(waiting))";
   closed(&mut first, defines);
   first.checkpoint().unwrap();
   let mut later = scripted(at, kits, &SCRIPT).boot::<String>([]).unwrap().0;
@@ -132,7 +132,7 @@ fn lived(at: &Path, kits: bool) {
   let goes =
     "after = size() + 1\nqueue.append(after)\nclose(await prompt(str, 'Corpus: say done.'))";
   assert_eq!(closed(&mut later, goes).as_ref().as_str(), Some("done"));
-  let leaves = "more = chain('more')\nasked = prompt(str, 'Corpus: ask.', on=more)\nawait wait(0.3)\n\
+  let leaves = "more = chain('more')\nasked = prompt(str, 'Corpus: ask.', on=more)\nawait wait(0.3, __name__)\n\
                 close(str(asked))";
   closed(&mut later, leaves);
 }
@@ -162,7 +162,7 @@ fn crossed(record: &Path) {
 /// argument to call it by, since the module is shown by calling each function of it. The first
 /// four sit in the checkpoint, and the last three in the tail after it.
 const LANGUAGE: [&str; 7] = [
-  "def square(n: int = 3) -> int:\n  return n * n\nclass Runner:\n  async def twice(self, n: int = 21) -> int:\n    await wait(0)\n    \
+  "def square(n: int = 3) -> int:\n  return n * n\nclass Runner:\n  async def twice(self, n: int = 21) -> int:\n    await wait(0, __name__)\n    \
    return n * 2\nasync_got = await Runner().twice()\ndef fib_list():\n  a, b, out = 0, 1, []\n  while a < 50:\n    \
    out.append(a)\n    a, b = b, a + b\n  return out\nclose(None)",
   "from dataclasses import dataclass\nclass Tally:\n  def __init__(self, start: int):\n    self.n = start\n  \

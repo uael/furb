@@ -220,8 +220,8 @@ function scriptedSession(options: SessionOptions, watch = false): Session {
       const shortcut = !first && last.includes("Add the search shortcut");
       const fallback = hires
         ? hires === "two"
-          ? 'for label in ("w/one", "w/two"):\n  prompt(str, "Think until I cancel.", on=chain(label))\nawait wait(3600)'
-          : 'for n in range(8):\n  prompt(str, "Think until I cancel.", on=chain(f"w/{n}"))\nawait wait(3600)'
+          ? 'for label in ("w/one", "w/two"):\n  prompt(str, "Think until I cancel.", on=chain(label))\nawait wait(3600, __name__)'
+          : 'for n in range(8):\n  prompt(str, "Think until I cancel.", on=chain(f"w/{n}"))\nawait wait(3600, __name__)'
         : shortcut
           ? 'notes = read("README.md")\nwrite(notes.replace("- Find it when it matters", "- Find it when it matters, with Ctrl+K"))\nclose("Ctrl+K opens the search now, and the README says so.")'
           : fenced

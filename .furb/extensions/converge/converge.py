@@ -6,6 +6,7 @@ from furb.engine import (
   ROOT,
   Refused,
   Text,
+  acting,
   bash,
   cancel,
   chain,
@@ -21,6 +22,7 @@ from furb.engine import (
   prompt,
   read,
   rung,
+  scope,
   transcript,
   wait,
   write,
@@ -846,8 +848,7 @@ async def converge(target: dict, ticks: int = 0) -> dict:
     spoke = state
     if book["state"] == "spent" and not job:
       return book
-    if not job:
-      await wait(EVERY)
-    else:
-      await wait(EVERY, *[a for a in ([job["act"]] if not job["asked"] else job["asked"]) if a != "none" and not over(a)])
+    acts = [a for a in ([job["act"]] if not job["asked"] else job["asked"]) if a != "none" and not over(a)] if job else []
+    # A tick with no act to wait for waits on its own chain, an act that never settles, so its seconds bound it.
+    await wait(EVERY, *(acts or [scope(acting())]))
   return book

@@ -177,6 +177,9 @@ def debug(template: Template):
 
 
 def wait(seconds: float = 0, *acts: str, on="") -> Act[str | None]:
+  if not acts:
+    raise Refused("no act: await the act, or wait(seconds, act)")
+
   def ear(id):
     while not (got := list(filter(over, acts))):
       yield {id, *acts}

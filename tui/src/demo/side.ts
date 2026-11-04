@@ -103,7 +103,7 @@ seen = {}
 for app in apps:
   seen[app] = await bash(f"echo {app}: tiles are cached by the browser, and a service worker keeps them for offline use")
 print(len(seen), "apps looked at")
-await wait(3600)`;
+await wait(3600, __name__)`;
 
 const rate = `def burst(client, n, start):
   ok = 0

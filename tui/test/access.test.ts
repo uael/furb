@@ -44,7 +44,7 @@ test("the mode of a screen reader draws one column of text, with no box, no spin
   await composing(
     async ({ app, screen, frame }) => {
       await session.engine.result(
-        await session.engine.rung({ word: "await wait(0.2)", on: session.engine.root }),
+        await session.engine.rung({ word: "await wait(0.2, __name__)", on: session.engine.root }),
       );
       const shown = await drawn(frame, screen.renderer.root);
       expect(shown).toContain("Explore this project");

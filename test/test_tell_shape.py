@@ -32,7 +32,7 @@ async def test_a_fact_that_carries_notes_is_what_the_turns_are_folded_from() -> 
   _, log, root = born()
   act = engine.rung("k = 1", on=root)
   assert await act is None
-  held = engine.wait(9, on=root)
+  held = engine.wait(9, root, on=root)
   engine.pause(root)
   engine.wake(root)
   engine.cancel(held)

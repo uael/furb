@@ -88,7 +88,7 @@ async def test_a_word_that_awaits_in_a_function_that_is_not_async_raises_where_i
   so the prompt asks its model again."""
   sand = Sand(stands=STANDS)
   root = engine.boot((), world=sand.hears())
-  sand.script[root] = ["f = lambda: await wait()\nf()", "close(str(raised))"]
+  sand.script[root] = ["f = lambda: await wait(0, __name__)\nf()", "close(str(raised))"]
   said = await engine.prompt(str, "await it", on=root)
   assert said == "'await' outside async function (<string>, line 1)"
 
@@ -293,7 +293,7 @@ async def test_an_ear_of_the_crate_crosses_to_the_boot_of_the_door_and_what_it_s
   """An ear of the crate crosses to the boot of the door beside the generators the contract says, and what it says
   from a thread of its own drives the life from the loop: time ends a wait from its thread."""
   root = furb_monty.engine.boot((), time=_monty.time(), world=Dead(stands=STANDS).hears())
-  assert await engine.wait(0.01, on=root) is None
+  assert await engine.wait(0.01, root, on=root) is None
 
 
 async def test_an_ear_of_the_crate_that_the_host_lets_go_goes_while_the_life_it_crossed_to_lives(
@@ -304,13 +304,13 @@ async def test_an_ear_of_the_crate_that_the_host_lets_go_goes_while_the_life_it_
   path = str(tmp_path / "record.jsonl")
   record, store = _monty.store(path)
   root = furb_monty.engine.boot(record, time=_monty.time(), store=store, world=Dead(stands=STANDS).hears())
-  assert await engine.wait(0.01, on=root) is None
+  assert await engine.wait(0.01, root, on=root) is None
   with pytest.raises(Refused, match="Another process owns"):
     _monty.store(path)
   store.dispose()
   _, again = _monty.store(path)
   again.dispose()
-  assert await engine.wait(0.01, on=root) is None
+  assert await engine.wait(0.01, root, on=root) is None
 
 
 async def test_the_engine_of_this_interpreter_steps_an_ear_of_the_crate_as_a_generator_of_its_own(
@@ -327,7 +327,7 @@ async def test_the_engine_of_this_interpreter_steps_an_ear_of_the_crate_as_a_gen
   root = furb.python.boot((), kernel=Py().kernel(), gate=Py().gating(), **ears, world=world)
   furb.python.write(furb.python.Text("a.txt", "one\n"), on=root)
   assert furb.python.read("a.txt", on=root).content == "one\n"
-  assert await furb.python.wait(0.01, on=root) is None
+  assert await furb.python.wait(0.01, root, on=root) is None
   for one in ears.values():
     one.dispose()
   kept = [fact for (fact,) in _monty.kept(path)]
@@ -440,7 +440,7 @@ async def test_the_door_names_the_work_that_an_earlier_life_left_pending(tmp_pat
   path = str(tmp_path / "record.jsonl")
   record, store = _monty.store(path)
   root = furb_monty.engine.boot(record, time=_monty.time(), store=store, world=Dead(stands=STANDS).hears())
-  engine.wait(600, on=root)
+  engine.wait(600, root, on=root)
   furb_monty.engine.boot(_monty.kept(path), time=_monty.time(), world=Dead(stands=STANDS).hears())
   assert furb_monty.engine.pending() == [("wait1", "wait")]
 
@@ -508,11 +508,11 @@ async def test_a_key_of_the_client_makes_its_act_once_in_a_life_and_in_a_later_l
   path = str(tmp_path / "record.jsonl")
   record, store = _monty.store(path)
   root = furb_monty.engine.boot(record, time=_monty.time(), store=store, world=Dead(stands=STANDS).hears())
-  first = furb_monty.engine.keyed("k1", "wait", 600, on=root)
-  assert (first, furb_monty.engine.keyed("k1", "wait", 600, on=root)) == ("wait1", "wait1")
-  assert furb_monty.engine.keyed("k2", "wait", 600) == "wait2"
+  first = furb_monty.engine.keyed("k1", "wait", 600, root, on=root)
+  assert (first, furb_monty.engine.keyed("k1", "wait", 600, root, on=root)) == ("wait1", "wait1")
+  assert furb_monty.engine.keyed("k2", "wait", 600, root) == "wait2"
   furb_monty.engine.boot(_monty.kept(path), time=_monty.time(), world=Dead(stands=STANDS).hears())
-  assert furb_monty.engine.keyed("k1", "wait", 600, on=root) == "wait1"
+  assert furb_monty.engine.keyed("k1", "wait", 600, root, on=root) == "wait1"
 
 
 def test_the_door_gives_the_catalog_of_the_crate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

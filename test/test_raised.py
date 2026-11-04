@@ -25,7 +25,7 @@ async def test_raised_is_the_exception_object_that_the_last_rung_raised_rebound_
     await engine.rung("k = BAD", on=root)
   assert engine.module(root)["raised"] is second
   with pytest.raises(CancelledError):
-    await engine.rung("w = wait(5)\ncancel(w)\nawait w", on=root)
+    await engine.rung("w = wait(5, __name__)\ncancel(w)\nawait w", on=root)
   assert engine.module(root)["raised"] is second
   assert await engine.rung("close(str(raised))", on=root) == "'two'"
 

@@ -389,7 +389,7 @@ fn a_life_whose_outside_works_keeps_a_snapshot_and_a_later_life_puts_that_work_t
   };
   let mut first = open(&record, true);
   let on = Some("chain1".to_owned());
-  drop(first.wait(&[], verbs::Wait { seconds: Some(60.0), on: on.clone() }).unwrap());
+  drop(first.wait(&["chain1"], verbs::Wait { seconds: Some(60.0), on: on.clone() }).unwrap());
   drop(first.bash("sleep 30", verbs::Bash { on, ..Default::default() }).unwrap());
   drop(first);
   let one = fs::read_to_string(&record).unwrap().lines().count();
@@ -751,7 +751,7 @@ fn a_stand_reloads_provider_settings_and_a_refused_reload_keeps_the_life() {
 /// reads the clock and chance, and asks a chain of its own, whose model answers in the second word.
 const WORK: [&str; 2] = [
   "write(Text(\"notes.md\", \"one\\ntwo\\n\"))\nnotes = read(\"notes.md\")\nsaid = await bash(\"echo hi\")\nawait \
-   wait(0.01)\nhelper = chain(\"helper\")\ngot = await prompt(int, \"Give 2.\", on=helper)\nclose(got + \
+   wait(0.01, __name__)\nhelper = chain(\"helper\")\ngot = await prompt(int, \"Give 2.\", on=helper)\nclose(got + \
    len(notes.lines) + int(clock() > 0) + int(0 <= chance() < 1))",
   "close(2)",
 ];
@@ -943,7 +943,7 @@ fn measure_how_long_a_life_opens_from_its_snapshot_and_by_a_replay() {
     }
     // A life that works always holds work of the outside that runs, as a wait.
     let wait = verbs::Wait { seconds: Some(3600.0), on: Some("chain1".to_owned()) };
-    drop(engine.wait(&[], wait).unwrap());
+    drop(engine.wait(&["chain1"], wait).unwrap());
     drop(engine);
   }
   let timed = |at: &Path, snapshot: bool| {
@@ -976,7 +976,7 @@ fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_promp
   let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0)\nclose(f'round {rounds}')";
   let mut first = scripted(&at, &[ran]).boot::<String>([]).unwrap().0;
   let word = "work = chain('work')\nran = await bash('echo one')\nqueue = [ran]\nSIZE = 6\ndef f():\n  return SIZE\n\
-              waiting = prompt(str, 'Wait.', on=work)\nawait wait(0.3)\nclose(str(waiting))";
+              waiting = prompt(str, 'Wait.', on=work)\nawait wait(0.3, __name__)\nclose(str(waiting))";
   let waiting = closed(&mut first, word).as_ref().as_str().unwrap().to_owned();
   drop(first);
   // The checkpoint is written as the command line writes it: in a life that only replays the record.
@@ -1026,7 +1026,7 @@ fn a_checkpoint_holds_data_alone_and_a_later_engine_seeds_a_life_from_it_with_no
   let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0)\nclose('late')";
   let mut first = scripted(&at, &[ran]).boot::<String>([]).unwrap().0;
   let word = "work = chain('work')\nshell = bash('echo one')\nawait shell\nqueue = [shell]\nSIZE = 6\n\
-              def f():\n  return SIZE\nwaiting = prompt(str, 'Wait.', on=work)\nawait wait(0.3)\nclose(str(waiting))";
+              def f():\n  return SIZE\nwaiting = prompt(str, 'Wait.', on=work)\nawait wait(0.3, __name__)\nclose(str(waiting))";
   let waiting = closed(&mut first, word).as_ref().as_str().unwrap().to_owned();
   first.checkpoint().unwrap();
   let kept = world::kept(at.join("record.jsonl")).unwrap();
@@ -1121,7 +1121,7 @@ const WAITED: &str =
 fn checkpointed(at: &Path) -> String {
   let mut first = scripted(at, &[WAITED]).boot::<String>([]).unwrap().0;
   let word = "work = chain('work')\nSIZE = 6\ndef f():\n  return SIZE\nwaiting = prompt(str, 'Wait.', on=work)\n\
-              await wait(0.3)\nclose(str(waiting))";
+              await wait(0.3, __name__)\nclose(str(waiting))";
   let waiting = closed(&mut first, word).as_ref().as_str().unwrap().to_owned();
   first.checkpoint().unwrap();
   waiting
@@ -1293,7 +1293,7 @@ fn a_later_life_of_the_engine_that_wrote_a_checkpoint_boots_on_it_and_on_the_tai
   let mut first = scripted(&at, &[ran]).boot::<String>([]).unwrap().0;
   closed(&mut first, "await bash('echo kept')\nclose(None)");
   let word = "work = chain('work')\nSIZE = 6\ndef f():\n  return SIZE\nwaiting = prompt(str, 'Wait.', on=work)\n\
-              await wait(0.3)\nclose(str(waiting))";
+              await wait(0.3, __name__)\nclose(str(waiting))";
   let waiting = closed(&mut first, word).as_ref().as_str().unwrap().to_owned();
   let turns = "close(len(turns('chain2')))";
   let told = closed(&mut first, turns).as_ref().as_int();
@@ -1352,8 +1352,7 @@ fn a_word_that_awaits_a_command_at_a_checkpoint_ends_as_cut_and_its_model_starts
   let at = place("checkpoint-cut-word");
   let work = "await bash('sleep 60')\nclose('late')";
   let mut first = scripted(&at, &[work]).boot::<String>([]).unwrap().0;
-  let asked =
-    "waiting = prompt(str, 'Wait.', on=chain('work'))\nawait wait(0.3)\nclose(str(waiting))";
+  let asked = "waiting = prompt(str, 'Wait.', on=chain('work'))\nawait wait(0.3, __name__)\nclose(str(waiting))";
   let waiting = closed(&mut first, asked).as_ref().as_str().unwrap().to_owned();
   let open = "close([x[1] for x in transcript('chain2', 'run') if not over(x[1])])";
   let runs = closed(&mut first, open).as_ref().py_repr();
@@ -1454,10 +1453,11 @@ fn a_chain_that_only_a_value_names_goes_on_from_a_checkpoint_with_its_own_module
 fn a_word_that_ran_at_a_checkpoint_is_cut_with_the_prompt_that_it_awaited() {
   let at = place("checkpoint-asked");
   let work = "got = await prompt(str, 'Ask.', on=chain('asked'))\nclose(got)";
-  let mut first =
-    scripted(&at, &[work, "await wait(3600)\nclose('late')"]).boot::<String>([]).unwrap().0;
-  let word =
-    "waiting = prompt(str, 'Wait.', on=chain('work'))\nawait wait(0.5)\nclose(str(waiting))";
+  let mut first = scripted(&at, &[work, "await wait(3600, __name__)\nclose('late')"])
+    .boot::<String>([])
+    .unwrap()
+    .0;
+  let word = "waiting = prompt(str, 'Wait.', on=chain('work'))\nawait wait(0.5, __name__)\nclose(str(waiting))";
   let waiting = closed(&mut first, word).as_ref().as_str().unwrap().to_owned();
   drop(first);
   let mut inspected =
@@ -1515,12 +1515,13 @@ fn a_record_that_another_engine_went_on_with_after_a_checkpoint_opens_with_each_
   let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0)\nclose(f'round {rounds}')";
   let mut first = scripted(&at, &[ran]).boot::<String>([]).unwrap().0;
   let word = "work = chain('work')\nqueue = [1]\nSIZE = 6\ndef f():\n  return SIZE\n\
-              waiting = prompt(str, 'Wait.', on=work)\nawait wait(0.3)\nclose(str(waiting))";
+              waiting = prompt(str, 'Wait.', on=work)\nawait wait(0.3, __name__)\nclose(str(waiting))";
   let waiting = closed(&mut first, word).as_ref().as_str().unwrap().to_owned();
   first.checkpoint().unwrap();
-  let mut tail = scripted(&at, &["await wait(3600)\nclose('late')"]).boot::<String>([]).unwrap().0;
+  let mut tail =
+    scripted(&at, &["await wait(3600, __name__)\nclose('late')"]).boot::<String>([]).unwrap().0;
   let word = "after = f() + 1\nqueue.append(after)\nmore = chain('more')\nasked = prompt(str, 'Ask.', on=more)\n\
-              shell = bash('echo tail')\nawait shell\nawait wait(0.3)\nclose(str(asked))";
+              shell = bash('echo tail')\nawait shell\nawait wait(0.3, __name__)\nclose(str(asked))";
   let asked = closed(&mut tail, word).as_ref().as_str().unwrap().to_owned();
   let turns = "close([len(turns('chain1')), len(turns('chain3'))])";
   let counted = |life: &mut Engine| -> Vec<i64> {

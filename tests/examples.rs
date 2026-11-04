@@ -139,6 +139,9 @@ fn a_grant_pauses_the_chain_at_its_ceiling_and_a_larger_grant_lets_it_go_on() {
 
 #[test]
 fn an_edit_of_the_door_of_a_thread_changes_the_plan_of_the_model() {
-  let yard = Yard::new("door", &["await wait(3600)\nclose(\"released\")", "await wait(3600)"]);
-  assert_eq!(yard.run("door", ""), "await wait(3600)\nclose(\"released\")\nreleased\n");
+  let yard = Yard::new(
+    "door",
+    &["await wait(3600, __name__)\nclose(\"released\")", "await wait(3600, __name__)"],
+  );
+  assert_eq!(yard.run("door", ""), "await wait(3600, __name__)\nclose(\"released\")\nreleased\n");
 }

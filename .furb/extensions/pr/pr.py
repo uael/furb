@@ -4,8 +4,10 @@ import re
 from furb.engine import (
   Exit,
   Refused,
+  acting,
   bash,
   clock,
+  scope,
   span,
   wait,
 )
@@ -181,7 +183,8 @@ async def checked(number: int, where: str = "", bound: float = 3600.0, every: fl
       elif rows:
         seen = "the runs are unread"
       return "pending", [f"head {head.strip()[:7]}: still pending after {int(spent)} s: {seen}"]
-    await wait(every)
+    # No act of the life says that a check moved, so the poll waits on its own chain, an act that never settles.
+    await wait(every, scope(acting()))
   failed = [one for one in rows if one["bucket"] in ("fail", "cancel")]
   lines = [f"head {head.strip()[:7]}: {len(rows)} checks, {len(failed)} failed"]
   for one in failed:

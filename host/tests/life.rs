@@ -231,7 +231,7 @@ async fn each_act_is_told_with_its_meaning_and_each_chain_with_the_state_of_its_
   life.send(Command::Answer { id: asked.clone(), line: "main".to_owned() }).await.unwrap();
   until(&mut events, stands(asked, State::Done)).await;
   until(&mut events, stands("chain1".to_owned(), State::Done)).await;
-  made(&life, rung("await wait(60)")).await;
+  made(&life, rung("await wait(60, __name__)")).await;
   until(&mut events, |event| matches!(event, Event::Act(act) if act.kind == Kind::Wait)).await;
   life.send(Command::Pause { id: "chain1".to_owned(), why: None }).await.unwrap();
   let held = until(

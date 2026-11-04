@@ -751,7 +751,7 @@ test("an act that no word made stands as a lit line of python in a panel, which 
         const id = await session.engine.wait([], { seconds: 60, on: session.engine.root });
         await session.refresh();
         const before = await frame();
-        expect(before).toContain(`${id} = wait(60)`);
+        expect(before).toContain(`${id} = wait(60, __name__)`);
         expect(before).not.toContain("1.0s");
         const card = app.scroll.getChildren().find((node) => node.id === id);
         if (!card) throw new Error("No panel for the pending wait.");
@@ -787,7 +787,7 @@ test("a tick writes only the time of a line that runs, and the text of its progr
         setSystemTime(new Date(start + 1300));
         const first = (await frame()).split("\n");
         const built = layouts;
-        expect(first.filter((line) => line.includes(`${id} = wait(60)`)).length).toBe(1);
+        expect(first.filter((line) => line.includes(`${id} = wait(60, __name__)`)).length).toBe(1);
         expect(first.join("\n")).toMatch(/waits 60s +1\.0s/);
         // The tick reads the time of the line again, and asks for a frame when it changed.
         const view = [...app.liveLines.keys()][0];
@@ -1034,7 +1034,7 @@ test("one gutter of furb draws the cells of each block of code: the number, the 
           expect([got?.r, got?.g, got?.b].map((one) => Math.round((one ?? -1) * 255))).toEqual(
             [want.r, want.g, want.b].map((one) => Math.round(one * 255)),
           );
-        const word = `${id} = wait(60)`;
+        const word = `${id} = wait(60, __name__)`;
         for (const [index, text, color] of [
           [0, "1", theme.faint],
           [7, "1", mix(theme.selected, theme.faint, 0.4)],
