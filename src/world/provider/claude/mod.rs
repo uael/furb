@@ -62,7 +62,11 @@ use tokio::{
 use futures::{FutureExt, StreamExt};
 use sha2::{Digest, Sha256};
 
-use super::{Model, ended, search, uuid};
+use super::{
+  Model,
+  atomic::{self, Access},
+  ended, numbers, search, uuid,
+};
 use crate::ear::runtime;
 
 mod accounts;
@@ -733,12 +737,7 @@ fn prompt_file(system: &str) -> Result<PathBuf, CompletionError> {
   let folder = env::temp_dir().join("furb-claude");
   let file = folder.join(format!("{:x}.md", Sha256::digest(system.as_bytes())));
   if !file.is_file() {
-    std::fs::create_dir_all(&folder)
-      .map_err(|no| failed(format!("{} was not made: {no}", folder.display())))?;
-    let part = folder.join(format!("{}.part", uuid()?));
-    std::fs::write(&part, system)
-      .and_then(|()| std::fs::rename(&part, &file))
-      .map_err(|no| failed(format!("{} was not written: {no}", file.display())))?;
+    atomic::write(&file, system.as_bytes(), Access::Shared).map_err(|no| failed(no.to_string()))?;
   }
   Ok(file)
 }
@@ -861,11 +860,7 @@ impl Conversation {
     }
     let folder = store.join("projects").join(name);
     let file = folder.join(format!("{}.jsonl", self.id));
-    let part = folder.join(format!("{}.part", uuid()?));
-    std::fs::create_dir_all(&folder)
-      .and_then(|()| std::fs::write(&part, lines))
-      .and_then(|()| std::fs::rename(&part, &file))
-      .map_err(|no| failed(format!("{} was not written: {no}", file.display())))?;
+    atomic::write(&file, lines.as_bytes(), Access::Shared).map_err(|no| failed(no.to_string()))?;
     self.resumed = true;
     Ok(true)
   }
@@ -1765,8 +1760,7 @@ pub(super) fn located() -> Option<PathBuf> {
 
 /// The numbers of a version, in order, which sort as a version does.
 fn numbered(version: &Path) -> Vec<u64> {
-  let name = version.file_name().map(|one| one.to_string_lossy().into_owned()).unwrap_or_default();
-  name.split(|one: char| !one.is_ascii_digit()).filter_map(|one| one.parse().ok()).collect()
+  version.file_name().map_or_else(Vec::new, |name| numbers(&name.to_string_lossy()))
 }
 
 #[cfg(all(test, unix))]

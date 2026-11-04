@@ -2627,3 +2627,10 @@ fn a_provider_that_searches_no_more_refuses_a_search() {
   let no = closed(&mut engine, "close(await act('search', '', None, 'rust', 'm'))").unwrap_err();
   assert!(no.contains("a life that inspects searches nothing"), "{no}");
 }
+
+#[test]
+fn a_version_is_compared_by_its_numbers() {
+  assert!(super::numbers("1.10.0") > super::numbers("1.4.0"));
+  assert_eq!(super::numbers("1.4.0"), vec![1, 4, 0]);
+  assert_eq!(super::numbers("claude-2.1.119"), vec![2, 1, 119]);
+}
