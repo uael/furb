@@ -24,7 +24,6 @@ use std::{
   fs::{File, OpenOptions, TryLockError, create_dir_all},
   path::Path,
   rc::Rc,
-  task::{Context, Poll},
   time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -38,8 +37,8 @@ use monty_types::unstable::{MontyGraph, MontyNode};
 use super::beside;
 use crate::{
   ENGINE, KERNEL,
-  ear::{Co, Ear, Heard, Next, Spoken, Step, hearing, say},
-  engine::{Life, ROOT},
+  ear::{Co, Ear, Hooks, Next, With, hearing, say},
+  engine::ROOT,
   fact::Fact,
   value::{Fault, Object, ObjectRef},
   wire::{built, whole},
@@ -296,7 +295,7 @@ pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>
       }
     }
   });
-  Ok((entries, Box::new(Keeping { ear: kept, store })))
+  Ok((entries, With::ear(kept, store)))
 }
 
 /// A message to the operator, from the ear of the record.
@@ -336,37 +335,16 @@ impl<S: Store> Held<S> {
   }
 }
 
-/// The ear that keeps the record, which syncs its store at the end of each run.
-struct Keeping<S> {
-  ear: Box<dyn Ear>,
-  store: Rc<RefCell<Held<S>>>,
-}
-
-impl<S: Store> Ear for Keeping<S> {
-  fn resume(&mut self, heard: Heard, cx: &mut Context<'_>) -> Step {
-    self.ear.resume(heard, cx)
-  }
-
-  fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
-    self.ear.poll(cx)
-  }
-
-  fn answered(&mut self, got: Result<Object, Fault>) {
-    self.ear.answered(got);
-  }
-
-  fn lent(&mut self, heard: Heard, cx: &mut Context<'_>, life: Life) -> (Step, Life) {
-    self.ear.lent(heard, cx, life)
-  }
-
+/// The ear that keeps the record syncs its store at the end of each run.
+impl<S: Store> Hooks for Rc<RefCell<Held<S>>> {
   /// A fault of the store ends no run: the ear holds it, tells the operator and tries again.
   fn ran(&mut self) -> Result<(), Fault> {
-    self.store.borrow_mut().synced();
+    self.borrow_mut().synced();
     Ok(())
   }
 
   fn behind(&self) -> bool {
-    self.store.try_borrow().map_or(true, |held| held.fault.is_some())
+    self.try_borrow().map_or(true, |held| held.fault.is_some())
   }
 }
 

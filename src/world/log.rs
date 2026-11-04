@@ -38,14 +38,12 @@ use std::{
   io::{BufRead, BufReader, BufWriter, Write},
   path::{Path, PathBuf},
   rc::Rc,
-  task::{Context, Poll},
 };
 
 use serde_json::Value;
 
 use crate::{
-  ear::{Co, Ear, Heard, Spoken, Step, ear, hear},
-  engine::Life,
+  ear::{Co, Ear, Hooks, With, ear, hear},
   fact::{Fact, named},
   value::{Fault, Object},
   wire::{outward, parsed},
@@ -127,41 +125,19 @@ fn heard(mut log: Log) -> Box<dyn Ear> {
       }
     }
   });
-  Box::new(Logging { ear, sink })
+  With::ear(ear, sink)
 }
 
-/// The ear that writes a log, which hands the lines to the file at the end of each run, and says
-/// when lines wait.
-struct Logging {
-  ear: Box<dyn Ear>,
-  sink: Rc<RefCell<Sink>>,
-}
-
-impl Ear for Logging {
-  fn resume(&mut self, heard: Heard, cx: &mut Context<'_>) -> Step {
-    self.ear.resume(heard, cx)
-  }
-
-  fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
-    self.ear.poll(cx)
-  }
-
-  fn answered(&mut self, got: Result<Object, Fault>) {
-    self.ear.answered(got);
-  }
-
-  fn lent(&mut self, heard: Heard, cx: &mut Context<'_>, life: Life) -> (Step, Life) {
-    self.ear.lent(heard, cx, life)
-  }
-
+/// The ear of a log hands the lines to the file at the end of each run, and says when lines wait.
+impl Hooks for Rc<RefCell<Sink>> {
   /// A fault of the file ends no run: the lines wait and the ear writes them again.
   fn ran(&mut self) -> Result<(), Fault> {
-    self.sink.borrow_mut().flush();
+    self.borrow_mut().flush();
     Ok(())
   }
 
   fn behind(&self) -> bool {
-    self.sink.try_borrow().map_or(true, |sink| sink.behind)
+    self.try_borrow().map_or(true, |sink| sink.behind)
   }
 }
 

@@ -168,6 +168,56 @@ pub trait Ear {
   }
 }
 
+/// What an ear adds to the ear that [`With`] wraps: its end of a run and its debt, the two methods
+/// that a wrapper of an ear gives its own.
+pub trait Hooks {
+  /// What the wrapper does at the end of each run, as [`Ear::ran`] does.
+  fn ran(&mut self) -> Result<(), Fault>;
+
+  /// Whether the wrapper holds a fact that it could not write yet, as [`Ear::behind`] says.
+  fn behind(&self) -> bool;
+}
+
+/// An ear with hooks: the ear that it wraps hears, speaks and is lent the life as before, and the
+/// hooks give the end of each run and the debt.
+pub struct With<H> {
+  ear: Box<dyn Ear>,
+  hooks: H,
+}
+
+impl<H: Hooks + 'static> With<H> {
+  /// The ear that wraps `ear` with `hooks`.
+  pub fn ear(ear: Box<dyn Ear>, hooks: H) -> Box<dyn Ear> {
+    Box::new(Self { ear, hooks })
+  }
+}
+
+impl<H: Hooks> Ear for With<H> {
+  fn resume(&mut self, heard: Heard, cx: &mut Context<'_>) -> Step {
+    self.ear.resume(heard, cx)
+  }
+
+  fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
+    self.ear.poll(cx)
+  }
+
+  fn answered(&mut self, got: Result<Object, Fault>) {
+    self.ear.answered(got);
+  }
+
+  fn lent(&mut self, heard: Heard, cx: &mut Context<'_>, life: Life) -> (Step, Life) {
+    self.ear.lent(heard, cx, life)
+  }
+
+  fn ran(&mut self) -> Result<(), Fault> {
+    self.hooks.ran()
+  }
+
+  fn behind(&self) -> bool {
+    self.hooks.behind()
+  }
+}
+
 /// What an ear says of its own accord: a saying, or a verb of the engine with its words, which the life answers.
 #[derive(Debug)]
 pub enum Spoken {
