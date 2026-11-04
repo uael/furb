@@ -45,26 +45,30 @@ struct Prepared {
 
 /// A function of the host that answers each request in place of the models: it is given the request and a function
 /// that tells what it writes as it writes it, and it gives the turn.
+#[derive(Clone)]
 pub struct Answer(pub world::Hosted);
 
 /// A function of the host that is told what a model writes, as it writes it: the rung it writes for, the chain of
 /// that rung, and what it added to its text and to its thought.
+#[derive(Clone)]
 pub struct Stream(pub Writes);
 
 /// A function of the host that is told each retry of a call of a model, before its wait: the rung the reply is for,
 /// the chain of that rung, the attempt that comes next, the most attempts, the seconds of the wait, and why the
 /// attempt before it failed. What the model wrote for that rung before the retry is void.
+#[derive(Clone)]
 pub struct Retrying(pub Retries);
 
 /// A function of the host that is told each report of the life that no model reads, one line each, such as a file
 /// of the record that the scratch directory leaves out. The host shows it in its log.
+#[derive(Clone)]
 pub struct Log(pub Arc<dyn Fn(&str) + Send + Sync>);
 
 /// What a life is opened on, which every host gives the same: the directory it stands on, the record it opens on and
 /// whether it keeps what it says there, whether it does work or only inspects its record, whether it enables the
 /// extensions that the configs turn on, the config directory of the user, and what its provider offers. Each part
 /// that is unsaid takes the default it names.
-#[derive(Default)]
+#[derive(Default, Clone)]
 #[cfg_attr(feature = "typescript", napi_derive::napi(object, object_to_js = false))]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject), pyo3(from_item_all))]
 pub struct Opening {
@@ -169,8 +173,8 @@ impl Opening {
     self.parted(false, prepared).map(|(record, ears, _)| (record, ears))
   }
 
-  /// Whether the life keeps what it says to its record.
-  fn keeps(&self) -> bool {
+  /// Whether the life keeps what it says to its record, under the lease of the store.
+  pub fn keeps(&self) -> bool {
     self.keeps != Some(false) && self.works() && self.record.is_some()
   }
 
@@ -335,16 +339,23 @@ impl Opening {
     let names = self.roster.clone();
     let preferred = self.actor.clone();
     provider = provider.refreshing(Arc::new(move || {
-      world::claude::refresh();
-      let fresh = Catalog::load()
-        .claude(claude.clone(), stall)
-        .configured(Path::new(&directory), config.as_deref())
-        .map_err(|no| no.to_string())?;
-      let kept = fresh.keep(names.as_deref(), preferred.as_deref());
-      let candidate = fresh
-        .provider(directory.clone(), kept.names.as_deref(), kept.actor.as_deref(), answer.clone())
-        .map_err(|no| no.to_string())?;
-      Ok(candidate.into_settings())
+      let (claude, config, directory) = (claude.clone(), config.clone(), directory.clone());
+      let (names, preferred, answer) = (names.clone(), preferred.clone(), answer.clone());
+      Box::pin(async move {
+        world::claude::refresh();
+        let fresh = Catalog::loaded()
+          .await
+          .discovered(claude, stall)
+          .await
+          .configure(Path::new(&directory), config.as_deref())
+          .await
+          .map_err(|no| no.to_string())?;
+        let kept = fresh.keeping(names.as_deref(), preferred.as_deref()).await;
+        let (names, actor) = (kept.names.as_deref(), kept.actor.as_deref());
+        let candidate =
+          fresh.provided(directory, names, actor, answer).await.map_err(|no| no.to_string())?;
+        Ok(candidate.into_settings())
+      })
     }));
     provider = provider.advertises(advertised).searching(works).config(user);
     if let Some(gallery) = gallery {

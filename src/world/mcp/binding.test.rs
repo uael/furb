@@ -60,8 +60,8 @@ fn found(program: &[&str], word: &str) -> Vec<String> {
   checked(&text)
     .expect("the gate reads the sheet")
     .into_iter()
-    .filter(|(line, _)| *line > above)
-    .map(|(line, why)| format!("line {}: {why}", line - above))
+    .filter(|one| one.line > above)
+    .map(|one| format!("line {}: {one}", one.line - above))
     .collect()
 }
 

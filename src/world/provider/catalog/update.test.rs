@@ -2,7 +2,14 @@
 
 use serde_json::json;
 
-use super::{Source, Status, applied, numbers, pi, stamp};
+use std::{
+  fs,
+  sync::atomic::{AtomicUsize, Ordering},
+};
+
+use jiff::Timestamp;
+
+use super::{Source, Status, Updater, applied, pi, stamp};
 use crate::world::provider::catalog::parsed;
 
 const SNAPSHOT: &str =
@@ -16,15 +23,30 @@ fn ids(text: Option<&str>) -> Vec<String> {
 
 #[test]
 fn a_count_of_seconds_reads_as_a_time() {
-  assert_eq!(stamp(0), "1970-01-01T00:00:00Z");
-  assert_eq!(stamp(951_782_400), "2000-02-29T00:00:00Z");
-  assert_eq!(stamp(1_000_000_000), "2001-09-09T01:46:40Z");
+  let at = |secs| stamp(Timestamp::from_second(secs).unwrap());
+  assert_eq!(at(0), "1970-01-01T00:00:00Z");
+  assert_eq!(at(951_782_400), "2000-02-29T00:00:00Z");
+  assert_eq!(at(1_000_000_000), "2001-09-09T01:46:40Z");
+  assert_eq!(stamp("2026-10-26T18:09:17.987Z".parse().unwrap()), "2026-10-26T18:09:17Z");
 }
 
 #[test]
-fn a_version_is_compared_by_its_numbers() {
-  assert!(numbers("1.10.0") > numbers("1.4.0"));
-  assert_eq!(numbers("1.4.0"), vec![1, 4, 0]);
+fn a_stale_or_absent_copy_updates_once_for_each_backoff() {
+  static RAN: AtomicUsize = AtomicUsize::new(0);
+  let updater = Updater::new(|| {
+    RAN.fetch_add(1, Ordering::SeqCst);
+  });
+  let dir = std::env::temp_dir().join(format!("furb-update-{}", std::process::id()));
+  fs::create_dir_all(&dir).unwrap();
+  let fresh = dir.join("models.json");
+  fs::write(&fresh, "{}").unwrap();
+  updater.background(&fresh);
+  assert_eq!(RAN.load(Ordering::SeqCst), 0);
+  let absent = dir.join("absent.json");
+  updater.background(&absent);
+  updater.background(&absent);
+  assert_eq!(RAN.load(Ordering::SeqCst), 1);
+  fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]

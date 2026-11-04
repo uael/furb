@@ -546,10 +546,11 @@ fn a_record_of_another_engine_of_the_same_version_replays_and_goes_on() {
   );
 }
 
-/// The corpus that the gate of the versions replays: the records in `tests/corpus`, which `tests/corpus/README.md`
-/// says.
-fn corpus() -> PathBuf {
-  Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("corpus")
+/// The records that each build of this version replays word by word: the records in `tests/replay`,
+/// which `tests/replay/README.md` says. The records of the promise of a release are in
+/// `tests/corpus`, which `tests/promise.rs` opens.
+fn replays() -> PathBuf {
+  Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("replay")
 }
 
 /// A life of a test whose model answers each request with the next word of a script, and with close(None) once the
@@ -673,8 +674,8 @@ fn a_stand_reloads_provider_settings_and_a_refused_reload_keeps_the_life() {
   fs::remove_dir_all(at).unwrap();
 }
 
-/// The words of the model of the life of the corpus: the root writes, reads, runs a command, waits, reads the
-/// clock and chance, and asks a chain of its own, whose model answers in the second word.
+/// The words of the model of the life of `worked`: the root writes, reads, runs a command, waits,
+/// reads the clock and chance, and asks a chain of its own, whose model answers in the second word.
 const WORK: [&str; 2] = [
   "write(Text(\"notes.md\", \"one\\ntwo\\n\"))\nnotes = read(\"notes.md\")\nsaid = await bash(\"echo hi\")\nawait \
    wait(0.01)\nhelper = chain(\"helper\")\ngot = await prompt(int, \"Give 2.\", on=helper)\nclose(got + \
@@ -682,10 +683,11 @@ const WORK: [&str; 2] = [
   "close(2)",
 ];
 
-#[test]
-#[ignore = "it makes the corpus again, which a person runs after a change that adds one to the version"]
-fn make_the_corpus() {
-  let at = place("corpus");
+/// The record of the life of `WORK` in a directory of its own: a first life works, and a second
+/// life on the record takes one prompt more, so the record holds two openings. Each official
+/// extension runs on it.
+fn worked(name: &str) -> PathBuf {
+  let at = place(name);
   let mut first = scripted(&at, &WORK).boot::<String>([]).unwrap().0;
   assert_eq!(
     closed(&mut first, "close(await prompt(int, 'Work in the directory.'))").as_ref().as_int(),
@@ -698,8 +700,7 @@ fn make_the_corpus() {
     Some("done")
   );
   drop(later);
-  fs::create_dir_all(corpus()).unwrap();
-  fs::copy(at.join("record.jsonl"), corpus().join("work.jsonl")).unwrap();
+  at.join("record.jsonl")
 }
 
 #[test]
@@ -708,11 +709,11 @@ fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
   let record = at.join("record.jsonl");
   // The place where the first stand stood, changed, makes the replay drift at the word that the stand told.
   let mut lines: Vec<String> =
-    fs::read_to_string(corpus().join("work.jsonl")).unwrap().lines().map(str::to_owned).collect();
+    fs::read_to_string(worked("drifts-work")).unwrap().lines().map(str::to_owned).collect();
   let stood = lines
     .iter()
     .position(|line| line.starts_with(r#"[["done","stand1","#))
-    .expect("the corpus holds the first stand");
+    .expect("the record holds the first stand");
   let mut entry: serde_json::Value = serde_json::from_str(&lines[stood]).unwrap();
   let place = entry[0][3][1].as_str().expect("the stand names its place").to_owned();
   entry[0][3][1] = serde_json::Value::from(format!("{place}-elsewhere"));
@@ -727,7 +728,9 @@ fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
   let refused =
     Opening { config, ..opening(&at, true) }.boot::<String>([]).map(|_| ()).unwrap_err();
   assert!(refused.to_string().starts_with("Drift: "), "{refused}");
-  let moved = format!("stand()\\ncd('{place}-elsewhere')");
+  // The word shows the place as python writes it, and the message as Rust debugs it: four marks for each one.
+  let shown = place.replace('\\', "\\\\\\\\");
+  let moved = format!("stand()\\ncd('{shown}-elsewhere')");
   assert!(
     refused.to_string().contains(&moved),
     "the drift is at the word that the stand told: {refused}"
@@ -743,28 +746,28 @@ fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
 }
 
 #[test]
-fn each_record_of_the_corpus_names_this_version_and_replays_on_this_build_with_no_drift() {
-  let mut records: Vec<PathBuf> = fs::read_dir(corpus())
+fn each_record_of_the_replays_names_this_version_and_replays_on_this_build_with_no_drift() {
+  let mut records: Vec<PathBuf> = fs::read_dir(replays())
     .unwrap()
     .map(|one| one.unwrap().path())
     .filter(|one| one.extension().is_some_and(|named| named == "jsonl"))
     .collect();
   records.sort();
-  assert!(!records.is_empty(), "the corpus holds no record");
+  assert!(!records.is_empty(), "tests/replay holds no record");
   for one in records {
     let name = one.file_stem().unwrap().to_string_lossy().into_owned();
-    let at = place(&format!("corpus-{name}"));
+    let at = place(&format!("replay-{name}"));
     fs::copy(&one, at.join("record.jsonl")).unwrap();
     let kept = world::kept(at.join("record.jsonl")).unwrap();
     assert_eq!(
       world::version(&kept),
       Some(world::VERSION),
-      "{name} is a record of another version: make the corpus again, as tests/corpus/README.md says"
+      "{name} is a record of another version: make it again, as tests/replay/README.md says"
     );
     let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
     if let Err(drift) = inspects.boot::<String>([]) {
       panic!(
-        "{name} drifts on this build: add one to world::VERSION and make the corpus again, as tests/corpus/README.md says. {drift}"
+        "{name} drifts on this build: add one to world::VERSION and make it again, as tests/replay/README.md says. {drift}"
       );
     }
   }
@@ -782,17 +785,21 @@ const UNSEEDED: &str = "[e[3] for e in transcript('chain1', 'enable') if e[4].st
                         ('user', e[4]) for n, t in enumerate(turns(on='chain1'))) or not all(m in \
                         module('chain1') for m in re.findall(r'^(?:def|class) (\\w+)', e[4], re.M)))]";
 
-/// Each record of the corpus, replayed in a life that only inspects it, by its name.
-fn replayed() -> Vec<(String, Engine)> {
-  let mut records: Vec<PathBuf> = fs::read_dir(corpus())
+/// Each record of `tests/replay`, and the record of the life of `WORK`, replayed in a life that
+/// only inspects it, by its name.
+fn replayed(by: &str) -> Vec<(String, Engine)> {
+  let mut records: Vec<PathBuf> = fs::read_dir(replays())
     .unwrap()
     .map(|one| one.unwrap().path())
     .filter(|one| one.extension().is_some_and(|named| named == "jsonl"))
     .collect();
   records.sort();
+  let work = worked(&format!("shown-{by}-made")).with_file_name("work.jsonl");
+  fs::rename(work.with_file_name("record.jsonl"), &work).unwrap();
+  records.push(work);
   let open = |one: PathBuf| {
     let name = one.file_stem().unwrap().to_string_lossy().into_owned();
-    let at = place(&format!("shown-{name}"));
+    let at = place(&format!("shown-{by}-{name}"));
     fs::copy(&one, at.join("record.jsonl")).unwrap();
     let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
     (name, inspects.boot::<String>([]).unwrap().0)
@@ -801,8 +808,8 @@ fn replayed() -> Vec<(String, Engine)> {
 }
 
 #[test]
-fn each_run_of_a_chain_of_the_corpus_has_a_turn_that_shows_its_word() {
-  for (name, mut engine) in replayed() {
+fn each_run_of_a_chain_of_the_replays_has_a_turn_that_shows_its_word() {
+  for (name, mut engine) in replayed("unshown") {
     let unshown = engine.word(UNSHOWN, vec![]).unwrap();
     assert_eq!(
       unshown.as_ref().items().unwrap().len(),
@@ -814,14 +821,13 @@ fn each_run_of_a_chain_of_the_corpus_has_a_turn_that_shows_its_word() {
 }
 
 #[test]
-fn a_replay_of_the_corpus_shows_each_file_of_an_extension_as_the_rung_of_its_read_then_its_code_alone()
- {
-  let (_, mut engine) = replayed().into_iter().find(|one| one.0 == "work").unwrap();
+fn a_replay_of_work_shows_each_file_of_an_extension_as_the_rung_of_its_read_then_its_code_alone() {
+  let (_, mut engine) = replayed("seeded").into_iter().find(|one| one.0 == "work").unwrap();
   let enables = engine.word("len(transcript('chain1', 'enable'))", vec![]).unwrap();
   assert_eq!(
     enables.as_ref().as_int(),
     Some(8),
-    "each official extension runs on the life of the corpus"
+    "each official extension runs on the life of work"
   );
   let unseeded = engine.word(UNSEEDED, vec![]).unwrap();
   assert_eq!(unseeded.as_ref().items().unwrap().len(), 0, "{}", unseeded.as_ref().py_repr());
@@ -1054,7 +1060,7 @@ fn a_checkpoint_of_a_later_schema_is_refused_with_both_schemas() {
 fn a_checkpoint_of_the_form_before_its_schema_that_a_later_life_wrote_opens_and_seeds_no_root_again()
  {
   let at = place("checkpoint-1034-relife");
-  fs::copy(corpus().join("handover").join("relife.jsonl"), at.join("record.jsonl")).unwrap();
+  fs::copy(replays().join("handover").join("relife.jsonl"), at.join("record.jsonl")).unwrap();
   for n in 3..=4 {
     let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
     let word = format!("queue.append({n})\nclose([f(), queue])");
@@ -1075,7 +1081,7 @@ fn a_checkpoint_of_the_form_before_its_schema_that_a_later_life_wrote_opens_and_
 #[test]
 fn a_checkpoint_of_the_form_before_its_schema_opens_on_this_build() {
   let at = place("checkpoint-1034");
-  fs::copy(corpus().join("handover").join("checkpoint.jsonl"), at.join("record.jsonl")).unwrap();
+  fs::copy(replays().join("handover").join("checkpoint.jsonl"), at.join("record.jsonl")).unwrap();
   let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
   assert_eq!(
     closed(&mut later, "close([f(), len(queue), get(waiting)[:2], over(waiting)])")

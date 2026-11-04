@@ -1,23 +1,17 @@
 //! The Responses API of a ChatGPT subscription, on the sign-in that furb keeps.
 
-use std::{
-  future::Future,
-  path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
-use bytes::Bytes;
 use rig_core::{
   client::CompletionClient,
   completion::{CompletionError, CompletionModel, CompletionRequest, CompletionResponse},
-  http_client::{
-    HeaderMap, HeaderValue, HttpClientExt, LazyBody, MultipartForm, Request, ReqwestClient,
-    Response, StreamingResponse,
-  },
+  http_client::{self, HeaderMap, HeaderValue, StreamingResponse},
   providers::openai,
   streaming::StreamingCompletionResponse,
-  wasm_compat::WasmCompatSend,
 };
 use serde_json::{Value, json};
+
+use super::clients::{Amend, Amended};
 
 mod auth;
 
@@ -66,7 +60,7 @@ impl CompletionModel for Codex {
     let client = openai::Client::builder()
       .api_key(credential.access)
       .base_url(auth::API)
-      .http_client(CodexHttp(ReqwestClient::default(), self.config.clone()))
+      .http_client(Amended::new(CodexHttp(self.config.clone())))
       .http_headers(headers)
       .build()
       .map_err(CompletionError::HttpError)?;
@@ -81,47 +75,16 @@ impl CompletionModel for Codex {
   }
 }
 
-/// Codex can stream Responses events without a Content-Type header.
+/// Codex can stream Responses events without a Content-Type header, and a refusal of its
+/// credential asks for a new sign-in. It holds the folder of the config that keeps the sign-in.
 #[derive(Clone, Debug, Default)]
-struct CodexHttp(ReqwestClient, PathBuf);
+struct CodexHttp(PathBuf);
 
-impl HttpClientExt for CodexHttp {
-  fn send<T, U>(
-    &self,
-    request: Request<T>,
-  ) -> impl Future<Output = rig_core::http_client::Result<Response<LazyBody<U>>>>
-  + WasmCompatSend
-  + 'static
-  where
-    T: Into<Bytes> + WasmCompatSend,
-    U: From<Bytes> + WasmCompatSend + 'static,
-  {
-    self.0.send(request)
-  }
-
-  fn send_multipart<U>(
-    &self,
-    request: Request<MultipartForm>,
-  ) -> impl Future<Output = rig_core::http_client::Result<Response<LazyBody<U>>>>
-  + WasmCompatSend
-  + 'static
-  where
-    U: From<Bytes> + WasmCompatSend + 'static,
-  {
-    self.0.send_multipart(request)
-  }
-
-  async fn send_streaming<T>(
-    &self,
-    request: Request<T>,
-  ) -> rig_core::http_client::Result<StreamingResponse>
-  where
-    T: Into<Bytes> + WasmCompatSend,
-  {
-    let mut response = self.0.send_streaming(request).await?;
+impl Amend for CodexHttp {
+  fn streamed(&self, mut response: StreamingResponse) -> http_client::Result<StreamingResponse> {
     if matches!(response.status().as_u16(), 401 | 403) {
-      auth::needs_login(&self.1);
-      return Err(rig_core::http_client::Error::InvalidStatusCodeWithMessage(
+      auth::needs_login(&self.0);
+      return Err(http_client::Error::InvalidStatusCodeWithMessage(
         response.status(),
         "Sign in to codex again from Providers.".to_owned(),
       ));

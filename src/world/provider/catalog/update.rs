@@ -7,31 +7,16 @@
 //! each source, the time of its last good fetch, and the error of its last failed one. Each catalog is read again from
 //! the caches when a life stands again, so a running life uses an update with no restart.
 
-#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
-#![expect(
-  clippy::duration_suboptimal_units,
-  reason = "debt: a Duration in a unit that is not the largest"
-)]
-#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(
-  clippy::redundant_closure_for_method_calls,
-  reason = "debt: a closure where a method path serves"
-)]
-
 use std::{
   collections::HashMap,
   fs,
   path::Path,
-  sync::{Mutex, OnceLock, mpsc},
-  time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+  sync::{Mutex, OnceLock, PoisonError, mpsc},
+  time::{Duration, Instant},
 };
 
 use indexmap::IndexMap;
+use jiff::Timestamp;
 use rig_core::http_client::ReqwestClient;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -39,7 +24,13 @@ use serde_json::{Map, Value, json};
 use super::{Cached, Listed};
 use crate::{
   ear::{reactor, runtime},
-  world::cache,
+  world::{
+    cache,
+    provider::{
+      atomic::{self, Access},
+      numbers,
+    },
+  },
 };
 
 /// Where models.dev serves its catalog.
@@ -64,10 +55,10 @@ pub(super) const PI: &str = "pi.json";
 const STATUS: &str = "catalog.status.json";
 
 /// How old the copy of models.dev grows before a life updates it.
-const STALE: Duration = Duration::from_secs(24 * 60 * 60);
+const STALE: Duration = Duration::from_hours(24);
 
 /// How long a life waits after an attempt before it makes another one in the background.
-const BACKOFF: Duration = Duration::from_secs(60 * 60);
+const BACKOFF: Duration = Duration::from_hours(1);
 
 /// One source of the catalog: its version when it has one, the time of its last good fetch, and the error of its last
 /// failed fetch, which a good fetch clears.
@@ -87,6 +78,31 @@ pub struct Status {
   pub models_dev: Source,
   #[serde(rename = "pi-ai")]
   pub pi_ai: Source,
+}
+
+/// Why a source gives no catalog. The text of each variant is what the status keeps of the failure.
+#[derive(Debug, thiserror::Error)]
+enum Error {
+  #[error("this machine has no cache folder")]
+  NoCache,
+  #[error("{url}: {source}")]
+  Fetch { url: String, source: reqwest::Error },
+  #[error("models.dev gave invalid data: {source}")]
+  ModelsDev { source: serde_json::Error },
+  #[error("models.dev gave too few providers")]
+  TooFew,
+  #[error("{}: {source}", REGISTRY)]
+  Registry { source: serde_json::Error },
+  #[error("{} names no version", REGISTRY)]
+  NoVersion,
+  #[error("pi-ai {version} gave invalid data for {name}: {source}")]
+  PiData { version: String, name: String, source: serde_json::Error },
+  #[error("pi-ai {version} lists no model of {name}")]
+  PiEmpty { version: String, name: String },
+  #[error("the status is not JSON: {source}")]
+  Status { source: serde_json::Error },
+  #[error("{0}")]
+  Write(#[from] atomic::Error),
 }
 
 #[derive(Deserialize, Default)]
@@ -112,6 +128,7 @@ struct PiCache {
   providers: HashMap<String, Cached>,
 }
 
+#[expect(clippy::expect_used, reason = "the snapshot is a file of the build, which a test reads")]
 fn bundled() -> &'static Bundled {
   static BUNDLED: OnceLock<Bundled> = OnceLock::new();
   BUNDLED
@@ -144,56 +161,99 @@ pub fn status() -> Status {
 }
 
 /// Fetch both sources now, keep what reads as a catalog, and say where the models stand after it.
-pub async fn update() -> Status {
+async fn update() -> Status {
   let Some(dir) = cache() else {
     let mut status = status();
-    let why = "this machine has no cache folder".to_owned();
+    let why = Error::NoCache.to_string();
     (status.models_dev.error, status.pi_ai.error) = (Some(why.clone()), Some(why));
     return status;
   };
   let mut kept = stored(&dir);
-  let stamp = now();
+  let fetched = stamp(Timestamp::now());
   match models_dev(&dir).await {
-    Ok(()) => kept.models_dev = Source { version: None, fetched: Some(stamp.clone()), error: None },
-    Err(why) => kept.models_dev.error = Some(why),
+    Ok(()) => {
+      kept.models_dev = Source { version: None, fetched: Some(fetched.clone()), error: None }
+    }
+    Err(why) => kept.models_dev.error = Some(why.to_string()),
   }
   match pi_ai(&dir).await {
     Ok(version) => {
-      kept.pi_ai = Source { version: Some(version), fetched: Some(stamp), error: None }
+      kept.pi_ai = Source { version: Some(version), fetched: Some(fetched), error: None }
     }
-    Err(why) => kept.pi_ai.error = Some(why),
+    Err(why) => kept.pi_ai.error = Some(why.to_string()),
   }
-  if let Ok(text) = serde_json::to_string_pretty(&kept) {
-    let _ = keep(&dir.join(STATUS), &text);
+  let saved = serde_json::to_string_pretty(&kept)
+    .map_err(|source| Error::Status { source })
+    .and_then(|text| keep(&dir.join(STATUS), &text));
+  let mut status = status();
+  if let Err(why) = saved {
+    // The status that stands is the old one, so it says that it could not be kept.
+    for source in [&mut status.models_dev, &mut status.pi_ai] {
+      source.error.get_or_insert_with(|| why.to_string());
+    }
   }
-  status()
+  status
 }
 
 /// [`update`], for a host that does not run on the reactor.
 pub fn updated() -> Status {
   let (send, got) = mpsc::channel();
   reactor().spawn(async move {
-    let _ = send.send(update().await);
+    // The caller waits on the other end until this send, so it cannot fail.
+    drop(send.send(update().await));
   });
   got.recv().unwrap_or_else(|_| status())
 }
 
-/// Update in the background when the copy of models.dev at a path is a day old or absent, and the last attempt of the
-/// process is an hour old, so no life waits on the network and a source that fails is not asked at each stand.
-pub(super) fn background(at: &Path) {
-  static LAST: Mutex<Option<Instant>> = Mutex::new(None);
-  let age = fs::metadata(at).ok().and_then(|made| made.modified().ok()?.elapsed().ok());
-  if cfg!(test) || age.is_some_and(|age| age <= STALE) {
-    return;
+/// What brings the cache up to date in the background, and the time of its last attempt.
+struct Updater {
+  last: Mutex<Option<Instant>>,
+  run: fn(),
+}
+
+impl Updater {
+  fn new(run: fn()) -> Self {
+    Self { last: Mutex::new(None), run }
   }
-  let Ok(mut last) = LAST.lock() else { return };
-  if last.is_some_and(|then| then.elapsed() < BACKOFF) {
-    return;
+
+  /// Run the update when the copy of models.dev at a path is a day old or absent, and the last
+  /// attempt is an hour old, so no life waits on the network and a source that fails is not asked
+  /// at each stand.
+  fn background(&self, at: &Path) {
+    let age = fs::metadata(at).ok().and_then(|made| made.modified().ok()?.elapsed().ok());
+    if age.is_some_and(|age| age <= STALE) {
+      return;
+    }
+    let mut last = self.last.lock().unwrap_or_else(PoisonError::into_inner);
+    if last.is_some_and(|then| then.elapsed() < BACKOFF) {
+      return;
+    }
+    *last = Some(Instant::now());
+    (self.run)();
   }
-  *last = Some(Instant::now());
-  runtime().spawn(async {
-    update().await;
+}
+
+/// The updater of the process, which a host injects with [`keep_fresh`]. A process that injects
+/// none, as a test or a program that embeds the crate, never updates in the background.
+static UPDATER: OnceLock<Updater> = OnceLock::new();
+
+/// Update the models of this process in the background from now on: a catalog that stands on a
+/// cache a day old starts an update for the next life. A host calls it once at its start.
+pub fn keep_fresh() {
+  UPDATER.get_or_init(|| {
+    Updater::new(|| {
+      runtime().spawn(async {
+        update().await;
+      });
+    })
   });
+}
+
+/// The update that the injected updater makes when the copy at a path calls for it.
+pub(super) fn background(at: &Path) {
+  if let Some(updater) = UPDATER.get() {
+    updater.background(at);
+  }
 }
 
 /// The providers that the copy of pi-ai holds, in place of those of the snapshot, when the copy is of a release as new
@@ -210,52 +270,45 @@ pub(super) fn applied(listed: &mut IndexMap<String, Listed>, text: Option<&str>)
   }
 }
 
-fn numbers(version: &str) -> Vec<u64> {
-  version.split(|one: char| !one.is_ascii_digit()).filter_map(|part| part.parse().ok()).collect()
-}
-
-async fn get(url: &str) -> Result<String, String> {
-  let asked =
-    ReqwestClient::new().get(url).header("user-agent", "furb").timeout(Duration::from_secs(60));
-  let got = asked
+async fn get(url: &str) -> Result<String, Error> {
+  let fetch = |source| Error::Fetch { url: url.to_owned(), source };
+  let got = ReqwestClient::new()
+    .get(url)
+    .header("user-agent", "furb")
+    .timeout(Duration::from_mins(1))
     .send()
     .await
-    .and_then(|got| got.error_for_status())
-    .map_err(|no| format!("{url}: {no}"))?;
-  got.text().await.map_err(|no| format!("{url}: {no}"))
+    .and_then(reqwest::Response::error_for_status)
+    .map_err(fetch)?;
+  got.text().await.map_err(fetch)
 }
 
-fn keep(at: &Path, text: &str) -> Result<(), String> {
-  let partial = at.with_extension("part");
-  let wrote = at.parent().is_some_and(|parent| fs::create_dir_all(parent).is_ok())
-    && fs::write(&partial, text).is_ok()
-    && fs::rename(&partial, at).is_ok();
-  if wrote { Ok(()) } else { Err(format!("no write of {}", at.display())) }
+fn keep(at: &Path, text: &str) -> Result<(), Error> {
+  Ok(atomic::write(at, text.as_bytes(), Access::Shared)?)
 }
 
-async fn models_dev(dir: &Path) -> Result<(), String> {
+async fn models_dev(dir: &Path) -> Result<(), Error> {
   let text = get(URL).await?;
   let read = serde_json::from_str::<HashMap<String, Cached>>(&text)
-    .map_err(|no| format!("models.dev gave invalid data: {no}"))?;
+    .map_err(|source| Error::ModelsDev { source })?;
   if read.values().filter(|one| !one.models.is_empty()).count() < 5 {
-    return Err("models.dev gave too few providers".to_owned());
+    return Err(Error::TooFew);
   }
   keep(&dir.join(MODELS), &text)
 }
 
-async fn pi_ai(dir: &Path) -> Result<String, String> {
+async fn pi_ai(dir: &Path) -> Result<String, Error> {
   let latest: Value =
-    serde_json::from_str(&get(REGISTRY).await?).map_err(|no| format!("{REGISTRY}: {no}"))?;
-  let version = latest
-    .get("version")
-    .and_then(Value::as_str)
-    .ok_or_else(|| format!("{REGISTRY} names no version"))?
-    .to_owned();
+    serde_json::from_str(&get(REGISTRY).await?).map_err(|source| Error::Registry { source })?;
+  let version = latest.get("version").and_then(Value::as_str).ok_or(Error::NoVersion)?.to_owned();
   let mut providers = Map::new();
   for name in &bundled().pi_ai.providers {
     let text = get(&format!("{FILES}@{version}/dist/providers/data/{name}.json")).await?;
-    let file: Value = serde_json::from_str(&text)
-      .map_err(|no| format!("pi-ai {version} gave invalid data for {name}: {no}"))?;
+    let file: Value = serde_json::from_str(&text).map_err(|source| Error::PiData {
+      version: version.clone(),
+      name: name.clone(),
+      source,
+    })?;
     let mut models = Map::new();
     for api in file.as_object().into_iter().flat_map(Map::values) {
       for one in api.as_object().into_iter().flat_map(Map::values) {
@@ -265,7 +318,7 @@ async fn pi_ai(dir: &Path) -> Result<String, String> {
       }
     }
     if models.is_empty() {
-      return Err(format!("pi-ai {version} lists no model of {name}"));
+      return Err(Error::PiEmpty { version, name: name.clone() });
     }
     providers.insert(name.clone(), json!({ "models": models }));
   }
@@ -304,28 +357,9 @@ fn pi(listing: &Value) -> Option<Value> {
   }))
 }
 
-/// The time now, as `2026-10-26T18:09:17Z`.
-fn now() -> String {
-  stamp(SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |since| since.as_secs()))
-}
-
-/// The time at a count of seconds since the epoch, as `2026-10-26T18:09:17Z`.
-fn stamp(secs: u64) -> String {
-  let (days, rest) = (i64::try_from(secs / 86400).unwrap_or(0), secs % 86400);
-  let z = days + 719_468;
-  let (era, day) = (z.div_euclid(146_097), z.rem_euclid(146_097));
-  let years = (day - day / 1460 + day / 36_524 - day / 146_096) / 365;
-  let in_year = day - (365 * years + years / 4 - years / 100);
-  let month = (5 * in_year + 2) / 153;
-  let date = in_year - (153 * month + 2) / 5 + 1;
-  let month = if month < 10 { month + 3 } else { month - 9 };
-  let year = years + era * 400 + i64::from(month <= 2);
-  format!(
-    "{year:04}-{month:02}-{date:02}T{:02}:{:02}:{:02}Z",
-    rest / 3600,
-    rest % 3600 / 60,
-    rest % 60
-  )
+/// The time at an instant, to the second, as `2026-10-26T18:09:17Z`.
+fn stamp(at: Timestamp) -> String {
+  at.strftime("%Y-%m-%dT%H:%M:%SZ").to_string()
 }
 
 #[cfg(test)]

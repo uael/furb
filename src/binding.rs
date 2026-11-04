@@ -457,7 +457,12 @@ pub fn opened(opening: Option<Opening>) -> Result<(Record, Vec<(String, NativeEa
 #[cfg_attr(feature = "typescript", napi)]
 pub fn gate(sheet: String) -> Result<Vec<(i64, String)>, Fault> {
   let found = crate::gate::checked(&sheet)?;
-  Ok(found.into_iter().map(|(line, why)| (i64::try_from(line).unwrap_or(i64::MAX), why)).collect())
+  Ok(
+    found
+      .into_iter()
+      .map(|one| (i64::try_from(one.line).unwrap_or(i64::MAX), one.to_string()))
+      .collect(),
+  )
 }
 
 /// The official extensions, in the order a life runs them.

@@ -44,6 +44,21 @@ const VERBS: [&str; 7] = ["prompt", "bash", "read", "write", "wait", "cd", "chan
 /// engine or of another version made the facts after its last checkpoint. Nothing when this build
 /// made them, or when the record holds no checkpoint of the schema that this build writes.
 pub(crate) fn crossed(path: &Path) -> Result<Option<Object>, Fault> {
+  folded(path, false)
+}
+
+/// The checkpoint that carries the facts after the last checkpoint of the record at a path as data,
+/// whatever build made them, as [`crossed`] carries the tail of another build. A host keeps it at
+/// the tip of a record whose life a fault stopped, since a replay of that tail runs again the word
+/// that the fault cut. Nothing when the record holds no checkpoint of the schema that this build
+/// writes.
+pub fn carry(path: &Path) -> Result<Option<Object>, Fault> {
+  folded(path, true)
+}
+
+/// The checkpoint that carries the tail of the record at a path, when a build of another engine or
+/// of another version made it or when the tail of any build is asked.
+fn folded(path: &Path, any: bool) -> Result<Option<Object>, Fault> {
   if !path.exists() {
     return Ok(None);
   }
@@ -54,7 +69,7 @@ pub(crate) fn crossed(path: &Path) -> Result<Option<Object>, Fault> {
     || world::version(tail).is_some_and(|one| one != VERSION);
   let data = fact(&heads[at]).and_then(|a| a.word(0).map(world::plain));
   let schema = |one: &Object| field(&one.as_ref(), "schema").and_then(|it| it.as_int());
-  let Some(data) = data.filter(|one| theirs && schema(one) == Some(SCHEMA)) else {
+  let Some(data) = data.filter(|one| (any || theirs) && schema(one) == Some(SCHEMA)) else {
     return Ok(None);
   };
   let (mut entries, mut kept) = (0, 0);

@@ -7,24 +7,6 @@
 //! row stays failed until a control reconnects it. Each change that no question asked for, a list that the server
 //! says has changed, a connection that ends and one that comes back, is told to the ear, which tells the life.
 
-#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
-#![expect(
-  clippy::clone_on_ref_ptr,
-  reason = "debt: a clone of an Arc or an Rc that hides its kind"
-)]
-#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(clippy::match_bool, reason = "debt: a match on a bool")]
-#![expect(
-  clippy::semicolon_if_nothing_returned,
-  reason = "debt: a unit expression with no semicolon"
-)]
-#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
-
 use std::{
   path::PathBuf,
   sync::{
@@ -42,6 +24,7 @@ use tokio::{
 };
 
 use super::{
+  Error,
   binding::binding,
   config::{self, CONNECT, Choice, Places, Server},
   oauth::{self, Opener, Vault},
@@ -54,7 +37,7 @@ use crate::ear::runtime;
 const RETRIES: u32 = 5;
 
 /// The value of each variable of the environment, or none when it is not set.
-pub type Environment = Arc<dyn Fn(&str) -> Option<String> + Send + Sync>;
+pub(super) type Environment = Arc<dyn Fn(&str) -> Option<String> + Send + Sync>;
 
 /// What the servers of a life stand on: the files of the configs, the directory of the images, the store of the
 /// tokens, the opener of the browser, and the variables of the environment.
@@ -67,42 +50,86 @@ pub struct Settings {
   pub variables: Environment,
 }
 
-/// The state of a server.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum State {
+/// The link of furb to a server, which holds what each state needs: the session while it is
+/// connected, why it failed, and the metadata of the resource that the challenge of a login named.
+enum Link {
   Pending,
-  Connected,
-  Failed,
-  NeedsAuth,
+  Connected { session: Arc<Session> },
+  Failed(String),
+  NeedsAuth { hint: Option<String> },
   Disabled,
   Unapproved,
 }
 
-impl State {
+impl Link {
+  /// The link of a server that the configs define, before any connect: failed when its definition
+  /// is broken.
+  fn defined(server: &Server) -> Link {
+    match () {
+      () if !server.error.is_empty() => Link::Failed(server.error.clone()),
+      () if server.disabled => Link::Disabled,
+      () if !server.approved => Link::Unapproved,
+      () => Link::Pending,
+    }
+  }
+
   /// The name of the state, as a server dict gives it.
-  pub fn name(self) -> &'static str {
+  fn name(&self) -> &'static str {
     match self {
-      State::Pending => "pending",
-      State::Connected => "connected",
-      State::Failed => "failed",
-      State::NeedsAuth => "needs-auth",
-      State::Disabled => "disabled",
-      State::Unapproved => "unapproved",
+      Link::Pending => "pending",
+      Link::Connected { .. } => "connected",
+      Link::Failed(_) => "failed",
+      Link::NeedsAuth { .. } => "needs-auth",
+      Link::Disabled => "disabled",
+      Link::Unapproved => "unapproved",
+    }
+  }
+
+  /// Why the server of this name is in the state, as a server dict gives it, or none.
+  fn why(&self, name: &str) -> Option<String> {
+    match self {
+      Link::Failed(why) => Some(why.clone()),
+      Link::NeedsAuth { .. } => {
+        Some(format!("the server asks for a login: mcp_control('login', {name:?})"))
+      }
+      Link::Pending | Link::Connected { .. } | Link::Disabled | Link::Unapproved => None,
     }
   }
 }
 
-/// One server of the life: its definition, its state and why, its session while it is connected, what it said of
-/// itself and offers, the metadata of the resource that its last challenge named, the generation of its keeper, and
-/// the keeper, which ends with the entry.
+/// An action of the operator on a server.
+#[derive(Clone, Copy)]
+enum Action {
+  Reconnect,
+  Enable,
+  Disable,
+  Approve,
+  Login,
+  Logout,
+}
+
+impl Action {
+  /// The action of this name, or why there is none.
+  fn of(name: &str) -> Result<Action, Error> {
+    match name {
+      "reconnect" => Ok(Action::Reconnect),
+      "enable" => Ok(Action::Enable),
+      "disable" => Ok(Action::Disable),
+      "approve" => Ok(Action::Approve),
+      "login" => Ok(Action::Login),
+      "logout" => Ok(Action::Logout),
+      other => Err(Error::Action(other.to_owned())),
+    }
+  }
+}
+
+/// One server of the life: its definition, its link, what it said of itself and offers, the
+/// generation of its keeper, and the keeper, which ends with the entry.
 struct Entry {
   server: Server,
-  state: State,
-  error: String,
-  session: Option<Arc<Session>>,
+  link: Link,
   info: Info,
   offered: Offered,
-  hint: Option<String>,
   generation: u64,
   keeper: Option<AbortHandle>,
 }
@@ -116,7 +143,7 @@ impl Drop for Entry {
 }
 
 /// The servers of a life.
-pub struct Hub {
+pub(super) struct Hub {
   settings: Settings,
   entries: Mutex<Vec<Entry>>,
   loaded: Mutex<bool>,
@@ -127,7 +154,7 @@ pub struct Hub {
 
 impl Hub {
   /// The servers of a life, none loaded yet, which tell each change that no question asked for to `told`.
-  pub fn new(settings: Settings, told: mpsc::UnboundedSender<String>) -> Arc<Hub> {
+  pub(super) fn new(settings: Settings, told: mpsc::UnboundedSender<String>) -> Arc<Hub> {
     Arc::new(Hub {
       settings,
       entries: Mutex::new(Vec::new()),
@@ -144,34 +171,25 @@ impl Hub {
 
   /// The servers that the configs define, read again: a server whose definition did not change keeps its connection,
   /// a new or changed one connects when it may run, and one that the configs no longer define ends.
-  pub fn reload(self: &Arc<Self>) {
+  pub(super) fn reload(self: &Arc<Self>) {
     *self.loaded.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = true;
-    let variables = self.settings.variables.clone();
+    let variables = Arc::clone(&self.settings.variables);
     let servers = config::servers(&self.settings.places, &|name| variables(name));
     let mut entries = self.entries();
     let mut held: Vec<Entry> = std::mem::take(&mut *entries);
     for server in servers {
       let kept = held.iter().position(|one| one.server == server).map(|at| held.remove(at));
       let entry = kept.unwrap_or_else(|| {
-        let state = match () {
-          () if !server.error.is_empty() => State::Failed,
-          () if server.disabled => State::Disabled,
-          () if !server.approved => State::Unapproved,
-          () => State::Pending,
-        };
-        let error = server.error.clone();
+        let link = Link::defined(&server);
         let mut entry = Entry {
           server,
-          state,
-          error,
-          session: None,
+          link,
           info: Info::default(),
           offered: Offered::default(),
-          hint: None,
           generation: 0,
           keeper: None,
         };
-        if state == State::Pending {
+        if matches!(entry.link, Link::Pending) {
           self.launch(&mut entry);
         }
         entry
@@ -194,13 +212,11 @@ impl Hub {
   fn launch(self: &Arc<Self>, entry: &mut Entry) {
     let generation = self.generations.fetch_add(1, Ordering::SeqCst);
     entry.generation = generation;
-    entry.state = State::Pending;
-    entry.error.clear();
-    entry.session = None;
+    entry.link = Link::Pending;
     if let Some(keeper) = entry.keeper.take() {
       keeper.abort();
     }
-    let task = runtime().spawn(keep(self.clone(), entry.server.name.clone(), generation));
+    let task = runtime().spawn(keep(Arc::clone(self), entry.server.name.clone(), generation));
     entry.keeper = Some(task.abort_handle());
   }
 
@@ -218,20 +234,20 @@ impl Hub {
     true
   }
 
-  /// A change of a server that no question asked for, told.
+  /// A change of a server that no question asked for, told. An ear that ended hears no more.
   fn tell(&self, name: &str) {
-    let _ = self.told.send(name.to_owned());
+    self.told.send(name.to_owned()).ok();
   }
 
   /// Once no server of these names, or no server at all when it names none, is pending, or the bound passed.
-  pub async fn settled(&self, names: &[&str], bound: Duration) {
+  async fn settled(&self, names: &[&str], bound: Duration) {
     let deadline = Instant::now() + bound;
     loop {
       let moved = self.moved.notified();
       tokio::pin!(moved);
       moved.as_mut().enable();
       let pending = self.entries().iter().any(|one| {
-        one.state == State::Pending
+        matches!(one.link, Link::Pending)
           && (names.is_empty() || names.contains(&one.server.name.as_str()))
       });
       if !pending || tokio::time::timeout_at(deadline, moved).await.is_err() {
@@ -241,60 +257,66 @@ impl Hub {
   }
 
   /// The dict of each server, once each server that runs connected or failed, within the bound of a connect.
-  pub async fn listed(self: &Arc<Self>) -> Vec<Value> {
+  pub(super) async fn listed(self: &Arc<Self>) -> Vec<Value> {
     self.reload();
     self.settled(&[], CONNECT + Duration::from_secs(5)).await;
     self.entries().iter().map(dict).collect()
   }
 
   /// The dict of each server, read again from the configs, when no server is pending; none while one is.
-  pub fn settled_now(self: &Arc<Self>) -> Option<Vec<Value>> {
+  pub(super) fn settled_now(self: &Arc<Self>) -> Option<Vec<Value>> {
     self.reload();
     let entries = self.entries();
-    match entries.iter().any(|one| one.state == State::Pending) {
-      true => None,
-      false => Some(entries.iter().map(dict).collect()),
+    if entries.iter().any(|one| matches!(one.link, Link::Pending)) {
+      None
+    } else {
+      Some(entries.iter().map(dict).collect())
     }
   }
 
   /// The dict of a server.
-  pub fn dict(&self, name: &str) -> Option<Value> {
+  fn dict(&self, name: &str) -> Option<Value> {
     self.entries().iter().find(|one| one.server.name == name).map(dict)
   }
 
   /// The session of a server and its definition, once it settled, or why it has none.
-  pub async fn session(self: &Arc<Self>, name: &str) -> Result<(Arc<Session>, Server), String> {
+  pub(super) async fn session(
+    self: &Arc<Self>,
+    name: &str,
+  ) -> Result<(Arc<Session>, Server), Error> {
     self.loaded();
     self.settled(&[name], CONNECT + Duration::from_secs(5)).await;
     let entries = self.entries();
     let entry = entries
       .iter()
       .find(|one| one.server.name == name)
-      .ok_or_else(|| format!("there is no server {name}"))?;
-    match (&entry.session, entry.state) {
-      (Some(session), State::Connected) => Ok((session.clone(), entry.server.clone())),
-      (_, State::NeedsAuth) => {
-        Err(format!("the server {name} asks for a login: mcp_control('login', {name:?})"))
-      }
-      (_, state) => {
-        let why = if entry.error.is_empty() { String::new() } else { format!(": {}", entry.error) };
-        Err(format!("the server {name} is not connected, it is {}{why}", state.name()))
-      }
+      .ok_or_else(|| Error::NoServer(name.to_owned()))?;
+    match &entry.link {
+      Link::Connected { session } => Ok((Arc::clone(session), entry.server.clone())),
+      Link::NeedsAuth { .. } => Err(Error::Login(name.to_owned())),
+      other => Err(Error::Down {
+        name: name.to_owned(),
+        state: other.name(),
+        why: match other {
+          Link::Failed(why) => Some(why.clone()),
+          _ => None,
+        },
+      }),
     }
   }
 
   /// A server whose request answered 401: its tokens refreshed and the server connected again, and whether it is
   /// connected then. A server whose tokens cannot be refreshed needs a login, which it tells.
-  pub async fn renewed(self: &Arc<Self>, name: &str, hint: Option<String>) -> bool {
+  pub(super) async fn renewed(self: &Arc<Self>, name: &str, hint: Option<String>) -> bool {
     let url = self
       .entries()
       .iter()
       .find(|one| one.server.name == name)
       .and_then(|one| one.server.transport.url().map(str::to_owned));
     let Some(url) = url else { return false };
-    let (vault, key) = (self.settings.vault.clone(), oauth::key(name, &url));
+    let (vault, key) = (Arc::clone(&self.settings.vault), oauth::key(name, &url));
     let held = {
-      let (vault, key) = (vault.clone(), key.clone());
+      let (vault, key) = (Arc::clone(&vault), key.clone());
       oauth::blocking(move || oauth::stored(vault.as_ref(), &key)).await
     };
     let fresh = match held {
@@ -304,40 +326,38 @@ impl Hub {
     let Some(fresh) = fresh else {
       let mut entries = self.entries();
       if let Some(entry) = entries.iter_mut().find(|one| one.server.name == name) {
-        entry.state = State::NeedsAuth;
-        entry.error = format!("the server asks for a login: mcp_control('login', {name:?})");
-        entry.session = None;
-        entry.hint = hint;
+        entry.link = Link::NeedsAuth { hint };
       }
       drop(entries);
       self.moved.notify_waiters();
       self.tell(name);
       return false;
     };
-    let _ = oauth::blocking(move || oauth::store(vault.as_ref(), &key, &fresh)).await;
+    // The fresh tokens serve this connect even when the store does not keep them.
+    oauth::blocking(move || oauth::store(vault.as_ref(), &key, &fresh)).await.ok();
     self.restart(name).is_ok() && {
       self.settled(&[name], CONNECT + Duration::from_secs(5)).await;
-      self.entries().iter().any(|one| one.server.name == name && one.state == State::Connected)
+      self
+        .entries()
+        .iter()
+        .any(|one| one.server.name == name && matches!(one.link, Link::Connected { .. }))
     }
   }
 
   /// A server that may run, connected again from the start.
-  fn restart(self: &Arc<Self>, name: &str) -> Result<(), String> {
+  fn restart(self: &Arc<Self>, name: &str) -> Result<(), Error> {
     let mut entries = self.entries();
     let entry = entries
       .iter_mut()
       .find(|one| one.server.name == name)
-      .ok_or_else(|| format!("there is no server {name}"))?;
+      .ok_or_else(|| Error::NoServer(name.to_owned()))?;
+    let name = name.to_owned();
     match () {
       () if !entry.server.error.is_empty() => {
-        Err(format!("the server {name} cannot run: {}", entry.server.error))
+        Err(Error::Broken { name, why: entry.server.error.clone() })
       }
-      () if entry.server.disabled => {
-        Err(format!("the server {name} is disabled: mcp_control('enable', {name:?})"))
-      }
-      () if !entry.server.approved => Err(format!(
-        "the server {name} of the project waits for approval: mcp_control('approve', {name:?})"
-      )),
+      () if entry.server.disabled => Err(Error::Disabled(name)),
+      () if !entry.server.approved => Err(Error::Unapproved(name)),
       () => {
         self.launch(entry);
         Ok(())
@@ -346,47 +366,52 @@ impl Hub {
   }
 
   /// What a control of the operator does to a server, and its dict after it, once it settled.
-  pub async fn control(self: &Arc<Self>, action: &str, name: &str) -> Result<Value, String> {
+  pub(super) async fn control(self: &Arc<Self>, action: &str, name: &str) -> Result<Value, Error> {
     self.loaded();
-    let found = self
-      .entries()
-      .iter()
-      .find(|one| one.server.name == name)
-      .map(|one| (one.server.clone(), one.hint.clone()));
-    let (server, hint) = found.ok_or_else(|| format!("there is no server {name}"))?;
-    match action {
-      "reconnect" => self.restart(name)?,
-      "enable" => self.chose(Choice::Enable, name)?,
-      "disable" => self.chose(Choice::Disable, name)?,
-      "approve" => self.chose(Choice::Approve, name)?,
-      "login" | "logout" => {
-        let url = server
-          .transport
-          .url()
-          .ok_or_else(|| format!("the server {name} runs on this machine and takes no login"))?;
-        let (vault, key) = (self.settings.vault.clone(), oauth::key(name, url));
-        if action == "login" {
-          let tokens =
-            oauth::login(url, hint.as_deref(), &self.settings.opener, &server.transport.oauth())
-              .await?;
-          oauth::blocking(move || oauth::store(vault.as_ref(), &key, &tokens)).await?;
-        } else {
-          oauth::blocking(move || vault.forget(&key)).await?;
-        }
+    let found = self.entries().iter().find(|one| one.server.name == name).map(|one| {
+      let hint = match &one.link {
+        Link::NeedsAuth { hint } => hint.clone(),
+        _ => None,
+      };
+      (one.server.clone(), hint)
+    });
+    let (server, hint) = found.ok_or_else(|| Error::NoServer(name.to_owned()))?;
+    match Action::of(action)? {
+      Action::Reconnect => self.restart(name)?,
+      Action::Enable => self.chose(Choice::Enable, name)?,
+      Action::Disable => self.chose(Choice::Disable, name)?,
+      Action::Approve => self.chose(Choice::Approve, name)?,
+      Action::Login => {
+        let (url, vault, key) = self.door(name, &server)?;
+        let tokens =
+          oauth::login(url, hint.as_deref(), &self.settings.opener, &server.transport.oauth())
+            .await?;
+        oauth::blocking(move || oauth::store(vault.as_ref(), &key, &tokens)).await?;
         self.restart(name)?;
       }
-      other => {
-        return Err(format!(
-          "the action {other} is none of reconnect, enable, disable, approve, login and logout"
-        ));
+      Action::Logout => {
+        let (_, vault, key) = self.door(name, &server)?;
+        oauth::blocking(move || vault.forget(&key)).await?;
+        self.restart(name)?;
       }
     }
     self.settled(&[name], CONNECT + Duration::from_secs(5)).await;
-    self.dict(name).ok_or_else(|| format!("there is no server {name}"))
+    self.dict(name).ok_or_else(|| Error::NoServer(name.to_owned()))
+  }
+
+  /// The address of a remote server, the store of its tokens and their key, or why a server on this
+  /// machine has none.
+  fn door<'a>(
+    &self,
+    name: &str,
+    server: &'a Server,
+  ) -> Result<(&'a str, Arc<dyn Vault>, String), Error> {
+    let url = server.transport.url().ok_or_else(|| Error::Local(name.to_owned()))?;
+    Ok((url, Arc::clone(&self.settings.vault), oauth::key(name, url)))
   }
 
   /// A choice of the operator, written to the local scope, and the servers read again.
-  fn chose(self: &Arc<Self>, choice: Choice, name: &str) -> Result<(), String> {
+  fn chose(self: &Arc<Self>, choice: Choice, name: &str) -> Result<(), Error> {
     config::choose(&self.settings.places, choice, name)?;
     self.reload();
     Ok(())
@@ -402,59 +427,50 @@ impl Hub {
   }
 
   /// The directory of the images of the life.
-  pub fn gallery(&self) -> Option<&std::path::Path> {
+  pub(super) fn gallery(&self) -> Option<&std::path::Path> {
     self.settings.gallery.as_deref()
   }
 
   /// Every server ended: each connection closed, and each process of a server ended with every process it started.
-  pub fn end(&self) {
+  pub(super) fn end(&self) {
     let held = std::mem::take(&mut *self.entries());
     drop(held);
   }
 }
 
-/// The dict of a server, as the act mcp_servers gives it. A tool that the config denies is not in it.
-fn dict(entry: &Entry) -> Value {
-  let server = &entry.server;
-  let allowed: Vec<Value> = entry
-    .offered
-    .tools
-    .iter()
-    .filter(|tool| !server.deny.iter().any(|denied| tool["name"].as_str() == Some(denied)))
-    .cloned()
-    .collect();
-  let text = |one: &Value, key: &str| one[key].as_str().unwrap_or_default().to_owned();
-  let tools: Vec<Value> = allowed
+/// A text of a JSON value, or an empty text.
+fn text(one: &Value, key: &str) -> String {
+  one[key].as_str().unwrap_or_default().to_owned()
+}
+
+/// The dict of each tool of a server that its config allows.
+fn tools(allowed: &[Value]) -> Vec<Value> {
+  allowed
     .iter()
     .map(|tool| {
-      let title = tool["title"].as_str().or_else(|| tool["annotations"]["title"].as_str()).unwrap_or_default();
+      let title = tool["title"]
+        .as_str()
+        .or_else(|| tool["annotations"]["title"].as_str())
+        .unwrap_or_default();
       json!({
         "name": text(tool, "name"),
         "title": title,
         "description": text(tool, "description"),
         "input": tool.get("inputSchema").cloned().unwrap_or_else(|| json!({"type": "object"})),
         "output": tool.get("outputSchema").cloned().unwrap_or(Value::Null),
-        "annotations": tool.get("annotations").cloned().filter(Value::is_object).unwrap_or_else(|| json!({})),
+        "annotations": tool
+          .get("annotations")
+          .cloned()
+          .filter(Value::is_object)
+          .unwrap_or_else(|| json!({})),
       })
     })
-    .collect();
-  let resources: Vec<Value> = entry
-    .offered
-    .resources
-    .iter()
-    .map(|one| {
-      json!({"uri": text(one, "uri"), "name": text(one, "name"), "description": text(one, "description"), "mime": text(one, "mimeType")})
-    })
-    .collect();
-  let templates: Vec<Value> = entry
-    .offered
-    .templates
-    .iter()
-    .map(|one| json!({"uri": text(one, "uriTemplate"), "name": text(one, "name"), "description": text(one, "description")}))
-    .collect();
-  let prompts: Vec<Value> = entry
-    .offered
-    .prompts
+    .collect()
+}
+
+/// The dict of each prompt of a server.
+fn prompts(offered: &[Value]) -> Vec<Value> {
+  offered
     .iter()
     .map(|one| {
       let arguments: Vec<Value> = one["arguments"]
@@ -472,8 +488,35 @@ fn dict(entry: &Entry) -> Value {
         .collect();
       json!({"name": text(one, "name"), "description": text(one, "description"), "arguments": arguments})
     })
+    .collect()
+}
+
+/// The dict of a server, as the act `mcp_servers` gives it. A tool that the config denies is not
+/// in it.
+fn dict(entry: &Entry) -> Value {
+  let server = &entry.server;
+  let allowed: Vec<Value> = entry
+    .offered
+    .tools
+    .iter()
+    .filter(|tool| !server.deny.iter().any(|denied| tool["name"].as_str() == Some(denied)))
+    .cloned()
     .collect();
-  let connected = entry.state == State::Connected;
+  let resources: Vec<Value> = entry
+    .offered
+    .resources
+    .iter()
+    .map(|one| {
+      json!({"uri": text(one, "uri"), "name": text(one, "name"), "description": text(one, "description"), "mime": text(one, "mimeType")})
+    })
+    .collect();
+  let templates: Vec<Value> = entry
+    .offered
+    .templates
+    .iter()
+    .map(|one| json!({"uri": text(one, "uriTemplate"), "name": text(one, "name"), "description": text(one, "description")}))
+    .collect();
+  let connected = matches!(entry.link, Link::Connected { .. });
   let word = if connected && !allowed.is_empty() {
     binding(&server.name, &allowed).word
   } else {
@@ -484,14 +527,14 @@ fn dict(entry: &Entry) -> Value {
     "scope": server.scope.name(),
     "transport": server.transport.kind(),
     "target": server.transport.target(),
-    "state": entry.state.name(),
-    "error": entry.error,
+    "state": entry.link.name(),
+    "error": entry.link.why(&server.name).unwrap_or_default(),
     "version": entry.info.version,
     "instructions": entry.info.instructions,
-    "tools": tools,
+    "tools": tools(&allowed),
     "resources": resources,
     "templates": templates,
-    "prompts": prompts,
+    "prompts": prompts(&entry.offered.prompts),
     "binding": word,
   })
 }
@@ -515,7 +558,7 @@ async fn keep(hub: Arc<Hub>, name: String, generation: u64) {
       return;
     };
     let token = match server.transport.url() {
-      Some(url) => oauth::token(hub.settings.vault.clone(), oauth::key(&name, url)).await,
+      Some(url) => oauth::token(Arc::clone(&hub.settings.vault), oauth::key(&name, url)).await,
       None => None,
     };
     let started = async {
@@ -523,87 +566,106 @@ async fn keep(hub: Arc<Hub>, name: String, generation: u64) {
       let offered = session::offered(&session, CONNECT).await?;
       Ok::<_, Failure>((session, heard, offered))
     };
-    match started.await {
-      Ok((session, mut heard, offered)) => {
-        let session = Arc::new(session);
+    let wait = match started.await {
+      Ok((session, heard, offered)) => {
         let info = session.info.clone();
-        let up = hub.set(&name, generation, |entry| {
-          (entry.state, entry.session, entry.info, entry.offered) =
-            (State::Connected, Some(session.clone()), info, offered);
-          entry.error.clear();
-        });
-        if !up {
+        let session = Arc::new(session);
+        if !hub.set(&name, generation, |entry| {
+          (entry.info, entry.offered) = (info, offered);
+          entry.link = Link::Connected { session: Arc::clone(&session) };
+        }) {
           return;
         }
         if !quiet {
           hub.tell(&name);
         }
         failures = 0;
-        let why = loop {
-          match heard.recv().await {
-            Some(Heard::Notified(method)) => {
-              let Some(changed) = Changed::of(&method) else { continue };
-              let mut offered = hub
-                .entries()
-                .iter()
-                .find(|one| one.generation == generation)
-                .map(|one| one.offered.clone())
-                .unwrap_or_default();
-              if session::relisted(&session, changed, &mut offered, CONNECT).await.is_ok()
-                && hub.set(&name, generation, |entry| entry.offered = offered)
-              {
-                hub.tell(&name);
-              }
-            }
-            Some(Heard::Closed(why)) => break why,
-            None => break "the connection closed".to_owned(),
-          }
-        };
+        let why = heeded(&hub, &name, generation, &session, heard).await;
         drop(session);
         let wait = backoff(0);
         let said = format!("{why}; furb connects again in {} s", wait.as_secs());
-        if !hub.set(&name, generation, |entry| {
-          (entry.state, entry.error, entry.session) = (State::Failed, said, None)
-        }) {
+        if !hub.set(&name, generation, |entry| entry.link = Link::Failed(said)) {
           return;
         }
         hub.tell(&name);
         quiet = false;
-        tokio::time::sleep(wait).await;
+        wait
       }
       Err(Failure::Unauthorized(hint)) => {
-        let said = format!("the server asks for a login: mcp_control('login', {name:?})");
-        hub.set(&name, generation, |entry| {
-          (entry.state, entry.error, entry.hint) = (State::NeedsAuth, said, hint)
-        });
+        hub.set(&name, generation, |entry| entry.link = Link::NeedsAuth { hint });
         if !quiet {
           hub.tell(&name);
         }
         return;
       }
-      Err(no) => {
-        let said = no.said();
-        if quiet {
-          hub.set(&name, generation, |entry| (entry.state, entry.error) = (State::Failed, said));
-          return;
+      Err(no) => match failed(&hub, &name, generation, &no.said(), quiet, &mut failures) {
+        Some(wait) => wait,
+        None => return,
+      },
+    };
+    tokio::time::sleep(wait).await;
+  }
+}
+
+/// What a connected server says of its own accord, heeded until its connection ends, and why it
+/// ended: each list that it says has changed is listed again.
+async fn heeded(
+  hub: &Hub,
+  name: &str,
+  generation: u64,
+  session: &Session,
+  mut heard: mpsc::UnboundedReceiver<Heard>,
+) -> String {
+  loop {
+    match heard.recv().await {
+      Some(Heard::Notified(method)) => {
+        let Some(changed) = Changed::of(&method) else { continue };
+        let mut offered = hub
+          .entries()
+          .iter()
+          .find(|one| one.generation == generation)
+          .map(|one| one.offered.clone())
+          .unwrap_or_default();
+        if session::relisted(session, changed, &mut offered, CONNECT).await.is_ok()
+          && hub.set(name, generation, |entry| entry.offered = offered)
+        {
+          hub.tell(name);
         }
-        failures += 1;
-        if failures >= RETRIES {
-          let said = format!(
-            "{said}; furb gave up after {RETRIES} tries: mcp_control('reconnect', {name:?})"
-          );
-          hub.set(&name, generation, |entry| (entry.state, entry.error) = (State::Failed, said));
-          hub.tell(&name);
-          return;
-        }
-        let wait = backoff(failures);
-        let said = format!("{said}; furb connects again in {} s", wait.as_secs());
-        if !hub.set(&name, generation, |entry| (entry.state, entry.error) = (State::Failed, said)) {
-          return;
-        }
-        hub.tell(&name);
-        tokio::time::sleep(wait).await;
       }
+      Some(Heard::Closed(why)) => return why,
+      None => return "the connection closed".to_owned(),
     }
   }
+}
+
+/// A connect that failed, kept as the state of its server, and the wait before the next one, or
+/// none when the keeper gives up: at once on the first connect, and after the last of the retries
+/// of a connection that ended.
+fn failed(
+  hub: &Hub,
+  name: &str,
+  generation: u64,
+  said: &str,
+  quiet: bool,
+  failures: &mut u32,
+) -> Option<Duration> {
+  if quiet {
+    hub.set(name, generation, |entry| entry.link = Link::Failed(said.to_owned()));
+    return None;
+  }
+  *failures += 1;
+  if *failures >= RETRIES {
+    let said =
+      format!("{said}; furb gave up after {RETRIES} tries: mcp_control('reconnect', {name:?})");
+    hub.set(name, generation, |entry| entry.link = Link::Failed(said));
+    hub.tell(name);
+    return None;
+  }
+  let wait = backoff(*failures);
+  let said = format!("{said}; furb connects again in {} s", wait.as_secs());
+  if !hub.set(name, generation, |entry| entry.link = Link::Failed(said)) {
+    return None;
+  }
+  hub.tell(name);
+  Some(wait)
 }

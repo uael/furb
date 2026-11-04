@@ -48,7 +48,7 @@ mod error;
 mod update;
 
 pub use error::Error;
-pub use update::{Source, Status, status, updated};
+pub use update::{Source, Status, keep_fresh, status, updated};
 
 use std::{
   collections::{HashMap, HashSet},
@@ -294,14 +294,26 @@ impl Catalog {
   /// The catalog of this machine: the snapshot, with the models the cache holds of its providers, the claude command
   /// line when it finds one, and the local server that the environment of the process names, one for the process, so
   /// what it listed holds for every catalog after. A cache a day old is refreshed in the background, for the next
-  /// life.
+  /// life, when the host has called [`keep_fresh`].
   pub fn load() -> Catalog {
+    blocking(Catalog::loaded())
+  }
+
+  /// The catalog of this machine, as [`Catalog::load`] gives it, for a caller that awaits.
+  pub async fn loaded() -> Catalog {
     static SERVER: OnceLock<Option<Arc<Server>>> = OnceLock::new();
     let env = |name: &str| env::var(name).ok();
     let server = SERVER.get_or_init(|| Server::named(env).map(Arc::new)).clone();
     let cached = cache().map(|at| at.join(update::MODELS));
     let listed = listed(cached.as_ref());
-    let mut catalog = Catalog::of(&listed, Claude::found(), server, env);
+    let claude = match Claude::found() {
+      Some(claude) => {
+        let models = claude.models().await;
+        Some((claude, models))
+      }
+      None => None,
+    };
+    let mut catalog = Catalog::of(&listed, claude, server, env);
     catalog.providers.push(Entry {
       name: super::codex::NAME.to_owned(),
       env: Vec::new(),
@@ -314,13 +326,19 @@ impl Catalog {
   /// it offers, and whose turn may go with no progress for the stall; and the catalog as it stands when neither is
   /// given, or when it finds no program.
   pub fn claude(self, bin: Option<PathBuf>, stall: Option<Duration>) -> Catalog {
+    blocking(self.discovered(bin, stall))
+  }
+
+  /// The catalog with the claude command line, as [`Catalog::claude`] gives it, for a caller that
+  /// awaits.
+  pub async fn discovered(self, bin: Option<PathBuf>, stall: Option<Duration>) -> Catalog {
     let Some(bin) = bin.or_else(|| stall.and_then(|_| claude::located())) else { return self };
     let claude = Claude::with(Some(bin), stall);
     let found = Some(claude.clone());
     let prefix = format!("{}:", claude::CLAUDE);
     let network = self.models.into_iter().filter(|one| !one.model.name.starts_with(&prefix));
     let mut models: Vec<_> =
-      claude.models().into_iter().map(|model| Offer::new(model, true)).collect();
+      claude.models().await.into_iter().map(|model| Offer::new(model, true)).collect();
     models.extend(network);
     Catalog { models, claude: found, ..self }
   }
@@ -330,16 +348,15 @@ impl Catalog {
   /// a local server, which it asks when it needs its models.
   pub(super) fn of(
     listed: &IndexMap<String, Listed>,
-    claude: Option<Claude>,
+    claude: Option<(Claude, Vec<Model>)>,
     local: Option<Arc<Server>>,
     env: impl Fn(&str) -> Option<String>,
   ) -> Catalog {
     let env = |name: &str| env(name).filter(|one| !one.is_empty());
     let found = claude.is_some();
-    let kept = claude.clone();
-    let claude = match claude {
-      Some(claude) => claude.models(),
-      None => Claude::with(None, None).fixed(),
+    let (kept, claude) = match claude {
+      Some((claude, models)) => (Some(claude), models),
+      None => (None, Claude::with(None, None).fixed()),
     };
     let mut models: Vec<_> = claude.into_iter().map(|model| Offer::new(model, found)).collect();
     let mut providers = Vec::new();
@@ -357,16 +374,33 @@ impl Catalog {
   }
 
   /// What a first run checks: the claude command line, each provider of the network, and the local server, which it
-  /// asks for what it lists, so it never runs on the thread of the reactor.
+  /// asks for what it lists.
   pub fn setup(&self) -> Setup {
+    blocking(self.checked())
+  }
+
+  /// What a first run checks, as [`Catalog::setup`] gives it, for a caller that awaits.
+  pub async fn checked(&self) -> Setup {
     let offered = |provider: &str| {
       let of = |model: &Model| model.name.split_once(':').is_some_and(|(one, _)| one == provider);
       self.models.iter().filter(|one| one.offered && of(&one.model)).count()
     };
     let providers = self.providers.iter();
+    let signed = match &self.claude {
+      Some(claude) => claude.signed().await,
+      None => false,
+    };
+    let local = match &self.local {
+      Some(server) => {
+        let heard = server.heard(None).await;
+        let offered = heard.models.len();
+        Some(Local { address: server.root.clone(), offered, failed: heard.failed })
+      }
+      None => None,
+    };
     Setup {
       claude: offered(claude::CLAUDE) > 0,
-      signed: self.claude.as_ref().is_some_and(Claude::signed),
+      signed,
       providers: providers
         .map(|one| Ready {
           provider: one.name.clone(),
@@ -375,31 +409,45 @@ impl Catalog {
           enabled: one.enabled,
         })
         .collect(),
-      local: self.local.as_ref().map(|server| {
-        let heard = server.heard(None);
-        Local { address: server.root.clone(), offered: heard.models.len(), failed: heard.failed }
-      }),
+      local,
     }
   }
 
   /// What the local server lists, for the name that the catalog wants of it, if any; and nothing when the environment
   /// names no server.
-  fn heard(&self, wanted: Option<&str>) -> Option<Heard> {
-    self.local.as_ref().map(|server| server.heard(wanted))
+  async fn heard(&self, wanted: Option<&str>) -> Option<Heard> {
+    match &self.local {
+      Some(server) => Some(server.heard(wanted).await),
+      None => None,
+    }
   }
 
   /// Every model the catalog offers, by its name: those of the claude command line, then those of the network, then
   /// those of the local server, so the first is the default actor.
   pub fn offered(&self) -> Vec<Model> {
+    blocking(self.offers())
+  }
+
+  /// Every model the catalog offers, as [`Catalog::offered`] gives them, for a caller that awaits.
+  pub async fn offers(&self) -> Vec<Model> {
     let offered = self.models.iter().filter(|one| one.offered).map(|one| one.model.clone());
-    offered.chain(self.heard(None).into_iter().flat_map(|heard| heard.models)).collect()
+    let served = self.heard(None).await.into_iter().flat_map(|heard| heard.models);
+    offered.chain(served).collect()
   }
 
   /// The model a name names: its name, `provider:id`, or an id that one model alone holds, among the models of the
   /// claude command line and of the network, and then, for a name of the provider local or of a provider that the
   /// catalog does not know, among those of the local server.
   pub fn find(&self, name: &str) -> Option<Model> {
-    named(&self.known(), name).cloned().or_else(|| self.served(name))
+    blocking(self.seek(name))
+  }
+
+  /// The model a name names, as [`Catalog::find`] gives it, for a caller that awaits.
+  pub async fn seek(&self, name: &str) -> Option<Model> {
+    match named(&self.known(), name) {
+      Some(model) => Some(model.clone()),
+      None => self.served(name).await,
+    }
   }
 
   /// The models of the claude command line and of the network.
@@ -418,40 +466,57 @@ impl Catalog {
   /// The model of the local server that a name with a colon names: among what the server listed, which the catalog
   /// asks the server for only when the server may hold it, and among what it listed already for any other name, as an
   /// id of Ollama whose part before its colon is the name of a provider of the network.
-  fn served(&self, name: &str) -> Option<Model> {
+  async fn served(&self, name: &str) -> Option<Model> {
     let server = self.local.as_ref().filter(|_| name.contains(':'))?;
-    let heard = if self.asks(name) { server.heard(Some(name)) } else { server.held() };
+    let heard = if self.asks(name) { server.heard(Some(name)).await } else { server.held() };
     named(&heard.models.iter().collect::<Vec<_>>(), name).cloned()
   }
 
   /// The model and the level an actor names: a model alone, or a model and a level after a slash, among the models of
   /// the claude command line and of the network first, and then among those of the local server.
-  fn actor<'a>(&self, actor: &'a str) -> Option<(Model, Option<&'a str>)> {
+  async fn actor<'a>(&self, actor: &'a str) -> Option<(Model, Option<&'a str>)> {
     let split = actor.rsplit_once('/');
-    let known = self.known();
-    if let Some(model) = named(&known, actor) {
-      return Some((model.clone(), None));
-    }
-    if let Some((name, level)) = split
-      && let Some(model) = named(&known, name)
     {
-      return Some((model.clone(), Some(level)));
+      let known = self.known();
+      if let Some(model) = named(&known, actor) {
+        return Some((model.clone(), None));
+      }
+      if let Some((name, level)) = split
+        && let Some(model) = named(&known, name)
+      {
+        return Some((model.clone(), Some(level)));
+      }
     }
-    if let Some(model) = self.served(actor) {
+    if let Some(model) = self.served(actor).await {
       return Some((model, None));
     }
     // A model of the local server is named by its id, so a word after its slash is a level of effort or no name of it.
     let (name, level) = split.filter(|(_, level)| LEVELS.contains(level))?;
-    Some((self.served(name)?, Some(level)))
+    Some((self.served(name).await?, Some(level)))
   }
 
   /// What the catalog still holds of the roster and the actor that a host names, as [`Kept`] says.
   /// A name that no model of the catalog answers to is dropped from the roster and from the actor,
   /// and named in `left`, in the order the host named them, each once.
   pub fn keep(&self, names: Option<&[String]>, actor: Option<&str>) -> Kept {
-    let (found, mut left): (Vec<String>, Vec<String>) =
-      names.unwrap_or_default().iter().cloned().partition(|name| self.find(name).is_some());
-    let held = actor.filter(|name| self.actor(name).is_some());
+    blocking(self.keeping(names, actor))
+  }
+
+  /// What the catalog still holds of a roster and an actor, as [`Catalog::keep`] gives it, for a
+  /// caller that awaits.
+  pub async fn keeping(&self, names: Option<&[String]>, actor: Option<&str>) -> Kept {
+    let (mut found, mut left) = (Vec::new(), Vec::new());
+    for name in names.unwrap_or_default() {
+      if self.seek(name).await.is_some() {
+        found.push(name.clone())
+      } else {
+        left.push(name.clone())
+      }
+    }
+    let held = match actor {
+      Some(name) if self.actor(name).await.is_some() => Some(name),
+      _ => None,
+    };
     let gone = actor.filter(|_| held.is_none()).map(str::to_owned);
     if let Some(name) = gone
       && !left.contains(&name)
@@ -470,27 +535,33 @@ impl Catalog {
     names: Option<&[String]>,
     actor: Option<&str>,
   ) -> Result<(Vec<Model>, Option<String>), Unknown> {
-    let unknown = |name: &str| {
-      let unnamed = self.local.is_none() && name.starts_with(&format!("{LOCAL}:"));
-      let why = unnamed.then(|| format!("no local server is named: set {ENV_URL}"));
-      let heard = || self.asks(name).then(|| self.heard(Some(name))).flatten();
-      let why = why.or_else(|| Some(heard()?.why(name)?.to_owned()));
-      let name = name.to_owned();
-      match why {
-        Some(why) => Unknown::Why { name, why },
-        None => Unknown::Name { name },
+    blocking(self.rostered(names, actor))
+  }
+
+  /// The models of a roster and its default actor, as [`Catalog::roster`] gives them, for a caller
+  /// that awaits.
+  pub async fn rostered(
+    &self,
+    names: Option<&[String]>,
+    actor: Option<&str>,
+  ) -> Result<(Vec<Model>, Option<String>), Unknown> {
+    let mut models = Vec::new();
+    match names {
+      Some(names) => {
+        for name in names {
+          match self.seek(name).await {
+            Some(model) => models.push(model),
+            None => return Err(self.unknown(name).await),
+          }
+        }
       }
-    };
-    let mut models = match names {
-      Some(names) => names
-        .iter()
-        .map(|name| self.find(name).ok_or_else(|| unknown(name)))
-        .collect::<Result<Vec<_>, _>>()?,
-      None => self.offered(),
-    };
+      None => models = self.offers().await,
+    }
     let actor = match actor {
       Some(actor) => {
-        let (model, level) = self.actor(actor).ok_or_else(|| unknown(actor))?;
+        let Some((model, level)) = self.actor(actor).await else {
+          return Err(self.unknown(actor).await);
+        };
         let named = model.at(level);
         models.insert(0, model);
         Some(named)
@@ -500,6 +571,21 @@ impl Catalog {
     let mut seen = HashSet::new();
     models.retain(|model| seen.insert(model.name.clone()));
     Ok((models, actor))
+  }
+
+  /// Why a name is no model of the catalog: no local server is named, or what the local server says
+  /// of it.
+  async fn unknown(&self, name: &str) -> Unknown {
+    let unnamed = self.local.is_none() && name.starts_with(&format!("{LOCAL}:"));
+    let mut why = unnamed.then(|| format!("no local server is named: set {ENV_URL}"));
+    if why.is_none() && self.asks(name) {
+      why = self.heard(Some(name)).await.and_then(|heard| heard.why(name).map(str::to_owned));
+    }
+    let name = name.to_owned();
+    match why {
+      Some(why) => Unknown::Why { name, why },
+      None => Unknown::Name { name },
+    }
   }
 
   /// The provider of a roster of the catalog on a directory, with the default actor of the roster, whose models a
@@ -512,15 +598,38 @@ impl Catalog {
     actor: Option<&str>,
     host: Option<Hosted>,
   ) -> Result<Provider, Unknown> {
-    let (models, actor) = self.roster(names, actor)?;
+    blocking(self.provided(directory.into(), names, actor, host))
+  }
+
+  /// The provider of a roster, as [`Catalog::provider`] gives it, for a caller that awaits.
+  pub async fn provided(
+    &self,
+    directory: String,
+    names: Option<&[String]>,
+    actor: Option<&str>,
+    host: Option<Hosted>,
+  ) -> Result<Provider, Unknown> {
+    let (models, actor) = self.rostered(names, actor).await?;
     let models = match host {
       Some(host) => models.into_iter().map(|model| model.hosted(Arc::clone(&host))).collect(),
       None => models,
     };
-    let directory = directory.into();
     let thinking = super::thinking(self.thinking.as_deref(), std::path::Path::new(&directory));
     Ok(Provider::new(directory, models).actor(actor).thinking(thinking))
   }
+}
+
+/// The one door to the catalog for a caller off the runtime of the ears, as the boot of a life
+/// on its blocking thread and the doors of the bindings are: it waits there for a question of
+/// the catalog that awaits. It panics on a thread of that runtime, so an ear awaits the question
+/// itself.
+#[expect(
+  clippy::disallowed_methods,
+  reason = "debt: the one bridge from the sync doors of the bindings and of the boot of a life to the catalog that \
+            awaits, until the design of the host (#983) makes those doors async"
+)]
+fn blocking<T>(work: impl Future<Output = T>) -> T {
+  crate::ear::runtime().block_on(work)
 }
 
 /// The roster and the actor that a catalog still holds of what a host named, and the names that
@@ -862,7 +971,8 @@ pub(super) fn reached(
 /// The providers of the snapshot, with the models of each that the caches hold, read again by each catalog so that a
 /// life which stands again sees an update. The parse of the caches stays while both files hold the same text, since
 /// the cache of models.dev is several megabytes and a catalog is made at each stand, each setup and each query. The
-/// cache of models.dev is refreshed in the background when it is a day old.
+/// cache of models.dev is refreshed in the background when it is a day old and the host called
+/// [`keep_fresh`].
 fn listed(cached: Option<&PathBuf>) -> Arc<IndexMap<String, Listed>> {
   type Kept = (Option<String>, Option<String>, Arc<IndexMap<String, Listed>>);
   static KEPT: OnceLock<Mutex<HashMap<Option<PathBuf>, Kept>>> = OnceLock::new();

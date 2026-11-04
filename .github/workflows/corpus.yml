@@ -1,0 +1,73 @@
+name: corpus
+
+# The promise of a stable release, as tests/corpus/README.md says: each record of each folder of tests/corpus opens on
+# the build of each pull request, and no file of a folder that a tag holds changes. The title of the pull request says
+# whether the change breaks, so the job runs again when the title is edited. A pull request that changes a line of
+# Cargo.toml that names monty runs the corpus on Linux, macOS and Windows, since monty runs the definitions of a record
+# and a move of its pin may change what they give. Any other pull request runs it on Linux alone.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, edited, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  # The step clear deletes the old cache of rust of the job, on main.
+  actions: write
+
+env:
+  # A gate builds once and runs no debugger, so a build writes no debug information and keeps no incremental state.
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_DEV_INCREMENTAL: "false"
+
+jobs:
+  pin:
+    name: the pin of monty
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      systems: ${{ steps.moved.outputs.systems }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: moved
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if git diff "$BASE"...HEAD -U0 -- Cargo.toml | grep -E '^[+-].*monty'; then
+            echo 'systems=["ubuntu-latest","macos-latest","windows-latest"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'systems=["ubuntu-latest"]' >> "$GITHUB_OUTPUT"
+          fi
+  corpus:
+    needs: pin
+    # The name stays "the corpus" on Linux, which is the check that the branch asks for.
+    name: the corpus${{ matrix.os != 'ubuntu-latest' && format(' on {0}', matrix.os) || '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(needs.pin.outputs.systems) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    steps:
+      # The hook reads the tags and the base of the pull request, so the checkout fetches the whole history.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - if: runner.os == 'Linux'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: python3 script/hooks/corpus.py --base "$BASE" --title "$TITLE"
+      - uses: ./.github/actions/setup
+        with:
+          python: none
+      - run: cargo test -p furb --test promise
+      - uses: ./.github/actions/clear

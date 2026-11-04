@@ -23,7 +23,6 @@
 #![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
 #![expect(clippy::implicit_clone, reason = "debt: to_owned or to_string where clone serves")]
 #![expect(clippy::map_unwrap_or, reason = "debt: map then unwrap_or, where map_or serves")]
-#![expect(clippy::option_option, reason = "debt: an Option of an Option, where an enum serves")]
 #![expect(
   clippy::return_self_not_must_use,
   reason = "debt: a method that returns Self with no must_use"
@@ -44,6 +43,7 @@
 #![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
 #![expect(clippy::used_underscore_binding, reason = "debt: a binding named with _ that is used")]
 
+mod atomic;
 pub mod catalog;
 pub mod claude;
 mod clients;
@@ -67,6 +67,7 @@ use rig_core::{
   completion::{
     CompletionError, CompletionModel, CompletionRequest, CompletionResponse, FinishReason,
   },
+  http_client,
   message::{AssistantContent, Message, Reasoning, Text, UserContent},
   streaming::{StreamFinal, StreamedAssistantContent, StreamingCompletionResponse},
 };
@@ -190,38 +191,86 @@ impl Backoff {
   }
 }
 
-/// Why a call of a model failed, in a few words, when the cause passes: the connection was lost or timed out, the
-/// provider is overloaded, limits the rate, or failed on its side, or the program of the claude command line was
-/// missing, as while an update replaces it. A failure of the request, of the turn, or of a model that the provider
-/// cannot make does not pass, and the model is not asked again.
-fn passing(no: &CompletionError) -> Option<String> {
-  let told = match no {
+/// A cause of a failed call that passes, so the provider asks the model again. Its text is the why
+/// of the retry.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+enum Transient {
+  /// The program of the claude command line was missing, as while an update replaces it.
+  #[error("the program is missing")]
+  Missing,
+  /// The account of the claude command line was parked, and the next call runs as another one.
+  #[error("{0}")]
+  Switched(String),
+  #[error("connection reset")]
+  Reset,
+  #[error("timed out")]
+  TimedOut,
+  #[error("the provider is overloaded")]
+  Overloaded,
+  #[error("rate limited")]
+  RateLimited,
+  #[error("connection lost")]
+  Lost,
+  /// A status of the side of the provider: 500, 502, 503 or 504.
+  #[error("server error {0}")]
+  Server(u16),
+  #[error("network error")]
+  Network,
+}
+
+/// The HTTP status that a failure carries: the status of an HTTP error of rig, or the status that
+/// heads the text of a provider, as `503 Service Unavailable`, or that follows `status code`, as
+/// rig words it. A number elsewhere in the text is no status.
+fn status(no: &CompletionError) -> Option<u16> {
+  let said = match no {
+    CompletionError::HttpError(
+      http_client::Error::InvalidStatusCode(code)
+      | http_client::Error::InvalidStatusCodeWithMessage(code, _)
+      | http_client::Error::InvalidStatusCodeWithDetails { status: code, .. },
+    ) => return Some(code.as_u16()),
     CompletionError::HttpError(no) => no.to_string(),
     CompletionError::ProviderError(why) => why.clone(),
     _ => return None,
   };
-  let said = told.to_lowercase();
+  let lower = said.to_lowercase();
+  let after = lower.split_once("status code").map_or(lower.as_str(), |(_, rest)| rest.trim_start());
+  let head: String = after.chars().take_while(char::is_ascii_digit).collect();
+  let ends = after[head.len()..].chars().next().is_none_or(|one| !one.is_ascii_alphanumeric());
+  if head.len() == 3 && ends { head.parse().ok() } else { None }
+}
+
+/// Why a call of a model failed, when the cause passes: the connection was lost or timed out, the
+/// provider is overloaded, limits the rate, or failed on its side, or the program of the claude
+/// command line was missing, as while an update replaces it. A failure of the request, of the turn,
+/// or of a model that the provider cannot make does not pass, and the model is not asked again.
+fn passing(no: &CompletionError) -> Option<Transient> {
+  match claude::error(no) {
+    Some(claude::Error::Missing(_)) => return Some(Transient::Missing),
+    Some(why @ claude::Error::Switched(_)) => return Some(Transient::Switched(why.to_string())),
+    Some(_) => return None,
+    None => {}
+  }
+  let said = match no {
+    CompletionError::HttpError(no) => no.to_string(),
+    CompletionError::ProviderError(why) => why.clone(),
+    _ => return None,
+  }
+  .to_lowercase();
   let has = |words: &[&str]| words.iter().any(|one| said.contains(one));
-  let status = said
-    .split(|one: char| !one.is_ascii_digit())
-    .find(|one| matches!(*one, "408" | "429" | "500" | "502" | "503" | "504" | "529"));
-  let why = if said.starts_with(&claude::MISSING.to_lowercase()) {
-    "the program is missing".to_owned()
-  } else if said.starts_with(&claude::SWITCHED.to_lowercase()) {
-    told
-  } else if has(&["connection reset", "reset by peer"]) {
-    "connection reset".to_owned()
-  } else if has(&["timed out", "timeout"]) || status == Some("408") {
-    "timed out".to_owned()
-  } else if has(&["overloaded"]) || status == Some("529") {
-    "the provider is overloaded".to_owned()
-  } else if has(&["rate limit", "too many requests"]) || status == Some("429") {
-    "rate limited".to_owned()
+  let status = status(no);
+  let why = if has(&["connection reset", "reset by peer"]) {
+    Transient::Reset
+  } else if has(&["timed out", "timeout"]) || status == Some(408) {
+    Transient::TimedOut
+  } else if has(&["overloaded"]) || status == Some(529) {
+    Transient::Overloaded
+  } else if has(&["rate limit", "too many requests"]) || status == Some(429) {
+    Transient::RateLimited
   } else if has(&["connection closed", "connection error", "broken pipe", "error sending request"])
   {
-    "connection lost".to_owned()
-  } else if let Some(code) = status {
-    format!("server error {code}")
+    Transient::Lost
+  } else if let Some(code @ (500 | 502 | 503 | 504)) = status {
+    Transient::Server(code)
   } else if has(&[
     "connection refused",
     "could not resolve",
@@ -229,11 +278,17 @@ fn passing(no: &CompletionError) -> Option<String> {
     "tls handshake",
     "network is unreachable",
   ]) {
-    "network error".to_owned()
+    Transient::Network
   } else {
     return None;
   };
   Some(why)
+}
+
+/// A failed call in words: a failure of the claude command line as a provider error, as it always
+/// read.
+fn failure(no: &CompletionError) -> String {
+  claude::error(no).map_or_else(|| no.to_string(), |why| format!("ProviderError: {why}"))
 }
 
 /// Whether a failed call can be corrected by another turn of the model: a transient provider fault,
@@ -273,24 +328,10 @@ const SIGN_POLL: Duration = Duration::from_secs(60);
 /// The time after the end of a limit that the provider waits, so the call is not made before the limit lifts.
 const LIMIT_SLACK: Duration = Duration::from_secs(1);
 
-/// Whether a failure is the usage limit of the claude command line, and then the moment it ends, if its message names
-/// one. A limit passes at its reset, so the provider asks again then, however long that takes.
-fn limit(no: &CompletionError, now: &Zoned) -> Option<Option<Zoned>> {
-  let CompletionError::ProviderError(said) = no else { return None };
-  let lower = said.to_lowercase();
-  (lower.contains("usage limit reached") || (lower.contains("limit") && lower.contains("resets")))
-    .then(|| resets(said, now))
-}
-
 /// The moment a usage limit ends, from the message of the claude command line: `resets 5:10pm (Europe/Paris)`, with
 /// a day before the time, as `resets Oct 28, 3pm`, when it ends in a later day, a time with no zone being in the zone
-/// of the machine, or the older `usage limit reached|1760000000`. A time with no day is the next one after now.
+/// of the machine. A time with no day is the next one after now.
 fn resets(said: &str, now: &Zoned) -> Option<Zoned> {
-  if let Some((_, epoch)) = said.rsplit_once('|')
-    && let Ok(second) = epoch.trim().parse::<i64>()
-  {
-    return Timestamp::from_second(second).ok().map(|at| at.to_zoned(now.time_zone().clone()));
-  }
   let rest = said.split_once("resets")?.1.trim();
   let (head, zone) = match rest.split_once('(') {
     Some((head, zone)) => (head, TimeZone::get(zone.split_once(')')?.0.trim()).ok()?),
@@ -677,7 +718,7 @@ pub type Advertised = (String, String, String, bool);
 /// settings give them.
 type Settings = (Vec<Model>, Option<String>, Thinking);
 
-type Refresh = Arc<dyn Fn() -> Result<Settings, String> + Send + Sync>;
+type Refresh = Arc<dyn Fn() -> BoxFuture<'static, Result<Settings, String>> + Send + Sync>;
 
 impl Provider {
   /// A provider of these models, on a directory, whose model thinks [`THINKING`] tokens at most in one turn.
@@ -1101,7 +1142,7 @@ impl Provider {
                   }
                   Some(_) => "the turn does not hold the word that ran".to_owned(),
                   None => match &got {
-                    Err(no) => format!("{STOPPED}: {no}"),
+                    Err(no) => format!("{STOPPED}: {}", failure(no)),
                     Ok(_) => "the turn holds no word".to_owned(),
                   },
                 };
@@ -1116,7 +1157,7 @@ impl Provider {
                         &chain,
                         &rung,
                         STOPPED,
-                        &[("why", &no.to_string()), ("ran", &ending(&ran))],
+                        &[("why", &failure(no)), ("ran", &ending(&ran))],
                       )
                       .await
                     }
@@ -1142,7 +1183,8 @@ impl Provider {
               );
             }
             let recoverable = got.as_ref().is_err_and(recoverable);
-            let got = got.map_err(|no| format!("{} answered nothing: {no}", reply.actor));
+            let got =
+              got.map_err(|no| format!("{} answered nothing: {}", reply.actor, failure(&no)));
             if let (Err(why), true) = (&got, reply.again)
               && !recoverable
             {
@@ -1171,11 +1213,10 @@ impl Provider {
             let first = !std::mem::replace(&mut stood, true);
             if let Some(refresh) = refresh.as_ref().filter(|_| !first && !word) {
               // Reading the settings asks each program of a model, which can take seconds, so the
-              // stand reads them on the runtime of the ears, and every chain of the life goes on
-              // meanwhile.
+              // stand awaits them as a task of the runtime of the ears, and every chain of the life
+              // goes on meanwhile.
               say(&mut co, Fact::says("started", &about, []));
-              let refresh = Arc::clone(refresh);
-              let read = runtime().spawn_blocking(move || refresh());
+              let read = runtime().spawn(refresh());
               co.work(stream::once(read.map(move |got| {
                 let got = got.map_err(|no| no.to_string()).and_then(|got| got);
                 Replied::Refreshed { about, got }
@@ -1971,8 +2012,11 @@ fn answered(
           Ok(Answer::Turn(turn)) => return hosted(turn.as_ref()).map(|one| (one, None)),
           Err(no) => no,
         };
-        if let Some(reset) = limit(&no, &Zoned::now()) {
+        if let Some(claude::Error::Limit { until }) = claude::error(&no) {
           let now = Zoned::now();
+          let reset = until
+            .and_then(|at| Timestamp::try_from(at).ok())
+            .map(|at| at.to_zoned(now.time_zone().clone()));
           let wait = reset.as_ref().map_or(LIMIT_POLL, |at| {
             let seconds = at.timestamp().as_second() - now.timestamp().as_second();
             Duration::from_secs(u64::try_from(seconds).unwrap_or(0)) + LIMIT_SLACK
@@ -1991,7 +2035,7 @@ fn answered(
           released(&mut hold).await?;
           continue;
         }
-        if claude::signed_out(&no) {
+        if let Some(claude::Error::SignedOut(_)) = claude::error(&no) {
           let why = "signed out, sign in again".to_owned();
           let retry = Retry { attempt: attempt + 1, most: backoff.most, wait: SIGN_POLL, why };
           tells
@@ -2003,6 +2047,7 @@ fn answered(
           continue;
         }
         let Some(why) = passing(&no).filter(|_| attempt < backoff.most) else { return Err(no) };
+        let why = why.to_string();
         attempt += 1;
         let wait = backoff.wait(attempt);
         let retry = Retry { attempt, most: backoff.most, wait, why };
@@ -2236,6 +2281,11 @@ fn uuid_from(
     &digits[16..20],
     &digits[20..]
   ))
+}
+
+/// The numbers of a text, in order, which sort as a version does: `1.10.0` is greater than `1.4.0`.
+fn numbers(text: &str) -> Vec<u64> {
+  text.split(|one: char| !one.is_ascii_digit()).filter_map(|part| part.parse().ok()).collect()
 }
 
 #[cfg(test)]

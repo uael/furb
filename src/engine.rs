@@ -24,7 +24,6 @@
   reason = "debt: an assignment of a clone, where clone_from serves"
 )]
 #![expect(clippy::cast_precision_loss, reason = "debt: an as cast that loses precision")]
-#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
 #![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
 #![expect(clippy::match_bool, reason = "debt: a match on a bool")]
 #![expect(
@@ -45,6 +44,7 @@
 use std::{
   cell::RefCell,
   collections::{HashMap, HashSet},
+  convert::Infallible,
   future::Future,
   marker::PhantomData,
   pin::Pin,
@@ -64,7 +64,7 @@ use crate::{
   gate::checked,
   sand::{Answer, Host, Nobody, Sand, id, object},
   snapshot::Keeper,
-  value::{Exit, Fault, IS, Object, Text, carried, entry, inward, marked},
+  value::{Exit, Fault, Given, IS, Object, Text, carried, entry, inward, marked},
 };
 
 /// The views of the engine, which make nothing: the verbs that an ear calls while it hears the past at a restore,
@@ -235,24 +235,24 @@ def __lasting(name, ear):
         return
 
 
-(
-  lambda: {name: x for name, x in __engine.items() if not name.startswith("_") and callable(x)},
-  lambda name, /, *args, **kwargs: __engine[name](*args, **kwargs),
-  __fresh["kernel"](),
-  __fresh["gate"](),
-  lambda: __engine["site"].get(),
-  lambda by: __engine["site"].set(by),
-  lambda token: __engine["site"].reset(token),
-  lambda word, names: eval(word, __engine, names),
-  lambda held: Template(*[x if isinstance(x, str) else Interpolation(*x) for x in held]),
-  lambda x: None if callable(x) else repr(x),
-  lambda cls: cls.__bases__[0],
-  __parking,
-  lambda names: __parked.update(names),
-  lambda name: __parked.discard(name),
-  lambda on, word: __sheet["against"](__engine, __gate, on, word),
-  __lasting,
-)"#;
+{
+  "names": lambda: {name: x for name, x in __engine.items() if not name.startswith("_") and callable(x)},
+  "call": lambda name, /, *args, **kwargs: __engine[name](*args, **kwargs),
+  "kernel": __fresh["kernel"](),
+  "gate": __fresh["gate"](),
+  "site": lambda: __engine["site"].get(),
+  "speaks": lambda by: __engine["site"].set(by),
+  "spoke": lambda token: __engine["site"].reset(token),
+  "word": lambda word, names: eval(word, __engine, names),
+  "template": lambda held: Template(*[x if isinstance(x, str) else Interpolation(*x) for x in held]),
+  "shown": lambda x: None if callable(x) else repr(x),
+  "base": lambda cls: cls.__bases__[0],
+  "parking": __parking,
+  "park": lambda names: __parked.update(names),
+  "unpark": lambda name: __parked.discard(name),
+  "against": lambda on, word: __sheet["against"](__engine, __gate, on, word),
+  "lasting": __lasting,
+}"#;
 
 /// The next number a callable or a class goes out under, in this process.
 static NUMBERS: AtomicI64 = AtomicI64::new(1);
@@ -271,6 +271,25 @@ type Watcher = Box<dyn FnMut(&Object)>;
 struct Handed {
   ears: HashMap<String, Box<dyn Ear>>,
   calls: HashMap<String, Callable>,
+}
+
+impl Handed {
+  /// The ears that a host gives a life, each under its name, and the names in the order it gave
+  /// them. A name given twice is refused.
+  fn of<N: Into<String>>(
+    ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
+  ) -> Result<(Handed, Vec<String>), Fault> {
+    let mut given = Handed::default();
+    let mut names = Vec::new();
+    for (name, ear) in ears {
+      let name = name.into();
+      if given.ears.insert(name.clone(), ear).is_some() {
+        return Err(Fault::refused(format!("{name} hears")));
+      }
+      names.push(name);
+    }
+    Ok((given, names))
+  }
 }
 
 thread_local! {
@@ -402,12 +421,19 @@ fn templated(pairs: &[(&str, Object)]) -> Object {
   )
 }
 
-/// What the opening gave: the callables of the sandbox that the host calls it by, each held under its handle.
-struct Opened {
+/// What the opening gave, by name: the callables of the sandbox that the host calls it by, each
+/// held under its handle, as a snapshot holds them too.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub(crate) struct Opened {
   /// The names of the engine that are callable, read again after boot, which binds some of them.
   names: Object,
   /// A name of the engine, called where it stands when it is called.
   call: Object,
+  /// The Kernel of the crate, which boot is given as an ear.
+  kernel: Object,
+  /// The gate of the crate, which boot is given as an ear.
+  gate: Object,
   /// Who speaks: `site`, read.
   site: Object,
   /// Who speaks from now on: `site`, set, which gives the token that resets it.
@@ -422,51 +448,47 @@ struct Opened {
   shown: Object,
   /// The class a class was made with.
   base: Object,
+  /// An ear wrapped so that it holds each act of the park until the park lets it go.
+  parking: Object,
+  /// Names put into the park.
+  park: Object,
   /// A name taken out of the parked names of the park.
   unpark: Object,
   /// What the gate finds against a word on a chain, which makes no fact.
   against: Object,
+  /// An ear wrapped so that it starts again after it raises.
+  lasting: Object,
+}
+
+impl Default for Opened {
+  /// Nothing under each name, as a life of nothing holds it.
+  fn default() -> Opened {
+    let Ok(none) = Opened::of(|_| Ok::<_, Infallible>(Object::none()));
+    none
+  }
 }
 
 impl Opened {
-  /// The callables of the opening, each at its place in what the opening gave, and nothing at a place that boot alone
-  /// takes, as a snapshot holds them.
-  fn list(&self) -> Vec<Object> {
-    let mut held = vec![Object::none(); 16];
-    let named = [
-      (0, &self.names),
-      (1, &self.call),
-      (4, &self.site),
-      (5, &self.speaks),
-      (6, &self.spoke),
-      (7, &self.word),
-      (8, &self.template),
-      (9, &self.shown),
-      (10, &self.base),
-      (13, &self.unpark),
-      (14, &self.against),
-    ];
-    for (at, one) in named {
-      held[at] = one.clone();
-    }
-    held
-  }
-
-  /// The callables of the opening, each by its place in what the opening gave.
-  fn of(at: impl Fn(usize) -> Object) -> Opened {
-    Opened {
-      names: at(0),
-      call: at(1),
-      site: at(4),
-      speaks: at(5),
-      spoke: at(6),
-      word: at(7),
-      template: at(8),
-      shown: at(9),
-      base: at(10),
-      unpark: at(13),
-      against: at(14),
-    }
+  /// The callables of the opening, each by its name.
+  fn of<E>(mut at: impl FnMut(&'static str) -> Result<Object, E>) -> Result<Opened, E> {
+    Ok(Opened {
+      names: at("names")?,
+      call: at("call")?,
+      kernel: at("kernel")?,
+      gate: at("gate")?,
+      site: at("site")?,
+      speaks: at("speaks")?,
+      spoke: at("spoke")?,
+      word: at("word")?,
+      template: at("template")?,
+      shown: at("shown")?,
+      base: at("base")?,
+      parking: at("parking")?,
+      park: at("park")?,
+      unpark: at("unpark")?,
+      against: at("against")?,
+      lasting: at("lasting")?,
+    })
   }
 }
 
@@ -514,7 +536,7 @@ impl Default for Outside {
     Outside {
       handed: Handed::default(),
       waker: Waker::noop().clone(),
-      opened: Opened::of(|_| Object::none()),
+      opened: Opened::default(),
       names: HashMap::new(),
       named: HashMap::new(),
       made: HashMap::new(),
@@ -553,8 +575,9 @@ impl Host for Outside {
 fn gated(sheet: Option<&Object>) -> Result<Object, Fault> {
   let sheet = sheet.and_then(|one| one.as_ref().as_str().map(str::to_owned)).unwrap_or_default();
   let found = checked(&sheet)?;
-  Ok(Object::list(found.into_iter().map(|(line, why)| {
-    Object::tuple([Object::int(i64::try_from(line).unwrap_or_default()), Object::string(why)])
+  Ok(Object::list(found.into_iter().map(|one| {
+    let line = i64::try_from(one.line).unwrap_or_default();
+    Object::tuple([Object::int(line), Object::string(one.to_string())])
   })))
 }
 
@@ -587,15 +610,18 @@ impl Outside {
     self.handed.ears.values().any(|ear| ear.behind())
   }
 
-  /// The side of the host, on what the opening gave.
-  fn new(given: Handed, opened: &Object) -> Outside {
-    let got = opened.as_ref();
-    let at = |i: usize| {
-      entry(&got, i).map(|one| one.to_owned()).expect("the opening gives sixteen callables")
-    };
-    let opened = Opened::of(at);
-    let kept = (0..16).filter_map(|i| at(i).as_ref().handle()).collect();
-    Outside { handed: given, opened, kept, ..Outside::default() }
+  /// The side of the host, on what the opening gave: a dict of its callables by name, each of which
+  /// the engine keeps.
+  fn new(given: Handed, opened: &Object) -> Result<Outside, Fault> {
+    let mut held: HashMap<String, Object> = (opened.as_ref().pairs().unwrap_or_default())
+      .into_iter()
+      .filter_map(|(name, one)| Some((name.as_str()?.to_owned(), one.to_owned())))
+      .collect();
+    let kept = held.values().filter_map(|one| one.as_ref().handle()).collect();
+    let opened = Opened::of(|name| {
+      held.remove(name).ok_or_else(|| Fault::refused(format!("the opening gives no {name}")))
+    })?;
+    Ok(Outside { handed: given, opened, kept, ..Outside::default() })
   }
 
   /// A new id of the host, for an object of the host or for an instance made again in the sandbox.
@@ -680,7 +706,7 @@ impl Outside {
   fn site(&mut self, sand: &mut Sand, value: Option<&Object>) -> Result<Object, Fault> {
     let (site, speaks) = (self.opened.site.clone(), self.opened.speaks.clone());
     let previous = sand.call(self, &site, vec![], vec![])?;
-    if let Some(value) = value.filter(|one| one.as_ref().type_name() != "NoneType") {
+    if let Some(value) = value.filter(|one| !one.as_ref().is_none()) {
       let by = value.as_ref().as_str().map_or_else(|| value.py_repr(), str::to_owned);
       let token = sand.call(self, &speaks, vec![Object::string(by)], vec![])?;
       if let Some(handle) = token.as_ref().handle() {
@@ -815,7 +841,7 @@ impl Outside {
     let Some((name, at)) = self.standing.get(&on).cloned() else {
       return Answer::Abort(Fault::refused(format!("{on} is no object of the host")));
     };
-    let a = a.filter(|one| one.as_ref().type_name() != "NoneType");
+    let a = a.filter(|one| !one.as_ref().is_none());
     let heard = match (at, a) {
       (At::Over, _) => return Answer::Fault(Fault::new("StopIteration", vec![])),
       (At::Unborn, Some(_)) => {
@@ -882,7 +908,6 @@ impl Outside {
   /// The side of the host of a life that a snapshot holds, on the ears that the host gives again: each ear stands
   /// under the id and at the place where its earlier ear stood, and the host holds what the engine held.
   fn restored(handed: Handed, table: &Table) -> Result<Outside, Fault> {
-    let at = |i: usize| table.opened.get(i).cloned().unwrap_or_else(Object::none);
     let mut standing = HashMap::new();
     for (id, name, waits) in &table.ears {
       if !handed.ears.contains_key(name) {
@@ -895,7 +920,14 @@ impl Outside {
     let given =
       table.given.parse().map_err(|_| Fault::refused("a snapshot counts the ids of the host"))?;
     let kept = table.kept.iter().copied().collect();
-    Ok(Outside { handed, opened: Opened::of(at), kept, standing, given, ..Outside::default() })
+    Ok(Outside {
+      handed,
+      opened: table.opened.clone(),
+      kept,
+      standing,
+      given,
+      ..Outside::default()
+    })
   }
 
   /// Each ear that waits, in the order of its id, as the host gives it.
@@ -980,7 +1012,7 @@ impl Outside {
         Some(act) => *act,
         None => {
           let got = self.named_call(sand, "get", vec![Object::string(&by)], vec![])?;
-          let act = got.as_ref().type_name() != "NoneType";
+          let act = !got.as_ref().is_none();
           acts.insert(by.clone(), act);
           act
         }
@@ -1397,7 +1429,7 @@ pub(crate) struct Table {
   pub(crate) root: String,
   pub(crate) ears: Vec<(MontyUuid, String, bool)>,
   pub(crate) kept: Vec<MontyUuid>,
-  pub(crate) opened: Vec<Object>,
+  pub(crate) opened: Opened,
   pub(crate) given: String,
   /// The work of the outside that ran: each act by its name, with the name of the ear that took it.
   pub(crate) working: Vec<(String, String)>,
@@ -1502,6 +1534,24 @@ impl Engine {
     self.run(|sand, outside| outside.said(sand, first))
   }
 
+  /// An engine on a sandbox and the side of its host, before any run: the record says what work it
+  /// left and what loops, and whether the life opened from a snapshot.
+  fn new(sand: Sand, outside: Outside, record: &[Object], root: String, restored: bool) -> Engine {
+    Engine {
+      sand,
+      outside,
+      watchers: HashMap::new(),
+      root,
+      raised: None,
+      stopped: None,
+      holding: left(record),
+      parked: looping(record),
+      keeper: None,
+      restored,
+      taken: crate::checkpoint::taken(record),
+    }
+  }
+
   /// An engine, opened from the record, on these ears, each under the name the engine hears it by, in the order
   /// the engine offers them a question.
   ///
@@ -1511,15 +1561,7 @@ impl Engine {
     record: impl IntoIterator<Item = Object>,
     ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
   ) -> Result<Engine, Fault> {
-    let mut given = Handed::default();
-    let mut names = Vec::new();
-    for (name, ear) in ears {
-      let name = name.into();
-      if given.ears.insert(name.clone(), ear).is_some() {
-        return Err(Fault::refused(format!("{name} hears")));
-      }
-      names.push(name);
-    }
+    let (given, names) = Handed::of(ears)?;
     let mut sand = Sand::new();
     let mut inputs = NamedValues::new();
     inputs.push("__source", Object::string(ENGINE));
@@ -1528,36 +1570,12 @@ impl Engine {
     inputs.push("__gate", Object::function(GATE, None));
     inputs.push("__again", Object::function(AGAIN, None));
     let opened = sand.run(OPENING, inputs, &mut Nobody("the opening"))?;
-    let mut outside = Outside::new(given, &opened);
-    let got = opened.as_ref();
-    let (kernel, gate) = (entry(&got, 2), entry(&got, 3));
-    let (kernel, gate) = (
-      kernel.expect("the opening gives the Kernel").to_owned(),
-      gate.expect("and the gate").to_owned(),
-    );
-    let lasting = entry(&got, 15).expect("the opening gives the lasting ear").to_owned();
-    let (parking, park) = (entry(&got, 11), entry(&got, 12));
-    let (parking, park) = (
-      parking.expect("the opening gives the park").to_owned(),
-      park.expect("and its names").to_owned(),
-    );
+    let mut outside = Outside::new(given, &opened)?;
+    let Opened { kernel, gate, lasting, parking, park, .. } = outside.opened.clone();
     let record = seeded(&mut sand, &mut outside, record.into_iter().collect())?;
-    let (watchers, holding, parked) = (HashMap::new(), left(&record), looping(&record));
-    let names_parked = Object::list(parked.iter().map(|(id, _)| Object::string(id)));
-    let parks = !parked.is_empty();
-    let mut engine = Engine {
-      sand,
-      outside,
-      watchers,
-      root: String::new(),
-      raised: None,
-      stopped: None,
-      holding,
-      parked,
-      keeper: None,
-      restored: false,
-      taken: crate::checkpoint::taken(&record),
-    };
+    let mut engine = Engine::new(sand, outside, &record, String::new(), false);
+    let names_parked = Object::list(engine.parked.iter().map(|(id, _)| Object::string(id)));
+    let parks = !engine.parked.is_empty();
     let (root, raised) = engine.run(|sand, outside| {
       outside.bound(sand)?;
       let mut entries = Vec::new();
@@ -1593,7 +1611,7 @@ impl Engine {
         Ok(root) => (root.as_ref().as_str().unwrap_or_default().to_owned(), None),
         Err(fault) => {
           let root = outside.named_call(sand, "get", vec![Object::string("chain1")], vec![])?;
-          let root = if root.as_ref().type_name() == "NoneType" { "" } else { "chain1" };
+          let root = if root.as_ref().is_none() { "" } else { "chain1" };
           (root.to_owned(), Some(fault))
         }
       };
@@ -1617,28 +1635,9 @@ impl Engine {
     sand: Sand,
     past: &[Object],
   ) -> Result<Engine, Fault> {
-    let mut given = Handed::default();
-    for (name, ear) in ears {
-      let name = name.into();
-      if given.ears.insert(name.clone(), ear).is_some() {
-        return Err(Fault::refused(format!("{name} hears")));
-      }
-    }
+    let (given, _) = Handed::of(ears)?;
     let outside = Outside::restored(given, table)?;
-    let (holding, parked) = (left(record), looping(record));
-    let mut engine = Engine {
-      sand,
-      outside,
-      watchers: HashMap::new(),
-      root: table.root.clone(),
-      raised: None,
-      stopped: None,
-      holding,
-      parked,
-      keeper: None,
-      restored: true,
-      taken: crate::checkpoint::taken(record),
-    };
+    let mut engine = Engine::new(sand, outside, record, table.root.clone(), true);
     engine.run(|sand, outside| {
       outside.bound(sand)?;
       outside.retold(sand, past)
@@ -1673,7 +1672,7 @@ impl Engine {
     ears.sort_unstable_by_key(|one| one.0);
     let mut kept: Vec<_> = outside.kept.iter().copied().collect();
     kept.sort_unstable();
-    let opened = outside.opened.list();
+    let opened = outside.opened.clone();
     let mut working: Vec<_> =
       outside.working.iter().map(|(id, name)| (id.clone(), name.clone())).collect();
     working.sort_unstable();
@@ -2007,7 +2006,7 @@ made!(Text => "text", Exit => "exit", Fact => "fact");
 
 impl<T: Plain> Plain for Option<T> {
   fn plain(got: Object) -> Result<Self, Fault> {
-    if got.as_ref().type_name() == "NoneType" { Ok(None) } else { T::plain(got).map(Some) }
+    if got.as_ref().is_none() { Ok(None) } else { T::plain(got).map(Some) }
   }
 }
 

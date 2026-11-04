@@ -14,7 +14,7 @@ use rig_core::http_client::{
   sse::{Event, GenericEventSource},
 };
 
-use super::CodexHttp;
+use super::{Amended, CodexHttp};
 use crate::ear::reactor;
 
 #[test]
@@ -39,7 +39,7 @@ fn subscription_events_stream_when_the_response_has_no_content_type() {
   let request =
     Request::get(format!("http://{address}/responses")).body(Vec::<u8>::new()).expect("request");
   let text = reactor().block_on(async {
-    let mut source = GenericEventSource::new(CodexHttp::default(), request);
+    let mut source = GenericEventSource::new(Amended::new(CodexHttp::default()), request);
     loop {
       match source.next().await.expect("an event").expect("valid subscription event") {
         Event::Open => {}

@@ -183,7 +183,8 @@ fn each_model_for_chat_that_the_server_lists_is_offered_with_the_window_and_the_
       "output_modalities": ["embeddings"]}},
   ]});
   let (address, told) = fake(move |request| at(request, "/v1/models").then(|| list.clone()));
-  let heard = on(&address, &[("FURB_LOCAL_KEY", "k"), ("FURB_LOCAL_TOKENS", "1000")]).heard(None);
+  let heard =
+    on(&address, &[("FURB_LOCAL_KEY", "k"), ("FURB_LOCAL_TOKENS", "1000")]).heard_now(None);
   assert_eq!(
     offered(&heard),
     [
@@ -228,7 +229,11 @@ fn a_server_that_lists_no_window_gives_it_where_its_kind_of_server_gives_it() {
     }
   });
   let quarter = ("local:one".to_owned(), 16_384, false, Some(4096));
-  assert_eq!(offered(&on(&address, &[]).heard(None)), [quarter], "llama.cpp gives it at /props");
+  assert_eq!(
+    offered(&on(&address, &[]).heard_now(None)),
+    [quarter],
+    "llama.cpp gives it at /props"
+  );
   let (address, _) = fake(|request| {
     if at(request, "/v1/models") {
       Some(json!({"data": [{"id": "a"}, {"id": "b"}, {"id": "c"}, {"id": "d"}]}))
@@ -241,7 +246,7 @@ fn a_server_that_lists_no_window_gives_it_where_its_kind_of_server_gives_it() {
       })
     }
   });
-  let heard = on(&address, &[]).heard(None);
+  let heard = on(&address, &[]).heard_now(None);
   let studio = [
     ("local:a".to_owned(), 8192, false, Some(2048)),
     ("local:c".to_owned(), 4096, true, Some(1024)),
@@ -276,7 +281,7 @@ fn a_server_that_lists_no_window_gives_it_where_its_kind_of_server_gives_it() {
         .then(|| json!({"capabilities": ["embedding"], "model_info": {"bert.context_length": 512}}))
     }
   });
-  let heard = on(&address, &[]).heard(None);
+  let heard = on(&address, &[]).heard_now(None);
   let ollama = [
     ("local:x".to_owned(), 32_768, false, Some(8192)),
     ("local:y".to_owned(), 8192, true, Some(2048)),
@@ -294,12 +299,12 @@ fn a_server_that_lists_no_window_gives_it_where_its_kind_of_server_gives_it() {
   assert_eq!(heard.why("local:e"), Some("the local server says that it is not a model for chat"));
   let (address, _) =
     fake(|request| at(request, "/v1/models").then(|| json!({"data": [{"id": "z"}]})));
-  let heard = on(&address, &[]).heard(None);
+  let heard = on(&address, &[]).heard_now(None);
   assert_eq!(
     (heard.models.len(), heard.why("local:z")),
     (0, Some("the local server gives no window of it: set FURB_LOCAL_WINDOW"))
   );
-  let heard = on(&address, &[("FURB_LOCAL_WINDOW", "2048")]).heard(None);
+  let heard = on(&address, &[("FURB_LOCAL_WINDOW", "2048")]).heard_now(None);
   assert_eq!(
     offered(&heard),
     [("local:z".to_owned(), 2048, false, Some(512))],
@@ -311,7 +316,7 @@ fn a_server_that_lists_no_window_gives_it_where_its_kind_of_server_gives_it() {
 fn a_server_that_answers_nothing_in_time_offers_no_model_and_is_asked_again_once_a_delay_passed() {
   let port = dropping();
   let server = on(&format!("http://user:secret@127.0.0.1:{port}"), &[]);
-  let heard = server.heard(None);
+  let heard = server.heard_now(None);
   let why = heard.why("local:any").unwrap_or_default().to_owned();
   let shown = format!("the local server at http://127.0.0.1:{port} lists no model: ");
   assert!(why.starts_with(&shown) && !why.contains("secret"), "{why}");
@@ -335,20 +340,20 @@ fn a_server_that_answers_nothing_in_time_offers_no_model_and_is_asked_again_once
   });
   let server = on(&address, &[]);
   assert!(
-    server.heard(None).why("local:m").is_some(),
+    server.heard_now(None).why("local:m").is_some(),
     "a server that answers with an error lists nothing"
   );
   assert!(
-    server.heard(None).models.is_empty(),
+    server.heard_now(None).models.is_empty(),
     "a server that listed nothing is not asked again before the delay"
   );
   assert_eq!(lists(&told), 1);
   thread::sleep(AGAIN);
   let names = |heard: Heard| heard.models.iter().map(|one| one.name.clone()).collect::<Vec<_>>();
   let first = ["local:m", "local:Qwen/Qwen3-8B"];
-  assert_eq!(names(server.heard(None)), first);
+  assert_eq!(names(server.heard_now(None)), first);
   assert_eq!(
-    names(server.heard(Some("local:new"))),
+    names(server.heard_now(Some("local:new"))),
     first,
     "a list is not asked again before the delay"
   );
@@ -356,32 +361,32 @@ fn a_server_that_answers_nothing_in_time_offers_no_model_and_is_asked_again_once
   thread::sleep(AGAIN);
   for wanted in [None, Some("local:Qwen/Qwen3-8B/high"), Some("Qwen/Qwen3-8B"), Some("local:m")] {
     assert_eq!(
-      names(server.heard(wanted)),
+      names(server.heard_now(wanted)),
       first,
       "a list that names what the catalog wants holds: {wanted:?}"
     );
   }
   assert_eq!(lists(&told), 0);
   let all = ["local:m", "local:Qwen/Qwen3-8B", "local:new"];
-  assert_eq!(names(server.heard(Some("local:new/high"))), all);
+  assert_eq!(names(server.heard_now(Some("local:new/high"))), all);
   assert_eq!(
     lists(&told),
     1,
     "a list that names no model of a name is asked again after the delay"
   );
-  let why = server.heard(Some("local:z/high")).why("local:z/high").map(str::to_owned);
+  let why = server.heard_now(Some("local:z/high")).why("local:z/high").map(str::to_owned);
   assert_eq!(why.as_deref(), Some("the local server gives no window of it: set FURB_LOCAL_WINDOW"));
   thread::sleep(AGAIN);
-  server.heard(Some("local:z"));
+  server.heard_now(Some("local:z"));
   assert_eq!(
     lists(&told),
     1,
     "a model that the list holds and does not offer is asked for after the delay"
   );
-  server.heard(None);
+  server.heard_now(None);
   assert_eq!(lists(&told), 0, "a list is not asked again before the delay");
   thread::sleep(AGAIN);
-  server.heard(None);
+  server.heard_now(None);
   assert_eq!(
     lists(&told),
     1,
@@ -393,7 +398,7 @@ fn a_server_that_answers_nothing_in_time_offers_no_model_and_is_asked_again_once
   let address = format!("http://127.0.0.1:{port}");
   let (tells, told) = mpsc::channel();
   thread::spawn(move || {
-    tells.send(on(&address, &[]).heard(None).why("local:any").map(str::to_owned))
+    tells.send(on(&address, &[]).heard_now(None).why("local:any").map(str::to_owned))
   });
   let why =
     told.recv_timeout(DEADLINE * 3).expect("a server that answers nothing is given up on in time");
@@ -416,11 +421,22 @@ fn a_server_whose_windows_elsewhere_do_not_come_in_time_offers_the_models_whose_
     }
   });
   let began = Instant::now();
-  let heard = on(&address, &[]).heard(None);
+  let heard = on(&address, &[]).heard_now(None);
   assert!(began.elapsed() < DEADLINE * 2, "{:?}", began.elapsed());
   assert_eq!(offered(&heard), [("local:a".to_owned(), 1000, false, Some(250))]);
   assert_eq!(
     heard.why("local:b"),
     Some("the local server gives no window of it: set FURB_LOCAL_WINDOW")
   );
+}
+
+/// What a server lists, waited for on the reactor, as the catalog awaits it.
+trait Hears {
+  fn heard_now(&self, wanted: Option<&str>) -> Heard;
+}
+
+impl Hears for Server {
+  fn heard_now(&self, wanted: Option<&str>) -> Heard {
+    crate::ear::reactor().block_on(self.heard(wanted))
+  }
 }
