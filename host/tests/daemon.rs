@@ -344,6 +344,14 @@ mod daemon {
     assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
     tokio::time::sleep(PAST).await;
     assert!(!window.lives(&life).await);
+    // A second birth opens on the checkpoint of the first, and ends with a checkpoint of its own.
+    let mut between = Window::dialed(&local).await;
+    opened(&mut between, &at, "a.jsonl").await;
+    between.attach(&life).await;
+    between.ran(&life, "z = 0").await;
+    assert_eq!(between.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+    tokio::time::sleep(PAST).await;
+    assert!(!between.lives(&life).await);
     let mut later = Window::dialed(&local).await;
     opened(&mut later, &at, "a.jsonl").await;
     later.attach(&life).await;

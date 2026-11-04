@@ -228,8 +228,13 @@ impl Life {
     if told.before(at + 1, &mut |one| facts.extend(Fact::of(one.as_ref()))).is_err() {
       return;
     }
+    // Each birth that a checkpoint opened said again the facts that its checkpoint restates, which
+    // the log of that birth told no reader twice, and the log of this one tells none twice either.
     for fact in facts.iter().filter(|one| one.kind() != checkpoint::CHECKPOINT) {
-      self.put(Event::Fact(json_of(fact)));
+      let fact = json_of(fact);
+      if !self.facts.contains(&digest(&fact)) {
+        self.put(Event::Fact(fact));
+      }
     }
     self.watch.reborn();
   }
