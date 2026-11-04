@@ -657,13 +657,15 @@ test("resume preserves chains, programs, theme, and input drafts, and unfinished
   if (!record) throw new Error("No saved record.");
   library = new Workspaces(first.preferences, { demo: true });
   await library.refresh();
-  // The replay of a saved record comes after the list, and the picker shows its state once it lands.
-  await until(library, () => library.groups[0]?.sessions[0]?.status === "paused");
+  // The replay of a saved record comes after the list, and the picker shows its state once it lands: its work runs
+  // again as it opens, so it shows as work, not as paused.
+  await until(library, () => library.groups[0]?.sessions[0]?.status === "runs");
   const saved = library.groups[0]?.sessions ?? [];
   expect(saved).toHaveLength(1);
   const detail = sessionDetail(saved[0] as SessionEntry, false);
   expect(detail).toContain("KiB");
-  expect(detail).toContain("Paused");
+  expect(detail).toContain("Working");
+  expect(detail).not.toContain("Paused");
   await library.dispose();
   const second = await demoSession({ record });
   await composing(
