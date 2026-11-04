@@ -1,6 +1,6 @@
 import type { Script } from "./script.ts";
 
-/** The part for the TUI that the model writes, as TypeScript. It imports no value, as the skill extending says. */
+/** The part for the TUI that the model writes, as TypeScript. It imports no value, as the skill ouroboros says. */
 const part = String.raw`<s:part>
 export default function (furb) {
   const items = (seen) =>
@@ -47,8 +47,8 @@ export const extending: Script[] = [
     steps: [
       {
         thinking:
-          "The skill extending shows how a part for the TUI is made, so I read the lines that name its functions first.",
-        word: 'guide = skill("extending", grep("furb[.]"))',
+          "The skill ouroboros shows how a part for the TUI is made, so I read the lines that name its functions first.",
+        word: 'guide = skill("ouroboros", grep("furb[.]"))',
       },
       {
         thinking:

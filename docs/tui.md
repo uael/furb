@@ -706,7 +706,7 @@ its scope and its tools, and the keys that reconnect, enable, disable, approve, 
 ![The servers of MCP](screenshots/75h-mcp-servers.png)
 
 A model can add a part to a life that runs. The operator asks for a component, here a panel for a todo list. The model
-reads the guide of the skill `extending`, makes the acts of its kind with a def, and writes an extension with
+reads the guide of the skill `ouroboros`, makes the acts of its kind with a def, and writes an extension with
 `extend`. The panel stands over the input at once, and the feed shows a line for each act. Nothing restarts.
 
 ![A model adds a panel](screenshots/74b-extend-live.png)

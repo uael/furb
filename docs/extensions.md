@@ -42,8 +42,7 @@ Eight extensions come with furb, and each life runs them unless a config turns t
   `skills://<name>` writes the word in `.furb/extensions/<name>` of the project, after a copy of the folder there
   when it stands elsewhere, and reloads the skill when the life runs it. Its life word, `await listed()`, reads
   `skills://`
-  in the setup of the root, which every new chain holds. It carries one skill of its own, `extending`, which shows a
-  model how to extend furb, with an example for each way. A skill named `extending` in a folder takes its place. The TUI
+  in the setup of the root, which every new chain holds. The TUI
   lists each skill after `/`, and its command reads the skill for the chain. `/skills`, or `/reload-skills`, reads the
   skills of the disk again.
 - **`compaction`** cuts a chain to the work that it still needs, and the chain goes on under its name. `compact()` keeps
@@ -67,11 +66,11 @@ Eight extensions come with furb, and each life runs them unless a config turns t
   shows the name that the record holds, and the sidebar hides the chain `naming`. A
   config that turns `naming` off, as `{"extensions": {"naming": false}}`, saves the call of that model. A rename in a
   client is the same act, which the client makes with an ear of its own, so it lasts whatever extension plays.
-- **`ouroboros`** teaches a model to extend furb. Its file holds the lore, which every chain reads in the setup, so it
-  has no life word. The lore says the three ways to extend furb and when to take each: a def in a word, which lives with
-  its chain; `extend(name, *rungs)`, which writes the words of those rungs as an extension of the project and turns it
-  on, so every later chain runs it; and an official extension, which lives in furb. `extend(name, *rungs, tui=module)`
-  also writes a [part for the TUI](#a-part-for-the-tui). `enabled()` gives the extensions that the life runs. `bound_by()` gives each name that a word of the chain bound, with the rung of that word.
+- **`ouroboros`** gives `extend(name, *rungs)`, which writes the words of those rungs as an extension of the project
+  and turns it on, so every later chain runs it, and `extend(name, *rungs, tui=module)`, which also writes a [part for
+  the TUI](#a-part-for-the-tui). How to extend furb stands in one home, the text of its
+  [`SKILL.md`](../extensions/ouroboros/SKILL.md), which a model reads with `skill("ouroboros")`: the three ways to extend
+  furb and when to take each, with an example for each. `enabled()` gives the extensions that the life runs. `bound_by()` gives each name that a word of the chain bound, with the rung of that word.
 - **`web`** searches the web and reads its pages. `web_search(query)` uses the search of the provider of the model of
   the chain, or of the actor that `to` names: the web search of the APIs of Anthropic, OpenAI and xAI, Gemini grounded
   in Google Search, and the search of DeepSeek. For a provider with no search, it uses the free search of Parallel for
@@ -181,7 +180,7 @@ A field of furb that the manifest does not know is refused with its path, so a t
 A word reaches the machine only through the acts that furb has already: a read, a write, a command, a wait, the
 clock, a chance, and a prompt to the operator. It can also make acts that an ear of its own answers, written in
 Python, as `remember()` does, and answer the reads of a scheme of its own. An extension that needs an ear in Rust is
-a change of furb. The skill `extending` gives an example of each.
+a change of furb. The skill `ouroboros` gives an example of each.
 
 A word sets the actor of a chain that it made, or of a chain that waits, with a rung on that chain: `rung("actor =
 'claude-cli:sonnet/medium'", on=chain)` rebinds the default actor, and `wake(chain)` lets a paused chain go on. The next
@@ -299,8 +298,8 @@ When a part fails, the TUI goes on. A module that does not load, that exports no
 shows its error in plain words in a panel under its name. A panel or a row that throws shows its error in its place,
 and a key or a command that throws shows its error in the footer.
 
-A model adds a part to a life that runs with `extend(name, *rungs, tui=module)` of `ouroboros`, which the skill
-`extending` teaches. The write lands in `.furb`, so the TUI loads the part at once. The config turns the extension on in
+A model adds a part to a life that runs with `extend(name, *rungs, tui=module)` of `ouroboros`, whose skill
+teaches it. The write lands in `.furb`, so the TUI loads the part at once. The config turns the extension on in
 the same life. A config that sets the extension to `false` takes its part away again. `/extensions` opens a dialog of
 the extensions that the life runs, each with what its part gives, or with the error that stopped its load. Only the
 operator sees an error of a part, so the skill tells the model to check its module with `bun build --no-bundle` and to
