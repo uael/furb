@@ -1374,3 +1374,20 @@ fn a_record_that_another_engine_went_on_with_after_a_checkpoint_opens_with_each_
     "a later life of this engine replays the tail that it made, and carries nothing"
   );
 }
+
+#[test]
+fn a_life_reads_the_classes_of_the_config_directory_that_it_opens_on_and_none_of_the_machine() {
+  let at = place("classes");
+  fs::create_dir_all(at.join("config")).unwrap();
+  fs::write(at.join("config/config.json"), r#"{"classes": {"claude-cli:opus": "cheap"}}"#).unwrap();
+  let opening = Opening {
+    roster: Some(vec!["claude-cli:opus".to_owned()]),
+    extensions: Some(false),
+    ..opening(&at, false)
+  };
+  let (mut engine, _) = opening.boot::<String>([]).unwrap();
+  let standing = engine.standing().unwrap().py_repr();
+  // The catalog gives opus the class dear, so only the config of this directory makes it cheap.
+  assert!(standing.starts_with("[[['claude-cli:opus', ["), "{standing}");
+  assert!(standing.contains("1000000, 'cheap']"), "{standing}");
+}

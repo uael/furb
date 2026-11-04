@@ -321,6 +321,7 @@ impl Opening {
     let claude = self.claude.as_ref().map(PathBuf::from);
     let config = self.config.as_ref().map(PathBuf::from);
     let directory = self.directory.clone();
+    let user = config.clone().unwrap_or_else(|| Places::here().config);
     let catalog = Catalog::load()
       .claude(claude.clone(), stall)
       .configured(Path::new(&directory), config.as_deref())
@@ -347,7 +348,7 @@ impl Opening {
         .map_err(|no| no.to_string())?;
       Ok(candidate.into_settings())
     }));
-    provider = provider.advertises(advertised).searching(works);
+    provider = provider.advertises(advertised).searching(works).config(user);
     if let Some(gallery) = gallery {
       provider = provider.images(gallery);
     }
