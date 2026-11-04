@@ -268,8 +268,13 @@ impl Claude {
   /// says it is not, in its JSON or in its words, so a version with no such command, or one that does not end in ten
   /// seconds, passes, and a turn says what is wrong. With accounts, it is signed in when any account is, and an
   /// account whose token cannot be read is not.
-  pub fn signed(&self) -> bool {
-    (0..self.program.accounts.count()).any(|at| self.program.under(at).signed())
+  pub async fn signed(&self) -> bool {
+    for at in 0..self.program.accounts.count() {
+      if self.program.under(at).signed().await {
+        return true;
+      }
+    }
+    false
   }
 
   /// The same command line, whose process waits this long for a program that is missing or does not run.
@@ -291,8 +296,8 @@ impl Claude {
   /// The command line says its models itself, with no model prompt, once for each version of its program: a process
   /// of its own asks it, and furb keeps the answer in its cache until the program changes or [`refresh`] is called.
   /// A command line that does not answer, as an older one does not, gives the fixed table of furb, within 20 seconds.
-  pub fn models(&self) -> Vec<Model> {
-    self.family(discover::models(&self.program).unwrap_or_else(discover::fallback))
+  pub async fn models(&self) -> Vec<Model> {
+    self.family(discover::models(&self.program).await.unwrap_or_else(discover::fallback))
   }
 
   /// The models that furb offers when it cannot ask the command line: the fixed table, which asks nothing.
@@ -325,12 +330,6 @@ impl Claude {
 
 /// The flag by which the command line records its system prompt once for a conversation.
 const SNAPSHOT: &str = "--system-prompt-snapshot";
-
-/// Whether the command line lists a flag in its help. It is asked once for each version of its program.
-async fn lists(program: &Program, flag: &'static str) -> bool {
-  let program = program.clone();
-  tokio::task::spawn_blocking(move || discover::lists(&program, flag)).await.unwrap_or(false)
-}
 
 /// The program that starts the command line: its file, and the words that come before each flag that furb gives it,
 /// as `cswap run 3` holds the file `cswap` and the words `run` and `3`. It starts a process with no shell, so each
@@ -369,14 +368,8 @@ impl Program {
     Ok(command)
   }
 
-  /// Whether this program, as its account, is signed in. It waits for the command on the runtime of
-  /// the ears, so it never runs on a thread of that runtime nor on the thread of a life, and the
-  /// command is ended after ten seconds.
-  #[expect(
-    clippy::disallowed_methods,
-    reason = "debt: a call that blocks: block_on, where the catalog asks whether it is signed in with no await"
-  )]
-  fn signed(&self) -> bool {
+  /// Whether this program, as its account, is signed in. The command is killed after ten seconds.
+  async fn signed(&self) -> bool {
     let Ok(mut command) = self.command() else { return false };
     command
       .args(["auth", "status"])
@@ -384,9 +377,8 @@ impl Program {
       .stdout(std::process::Stdio::piped())
       .stderr(std::process::Stdio::piped())
       .kill_on_drop(true);
-    let asked =
-      async move { tokio::time::timeout(Duration::from_secs(10), command.output()).await };
-    let Ok(Ok(out)) = runtime().block_on(asked) else { return true };
+    let asked = tokio::time::timeout(Duration::from_secs(10), command.output()).await;
+    let Ok(Ok(out)) = asked else { return true };
     let said = String::from_utf8_lossy(&out.stdout);
     let logged =
       serde_json::from_str::<Value>(&said).ok().and_then(|one| one["loggedIn"].as_bool());
@@ -464,8 +456,8 @@ impl Claude {
     }
     let settings = request.additional_params.unwrap_or_default();
     let effort = settings.get("effort").and_then(Value::as_str).map(str::to_owned);
-    if let Some(effort) =
-      effort.as_deref().filter(|one| !discover::takes(&self.program, &name, one))
+    if let Some(effort) = effort.as_deref()
+      && !discover::takes(&self.program, &name, effort).await
     {
       let efforts = EFFORTS.join(", ");
       return Err(failed(format!("{name} spends one of {efforts} on a turn, never {effort}.")));
@@ -981,7 +973,7 @@ impl Conversation {
     command.arg("--system-prompt-file").arg(&prompt).args(["--setting-sources", ""]);
     // Else a resumed or forked conversation sends the system prompt that its first request recorded, and not this
     // one. A command line that does not list the flag would refuse it, so it gets none.
-    if lists(program, SNAPSHOT).await {
+    if discover::lists(program, SNAPSHOT).await {
       command.args([SNAPSHOT, "off"]);
     }
     command.current_dir(home()?);

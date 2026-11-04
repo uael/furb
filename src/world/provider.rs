@@ -717,7 +717,7 @@ pub type Advertised = (String, String, String, bool);
 /// settings give them.
 type Settings = (Vec<Model>, Option<String>, Thinking);
 
-type Refresh = Arc<dyn Fn() -> Result<Settings, String> + Send + Sync>;
+type Refresh = Arc<dyn Fn() -> BoxFuture<'static, Result<Settings, String>> + Send + Sync>;
 
 impl Provider {
   /// A provider of these models, on a directory, whose model thinks [`THINKING`] tokens at most in one turn.
@@ -1212,11 +1212,10 @@ impl Provider {
             let first = !std::mem::replace(&mut stood, true);
             if let Some(refresh) = refresh.as_ref().filter(|_| !first && !word) {
               // Reading the settings asks each program of a model, which can take seconds, so the
-              // stand reads them on the runtime of the ears, and every chain of the life goes on
-              // meanwhile.
+              // stand awaits them as a task of the runtime of the ears, and every chain of the life
+              // goes on meanwhile.
               say(&mut co, Fact::says("started", &about, []));
-              let refresh = Arc::clone(refresh);
-              let read = runtime().spawn_blocking(move || refresh());
+              let read = runtime().spawn(refresh());
               co.work(stream::once(read.map(move |got| {
                 let got = got.map_err(|no| no.to_string()).and_then(|got| got);
                 Replied::Refreshed { about, got }

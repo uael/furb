@@ -237,7 +237,19 @@ pub fn shape(name: &str) -> Object {
 /// the nearest one that model takes; or the name as it is, and no model, when the catalog knows no model by it, the
 /// operator among them.
 pub fn actor(to: &str) -> (String, Option<String>) {
-  match Catalog::load().roster(Some(&[]), Some(to)) {
+  named(to, Catalog::load().roster(Some(&[]), Some(to)))
+}
+
+/// An actor as [`actor`] gives it, for a caller on the runtime of the ears, which awaits the catalog.
+pub async fn actored(to: &str) -> (String, Option<String>) {
+  named(to, Catalog::loaded().await.rostered(Some(&[]), Some(to)).await)
+}
+
+fn named<E>(
+  to: &str,
+  got: Result<(Vec<furb::world::Model>, Option<String>), E>,
+) -> (String, Option<String>) {
+  match got {
     Ok((models, actor)) => {
       (actor.unwrap_or_else(|| to.to_owned()), models.first().map(|one| one.name().to_owned()))
     }

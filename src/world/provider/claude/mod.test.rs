@@ -773,8 +773,8 @@ pub(crate) fn gone(pid: &str) -> bool {
 
 /// The models of a yard: what the scripted command line says of them, and how many times it was asked.
 fn said(claude: &Claude) -> Vec<(String, u64, Vec<String>)> {
-  claude
-    .models()
+  reactor()
+    .block_on(claude.models())
     .iter()
     .map(|one| (one.name.clone(), one.window, one.efforts.iter().map(|e| e.0.clone()).collect()))
     .collect()
@@ -979,8 +979,8 @@ fn the_command_line_is_signed_in_when_any_of_its_accounts_is() {
     let accounts = listed(&yard, names);
     Claude::with_accounts(Some(script.clone()), Vec::new(), accounts, Switch::Failover, None)
   };
-  assert!(claude(&["a", "b"]).signed());
-  assert!(!claude(&["a"]).signed());
+  assert!(reactor().block_on(claude(&["a", "b"]).signed()));
+  assert!(!reactor().block_on(claude(&["a"]).signed()));
 }
 
 #[test]

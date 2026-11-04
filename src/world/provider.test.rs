@@ -607,7 +607,7 @@ fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line_and_each_l
   use super::claude::test::Yard;
   let yard = Yard::new("chain");
   let claude = yard.claude(10_000);
-  let (mut engine, _) = life("claude", claude.models());
+  let (mut engine, _) = life("claude", crate::ear::reactor().block_on(claude.models()));
   let root = engine.root().to_owned();
   let mut answer = |message: &str| {
     let with = verbs::Prompt { message: Some(message.into()), on: on(&root), ..Default::default() };
@@ -627,7 +627,7 @@ fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line_and_each_l
   assert_eq!(heard.len(), 2);
   assert!(heard[1].contains("second task") && !heard[1].contains("first task"), "{}", heard[1]);
   // The ids of chains repeat in every life, and a life on the same command line keeps a conversation of its own.
-  let (mut other, _) = life("claude-other", claude.models());
+  let (mut other, _) = life("claude-other", crate::ear::reactor().block_on(claude.models()));
   let with =
     verbs::Prompt { message: Some("first task".into()), on: on(&root), ..Default::default() };
   block_on(other.prompt(Object::string("str"), with).expect("a prompt is made"))
@@ -651,9 +651,12 @@ fn a_claude_that_an_update_took_away_is_asked_again_after_its_backoff_until_it_c
   let claude = Claude::with_command(fake.prefix(), Vec::new(), Some(Duration::from_secs(10)));
   let (retries, told) = retried();
   let backoff = Backoff { most: 10, first: Duration::from_millis(100) };
-  let provider = Provider::new(yard("away").display().to_string(), claude.models())
-    .backoff(backoff)
-    .retries(retries);
+  let provider = Provider::new(
+    yard("away").display().to_string(),
+    crate::ear::reactor().block_on(claude.models()),
+  )
+  .backoff(backoff)
+  .retries(retries);
   let mut engine = lived(provider);
   let root = engine.root().to_owned();
   fake.away();
@@ -678,7 +681,10 @@ fn the_claude_command_line_is_told_the_most_thought_of_the_provider_unless_the_e
   let claude = fake.claude(10_000);
   let inherited = Thinking { most: 4096, inherited: true };
   for (name, most) in [("most-told", Thinking::default()), ("most-inherited", inherited)] {
-    let provider = Provider::new(yard(name).display().to_string(), claude.models());
+    let provider = Provider::new(
+      yard(name).display().to_string(),
+      crate::ear::reactor().block_on(claude.models()),
+    );
     let mut engine = lived(provider.thinking(most).actor(Some("claude-cli:opus/high".into())));
     let root = engine.root().to_owned();
     let with = verbs::Prompt { message: Some("task".into()), on: on(&root), ..Default::default() };
@@ -700,7 +706,7 @@ fn the_word_of_the_claude_command_line_is_the_text_it_settled_over_the_parts_it_
   use super::claude::test::Yard;
   let yard = Yard::new("gap");
   let claude = yard.claude(10_000);
-  let (mut engine, _) = life("claude-gap", claude.models());
+  let (mut engine, _) = life("claude-gap", crate::ear::reactor().block_on(claude.models()));
   let root = engine.root().to_owned();
   // The command line streams the text of its reply less its first part, and then says the text whole.
   let with =
@@ -774,8 +780,11 @@ fn the_claude_command_line_sees_each_image_that_a_prompt_names_and_each_image_th
   let word = format!("read({:?})", at.join("read.png").display().to_string());
   fs::write(fake.at.join("word.1"), serde_json::to_string(&word).expect("a word of json"))
     .expect("the word is written");
-  let provider =
-    Provider::new(at.display().to_string(), fake.claude(10_000).models()).images(at.join("images"));
+  let provider = Provider::new(
+    at.display().to_string(),
+    crate::ear::reactor().block_on(fake.claude(10_000).models()),
+  )
+  .images(at.join("images"));
   let mut engine = seeing(provider, Some(at.join("images")));
   let root = engine.root().to_owned();
   let message = format!("look at {}", images::reference("named.png", &kept.uri));
@@ -1905,7 +1914,8 @@ fn a_stand_on_new_settings_asks_a_reply_that_waits_for_a_usage_limit_again_on_th
     .retries(retries)
     .refreshing(Arc::new(move || {
       let models = if flipped.load(Ordering::SeqCst) { &fresh } else { &stale };
-      Ok((vec![models.clone()], None, Thinking::default()))
+      let got = Ok((vec![models.clone()], None, Thinking::default()));
+      Box::pin(async move { got })
     }));
   let mut engine = lived(provider);
   let id = asked(&mut engine);
@@ -1983,7 +1993,7 @@ fn a_claude_command_line_at_its_usage_limit_is_asked_again_at_the_reset_and_answ
   use super::claude::test::Yard;
   let yard = Yard::new("limit");
   let claude = yard.claude(10_000);
-  let (mut engine, _) = life("claude-limit", claude.models());
+  let (mut engine, _) = life("claude-limit", crate::ear::reactor().block_on(claude.models()));
   let root = engine.root().to_owned();
   let with =
     verbs::Prompt { message: Some("LIMIT task".into()), on: on(&root), ..Default::default() };
@@ -2440,15 +2450,21 @@ fn a_local_model_reads_the_end_of_a_thought_that_the_provider_cut_in_its_next_tu
 #[test]
 fn a_stand_that_reads_the_settings_slowly_holds_no_chain_while_it_reads() {
   let (answer, login) = std::sync::mpsc::channel::<()>();
-  let login = Mutex::new(login);
+  let login = Arc::new(Mutex::new(login));
   let (host, _) = failing(&[]);
   let model = scripted(&MockCompletionModel::default()).hosted(host);
   let fresh = model.clone();
   let provider = Provider::new(yard("slow-stand").display().to_string(), vec![model]).refreshing(
     Arc::new(move || {
-      // A login of a command line that answers only once the test lets it.
-      login.lock().expect("the login").recv().expect("the login answers");
-      Ok((vec![fresh.clone()], None, Thinking::default()))
+      let (login, fresh) = (Arc::clone(&login), fresh.clone());
+      Box::pin(async move {
+        // A login of a command line that answers only once the test lets it.
+        let waited = tokio::task::spawn_blocking(move || {
+          login.lock().expect("the login").recv().expect("the login answers");
+        });
+        waited.await.expect("the login is waited for");
+        Ok((vec![fresh], None, Thinking::default()))
+      })
     }),
   );
   let mut engine = lived(provider);

@@ -11,23 +11,21 @@
   reason = "debt: a let _ drops a value that must be used"
 )]
 #![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(
-  clippy::redundant_closure_for_method_calls,
-  reason = "debt: a closure where a method path serves"
-)]
 
 use std::{
   collections::HashMap,
   fs,
-  io::{BufRead, BufReader, Read, Write},
   process::Stdio,
-  sync::{Mutex, OnceLock, mpsc},
-  thread,
+  sync::{Mutex, OnceLock, PoisonError},
   time::{Duration, Instant, UNIX_EPOCH},
 };
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use tokio::{
+  io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines},
+  process::{ChildStdin, ChildStdout},
+};
 
 use super::{EFFORTS, Program};
 
@@ -123,76 +121,75 @@ fn store(stamp: &str, found: &[Found]) {
   }
 }
 
-/// The models that the program says, from memory, from the cache, or from the program itself; none when it does not
-/// answer.
-pub(super) fn models(program: &Program) -> Option<Vec<Found>> {
+/// The models that the program says, from memory, from the cache, or from the program itself;
+/// none when it does not answer. No lock is held while the program is asked, so two catalogs
+/// that ask at once may each ask it.
+pub(super) async fn models(program: &Program) -> Option<Vec<Found>> {
   let stamp = stamp(program);
-  let mut seen = seen().lock().unwrap_or_else(|one| one.into_inner());
-  match seen.get(&stamp) {
-    Some(Seen::Found(found)) => return Some(found.clone()),
-    Some(Seen::Failed(at)) if at.elapsed() < RETRY => return None,
-    _ => {}
+  let held = match seen().lock().unwrap_or_else(PoisonError::into_inner).get(&stamp) {
+    Some(Seen::Found(found)) => Some(Some(found.clone())),
+    Some(Seen::Failed(at)) if at.elapsed() < RETRY => Some(None),
+    _ => None,
+  };
+  if let Some(held) = held {
+    return held;
   }
-  let found = stored(&stamp).or_else(|| {
-    let found = probe(program)?;
-    store(&stamp, &found);
-    Some(found)
-  });
+  let found = match stored(&stamp) {
+    Some(found) => Some(found),
+    None => {
+      let found = probe(program).await;
+      if let Some(found) = &found {
+        store(&stamp, found);
+      }
+      found
+    }
+  };
   let kept = found.clone().map_or(Seen::Failed(Instant::now()), Seen::Found);
-  seen.insert(stamp, kept);
+  seen().lock().unwrap_or_else(PoisonError::into_inner).insert(stamp, kept);
   found
 }
 
 /// Whether a turn may spend this effort on this alias: any effort of furb, or one that the command line reported.
-pub(super) fn takes(program: &Program, alias: &str, effort: &str) -> bool {
+pub(super) async fn takes(program: &Program, alias: &str, effort: &str) -> bool {
   if EFFORTS.contains(&effort) {
     return true;
   }
-  let Some(found) = models(program) else { return false };
+  let Some(found) = models(program).await else { return false };
   found.iter().any(|one| one.alias == alias && one.efforts.iter().any(|one| one == effort))
 }
 
 /// Whether the program lists a flag in its help, asked once for each stamp of the program. A program that does not
 /// answer in time lists none, so furb gives it no flag that it may not know.
-pub(super) fn lists(program: &Program, flag: &str) -> bool {
+pub(super) async fn lists(program: &Program, flag: &str) -> bool {
   static LISTED: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
   let held = LISTED.get_or_init(Default::default);
   let key = format!("{}\0{flag}", stamp(program));
-  if let Some(known) = held.lock().unwrap_or_else(|one| one.into_inner()).get(&key) {
-    return *known;
+  let known = held.lock().unwrap_or_else(PoisonError::into_inner).get(&key).copied();
+  if let Some(known) = known {
+    return known;
   }
-  let listed = help(program).is_some_and(|text| text.contains(flag));
-  held.lock().unwrap_or_else(|one| one.into_inner()).insert(key, listed);
+  let listed = help(program).await.is_some_and(|text| text.contains(flag));
+  held.lock().unwrap_or_else(PoisonError::into_inner).insert(key, listed);
   listed
 }
 
-/// What the program says for `--help`, none when it does not run or does not answer within [`WITHIN`].
-fn help(program: &Program) -> Option<String> {
+/// What the program says for `--help`, none when it does not run or does not end within
+/// [`WITHIN`], when it is killed.
+async fn help(program: &Program) -> Option<String> {
   let mut command = program.command().ok()?;
-  let mut child = command
-    .as_std_mut()
+  command
     .arg("--help")
     .stdin(Stdio::null())
     .stdout(Stdio::piped())
     .stderr(Stdio::null())
-    .spawn()
-    .ok()?;
-  let mut out = child.stdout.take()?;
-  let (send, heard) = mpsc::channel();
-  thread::spawn(move || {
-    let mut bytes = Vec::new();
-    let _ = out.read_to_end(&mut bytes);
-    let _ = send.send(String::from_utf8_lossy(&bytes).into_owned());
-  });
-  let text = heard.recv_timeout(WITHIN).ok();
-  let _ = child.kill();
-  let _ = child.wait();
-  text
+    .kill_on_drop(true);
+  let out = tokio::time::timeout(WITHIN, command.output()).await.ok()?.ok()?;
+  Some(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
 /// Forget each discovery, so the next models ask the command line again.
 pub fn refresh() {
-  seen().lock().unwrap_or_else(|one| one.into_inner()).clear();
+  seen().lock().unwrap_or_else(PoisonError::into_inner).clear();
   if let Some(file) = cached() {
     let _ = fs::remove_file(file);
   }
@@ -205,10 +202,10 @@ fn plain(alias: &str) -> bool {
     && alias.chars().all(|one| one.is_ascii_alphanumeric() || one == '-' || one == '_')
 }
 
-/// Ask the program of its models, with one process that spends no model prompt.
-fn probe(program: &Program) -> Option<Vec<Found>> {
-  let mut tokio = program.command().ok()?;
-  let command = tokio.as_std_mut();
+/// Ask the program of its models, with one process that spends no model prompt and that is
+/// killed once it answered, or once [`WITHIN`] passed.
+async fn probe(program: &Program) -> Option<Vec<Found>> {
+  let mut command = program.command().ok()?;
   command.args([
     "-p",
     "--input-format",
@@ -228,36 +225,29 @@ fn probe(program: &Program) -> Option<Vec<Found>> {
   command.env("FURB_CLAUDE_DISCOVER", "1");
   command.env("CLAUDE_CODE_DISABLE_BUNDLED_SKILLS", "1");
   command.env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1");
-  command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
+  command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).kill_on_drop(true);
   let mut child = command.spawn().ok()?;
-  let found = child.stdin.take().zip(child.stdout.take()).and_then(|(mut stdin, stdout)| {
-    let (lines, heard) = mpsc::channel();
-    thread::spawn(move || {
-      for line in BufReader::new(stdout).lines() {
-        let Ok(line) = line else { break };
-        if lines.send(line).is_err() {
-          break;
-        }
-      }
-    });
-    asked(&mut stdin, &heard)
-  });
-  let _ = child.kill();
-  let _ = child.wait();
-  found
+  let (stdin, stdout) = child.stdin.take().zip(child.stdout.take())?;
+  let found = tokio::time::timeout(WITHIN, asked(stdin, BufReader::new(stdout).lines())).await;
+  // The child is killed as it drops, and the runtime reaps it.
+  drop(child);
+  found.ok().flatten()
 }
 
-fn asked(stdin: &mut impl Write, heard: &mpsc::Receiver<String>) -> Option<Vec<Found>> {
-  let deadline = Instant::now() + WITHIN;
+/// The models that the program says over its control requests.
+async fn asked(
+  mut stdin: ChildStdin,
+  mut lines: Lines<BufReader<ChildStdout>>,
+) -> Option<Vec<Found>> {
   let mut count = 0;
-  let mut ask = |request: Value| -> Option<Value> {
+  let mut ask = async |request: Value| -> Option<Value> {
     count += 1;
     let id = format!("furb-{count}");
-    writeln!(stdin, "{}", json!({"type": "control_request", "request_id": id, "request": request}))
-      .ok()?;
-    stdin.flush().ok()?;
+    let line = json!({"type": "control_request", "request_id": id, "request": request});
+    stdin.write_all(format!("{line}\n").as_bytes()).await.ok()?;
+    stdin.flush().await.ok()?;
     loop {
-      let line = heard.recv_timeout(deadline.checked_duration_since(Instant::now())?).ok()?;
+      let line = lines.next_line().await.ok()??;
       let Ok(event) = serde_json::from_str::<Value>(&line) else { continue };
       let response = &event["response"];
       if event["type"] == "control_response" && response["request_id"] == id.as_str() {
@@ -265,7 +255,7 @@ fn asked(stdin: &mut impl Write, heard: &mpsc::Receiver<String>) -> Option<Vec<F
       }
     }
   };
-  let init = ask(json!({"subtype": "initialize"}))?;
+  let init = ask(json!({"subtype": "initialize"})).await?;
   let mut found: Vec<Found> = Vec::new();
   for one in init["models"].as_array()? {
     let Some(alias) = one["value"].as_str().filter(|one| plain(one)) else { continue };
@@ -279,11 +269,11 @@ fn asked(stdin: &mut impl Write, heard: &mpsc::Receiver<String>) -> Option<Vec<F
       }
       _ => EFFORTS.iter().map(|one| (*one).to_owned()).collect(),
     };
-    if ask(json!({"subtype": "set_model", "model": alias})).is_none() {
+    if ask(json!({"subtype": "set_model", "model": alias})).await.is_none() {
       continue;
     }
     let Some(window) =
-      ask(json!({"subtype": "get_context_usage"})).and_then(|one| one["maxTokens"].as_u64())
+      ask(json!({"subtype": "get_context_usage"})).await.and_then(|one| one["maxTokens"].as_u64())
     else {
       continue;
     };
