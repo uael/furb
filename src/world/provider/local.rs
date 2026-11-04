@@ -1,4 +1,5 @@
-//! A local server of models: a server that serves the chat completions of OpenAI under `/v1` and lists its models at
+//! A local server of models: a server that serves the chat completions of `OpenAI` under `/v1` and
+//! lists its models at
 //! `/v1/models`, as llama.cpp, LM Studio, Ollama, vLLM and Strata do.
 //!
 //! `FURB_LOCAL_URL` names its address, of http when it names no scheme, with `/v1` at its end or without it and with no
@@ -10,11 +11,12 @@
 //! `max_thinking_tokens` of a config of the project gives, 32768 by default, an eighth of it at the effort `low` and a
 //! quarter at `medium`: past it, the provider asks the model again
 //! with that thought and with its thought turned off, as llama.cpp and vLLM read `enable_thinking` in
-//! `chat_template_kwargs`, so it writes its word at once, and at 0 the provider asks with its thought off from the
-//! first request. Each of its models is named `local:` and the id that the server lists, and costs nothing. It takes
-//! the efforts `off`, `low`, `medium` and `high`: `off` turns its thought off with `enable_thinking` false, and each
-//! other level is the effort of reasoning of OpenAI, `reasoning_effort`, which the server hands the template of its
-//! chat, so the level bounds how long it thinks before each word.
+//! `chat_template_kwargs`, so it writes its word at once, and at 0 the provider asks with its
+//! thought off from the first request. Each of its models is named `local:` and the id that the
+//! server lists, and costs nothing. It takes the efforts `off`, `low`, `medium` and `high`: `off`
+//! turns its thought off with `enable_thinking` false, and each other level is the effort of
+//! reasoning of `OpenAI`, `reasoning_effort`, which the server hands the template of its chat, so
+//! the level bounds how long it thinks before each word.
 //!
 //! A model reads the window that the server gives it: `meta.n_ctx` of llama.cpp or `max_model_len` of vLLM in the list,
 //! or, from a server that gives none there, `default_generation_settings.n_ctx` at `/props` of llama.cpp, the window of
@@ -26,17 +28,8 @@
 //! model for chat with no window, after which the server is asked again once a delay passed. A host that lists the
 //! models waits for the server, five seconds at most and once in each delay while the server does not answer.
 
-#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
-#![expect(clippy::match_bool, reason = "debt: a match on a bool")]
-
 use std::{
-  error::Error,
+  error::Error as StdError,
   sync::{Mutex, PoisonError},
   time::{Duration, Instant},
 };
@@ -44,6 +37,7 @@ use std::{
 use rig_core::http_client::ReqwestClient;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
+use url::Url;
 
 use super::{
   Model,
@@ -66,35 +60,59 @@ const ENV_WINDOW: &str = "FURB_LOCAL_WINDOW";
 /// The name of the environment that gives the most that a model of the server writes in one turn.
 const ENV_TOKENS: &str = "FURB_LOCAL_TOKENS";
 
+/// Why a request to a server did not come to an answer.
+#[derive(Debug, thiserror::Error)]
+enum Error {
+  #[error("{}", causes(.0))]
+  Request(reqwest::Error),
+  #[error("{0}")]
+  Json(#[from] serde_json::Error),
+  #[error("its list holds no data")]
+  NoData,
+  #[error("it listed nothing in {0:?}")]
+  Slow(Duration),
+  #[error("{0}")]
+  Task(#[from] tokio::task::JoinError),
+}
+
+/// Why a server listed no model.
+#[derive(Debug, thiserror::Error)]
+#[error("the local server at {root} lists no model: {source}")]
+struct Failed {
+  root: String,
+  source: Error,
+}
+
 /// How long the catalog waits to connect to the server.
 const CONNECT: Duration = Duration::from_secs(1);
 
 /// How long the catalog waits for the server to list its models, with every request that the list needs, since a host
-/// that lists the models waits for them. The tests wait one second here, and one second before they ask again.
-#[cfg(not(test))]
+/// that lists the models waits for them.
 const DEADLINE: Duration = Duration::from_secs(5);
-#[cfg(test)]
-const DEADLINE: Duration = Duration::from_secs(1);
 
 /// How long the catalog waits before it asks again a server that listed nothing, or that listed no model of a name
 /// that a roster names.
-#[cfg(not(test))]
 const AGAIN: Duration = Duration::from_secs(30);
-#[cfg(test)]
-const AGAIN: Duration = Duration::from_secs(1);
 
-/// A local server as the environment names it: its address with no `/v1` at its end, its key, which is empty for a
-/// server that takes none, the window and the most tokens of a turn that the environment gives each of its models, and what it listed and when, or why it listed nothing.
+/// A local server as the environment names it: its address with no `/v1` at its end, its key, which
+/// is empty for a server that takes none, the window and the most tokens of a turn that the
+/// environment gives each of its models, how long it waits for the list and before it asks again,
+/// and what it listed and when, or why it listed nothing.
 pub(super) struct Server {
   pub(super) root: String,
   key: String,
   window: Option<u64>,
   tokens: Option<u64>,
+  deadline: Duration,
+  again: Duration,
   listed: Mutex<Option<Answered>>,
 }
 
 /// What a server answered when the catalog asked it for its models, and when.
-type Answered = (Instant, Result<Vec<Offer>, String>);
+struct Answered {
+  at: Instant,
+  got: Result<Vec<Offer>, Failed>,
+}
 
 /// What a local server listed, as the catalog offers it: its models, why it listed nothing, when it did, and why the
 /// catalog offers no model of each other id that it listed.
@@ -156,21 +174,39 @@ impl Server {
   pub(super) fn named(env: impl Fn(&str) -> Option<String>) -> Option<Server> {
     let env = |name: &str| env(name).filter(|one| !one.trim().is_empty());
     let address = env(ENV_URL)?;
-    let root = address.trim().trim_end_matches('/').trim_end_matches("/v1").trim_end_matches('/');
     // A user and a password in the address would go into each error that names it, so the key goes in its own name.
     // An address with no scheme is of http, as a local server serves it.
-    let (scheme, rest) = root.split_once("://").unwrap_or(("http", root));
-    let (authority, path) = rest.find('/').map_or((rest, ""), |at| rest.split_at(at));
-    let host = authority.rsplit_once('@').map_or(authority, |(_, host)| host);
-    let root = format!("{scheme}://{host}{path}");
+    let address = address.trim();
+    let mut url = Url::parse(&if address.contains("://") {
+      address.to_owned()
+    } else {
+      format!("http://{address}")
+    })
+    .ok()?;
+    url.host_str()?;
+    if url.set_username("").is_err() || url.set_password(None).is_err() {
+      return None;
+    }
+    let path = url.path().trim_end_matches('/').trim_end_matches("/v1").trim_end_matches('/');
+    let root = format!("{}://{}{path}", url.scheme(), url.authority());
     let count = |name: &str| env(name)?.trim().parse::<u64>().ok().filter(|one| *one > 0);
     Some(Server {
       root,
       key: env(ENV_KEY).unwrap_or_default(),
       window: count(ENV_WINDOW),
       tokens: count(ENV_TOKENS),
+      deadline: DEADLINE,
+      again: AGAIN,
       listed: Mutex::default(),
     })
+  }
+
+  /// The server, waiting this long for its list and this long before it asks again.
+  #[cfg(test)]
+  pub(super) fn timed(mut self, deadline: Duration, again: Duration) -> Server {
+    self.deadline = deadline;
+    self.again = again;
+    self
   }
 
   /// What the server lists, as the catalog offers it: the list it gave, or the list it gives now when it gave none
@@ -185,18 +221,20 @@ impl Server {
       };
       wanted.map_or_else(offered, holds)
     };
-    let held = |(at, got): &Answered| got.as_deref().is_ok_and(lists) || at.elapsed() < AGAIN;
+    let held = |answered: &Answered| {
+      answered.got.as_deref().is_ok_and(lists) || answered.at.elapsed() < self.again
+    };
     let lock = || self.listed.lock().unwrap_or_else(PoisonError::into_inner);
     let fresh = lock().as_ref().is_some_and(held);
     if !fresh {
       // The server is asked outside the lock, so what it listed already stays at hand meanwhile.
       let got = self.list().await;
-      *lock() = Some((Instant::now(), got));
+      *lock() = Some(Answered { at: Instant::now(), got });
     }
     let listed = lock();
-    match listed.as_ref().map(|(_, got)| got) {
+    match listed.as_ref().map(|answered| &answered.got) {
       Some(Ok(offers)) => self.offered(offers),
-      Some(Err(why)) => Heard { failed: Some(why.clone()), ..Heard::default() },
+      Some(Err(why)) => Heard { failed: Some(why.to_string()), ..Heard::default() },
       None => Heard::default(),
     }
   }
@@ -205,7 +243,7 @@ impl Server {
   /// nothing yet.
   pub(super) fn held(&self) -> Heard {
     let listed = self.listed.lock().unwrap_or_else(PoisonError::into_inner);
-    match listed.as_ref().map(|(_, got)| got) {
+    match listed.as_ref().map(|answered| &answered.got) {
       Some(Ok(offers)) => self.offered(offers),
       _ => Heard::default(),
     }
@@ -256,24 +294,32 @@ impl Server {
   }
 
   /// The models that the server lists now, or why it lists none.
-  async fn list(&self) -> Result<Vec<Offer>, String> {
+  async fn list(&self) -> Result<Vec<Offer>, Failed> {
+    self.fetch().await.map_err(|source| Failed { root: self.root.clone(), source })
+  }
+
+  /// The models that the server lists now, or why the list did not come.
+  async fn fetch(&self) -> Result<Vec<Offer>, Error> {
     let client = ReqwestClient::builder().connect_timeout(CONNECT).build();
-    let client = client.map_err(|no| no.to_string())?;
-    let asking = Asking { client, root: self.root.clone(), key: self.key.clone() };
+    let asking = Asking {
+      client: client.map_err(Error::Request)?,
+      root: self.root.clone(),
+      key: self.key.clone(),
+    };
+    let deadline = self.deadline;
     // The windows that the server gives apart from its list take what is left of the deadline, and a list keeps its
     // models when they do not come in time.
     let listing = async move {
       let began = Instant::now();
-      let listed = tokio::time::timeout(DEADLINE, asking.offers()).await;
-      let mut offers = listed.map_err(|_| format!("it listed nothing in {DEADLINE:?}"))??;
-      let _ = tokio::time::timeout(
-        DEADLINE.saturating_sub(began.elapsed()),
-        asking.windowed(&mut offers),
-      )
-      .await;
-      Ok::<_, String>(offers)
+      let mut offers = match tokio::time::timeout(deadline, asking.offers()).await {
+        Ok(listed) => listed?,
+        Err(_elapsed) => return Err(Error::Slow(deadline)),
+      };
+      let windows = asking.windowed(&mut offers);
+      drop(tokio::time::timeout(deadline.saturating_sub(began.elapsed()), windows).await);
+      Ok::<_, Error>(offers)
     };
-    listing.await.map_err(|why| format!("the local server at {} lists no model: {why}", self.root))
+    listing.await
   }
 }
 
@@ -305,7 +351,7 @@ impl Entry {
 impl Asking {
   /// What the server answers at a path, as JSON: a get, or a post of a body when one is given; or why it answered
   /// nothing.
-  async fn asked(&self, path: &str, body: Option<&Value>) -> Result<Value, String> {
+  async fn asked(&self, path: &str, body: Option<&Value>) -> Result<Value, Error> {
     let url = format!("{}{path}", self.root);
     let mut request = match body {
       Some(body) => {
@@ -317,14 +363,14 @@ impl Asking {
       request = request.bearer_auth(&self.key);
     }
     let text = async { request.send().await?.error_for_status()?.text().await };
-    let text = text.await.map_err(|no| causes(&no.without_url()))?;
-    serde_json::from_str(&text).map_err(|no| no.to_string())
+    let text = text.await.map_err(|no| Error::Request(no.without_url()))?;
+    Ok(serde_json::from_str(&text)?)
   }
 
   /// The models that the server lists, each with the window that the list gives where it gives one.
-  async fn offers(&self) -> Result<Vec<Offer>, String> {
+  async fn offers(&self) -> Result<Vec<Offer>, Error> {
     let listed = self.asked("/v1/models", None).await?;
-    let entries = listed.get("data").and_then(Value::as_array).ok_or("its list holds no data")?;
+    let entries = listed.get("data").and_then(Value::as_array).ok_or(Error::NoData)?;
     let entries = entries.iter().filter_map(|one| Entry::deserialize(one).ok());
     Ok(entries.map(Entry::offer).collect())
   }
@@ -356,9 +402,10 @@ impl Asking {
         one.images |= kind == "vlm";
       }
     }
-    let loaded = match offers.iter().any(|one| one.window.is_none()) {
-      true => self.asked("/api/ps", None).await.unwrap_or_default(),
-      false => Value::Null,
+    let loaded = if offers.iter().any(|one| one.window.is_none()) {
+      self.asked("/api/ps", None).await.unwrap_or_default()
+    } else {
+      Value::Null
     };
     for one in offers.iter_mut().filter(|one| one.window.is_none()) {
       let Ok(shown) = self.asked("/api/show", Some(&json!({"model": one.id}))).await else { break };
@@ -394,15 +441,15 @@ fn names(name: &str, id: &str) -> bool {
 }
 
 /// The settings that ask a model of a local server again with its thought off, once its thought passed the most of a
-/// turn: no effort of OpenAI, and `enable_thinking` false for the template of its chat.
+/// turn: no effort of `OpenAI`, and `enable_thinking` false for the template of its chat.
 pub(super) fn silenced() -> Map<String, Value> {
   let off = json!({"reasoning_effort": null, "chat_template_kwargs": {"enable_thinking": false}});
   off.as_object().cloned().unwrap_or_default()
 }
 
-/// The efforts that a model of a local server takes, each with what its request says: `off` turns its thought off as
-/// the template of its chat reads it, and each other level is the effort of reasoning of OpenAI, which the server hands
-/// that template.
+/// The efforts that a model of a local server takes, each with what its request says: `off` turns
+/// its thought off as the template of its chat reads it, and each other level is the effort of
+/// reasoning of `OpenAI`, which the server hands that template.
 pub(super) fn efforts() -> Vec<(String, Map<String, Value>)> {
   let off = ("off", json!({"chat_template_kwargs": {"enable_thinking": false}}));
   let levels = ["low", "medium", "high"].map(|level| (level, json!({"reasoning_effort": level})));
@@ -418,7 +465,7 @@ fn positive(one: &Value) -> Option<u64> {
 }
 
 /// An error, with each error under it.
-fn causes(no: &dyn Error) -> String {
+fn causes(no: &dyn StdError) -> String {
   let mut why = no.to_string();
   let mut under = no.source();
   while let Some(one) = under {

@@ -20,19 +20,20 @@
 #![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
 #![expect(clippy::unreadable_literal, reason = "debt: a long literal with no separator")]
 
-use std::{fs, path::PathBuf, sync::Arc};
+use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 
 use rig_core::{completion::CompletionRequest, message::Message};
 use serde_json::{Value, json};
 
 use super::{
   super::{
-    Asked, Model, Told,
+    Model, Told,
     clients::Client,
     local::{
       Server,
       test::{dropping, fake},
     },
+    model::Asked,
   },
   Catalog, DOCTRINE, SNAPSHOT, clamp, doctrine_in, listed, parsed,
   update::{MODELS, PI},
@@ -89,7 +90,8 @@ fn catalog(environment: &[&str]) -> Catalog {
   let env = move |name: &str| {
     environment.iter().find(|(held, _)| held == name).map(|(_, value)| value.clone())
   };
-  let server = Server::named(&env).map(Arc::new);
+  let server = Server::named(&env)
+    .map(|one| Arc::new(one.timed(Duration::from_secs(1), Duration::from_secs(1))));
   Catalog::of(&parsed(LISTED, None), None, server, env)
 }
 
@@ -639,7 +641,7 @@ fn a_first_run_checks_the_claude_command_line_each_provider_and_the_local_server
 #[cfg(unix)]
 #[test]
 fn a_configured_claude_prefix_reaches_completions_and_search_and_project_settings_win() {
-  use super::super::{Answer, claude::test::Yard};
+  use super::super::{claude::test::Yard, model::Answer};
   use std::fs;
 
   let yard = Yard::new("configured-prefix");
@@ -805,7 +807,7 @@ fn a_model_of_a_chat_provider_of_the_settings_takes_the_efforts_that_it_lists_as
 /// A first turn of a model of the claude command line, which the fake answers with its first reply.
 #[cfg(unix)]
 fn first_turn(model: &Model) {
-  use super::super::Answer;
+  use super::super::model::Answer;
   let request = CompletionRequest {
     model: None,
     preamble: Some("ENGINE ONLY".to_owned()),

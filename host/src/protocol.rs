@@ -26,12 +26,14 @@ pub enum Role {
   Write,
 }
 
-/// What a peer is: a window of an operator, or the process of a skill.
+/// What a peer is: a window of an operator, the process of a skill, or the daemon of a new build,
+/// which asks the handover.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Kind {
   Window,
   Skill,
+  Daemon,
 }
 
 /// The first frame of a peer: the protocol that it speaks, its kind, and the name of a skill.
@@ -69,10 +71,27 @@ pub enum Verb {
   Hello(Hello),
   /// The lives and the records of the machine.
   List,
-  /// The life of a record opened, in a folder or in the folder of its record.
+  /// The life of a record opened, in a folder or in the folder of its record. A life that this
+  /// open makes stands on the actor, the roster and the extensions that the peer names, reads the
+  /// settings of the user in the folder `config` and runs the claude command line `claude` when
+  /// the peer names them, as the window of the peer reads them, and the peer answers each request
+  /// of its models in their place when it asks to, as a demo does.
+  /// With `attach`, the peer attaches the life in the same step, from that place in its log, so
+  /// the life has a holder before its grace can pass.
   Open {
     life: String,
     cwd: Option<String>,
+    actor: Option<String>,
+    roster: Option<Vec<String>>,
+    extensions: Option<bool>,
+    #[serde(default)]
+    config: Option<String>,
+    #[serde(default)]
+    claude: Option<String>,
+    #[serde(default)]
+    answers: bool,
+    #[serde(default)]
+    attach: Option<Seq>,
   },
   /// The events of a life from a place in its log, which the daemon pushes to the peer.
   Attach {
@@ -118,6 +137,12 @@ pub enum Verb {
   Standing {
     life: String,
   },
+  /// The share of the window of its model that the prompt of an answer filled, as `filled` of
+  /// the engine gives it from the reply that took that answer, and nothing before an answer.
+  Filled {
+    life: String,
+    act: String,
+  },
   Cwd {
     life: String,
     on: Option<String>,
@@ -144,21 +169,28 @@ pub enum Verb {
     act: String,
     line: String,
   },
+  /// A pause of an act or of a chain, with the cause that the operator gives.
   Pause {
     life: String,
     act: String,
+    why: Option<String>,
   },
   Wake {
     life: String,
     act: String,
   },
+  /// A cancel of an act or of a chain, with the cause that the operator gives.
   Cancel {
     life: String,
     act: String,
+    why: Option<String>,
   },
+  /// A chain made on a chain, under a label, or a fork of the chain `source` with its transcript
+  /// and its program.
   Chain {
     life: String,
     label: Option<String>,
+    source: Option<String>,
     on: Option<String>,
   },
   /// A word that runs on a chain as a turn of the operator.
@@ -167,6 +199,94 @@ pub enum Verb {
     word: String,
     on: Option<String>,
   },
+  /// A close of an act with a value, written as the record writes a value: `2.0` stays a float,
+  /// and `{"is": "Refused", "args": ["why"]}` is a refusal.
+  Close {
+    life: String,
+    act: String,
+    value: String,
+  },
+  /// A ceiling of the spend of a chain, in dollars or in a share of its window.
+  Grant {
+    life: String,
+    usd: Option<f64>,
+    share: Option<f64>,
+    on: Option<String>,
+  },
+  /// A command that runs on a chain, with the text of its stdin, or with its stdin kept open for
+  /// the lines that a write to `<act>/stdin` feeds it.
+  Bash {
+    life: String,
+    command: String,
+    stdin: Option<String>,
+    #[serde(default)]
+    feed: bool,
+    on: Option<String>,
+  },
+  /// The text at a path, read where a chain stands, as an act of the operator.
+  Read {
+    life: String,
+    path: String,
+    on: Option<String>,
+  },
+  /// A text written at a path, where a chain stands, as an act of the operator.
+  Write {
+    life: String,
+    path: String,
+    content: String,
+    on: Option<String>,
+  },
+  /// The names that the module of a chain binds.
+  Names {
+    life: String,
+    on: Option<String>,
+  },
+  /// What the gate finds in a word on a chain, which runs nothing.
+  Gate {
+    life: String,
+    word: String,
+    on: Option<String>,
+  },
+  /// A stand of the life, which reads the roster and the actor again.
+  Stand {
+    life: String,
+  },
+  /// The fact that the operator read a chain or a thread up to now, which each window and each
+  /// later life reads in the record.
+  Seen {
+    life: String,
+    about: String,
+  },
+  /// A message that the operator queued, sent once as a prompt on a chain. The record keeps the
+  /// entry and the hash of its words, so a second send of the entry, from any window, gives the
+  /// act of the first.
+  Queue {
+    life: String,
+    entry: String,
+    hash: String,
+    shape: String,
+    message: String,
+    on: Option<String>,
+  },
+  /// The turn that the peer gave for a request of a model of a life that it answers, written as
+  /// the record writes a value, or why it gives none.
+  Answered {
+    life: String,
+    ask: u64,
+    turn: Option<Value>,
+    why: Option<String>,
+  },
+  /// What the peer added to the text and to the thought of the turn of a request, as it writes.
+  Wrote {
+    life: String,
+    ask: u64,
+    text: String,
+    thinking: String,
+  },
+  /// The place of the daemon given to the daemon of a new build: each life written to its
+  /// checkpoint and ended, and the lives with their pins in the answer, once the daemon stopped to
+  /// listen.
+  Handover,
   #[serde(rename = "view.mount")]
   ViewMount(Mount),
   #[serde(rename = "view.tree")]
@@ -196,16 +316,29 @@ impl Verb {
         | Self::Turns { .. }
         | Self::Program { .. }
         | Self::Standing { .. }
+        | Self::Filled { .. }
         | Self::Cwd { .. }
         | Self::Inspect { .. }
         | Self::Pending { .. }
+        | Self::Names { .. }
+        | Self::Gate { .. }
         | Self::ViewMount(_)
         | Self::ViewTree(_)
-        | Self::ViewEvent(_)
         | Self::ViewEffect(_)
         | Self::ViewDispose(_)
     );
     if reads { Role::Read } else { Role::Write }
+  }
+
+  /// The kind of peer that says the verb, when it is a frame of a view: a window mounts, says what
+  /// a person did and disposes, and a skill serves the trees and the effects. Any other peer is
+  /// refused it.
+  pub fn speaker(&self) -> Option<Kind> {
+    match self {
+      Self::ViewMount(_) | Self::ViewEvent(_) | Self::ViewDispose(_) => Some(Kind::Window),
+      Self::ViewTree(_) | Self::ViewEffect(_) => Some(Kind::Skill),
+      _ => None,
+    }
   }
 }
 
@@ -220,6 +353,11 @@ pub enum Frame {
   Refused { id: Option<u64>, error: ProtocolError, why: String },
   /// One event of a life that the peer attached, under its place in the log of the life.
   Event { life: String, seq: Seq, event: Event },
+  /// Who is attached to a life now, pushed to each of its windows after each attach and detach.
+  Presence { life: String, peers: Vec<Peer> },
+  /// A request of a model of a life that the peer answers: its number, and the request with the
+  /// actor, the chain, the messages and the settings.
+  Ask { life: String, ask: u64, request: Value },
   #[serde(rename = "view.mount")]
   ViewMount(Mount),
   #[serde(rename = "view.tree")]
@@ -261,6 +399,16 @@ pub enum Answer {
     value: Value,
   },
   Presence(Vec<Peer>),
+  /// The lives that a daemon gave at its handover.
+  Handed(Vec<Handed>),
+}
+
+/// A life that a daemon gave at its handover: its record, its folder, and the holder of each pin.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Handed {
+  pub life: String,
+  pub cwd: String,
+  pub pins: Vec<String>,
 }
 
 /// A record of the machine, and whether a life of the daemon holds it now.
@@ -364,6 +512,34 @@ pub struct Node {
   pub shape: Shape,
 }
 
+impl Node {
+  /// The node as a window that only reads gets it: each node that acts, inert.
+  #[must_use]
+  pub fn inert(self) -> Node {
+    let shape = match self.shape {
+      Shape::Input { value, hint, .. } => Shape::Input { value, hint, inert: true },
+      Shape::Button { label, .. } => Shape::Button { label, inert: true },
+      Shape::Box { axis, gap, border, children } => {
+        Shape::Box { axis, gap, border, children: inerts(children) }
+      }
+      Shape::List { items } => Shape::List { items: inerts(items) },
+      Shape::Table { header, rows } => {
+        Shape::Table { header, rows: rows.into_iter().map(inerts).collect() }
+      }
+      shape @ (Shape::Text { .. }
+      | Shape::Progress { .. }
+      | Shape::Code { .. }
+      | Shape::Diff { .. }
+      | Shape::Markdown { .. }) => shape,
+    };
+    Node { shape, ..self }
+  }
+}
+
+fn inerts(nodes: Vec<Node>) -> Vec<Node> {
+  nodes.into_iter().map(Node::inert).collect()
+}
+
 /// The closed set of the nodes of a view, which each window draws in its own way.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "node", rename_all = "snake_case")]
@@ -387,9 +563,15 @@ pub enum Shape {
   Input {
     value: String,
     hint: Option<String>,
+    /// A node that acts is inert in the window of a peer that only reads: it draws and takes no
+    /// gesture.
+    #[serde(default)]
+    inert: bool,
   },
   Button {
     label: String,
+    #[serde(default)]
+    inert: bool,
   },
   /// The share of the work that is done, from 0 to 1, or none while it is not known.
   Progress {

@@ -70,7 +70,7 @@ fn a_snapshot_that_fails_to_land_leaves_no_part_of_it_on_the_disk() {
   fs::create_dir_all(path(&record).join("held")).unwrap();
   let mut keeper = Keeper::new(record.clone(), "build".to_owned());
   let table: Table = serde_json::from_str(
-    r#"{"root":"chain1","ears":[],"kept":[],"opened":[],"given":"","working":[]}"#,
+    r#"{"root":"chain1","ears":[],"kept":[],"opened":{},"given":"","working":[]}"#,
   )
   .unwrap();
   keeper.write(&table, &[0; 4096]);
@@ -91,4 +91,32 @@ fn a_snapshot_fits_on_a_disk_that_holds_twice_its_size_free_or_that_says_nothing
 fn the_free_space_of_a_folder_is_the_space_of_its_disk() {
   let room = super::free(&place("free")).expect("a disk says its free space");
   assert!(room > 0);
+}
+
+#[test]
+#[cfg(unix)]
+fn the_files_of_a_record_whose_name_is_no_text_keep_its_bytes() {
+  use std::{
+    ffi::OsString,
+    os::unix::ffi::{OsStrExt, OsStringExt},
+  };
+
+  let mut name = place("bytes").into_os_string().into_vec();
+  name.extend_from_slice(b"/record\xff.jsonl");
+  let record = PathBuf::from(OsString::from_vec(name.clone()));
+  let mut snapshot = name.clone();
+  snapshot.extend_from_slice(b".snapshot");
+  assert_eq!(path(&record).as_os_str().as_bytes(), snapshot.as_slice());
+  let mut aside_name = snapshot;
+  aside_name.extend_from_slice(b".tmp");
+  assert_eq!(aside(&record).as_os_str().as_bytes(), aside_name.as_slice());
+  let mut log = name;
+  log.extend_from_slice(b".log");
+  let log = PathBuf::from(OsString::from_vec(log));
+  if fs::write(&log, "one\n").is_err() {
+    return;
+  }
+  let keeper = Keeper::new(record, "build".to_owned());
+  assert!(keeper.grew(), "a log that no snapshot covers holds something new");
+  assert!(super::log(&keeper.record).is_some(), "the log of a name that is no text is read");
 }

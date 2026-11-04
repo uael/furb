@@ -207,8 +207,8 @@ export function outline(tops: readonly Thread[], folds: ReadonlySet<string>): Th
 
 /** One thread of a chain, as the list of the threads of that chain shows it: its prompt, the first line of its message,
  * its messages, the questions and the notices that it made for the operator, the questions that wait in it, and its
- * state. A thread is resolved once its prompt and
- * each of its messages is over, and a message to a resolved thread opens it again until its model closes the message. */
+ * state. A thread is resolved when its prompt is over. A message of None on an open thread is over at once, so it
+ * holds nothing open, and a prompt of str on a resolved thread opens it again until its model closes that prompt. */
 export interface ChainThread {
   act: LiveAct;
   title: string;
@@ -223,6 +223,11 @@ export interface ChainThread {
   origin: "operator" | "rung" | "ear";
   /** Whether the operator started it, directly or by a word of their own. */
   yours: boolean;
+}
+
+/** The acts whose changes are the work of a thread: its prompt, its messages and its prompts to the operator. */
+export function threadWork(thread: Pick<ChainThread, "act" | "messages" | "asked">): LiveAct[] {
+  return [thread.act, ...thread.messages, ...thread.asked];
 }
 
 /** Whether an act is the operator's own: made by them, or by one of their sessions. */

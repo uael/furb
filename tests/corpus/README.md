@@ -12,12 +12,17 @@ The test `make_the_corpus` in `tests/promise.rs` makes the records of `next`. Ea
   life keeps its checkpoint. A second life of the same engine goes on from the checkpoint. It takes a prompt, defines a
   name on what the checkpoint holds, and leaves a prompt open.
 - `crossed.jsonl` is the same life with no kit. Its tail names another engine.
+- `language.jsonl` holds the definitions that a word uses, with no kit: `def` and `async def`, a class and a dataclass,
+  `match`, comprehensions, f-strings and t-strings, a type alias, generics and decorators. A checkpoint holds some of
+  them, and the tail after it holds the others.
 - Beside each record, `<name>.modules` shows what the module of each chain held when the build made the record. It lists
   each value, and what each definition gives, as python shows them. It has no name of a kit. A minor release may change
   a kit and its defaults.
 
 The test `each_record_of_each_folder_of_the_corpus_opens_gives_back_its_modules_and_takes_one_more_turn` in
-`tests/promise.rs` runs in `cargo test`. It also runs on Linux in `.github/workflows/corpus.yml`, on each pull request.
+`tests/promise.rs` runs in `cargo test`. It also runs in `.github/workflows/corpus.yml`, on each pull request: on Linux, and on Linux, macOS and Windows when
+the pull request changes a line of `Cargo.toml` that names monty, since a move of the pin of monty may change what a
+stored definition gives.
 For each record of each folder, it does these steps:
 
 1. It opens the record. It gets no refusal and no drift.

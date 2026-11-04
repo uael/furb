@@ -65,7 +65,7 @@ contract needs a request of the owner.
 | `src/furb/AGENTS.md` | The technical names of the engine, and the laws that no test can hold. |
 | `DOCTRINE.md` | The doctrine of furb: how a model works in furb. The setup of the root reads it, and each chain with no source holds that read. |
 | `src/furb/__init__.py` | The switch: `FURB_ENGINE` picks the engine that `from furb import engine` gives. |
-| `src/engine.rs`, `src/sand.rs` | One life of `engine.py` in the sandbox of monty, how each value crosses, and the verbs that a host says. |
+| `src/engine.rs`, `src/engine/`, `src/sand.rs` | One life of `engine.py` in the sandbox of monty, how each value crosses, and the verbs that a host says. |
 | `src/snapshot.rs` | The snapshot of a life beside its record: the state that a later life on the same record, build and ears opens from with no replay, which it checks against the record. |
 | `src/ear.rs`, `src/fact.rs` | The ear, the one thing a life hears by, and a fact as the engine says it. |
 | `src/value.rs`, `src/wire.rs` | A value that crosses between the engine and a host, and that value as JSON. |
@@ -76,7 +76,7 @@ contract needs a request of the owner.
 | --- | --- |
 | `src/furb/kernel.py` | The Kernel, which runs the word of a rung in the module of its chain. Both engines load it. |
 | `src/furb/sheet.py` | The sheet that the gate reads a word on, and the findings that it reads off it. |
-| `src/gate.rs` | The gate: the type checker of monty, which reads a sheet. |
+| `src/gate.rs`, `src/gate/` | The gate: the type checker of monty, which reads a sheet. |
 
 ### The World and the life
 
@@ -85,7 +85,7 @@ contract needs a request of the owner.
 | `src/world.rs` | The ears of the World that the crate writes, one for each concern. |
 | `src/world/files.rs` | The files: a read and a write of a path, and of a path of `scratch://`, and a read of an image, which a model sees. |
 | `src/world/scratch.rs` | The scratch directory of a life: its place in the cache of furb for each record, the paths of `scratch://`, and the files that a record makes again in it. |
-| `src/world/bash.rs` | The commands: each runs in a shell of the machine, in the working directory of its chain, with `TMPDIR` set to the scratch directory. |
+| `src/world/bash.rs`, `src/world/bash/` | The commands: each runs in a shell of the machine, in the working directory of its chain, with `TMPDIR` set to the scratch directory. `shell.rs` holds the sh and its PATH, `group.rs` the processes that a command ends together, and `kept.rs` the head and the tail that a stream keeps. |
 | `src/world/fetch.rs` | The fetch: a page over HTTP as a text, as Markdown when it is HTML, which the question `fetch` asks. |
 | `src/world/mcp.rs`, `src/world/mcp/` | The client of the MCP servers: the ear `mcp`, which answers the acts `mcp_*` and says the fact `mcp_changed`, and the servers, their config, their sign-in and their tools. |
 | `src/world/time.rs` | The clock, a chance, and a wait. |
@@ -106,7 +106,14 @@ no network.
 
 | File | What it holds |
 | --- | --- |
-| `src/world/provider.rs` | The ear: the standing, each reply, the messages of a turn, what a model writes as it writes it, and the usage of a turn. |
+| `src/world/provider.rs` | The provider: the models that it offers, the default actor, its refresh, and what the host is told while a model writes. |
+| `src/world/provider/hearer.rs` | The ear: one method for each event that it hears, the replies that it took, and the notes that it tells a chain. |
+| `src/world/provider/model.rs` | A model: its class, its settings, the standing that a chain reads, and the request of a reply. |
+| `src/world/provider/word.rs` | The word of a reply as its model writes it: what the gate finds against it, and each part of it that runs. |
+| `src/world/provider/messages.rs` | The turns of a chain as the messages that a model reads. |
+| `src/world/provider/answer.rs` | The call of a model for a reply: the stream, the retries, and the turn that its answer gives, with its usage. |
+| `src/world/provider/retry.rs` | The failures of a call that pass, and the wait before the provider asks the model again. |
+| `src/world/provider/thinking.rs` | The most tokens of thought of a model in one turn, and how a model takes them. |
 | `src/world/provider/catalog.rs` | The catalog: the snapshot and its cache, which models it offers, the credential and the address of each, the efforts of each kind of request, the default actor, and the roster. |
 | `src/world/provider/local.rs` | The local server: its address, its key, the models it lists, and the window of each. |
 | `src/world/provider/catalog.json` | The snapshot of models.dev and of the data of pi-ai, one model on each line, which `script/catalog.py` makes again. |
@@ -148,7 +155,6 @@ and `cli/pyproject.toml` say.
 | `cli/src/main.rs` | The words of the command line, on clap, and the commands `prompt`, `turns`, `facts`, `run`, `checkpoint`, `catalog` and `extensions`. |
 | `cli/src/life.rs` | One life on the opening of the crate: the prompt of the record it takes up, and how the operator awaits an act. |
 | `cli/src/console.rs` | The console of the terminal, which shows each prompt to the operator and reads the line back by the rules of the crate. |
-| `cli/src/rpc.rs` | The JSON-RPC of `--mode rpc`, which [`docs/rpc.md`](docs/rpc.md) says. Change the two together. |
 | `cli/src/tui.rs` | How furb finds the TUI and hands the terminal to it. |
 | `cli/tests/furb.rs` | The tests, which run `furb` as a process, on a claude command line that answers from a script. |
 

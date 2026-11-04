@@ -18,6 +18,13 @@ export type Request1 =
   | {
       life: string;
       cwd?: string | null;
+      actor?: string | null;
+      roster?: string[] | null;
+      extensions?: boolean | null;
+      config?: string | null;
+      claude?: string | null;
+      answers?: boolean;
+      attach?: number | null;
       verb: "open";
     }
   | {
@@ -75,6 +82,11 @@ export type Request1 =
     }
   | {
       life: string;
+      act: string;
+      verb: "filled";
+    }
+  | {
+      life: string;
       on?: string | null;
       verb: "cwd";
     }
@@ -105,6 +117,7 @@ export type Request1 =
   | {
       life: string;
       act: string;
+      why?: string | null;
       verb: "pause";
     }
   | {
@@ -115,11 +128,13 @@ export type Request1 =
   | {
       life: string;
       act: string;
+      why?: string | null;
       verb: "cancel";
     }
   | {
       life: string;
       label?: string | null;
+      source?: string | null;
       on?: string | null;
       verb: "chain";
     }
@@ -128,6 +143,86 @@ export type Request1 =
       word: string;
       on?: string | null;
       verb: "run";
+    }
+  | {
+      life: string;
+      act: string;
+      value: string;
+      verb: "close";
+    }
+  | {
+      life: string;
+      usd?: number | null;
+      share?: number | null;
+      on?: string | null;
+      verb: "grant";
+    }
+  | {
+      life: string;
+      command: string;
+      stdin?: string | null;
+      feed?: boolean;
+      on?: string | null;
+      verb: "bash";
+    }
+  | {
+      life: string;
+      path: string;
+      on?: string | null;
+      verb: "read";
+    }
+  | {
+      life: string;
+      path: string;
+      content: string;
+      on?: string | null;
+      verb: "write";
+    }
+  | {
+      life: string;
+      on?: string | null;
+      verb: "names";
+    }
+  | {
+      life: string;
+      word: string;
+      on?: string | null;
+      verb: "gate";
+    }
+  | {
+      life: string;
+      verb: "stand";
+    }
+  | {
+      life: string;
+      about: string;
+      verb: "seen";
+    }
+  | {
+      life: string;
+      entry: string;
+      hash: string;
+      shape: string;
+      message: string;
+      on?: string | null;
+      verb: "queue";
+    }
+  | {
+      life: string;
+      ask: number;
+      turn?: unknown;
+      why?: string | null;
+      verb: "answered";
+    }
+  | {
+      life: string;
+      ask: number;
+      text: string;
+      thinking: string;
+      verb: "wrote";
+    }
+  | {
+      verb: "handover";
     }
   | (Mount & {
       verb: "view.mount";
@@ -145,9 +240,10 @@ export type Request1 =
       verb: "view.dispose";
     });
 /**
- * What a peer is: a window of an operator, or the process of a skill.
+ * What a peer is: a window of an operator, the process of a skill, or the daemon of a new build,
+ * which asks the handover.
  */
-export type Kind = "window" | "skill";
+export type Kind = "window" | "skill" | "daemon";
 /**
  * Where a window shows a view. The dock follows the chain that it names, and the row, the detail
  * and the mark follow the chain of the act that they name. The sidebar, the footer, a screen and
@@ -212,10 +308,16 @@ export type Node1 =
   | {
       value: string;
       hint?: string | null;
+      /**
+       * A node that acts is inert in the window of a peer that only reads: it draws and takes no
+       * gesture.
+       */
+      inert?: boolean;
       node: "input";
     }
   | {
       label: string;
+      inert?: boolean;
       node: "button";
     }
   | {
@@ -284,6 +386,17 @@ export type Frame =
       event: Event;
       frame: "event";
     }
+  | {
+      life: string;
+      peers: Peer[];
+      frame: "presence";
+    }
+  | {
+      life: string;
+      ask: number;
+      request: unknown;
+      frame: "ask";
+    }
   | (Mount & {
       frame: "view.mount";
     })
@@ -340,6 +453,10 @@ export type Answer =
   | {
       answer: "presence";
       data: Peer[];
+    }
+  | {
+      answer: "handed";
+      data: Handed[];
     };
 /**
  * What a peer may do: read a life, or read and write it. Write holds each right of read.
@@ -376,6 +493,56 @@ export type ProtocolError =
   | {
       why: string;
       error: "refused";
+    }
+  | {
+      error: "stopped";
+    }
+  | {
+      life: string;
+      error: "closed";
+    }
+  | {
+      life: string;
+      error: "relative";
+    }
+  | {
+      life: string;
+      error: "unattached";
+    }
+  | {
+      life: string;
+      holder: string;
+      error: "unpinned";
+    }
+  | {
+      life: string;
+      ask: number;
+      error: "unasked";
+    }
+  | {
+      life: string;
+      error: "answerless";
+    }
+  | {
+      needs: Kind;
+      has: Kind;
+      error: "speaker";
+    }
+  | {
+      error: "nameless";
+    }
+  | {
+      life: string;
+      skill: string;
+      error: "no_skill";
+    }
+  | {
+      viewer: string;
+      error: "unmounted";
+    }
+  | {
+      viewer: string;
+      error: "mounted";
     };
 /**
  * What a life tells its clients, in the order of its log.
@@ -547,6 +714,14 @@ export interface Peer {
 export interface Listed {
   life: string;
   open: boolean;
+}
+/**
+ * A life that a daemon gave at its handover: its record, its folder, and the holder of each pin.
+ */
+export interface Handed {
+  life: string;
+  cwd: string;
+  pins: string[];
 }
 /**
  * One act of a life with its meaning, as it stands after the last fact about it.

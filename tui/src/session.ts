@@ -27,12 +27,13 @@ import {
   beside,
   busy,
   cancelled,
+  chainThreads,
   type Desk,
   desk,
   failed,
   rollUp,
   type State,
-  sessionNamed,
+  threadWork,
   working as workOf,
 } from "furb/life";
 import type { Engine, HostView, Usage } from "./bridge.ts";
@@ -107,6 +108,9 @@ export const statusLabels: Record<Status, string> = {
   saved: "Saved",
 };
 /** Whether an act is at work: it lives, no pause holds it, and its kind is one whose work takes time. */
+/** Whether an act is a notice to the operator: a prompt of None to him, which tells and asks nothing. */
+export const notice = (act: ActRow): boolean =>
+  act.kind === "prompt" && act.words[0] === "None" && act.words[2] === "operator";
 export const working = (act: ActRow): boolean =>
   !act.done && !act.paused && !act.unfinished && WORK.includes(act.kind);
 /** The phase of an act that a view of the whole life reads: whether it is done or held, when it began and ended, and
@@ -154,6 +158,9 @@ interface Index {
   /** The last act on each chain that is no chain and no grant, and the chains whose last act failed. */
   latest: Map<string, ActRow>;
   failing: Set<string>;
+  /** The last rename_session that is done and the last name_session that gave a name, on each chain, from which the
+   * root gives the name of the session. */
+  named: Map<string, { said?: ActRow; given?: ActRow }>;
 }
 
 /** The place of an act in each list of an index that holds it, and whether it is among the writes that are done. */
@@ -203,6 +210,13 @@ function placed(index: Index, act: ActRow): void {
     index.latest.set(act.on, act);
     if (failed(act)) index.failing.add(act.on);
     else index.failing.delete(act.on);
+  }
+  const naming = act.kind === "rename_session" ? "said" : act.kind === "name_session" ? "given" : undefined;
+  if (naming && act.done && typeof act.value === "string" && (naming === "said" || act.value)) {
+    const names = index.named.get(act.on) ?? {};
+    index.named.set(act.on, names);
+    const past = names[naming];
+    if (!past || (index.at.get(past.id) ?? 0) <= (index.at.get(act.id) ?? 0)) names[naming] = act;
   }
   if (act.kind === "read" && act.done && act.words[0] === "skills://") {
     const past = index.skills;
@@ -390,6 +404,13 @@ export class Session extends EventEmitter {
     if (this.pinned !== undefined) return this.pinned ?? undefined;
     return this.thread ?? (this.fresh || this.shape !== "str" ? undefined : this.lit);
   }
+  /** The shape of a line sent on a thread: None, a message that its model reads at its next step and that is done at
+   * once, while the prompt of the thread is open and a model answers it, else str, a prompt that opens a thread over
+   * again, as the engine reads a prompt on a thread. */
+  lineShape(thread: string): "None" | "str" {
+    const prompt = this.acts.find((act) => act.id === thread);
+    return prompt?.kind === "prompt" && !prompt.done && prompt.words[2] !== "operator" ? "None" : "str";
+  }
   /** The input sends its next message to the thread named, or starts a new thread when none is named. */
   aim(thread?: string): void {
     this.thread = thread;
@@ -537,17 +558,8 @@ export class Session extends EventEmitter {
     this.emit("change");
   }
   private changed = () => {
-    // A notice asks nothing, so it settles as the console takes it, and no key of the operator dismisses it.
-    for (const id of this.host.notices.keys())
-      if (!this.settled.has(id)) {
-        this.settled.add(id);
-        void this.host.dismiss(id).catch(this.fail);
-      }
-    for (const id of this.settled) if (!this.host.notices.has(id)) this.settled.delete(id);
     this.emit("change");
   };
-  /** The notices that the session dismissed, until the console drops them. */
-  private readonly settled = new Set<string>();
   /** The theme that the session shows: the one that the preferences name, or the one of the mode of the terminal. */
   get theme(): ThemeName {
     return themeOf(this.preferences.theme, this.preferences.terminalMode);
@@ -579,7 +591,9 @@ export class Session extends EventEmitter {
    * with rename_session, else the name that the extension naming gave with name_session. An empty name from the
    * operator gives the name of the directory again. */
   get recordName(): string | undefined {
-    const name = sessionNamed(this.activityByChain.get(this.engine.root) ?? [], this.engine.root);
+    const names = this.indexed().named.get(this.engine.root);
+    const said = names?.said?.value ?? names?.given?.value;
+    const name = said === undefined ? undefined : String(said);
     return name === undefined ? undefined : name || basename(this.host.directory);
   }
   /** Whether a chain is the one where the extension naming asks a model for the name of the session, which the
@@ -867,7 +881,6 @@ export class Session extends EventEmitter {
     if (chain ? this.error : Object.entries(this.errors).some(([key, error]) => error && !this.damaged[key]))
       return "failed";
     if (this.queueHeld && this.queued.length) return "asks";
-    if (this.host.pending.size) return "paused";
     if (!chain && this.host.prompts.size) return "asks";
     const state = this.actStatus(chain);
     return this.paused && (state === "idle" || state === "failed") ? "paused" : state;
@@ -897,6 +910,13 @@ export class Session extends EventEmitter {
     this.liveRead = { version: this.version, on };
     return on;
   }
+  /** Whether a model writes a word on a chain: a rung of it that is not done and has no word in the program yet. It
+   * reads the acts of the chain that are not done, and not each act of the life. */
+  writing(chain: string): boolean {
+    return (this.liveOn().get(chain) ?? []).some(
+      (act) => act.kind === "rung" && !act.done && !this.program[act.id],
+    );
+  }
   /** The state of the acts of each chain, or of every chain, as actStatus read it at a version of the acts. */
   private states = { version: -1, of: new Map<string, Status>() };
   private statusOf(chain?: string): Status {
@@ -905,7 +925,6 @@ export class Session extends EventEmitter {
       act !== undefined && act.kind !== "chain" && act.kind !== "grant" && (!chain || act.on === chain);
     const asked = (ids: Iterable<string>) => [...ids].some((id) => mine(index.ids.get(id)));
     if (asked(this.host.prompts.keys())) return "asks";
-    if (asked(this.host.pending.keys())) return "paused";
     // Only an act that is not done works or waits under a pause, and the index holds each such act.
     const live = (chain ? (this.liveOn().get(chain) ?? []) : [...index.live.values()]).filter(
       (act) => mine(act) && !act.unfinished,
@@ -948,18 +967,86 @@ export class Session extends EventEmitter {
       ...(rungs.length ? [workOf(local, remote)] : ["runs" as const]),
     ]);
   }
-  /** The state of a chain. A chain that the operator started, directly or by a word of their own, and that finished
-   * its work while another chain was shown, is finished and not yet seen until the operator opens it. */
+  /** The state of a chain. A chain that the operator started, directly or by a word of their own, that rests and that
+   * holds a thread of his that is over with work past the place up to which he read it is unread, until a fact seen
+   * covers that work. A checkpoint carries no thread that is over, so a life on it holds no such work from before. */
   chainStatus(id: string): Status {
     const status = this.actStatus(id);
-    const before = this.phases.get(id);
-    this.phases.set(id, status);
-    const chain = this.indexed().ids.get(id);
-    const mine = chain?.by === "operator" || this.actOf(chain?.by ?? "")?.by === "operator";
-    if (id === this.selected || status !== "idle") this.unread.delete(id);
-    else if (before && busy(before as State) && mine) this.unread.add(id);
-    return status === "idle" && this.unread.has(id) ? "unread" : status;
+    return status === "idle" && this.unreadChain(id) ? "unread" : status;
   }
+  /** Whether a chain that the operator started holds work past the place up to which he read it. The chain shown is
+   * read as it shows. */
+  private unreadChain(id: string): boolean {
+    if (id === this.selected) return false;
+    const index = this.indexed();
+    const chain = index.ids.get(id);
+    const mine = chain?.by === "operator" || this.actOf(chain?.by ?? "")?.by === "operator";
+    if (!mine) return false;
+    const owed = new Set(this.host.prompts.keys());
+    const on = this.activityByChain.get(id) ?? [];
+    // A notice to the operator on the chain itself, out of any thread, is unread until a fact seen of the chain covers it.
+    const read = this.read(id);
+    if (on.some((act) => notice(act) && !act.thread && act.began > read)) return true;
+    return chainThreads(on, index.ids, owed, this.threadsKnown).some(
+      (thread) => thread.resolved && thread.yours && this.unreadThread(thread.act.id, threadWork(thread)),
+    );
+  }
+  /** What the threads of the chains keep of each prompt that they read. */
+  private readonly threadsKnown = new WeakMap<LiveAct, { message: string | undefined; title: string }>();
+  /** The place of the last change of some acts: the latest place at which one of them began or ended. */
+  placeOf(acts: readonly ActRow[]): number {
+    let place = 0;
+    for (const act of acts) place = Math.max(place, act.ended ?? act.began);
+    return place;
+  }
+  /** Whether a thread holds work past the place up to which the operator read it, as a fact seen says. A thread that
+   * the feed shows open counts as read until the operator leaves it. */
+  unreadThread(id: string, acts: readonly ActRow[]): boolean {
+    const chain = this.indexed().ids.get(id)?.on ?? "";
+    // A chain that the operator left covers each thread that it showed him. The chain shown covers none yet, so a
+    // folded thread of it shows new work.
+    const left = Math.max(this.host.seen.get(chain) ?? 0, this.told.get(chain) ?? 0);
+    return this.placeOf(acts) > Math.max(this.read(id), left);
+  }
+  /** The place up to which the operator read a chain or a thread: the last fact seen of the record, or what this
+   * window shows him or said that he read, whose fact did not come back yet. */
+  private read(id: string): number {
+    return Math.max(this.host.seen.get(id) ?? 0, this.showing.get(id) ?? 0, this.told.get(id) ?? 0);
+  }
+  /** A chain or a thread that shows its work to the operator now: when he leaves it, the record says that he read it
+   * up to the place of that work. */
+  shows(id: string, acts: readonly ActRow[]): void {
+    const place = this.placeOf(acts);
+    if (place <= this.read(id)) return;
+    this.showing.set(id, place);
+    this.readsCount++;
+  }
+  /** A count that changes each time a place up to which the operator read a chain or a thread changes, so that a view
+   * keeps what it read of the unread threads while the count stands. */
+  get readsVersion(): number {
+    if (this.readsSeen !== this.host.seen) {
+      this.readsSeen = this.host.seen;
+      this.readsCount++;
+    }
+    return this.readsCount;
+  }
+  private readsCount = 0;
+  private readsSeen?: Map<string, number>;
+  /** The operator leaves what showed new work to him, or one thread of it when an id is given: the record says up to
+   * which place he read each. A window that reads only says nothing. */
+  leave(id?: string): void {
+    if (id === undefined && this.selected) this.shows(this.selected, this.activity);
+    for (const [about, place] of this.showing) {
+      if (id !== undefined && about !== id) continue;
+      this.showing.delete(about);
+      this.told.set(about, place);
+      if (this.host.role !== "read" && !this.host.reading && !this.host.recorded)
+        void this.host.see(about, place).catch(this.fail);
+    }
+  }
+  /** What showed new work to the operator in this window, up to which place, until he leaves it. */
+  private readonly showing = new Map<string, number>();
+  private readonly told = new Map<string, number>();
   /** The chains that a view of the chains shows apart, each with its state: the root, the chain shown, and each chain
    * whose state is not idle, in the order of the chains, and how many other chains rest. It reads the state of each
    * chain that can be other than idle: one with work that is not done or held, a question of the operator, a last act
@@ -971,8 +1058,7 @@ export class Session extends EventEmitter {
       this.selected,
       ...this.liveOn().keys(),
       ...index.failing,
-      ...this.unread,
-      ...[...this.phases].flatMap(([id, phase]) => (phase === "idle" ? [] : [id])),
+      ...index.chains.flatMap((chain) => (this.unreadChain(chain.id) ? [chain.id] : [])),
       ...[...this.host.prompts.keys(), ...this.host.pending.keys()].flatMap(
         (id) => index.ids.get(id)?.on ?? [],
       ),
@@ -1001,20 +1087,13 @@ export class Session extends EventEmitter {
     return out;
   }
   /** A message or a word that the operator sends to a paused chain wakes the chain first, since the operator who
-   * writes to it wants it to go on: work that a reopened record held starts again, and the pause over the chain ends.
-   * It says whether the chain was paused. */
+   * writes to it wants it to go on: the pause over the chain ends. It says whether the chain was paused. */
   async wakeForInput(): Promise<boolean> {
     if (!this.paused) return false;
-    if (this.host.pending.size) await this.host.resume();
-    await this.refresh();
-    if (this.paused) await this.engine.wake(this.selected);
+    await this.engine.wake(this.selected);
     await this.refresh();
     return true;
   }
-  /** The chains that the operator started and that finished their work while another chain was shown, which wait for
-   * the operator to look at them, and the state that each chain had when the view last read it. */
-  private readonly unread = new Set<string>();
-  private readonly phases = new Map<string, Status>();
   get chains(): ActRow[] {
     return this.indexed().chains;
   }
@@ -1042,6 +1121,7 @@ export class Session extends EventEmitter {
       work: new Map(),
       latest: new Map(),
       failing: new Set(),
+      named: new Map(),
     };
     for (const [place, act] of this.acts.entries()) {
       index.ids.set(act.id, act);
@@ -1328,6 +1408,7 @@ export class Session extends EventEmitter {
     return id === this.engine.root ? "Main" : String((chain?.kind === "chain" && chain.words[0]) || "Chain");
   }
   async select(id: string): Promise<void> {
+    if (id !== this.selected) this.leave();
     // The moment that the feed shows is one of the chain shown, so another chain is shown as it stands now.
     if (id !== this.selected) this.moment = undefined;
     // The turns and the program of the chain left are not the chain selected, which shows them once it has read them.
@@ -1769,15 +1850,14 @@ export class Session extends EventEmitter {
     this.emit("compose", String(last.words[1] ?? ""));
   }
   /** A message to a thread, from the box at the end of the thread. It goes to the thread whatever the input is
-   * doing, and a message to a thread that is over opens it again. */
+   * doing: a message that its model reads at its next step while the thread is open, and a prompt that opens the
+   * thread again once it is over. */
   async reply(thread: string, input: string): Promise<void> {
     if (!input.trim() || this.host.reading) return;
     this.error = "";
     this.notice = "";
-    const pending = this.host.pending.size > 0;
-    const id = await this.engine.prompt("str", { message: input.trim(), on: thread });
+    const id = await this.engine.prompt(this.lineShape(thread), { message: input.trim(), on: thread });
     this.notice = `Your message went to the thread ${thread}.`;
-    if (pending) this.emit("resume");
     this.track(id);
     await this.refresh();
   }
@@ -1805,18 +1885,16 @@ export class Session extends EventEmitter {
       else {
         await this.attachFiles(input);
         this.redo = [];
-        const pending = this.host.pending.size > 0;
         const thread = this.target;
         this.fresh = false;
         this.pinned = undefined;
         const id = thread
-          ? await this.engine.prompt("str", { message: this.withImages(input), on: thread })
+          ? await this.engine.prompt(this.lineShape(thread), { message: this.withImages(input), on: thread })
           : await this.engine.prompt(this.shape, { message: this.withImages(input), on: this.selected });
         if (thread) this.notice = `Your message went to the thread ${thread}.`;
         this.sentTo.set(id, thread);
         delete this.images[this.selected];
         this.save();
-        if (pending) this.emit("resume");
         this.track(id);
       }
     }
@@ -1900,10 +1978,6 @@ export class Session extends EventEmitter {
         this.notice = "Paused. In-flight work can finish.";
         break;
       case "wake": {
-        if (this.host.pending.size) {
-          this.emit("resume");
-          break;
-        }
         // With no chain named, the wake goes to the whole life: a pause of one chain holds the chains it made, and the
         // chains that stand outside it, so a wake of the selected chain alone leaves them paused.
         const stopped = argument
@@ -2179,6 +2253,7 @@ export class Session extends EventEmitter {
    * on when it runs in a host of its own, or the life ends when end is set. */
   async dispose(end = false): Promise<void> {
     clearTimeout(this.noticeTimer);
+    this.leave();
     this.closed = true;
     this.host.off("change", this.changed);
     this.host.off("fault", this.fail);

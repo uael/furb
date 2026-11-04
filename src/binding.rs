@@ -520,22 +520,6 @@ pub fn shell() -> String {
   world::shell().display().to_string()
 }
 
-/// The memory that the sandboxes of this process hold, in bytes, above the least that the process held when the first
-/// began. A host reads it from any thread, to warn the operator before the bound.
-#[cfg_attr(feature = "python", pyfunction)]
-#[cfg_attr(feature = "typescript", napi)]
-pub fn sandbox_held() -> i64 {
-  i64::try_from(crate::sand::held()).unwrap_or(i64::MAX)
-}
-
-/// The memory at which a sandbox raises a `MemoryError` and the life stops, in bytes: 4 GiB, or what
-/// `FURB_SANDBOX_MEMORY` gives in MiB.
-#[cfg_attr(feature = "python", pyfunction)]
-#[cfg_attr(feature = "typescript", napi)]
-pub fn sandbox_bound() -> i64 {
-  i64::try_from(crate::sand::bound()).unwrap_or(i64::MAX)
-}
-
 /// Every shape the operator answers, by its name.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
@@ -711,7 +695,8 @@ pub fn levels() -> Vec<&'static str> {
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn attach_image(directory: String, path: String) -> Result<ImageAttachment, Fault> {
-  let got = images::attach(directory.as_ref(), path.as_ref()).map_err(Fault::refused)?;
+  let got = images::attach(directory.as_ref(), path.as_ref())
+    .map_err(|no| Fault::refused(no.to_string()))?;
   let size = i64::try_from(got.size).unwrap_or(i64::MAX);
   Ok(ImageAttachment { name: got.name, uri: got.uri, mime_type: got.media.to_owned(), size })
 }
@@ -721,7 +706,8 @@ pub fn attach_image(directory: String, path: String) -> Result<ImageAttachment, 
 #[cfg_attr(feature = "typescript", napi)]
 pub fn image_content(directory: String, uri: String) -> Result<ImageContent, Fault> {
   use base64::{Engine as _, engine::general_purpose::STANDARD};
-  let (media, bytes) = images::read(directory.as_ref(), &uri).map_err(Fault::refused)?;
+  let (media, bytes) =
+    images::read(directory.as_ref(), &uri).map_err(|no| Fault::refused(no.to_string()))?;
   Ok(ImageContent { data: STANDARD.encode(bytes), mime_type: media.to_owned() })
 }
 
@@ -729,8 +715,9 @@ pub fn image_content(directory: String, uri: String) -> Result<ImageContent, Fau
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn image_path(directory: String, uri: String) -> Result<ImagePath, Fault> {
-  let (path, digest) = images::path(directory.as_ref(), &uri).map_err(Fault::refused)?;
-  Ok(ImagePath { path: path.display().to_string(), digest })
+  let found =
+    images::path(directory.as_ref(), &uri).map_err(|no| Fault::refused(no.to_string()))?;
+  Ok(ImagePath { path: found.path.display().to_string(), digest: found.digest })
 }
 
 /// How a message names an image: `![name](uri)`.
@@ -751,7 +738,7 @@ pub fn image_references(message: String) -> Vec<images::Named> {
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn image_type(data: &[u8]) -> Result<ImageType, Fault> {
-  let (media, extension) = images::kind(data).map_err(Fault::refused)?;
+  let (media, extension) = images::kind(data).map_err(|no| Fault::refused(no.to_string()))?;
   Ok(ImageType { mime_type: media.to_owned(), extension: extension.to_owned() })
 }
 

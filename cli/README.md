@@ -1,7 +1,7 @@
 # furb, the command line
 
 `furb` is the command line of furb. With no command, it opens the TUI. With a command, it runs one life and prints
-what it gave. With `--mode rpc`, it serves one life to another program.
+what it gave.
 
 ```sh
 pip install furb                     # Gives the command furb. It needs Python 3.14 or later.
@@ -21,7 +21,6 @@ From a clone, `uv run furb` runs the `furb` of the clone, and `cargo run -p furb
 | `furb extensions` | Print the extensions that a life here runs, each with its life word. |
 | `furb checkpoint --record FILE` | Write at the tip of a record the checkpoint of its life, from which a build of a later version goes on. It asks no model. |
 | `furb catalog` | Print where the models of this machine came from. `--update` fetches them again now. |
-| `furb --mode rpc` | Serve one life on stdin and stdout, as [the JSON-RPC](https://github.com/uael/furb/blob/main/docs/rpc.md) says. |
 
 These words go with each command that opens a life. `extensions` and `checkpoint` take only `--record` and `--cwd`:
 

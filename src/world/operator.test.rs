@@ -1,6 +1,6 @@
 //! The operator: a line it writes back, read as a value of the shape a prompt wants.
 
-use super::{answered, answers};
+use super::{Shape, answered, answers};
 
 /// What a line comes to, as python shows it, or why it is none.
 fn read(shape: &str, line: &str) -> String {
@@ -18,10 +18,11 @@ fn a_line_is_read_as_the_shape_a_prompt_wants() {
 
 #[test]
 fn a_line_that_is_no_value_of_the_shape_is_refused() {
-  assert_eq!(read("int", "many"), "Refused: \"many\" is no int");
-  assert_eq!(read("int", "0x10"), "Refused: \"0x10\" is no int");
+  let digit = "invalid digit found in string";
+  assert_eq!(read("int", "many"), format!("Refused: \"many\" is no int: {digit}"));
+  assert_eq!(read("int", "0x10"), format!("Refused: \"0x10\" is no int: {digit}"));
   assert_eq!(read("bool", "maybe"), "Refused: \"maybe\" is neither yes nor no");
-  assert_eq!(read("list", "{}"), "Refused: \"{}\" is no list");
+  assert_eq!(read("list", "{}"), "Refused: \"{}\" is no list: {} does not fit");
   assert_eq!(read("set", "{}"), "Refused: the operator answers no set");
 }
 
@@ -73,22 +74,28 @@ fn a_list_a_dict_and_a_tuple_hold_items_of_their_shapes() {
 }
 
 #[test]
-fn an_item_that_has_not_the_shape_of_its_place_refuses_the_line() {
-  assert_eq!(read("list[str]", "[1]"), "Refused: \"[1]\" is no list[str]");
-  assert_eq!(read("list[int]", "[1.5]"), "Refused: \"[1.5]\" is no list[int]");
-  assert_eq!(read("list[str]", "a, b"), "Refused: \"a, b\" is no list[str]");
+fn an_item_that_has_not_the_shape_of_its_place_refuses_the_line_with_the_item() {
+  assert_eq!(read("list[str]", "[1]"), "Refused: \"[1]\" is no list[str]: 1 does not fit");
+  assert_eq!(read("list[int]", "[1.5]"), "Refused: \"[1.5]\" is no list[int]: 1.5 does not fit");
+  assert_eq!(
+    read("list[str]", "a, b"),
+    "Refused: \"a, b\" is no list[str]: expected value at line 1 column 1"
+  );
   assert_eq!(
     read("dict[str, int]", r#"{"a": "b"}"#),
-    "Refused: \"{\\\"a\\\": \\\"b\\\"}\" is no dict[str, int]"
+    r#"Refused: "{\"a\": \"b\"}" is no dict[str, int]: "b" does not fit"#
   );
-  assert_eq!(read("tuple[int, str]", "[1]"), "Refused: \"[1]\" is no tuple[int, str]");
+  assert_eq!(
+    read("tuple[int, str]", "[1]"),
+    "Refused: \"[1]\" is no tuple[int, str]: [1] does not fit"
+  );
   assert_eq!(
     read("tuple[int, str]", r#"[1, "a", 2]"#),
-    "Refused: \"[1, \\\"a\\\", 2]\" is no tuple[int, str]"
+    r#"Refused: "[1, \"a\", 2]" is no tuple[int, str]: [1, "a", 2] does not fit"#
   );
   assert_eq!(
     read("list[Literal['a']]", r#"["b"]"#),
-    "Refused: \"[\\\"b\\\"]\" is no list[Literal['a']]"
+    r#"Refused: "[\"b\"]" is no list[Literal['a']]: "b" does not fit"#
   );
   for shape in [
     "list[Option]",
@@ -115,4 +122,22 @@ fn a_union_is_its_first_shape_that_reads_the_line_and_none_for_no_word() {
   assert_eq!(read("Literal['a'] | None", "a"), "'a'");
   assert_eq!(read("list[str] | None", r#"["a"]"#), "['a']");
   assert_eq!(read("int | None", "four"), "Refused: \"four\" is no int | None");
+}
+
+#[test]
+fn a_shape_gives_the_lines_of_its_choices_and_whether_no_word_answers_it() {
+  let choices = |name: &str| Shape::parse(name).map(|one| one.choices()).unwrap_or_default();
+  assert_eq!(choices("bool"), ["yes", "no"]);
+  assert_eq!(
+    choices(r#"Literal["a, b", 'it\'s', 3, True, None]"#),
+    ["a, b", "it's", "3", "True", "None"]
+  );
+  assert_eq!(choices("typing.Literal['one']"), Vec::<String>::new());
+  let nothing = |name: &str| Shape::parse(name).is_some_and(|one| one.takes_nothing());
+  assert!(nothing("int | None") && nothing("None | Literal['a']"));
+  assert!(!nothing("None") && !nothing("int") && !nothing("list[int | None]"));
+  assert_eq!(
+    (Shape::object("None").py_repr(), Shape::object("int").py_repr()),
+    ("None".into(), "'int'".into())
+  );
 }

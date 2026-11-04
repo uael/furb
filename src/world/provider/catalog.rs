@@ -30,19 +30,6 @@
 //!
 //! [`local`]: super::local
 
-#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
-#![expect(
-  clippy::clone_on_ref_ptr,
-  reason = "debt: a clone of an Arc or an Rc that hides its kind"
-)]
-#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
-#![expect(clippy::match_same_arms, reason = "debt: match arms with the same body")]
-#![expect(
-  clippy::return_self_not_must_use,
-  reason = "debt: a method that returns Self with no must_use"
-)]
-#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
-
 mod config;
 mod error;
 mod update;
@@ -66,7 +53,7 @@ use serde_json::{Map, Value, json};
 use super::{
   Class, Hosted, Model, Provider, Streams,
   claude::{self, Claude},
-  clients::{Client, Reach},
+  clients::{self, Client, Reach},
   local::{self, ENV_URL, Heard, LOCAL, Server},
   search,
 };
@@ -325,6 +312,7 @@ impl Catalog {
   /// The catalog with the claude command line at a path, or the one of this machine when only a stall is given, which
   /// it offers, and whose turn may go with no progress for the stall; and the catalog as it stands when neither is
   /// given, or when it finds no program.
+  #[must_use]
   pub fn claude(self, bin: Option<PathBuf>, stall: Option<Duration>) -> Catalog {
     blocking(self.discovered(bin, stall))
   }
@@ -508,9 +496,9 @@ impl Catalog {
     let (mut found, mut left) = (Vec::new(), Vec::new());
     for name in names.unwrap_or_default() {
       if self.seek(name).await.is_some() {
-        found.push(name.clone())
+        found.push(name.clone());
       } else {
-        left.push(name.clone())
+        left.push(name.clone());
       }
     }
     let held = match actor {
@@ -562,9 +550,9 @@ impl Catalog {
         let Some((model, level)) = self.actor(actor).await else {
           return Err(self.unknown(actor).await);
         };
-        let named = model.at(level);
+        let leveled = model.at(level);
         models.insert(0, model);
-        Some(named)
+        Some(leveled)
       }
       None => None,
     };
@@ -614,7 +602,7 @@ impl Catalog {
       Some(host) => models.into_iter().map(|model| model.hosted(Arc::clone(&host))).collect(),
       None => models,
     };
-    let thinking = super::thinking(self.thinking.as_deref(), std::path::Path::new(&directory));
+    let thinking = super::thinking(self.thinking.as_deref(), Path::new(&directory));
     Ok(Provider::new(directory, models).actor(actor).thinking(thinking))
   }
 }
@@ -748,7 +736,7 @@ impl Listing {
       Dialect::Anthropic if level == "off" && self.reasons("toggle") => {
         json!({"thinking": {"type": "disabled"}})
       }
-      Dialect::Anthropic if level == "off" => json!({}),
+      Dialect::Anthropic | Dialect::Pi if level == "off" => json!({}),
       Dialect::Anthropic if named && self.reasons("budget_tokens") => {
         json!({"output_config": {"effort": level}, "thinking": thought})
       }
@@ -769,7 +757,6 @@ impl Listing {
       Dialect::OpenRouter if level == "off" => json!({"reasoning": {"enabled": false}}),
       Dialect::OpenRouter => json!({"reasoning": {"max_tokens": budget(level)}}),
       Dialect::Chat => json!({"reasoning_effort": word}),
-      Dialect::Pi if level == "off" => json!({}),
       Dialect::Pi => json!({"reasoning": level}),
       Dialect::Silent => json!({}),
     };
@@ -953,11 +940,14 @@ pub(super) fn reached(
   client: Client,
   reach: Result<Reach, String>,
 ) -> Model {
-  let made: Arc<OnceLock<Result<Streams, String>>> = Arc::default();
+  let made: Arc<OnceLock<Result<Streams, clients::Error>>> = Arc::default();
   let search = reach.as_ref().ok().and_then(|one| search::native(client, one));
   let model = Model::lazy(name, window, move || {
-    let got = made.get_or_init(|| reach.clone().and_then(|reach| client.streams(&reach)));
-    got.clone().map_err(CompletionError::ProviderError)
+    let got = made.get_or_init(|| {
+      let reach = reach.clone().map_err(clients::Error::Unreached)?;
+      client.streams(&reach)
+    });
+    got.clone().map_err(|no| CompletionError::ProviderError(no.to_string()))
   });
   match search {
     Some(search) => model.searches(search),
@@ -980,18 +970,19 @@ fn listed(cached: Option<&PathBuf>) -> Arc<IndexMap<String, Listed>> {
   let pi = cached.and_then(|at| fs::read_to_string(at.with_file_name(update::PI)).ok());
   let mut kept = KEPT.get_or_init(Default::default).lock().unwrap_or_else(PoisonError::into_inner);
   match kept.get(&cached.cloned()) {
-    Some((was, was_pi, made)) if *was == text && *was_pi == pi => return made.clone(),
+    Some((was, was_pi, made)) if *was == text && *was_pi == pi => return Arc::clone(made),
     _ => {}
   }
   let mut made = parsed(SNAPSHOT, text.as_deref());
   update::applied(&mut made, pi.as_deref());
   let made = Arc::new(made);
-  kept.insert(cached.cloned(), (text, pi, made.clone()));
+  kept.insert(cached.cloned(), (text, pi, Arc::clone(&made)));
   made
 }
 
 /// The providers of a snapshot, each with the models of the cache when the cache holds models of it as new as those
 /// of the snapshot or newer. The last day that a model of a list changed says how new the list is.
+#[expect(clippy::expect_used, reason = "the snapshot is a file of the build, which a test reads")]
 pub(super) fn parsed(snapshot: &str, cached: Option<&str>) -> IndexMap<String, Listed> {
   let entries: IndexMap<String, Value> = serde_json::from_str(snapshot)
     .expect("the snapshot of the catalog is the JSON of its providers");
@@ -1031,6 +1022,7 @@ impl Listed {
 /// The class that the snapshot gives a model of a family that a program of its own serves, by the
 /// name of the family, as `claude-cli` or `codex`, and the name of the model in it, and nothing for
 /// a model that it does not list.
+#[expect(clippy::expect_used, reason = "the snapshot is a file of the build, which a test reads")]
 pub(super) fn family(name: &str, model: &str) -> Option<Class> {
   static FAMILIES: OnceLock<HashMap<String, Cached>> = OnceLock::new();
   let families = FAMILIES.get_or_init(|| {

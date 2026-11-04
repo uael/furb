@@ -1,10 +1,10 @@
-//! furb, the command line: the TUI, a JSON-RPC on stdin and stdout, and one command of the operator on one life.
+//! furb, the command line: the TUI, and one command of the operator on one life.
 //!
-//! With no command, furb hands the terminal to the TUI, or, with `--mode rpc`, serves a client on its stdin and its
-//! stdout. `prompt`, `turns`, `run` and `extensions` each open one life and print what it came to, and `facts` prints a record
-//! as it is. Every life runs on
-//! the engine of the crate, on the ears of the World that the crate writes, the extensions among them, and on the
-//! provider of the model of its default actor and of the models that `--roster` names, or of every model that the
+//! With no command, furb hands the terminal to the TUI. `prompt`, `turns`, `run` and
+//! `extensions` each open one life and print what it came to, and `facts` prints a record as
+//! it is. Every life runs on the engine of the crate, on the ears of the World that the
+//! crate writes, the extensions among them, and on the provider of the model of its default
+//! actor and of the models that `--roster` names, or of every model that the
 //! catalog of the crate offers when `--roster` names none.
 
 #![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
@@ -19,18 +19,20 @@
 )]
 
 mod console;
+mod host;
 mod life;
-mod rpc;
 mod tui;
 
 use std::{
   collections::HashMap,
   path::{Path, PathBuf},
   process::ExitCode,
+  time::Duration,
 };
 
-use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum, error::ErrorKind};
+use clap::{Args, Parser, Subcommand};
 use furb::{life::Opening, value::entry, verbs, world};
+use furb_host::GRACE;
 
 use crate::life::Life;
 
@@ -38,9 +40,6 @@ use crate::life::Life;
 #[derive(Parser)]
 #[command(name = "furb", version, about, args_conflicts_with_subcommands = true)]
 struct Furb {
-  /// What furb serves with no command: the TUI, or a JSON-RPC on stdin and stdout, which docs/rpc.md describes.
-  #[arg(long, value_enum, default_value_t = Mode::Tui)]
-  mode: Mode,
   /// Open the TUI on its demo session, which asks no model.
   #[arg(long)]
   demo: bool,
@@ -53,15 +52,6 @@ struct Furb {
   more: Vec<String>,
   #[command(subcommand)]
   command: Option<Command>,
-}
-
-/// What furb serves with no command.
-#[derive(Clone, Copy, PartialEq, ValueEnum)]
-enum Mode {
-  /// The TUI, which takes the terminal.
-  Tui,
-  /// A JSON-RPC: a command on each line of stdin, and a response or an event on each line of stdout.
-  Rpc,
 }
 
 /// The record a life keeps and resumes from, and the directory its chains start in.
@@ -163,12 +153,39 @@ enum Command {
     #[arg(long)]
     update: bool,
   },
+  /// Serve the daemon of this machine, which holds each life by its record while a window or a pin
+  /// holds it, and refuses to start where a daemon serves already.
+  Host {
+    /// How many seconds a life that no window and no pin holds lives before it writes its
+    /// checkpoint and ends.
+    #[arg(long, value_name = "SECONDS", default_value_t = GRACE.as_secs_f64(), value_parser = grace)]
+    grace: f64,
+    #[command(subcommand)]
+    then: Option<Hosting>,
+  },
   /// Print each extension that a life on the record runs: those it enables, then those that the configs of the user
   /// and of the directory turn on, each with its life word.
   Extensions {
     #[command(flatten)]
     place: Place,
   },
+}
+
+/// A grace in seconds, which is a duration.
+fn grace(given: &str) -> Result<f64, String> {
+  let seconds: f64 =
+    given.parse().map_err(|no| format!("{given} is no number of seconds: {no}"))?;
+  Duration::try_from_secs_f64(seconds)
+    .map(|_| seconds)
+    .map_err(|no| format!("{given} s is no grace: {no}"))
+}
+
+/// What `furb host` does beside serving.
+#[derive(Subcommand)]
+enum Hosting {
+  /// Serve in the place of the daemon that runs: it writes the checkpoint of each life and gives
+  /// them to this one, and each window connects again.
+  Upgrade,
 }
 
 impl Place {
@@ -208,15 +225,11 @@ fn main() -> ExitCode {
     Some(Command::Run { word, place, stand }) => run(stand.on(place.opening(true)), word),
     Some(Command::Extensions { place }) => extensions(place.opening(false)),
     Some(Command::Catalog { update }) => catalog(update),
+    Some(Command::Host { grace, then }) => {
+      host::serve(Duration::from_secs_f64(grace), matches!(then, Some(Hosting::Upgrade)))
+    }
     Some(Command::Checkpoint { record, cwd }) => {
       checkpoint(Place { record: Some(record.clone()), cwd }.opening(false), &record)
-    }
-    None if furb.mode == Mode::Rpc => {
-      if furb.demo || !furb.more.is_empty() {
-        let why = "--demo and the words after -- are for the TUI, and --mode rpc serves no TUI";
-        Furb::command().error(ErrorKind::ArgumentConflict, why).exit();
-      }
-      rpc::serve(furb.stand.on(furb.place.opening(true)), furb.place.record.as_deref())
     }
     None => {
       tui::launch(furb.demo, &furb.place, &furb.stand, &furb.more).map(|never| match never {})
@@ -268,7 +281,12 @@ fn prompt(opening: Opening, shape: &str, message: String, to: String) -> Result<
     None => {
       let with =
         verbs::Prompt { message: Some(message), to: Some(to), on: Some(life.root.clone()) };
-      life.engine.prompt(life::shape(shape), with).map_err(|no| no.to_string())?.id().to_owned()
+      life
+        .engine
+        .prompt(furb::world::Shape::object(shape), with)
+        .map_err(|no| no.to_string())?
+        .id()
+        .to_owned()
     }
   };
   println!("{}", life.settled(&id)?.py_repr());
@@ -314,22 +332,8 @@ fn facts(record: &Path, act: Option<&str>, chain: Option<&str>) -> Result<(), St
 }
 
 /// One word its caller wrote, run as a rung on the root of a life, awaited for what the word gave, as python shows it.
-/// A word that awaits only work that an earlier life left, which no wake runs, ends with an error that names that work.
 fn run(opening: Opening, word: String) -> Result<(), String> {
   let mut life = Life::lived(opening)?;
-  let mut pending = Vec::new();
-  for (id, _) in life.engine.pending().map_err(|no| no.to_string())? {
-    let act = life.engine.get(&id).map_err(|no| no.to_string())?;
-    pending.push((id, act.map(|one| one.on().to_owned()).unwrap_or_default()));
-  }
-  if let Some((_, chain)) = pending.first() {
-    let named: Vec<String> = pending.iter().map(|(id, on)| format!("{id} on {on}")).collect();
-    eprintln!(
-      "furb: an earlier life left {} pending, and it runs again only at a wake: from the word, as wake({chain:?}), \
-       from the TUI, or from `furb --mode rpc`.",
-      named.join(", ")
-    );
-  }
   let with = verbs::Rung { word: Some(word), on: Some(life.root.clone()), ..Default::default() };
   let id = life.engine.rung(with).map_err(|no| no.to_string())?.id().to_owned();
   println!("{}", life.settled(&id)?.py_repr());

@@ -2,7 +2,7 @@ import type { BoxRenderable, RGBA, TextRenderable } from "@opentui/core";
 import { busy, gist } from "furb/life";
 import { shortenHome, shortenHomes } from "../files.ts";
 import { clip, count, modelName, retryLine } from "../format.ts";
-import { readOnly } from "../reading.ts";
+import { readOnly, sameBuild } from "../reading.ts";
 import { statusLabels, views } from "../session.ts";
 import { theme as c, glyph, markOf, spacing as space, spin, threadTone } from "../theme.ts";
 import { bold, type Part, plain, styled } from "../ui.ts";
@@ -318,9 +318,7 @@ export const chrome = part({
       : (retries.find((stream) => stream.chain === w.selected) ?? retries[0])?.retry;
     // The block of the word that a model writes on the chain shown holds the loader of the step, so the footer turns
     // no second loader for it.
-    const written =
-      !retry &&
-      w.acts.some((act) => act.kind === "rung" && !act.done && act.on === w.selected && !w.program[act.id]);
+    const written = !retry && w.writing(w.selected);
     const moving = (busy(status) || status === "opening" || Boolean(retry)) && !written;
     this.statusMoves = moving;
     // While the block of the word holds the loader, the footer shows the still mark of a model that thinks.
@@ -360,7 +358,9 @@ export const chrome = part({
       ...(this.renderer.width < 100 && !this.reader
         ? ([["⌃\\", "sidebar", () => this.toggleSidebar()]] as readonly Offer[])
         : []),
-      ...(w.host.reading ? ([["/new", "Start a new life", () => this.startFrom()]] as readonly Offer[]) : []),
+      ...(w.host.reading && !sameBuild(w.host.reading)
+        ? ([["/new", "Start a new life", () => this.startFrom()]] as readonly Offer[])
+        : []),
       ...(group === "" && w.paused
         ? ([["/wake", "wake the chain", () => this.action("/wake")]] as const)
         : []),

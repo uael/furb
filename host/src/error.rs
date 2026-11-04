@@ -1,13 +1,14 @@
-//! The errors of the host: of a life, of the protocol, and of a transport.
+//! The errors of the host: of a life, of the protocol, of a transport, and of the access of a peer
+//! of the network.
 
-use std::{io, path::PathBuf};
+use std::{io, net::SocketAddr, path::PathBuf};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio_util::codec::LinesCodecError;
 
-use crate::protocol::Role;
+use crate::protocol::{Kind, Role};
 
 /// Why a life gave no reply to a command.
 #[derive(Debug, Error)]
@@ -53,6 +54,53 @@ pub enum ProtocolError {
   /// The daemon or the life refused the verb, with why.
   #[error("{why}")]
   Refused { why: String },
+  /// The daemon gave its place to the daemon of a new build, or stops.
+  #[error("the daemon stops")]
+  Stopped,
+  #[error("no life of the daemon lives on the record {life}")]
+  Closed { life: String },
+  /// A life is named by the absolute path of its record, the same for each peer.
+  #[error("the record {life} is not an absolute path")]
+  Relative { life: String },
+  #[error("the peer did not attach the life on the record {life}")]
+  Unattached { life: String },
+  #[error("no pin of the holder {holder} holds the life on the record {life}")]
+  Unpinned { life: String, holder: String },
+  /// A turn or a write for a request of a model that the life does not wait for.
+  #[error("no model of the life on the record {life} waits for the turn of the request {ask}")]
+  Unasked { life: String, ask: u64 },
+  /// A turn for a life whose models no peer answers.
+  #[error("no peer answers the models of the life on the record {life}")]
+  Answerless { life: String },
+  /// A frame of a view that only a window says, or only a skill, and the peer is of another kind.
+  #[error("the verb is said by a peer of the kind {needs:?}, and the peer is of the kind {has:?}")]
+  Speaker { needs: Kind, has: Kind },
+  /// A skill says its name at its hello, since a window mounts the views of a skill by it.
+  #[error("a skill says its name at its hello")]
+  Nameless,
+  #[error("no skill {skill} is attached to the life on the record {life}")]
+  NoSkill { life: String, skill: String },
+  /// A view belongs to the window that mounted it and to the skill that serves it, and to no other
+  /// peer.
+  #[error("the peer holds no view {viewer}")]
+  Unmounted { viewer: String },
+  /// A viewer names one view of the daemon.
+  #[error("a view {viewer} is mounted already")]
+  Mounted { viewer: String },
+}
+
+/// Why the daemon stops, or does not start.
+#[derive(Debug, Error)]
+pub enum DaemonError {
+  #[error(transparent)]
+  Transport(#[from] TransportError),
+  /// The daemon that runs refused the handover.
+  #[error("the daemon that runs refused the handover: {0}")]
+  Refused(#[from] ProtocolError),
+  #[error("the daemon that runs closed before it gave its lives")]
+  Unanswered,
+  #[error("the daemon that runs answered no frame of the protocol")]
+  Unread(#[source] serde_json::Error),
 }
 
 impl From<LifeError> for ProtocolError {
@@ -86,4 +134,43 @@ pub enum TransportError {
   Peer(#[from] LinesCodecError),
   #[error("a frame cannot be written as JSON")]
   Unwritten(#[from] serde_json::Error),
+  /// Tailscale gives this machine no address on the tailnet.
+  #[error("Tailscale gives this machine no address on the tailnet")]
+  Tailless,
+  /// Plain TCP listens only where `WireGuard` or the machine keeps the frames.
+  #[error("plain TCP listens only on loopback or on the tailnet, not on {addr}")]
+  Open { addr: SocketAddr },
+  #[error("the door of the windows draws no token")]
+  Random(#[source] getrandom::Error),
+  #[error("the address of the door of the windows cannot be written in {}", file.display())]
+  Door { file: PathBuf, source: io::Error },
+  /// A peer of the door of the windows gave no token of the daemon, or another.
+  #[error("a peer of the door of the windows gave no token of the daemon")]
+  Tokenless,
+  #[error("the WebSocket of a peer did not open")]
+  Upgrade(#[source] Box<tokio_tungstenite::tungstenite::Error>),
+  #[error(transparent)]
+  Access(#[from] AccessError),
+}
+
+/// Why the daemon lets in no peer of the network, or reads no settings of the host.
+#[derive(Debug, Error)]
+pub enum AccessError {
+  #[error("{} cannot be read", path.display())]
+  Read { path: PathBuf, source: io::Error },
+  #[error("{} holds no settings of the host", path.display())]
+  Parse { path: PathBuf, source: serde_json::Error },
+  /// The access list gives no role to the login, so the daemon refuses its peer.
+  #[error("the access list gives no role to {login}")]
+  Unlisted { login: String },
+  #[error("the local API of Tailscale does not answer at {place}")]
+  Api { place: String, source: io::Error },
+  #[error("the local API of Tailscale broke the exchange")]
+  Http(#[from] hyper::Error),
+  #[error("the request to the local API of Tailscale is not valid")]
+  Asked(#[from] hyper::http::Error),
+  #[error("the local API of Tailscale refused {path} with {status}: {why}")]
+  Status { path: String, status: u16, why: String },
+  #[error("the local API of Tailscale answered {path} with no JSON that furb reads")]
+  Unread { path: String, source: serde_json::Error },
 }

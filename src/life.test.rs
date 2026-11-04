@@ -27,7 +27,7 @@ use std::{
 
 use super::{Answer, Opening};
 use crate::{
-  Ear, Engine, Fact, Object, Text,
+  Act, Ear, Engine, Fact, Object, Text,
   ear::{ear, hear, hearing, say},
   extension::enabled,
   value::{ObjectRef, entry},
@@ -384,7 +384,7 @@ fn a_snapshot_that_its_record_outgrew_is_dropped_and_the_life_replays() {
 }
 
 #[test]
-fn a_life_whose_outside_works_keeps_a_snapshot_and_a_later_life_holds_that_work_as_a_replay_holds_it()
+fn a_life_whose_outside_works_keeps_a_snapshot_and_a_later_life_puts_that_work_to_the_outside_as_a_replay_does()
  {
   let at = place("works");
   let (record, again) = (at.join("record.jsonl"), at.join("again.jsonl"));
@@ -399,41 +399,89 @@ fn a_life_whose_outside_works_keeps_a_snapshot_and_a_later_life_holds_that_work_
   drop(first.wait(&[], verbs::Wait { seconds: Some(60.0), on: on.clone() }).unwrap());
   drop(first.bash("sleep 30", verbs::Bash { on, ..Default::default() }).unwrap());
   drop(first);
-  let one = heads(&record, 0).len();
+  let one = fs::read_to_string(&record).unwrap().lines().count();
   for end in ["", ".log", ".snapshot"] {
     fs::copy(format!("{}{end}", record.display()), format!("{}{end}", again.display())).unwrap();
   }
   let mut restored = open(&record, true);
   let mut replayed = open(&again, false);
   assert!(restored.restored(), "the snapshot covers the work that ran when the life ended");
-  let left = restored.pending().unwrap();
-  assert_eq!(
-    left,
-    [("wait1", "wait"), ("bash1", "bash")].map(|(a, b)| (a.to_owned(), b.to_owned()))
-  );
-  assert_eq!(
-    left,
-    replayed.pending().unwrap(),
-    "the work that ran waits for a wake, as in a replay"
-  );
   for engine in [&mut restored, &mut replayed] {
-    engine.wake("chain1").unwrap();
-    assert!(engine.pending().unwrap().is_empty(), "the wake put that work to the outside again");
+    assert!(engine.pending().unwrap().is_empty(), "the open put that work to the outside again");
   }
   drop((restored, replayed));
-  // The life from the snapshot stands again at its tip, where the root reads the clock, and each ear hears the wake
-  // in its own order.
+  // The record of each life after the first, by the kind and the name of each fact, in no order
+  // since each ear hears the wake in its own order, less what the life from the snapshot reads as
+  // it stands again at its tip.
   let acts = |record: &Path| {
-    let mut facts = heads(record, one);
-    facts.retain(|one| {
-      !one.contains("'stand") && !one.contains("'clock") && !one.starts_with("['tell', 'chain1'")
-    });
+    let lines = fs::read_to_string(record).unwrap();
+    let head = |line: &str| line.splitn(3, ',').take(2).collect::<Vec<_>>().join(",");
+    let mut facts: Vec<String> = lines.lines().skip(one).map(head).collect();
+    facts.retain(|fact| !fact.contains("\"stand") && !fact.contains("\"clock"));
     facts.sort();
     facts
   };
   let (restored, replayed) = (acts(&record), acts(&again));
-  assert!(restored.iter().any(|one| one.starts_with("['started', 'wait1'")), "{restored:?}");
+  assert!(restored.iter().any(|one| one == "[[\"started\",\"wait1\""), "{restored:?}");
   assert_eq!(restored, replayed, "both lives go on with the same facts");
+}
+
+#[test]
+fn a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_the_command_with_no_wake()
+ {
+  let at = place("cut");
+  let (asked, heard) = futures::channel::mpsc::unbounded::<()>();
+  let asked = Mutex::new(asked);
+  // The first model writes a part of its turn, and the life stops while it writes the rest.
+  let streams = Answer(Arc::new(move |_, told| {
+    told("x = ", "");
+    drop(asked.lock().unwrap().unbounded_send(()));
+    Box::pin(std::future::pending())
+  }));
+  let first = Opening {
+    roster: Some(vec!["claude-cli:opus".to_owned()]),
+    answer: Some(streams),
+    extensions: Some(false),
+    snapshot: Some(false),
+    ..opening(&at, true)
+  };
+  let mut first = first.boot::<String>([]).unwrap().0;
+  let on = Some("chain1".to_owned());
+  drop(first.bash("sleep 30", verbs::Bash { on: on.clone(), ..Default::default() }).unwrap());
+  let message = Some("go".to_owned());
+  let prompt = verbs::Prompt { message, on, ..Default::default() };
+  let prompt = first.prompt(Object::string("str"), prompt).unwrap().id().to_owned();
+  {
+    let mut heard = heard;
+    let streamed = futures::StreamExt::next(&mut heard);
+    let act = Act::<Object>::of(&mut first, &prompt);
+    futures::executor::block_on(futures::future::select(act, streamed));
+  }
+  drop(first);
+  let mut later = Opening {
+    extensions: Some(false),
+    snapshot: Some(false),
+    ..scripted(&at, &["close('again')"])
+  }
+  .boot::<String>([])
+  .unwrap()
+  .0;
+  assert!(
+    later.pending().unwrap().is_empty(),
+    "the open put the work that the stop cut to the outside"
+  );
+  let got = futures::executor::block_on(Act::<Object>::of(&mut later, &prompt)).unwrap();
+  assert_eq!(got.as_ref().as_str(), Some("again"), "the reply that the stop cut is asked again");
+  let command = later.word("repr(peek('bash1'))", vec![]).unwrap();
+  let command = command.as_ref().as_str().unwrap_or_default().to_owned();
+  assert!(
+    command.contains("interrupted"),
+    "the command that the stop cut ends as interrupted: {command}"
+  );
+  let running =
+    "[x[1] for x in transcript(ROOT) if x[0] == 'started' and x[1] != ROOT and not over(x[1])]";
+  let running = later.word(running, vec![]).unwrap().as_ref().py_repr();
+  assert_eq!(running, "[]", "no act stays running with no process");
 }
 
 #[test]
@@ -487,6 +535,18 @@ fn a_record_names_the_engine_and_the_version_that_made_it_once_in_a_file_of_line
     drop(open().unwrap());
     let made = vec![(world::engine(), Some(world::VERSION))];
     assert_eq!(builds(&record), made);
+    let kept = world::kept(&record).unwrap();
+    assert_eq!(
+      world::release(&kept).as_deref(),
+      Some(env!("CARGO_PKG_VERSION")),
+      "it names the release"
+    );
+    let schema = kept
+      .iter()
+      .filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of))
+      .find(|one| one.kind() == world::MADE)
+      .and_then(|one| one.word(2).and_then(|word| word.as_str().map(str::to_owned)));
+    assert_eq!(schema, Some(world::RECORD_SCHEMA.to_string()), "it names the schema of the record");
     drop(open().unwrap());
     assert_eq!(builds(&record), made, "a later life names it no more");
   }
@@ -513,6 +573,16 @@ fn a_record_that_names_no_engine_replays_as_before_and_names_none() {
   assert_eq!(builds(&record), Vec::new(), "this engine did not make it");
 }
 
+/// The fact made of a build of an engine and a version of the replay, with the schema of the record
+/// and the release of this build, as a line of the record holds it.
+fn made_of(engine: &str, version: i64) -> String {
+  format!(
+    "[\"made\",\"chain1\",\"store\",\"{engine}\",{version},\"{}\",\"{}\"]",
+    world::RECORD_SCHEMA,
+    env!("CARGO_PKG_VERSION")
+  )
+}
+
 /// A record of one rung that a life of a test kept, and the text of the record with its fact made changed.
 fn made_elsewhere(at: &Path, made: &str) -> (PathBuf, String) {
   let record = at.join("record.jsonl");
@@ -522,7 +592,7 @@ fn made_elsewhere(at: &Path, made: &str) -> (PathBuf, String) {
     .0;
   closed(&mut first, "x = 1\nclose(x)");
   drop(first);
-  let ours = format!("[\"made\",\"chain1\",\"store\",\"{}\",{}]", world::engine(), world::VERSION);
+  let ours = made_of(&world::engine(), world::VERSION);
   let text = fs::read_to_string(&record).unwrap();
   assert!(text.contains(&ours), "the record names this build");
   let text = text.replace(&ours, made);
@@ -533,7 +603,7 @@ fn made_elsewhere(at: &Path, made: &str) -> (PathBuf, String) {
 #[test]
 fn a_record_of_another_engine_of_the_same_version_replays_and_goes_on() {
   let at = place("same-version");
-  let made = format!("[\"made\",\"chain1\",\"store\",\"{}\",{}]", "0".repeat(64), world::VERSION);
+  let made = made_of(&"0".repeat(64), world::VERSION);
   let (record, _) = made_elsewhere(&at, &made);
   let open = || Opening { extensions: Some(false), snapshot: Some(false), ..opening(&at, true) };
   let mut later = open().boot::<String>([]).unwrap().0;
@@ -595,13 +665,23 @@ fn the_boot_of_a_life_asks_the_claude_command_line_its_models_once_and_a_later_s
   }
   .boot::<String>([])
   .unwrap();
+  // This test failed once in 20 full runs, with no log that said why. Each check says what the
+  // fake saw, so the next failure names its cause.
+  let saw = || {
+    let heard = |name: &str| fs::read_to_string(at.join(name)).unwrap_or_else(|no| no.to_string());
+    format!("discoveries: {:?}, model: {:?}", heard("discoveries"), heard("model"))
+  };
   assert_eq!(
     asked(),
     1,
-    "the opening asked the models, and the stand of the boot holds what it found"
+    "the opening asked the models, and the stand of the boot holds what it found; {}",
+    saw()
   );
-  stood(&mut engine).unwrap();
-  assert_eq!(asked(), 2, "a later stand asks the command line again");
+  let started = std::time::Instant::now();
+  let stand = stood(&mut engine);
+  let took = started.elapsed();
+  assert!(stand.is_ok(), "the stand took {took:?} and failed: {stand:?}; {}", saw());
+  assert_eq!(asked(), 2, "a later stand asks the command line again, in {took:?}; {}", saw());
 }
 
 #[test]
@@ -957,7 +1037,11 @@ fn a_checkpoint_holds_data_alone_and_a_later_engine_seeds_a_life_from_it_with_no
   let kept = world::kept(at.join("record.jsonl")).unwrap();
   let fact = entry(&kept[crate::checkpoint::last(&kept).unwrap()].as_ref(), 0).and_then(Fact::of);
   let data = crate::wire::outward(fact.unwrap().word(0).unwrap());
-  assert_eq!(data["schema"], serde_json::json!(crate::checkpoint::SCHEMA));
+  assert_eq!(data["schema"], serde_json::json!(world::CHECKPOINT_SCHEMA.to_string()));
+  assert!(
+    data.get("version").is_none(),
+    "the checkpoint names its schema and no version of the replay"
+  );
   assert!(data.get("entries").is_none(), "the checkpoint holds data and no entry");
   let chains: Vec<&str> =
     data["chains"].as_array().unwrap().iter().filter_map(|one| one["id"].as_str()).collect();
@@ -1033,25 +1117,135 @@ fn a_checkpoint_of_a_later_life_of_a_record_opens_with_no_drift_and_seeds_the_ro
   }
 }
 
-#[test]
-fn a_checkpoint_of_a_later_schema_is_refused_with_both_schemas() {
-  let at = place("checkpoint-schema");
-  let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
-  closed(&mut first, "kept = 1\nclose(kept)");
+/// The word of the first life of a record whose module, chain and open prompt a later life holds.
+const WAITED: &str =
+  "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0)\nclose('late')";
+
+/// A life on a record that holds a value, a definition, a chain and a prompt open on it, which ends
+/// with its checkpoint, and the name of that prompt.
+fn checkpointed(at: &Path) -> String {
+  let mut first = scripted(at, &[WAITED]).boot::<String>([]).unwrap().0;
+  let word = "work = chain('work')\nSIZE = 6\ndef f():\n  return SIZE\nwaiting = prompt(str, 'Wait.', on=work)\n\
+              await wait(0.3)\nclose(str(waiting))";
+  let waiting = closed(&mut first, word).as_ref().as_str().unwrap().to_owned();
   first.checkpoint().unwrap();
+  waiting
+}
+
+/// A later life on the record of [`checkpointed`] holds each chain, the turns of the root, the
+/// module and the open prompt on its chain.
+fn reopened(at: &Path, waiting: &str, why: &str) {
+  let mut later = scripted(at, &[]).boot::<String>([]).unwrap().0;
+  let word = format!(
+    "close([f(), get('chain2')[4], len(turns(on='chain1')) > 1, get('{waiting}')[3:5], \
+     isinstance(peek('{waiting}'), str) or not over('{waiting}')])"
+  );
+  assert_eq!(
+    closed(&mut later, &word).as_ref().py_repr(),
+    "[6, 'work', True, ('chain2', 'str'), True]",
+    "{why}"
+  );
+}
+
+/// The record at a place, with each line that holds a piece changed by a function.
+fn changed(at: &Path, piece: &str, change: impl Fn(&str) -> String) {
+  let path = at.join("record.jsonl");
+  let text = fs::read_to_string(&path).unwrap();
+  assert!(text.contains(piece), "the record holds {piece}");
+  let lines: Vec<String> = text
+    .lines()
+    .map(|line| if line.contains(piece) { change(line) } else { line.to_owned() })
+    .collect();
+  fs::write(&path, lines.join("\n") + "\n").unwrap();
+}
+
+#[test]
+fn a_checkpoint_of_a_later_minor_of_its_schema_with_fields_more_opens_with_each_chain_and_its_prompts()
+ {
+  let at = place("checkpoint-minor");
+  let waiting = checkpointed(&at);
+  let ours = format!("\"schema\":\"{}\"", world::CHECKPOINT_SCHEMA);
+  let later =
+    format!("\"schema\":\"{}.{}\",\"later\":{{\"seen\":1}}", world::CHECKPOINT_SCHEMA.major, 9);
+  changed(&at, "[[\"checkpoint\",", |line| {
+    line.replace(&ours, &later).replace("\"id\":\"", "\"later\":1,\"id\":\"")
+  });
   let text = fs::read_to_string(at.join("record.jsonl")).unwrap();
-  let schema = format!("\"schema\":{}", crate::checkpoint::SCHEMA);
-  assert!(text.contains(&schema), "the checkpoint names its schema");
-  let later = format!("\"schema\":{}", crate::checkpoint::SCHEMA + 1);
-  fs::write(at.join("record.jsonl"), text.replace(&schema, &later)).unwrap();
+  assert!(text.contains("\"later\":1,\"id\":\"chain2\""), "a chain holds a field more");
+  reopened(
+    &at,
+    &waiting,
+    "a later minor of the schema opens, and each field that this build does not know is skipped",
+  );
+}
+
+#[test]
+fn a_record_whose_tail_holds_a_kind_of_fact_that_this_build_does_not_know_opens_with_each_chain_and_its_prompts()
+ {
+  let at = place("record-kind");
+  let waiting = checkpointed(&at);
+  let later = format!(
+    "[[\"made\",\"chain1\",\"store\",\"{}\",{},\"{}.9\",\"9.9.9\"]]",
+    "0".repeat(64),
+    world::VERSION + 1,
+    world::RECORD_SCHEMA.major
+  );
+  let unknown = [
+    later.as_str(),
+    "[[\"glimpse\",\"chain1\",\"store\",{\"seen\":1}]]",
+    "[[\"glimpse\",\"glimpse1\",\"store\",\"chain1\",\"later\"]]",
+    "[[\"done\",\"glimpse1\",\"store\",\"seen\"]]",
+  ];
+  let path = at.join("record.jsonl");
+  let text = fs::read_to_string(&path).unwrap();
+  fs::write(&path, format!("{text}{}\n", unknown.join("\n"))).unwrap();
+  reopened(
+    &at,
+    &waiting,
+    "a later build of the major made the tail, and this build skips the kind that it does not know",
+  );
+}
+
+#[test]
+fn a_record_of_another_major_of_its_schema_is_refused_with_both_schemas_and_keeps_nothing() {
+  let at = place("record-major");
+  checkpointed(&at);
+  let ours = format!(",\"{}\",", world::RECORD_SCHEMA);
+  let theirs = format!(",\"{}.0\",", world::RECORD_SCHEMA.major + 1);
+  changed(&at, "[[\"made\",", |line| line.replace(&ours, &theirs));
+  let text = fs::read_to_string(at.join("record.jsonl")).unwrap();
   let refused = scripted(&at, &[]).boot::<String>([]).unwrap_err();
   assert_eq!(
     refused.message(),
     format!(
-      "the checkpoint of the record holds the schema {}, and this build reads the schema {} at most: open the \
-       record with a later build",
-      crate::checkpoint::SCHEMA + 1,
-      crate::checkpoint::SCHEMA
+      "the record holds the schema {}.0, of another major than the schema {} that this build writes: open it with a \
+       build that writes the major {}, or start a new life",
+      world::RECORD_SCHEMA.major + 1,
+      world::RECORD_SCHEMA,
+      world::RECORD_SCHEMA.major + 1
+    )
+  );
+  assert_eq!(fs::read_to_string(at.join("record.jsonl")).unwrap(), text, "it keeps nothing");
+}
+
+#[test]
+fn a_checkpoint_of_another_major_of_its_schema_is_refused_with_both_schemas() {
+  let at = place("checkpoint-schema");
+  let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  closed(&mut first, "kept = 1\nclose(kept)");
+  first.checkpoint().unwrap();
+  let ours = format!("\"schema\":\"{}\"", world::CHECKPOINT_SCHEMA);
+  let theirs = format!("\"schema\":\"{}.0\"", world::CHECKPOINT_SCHEMA.major + 1);
+  changed(&at, &ours, |line| line.replace(&ours, &theirs));
+  let refused = scripted(&at, &[]).boot::<String>([]).unwrap_err();
+  assert_eq!(
+    refused.message(),
+    format!(
+      "the checkpoint holds the schema {}.0, of another major than the schema {} that this build writes: open it \
+       with a build that writes the major {}, or start a new life",
+      world::CHECKPOINT_SCHEMA.major + 1,
+      world::CHECKPOINT_SCHEMA,
+      world::CHECKPOINT_SCHEMA.major + 1
     )
   );
 }
@@ -1297,12 +1491,10 @@ fn a_record_of_another_version_opens_on_this_build_from_its_last_checkpoint() {
   let written = crate::checkpoint::written(&mut first).unwrap();
   drop(first);
   crate::checkpoint::keep(&path, written).unwrap();
-  let made =
-    |engine: &str, version: i64| format!("[\"made\",\"chain1\",\"store\",\"{engine}\",{version}]");
   let text = fs::read_to_string(&path).unwrap();
-  let ours = made(&world::engine(), world::VERSION);
+  let ours = made_of(&world::engine(), world::VERSION);
   assert!(text.contains(&ours), "{text}");
-  fs::write(&path, text.replace(&ours, &made(&"0".repeat(64), world::VERSION + 1))).unwrap();
+  fs::write(&path, text.replace(&ours, &made_of(&"0".repeat(64), world::VERSION + 1))).unwrap();
   let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
   assert_eq!(
     closed(&mut later, "close(kept + 1)").as_ref().as_int(),
@@ -1345,8 +1537,7 @@ fn a_record_that_another_engine_went_on_with_after_a_checkpoint_opens_with_each_
   // The facts after the checkpoint name another engine, as a build of another engine names them.
   let path = at.join("record.jsonl");
   let text = fs::read_to_string(&path).unwrap();
-  let made =
-    |engine: &str| format!("[\"made\",\"chain1\",\"store\",\"{engine}\",{}]", world::VERSION);
+  let made = |engine: &str| made_of(engine, world::VERSION);
   let cut = text
     .rfind("[[\"checkpoint\"")
     .and_then(|at| text[at..].find('\n').map(|end| at + end))

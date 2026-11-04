@@ -6,7 +6,7 @@
 use std::{
   collections::{HashMap, HashSet},
   fs::{self, OpenOptions},
-  io::{ErrorKind, Write},
+  io::{self, ErrorKind, Write},
   path::{Path, PathBuf},
   time::SystemTime,
 };
@@ -29,6 +29,25 @@ const KINDS: [(&str, &str, &[u8]); 4] = [
   ("image/webp", "webp", b"RIFF"),
 ];
 
+/// Why an image did not attach, keep or read.
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+  #[error("Choose a PNG, JPEG, GIF, or WebP image.")]
+  NotImage,
+  #[error("An image must be a file of at most 20 MiB.")]
+  TooLarge,
+  #[error("The saved image is too large.")]
+  SavedTooLarge,
+  #[error("The saved image attachment has changed.")]
+  Changed,
+  #[error("Invalid image attachment.")]
+  Invalid,
+  #[error("The image {uri} did not load from {}: {source}", path.display())]
+  Unloaded { uri: String, path: PathBuf, source: io::Error },
+  #[error("{0}")]
+  Io(#[from] io::Error),
+}
+
 /// An image a host attached: the name of its file, its uri, its media type, and its size in bytes.
 pub struct Attached {
   pub name: String,
@@ -47,7 +66,7 @@ pub struct Named {
 }
 
 /// The type of an image by its first bytes: its media type and its extension, for a PNG, a JPEG, a GIF or a WebP.
-pub fn kind(bytes: &[u8]) -> Result<(&'static str, &'static str), String> {
+pub fn kind(bytes: &[u8]) -> Result<(&'static str, &'static str), Error> {
   let gif = bytes.get(4..6).is_some_and(|version| version == b"7a" || version == b"9a");
   let webp = bytes.get(8..12) == Some(b"WEBP");
   KINDS
@@ -61,65 +80,71 @@ pub fn kind(bytes: &[u8]) -> Result<(&'static str, &'static str), String> {
         }
     })
     .map(|(media, extension, _)| (*media, *extension))
-    .ok_or_else(|| "Choose a PNG, JPEG, GIF, or WebP image.".to_owned())
+    .ok_or(Error::NotImage)
 }
 
 /// An image copied into a directory of images under the digest of its bytes, with the name of the file it came from.
-pub fn attach(directory: &Path, path: &Path) -> Result<Attached, String> {
-  let info = fs::metadata(path).map_err(|no| no.to_string())?;
+pub fn attach(directory: &Path, path: &Path) -> Result<Attached, Error> {
+  let info = fs::metadata(path)?;
   if !info.is_file() || info.len() > LARGEST {
-    return Err("An image must be a file of at most 20 MiB.".to_owned());
+    return Err(Error::TooLarge);
   }
-  let bytes = fs::read(path).map_err(|no| no.to_string())?;
+  let bytes = fs::read(path)?;
   let (uri, media) = keep(directory, &bytes)?;
   let name = path.file_name().map(|one| one.to_string_lossy().into_owned()).unwrap_or_default();
   Ok(Attached { name, uri, media, size: bytes.len() as u64 })
 }
 
 /// An image kept in a directory of images under the digest of its bytes: its uri and its media type.
-pub fn keep(directory: &Path, bytes: &[u8]) -> Result<(String, &'static str), String> {
+pub fn keep(directory: &Path, bytes: &[u8]) -> Result<(String, &'static str), Error> {
   if bytes.len() as u64 > LARGEST {
-    return Err("An image must be a file of at most 20 MiB.".to_owned());
+    return Err(Error::TooLarge);
   }
   let (media, extension) = kind(bytes)?;
   let file = format!("{}.{extension}", digest(bytes));
-  fs::create_dir_all(directory).map_err(|no| no.to_string())?;
+  fs::create_dir_all(directory)?;
   let mut options = OpenOptions::new();
   options.write(true).create_new(true);
   #[cfg(unix)]
   std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
   match options.open(directory.join(&file)) {
-    Ok(mut kept) => kept.write_all(bytes).map_err(|no| no.to_string())?,
+    Ok(mut kept) => kept.write_all(bytes)?,
     Err(no) if no.kind() == ErrorKind::AlreadyExists => {}
-    Err(no) => return Err(no.to_string()),
+    Err(no) => return Err(no.into()),
   }
   Ok((format!("{SCHEME}{file}"), media))
 }
 
 /// The file of a directory of images that holds the image of a uri, and the digest its bytes have.
-pub fn path(directory: &Path, uri: &str) -> Result<(PathBuf, String), String> {
-  let (digest, _) = parts(uri).ok_or_else(|| "Invalid image attachment.".to_owned())?;
+pub struct Located {
+  pub path: PathBuf,
+  pub digest: String,
+}
+
+/// Where the image of a uri stands in a directory of images.
+pub fn path(directory: &Path, uri: &str) -> Result<Located, Error> {
+  let (digest, _) = parts(uri).ok_or(Error::Invalid)?;
   let file = uri.strip_prefix(SCHEME).unwrap_or_default();
-  Ok((directory.join(file), digest.to_owned()))
+  Ok(Located { path: directory.join(file), digest: digest.to_owned() })
 }
 
 /// The bytes of the image of a uri, and its media type, once the bytes have the digest the uri names.
-pub fn read(directory: &Path, uri: &str) -> Result<(&'static str, Vec<u8>), String> {
-  let (path, named) = path(directory, uri)?;
-  let size = fs::metadata(&path).map_err(|no| unloaded(uri, &path, &no))?.len();
+pub fn read(directory: &Path, uri: &str) -> Result<(&'static str, Vec<u8>), Error> {
+  let Located { path, digest: named } = path(directory, uri)?;
+  let size = fs::metadata(&path).map_err(|no| unloaded(uri, &path, no))?.len();
   if size > LARGEST {
-    return Err("The saved image is too large.".to_owned());
+    return Err(Error::SavedTooLarge);
   }
-  let bytes = fs::read(&path).map_err(|no| unloaded(uri, &path, &no))?;
+  let bytes = fs::read(&path).map_err(|no| unloaded(uri, &path, no))?;
   if digest(&bytes) != named {
-    return Err("The saved image attachment has changed.".to_owned());
+    return Err(Error::Changed);
   }
   Ok((kind(&bytes)?.0, bytes))
 }
 
 /// Why the image of a uri did not load: the file it was read from, and what the system said.
-fn unloaded(uri: &str, path: &Path, no: &std::io::Error) -> String {
-  format!("The image {uri} did not load from {}: {no}", path.display())
+fn unloaded(uri: &str, path: &Path, source: io::Error) -> Error {
+  Error::Unloaded { uri: uri.to_owned(), path: path.to_owned(), source }
 }
 
 /// How a message names an image: `![name](uri)`, with each bracket and line break of the name as `_`.
@@ -172,7 +197,14 @@ fn digest(bytes: &[u8]) -> String {
 /// with the size and the time of the change of the file it was read at.
 pub(super) struct Images {
   directory: Option<PathBuf>,
-  held: HashMap<PathBuf, ((u64, Option<SystemTime>), UserContent)>,
+  held: HashMap<PathBuf, Held>,
+}
+
+/// The content of an image, with the size and the time of the change of the file it was read at.
+struct Held {
+  len: u64,
+  modified: Option<SystemTime>,
+  content: UserContent,
 }
 
 impl Images {
@@ -190,7 +222,7 @@ impl Images {
     &mut self,
     python: &str,
     given: &mut HashSet<String>,
-  ) -> Result<Vec<UserContent>, String> {
+  ) -> Result<Vec<UserContent>, Error> {
     let Some(directory) = self.directory.clone() else { return Ok(Vec::new()) };
     let mut uris: Vec<Named> = Vec::new();
     for paragraph in paragraphs(python) {
@@ -217,14 +249,15 @@ impl Images {
   }
 
   /// The content of the image of a uri: the one read before while its file stays the same, or read now.
-  fn image(&mut self, directory: &Path, uri: &str) -> Result<UserContent, String> {
-    let (path, _) = path(directory, uri)?;
-    let info = fs::metadata(&path).map_err(|no| unloaded(uri, &path, &no))?;
-    let stamp = (info.len(), info.modified().ok());
-    if let Some((held, content)) = self.held.get(&path)
-      && *held == stamp
+  fn image(&mut self, directory: &Path, uri: &str) -> Result<UserContent, Error> {
+    let path = path(directory, uri)?.path;
+    let info = fs::metadata(&path).map_err(|no| unloaded(uri, &path, no))?;
+    let (len, modified) = (info.len(), info.modified().ok());
+    if let Some(held) = self.held.get(&path)
+      && held.len == len
+      && held.modified == modified
     {
-      return Ok(content.clone());
+      return Ok(held.content.clone());
     }
     let (media, bytes) = read(directory, uri)?;
     let content = UserContent::image_base64(
@@ -232,7 +265,7 @@ impl Images {
       ImageMediaType::from_mime_type(media),
       None,
     );
-    self.held.insert(path, (stamp, content.clone()));
+    self.held.insert(path, Held { len, modified, content: content.clone() });
     Ok(content)
   }
 }

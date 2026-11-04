@@ -92,7 +92,7 @@ async function fooAndBar(directory: string, open: () => Workspaces) {
   return { library, group, first, second };
 }
 
-test("workspaces keep sessions alive, report background completion and input, and reopen saved records paused", () =>
+test("workspaces keep sessions alive, report background completion and input, and reopen saved records whose work goes on", () =>
   withLibrary(async ({ directory, open }) => {
     await mkdir(join(directory, "alpha"));
     await mkdir(join(directory, "beta"));
@@ -155,13 +155,15 @@ test("workspaces keep sessions alive, report background completion and input, an
     expect(
       library.groups
         .flatMap((group) => group.sessions)
-        .every((entry) => !entry.session && ["saved", "paused"].includes(entry.status)),
+        .every((entry) => !entry.session && ["saved", "runs"].includes(entry.status)),
     ).toBe(true);
     const restored = library.groups[0]?.sessions.find((entry) => entry.path === record);
     if (!restored) throw new Error("The saved session is missing.");
     await library.select(restored);
-    expect(restored.status).toBe("paused");
-    expect(restored.session?.host.pending.has(waiting)).toBe(true);
+    // The open put the wait to the outside again, so it runs with no choice of the operator.
+    await until(library, () => ["thinks", "runs", "delegates"].includes(restored.status));
+    expect(restored.session?.host.pending.size).toBe(0);
+    expect((await restored.session?.engine.outcome(waiting))?.done).toBe(false);
     const metadata = JSON.parse(await readFile(`${record}.session.json`, "utf8"));
     expect(metadata.pending).toBeUndefined();
   }));
@@ -411,7 +413,7 @@ test("the list of saved sessions comes before their replays, and a row shows its
     const row = (await library.add(directory)).sessions.find((candidate) => candidate.path === entry.path);
     // The replay runs in a worker that loads the native engine first, so the list is there before it.
     expect(row?.status).toBe("saved");
-    await until(library, () => row?.status === "paused");
+    await until(library, () => row?.status === "runs");
   }));
 
 test("a session that opens keeps its row through a refresh that comes before its record", () =>
@@ -1011,7 +1013,7 @@ test("Add a workspace in the sidebar works while the session shown is open to re
     const made = await library.create(await library.add(directory), "Made elsewhere");
     await library.dispose();
     const text = await readFile(made.path, "utf8");
-    const found = /\["made","chain1","store","([0-9a-f]{64})",(\d+)\]/.exec(text);
+    const found = /\["made","chain1","store","([0-9a-f]{64})",(\d+)(?:,[^\]]*)?\]/.exec(text);
     if (!found?.[2]) throw new Error("no build");
     await writeFile(
       made.path,

@@ -10,7 +10,7 @@
 //! any depth, since the session holds each call of the host that waits. A value of the sandbox with no data form, and
 //! a class of the sandbox, crosses to the host as a handle, which the session holds until the host releases it.
 
-use std::{mem, sync::atomic::Ordering, time::Duration};
+use std::{mem, time::Duration};
 
 use monty::{MontyRepl, ReplFunctionCall, ReplProgress, ReplStartError};
 use monty_types::{
@@ -25,23 +25,15 @@ use crate::value::{Fault, Object};
 /// is most of the heap.
 const GC_INTERVAL: usize = 10_000_000;
 
-/// The longest stretch of the code of the sandbox between two round trips to the host. Past it, monty raises a
+/// The longest stretch of a word of a rung between two round trips to the host. Past it, monty
+/// raises a
 /// `TimeoutError` where the code stands, which the code may catch, so its `finally` blocks run on a new stretch; a
 /// second excess in the same stretch ends the run. So a word that never yields ends there with the exception, and the
-/// life goes on. The longest stretch of a legal life is about 180 ms in the dev profile, over the replay of a record of
-/// 96322 entries, so the bound stands far above every legal one, on a slower machine too.
+/// life goes on. The bound holds while a word steps, live or run again by a replay, and in each
+/// live entry of the host; the replay, the seed and the gather of a checkpoint around the words are
+/// the engine's own work, which grows with the life, so they run unbounded and a life that ran
+/// within its bounds always resumes.
 pub(crate) const TURN: Duration = Duration::from_secs(30);
-
-/// The most that the sandboxes of a program may hold, in bytes: 4 GiB. The host of the TUI that holds a record of 411 MB
-/// stands at 0.7 GiB of resident memory, and the largest life seen held 1.6 GiB, so the bound stands above every legal
-/// life, and below the memory of the machines that run one. Past it, monty raises a `MemoryError` where the code
-/// stands, which no code of the sandbox catches: the entry of the host ends with it as a fault, the life stops, since
-/// the frames that it cut never ran their `finally`, and the process and the machine keep their memory.
-///
-/// The bound is of the bytes that the program asks of its allocator, which the sandbox of a program with no counting
-/// allocator does not read: there only the operations that monty checks before they allocate are bound, as a repeat
-/// of a list. `FURB_SANDBOX_MEMORY` gives another bound, in MiB, to the sandboxes that a program makes after.
-pub(crate) const MEMORY: usize = 4 << 30;
 
 #[cfg(test)]
 thread_local! {
@@ -98,19 +90,22 @@ pub(crate) struct Sand {
   state: State,
   /// How many runs the session began. It holds a name for each one until the life ends.
   fed: usize,
+  /// Whether the bound of the turn holds now: while a word of a rung steps, which the Kernel says,
+  /// and in each live entry of the host. The replay, the seed and the gather of a checkpoint are
+  /// the engine's own work over words that already ran within the bound, so they run unbounded,
+  /// while each word that they run again keeps it.
+  bounded: bool,
+  /// The bound that the session holds, which a round trip brings to `bounded`.
+  applied: bool,
 }
 
 impl Sand {
   /// A sandbox with the limits of monty, which holds handles, and nothing in it yet.
   pub(crate) fn new() -> Self {
-    let limits = ResourceLimits::default()
-      .gc_interval(GC_INTERVAL)
-      .max_turn_duration(turn())
-      .max_memory(memory());
+    let limits = ResourceLimits::default().gc_interval(GC_INTERVAL).max_turn_duration(turn());
     let limits = ResourceTracker::new(limits);
-    count();
     let repl = MontyRepl::new("furb", limits, CompileOptions::default()).with_handles();
-    Self { state: State::Idle(repl), fed: 0 }
+    Self { state: State::Idle(repl), fed: 0, bounded: true, applied: true }
   }
 
   /// The session between two runs, as monty dumps it.
@@ -123,19 +118,20 @@ impl Sand {
   }
 
   /// A sandbox on the session of a dump, between two runs. The dump holds the limits of its session, so the sandbox
-  /// keeps the bounds of the turn and of the memory that the life that made it set.
+  /// keeps the bound of the turn that the life that made it set.
   pub(crate) fn loaded(bytes: &[u8]) -> Result<Self, Fault> {
-    count();
     let dump = monty::Dump::load(bytes).map_err(|no| Fault::refused(no.to_string()))?;
     match dump.state {
-      monty::Session::Idle(repl) => Ok(Self { state: State::Idle(*repl), fed: 0 }),
+      monty::Session::Idle(repl) => {
+        Ok(Self { state: State::Idle(*repl), fed: 0, bounded: true, applied: false })
+      }
       _ => Err(Fault::refused("a snapshot holds a session between two runs")),
     }
   }
 
   /// A sandbox of nothing, which holds no session, and stands in for one that is lent to code of a host.
   pub(crate) fn none() -> Self {
-    Self { state: State::Lent, fed: 0 }
+    Self { state: State::Lent, fed: 0, bounded: true, applied: true }
   }
 
   /// How many runs the session began.
@@ -161,6 +157,10 @@ impl Sand {
       }
     };
     self.fed += 1;
+    let mut repl = repl;
+    if let Some(limit) = self.changed() {
+      repl.tracker_mut().set_max_turn_duration(limit);
+    }
     let step = repl.feed_start(code, inputs, PrintWriter::Disabled);
     self.drive(step, host)
   }
@@ -189,10 +189,35 @@ impl Sand {
     kwargs: Vec<(&str, Object)>,
   ) -> Result<Object, Fault> {
     let call = self.taken()?;
+    let call = self.limited(call);
     let kwargs = kwargs.into_iter().map(|(key, value)| (Object::string(key), value)).collect();
     let step =
       call.call_first(callable.clone(), CallArgs::from((args, kwargs)), PrintWriter::Disabled);
     self.drive(step, host)
+  }
+
+  /// Whether the bound of the turn holds from the next round trip to the host on, and whether it
+  /// held before.
+  pub(crate) fn bound(&mut self, bounded: bool) -> bool {
+    mem::replace(&mut self.bounded, bounded)
+  }
+
+  /// The bound of the turn that the session must hold from now, when it holds another.
+  fn changed(&mut self) -> Option<Duration> {
+    (self.applied != self.bounded).then(|| {
+      self.applied = self.bounded;
+      if self.bounded { turn() } else { Duration::MAX }
+    })
+  }
+
+  /// A call that the session goes on with, under the bound that holds now, as a fresh turn when it
+  /// changed.
+  fn limited(&mut self, call: ReplFunctionCall) -> ReplFunctionCall {
+    let Some(limit) = self.changed() else { return call };
+    let mut progress = ReplProgress::FunctionCall(call);
+    progress.tracker_mut().set_max_turn_duration(limit);
+    let ReplProgress::FunctionCall(call) = progress else { unreachable!("the call stays a call") };
+    call
   }
 
   /// The host holds the handle `id` no more, so the session lets go of what it held under it.
@@ -237,6 +262,7 @@ impl Sand {
           let answer = host.answer(self, on, &name, args);
           // The call is gone when the run ended while the host answered it.
           let call = self.taken()?;
+          let call = self.limited(call);
           match answer {
             Answer::Value(value) => call.resume(value, PrintWriter::Disabled),
             Answer::Raise(exception) => call.raise(exception, PrintWriter::Disabled),
@@ -300,38 +326,6 @@ impl Sand {
       }
     }
   }
-}
-
-/// The memory that a sandbox may hold: what `FURB_SANDBOX_MEMORY` gives in MiB, or [`MEMORY`].
-fn memory() -> usize {
-  std::env::var("FURB_SANDBOX_MEMORY")
-    .ok()
-    .and_then(|mib| mib.trim().parse::<usize>().ok())
-    .map_or(MEMORY, |mib| mib.saturating_mul(1 << 20))
-}
-
-/// Starts the count of the memory of the sandboxes of the program at the least that it held, and lifts the ceiling at
-/// which the allocator ends the process, so only the `MemoryError` of the sandbox bounds it. The count is of the
-/// program, since the allocator is: a program that installed no counting allocator counts nothing, and the error that
-/// says so holds nothing to mend.
-fn count() {
-  monty_alloc::set_hard_limit(None).unwrap_or_default();
-}
-
-/// What the sandboxes of the program hold of the memory that bounds them, in bytes: what the counting allocator holds
-/// above the least that the program held when a sandbox began. It is nothing before a sandbox began, and in a
-/// program with no counting allocator. A host reads it from any thread, to warn before the [`bound`].
-pub fn held() -> usize {
-  let base = monty_types::BASELINE_MEMORY.load(Ordering::Relaxed);
-  if base == usize::MAX {
-    return 0;
-  }
-  monty_types::LIVE_MEMORY.load(Ordering::Relaxed).saturating_sub(base)
-}
-
-/// The memory at which a sandbox raises a `MemoryError`, in bytes: [`MEMORY`], or what `FURB_SANDBOX_MEMORY` gives.
-pub fn bound() -> usize {
-  memory()
 }
 
 /// The bound of the turn of a sandbox: [`TURN`], or what the test set.

@@ -65,8 +65,9 @@ its chain when it is not Main. The sidebar is wide, 56 columns by default, and i
 
 A click on a workspace gives it the focus: its session that asks, else one that lives, else its newest, opens in the
 feed. A click on the arrow of a workspace that has not the focus shows its sessions without a change of focus. A click
-on a thread shows it in the feed, on its chain, and the input then sends each message to it, as `prompt(str, message,
-on=thread)`, which its model reads at its next step and answers. A message to a resolved thread opens it again. Under
+on a thread shows it in the feed, on its chain, and the input then sends each message to it, as `prompt(None, message,
+on=thread)` while the thread is open: its model reads it at its next step, and it is over at once, so no close answers it.
+A message to a resolved thread is a `prompt(str, message, on=thread)`, which opens it again. Under
 the thread lit, Collapse folds it in the feed to its box on one line, Resolve closes it, as `close(None, thread)` does,
 and Reply makes it the target of the input, as Reply at the end of its box does. The resolved threads fold under one
 row, Resolved, which a click opens. The threads that the ladder of a thread made, its agents, fold under it to one row
@@ -101,7 +102,8 @@ takes the color of the thread, its meta line says `to ↳` and the name of the t
 `↳ Replying here` in its color. `+ New thread`, at the right end of the meta line, and `/newthread`, make the next
 message start a thread of its own. The target holds from the first character that you type until you send or clear the
 message, so a thread that opens meanwhile takes nothing that you wrote for another. ↑ in an empty input takes back your
-last message to the thread, while it runs or once a cancel ended it, to edit it and send it again in its place. The
+last prompt that opened the thread again, while it runs or once a cancel ended it, to edit it and send it again in its
+place. A message to an open thread is over at once, so it stays. The
 numbers go on from one step to the next, so a thread counts the lines of its program from its first step to its last,
 also past the steps that a fold keeps out. No step and no act takes a row of its own. Each line ends with a quiet hint
 of what its acts came to: a read the count of its lines, a write the lines that it added and removed, a command its exit
@@ -241,7 +243,10 @@ The model picker names the current model and the window of each. ⇧Tab chooses 
 A model asks you a question with a prompt to the operator, and a prompt of None is a notice, which tells you something
 and asks nothing. A notice waits for nothing: it settles in the feed as a panel on one line, as a folded thread does,
 with the first line of its message and the count of its other lines, and a click opens it to its whole message. No key
-dismisses it. Many questions can wait at once, on many chains. The desk over the input shows what waits: a mark `◆` for
+dismisses it. A notice that you did not read yet shows `●`, and one that you read shows a faint `✓`. You read the
+notices of a thread or a chain when you leave it, or fold the thread, and the record keeps it as a fact `seen`, so each
+window and each later life on the record shows the same marks. A finished thread that you started shows the same marks
+in the sidebar. Many questions can wait at once, on many chains. The desk over the input shows what waits: a mark `◆` for
 each question, in the order that they came, and the one that you act on in the color of a question, with its place, its
 chain, its id, and what it wants. Under it stand the first line of its message, the count of its other lines, and its
 choices or where the input sends its answer. A click on a mark goes to its ask and shows its chain, and a click on the
@@ -470,14 +475,14 @@ A session that opens with unfinished work stays paused until you resume it.
 
 ## A record to read
 
-A record whose replay drifts, as a record that a build of another version made, opens to read. The TUI shows what the
-record kept: each chain, each rung with its word, and each act. No word runs again, no model is asked, and a command
-that would change the life is refused. A read leaves the record and its log as they were. It can refresh the derived
-cache, `<record>.told`.
+A record whose replay drifts, as a record that a build of another engine or version made before its first checkpoint,
+opens to read. The TUI shows what the record kept: each chain, each rung with its word, and each act. No word runs
+again, no model is asked, and a command that would change the life is refused. A read leaves the record and its log as
+they were. It can refresh the derived cache, `<record>.told`.
 
 A dialog gives the build that made the record and this build, each on a line of its own. A record of an earlier engine
-that names no engine says "an earlier engine, not named". It offers three choices: read the record, resume it in a new
-session in its workspace, or start a new life from it, as [the TUI](../tui/README.md#sessions-and-records) says.
+that names no engine says "an earlier engine, not named". It offers two choices: read the record, or start a new
+life from it in its workspace, as [the TUI](../tui/README.md#sessions-and-records) says.
 
 ![A record to read](screenshots/56-record-to-read.png)
 

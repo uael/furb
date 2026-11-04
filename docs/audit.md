@@ -28,13 +28,15 @@ gave the gate and ran, from those answers alone.
 
 ## Run it
 
-The build that audits the record must be of the version of the build that made it. The record names that build in
-its fact `made`: the engine, as a digest of `src/furb/engine.py` and `src/furb/kernel.py`, and the version of the
-build. That version is the version of the record, which many releases share, and not the version of a release. A
-build of another version refuses the record before any replay, and the audit says so. After a checkpoint, a build of
-another engine replays nothing of what came after it, and carries it as data, so it audits none of it. So install a
-release of furb
-whose build has the version of the record, the latest one first, in a clean virtual environment:
+The build that audits the record must be of the version of the build that made it. The record names that build in its
+fact `made`: the engine, as a digest of `src/furb/engine.py` and `src/furb/kernel.py`, the version of the replay, the
+schema of the record, and the release of furb that made it, as `0.4.2`. The version of the replay is shared by many
+releases. A build refuses before any replay only a record of another major of the schema, and the audit says so. A
+record with no checkpoint that a build of another engine or version made replays, and the replay stops at the first act
+that does not agree with the record. After a checkpoint, a build of another engine or version replays nothing of what
+came after it, and carries it as data, so it audits none of it. So install the release that the fact `made` names, in a
+clean virtual environment. A record from a build before the release was in the fact names no release: then install a
+release whose build has the version of the record, the latest one first:
 
 ```sh
 python3.14 -m venv clean

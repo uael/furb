@@ -2,6 +2,7 @@ import { InputRenderable, InputRenderableEvents, RGBA } from "@opentui/core";
 import { commands, slashes } from "../commands.ts";
 import { clip } from "../format.ts";
 import { bindings, chords, keys, shown } from "../keys.ts";
+import { sameBuild } from "../reading.ts";
 import { type View, views } from "../session.ts";
 import { theme as c, glyph, type MarkState, markOf, marks, spacing as space } from "../theme.ts";
 import { bold, type Part } from "../ui.ts";
@@ -37,7 +38,9 @@ export const palette = part({
         ? [
             {
               label: "Read only",
-              detail: "Why this record opens to read, and how to start a new life from it",
+              detail: sameBuild(this.session.host.reading)
+                ? "Why this record opens to read, and the drift"
+                : "Why this record opens to read, and how to start a new life from it",
               command: "",
               run: () => this.readOrRenew(),
             },

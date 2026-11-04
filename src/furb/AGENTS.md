@@ -195,9 +195,11 @@ meanings. The entry of such a name here gives only its form in the engine.
   string, a list of plain, or a table from a string to plain.
 - drift: an act that, made again, does not agree with the record.
 - pending: what the record shows started and not done when boot returns: a command, a wait, a prompt to the operator
-  or a reply that the outside took, which the life holds with no fact until a wake that the life says.
+  or a reply that the outside took, which the life holds with no fact until a wake that the life says; the opening of
+  a life that does work, in `src/life.rs`, says that wake at the tip for each act that no pause holds and no crash
+  loop parked, so a resume goes on from the state of the tip.
 - extension: python that extends the engine from a rung: its word, which defines its names, and, for one that a host
-  gives a life, its life word, which starts its work; an official one has an ear of the World that answers the
+  gives a life, its life word, which starts its work; an official one may have an ear of the World that answers the
   questions that its word defines.
 - enable: the fact by which the World turns an extension on in a life, with its name, its word, its life word and, for
   an extension that plays on the root alone, root, which the record keeps; the World says it at the tip, and when a
@@ -268,14 +270,14 @@ meanings. The entry of such a name here gives only its form in the engine.
 - A chain is a function of the record, and a later boot must offer the same interpreter and the same outside, since a
   record is made again by running its words, or loaded from the snapshot that a run of those words made on the same
   record, interpreter and outside, which the opening of the life checks against the record. A record names the
-  version of the build that made it, and a life on a build of another version is refused before any replay, but for
-  the segment after a checkpoint, which it carries as data.
+  version of the build that made it, and a life on a build of another version replays none of the segment after its
+  last checkpoint: it carries that segment as data.
 - A chain is one conversation, and the transcript that a provider caches grows at one end.
 - Nothing is told twice, and nothing tells what it does not know: an act tells of itself, and a chain of the rungs it
   asks a model for, with the message of the prompt each advances, of a word that told nothing, of the prompts and the
   words it refuses, and of the done of an act that one of its rungs made on another chain, or of the pause of the
   chain of such a prompt.
-- A recoverable error is one a model can correct on another turn: a cut turn, context overflow, transient provider failure, or refusal of its word. The provider gives the next turn the cause, and never pauses the chain for these errors. It retries transient failures within its backoff first. A failed setting, missing model, unsupported input or a fault of the host is not recoverable; do not retry it as a model error.
+- A recoverable error is one a model can correct on another turn: a cut turn, transient provider failure, or refusal of its word. The provider gives the next turn the cause, and never pauses the chain for these errors. It retries transient failures within its backoff first. A failed setting, missing model, unsupported input, a prompt too long for the context of the model or a fault of the host is not recoverable; do not retry it as a model error. A prompt too long is not, since the next turn holds the same turns and more: a chain that asked again at once looped, with 386 refused replies in 11 minutes, so the second such refusal in a row pauses the chain with its why.
 - A drift is a hard error.
 - A change that makes room under the wall and rewrites the code of a fix names that fix, and shows that the test
   of the fix fails on the old form of its cause, since a test that does not hold the failure lets a later change undo

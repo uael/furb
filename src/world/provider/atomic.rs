@@ -52,7 +52,7 @@ fn put(beside: &Path, path: &Path, bytes: &[u8], access: Access) -> io::Result<(
 fn beside(path: &Path) -> Result<PathBuf, getrandom::Error> {
   let mut bytes = [0; 8];
   getrandom::fill(&mut bytes)?;
-  let suffix: String = bytes.iter().map(|one| format!("{one:02x}")).collect();
+  let suffix = format!("{:016x}", u64::from_ne_bytes(bytes));
   let mut name = path.file_name().unwrap_or_default().to_owned();
   name.push(format!(".{suffix}.part"));
   Ok(path.with_file_name(name))

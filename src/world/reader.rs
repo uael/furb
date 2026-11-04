@@ -20,20 +20,6 @@
 //! A question that the reader says names its maker, as the engine names it, and each other fact that it says is said
 //! by [`READER`].
 
-#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
-#![cfg_attr(
-  test,
-  expect(clippy::needless_for_each, reason = "debt: for_each where a for loop serves")
-)]
-#![cfg_attr(
-  test,
-  expect(
-    clippy::needless_pass_by_value,
-    reason = "debt: an argument taken by value and only borrowed"
-  )
-)]
-#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
-
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
@@ -46,7 +32,13 @@ use crate::{
   wire::{outward, parsed},
 };
 
-use super::{log::agrees, made, store::each, version};
+use super::{
+  beside,
+  log::{KEEP, Line, agrees, keep},
+  made,
+  store::each,
+  version,
+};
 
 /// Who says each fact that the reader adds to the facts that a record kept, but a question.
 pub const READER: &str = "reader";
@@ -76,17 +68,29 @@ impl Retold {
   /// Each fact of the file, in the order that the life said them, read one line at a time, so a reader holds no more
   /// of a large record than it keeps of each fact.
   pub fn each(&self, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
-    self.lines(None, take)
+    self.lines(None, None, take)
   }
 
   /// Each fact of the file that the life said after the record kept its entry n, counted from 1,
   /// in order.
   pub fn after(&self, n: usize, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
-    self.lines(Some(&serde_json::json!([KEEP, "", n]).to_string()), take)
+    self.lines(Some(&keep(n)), None, take)
   }
 
-  /// Each fact of the file after the line from, or from its start.
-  fn lines(&self, mut from: Option<&str>, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
+  /// Each fact of the file that the life said before the record kept its entry n, counted from 1,
+  /// in order.
+  pub fn before(&self, n: usize, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
+    self.lines(None, Some(&keep(n)), take)
+  }
+
+  /// Each fact of the file after the line from, or from its start, up to the line until, or to its
+  /// end.
+  fn lines(
+    &self,
+    mut from: Option<&str>,
+    until: Option<&str>,
+    take: &mut dyn FnMut(Object),
+  ) -> Result<(), Fault> {
     let failed =
       |no: std::io::Error| Fault::refused(format!("{} cannot be read: {no}", self.file.display()));
     let file = std::fs::File::open(&self.file).map_err(failed)?;
@@ -98,9 +102,12 @@ impl Retold {
         return Ok(());
       }
       let text = line.trim_end_matches('\n');
+      if until == Some(text) {
+        return Ok(());
+      }
       if from.is_some() {
         from = from.filter(|mark| *mark != text);
-      } else if text.starts_with('[') && !text.starts_with(r#"["keep","","#) {
+      } else if text.starts_with('[') && !matches!(Line::of(text), Line::Keep(_)) {
         take(parsed(text)?);
       }
     }
@@ -121,8 +128,8 @@ impl Retold {
 /// record. Else the reader writes it again from the record.
 pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   let path = path.as_ref();
-  let log = PathBuf::from(format!("{}.log", path.display()));
-  let cache = PathBuf::from(format!("{}.told", path.display()));
+  let log = beside(path, ".log");
+  let cache = beside(path, ".told");
   let stamp = serde_json::json!([stamped(path), stamped(&log), BUILD]);
   if let Some(found) = cached(&cache, &stamp, &log) {
     return Ok(found);
@@ -147,34 +154,13 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   let logged = agrees(path, entries, &asked);
   let last = last.as_ref().map(digest);
   let head = serde_json::json!({ "stamp": stamp, "made": maker, "version": built, "logged": logged, "entries": entries, "last": last });
-  let fresh = PathBuf::from(format!("{}.told.new", path.display()));
+  let fresh = beside(path, ".told.new");
   let failed =
     |no: std::io::Error| Fault::refused(format!("{} cannot be written: {no}", fresh.display()));
   let mut file = std::io::BufWriter::new(std::fs::File::create(&fresh).map_err(failed)?);
   writeln!(file, "{head}").map_err(failed)?;
-  if !logged {
-    let mut broken = None;
-    {
-      let mut out = |fact: Object| {
-        if broken.is_none()
-          && let Err(no) = writeln!(file, "{}", outward(fact.as_ref()))
-        {
-          broken = Some(no);
-        }
-      };
-      let mut life = Reader::new(makers.ended(), &mut out);
-      let mut n = 0;
-      each(path, &mut |entry| {
-        if let Some(fact) = kept(&entry) {
-          life.hear(fact);
-        }
-        n += 1;
-        life.kept(n);
-      })?;
-    }
-    if let Some(no) = broken {
-      return Err(failed(no));
-    }
+  if !logged && let Some(no) = retell(path, makers, &mut file)? {
+    return Err(failed(no));
   }
   file.into_inner().map_err(|no| failed(no.into_error()))?.sync_data().map_err(failed)?;
   std::fs::rename(&fresh, &cache).map_err(failed)?;
@@ -188,12 +174,35 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   })
 }
 
+/// The facts that the reader says over the record at a path, each on a line of its own in a
+/// file, and the first fault of the file, which stops the lines but not the read.
+fn retell(
+  path: &Path,
+  makers: Makers,
+  file: &mut impl Write,
+) -> Result<Option<std::io::Error>, Fault> {
+  let mut broken = None;
+  let mut out = |fact: Object| {
+    if broken.is_none()
+      && let Err(no) = writeln!(file, "{}", outward(fact.as_ref()))
+    {
+      broken = Some(no);
+    }
+  };
+  let mut life = Reader::new(makers.ended(), &mut out);
+  let mut n = 0;
+  each(path, &mut |entry| {
+    if let Some(fact) = kept(&entry) {
+      life.hear(fact);
+    }
+    n += 1;
+    life.kept(n);
+  })?;
+  Ok(broken)
+}
+
 /// What the build that writes a file of what a record tells names in it: a reader of another build writes it again.
 const BUILD: &str = concat!(env!("CARGO_PKG_VERSION"), "/", env!("CARGO_PKG_NAME"), "/3");
-
-/// The kind of the line that says that the record kept an entry there, in the log and in the
-/// file of what a record tells.
-const KEEP: &str = "keep";
 
 /// The size and the time of change of a file, in nanoseconds, or nothing when no file stands there.
 fn stamped(path: &Path) -> Option<(u64, u128)> {
@@ -207,7 +216,7 @@ fn stamped(path: &Path) -> Option<(u64, u128)> {
 fn cached(told: &Path, stamp: &serde_json::Value, log: &Path) -> Option<Retold> {
   let file = std::fs::File::open(told).ok()?;
   let mut head = String::new();
-  std::io::BufRead::read_line(&mut std::io::BufReader::new(file), &mut head).ok()?;
+  BufRead::read_line(&mut std::io::BufReader::new(file), &mut head).ok()?;
   let head: serde_json::Value = serde_json::from_str(&head).ok()?;
   if head.get("stamp")? != stamp {
     return None;
@@ -290,10 +299,12 @@ fn text(fact: &Fact, at: usize) -> String {
 
 /// The facts that a record kept, with the facts that the engine said and the record does not keep.
 #[cfg(test)]
-fn told(kept: Vec<Object>) -> Vec<Object> {
+fn told(kept: &[Object]) -> Vec<Object> {
   let facts: Vec<Fact> = kept.iter().filter_map(|one| Fact::owned(plain(one.as_ref()))).collect();
   let mut makers = Makers::default();
-  facts.iter().for_each(|one| makers.hear(one));
+  for one in &facts {
+    makers.hear(one);
+  }
   let mut out = Vec::new();
   let mut take = |one| out.push(one);
   let mut life = Reader::new(makers.ended(), &mut take);
@@ -385,6 +396,15 @@ impl<'a> Reader<'a> {
   }
 }
 
+/// A prompt that is not done.
+struct Open {
+  id: String,
+  chain: String,
+  maker: String,
+  /// Whether the prompt goes to the operator.
+  operator: bool,
+}
+
 /// What the reader knows of the facts that it heard, and where it says the facts that it tells.
 struct Reader<'a> {
   out: &'a mut dyn FnMut(Object),
@@ -400,8 +420,8 @@ struct Reader<'a> {
   scopes: HashMap<String, String>,
   /// Each act that is done.
   done: HashSet<String>,
-  /// Each prompt that is not done, in order, with its chain, its maker, and whether it goes to the operator.
-  prompts: Vec<(String, String, String, bool)>,
+  /// Each prompt that is not done, in order.
+  prompts: Vec<Open>,
   /// The rung of each maker that is not done.
   rungs: HashMap<String, String>,
   /// The word of each rung, the rung of each reply, and the rung of each gate.
@@ -449,7 +469,7 @@ impl Reader<'_> {
       }
       "cancel" if !self.done.contains(about) => {
         let why = fact.word(0).map(|one| one.to_owned()).filter(|one| *one != Object::none());
-        self.end(about, Fault::new("CancelledError", why.into_iter().collect()).object());
+        self.end(about, Fault::cancelled(why).object());
       }
       _ => {}
     }
@@ -495,7 +515,8 @@ impl Reader<'_> {
     let scope = if kind == "chain" { about.to_owned() } else { chain.clone() };
     self.scopes.insert(about.to_owned(), scope);
     if kind == "prompt" {
-      self.prompts.push((about.to_owned(), chain, by.to_owned(), text(fact, 3) == "operator"));
+      let operator = text(fact, 3) == "operator";
+      self.prompts.push(Open { id: about.to_owned(), chain, maker: by.to_owned(), operator });
     }
   }
 
@@ -512,8 +533,8 @@ impl Reader<'_> {
       .prompts
       .iter()
       .rev()
-      .find(|(_, on, by, operator)| on == chain && by != id && !operator)
-      .map_or_else(|| chain.to_owned(), |(prompt, ..)| prompt.clone());
+      .find(|open| open.chain == chain && open.maker != id && !open.operator)
+      .map_or_else(|| chain.to_owned(), |open| open.id.clone());
     if let Some(last) = self.rungs.remove(&maker) {
       self.end(&last, Object::none());
     }
@@ -537,7 +558,7 @@ impl Reader<'_> {
   fn answered(&mut self, fact: &Fact) {
     let about = fact.about();
     self.done.insert(about.to_owned());
-    self.prompts.retain(|(prompt, ..)| prompt != about);
+    self.prompts.retain(|open| open.id != about);
     if let Some(rung) = self.rungs.remove(about) {
       self.end(&rung, Object::none());
     }
@@ -573,7 +594,7 @@ impl Reader<'_> {
       &rung,
       [Object::list([Object::string(format!("#{rung} refused\n{bound}"))])],
     ));
-    self.end(&rung, Fault::new("Refused", vec![]).object());
+    self.end(&rung, Fault::refusal().object());
   }
 
   /// An act done with a value, with the rung of it that runs and the run of a rung, as the engine ends them.
@@ -586,7 +607,7 @@ impl Reader<'_> {
       self.stage.push(said("done", &run, [Object::none()]));
     }
     self.stage.push(said("done", id, [value]));
-    self.prompts.retain(|(prompt, ..)| prompt != id);
+    self.prompts.retain(|open| open.id != id);
     if let Some(rung) = self.rungs.remove(id) {
       self.end(&rung, Object::none());
     }

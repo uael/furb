@@ -137,7 +137,7 @@ export function threadState(moment: Moment, thread: Thread): State {
 export function chainState(moment: Moment, chain: string): State {
   const work = moment.acts.filter((act) => act.on === chain && act.kind !== "chain");
   const owes = work.some((act) => moment.owed.has(act.id));
-  return glyphOf(rowState(work, owes, new Map()));
+  return glyphOf(rowState(work, owes));
 }
 
 /** The name of a chain as a person reads it: its label, or its id, and You for the operator. */

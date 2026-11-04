@@ -7,16 +7,6 @@
 //! that does not agree with the record at its place makes a new act, and the act of the record goes on as pending
 //! work.
 
-#![expect(
-  clippy::return_self_not_must_use,
-  reason = "debt: a method that returns Self with no must_use"
-)]
-#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
-#![expect(
-  clippy::single_match_else,
-  reason = "debt: a match of one arm and else, where if let serves"
-)]
-
 use std::{
   cell::RefCell,
   collections::VecDeque,
@@ -98,8 +88,8 @@ pub struct Question {
 
 impl Question {
   /// Answer the question with a line that the console reads in its shape.
-  pub fn answer(&self, life: &mut Life, line: &str) -> Result<(), Fault> {
-    let value = world::answered(&self.shape, line)?;
+  pub fn answer(&self, life: &mut Life, text: &str) -> Result<(), Fault> {
+    let value = world::answered(&self.shape, text)?;
     life.engine.close(value, verbs::Close { id: Some(self.id.clone()) })
   }
 }
@@ -125,30 +115,35 @@ pub struct Open(Opening);
 
 impl Open {
   /// The model that a prompt goes to when it names none, as the catalog names it.
+  #[must_use]
   pub fn model(mut self, model: impl Into<String>) -> Self {
     self.0.actor = Some(model.into());
     self
   }
 
   /// The models that the life offers beside that one.
+  #[must_use]
   pub fn roster<S: Into<String>>(mut self, models: impl IntoIterator<Item = S>) -> Self {
     self.0.roster = Some(models.into_iter().map(Into::into).collect());
     self
   }
 
   /// The directory that the life stands on; the directory of the process when unsaid.
+  #[must_use]
   pub fn directory(mut self, directory: impl Into<String>) -> Self {
     self.0.directory = directory.into();
     self
   }
 
   /// The claude command line to run, in place of the one that `FURB_CLAUDE_BIN` names or this machine holds.
+  #[must_use]
   pub fn claude(mut self, claude: impl Into<String>) -> Self {
     self.0.claude = Some(claude.into());
     self
   }
 
   /// Whether the life enables the extensions that the configs turn on; true when unsaid.
+  #[must_use]
   pub fn extensions(mut self, enables: bool) -> Self {
     self.0.extensions = Some(enables);
     self
@@ -161,17 +156,13 @@ impl Open {
       opening.directory = here.display().to_string();
     }
     let asked = Rc::new(RefCell::new(VecDeque::new()));
-    let (mut engine, record) = opening.open([("console", console(Rc::clone(&asked)))]).await?;
+    let (engine, record) = opening.open([("console", console(Rc::clone(&asked)))]).await?;
     let made = record
       .iter()
       .filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of))
       .filter(|one| one.by() == "operator" && MADE.contains(&one.kind()) && one.question())
       .filter(|one| one.about() != "chain1")
       .collect();
-    for (id, _) in engine.pending()? {
-      let chain = engine.word("scope(id)", vec![("id", Object::string(&id))])?;
-      engine.wake(chain.as_ref().as_str().unwrap_or_default())?;
-    }
     Ok(Life { engine, made, asked })
   }
 }
@@ -257,16 +248,15 @@ impl Life {
   /// A thread on a chain: the message to its actor, which answers it with a value of the shape.
   pub fn prompt_on<T: Shape>(&mut self, chain: &Chain, message: &str) -> Result<Thread<T>, Fault> {
     let words = [Object::string(T::NAME), Object::string(message), Object::string("")];
-    let id = match self.again("prompt", chain, &words) {
-      Some(id) => id,
-      None => {
-        let with = verbs::Prompt {
-          message: Some(message.to_owned()),
-          on: Some(chain.0.clone()),
-          ..Default::default()
-        };
-        self.engine.prompt(Object::string(T::NAME), with)?.id().to_owned()
-      }
+    let id = if let Some(id) = self.again("prompt", chain, &words) {
+      id
+    } else {
+      let with = verbs::Prompt {
+        message: Some(message.to_owned()),
+        on: Some(chain.0.clone()),
+        ..Default::default()
+      };
+      self.engine.prompt(Object::string(T::NAME), with)?.id().to_owned()
     };
     Ok(Thread { id, chain: chain.clone(), shape: PhantomData })
   }
@@ -280,16 +270,15 @@ impl Life {
   /// A new chain on a chain.
   pub fn chain_on(&mut self, on: &Chain, label: &str) -> Result<Chain, Fault> {
     let words = [Object::string(label), Object::string("")];
-    let id = match self.again("chain", on, &words) {
-      Some(id) => id,
-      None => {
-        let with = verbs::Chain {
-          label: Some(label.to_owned()),
-          on: Some(on.0.clone()),
-          ..Default::default()
-        };
-        self.engine.chain(with)?.id().to_owned()
-      }
+    let id = if let Some(id) = self.again("chain", on, &words) {
+      id
+    } else {
+      let with = verbs::Chain {
+        label: Some(label.to_owned()),
+        on: Some(on.0.clone()),
+        ..Default::default()
+      };
+      self.engine.chain(with)?.id().to_owned()
     };
     Ok(Chain(id))
   }

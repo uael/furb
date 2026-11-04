@@ -62,18 +62,26 @@ export function readOnly(reading: Reading): string {
   return `Read only: ${sameBuild(reading) ? "its replay drifts" : "made by another build"}`;
 }
 
-/** The lines of the dialog of a record open to read: each engine on a line of its own, why it opens to read, and what
- * a new life carries. */
-export function readingNote(reading: Reading): string[] {
+/** The lines of the dialog of a record open to read: each engine on a line of its own, and why it opens to read. A
+ * record that this build made drifts on its own, which is a defect: the dialog says so, gives the drift and the path of
+ * the record, and carries nothing, since a carry loses the module and is no resume. A record of another build says what a
+ * new life carries. */
+export function readingNote(reading: Reading, record?: string): string[] {
   const { made, build } = engines(reading);
   const { turns = 0, files = 0 } = reading.carries ?? {};
   const count = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+  if (sameBuild(reading))
+    return [
+      `Made by: ${made}`,
+      `This build: ${build}`,
+      "This is a defect: this build made the record, and its replay drifts.",
+      reading.why,
+      ...(record ? [`Record: ${record}`] : []),
+    ];
   return [
     `Made by: ${made}`,
     `This build: ${build}`,
-    sameBuild(reading)
-      ? `This build made it, and its replay drifts: ${reading.why}`
-      : "A replay would drift, so it opens to read. No word runs again.",
+    "A replay would drift, so it opens to read. No word runs again.",
     ...(reading.carries
       ? [
           `A new life carries ${count(turns, "turn")} of its root chain and the ${count(files, "file")} that it wrote.`,
@@ -154,8 +162,13 @@ function shortened<T>(value: T): T {
   return (changed ? made : value) as T;
 }
 
-/** What a session that only reads does not do. */
-const READS = "This record is open to read, so nothing runs on it. Start a new life from it to go on.";
+/** What a session that only reads says to a word that would run: a drift of the build that made the record is a defect, so it offers no new life; a record of another build offers one. */
+export function reads(reading?: Reading): string {
+  const open = "This record is open to read, so nothing runs on it.";
+  return reading && sameBuild(reading)
+    ? `${open} Its replay drifts on the build that made it, which is a defect.`
+    : `${open} Start a new life from it to go on.`;
+}
 
 /** A record open to read, with no life: the facts that the crate retold of it, in the file that it names, as an engine
  * and a session give a snapshot of a life, so the TUI draws it as it draws a life. No word runs again, no model is
@@ -167,7 +180,7 @@ export class Reader {
   readonly entries: Entry[] = [];
   readonly pending = new Map<string, string>();
   readonly streams = new Map<string, never>();
-  readonly console = { prompts: new Map<string, never>(), notices: new Map<string, never>() };
+  readonly console = { prompts: new Map<string, never>() };
   readonly changes: FileChanges;
   /** The facts of each chain, as the transcript of the chain holds them. */
   private readonly held = new Map<string, Fact[]>();
@@ -484,7 +497,7 @@ export class Reader {
   }
 
   inspect(name: string): { value: unknown } {
-    if (name !== "actor") throw new Error(READS);
+    if (name !== "actor") throw new Error(reads(this.reading));
     return { value: this.actor };
   }
 
@@ -512,6 +525,6 @@ export class Reader {
 
   /** Each other verb, which would make an act or change the life. */
   refuse(): never {
-    throw new Error(READS);
+    throw new Error(reads(this.reading));
   }
 }

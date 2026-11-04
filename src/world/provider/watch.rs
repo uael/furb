@@ -18,17 +18,6 @@
 //! as the parts that ran, whatever the model wrote after them that the chain would refuse, since a later life runs
 //! the word of the rung and a statement of it must run there as it ran.
 
-#![expect(
-  clippy::assigning_clones,
-  reason = "debt: an assignment of a clone, where clone_from serves"
-)]
-#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
-#![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
-#![expect(
-  clippy::single_match_else,
-  reason = "debt: a match of one arm and else, where if let serves"
-)]
-
 use ruff_python_ast::{
   Expr, Stmt,
   visitor::{self, Visitor},
@@ -110,7 +99,7 @@ impl Watch {
 
   /// The word, as python, given to the Kernel as far as where it ends in the text.
   pub(super) fn gave(&mut self, word: &str, end: usize) {
-    self.sent = word.to_owned();
+    word.clone_into(&mut self.sent);
     self.given = end;
   }
 
@@ -148,8 +137,9 @@ impl Watch {
   }
 }
 
-/// The marks that a model writes around its word out of the habit of a fence or of a tool call, which the word loses
-/// line by line: a fence, as ``` alone or with a language, a line that is a tag of a tool call alone, as
+/// The marks that a model writes around its word out of the habit of a fence or of a tool call,
+/// which the word loses line by line: a fence, as `` ``` `` alone or with a language, a line that
+/// is a tag of a tool call alone, as
 /// `<invoke name="python">`, `<function=write>` or their close, or a line that is a break of HTML alone, as
 /// `<br>`, while no line of the word stands before it; and once one went, each such line and each fence, a tag
 /// of a tool call at the start of a line and its close at the end of one, outside a quote. A line that is the close
@@ -243,7 +233,7 @@ fn broke(line: &str) -> bool {
   matches!(line.to_ascii_lowercase().as_str(), "<br>" | "<br/>" | "<br />")
 }
 
-/// Whether a line, trimmed, is a fence: ``` alone or with the name of a language.
+/// Whether a line, trimmed, is a fence: `` ``` `` alone or with the name of a language.
 fn fence(line: &str) -> bool {
   line
     .strip_prefix("```")
@@ -300,16 +290,12 @@ fn quotes(word: &str) -> Vec<(usize, &str, Option<usize>)> {
     let ends = word[text..]
       .match_indices(&close)
       .find(|(at, _)| matches!(word[text + at + close.len()..].chars().next(), None | Some('\n')));
-    match ends {
-      Some((at, _)) => {
-        from = text + at + close.len();
-        found.push((start, name, Some(from)));
-      }
-      None => {
-        found.push((start, name, None));
-        break;
-      }
-    }
+    let Some((at, _)) = ends else {
+      found.push((start, name, None));
+      break;
+    };
+    from = text + at + close.len();
+    found.push((start, name, Some(from)));
   }
   found
 }
@@ -325,7 +311,9 @@ fn unquoted(word: &str) -> String {
   for (start, name, end) in quotes(word) {
     let Some(end) = end else { break };
     made.push_str(&word[at..start]);
-    made.push_str(&format!("{name} = 0{}", "\n".repeat(word[start..end].matches('\n').count())));
+    made.push_str(name);
+    made.push_str(" = 0");
+    made.push_str(&"\n".repeat(word[start..end].matches('\n').count()));
     at = end;
   }
   made.push_str(&word[at..]);

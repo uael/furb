@@ -46,14 +46,20 @@ let fails = 0;
 const env = environment();
 const entities: Record<string, string> = { quot: '"', amp: "&", lt: "<", gt: ">", apos: "'" };
 
-/** What a run of the tests wrote, and whether it passed. */
+/** What a run of the tests wrote, and whether it passed. The run, and each process that it starts, takes a temporary
+ * directory of its own, a yard that goes when the run ends, on a pass and on a failure, unless FURB_KEEP_YARDS is set:
+ * a library of the run reads the temporary directory that its process started with. */
 async function test(args: string[]): Promise<{ text: string; passed: boolean }> {
-  const run = Bun.spawn([process.execPath, "test", ...args], { env, stdout: "pipe", stderr: "pipe" });
+  const machine = tmpdir();
+  const yard = await mkdtemp(join(machine, "furb-yard-"));
+  const own = { ...env, TMPDIR: yard, TMP: yard, TEMP: yard, FURB_MACHINE_TMPDIR: machine, FURB_YARD: yard };
+  const run = Bun.spawn([process.execPath, "test", ...args], { env: own, stdout: "pipe", stderr: "pipe" });
   const [out, err, code] = await Promise.all([
     new Response(run.stdout).text(),
     new Response(run.stderr).text(),
     run.exited,
   ]);
+  if (process.env.FURB_KEEP_YARDS === undefined) await rm(yard, { recursive: true, force: true });
   return { text: out + err, passed: code === 0 };
 }
 

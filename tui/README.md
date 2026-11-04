@@ -98,15 +98,12 @@ Sessions are saved under `.furb/sessions` in the selected directory. The `.furb`
 An unfinished session opens paused and offers a resume choice. The native engine replays completed work from the
 record.
 
-A record whose replay drifts, as a record that a build of another version made, opens to read: the TUI shows what
-the record kept, runs no word again, asks no model, leaves the record and its log as they were, and refuses each
-command that would change the life. A dialog gives the build that made the record and this build, and offers three
-choices:
+A record whose replay drifts, as a record that a build of another engine or version made before its first checkpoint,
+opens to read: the TUI shows what the record kept, runs no word again, asks no model, leaves the record and its log as
+they were, and refuses each command that would change the life. A dialog gives the build that made the record and
+this build, and offers two choices:
 
 - **Read it** shows the record. The footer says "Read only" and offers a new life, and the composer is off.
-- **Resume it** opens a new session in the workspace of the record. The session goes on from the turns of the root
-  chain of the record and asks again each prompt of a model that the record left open. It runs the word `inherit` of
-  the extension compaction, so a life with that extension off gets the turns as text.
 - **Start a new life from it** opens a new session whose first word carries, as text, the turns of the root chain
   and the files that the record wrote. It asks no prompt again.
 
@@ -148,10 +145,8 @@ window of a new build takes the life over with its record whole.
   host again and reads the acts of the life again from the start. A window hears that a window ended the life only
   when a window did. A host that ends because its worker raised writes the fault in `<key>.failed`. A window starts no
   host for that fault: it shows the fault, and `/reopen` tries once more.
-- A host looks at the free space of the disk of the record and at the memory of the life every 30 seconds. Under 2 GiB
-  of disk, or over three quarters of the memory bound of the sandbox, it shows a notice in each window. A full disk
-  stops the record, the log and the snapshot, and at the memory bound the life stops. `FURB_DISK_WARN` sets the disk
-  limit in bytes, `FURB_MEMORY_WARN` the share of the memory, and `FURB_SANDBOX_MEMORY` the bound in MiB.
+- A host looks at the free space of the disk of the record every 30 seconds. Under 2 GiB of disk, it shows a notice in
+  each window. A full disk stops the record, the log and the snapshot. `FURB_DISK_WARN` sets the disk limit in bytes.
   A record in `.furb/sessions` adds a notice when the files of that folder hold more than 10 GiB, since nothing else
   removes them. `FURB_SESSIONS_WARN` sets that limit in bytes.
 - A host says of itself in `<key>.json` as soon as it starts, and it listens at its socket before it opens the life. A
@@ -262,6 +257,10 @@ only the chains that can have changed. A record open to read holds of each file 
 output only what a row shows, and reads the rest from its file when the operator opens the act. A change of the life
 makes again only the cards of the acts that changed, so a frame of a long life takes about as long as a frame of a short
 one.
+
+A key gets the next frame of the renderer, whatever the view has to draw again: the frame after a key draws only
+what the key changed, and the view waits after each draw twice as long as that draw took, so on a long life it takes
+at most a third of the thread.
 
 `bun run bench` measures this speed, and the gates hold it to its budgets, as [AGENTS.md](../AGENTS.md) says.
 

@@ -6,12 +6,6 @@
 //! program changes or [`refresh`] is called. A command line that does not answer, as an older one does not, leaves the
 //! fixed table of [`fallback`].
 
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-
 use std::{
   collections::HashMap,
   fs,
@@ -130,15 +124,14 @@ pub(super) async fn models(program: &Program) -> Option<Vec<Found>> {
   if let Some(held) = held {
     return held;
   }
-  let found = match stored(&stamp) {
-    Some(found) => Some(found),
-    None => {
-      let found = probe(program).await;
-      if let Some(found) = &found {
-        store(&stamp, found);
-      }
-      found
+  let found = if let Some(found) = stored(&stamp) {
+    Some(found)
+  } else {
+    let found = probe(program).await;
+    if let Some(found) = &found {
+      store(&stamp, found);
     }
+    found
   };
   let kept = found.clone().map_or(Seen::Failed(Instant::now()), Seen::Found);
   seen().lock().unwrap_or_else(PoisonError::into_inner).insert(stamp, kept);
@@ -186,8 +179,9 @@ async fn help(program: &Program) -> Option<String> {
 /// Forget each discovery, so the next models ask the command line again.
 pub fn refresh() {
   seen().lock().unwrap_or_else(PoisonError::into_inner).clear();
+  // A cache that cannot go stays, and the next models read it until the program makes a new stamp.
   if let Some(file) = cached() {
-    let _ = fs::remove_file(file);
+    fs::remove_file(file).unwrap_or_default();
   }
 }
 
@@ -201,26 +195,11 @@ fn plain(alias: &str) -> bool {
 /// Ask the program of its models, with one process that spends no model prompt and that is
 /// killed once it answered, or once [`WITHIN`] passed.
 async fn probe(program: &Program) -> Option<Vec<Found>> {
-  let mut command = program.command().ok()?;
-  command.args([
-    "-p",
-    "--input-format",
-    "stream-json",
-    "--output-format",
-    "stream-json",
-    "--verbose",
-  ]);
-  command.args([
-    "--tools",
-    "",
-    "--strict-mcp-config",
-    "--disable-slash-commands",
-    "--setting-sources",
-    "",
-  ]);
+  let print =
+    ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"];
+  let mut command = program.base_command(&print).ok()?;
+  command.args(["--tools", ""]);
   command.env("FURB_CLAUDE_DISCOVER", "1");
-  command.env("CLAUDE_CODE_DISABLE_BUNDLED_SKILLS", "1");
-  command.env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1");
   command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).kill_on_drop(true);
   let mut child = command.spawn().ok()?;
   let (stdin, stdout) = child.stdin.take().zip(child.stdout.take())?;

@@ -28,11 +28,14 @@ fn yard(name: &str) -> PathBuf {
 
 #[test]
 fn the_type_of_an_image_is_read_off_its_first_bytes() {
-  assert_eq!(kind(PNG), Ok(("image/png", "png")));
-  assert_eq!(kind(b"\xff\xd8\xff\xe0"), Ok(("image/jpeg", "jpg")));
-  assert_eq!(kind(b"GIF89a..."), Ok(("image/gif", "gif")));
-  assert_eq!(kind(b"RIFF\0\0\0\0WEBPVP8 "), Ok(("image/webp", "webp")));
-  assert_eq!(kind(b"RIFF\0\0\0\0WAVE"), Err("Choose a PNG, JPEG, GIF, or WebP image.".to_owned()));
+  assert_eq!(kind(PNG).expect("a known image"), ("image/png", "png"));
+  assert_eq!(kind(b"\xff\xd8\xff\xe0").expect("a known image"), ("image/jpeg", "jpg"));
+  assert_eq!(kind(b"GIF89a...").expect("a known image"), ("image/gif", "gif"));
+  assert_eq!(kind(b"RIFF\0\0\0\0WEBPVP8 ").expect("a known image"), ("image/webp", "webp"));
+  assert_eq!(
+    kind(b"RIFF\0\0\0\0WAVE").unwrap_err().to_string(),
+    "Choose a PNG, JPEG, GIF, or WebP image."
+  );
 }
 
 #[test]
@@ -73,10 +76,13 @@ fn an_image_is_read_only_while_its_bytes_have_the_digest_it_is_named_by() {
   let at = yard("read");
   fs::write(at.join("a.png"), PNG).expect("the image is written");
   let kept = attach(&at, &at.join("a.png")).expect("the image is attached");
-  assert_eq!(read(&at, &kept.uri), Ok(("image/png", PNG.to_vec())));
+  assert_eq!(read(&at, &kept.uri).expect("the image reads"), ("image/png", PNG.to_vec()));
   let file = at.join(kept.uri.strip_prefix("furb-image://").unwrap_or_default());
   fs::write(&file, b"\x89PNG\r\n\x1a\nchanged").expect("the kept image changes");
-  assert_eq!(read(&at, &kept.uri), Err("The saved image attachment has changed.".to_owned()));
+  assert_eq!(
+    read(&at, &kept.uri).unwrap_err().to_string(),
+    "The saved image attachment has changed."
+  );
 }
 
 #[test]
@@ -89,12 +95,12 @@ fn a_turn_hands_a_model_each_image_that_a_read_gives_and_no_image_that_a_text_na
   let text = format!("#read2\nread2_path = '/x/a.md'\nread2_text = 'see {named}'");
   let mut images = Images::new(Some(at.clone()));
   assert_eq!(
-    images.named(&read, &mut HashSet::new()).map(|seen| seen.len()),
+    images.named(&read, &mut HashSet::new()).map(|seen| seen.len()).map_err(|no| no.to_string()),
     Ok(2),
     "a read of an image hands it after the text that names it"
   );
   assert_eq!(
-    images.named(&text, &mut HashSet::new()).map(|seen| seen.len()),
+    images.named(&text, &mut HashSet::new()).map(|seen| seen.len()).map_err(|no| no.to_string()),
     Ok(0),
     "a text that names an image hands none"
   );
@@ -117,7 +123,7 @@ fn a_turn_hands_a_model_each_image_that_the_message_of_a_prompt_it_opens_names_o
   assert_eq!(told.text, named);
   let mut given = HashSet::from([kept.uri.clone()]);
   assert_eq!(
-    images.named(&python, &mut given).map(|seen| seen.len()),
+    images.named(&python, &mut given).map(|seen| seen.len()).map_err(|no| no.to_string()),
     Ok(0),
     "an image that an earlier turn of the request gave comes no more"
   );
@@ -126,7 +132,10 @@ fn a_turn_hands_a_model_each_image_that_the_message_of_a_prompt_it_opens_names_o
     matches!(&image.data, DocumentSourceKind::Base64(data) if data == "iVBORw0KGgp0aGUgcmVzdA==")
   );
   assert_eq!(
-    Images::new(None).named(&python, &mut HashSet::new()).map(|seen| seen.len()),
+    Images::new(None)
+      .named(&python, &mut HashSet::new())
+      .map(|seen| seen.len())
+      .map_err(|no| no.to_string()),
     Ok(0),
     "a life with no directory hands none"
   );
@@ -135,7 +144,7 @@ fn a_turn_hands_a_model_each_image_that_the_message_of_a_prompt_it_opens_names_o
   let system = fs::metadata(&file).expect_err("the image is gone");
   let gone = format!("The image {} did not load from {}: {system}", kept.uri, file.display());
   assert_eq!(
-    images.named(&python, &mut HashSet::new()).map(|seen| seen.len()),
+    images.named(&python, &mut HashSet::new()).map(|seen| seen.len()).map_err(|no| no.to_string()),
     Err(gone),
     "an image whose file is gone fails"
   );

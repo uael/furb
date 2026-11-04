@@ -53,7 +53,7 @@ use unsync::oneshot;
 use crate::{
   Act, Ear, Engine, Exit, Fact, Fault, Object, Text,
   ear::{Co, Next, ear, hear, hearing, lasting, say},
-  engine::{CRASHES, HEARING, callable},
+  engine::{CRASHES, callable, hosted::HEARING},
   verbs, world,
 };
 
@@ -904,6 +904,40 @@ fn the_work_an_earlier_life_left_is_pending_until_a_wake_that_this_life_says() {
 }
 
 #[test]
+fn a_replay_gives_a_word_the_facts_of_the_world_that_the_first_life_gave() {
+  let word = "b = bash('echo hi')\nawait b\nseen = [x[:3] for x in transcript(of='bash') if x[1] == b]\n\
+    went = peek(b).code\nlast = bash('echo ' + str(len(seen)))\nawait last";
+  let bash = |lived: &mut Lived, root: &str| {
+    let of = Some("bash".to_owned());
+    let facts = lived.engine.transcript(verbs::Transcript { on: on(root), of }).unwrap();
+    let text = |one: &Fact, at| one.word(at).and_then(|x| x.as_str().map(str::to_owned));
+    let shown = |one: &Fact| {
+      (one.kind().to_owned(), one.about().to_owned(), one.by().to_owned(), text(one, 1))
+    };
+    facts.iter().map(shown).collect::<Vec<_>>()
+  };
+  let (root, live) = {
+    let mut first = Lived::new("speaker", &[], true).unwrap();
+    let root = first.root();
+    let rung = verbs::Rung { word: Some(word.to_owned()), on: on(&root), ..Default::default() };
+    let rung = first.engine.rung(rung).unwrap().id().to_owned();
+    assert!(first.settled(&rung).is_ok());
+    assert!(first.engine.pending().unwrap().is_empty());
+    let live = bash(&mut first, &root);
+    (root, live)
+  };
+  let started = live.iter().filter(|one| one.0 == "started" && one.2 == "bash").count();
+  assert_eq!(started, 2, "the ear of commands said the started of each command: {live:?}");
+  let mut second = Lived::new("speaker", &[], false).unwrap();
+  assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
+  assert_eq!(
+    bash(&mut second, &root),
+    live,
+    "the replay gives the view of bash that the first life gave"
+  );
+}
+
+#[test]
 fn an_act_that_lives_end_while_it_runs_again_and_again_is_parked_until_a_retry() {
   let root = {
     let mut first = Lived::new("parked", &["WAIT"], true).unwrap();
@@ -919,10 +953,11 @@ fn an_act_that_lives_end_while_it_runs_again_and_again_is_parked_until_a_retry()
     root
   };
   let started = |lived: &mut Lived| {
-    let facts = lived.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
-    let ours =
-      |one: &&Fact| one.kind() == "started" && one.about() == "reply1" && one.by() != "journal";
-    facts.iter().filter(ours).count()
+    let mut count = |of: Option<String>| {
+      let facts = lived.engine.transcript(verbs::Transcript { on: on(&root), of }).unwrap();
+      facts.iter().filter(|one| one.kind() == "started" && one.about() == "reply1").count()
+    };
+    count(None) - count(Some("journal".to_owned()))
   };
   let reply = || vec![("reply1".to_owned(), "reply".to_owned())];
   // Each life that a host wakes as it opens asks the model again, and ends while the reply runs.
@@ -1688,13 +1723,17 @@ fn what_an_ear_says_of_its_own_accord_lands_while_it_stands_at_a_yield_and_takes
 
 #[test]
 fn a_fault_that_cuts_a_run_stops_the_life_which_refuses_each_later_entry_and_keeps_no_snapshot() {
-  let mut lived = Lived::new("stopped", &["x = 'a' * (5 << 30)", "close(8)"], true).unwrap();
+  crate::sand::BOUND.set(std::time::Duration::from_millis(100));
+  let cutter = "try:\n  while True:\n    pass\nfinally:\n  while True:\n    pass";
+  let mut lived = Lived::new("stopped", &[cutter, "close(8)"], true).unwrap();
   let root = lived.root();
   let with = verbs::Prompt { on: on(&root), ..Default::default() };
-  let cut =
-    lived.engine.prompt(Object::string("int"), with).expect_err("the memory bound cuts the run");
-  assert_eq!(cut.name, "MemoryError");
-  assert_eq!(lived.engine.stopped().map(|fault| fault.name.as_str()), Some("MemoryError"));
+  let cut = lived
+    .engine
+    .prompt(Object::string("int"), with)
+    .expect_err("the second excess of the turn cuts the run");
+  assert_eq!(cut.name, "TimeoutError");
+  assert_eq!(lived.engine.stopped().map(|fault| fault.name.as_str()), Some("TimeoutError"));
   assert!(
     lived.engine.snapshot().is_none(),
     "a life that stopped keeps no snapshot of its sandbox"
@@ -1703,10 +1742,7 @@ fn a_fault_that_cuts_a_run_stops_the_life_which_refuses_each_later_entry_and_kee
   let no =
     lived.engine.prompt(Object::string("int"), with).expect_err("a life that stopped makes no act");
   assert_eq!(no.name, "Refused");
-  assert!(
-    no.message().starts_with("The life stopped at MemoryError: memory limit exceeded"),
-    "{no}"
-  );
+  assert!(no.message().starts_with("The life stopped at TimeoutError: "), "{no}");
   let view = lived.engine.word("len(transcript(ROOT))", vec![]).expect_err("nor reads one");
   assert_eq!(view.message(), no.message());
   assert_eq!(lived.read.borrow().len(), 1, "the model was asked once");
@@ -1736,7 +1772,54 @@ fn an_ear_that_ends_after_it_says_still_has_each_saying_heard() {
   let id = act.id().to_owned();
   block_on(act).unwrap();
   let facts = engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
-  let heard: Vec<&str> =
-    facts.iter().filter(|one| one.about() == id).map(|one| one.kind()).collect();
+  let heard: Vec<&str> = facts.iter().filter(|one| one.about() == id).map(Fact::kind).collect();
   assert_eq!(heard, ["wait", "started", "done"]);
+}
+/// Each sandbox that this thread makes from now on, with a turn bound short enough that the replay
+/// of a life of many facts, as a whole, outlasts it.
+fn bounded_short() {
+  crate::sand::BOUND.set(Duration::from_millis(50));
+}
+
+#[test]
+fn a_life_whose_words_each_ran_within_the_bound_replays_and_keeps_its_checkpoint_past_it() {
+  bounded_short();
+  let word = "for i in range(1500):\n  await wait(0)\nclose(8)";
+  let (root, facts) = {
+    let mut first = Lived::new("outlasts", &[word], true).unwrap();
+    let root = first.root();
+    let with = verbs::Prompt { on: on(&root), ..Default::default() };
+    let act = first.engine.prompt(Object::string("int"), with).unwrap();
+    assert_eq!(
+      block_on(act).unwrap().as_ref().as_int(),
+      Some(8),
+      "each word runs within the bound live"
+    );
+    let facts = first.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
+    (root, facts.iter().filter_map(said).collect::<Vec<_>>())
+  };
+  let began = std::time::Instant::now();
+  let mut second = Lived::new("outlasts", &[], false).expect("the replay opens the life");
+  assert!(began.elapsed() > crate::sand::BOUND.get(), "the replay as a whole outlasts the bound");
+  assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
+  assert!(second.engine.stopped().is_none(), "{:?}", second.engine.stopped());
+  let again = second.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
+  let again = again.iter().filter_map(said).collect::<Vec<_>>();
+  // The time and the Kernel say their facts in an order of their own, so the replay holds each
+  // fact, in any order.
+  let mut missing = facts;
+  for one in &again {
+    if let Some(at) = missing.iter().position(|was| was == one) {
+      missing.swap_remove(at);
+    }
+  }
+  assert!(
+    missing.is_empty(),
+    "the replay holds each fact of the record: {:?}",
+    &missing[..missing.len().min(3)]
+  );
+  second.engine.checkpoint().expect("the checkpoint of the life is written whole");
+  let third = Lived::new("outlasts", &[], false).expect("the life goes on from its checkpoint");
+  assert!(third.engine.raised().is_none(), "{:?}", third.engine.raised());
+  assert_eq!(third.root(), root);
 }

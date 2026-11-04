@@ -17,7 +17,7 @@ export const tree = part({
         {
           label: "Wake chain",
           detail: "Then choose the point that the new branch starts from.",
-          run: () => (this.session.host.pending.size ? this.resume() : this.action("/wake")),
+          run: () => this.action("/wake"),
         },
       ]);
       return;

@@ -12,8 +12,9 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-/** The folder that holds each program that the tests compiled, for all the runs of the tests on this machine. */
-const built = join(tmpdir(), "furb-executables");
+/** The folder that holds each program that the tests compiled, for all the runs of the tests on this machine, in its
+ * temporary directory and not in the yard of a run of the tests. */
+const built = join(process.env.FURB_MACHINE_TMPDIR ?? tmpdir(), "furb-executables");
 
 /** The folder of the scripts that the tests run as programs, which the runner of the tests compiles before any test. */
 export const programs = join(import.meta.dir, "programs");

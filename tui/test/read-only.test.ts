@@ -76,7 +76,7 @@ async function made(record: string, named: boolean): Promise<void> {
     .split("\n")
     .filter((line) => !line.startsWith('[["checkpoint",'))
     .join("\n");
-  const fact = /\["made","chain1","store","[0-9a-f]{64}",\d+\]/.exec(text)?.[0];
+  const fact = /\["made","chain1","store","[0-9a-f]{64}",\d+(?:,[^\]]*)?\]/.exec(text)?.[0];
   if (!fact) throw new Error("The record names no engine.");
   const without = text
     .split("\n")
@@ -173,7 +173,8 @@ test("a record open to read says so in its footer and its composer, and shows no
       const frame = open.frame();
       expect(open.session.host.reading).toBeDefined();
       expect(frame).toContain("Read only: its replay drifts");
-      expect(frame).toContain("Start a new life");
+      // The replay of this build drifts, which is a defect, so the footer offers no carry.
+      expect(frame).not.toContain("Start a new life");
       expect(frame).not.toMatch(/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/);
       expect(frame).not.toContain("running");
       expect(frame).toContain("not finished when the record ends");

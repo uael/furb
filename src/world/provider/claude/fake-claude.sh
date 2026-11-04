@@ -23,8 +23,12 @@
 # that resumes a conversation says on the stderr that it holds no such conversation and ends with a failure before it
 # reads any input, as many times as the file holds, or once when it holds nothing. It lists the flag
 # --system-prompt-snapshot in its help, unless the file nosnapshot stands beside it, and it writes the
-# CLAUDE_CODE_DISABLE_CLAUDE_MDS of each process beside it too, in mds.N, or unset.
+# CLAUDE_CODE_DISABLE_CLAUDE_MDS of each process beside it too, in mds.N, or unset, and its CLAUDE_CODE_PROMPT_CACHE_TTL,
+# CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL and CLAUDE_CODE_MESSAGES_PROMPT_CACHE_TTL, each or unset, in ttl.N.
 here=$(dirname "$0")
+# When the FIFO lifeline stands beside it, each process holds its end for writing until it ends, so the reader knows
+# when no process of it lives.
+if [ -p "$here/lifeline" ]; then exec 9>>"$here/lifeline"; fi
 # A process that furb starts to ask for the models (FURB_CLAUDE_DISCOVER) answers control requests and no turn, and
 # leaves no trace of a process of a turn. It writes a line in discoveries for each one. When the file models stands
 # beside it, each of its lines is an alias, its window and its efforts joined by commas, or - for none, and it
@@ -62,6 +66,8 @@ for arg in "$@"; do
 done
 printf '%s\0' "$@" > "$here/args.$$"
 printf '%s' "${CLAUDE_CODE_DISABLE_CLAUDE_MDS-unset}" > "$here/mds.$$"
+printf '%s %s %s' "${CLAUDE_CODE_PROMPT_CACHE_TTL-unset}" "${CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL-unset}" \
+  "${CLAUDE_CODE_MESSAGES_PROMPT_CACHE_TTL-unset}" > "$here/ttl.$$"
 printf '%s' "${MAX_THINKING_TOKENS-unset}" > "$here/thinking.$$"
 who=${CLAUDE_CODE_OAUTH_TOKEN-unset}
 printf '%s' "$who" > "$here/token.$$"
@@ -115,6 +121,19 @@ while IFS= read -r line; do
         continue
       fi ;;
     *BARE*) echo '{"type":"result","result":"close(1)","usage":{}}'; continue ;;
+    # While the file hold stands beside it, a line that holds HOLD gets no answer, and when hold holds stream, the
+    # first part of a text before the silence. It says held and its id on the lifeline then.
+    *HOLD*)
+      if [ -f "$here/hold" ]; then
+        if [ "$(cat "$here/hold")" = stream ]; then
+          at=0
+          say '{"type":"message_start"}'
+          say '{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}'
+          part '"close("'
+        fi
+        if [ -p "$here/lifeline" ]; then echo "held $$" >&9; fi
+        continue
+      fi ;;
   esac
   n=$((n + 1))
   count=$(( $(cat "$here/count" 2>/dev/null || echo 0) + 1 ))

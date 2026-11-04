@@ -222,22 +222,22 @@ export const settings = part({
     const old = { ...c };
     setTheme(name);
     this.theme = name;
-    const replacements = new Map(
+    const replacements = new Map<unknown, RGBA>(
       Object.keys(old).map((key) => [old[key as keyof typeof old], c[key as keyof typeof c]]),
     );
     const recolor = (node: Renderable) => {
-      for (const property of [
-        "fg",
-        "bg",
-        "backgroundColor",
-        "borderColor",
-        "titleColor",
-        "textColor",
-        "placeholderColor",
-      ]) {
-        const color: unknown = Reflect.get(node, property);
-        if (replacements.has(color as RGBA)) Reflect.set(node, property, replacements.get(color as RGBA));
-      }
+      if ("fg" in node && replacements.has(node.fg)) node.fg = replacements.get(node.fg);
+      if ("bg" in node && replacements.has(node.bg)) node.bg = replacements.get(node.bg);
+      if ("backgroundColor" in node && replacements.has(node.backgroundColor))
+        node.backgroundColor = replacements.get(node.backgroundColor);
+      if ("borderColor" in node && replacements.has(node.borderColor))
+        node.borderColor = replacements.get(node.borderColor);
+      if ("titleColor" in node && replacements.has(node.titleColor))
+        node.titleColor = replacements.get(node.titleColor);
+      if ("textColor" in node && replacements.has(node.textColor))
+        node.textColor = replacements.get(node.textColor);
+      if ("placeholderColor" in node && replacements.has(node.placeholderColor))
+        node.placeholderColor = replacements.get(node.placeholderColor);
       for (const child of node.getChildren()) recolor(child);
     };
     recolor(this.root);

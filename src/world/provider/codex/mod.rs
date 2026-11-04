@@ -1,4 +1,4 @@
-//! The Responses API of a ChatGPT subscription, on the sign-in that furb keeps.
+//! The Responses API of a `ChatGPT` subscription, on the sign-in that furb keeps.
 
 use std::path::{Path, PathBuf};
 
