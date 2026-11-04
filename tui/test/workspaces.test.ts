@@ -10,7 +10,7 @@ import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { seedDemoFiles } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
-import { Session, savedView, statusLabels } from "../src/session.ts";
+import { Session, savedView } from "../src/session.ts";
 import { spacing } from "../src/theme.ts";
 import { type SessionEntry, Workspaces } from "../src/workspaces.ts";
 import { cellAt } from "./composing.ts";
@@ -431,75 +431,6 @@ test("a session that opens keeps its row through a refresh that comes before its
     expect(group.sessions.filter((entry) => entry.path === created.path)).toEqual([created]);
     expect(library.current).toBe(created);
     expect(created.session?.sessionName).toBe("Second");
-  }));
-
-/** A record that a build of another version made, as a crash of its life leaves it: with no checkpoint at its tip, from
- * which this build would go on. A life that ends writes its checkpoint, so the record of each test holds one. */
-function crashed(text: string): string {
-  return text
-    .split("\n")
-    .filter((line) => !line.startsWith('[["checkpoint",'))
-    .join("\n");
-}
-
-test("a session whose record a build of another version made opens to read before any replay, and names both versions", () =>
-  withLibrary(async ({ directory, open }) => {
-    let library = open();
-    const made = await library.create(await library.add(directory), "Made elsewhere");
-    await library.dispose();
-    const text = await readFile(made.path, "utf8");
-    const found = /\["made","chain1","store","([0-9a-f]{64})",(\d+)\]/.exec(text);
-    if (!found?.[1] || !found[2]) throw new Error("The record names no build.");
-    const [named, engine, version] = [found[0], found[1], Number(found[2])];
-    const other = crashed(text).replace(
-      named,
-      `["made","chain1","store","${"0".repeat(64)}",${version + 1}]`,
-    );
-    await writeFile(made.path, other);
-    library = open();
-    const group = await library.add(directory);
-    const row = group.sessions.find((entry) => entry.path === made.path);
-    if (!row) throw new Error("No row for the record.");
-    const said = `was made by a build of version ${version + 1}, and this build is of version ${version}, so a replay would drift. Open the record with the build of version ${version + 1}, which stands at `;
-    const then = ` once a build of that version ran on this machine, and which script/builds.sh ${version + 1} makes there. Or start a new life.`;
-    await library.select(row);
-    const reading = row.session?.host.reading;
-    expect(reading?.made).toBe("0".repeat(64));
-    expect(reading?.engine).toBe(engine);
-    expect(reading?.version).toBe(version + 1);
-    expect(reading?.current).toBe(version);
-    expect(reading?.why).toStartWith("Drift: the record ");
-    expect(reading?.why).toContain(said);
-    expect(reading?.why).toEndWith(then);
-    expect(row.error).toBeUndefined();
-    expect(await readFile(made.path, "utf8")).toBe(other);
-  }));
-
-test("a saved record that a build of another version made shows as read only before and after it opens, and no error", () =>
-  withLibrary(async ({ directory, open }) => {
-    let library = open();
-    const made = await library.create(await library.add(directory), "Made elsewhere");
-    await library.dispose();
-    const text = await readFile(made.path, "utf8");
-    const found = /\["made","chain1","store","([0-9a-f]{64})",(\d+)\]/.exec(text);
-    if (!found?.[1] || !found[2]) throw new Error("The record names no build.");
-    await writeFile(
-      made.path,
-      crashed(text).replace(
-        found[0],
-        `["made","chain1","store","${"0".repeat(64)}",${Number(found[2]) + 1}]`,
-      ),
-    );
-    library = open();
-    const row = (await library.add(directory)).sessions.find((entry) => entry.path === made.path);
-    if (!row) throw new Error("No row for the record.");
-    await until(library, () => row.status === "reading");
-    expect(row.error).toBeUndefined();
-    expect(statusLabels[row.status]).toBe("Read only");
-    await library.select(row);
-    expect(row.status).toBe("reading");
-    expect(row.error).toBeUndefined();
-    expect(library.groupStatus(library.groupOf(row) as never)).toBe("reading");
   }));
 
 test("deleting the current session moves to the next session that opens, and to a new one when none does", () =>

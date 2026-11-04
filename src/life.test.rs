@@ -556,68 +556,6 @@ fn a_record_of_another_engine_of_the_same_version_replays_and_goes_on() {
   );
 }
 
-#[test]
-fn a_life_on_a_record_of_another_version_is_refused_before_any_replay_and_says_both_versions_and_what_to_do()
- {
-  let at = place("other-version");
-  let other = world::VERSION + 1;
-  let (record, text) = made_elsewhere(
-    &at,
-    &format!("[\"made\",\"chain1\",\"store\",\"{}\",{other}]", world::engine()),
-  );
-  let open = || Opening { extensions: Some(false), ..opening(&at, true) };
-  for life in [open(), Opening { inspecting: Some(true), ..open() }] {
-    let refused = life.boot::<String>([]).map(|_| ()).unwrap_err();
-    assert_eq!(
-      refused.to_string(),
-      format!(
-        "Drift: the record {} was made by a build of version {other}, and this build is of version {}, so a replay \
-         would drift. Open the record with the build of version {other}, which stands at {} once a build of that \
-         version ran on this machine, and which script/builds.sh {other} makes there. Or start a new life.",
-        record.display(),
-        world::VERSION,
-        world::build(other).unwrap().display()
-      )
-    );
-  }
-  assert_eq!(fs::read_to_string(&record).unwrap(), text, "it keeps nothing");
-}
-
-#[test]
-fn a_life_on_a_record_of_another_engine_before_the_versions_is_refused_before_any_replay_and_says_both_engines()
- {
-  let at = place("other");
-  let (record, text) =
-    made_elsewhere(&at, &format!("[\"made\",\"chain1\",\"store\",\"{}\"]", "0".repeat(64)));
-  let open = || Opening { extensions: Some(false), ..opening(&at, true) };
-  for life in [open(), Opening { inspecting: Some(true), ..open() }] {
-    let refused = life.boot::<String>([]).map(|_| ()).unwrap_err();
-    assert_eq!(
-      refused.to_string(),
-      format!(
-        "Drift: the record {} was made by the engine 000000000000, and this build runs the engine {:.12}, so a \
-         replay would drift. Open the record with the build that made it, or start a new life.",
-        record.display(),
-        world::engine()
-      )
-    );
-  }
-  assert_eq!(fs::read_to_string(&record).unwrap(), text, "it keeps nothing");
-}
-
-#[test]
-fn a_life_on_a_record_of_another_engine_is_refused_before_it_takes_the_lease_of_the_record() {
-  let at = place("leased");
-  let (record, _) =
-    made_elsewhere(&at, &format!("[\"made\",\"chain1\",\"store\",\"{}\"]", "0".repeat(64)));
-  let _held = world::store(&record).unwrap();
-  let refused = Opening { extensions: Some(false), ..opening(&at, true) }
-    .boot::<String>([])
-    .map(|_| ())
-    .unwrap_err();
-  assert!(refused.to_string().starts_with("Drift: the record"), "{refused}");
-}
-
 /// The corpus that the gate of the versions replays: the records in `tests/corpus`, which `tests/corpus/README.md`
 /// says.
 fn corpus() -> PathBuf {
@@ -1343,41 +1281,6 @@ fn a_record_of_another_version_opens_on_this_build_from_its_last_checkpoint() {
   );
 }
 
-#[test]
-#[cfg(unix)]
-fn a_record_of_an_older_version_whose_build_writes_no_checkpoint_is_refused_with_why() {
-  let at = place("unupgraded");
-  let path = at.join("record.jsonl");
-  let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
-  closed(&mut first, "close(1)");
-  drop(first);
-  let text = fs::read_to_string(&path).unwrap();
-  let ours = format!("\"{}\",{}]", world::engine(), world::VERSION);
-  fs::write(
-    &path,
-    text.replace(&ours, &format!("\"{}\",{}]", world::engine(), world::VERSION - 1)),
-  )
-  .unwrap();
-  let program = at.join("old-furb");
-  fs::write(&program, "#!/bin/sh\necho no such command >&2\nexit 2\n").unwrap();
-  #[cfg(unix)]
-  fs::set_permissions(&program, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
-  let refused =
-    super::upgraded(&path, &at.display().to_string(), |_| Some(program.clone())).unwrap_err();
-  assert_eq!(
-    refused.to_string(),
-    format!(
-      "Refused: the build of version {} at {} wrote no checkpoint of {}: no such command",
-      world::VERSION - 1,
-      program.display(),
-      path.display()
-    )
-  );
-  assert!(
-    super::upgraded(&path, "", |_| None).is_ok(),
-    "a record whose build the store lacks stays as it is"
-  );
-}
 #[test]
 fn a_record_that_another_engine_went_on_with_after_a_checkpoint_opens_with_each_chain_its_turns_and_its_open_prompts()
  {

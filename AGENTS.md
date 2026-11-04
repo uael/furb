@@ -14,7 +14,7 @@ API of its own:
 - `src/lib.rs` says what the crate gives: `Engine`, whose methods are the verbs of the contract, which `build.rs`
   makes from the contract, and `Ear`, the one trait of an ear, which a host writes as a generator of rust with `ear`.
 - `src/world/` holds the ears of the World that the crate writes, one file for each concern: the files, the commands,
-  the pages of the web, the client of the MCP servers, the time, the store of the record and the store of builds, the log of a life, the reader of a record with no life, the
+  the pages of the web, the client of the MCP servers, the time, the store of the record, the log of a life, the reader of a record with no life, the
   scratch directory, the rules by which a console reads the operator, and the provider of models, which asks each model
   through rig and streams what it writes. The doc comments of `src/world.rs` and of each module say what each does, the
   tables of [`CONTRIBUTING.md`](CONTRIBUTING.md#the-world-and-the-life) list its files, and `docs/models.md` tells a
@@ -276,8 +276,6 @@ fix what your change broke, and report what was broken before.
   `cargo test` and `bun run build` take the dev profile, which optimizes every dependency, the interpreter among them,
   so a word runs as fast as in a release while the crates of the workspace build quickly. A wheel for PyPI takes the
   release.
-- `script/builds.sh <version>`: build the command line at the last commit of `origin/main` that holds a version, and
-  put it in the store of builds of the machine, so a record of that version opens with `furb` again.
 - `script/worktree.sh <path> <branch> [base]`: make a git worktree whose build starts warm. It checks out a branch that
   stands on origin or in this clone, and moves a local branch that lags behind origin up to it; a new branch starts from
   `base`, `origin/main` by default. It copies on write the build directories of the checkout whose build stands nearest
@@ -336,11 +334,6 @@ fix what your change broke, and report what was broken before.
 - `uv run python script/play.py`: one real life that uses every part of the runtime, and a second life on its
   record.
 - `uv run python script/deepswe.py`: the DeepSWE rig, which `script/AGENTS.md` says how to run.
-- `uv run python script/bench/onelife.py`: the proof of one life. It builds the command line three times, with the
-  engine changed twice in a way that makes the same acts and the last build of the next version, and runs one record
-  over the three builds on a claude that answers from a script: the record goes on with no drift, reloads an extension,
-  compacts a chain in place and crosses the version through a checkpoint, and no chain is lost, no name is taken twice
-  and no command or turn runs twice. Its docstring says how to run it.
 - `uv run python script/bench/replay.py <task> --out <directory>`: the bench of replay. One life of the local model
   works a task of DeepSWE, later lives open on its record, one more opens after a change of the World, and Claude
   Code on the same model works the task as the baseline. Its docstring says how to run it.

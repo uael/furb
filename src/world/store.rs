@@ -121,9 +121,7 @@ pub const MADE: &str = "made";
 ///
 /// The gate of the corpus holds the versions few: each record of the corpus in `tests/corpus` replays with no drift
 /// on each build of its version. A change that makes a record of the corpus drift adds one to the version, and
-/// makes the corpus again in the same change, as `tests/corpus/README.md` says. The command line of each version puts
-/// its program in the store of builds of the machine, where [`build`](super::build) says, so a build of a later
-/// version hands a record of this one to it.
+/// makes the corpus again in the same change, as `tests/corpus/README.md` says.
 pub const VERSION: i64 = 9;
 
 /// The engine of this build, which a record names: a digest of the engine and of the Kernel, which make each act of

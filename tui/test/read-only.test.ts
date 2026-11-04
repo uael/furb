@@ -117,6 +117,7 @@ for (const width of [80, 160]) {
     try {
       const record = await lived(directory, "other");
       await made(record, true);
+      await drifting(record);
       const open = await shown(record, directory, width);
       try {
         const reading = open.session.host.reading;
@@ -241,6 +242,7 @@ test("a record of an earlier engine offers a resume that names its open prompts,
   try {
     const record = await lived(directory, "older");
     await made(record, true);
+    await drifting(record);
     // The earlier life left a prompt of a model open when it ended.
     await appendFile(
       record,
@@ -280,6 +282,7 @@ test("a record of an earlier engine resumes in a real life: its turns go on and 
   try {
     const record = await lived(directory, "older");
     await made(record, true);
+    await drifting(record);
     // The earlier life closed its only prompt, so the resume has no prompt to ask again.
     await appendFile(record, `${JSON.stringify([["done", "prompt1", "chain1", "Done."], Date.now()])}\n`);
     const library = new Workspaces(new Preferences(join(directory, "config/ui.json")), {});
