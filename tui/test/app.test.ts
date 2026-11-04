@@ -634,7 +634,7 @@ test("the markdown of a message draws each element with no marks, and a code blo
     { width: 140, height: 60 },
   ));
 
-test("resume preserves chains, programs, theme, and input drafts while unfinished work stays paused", async () => {
+test("resume preserves chains, programs, theme, and input drafts, and unfinished work goes on", async () => {
   const first = await demoSession({ seed: true });
   let library = await demoLibrary(first);
   const screen = await createTestRenderer({ width: 120, height: 40, exitSignals: [] });
@@ -647,7 +647,7 @@ test("resume preserves chains, programs, theme, and input drafts while unfinishe
   first.view = "transcript";
   app.render();
   app.composer.setText('draft = "keep this"');
-  const pending = await first.engine.wait([], { seconds: 10, on: fork.id });
+  const pending = await first.engine.wait([], { seconds: 600, on: fork.id });
   const ids = first.chains.map((chain) => chain.id);
   const program = { ...first.program };
   const record = first.host.record;
@@ -674,7 +674,8 @@ test("resume preserves chains, programs, theme, and input drafts while unfinishe
       expect(second.theme).toBe("paper");
       expect(second.mode).toBe("python");
       expect(app.composer.plainText).toBe('draft = "keep this"');
-      expect(second.host.pending.has(pending)).toBe(true);
+      // The open put the wait to the outside again, so it runs with no choice of the operator.
+      expect(second.host.pending.size).toBe(0);
       expect((await second.engine.outcome(pending)).done).toBe(false);
     },
     { width: 120, height: 40 },
