@@ -22,7 +22,7 @@ use furb::{
 };
 use furb_host::{
   Command, Event, Life, LifeError, LifeHandle, Reply, Seq,
-  view::{Phase, RunState, State},
+  view::{Kind, Phase, RunState, State},
 };
 use futures::{Stream, StreamExt};
 use serde_json::json;
@@ -238,11 +238,11 @@ async fn each_act_is_told_with_its_meaning_and_each_chain_with_the_state_of_its_
   until(&mut events, stands(asked, State::Done)).await;
   until(&mut events, stands("chain1".to_owned(), State::Done)).await;
   made(&life, rung("await wait(60)")).await;
-  until(&mut events, |event| matches!(event, Event::Act(act) if act.kind == "wait")).await;
+  until(&mut events, |event| matches!(event, Event::Act(act) if act.kind == Kind::Wait)).await;
   life.send(Command::Pause { id: "chain1".to_owned(), why: None }).await.unwrap();
   let held = until(
     &mut events,
-    |event| matches!(event, Event::Act(act) if act.kind == "wait" && act.state == State::Paused),
+    |event| matches!(event, Event::Act(act) if act.kind == Kind::Wait && act.state == State::Paused),
   )
   .await;
   let Some(Event::Act(wait)) = held.last().map(|one| &*one.1) else { panic!("an act") };

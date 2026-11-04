@@ -9,7 +9,7 @@ use furb::fact::named;
 use serde_json::Value;
 
 use super::{
-  act::{Act, Answer, Pause, Phase, RunState, Spend, WORK, fault},
+  act::{Act, Answer, Kind, Pause, Phase, RunState, Spend, fault},
   state::{State, chain_state},
 };
 use crate::ears::CONSOLE;
@@ -97,27 +97,33 @@ impl Fold {
   fn asked(&mut self, [kind, id, by]: [&str; 3], rest: &[Value], born: Option<Pause>) {
     let text = |at: usize| rest.get(at).and_then(Value::as_str).unwrap_or_default().to_owned();
     let on = text(0);
-    let chain =
-      if kind == "chain" { id.to_owned() } else { self.chain_of(&on).unwrap_or(&on).to_owned() };
+    let followed = followed(kind);
+    let kind = Kind::from(kind);
+    let chain = if kind == Kind::Chain {
+      id.to_owned()
+    } else {
+      self.chain_of(&on).unwrap_or(&on).to_owned()
+    };
     match kind {
-      "run" => {
+      Kind::Run => {
         let rung = text(1);
         if let Some(act) =
-          self.acts.get_mut(&rung).filter(|act| act.kind == "rung" && act.word.is_none())
+          self.acts.get_mut(&rung).filter(|act| act.kind == Kind::Rung && act.word.is_none())
         {
           act.word = Some(text(2));
           self.moved.push(rung.clone());
         }
         self.runs.insert(id.to_owned(), rung);
       }
-      "reply" => {
+      Kind::Reply => {
         let reply = Reply { chain: on.clone(), actor: text(1), maker: by.to_owned() };
         self.replies.insert(id.to_owned(), reply);
       }
       _ => {}
     }
+    let run = (kind == Kind::Rung).then_some(RunState::Running);
     let act = Act {
-      kind: kind.to_owned(),
+      kind,
       id: id.to_owned(),
       by: by.to_owned(),
       on,
@@ -125,8 +131,8 @@ impl Fold {
       words: rest.get(1..).unwrap_or_default().to_vec(),
       phase: Phase::Asked,
       operator: false,
-      pause: born.filter(|_| followed(kind)),
-      run: (kind == "rung").then_some(RunState::Running),
+      pause: born.filter(|_| followed),
+      run,
       word: None,
       began: self.clock,
       ended: None,
@@ -141,18 +147,18 @@ impl Fold {
   /// A new act in the places that the fold reads it from: the live acts, the children of its maker,
   /// and the acts of its chain and of the chain of its maker that its state reads.
   fn placed(&mut self, act: &Act) {
-    if !followed(&act.kind) {
+    if !followed(act.kind.as_str()) {
       return;
     }
     self.live.insert(act.began, act.id.clone());
     self.children.entry(act.by.clone()).or_default().push(act.id.clone());
-    if !WORK.contains(&act.kind.as_str()) {
+    if !act.kind.work() {
       return;
     }
     let held = self.chains.entry(act.chain.clone()).or_default();
     held.open.insert(act.began, act.id.clone());
     held.last = Some(act.id.clone());
-    if act.kind == "prompt" {
+    if act.kind == Kind::Prompt {
       held.prompt = Some(act.id.clone());
       if let Some(maker) = self.remote_of(act) {
         self.chains.entry(maker).or_default().remote.insert(act.began, act.id.clone());
@@ -162,8 +168,8 @@ impl Fold {
 
   /// The chain of the rung that made a prompt on another chain.
   fn remote_of(&self, prompt: &Act) -> Option<String> {
-    let maker = self.acts.get(&prompt.by).filter(|maker| maker.kind == "rung")?;
-    (prompt.kind == "prompt" && maker.chain != prompt.chain).then(|| maker.chain.clone())
+    let maker = self.acts.get(&prompt.by).filter(|maker| maker.kind == Kind::Rung)?;
+    (prompt.kind == Kind::Prompt && maker.chain != prompt.chain).then(|| maker.chain.clone())
   }
 
   /// A fact about an act: its kind, what it is about and who said it, then the fact whole.
@@ -189,7 +195,7 @@ impl Fold {
       "ready" => {
         let word = fact.get(3).and_then(Value::as_str);
         if let Some((act, word)) =
-          self.acts.get_mut(about).filter(|act| act.kind == "rung").zip(word)
+          self.acts.get_mut(about).filter(|act| act.kind == Kind::Rung).zip(word)
         {
           act.word = Some(word.to_owned());
           self.moved.push(about.to_owned());
@@ -218,7 +224,7 @@ impl Fold {
           Answer { actor: reply.actor, usage: [part(0), part(1), part(2), part(3), part(4)] };
         for id in [reply.chain, reply.maker] {
           if let Some(act) =
-            self.acts.get_mut(&id).filter(|act| matches!(act.kind.as_str(), "chain" | "rung"))
+            self.acts.get_mut(&id).filter(|act| matches!(act.kind, Kind::Chain | Kind::Rung))
           {
             act.spend.get_or_insert_with(Spend::default).add(&answer);
             self.moved.push(id);
@@ -254,13 +260,13 @@ impl Fold {
   /// value. A cancel ends it well when it retells, when the rung itself ended well, or when its
   /// prompt did.
   fn update_run(&mut self, id: &str) {
-    let Some(act) = self.acts.get(id).filter(|act| act.kind == "rung") else { return };
+    let Some(act) = self.acts.get(id).filter(|act| act.kind == Kind::Rung) else { return };
     let ran = self.ran.get(id);
     let run = match (self.refused.get(id), ran.or(act.value()).and_then(fault)) {
       (Some(found), _) => RunState::Refused(found.clone()),
       (None, Some((is, args))) => {
         let well = |one: &Act| one.done() && one.value().and_then(fault).is_none();
-        let parent = self.acts.get(&act.by).filter(|one| one.kind == "prompt");
+        let parent = self.acts.get(&act.by).filter(|one| one.kind == Kind::Prompt);
         let retells = act.words.get(1).is_some_and(truthy);
         let reason = format!("{is}: {}", args.iter().map(display).collect::<Vec<_>>().join(", "));
         match is {
@@ -288,14 +294,16 @@ impl Fold {
       let Some(act) = self.acts.get(id) else { continue };
       chains.push(act.chain.clone());
       chains.extend(self.remote_of(act));
-      if act.kind != "chain" {
+      if act.kind != Kind::Chain {
         let state = State::of(act);
         self.acts.entry(id.clone()).and_modify(|act| act.state = state);
       }
     }
     for chain in chains {
       let state = self.chain_state(&chain);
-      let Some(act) = self.acts.get_mut(&chain).filter(|act| act.kind == "chain") else { continue };
+      let Some(act) = self.acts.get_mut(&chain).filter(|act| act.kind == Kind::Chain) else {
+        continue;
+      };
       if act.state != state {
         act.state = state;
         if !moved.contains(&chain) {

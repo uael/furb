@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use super::act::{Act, RunState, WORK};
+use super::act::{Act, Kind, RunState};
 
 /// The state of work: it asks the operator, it ended while the operator looked away, it failed, a
 /// pause holds it, its model thinks or writes its word, a word or a command of it runs, its word
@@ -67,11 +67,11 @@ impl State {
       State::Cancelled
     } else if act.failed() {
       State::Failed
-    } else if !done && !WORK.contains(&act.kind.as_str()) {
+    } else if !done && !act.kind.work() {
       State::Delegates
-    } else if done && (act.kind != "rung" || act.run != Some(RunState::Running)) {
+    } else if done && (act.kind != Kind::Rung || act.run != Some(RunState::Running)) {
       State::Done
-    } else if act.kind == "rung" && !done && act.word.is_none() {
+    } else if act.kind == Kind::Rung && !done && act.word.is_none() {
       State::Thinks
     } else {
       State::Runs
@@ -84,9 +84,9 @@ impl State {
 /// and a word of it that awaits only another chain delegates.
 pub fn working(local: &[&Act], remote: &[&Act]) -> State {
   let mut open = local.iter().filter(|act| !act.done());
-  if open.clone().any(|act| act.kind == "rung" && act.word.is_none()) {
+  if open.clone().any(|act| act.kind == Kind::Rung && act.word.is_none()) {
     State::Thinks
-  } else if open.any(|act| act.kind == "bash" || act.kind == "wait") {
+  } else if open.any(|act| matches!(act.kind, Kind::Bash | Kind::Wait)) {
     State::Runs
   } else if remote.iter().any(|act| !act.done()) {
     State::Delegates
@@ -104,8 +104,7 @@ pub fn chain_state(on: &[&Act], remote: &[&Act]) -> State {
   if on.iter().any(|act| act.owed()) {
     return State::Asks;
   }
-  let live: Vec<&Act> =
-    on.iter().copied().filter(|act| WORK.contains(&act.kind.as_str())).collect();
+  let live: Vec<&Act> = on.iter().copied().filter(|act| act.kind.work()).collect();
   if live.iter().any(|act| act.pause.is_some() && !act.done()) {
     return State::Paused;
   }
@@ -115,7 +114,7 @@ pub fn chain_state(on: &[&Act], remote: &[&Act]) -> State {
   match live.last() {
     Some(last) if last.cancelled() => State::Cancelled,
     Some(last) if last.failed() => State::Failed,
-    _ if live.iter().any(|act| act.kind == "prompt") => State::Done,
+    _ if live.iter().any(|act| act.kind == Kind::Prompt) => State::Done,
     _ => State::Idle,
   }
 }
@@ -126,14 +125,14 @@ pub fn restate(acts: &mut [Act]) {
   let states: Vec<State> = acts
     .iter()
     .map(|act| {
-      if act.kind != "chain" {
+      if act.kind != Kind::Chain {
         return State::of(act);
       }
       let on: Vec<&Act> =
         acts.iter().filter(|one| one.chain == act.id && one.id != act.id).collect();
       let remote: Vec<&Act> = acts
         .iter()
-        .filter(|one| one.kind == "prompt" && one.chain != act.id)
+        .filter(|one| one.kind == Kind::Prompt && one.chain != act.id)
         .filter(|one| ids.get(one.by.as_str()).is_some_and(|maker| maker.chain == act.id))
         .collect();
       chain_state(&on, &remote)
