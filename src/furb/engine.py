@@ -426,10 +426,8 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
         continue
       waits = [c for *_, c in transcript(id, "wants") if not over(c)]
       if step not in waiting and (
-        step := min(
-          (x for x in waiting if not (paused(x) or over(x) or (hush == get(x)[2] and not all(map(over, begun))))),
-          key=lambda x: len(transcript(id, get(x)[2])),
-          default="",
+        step := next(
+          (x for x in waiting if not (paused(x) or over(x) or (hush == get(x)[2] and not all(map(over, begun))))), ""
         )
       ):
         maker, to = get(step)[2::4]

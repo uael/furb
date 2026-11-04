@@ -30,6 +30,10 @@
 //!
 //! [`local`]: super::local
 
+#![expect(
+  clippy::semicolon_if_nothing_returned,
+  reason = "debt: a unit expression with no semicolon"
+)]
 #![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
 #![expect(
   clippy::clone_on_ref_ptr,

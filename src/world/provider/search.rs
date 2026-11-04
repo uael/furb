@@ -4,6 +4,7 @@
 //! grounding of Gemini in Google Search, and the search API of DeepSeek; else a free search. A
 //! search answers with text in Markdown, which ends with its sources.
 
+#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
 #![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
 
 use std::{future::Future, io, process::ExitStatus, process::Stdio, sync::Arc, time::Duration};

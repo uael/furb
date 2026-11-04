@@ -56,9 +56,16 @@ use serde_json::{Value, json};
 use jiff::{Zoned, civil};
 
 use super::{
-  Backoff, CHEAP, Class, Hosted, Model, Provider, Retries, Retry, Thinking, Transient, Writes,
-  budgeted, catalog::Catalog, images, local::Server, messages, passing, recoverable, resets,
-  search::Searches, tail, thinking, unclosed, unfenced,
+  Hosted, Model, Provider, Retries, Writes,
+  answer::{unclosed, unfenced, uuid_from},
+  catalog::Catalog,
+  images,
+  local::Server,
+  messages::{messages, tail},
+  model::{CHEAP, Class, standing},
+  retry::{Backoff, Retry, Transient, passing, recoverable, resets},
+  search::Searches,
+  thinking::{Thinking, budgeted, thinking},
 };
 use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, Text, verbs, world};
 
@@ -1712,9 +1719,9 @@ fn a_turn_of_a_model_loses_its_marks_and_a_turn_of_marks_alone_goes_with_the_use
   let said: Vec<Value> = got
     .iter()
     .map(|one| match one {
-      super::Message::User { content } => json!(["user", format!("{content:?}")]),
-      super::Message::Assistant { content, .. } => json!(["assistant", format!("{content:?}")]),
-      super::Message::System { .. } => json!(["system"]),
+      Message::User { content } => json!(["user", format!("{content:?}")]),
+      Message::Assistant { content, .. } => json!(["assistant", format!("{content:?}")]),
+      Message::System { .. } => json!(["system"]),
     })
     .collect();
   assert_eq!(said.len(), 3, "{said:?}");
@@ -2204,7 +2211,7 @@ fn each_image_comes_once_in_a_request_after_the_text_that_names_it_as_a_fork_giv
   let users: Vec<Vec<&'static str>> = got
     .iter()
     .filter_map(|one| match one {
-      super::Message::User { content } => Some(
+      Message::User { content } => Some(
         content
           .iter()
           .map(|part| match part {
@@ -2236,9 +2243,9 @@ fn a_turn_of_a_model_with_no_usage_and_no_blocks_goes_as_its_python_in_the_role_
   let said: Vec<Value> = got
     .iter()
     .map(|one| match one {
-      super::Message::User { content } => json!(["user", format!("{content:?}")]),
-      super::Message::Assistant { content, .. } => json!(["assistant", format!("{content:?}")]),
-      super::Message::System { .. } => json!(["system"]),
+      Message::User { content } => json!(["user", format!("{content:?}")]),
+      Message::Assistant { content, .. } => json!(["assistant", format!("{content:?}")]),
+      Message::System { .. } => json!(["system"]),
     })
     .collect();
   let roles: Vec<_> = said.iter().map(|one| one[0].as_str().unwrap_or_default()).collect();
@@ -2259,16 +2266,16 @@ fn the_open_of_a_chain_after_its_setup_goes_as_a_block_of_its_own() {
   ]);
   let model = scripted(&MockCompletionModel::new([]));
   let got = messages(turns.as_ref(), &model, &mut images::Images::new(None)).unwrap();
-  let Some(super::Message::User { content }) = got.last() else { panic!("a user turn: {got:?}") };
+  let Some(Message::User { content }) = got.last() else { panic!("a user turn: {got:?}") };
   let texts: Vec<String> = content
     .iter()
     .filter_map(|one| match one {
-      super::UserContent::Text(text) => Some(text.text.clone()),
+      UserContent::Text(text) => Some(text.text.clone()),
       _ => None,
     })
     .collect();
   assert_eq!(texts, ["#read1\nread1_path = 'a.txt'".to_owned(), opened.to_owned()]);
-  let Some(super::Message::User { content }) = got.first() else { panic!("a user turn: {got:?}") };
+  let Some(Message::User { content }) = got.first() else { panic!("a user turn: {got:?}") };
   assert_eq!(content.len(), 1, "a turn with no open after a paragraph goes whole");
 }
 
@@ -2289,9 +2296,9 @@ fn a_turn_of_the_model_that_the_gate_refused_goes_on_the_user_side_quoted_under_
   let said: Vec<Value> = got
     .iter()
     .map(|one| match one {
-      super::Message::User { content } => json!(["user", format!("{content:?}")]),
-      super::Message::Assistant { content, .. } => json!(["assistant", format!("{content:?}")]),
-      super::Message::System { .. } => json!(["system"]),
+      Message::User { content } => json!(["user", format!("{content:?}")]),
+      Message::Assistant { content, .. } => json!(["assistant", format!("{content:?}")]),
+      Message::System { .. } => json!(["system"]),
     })
     .collect();
   assert_eq!(said.len(), 2, "the refused word is no turn of the model: {said:?}");
@@ -2548,7 +2555,7 @@ fn the_configs_of_the_user_and_of_the_project_give_the_classes_and_the_list_of_a
       .map(|name| catalog.find(name).expect("the catalog holds the claude command line").clone())
       .collect();
   let roster = |directory: &Path| {
-    let given = super::standing(&models, &directory.display().to_string(), "a", None, &user);
+    let given = standing(&models, &directory.display().to_string(), "a", None, &user);
     let names = given.py_repr();
     names
       .split("], ['")
@@ -2574,7 +2581,7 @@ fn the_configs_of_the_user_and_of_the_project_give_the_classes_and_the_list_of_a
 
 #[test]
 fn a_machine_with_no_random_bytes_fails_the_call_that_needs_an_id() {
-  let got = super::uuid_from(|_| Err(getrandom::Error::UNSUPPORTED));
+  let got = uuid_from(|_| Err(getrandom::Error::UNSUPPORTED));
   let Err(CompletionError::ProviderError(why)) = got else {
     panic!("a machine with no random bytes gave an id")
   };
@@ -2583,12 +2590,12 @@ fn a_machine_with_no_random_bytes_fails_the_call_that_needs_an_id() {
 
 #[test]
 fn an_id_is_a_uuid_of_version_4_and_variant_1() {
-  let zeros = super::uuid_from(|bytes| {
+  let zeros = uuid_from(|bytes| {
     bytes.fill(0);
     Ok(())
   });
   assert_eq!(zeros.unwrap(), "00000000-0000-4000-8000-000000000000");
-  let ones = super::uuid_from(|bytes| {
+  let ones = uuid_from(|bytes| {
     bytes.fill(0xff);
     Ok(())
   });

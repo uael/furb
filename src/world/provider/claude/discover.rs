@@ -6,6 +6,11 @@
 //! program changes or [`refresh`] is called. A command line that does not answer, as an older one does not, leaves the
 //! fixed table of [`fallback`].
 
+#![expect(
+  clippy::single_match_else,
+  reason = "debt: a match of one arm and else, where if let serves"
+)]
+
 use std::{
   collections::HashMap,
   fs,
