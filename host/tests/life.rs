@@ -329,3 +329,39 @@ async fn the_operator_closes_an_act_and_says_what_he_saw_and_what_he_queued() {
   assert_eq!(steps, [(json!("begin"), json!("h1")), (json!("sent"), json!(first))]);
   fs::remove_dir_all(&at).unwrap();
 }
+#[tokio::test]
+async fn each_write_keeps_its_change_in_the_journal_beside_the_record() {
+  let at = place("journal");
+  fs::write(at.join("a.txt"), "old\n").unwrap();
+  let record = at.join("a.jsonl").display().to_string();
+  let opening = Opening { record: Some(record.clone()), ..scripted(&at, &[]) };
+  let life = Life::spawn(opening).unwrap();
+  let mut events = Box::pin(life.events(0));
+  let word = "write(Text('a.txt', 'new\\n'))\nwrite(Text('b.txt', 'made\\n'))\nwrite(Text('scratch://n', 'x'))";
+  let id = made(&life, rung(word)).await;
+  until(&mut events, done(&id)).await;
+  let journal = PathBuf::from(format!("{record}.changes.jsonl"));
+  let lines = tokio::time::timeout(Duration::from_secs(60), async {
+    loop {
+      let held = fs::read_to_string(&journal).unwrap_or_default();
+      if held.lines().count() >= 2 {
+        return held;
+      }
+      tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+  })
+  .await
+  .unwrap();
+  let changes: Vec<serde_json::Value> =
+    lines.lines().map(|line| serde_json::from_str(line).unwrap()).collect();
+  let file = |name: &str| at.join(name).display().to_string();
+  assert_eq!(changes.len(), 2, "{lines}");
+  assert_eq!(changes[0]["path"], json!(file("a.txt")));
+  assert_eq!((&changes[0]["before"], &changes[0]["after"]), (&json!("old\n"), &json!("new\n")));
+  assert!(changes[0]["act"].as_str().is_some_and(|act| act.starts_with("write")));
+  assert_eq!(changes[0].get("made"), None);
+  assert_eq!(changes[1]["path"], json!(file("b.txt")));
+  assert_eq!((&changes[1]["before"], &changes[1]["made"]), (&json!(""), &json!(true)));
+  life.send(Command::End).await.unwrap();
+  fs::remove_dir_all(&at).unwrap();
+}

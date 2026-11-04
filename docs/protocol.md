@@ -109,6 +109,9 @@ once it listens. A second daemon refuses to start there.
 - `open` gives the life of a record, by its absolute path, in the folder `cwd`, the folder of the record when it is
   not given. Each life opens on a thread of its own, so the daemon answers each verb while a life opens, and a fault
   of one life ends that life alone. Each verb of a life refuses with `closed` when no life lives on its record.
+- Each life keeps the journal of the changes of its files beside its record, as `<record>.changes.jsonl`: one line
+  for each write of a file, with its `path`, the text `before` and `after` it, its `act`, and `made` when the write
+  made the file. A window reads it to show and to undo what each write changed.
 - A holder keeps a life: each window that attached it, and each pin, by the name of its holder. Work that runs holds
   nothing. A life with no holder for 30 seconds writes its checkpoint and ends, and `list` gives it as not `open`
   from then on. An `open` of a life that ends waits for its end, then opens it again from its checkpoint.
