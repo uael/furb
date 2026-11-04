@@ -262,8 +262,8 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
     t = transcript(source or ROOT)
     h = [(x[0] == "tell" and x[3][0][:6]) or x[0] for x in t] + ["chain(", "#chain", "setup"]
     hi = h.index("#chain", lo := h.index("chain("))
-    refused, running, waiting, last, heard = set(), {}, {}, standing(), []
-    step = news = ran = reply = note = to = ""
+    refused, running, waiting, last, heard, begun = set(), {}, {}, standing(), [], set()
+    step = news = ran = reply = note = to = hush = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def placed(moved):
@@ -360,6 +360,10 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
         ):
           yield "tell", maker, [headed(p, "paused", why=why)]
           running[maker] or (news := (p + " paused", maker, 0))
+        case (kind, about, by, *_) if (
+          ((kind == "started" and not get(by)) or kind == "prompt") and r[2] in running and not get(r[2])[4]
+        ):
+          begun.add(about)
       if scope(a[1]) != id:
         continue
       if a[0] in ("ready", "done"):
@@ -391,7 +395,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
           waiting[rid] = running[rid] = ""
         case ("tell", *_, notes) if notes not in (["chain()"], [*r[4:5]]):
           heard.append("\n".join(notes))
-          ran = ""
+          ran = hush = ""
           if a is note:
             note = bind(step)
         case ("done", about, *_) if about == note:
@@ -414,14 +418,16 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
           pause(id, why)
       if r[0] == "run":
         running[r[4]] = a[0] != "done"
+        a[0] == "done" and (hush := (get(r[4]) or a)[2])
       elif r[0] == "wants":
         running[get(r[2])[4]] = a[0] != "started"
+      a[0] == "done" and a[1] in begun and (hush := "")
       if any(running.values()):
         continue
       waits = [c for *_, c in transcript(id, "wants") if not over(c)]
       if step not in waiting and (
         step := min(
-          (x for x in waiting if not (paused(x) or over(x) or (ran and waits))),
+          (x for x in waiting if not (paused(x) or over(x) or (hush == get(x)[2] and not all(map(over, begun))))),
           key=lambda x: len(transcript(id, get(x)[2])),
           default="",
         )
