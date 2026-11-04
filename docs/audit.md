@@ -31,7 +31,9 @@ gave the gate and ran, from those answers alone.
 The build that audits the record must be of the version of the build that made it. The record names that build in
 its fact `made`: the engine, as a digest of `src/furb/engine.py` and `src/furb/kernel.py`, and the version of the
 build. That version is the version of the record, which many releases share, and not the version of a release. A
-build of another version refuses the record before any replay, and the audit says so. So install a release of furb
+build of another version refuses the record before any replay, and the audit says so. After a checkpoint, a build of
+another engine replays nothing of what came after it, and carries it as data, so it audits none of it. So install a
+release of furb
 whose build has the version of the record, the latest one first, in a clean virtual environment:
 
 ```sh

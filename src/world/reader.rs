@@ -62,8 +62,8 @@ pub struct Retold {
   pub logged: bool,
   /// The file that holds the facts, in the order that the life said them, each on a line of its own as JSON reads a
   /// value of the sandbox: the log beside the record while it agrees with the record, and else the file of what the
-  /// record tells, `<record>.told`, beside it. A line that does not start with `[`, and a line `["keep", "", n]` of
-  /// the log, holds no fact.
+  /// record tells, `<record>.told`, beside it. A line that does not start with `[`, and a line
+  /// `["keep", "", n]`, which says that the record kept its entry n there, holds no fact.
   pub file: PathBuf,
   /// The count of the entries of the record.
   pub entries: usize,
@@ -76,6 +76,17 @@ impl Retold {
   /// Each fact of the file, in the order that the life said them, read one line at a time, so a reader holds no more
   /// of a large record than it keeps of each fact.
   pub fn each(&self, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
+    self.lines(None, take)
+  }
+
+  /// Each fact of the file that the life said after the record kept its entry n, counted from 1,
+  /// in order.
+  pub fn after(&self, n: usize, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
+    self.lines(Some(&serde_json::json!([KEEP, "", n]).to_string()), take)
+  }
+
+  /// Each fact of the file after the line from, or from its start.
+  fn lines(&self, mut from: Option<&str>, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
     let failed =
       |no: std::io::Error| Fault::refused(format!("{} cannot be read: {no}", self.file.display()));
     let file = std::fs::File::open(&self.file).map_err(failed)?;
@@ -87,7 +98,9 @@ impl Retold {
         return Ok(());
       }
       let text = line.trim_end_matches('\n');
-      if text.starts_with('[') && !text.starts_with(r#"["keep","","#) {
+      if from.is_some() {
+        from = from.filter(|mark| *mark != text);
+      } else if text.starts_with('[') && !text.starts_with(r#"["keep","","#) {
         take(parsed(text)?);
       }
     }
@@ -150,10 +163,13 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
         }
       };
       let mut life = Reader::new(makers.ended(), &mut out);
+      let mut n = 0;
       each(path, &mut |entry| {
         if let Some(fact) = kept(&entry) {
           life.hear(fact);
         }
+        n += 1;
+        life.kept(n);
       })?;
     }
     if let Some(no) = broken {
@@ -173,7 +189,11 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
 }
 
 /// What the build that writes a file of what a record tells names in it: a reader of another build writes it again.
-const BUILD: &str = concat!(env!("CARGO_PKG_VERSION"), "/", env!("CARGO_PKG_NAME"), "/2");
+const BUILD: &str = concat!(env!("CARGO_PKG_VERSION"), "/", env!("CARGO_PKG_NAME"), "/3");
+
+/// The kind of the line that says that the record kept an entry there, in the log and in the
+/// file of what a record tells.
+const KEEP: &str = "keep";
 
 /// The size and the time of change of a file, in nanoseconds, or nothing when no file stands there.
 fn stamped(path: &Path) -> Option<(u64, u128)> {
@@ -238,7 +258,7 @@ fn items(said: ObjectRef<'_>) -> Vec<ObjectRef<'_>> {
 /// A value that a record kept, as the engine gives it: a tuple and a whole float, which keep a mark in the record so
 /// that a later life reads them again as they were, come back as a tuple and a float, so a host reads the file of what
 /// a record tells as it reads the log of a life.
-fn plain(said: ObjectRef<'_>) -> Object {
+pub(crate) fn plain(said: ObjectRef<'_>) -> Object {
   if said.type_name() == "dict"
     && let Some(pairs) = said.pairs()
   {
@@ -435,6 +455,16 @@ impl Reader<'_> {
     }
     (self.out)(owned.0);
     self.flush();
+  }
+
+  /// Say that the record kept its entry n there, counted from 1, as the log says it.
+  fn kept(&mut self, n: usize) {
+    self.flush();
+    (self.out)(Object::list([
+      Object::string(KEEP),
+      Object::string(""),
+      Object::int(i64::try_from(n).unwrap_or(i64::MAX)),
+    ]));
   }
 
   /// Tell the facts that the reader said, in order.
