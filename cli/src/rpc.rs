@@ -162,7 +162,7 @@ impl Server {
           if line.ends_with(b"\r") {
             line.pop();
           }
-          self.answer(&line)?;
+          self.answer(&line).await?;
         }
       }
     }
@@ -206,7 +206,7 @@ impl Server {
   }
 
   /// One command, answered: its response is written first, and the events it caused after it.
-  fn answer(&mut self, line: &[u8]) -> io::Result<()> {
+  async fn answer(&mut self, line: &[u8]) -> io::Result<()> {
     // A command reads the prompts as the life last told them.
     self.heard();
     if line.iter().all(u8::is_ascii_whitespace) {
@@ -220,7 +220,7 @@ impl Server {
       Ok(fields) => {
         let command = Command(fields);
         let kind = command.text("type").ok().flatten().unwrap_or_default();
-        let done = self.done(&kind, &command);
+        let done = self.done(&kind, &command).await;
         let mut response = json!({"type": "response", "command": kind, "success": done.is_ok()});
         if let Some(id) = command.0.get("id").and_then(|one| serde_json::from_str(one.get()).ok()) {
           response["id"] = id;
@@ -238,15 +238,18 @@ impl Server {
   }
 
   /// What a command did, as the data of its response, or why it did nothing.
-  fn done(&mut self, kind: &str, command: &Command) -> Result<Value, String> {
+  async fn done(&mut self, kind: &str, command: &Command) -> Result<Value, String> {
     let failed = |no: Fault| no.to_string();
     let on = command.text("on")?.unwrap_or_else(|| self.life.root.clone());
     match kind {
       "prompt" => {
         let shape = command.text("shape")?.filter(|name| !name.is_empty());
         let shape = life::shape(shape.as_deref().unwrap_or(life::SHAPE));
-        let (message, to) =
-          (command.text("message")?, command.text("to")?.map(|to| life::actor(&to).0));
+        let message = command.text("message")?;
+        let to = match command.text("to")? {
+          Some(to) => Some(life::actored(&to).await.0),
+          None => None,
+        };
         let id = match command.text("key")? {
           Some(key) => {
             let mut kwargs = vec![("on", Object::string(on.as_str()))];

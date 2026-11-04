@@ -21,7 +21,7 @@ use std::{
   collections::VecDeque,
   fmt::Display,
   fs::{File, OpenOptions, TryLockError, create_dir_all},
-  path::{Path, PathBuf},
+  path::Path,
   rc::Rc,
   task::{Context, Poll},
   time::{Duration, SystemTime, UNIX_EPOCH},
@@ -34,6 +34,7 @@ use sha2::{Digest, Sha256};
 
 use monty_types::unstable::{MontyGraph, MontyNode};
 
+use super::beside;
 use crate::{
   ENGINE, KERNEL,
   ear::{Co, Ear, Heard, Next, Spoken, Step, hearing, say},
@@ -119,9 +120,9 @@ pub const MADE: &str = "made";
 
 /// The version of this build, which a record names. A record replays on each build of the version that made it.
 ///
-/// The gate of the corpus holds the versions few: each record of the corpus in `tests/corpus` replays with no drift
-/// on each build of its version. A change that makes a record of the corpus drift adds one to the version, and
-/// makes the corpus again in the same change, as `tests/corpus/README.md` says.
+/// The gate of the replays holds the versions few: each record in `tests/replay` replays with no
+/// drift on each build of its version. A change that makes one of them drift adds one to the
+/// version, and makes the record again in the same change, as `tests/replay/README.md` says.
 pub const VERSION: i64 = 9;
 
 /// The engine of this build, which a record names: a digest of the engine and of the Kernel, which make each act of
@@ -370,7 +371,7 @@ impl Drop for Lease {
 /// leave a lock that no later process meets, and on macOS a lookup of a renamed path can go on giving the moved file
 /// to every process for seconds, so no holder moves or removes the lock file.
 fn leased(path: &Path) -> Result<Lease, Fault> {
-  let lock = PathBuf::from(format!("{}.lock", path.display()));
+  let lock = beside(path, ".lock");
   if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
     create_dir_all(parent).map_err(|no| failed(&lock, no))?;
   }

@@ -56,8 +56,8 @@ use serde_json::{Value, json};
 use jiff::{Zoned, civil};
 
 use super::{
-  Backoff, CHEAP, Class, Hosted, Model, Provider, Retries, Retry, Thinking, Writes, budgeted,
-  catalog::Catalog, images, limit, local::Server, messages, passing, recoverable, resets,
+  Backoff, CHEAP, Class, Hosted, Model, Provider, Retries, Retry, Thinking, Transient, Writes,
+  budgeted, catalog::Catalog, images, local::Server, messages, passing, recoverable, resets,
   search::Searches, tail, thinking, unclosed, unfenced,
 };
 use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, Text, verbs, world};
@@ -607,7 +607,7 @@ fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line_and_each_l
   use super::claude::test::Yard;
   let yard = Yard::new("chain");
   let claude = yard.claude(10_000);
-  let (mut engine, _) = life("claude", claude.models());
+  let (mut engine, _) = life("claude", crate::ear::reactor().block_on(claude.models()));
   let root = engine.root().to_owned();
   let mut answer = |message: &str| {
     let with = verbs::Prompt { message: Some(message.into()), on: on(&root), ..Default::default() };
@@ -627,7 +627,7 @@ fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line_and_each_l
   assert_eq!(heard.len(), 2);
   assert!(heard[1].contains("second task") && !heard[1].contains("first task"), "{}", heard[1]);
   // The ids of chains repeat in every life, and a life on the same command line keeps a conversation of its own.
-  let (mut other, _) = life("claude-other", claude.models());
+  let (mut other, _) = life("claude-other", crate::ear::reactor().block_on(claude.models()));
   let with =
     verbs::Prompt { message: Some("first task".into()), on: on(&root), ..Default::default() };
   block_on(other.prompt(Object::string("str"), with).expect("a prompt is made"))
@@ -651,9 +651,12 @@ fn a_claude_that_an_update_took_away_is_asked_again_after_its_backoff_until_it_c
   let claude = Claude::with_command(fake.prefix(), Vec::new(), Some(Duration::from_secs(10)));
   let (retries, told) = retried();
   let backoff = Backoff { most: 10, first: Duration::from_millis(100) };
-  let provider = Provider::new(yard("away").display().to_string(), claude.models())
-    .backoff(backoff)
-    .retries(retries);
+  let provider = Provider::new(
+    yard("away").display().to_string(),
+    crate::ear::reactor().block_on(claude.models()),
+  )
+  .backoff(backoff)
+  .retries(retries);
   let mut engine = lived(provider);
   let root = engine.root().to_owned();
   fake.away();
@@ -678,7 +681,10 @@ fn the_claude_command_line_is_told_the_most_thought_of_the_provider_unless_the_e
   let claude = fake.claude(10_000);
   let inherited = Thinking { most: 4096, inherited: true };
   for (name, most) in [("most-told", Thinking::default()), ("most-inherited", inherited)] {
-    let provider = Provider::new(yard(name).display().to_string(), claude.models());
+    let provider = Provider::new(
+      yard(name).display().to_string(),
+      crate::ear::reactor().block_on(claude.models()),
+    );
     let mut engine = lived(provider.thinking(most).actor(Some("claude-cli:opus/high".into())));
     let root = engine.root().to_owned();
     let with = verbs::Prompt { message: Some("task".into()), on: on(&root), ..Default::default() };
@@ -700,7 +706,7 @@ fn the_word_of_the_claude_command_line_is_the_text_it_settled_over_the_parts_it_
   use super::claude::test::Yard;
   let yard = Yard::new("gap");
   let claude = yard.claude(10_000);
-  let (mut engine, _) = life("claude-gap", claude.models());
+  let (mut engine, _) = life("claude-gap", crate::ear::reactor().block_on(claude.models()));
   let root = engine.root().to_owned();
   // The command line streams the text of its reply less its first part, and then says the text whole.
   let with =
@@ -774,8 +780,11 @@ fn the_claude_command_line_sees_each_image_that_a_prompt_names_and_each_image_th
   let word = format!("read({:?})", at.join("read.png").display().to_string());
   fs::write(fake.at.join("word.1"), serde_json::to_string(&word).expect("a word of json"))
     .expect("the word is written");
-  let provider =
-    Provider::new(at.display().to_string(), fake.claude(10_000).models()).images(at.join("images"));
+  let provider = Provider::new(
+    at.display().to_string(),
+    crate::ear::reactor().block_on(fake.claude(10_000).models()),
+  )
+  .images(at.join("images"));
   let mut engine = seeing(provider, Some(at.join("images")));
   let root = engine.root().to_owned();
   let message = format!("look at {}", images::reference("named.png", &kept.uri));
@@ -841,6 +850,18 @@ fn failing(reasons: &[&str]) -> (Hosted, Arc<AtomicUsize>) {
     async move { Ok(Object::list(turn)) }.boxed()
   });
   (host, calls)
+}
+
+/// The same model, whose failures read as the claude command line words them: a usage limit or a
+/// failed sign in in the text that a function of the host fails with is the typed failure that the
+/// claude provider gives.
+fn spoken(mut model: Model) -> Model {
+  let inner = Arc::clone(&model.answers);
+  model.answers = Arc::new(move |asked| {
+    let got = inner(asked);
+    Box::pin(async move { got.await.map_err(super::claude::worded) })
+  });
+  model
 }
 
 /// The retries that a test was told, each as its rung, its chain and the retry.
@@ -963,7 +984,8 @@ fn an_exhausted_recoverable_provider_error_gives_the_model_another_turn_without_
 
 #[test]
 fn only_a_failure_of_the_network_or_of_the_side_of_the_provider_passes() {
-  let provider = |why: &str| passing(&CompletionError::ProviderError(why.to_owned()));
+  let provider =
+    |why: &str| passing(&CompletionError::ProviderError(why.to_owned())).map(|one| one.to_string());
   assert_eq!(
     provider("error sending request: connection reset").as_deref(),
     Some("connection reset")
@@ -976,11 +998,11 @@ fn only_a_failure_of_the_network_or_of_the_side_of_the_provider_passes() {
   assert_eq!(provider("400 Bad Request: unsupported parameter"), None);
   assert_eq!(provider("could not resolve host"), Some("network error".to_owned()));
   assert_eq!(provider("No model is m/x."), None);
-  assert_eq!(
-    provider("No program to run: claude did not start: No such file or directory (os error 2)")
-      .as_deref(),
-    Some("the program is missing")
-  );
+  let why = "claude did not start: No such file or directory (os error 2)".to_owned();
+  let missing = CompletionError::RequestError(Box::new(super::claude::Error::Missing(why)));
+  assert_eq!(passing(&missing), Some(Transient::Missing));
+  let said = "No program to run: claude did not start: No such file or directory (os error 2)";
+  assert_eq!(provider(said), None, "the text alone is no missing program");
   assert_eq!(provider("Claude exited (1): Error: 'claude' was not found on PATH."), None);
   assert_eq!(passing(&CompletionError::ResponseError("the stream stopped, 503".into())), None);
 }
@@ -1758,7 +1780,7 @@ fn a_call_that_the_usage_limit_refuses_waits_for_its_reset_and_the_chain_is_told
     + 1;
   let (host, calls) = failing(&[&format!("Claude AI usage limit reached|{soon}")]);
   let (retries, told) = retried();
-  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let model = spoken(scripted(&MockCompletionModel::default()).hosted(host));
   let provider = Provider::new(yard("limit").display().to_string(), vec![model]).retries(retries);
   let mut engine = lived(provider);
   let id = asked(&mut engine);
@@ -1787,7 +1809,7 @@ fn a_call_that_the_usage_limit_refuses_waits_for_its_reset_and_the_chain_is_told
 fn a_call_that_a_failed_sign_in_refuses_waits_for_a_stand_and_the_chain_is_told_once() {
   let (host, calls) = failing(&["Invalid API key \u{b7} Please run /login"]);
   let (retries, told) = retried();
-  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let model = spoken(scripted(&MockCompletionModel::default()).hosted(host));
   let provider =
     Provider::new(yard("signed-out").display().to_string(), vec![model]).retries(retries);
   let mut engine = lived(provider);
@@ -1823,7 +1845,7 @@ fn a_stand_ends_the_wait_of_a_usage_limit_and_asks_the_model_again_at_once() {
     + 86_400;
   let (host, calls) = failing(&[&format!("Claude AI usage limit reached|{later}")]);
   let (retries, told) = retried();
-  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let model = spoken(scripted(&MockCompletionModel::default()).hosted(host));
   let provider =
     Provider::new(yard("limit-now").display().to_string(), vec![model]).retries(retries);
   let mut engine = lived(provider);
@@ -1849,7 +1871,7 @@ fn a_stand_that_meets_the_same_usage_limit_again_tells_the_chain_nothing_more() 
   let limit = format!("Claude AI usage limit reached|{later}");
   let (host, calls) = failing(&[&limit, &limit]);
   let (retries, told) = retried();
-  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let model = spoken(scripted(&MockCompletionModel::default()).hosted(host));
   let provider =
     Provider::new(yard("limit-twice").display().to_string(), vec![model]).retries(retries);
   let mut engine = lived(provider);
@@ -1884,7 +1906,7 @@ fn a_stand_on_new_settings_asks_a_reply_that_waits_for_a_usage_limit_again_on_th
   let (new, after) = failing(&[]);
   let fresh = scripted(&MockCompletionModel::default()).hosted(new);
   let (retries, told) = retried();
-  let model = scripted(&MockCompletionModel::default()).hosted(old);
+  let model = spoken(scripted(&MockCompletionModel::default()).hosted(old));
   let stale = model.clone();
   let switched = Arc::new(std::sync::atomic::AtomicBool::new(false));
   let flipped = Arc::clone(&switched);
@@ -1892,7 +1914,8 @@ fn a_stand_on_new_settings_asks_a_reply_that_waits_for_a_usage_limit_again_on_th
     .retries(retries)
     .refreshing(Arc::new(move || {
       let models = if flipped.load(Ordering::SeqCst) { &fresh } else { &stale };
-      Ok((vec![models.clone()], None, Thinking::default()))
+      let got = Ok((vec![models.clone()], None, Thinking::default()));
+      Box::pin(async move { got })
     }));
   let mut engine = lived(provider);
   let id = asked(&mut engine);
@@ -1934,29 +1957,11 @@ fn a_usage_limit_ends_at_the_day_its_message_names() {
 }
 
 #[test]
-fn a_usage_limit_ends_at_the_second_its_older_message_names() {
-  let said = "Claude AI usage limit reached|1792768200";
-  let at = resets(said, &paris(10, 23, 16, 19)).expect("a moment");
-  assert_eq!(at.timestamp().as_second(), 1_792_768_200);
-}
-
-#[test]
 fn a_usage_limit_whose_message_names_no_moment_has_none() {
   let now = paris(10, 23, 16, 19);
   assert_eq!(resets("You've hit your limit \u{b7} resets soon", &now), None);
   assert_eq!(resets("You've hit your limit \u{b7} resets 5pm (Mars/Base)", &now), None);
   assert_eq!(resets("You've hit your limit \u{b7} resets Mon 5pm", &now), None);
-}
-
-#[test]
-fn only_a_usage_limit_of_the_claude_command_line_is_a_limit_that_waits_for_its_reset() {
-  let now = paris(10, 23, 16, 19);
-  let failed = |why: &str| CompletionError::ProviderError(why.to_owned());
-  let said = failed("You've hit your session limit \u{b7} resets 5:10pm (Europe/Paris)");
-  assert_eq!(limit(&said, &now), Some(Some(paris(10, 23, 17, 10))));
-  assert_eq!(limit(&failed("You've hit your limit \u{b7} resets soon"), &now), Some(None));
-  assert_eq!(limit(&failed("429 rate limit exceeded"), &now), None);
-  assert_eq!(limit(&failed("boom"), &now), None);
 }
 
 #[test]
@@ -1968,7 +1973,7 @@ fn a_limit_that_stands_after_its_reset_is_asked_again_soon_and_the_chain_is_told
   let past = format!("Claude AI usage limit reached|{}", now - 3600);
   let (host, calls) = failing(&[&past, &past]);
   let (retries, told) = retried();
-  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let model = spoken(scripted(&MockCompletionModel::default()).hosted(host));
   let provider =
     Provider::new(yard("limit-twice").display().to_string(), vec![model]).retries(retries);
   let mut engine = lived(provider);
@@ -1988,7 +1993,7 @@ fn a_claude_command_line_at_its_usage_limit_is_asked_again_at_the_reset_and_answ
   use super::claude::test::Yard;
   let yard = Yard::new("limit");
   let claude = yard.claude(10_000);
-  let (mut engine, _) = life("claude-limit", claude.models());
+  let (mut engine, _) = life("claude-limit", crate::ear::reactor().block_on(claude.models()));
   let root = engine.root().to_owned();
   let with =
     verbs::Prompt { message: Some("LIMIT task".into()), on: on(&root), ..Default::default() };
@@ -2150,10 +2155,28 @@ fn a_reply_whose_call_ended_after_a_part_of_its_word_ran_is_the_word_that_ran() 
 
 #[test]
 fn a_switched_account_is_a_failure_that_passes_in_its_own_words_and_no_wait_for_a_limit() {
+  let why = super::claude::Error::Switched("from perso to team: its usage limit".to_owned());
+  let no = CompletionError::RequestError(Box::new(why));
   let said = "Switched account from perso to team: its usage limit";
-  let no = CompletionError::ProviderError(said.to_owned());
-  assert_eq!(passing(&no), Some(said.to_owned()));
-  assert_eq!(limit(&no, &jiff::Zoned::now()), None);
+  assert_eq!(passing(&no), Some(Transient::Switched(said.to_owned())));
+  assert!(!matches!(super::claude::error(&no), Some(super::claude::Error::Limit { .. })));
+}
+
+#[test]
+fn a_status_is_the_one_of_an_http_error_or_the_one_that_heads_or_follows_status_code() {
+  let provider =
+    |why: &str| passing(&CompletionError::ProviderError(why.to_owned())).map(|one| one.to_string());
+  assert_eq!(provider("503 Service Unavailable").as_deref(), Some("server error 503"));
+  assert_eq!(
+    provider("Invalid status code 504 with message: x").as_deref(),
+    Some("server error 504")
+  );
+  assert_eq!(provider("the file /tmp/500/a was not found"), None);
+  assert_eq!(provider("No model listens on 127.0.0.1:5029"), None);
+  let response = rig_core::http_client::Response::builder().status(502).body(());
+  let status =
+    rig_core::http_client::Error::InvalidStatusCode(response.expect("a response").status());
+  assert_eq!(passing(&CompletionError::HttpError(status)), Some(Transient::Server(502)));
 }
 
 #[test]
@@ -2332,7 +2355,7 @@ fn a_stand_over_a_paused_chain_asks_no_model_until_the_wake() {
     + 86_400;
   let (host, calls) = failing(&[&format!("Claude AI usage limit reached|{later}")]);
   let (retries, told) = retried();
-  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let model = spoken(scripted(&MockCompletionModel::default()).hosted(host));
   let at = yard("pause-stand").display().to_string();
   let mut engine = lived(Provider::new(at, vec![model]).retries(retries));
   let id = asked(&mut engine);
@@ -2427,15 +2450,21 @@ fn a_local_model_reads_the_end_of_a_thought_that_the_provider_cut_in_its_next_tu
 #[test]
 fn a_stand_that_reads_the_settings_slowly_holds_no_chain_while_it_reads() {
   let (answer, login) = std::sync::mpsc::channel::<()>();
-  let login = Mutex::new(login);
+  let login = Arc::new(Mutex::new(login));
   let (host, _) = failing(&[]);
   let model = scripted(&MockCompletionModel::default()).hosted(host);
   let fresh = model.clone();
   let provider = Provider::new(yard("slow-stand").display().to_string(), vec![model]).refreshing(
     Arc::new(move || {
-      // A login of a command line that answers only once the test lets it.
-      login.lock().expect("the login").recv().expect("the login answers");
-      Ok((vec![fresh.clone()], None, Thinking::default()))
+      let (login, fresh) = (Arc::clone(&login), fresh.clone());
+      Box::pin(async move {
+        // A login of a command line that answers only once the test lets it.
+        let waited = tokio::task::spawn_blocking(move || {
+          login.lock().expect("the login").recv().expect("the login answers");
+        });
+        waited.await.expect("the login is waited for");
+        Ok((vec![fresh], None, Thinking::default()))
+      })
     }),
   );
   let mut engine = lived(provider);
@@ -2597,4 +2626,11 @@ fn a_provider_that_searches_no_more_refuses_a_search() {
   let mut engine = lived(provider.searching(false));
   let no = closed(&mut engine, "close(await act('search', '', None, 'rust', 'm'))").unwrap_err();
   assert!(no.contains("a life that inspects searches nothing"), "{no}");
+}
+
+#[test]
+fn a_version_is_compared_by_its_numbers() {
+  assert!(super::numbers("1.10.0") > super::numbers("1.4.0"));
+  assert_eq!(super::numbers("1.4.0"), vec![1, 4, 0]);
+  assert_eq!(super::numbers("claude-2.1.119"), vec![2, 1, 119]);
 }

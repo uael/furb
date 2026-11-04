@@ -318,7 +318,17 @@ impl Catalog {
   /// The catalog with the provider settings of the configs, in the order of [`crate::extension::configs`]: the user,
   /// the project, then the local config of the project. A false entry removes a provider.
   /// Invalid settings give an error. A running provider keeps its previous settings when a reload fails.
-  pub fn configured(mut self, directory: &Path, config: Option<&Path>) -> Result<Catalog, Error> {
+  pub fn configured(self, directory: &Path, config: Option<&Path>) -> Result<Catalog, Error> {
+    super::blocking(self.configure(directory, config))
+  }
+
+  /// The catalog with the provider settings of the configs, as [`Catalog::configured`] gives it,
+  /// for a caller that awaits.
+  pub async fn configure(
+    mut self,
+    directory: &Path,
+    config: Option<&Path>,
+  ) -> Result<Catalog, Error> {
     let places = crate::extension::Places::here();
     let files = crate::extension::configs(config.unwrap_or(&places.config), directory);
     let entries = merged(files)?;
@@ -326,12 +336,12 @@ impl Catalog {
     let defaults = listed(cached.as_ref());
     for (name, form) in entries {
       valid_name(&name)?;
-      self.apply(name, form, config, &defaults)?;
+      self.apply(name, form, config, &defaults).await?;
     }
     Ok(self)
   }
 
-  fn apply(
+  async fn apply(
     &mut self,
     name: String,
     form: Value,
@@ -352,7 +362,7 @@ impl Catalog {
       return if built_in { Ok(()) } else { Err(Error::Builtin(name)) };
     }
     if name == claude::CLAUDE {
-      return self.set_claude(form);
+      return self.set_claude(form).await;
     }
     self.set_custom(&name, form, defaults)
   }
@@ -388,7 +398,7 @@ impl Catalog {
     Ok(())
   }
 
-  fn set_claude(&mut self, form: Value) -> Result<(), Error> {
+  async fn set_claude(&mut self, form: Value) -> Result<(), Error> {
     let settings: ClaudeConfig = parse(claude::CLAUDE, form)?;
     if settings.command.is_none() && settings.accounts.is_none() && settings.switch.is_none() {
       return Ok(());
@@ -404,7 +414,9 @@ impl Catalog {
     let command = claude::Claude::with_accounts(bin, args, accounts, switch, None);
     let at = self.first_of(claude::CLAUDE).unwrap_or(0);
     self.drop_models(claude::CLAUDE);
-    self.models.splice(at..at, command.models().into_iter().map(|model| Offer::new(model, true)));
+    self
+      .models
+      .splice(at..at, command.models().await.into_iter().map(|model| Offer::new(model, true)));
     self.providers.retain(|held| held.name != claude::CLAUDE);
     Ok(())
   }

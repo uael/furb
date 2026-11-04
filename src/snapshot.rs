@@ -39,7 +39,7 @@ use crate::{
 };
 
 /// The version of the form of a snapshot.
-const VERSION: u64 = 2;
+const VERSION: u64 = 3;
 
 /// How many times its size the disk must hold free for a snapshot to be written: the new snapshot stands beside the old
 /// one until it takes its name, and the record and the log must still grow.

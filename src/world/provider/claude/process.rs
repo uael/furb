@@ -14,7 +14,7 @@ use tokio::{
   process::{Child, ChildStderr, ChildStdin, ChildStdout, Command},
 };
 
-use super::{MISSING, Program, failed, protocol::Event};
+use super::{Error, Program, failed, protocol::Event, refused};
 
 /// How long a turn reads what a process that ended still holds on its stdout and its stderr, since
 /// a process that it started may hold them open.
@@ -103,8 +103,8 @@ impl Process {
     .map_err(|no| {
       let absent =
         matches!(no.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied);
-      let missing = if absent { format!("{MISSING}: ") } else { String::new() };
-      failed(format!("{missing}{} did not start: {no}", program.name()))
+      let said = format!("{} did not start: {no}", program.name());
+      if absent { refused(Error::Missing(said)) } else { failed(said) }
     })?;
     let (Some(stdin), Some(stdout), Some(stderr)) =
       (child.stdin.take(), child.stdout.take(), child.stderr.take())
@@ -242,7 +242,7 @@ pub(super) async fn exited(
   let code = code.map_or_else(|| "a signal".to_owned(), |code| code.to_string());
   if !spoke && absent(&tail.kept) {
     let said = tail.said();
-    return (failed(format!("{MISSING}: {} exited ({code}){said}", program.name())), true);
+    return (refused(Error::Missing(format!("{} exited ({code}){said}", program.name()))), true);
   }
   (failed(format!("Claude exited ({code}){}", tail.said())), false)
 }

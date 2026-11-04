@@ -37,10 +37,25 @@ const FAKE: &str = include_str!("../../src/world/provider/claude/fake-claude.sh"
 /// A word that counts the lines of the file of the yard.
 const COUNT: &str = "close(len(read('a.txt').lines))";
 
-/// A directory of one test, and the fake claude beside it.
+/// The env var that keeps the folder of each yard, so that a failure can still be read there.
+const KEEP: &str = "FURB_KEEP_YARDS";
+
+/// A directory of one test, and the fake claude beside it. The folder goes with the yard, on a
+/// pass and on a failure, unless the env var `FURB_KEEP_YARDS` is set.
 struct Yard {
+  base: PathBuf,
   at: PathBuf,
   fake: PathBuf,
+}
+
+impl Drop for Yard {
+  fn drop(&mut self) {
+    if std::env::var_os(KEEP).is_some() {
+      eprintln!("{KEEP} keeps {}", self.base.display());
+    } else {
+      let _ = fs::remove_dir_all(&self.base);
+    }
+  }
 }
 
 impl Yard {
@@ -61,7 +76,7 @@ impl Yard {
       .expect("the config");
     fs::write(at.join("a.txt"), "one\ntwo\nthree\n").expect("the file a word reads");
     program(&fake.join("claude"), FAKE);
-    Yard { at, fake }
+    Yard { base, at, fake }
   }
 
   /// The words the fake answers with, in order.

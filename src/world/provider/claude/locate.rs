@@ -5,6 +5,8 @@ use std::{
   path::{Path, PathBuf},
 };
 
+use crate::world::provider::numbers;
+
 /// The name of the program of the command line.
 pub(super) const PROGRAM: &str = if cfg!(windows) { "claude.exe" } else { "claude" };
 
@@ -34,6 +36,5 @@ pub(in crate::world::provider) fn located() -> Option<PathBuf> {
 
 /// The numbers of a version, in order, which sort as a version does.
 fn numbered(version: &Path) -> Vec<u64> {
-  let name = version.file_name().map(|one| one.to_string_lossy().into_owned()).unwrap_or_default();
-  name.split(|one: char| !one.is_ascii_digit()).filter_map(|one| one.parse().ok()).collect()
+  version.file_name().map_or_else(Vec::new, |name| numbers(&name.to_string_lossy()))
 }

@@ -1,10 +1,18 @@
 //! A life as the host holds it: a thread of its own, with a runtime of tokio and a set of local
 //! tasks, since the engine is not `Send`. The thread owns the engine. It awaits the open, then one
 //! local task pumps the engine while it waits for the next command, and keeps the log of the events
-//! of the life. Once the life ends, the thread holds its log for the readers until each handle of
-//! the life is gone.
+//! of the life. The thread opens the life again from its checkpoint at each rebirth, as
+//! [`crate::rebirth`] says, for the same handles and the same log. Once the life ends, the thread
+//! holds its log for the readers until each handle of the life is gone.
 
-use std::{collections::VecDeque, future::poll_fn, sync::Arc, task::Poll, thread};
+use std::{
+  collections::{HashSet, VecDeque},
+  future::poll_fn,
+  hash::{DefaultHasher, Hash, Hasher},
+  sync::Arc,
+  task::Poll,
+  thread,
+};
 
 use furb::{
   Engine, Fault, Object,
@@ -29,6 +37,7 @@ use crate::{
   ears::ears,
   error::LifeError,
   event::{Event, Seq},
+  rebirth::{self, Watch},
 };
 
 /// How many events a reader may stand behind the life before it reads them again from the log of
@@ -94,11 +103,14 @@ enum Message {
 }
 
 /// The log of a life on its thread: each event that it told, the readers that hear each next one,
-/// and what the ears and the provider told that is not in the log yet.
+/// what the ears and the provider told that is not in the log yet, the digest of each fact that it
+/// told, and what the actor watches to know when the life is born again.
 pub struct Life {
   log: Vec<Arc<Event>>,
   readers: broadcast::Sender<Logged>,
   heard: UnboundedReceiver<Event>,
+  facts: HashSet<u64>,
+  watch: Watch,
 }
 
 /// The handle of a life, which any thread holds: it says a command to the life and reads its
@@ -127,6 +139,10 @@ impl Life {
 
   /// One event put in the log, and sent to each reader.
   fn put(&mut self, event: Event) {
+    if let Event::Fact(fact) = &event {
+      self.facts.insert(digest(fact));
+    }
+    self.watch.heard(&event);
     let (seq, event) = (self.log.len() as Seq, Arc::new(event));
     self.log.push(Arc::clone(&event));
     self.readers.send((seq, event)).ok();
@@ -148,12 +164,41 @@ impl Life {
     }
   }
 
+  /// What an open told, less each fact that the log told before it: an open after a rebirth says
+  /// again each fact that the checkpoint restates, which each reader already heard.
+  fn opened(&mut self) {
+    let mut told = Vec::new();
+    while let Ok(event) = self.heard.try_recv() {
+      told.push(event);
+    }
+    let heard =
+      |event: &Event| matches!(event, Event::Fact(fact) if self.facts.contains(&digest(fact)));
+    let told: Vec<Event> = told.into_iter().filter(|event| !heard(event)).collect();
+    for event in told {
+      self.told(Some(event));
+    }
+  }
+
+  /// The life opened again, after each event that the engine before it told.
+  fn reborn(&mut self, fault: Option<String>) {
+    self.told(None);
+    self.put(Event::Reborn(fault));
+    self.watch.reborn();
+  }
+
   /// The events of the log from a place.
   fn since(&self, from: Seq) -> Vec<Logged> {
     let from = usize::try_from(from).unwrap_or(usize::MAX);
     let since = self.log.iter().enumerate().skip(from);
     since.map(|(at, one)| (at as Seq, Arc::clone(one))).collect()
   }
+}
+
+/// The digest of a fact, by which the log knows a fact that it told.
+fn digest(fact: &Value) -> u64 {
+  let mut hasher = DefaultHasher::new();
+  fact.to_string().hash(&mut hasher);
+  hasher.finish()
 }
 
 /// The thread of a life, until each handle of the life is gone.
@@ -182,7 +227,8 @@ async fn run(
   readers: broadcast::Sender<Logged>,
 ) {
   let (told, heard) = mpsc::unbounded_channel();
-  let mut life = Life { log: Vec::new(), readers, heard };
+  let mut life =
+    Life { log: Vec::new(), readers, heard, facts: HashSet::new(), watch: Watch::default() };
   let writes = told.clone();
   opening.stream = Some(Stream(Arc::new(move |rung, chain, text, thinking| {
     let (rung, chain) = (rung.to_owned(), chain.to_owned());
@@ -193,10 +239,7 @@ async fn run(
   opening.log = Some(Log(Arc::new(move |line| {
     reports.send(Event::Notice(line.to_owned())).ok();
   })));
-  let ended = match opening.open(ears(told)).await {
-    Ok((engine, _)) => driven(engine, &mut life, &mut received).await,
-    Err(fault) => Some(fault.to_string()),
-  };
+  let ended = lives(opening, &mut life, &mut received, &told).await;
   life.told(None);
   life.put(Event::Ended(ended));
   while let Some(message) = received.recv().await {
@@ -207,6 +250,35 @@ async fn run(
   }
 }
 
+/// The life opened, driven, and opened again from its checkpoint at each rebirth, until it ends,
+/// and the fault that ended it, when one did.
+async fn lives(
+  opening: Opening,
+  life: &mut Life,
+  received: &mut UnboundedReceiver<Message>,
+  told: &UnboundedSender<Event>,
+) -> Option<String> {
+  let record = opening.record.clone().filter(|_| opening.keeps());
+  loop {
+    let engine = match opening.clone().open(ears(told.clone())).await {
+      Ok((engine, _)) => engine,
+      Err(fault) => return Some(fault.to_string()),
+    };
+    life.opened();
+    match driven(engine, life, received, record.as_deref()).await {
+      Drove::Ended(fault) => return fault.map(|one| one.to_string()),
+      Drove::Reborn(fault) => life.reborn(fault.map(|one| one.to_string())),
+    }
+  }
+}
+
+/// How the engine of a life went: the life ended, or it is born again, each with the fault that
+/// stopped it, when one did.
+enum Drove {
+  Ended(Option<Fault>),
+  Reborn(Option<Fault>),
+}
+
 /// What woke the thread of a life.
 enum Woke {
   Told(Event),
@@ -214,13 +286,15 @@ enum Woke {
   Said(Option<Message>),
 }
 
-/// The engine driven while it hears each command, until a client ends it, each handle is gone, or a
-/// fault stops it, and the fault, when one did.
+/// The engine driven while it hears each command, until a client ends it, each handle is gone, a
+/// fault stops it, or the life is due to be born again. A life that keeps a record ends with its
+/// checkpoint.
 async fn driven(
   mut engine: Engine,
   life: &mut Life,
   received: &mut UnboundedReceiver<Message>,
-) -> Option<String> {
+  record: Option<&str>,
+) -> Drove {
   loop {
     let woke = tokio::select! {
       biased;
@@ -230,23 +304,46 @@ async fn driven(
     };
     match woke {
       Woke::Told(event) => life.told(Some(event)),
-      Woke::Stopped(fault) => return Some(fault.to_string()),
-      Woke::Said(None) => return None,
+      Woke::Stopped(fault) => {
+        drop(engine);
+        return stopped(fault, record).await;
+      }
+      Woke::Said(None) => return Drove::Ended(rebirth::ended(engine, record.is_some())),
       Woke::Said(Some(Message::Since(from, reply))) => {
         life.told(None);
         reply.send(life.since(from)).ok();
       }
       Woke::Said(Some(Message::Command(Command::End, reply))) => {
-        reply.send(Ok(Reply::Done)).ok();
-        return None;
+        let ended = rebirth::ended(engine, record.is_some());
+        reply.send(ended.clone().map_or(Ok(Reply::Done), |fault| Err(fault.into()))).ok();
+        return Drove::Ended(ended);
       }
       Woke::Said(Some(Message::Command(command, reply))) => {
         reply.send(answered_by(&mut engine, command)).ok();
-        if let Some(fault) = engine.stopped() {
-          return Some(fault.to_string());
+        if let Some(fault) = engine.stopped().cloned() {
+          drop(engine);
+          return stopped(fault, record).await;
         }
       }
     }
+    if record.is_some() && life.watch.due() {
+      return match engine.checkpoint() {
+        Ok(()) => Drove::Reborn(None),
+        Err(fault) => stopped(fault, record).await,
+      };
+    }
+  }
+}
+
+/// What a fault that stopped the sandbox or its checkpoint comes to, once the engine is gone: a
+/// rebirth from the tail carried as data, when the life keeps a record that holds a checkpoint,
+/// and else the end of the life.
+async fn stopped(fault: Fault, record: Option<&str>) -> Drove {
+  let Some(record) = record else { return Drove::Ended(Some(fault)) };
+  match rebirth::carried(record.to_owned()).await {
+    Ok(true) => Drove::Reborn(Some(fault)),
+    Ok(false) => Drove::Ended(Some(fault)),
+    Err(no) => Drove::Ended(Some(Fault::refused(format!("{fault}, and then {no}")))),
   }
 }
 

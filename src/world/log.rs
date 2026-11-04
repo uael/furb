@@ -15,28 +15,27 @@
 //! other line is one fact, as JSON reads a value of the sandbox, but for the line `["keep", "", n]`, which says that
 //! the record keeps its entry `n`, counted from 1, there. An act that no fact showed before, since an ear of the
 //! engine took it, stands on the line before the first fact about it. The fact of a module stands with no words,
-//! since a module is no plain value and differs from one life to the next. The ear writes no fsync of the log. A line
-//! that it cannot write, as on a full disk, waits in memory with each line after it, and the ear writes them in order
-//! at its next line, after it cut what the failed write left, so the log lacks no fact once the disk has room.
+//! since a module is no plain value and differs from one life to the next. The ear writes no
+//! fsync of the log. A line waits in a buffer, which the file takes at the end of each run of
+//! the sandbox, so a reader sees a fact of the log once its run ends. A line that the file
+//! cannot take, as on a full disk, waits in memory with each line after it, and the ear writes
+//! them in order at its next line, so the log lacks no fact once the disk has room.
 //!
 //! A later life makes again no act of its record that an ear of the outside made, unless that ear makes it again, and
 //! says no fact about one that it does not make. So when the life keeps its first entry, the log writes each entry of
 //! the record about such an act that no line shows, in the order of the record, and the log still holds every act of
 //! its record.
-
-#![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(clippy::map_unwrap_or, reason = "debt: map then unwrap_or, where map_or serves")]
+//!
+//! [`Line`] reads a line of a log from its head, and [`keep`] writes the line of keep, so the
+//! format of the log has this one home, which the reader of a record with no life shares.
 
 use std::{
-  cell::Cell,
+  borrow::Cow,
+  cell::RefCell,
   collections::HashSet,
+  fmt::Display,
   fs::{File, OpenOptions},
-  io::{BufRead, BufReader, Seek, SeekFrom, Write},
+  io::{BufRead, BufReader, BufWriter, Write},
   path::{Path, PathBuf},
   rc::Rc,
   task::{Context, Poll},
@@ -50,11 +49,59 @@ use crate::{
   fact::{Fact, named},
   value::{Fault, Object},
   wire::{outward, parsed},
-  world::kept,
+  world::{beside, kept},
 };
 
-/// The start of the line that says the record kept an entry, as the ear writes it.
-const KEEP: &str = r#"["keep","","#;
+/// The kind of the line that says the record kept an entry there, in the log and in what a
+/// record tells.
+pub(super) const KEEP: &str = "keep";
+
+/// How many bytes of lines the buffer holds before it hands them to the file.
+const BUFFER: usize = 1 << 20;
+
+/// The line that says the record kept its entry `n`, counted from 1, with no end of line.
+pub(super) fn keep(n: usize) -> String {
+  format!(r#"["{KEEP}","",{n}]"#)
+}
+
+/// A line of a log, read from its head alone, so no fact is made.
+pub(super) enum Line<'a> {
+  /// The map of the first line.
+  Head,
+  /// The line that says the record kept its entry `n`, with `n` when the line reads one.
+  Keep(Option<usize>),
+  /// A question, with the name of the act that it makes.
+  Question(Cow<'a, str>),
+  /// Any other fact.
+  Other,
+}
+
+impl<'a> Line<'a> {
+  /// The line from its first two words, as `["bash","bash3",`. A line whose head holds an escape
+  /// is parsed whole.
+  pub(super) fn of(text: &'a str) -> Line<'a> {
+    let Some(rest) = text.strip_prefix("[\"") else {
+      return if text.starts_with('{') { Line::Head } else { Line::Other };
+    };
+    let Some((kind, rest)) = rest.split_once('"') else { return Line::Other };
+    let about = rest.strip_prefix(",\"").and_then(|one| one.split_once('"'));
+    if kind == KEEP
+      && let Some(("", number)) = about
+    {
+      let at = number.strip_prefix(',').and_then(|one| one.strip_suffix(']'));
+      return Line::Keep(at.and_then(|one| one.parse().ok()));
+    }
+    let name = about.map(|one| one.0);
+    if kind.contains('\\') || name.is_some_and(|one| one.contains('\\')) {
+      let fact = parsed(text).ok();
+      let fact = fact.as_ref().and_then(|one| Fact::of(one.as_ref())).filter(Fact::question);
+      return fact.map_or(Line::Other, |one| Line::Question(Cow::Owned(one.about().to_owned())));
+    }
+    name
+      .filter(|one| named(one, kind))
+      .map_or(Line::Other, |one| Line::Question(Cow::Borrowed(one)))
+  }
+}
 
 /// The ear of the log of the record at a path, which held a number of entries when the life opened: it hears every
 /// fact, and writes the log again from its first line.
@@ -70,7 +117,7 @@ pub(crate) fn continued(record: impl AsRef<Path>, entries: usize) -> Box<dyn Ear
 
 /// The ear that writes a log.
 fn heard(mut log: Log) -> Box<dyn Ear> {
-  let behind = Rc::clone(&log.behind);
+  let sink = Rc::clone(&log.sink);
   let ear = ear(move |mut co| async move {
     loop {
       let a = hear(&mut co).await;
@@ -80,13 +127,14 @@ fn heard(mut log: Log) -> Box<dyn Ear> {
       }
     }
   });
-  Box::new(Logging { ear, behind })
+  Box::new(Logging { ear, sink })
 }
 
-/// The ear that writes a log, which says when lines of the log wait.
+/// The ear that writes a log, which hands the lines to the file at the end of each run, and says
+/// when lines wait.
 struct Logging {
   ear: Box<dyn Ear>,
-  behind: Rc<Cell<bool>>,
+  sink: Rc<RefCell<Sink>>,
 }
 
 impl Ear for Logging {
@@ -106,15 +154,59 @@ impl Ear for Logging {
     self.ear.lent(heard, cx, life)
   }
 
+  /// A fault of the file ends no run: the lines wait and the ear writes them again.
+  fn ran(&mut self) -> Result<(), Fault> {
+    self.sink.borrow_mut().flush();
+    Ok(())
+  }
+
   fn behind(&self) -> bool {
-    self.behind.get()
+    self.sink.try_borrow().map_or(true, |sink| sink.behind)
+  }
+}
+
+/// The file of the log, and the lines that wait for it.
+struct Sink {
+  /// The file, in a buffer that fills to [`BUFFER`] bytes, or nothing when the log cannot be
+  /// written.
+  out: Option<BufWriter<File>>,
+  /// The lines that the buffer did not take, as on a full disk, with each line after them, in
+  /// order.
+  waiting: String,
+  /// Whether the last flush left a line that the file does not hold.
+  behind: bool,
+}
+
+impl Sink {
+  /// Lines, each with its end, written after each line that waits.
+  fn put(&mut self, lines: &str) {
+    if self.out.is_some() {
+      self.waiting.push_str(lines);
+      self.drain();
+    }
+  }
+
+  /// Each line that waits, handed to the buffer in order.
+  fn drain(&mut self) {
+    if let Some(out) = self.out.as_mut()
+      && out.write_all(self.waiting.as_bytes()).is_ok()
+    {
+      self.waiting.clear();
+    }
+  }
+
+  /// Each line, handed to the file.
+  fn flush(&mut self) {
+    self.drain();
+    let failed = self.out.as_mut().is_some_and(|out| out.flush().is_err());
+    self.behind = failed || !self.waiting.is_empty();
   }
 }
 
 /// The log file, and what the ear knows of it.
 struct Log {
   path: PathBuf,
-  file: Option<File>,
+  sink: Rc<RefCell<Sink>>,
   /// The file that a life writes the log again in, beside the log, until it keeps its first entry.
   fresh: Option<PathBuf>,
   /// How many entries the record holds.
@@ -124,14 +216,6 @@ struct Log {
   /// The entries of the record about each act that an ear of the outside made, by the name of that act, in the order
   /// of the record, which the log writes when the life keeps its first entry and no line shows that act.
   owed: Vec<(String, Value)>,
-  /// The lines that the ear could not write yet, in order.
-  waiting: String,
-  /// The length of the file after the last lines that the ear wrote whole.
-  whole: u64,
-  /// Whether a write failed after that length, so the file can hold a part of a line past it.
-  torn: bool,
-  /// Whether lines wait, which the ear tells the life.
-  behind: Rc<Cell<bool>>,
 }
 
 /// The lines of the log at a path that come before a checkpoint, the entries before which a record holds, with its
@@ -154,17 +238,21 @@ fn earlier(log: &Path, before: &[Object]) -> Option<(String, HashSet<String>)> {
   for line in lines {
     let whole = line.strip_suffix('\n')?;
     let value = serde_json::from_str::<Value>(whole).ok()?;
-    if let Some(at) = whole.strip_prefix(KEEP).and_then(|one| one.strip_suffix(']')) {
-      let at = at.parse::<usize>().ok()?;
-      if at != entries + 1 {
-        return None;
+    match Line::of(whole) {
+      Line::Keep(at) => {
+        let at = at?;
+        if at != entries + 1 {
+          return None;
+        }
+        if at > before.len() {
+          break;
+        }
+        entries = at;
       }
-      if at > before.len() {
-        break;
+      Line::Question(name) => {
+        asked.remove(name.as_ref());
       }
-      entries = at;
-    } else if let Some(name) = question(whole) {
-      asked.remove(&name);
+      Line::Head | Line::Other => {}
     }
     if let Some(about) = value.get(1).and_then(Value::as_str).filter(|one| !one.is_empty()) {
       seen.insert(about.to_owned());
@@ -204,33 +292,30 @@ impl Log {
   /// The log of the record at a path, which holds these entries, written again from its first line, or from the
   /// lines of the log before it that come before the checkpoint that the life boots on.
   fn open(record: &Path, held: &[Object]) -> Log {
-    let path = PathBuf::from(format!("{}.log", record.display()));
-    let fresh = PathBuf::from(format!("{}.log.new", record.display()));
+    let path = beside(record, ".log");
+    let fresh = beside(record, ".log.new");
     let earlier = crate::checkpoint::last(held)
       .and_then(|at| earlier(&path, &held[..at]).map(|(text, seen)| (at, text, seen)));
     let file = OpenOptions::new().create(true).write(true).truncate(true).open(&fresh).ok();
     let entries = held.len();
     let mut log = Log {
       path,
-      file,
+      sink: Log::sink(file),
       fresh: Some(fresh),
       entries,
       seen: HashSet::new(),
       owed: owed(held),
-      waiting: String::new(),
-      whole: 0,
-      torn: false,
-      behind: Rc::default(),
     };
     match earlier {
-      Some((at, text, seen)) => {
+      Some((at, mut text, seen)) => {
         log.seen = seen;
-        log.waiting = text;
         for n in at + 1..=entries {
-          log.waiting.push_str(&format!("{}\n", serde_json::json!(["keep", "", n])));
+          text.push_str(&keep(n));
+          text.push('\n');
         }
-        let failed = log.flushed().is_err();
-        log.behind.set(failed);
+        let mut sink = log.sink.borrow_mut();
+        sink.put(&text);
+        sink.flush();
       }
       None => log.line(&serde_json::json!({ "entries": entries })),
     }
@@ -239,7 +324,7 @@ impl Log {
 
   /// The log of the record at a path, written on after the lines that it holds, each name of which it has seen.
   fn continued(record: &Path, entries: usize) -> Log {
-    let path = PathBuf::from(format!("{}.log", record.display()));
+    let path = beside(record, ".log");
     let mut seen = HashSet::new();
     for line in std::fs::read_to_string(&path).unwrap_or_default().lines().skip(1) {
       let about = serde_json::from_str::<Value>(line)
@@ -248,24 +333,23 @@ impl Log {
       seen.extend(about.filter(|one| !one.is_empty()));
     }
     let file = OpenOptions::new().append(true).open(&path).ok();
-    let whole = file.as_ref().and_then(|one| one.metadata().ok()).map_or(0, |one| one.len());
-    Log {
-      path,
-      file,
-      fresh: None,
-      entries,
-      seen,
-      owed: Vec::new(),
-      waiting: String::new(),
-      whole,
-      torn: false,
-      behind: Rc::default(),
-    }
+    Log { path, sink: Log::sink(file), fresh: None, entries, seen, owed: Vec::new() }
+  }
+
+  /// The sink of a log file, when it opened.
+  fn sink(file: Option<File>) -> Rc<RefCell<Sink>> {
+    let out = file.map(|file| BufWriter::with_capacity(BUFFER, file));
+    Rc::new(RefCell::new(Sink { out, waiting: String::new(), behind: false }))
+  }
+
+  /// Whether the log can be written.
+  fn live(&self) -> bool {
+    self.sink.borrow().out.is_some()
   }
 
   /// A fact that the ear heard, after the act it is about when no line shows that act yet.
   async fn heard(&mut self, co: &mut Co, a: &Fact) {
-    if self.file.is_none() {
+    if !self.live() {
       return;
     }
     let about = a.about();
@@ -304,41 +388,21 @@ impl Log {
       }
     }
     if let Some(fresh) = self.fresh.take()
-      && self.file.is_some()
+      && self.live()
       && std::fs::rename(&fresh, &self.path).is_err()
     {
-      self.file = None;
-      let _ = std::fs::remove_file(&fresh);
+      self.sink.borrow_mut().out = None;
+      // The next life truncates the file, so one that stays does no harm.
+      std::fs::remove_file(&fresh).unwrap_or_default();
     }
     self.entries += 1;
-    self.line(&serde_json::json!(["keep", "", self.entries]));
+    self.line(&keep(self.entries));
   }
 
-  /// One line, written after each line that waits, or waiting with them when the ear cannot write it.
-  fn line(&mut self, value: &Value) {
-    if self.file.is_none() {
-      return;
-    }
-    self.waiting.push_str(&format!("{value}\n"));
-    let failed = self.flushed().is_err();
-    self.behind.set(failed);
-  }
-
-  /// Each line that waits, written in order after what a failed write left is cut.
-  fn flushed(&mut self) -> std::io::Result<()> {
-    let Some(file) = self.file.as_mut() else { return Ok(()) };
-    if self.torn {
-      file.set_len(self.whole)?;
-      file.seek(SeekFrom::Start(self.whole))?;
-      self.torn = false;
-    }
-    if let Err(no) = file.write_all(self.waiting.as_bytes()) {
-      self.torn = true;
-      return Err(no);
-    }
-    self.whole += self.waiting.len() as u64;
-    self.waiting.clear();
-    Ok(())
+  /// One line, written after each line that waits, or waiting with them when the file cannot take
+  /// it.
+  fn line(&mut self, value: &impl Display) {
+    self.sink.borrow_mut().put(&format!("{value}\n"));
   }
 }
 
@@ -346,8 +410,9 @@ impl Drop for Log {
   /// The file that the life wrote the log again in goes when it never took the place of the log.
   fn drop(&mut self) {
     if let Some(fresh) = self.fresh.take() {
-      self.file = None;
-      let _ = std::fs::remove_file(fresh);
+      self.sink.borrow_mut().out = None;
+      // The next life truncates the file, so one that stays does no harm.
+      std::fs::remove_file(fresh).unwrap_or_default();
     }
   }
 }
@@ -368,13 +433,13 @@ pub fn logged(path: impl AsRef<Path>) -> Result<Option<Vec<Object>>, Fault> {
   if !agrees(path, record.len(), &asked) {
     return Ok(None);
   }
-  let Ok(text) = std::fs::read_to_string(format!("{}.log", path.display())) else {
+  let Ok(text) = std::fs::read_to_string(beside(path, ".log")) else {
     return Ok(None);
   };
   let facts = text
     .lines()
     .skip(1)
-    .filter(|line| !line.starts_with(KEEP))
+    .filter(|line| !matches!(Line::of(line), Line::Keep(_)))
     .map_while(|line| parsed(line).ok())
     .collect();
   Ok(Some(facts))
@@ -383,7 +448,7 @@ pub fn logged(path: impl AsRef<Path>) -> Result<Option<Vec<Object>>, Fault> {
 /// Whether the log of the record at a path agrees with a record of that many entries and of those questions, as
 /// [`logged`] reads it, which the caller read once.
 pub(crate) fn agrees(path: &Path, entries: usize, asked: &HashSet<String>) -> bool {
-  File::open(format!("{}.log", path.display()))
+  File::open(beside(path, ".log"))
     .is_ok_and(|file| agreed(BufReader::with_capacity(1 << 20, file), entries, asked.clone()))
 }
 
@@ -397,7 +462,8 @@ fn agreed(mut lines: impl BufRead, record: usize, mut asked: HashSet<String>) ->
     Ok(_) => serde_json::from_str::<Value>(line.trim_end_matches('\n')).ok(),
     Err(_) => return false,
   };
-  let Some(mut entries) = head.and_then(|one| one.get("entries")?.as_u64()) else {
+  let Some(mut entries) = head.and_then(|one| usize::try_from(one.get("entries")?.as_u64()?).ok())
+  else {
     return false;
   };
   loop {
@@ -409,37 +475,27 @@ fn agreed(mut lines: impl BufRead, record: usize, mut asked: HashSet<String>) ->
     }
     let ended = line.ends_with('\n');
     let text =
-      line.strip_suffix('\n').map(|one| one.strip_suffix('\r').unwrap_or(one)).unwrap_or(&line);
+      line.strip_suffix('\n').map_or(line.as_str(), |one| one.strip_suffix('\r').unwrap_or(one));
     if serde_json::from_str::<serde::de::IgnoredAny>(text).is_err() {
       if !ended {
         break;
       }
       return false;
     }
-    if let Some(at) = text.strip_prefix(KEEP).and_then(|one| one.strip_suffix(']')) {
-      if at.parse::<u64>().ok() != entries.checked_add(1) {
-        return false;
+    match Line::of(text) {
+      Line::Keep(at) => {
+        if at != entries.checked_add(1) {
+          return false;
+        }
+        entries += 1;
       }
-      entries += 1;
-    } else if let Some(name) = question(text) {
-      asked.remove(&name);
+      Line::Question(name) => {
+        asked.remove(name.as_ref());
+      }
+      Line::Head | Line::Other => {}
     }
   }
-  asked.is_empty() && usize::try_from(entries).ok() == Some(record)
-}
-
-/// The name of the question that a line of a log shows, read from its first two words, as `["bash","bash3",`. A
-/// line whose head holds an escape is parsed whole.
-fn question(line: &str) -> Option<String> {
-  let rest = line.strip_prefix("[\"")?;
-  let (kind, rest) = rest.split_once('"')?;
-  let about = rest.strip_prefix(",\"").and_then(|one| one.split_once('"')).map(|one| one.0);
-  if kind.contains('\\') || about.is_some_and(|one| one.contains('\\')) {
-    let fact = parsed(line).ok()?;
-    let fact = Fact::of(fact.as_ref())?;
-    return fact.question().then(|| fact.about().to_owned());
-  }
-  about.filter(|one| named(one, kind)).map(str::to_owned)
+  asked.is_empty() && entries == record
 }
 
 #[cfg(test)]

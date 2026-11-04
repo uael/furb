@@ -407,6 +407,10 @@ export type Event =
       data: string;
     }
   | {
+      event: "reborn";
+      data: string | null;
+    }
+  | {
       event: "ended";
       data: string | null;
     };

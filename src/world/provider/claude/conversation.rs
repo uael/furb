@@ -17,25 +17,19 @@ use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
 
 use super::{
-  Deltas, MISSING, Program, discover, failed,
+  Deltas, Error, Program, discover, error, failed,
   process::{GRACE, Line, Process, Spend, absent, exited, last, stalled},
   protocol::{Event, Reply, unexplained},
+  refused, worded,
 };
-use crate::world::provider::{ENV_THINKING, uuid};
-
-/// What the command line says when it holds no conversation under the id that a process resumes, as
-/// when its file is gone.
-const LOST: &str = "No conversation found with session ID";
+use crate::world::provider::{
+  ENV_THINKING,
+  atomic::{self, Access},
+  uuid,
+};
 
 /// The flag by which the command line records its system prompt once for a conversation.
 const SNAPSHOT: &str = "--system-prompt-snapshot";
-
-/// Whether the command line lists a flag in its help. It is asked once for each version of its
-/// program.
-async fn lists(program: &Program, flag: &'static str) -> bool {
-  let program = program.clone();
-  tokio::task::spawn_blocking(move || discover::lists(&program, flag)).await.unwrap_or(false)
-}
 
 /// The directory that each process runs in: a folder of furb, where the command line finds the
 /// memory of no project, and keeps the conversations of furb under one name.
@@ -54,12 +48,7 @@ fn prompt_file(system: &str) -> Result<PathBuf, CompletionError> {
   let folder = env::temp_dir().join("furb-claude");
   let file = folder.join(format!("{:x}.md", Sha256::digest(system.as_bytes())));
   if !file.is_file() {
-    std::fs::create_dir_all(&folder)
-      .map_err(|no| failed(format!("{} was not made: {no}", folder.display())))?;
-    let part = folder.join(format!("{}.part", uuid()?));
-    std::fs::write(&part, system)
-      .and_then(|()| std::fs::rename(&part, &file))
-      .map_err(|no| failed(format!("{} was not written: {no}", file.display())))?;
+    atomic::write(&file, system.as_bytes(), Access::Shared).map_err(|no| failed(no.to_string()))?;
   }
   Ok(file)
 }
@@ -188,11 +177,7 @@ impl Conversation {
     }
     let folder = store.join("projects").join(name);
     let file = folder.join(format!("{}.jsonl", self.id));
-    let part = folder.join(format!("{}.part", uuid()?));
-    std::fs::create_dir_all(&folder)
-      .and_then(|()| std::fs::write(&part, lines))
-      .and_then(|()| std::fs::rename(&part, &file))
-      .map_err(|no| failed(format!("{} was not written: {no}", file.display())))?;
+    atomic::write(&file, lines.as_bytes(), Access::Shared).map_err(|no| failed(no.to_string()))?;
     self.resumed = true;
     Ok(true)
   }
@@ -250,7 +235,7 @@ impl Conversation {
     loop {
       let mut outcome =
         Outcome { incoming: &incoming, asked, again, heard: false, restored: None, replied: None };
-      let got = self.flight(delta, &spend, run, &mut outcome).await;
+      let got = self.flight(delta, &spend, run, &mut outcome).await.map_err(worded);
       let got = got.map(|(response, process)| {
         let reply = Message::Assistant { id: None, content: response.choice.clone() };
         outcome.replied = Some((canonical(&reply), process));
@@ -258,7 +243,7 @@ impl Conversation {
       });
       self.settle(outcome);
       match (got, &lost) {
-        (Err(no), None) if no.to_string().contains(LOST) => {
+        (Err(no), None) if matches!(error(&no), Some(Error::Lost(_))) => {
           lost = Some(self.id.clone());
           self.renew()?;
           (delta, again) = (messages, false);
@@ -284,14 +269,14 @@ impl Conversation {
     gone: Duration,
   ) -> Result<Process, CompletionError> {
     let print = ["-p", "--input-format", "stream-json", "--output-format", "stream-json"];
-    let mut command = program.base_command(&print).map_err(failed)?;
+    let mut command = program.base_command(&print).map_err(|why| refused(Error::SignedOut(why)))?;
     command.args(["--verbose", "--include-partial-messages", "--model", &self.name]);
     let prompt = prompt_file(&self.system)?;
     command.arg("--system-prompt-file").arg(&prompt);
     // Else a resumed or forked conversation sends the system prompt that its first request
     // recorded, and not this one. A command line that does not list the flag would refuse it, so it
     // gets none.
-    if lists(program, SNAPSHOT).await {
+    if discover::lists(program, SNAPSHOT).await {
       command.args([SNAPSHOT, "off"]);
     }
     command.current_dir(home()?);
@@ -390,7 +375,7 @@ impl Conversation {
         if absent(&process.tail.kept) {
           outcome.restored = Some(before);
           let name = run.program.name();
-          return Err(failed(format!("{MISSING}: {name} took no input: {no}{said}")));
+          return Err(refused(Error::Missing(format!("{name} took no input: {no}{said}"))));
         }
         return Err(failed(format!("claude took no input: {no}{said}")));
       }

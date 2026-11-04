@@ -213,8 +213,8 @@ meanings. The entry of such a name here gives only its form in the engine.
   the TUI, plays no word: no turn of its file in a setup, and no rung on a chain.
 - made: the fact by which the store names in the record the build that made it, the digest of the engine and of the
   Kernel and the version of the build, `VERSION` in `src/world/store.rs`, which the store says as it hears the root of
-  a new record at its birth. A build keeps the version while each record of the corpus,
-  `tests/corpus`, replays on it with no drift. After a checkpoint, only the fact made of the segment after it counts,
+  a new record at its birth. A build keeps the version while each record of `tests/replay` replays on it with no
+  drift. After a checkpoint, only the fact made of the segment after it counts,
   and the store says it again at the root of the first life that goes on from the checkpoint. When it names another
   engine or another version, a life replays none of that segment: it writes at the tip a checkpoint that carries the
   segment as data, and goes on from it.

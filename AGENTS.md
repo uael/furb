@@ -11,7 +11,7 @@ link to that folder.
 The crate at the root, `furb`, runs the same file in monty, a python interpreter written in rust, behind an async
 API of its own:
 
-- `src/lib.rs` says what the crate gives: `Engine`, whose methods are the verbs of the contract, which `build.rs`
+- `src/lib.rs` says what the crate gives: `Engine`, whose methods are the verbs of the contract, which `build/verbs.rs`
   makes from the contract, and `Ear`, the one trait of an ear, which a host writes as a generator of rust with `ear`.
 - `src/world/` holds the ears of the World that the crate writes, one file for each concern: the files, the commands,
   the pages of the web, the client of the MCP servers, the time, the store of the record, the log of a life, the reader of a record with no life, the
@@ -28,8 +28,9 @@ API of its own:
 - `src/life.rs` opens a life as every host opens one, from one `Opening`: the record, the ears of the crate after the
   ears of the host, the default actor, the roster that the host names or every model of the catalog, and the extensions.
   A host adds only its own ears, as the console of its operator. A life on a record of another version with no
-  checkpoint is refused before any replay, and `tests/corpus` holds the records that each build must replay with no
-  drift. Each door gives it as
+  checkpoint is refused before any replay, and `tests/replay` holds the records that each build of the version must
+  replay with no drift. `tests/corpus` holds the records of each release, which each later build must open, as
+  `tests/corpus/README.md` says. Each door gives it as
   `opened` and as `Engine.open`.
 - `src/checkpoint.rs` holds the checkpoint of a life: a fact at the tip of its record with each chain that lives, its
   turns, its module and its open prompts, from which a later life of any build goes on: the fact, its store and the
@@ -39,7 +40,8 @@ API of its own:
   whatever engine wrote it, and replays the entries after it alone when its own engine made them. When a build of
   another engine or of another version made them, the life first writes at the tip a checkpoint that carries them as
   data, as `src/checkpoint/tail.rs` says: each chain keeps its turns and its open prompts, and is told each name of its
-  module that a word of that tail changed, which it lost.
+  module that a word of that tail changed, which it lost. `checkpoint::carry` gives that checkpoint for a tail of any
+  build, which a host keeps after a fault stopped the life of that tail.
 - `src/snapshot.rs` holds the snapshot of a life beside its record: the session of the sandbox that monty dumps and
   what the engine holds of the ears, which a later life on the same record and build opens from with no replay.
 - `src/engine.rs` opens a life in the sandbox: it loads the engine, the sheet and the Kernel, each in a namespace of its
@@ -68,6 +70,10 @@ API of its own:
 - `host/` is `furb-host`, the third package of the workspace of the crate, on the public API of `furb` alone. Its
   `Life::spawn` opens a life on a thread of its own, which owns the engine, and gives a `LifeHandle` that any thread
   holds: it says a command to the life and reads the events of the life in order, from any place of its log. The
+  thread writes the checkpoint of a life that keeps its record at its end, and opens the life again from it for the
+  same handles when its sandbox holds half of its memory bound or when it said a tail of facts, as
+  `host/src/rebirth.rs` says. After a fault that stops the sandbox, it carries the tail of the record as data and
+  opens from it, since a replay would run again the word that the fault cut. The
   crate holds the one list of the ears of the host that each life hears: the console of the operator, and the ear
   that tells each fact as events. `protocol` holds the one protocol of the daemon, a `Verb` and a `Frame` of JSON
   lines with the version `PROTOCOL`, `transport` the socket or the pipe of the machine behind a `Dialer` and an
@@ -146,7 +152,7 @@ engine does not serve its meaning, the name is wrong, and the name changes.
   chain shows as a turn, and the transcript is the whole of what ran: no run is made on the side, and no control flow
   is hidden. furb hosts itself with its own verbs. Only the Kernel and the World stand outside `src/furb/engine.py`,
   and the seeding of a chain, each turn that furb crafts for it, lives in `engine.py` alone. The test
-  `each_run_of_a_chain_of_the_corpus_has_a_turn_that_shows_its_word` in `src/life.test.rs` holds the first part.
+  `each_run_of_a_chain_of_the_replays_has_a_turn_that_shows_its_word` in `src/life.test.rs` holds the first part.
 - The record is the one truth of a life. A cache of a life is derived from its record and checked against it, and a
   reader drops a cache that does not agree: the log of a life holds every fact that the life said, and each later
   life writes it again from the record. A record is made again by running its words, or loaded from the snapshot
