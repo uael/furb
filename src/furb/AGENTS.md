@@ -197,7 +197,7 @@ meanings. The entry of such a name here gives only its form in the engine.
 - pending: what the record shows started and not done when boot returns: a command, a wait, a prompt to the operator
   or a reply that the outside took, which the life holds with no fact until a wake that the life says.
 - extension: python that extends the engine from a rung: its word, which defines its names, and, for one that a host
-  gives a life, its life word, which starts its work; an official one has an ear of the World that answers the
+  gives a life, its life word, which starts its work; an official one may have an ear of the World that answers the
   questions that its word defines.
 - enable: the fact by which the World turns an extension on in a life, with its name, its word, its life word and, for
   an extension that plays on the root alone, root, which the record keeps; the World says it at the tip, and when a
@@ -268,8 +268,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 - A chain is a function of the record, and a later boot must offer the same interpreter and the same outside, since a
   record is made again by running its words, or loaded from the snapshot that a run of those words made on the same
   record, interpreter and outside, which the opening of the life checks against the record. A record names the
-  version of the build that made it, and a life on a build of another version is refused before any replay, but for
-  the segment after a checkpoint, which it carries as data.
+  version of the build that made it, and a life on a build of another version replays none of the segment after its
+  last checkpoint: it carries that segment as data.
 - A chain is one conversation, and the transcript that a provider caches grows at one end.
 - Nothing is told twice, and nothing tells what it does not know: an act tells of itself, and a chain of the rungs it
   asks a model for, with the message of the prompt each advances, of a word that told nothing, of the prompts and the

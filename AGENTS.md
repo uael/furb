@@ -24,11 +24,11 @@ API of its own:
   chain or the root alone, and plays the setup of the root on a new record. `parts` gives the part of each extension for
   the TUI, which `tui/src/parts.ts` loads. `extensions/` holds the official extensions, `catchup`, `memory`, `skills`,
   `compaction`, `naming`, `ouroboros`, `web` and `mcp`, each a word, a contract and a suite, and `src/extension/` holds the ear of
-  the World of each that has one, as `skills.rs`. `docs/extensions.md` says how an extension works.
+  the World of the one that has one, `skills.rs`. `docs/extensions.md` says how an extension works.
 - `src/life.rs` opens a life as every host opens one, from one `Opening`: the record, the ears of the crate after the
   ears of the host, the default actor, the roster that the host names or every model of the catalog, and the extensions.
-  A host adds only its own ears, as the console of its operator. A life on a record of another version with no
-  checkpoint is refused before any replay, and `tests/replay` holds the records that each build of the version must
+  A host adds only its own ears, as the console of its operator. A life on a record that another engine or version
+  made after its last checkpoint replays none of that tail: it carries it as data, as `src/checkpoint.rs` says. `tests/replay` holds the records that each build of the version must
   replay with no drift. `tests/corpus` holds the records of each release, which each later build must open, as
   `tests/corpus/README.md` says. Each door gives it as
   `opened` and as `Engine.open`.
