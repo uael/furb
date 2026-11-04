@@ -162,8 +162,13 @@ function shortened<T>(value: T): T {
   return (changed ? made : value) as T;
 }
 
-/** What a session that only reads does not do. */
-const READS = "This record is open to read, so nothing runs on it. Start a new life from it to go on.";
+/** What a session that only reads says to a word that would run: a drift of the build that made the record is a defect, so it offers no new life; a record of another build offers one. */
+export function reads(reading?: Reading): string {
+  const open = "This record is open to read, so nothing runs on it.";
+  return reading && sameBuild(reading)
+    ? `${open} Its replay drifts on the build that made it, which is a defect.`
+    : `${open} Start a new life from it to go on.`;
+}
 
 /** A record open to read, with no life: the facts that the crate retold of it, in the file that it names, as an engine
  * and a session give a snapshot of a life, so the TUI draws it as it draws a life. No word runs again, no model is
@@ -492,7 +497,7 @@ export class Reader {
   }
 
   inspect(name: string): { value: unknown } {
-    if (name !== "actor") throw new Error(READS);
+    if (name !== "actor") throw new Error(reads(this.reading));
     return { value: this.actor };
   }
 
@@ -520,6 +525,6 @@ export class Reader {
 
   /** Each other verb, which would make an act or change the life. */
   refuse(): never {
-    throw new Error(READS);
+    throw new Error(reads(this.reading));
   }
 }
