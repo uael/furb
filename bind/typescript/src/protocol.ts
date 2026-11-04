@@ -82,6 +82,11 @@ export type Request1 =
     }
   | {
       life: string;
+      act: string;
+      verb: "filled";
+    }
+  | {
+      life: string;
       on?: string | null;
       verb: "cwd";
     }

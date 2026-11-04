@@ -255,6 +255,7 @@ fn routed(verb: Verb) -> Routed {
     Verb::Turns { life, on } => (life, Command::Turns { on }),
     Verb::Program { life, on } => (life, Command::Program { on }),
     Verb::Standing { life } => (life, Command::Standing),
+    Verb::Filled { life, act } => (life, Command::Filled { id: act }),
     Verb::Cwd { life, on } => (life, Command::Cwd { on }),
     Verb::Inspect { life, name, on } => (life, Command::Inspect { name, on }),
     Verb::Pending { life } => (life, Command::Pending),

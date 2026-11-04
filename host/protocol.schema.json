@@ -360,6 +360,27 @@
             "life": {
               "type": "string"
             },
+            "act": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "filled"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "act"
+          ],
+          "description": "The share of the window of its model that the prompt of an answer filled, as `filled` of\nthe engine gives it from the reply that took that answer, and nothing before an answer."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
             "on": {
               "type": [
                 "string",

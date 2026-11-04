@@ -190,6 +190,15 @@ mod daemon {
       rung
     }
 
+    /// The last reply of a life, which took the last answer of a model.
+    async fn replied(&mut self, life: &str) -> String {
+      let of = Some("reply".to_owned());
+      let replies = Verb::Transcript { life: life.to_owned(), on: None, of };
+      let Ok(Answer::Values(replies)) = self.ask(replies).await else { panic!("no replies") };
+      let reply = replies.last().and_then(|one| one[1].as_str().map(str::to_owned));
+      reply.expect("a reply took the answer")
+    }
+
     async fn attach(&mut self, life: &str) {
       assert_eq!(self.ask(Verb::Attach { life: life.to_owned(), from: 0 }).await, Ok(Answer::Done));
     }
@@ -571,13 +580,17 @@ mod daemon {
     assert_eq!(window.ask(wrote(ask)).await, Ok(Answer::Done));
     let thought = |one: &Frame| matches!(one, Frame::Event { event: Event::Text { thinking, .. }, .. } if thinking == "So.");
     window.until(thought).await;
-    let turn = Some(json!(["assistant", "close('ok')", null, null]));
+    let turn = Some(json!(["assistant", "close('ok')", [500_000, 10, 0, 0, 0.0], null]));
     let answered = Verb::Answered { life: life.clone(), ask, turn, why: None };
     assert_eq!(window.ask(answered.clone()).await, Ok(Answer::Done));
     let Frame::Event { event: Event::Act(act), .. } = window.until(done(&id)).await else {
       panic!("no act")
     };
     assert_eq!(act.value(), Some(&json!("ok")));
+    let filled = Verb::Filled { life: life.clone(), act: window.replied(&life).await };
+    let share = window.ask(filled).await;
+    let half = |one: &Value| one.as_f64().is_some_and(|share| share > 0.0 && share <= 1.0);
+    assert!(matches!(&share, Ok(Answer::Value(one)) if half(one)), "{share:?}");
     let again = window.ask(answered).await;
     assert_eq!(again, Err(ProtocolError::Unasked { life: life.clone(), ask }));
     let other = opened(&mut window, &at, "b.jsonl").await;

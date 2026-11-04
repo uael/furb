@@ -71,6 +71,7 @@ mod protocol {
       Verb::Turns { life: life(), on: on() },
       Verb::Program { life: life(), on: on() },
       Verb::Standing { life: life() },
+      Verb::Filled { life: life(), act: "reply1".to_owned() },
       Verb::Cwd { life: life(), on: on() },
       Verb::Inspect { life: life(), name: "x".to_owned(), on: on() },
       Verb::Pending { life: life() },
