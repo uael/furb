@@ -49,7 +49,7 @@ use crate::{
   },
   serve::{Host, Outbox, serve},
   transport::{Accepted, Dialer, Identity, Listener, Local, Tailscale, Tcp, upgraded},
-  views::{Kit, Views},
+  views::{Skill, Views},
 };
 
 /// How long a life with no holder lives, unless the settings of the daemon say otherwise.
@@ -392,7 +392,7 @@ impl From<Reply> for Answer {
 
 /// The lives of the daemon, each under the path of its record, which one task owns: the count of
 /// the births of a life, where the task tells the listener of a handover, and the views that the
-/// kits of the lives serve.
+/// skills of the lives serve.
 struct Lives {
   settings: Settings,
   held: HashMap<String, Held>,
@@ -535,7 +535,7 @@ impl Lives {
   }
 
   /// A peer attached to a life, which hears each event of the life from a place in its log. A
-  /// window holds the life, and a kit, under its name, serves views of it and holds nothing.
+  /// window holds the life, and a skill, under its name, serves views of it and holds nothing.
   fn attach(
     &mut self,
     life: &str,
@@ -543,16 +543,16 @@ impl Lives {
     peer: Peer,
     outbox: &Outbox,
   ) -> Result<Answer, ProtocolError> {
-    let kit = match peer.kind {
-      Kind::Kit => Some(peer.name.clone().ok_or(ProtocolError::Nameless)?),
+    let skill = match peer.kind {
+      Kind::Skill => Some(peer.name.clone().ok_or(ProtocolError::Nameless)?),
       Kind::Window | Kind::Daemon => None,
     };
     let (handle, holders) = living(&mut self.held, life)?;
     let teller = told(life.to_owned(), handle.events(from), outbox.clone(), self.asks.clone());
     let told = tokio::spawn(teller).abort_handle();
-    if let Some(name) = kit {
+    if let Some(name) = skill {
       let life = life.to_owned();
-      self.views.attach(Kit { life, name, outbox: outbox.clone(), told });
+      self.views.attach(Skill { life, name, outbox: outbox.clone(), told });
     } else {
       holders.attach(Window { peer, outbox: outbox.clone(), told });
       holders.present(life);
@@ -560,15 +560,17 @@ impl Lives {
     Ok(Answer::Done)
   }
 
-  /// A peer that let go of a life: a window of its hold and of its views, and a kit of its views.
+  /// A peer that let go of a life: a window of its hold and of its views, and a skill of its views.
   fn detach(&mut self, life: &str, outbox: &Outbox) -> Result<Answer, ProtocolError> {
     let (_, holders) = living(&mut self.held, life)?;
     let was = holders.detach(outbox);
     if was {
       holders.present(life);
     }
-    let kit = self.views.left(life, outbox);
-    (was || kit).then_some(Answer::Done).ok_or(ProtocolError::Unattached { life: life.to_owned() })
+    let skill = self.views.left(life, outbox);
+    (was || skill)
+      .then_some(Answer::Done)
+      .ok_or(ProtocolError::Unattached { life: life.to_owned() })
   }
 
   /// A view that a window mounts in a slot of a life that it holds.
