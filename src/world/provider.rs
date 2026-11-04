@@ -655,6 +655,7 @@ impl Model {
 /// extensions that it gives in the standing.
 pub struct Provider {
   directory: String,
+  config: Option<PathBuf>,
   extensions: Option<Vec<Advertised>>,
   models: Arc<RwLock<Vec<Model>>>,
   actor: Option<String>,
@@ -684,6 +685,7 @@ impl Provider {
     let directory = directory.into();
     Provider {
       directory,
+      config: None,
       extensions: None,
       models: Arc::new(RwLock::new(models)),
       actor: None,
@@ -696,6 +698,14 @@ impl Provider {
       gone: Vec::new(),
       searching: true,
     }
+  }
+
+  /// The config directory of the user whose `config.json` the standing reads for the classes
+  /// and the list of automatic work, else the one that [`crate::extension::Places::here`]
+  /// names: a life that opens on a config directory of its own reads no file of the machine.
+  pub fn config(mut self, config: impl Into<PathBuf>) -> Provider {
+    self.config = Some(config.into());
+    self
   }
 
   /// The most tokens of thought of a model in one turn.
@@ -814,6 +824,7 @@ impl Provider {
     let native = self.search();
     let Provider {
       directory,
+      config,
       extensions,
       models,
       actor,
@@ -856,7 +867,7 @@ impl Provider {
             &directory,
             &actor,
             extensions.as_deref(),
-            &crate::extension::Places::here().config,
+            &config.clone().unwrap_or_else(|| crate::extension::Places::here().config),
           );
           say(&mut co, Fact::says("done", &about, [given]));
           // A stand reads the settings again, as after a change of the command line or of its
