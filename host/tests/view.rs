@@ -217,8 +217,9 @@ fn a_bool_gives_yes_and_no_a_literal_each_of_its_values_and_any_other_shape_none
     choices(r#"Literal["a, b", 'it\'s', 3, True, None]"#),
     ["a, b", "it's", "3", "True", "None"]
   );
-  assert_eq!(choices("typing.Literal['one']"), ["one"]);
-  for shape in ["str", "int", "float", "list", "dict", "None", "list[str]"] {
+  // The console refuses a shape that names its module, so the desk offers it no choice.
+  for shape in ["str", "int", "float", "list", "dict", "None", "list[str]", "typing.Literal['one']"]
+  {
     assert_eq!(choices(shape), Vec::<String>::new(), "{shape}");
   }
 }
