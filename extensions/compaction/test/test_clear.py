@@ -25,7 +25,10 @@ async def test_so_the_model_of_the_chain_reads_from_zero_and_the_chain_keeps_wha
   sand, root, _ = compacting(tmp_path)
   word = "k = 7\nread('a.txt')\nw = prompt(int, 'n', to=OPERATOR)\nside = chain('worker')"
   sand.script[root] = [word, "clear()\nclose(k)"]
-  assert await engine.prompt(int, "the k", on=root) == 7
+  the = engine.prompt(int, "the k", on=root)
+  await settle()
+  engine.prompt(None, "go on", on=the)
+  assert await the == 7
   await settle()
   asked = next(str(a[1]) for a in engine.transcript(root) if a[0] == "prompt" and a[5] == "n")
   (turn,) = engine.turns(on=root)
