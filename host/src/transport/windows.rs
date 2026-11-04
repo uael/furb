@@ -37,6 +37,15 @@ pub(crate) fn listen(
   future::ready(instance(&place, true).map(|next| Listener { place, next }))
 }
 
+/// The pipe after a handover: the daemon that gave its lives holds a peer of the pipe, so the name
+/// stands, and the first instance of it cannot be asked for.
+pub(crate) fn succeed(
+  folder: &Path,
+) -> impl Future<Output = Result<Listener, TransportError>> + use<> {
+  let place = piped(folder);
+  future::ready(instance(&place, false).map(|next| Listener { place, next }))
+}
+
 impl Listener {
   pub(crate) async fn accept(&mut self) -> Result<Accepted, TransportError> {
     self.next.connect().await.map_err(TransportError::Accept)?;
@@ -60,6 +69,11 @@ pub(crate) async fn dial(folder: &Path) -> Result<Dialed, TransportError> {
 
 /// The login of the user of the daemon, the one user whom the access list of the pipe lets in.
 pub(crate) fn login(_: &Accepted) -> Result<String, TransportError> {
+  own()
+}
+
+/// The login of the user of the daemon.
+pub(crate) fn own() -> Result<String, TransportError> {
   let mut name = [0u16; 257];
   let mut size: u32 = 257;
   // SAFETY: name holds size units, and the call writes at most that many.

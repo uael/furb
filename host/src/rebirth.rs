@@ -14,7 +14,10 @@ use std::collections::HashSet;
 use furb::{Engine, Fault, checkpoint};
 use tokio::task;
 
-use crate::{event::Event, view::Phase};
+use crate::{
+  event::Event,
+  view::{Kind, Phase},
+};
 
 /// How many facts a life says after it opened before it writes its checkpoint and is born again,
 /// at the first moment when no command and no reply runs, which a rebirth would cut.
@@ -33,7 +36,7 @@ impl Watch {
   pub(crate) fn heard(&mut self, event: &Event) {
     match event {
       Event::Fact(_) => self.facts += 1,
-      Event::Act(act) if matches!(act.kind.as_str(), "bash" | "reply") => {
+      Event::Act(act) if matches!(act.kind, Kind::Bash | Kind::Reply) => {
         match act.phase {
           Phase::Done(_) => self.running.remove(&act.id),
           Phase::Asked | Phase::Started => self.running.insert(act.id.clone()),

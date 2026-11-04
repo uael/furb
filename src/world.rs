@@ -38,7 +38,7 @@ pub use fetch::fetch;
 pub use files::{CONFIG, files};
 pub(crate) use log::continued;
 pub use log::{log, logged};
-pub use operator::{Asked, SHAPES, answered, answers};
+pub use operator::{Asked, SHAPES, Shape, answered, answers, named};
 pub(crate) use provider::search::spawned;
 pub use provider::{
   Advertised, BACKOFF, Backoff, Hosted, Model, Provider, Retries, Retry, Search, Told, Writes,
@@ -53,7 +53,7 @@ pub use store::{
   CHECKPOINT_SCHEMA, Lines, MADE, RECORD_SCHEMA, Schema, SchemaError, Sqlite, Store, VERSION,
   engine, heads, keeping, kept, made, readable, release, store, version,
 };
-pub(crate) use store::{database, each};
+pub(crate) use store::{Format, each};
 pub use time::time;
 
 use crate::{
@@ -67,6 +67,19 @@ pub(crate) fn beside(record: &Path, suffix: &str) -> PathBuf {
   let mut name = record.as_os_str().to_os_string();
   name.push(suffix);
   PathBuf::from(name)
+}
+
+/// The bytes that a process may still write on the disk that holds a folder, none when the disk
+/// does not say.
+#[cfg(unix)]
+pub(crate) fn free(folder: &Path) -> Option<u64> {
+  let stat = rustix::fs::statvfs(folder).ok()?;
+  stat.f_bavail.checked_mul(stat.f_frsize)
+}
+
+#[cfg(not(unix))]
+pub(crate) fn free(_: &Path) -> Option<u64> {
+  None
 }
 
 /// The directory a chain stands in, which a path of it resolves against: where the chain went last, resolved against
@@ -102,7 +115,7 @@ pub(crate) fn resolved(directory: &Path, path: &str) -> PathBuf {
 
 /// The cache of furb on this machine: under `XDG_CACHE_HOME`, `LOCALAPPDATA` on Windows, `Library/Caches` of the
 /// home on macOS, and `.cache` of the home elsewhere.
-pub(crate) fn cache() -> Option<PathBuf> {
+pub fn cache() -> Option<PathBuf> {
   let named = |name: &str| env::var_os(name).filter(|one| !one.is_empty()).map(PathBuf::from);
   let base = named("XDG_CACHE_HOME").or_else(|| {
     if cfg!(windows) {

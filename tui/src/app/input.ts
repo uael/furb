@@ -617,7 +617,6 @@ export const input = part({
     this.session.off("change", this.schedule);
     this.options.workspaces.off("change", this.schedule);
     this.session.off("compose", this.compose);
-    this.session.off("resume", this.resume);
     this.session.off("shared", this.shared);
     this.session.off("copied", this.copied);
     this.session.off("status", this.statusShown);
@@ -631,6 +630,7 @@ export const input = part({
     this.renderer.off("selection", this.copySelection);
     this.renderer.off("theme_mode", this.modeChanged);
     this.renderer.removeFrameCallback(this.drawDue);
+    this.renderer.keyInput.off("keypress", this.keyHeard);
     this.renderer.off("focus", this.focusTaken);
     this.renderer.off("blur", this.focusLost);
     this.root.destroyRecursively();

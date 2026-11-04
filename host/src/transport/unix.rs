@@ -36,6 +36,10 @@ pub(crate) async fn listen(folder: &Path) -> Result<Listener, TransportError> {
   }
 }
 
+pub(crate) async fn succeed(folder: &Path) -> Result<Listener, TransportError> {
+  listen(folder).await
+}
+
 impl Listener {
   pub(crate) async fn accept(&self) -> Result<Accepted, TransportError> {
     let (stream, _) = self.0.accept().await.map_err(TransportError::Accept)?;
@@ -57,6 +61,11 @@ pub(crate) fn login(stream: &Accepted) -> Result<String, TransportError> {
     return Err(TransportError::Stranger { uid });
   }
   named(uid)
+}
+
+/// The login of the user of the daemon.
+pub(crate) fn own() -> Result<String, TransportError> {
+  named(user())
 }
 
 /// The folder of the socket made, of mode 0700, and refused when another user owns it or may

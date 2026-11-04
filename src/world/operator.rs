@@ -2,12 +2,7 @@
 //! as a value of the shape the prompt wants. Every console reads a line by these rules, so an answer means the same at
 //! every host.
 
-#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
-#![expect(clippy::match_same_arms, reason = "debt: match arms with the same body")]
-#![expect(
-  clippy::unnecessary_wraps,
-  reason = "debt: a Result or an Option that is always Ok or Some"
-)]
+use std::fmt::Display;
 
 use indexmap::IndexMap;
 use serde_json::value::RawValue;
@@ -67,7 +62,8 @@ impl Asked {
 }
 
 /// A shape that the operator answers, as its name reads.
-enum Shape {
+#[derive(Debug, Clone)]
+pub enum Shape {
   Str,
   None,
   Bool,
@@ -89,7 +85,7 @@ enum Shape {
 /// truth or None, as python names it, such as Literal['a', 1, True, None], or a list, a dict, a tuple or a union of
 /// shapes that it answers, such as list[str], dict[str, int], tuple[int, str] or int | None.
 pub fn answers(shape: &str) -> bool {
-  parse(shape).is_some()
+  Shape::parse(shape).is_some()
 }
 
 /// The parts of a text between the marks that stand in no brackets and in no quote.
@@ -103,7 +99,6 @@ fn parts(text: &str, mark: char) -> Vec<&str> {
     match (quote, c) {
       (Some(_), '\\') => skip = true,
       (Some(open), c) if c == open => quote = None,
-      (Some(_), _) => {}
       (None, '\'' | '"') => quote = Some(c),
       (None, '[' | '(' | '{') => depth += 1,
       (None, ']' | ')' | '}') => depth -= 1,
@@ -118,49 +113,78 @@ fn parts(text: &str, mark: char) -> Vec<&str> {
   found
 }
 
-/// A shape as its name reads, or none when the operator answers it not.
-fn parse(name: &str) -> Option<Shape> {
-  let text = name.trim();
-  let arms = parts(text, '|');
-  if arms.len() > 1 {
-    let mut shapes = vec![];
-    for arm in arms {
-      match parse(arm)? {
-        Shape::Either(more) => shapes.extend(more),
-        one => shapes.push(one),
+impl Shape {
+  /// A shape as its name reads, or none when the operator answers it not.
+  pub fn parse(name: &str) -> Option<Shape> {
+    let text = name.trim();
+    let arms = parts(text, '|');
+    if arms.len() > 1 {
+      let mut shapes = vec![];
+      for arm in arms {
+        match Shape::parse(arm)? {
+          Shape::Either(more) => shapes.extend(more),
+          one => shapes.push(one),
+        }
       }
+      return Some(Shape::Either(shapes));
     }
-    return Some(Shape::Either(shapes));
-  }
-  let (head, inside) = match text.split_once('[') {
-    Some((head, rest)) => (head.trim(), Some(rest.strip_suffix(']')?)),
-    None => (text, None),
-  };
-  Some(match (head, inside) {
-    ("str", None) => Shape::Str,
-    ("None", None) => Shape::None,
-    ("bool", None) => Shape::Bool,
-    ("int", None) => Shape::Int,
-    ("float", None) => Shape::Float,
-    ("list", None) => Shape::List(None),
-    ("dict", None) => Shape::Dict(None),
-    ("list", Some(item)) => Shape::List(Some(Box::new(parse(item)?))),
-    ("dict", Some(pair)) => match parts(pair, ',')[..] {
-      [key, value] if matches!(parse(key)?, Shape::Str) => {
-        Shape::Dict(Some(Box::new(parse(value)?)))
+    let (head, inside) = match text.split_once('[') {
+      Some((head, rest)) => (head.trim(), Some(rest.strip_suffix(']')?)),
+      None => (text, None),
+    };
+    Some(match (head, inside) {
+      ("str", None) => Shape::Str,
+      ("None", None) => Shape::None,
+      ("bool", None) => Shape::Bool,
+      ("int", None) => Shape::Int,
+      ("float", None) => Shape::Float,
+      ("list", None) => Shape::List(None),
+      ("dict", None) => Shape::Dict(None),
+      ("list", Some(item)) => Shape::List(Some(Box::new(Shape::parse(item)?))),
+      ("dict", Some(pair)) => match parts(pair, ',')[..] {
+        [key, value] if matches!(Shape::parse(key)?, Shape::Str) => {
+          Shape::Dict(Some(Box::new(Shape::parse(value)?)))
+        }
+        _ => return None,
+      },
+      ("tuple", Some(items)) => {
+        Shape::Tuple(parts(items, ',').into_iter().map(Shape::parse).collect::<Option<_>>()?)
       }
+      ("Literal", Some(_)) => Shape::Choice(literal(text)?),
       _ => return None,
-    },
-    ("tuple", Some(items)) => {
-      Shape::Tuple(parts(items, ',').into_iter().map(parse).collect::<Option<_>>()?)
+    })
+  }
+
+  /// The lines that answer a shape that is a choice: yes and no for a bool, and each value of a
+  /// Literal as `named` gives it. Any other shape gives none.
+  pub fn choices(&self) -> Vec<String> {
+    match self {
+      Shape::Bool => vec!["yes".to_owned(), "no".to_owned()],
+      Shape::Choice(values) => values.iter().map(named).collect(),
+      _ => Vec::new(),
     }
-    ("Literal", Some(_)) => Shape::Choice(choices(text)?),
-    _ => return None,
-  })
+  }
+
+  /// Whether a line of no word answers the shape: a union that holds None, which such a line
+  /// answers with None.
+  pub fn takes_nothing(&self) -> bool {
+    matches!(self, Shape::Either(arms) if arms.iter().any(|one| matches!(one, Shape::None)))
+  }
+
+  /// A shape as a prompt is given it, by its name: None itself, or the name of a type.
+  pub fn object(name: &str) -> Object {
+    if name == "None" { Object::none() } else { Object::string(name) }
+  }
+}
+
+/// A value of a Literal as the operator names it: a string as its text, and any other value as
+/// python shows it.
+pub fn named(value: &Object) -> String {
+  value.as_ref().as_str().map_or_else(|| value.py_repr(), str::to_owned)
 }
 
 /// The values of a Literal that the operator answers, in the order of its shape, or none for any other shape.
-fn choices(shape: &str) -> Option<Vec<Object>> {
+fn literal(shape: &str) -> Option<Vec<Object>> {
   let mut rest = shape.strip_prefix("Literal[")?.strip_suffix(']')?;
   let mut values = vec![];
   loop {
@@ -225,33 +249,34 @@ fn choice(text: &str) -> Option<(Object, &str)> {
 /// line less the spaces around it names as python shows it, or, for a string, as its text. A union is the first of its
 /// shapes that reads the line, and None for a line with no word when the union holds None.
 pub fn answered(shape: &str, line: &str) -> Result<Object, Fault> {
-  let held =
-    parse(shape).ok_or_else(|| Fault::refused(format!("the operator answers no {shape}")))?;
+  let held = Shape::parse(shape)
+    .ok_or_else(|| Fault::refused(format!("the operator answers no {shape}")))?;
   read(&held, shape.trim(), line)
 }
 
 /// A line as a value of a shape, under the name that the prompt gave to the whole shape.
 fn read(shape: &Shape, name: &str, line: &str) -> Result<Object, Fault> {
   let no = || Fault::refused(format!("{line:?} is no {name}"));
+  let cause = |why: &dyn Display| Fault::refused(format!("{line:?} is no {name}: {why}"));
   let text = line.trim();
   match shape {
     Shape::None => Ok(Object::none()),
     Shape::Str => Ok(Object::string(line)),
-    Shape::Int => text.parse().map(Object::int).map_err(|_| no()),
-    Shape::Float => text.parse().map(Object::float).map_err(|_| no()),
+    Shape::Int => text.parse().map(Object::int).map_err(|why| cause(&why)),
+    Shape::Float => text.parse().map(Object::float).map_err(|why| cause(&why)),
     Shape::Bool => match text.to_lowercase().as_str() {
       "y" | "yes" | "true" | "1" => Ok(Object::bool(true)),
       "n" | "no" | "false" | "0" => Ok(Object::bool(false)),
       _ => Err(Fault::refused(format!("{line:?} is neither yes nor no"))),
     },
     Shape::Choice(values) => {
-      let named = |one: &&Object| one.py_repr() == text || one.as_ref().as_str() == Some(text);
+      let names = |one: &&Object| one.py_repr() == text || one.as_ref().as_str() == Some(text);
       let none = || Fault::refused(format!("{line:?} is none of {name}"));
-      values.iter().find(named).cloned().ok_or_else(none)
+      values.iter().find(names).cloned().ok_or_else(none)
     }
     Shape::List(_) | Shape::Dict(_) | Shape::Tuple(_) => {
-      let raw: &RawValue = serde_json::from_str(text).map_err(|_| no())?;
-      built(shape, raw).map_err(|_| no())
+      let raw: &RawValue = serde_json::from_str(text).map_err(|why| cause(&why))?;
+      built(shape, raw).map_err(|why| cause(&reason(&why)))
     }
     Shape::Either(arms) => {
       if text.is_empty() && arms.iter().any(|one| matches!(one, Shape::None)) {
@@ -267,6 +292,7 @@ fn read(shape: &Shape, name: &str, line: &str) -> Result<Object, Fault> {
 fn built(shape: &Shape, raw: &RawValue) -> Result<Object, Fault> {
   let text = raw.get();
   let no = || Fault::refused(format!("{text} does not fit"));
+  let cause = |why: &dyn Display| Fault::refused(format!("{text} does not fit: {why}"));
   let first = text.as_bytes().first().copied();
   let number = matches!(first, Some(b'-' | b'0'..=b'9'));
   match shape {
@@ -274,7 +300,7 @@ fn built(shape: &Shape, raw: &RawValue) -> Result<Object, Fault> {
     Shape::None if text == "null" => written(raw),
     Shape::Bool if text == "true" || text == "false" => written(raw),
     Shape::Int if number && !text.contains(['.', 'e', 'E']) => written(raw),
-    Shape::Float if number => text.parse().map(Object::float).map_err(|_| no()),
+    Shape::Float if number => text.parse().map(Object::float).map_err(|why| cause(&why)),
     Shape::Choice(values) => {
       let one = written(raw)?;
       if values.iter().any(|value| value.py_repr() == one.py_repr()) { Ok(one) } else { Err(no()) }
@@ -288,13 +314,13 @@ fn built(shape: &Shape, raw: &RawValue) -> Result<Object, Fault> {
       }
     }
     Shape::List(Some(item)) if first == Some(b'[') => {
-      let items: Vec<&RawValue> = serde_json::from_str(text).map_err(|_| no())?;
+      let items: Vec<&RawValue> = serde_json::from_str(text).map_err(|why| cause(&why))?;
       Ok(Object::list(
         items.into_iter().map(|one| built(item, one)).collect::<Result<Vec<_>, _>>()?,
       ))
     }
     Shape::Tuple(shapes) if first == Some(b'[') => {
-      let items: Vec<&RawValue> = serde_json::from_str(text).map_err(|_| no())?;
+      let items: Vec<&RawValue> = serde_json::from_str(text).map_err(|why| cause(&why))?;
       if items.len() != shapes.len() {
         return Err(no());
       }
@@ -304,10 +330,11 @@ fn built(shape: &Shape, raw: &RawValue) -> Result<Object, Fault> {
       Ok(marked("tuple", [("args", Object::list([items]))]))
     }
     Shape::Dict(Some(item)) if first == Some(b'{') => {
-      let map: IndexMap<String, &RawValue> = serde_json::from_str(text).map_err(|_| no())?;
+      let map: IndexMap<String, &RawValue> =
+        serde_json::from_str(text).map_err(|why| cause(&why))?;
       let marks = map.contains_key(IS);
       let pairs = map.into_iter().map(|(key, one)| Ok((Object::string(key), built(item, one)?)));
-      dict(pairs.collect::<Result<Vec<_>, Fault>>()?, marks)
+      Ok(dict(pairs.collect::<Result<Vec<_>, Fault>>()?, marks))
     }
     Shape::Either(arms) => arms.iter().find_map(|arm| built(arm, raw).ok()).ok_or_else(no),
     _ => Err(no()),
@@ -316,12 +343,18 @@ fn built(shape: &Shape, raw: &RawValue) -> Result<Object, Fault> {
 
 /// A dict of the operator, whose pairs read as a mark of the engine when its keys hold the key of the mark, so the
 /// engine never reads them as one.
-fn dict(pairs: Vec<(Object, Object)>, marks: bool) -> Result<Object, Fault> {
+fn dict(pairs: Vec<(Object, Object)>, marks: bool) -> Object {
   if !marks {
-    return Ok(Object::dict(pairs));
+    return Object::dict(pairs);
   }
   let pairs = pairs.into_iter().map(|(key, one)| Object::tuple([key, one]));
-  Ok(marked("dict", [("args", Object::list([Object::list(pairs)]))]))
+  marked("dict", [("args", Object::list([Object::list(pairs)]))])
+}
+
+/// Why a fault refused, as its message says it.
+fn reason(fault: &Fault) -> String {
+  let said = fault.args.first().and_then(|one| one.as_ref().as_str().map(str::to_owned));
+  said.unwrap_or_else(|| fault.name.clone())
 }
 
 /// A value of JSON as the operator writes it, which is plain data: every number exact, which JSON read as a number
@@ -338,7 +371,7 @@ fn written(raw: &RawValue) -> Result<Object, Fault> {
       let map: IndexMap<String, &RawValue> = serde_json::from_str(raw.get()).map_err(invalid)?;
       let marks = map.contains_key(IS);
       let pairs = map.into_iter().map(|(key, one)| Ok((Object::string(key), written(one)?)));
-      dict(pairs.collect::<Result<Vec<_>, Fault>>()?, marks)
+      Ok(dict(pairs.collect::<Result<Vec<_>, Fault>>()?, marks))
     }
     Some(b'-' | b'0'..=b'9') => {
       let text = raw.get();

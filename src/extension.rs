@@ -4,9 +4,10 @@
 //! Claude Code reads the folder as an ordinary skill. Its frontmatter gives the name and the
 //! description, and the fields of furb under `metadata`, where the open format of skills puts the
 //! fields of a client: the file of its word, its life word, the file of its interface, whether it
-//! plays by default, where it plays, and the file of its view for a TUI. The file of the word is a
-//! python module that imports what it uses from `furb.engine`, so an editor reads it. The word is
-//! that file less those imports. The official extensions are the crate's own, which it carries in
+//! plays by default, where it plays, the file of its view for a TUI, and the program of its
+//! process, which the daemon starts when a life plays it. The file of the word is a python module
+//! that imports what it uses from `furb.engine`, so an editor reads it. The word is that file less
+//! those imports. The official extensions are the crate's own, which it carries in
 //! the same form.
 //!
 //! A host finds the extensions in the configs that [`configs`] gives, in its order, each `{"extensions": {name:
@@ -78,8 +79,13 @@ const PLAYS: &str = "furb-plays";
 /// The field of the manifest that names the file of the view of the extension for a TUI.
 const VIEW: &str = "furb-view";
 
+/// The field of the manifest that names the file of the process of the extension, which the daemon
+/// of the host starts when a life plays the extension: a module of TypeScript or JavaScript, which
+/// bun runs, or a program.
+pub(crate) const PROCESS: &str = "furb-process";
+
 /// Each field of furb that a manifest can give.
-const FIELDS: [&str; 6] = [WORD, LIFE, INTERFACE, DEFAULT, PLAYS, VIEW];
+const FIELDS: [&str; 7] = [WORD, LIFE, INTERFACE, DEFAULT, PLAYS, VIEW, PROCESS];
 
 /// The marks that open a block of lines as the value of a key of a frontmatter.
 const BLOCKS: [&str; 6] = ["|", "|-", "|+", ">", ">-", ">+"];

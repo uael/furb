@@ -1,30 +1,18 @@
 //! The store: the record of a life, which one process at a time owns by a lease. A record whose name ends in
 //! `.sqlite`, `.sqlite3` or `.db` is a database of SQLite, and any other record is a file of lines, one fact per line.
 
-#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(clippy::match_bool, reason = "debt: a match on a bool")]
-#![expect(
-  clippy::redundant_closure_for_method_calls,
-  reason = "debt: a closure where a method path serves"
-)]
-
+mod error;
 mod lines;
-pub mod schema;
+pub(super) mod schema;
 mod sqlite;
 
 use std::{
   cell::RefCell,
   collections::VecDeque,
-  fmt::Display,
+  ffi::OsStr,
   fs::{File, OpenOptions, TryLockError, create_dir_all},
   path::Path,
   rc::Rc,
-  task::{Context, Poll},
   time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -35,11 +23,12 @@ use sha2::{Digest, Sha256};
 
 use monty_types::unstable::{MontyGraph, MontyNode};
 
-use super::beside;
+use self::error::StoreError;
+use super::{beside, free};
 use crate::{
   ENGINE, KERNEL,
-  ear::{Co, Ear, Heard, Next, Spoken, Step, hearing, say},
-  engine::{Life, ROOT},
+  ear::{Co, Ear, Hooks, Next, With, hearing, say},
+  engine::ROOT,
   fact::Fact,
   value::{Fault, Object, ObjectRef},
   wire::{built, whole},
@@ -68,51 +57,57 @@ pub trait Store {
   /// power. The life syncs its store once at the end of each run of the sandbox, so a loss of power loses at most what
   /// the last run kept.
   fn sync(&mut self) -> Result<(), Fault>;
+
+  /// The folder of the record and the bytes that its disk still takes, which the life reads as it
+  /// keeps, so it can tell the operator before a keep fails. A store that does not say gives
+  /// nothing, and the life tells nothing before a keep fails.
+  fn room(&self) -> Option<(&Path, u64)> {
+    None
+  }
+}
+
+/// The room of the record at a path: the folder that holds it and the bytes that its disk still
+/// takes, nothing when the disk does not say.
+fn room(path: &Path) -> Option<(&Path, u64)> {
+  let folder =
+    path.parent().filter(|parent| !parent.as_os_str().is_empty()).unwrap_or(Path::new("."));
+  Some((folder, free(folder)?))
 }
 
 /// The record at a path, read under its lease, and the ear that keeps on it what the journal says to keep: a
 /// database of SQLite when the name of the path ends in `.sqlite`, `.sqlite3` or `.db`, and else a file of lines.
 pub fn store(path: impl AsRef<Path>) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
   let path = path.as_ref();
-  match database(path) {
-    true => keeping(Sqlite::open(path)?),
-    false => keeping(Lines::open(path)?),
-  }
+  keeping(Format::of(path).open(path)?)
 }
 
 /// What the store kept at a path, read with no lease and changed in nothing on the disk, as a later life would open
 /// on it.
 pub fn kept(path: impl AsRef<Path>) -> Result<Vec<Object>, Fault> {
   let path = path.as_ref();
-  let held = match database(path) {
-    true => sqlite::kept(path),
-    false => lines::kept(path),
-  };
-  Ok(held?.into_iter().map(streamed).collect())
+  Ok(Format::of(path).kept(path)?.into_iter().map(streamed).collect())
 }
 
 /// Each entry that the store kept at a path, in order, read with no lease and changed in nothing, one at a time, so
 /// a reader holds no more of a large record than it keeps of each entry.
-pub fn each(path: impl AsRef<Path>, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
+pub(crate) fn each(path: impl AsRef<Path>, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
   let path = path.as_ref();
-  match database(path) {
-    true => sqlite::each(path, take),
-    false => lines::each(path, take),
-  }
+  Ok(Format::of(path).each(path, take)?)
 }
 
 /// The entries that the store kept at a path whose fact is of one of some kinds, in order, read with no lease and
 /// changed in nothing. A file of lines is read from the head of each line, and parses only the lines of those kinds.
 pub fn heads(path: impl AsRef<Path>, kinds: &[&str]) -> Result<Vec<Object>, Fault> {
   let path = path.as_ref();
-  if !database(path) {
-    return lines::heads(path, kinds);
+  let format = Format::of(path);
+  if format == Format::Lines {
+    return Ok(lines::heads(path, kinds)?);
   }
   let of = |entry: &Object| {
     let fact = entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
     fact.is_some_and(|one| kinds.contains(&one.kind()))
   };
-  Ok(sqlite::kept(path)?.into_iter().filter(of).collect())
+  Ok(format.kept(path)?.into_iter().filter(of).collect())
 }
 
 /// The kind of the fact by which a record names the build that made it: `("made", "chain1",
@@ -229,16 +224,35 @@ fn named() -> Fact {
 /// How long the ear of the record waits before it tries again to write the entries that it could not write.
 const AGAIN: Duration = Duration::from_secs(5);
 
+/// The free bytes of the disk of the record under which the ear tells the operator that the disk is
+/// almost full. It tells again only once the disk held twice as much, so a disk that stands near
+/// the bound gives one notice.
+const LOW: u64 = 1 << 30;
+
+/// What the ear of the record told the operator last, so it tells each change once.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Told {
+  /// The record takes each entry, and its disk has room, or the operator was told nothing yet.
+  Room,
+  /// The disk of the record holds less than [`LOW`] free.
+  Low,
+  /// The record takes no entry.
+  Stopped,
+}
+
 /// The record that a store holds, and the ear that keeps in the store what the journal says to keep.
 ///
 /// A new record names the engine and the version of this build: the ear says them as it hears the root at its birth,
 /// so a later life says them again at the same place. A record of a build before the fact made names no engine, and
 /// stays so, since this engine did not make it.
 ///
-/// An entry that the store cannot keep, as on a full disk, waits in memory with each entry after it, and the ear
-/// tries again in order at each keep, at the end of each run and every few seconds, until they land: no entry is lost
-/// or kept twice, and the life goes on. The ear tells the operator once when the record stops growing, with the fault,
-/// and once when it grows again.
+/// The ear tells the operator once when the disk of the record holds less than [`LOW`] free, with
+/// the folder and the space left, before a keep fails. An entry that the store cannot keep, as on a
+/// full disk, waits in memory with each entry after it, and the ear tries again in order at each
+/// keep, at the end of each run and every few seconds, until they land: no entry is lost or kept
+/// twice, and the life goes on. The ear tells the operator once when the record stops growing, with
+/// the fault, and once when it grows again. A message that did not go is said again at the next
+/// pass.
 pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
   let mut store = Held { store, waiting: VecDeque::new(), fault: None };
   let entries: Vec<Object> = store.store.entries()?.into_iter().map(streamed).collect();
@@ -248,8 +262,8 @@ pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>
   let new = entries.is_empty()
     || crate::checkpoint::last(&entries).is_some_and(|at| made(&entries[at + 1..]).is_none());
   let kept = hearing(&["keep", "chain"], move |mut co: Co<()>| async move {
-    // Whether the ear told the operator that the record stopped, and whether a try waits for its time.
-    let (mut stopped, mut again) = (false, false);
+    // What the ear told the operator last, and whether a try waits for its time.
+    let (mut said, mut again) = (Told::Room, false);
     loop {
       match co.next().await {
         Next::Heard(a) => match a.kind() {
@@ -272,37 +286,48 @@ pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>
             again = true;
             co.work(stream::once(tokio::time::sleep(AGAIN)));
           }
-          if !stopped {
-            stopped = true;
-            let message = format!(
-              "The record of this life cannot be written: {}. The life goes on, and holds in memory each fact \
-               that the record does not hold yet. It tries again until the record takes them, in order, and tells \
-               you then. Until then, an end of the life loses them: give the disk room, and keep the life open.",
-              fault.message()
-            );
-            told(&mut co, message).await;
+          if said != Told::Stopped {
+            // A message that cannot go leaves what the ear said, so the next pass says it again.
+            if told(&mut co, stopped(&fault)).await.is_ok() {
+              said = Told::Stopped;
+            }
           }
         }
-        None if stopped => {
-          stopped = false;
-          told(
-            &mut co,
-            "The record of this life is written again: it holds each fact that waited, in order."
-              .into(),
-          )
-          .await;
+        None if said == Told::Stopped => {
+          let message =
+            "The record of this life is written again: it holds each fact that waited, in order.";
+          if told(&mut co, message.into()).await.is_ok() {
+            said = Told::Room;
+          }
         }
-        None => {}
+        None => {
+          let low = held.borrow().low(&mut said);
+          if let Some(message) = low
+            && told(&mut co, message).await.is_ok()
+          {
+            said = Told::Low;
+          }
+        }
       }
     }
   });
-  Ok((entries, Box::new(Keeping { ear: kept, store })))
+  Ok((entries, With::ear(kept, store)))
 }
 
-/// A message to the operator, from the ear of the record.
-async fn told(co: &mut Co<()>, message: String) {
+/// The message that the record stopped growing, with the fault of the store.
+fn stopped(fault: &Fault) -> String {
+  format!(
+    "The record of this life cannot be written: {}. The life goes on, and holds in memory each fact \
+     that the record does not hold yet. It tries again until the record takes them, in order, and tells \
+     you then. Until then, an end of the life loses them: give the disk room, and keep the life open.",
+    fault.message()
+  )
+}
+
+/// A message to the operator, from the ear of the record, or why it did not go.
+async fn told(co: &mut Co<()>, message: String) -> Result<(), Fault> {
   let to = [("to", Object::string("operator")), ("on", Object::string(ROOT))];
-  let _ = co.call("prompt", vec![Object::none(), Object::string(message)], to.into()).await;
+  co.call("prompt", vec![Object::none(), Object::string(message)], to.into()).await.map(drop)
 }
 
 /// A store, and the entries that it could not keep yet, in order, with the last fault of the store.
@@ -315,6 +340,25 @@ struct Held<S> {
 }
 
 impl<S: Store> Held<S> {
+  /// The notice that the disk of the record is almost full, when the operator knows nothing of it
+  /// yet. A disk that holds twice [`LOW`] again ends what the operator knows, so a later fall under
+  /// the bound tells again.
+  fn low(&self, said: &mut Told) -> Option<String> {
+    let (folder, free) = self.store.room()?;
+    if free >= 2 * LOW {
+      *said = Told::Room;
+    }
+    (free < LOW && *said == Told::Room).then(|| {
+      format!(
+        "The disk of the record of this life is almost full: {} has {} MB left. When it is full, the \
+         life holds each fact in memory until the record takes them again, and an end of the life then \
+         loses them: give the disk room.",
+        folder.display(),
+        free / 1_000_000
+      )
+    })
+  }
+
   /// Each entry that waits kept in order, and the fault that stops the record, if one does.
   fn flushed(&mut self) -> Option<Fault> {
     while let Some(entry) = self.waiting.front() {
@@ -336,44 +380,81 @@ impl<S: Store> Held<S> {
   }
 }
 
-/// The ear that keeps the record, which syncs its store at the end of each run.
-struct Keeping<S> {
-  ear: Box<dyn Ear>,
-  store: Rc<RefCell<Held<S>>>,
-}
-
-impl<S: Store> Ear for Keeping<S> {
-  fn resume(&mut self, heard: Heard, cx: &mut Context<'_>) -> Step {
-    self.ear.resume(heard, cx)
-  }
-
-  fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
-    self.ear.poll(cx)
-  }
-
-  fn answered(&mut self, got: Result<Object, Fault>) {
-    self.ear.answered(got);
-  }
-
-  fn lent(&mut self, heard: Heard, cx: &mut Context<'_>, life: Life) -> (Step, Life) {
-    self.ear.lent(heard, cx, life)
-  }
-
+/// The ear that keeps the record syncs its store at the end of each run.
+impl<S: Store> Hooks for Rc<RefCell<Held<S>>> {
   /// A fault of the store ends no run: the ear holds it, tells the operator and tries again.
-  fn ran(&mut self) -> Result<(), Fault> {
-    self.store.borrow_mut().synced();
+  fn ran(&mut self, _: &mut dyn Ear) -> Result<(), Fault> {
+    self.borrow_mut().synced();
     Ok(())
   }
 
-  fn behind(&self) -> bool {
-    self.store.try_borrow().map_or(true, |held| held.fault.is_some())
+  fn behind(&self, _: &dyn Ear) -> bool {
+    self.try_borrow().map_or(true, |held| held.fault.is_some())
   }
 }
 
-/// Whether the record at a path is a database of SQLite, which its name says.
-pub(crate) fn database(path: &Path) -> bool {
-  let named = path.extension().and_then(|one| one.to_str()).unwrap_or_default();
-  ["sqlite", "sqlite3", "db"].iter().any(|one| named.eq_ignore_ascii_case(one))
+/// A store that a box holds is a store, so a record opens in the store that its format gives.
+impl<S: Store + ?Sized> Store for Box<S> {
+  fn entries(&mut self) -> Result<Vec<Object>, Fault> {
+    (**self).entries()
+  }
+
+  fn keep(&mut self, entry: ObjectRef<'_>) -> Result<(), Fault> {
+    (**self).keep(entry)
+  }
+
+  fn sync(&mut self) -> Result<(), Fault> {
+    (**self).sync()
+  }
+
+  fn room(&self) -> Option<(&Path, u64)> {
+    (**self).room()
+  }
+}
+
+/// How the record at a path is kept, which its name says: [`Format::of`] chooses it once.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Format {
+  /// A file of lines, one fact per line.
+  Lines,
+  /// A database of SQLite, one row for each entry.
+  Sqlite,
+}
+
+impl Format {
+  /// The format of the record at a path: a database when its name ends in `.sqlite`, `.sqlite3`
+  /// or `.db`.
+  pub(crate) fn of(path: &Path) -> Self {
+    let named = path.extension().and_then(OsStr::to_str).unwrap_or_default();
+    if ["sqlite", "sqlite3", "db"].iter().any(|one| named.eq_ignore_ascii_case(one)) {
+      Self::Sqlite
+    } else {
+      Self::Lines
+    }
+  }
+
+  /// The store of the record at a path, under its lease.
+  pub(crate) fn open(self, path: &Path) -> Result<Box<dyn Store>, Fault> {
+    Ok(match self {
+      Self::Sqlite => Box::new(Sqlite::open(path)?),
+      Self::Lines => Box::new(Lines::open(path)?),
+    })
+  }
+
+  /// Each entry of the record at a path, in order, read with no lease and changed in nothing.
+  fn each(self, path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), StoreError> {
+    match self {
+      Self::Sqlite => sqlite::each(path, take),
+      Self::Lines => lines::each(path, take),
+    }
+  }
+
+  /// What the record at a path holds, read with no lease and changed in nothing.
+  fn kept(self, path: &Path) -> Result<Vec<Object>, StoreError> {
+    let mut entries = Vec::new();
+    self.each(path, &mut |one| entries.push(one))?;
+    Ok(entries)
+  }
 }
 
 /// The entry of one fact, from the JSON that the record holds of the fact, or nothing when it is no fact: a fact is
@@ -383,14 +464,9 @@ fn entry_of(fact: &RawValue) -> Option<Object> {
   let fact = built(&mut graph, fact, 1).ok()?;
   let root = graph.push(MontyNode::List(vec![fact]));
   let entry = whole(graph, root).ok()?;
-  let fact = entry.as_ref().items().and_then(|held| held.first().and_then(|one| one.items()));
+  let fact = entry.as_ref().items().and_then(|held| held.first().and_then(ObjectRef::items));
   let holds = fact.is_some_and(|fact| fact.len() >= 3 && fact[0].as_str().is_some());
   holds.then_some(entry)
-}
-
-/// The refusal of what a store could not do at a path.
-fn failed(path: &Path, no: impl Display) -> Fault {
-  Fault::refused(format!("{no}: {}", path.display()))
 }
 
 /// The time now, in milliseconds since the start of 1970.
@@ -405,8 +481,12 @@ fn now() -> u64 {
 struct Lease(File);
 
 impl Drop for Lease {
+  #[expect(
+    clippy::let_underscore_must_use,
+    reason = "a drop cannot return the fault of an unlock, and the kernel ends the lock with the process"
+  )]
   fn drop(&mut self) {
-    let _ = self.0.unlock();
+    let _: std::io::Result<()> = self.0.unlock();
   }
 }
 
@@ -416,10 +496,10 @@ impl Drop for Lease {
 /// The lease is the lock on the file at the path, and nothing checks which file that is. A rename of the file would
 /// leave a lock that no later process meets, and on macOS a lookup of a renamed path can go on giving the moved file
 /// to every process for seconds, so no holder moves or removes the lock file.
-fn leased(path: &Path) -> Result<Lease, Fault> {
+fn leased(path: &Path) -> Result<Lease, StoreError> {
   let lock = beside(path, ".lock");
   if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
-    create_dir_all(parent).map_err(|no| failed(&lock, no))?;
+    create_dir_all(parent).map_err(StoreError::io(&lock))?;
   }
   let file = OpenOptions::new()
     .read(true)
@@ -427,13 +507,11 @@ fn leased(path: &Path) -> Result<Lease, Fault> {
     .create(true)
     .truncate(false)
     .open(&lock)
-    .map_err(|no| failed(&lock, no))?;
+    .map_err(StoreError::io(&lock))?;
   match file.try_lock() {
     Ok(()) => Ok(Lease(file)),
-    Err(TryLockError::WouldBlock) => {
-      Err(Fault::refused(format!("Another process owns {}.", path.display())))
-    }
-    Err(TryLockError::Error(no)) => Err(failed(&lock, no)),
+    Err(TryLockError::WouldBlock) => Err(StoreError::Owned { path: path.to_path_buf() }),
+    Err(TryLockError::Error(no)) => Err(StoreError::io(&lock)(no)),
   }
 }
 

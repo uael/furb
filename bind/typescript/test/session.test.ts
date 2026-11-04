@@ -422,6 +422,29 @@ test("a session that keeps a record keeps a snapshot of its life, and a later se
   }
 });
 
+test("a fact seen that the operator says covers what came before it, and a later life on its record reads it", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-seen-"));
+  const record = join(cwd, "life.jsonl");
+  const place = (session: Session, id: string) => session.activity.acts.get(id)?.began ?? 0;
+  const first = new Session({ cwd, record, extensions: false });
+  const engine = first.open();
+  const before = engine.prompt("None", { message: "noted", to: "operator", on: engine.root }).id;
+  engine.say("seen", engine.root, []);
+  const after = engine.prompt("None", { message: "later", to: "operator", on: engine.root }).id;
+  const seen = first.activity.seen.get(engine.root) ?? 0;
+  expect([place(first, before) < seen, place(first, after) > seen]).toEqual([true, true]);
+  await first.dispose();
+  const second = new Session({ cwd, record, extensions: false });
+  try {
+    second.open();
+    const again = second.activity.seen.get(second.engine?.root ?? "") ?? 0;
+    expect([place(second, before) < again, place(second, after) > again]).toEqual([true, true]);
+  } finally {
+    await second.dispose();
+    await rm(cwd, { recursive: true });
+  }
+});
+
 test("a session that ends keeps the checkpoint of its life at the tip of its record, and a later session opens on it", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-checkpoint-"));
   const record = join(cwd, "life.jsonl");
@@ -465,7 +488,7 @@ test("a later session on a record holds no stream of the life before it", async 
   }
 });
 
-test("unfinished model work and waits reopen pending until the host resumes them", async () => {
+test("unfinished model work and waits go on as their record reopens, with no resume of the host", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-resume-"));
   const record = join(cwd, "life.jsonl");
   let calls = 0;
@@ -483,13 +506,8 @@ test("unfinished model work and waits reopen pending until the host resumes them
   });
   const resumed = second.open();
   try {
-    // The engine starts no pending work until a wake that this life says, so no model is asked however long it
-    // stands.
-    await tick();
-    expect(calls).toBe(0);
-    expect(second.pending.has(prompt)).toBe(true);
-    expect(resumed.outcome(prompt).done).toBe(false);
-    await second.resume();
+    // The open puts the work that the first life left to the outside again, so nothing waits for a wake.
+    expect(second.pending.size).toBe(0);
     expect(await resumed.result<string>(prompt)).toBe("resumed");
     expect(await resumed.result(wait)).toBeNull();
     expect(calls).toBe(1);
@@ -511,7 +529,6 @@ test("work that ends with its life again and again parks until the host retries 
   for (let life = 1; life < 5; life++) {
     const later = new Session({ record, ...never });
     later.open();
-    await later.resume();
     await tick();
     await later.dispose();
   }
@@ -538,45 +555,6 @@ test("work that ends with its life again and again parks until the host retries 
     expect(last.parked.size).toBe(0);
   } finally {
     await last.dispose();
-    await rm(cwd, { recursive: true });
-  }
-});
-
-test("the session asks the engine for the pending work again only after a fact that can change it", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "furb-pending-"));
-  const record = join(cwd, "life.jsonl");
-  const first = new Session({ cwd, record, ...modeled, answer: () => new Promise(() => {}) });
-  const engine = first.open();
-  const gone = engine.wait([], { seconds: 600, on: engine.root }).id;
-  const wait = engine.wait([], { seconds: 600, on: engine.root }).id;
-  await first.dispose();
-  const second = new Session({ record, ...modeled, answer: () => new Promise(() => {}) });
-  const resumed = second.open();
-  try {
-    let asked = 0;
-    const pending = resumed.pending.bind(resumed);
-    resumed.pending = () => {
-      asked++;
-      return pending();
-    };
-    const read = () => [[...second.pending.keys()], asked];
-    expect(read()).toEqual([[gone, wait], 1]);
-    resumed.clock({ on: resumed.root });
-    await tick();
-    expect(read()).toEqual([[gone, wait], 1]);
-    // The done of an act of the pending work, which a cancel says.
-    resumed.cancel(gone);
-    await tick();
-    expect(read()).toEqual([[wait], 2]);
-    resumed.pause(resumed.root);
-    await tick();
-    expect(read()).toEqual([[], 3]);
-    // The wake, and the started of the wait that the World takes again.
-    resumed.wake(resumed.root);
-    await tick();
-    expect(read()).toEqual([[], 4]);
-  } finally {
-    await second.dispose();
     await rm(cwd, { recursive: true });
   }
 });
@@ -746,7 +724,7 @@ test("a whole number from the operator answers a float prompt as a float, typed 
   }
 });
 
-test("a prompt of None to the operator is closed as the console takes it, and stays a notice until a dismiss", async () => {
+test("a prompt of None to the operator is closed as the console takes it, and the console keeps nothing of it", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-notice-"));
   const session = boot({ cwd });
   try {
@@ -754,9 +732,7 @@ test("a prompt of None to the operator is closed as the console takes it, and st
     const told = engine.prompt("None", { message: "The build is green.", to: "operator", on: engine.root });
     expect(await told).toBeNull();
     expect(session.console.prompts.size).toBe(0);
-    expect([...session.console.notices.values()]).toEqual([{ id: told.id, message: "The build is green." }]);
-    session.console.dismiss(told.id);
-    expect(session.console.notices.size).toBe(0);
+    expect(session.activity.acts.get(told.id)?.done).toBe(true);
   } finally {
     await session.dispose();
     await rm(cwd, { recursive: true });
@@ -829,7 +805,7 @@ test("resume wakes no work that a pause of the operator holds, so that pause sta
   }
 });
 
-test("pending work that a cancel ends is pending no more", async () => {
+test("a prompt to the operator that an earlier life left waits for its answer again as its record reopens", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-drained-"));
   const record = join(cwd, "life.jsonl");
   const first = new Session({ cwd, record });
@@ -839,10 +815,10 @@ test("pending work that a cancel ends is pending no more", async () => {
   const second = new Session({ record });
   try {
     const again = second.open();
-    expect(second.pending.has(prompt)).toBe(true);
-    again.cancel(prompt);
-    await tick();
     expect(second.pending.size).toBe(0);
+    expect(again.outcome(prompt).done).toBe(false);
+    again.close("answered", { id: prompt });
+    expect(await again.result<string>(prompt)).toBe("answered");
   } finally {
     await second.dispose();
     await rm(cwd, { recursive: true });
@@ -891,7 +867,7 @@ test("a close of the session whose save fails still ends its life and its comman
     await expect(session.dispose()).rejects.toThrow("life.jsonl.session.json.tmp");
     expect(engine.disposed).toBe(true);
     // A process the session ended ends a moment after, once the system hears of it.
-    for (let tries = 0; alive(pid) && tries < 100; tries++) await Bun.sleep(20);
+    for (const deadline = Date.now() + 5000; alive(pid) && Date.now() < deadline; ) await Bun.sleep(20);
     expect(alive(pid)).toBe(false);
   } finally {
     await remove(cwd);

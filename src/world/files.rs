@@ -1,11 +1,5 @@
 //! The files of the machine: a cd, a read and a write of a path that nobody of the engine serves.
 
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-
 use std::{
   fmt, fs,
   io::{self, ErrorKind, Write},
@@ -51,8 +45,8 @@ pub fn files(scratch: Scratch, config: PathBuf, gallery: Option<PathBuf>) -> Box
       }
       // A write of a door of a command of the life is the ear of the commands' to answer, wherever that ear stands.
       if a.kind() == "write"
-        && let Some((_, command, _)) = door(&a)
-        && !co.call("get", vec![Object::string(&command)], vec![]).await?.as_ref().is_none()
+        && let Some(at) = door(&a)
+        && !co.call("get", vec![Object::string(&at.command)], vec![]).await?.as_ref().is_none()
       {
         continue;
       }
@@ -188,12 +182,13 @@ fn replace(
     .and_then(|()| file.sync_all())
     .and_then(|()| mode.map_or(Ok(()), |mode| file.set_permissions(mode)));
   drop(file);
+  // A temp that stays is a hidden file of its own name, which no write reads again.
   if let Err(no) = done {
-    let _ = fs::remove_file(&temp);
+    fs::remove_file(&temp).unwrap_or_default();
     return Err(no);
   }
   if fs::rename(&temp, &target).is_err() {
-    let _ = fs::remove_file(&temp);
+    fs::remove_file(&temp).unwrap_or_default();
     return fs::write(&target, bytes);
   }
   Ok(())

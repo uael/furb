@@ -66,16 +66,20 @@ use crate::{
 const GATE: &str = "gate";
 /// The function of the host that starts an ear of the host again after it raised, by its name.
 const AGAIN: &str = "again";
+/// The function of the host by which the Kernel bounds the turn while a word of a rung steps, and
+/// says whether it was bounded before.
+const TURN: &str = "turn";
 
 /// The kinds of act that are work an operator waits for: a prompt, a rung, a command and a wait.
 const WORK: [&str; 4] = ["prompt", "rung", "bash", "wait"];
 
 /// Whether this life took up an act that the record shows started and not done: the outside says it started in this
 /// life, which it does once a wake that this life says puts the act to it, or the act is done. A started that the
-/// journal says again is of an earlier life.
+/// journal says again is of an earlier life, and the view of the journal holds it.
 /// An act that a snapshot holds as work that ran is taken up only once this life puts it to the outside again.
-const TOOK: &str = "peek(__id, ...) is not ... or __id not in __restored and ('started', __id) in \
-  [x[:2] for x in transcript(scope(__id)) if x[2] != 'journal']";
+const TOOK: &str = "peek(__id, ...) is not ... or __id not in __restored and \
+  [x[1] for x in transcript(scope(__id), 'started')].count(__id) > \
+  [x[1] for x in transcript(scope(__id), 'journal') if x[0] == 'started'].count(__id)";
 
 /// Whether an act waits: it is not done, and no pause holds it.
 const WAITS: &str = "peek(__id, ...) is ... and not paused(__id)";
@@ -153,6 +157,10 @@ impl Host for Outside {
       // A gate that cannot read a word raises where the gate was called, so the ear of the gate answers that word.
       None if name == GATE => return gated(args.first()).map_or_else(Answer::Fault, Answer::Value),
       None if name == AGAIN => Ok(Object::bool(self.reborn(args.first()))),
+      None if name == TURN => {
+        let bounded = args.first().is_some_and(|one| one.as_ref().as_bool().unwrap_or(false));
+        Ok(Object::bool(sand.bound(bounded)))
+      }
       None => self.called(sand, name, &args),
       Some(on) if name == "send" => return self.sent(sand, on, args.first()),
       Some(on) => Err(Fault::refused(format!("{on} is no generator of the host that has {name}"))),
@@ -515,12 +523,16 @@ impl Engine {
   ) -> Result<Engine, Fault> {
     let (given, names) = Handed::of(ears)?;
     let mut sand = Sand::new();
+    // The opening, the seed and the replay are the engine's own work: unbounded, but for each word
+    // they run again.
+    sand.bound(false);
     let mut inputs = NamedValues::new();
     inputs.push("__source", Object::string(ENGINE));
     inputs.push("__sheet_source", Object::string(SHEET));
     inputs.push("__kernel_source", Object::string(KERNEL));
     inputs.push("__gate", Object::function(GATE, None));
     inputs.push("__again", Object::function(AGAIN, None));
+    inputs.push("__turn", Object::function(TURN, None));
     let opened = sand.run(OPENING, inputs, &mut Nobody("the opening"))?;
     let mut outside = Outside::new(given, &opened)?;
     let Opened { kernel, gate, lasting, parking, park, .. } = outside.opened.clone();
@@ -571,6 +583,7 @@ impl Engine {
       outside.bound(sand)?;
       Ok(opened)
     })?;
+    engine.sand.bound(true);
     engine.root = root;
     engine.raised = raised;
     Ok(engine)
@@ -631,6 +644,15 @@ impl Engine {
     working.sort_unstable();
     let given = outside.given.to_string();
     Some((Table { root: self.root.clone(), ears, kept, opened, given, working }, dump))
+  }
+
+  /// What `body` gives, run as the engine's own work, with no bound of the turn but for each word
+  /// that it steps.
+  pub(crate) fn unbounded<T>(&mut self, body: impl FnOnce(&mut Engine) -> T) -> T {
+    let was = self.sand.bound(false);
+    let got = body(self);
+    self.sand.bound(was);
+    got
   }
 
   /// Whether the life opened from the snapshot of its record, with no replay.
@@ -748,6 +770,28 @@ impl Engine {
       }
     }
     Ok(pending)
+  }
+
+  /// The work that an earlier life left, put to the outside again with no wake from a host: a
+  /// wake of each act of [`Engine::pending`] that no other act of it made, so the World asks each
+  /// reply of it again, takes each wait and each prompt to the operator of it again, and closes
+  /// each command of it as interrupted, and the model of its chain reads that end in a turn. A
+  /// life that opens on a record and does work says it once, at its tip, since a resume returns to
+  /// the state of that tip, whose work goes on. A parked act and an act that a pause holds stay as
+  /// they are.
+  pub fn resume(&mut self) -> Result<(), Fault> {
+    let pending = self.pending()?;
+    let mut tops = Vec::new();
+    for (id, _) in &pending {
+      let by = self.get(id)?.map(|act| act.by().to_owned()).unwrap_or_default();
+      if !pending.iter().any(|(one, _)| *one == by) {
+        tops.push(id.clone());
+      }
+    }
+    for id in tops {
+      self.wake(&id)?;
+    }
+    Ok(())
   }
 
   /// The work that a crash loop parked, each act by its name and its kind, in the order of the record: an act of the

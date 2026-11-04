@@ -102,10 +102,10 @@ fn deepseek_answers_with_each_result_its_title_its_address_and_its_summary() {
     {"title": "None", "url": ""},
   ]});
   assert_eq!(
-    deepseek(&got).unwrap(),
+    deepseek(&got),
     "1. [One](https://one)\n   First.\n2. [https://two](https://two)\n   Second."
   );
-  assert_eq!(deepseek(&json!({"results": []})).unwrap(), "No result.");
+  assert_eq!(deepseek(&json!({"results": []})), "No result.");
 }
 
 /// A command line that starts with these words, writes its arguments and what its stdin holds, or fails, in a folder
@@ -137,7 +137,7 @@ fn the_claude_command_line_searches_on_its_model_with_its_tool_web_search_alone_
   assert_eq!(query, "what is rust");
   let bin = program("fails", &[], "echo out; echo 'no credit' >&2; exit 3");
   let no = reactor().block_on(claude(bin, "haiku".to_owned())("q".to_owned())).unwrap_err();
-  assert_eq!(no, "claude exit status: 3: no credit");
+  assert_eq!(no.to_string(), "claude exit status: 3: no credit");
 }
 
 #[cfg(unix)]
@@ -178,11 +178,11 @@ fn the_free_search_refuses_with_the_error_of_its_server_and_gives_a_text_that_is
 {
   let error =
     json!({"jsonrpc": "2.0", "id": 1, "error": {"code": -32000, "message": "Too many requests"}});
-  assert_eq!(found(&error.to_string()).unwrap_err(), "Too many requests");
+  assert_eq!(found(&error.to_string()).unwrap_err().to_string(), "Too many requests");
   let failed =
     json!({"result": {"isError": true, "content": [{"type": "text", "text": "No query."}]}});
-  assert_eq!(found(&failed.to_string()).unwrap_err(), "No query.");
+  assert_eq!(found(&failed.to_string()).unwrap_err().to_string(), "No query.");
   let plain = json!({"result": {"content": [{"type": "text", "text": "Plain."}]}});
   assert_eq!(found(&plain.to_string()).unwrap(), "Plain.");
-  assert!(found("<html>").unwrap_err().starts_with("the free search answered no JSON"));
+  assert!(found("<html>").unwrap_err().to_string().starts_with("the free search answered no JSON"));
 }

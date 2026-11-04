@@ -380,6 +380,8 @@ impl Opening {
   ///
   /// A life opens from the snapshot of its record when the snapshot agrees with the record, its log, this build and
   /// these ears, as [`crate::snapshot`] says, and stands again at its tip, as boot does; else it replays the record.
+  /// A life that does work then puts the work that an earlier life left to the outside again, as
+  /// [`Engine::resume`] says, so no act of the record stays running with no process.
   /// A life that keeps its record keeps its snapshot when it ends. A snapshot
   /// that agrees and that the ears of this host cannot take, as an ear that speaks at its birth, is dropped, and the
   /// life is refused, so the next life on the record replays.
@@ -424,7 +426,7 @@ impl Opening {
     let mut names: Vec<String> = host.iter().map(|(name, _)| name.clone()).collect();
     names.extend(self.names());
     let build = snapshot::build(&names);
-    let (keeps, snapshots) = (self.keeps(), self.snapshot != Some(false));
+    let (keeps, snapshots, works) = (self.keeps(), self.snapshot != Some(false), self.works());
     let path = self.record.clone().filter(|_| snapshots).map(PathBuf::from);
     let restore = path.as_ref().and_then(|path| snapshot::restore(path, &build));
     let (record, ears, cut) = self.parted(restore.is_some() && keeps, prepared)?;
@@ -463,6 +465,11 @@ impl Opening {
     }
     if let Some(path) = path.filter(|_| keeps && !cut) {
       engine.keep(Keeper::new(path, build));
+    }
+    // A resume returns to the state at the tip of the record, so the work that the stop cut goes
+    // on with no wake.
+    if works {
+      engine.resume()?;
     }
     Ok((engine, record))
   }

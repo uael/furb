@@ -243,7 +243,10 @@ The model picker names the current model and the window of each. ⇧Tab chooses 
 A model asks you a question with a prompt to the operator, and a prompt of None is a notice, which tells you something
 and asks nothing. A notice waits for nothing: it settles in the feed as a panel on one line, as a folded thread does,
 with the first line of its message and the count of its other lines, and a click opens it to its whole message. No key
-dismisses it. Many questions can wait at once, on many chains. The desk over the input shows what waits: a mark `◆` for
+dismisses it. A notice that you did not read yet shows `●`, and one that you read shows a faint `✓`. You read the
+notices of a thread or a chain when you leave it, or fold the thread, and the record keeps it as a fact `seen`, so each
+window and each later life on the record shows the same marks. A finished thread that you started shows the same marks
+in the sidebar. Many questions can wait at once, on many chains. The desk over the input shows what waits: a mark `◆` for
 each question, in the order that they came, and the one that you act on in the color of a question, with its place, its
 chain, its id, and what it wants. Under it stand the first line of its message, the count of its other lines, and its
 choices or where the input sends its answer. A click on a mark goes to its ask and shows its chain, and a click on the

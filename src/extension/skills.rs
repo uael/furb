@@ -2,7 +2,7 @@
 //! code or with none: the folders of skills on the disk, the extensions of the project and of the
 //! configs, and the official extensions that the crate carries. It answers the act `skill`, which
 //! loads a skill on a chain, and a write of `skills://` and a name, which writes the word of a
-//! skill.
+//! skill. [`process`] gives the program of the process of a skill, which a daemon runs.
 
 use std::{
   fs,
@@ -13,8 +13,8 @@ use crate::{
   ear::{Co, Ear, hear, hearing, say},
   engine::ROOT,
   extension::{
-    DEFAULT, ENABLE, Extension, INTERFACE, MANIFEST, Places, WORD, copy, enabled, frontmatter,
-    imports_furb, load, manifested, manifests, shipped, turned_on, word,
+    DEFAULT, ENABLE, Extension, INTERFACE, MANIFEST, PROCESS, Places, WORD, copy, enabled,
+    frontmatter, imports_furb, load, manifested, manifests, shipped, turned_on, word,
   },
   fact::Fact,
   value::{Fault, Object, Text, entry},
@@ -315,6 +315,18 @@ fn filed(one: &Skill, file: &str, path: &str) -> Result<Text, Fault> {
       Ok(Text::new(path, text))
     }
   }
+}
+
+/// The program of the process of the skill of a name, as a life whose folder is `here` finds the
+/// skill: the file of its folder that its manifest names under `metadata` as `furb-process`. It is
+/// none when the manifest names none, when the file leaves the folder, and when the skill is
+/// official, since the crate carries no process yet.
+pub fn process(name: &str, here: &Path, places: &Places) -> Option<PathBuf> {
+  let one = found(here, here, places).into_iter().find(|one| one.name == name)?;
+  let Place::Folder(folder) = &one.place else { return None };
+  let file = frontmatter(&one.manifest).meta(PROCESS)?.to_owned();
+  let inside = Path::new(&file).components().all(|part| matches!(part, Component::Normal(_)));
+  inside.then(|| folder.join(file))
 }
 
 /// The skills of a chain that stands in `here`, in the order of their names: each folder that holds

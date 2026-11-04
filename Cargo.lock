@@ -1577,9 +1577,12 @@ version = "0.4.2"
 dependencies = [
  "clap",
  "furb",
+ "furb-host",
  "futures",
+ "libc",
  "serde_json",
  "tokio",
+ "tokio-util",
  "unsync",
  "windows-sys 0.61.2",
 ]
@@ -1588,14 +1591,21 @@ dependencies = [
 name = "furb-host"
 version = "0.4.2"
 dependencies = [
+ "base64 0.22.1",
+ "form_urlencoded",
  "furb",
  "futures",
+ "getrandom 0.3.4",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
  "libc",
  "schemars 1.2.2",
  "serde",
  "serde_json",
  "thiserror 2.0.20",
  "tokio",
+ "tokio-tungstenite",
  "tokio-util",
  "windows-sys 0.61.2",
 ]

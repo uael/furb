@@ -30,13 +30,6 @@ export function standingOf(engine: Pick<Engine, "standing">): Standing {
 export type Fact = ReturnType<Engine["say"]>;
 /** One entry of the record: one fact, an act among them. */
 export type Entry = [Fact];
-/** A prompt of None to the operator, which asks nothing: the console closed it as it took it, and shows its message
- * until the operator dismisses it. */
-export interface OperatorNotice {
-  id: string;
-  message: string;
-}
-
 export interface OperatorPrompt {
   id: string;
   shape: string;

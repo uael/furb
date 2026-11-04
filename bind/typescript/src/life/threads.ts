@@ -225,6 +225,11 @@ export interface ChainThread {
   yours: boolean;
 }
 
+/** The acts whose changes are the work of a thread: its prompt, its messages and its prompts to the operator. */
+export function threadWork(thread: Pick<ChainThread, "act" | "messages" | "asked">): LiveAct[] {
+  return [thread.act, ...thread.messages, ...thread.asked];
+}
+
 /** Whether an act is the operator's own: made by them, or by one of their sessions. */
 function byOperator(act: { by: string }): boolean {
   return act.by === "operator" || act.by.startsWith("operator/");

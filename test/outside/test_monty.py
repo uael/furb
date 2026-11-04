@@ -462,7 +462,8 @@ async def test_the_door_parks_a_reply_that_five_lives_left_and_runs_it_again_at_
   assert (furb_monty.engine.parked(), furb_monty.engine.pending()) == ([("reply1", "reply")], [])
 
   def started() -> list[tuple]:
-    return [x for x in engine.transcript(root) if x[:2] == ("started", "reply1") and x[2] != "journal"]
+    every = [x for x in engine.transcript(root) if x[:2] == ("started", "reply1")]
+    return every[len([x for x in engine.transcript(root, "journal") if x[:2] == ("started", "reply1")]) :]
 
   engine.wake(root)
   await settle()

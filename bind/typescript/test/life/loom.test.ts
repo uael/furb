@@ -333,6 +333,8 @@ function boardActs(): LiveAct[] {
         act(`bash${10 * chain + step}`, "bash", `chain${chain}`, `prompt${chain}`, acts.length + 1, ended, {
           ...(ended === undefined ? {} : states[(chain * step) % states.length]),
           ...(step === 1 && chain === 6 ? { paused: true } : {}),
+          // A pause of the operator holds a command of chain7 that runs.
+          ...(step === 1 && chain === 7 ? { paused: true } : {}),
         }),
       );
     }
@@ -659,5 +661,48 @@ test("an act that runs says what it does: a question to the operator, the chains
   expect(doingOf(bash, find, label)).toBe("runs cargo clippy");
   expect(doingOf(wait("bash1"), (id) => (id === "bash1" ? bash : acts.get(id)), label)).toBe(
     "runs cargo clippy",
+  );
+});
+
+test("a reopened session with work that an earlier life left shows that work as it runs, not as paused", () => {
+  // The open of a life on its record resumes its cut work at once (#1193), so the work that a host still names as
+  // pending is work, on the loom of each width and on the board of a host.
+  const acts = [
+    act("chain1", "chain", "", "operator", 1),
+    act("rung1", "rung", "chain1", "operator", 2),
+    act("chain2", "chain", "", "rung1", 3),
+    act("prompt1", "prompt", "chain2", "rung1", 4),
+    { ...act("rung2", "rung", "chain2", "prompt1", 5), word: 'await bash("make")' },
+    act("bash1", "bash", "chain2", "rung2", 6),
+  ];
+  const pending = new Map([
+    ["prompt1", "prompt"],
+    ["rung2", "rung"],
+    ["bash1", "bash"],
+  ]);
+  const base = {
+    acts,
+    prompts: [],
+    measures: {},
+    folds: new Set<string>(),
+    pending,
+    label: (id: string) => id,
+  };
+  const index = {
+    ids: new Map(acts.map((one) => [one.id, one])),
+    on: Map.groupBy(acts, (one) => one.on),
+    chains: acts.filter((one) => one.kind === "chain"),
+    live: acts.filter((one) => !one.done),
+  };
+  for (const loom of [weave({ ...base, width: 40 }), weave({ ...base, width: 0, index })]) {
+    const of = (id: string) => loom.rows.find((row) => row.id === id);
+    expect(of("chain2")?.state).toBe("runs");
+    expect(of("chain2")?.waits).toBe("bash1");
+    expect(loom.rows.map((row) => row.state)).not.toContain("paused");
+  }
+  // A pause of the operator still holds the same work as paused.
+  const held = acts.map((one) => (one.id === "bash1" ? { ...one, paused: true } : one));
+  expect(weave({ ...base, acts: held, width: 40 }).rows.find((row) => row.id === "chain2")?.state).toBe(
+    "paused",
   );
 });

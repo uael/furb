@@ -171,8 +171,6 @@ export class App {
   /** The program of each thread and each word of the operator, as it stood at a version of the acts and of the words
    * that its models write. */
   programs = new Map<string, { session: unknown; version: number; live: string; lines: ProgramLine[] }>();
-  /** What each thread showed when it was last seen open, which tells a folded thread that new work came. */
-  readonly seenThreads = new Map<string, { seen: string; folded: boolean }>();
   /** The programs that have a line which runs, each with the times of those lines as it drew them last. */
   liveLines = new Map<Gutter, { times: () => string; shown: string }>();
   /** The rows that a model writes, by the step that it writes, which the tick draws again, each with the lines that
@@ -214,6 +212,9 @@ export class App {
   };
   /** The key of the rows of the threads of the sidebar, by the list that it came from and the minute. */
   railThreadKey?: { list: ChainThread[]; minute: number; parts: string[]; count: number; text: string };
+  /** The key of the unread marks of the threads of the sidebar, by the list that it came from and the count of the
+   * reads of the session. */
+  railUnreadKey?: { list: ChainThread[]; reads: number; parts: string[]; count: number; text: string };
   /** The threads of the chain shown, read again only when the acts or the questions that wait change. */
   threadList: ThreadList = {
     session: undefined,
@@ -382,6 +383,15 @@ export class App {
   statusKey = "";
   /** Whether the footer shows a spinner, which the tick turns. */
   statusMoves = false;
+  /** When the last draw of the view ended, and how long it took. The next draw waits for a time that these give. */
+  drawnAt = 0;
+  drawing = 0;
+  /** Whether a key came since the last frame, whose frame shows it before the view draws again. */
+  keyed = false;
+  /** A key marks the next frame as the frame of a key. */
+  keyHeard = (): void => {
+    this.keyed = true;
+  };
   /** The whole text of the footer, which a notice cut to its room shows in a tip. */
   statusWhole = "";
   readonly tick: ReturnType<typeof setInterval>;
@@ -694,7 +704,6 @@ export class App {
     session.on("change", this.schedule);
     options.workspaces.on("change", this.schedule);
     session.on("compose", this.compose);
-    session.on("resume", this.resume);
     session.on("shared", this.shared);
     session.on("copied", this.copied);
     session.on("status", this.statusShown);
@@ -709,6 +718,7 @@ export class App {
     renderer.on("selection", this.copySelection);
     renderer.on("theme_mode", this.modeChanged);
     renderer.setFrameCallback(this.drawDue);
+    renderer.keyInput.on("keypress", this.keyHeard);
     renderer.on("focus", this.focusTaken);
     renderer.on("blur", this.focusLost);
     // A renderer that ends on its own, as on a signal, ends the App before it frees the buffers of the view.
@@ -742,7 +752,6 @@ export class App {
         void this.highlightEditor();
       })
       .catch(session.fail);
-    if (session.host.pending.size) this.resume();
     if (session.host.reading && !session.readingTold) this.readOrRenew();
   }
 
@@ -757,13 +766,18 @@ export class App {
       sameBuild(reading) ? "This record does not replay" : "This record was made by another build",
       [
         { label: "Read it", detail: "See what it kept. No word runs again.", run: () => {} },
-        {
-          label: "Start a new life from it",
-          detail: "A new session with its earlier work as text",
-          run: () => this.startFrom(),
-        },
+        // A record that this build made and whose replay drifts is a defect, and a carry from it loses the module.
+        ...(sameBuild(reading)
+          ? []
+          : [
+              {
+                label: "Start a new life from it",
+                detail: "A new session with its earlier work as text",
+                run: () => this.startFrom(),
+              },
+            ]),
       ],
-      { note: readingNote(reading) },
+      { note: readingNote(reading, this.session.host.record) },
     );
   }
   /** A new life in the workspace of a record open to read, whose first word carries the earlier work of the record as
@@ -810,14 +824,23 @@ export class App {
   /** A node whose background takes a color while the pointer is on it, and gives it back when the pointer leaves. */
   hoverable<T extends BoxRenderable | TextRenderable>(node: T, color = c.raised): T {
     // A box has a background, and a text the color behind its cells.
-    const property = node instanceof BoxRenderable ? "backgroundColor" : "bg";
-    const rest: unknown = Reflect.get(node, property);
-    node.onMouseOver = () => {
-      Reflect.set(node, property, color);
-    };
-    node.onMouseOut = () => {
-      Reflect.set(node, property, rest);
-    };
+    if (node instanceof BoxRenderable) {
+      const rest = node.backgroundColor;
+      node.onMouseOver = () => {
+        node.backgroundColor = color;
+      };
+      node.onMouseOut = () => {
+        node.backgroundColor = rest;
+      };
+    } else {
+      const rest = node.bg;
+      node.onMouseOver = () => {
+        node.bg = color;
+      };
+      node.onMouseOut = () => {
+        node.bg = rest;
+      };
+    }
     return node;
   }
   /** The mode of the terminal changed, so the theme that follows it changes too. */

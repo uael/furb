@@ -34,7 +34,10 @@ use rig_core::{
 };
 use serde_json::{Value, json};
 
-use super::{Account, Claude, Completion, Source, Switch, cached};
+use super::{
+  Account, Claude, Completion, Source, Switch,
+  conversation::{cached, lasting},
+};
 use crate::ear::reactor;
 
 /// The fake command line, which the tests of the command line of furb run too.
@@ -392,6 +395,34 @@ fn a_message_that_the_command_line_did_not_hear_goes_whole_at_the_next_turn() {
     let line: Value = serde_json::from_str(yard.heard().last().unwrap()).unwrap();
     assert_eq!(line["message"]["content"], json!([{"type": "text", "text": sent}]), "{name}");
   }
+}
+
+#[test]
+fn a_turn_dropped_after_the_command_line_heard_it_leaves_the_next_turn_to_send_only_what_it_gained()
+{
+  let yard = Yard::new("droppedheard");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let settings = json!({"session": "chain"});
+  let one = asked(&model, &[user("first")], settings.clone()).unwrap();
+  let answer = Message::Assistant { id: None, content: one.choice };
+  let dropped = [user("first"), answer.clone(), user("second WAIT")];
+  let turn = model.completion(request("ENGINE ONLY", &dropped, settings.clone()));
+  let heard = async {
+    while !yard.heard().iter().any(|one| one.contains("WAIT")) {
+      tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+  };
+  let raced = reactor().block_on(async {
+    tokio::time::timeout(Duration::from_secs(10), select(Box::pin(turn), Box::pin(heard))).await
+  });
+  let Ok(Either::Right(((), turn))) = raced else {
+    panic!("the turn was still in flight when the fake heard its line")
+  };
+  drop(turn);
+  let grown = [user("first"), answer, user("second WAIT\n\nthird")];
+  asked(&model, &grown, settings).unwrap();
+  let line: Value = serde_json::from_str(yard.heard().last().unwrap()).unwrap();
+  assert_eq!(line["message"]["content"], json!([{"type": "text", "text": "third"}]));
 }
 
 #[test]
@@ -755,6 +786,41 @@ fn a_turn_that_is_dropped_ends_its_process() {
   assert!(gone(&pid), "the process of the dropped turn ended");
 }
 
+#[test]
+fn a_turn_dropped_while_the_keeper_hands_it_the_conversation_leaves_the_conversation_to_the_next_turn()
+ {
+  let yard = Yard::new("handed");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let settings = json!({"session": "chain"});
+  let first = model.completion(request("ENGINE ONLY", &[user("WAIT")], settings.clone()));
+  let heard = async {
+    while !yard.heard().iter().any(|one| one.contains("WAIT")) {
+      tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+  };
+  let raced = reactor().block_on(async {
+    tokio::time::timeout(Duration::from_secs(10), select(Box::pin(first), Box::pin(heard))).await
+  });
+  let Ok(Either::Right(((), first))) = raced else {
+    panic!("the first turn was still in flight when the fake heard its line")
+  };
+  let second = model.completion(request("ENGINE ONLY", &[user("second")], settings.clone()));
+  let mut second = Box::pin(second);
+  let waited = reactor()
+    .block_on(async { tokio::time::timeout(Duration::from_millis(200), &mut second).await });
+  assert!(waited.is_err(), "the second turn waits for the conversation that the first one holds");
+  drop(first);
+  // The keeper hands the conversation to the second turn, which is dropped before it takes it, as a
+  // reply that is cancelled.
+  std::thread::sleep(Duration::from_millis(200));
+  drop(second);
+  let third = model.completion(request("ENGINE ONLY", &[user("third")], settings));
+  let got =
+    reactor().block_on(async { tokio::time::timeout(Duration::from_secs(10), third).await });
+  let Ok(got) = got else { panic!("the third turn waited for a conversation that no turn holds") };
+  got.unwrap();
+}
+
 /// Whether the process of an id is gone, within a time, as a process ends a moment after it is killed. A process
 /// that ended and that nothing reaped yet is gone too.
 pub(crate) fn gone(pid: &str) -> bool {
@@ -993,11 +1059,49 @@ fn the_block_before_the_first_open_of_a_chain_in_a_conversation_is_marked_for_th
   ];
   let mut marked = false;
   cached(&mut blocks, &mut marked);
-  assert_eq!(blocks[0]["cache_control"], json!({"type": "ephemeral", "ttl": "1h"}));
+  assert_eq!(blocks[0]["cache_control"], json!({"type": "ephemeral", "ttl": lasting()}));
   assert_eq!((blocks[1].get("cache_control"), marked), (None, true));
   let mut later = vec![text("#read9"), text("#chain4\nchain4: Act[object]")];
   cached(&mut later, &mut marked);
   assert_eq!(later[0].get("cache_control"), None, "a conversation marks one block at most");
+}
+
+#[test]
+fn no_request_of_the_command_line_puts_a_mark_of_an_hour_after_one_of_minutes() {
+  let yard = Yard::new("ttl");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let blocks = vec![UserContent::text("#read1"), UserContent::text("#chain2\nchain2: Act[object]")];
+  let turn = Message::User { content: blocks };
+  asked(&model, &[turn], json!({"session": "chain"})).unwrap();
+  let line: serde_json::Value = serde_json::from_str(&yard.heard()[0]).unwrap();
+  let ours: Vec<String> = line["message"]["content"]
+    .as_array()
+    .unwrap()
+    .iter()
+    .filter_map(|one| one["cache_control"]["ttl"].as_str().map(str::to_owned))
+    .collect();
+  assert_eq!(ours.len(), 1, "{line}");
+  let ttl = fs::read_to_string(yard.at.join(format!("ttl.{}", yard.pids()[0]))).unwrap();
+  let [main, helper, messages] = ttl.split(' ').collect::<Vec<_>>()[..] else { panic!("{ttl}") };
+  // The command line marks its system prompt and its last message with the life of the source of
+  // the request: its turns, which run an hour on a subscription within its limits and else five
+  // minutes, and its helpers, as its compaction, which run five minutes, each unless pinned.
+  let lives = |pin: &str, unpinned: &[&'static str]| match pin {
+    "unset" => unpinned.iter().map(|one| (*one).to_owned()).collect(),
+    one => vec![one.to_owned()],
+  };
+  for source in [lives(main, &["1h", "5m"]), lives(helper, &["5m"])] {
+    for life in source {
+      let last = if messages == "5m" { "5m".to_owned() } else { life.clone() };
+      let request: Vec<&str> = [life.as_str()]
+        .into_iter()
+        .chain(ours.iter().map(String::as_str))
+        .chain([last.as_str()])
+        .collect();
+      let after = request.windows(2).find(|two| two == &["5m", "1h"]);
+      assert!(after.is_none(), "a request of the command line marks {request:?}");
+    }
+  }
 }
 
 #[test]

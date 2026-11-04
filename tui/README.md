@@ -258,6 +258,10 @@ output only what a row shows, and reads the rest from its file when the operator
 makes again only the cards of the acts that changed, so a frame of a long life takes about as long as a frame of a short
 one.
 
+A key gets the next frame of the renderer, whatever the view has to draw again: the frame after a key draws only
+what the key changed, and the view waits after each draw twice as long as that draw took, so on a long life it takes
+at most a third of the thread.
+
 `bun run bench` measures this speed, and the gates hold it to its budgets, as [AGENTS.md](../AGENTS.md) says.
 
 ## Mouse and keys

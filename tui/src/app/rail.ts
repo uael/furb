@@ -9,6 +9,7 @@ import {
   gist,
   nestThreads,
   type ThreadNode,
+  threadWork,
 } from "furb/life";
 import { checkoutOf } from "../checkout.ts";
 import { clock } from "../clock.ts";
@@ -215,6 +216,25 @@ export const rail = part({
     return `threads ${count}`;
   },
 
+  /** What the unread marks of the threads need to be drawn again, kept while the list of the threads and the reads of
+   * the session stand: a new fact that lands on no thread and moves no read then reads no thread. Each chain keeps its
+   * part while no act lands on it and no read moves, so a new act reads the threads of one chain. */
+  unreadKey(threads: ChainThread[]): string {
+    const reads = this.session.readsVersion;
+    const kept = this.railUnreadKey;
+    if (kept && kept.list === threads && kept.reads === reads) return kept.text;
+    const parts = this.railThreadCache?.chains.values() ?? [{ stamp: 0, list: threads } as ChainRead];
+    const texts = [...parts].map((part) => {
+      if (part.unread?.reads !== reads)
+        part.unread = { reads, text: part.list.map((one) => (this.unreadThread(one) ? "1" : "0")).join("") };
+      return part.unread.text;
+    });
+    const same = kept?.parts.length === texts.length && texts.every((one, at) => one === kept.parts[at]);
+    const count = same && kept ? kept.count : (kept?.count ?? 0) + 1;
+    this.railUnreadKey = { list: threads, reads, parts: texts, count, text: `unread ${count}` };
+    return `unread ${count}`;
+  },
+
   /** The thread that the feed shows now: the one chosen, else the last that is open on the chain shown. */
   activeThread(): ChainThread | undefined {
     const w = this.session;
@@ -229,6 +249,11 @@ export const rail = part({
       this.schedule();
     }
     return open ?? own.at(-1);
+  },
+
+  /** Whether a thread holds work that the operator did not read, as the facts seen of the record say. */
+  unreadThread(thread: ChainThread): boolean {
+    return this.session.unreadThread(thread.act.id, threadWork(thread));
   },
 
   /** The state of a thread in a word and its color. */
@@ -517,11 +542,14 @@ export const rail = part({
       this.railSession.add(
         this.railSplit([[`↑ ${from} more`, c.faint]], [], () => this.workspacePicker(), edge),
       );
+    // The switcher and the threads under it draw apart, so each takes the place of its own rows in the order.
+    const switched: string[] = [];
+    this.railOrder = this.railOrder.filter((id) => !id.startsWith("ws:"));
     for (const group of groups.slice(from, from + SWITCHER)) {
       const mine = group === current;
       const attention = this.attentionOf(group.sessions);
       const id = `ws:${group.directory}`;
-      this.railOrder.push(id);
+      switched.push(id);
       this.railHandlers.set(id, { enter: () => void this.focusWorkspace(group).catch(this.report) });
       const row = this.railSplit(
         [[mine ? glyph.mark : " ", c.accent], [" "], [group.name, mine ? c.text : c.muted, mine ? bold : 0]],
@@ -532,6 +560,7 @@ export const rail = part({
       );
       this.railSession.add(row);
     }
+    this.railOrder = [...switched, ...this.railOrder];
     if (groups.length > from + SWITCHER)
       this.railSession.add(
         this.railSplit(
@@ -595,6 +624,7 @@ export const rail = part({
         ]),
       ]),
       this.threadsKey(threads),
+      this.unreadKey(threads),
       active?.act.id,
       [...this.unfolded],
       this.renaming && this.itemKey(this.renaming.item),
@@ -611,10 +641,9 @@ export const rail = part({
       this.railHeading.add(this.text("Workspaces", c.text, { attributes: bold, flexGrow: 1 }));
       this.railHeading.add(this.text("⌃W", c.faint, { run: () => void this.workspacePicker() }));
     }
-    if (style !== "cards") {
-      this.railOrder = [];
-      this.railHandlers.clear();
-    }
+    this.railOrder = style === "cards" ? this.railOrder.filter((id) => id.startsWith("ws:")) : [];
+    for (const id of [...this.railHandlers.keys()])
+      if (!this.railOrder.includes(id)) this.railHandlers.delete(id);
     const order = (id: string, handler: RailHandler) => {
       this.railOrder.push(id);
       this.railHandlers.set(id, handler);
@@ -671,7 +700,7 @@ export const rail = part({
     const threadRow = (thread: ChainThread, indent: number, state = thread.state) => {
       const id = `th:${thread.act.id}`;
       const lit = active === thread;
-      const [mark, tone] = threadMarks(thread, state);
+      const [mark, tone] = threadMarks(thread, state, this.unreadThread(thread));
       order(id, {
         enter: () => this.chooseThread(thread),
         space: () => this.foldThread(thread.act.id),
@@ -699,7 +728,7 @@ export const rail = part({
     const card = (thread: ChainThread, state = thread.state) => {
       const id = `th:${thread.act.id}`;
       const lit = active === thread || cursor === id;
-      const [mark, tone] = threadMarks(thread, state);
+      const [mark, tone] = threadMarks(thread, state, this.unreadThread(thread));
       order(id, {
         enter: () => this.chooseThread(thread),
         space: () => this.foldThread(thread.act.id),
