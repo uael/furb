@@ -219,7 +219,7 @@ impl Claude {
     });
     let accounts = Arc::new(Accounts::new(accounts, switch));
     let (keeper, asked) = mpsc::unbounded_channel();
-    runtime().spawn(keeper::kept(asked, Arc::clone(&accounts)));
+    runtime().spawn(keeper::kept(asked, Arc::clone(&accounts), keeper.downgrade()));
     Claude { program: Program::with(bin, args, accounts), stall, gone: patience(), keeper }
   }
 
