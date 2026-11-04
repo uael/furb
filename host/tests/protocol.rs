@@ -119,11 +119,12 @@ mod protocol {
       Verb::Queue {
         life: life(),
         entry: "q1".to_owned(),
-        hash: "h1".to_owned(),
         shape: "None".to_owned(),
         message: "hi".to_owned(),
         on: on(),
       },
+      Verb::Unqueue { life: life(), entry: "q1".to_owned() },
+      Verb::Queued { life: life(), on: on() },
       Verb::Answered {
         life: life(),
         ask: 1,
@@ -329,6 +330,7 @@ mod protocol {
       "stand",
       "seen",
       "queue",
+      "unqueue",
       "answered",
       "wrote",
       "view.event",

@@ -424,9 +424,11 @@ fn routed(verb: Verb) -> Routed {
     Verb::Gate { life, word, on } => (life, Command::Gate { word, on }),
     Verb::Stand { life } => (life, Command::Stand),
     Verb::Seen { life, about } => (life, Command::Seen { about }),
-    Verb::Queue { life, entry, hash, shape, message, on } => {
-      (life, Command::Queue { entry, hash, shape, message, on })
+    Verb::Queue { life, entry, shape, message, on } => {
+      (life, Command::Queue { entry, shape, message, on })
     }
+    Verb::Unqueue { life, entry } => (life, Command::Unqueue { entry }),
+    Verb::Queued { life, on } => (life, Command::Queued { on }),
     other => return Routed::Daemon(other),
   };
   Routed::Life(life, command)
