@@ -628,13 +628,13 @@ def seed(data: object) -> list[Entry]:
   Each chain of the data is made again under its name, on its parent and with its label, as the operator makes it, and each name of a kind up to the highest that the data takes, which no entry carries, stays taken.
   Each open prompt of the data is made again through prompt under its name, and each chain that the data says paused is paused.
   Each act of the data with a value stands known on its chain with that value and runs nothing.
-  A rung of the operator on each chain binds its definitions and its values, says its turns as its prefix, tells what the checkpoint lost and cut, and runs again each word that ran on it.
+  A rung of the operator on each chain binds its definitions and its values, says its turns as its prefix, and tells what the checkpoint lost and cut, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows.
   """
 
 def gathered(define: Callable[[str], str], floor: dict[str, int]) -> dict:
   """gathered gives the data of a checkpoint of the life at its tip, which seed reads, as plain data that each build of the major reads: taken, chains and acts.
   taken gives the highest number of each kind that an act of a chain took, and at least the number that floor gives, since a later life makes no act again that an ear of the outside made.
-  chains holds the root, the chain of each open prompt and each chain that a plain value of a chain in chains names, each with its parent, its label, its source, whether it is paused, its turns, what define gives of each word that ran on it, the text that binds each plain value of its module again, the names of the other values, the acts that it cut, and each word that still runs on it.
+  chains holds the root, the chain of each open prompt and each chain that a plain value of a chain in chains names, each with its parent, its label, its source, whether it is paused, its turns, what define gives of each word that ran on it, the text that binds each plain value of its module again, the names of the other values, and the acts that it cut, each word that ran on it among them.
   acts holds the last stand, the last clock, and each act of a verb that a value names or that is a command of a chain in chains: an act that is over with its value, an open prompt with its shape, its message, its actor and the ear that started it, and another act as cut, with a refusal that says why.
   gathered is a view: it makes nothing and says nothing.
   """

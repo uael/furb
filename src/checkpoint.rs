@@ -6,7 +6,8 @@
 //! of its own shape, [`SCHEMA`]; `version` and `engine`, the build that wrote it; `taken`, the
 //! highest number of each kind; `chains`, each chain that lives with its parent, its label, its
 //! source, whether it is paused, its turns, the text of its definitions, its plain values by name,
-//! the names that it lost, the acts that the checkpoint cut, and each word that ran on it; and
+//! the names that it lost, and the acts that the checkpoint cut, each word that ran on it among
+//! them, which no later life runs again; and
 //! `acts`, each act that a value names, the last stand and the last clock, with its value, or, for
 //! an open prompt, with its shape, its message, its actor and the ear that held it. `gathered` of
 //! the engine gathers it and `seed` of the engine reads it, so the engine is the one home of its
@@ -53,8 +54,9 @@ use crate::{
 /// The kind of the fact of a checkpoint.
 pub const CHECKPOINT: &str = "checkpoint";
 
-/// The version of the shape of the data of a checkpoint, apart from the version of the record.
-pub const SCHEMA: i64 = 1;
+/// The version of the shape of the data of a checkpoint, apart from the version of the record. The
+/// data of schema 1 also holds `again`, each word that ran on a chain, which `seed` names as cut.
+pub const SCHEMA: i64 = 2;
 
 /// The kind of an entry of a checkpoint of the form before [`SCHEMA`] that stands for the names of
 /// a kind that no entry carries.
