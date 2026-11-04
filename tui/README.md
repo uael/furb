@@ -98,15 +98,12 @@ Sessions are saved under `.furb/sessions` in the selected directory. The `.furb`
 An unfinished session opens paused and offers a resume choice. The native engine replays completed work from the
 record.
 
-A record whose replay drifts, as a record that a build of another version made, opens to read: the TUI shows what
-the record kept, runs no word again, asks no model, leaves the record and its log as they were, and refuses each
-command that would change the life. A dialog gives the build that made the record and this build, and offers three
-choices:
+A record whose replay drifts, as a record that a build of another engine or version made before its first checkpoint,
+opens to read: the TUI shows what the record kept, runs no word again, asks no model, leaves the record and its log as
+they were, and refuses each command that would change the life. A dialog gives the build that made the record and
+this build, and offers two choices:
 
 - **Read it** shows the record. The footer says "Read only" and offers a new life, and the composer is off.
-- **Resume it** opens a new session in the workspace of the record. The session goes on from the turns of the root
-  chain of the record and asks again each prompt of a model that the record left open. It runs the word `inherit` of
-  the extension compaction, so a life with that extension off gets the turns as text.
 - **Start a new life from it** opens a new session whose first word carries, as text, the turns of the root chain
   and the files that the record wrote. It asks no prompt again.
 
