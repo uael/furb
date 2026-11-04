@@ -120,7 +120,7 @@ class Round:
     exec(compile(IMPORT.sub("", PULL.read_text(encoding="utf-8")), str(PULL), "exec"), ns)  # noqa: S102
     exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), ns)  # noqa: S102
     self.real_hire = ns["hire"]
-    ns.update(quietly=self.quietly, hire=self.hire)
+    ns.update(quietly=self.quietly, hire=self.hire, PROBE="echo 64")
     self.ns = ns
 
   def __getattr__(self, name: str) -> object:
@@ -362,6 +362,46 @@ def test_an_audit_runs_in_no_workspace_and_a_fix_takes_its_brief_whole(conductor
 def test_each_brief_forbids_a_window_on_this_machine(conductor: Round) -> None:
   for brief in (conductor.WORKER, conductor.AUDIT, conductor.FIX, conductor.ANSWER):
     assert "Never open a window on this machine" in brief
+
+
+def test_each_brief_sends_each_build_through_the_slot_of_the_machine(conductor: Round) -> None:
+  for brief in (conductor.WORKER, conductor.AUDIT, conductor.FIX, conductor.ANSWER):
+    assert "sh script/build-slot.sh <command>" in brief
+    assert "no CARGO_BUILD_JOBS above 4" in brief
+  assert "sh {repo}/script/build-slot.sh {repo}/script/worktree.sh {path}" in conductor.WORKSPACE
+
+
+async def test_the_round_reads_the_free_memory_and_a_hire_counts_its_share_of_it(conductor: Round) -> None:
+  conductor.ns["PROBE"] = "echo 7.5"
+  await conductor.probe_memory()
+  assert conductor.machine == {"free": 7.5}
+  conductor.real_hire("a", "x")
+  assert conductor.machine["free"] == 6.5
+  conductor.ns["PROBE"] = "echo nonsense"
+  with pytest.raises(Refused, match="the probe of the memory said nonsense"):
+    await conductor.probe_memory()
+
+
+def test_an_item_waits_while_the_machine_has_under_the_memory_that_a_hire_needs(conductor: Round) -> None:
+  conductor.limits["room"] = {"sonnet": 5}
+  conductor.queue.append(("q", "b", "t"))
+  conductor.machine["free"] = 5.9
+  conductor.staff()
+  assert conductor.hired == []
+  assert conductor.heard == ["q waits: the machine has under 6 GB of memory free."]
+  conductor.machine["free"] = 6.0
+  conductor.staff()
+  assert [h[0] for h in conductor.hired] == ["q"]
+
+
+async def test_a_red_pr_waits_for_a_fixer_while_the_machine_has_too_little_memory(conductor: Round) -> None:
+  conductor.github(raw(5, "k5", (("the gates", "FAILURE"),)))
+  conductor.ns["touched"].clear()
+  conductor.machine["free"] = 1.0
+  conductor.ns["held_keys"] = lambda: {"k5"}
+  await conductor.sweep()
+  assert conductor.hired == []
+  assert "waits for a fixer" in conductor.heard[-1] and "GB of memory free" in conductor.heard[-1]
 
 
 def test_a_worker_that_ends_with_a_pr_is_a_line_with_its_whole_report(conductor: Round) -> None:
