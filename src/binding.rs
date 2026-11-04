@@ -749,7 +749,7 @@ pub fn image_references(message: String) -> Vec<images::Named> {
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn image_type(data: &[u8]) -> Result<ImageType, Fault> {
-  let (media, extension) = images::kind(data).map_err(Fault::refused)?;
+  let (media, extension) = images::kind(data).map_err(|no| Fault::refused(no.to_string()))?;
   Ok(ImageType { mime_type: media.to_owned(), extension: extension.to_owned() })
 }
 
