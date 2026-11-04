@@ -44,6 +44,8 @@ let demo = false;
 let timer: ReturnType<typeof setTimeout> | undefined;
 /** The watch on the file of a recorded life, which hears each line that the file adds. */
 let follower: FSWatcher | undefined;
+/** The look at the file of a recorded life that goes on when the watch of the file misses a write. */
+let poller: ReturnType<typeof setInterval> | undefined;
 let sentFacts = 0;
 async function refreshCodex(directory?: string): Promise<void> {
   if (
@@ -291,6 +293,11 @@ async function answer(data: { target: string; method: string; args: unknown[] })
       follower = watchFile(options.record, () => {
         if (recorded.follow()) refresh();
       });
+      // A watch of a file may miss a write, as one on Linux does at times, so the file is looked at again each second.
+      poller = setInterval(() => {
+        if (recorded.follow()) refresh();
+      }, 1000);
+      poller.unref();
       return recorded.root;
     }
     claude = options.claude;
@@ -557,6 +564,8 @@ self.onmessage = async ({ data }) => {
   if (timer) clearTimeout(timer);
   follower?.close();
   follower = undefined;
+  clearInterval(poller);
+  poller = undefined;
   session = undefined;
   engine = undefined;
   snapshots = undefined;
