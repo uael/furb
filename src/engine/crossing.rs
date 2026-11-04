@@ -32,6 +32,9 @@ pub(super) struct Crossing {
   pub(super) numbers: HashMap<MontyUuid, i64>,
   /// The handles the engine holds for itself, which the host never releases.
   pub(super) kept: HashSet<MontyUuid>,
+  /// Whether what comes in is the record of an earlier life, whose numbers name callables of the
+  /// process that made it, which no callable of this life is.
+  pub(super) recorded: bool,
 }
 
 impl Outside {
@@ -255,6 +258,12 @@ impl Outside {
           text("name").and_then(|name| self.crossing.names.get(&name).cloned()) =>
       {
         Ok(Some(held))
+      }
+      // A callable of the record, which no later life holds: what stands in its place, which is
+      // equal to each callable, as the one that the word makes again.
+      "made" if self.crossing.recorded => {
+        let unmade = self.opened.unmade.clone();
+        sand.call(self, &unmade, vec![], vec![]).map(Some)
       }
       // A callable the engine made, or a class a word defined, back from the host by the number it
       // went out under.

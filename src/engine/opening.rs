@@ -32,6 +32,13 @@ use crate::value::Object;
 /// step. A rung that awaited an act through a wants hears only that act, so it is closed with
 /// that refusal, and a rung of any other run hears the done of its run.
 ///
+/// It gives what stands for a value of a record that no later life makes again as it was: a
+/// callable, which went out by a number of the process that made it, stands as a value equal to
+/// each callable, and a text in the words of an act that a word made, which holds the address of an
+/// object, stands as a value equal to each text that differs from it in its addresses alone. The
+/// heap of a later life is no function of the record, so the act that a word makes again agrees
+/// with the record.
+///
 /// The module of the engine holds the names python gives a module before the engine runs, so a word
 /// reads them in a chain as it reads them in python, and as the gate reads them. No loader made the
 /// module here, so it has no spec and no loader. Python binds `__debug__` among its builtins, and
@@ -84,6 +91,42 @@ def __parking(ear):
       heard = yield (None if held else wait)
   except StopIteration:
     return
+
+class __Recorded:
+  def __init__(self, held=None):
+    self.held = held
+
+  def __eq__(self, other):
+    import re
+
+    if isinstance(other, type(self)):
+      return self.held == other.held
+    if self.held is None:
+      return callable(other)
+    unaddressed = lambda text: re.sub(r" at 0x[0-9a-f]+", "", text)
+    return isinstance(other, str) and unaddressed(other) == unaddressed(self.held)
+
+  def __repr__(self):
+    return "<a callable of an earlier life>" if self.held is None else repr(self.held)
+
+def __recorded(entries):
+  import re
+
+  Text = __engine["Text"]
+
+  def again(word):
+    if isinstance(word, str) and re.search(r" at 0x[0-9a-f]+", word):
+      return __Recorded(word)
+    if isinstance(word, Text):
+      return Text(word.path, again(word.content))
+    if isinstance(word, (tuple, list)):
+      return type(word)(map(again, word))
+    return word
+
+  return [
+    ((*x[:4], *map(again, x[4:])),) if __engine["question"](x) and re.fullmatch(r"[a-z_]+\d+", x[2]) else (x,)
+    for (x,) in entries
+  ]
 
 __fresh = {"kernel": lambda: __kernel["kernel"](__engine), "gate": lambda: __sheet["gating"](__engine, __gate)}
 
@@ -157,6 +200,8 @@ def __lasting(name, ear):
   "unpark": lambda name: __parked.discard(name),
   "against": lambda on, word: __sheet["against"](__engine, __gate, on, word),
   "lasting": __lasting,
+  "unmade": lambda: __Recorded(),
+  "recorded": __recorded,
 }"#;
 
 /// What the opening gave, by name: the callables of the sandbox that the host calls it by, each
@@ -196,6 +241,12 @@ pub(crate) struct Opened {
   pub(super) against: Object,
   /// An ear wrapped so that it starts again after it raises.
   pub(super) lasting: Object,
+  /// What stands for a callable of the record of an earlier life: a value equal to each callable.
+  pub(super) unmade: Object,
+  /// The entries of a record, with each text in the words of an act that a word made, that holds
+  /// the address of an object, in the place of a value equal to each text that differs from it in
+  /// its addresses alone.
+  pub(super) recorded: Object,
 }
 
 impl Default for Opened {
@@ -226,6 +277,8 @@ impl Opened {
       unpark: at("unpark")?,
       against: at("against")?,
       lasting: at("lasting")?,
+      unmade: at("unmade")?,
+      recorded: at("recorded")?,
     })
   }
 }
