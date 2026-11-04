@@ -580,7 +580,7 @@ fn configured_catalog(
   world::Catalog::load()
     .claude(claude.map(Into::into), None)
     .configured(&directory, config.as_deref())
-    .map_err(Fault::refused)
+    .map_err(|no| Fault::refused(no.to_string()))
 }
 
 /// What a first run checks of this machine, as a host reads it: whether the claude command line offers a model and

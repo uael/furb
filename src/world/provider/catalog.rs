@@ -44,8 +44,10 @@
 #![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
 
 mod config;
+mod error;
 mod update;
 
+pub use error::Error;
 pub use update::{Source, Status, status, updated};
 
 use std::{
@@ -90,21 +92,42 @@ pub fn doctrine(directory: &Path) -> Option<PathBuf> {
   doctrine_in(directory, dev, env::home_dir().as_deref())
 }
 
-/// The path that [`doctrine`] gives, from the directory, the checkout of dev mode and the home.
-fn doctrine_in(directory: &Path, checkout: Option<&Path>, home: Option<&Path>) -> Option<PathBuf> {
+/// Where the doctrine of a directory stands.
+enum Place {
+  /// A file that a chain reads as it is: the doctrine of the project or the checkout of dev mode.
+  Held(PathBuf),
+  /// The official copy in the home, which stands only once [`write_official`] has written it.
+  Official(PathBuf),
+}
+
+/// Where the doctrine stands for the directory, the checkout of dev mode and the home.
+/// It writes nothing.
+fn doctrine_place(directory: &Path, checkout: Option<&Path>, home: Option<&Path>) -> Option<Place> {
   let project = directory.join(".furb").join("DOCTRINE.md");
   if project.is_file() {
-    return Some(project);
+    return Some(Place::Held(project));
   }
   if let Some(dev) = checkout.map(|one| one.join("DOCTRINE.md")).filter(|one| one.is_file()) {
-    return Some(dev);
+    return Some(Place::Held(dev));
   }
-  let official = home?.join(".furb").join("DOCTRINE.md");
-  if fs::read_to_string(&official).ok().as_deref() != Some(DOCTRINE) {
+  Some(Place::Official(home?.join(".furb").join("DOCTRINE.md")))
+}
+
+/// The official copy of the doctrine, written from [`DOCTRINE`] when that file holds another text.
+fn write_official(official: &Path) -> Option<()> {
+  if fs::read_to_string(official).ok().as_deref() != Some(DOCTRINE) {
     fs::create_dir_all(official.parent()?).ok()?;
-    fs::write(&official, DOCTRINE).ok()?;
+    fs::write(official, DOCTRINE).ok()?;
   }
-  Some(official)
+  Some(())
+}
+
+/// The path that [`doctrine`] gives, from the directory, the checkout of dev mode and the home.
+fn doctrine_in(directory: &Path, checkout: Option<&Path>, home: Option<&Path>) -> Option<PathBuf> {
+  match doctrine_place(directory, checkout, home)? {
+    Place::Held(path) => Some(path),
+    Place::Official(path) => write_official(&path).map(|()| path),
+  }
 }
 
 /// The snapshot of the catalog that the crate carries.
@@ -208,13 +231,31 @@ enum Dialect {
   Silent,
 }
 
+/// A model, and whether the catalog offers it.
+struct Offer {
+  model: Model,
+  offered: bool,
+}
+
+impl Offer {
+  fn new(model: Model, offered: bool) -> Offer {
+    Offer { model, offered }
+  }
+}
+
+/// A provider, with the names of its credential and whether the settings enable it.
+struct Entry {
+  name: String,
+  env: Vec<String>,
+  enabled: bool,
+}
+
 /// The models this machine can ask, each with whether the catalog offers it: those of the claude command line and of
 /// the network, the local server that the environment names, which holds what it listed, and the most tokens of
 /// thought of a model in one turn that the environment gives as `MAX_THINKING_TOKENS`.
 pub struct Catalog {
-  models: Vec<(Model, bool)>,
-  /// Each provider, with the names of its credential and whether the settings enable it.
-  providers: Vec<(String, Vec<String>, bool)>,
+  models: Vec<Offer>,
+  providers: Vec<Entry>,
   local: Option<Arc<Server>>,
   thinking: Option<String>,
   /// The claude command line that the catalog found, which a first run asks whether it is signed in.
@@ -261,7 +302,11 @@ impl Catalog {
     let cached = cache().map(|at| at.join(update::MODELS));
     let listed = listed(cached.as_ref());
     let mut catalog = Catalog::of(&listed, Claude::found(), server, env);
-    catalog.providers.push((super::codex::NAME.to_owned(), Vec::new(), false));
+    catalog.providers.push(Entry {
+      name: super::codex::NAME.to_owned(),
+      env: Vec::new(),
+      enabled: false,
+    });
     catalog
   }
 
@@ -273,8 +318,9 @@ impl Catalog {
     let claude = Claude::with(Some(bin), stall);
     let found = Some(claude.clone());
     let prefix = format!("{}:", claude::CLAUDE);
-    let network = self.models.into_iter().filter(|(model, _)| !model.name.starts_with(&prefix));
-    let mut models: Vec<_> = claude.models().into_iter().map(|model| (model, true)).collect();
+    let network = self.models.into_iter().filter(|one| !one.model.name.starts_with(&prefix));
+    let mut models: Vec<_> =
+      claude.models().into_iter().map(|model| Offer::new(model, true)).collect();
     models.extend(network);
     Catalog { models, claude: found, ..self }
   }
@@ -295,16 +341,16 @@ impl Catalog {
       Some(claude) => claude.models(),
       None => Claude::with(None, None).fixed(),
     };
-    let mut models: Vec<_> = claude.into_iter().map(|model| (model, found)).collect();
+    let mut models: Vec<_> = claude.into_iter().map(|model| Offer::new(model, found)).collect();
     let mut providers = Vec::new();
     for (provider, one) in listed {
-      providers.push((provider.clone(), one.env.clone(), true));
+      providers.push(Entry { name: provider.clone(), env: one.env.clone(), enabled: true });
       let credential = one.credential(&env);
       for (id, listing) in &one.models {
         let Some(client) = listing.client(one.rig).filter(|_| listing.kept()) else { continue };
         let reach = credential.clone().and_then(|key| one.reach(id, listing, client, key, &env));
         let offered = reach.is_ok();
-        models.push((model(provider, id, listing, client, reach), offered));
+        models.push(Offer::new(model(provider, id, listing, client, reach), offered));
       }
     }
     Catalog { models, providers, local, thinking: env(super::ENV_THINKING), claude: kept }
@@ -315,18 +361,18 @@ impl Catalog {
   pub fn setup(&self) -> Setup {
     let offered = |provider: &str| {
       let of = |model: &Model| model.name.split_once(':').is_some_and(|(one, _)| one == provider);
-      self.models.iter().filter(|(model, offered)| *offered && of(model)).count()
+      self.models.iter().filter(|one| one.offered && of(&one.model)).count()
     };
     let providers = self.providers.iter();
     Setup {
       claude: offered(claude::CLAUDE) > 0,
       signed: self.claude.as_ref().is_some_and(Claude::signed),
       providers: providers
-        .map(|(provider, env, enabled)| Ready {
-          provider: provider.clone(),
-          env: env.clone(),
-          offered: offered(provider),
-          enabled: *enabled,
+        .map(|one| Ready {
+          provider: one.name.clone(),
+          env: one.env.clone(),
+          offered: offered(&one.name),
+          enabled: one.enabled,
         })
         .collect(),
       local: self.local.as_ref().map(|server| {
@@ -345,8 +391,7 @@ impl Catalog {
   /// Every model the catalog offers, by its name: those of the claude command line, then those of the network, then
   /// those of the local server, so the first is the default actor.
   pub fn offered(&self) -> Vec<Model> {
-    let offered =
-      self.models.iter().filter(|(_, offered)| *offered).map(|(model, _)| model.clone());
+    let offered = self.models.iter().filter(|one| one.offered).map(|one| one.model.clone());
     offered.chain(self.heard(None).into_iter().flat_map(|heard| heard.models)).collect()
   }
 
@@ -359,7 +404,7 @@ impl Catalog {
 
   /// The models of the claude command line and of the network.
   fn known(&self) -> Vec<&Model> {
-    self.models.iter().map(|(model, _)| model).collect()
+    self.models.iter().map(|one| &one.model).collect()
   }
 
   /// Whether the local server may hold a model of a name: a name of the provider local, or of a provider that the
@@ -637,14 +682,27 @@ fn budget(level: &str) -> u64 {
   }
 }
 
+/// The credential of a provider, and whether it goes as a bearer.
+#[derive(Clone)]
+struct Credential {
+  key: String,
+  bearer: bool,
+}
+
+impl Credential {
+  fn bare(key: String) -> Credential {
+    Credential { key, bearer: false }
+  }
+}
+
 impl Listed {
   /// The credential of the provider and whether it goes as a bearer, or why the environment holds none. The clients
   /// of Amazon and Google read their credentials themselves: those of Google are its key of an API, or its
   /// credentials of an application where its client finds them, under the application data on Windows and under
   /// the home elsewhere.
-  fn credential(&self, env: &impl Fn(&str) -> Option<String>) -> Result<(String, bool), String> {
+  fn credential(&self, env: &impl Fn(&str) -> Option<String>) -> Result<Credential, String> {
     if let Some(key) = &self.key {
-      return Ok((key.clone(), false));
+      return Ok(Credential::bare(key.clone()));
     }
     let named = self.env.iter().find_map(|name| env(name).map(|key| (name, key)));
     let adc = || {
@@ -656,10 +714,12 @@ impl Listed {
       })
     };
     match (self.rig, named) {
-      (Client::Bedrock, Some(_)) => Ok((String::new(), false)),
-      (Client::Vertex, Some(_)) => Ok((env("GOOGLE_CLOUD_API_KEY").unwrap_or_default(), false)),
-      (Client::Vertex, None) if adc() => Ok((String::new(), false)),
-      (_, Some((name, key))) => Ok((key, self.bearer.contains(name))),
+      (Client::Bedrock, Some(_)) => Ok(Credential::bare(String::new())),
+      (Client::Vertex, Some(_)) => {
+        Ok(Credential::bare(env("GOOGLE_CLOUD_API_KEY").unwrap_or_default()))
+      }
+      (Client::Vertex, None) if adc() => Ok(Credential::bare(String::new())),
+      (_, Some((name, key))) => Ok(Credential { key, bearer: self.bearer.contains(name) }),
       (_, None) => {
         Err(format!("no credential of it stands in the environment: set {}", self.env.join(" or ")))
       }
@@ -674,7 +734,7 @@ impl Listed {
     id: &str,
     listing: &Listing,
     client: Client,
-    (key, bearer): (String, bool),
+    credential: Credential,
     env: &impl Fn(&str) -> Option<String>,
   ) -> Result<Reach, String> {
     let own = listing.provider.as_ref().and_then(|own| own.api.clone());
@@ -702,7 +762,7 @@ impl Listed {
     };
     let version = env("AZURE_OPENAI_API_VERSION").filter(|_| client == Client::Azure);
     let id = deployed.unwrap_or_else(|| id.to_owned());
-    Ok(Reach { key, bearer, api, id, version, project })
+    Ok(Reach { key: credential.key, bearer: credential.bearer, api, id, version, project })
   }
 
   /// An address with each place `${NAME}` filled from the environment, which reads the name of pi-ai for the place
