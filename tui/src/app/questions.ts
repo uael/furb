@@ -128,25 +128,6 @@ export const questions = part({
     return elapsed(clock() - (this.session.started[id] ?? clock()));
   },
 
-  resume(): void {
-    const pending = this.session.host.pending;
-    this.openPalette("Saved work is paused", [
-      {
-        label: "Resume saved work",
-        detail: `${pending.size} unfinished ${pending.size === 1 ? "act starts" : "acts start"} again.`,
-        run: async () => {
-          await this.session.host.resume();
-          await this.session.refresh();
-        },
-      },
-      {
-        label: "Keep it paused",
-        detail: "Inspect the session first. /wake brings this choice back.",
-        run: () => {},
-      },
-    ]);
-  },
-
   /** The dialog of an ask: its whole message, and the field of its answer or the choices of its shape. Its title says
    * which ask of the desk it is, and from which chain. Tab and ⇧Tab go to the next and the previous ask, and an
    * answer goes on to the next ask that waits, until none waits. */
@@ -240,4 +221,4 @@ export const questions = part({
 
 export type QuestionsPart = typeof questions;
 
-export const questionsBound = ["resume", "moveAsk"] as const;
+export const questionsBound = ["moveAsk"] as const;

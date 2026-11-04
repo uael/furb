@@ -868,6 +868,40 @@ fn the_work_an_earlier_life_left_is_pending_until_a_wake_that_this_life_says() {
 }
 
 #[test]
+fn a_replay_gives_a_word_the_facts_of_the_world_that_the_first_life_gave() {
+  let word = "b = bash('echo hi')\nawait b\nseen = [x[:3] for x in transcript(of='bash') if x[1] == b]\n\
+    went = peek(b).code\nlast = bash('echo ' + str(len(seen)))\nawait last";
+  let bash = |lived: &mut Lived, root: &str| {
+    let of = Some("bash".to_owned());
+    let facts = lived.engine.transcript(verbs::Transcript { on: on(root), of }).unwrap();
+    let text = |one: &Fact, at| one.word(at).and_then(|x| x.as_str().map(str::to_owned));
+    let shown = |one: &Fact| {
+      (one.kind().to_owned(), one.about().to_owned(), one.by().to_owned(), text(one, 1))
+    };
+    facts.iter().map(shown).collect::<Vec<_>>()
+  };
+  let (root, live) = {
+    let mut first = Lived::new("speaker", &[], true).unwrap();
+    let root = first.root();
+    let rung = verbs::Rung { word: Some(word.to_owned()), on: on(&root), ..Default::default() };
+    let rung = first.engine.rung(rung).unwrap().id().to_owned();
+    assert!(first.settled(&rung).is_ok());
+    assert!(first.engine.pending().unwrap().is_empty());
+    let live = bash(&mut first, &root);
+    (root, live)
+  };
+  let started = live.iter().filter(|one| one.0 == "started" && one.2 == "bash").count();
+  assert_eq!(started, 2, "the ear of commands said the started of each command: {live:?}");
+  let mut second = Lived::new("speaker", &[], false).unwrap();
+  assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
+  assert_eq!(
+    bash(&mut second, &root),
+    live,
+    "the replay gives the view of bash that the first life gave"
+  );
+}
+
+#[test]
 fn an_act_that_lives_end_while_it_runs_again_and_again_is_parked_until_a_retry() {
   let root = {
     let mut first = Lived::new("parked", &["WAIT"], true).unwrap();
@@ -883,10 +917,11 @@ fn an_act_that_lives_end_while_it_runs_again_and_again_is_parked_until_a_retry()
     root
   };
   let started = |lived: &mut Lived| {
-    let facts = lived.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
-    let ours =
-      |one: &&Fact| one.kind() == "started" && one.about() == "reply1" && one.by() != "journal";
-    facts.iter().filter(ours).count()
+    let mut count = |of: Option<String>| {
+      let facts = lived.engine.transcript(verbs::Transcript { on: on(&root), of }).unwrap();
+      facts.iter().filter(|one| one.kind() == "started" && one.about() == "reply1").count()
+    };
+    count(None) - count(Some("journal".to_owned()))
   };
   let reply = || vec![("reply1".to_owned(), "reply".to_owned())];
   // Each life that a host wakes as it opens asks the model again, and ends while the reply runs.

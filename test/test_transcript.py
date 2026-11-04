@@ -1,6 +1,6 @@
 """transcript, the facts on a chain."""
 
-from conftest import born, fresh, heads, lasting, paragraphs, said, settle, slow
+from conftest import WORLD, Sand, born, fresh, heads, lasting, paragraphs, relived, said, settle, slow
 from furb import engine
 from furb.engine import OPERATOR
 
@@ -16,6 +16,24 @@ async def test_transcript_gives_the_facts_on_a_chain() -> None:
   held, log = lasting(engine.transcript(root)), lasting(log)
   assert [a for a in held if a not in log] == []
   assert [a for a in log if a in held and not engine.question(a)] == [a for a in held if not engine.question(a)]
+
+
+async def test_transcript_on_journal_gives_each_fact_that_the_journal_said_again() -> None:
+  """transcript(on, "journal") gives each fact on a chain that the journal said again from the record, with the speaker that the record holds, so a host tells the facts of an earlier life from those of this one."""
+  sand, _, root = born()
+  first = engine.bash("echo hi", on=root)
+  assert (await first).code == 0
+  await settle()
+  _, over = await relived(Sand(), list(sand.record))
+  later = engine.bash("echo again", on=over)
+  assert (await later).code == 0
+  held = engine.transcript(over, "journal")
+  assert [a[:3] for a in held if a[1] == first] == [
+    ("started", first, WORLD),
+    ("out", first, WORLD),
+    ("done", first, WORLD),
+  ]
+  assert [a for a in held if a[1] == later] == [] and [a for a in held if a not in engine.transcript(over)] == []
 
 
 async def test_transcript_gives_a_new_list_at_each_call() -> None:

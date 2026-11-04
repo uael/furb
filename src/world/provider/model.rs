@@ -1,16 +1,6 @@
 //! The models of the provider, their class in the configs, and what a chain stands on and asks of a
 //! model.
 
-#![expect(
-  clippy::return_self_not_must_use,
-  reason = "debt: a method that returns Self with no must_use"
-)]
-#![expect(
-  clippy::struct_excessive_bools,
-  reason = "debt: a struct of many bools, where an enum serves"
-)]
-#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
-
 use std::{collections::HashMap, path::Path, sync::Arc};
 
 use futures::future::BoxFuture;
@@ -99,7 +89,7 @@ impl Class {
 }
 
 /// The most that a cheap model costs, in dollars for a million tokens that it reads.
-pub const CHEAP: f64 = 1.0;
+pub(crate) const CHEAP: f64 = 1.0;
 
 /// The key of a config whose map gives a model the class that it names, over the one of the
 /// catalog.
@@ -145,6 +135,10 @@ pub(super) fn configured(user: &Path, directory: &Path) -> Configured {
 /// each provider reads an effort its own way. A model that says what a turn cost says it as the
 /// number `cost` of its raw record, and the price of a model counts the cost of one that says none.
 #[derive(Clone)]
+#[expect(
+  clippy::struct_excessive_bools,
+  reason = "each bool is a trait of the server of a model apart from the others, no state of one enum"
+)]
 pub struct Model {
   pub(super) name: String,
   pub(super) window: u64,
@@ -227,6 +221,7 @@ impl Model {
   /// One effort the model spends, and the settings that it adds to the request, a map of rig's
   /// additional parameters: a budget of thinking for one provider, an effort of reasoning for
   /// another.
+  #[must_use]
   pub fn effort(mut self, name: impl Into<String>, settings: Value) -> Model {
     let settings = match settings {
       Value::Object(settings) => settings,
@@ -238,6 +233,7 @@ impl Model {
 
   /// The setting that carries the conversation of a reply, the chain of this life, which a provider
   /// keeps a conversation or a cache by.
+  #[must_use]
   pub fn conversation(mut self, key: impl Into<String>) -> Model {
     self.conversation = Some(key.into());
     self
@@ -245,24 +241,28 @@ impl Model {
 
   /// What the model costs, in dollars for a million tokens: read, written, read from the cache, and
   /// written to it.
+  #[must_use]
   pub fn price(mut self, input: f64, output: f64, read: f64, wrote: f64) -> Model {
     self.price = Some([input, output, read, wrote]);
     self
   }
 
   /// The model takes the images that a turn names.
+  #[must_use]
   pub fn images(mut self) -> Model {
     self.images = true;
     self
   }
 
   /// The model, whose provider searches the web with this search.
+  #[must_use]
   pub fn searches(mut self, search: Searches) -> Model {
     self.search = Some(search);
     self
   }
 
   /// The same model, whose turns a function of the host answers in place of the model.
+  #[must_use]
   pub fn hosted(mut self, host: Hosted) -> Model {
     self.hosted = true;
     self.answers = Arc::new(move |asked| {
@@ -323,6 +323,7 @@ impl Model {
   }
 
   /// The model, of a class that the catalog gives, which its price no longer gives.
+  #[must_use]
   pub fn classed(mut self, class: Class) -> Model {
     self.class = Some(class);
     self

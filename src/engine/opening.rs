@@ -37,8 +37,10 @@ def __parking(ear):
       else:
         for a in [x for x in held if x[1] not in __parked]:
           held.remove(a)
-          at = __engine["transcript"](__engine["scope"](a[1]))
-          taken = ("started", a[1]) in [x[:2] for x in at if x[2] != "journal"]
+          on = __engine["scope"](a[1])
+          starts = [x[1] for x in __engine["transcript"](on, "started")].count(a[1])
+          again = [x[1] for x in __engine["transcript"](on, "journal") if x[0] == "started"].count(a[1])
+          taken = starts > again
           if not __engine["over"](a[1]) and not taken:
             said = ear.send(a)
             while isinstance(said, tuple):

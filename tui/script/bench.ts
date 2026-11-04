@@ -9,7 +9,7 @@
  * new act, for a paragraph told on the root chain, which the turns of the chain read, and for a token of a model
  * that writes. It measures a fact of the short life and one of the long life one after the other, as a pair, so that
  * other work of the machine weighs on both alike, and takes for each kind the median of each life and the median of
- * the ratios of 60 pairs, after a first batch of 20 pairs that warms the code of the kind and counts not. In the long
+ * the ratios of 150 pairs, after a first batch of 20 pairs that warms the code of the kind and counts not. In the long
  * life it measures too the first frame, from the open of the life to its first frame, once cold and twice warm, and
  * the frames while the feed scrolls and a command streams a line of output each frame at the target rate of the
  * renderer, with the time from a key that the operator presses ten times each second to the first frame that begins
@@ -80,7 +80,7 @@ const KEYED = 6;
 const ROUNDS = 3;
 /** The pairs of new facts of each kind that warm the code of the kind and count not, and the pairs that count. */
 const WARM = 20;
-const PAIRS = 60;
+const PAIRS = 150;
 /** How many bytes of a record the pace reads at a time. */
 const PART = 16 * 2 ** 20;
 
