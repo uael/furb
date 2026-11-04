@@ -39,6 +39,9 @@ test("⌃C cancels the last message of the owner alone, and never the thread or 
   composing(
     async ({ session, app, screen, frame }) => {
       const { thread, workers } = await conductor(session);
+      // A line on the open thread is a message of None, over at once, so the message that a cancel takes is one that
+      // starts a thread of its own.
+      await session.submit("/newthread");
       app.composer.setText("Think until I cancel.");
       await app.submit();
       const message = await sent(session, thread);
@@ -146,11 +149,11 @@ test("the owner takes back his last message and writes it again, and no other wo
 
 test("a right click on a later message of a thread offers to take it back", () =>
   composing(
-    async ({ session, app, screen, frame }) => {
+    async ({ session, screen, frame }) => {
       const { thread } = await conductor(session);
-      session.aim(thread);
-      app.composer.setText("Think until I cancel.");
-      await app.submit();
+      // A prompt of str on an open thread is answered in steps, so it runs and a cancel can take it back, which a
+      // message of None, over at once, never does.
+      await session.engine.prompt("str", { message: "Think until I cancel.", on: thread });
       await until(session, () => session.lastOwn?.words[1] === "Think until I cancel.");
       await session.refresh();
       let shown = await frame();

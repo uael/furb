@@ -390,6 +390,13 @@ export class Session extends EventEmitter {
     if (this.pinned !== undefined) return this.pinned ?? undefined;
     return this.thread ?? (this.fresh || this.shape !== "str" ? undefined : this.lit);
   }
+  /** The shape of a line sent on a thread: None, a message that its model reads at its next step and that is done at
+   * once, while the prompt of the thread is open and a model answers it, else str, a prompt that opens a thread over
+   * again, as the engine reads a prompt on a thread. */
+  lineShape(thread: string): "None" | "str" {
+    const prompt = this.acts.find((act) => act.id === thread);
+    return prompt?.kind === "prompt" && !prompt.done && prompt.words[2] !== "operator" ? "None" : "str";
+  }
   /** The input sends its next message to the thread named, or starts a new thread when none is named. */
   aim(thread?: string): void {
     this.thread = thread;
@@ -1769,13 +1776,14 @@ export class Session extends EventEmitter {
     this.emit("compose", String(last.words[1] ?? ""));
   }
   /** A message to a thread, from the box at the end of the thread. It goes to the thread whatever the input is
-   * doing, and a message to a thread that is over opens it again. */
+   * doing: a message that its model reads at its next step while the thread is open, and a prompt that opens the
+   * thread again once it is over. */
   async reply(thread: string, input: string): Promise<void> {
     if (!input.trim() || this.host.reading) return;
     this.error = "";
     this.notice = "";
     const pending = this.host.pending.size > 0;
-    const id = await this.engine.prompt("str", { message: input.trim(), on: thread });
+    const id = await this.engine.prompt(this.lineShape(thread), { message: input.trim(), on: thread });
     this.notice = `Your message went to the thread ${thread}.`;
     if (pending) this.emit("resume");
     this.track(id);
@@ -1810,7 +1818,7 @@ export class Session extends EventEmitter {
         this.fresh = false;
         this.pinned = undefined;
         const id = thread
-          ? await this.engine.prompt("str", { message: this.withImages(input), on: thread })
+          ? await this.engine.prompt(this.lineShape(thread), { message: this.withImages(input), on: thread })
           : await this.engine.prompt(this.shape, { message: this.withImages(input), on: this.selected });
         if (thread) this.notice = `Your message went to the thread ${thread}.`;
         this.sentTo.set(id, thread);
