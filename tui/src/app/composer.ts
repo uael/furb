@@ -63,18 +63,32 @@ export const composer = part({
    * of the renderer, so that the work of the view and the frame that shows it share the time of one frame. */
   schedule() {
     if (this.closed) return;
+    // A long life makes each draw of the view cost more, so the next draw waits twice as long as the last one took:
+    // the view takes at most a third of the thread, and a key always finds the thread free for its frame.
     if (!this.redraw)
-      this.redraw = setTimeout(() => {
-        this.redraw = undefined;
-        this.due = true;
-        this.renderer.requestRender();
-      }, 35);
+      this.redraw = setTimeout(
+        () => {
+          this.redraw = undefined;
+          this.due = true;
+          this.renderer.requestRender();
+        },
+        Math.max(35, this.drawnAt + 2 * this.drawing - performance.now()),
+      );
   },
 
   async drawDue(): Promise<void> {
     if (!this.due || this.closed) return;
+    // The frame after a key shows the key at once, and the view draws in the next frame.
+    if (this.keyed) {
+      this.keyed = false;
+      setTimeout(() => this.renderer.requestRender(), 0);
+      return;
+    }
     this.due = false;
+    const began = performance.now();
     this.render();
+    this.drawnAt = performance.now();
+    this.drawing = this.drawnAt - began;
   },
 
   /** What the input sent in this mode, the oldest first: the lines of the other sessions of the workspace and of its
