@@ -25,7 +25,7 @@ async def test_the_started_names_the_act_and_says_no_more_of_it() -> None:
 
 
 async def test_the_journal_keeps_a_started_of_the_outside() -> None:
-  """The journal keeps a started of the outside, so a later life holds the act from the outside and does not say its first started again, since only the outside runs it: the act is done where the record holds its done, and pending when the record holds none."""
+  """The journal keeps a started of the outside, so a later life holds the act from the outside and says its first started again, which puts the act to no ear, since only the outside runs it: the act is done where the record holds its done, and pending when the record holds none."""
   sand, log, root = born(auto=False)
   step = engine.rung("x = bash('sleep 9')", on=root)
   await settle()
@@ -33,14 +33,18 @@ async def test_the_journal_keeps_a_started_of_the_outside() -> None:
   assert (("started", command, WORLD),) in sand.record
   later = Sand()
   heard, over = await relived(later, plain(sand.record))
-  assert [a for a in said(heard, "started") if a[1] == command] == []
+  assert [a for a in said(heard, "started") if a[1] == command] == [("started", command, "journal")]
+  assert [a for a in engine.transcript(over, "started") if a[1] == command] == [("started", command, WORLD)]
   assert said(later.calls, "bash") == [] and engine.peek(command, ...) is ... and engine.peek(step) is None
   engine.wake(over)
   await settle()
   assert [a[1] for a in said(later.calls, "bash")] == [command] and isinstance(engine.peek(command), Refused)
-  assert [a for a in said(heard, "started") if a[1] == command] == [("started", command, WORLD)]
+  assert [a[2] for a in said(heard, "started") if a[1] == command] == ["journal", WORLD]
   ended, _, root = born()
   one = engine.bash("echo hi", on=root)
   assert (await one).code == 0
   again, _ = await relived(Sand(), plain(ended.record))
-  assert [(a[0], a[2]) for a in again if a[1] == one and a[0] in ("started", "done")] == [("done", "journal")]
+  assert [(a[0], a[2]) for a in again if a[1] == one and a[0] in ("started", "done")] == [
+    ("started", "journal"),
+    ("done", "journal"),
+  ]

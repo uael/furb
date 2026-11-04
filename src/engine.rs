@@ -72,10 +72,11 @@ const WORK: [&str; 4] = ["prompt", "rung", "bash", "wait"];
 
 /// Whether this life took up an act that the record shows started and not done: the outside says it started in this
 /// life, which it does once a wake that this life says puts the act to it, or the act is done. A started that the
-/// journal says again is of an earlier life.
+/// journal says again is of an earlier life, and the view of the journal holds it.
 /// An act that a snapshot holds as work that ran is taken up only once this life puts it to the outside again.
-const TOOK: &str = "peek(__id, ...) is not ... or __id not in __restored and ('started', __id) in \
-  [x[:2] for x in transcript(scope(__id)) if x[2] != 'journal']";
+const TOOK: &str = "peek(__id, ...) is not ... or __id not in __restored and \
+  [x[1] for x in transcript(scope(__id), 'started')].count(__id) > \
+  [x[1] for x in transcript(scope(__id), 'journal') if x[0] == 'started'].count(__id)";
 
 /// Whether an act waits: it is not done, and no pause holds it.
 const WAITS: &str = "peek(__id, ...) is ... and not paused(__id)";

@@ -906,7 +906,7 @@ def boot(record=(), **outside):
   made, known, done, held, log, alive, born, busy, left, waits = Counter(), {}, {}, {}, [], {}, {}, set(), [], {}
   first, driven, taken = {e[1]: e for (e,) in record[::-1] if e[0] in ("started", "done")}, set(), {}
   due = [e for (e,) in record[::-1] if first.get(e[1]) is not e]
-  kept = {e[1]: e for (e,) in record if question(e)}
+  kept, again = {e[1]: e for (e,) in record if question(e)}, {}
 
   def drift(name):
     return Drift(
@@ -918,33 +918,43 @@ def boot(record=(), **outside):
       due.pop()
     return due
 
+  def repeat(kind, about, by, *words):
+    with site.set(by):
+      a = say(kind, about, *words)
+    again[id(a)] = a
+    held.setdefault((scope(about), "journal"), []).append(a)
+
+  def recount(entry):
+    match entry:
+      case (kind, name, by, on, *words) if question((kind, name)):
+        if (
+          by in kept
+          or (on and not get(on))
+          or (by == "journal" and not holds(scope(on), [known.setdefault(name, (kind, name, by, on))]))
+        ):
+          born.setdefault(kind, {})[name] = name
+          return
+        if by not in outside and (
+          not callable(verb := (module(on) or globals()).get(kind)) or re.fullmatch(r"\w+?\d+", by)
+        ):
+          raise drift(name)
+        with site.set(by):
+          try:
+            act(kind, on, None, *words) if by in outside else verb(*words, on=on)
+          except Refused:
+            pass
+      case (_, about, *_) if scope(about):
+        repeat(*entry)
+
   def journal(a=(), last=None):
     try:
       while True:
         while owed() and (
           not (log or left)
-          or (due[-1][0] == "joined" and due.pop() and due)
+          or (due[-1][0] == "joined" and not question(due[-2]) and due.pop() and due)
           or (a and a[::2] == ("wake", "journal") and due[-1][1] in taken)
         ):
-          match due.pop():
-            case (kind, name, by, on, *words) if question((kind, name)):
-              if (
-                by in outside
-                or by in kept
-                or (on and not get(on))
-                or (by == "journal" and not holds(scope(on), [known.setdefault(name, (kind, name, by, on))]))
-              ):
-                born.setdefault(kind, {})[name] = name
-                continue
-              if not callable(verb := (module(on) or globals()).get(kind)) or re.fullmatch(r"\w+?\d+", by):
-                raise drift(name)
-              with site.set(by):
-                try:
-                  verb(*words, on=on)
-                except Refused:
-                  pass
-            case (kind, about, _, *words) if scope(about):
-              yield kind, about, *words
+          recount(due.pop())
         b = a
         match a := (yield):
           case (kind, about, by, *_) if (
@@ -953,11 +963,16 @@ def boot(record=(), **outside):
             if not by and (owed() or about in first):
               raise drift(about)
             if by not in known and by not in driven:
-              about in kept or (yield "keep", "", (kept.setdefault(about, q),))
+              glue = (
+                b is last is not None
+                and kind not in ("started", "done")
+                and ("keep", "", (("joined", "", "journal", kind, about),))
+              )
+              if about not in kept:
+                a is q and glue and (yield glue)
+                yield "keep", "", (kept.setdefault(about, q),)
               if a is not q:
-                b is last and kind not in ("started", "done") and (
-                  yield "keep", "", (("joined", "", "journal", kind, about),)
-                )
+                glue and (yield glue)
                 yield "keep", "", (a,)
               last = a
             if kind == "wake" and not owed():
@@ -1000,11 +1015,10 @@ def boot(record=(), **outside):
           drive(ear(name), name)
         if kept.get(name, a) == a:
           if name not in taken and (f := first.get(name)):
-            if f[0] == "done":
-              with site.set(f[2] and "journal"):
-                say("done", name, f[3])
-            else:
-              taken[name] = True
+            taken[name] = f[0] == "started"
+            repeat(*f)
+            while taken[name] and owed() and due[-1][0] == "joined" and due.pop() and due:
+              recount(due.pop())
           if kind in ("run", "chain") or not owed():
             offers(a)
         if name not in taken and not busy & set(outside) & set(dict(ears(a))):
@@ -1047,7 +1061,9 @@ def boot(record=(), **outside):
       with site.set(name):
         busy.add(name)
         try:
-          waits[name] = w = lives(g, a)
+          waits[name] = w = lives(
+            g, (*a[:2], "journal", *a[3:]) if again.get(id(a), 0) is a and a[2] and name not in known else a
+          )
           w is False and alive.pop(name)
         finally:
           busy.discard(name)

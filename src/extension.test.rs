@@ -424,9 +424,9 @@ fn a_life_enables_at_its_tip_each_extension_it_is_given_and_plays_its_word_then_
     "the fact is about the root, and carries the name, the word and the life word"
   );
   assert_eq!(
-    facts[5],
-    ("rung".to_owned(), "extensions".to_owned()),
-    "the rung stands after the fact"
+    facts[5..7],
+    [("joined".to_owned(), "journal".to_owned()), ("rung".to_owned(), "extensions".to_owned())],
+    "the rung stands after the fact, joined to it, since the ear made it as it heard that fact"
   );
   let full = format!("{NOTE}\n\nnote()");
   assert_eq!(played(&mut engine, &["chain1"]), [rung("rung1", "chain1", &full)]);
