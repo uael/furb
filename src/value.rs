@@ -19,6 +19,38 @@ pub use monty_types::{MontyObject as Object, ObjectRef};
 /// The key of the one mark: a map whose `is` names a class of the engine is an instance of it, by its fields.
 pub const IS: &str = "is";
 
+/// What the World reads of a value that monty gives.
+pub(crate) trait Given {
+  /// Whether the value is `None`.
+  fn is_none(&self) -> bool;
+  /// The seconds that a float or an int counts.
+  fn seconds(&self) -> Option<f64>;
+}
+
+impl Given for ObjectRef<'_> {
+  fn is_none(&self) -> bool {
+    self.type_name() == "NoneType"
+  }
+
+  #[expect(
+    clippy::cast_precision_loss,
+    reason = "a count of seconds past 2^53 is no count to wait for"
+  )]
+  fn seconds(&self) -> Option<f64> {
+    self.as_float().or_else(|| self.as_int().map(|n| n as f64))
+  }
+}
+
+/// Bytes as the lowercase digits of base sixteen.
+pub(crate) fn hex(bytes: &[u8]) -> String {
+  const DIGITS: &[u8; 16] = b"0123456789abcdef";
+  bytes
+    .iter()
+    .flat_map(|one| [DIGITS[usize::from(one >> 4)], DIGITS[usize::from(one & 15)]])
+    .map(char::from)
+    .collect()
+}
+
 /// A text of the engine: the content at a path.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Text {

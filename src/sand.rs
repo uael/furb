@@ -10,14 +10,7 @@
 //! any depth, since the session holds each call of the host that waits. A value of the sandbox with no data form, and
 //! a class of the sandbox, crosses to the host as a handle, which the session holds until the host releases it.
 
-#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-
-use std::{sync::atomic::Ordering, time::Duration};
+use std::{mem, sync::atomic::Ordering, time::Duration};
 
 use monty::{MontyRepl, ReplFunctionCall, ReplProgress, ReplStartError};
 use monty_types::{
@@ -85,15 +78,24 @@ pub(crate) enum Answer {
   Abort(Fault),
 }
 
+/// Where the session of a [`Sand`] stands.
+enum State {
+  /// The session between two runs.
+  Idle(MontyRepl),
+  /// The call of the sandbox that the host answers now, while a run goes on. The session holds each
+  /// call it waits on beneath it.
+  Answering(Box<ReplFunctionCall>),
+  /// The run ended while the host answered a call, which ended every call it answered with it. The
+  /// fault says why. The session waits for the next run, as it does when idle.
+  Ended(MontyRepl, Fault),
+  /// No session here: a run holds it, or this sandbox stands in for one that is lent to code of a
+  /// host.
+  Lent,
+}
+
 /// One monty session, which is one life.
 pub(crate) struct Sand {
-  /// The session between two runs.
-  idle: Option<MontyRepl>,
-  /// The call of the sandbox that the host answers now, while a run goes on; the session holds each call it waits on
-  /// beneath it.
-  answering: Option<ReplFunctionCall>,
-  /// Why the run ended while the host answered a call, which ended every call it answered with it.
-  ended: Option<Fault>,
+  state: State,
   /// How many runs the session began. It holds a name for each one until the life ends.
   fed: usize,
 }
@@ -108,15 +110,14 @@ impl Sand {
     let limits = ResourceTracker::new(limits);
     count();
     let repl = MontyRepl::new("furb", limits, CompileOptions::default()).with_handles();
-    Self { idle: Some(repl), answering: None, ended: None, fed: 0 }
+    Self { state: State::Idle(repl), fed: 0 }
   }
 
   /// The session between two runs, as monty dumps it.
   pub(crate) fn dump(&self) -> Result<Vec<u8>, Fault> {
-    let repl = self
-      .idle
-      .as_ref()
-      .ok_or_else(|| Fault::refused("a sandbox dumps its session between two runs"))?;
+    let (State::Idle(repl) | State::Ended(repl, _)) = &self.state else {
+      return Err(Fault::refused("a sandbox dumps its session between two runs"));
+    };
     monty::dump("furb", None, &[], monty::SessionRef::Idle(repl))
       .map_err(|no| Fault::refused(no.to_string()))
   }
@@ -127,16 +128,14 @@ impl Sand {
     count();
     let dump = monty::Dump::load(bytes).map_err(|no| Fault::refused(no.to_string()))?;
     match dump.state {
-      monty::Session::Idle(repl) => {
-        Ok(Self { idle: Some(*repl), answering: None, ended: None, fed: 0 })
-      }
+      monty::Session::Idle(repl) => Ok(Self { state: State::Idle(*repl), fed: 0 }),
       _ => Err(Fault::refused("a snapshot holds a session between two runs")),
     }
   }
 
   /// A sandbox of nothing, which holds no session, and stands in for one that is lent to code of a host.
   pub(crate) fn none() -> Self {
-    Self { idle: None, answering: None, ended: None, fed: 0 }
+    Self { state: State::Lent, fed: 0 }
   }
 
   /// How many runs the session began.
@@ -148,15 +147,20 @@ impl Sand {
   /// One piece of code, run in the sandbox with these names bound, and what its last expression gave.
   ///
   /// The host answers every call the code makes while it runs. What the code raises is the fault.
-  pub(crate) fn run(
+  pub(crate) fn run<H: Host>(
     &mut self,
     code: &str,
     inputs: NamedValues,
-    host: &mut dyn Host,
+    host: &mut H,
   ) -> Result<Object, Fault> {
+    let repl = match self.take() {
+      State::Idle(repl) | State::Ended(repl, _) => repl,
+      held => {
+        self.state = held;
+        return Err(Fault::refused("a sandbox runs only between two runs"));
+      }
+    };
     self.fed += 1;
-    self.ended = None;
-    let repl = self.idle.take().expect("a sandbox holds its session between two runs");
     let step = repl.feed_start(code, inputs, PrintWriter::Disabled);
     self.drive(step, host)
   }
@@ -173,25 +177,18 @@ impl Sand {
     let mut inputs = NamedValues::new();
     inputs.push(ENTER, Object::function(ENTER, None));
     self.run(&format!("{ENTER}()"), inputs, &mut entering)?;
-    Ok(entering.got.expect("an entry runs its body before its run is done"))
+    entering.got.ok_or_else(|| Fault::refused("an entry runs its body before its run is done"))
   }
 
   /// A callable of the sandbox, called with these words while the host answers a call, and what it gave.
-  pub(crate) fn call(
+  pub(crate) fn call<H: Host>(
     &mut self,
-    host: &mut dyn Host,
+    host: &mut H,
     callable: &Object,
     args: Vec<Object>,
     kwargs: Vec<(&str, Object)>,
   ) -> Result<Object, Fault> {
-    let Some(call) = self.answering.take() else {
-      return Err(
-        self
-          .ended
-          .clone()
-          .expect("the host calls into the sandbox inside an entry, until its run ends"),
-      );
-    };
+    let call = self.taken()?;
     let kwargs = kwargs.into_iter().map(|(key, value)| (Object::string(key), value)).collect();
     let step =
       call.call_first(callable.clone(), CallArgs::from((args, kwargs)), PrintWriter::Disabled);
@@ -199,22 +196,25 @@ impl Sand {
   }
 
   /// The host holds the handle `id` no more, so the session lets go of what it held under it.
+  /// A sandbox that stands in for a lent one holds nothing, so it lets go of nothing.
   pub(crate) fn release(&mut self, id: &MontyUuid) {
-    if let Some(call) = self.answering.as_mut() {
-      call.release(id);
-    } else if let Some(repl) = self.idle.as_mut() {
-      repl.release(id);
-    } else {
-      unreachable!("the host releases a handle between two runs or while it answers a call");
+    match &mut self.state {
+      State::Answering(call) => {
+        call.release(id);
+      }
+      State::Idle(repl) | State::Ended(repl, _) => {
+        repl.release(id);
+      }
+      State::Lent => {}
     }
   }
 
   /// A run driven until it is done, or until the call the host made first returns: each call of the sandbox is
   /// answered by the host, with the call standing where the host reaches it.
-  fn drive(
+  fn drive<H: Host>(
     &mut self,
     mut step: Result<ReplProgress, Box<ReplStartError>>,
-    host: &mut dyn Host,
+    host: &mut H,
   ) -> Result<Object, Fault> {
     loop {
       let progress = match step {
@@ -223,22 +223,20 @@ impl Sand {
       };
       step = match progress {
         ReplProgress::Complete { repl, value } => {
-          self.idle = Some(repl);
+          self.state = State::Idle(repl);
           return Ok(value);
         }
         ReplProgress::Returned { result, call } => {
-          self.answering = Some(call);
+          self.state = State::Answering(Box::new(call));
           return result.map_err(|error| fault(&error));
         }
         ReplProgress::FunctionCall(call) => {
           let args: Vec<Object> = call.args.args().map(|one| one.to_owned()).collect();
           let (on, name) = (call.object_id, call.function_name.clone());
-          self.answering = Some(call);
+          self.state = State::Answering(Box::new(call));
           let answer = host.answer(self, on, &name, args);
           // The call is gone when the run ended while the host answered it.
-          let Some(call) = self.answering.take() else {
-            return Err(self.ended.clone().expect("a run that ended says why"));
-          };
+          let call = self.taken()?;
           match answer {
             Answer::Value(value) => call.resume(value, PrintWriter::Disabled),
             Answer::Raise(exception) => call.raise(exception, PrintWriter::Disabled),
@@ -277,11 +275,30 @@ impl Sand {
   /// What the sandbox raised, as the fault a host reads, with the session kept for the next run. Every call the host
   /// was answering ended with the run.
   fn failed(&mut self, failed: ReplStartError) -> Fault {
-    self.idle = Some(failed.repl);
-    self.answering = None;
     let fault = fault(&failed.error);
-    self.ended = Some(fault.clone());
+    self.state = State::Ended(failed.repl, fault.clone());
     fault
+  }
+
+  /// The state of the session, which a run or a call takes out and puts back.
+  fn take(&mut self) -> State {
+    mem::replace(&mut self.state, State::Lent)
+  }
+
+  /// The call that the host answers now, taken out of the session, or why there is none. A run that
+  /// ended says why, and the session keeps that for each later call of the same run.
+  fn taken(&mut self) -> Result<ReplFunctionCall, Fault> {
+    match self.take() {
+      State::Answering(call) => Ok(*call),
+      State::Ended(repl, why) => {
+        self.state = State::Ended(repl, why.clone());
+        Err(why)
+      }
+      held => {
+        self.state = held;
+        Err(Fault::refused("the host calls into the sandbox only while it answers a call"))
+      }
+    }
   }
 }
 
@@ -298,7 +315,7 @@ fn memory() -> usize {
 /// program, since the allocator is: a program that installed no counting allocator counts nothing, and the error that
 /// says so holds nothing to mend.
 fn count() {
-  let _ = monty_alloc::set_hard_limit(None);
+  monty_alloc::set_hard_limit(None).unwrap_or_default();
 }
 
 /// What the sandboxes of the program hold of the memory that bounds them, in bytes: what the counting allocator holds
@@ -366,7 +383,7 @@ pub(crate) fn object(class: &str, id: MontyUuid) -> Object {
 /// An id of the host, from a number: each object of the host that the sandbox holds, and each value the host hands in
 /// by its fields, stands under one of its own.
 pub(crate) fn id(of: u128) -> MontyUuid {
-  MontyUuid::try_from_slice(&of.to_be_bytes()).expect("sixteen bytes are an id")
+  MontyUuid::from_u128(of)
 }
 
 /// The host of an entry: its body answers the first call, and the host answers every other.

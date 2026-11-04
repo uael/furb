@@ -338,9 +338,9 @@ pub struct Inspection {
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "python", pyo3(signature = (scratch, config = None)))]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn files(scratch: String, config: Option<String>) -> NativeEar {
+pub fn files(scratch: String, config: Option<String>) -> Result<NativeEar, Fault> {
   let config = config.map_or_else(|| extension::Places::here().config, Into::into);
-  NativeEar::of(world::files(world::Scratch::at(scratch), config, None))
+  Ok(NativeEar::of(world::files(world::Scratch::at(scratch)?, config, None)))
 }
 
 /// The ear of commands, which runs each in a shell of this machine, with `TMPDIR` set to the scratch directory that
@@ -348,17 +348,17 @@ pub fn files(scratch: String, config: Option<String>) -> NativeEar {
 /// closes as interrupted each command that the record shows started and not done, at the wake.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn bash(scratch: String, record: Vec<Value>) -> NativeEar {
+pub fn bash(scratch: String, record: Vec<Value>) -> Result<NativeEar, Fault> {
   let record: Vec<Object> = record.into_iter().map(|one| one.0).collect();
-  NativeEar::of(world::bash(world::Scratch::at(scratch), &record))
+  Ok(NativeEar::of(world::bash(world::Scratch::at(scratch)?, &record)))
 }
 
 /// The scratch directory of the record at a path, in the cache of furb, which a host removes when it deletes the
 /// record; nothing when the machine has no cache of furb.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn scratch(record: String) -> Option<String> {
-  world::Scratch::of(record.as_ref()).map(|one| one.path().display().to_string())
+pub fn scratch(record: String) -> Result<Option<String>, Fault> {
+  Ok(world::Scratch::of(record.as_ref())?.map(|one| one.path().display().to_string()))
 }
 
 /// The ear of time, which reads the clock, draws a chance, and ends a wait.

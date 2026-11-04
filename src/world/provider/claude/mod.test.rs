@@ -20,16 +20,15 @@ use std::{
   path::{Path, PathBuf},
   process::{Command, Stdio},
   sync::OnceLock,
-  time::Duration,
+  time::{Duration, SystemTime},
 };
 
 use futures::{
   StreamExt,
   future::{Either, select},
 };
-use jiff::Zoned;
 use rig_core::{
-  completion::{CompletionModel, CompletionRequest},
+  completion::{CompletionError, CompletionModel, CompletionRequest},
   message::{AssistantContent, Message, Reasoning, Text, UserContent},
   streaming::StreamedAssistantContent,
 };
@@ -258,12 +257,8 @@ fn a_turn_waits_for_a_program_that_an_update_took_away_and_then_names_the_progra
   yard.away();
   let no = asked(&model, &[user("first")], settings).unwrap_err();
   let bin = yard.at.join("claude");
-  let said = format!(
-    "ProviderError: {}: {} did not start: No such file or directory (os error 2)",
-    super::MISSING,
-    bin.display()
-  );
-  assert_eq!(no.to_string(), said);
+  let said = format!("{} did not start: No such file or directory (os error 2)", bin.display());
+  assert!(matches!(super::error(&no), Some(super::Error::Missing(why)) if *why == said), "{no}");
 }
 
 #[test]
@@ -275,10 +270,12 @@ fn a_prefix_that_found_no_claude_fails_as_a_missing_program_and_the_next_turn_be
   let model = claude.completion_model("sonnet");
   let settings = json!({"session": "chain"});
   yard.away();
-  let no = asked(&model, &[user("first")], settings.clone()).unwrap_err().to_string();
-  let missing = format!("ProviderError: {}: {} ", super::MISSING, prefix.display());
-  assert!(no.starts_with(&missing), "{no}");
-  assert!(no.ends_with(": Error: 'claude' was not found on PATH."), "{no}");
+  let no = asked(&model, &[user("first")], settings.clone()).unwrap_err();
+  let Some(super::Error::Missing(why)) = super::error(&no) else {
+    panic!("a missing program: {no}")
+  };
+  assert!(why.starts_with(&format!("{} ", prefix.display())), "{why}");
+  assert!(why.ends_with(": Error: 'claude' was not found on PATH."), "{why}");
   yard.back();
   let got = asked(&model, &[user("first")], settings).unwrap();
   assert_eq!(got.choice, [AssistantContent::text("close(\"reply 1\")")]);
@@ -776,8 +773,8 @@ pub(crate) fn gone(pid: &str) -> bool {
 
 /// The models of a yard: what the scripted command line says of them, and how many times it was asked.
 fn said(claude: &Claude) -> Vec<(String, u64, Vec<String>)> {
-  claude
-    .models()
+  reactor()
+    .block_on(claude.models())
     .iter()
     .map(|one| (one.name.clone(), one.window, one.efforts.iter().map(|e| e.0.clone()).collect()))
     .collect()
@@ -842,6 +839,14 @@ fn an_effort_that_the_command_line_reported_is_taken_on_a_turn() {
   assert_eq!(after(&yard.args(&yard.pids()[0]), "--effort").as_deref(), Some("turbo"));
 }
 
+/// What a failed turn says of the account it switched from and to, which it must have switched.
+fn switched(no: &CompletionError) -> &str {
+  let Some(super::Error::Switched(why)) = super::error(no) else {
+    panic!("a switched account: {no}")
+  };
+  why
+}
+
 /// The accounts of a test, each with a token file in the yard that holds `tok-` and its name.
 fn listed(yard: &Yard, names: &[&str]) -> Vec<Account> {
   let account = |name: &&str| {
@@ -859,8 +864,8 @@ fn a_usage_limit_parks_its_account_and_the_turn_that_asks_again_runs_as_the_next
   let model = claude.completion_model("sonnet");
   fs::write(yard.at.join("limited.tok-a"), "600").unwrap();
   let settings = json!({"session": "chain"});
-  let no = asked(&model, &[user("first")], settings.clone()).unwrap_err().to_string();
-  assert_eq!(no, "ProviderError: Switched account from a to b: its usage limit");
+  let no = asked(&model, &[user("first")], settings.clone()).unwrap_err();
+  assert_eq!(switched(&no), "from a to b: its usage limit");
   let got = asked(&model, &[user("first")], settings.clone()).unwrap();
   assert_eq!(got.choice, [AssistantContent::text("close(\"reply 1\")")]);
   let more = [user("first"), Message::Assistant { id: None, content: got.choice }, user("second")];
@@ -878,8 +883,8 @@ fn a_failed_sign_in_parks_its_account_until_the_command_line_stands_again() {
   let accounts = listed(&yard, &["a", "b"]);
   fs::write(yard.at.join("signedout.tok-a"), "").unwrap();
   let model = yard.claude_as(accounts.clone(), Switch::Failover).completion_model("sonnet");
-  let no = asked(&model, &[user("first")], json!({"session": "one"})).unwrap_err().to_string();
-  assert_eq!(no, "ProviderError: Switched account from a to b: its sign in failed");
+  let no = asked(&model, &[user("first")], json!({"session": "one"})).unwrap_err();
+  assert_eq!(switched(&no), "from a to b: its sign in failed");
   fs::remove_file(yard.at.join("signedout.tok-a")).unwrap();
   asked(&model, &[user("first")], json!({"session": "two"})).unwrap();
   let again = yard.claude_as(accounts, Switch::Failover).completion_model("sonnet");
@@ -896,16 +901,15 @@ fn every_account_parked_waits_for_the_first_reset_as_the_command_line_says_it() 
   fs::write(yard.at.join("limited.tok-b"), "900").unwrap();
   let settings = json!({"session": "chain"});
   let first = asked(&model, &[user("first")], settings.clone()).unwrap_err();
-  assert_eq!(first.to_string(), "ProviderError: Switched account from a to b: its usage limit");
+  assert_eq!(switched(&first), "from a to b: its usage limit");
   let second = asked(&model, &[user("first")], settings.clone()).unwrap_err();
-  let said = second.to_string();
-  assert!(said.starts_with("ProviderError: Claude AI usage limit reached|"), "{said}");
-  let now = Zoned::now();
-  let Some(Some(end)) = super::super::limit(&second, &now) else { panic!("a limit with a reset") };
-  let wait = end.timestamp().as_second() - now.timestamp().as_second();
+  let Some(super::Error::Limit { until: Some(end) }) = super::error(&second) else {
+    panic!("a limit with a reset: {second}")
+  };
+  let wait = end.duration_since(SystemTime::now()).map_or(0, |one| one.as_secs());
   assert!((500..=610).contains(&wait), "the first reset is the one of a: {wait}");
   let third = asked(&model, &[user("first")], settings).unwrap_err();
-  assert_eq!(third.to_string(), said);
+  assert_eq!(third.to_string(), second.to_string());
   assert_eq!(yard.tokens(), ["tok-a", "tok-b"], "no process starts while every account waits");
 }
 
@@ -930,8 +934,8 @@ fn an_account_whose_token_cannot_be_read_starts_no_process_and_counts_as_signed_
   accounts.insert(0, Account { name: "a".to_owned(), source: Source::TokenFile(missing) });
   let model = yard.claude_as(accounts, Switch::Failover).completion_model("sonnet");
   let settings = json!({"session": "chain"});
-  let no = asked(&model, &[user("first")], settings.clone()).unwrap_err().to_string();
-  assert_eq!(no, "ProviderError: Switched account from a to b: its sign in failed");
+  let no = asked(&model, &[user("first")], settings.clone()).unwrap_err();
+  assert_eq!(switched(&no), "from a to b: its sign in failed");
   assert!(yard.pids().is_empty(), "no process ran as the account with no token");
   asked(&model, &[user("first")], settings).unwrap();
   assert_eq!(yard.tokens(), ["tok-b"]);
@@ -944,7 +948,8 @@ fn a_single_account_is_never_parked_and_its_limit_stays_the_wait_of_the_provider
   fs::write(yard.at.join("limited.tok-a"), "600").unwrap();
   for _ in 0..2 {
     let no = asked(&model, &[user("first")], json!({"session": "chain"})).unwrap_err();
-    assert!(no.to_string().starts_with("ProviderError: Claude AI usage limit reached|"), "{no}");
+    let limited = matches!(super::error(&no), Some(super::Error::Limit { until: Some(_) }));
+    assert!(limited, "the limit of the command line, with its reset: {no}");
   }
   assert_eq!(yard.tokens(), ["tok-a", "tok-a"]);
 }
@@ -974,8 +979,8 @@ fn the_command_line_is_signed_in_when_any_of_its_accounts_is() {
     let accounts = listed(&yard, names);
     Claude::with_accounts(Some(script.clone()), Vec::new(), accounts, Switch::Failover, None)
   };
-  assert!(claude(&["a", "b"]).signed());
-  assert!(!claude(&["a"]).signed());
+  assert!(reactor().block_on(claude(&["a", "b"]).signed()));
+  assert!(!reactor().block_on(claude(&["a"]).signed()));
 }
 
 #[test]

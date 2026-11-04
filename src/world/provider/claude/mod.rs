@@ -72,8 +72,8 @@ use crate::ear::runtime;
 mod accounts;
 mod discover;
 mod protocol;
+use accounts::Accounts;
 pub use accounts::{Account, Source, Switch};
-use accounts::{Accounts, NO_TOKEN};
 use discover::Found;
 pub use discover::refresh;
 use protocol::{Delta, Event, Finished, Spent, Start, Stop, Streamed, Whole};
@@ -126,37 +126,88 @@ const PAUSE: Duration = Duration::from_secs(5);
 /// is gone.
 const LOST: &str = "No conversation found with session ID";
 
-/// The words that begin the failure of a turn whose program was missing or did not run, as while an update of claude
-/// replaces it, which the provider takes for a failure that passes.
-pub(super) const MISSING: &str = "No program to run";
-
-/// The words that begin the failure of a turn whose account was parked, which the provider takes for a failure that
-/// passes: the turn that asks again runs as another account.
-pub(super) const SWITCHED: &str = "Switched account";
-
 /// What a failed sign in of the command line says, in lower case.
-const SIGNED_OUT: [&str; 6] = [
+const SIGNED_OUT: [&str; 5] = [
   "please run /login",
   "not logged in",
   "invalid api key",
   "oauth token has expired",
   "authentication_error",
-  NO_TOKEN,
 ];
 
-/// The words that begin the failure of a turn that finds every account signed out.
-const ALL_SIGNED_OUT: &str = "Every account of the claude command line is signed out.";
-
-/// Whether a failure is a failed sign in of the command line, or that every account of it is signed out. A sign in
-/// outside furb ends it, so the provider waits and asks again.
-pub(super) fn signed_out(no: &CompletionError) -> bool {
-  let CompletionError::ProviderError(said) = no else { return false };
-  let said = said.to_lowercase();
-  said.starts_with(&ALL_SIGNED_OUT.to_lowercase()) || signed_out_words(&said)
+/// A failed turn of the command line that the provider decides on. It crosses the boundary of rig
+/// boxed in a `CompletionError::RequestError`, the one variant of rig that holds a source, and
+/// [`error`] takes it back.
+#[derive(Debug, thiserror::Error)]
+pub(super) enum Error {
+  /// A usage limit, and the moment it ends when the command line names one. The provider asks again
+  /// then.
+  #[error("Claude AI usage limit reached{}", until_text(.until.as_ref()))]
+  Limit { until: Option<SystemTime> },
+  /// A failed sign in, or every account signed out. A sign in outside furb ends it, so the provider
+  /// asks again.
+  #[error("{0}")]
+  SignedOut(String),
+  /// The program was missing or did not run, as while an update of claude replaces it, which
+  /// passes.
+  #[error("No program to run: {0}")]
+  Missing(String),
+  /// The account was parked, and the turn that asks again runs as another one, which passes.
+  #[error("Switched account {0}")]
+  Switched(String),
+  /// The command line holds no conversation under the id that the process resumed.
+  #[error("{0}")]
+  Lost(String),
 }
 
-fn signed_out_words(said: &str) -> bool {
-  SIGNED_OUT.iter().any(|one| said.contains(one))
+/// The end of a limit as a failure says it, when it is known.
+fn until_text(until: Option<&SystemTime>) -> String {
+  until
+    .and_then(|at| jiff::Timestamp::try_from(*at).ok())
+    .map_or_else(String::new, |at| format!(" until {at}"))
+}
+
+/// A failure that the provider decides on, as rig carries it.
+fn refused(why: Error) -> CompletionError {
+  CompletionError::RequestError(Box::new(why))
+}
+
+/// The failure of the command line that a failed call holds, if the provider decides on it.
+pub(super) fn error(no: &CompletionError) -> Option<&Error> {
+  let CompletionError::RequestError(source) = no else { return None };
+  source.downcast_ref()
+}
+
+/// A failure in the words of the command line, typed when the words name a usage limit, a failed
+/// sign in or a lost conversation. This is the one place that reads them, since the command line
+/// gives nothing but its text.
+pub(super) fn worded(no: CompletionError) -> CompletionError {
+  let CompletionError::ProviderError(said) = &no else { return no };
+  let lower = said.to_lowercase();
+  if lower.contains("usage limit reached") || (lower.contains("limit") && lower.contains("resets"))
+  {
+    refused(Error::Limit { until: limited(said) })
+  } else if SIGNED_OUT.iter().any(|one| lower.contains(one)) {
+    refused(Error::SignedOut(said.clone()))
+  } else if said.contains(LOST) {
+    refused(Error::Lost(said.clone()))
+  } else {
+    no
+  }
+}
+
+/// The moment a usage limit ends, from the message of the command line: the older `usage limit
+/// reached|1760000000`, or the moment after `resets`.
+fn limited(said: &str) -> Option<SystemTime> {
+  if let Some((_, epoch)) = said.rsplit_once('|')
+    && let Ok(second) = epoch.trim().parse::<u64>()
+  {
+    return Some(UNIX_EPOCH + Duration::from_secs(second));
+  }
+  let at = super::resets(said, &Zoned::now())?;
+  u64::try_from(at.timestamp().as_second())
+    .ok()
+    .map(|second| UNIX_EPOCH + Duration::from_secs(second))
 }
 
 /// The claude command line: its program, how long a turn may go with no progress, how long a process waits for a
@@ -221,8 +272,13 @@ impl Claude {
   /// says it is not, in its JSON or in its words, so a version with no such command, or one that does not end in ten
   /// seconds, passes, and a turn says what is wrong. With accounts, it is signed in when any account is, and an
   /// account whose token cannot be read is not.
-  pub fn signed(&self) -> bool {
-    (0..self.program.accounts.count()).any(|at| self.program.under(at).signed())
+  pub async fn signed(&self) -> bool {
+    for at in 0..self.program.accounts.count() {
+      if self.program.under(at).signed().await {
+        return true;
+      }
+    }
+    false
   }
 
   /// The same command line, whose process waits this long for a program that is missing or does not run.
@@ -244,8 +300,8 @@ impl Claude {
   /// The command line says its models itself, with no model prompt, once for each version of its program: a process
   /// of its own asks it, and furb keeps the answer in its cache until the program changes or [`refresh`] is called.
   /// A command line that does not answer, as an older one does not, gives the fixed table of furb, within 20 seconds.
-  pub fn models(&self) -> Vec<Model> {
-    self.family(discover::models(&self.program).unwrap_or_else(discover::fallback))
+  pub async fn models(&self) -> Vec<Model> {
+    self.family(discover::models(&self.program).await.unwrap_or_else(discover::fallback))
   }
 
   /// The models that furb offers when it cannot ask the command line: the fixed table, which asks nothing.
@@ -278,12 +334,6 @@ impl Claude {
 
 /// The flag by which the command line records its system prompt once for a conversation.
 const SNAPSHOT: &str = "--system-prompt-snapshot";
-
-/// Whether the command line lists a flag in its help. It is asked once for each version of its program.
-async fn lists(program: &Program, flag: &'static str) -> bool {
-  let program = program.clone();
-  tokio::task::spawn_blocking(move || discover::lists(&program, flag)).await.unwrap_or(false)
-}
 
 /// The program that starts the command line: its file, and the words that come before each flag that furb gives it,
 /// as `cswap run 3` holds the file `cswap` and the words `run` and `3`. It starts a process with no shell, so each
@@ -322,14 +372,8 @@ impl Program {
     Ok(command)
   }
 
-  /// Whether this program, as its account, is signed in. It waits for the command on the runtime of
-  /// the ears, so it never runs on a thread of that runtime nor on the thread of a life, and the
-  /// command is ended after ten seconds.
-  #[expect(
-    clippy::disallowed_methods,
-    reason = "debt: a call that blocks: block_on, where the catalog asks whether it is signed in with no await"
-  )]
-  fn signed(&self) -> bool {
+  /// Whether this program, as its account, is signed in. The command is killed after ten seconds.
+  async fn signed(&self) -> bool {
     let Ok(mut command) = self.command() else { return false };
     command
       .args(["auth", "status"])
@@ -337,9 +381,8 @@ impl Program {
       .stdout(std::process::Stdio::piped())
       .stderr(std::process::Stdio::piped())
       .kill_on_drop(true);
-    let asked =
-      async move { tokio::time::timeout(Duration::from_secs(10), command.output()).await };
-    let Ok(Ok(out)) = runtime().block_on(asked) else { return true };
+    let asked = tokio::time::timeout(Duration::from_secs(10), command.output()).await;
+    let Ok(Ok(out)) = asked else { return true };
     let said = String::from_utf8_lossy(&out.stdout);
     let logged =
       serde_json::from_str::<Value>(&said).ok().and_then(|one| one["loggedIn"].as_bool());
@@ -417,8 +460,8 @@ impl Claude {
     }
     let settings = request.additional_params.unwrap_or_default();
     let effort = settings.get("effort").and_then(Value::as_str).map(str::to_owned);
-    if let Some(effort) =
-      effort.as_deref().filter(|one| !discover::takes(&self.program, &name, one))
+    if let Some(effort) = effort.as_deref()
+      && !discover::takes(&self.program, &name, effort).await
     {
       let efforts = EFFORTS.join(", ");
       return Err(failed(format!("{name} spends one of {efforts} on a turn, never {effort}.")));
@@ -468,13 +511,16 @@ impl Claude {
     got.map_err(|no| self.switched(at, no))
   }
 
-  /// The failure of a turn that finds every account parked: the wait for the first reset of a limit, in the words of
-  /// the command line, or that every account is signed out.
+  /// The failure of a turn that finds every account parked: the wait for the first reset of a
+  /// limit, or that every account is signed out.
   fn exhausted(&self, now: SystemTime) -> CompletionError {
-    match self.program.accounts.earliest(now) {
-      Some(end) => failed(format!("Claude AI usage limit reached|{}", epoch(end))),
-      None => failed(format!("{ALL_SIGNED_OUT} Sign one in, then run /reload.")),
-    }
+    refused(match self.program.accounts.earliest(now) {
+      Some(end) => Error::Limit { until: Some(end) },
+      None => Error::SignedOut(
+        "Every account of the claude command line is signed out. Sign one in, then run /reload."
+          .to_owned(),
+      ),
+    })
   }
 
   /// What a failed turn of an account comes to. A usage limit or a failed sign in parks the account, and the turn
@@ -485,46 +531,25 @@ impl Claude {
     if !accounts.switchable() {
       return no;
     }
-    let Some(why) = refusal(&no) else { return no };
     let now = SystemTime::now();
-    let (until, reason) = match why {
-      Refusal::Limit(end) => (Some(end.unwrap_or(now + super::LIMIT_POLL)), "its usage limit"),
-      Refusal::SignedOut => (None, "its sign in failed"),
+    let (until, reason) = match error(&no) {
+      Some(Error::Limit { until }) => {
+        (Some(until.unwrap_or(now + super::LIMIT_POLL)), "its usage limit")
+      }
+      Some(Error::SignedOut(_)) => (None, "its sign in failed"),
+      _ => return no,
     };
     accounts.park(at, until);
     match (accounts.peek(now), accounts.earliest(now)) {
-      (Some(next), _) => failed(format!(
-        "{SWITCHED} from {} to {}: {reason}",
+      (Some(next), _) => refused(Error::Switched(format!(
+        "from {} to {}: {reason}",
         accounts.name(at),
         accounts.name(next)
-      )),
+      ))),
       (None, Some(_)) => self.exhausted(now),
       (None, None) => no,
     }
   }
-}
-
-/// Why an account cannot serve: a usage limit, and the moment it ends if the message names one, or a failed sign in.
-enum Refusal {
-  Limit(Option<SystemTime>),
-  SignedOut,
-}
-
-fn refusal(no: &CompletionError) -> Option<Refusal> {
-  if let Some(reset) = super::limit(no, &Zoned::now()) {
-    let end = reset
-      .and_then(|at| u64::try_from(at.timestamp().as_second()).ok())
-      .map(|seconds| UNIX_EPOCH + Duration::from_secs(seconds));
-    return Some(Refusal::Limit(end));
-  }
-  let CompletionError::ProviderError(said) = no else { return None };
-  let said = said.to_lowercase();
-  signed_out_words(&said).then_some(Refusal::SignedOut)
-}
-
-/// A time as the seconds since 1970, which the older message of a usage limit gives.
-fn epoch(at: SystemTime) -> u64 {
-  at.duration_since(UNIX_EPOCH).map_or(0, |one| one.as_secs())
 }
 
 /// What the keeper of the conversations is asked: to lend the conversation of a key to a turn, or to take it back.
@@ -902,14 +927,15 @@ impl Conversation {
         reply: None,
         restored: None,
       };
-      let got = flight.run(delta, spend.clone(), program, stall, gone, deltas).await;
+      let got =
+        flight.run(delta, spend.clone(), program, stall, gone, deltas).await.map_err(worded);
       if let Ok(response) = &got {
         let reply = Message::Assistant { id: None, content: response.choice.clone() };
         flight.reply = Some(canonical(&reply));
       }
       drop(flight);
       match (got, &lost) {
-        (Err(no), None) if no.to_string().contains(LOST) => {
+        (Err(no), None) if matches!(error(&no), Some(Error::Lost(_))) => {
           lost = Some(self.id.clone());
           self.renew()?;
           (delta, again) = (messages, false);
@@ -935,14 +961,14 @@ impl Conversation {
     spend: Spend,
     gone: Duration,
   ) -> Result<Process, CompletionError> {
-    let mut command = program.command().map_err(failed)?;
+    let mut command = program.command().map_err(|why| refused(Error::SignedOut(why)))?;
     command.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json"]);
     command.args(["--verbose", "--include-partial-messages", "--model", &self.name]);
     let prompt = prompt_file(&self.system)?;
     command.arg("--system-prompt-file").arg(&prompt).args(["--setting-sources", ""]);
     // Else a resumed or forked conversation sends the system prompt that its first request recorded, and not this
     // one. A command line that does not list the flag would refuse it, so it gets none.
-    if lists(program, SNAPSHOT).await {
+    if discover::lists(program, SNAPSHOT).await {
       command.args([SNAPSHOT, "off"]);
     }
     command.current_dir(home()?);
@@ -998,8 +1024,8 @@ impl Conversation {
     .map_err(|no| {
       let absent =
         matches!(no.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied);
-      let missing = if absent { format!("{MISSING}: ") } else { String::new() };
-      failed(format!("{missing}{} did not start: {no}", program.name()))
+      let said = format!("{} did not start: {no}", program.name());
+      if absent { refused(Error::Missing(said)) } else { failed(said) }
     })?;
     let (Some(stdin), Some(stdout), Some(stderr)) =
       (child.stdin.take(), child.stdout.take(), child.stderr.take())
@@ -1163,7 +1189,7 @@ async fn exited(
   let code = code.map_or_else(|| "a signal".to_owned(), |code| code.to_string());
   if !spoke && absent(&tail.kept) {
     let said = tail.said();
-    return (failed(format!("{MISSING}: {} exited ({code}){said}", program.name())), true);
+    return (refused(Error::Missing(format!("{} exited ({code}){said}", program.name()))), true);
   }
   (failed(format!("Claude exited ({code}){}", tail.said())), false)
 }
@@ -1263,7 +1289,10 @@ impl Flight<'_> {
         let said = process.tail.said();
         if absent(&process.tail.kept) {
           self.restored = Some(before);
-          return Err(failed(format!("{MISSING}: {} took no input: {no}{said}", program.name())));
+          return Err(refused(Error::Missing(format!(
+            "{} took no input: {no}{said}",
+            program.name()
+          ))));
         }
         return Err(failed(format!("claude took no input: {no}{said}")));
       }

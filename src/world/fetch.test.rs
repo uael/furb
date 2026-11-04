@@ -23,15 +23,18 @@ use crate::{
 #[test]
 fn a_page_of_html_is_its_markdown_other_text_is_itself_and_a_page_of_no_text_is_refused() {
   let html = "<html><head><title>T</title><style>p{}</style></head><body><h1>Rust</h1>\n\n\n<p>Is <b>fast</b>.</p><script>x()</script></body></html>";
-  assert_eq!(page("text/html; charset=utf-8", html).unwrap(), "# Rust\n\nIs **fast**.");
+  assert_eq!(page("u", "text/html; charset=utf-8", html).unwrap(), "# Rust\n\nIs **fast**.");
   assert_eq!(
-    page("", html).unwrap(),
+    page("u", "", html).unwrap(),
     "# Rust\n\nIs **fast**.",
     "a page of no kind that opens with a tag is HTML"
   );
-  assert_eq!(page("application/json", "{\"a\": 1}").unwrap(), "{\"a\": 1}");
-  assert_eq!(page("text/plain", "plain  \n").unwrap(), "plain  \n");
-  assert_eq!(page("image/png", "\u{89}PNG").unwrap_err(), "is no text: image/png");
+  assert_eq!(page("u", "application/json", "{\"a\": 1}").unwrap(), "{\"a\": 1}");
+  assert_eq!(page("u", "text/plain", "plain  \n").unwrap(), "plain  \n");
+  assert_eq!(
+    page("u", "image/png", "\u{89}PNG").unwrap_err().to_string(),
+    "u is no text: image/png"
+  );
 }
 
 #[test]

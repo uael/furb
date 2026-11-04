@@ -32,9 +32,6 @@ const OTHERS: [&str; 4] = [
   "CLAUDE_CODE_API_KEY_FILE_DESCRIPTOR",
 ];
 
-/// The words after the name of an account in each failure to read its token, which a turn takes for a failed sign in.
-pub(super) const NO_TOKEN: &str = "has no token";
-
 /// Where an account takes its credential.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Source {
@@ -190,7 +187,7 @@ impl Accounts {
       command.env_remove(name);
     }
     let name = &account.name;
-    let none = |what: String| format!("The account {name} {NO_TOKEN}: {what}");
+    let none = |what: String| format!("The account {name} has no token: {what}");
     let token = match &account.source {
       Source::ConfigDir(dir) => {
         command.env_remove(TOKEN).env(CONFIG, dir);
