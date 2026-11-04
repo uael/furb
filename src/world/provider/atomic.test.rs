@@ -44,7 +44,8 @@ fn a_write_that_fails_names_the_file_and_leaves_the_folder_as_it_was() {
   fs::write(at.join("held"), "a file").expect("a file where a folder is asked");
   let no = write(&at.join("held").join("state.json"), b"x", Access::Shared).expect_err("no folder");
   assert!(matches!(&no, Error::Write { path, .. } if path.ends_with("held/state.json")));
-  assert!(no.to_string().contains("held/state.json was not written"));
+  let shown = std::path::Path::new("held").join("state.json");
+  assert!(no.to_string().contains(&format!("{} was not written", shown.display())));
   assert_eq!(names(&at), ["held"]);
 }
 
