@@ -191,6 +191,7 @@ impl Stand {
 
 fn main() -> ExitCode {
   let furb = Furb::parse();
+  world::catalog::keep_fresh();
   let done = match furb.command {
     Some(Command::Prompt { message, to, shape, place, mut stand }) => {
       // The actor of the prompt is one the life offers, which a roster that names models must name too.
