@@ -240,7 +240,25 @@ def prompt[T](shape: type[T] | object, message="", to="", on="") -> Act[T]:
     yield opened(id, named, message=message, thread=thread)
     a: tuple = ()
     while not says:
-      heard = a[:1] == ("done",) and prompted(a[1]) and get(a[1])[3:5] == (id, "None")
+      got = a[:1] == ("done",) and get(a[1])
+      heard = got and prompted(a[1]) and got[3:5] == (id, "None")
+      heard or (
+        got
+        and got[2] == id
+        and (
+          owed := (
+            "",
+            *[
+              x[1] * operated(x[2])
+              for x in transcript(id)
+              if (x[3:5] == (id, "None") and operated(x[2]))
+              or (x[0] == "prompt" and x[6] == OPERATOR and under(x[2], id))
+              or (x[:3:2] == ("rung", id) and not over(x[1]))
+            ],
+          )[-1]
+        )
+        and prompt(None, owed + " unanswered", on=id)
+      )
       asks and not (
         paused(id)
         or any(
