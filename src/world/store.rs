@@ -14,6 +14,7 @@
 )]
 
 mod lines;
+pub mod schema;
 mod sqlite;
 
 use std::{
@@ -21,9 +22,8 @@ use std::{
   collections::VecDeque,
   fmt::Display,
   fs::{File, OpenOptions, TryLockError, create_dir_all},
-  path::{Path, PathBuf},
+  path::Path,
   rc::Rc,
-  task::{Context, Poll},
   time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -34,16 +34,18 @@ use sha2::{Digest, Sha256};
 
 use monty_types::unstable::{MontyGraph, MontyNode};
 
+use super::beside;
 use crate::{
   ENGINE, KERNEL,
-  ear::{Co, Ear, Heard, Next, Spoken, Step, hearing, say},
-  engine::{Life, ROOT},
+  ear::{Co, Ear, Hooks, Next, With, hearing, say},
+  engine::ROOT,
   fact::Fact,
   value::{Fault, Object, ObjectRef},
   wire::{built, whole},
 };
 
 pub use lines::Lines;
+pub use schema::{CHECKPOINT_SCHEMA, RECORD_SCHEMA, Schema, SchemaError};
 pub use sqlite::Sqlite;
 
 /// The place that keeps the record of a life, which a host can write for a place of its own and give to `keeping`.
@@ -112,12 +114,20 @@ pub fn heads(path: impl AsRef<Path>, kinds: &[&str]) -> Result<Vec<Object>, Faul
   Ok(sqlite::kept(path)?.into_iter().filter(of).collect())
 }
 
-/// The kind of the fact by which a record names the build that made it: `("made", "chain1", "store", engine,
-/// version)`, where engine is what [`engine`] gives and version is [`VERSION`]. A record of a build before the
-/// versions holds no version. No contract holds it, so this is the one home of its shape.
+/// The kind of the fact by which a record names the build that made it: `("made", "chain1",
+/// "store", engine, version, schema, release)`, where engine is what [`engine`] gives, version is
+/// [`VERSION`], schema is [`RECORD_SCHEMA`] and release is the release of furb that made it, as
+/// `0.4.2`. A record of a build before the versions holds no version, and one of a build before the
+/// schemas holds no schema and no release. No contract holds it, so this is the one home of its
+/// shape.
 pub const MADE: &str = "made";
 
-/// The version of this build, which a record names. A record replays on each build of the version that made it.
+/// The version of the replay of this build, which a record names. A record replays on each build of
+/// the version that made it. It is no version of a schema: the record and the checkpoint each have
+/// a schema of their own, in [`schema`], which a later build of the major reads. A tail of the
+/// record replays only on a build of the engine and of the version that made it: one of another
+/// engine or version is carried as data after a checkpoint, and refused when the record holds no
+/// checkpoint.
 ///
 /// The gate of the replays holds the versions few: each record in `tests/replay` replays with no
 /// drift on each build of its version. A change that makes one of them drift adds one to the
@@ -153,6 +163,30 @@ pub fn version(record: &[Object]) -> Option<i64> {
   })
 }
 
+/// The release of furb that a record names, as `0.4.2`, and nothing when it names none, as a record
+/// of a build before the release was in the fact made.
+pub fn release(record: &[Object]) -> Option<String> {
+  record.iter().find_map(|entry| {
+    let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
+    (fact.kind() == MADE).then(|| fact.word(3)?.as_str().map(str::to_owned)).flatten()
+  })
+}
+
+/// Whether this build reads a record from its facts made: each names the schema of the record that
+/// its build wrote, and a record that names a schema of another major is refused, with both
+/// schemas.
+pub fn readable(record: &[Object]) -> Result<(), SchemaError> {
+  for entry in record {
+    let Some(fact) = entry.as_ref().items().and_then(|held| Fact::of(*held.first()?)) else {
+      continue;
+    };
+    if fact.kind() == MADE {
+      RECORD_SCHEMA.opens("record", fact.word(2))?;
+    }
+  }
+  Ok(())
+}
+
 /// The kind of the fact by which a provider says a part of the word of a rung that its model finished.
 const WRITING: &str = "writing";
 
@@ -177,6 +211,18 @@ fn streamed(entry: Object) -> Object {
     before.to_owned(),
   ];
   Object::list([Object::list(said)])
+}
+
+/// The fact made of this build: its engine, its version of the replay, the schema of its record and
+/// its release.
+fn named() -> Fact {
+  let build = [
+    Object::string(engine()),
+    Object::int(VERSION),
+    RECORD_SCHEMA.object(),
+    Object::string(env!("CARGO_PKG_VERSION")),
+  ];
+  Fact::says(MADE, ROOT, build)
 }
 
 /// How long the ear of the record waits before it tries again to write the entries that it could not write.
@@ -211,7 +257,7 @@ pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>
             held.borrow_mut().waiting.push_back(entry.to_owned());
           }
           "chain" if new && a.about() == ROOT => {
-            say(&mut co, Fact::says(MADE, ROOT, [Object::string(engine()), Object::int(VERSION)]));
+            say(&mut co, named());
             continue;
           }
           _ => continue,
@@ -249,7 +295,7 @@ pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>
       }
     }
   });
-  Ok((entries, Box::new(Keeping { ear: kept, store })))
+  Ok((entries, With::ear(kept, store)))
 }
 
 /// A message to the operator, from the ear of the record.
@@ -289,32 +335,11 @@ impl<S: Store> Held<S> {
   }
 }
 
-/// The ear that keeps the record, which syncs its store at the end of each run.
-struct Keeping<S> {
-  ear: Box<dyn Ear>,
-  store: Rc<RefCell<Held<S>>>,
-}
-
-impl<S: Store> Ear for Keeping<S> {
-  fn resume(&mut self, heard: Heard, cx: &mut Context<'_>) -> Step {
-    self.ear.resume(heard, cx)
-  }
-
-  fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Spoken> {
-    self.ear.poll(cx)
-  }
-
-  fn answered(&mut self, got: Result<Object, Fault>) {
-    self.ear.answered(got);
-  }
-
-  fn lent(&mut self, heard: Heard, cx: &mut Context<'_>, life: Life) -> (Step, Life) {
-    self.ear.lent(heard, cx, life)
-  }
-
+/// The ear that keeps the record syncs its store at the end of each run.
+impl<S: Store> Hooks for Rc<RefCell<Held<S>>> {
   /// A fault of the store ends no run: the ear holds it, tells the operator and tries again.
   fn ran(&mut self) -> Result<(), Fault> {
-    self.store.borrow_mut().synced();
+    self.borrow_mut().synced();
     Ok(())
   }
 }
@@ -366,7 +391,7 @@ impl Drop for Lease {
 /// leave a lock that no later process meets, and on macOS a lookup of a renamed path can go on giving the moved file
 /// to every process for seconds, so no holder moves or removes the lock file.
 fn leased(path: &Path) -> Result<Lease, Fault> {
-  let lock = PathBuf::from(format!("{}.lock", path.display()));
+  let lock = beside(path, ".lock");
   if let Some(parent) = path.parent().filter(|parent| !parent.as_os_str().is_empty()) {
     create_dir_all(parent).map_err(|no| failed(&lock, no))?;
   }

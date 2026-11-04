@@ -36,6 +36,10 @@ pub(crate) async fn listen(folder: &Path) -> Result<Listener, TransportError> {
   }
 }
 
+pub(crate) async fn succeed(folder: &Path) -> Result<Listener, TransportError> {
+  listen(folder).await
+}
+
 impl Listener {
   pub(crate) async fn accept(&self) -> Result<Accepted, TransportError> {
     let (stream, _) = self.0.accept().await.map_err(TransportError::Accept)?;

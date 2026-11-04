@@ -1,0 +1,175 @@
+//! The one piece of python that the crate writes, and what it gives the host, by name.
+
+use std::convert::Infallible;
+
+use crate::value::Object;
+
+/// The one piece of python the crate writes: it loads the engine, the sheet and the Kernel, each in
+/// a namespace of its own, and gives what the host calls in the sandbox by.
+///
+/// It gives the park too: a generator that stands in front of an ear of the outside and holds back
+/// from it each act that is parked when the act is put to it, and the parked names, which the host
+/// sets at boot and clears at a retry. When a retried act is not done and no ear took it in this
+/// life, the park puts it to its ear at the next fact that the ear hears, in the order of the ears,
+/// before that fact. The park waits for what its ear waits for, and for every fact while it holds
+/// an act back.
+///
+/// The module of the engine holds the names python gives a module before the engine runs, so a word
+/// reads them in a chain as it reads them in python, and as the gate reads them. No loader made the
+/// module here, so it has no spec and no loader. Python binds `__debug__` among its builtins, and
+/// the sandbox binds it in its main module alone.
+pub(super) const OPENING: &str = r#"from string.templatelib import Interpolation, Template
+
+__engine = {"__debug__": True, "__doc__": None, "__package__": "furb", "__spec__": None, "__loader__": None}
+exec(__source, __engine)
+__sheet = {}
+exec(__sheet_source, __sheet)
+__kernel = {}
+exec(__kernel_source, __kernel)
+__parked = set()
+
+def __parking(ear):
+  held, heard, wait = [], None, None
+  try:
+    while True:
+      if heard is not None and heard[1] in __parked and heard is __engine["get"](heard[1]):
+        held.append(heard)
+      else:
+        for a in [x for x in held if x[1] not in __parked]:
+          held.remove(a)
+          at = __engine["transcript"](__engine["scope"](a[1]))
+          taken = ("started", a[1]) in [x[:2] for x in at if x[2] != "journal"]
+          if not __engine["over"](a[1]) and not taken:
+            said = ear.send(a)
+            while isinstance(said, tuple):
+              said = ear.send((yield said))
+            wait = said
+        said = ear.send(heard)
+        while isinstance(said, tuple):
+          said = ear.send((yield said))
+        wait = said
+      heard = yield (None if held else wait)
+  except StopIteration:
+    return
+
+__fresh = {"kernel": lambda: __kernel["kernel"](__engine), "gate": lambda: __sheet["gating"](__engine, __gate)}
+
+def __lasting(name, ear):
+  told = False
+  while True:
+    heard, wait = None, None
+    try:
+      said = ear.send(None)
+      while True:
+        if not isinstance(said, tuple):
+          wait = said
+        heard = yield said
+        said = ear.send(heard)
+    except StopIteration:
+      return
+    except Exception as fault:
+      why = f"The ear {name} raised {type(fault).__name__}: {fault}"
+      get, over = __engine["get"], __engine["over"]
+      if isinstance(heard, tuple) and isinstance(wait, (set, frozenset)) and heard[0] in wait:
+        if get(heard[1]) is heard and not over(heard[1]):
+          yield "done", heard[1], __engine["Refused"](why)
+      ear = __fresh[name]() if name in __fresh else ear if __again(name) else None
+      if not told:
+        told = True
+        then = "It starts again and takes the next act." if ear is not None else "It cannot start again."
+        try:
+          __engine["prompt"](None, f"{why}. {then}", to=__engine["OPERATOR"], on=__engine["ROOT"])
+        except Exception:
+          pass
+      if ear is None:
+        return
+
+{
+  "names": lambda: {name: x for name, x in __engine.items() if not name.startswith("_") and callable(x)},
+  "call": lambda name, /, *args, **kwargs: __engine[name](*args, **kwargs),
+  "kernel": __fresh["kernel"](),
+  "gate": __fresh["gate"](),
+  "site": lambda: __engine["site"].get(),
+  "speaks": lambda by: __engine["site"].set(by),
+  "spoke": lambda token: __engine["site"].reset(token),
+  "word": lambda word, names: eval(word, __engine, names),
+  "template": lambda held: Template(*[x if isinstance(x, str) else Interpolation(*x) for x in held]),
+  "shown": lambda x: None if callable(x) else repr(x),
+  "base": lambda cls: cls.__bases__[0],
+  "parking": __parking,
+  "park": lambda names: __parked.update(names),
+  "unpark": lambda name: __parked.discard(name),
+  "against": lambda on, word: __sheet["against"](__engine, __gate, on, word),
+  "lasting": __lasting,
+}"#;
+
+/// What the opening gave, by name: the callables of the sandbox that the host calls it by, each
+/// held under its handle, as a snapshot holds them too.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub(crate) struct Opened {
+  /// The names of the engine that are callable, read again after boot, which binds some of them.
+  pub(super) names: Object,
+  /// A name of the engine, called where it stands when it is called.
+  pub(super) call: Object,
+  /// The Kernel of the crate, which boot is given as an ear.
+  pub(super) kernel: Object,
+  /// The gate of the crate, which boot is given as an ear.
+  pub(super) gate: Object,
+  /// Who speaks: `site`, read.
+  pub(super) site: Object,
+  /// Who speaks from now on: `site`, set, which gives the token that resets it.
+  pub(super) speaks: Object,
+  /// Who spoke before: `site`, reset by a token.
+  pub(super) spoke: Object,
+  /// A word run in the names of the engine, with values bound.
+  pub(super) word: Object,
+  /// A template string of the sandbox, made from the parts of a template string of the host.
+  pub(super) template: Object,
+  /// Nothing for a callable, and the representation of anything else.
+  pub(super) shown: Object,
+  /// The class a class was made with.
+  pub(super) base: Object,
+  /// An ear wrapped so that it holds each act of the park until the park lets it go.
+  pub(super) parking: Object,
+  /// Names put into the park.
+  pub(super) park: Object,
+  /// A name taken out of the parked names of the park.
+  pub(super) unpark: Object,
+  /// What the gate finds against a word on a chain, which makes no fact.
+  pub(super) against: Object,
+  /// An ear wrapped so that it starts again after it raises.
+  pub(super) lasting: Object,
+}
+
+impl Default for Opened {
+  /// Nothing under each name, as a life of nothing holds it.
+  fn default() -> Opened {
+    let Ok(none) = Opened::of(|_| Ok::<_, Infallible>(Object::none()));
+    none
+  }
+}
+
+impl Opened {
+  /// The callables of the opening, each by its name.
+  pub(super) fn of<E>(mut at: impl FnMut(&'static str) -> Result<Object, E>) -> Result<Opened, E> {
+    Ok(Opened {
+      names: at("names")?,
+      call: at("call")?,
+      kernel: at("kernel")?,
+      gate: at("gate")?,
+      site: at("site")?,
+      speaks: at("speaks")?,
+      spoke: at("spoke")?,
+      word: at("word")?,
+      template: at("template")?,
+      shown: at("shown")?,
+      base: at("base")?,
+      parking: at("parking")?,
+      park: at("park")?,
+      unpark: at("unpark")?,
+      against: at("against")?,
+      lasting: at("lasting")?,
+    })
+  }
+}

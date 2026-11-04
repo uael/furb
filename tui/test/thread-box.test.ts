@@ -173,14 +173,17 @@ test("a folded thread marks new work with a dot, and the dot goes once the threa
     true,
   ));
 
-test("the work that came before a thread folded counts as seen", () =>
-  composing(async ({ app }) => {
-    expect(app.unread("p1", "a", false)).toBe(false);
-    expect(app.unread("p1", "b", true)).toBe(false);
-    expect(app.unread("p1", "b", true)).toBe(false);
-    expect(app.unread("p1", "c", true)).toBe(true);
-    expect(app.unread("p1", "c", false)).toBe(false);
-    expect(app.unread("p1", "c", true)).toBe(false);
+test("a fact seen of the record covers the work of a thread up to its place, and a thread shown open counts as read until the operator leaves it", () =>
+  composing(async ({ session }) => {
+    const work = [{ began: 4, ended: 9 }] as unknown as Parameters<typeof session.unreadThread>[1];
+    expect(session.unreadThread("p1", work)).toBe(true);
+    // Another window said that the operator read the thread up to the place of its work.
+    session.host.seen = new Map([["p1", 9]]);
+    expect(session.unreadThread("p1", work)).toBe(false);
+    const later = [...work, { began: 12 }] as unknown as typeof work;
+    expect(session.unreadThread("p1", later)).toBe(true);
+    session.shows("p1", later);
+    expect(session.unreadThread("p1", later)).toBe(false);
   }));
 
 /** Lines of code for a window, the nth of which runs when it is named. */

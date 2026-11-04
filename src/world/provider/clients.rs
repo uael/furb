@@ -69,56 +69,80 @@ pub(super) struct Reach {
   pub(super) project: Option<(String, String)>,
 }
 
+/// Why a client of rig cannot be made. Each cause holds its text, so that the error clones into the
+/// cell that keeps the client of a model.
+#[derive(Clone, Debug, thiserror::Error)]
+pub(super) enum Error {
+  #[error("the provider has no address")]
+  NoAddress,
+  #[error("{0}")]
+  Client(String),
+  #[error("{0}")]
+  Header(String),
+  #[error("{0}")]
+  Bedrock(String),
+  #[error("{0}")]
+  Vertex(String),
+  #[error("{0}")]
+  Unreached(String),
+}
+
+impl From<http_client::Error> for Error {
+  fn from(no: http_client::Error) -> Self {
+    Self::Client(no.to_string())
+  }
+}
+
 /// The value that the credential of a client of rig takes when the provider takes the credential under another
 /// header, and which [`Unsent`] leaves out of each request.
 const UNSENT: &str = "unsent";
 
 impl Client {
   /// What streams the responses of a model through this client.
-  pub(super) fn streams(self, reach: &Reach) -> Result<Streams, String> {
+  pub(super) fn streams(self, reach: &Reach) -> Result<Streams, Error> {
     let (key, id) = (reach.key.clone(), reach.id.clone());
-    let failed = |no: http_client::Error| no.to_string();
     macro_rules! asked {
       ($client:ty) => {
-        <$client>::builder().api_key(key).build().map_err(failed)?.completion_model(id)
+        <$client>::builder().api_key(key).build()?.completion_model(id)
       };
     }
-    let api = || reach.api.clone().ok_or("the provider has no address".to_owned());
+    let api = || reach.api.clone().ok_or(Error::NoAddress);
     Ok(match self {
       Client::Anthropic if reach.bearer => {
-        let mut built = anthropic::Client::builder().api_key(UNSENT).http_client(Unsent::default());
+        let mut built =
+          anthropic::Client::builder().api_key(UNSENT).http_client(Amended::new(Unsent));
         built = built.http_headers(headed("authorization", &format!("Bearer {key}"))?);
         if let Some(api) = &reach.api {
           built = built.base_url(api);
         }
-        streams(built.build().map_err(failed)?.completion_model(id).with_automatic_caching())
+        streams(built.build()?.completion_model(id).with_automatic_caching())
       }
       Client::Anthropic => {
         let mut built = anthropic::Client::builder().api_key(key);
         if let Some(api) = &reach.api {
           built = built.base_url(api);
         }
-        streams(built.build().map_err(failed)?.completion_model(id).with_automatic_caching())
+        streams(built.build()?.completion_model(id).with_automatic_caching())
       }
       Client::Openai => {
         let mut built = openai::Client::builder().api_key(key);
         if let Some(api) = &reach.api {
           built = built.base_url(api);
         }
-        streams(built.build().map_err(failed)?.completion_model(id))
+        streams(built.build()?.completion_model(id))
       }
       Client::Chat if key.is_empty() => {
         let built = openai::CompletionsClient::builder().api_key(UNSENT).base_url(api()?);
-        streams(built.http_client(Unsent::default()).build().map_err(failed)?.completion_model(id))
+        streams(built.http_client(Amended::new(Unsent)).build()?.completion_model(id))
       }
       Client::Chat => {
         let built = openai::CompletionsClient::builder().api_key(key).base_url(api()?);
-        streams(built.build().map_err(failed)?.completion_model(id))
+        streams(built.build()?.completion_model(id))
       }
       Client::Gateway => {
         let built = openai::CompletionsClient::builder().api_key(UNSENT).base_url(api()?);
         let built = built.http_headers(headed("cf-aig-authorization", &format!("Bearer {key}"))?);
-        streams(built.http_client(Unsent::default()).build().map_err(failed)?.completion_model(id))
+        streams(built.http_client(Amended::new(Unsent)).build()?.completion_model(id))
       }
       Client::Gemini => streams(asked!(gemini::Client)),
       Client::Openrouter => streams(asked!(openrouter::Client)),
@@ -137,16 +161,17 @@ impl Client {
           Some(at) => built.token_dir(at.join("copilot")),
           None => built,
         };
-        streams(built.build().map_err(failed)?.completion_model(id))
+        streams(built.build()?.completion_model(id))
       }
       Client::Azure => {
         let built = azure::Client::builder().api_key(azure::AzureOpenAIAuth::ApiKey(key));
         let built = built.azure_endpoint(api()?);
         let built = built.api_version(reach.version.as_deref().unwrap_or("2024-10-21"));
-        streams(built.build().map_err(failed)?.completion_model(id))
+        streams(built.build()?.completion_model(id))
       }
       Client::Bedrock => {
-        let built = rig_bedrock::client::Client::from_env().map_err(|no| no.to_string())?;
+        let built =
+          rig_bedrock::client::Client::from_env().map_err(|no| Error::Bedrock(no.to_string()))?;
         streams(built.completion_model(id))
       }
       Client::Vertex => {
@@ -157,7 +182,7 @@ impl Client {
           let credentials = google_cloud_auth::credentials::api_key_credentials::Builder::new(key);
           built = built.with_credentials(credentials.build());
         }
-        whole(built.build().map_err(|no| no.to_string())?.completion_model(id))
+        whole(built.build().map_err(|no| Error::Vertex(no.to_string()))?.completion_model(id))
       }
       Client::Pi => streams(Pi::new(api()?, key, id)),
     })
@@ -165,9 +190,9 @@ impl Client {
 }
 
 /// A map of one header.
-fn headed(name: &'static str, value: &str) -> Result<HeaderMap, String> {
+fn headed(name: &'static str, value: &str) -> Result<HeaderMap, Error> {
   let mut headers = HeaderMap::new();
-  headers.insert(name, HeaderValue::from_str(value).map_err(|no| no.to_string())?);
+  headers.insert(name, HeaderValue::from_str(value).map_err(|no| Error::Header(no.to_string()))?);
   Ok(headers)
 }
 
@@ -189,26 +214,29 @@ fn whole<M: CompletionModel + 'static>(model: M) -> Streams {
   })
 }
 
-/// A client of HTTP that leaves out each header whose value ends with [`UNSENT`], which the key of a client of rig
-/// holds when the provider takes its credential under another header.
-#[derive(Clone, Debug, Default)]
-struct Unsent(ReqwestClient);
-
-impl Unsent {
-  /// The request with no header that holds [`UNSENT`].
-  fn sent<T>(mut request: Request<T>) -> Request<T> {
-    let unsent: Vec<_> = (request.headers().iter())
-      .filter(|(_, value)| value.as_bytes().ends_with(UNSENT.as_bytes()))
-      .map(|(name, _)| name.clone())
-      .collect();
-    for name in unsent {
-      request.headers_mut().remove(name);
-    }
+/// What an [`Amended`] client changes on its way: the request before it goes, and the streamed
+/// reply before it is read. A method that a type leaves out changes nothing.
+pub(super) trait Amend: Clone + std::fmt::Debug + Send + Sync + 'static {
+  fn request<T>(&self, request: Request<T>) -> Request<T> {
     request
+  }
+
+  fn streamed(&self, response: StreamingResponse) -> http_client::Result<StreamingResponse> {
+    Ok(response)
   }
 }
 
-impl HttpClientExt for Unsent {
+/// A client of HTTP that forwards each call to reqwest with what its [`Amend`] changed.
+#[derive(Clone, Debug, Default)]
+pub(super) struct Amended<A>(ReqwestClient, A);
+
+impl<A: Amend> Amended<A> {
+  pub(super) fn new(amend: A) -> Self {
+    Self(ReqwestClient::default(), amend)
+  }
+}
+
+impl<A: Amend> HttpClientExt for Amended<A> {
   fn send<T, U>(
     &self,
     request: Request<T>,
@@ -217,7 +245,7 @@ impl HttpClientExt for Unsent {
     T: Into<Bytes> + WasmCompatSend,
     U: From<Bytes> + WasmCompatSend + 'static,
   {
-    self.0.send(Unsent::sent(request))
+    self.0.send(self.1.request(request))
   }
 
   fn send_multipart<U>(
@@ -227,16 +255,31 @@ impl HttpClientExt for Unsent {
   where
     U: From<Bytes> + WasmCompatSend + 'static,
   {
-    self.0.send_multipart(Unsent::sent(request))
+    self.0.send_multipart(self.1.request(request))
   }
 
-  fn send_streaming<T>(
-    &self,
-    request: Request<T>,
-  ) -> impl Future<Output = http_client::Result<StreamingResponse>> + WasmCompatSend
+  async fn send_streaming<T>(&self, request: Request<T>) -> http_client::Result<StreamingResponse>
   where
     T: Into<Bytes> + WasmCompatSend,
   {
-    self.0.send_streaming(Unsent::sent(request))
+    self.1.streamed(self.0.send_streaming(self.1.request(request)).await?)
+  }
+}
+
+/// Leaves out each header whose value ends with [`UNSENT`], which the key of a client of rig holds
+/// when the provider takes its credential under another header.
+#[derive(Clone, Debug, Default)]
+pub(super) struct Unsent;
+
+impl Amend for Unsent {
+  fn request<T>(&self, mut request: Request<T>) -> Request<T> {
+    let unsent: Vec<_> = (request.headers().iter())
+      .filter(|(_, value)| value.as_bytes().ends_with(UNSENT.as_bytes()))
+      .map(|(name, _)| name.clone())
+      .collect();
+    for name in unsent {
+      request.headers_mut().remove(name);
+    }
+    request
   }
 }

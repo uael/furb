@@ -28,6 +28,7 @@ use tokio::{
 };
 
 use super::{EFFORTS, Program};
+use crate::world::provider::atomic::{self, Access};
 
 /// One model of the command line as it said itself: the alias, the window of the model that it resolves to, and the
 /// efforts that it takes, none when it takes no effort.
@@ -112,13 +113,8 @@ fn store(stamp: &str, found: &[Found]) {
     let Some(oldest) = map.keys().next().cloned() else { break };
     map.shift_remove(&oldest);
   }
-  let part = file.with_extension(format!("{}.part", std::process::id()));
-  let wrote = file.parent().map_or(Ok(()), fs::create_dir_all).and_then(|()| {
-    fs::write(&part, Value::Object(map).to_string()).and_then(|()| fs::rename(&part, &file))
-  });
-  if wrote.is_err() {
-    let _ = fs::remove_file(&part);
-  }
+  // A cache that cannot be written costs the next life one probe more, so the failure ends here.
+  drop(atomic::write(&file, Value::Object(map).to_string().as_bytes(), Access::Shared));
 }
 
 /// The models that the program says, from memory, from the cache, or from the program itself;
@@ -205,26 +201,11 @@ fn plain(alias: &str) -> bool {
 /// Ask the program of its models, with one process that spends no model prompt and that is
 /// killed once it answered, or once [`WITHIN`] passed.
 async fn probe(program: &Program) -> Option<Vec<Found>> {
-  let mut command = program.command().ok()?;
-  command.args([
-    "-p",
-    "--input-format",
-    "stream-json",
-    "--output-format",
-    "stream-json",
-    "--verbose",
-  ]);
-  command.args([
-    "--tools",
-    "",
-    "--strict-mcp-config",
-    "--disable-slash-commands",
-    "--setting-sources",
-    "",
-  ]);
+  let print =
+    ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"];
+  let mut command = program.base_command(&print).ok()?;
+  command.args(["--tools", ""]);
   command.env("FURB_CLAUDE_DISCOVER", "1");
-  command.env("CLAUDE_CODE_DISABLE_BUNDLED_SKILLS", "1");
-  command.env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1");
   command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).kill_on_drop(true);
   let mut child = command.spawn().ok()?;
   let (stdin, stdout) = child.stdin.take().zip(child.stdout.take())?;

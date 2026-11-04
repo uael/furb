@@ -436,7 +436,7 @@ def test_an_ask_that_a_worker_leaves_queues_one_follow_up_unless_another_item_ca
 
 
 def test_a_message_of_the_owner_that_no_ask_names_is_one_notice(conductor: Round) -> None:
-  conductor.owner_asks["A1"] = {"prompt": "prompt1, prompt3", "items": [], "state": "open"}
+  conductor.owner_asks["A1"] = {"prompt": "prompt1, prompt3", "items": [], "state": "done"}
   conductor.facts_of["chain1"] = [
     ("prompt", "prompt1", "operator", "chain1", "str", "a"),
     ("prompt", "prompt2", "operator/uael", "chain1", "str", "b"),
@@ -449,6 +449,25 @@ def test_a_message_of_the_owner_that_no_ask_names_is_one_notice(conductor: Round
     "The message prompt2 of the owner holds no ask in owner_asks. Split it into its asks, each with his quote and the items that carry it, before anything else."
   ]
 
+
+def test_an_ask_of_the_owner_that_no_live_item_carries_is_one_notice(conductor: Round) -> None:
+  conductor.owner_asks.update(
+    A1={"prompt": "prompt1", "items": [], "state": "missing"},
+    A2={"prompt": "prompt2", "items": ["gone"], "state": "partly"},
+    A3={"prompt": "prompt3", "items": ["q"], "state": "open"},
+    A4={"prompt": "prompt4", "items": [], "state": "done"},
+    A5={"prompt": "prompt5", "items": ["k"], "state": "decision"},
+  )
+  conductor.queue.append(("q", "b", "t"))
+  conductor.asked()
+  conductor.asked()
+  assert conductor.notices() == [
+    "The ask A1 of the owner (prompt1) is missing, and no item names it. Queue an item for it, or mark it done with the evidence of main, before anything else.",
+    "The ask A2 of the owner (prompt2) is partly, and no item carries it now: its items gone ended. Queue an item for it, or mark it done with the evidence of main, before anything else.",
+  ]
+  conductor.owner_asks["A2"]["items"].append("again")
+  conductor.asked()
+  assert len(conductor.notices()) == 3
 
 def test_the_words_of_the_owner_hold_his_messages_and_his_answers_in_order(conductor: Round) -> None:
   conductor.facts_of["chain1"] = [

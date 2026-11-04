@@ -53,6 +53,35 @@ pub enum ProtocolError {
   /// The daemon or the life refused the verb, with why.
   #[error("{why}")]
   Refused { why: String },
+  /// The daemon gave its place to the daemon of a new build, or stops.
+  #[error("the daemon stops")]
+  Stopped,
+  #[error("no life of the daemon lives on the record {life}")]
+  Closed { life: String },
+  /// A life is named by the absolute path of its record, the same for each peer.
+  #[error("the record {life} is not an absolute path")]
+  Relative { life: String },
+  #[error("the peer did not attach the life on the record {life}")]
+  Unattached { life: String },
+  #[error("no pin of the holder {holder} holds the life on the record {life}")]
+  Unpinned { life: String, holder: String },
+  /// A frame of a view, which the daemon does not route yet.
+  #[error("the daemon routes no frame of a view")]
+  Viewless,
+}
+
+/// Why the daemon stops, or does not start.
+#[derive(Debug, Error)]
+pub enum DaemonError {
+  #[error(transparent)]
+  Transport(#[from] TransportError),
+  /// The daemon that runs refused the handover.
+  #[error("the daemon that runs refused the handover: {0}")]
+  Refused(#[from] ProtocolError),
+  #[error("the daemon that runs closed before it gave its lives")]
+  Unanswered,
+  #[error("the daemon that runs answered no frame of the protocol")]
+  Unread(#[source] serde_json::Error),
 }
 
 impl From<LifeError> for ProtocolError {

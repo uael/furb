@@ -148,10 +148,8 @@ window of a new build takes the life over with its record whole.
   host again and reads the acts of the life again from the start. A window hears that a window ended the life only
   when a window did. A host that ends because its worker raised writes the fault in `<key>.failed`. A window starts no
   host for that fault: it shows the fault, and `/reopen` tries once more.
-- A host looks at the free space of the disk of the record and at the memory of the life every 30 seconds. Under 2 GiB
-  of disk, or over three quarters of the memory bound of the sandbox, it shows a notice in each window. A full disk
-  stops the record and the log, and at the memory bound the life stops. `FURB_DISK_WARN` sets the disk
-  limit in bytes, `FURB_MEMORY_WARN` the share of the memory, and `FURB_SANDBOX_MEMORY` the bound in MiB.
+- A host looks at the free space of the disk of the record every 30 seconds. Under 2 GiB of disk, it shows a notice in
+  each window. A full disk stops the record and the log. `FURB_DISK_WARN` sets the disk limit in bytes.
   A record in `.furb/sessions` adds a notice when the files of that folder hold more than 10 GiB, since nothing else
   removes them. `FURB_SESSIONS_WARN` sets that limit in bytes.
 - A host says of itself in `<key>.json` as soon as it starts, and it listens at its socket before it opens the life. A

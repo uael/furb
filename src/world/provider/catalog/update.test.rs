@@ -9,7 +9,7 @@ use std::{
 
 use jiff::Timestamp;
 
-use super::{Source, Status, Updater, applied, numbers, pi, stamp};
+use super::{Source, Status, Updater, applied, pi, stamp};
 use crate::world::provider::catalog::parsed;
 
 const SNAPSHOT: &str =
@@ -47,12 +47,6 @@ fn a_stale_or_absent_copy_updates_once_for_each_backoff() {
   updater.background(&absent);
   assert_eq!(RAN.load(Ordering::SeqCst), 1);
   fs::remove_dir_all(&dir).unwrap();
-}
-
-#[test]
-fn a_version_is_compared_by_its_numbers() {
-  assert!(numbers("1.10.0") > numbers("1.4.0"));
-  assert_eq!(numbers("1.4.0"), vec![1, 4, 0]);
 }
 
 #[test]

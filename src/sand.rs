@@ -10,7 +10,7 @@
 //! any depth, since the session holds each call of the host that waits. A value of the sandbox with no data form, and
 //! a class of the sandbox, crosses to the host as a handle, which the session holds until the host releases it.
 
-use std::{mem, sync::atomic::Ordering, time::Duration};
+use std::{mem, time::Duration};
 
 use monty::{MontyRepl, ReplFunctionCall, ReplProgress, ReplStartError};
 use monty_types::{
@@ -31,17 +31,6 @@ const GC_INTERVAL: usize = 10_000_000;
 /// life goes on. The longest stretch of a legal life is about 180 ms in the dev profile, over the replay of a record of
 /// 96322 entries, so the bound stands far above every legal one, on a slower machine too.
 pub(crate) const TURN: Duration = Duration::from_secs(30);
-
-/// The most that the sandboxes of a program may hold, in bytes: 4 GiB. The host of the TUI that holds a record of 411 MB
-/// stands at 0.7 GiB of resident memory, and the largest life seen held 1.6 GiB, so the bound stands above every legal
-/// life, and below the memory of the machines that run one. Past it, monty raises a `MemoryError` where the code
-/// stands, which no code of the sandbox catches: the entry of the host ends with it as a fault, the life stops, since
-/// the frames that it cut never ran their `finally`, and the process and the machine keep their memory.
-///
-/// The bound is of the bytes that the program asks of its allocator, which the sandbox of a program with no counting
-/// allocator does not read: there only the operations that monty checks before they allocate are bound, as a repeat
-/// of a list. `FURB_SANDBOX_MEMORY` gives another bound, in MiB, to the sandboxes that a program makes after.
-pub(crate) const MEMORY: usize = 4 << 30;
 
 #[cfg(test)]
 thread_local! {
@@ -103,12 +92,8 @@ pub(crate) struct Sand {
 impl Sand {
   /// A sandbox with the limits of monty, which holds handles, and nothing in it yet.
   pub(crate) fn new() -> Self {
-    let limits = ResourceLimits::default()
-      .gc_interval(GC_INTERVAL)
-      .max_turn_duration(turn())
-      .max_memory(memory());
+    let limits = ResourceLimits::default().gc_interval(GC_INTERVAL).max_turn_duration(turn());
     let limits = ResourceTracker::new(limits);
-    count();
     let repl = MontyRepl::new("furb", limits, CompileOptions::default()).with_handles();
     Self { state: State::Idle(repl), fed: 0 }
   }
@@ -280,38 +265,6 @@ impl Sand {
       }
     }
   }
-}
-
-/// The memory that a sandbox may hold: what `FURB_SANDBOX_MEMORY` gives in MiB, or [`MEMORY`].
-fn memory() -> usize {
-  std::env::var("FURB_SANDBOX_MEMORY")
-    .ok()
-    .and_then(|mib| mib.trim().parse::<usize>().ok())
-    .map_or(MEMORY, |mib| mib.saturating_mul(1 << 20))
-}
-
-/// Starts the count of the memory of the sandboxes of the program at the least that it held, and lifts the ceiling at
-/// which the allocator ends the process, so only the `MemoryError` of the sandbox bounds it. The count is of the
-/// program, since the allocator is: a program that installed no counting allocator counts nothing, and the error that
-/// says so holds nothing to mend.
-fn count() {
-  monty_alloc::set_hard_limit(None).unwrap_or_default();
-}
-
-/// What the sandboxes of the program hold of the memory that bounds them, in bytes: what the counting allocator holds
-/// above the least that the program held when a sandbox began. It is nothing before a sandbox began, and in a
-/// program with no counting allocator. A host reads it from any thread, to warn before the [`bound`].
-pub fn held() -> usize {
-  let base = monty_types::BASELINE_MEMORY.load(Ordering::Relaxed);
-  if base == usize::MAX {
-    return 0;
-  }
-  monty_types::LIVE_MEMORY.load(Ordering::Relaxed).saturating_sub(base)
-}
-
-/// The memory at which a sandbox raises a `MemoryError`, in bytes: [`MEMORY`], or what `FURB_SANDBOX_MEMORY` gives.
-pub fn bound() -> usize {
-  memory()
 }
 
 /// The bound of the turn of a sandbox: [`TURN`], or what the test set.

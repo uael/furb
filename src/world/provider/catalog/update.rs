@@ -9,8 +9,8 @@
 
 use std::{
   collections::HashMap,
-  fs, io,
-  path::{Path, PathBuf},
+  fs,
+  path::Path,
   sync::{Mutex, OnceLock, PoisonError, mpsc},
   time::{Duration, Instant},
 };
@@ -24,7 +24,13 @@ use serde_json::{Map, Value, json};
 use super::{Cached, Listed};
 use crate::{
   ear::{reactor, runtime},
-  world::cache,
+  world::{
+    cache,
+    provider::{
+      atomic::{self, Access},
+      numbers,
+    },
+  },
 };
 
 /// Where models.dev serves its catalog.
@@ -95,8 +101,8 @@ enum Error {
   PiEmpty { version: String, name: String },
   #[error("the status is not JSON: {source}")]
   Status { source: serde_json::Error },
-  #[error("no write of {}: {source}", path.display())]
-  Write { path: PathBuf, source: io::Error },
+  #[error("{0}")]
+  Write(#[from] atomic::Error),
 }
 
 #[derive(Deserialize, Default)]
@@ -264,10 +270,6 @@ pub(super) fn applied(listed: &mut IndexMap<String, Listed>, text: Option<&str>)
   }
 }
 
-fn numbers(version: &str) -> Vec<u64> {
-  version.split(|one: char| !one.is_ascii_digit()).filter_map(|part| part.parse().ok()).collect()
-}
-
 async fn get(url: &str) -> Result<String, Error> {
   let fetch = |source| Error::Fetch { url: url.to_owned(), source };
   let got = ReqwestClient::new()
@@ -282,15 +284,7 @@ async fn get(url: &str) -> Result<String, Error> {
 }
 
 fn keep(at: &Path, text: &str) -> Result<(), Error> {
-  let partial = at.with_extension("part");
-  let wrote = || {
-    if let Some(parent) = at.parent() {
-      fs::create_dir_all(parent)?;
-    }
-    fs::write(&partial, text)?;
-    fs::rename(&partial, at)
-  };
-  wrote().map_err(|source| Error::Write { path: at.to_owned(), source })
+  Ok(atomic::write(at, text.as_bytes(), Access::Shared)?)
 }
 
 async fn models_dev(dir: &Path) -> Result<(), Error> {

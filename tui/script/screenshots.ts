@@ -306,11 +306,10 @@ try {
     on: session.selected,
     to: "operator",
   });
-  await until(session.host, () => session.host.notices.has(notice));
+  await until(session, () => session.acts.some((act) => act.id === notice && act.done));
   await session.refresh();
   await capture("22-operator-notice");
   app().question();
-  await until(session.host, () => !session.host.notices.has(notice));
   const markdown = await session.engine.prompt("None", {
     message: [
       "## The search shortcut",
@@ -348,7 +347,7 @@ try {
     to: "operator",
   });
   // A notice settles as a quiet line, which opens to its whole message.
-  await until(session.host, () => session.acts.some((act) => act.id === markdown && act.done));
+  await until(session, () => session.acts.some((act) => act.id === markdown && act.done));
   session.folds[markdown] = false;
   await session.refresh();
   await capture("51-markdown");

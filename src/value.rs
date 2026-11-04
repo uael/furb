@@ -11,15 +11,13 @@
 //! So an instance of a class of the engine goes in as its name and its fields, in a map marked `is`, and the
 //! engine makes the instance in the sandbox. That is the one rule of the crossing that is not monty's own.
 
-#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
-
 use monty_types::unstable::{self, MontyGraph, MontyNode, NodeId};
 pub use monty_types::{MontyObject as Object, ObjectRef};
 
 /// The key of the one mark: a map whose `is` names a class of the engine is an instance of it, by its fields.
 pub const IS: &str = "is";
 
-/// What the World reads of a value that monty gives.
+/// What the crate reads of a value that monty gives.
 pub(crate) trait Given {
   /// Whether the value is `None`.
   fn is_none(&self) -> bool;
@@ -139,18 +137,50 @@ impl Fault {
     Fault::new("Refused", vec![Object::string(why.into())])
   }
 
+  /// A refusal that says no why.
+  pub fn refusal() -> Self {
+    Fault::new("Refused", vec![])
+  }
+
+  /// The end of a generator of a host that is over.
+  pub fn stop_iteration() -> Self {
+    Fault::new("StopIteration", vec![])
+  }
+
+  /// A key that no object of the host holds.
+  pub fn key_error(key: i64) -> Self {
+    Fault::new("KeyError", vec![Object::int(key)])
+  }
+
+  /// A text that is no value of its kind.
+  pub fn value_error(text: impl Into<String>) -> Self {
+    Fault::new("ValueError", vec![Object::string(text.into())])
+  }
+
+  /// A value of the wrong type, with why.
+  pub fn type_error(why: impl Into<String>) -> Self {
+    Fault::new("TypeError", vec![Object::string(why.into())])
+  }
+
+  /// A cancel, with the reason that it was given, if any.
+  pub fn cancelled(why: Option<Object>) -> Self {
+    Fault::new("CancelledError", why.into_iter().collect())
+  }
+
   /// The fault an object is: an instance of an exception class of the sandbox, which carries its `args`, or a
   /// builtin exception, which monty carries by its type and its one message.
   pub fn of(said: ObjectRef<'_>) -> Option<Fault> {
     if said.type_name() == "Exception" {
-      let text = said.py_repr();
-      let (name, arg) = text.split_once('(').unwrap_or((&text, ""));
-      // The interpreter shows some of its exceptions under their module, `asyncio.exceptions.CancelledError`,
-      // and a name is bare on both sides of the boundary.
+      let owned = said.to_owned();
+      let (graph, root) = unstable::graph_parts(&owned);
+      let MontyNode::Exception { exc_type, arg } = graph.node(root) else {
+        return None;
+      };
+      let name: &str = (*exc_type).into();
+      // Monty names some exceptions under their module, `asyncio.exceptions.CancelledError`, and a
+      // name is bare on both sides of the boundary.
       let name = name.rsplit('.').next().unwrap_or(name);
-      let arg = arg.trim_end_matches(')').trim_matches('\'');
-      let args = if arg.is_empty() { vec![] } else { vec![Object::string(arg)] };
-      return Some(Fault::new(name, args));
+      return Some(Fault::new(name, arg.iter().map(Object::string).collect()));
     }
     if matches!(said.type_name(), "dict" | "list" | "tuple") {
       return None;
@@ -237,11 +267,11 @@ pub(crate) fn carried(value: Object) -> Object {
     });
     (height[at], size[at]) = (high, many);
   }
-  let room = graph.len().saturating_mul(REPEATS);
-  if height[root.index()] < DEEPEST && size[root.index()] <= room {
+  let limit = graph.len().saturating_mul(REPEATS);
+  if height[root.index()] < DEEPEST && size[root.index()] <= limit {
     return value;
   }
-  let (mut cut, mut left) = (MontyGraph::new(), room);
+  let (mut cut, mut left) = (MontyGraph::new(), limit);
   let root = cutting(graph, root, 0, &mut left, &mut cut, false);
   unstable::object_from_graph(cut, root).unwrap_or_else(|_| Object::repr(NESTED))
 }
@@ -382,5 +412,20 @@ mod tests {
     let fault = Fault::of(held.as_ref()).unwrap();
     assert_eq!(fault.name, "ValueError");
     assert_eq!(fault.message(), "bad");
+  }
+
+  #[test]
+  fn a_builtin_exception_keeps_a_message_that_holds_quotes_and_brackets() {
+    let said = "it's (not) 'ok')";
+    let held = Object::exception(monty_types::ExcType::KeyError, Some(said.to_owned()));
+    assert_eq!(Fault::of(held.as_ref()).unwrap().message(), said);
+  }
+
+  #[test]
+  fn a_builtin_exception_that_monty_names_by_its_module_is_given_a_bare_name() {
+    let held = Object::exception(monty_types::ExcType::CancelledError, None);
+    let fault = Fault::of(held.as_ref()).unwrap();
+    assert_eq!(fault.name, "CancelledError");
+    assert!(fault.args.is_empty());
   }
 }

@@ -30,7 +30,8 @@ The first frame of a peer is its hello:
 {"id": 0, "verb": "hello", "protocol": 1, "kind": "window", "name": null}
 ```
 
-- `kind` is `window` or `skill`, and a skill gives its `name`.
+- `kind` is `window`, `skill`, or `daemon` for the daemon of a new build that asks the handover, and a skill gives
+  its `name`.
 - The daemon answers with its protocol and the peer as it knows it: its login, its role, its kind and its name.
 
   ```json
@@ -64,6 +65,7 @@ it is not given. The daemon answers requests in any order.
 | `pause`, `wake`, `cancel` | `life`, `act` | write |
 | `chain` | `life`, `label`, `on` | write |
 | `run` | `life`, `word`, `on` | write |
+| `handover` | | write |
 | `view.mount`, `view.tree`, `view.event`, `view.effect`, `view.dispose` | see below | read |
 
 - The role to write holds each right of the role to read. A verb needs the role to write unless this table says read,
@@ -75,6 +77,27 @@ it is not given. The daemon answers requests in any order.
 - After `attach`, the daemon pushes each event of the life as a frame `event`, with the `life`, the `seq` of the event
   in the log of the life and the `event`: `fact`, `act`, `text`, `notice`, `changed`, `reborn` or `ended`. After
   `reborn`, the life goes on from its checkpoint, and its acts come again as they stand.
+- After each `attach` and `detach`, the daemon pushes to each window of the life a frame `presence` with the `life`
+  and its `peers`, each window that is attached now. Presence is no fact of the record.
+
+## The daemon
+
+`furb host` serves the daemon of the machine in the folder `host` of the cache of furb, and says where it listens
+once it listens. A second daemon refuses to start there.
+
+- `open` gives the life of a record, by its absolute path, in the folder `cwd`, the folder of the record when it is
+  not given. Each life opens on a thread of its own, so the daemon answers each verb while a life opens, and a fault
+  of one life ends that life alone. Each verb of a life refuses with `closed` when no life lives on its record.
+- A holder keeps a life: each window that attached it, and each pin, by the name of its holder. Work that runs holds
+  nothing. A life with no holder for 30 seconds writes its checkpoint and ends, and `list` gives it as not `open`
+  from then on. An `open` of a life that ends waits for its end, then opens it again from its checkpoint.
+- `detach` lets go of the window that says it alone, as `/end` does, and a window whose peer leaves is detached.
+- `furb host upgrade` serves the daemon of a new build in the place of the daemon that runs, which has no takeover.
+  The new daemon says `handover`. The daemon that runs writes the checkpoint of each life, ends it, stops to listen
+  and answers `handed` with each life, its folder and its pins. The new daemon listens and opens each life again with
+  its pins, then the old one closes each window and ends. Each window dials again and attaches, and the life goes on
+  from its checkpoint.
+- A frame of a view gets the refusal `viewless` until the daemon routes views.
 
 ## Views
 

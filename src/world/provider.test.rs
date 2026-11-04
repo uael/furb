@@ -2597,9 +2597,12 @@ fn an_id_is_a_uuid_of_version_4_and_variant_1() {
 
 /// The native search of the tests, which answers with its query.
 fn found_by_native() -> Searches {
-  Arc::new(|query| -> futures::future::BoxFuture<'static, Result<String, String>> {
-    Box::pin(async move { Ok(format!("Found {query}.")) })
-  })
+  Arc::new(
+    |query| -> futures::future::BoxFuture<
+      'static,
+      Result<String, crate::world::provider::search::Error>,
+    > { Box::pin(async move { Ok(format!("Found {query}.")) }) },
+  )
 }
 
 /// What a word that a rung runs on the root of a life closes with, or why it raised.
@@ -2626,4 +2629,11 @@ fn a_provider_that_searches_no_more_refuses_a_search() {
   let mut engine = lived(provider.searching(false));
   let no = closed(&mut engine, "close(await act('search', '', None, 'rust', 'm'))").unwrap_err();
   assert!(no.contains("a life that inspects searches nothing"), "{no}");
+}
+
+#[test]
+fn a_version_is_compared_by_its_numbers() {
+  assert!(super::numbers("1.10.0") > super::numbers("1.4.0"));
+  assert_eq!(super::numbers("1.4.0"), vec![1, 4, 0]);
+  assert_eq!(super::numbers("claude-2.1.119"), vec![2, 1, 119]);
 }

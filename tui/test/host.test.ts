@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { createConnection, createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
@@ -102,29 +102,6 @@ await host.dispose();
       await eventually(() => !alive(about.pid), "the host to end");
       expect(existsSync(place.socket)).toBe(false);
       expect(existsSync(place.about)).toBe(false);
-    }),
-);
-
-test.skipIf(process.platform === "win32")(
-  "a life that a fault stops tells the window that is attached, and the log of the host keeps why",
-  () =>
-    demoLife(async (record, directory) => {
-      const place = hostPlace(record);
-      if (!place) throw new Error("No socket serves here.");
-      const { engine, host } = await openEngine({ demo: true, host: true, cwd: directory, record });
-      const faults: string[] = [];
-      host.on("fault", (error: Error) => faults.push(error.message));
-      const cut = await Promise.resolve()
-        .then(() => engine.rung({ word: "x = 'a' * (5 << 30)", on: engine.root }))
-        .then(
-          () => "",
-          (error: Error) => error.message,
-        );
-      expect(cut).toContain("memory limit exceeded");
-      await eventually(() => faults.length > 0, "the window to hear that the life stopped");
-      expect(faults[0]).toStartWith("The life stopped at MemoryError: memory limit exceeded");
-      expect(readFileSync(place.log, "utf8")).toContain(`furb-host: ${faults[0]}`);
-      await host.end();
     }),
 );
 
@@ -793,35 +770,6 @@ test.skipIf(process.platform === "win32")(
       await eventually(() => lines.length > 0, "the host to warn of the disk");
       expect(lines[0]).toMatch(/^Only [\d.]+ GB is free on the disk of this record\./);
       await Bun.sleep(300);
-      expect(lines).toHaveLength(1);
-      await opened.host.end();
-    }),
-);
-
-test.skipIf(process.platform === "win32")(
-  "a host tells its windows once that the life holds most of the memory that bounds it",
-  () =>
-    demoLife(async (record, directory) => {
-      const set = {
-        FURB_SANDBOX_MEMORY: "400",
-        FURB_MEMORY_WARN: "0.1",
-        FURB_HOST_WATCH: "100",
-        FURB_DISK_WARN: "0",
-      };
-      Object.assign(process.env, set);
-      const lines: string[] = [];
-      let opened: Awaited<ReturnType<typeof openEngine>>;
-      try {
-        opened = await openEngine({ demo: true, host: true, cwd: directory, record }, (link) =>
-          link.host.on("log", (line: string) => lines.push(line)),
-        );
-      } finally {
-        for (const name of Object.keys(set)) delete process.env[name];
-      }
-      await opened.engine.rung({ word: "x = 'a' * (60 << 20)", on: opened.engine.root });
-      await eventually(() => lines.length > 0, "the host to warn of the memory");
-      expect(lines[0]).toMatch(/^The life holds \d+ MiB of the 400 MiB of memory that bounds it\./);
-      await Bun.sleep(400);
       expect(lines).toHaveLength(1);
       await opened.host.end();
     }),

@@ -19,6 +19,7 @@
 )]
 
 mod console;
+mod host;
 mod life;
 mod rpc;
 mod tui;
@@ -163,12 +164,26 @@ enum Command {
     #[arg(long)]
     update: bool,
   },
+  /// Serve the daemon of this machine, which holds each life by its record while a window or a pin
+  /// holds it, and refuses to start where a daemon serves already.
+  Host {
+    #[command(subcommand)]
+    then: Option<Hosting>,
+  },
   /// Print each extension that a life on the record runs: those it enables, then those that the configs of the user
   /// and of the directory turn on, each with its life word.
   Extensions {
     #[command(flatten)]
     place: Place,
   },
+}
+
+/// What `furb host` does beside serving.
+#[derive(Subcommand)]
+enum Hosting {
+  /// Serve in the place of the daemon that runs: it writes the checkpoint of each life and gives
+  /// them to this one, and each window connects again.
+  Upgrade,
 }
 
 impl Place {
@@ -208,6 +223,7 @@ fn main() -> ExitCode {
     Some(Command::Run { word, place, stand }) => run(stand.on(place.opening(true)), word),
     Some(Command::Extensions { place }) => extensions(place.opening(false)),
     Some(Command::Catalog { update }) => catalog(update),
+    Some(Command::Host { then }) => host::serve(matches!(then, Some(Hosting::Upgrade))),
     Some(Command::Checkpoint { record, cwd }) => {
       checkpoint(Place { record: Some(record.clone()), cwd }.opening(false), &record)
     }

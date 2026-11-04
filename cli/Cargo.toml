@@ -16,10 +16,13 @@ workspace = true
 
 [dependencies]
 # The engine, the ears of the World and the provider of models, at the version of this program.
-furb = { path = "..", version = "0.4.2", features = ["allocator"] }
+furb = { path = "..", version = "0.4.2" }
+# The daemon of the machine, which `furb host` serves.
+furb-host = { path = "../host", version = "0.4.2" }
 clap = { version = "4.6", features = ["derive"] }
-# The stdin of the operator, read by the console as the reactor of furb wakes it.
-tokio = { version = "1", features = ["io-std", "io-util", "macros"] }
+# The stdin of the operator, read by the console as the reactor of furb wakes it, and the runtime of
+# the daemon.
+tokio = { version = "1", features = ["io-std", "io-util", "macros", "rt-multi-thread"] }
 # The work of the console, which it streams to its ear, and the stop of a read.
 futures = "0.3"
 unsync = "0.2"

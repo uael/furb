@@ -49,7 +49,8 @@ pub(crate) use reader::plain;
 pub use reader::{READER, Retold, retold};
 pub use scratch::{SCRATCH, Scratch};
 pub use store::{
-  Lines, MADE, Sqlite, Store, VERSION, engine, heads, keeping, kept, made, store, version,
+  CHECKPOINT_SCHEMA, Lines, MADE, RECORD_SCHEMA, Schema, SchemaError, Sqlite, Store, VERSION,
+  engine, heads, keeping, kept, made, readable, release, store, version,
 };
 pub(crate) use store::{database, each};
 pub use time::time;
@@ -58,6 +59,14 @@ use crate::{
   ear::Co,
   value::{Fault, Object},
 };
+
+/// The file that a record keeps beside it, as `<record>.log`: the name of the record with the
+/// suffix after it, byte for byte, so a name that is no text reaches its file.
+pub(crate) fn beside(record: &Path, suffix: &str) -> PathBuf {
+  let mut name = record.as_os_str().to_os_string();
+  name.push(suffix);
+  PathBuf::from(name)
+}
 
 /// The directory a chain stands in, which a path of it resolves against: where the chain went last, resolved against
 /// the directory the life stands on, each read as a path of the machine where it names the home of the user with `~`,
@@ -92,7 +101,7 @@ pub(crate) fn resolved(directory: &Path, path: &str) -> PathBuf {
 
 /// The cache of furb on this machine: under `XDG_CACHE_HOME`, `LOCALAPPDATA` on Windows, `Library/Caches` of the
 /// home on macOS, and `.cache` of the home elsewhere.
-pub(crate) fn cache() -> Option<PathBuf> {
+pub fn cache() -> Option<PathBuf> {
   let named = |name: &str| env::var_os(name).filter(|one| !one.is_empty()).map(PathBuf::from);
   let base = named("XDG_CACHE_HOME").or_else(|| {
     if cfg!(windows) {

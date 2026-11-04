@@ -6,11 +6,11 @@
 )]
 #![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
 
-use std::{fs, io::Write, path::PathBuf};
+use std::{fs, path::PathBuf};
 
 use serde_json::json;
 
-use super::{Log, logged};
+use super::{Line, Log, logged};
 
 /// A record of its own for one test, which does not stand yet.
 fn place(name: &str) -> PathBuf {
@@ -56,18 +56,44 @@ fn a_log_that_a_drifted_replay_left_short_of_an_act_of_its_record_does_not_agree
 }
 
 #[test]
-fn a_line_that_the_ear_could_not_write_waits_and_lands_after_what_the_failed_write_left_is_cut() {
-  let record = place("torn");
+fn a_line_reaches_the_file_when_the_run_ends() {
+  let record = place("buffered");
   let mut log = Log::open(&record, &[]);
   log.line(&json!(["stand", "stand1", "operator", "chain1"]));
   let fresh = format!("{}.log.new", record.display());
-  // A write that failed on a full disk left a part of its line, and its line waits.
-  fs::OpenOptions::new().append(true).open(&fresh).unwrap().write_all(b"[\"done\",\"sta").unwrap();
-  log.torn = true;
-  log.waiting.push_str("[\"done\",\"stand1\",\"journal\",[]]\n");
-  log.line(&json!(["stand", "stand2", "operator", "chain1"]));
+  assert_eq!(fs::read_to_string(&fresh).unwrap(), "", "the lines wait in the buffer");
+  log.sink.borrow_mut().flush();
   assert_eq!(
     fs::read_to_string(&fresh).unwrap(),
+    "{\"entries\":0}\n[\"stand\",\"stand1\",\"operator\",\"chain1\"]\n"
+  );
+}
+
+#[test]
+fn a_line_that_the_buffer_did_not_take_waits_and_lands_after_the_lines_before_it() {
+  let record = place("waiting");
+  let mut log = Log::open(&record, &[]);
+  log.line(&json!(["stand", "stand1", "operator", "chain1"]));
+  log.sink.borrow_mut().waiting.push_str("[\"done\",\"stand1\",\"journal\",[]]\n");
+  log.line(&json!(["stand", "stand2", "operator", "chain1"]));
+  log.sink.borrow_mut().flush();
+  assert_eq!(
+    fs::read_to_string(format!("{}.log.new", record.display())).unwrap(),
     "{\"entries\":0}\n[\"stand\",\"stand1\",\"operator\",\"chain1\"]\n[\"done\",\"stand1\",\"journal\",[]]\n[\"stand\",\"stand2\",\"operator\",\"chain1\"]\n"
   );
+}
+
+#[test]
+fn a_line_is_read_from_its_head_alone() {
+  assert!(matches!(Line::of("{\"entries\":1}"), Line::Head));
+  assert!(matches!(Line::of("[\"keep\",\"\",7]"), Line::Keep(Some(7))));
+  assert!(matches!(Line::of("[\"keep\",\"\",x]"), Line::Keep(None)));
+  assert!(
+    matches!(Line::of("[\"bash\",\"bash3\",\"rung1\"]"), Line::Question(name) if name == "bash3")
+  );
+  assert!(matches!(Line::of("[\"done\",\"bash3\",\"journal\"]"), Line::Other));
+  assert!(
+    matches!(Line::of("[\"b\\u0061sh\",\"bash3\",\"rung1\"]"), Line::Question(name) if name == "bash3")
+  );
+  assert!(matches!(Line::of("[1,2]"), Line::Other));
 }

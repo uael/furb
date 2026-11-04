@@ -51,8 +51,8 @@ pub fn files(scratch: Scratch, config: PathBuf, gallery: Option<PathBuf>) -> Box
       }
       // A write of a door of a command of the life is the ear of the commands' to answer, wherever that ear stands.
       if a.kind() == "write"
-        && let Some((_, command, _)) = door(&a)
-        && !co.call("get", vec![Object::string(&command)], vec![]).await?.as_ref().is_none()
+        && let Some(at) = door(&a)
+        && !co.call("get", vec![Object::string(&at.command)], vec![]).await?.as_ref().is_none()
       {
         continue;
       }

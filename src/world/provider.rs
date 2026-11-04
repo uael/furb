@@ -43,6 +43,7 @@
 #![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
 #![expect(clippy::used_underscore_binding, reason = "debt: a binding named with _ that is used")]
 
+mod atomic;
 pub mod catalog;
 pub mod claude;
 mod clients;
@@ -1319,7 +1320,9 @@ impl Provider {
               let got = search(query.clone()).await;
               Replied::Searched {
                 id,
-                got: got.map(|answer| crate::value::Text::new(query, answer)),
+                got: got
+                  .map(|answer| crate::value::Text::new(query, answer))
+                  .map_err(|no| no.to_string()),
               }
             };
             co.work(stream::once(work).take_until(stopped));
@@ -1721,7 +1724,9 @@ fn messages(
     if python.is_empty() {
       continue;
     }
-    let seen = images.named(python, &mut given).map_err(CompletionError::ProviderError)?;
+    let seen = images
+      .named(python, &mut given)
+      .map_err(|no| CompletionError::ProviderError(no.to_string()))?;
     if !seen.is_empty() && !model.images {
       return Err(CompletionError::ProviderError(format!(
         "{} does not accept images.",
@@ -2276,6 +2281,11 @@ fn uuid_from(
     &digits[16..20],
     &digits[20..]
   ))
+}
+
+/// The numbers of a text, in order, which sort as a version does: `1.10.0` is greater than `1.4.0`.
+fn numbers(text: &str) -> Vec<u64> {
+  text.split(|one: char| !one.is_ascii_digit()).filter_map(|part| part.parse().ok()).collect()
 }
 
 #[cfg(test)]

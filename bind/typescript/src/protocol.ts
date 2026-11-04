@@ -129,6 +129,9 @@ export type Request1 =
       on?: string | null;
       verb: "run";
     }
+  | {
+      verb: "handover";
+    }
   | (Mount & {
       verb: "view.mount";
     })
@@ -145,9 +148,10 @@ export type Request1 =
       verb: "view.dispose";
     });
 /**
- * What a peer is: a window of an operator, or the process of a skill.
+ * What a peer is: a window of an operator, the process of a skill, or the daemon of a new build,
+ * which asks the handover.
  */
-export type Kind = "window" | "skill";
+export type Kind = "window" | "skill" | "daemon";
 /**
  * Where a window shows a view. The dock follows the chain that it names, and the row, the detail
  * and the mark follow the chain of the act that they name. The sidebar, the footer, a screen and
@@ -284,6 +288,11 @@ export type Frame =
       event: Event;
       frame: "event";
     }
+  | {
+      life: string;
+      peers: Peer[];
+      frame: "presence";
+    }
   | (Mount & {
       frame: "view.mount";
     })
@@ -340,6 +349,10 @@ export type Answer =
   | {
       answer: "presence";
       data: Peer[];
+    }
+  | {
+      answer: "handed";
+      data: Handed[];
     };
 /**
  * What a peer may do: read a life, or read and write it. Write holds each right of read.
@@ -376,6 +389,29 @@ export type ProtocolError =
   | {
       why: string;
       error: "refused";
+    }
+  | {
+      error: "stopped";
+    }
+  | {
+      life: string;
+      error: "closed";
+    }
+  | {
+      life: string;
+      error: "relative";
+    }
+  | {
+      life: string;
+      error: "unattached";
+    }
+  | {
+      life: string;
+      holder: string;
+      error: "unpinned";
+    }
+  | {
+      error: "viewless";
     };
 /**
  * What a life tells its clients, in the order of its log.
@@ -547,6 +583,14 @@ export interface Peer {
 export interface Listed {
   life: string;
   open: boolean;
+}
+/**
+ * A life that a daemon gave at its handover: its record, its folder, and the holder of each pin.
+ */
+export interface Handed {
+  life: string;
+  cwd: string;
+  pins: string[];
 }
 /**
  * One act of a life with its meaning, as it stands after the last fact about it.

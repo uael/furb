@@ -3,7 +3,7 @@
 # crate that stands on git, and furb stands on the fork of monty by git, so the proof stands in for the day when monty
 # stands on crates.io with what furb needs: it copies this checkout, and there it gives each dependency on monty the
 # version of the fork at the revision that Cargo.toml names. cargo packs the crates of the fork that furb runs at that
-# revision, and furb and furb-cli on them. Each packed crate stands in for crates.io as a patch of crates.io, and cargo
+# revision, and furb, furb-host and furb-cli on them. Each packed crate stands in for crates.io as a patch of crates.io, and cargo
 # takes every other crate from crates.io and resolves each version afresh, with no lock of furb, as a user gets them.
 # A new crate takes furb as cargo add writes it, runs the example chains of docs/examples/rust there, on a claude
 # command line that answers from a script, and cargo install puts furb-cli on it and runs furb --help. The first
@@ -21,13 +21,13 @@ mkdir "$work/crates" "$work/unpacked" "$work/furb"
 git clone -q https://github.com/uael/monty "$work/monty"
 git -C "$work/monty" checkout -q "$rev"
 fork=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"$/\1/p' "$work/monty/Cargo.toml")
-monty="monty-macros monty-types monty-alloc monty monty-typeshed monty-type-checking"
+monty="monty-macros monty-types monty monty-typeshed monty-type-checking"
 (cd "$work/monty" && cargo package --quiet --no-verify $(printf -- '-p %s ' $monty))
 # The copy of the checkout: each file that git tracks, as it stands now, and each dependency on monty by its version.
 (cd "$root" && git ls-files -z | tar --null -T - -cf -) | tar -xf - -C "$work/furb"
 sed -i.git 's/^\(monty[a-z-]* = { git = "https:\/\/github.com\/uael\/monty", rev = "[0-9a-f]*"\) }$/\1, version = "'"$fork"'" }/' \
   "$work/furb/Cargo.toml"
-test "$(grep -c "version = \"$fork\" }" "$work/furb/Cargo.toml")" = 4
+test "$(grep -c "version = \"$fork\" }" "$work/furb/Cargo.toml")" = 3
 rm "$work/furb/Cargo.lock"
 printf '[patch.crates-io]\n' > "$work/config.toml"
 unpack() {
@@ -64,6 +64,8 @@ if [ "$said" != "$want" ]; then
   printf 'chains said:\n%s\n' "$said" >&2
   exit 1
 fi
+(cd "$work/furb" && cargo --config "$work/config.toml" package --quiet --no-verify -p furb-host)
+unpack "$CARGO_TARGET_DIR/package/furb-host-$version.crate"
 (cd "$work/furb" && cargo --config "$work/config.toml" package --quiet --no-verify -p furb-cli)
 unpack "$CARGO_TARGET_DIR/package/furb-cli-$version.crate"
 cargo --config "$work/config.toml" install --quiet --debug --root "$work/bin" --path "$work/unpacked/furb-cli-$version"

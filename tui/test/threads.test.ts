@@ -121,6 +121,39 @@ test("a thread resolves from its card, and a message to it opens it again", () =
     true,
   ));
 
+test("a line on an open thread is a message of None, over at once, and a line on a resolved thread is a prompt of str", () =>
+  composing(
+    async ({ session }) => {
+      await idle(session);
+      const root = session.engine.root;
+      await session.engine.pause(root);
+      const id = await session.engine.prompt("str", { message: "Hold this thread open", on: root });
+      await session.refresh();
+      await until(session, () => listed(session).some((one) => one.act.id === id));
+      const on = () => session.acts.filter((act) => act.thread === id);
+      session.aim(id);
+      expect(session.lineShape(id)).toBe("None");
+      await session.submit("Look at it once");
+      await until(session, () => on().length === 1);
+      expect(on()[0]?.words[0]).toBe("None");
+      // The message is over at once, and it holds the thread open no more than the prompt of the thread does.
+      await until(session, () => on()[0]?.done === true);
+      expect(listed(session).find((one) => one.act.id === id)?.resolved).toBe(false);
+      await session.reply(id, "And once more");
+      await until(session, () => on().length === 2);
+      expect(on()[1]?.words[0]).toBe("None");
+      await session.resolve(id);
+      await until(session, () => listed(session).find((one) => one.act.id === id)?.resolved === true);
+      expect(session.lineShape(id)).toBe("str");
+      await session.submit("Look at it again");
+      await until(session, () => on().length === 3);
+      expect(on()[2]?.words[0]).toBe("str");
+      await until(session, () => listed(session).find((one) => one.act.id === id)?.resolved === false);
+    },
+    size,
+    true,
+  ));
+
 test("a question of a str shows a field in its card in the sidebar, and Enter in it answers the question", () =>
   composing(
     async ({ session, app, screen, frame }) => {
@@ -704,3 +737,28 @@ test("the marks of the threads count a question anywhere and the failure or paus
       tip: "1 failed  ·  1 paused",
     });
   }, size));
+
+test("a done thread of the operator that no fact seen covers shows ●, and a seen that another window says turns it into a faint ✓", () =>
+  composing(
+    async ({ session, frame }) => {
+      session.folds["thread:prompt1"] = true;
+      await idle(session);
+      // A window that opens later on the life, with the thread folded, never showed its work.
+      (session as unknown as { showing: Map<string, number> }).showing.clear();
+      const row = async () =>
+        rail(session, await frame()).find((line) => line.includes("Explore this project")) ?? "";
+      expect(await row()).toContain("● Explore this project");
+      // Another window of the life said that the operator read the thread, and the host gives it to this one.
+      session.host.seen = new Map([["prompt1", Number.MAX_SAFE_INTEGER]]);
+      session.emit("change");
+      let seen = await row();
+      for (let step = 0; step < 80 && !seen.includes(`${glyph.done} Explore`); step++) {
+        await Bun.sleep(25);
+        seen = await row();
+      }
+      expect(seen).toContain(`${glyph.done} Explore this project`);
+      expect(seen).not.toContain("●");
+    },
+    size,
+    true,
+  ));

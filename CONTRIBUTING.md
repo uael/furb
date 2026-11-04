@@ -65,7 +65,7 @@ contract needs a request of the owner.
 | `src/furb/AGENTS.md` | The technical names of the engine, and the laws that no test can hold. |
 | `DOCTRINE.md` | The doctrine of furb: how a model works in furb. The setup of the root reads it, and each chain with no source holds that read. |
 | `src/furb/__init__.py` | The switch: `FURB_ENGINE` picks the engine that `from furb import engine` gives. |
-| `src/engine.rs`, `src/sand.rs` | One life of `engine.py` in the sandbox of monty, how each value crosses, and the verbs that a host says. |
+| `src/engine.rs`, `src/engine/`, `src/sand.rs` | One life of `engine.py` in the sandbox of monty, how each value crosses, and the verbs that a host says. |
 | `src/ear.rs`, `src/fact.rs` | The ear, the one thing a life hears by, and a fact as the engine says it. |
 | `src/value.rs`, `src/wire.rs` | A value that crosses between the engine and a host, and that value as JSON. |
 
@@ -75,7 +75,7 @@ contract needs a request of the owner.
 | --- | --- |
 | `src/furb/kernel.py` | The Kernel, which runs the word of a rung in the module of its chain. Both engines load it. |
 | `src/furb/sheet.py` | The sheet that the gate reads a word on, and the findings that it reads off it. |
-| `src/gate.rs` | The gate: the type checker of monty, which reads a sheet. |
+| `src/gate.rs`, `src/gate/` | The gate: the type checker of monty, which reads a sheet. |
 
 ### The World and the life
 
@@ -84,7 +84,7 @@ contract needs a request of the owner.
 | `src/world.rs` | The ears of the World that the crate writes, one for each concern. |
 | `src/world/files.rs` | The files: a read and a write of a path, and of a path of `scratch://`, and a read of an image, which a model sees. |
 | `src/world/scratch.rs` | The scratch directory of a life: its place in the cache of furb for each record, the paths of `scratch://`, and the files that a record makes again in it. |
-| `src/world/bash.rs` | The commands: each runs in a shell of the machine, in the working directory of its chain, with `TMPDIR` set to the scratch directory. |
+| `src/world/bash.rs`, `src/world/bash/` | The commands: each runs in a shell of the machine, in the working directory of its chain, with `TMPDIR` set to the scratch directory. `shell.rs` holds the sh and its PATH, `group.rs` the processes that a command ends together, and `kept.rs` the head and the tail that a stream keeps. |
 | `src/world/fetch.rs` | The fetch: a page over HTTP as a text, as Markdown when it is HTML, which the question `fetch` asks. |
 | `src/world/mcp.rs`, `src/world/mcp/` | The client of the MCP servers: the ear `mcp`, which answers the acts `mcp_*` and says the fact `mcp_changed`, and the servers, their config, their sign-in and their tools. |
 | `src/world/time.rs` | The clock, a chance, and a wait. |

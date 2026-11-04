@@ -20,7 +20,7 @@
 #![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
 #![expect(clippy::unreadable_literal, reason = "debt: a long literal with no separator")]
 
-use std::{fs, path::PathBuf, sync::Arc};
+use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 
 use rig_core::{completion::CompletionRequest, message::Message};
 use serde_json::{Value, json};
@@ -89,7 +89,8 @@ fn catalog(environment: &[&str]) -> Catalog {
   let env = move |name: &str| {
     environment.iter().find(|(held, _)| held == name).map(|(_, value)| value.clone())
   };
-  let server = Server::named(&env).map(Arc::new);
+  let server = Server::named(&env)
+    .map(|one| Arc::new(one.timed(Duration::from_secs(1), Duration::from_secs(1))));
   Catalog::of(&parsed(LISTED, None), None, server, env)
 }
 

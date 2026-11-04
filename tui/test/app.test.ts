@@ -10,7 +10,7 @@ import { openEngine } from "../src/bridge.ts";
 import { demoLibrary, demoSession, removeDemoDirectories, seedDemo } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
 import type { Session } from "../src/session.ts";
-import { palettes, spin, theme } from "../src/theme.ts";
+import { glyph, palettes, spin, theme } from "../src/theme.ts";
 import { mix } from "../src/ui.ts";
 import { type SessionEntry, Workspaces } from "../src/workspaces.ts";
 import { cellAt, composing, drawn, withDemo } from "./composing.ts";
@@ -471,11 +471,8 @@ test("a prompt of None to the operator is a notice that settles as a quiet line,
         on: session.engine.root,
       });
       expect(await session.engine.result(id)).toBeNull();
-      // The session dismisses the notice as the console takes it, so it waits on no desk.
-      await until(
-        session.host,
-        () => !session.host.notices.has(id) && session.acts.some((act) => act.id === id),
-      );
+      // The console closes the notice as it takes it, so it waits on no desk.
+      await until(session, () => session.acts.some((act) => act.id === id && act.done));
       await session.refresh();
       expect(session.operatorPrompt).toBeUndefined();
       expect(session.desk.asks).toEqual([]);
@@ -593,7 +590,7 @@ test("the markdown of a message draws each element with no marks, and a code blo
         to: "operator",
         on: session.engine.root,
       });
-      await until(session.host, () => session.acts.some((act) => act.id === id && act.done));
+      await until(session, () => session.acts.some((act) => act.id === id && act.done));
       // A notice settles folded, and opens to its message.
       session.folds[id] = false;
       await session.refresh();
@@ -1014,7 +1011,7 @@ test("one gutter of furb draws the cells of each block of code: the number, the 
           to: "operator",
           on: session.engine.root,
         });
-        await until(session.host, () => session.acts.some((act) => act.id === note && act.done));
+        await until(session, () => session.acts.some((act) => act.id === note && act.done));
         session.folds[note] = false;
         await session.refresh();
         const nodes: Renderable[] = [];
@@ -1074,7 +1071,7 @@ test("the blocks of a word and of a code block of markdown stand alike in each p
         to: "operator",
         on: session.engine.root,
       });
-      await until(session.host, () => session.acts.some((act) => act.id === id && act.done));
+      await until(session, () => session.acts.some((act) => act.id === id && act.done));
       session.folds[id] = false;
       for (const name of Object.keys(palettes) as (keyof typeof palettes)[]) {
         session.theme = name;
@@ -1117,7 +1114,7 @@ test("a word and a code block of markdown take one ground, one label, one gutter
         to: "operator",
         on: session.engine.root,
       });
-      await until(session.host, () => session.acts.some((act) => act.id === id && act.done));
+      await until(session, () => session.acts.some((act) => act.id === id && act.done));
       session.folds[id] = false;
       for (const name of Object.keys(palettes) as (keyof typeof palettes)[]) {
         session.theme = name;
@@ -1158,6 +1155,32 @@ test("a word and a code block of markdown take one ground, one label, one gutter
           }
         }
       }
+    },
+    { width: 120, height: 40 },
+  ));
+
+test("a notice to the operator shows ● until a fact seen of its chain covers it, and a faint ✓ after", () =>
+  composing(
+    async ({ session, frame }) => {
+      const id = await session.engine.prompt("None", {
+        message: "The search shortcut works.",
+        to: "operator",
+        on: session.engine.root,
+      });
+      await until(session, () => session.acts.some((act) => act.id === id && act.done));
+      const line = async () =>
+        (await frame()).split("\n").find((row) => row.includes("The search shortcut")) ?? "";
+      expect(await line()).toContain("●");
+      // Another window says that the operator read the chain, and the host gives it to this one.
+      session.host.seen = new Map([[session.engine.root, Number.MAX_SAFE_INTEGER]]);
+      await session.refresh();
+      let shown = await line();
+      for (let step = 0; step < 80 && shown.includes("●"); step++) {
+        await Bun.sleep(25);
+        shown = await line();
+      }
+      expect(shown).not.toContain("●");
+      expect(shown).toContain(glyph.done);
     },
     { width: 120, height: 40 },
   ));

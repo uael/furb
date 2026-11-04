@@ -567,10 +567,13 @@ export const feed = part({
         // A message that a branch took shows what its thread held when the branch began.
         const mine = taken.has(act.id);
         const made = mine ? (takenMade().get(act.id) ?? []) : madeBy(act.id);
-        const seen = `${made.length}:${made.filter((one) => one.done).length}:${thread?.messages.length ?? 0}:${thread?.asked.length ?? 0}:${thread?.state}`;
         const folded = Boolean(thread && this.threadFolded(act.id));
         if (folded) collapsed = depth;
-        const news = this.unread(act.id, seen, folded);
+        // A thread that stands open shows its work, which the operator read once he leaves it. A folded thread shows
+        // the work past the place up to which he read it as unread.
+        const work = [act, ...made, ...(thread?.messages ?? []), ...(thread?.asked ?? [])];
+        if (thread && !folded) w.shows(act.id, work);
+        const news = folded && w.unreadThread(act.id, work);
         const steps = made.length + (thread?.messages.length ?? 0);
         // A folded thread keeps its header alone, drawn as the open thread draws it, with how many steps it holds.
         // Its state stands beside its shape, as the open thread says it.
@@ -747,6 +750,8 @@ export const feed = part({
         const askSection = (ask: ActRow): Section => {
           const text = String(ask.words[1] ?? "");
           const notice = ask.words[0] === "None";
+          // A notice is unread until a fact seen of its thread or of the chain that the operator left covers it.
+          const unseen = notice && w.unreadThread(act.id, [ask]);
           const pending = w.desk.asks.find((one) => one.id === ask.id);
           const aimed = Boolean(pending) && w.aimed?.id === ask.id;
           const value = typeof ask.value === "boolean" ? (ask.value ? "yes" : "no") : display(ask.value);
@@ -756,7 +761,7 @@ export const feed = part({
             notice && w.folds[`message:${ask.id}`] !== false ? this.firstRows(text, MESSAGE_ROWS) : [text, 0];
           return {
             id: `${act.id}-ask-${ask.id}`,
-            key: `${text}\n${notice}\n${Boolean(pending)}\n${aimed}\n${ask.done ? value : ""}\n${rest}\n${this.feedWidth}\n${this.theme}`,
+            key: `${text}\n${notice}\n${unseen}\n${Boolean(pending)}\n${aimed}\n${ask.done ? value : ""}\n${rest}\n${this.feedWidth}\n${this.theme}`,
             apart: true,
             act: ask,
             shown: text,
@@ -764,7 +769,9 @@ export const feed = part({
               box.add(
                 this.text(
                   [
-                    [`${glyph.asks} `, pending ? c.warning : c.faint],
+                    notice
+                      ? [`${markOf(unseen ? "unread" : "seen")[0]} `, markOf(unseen ? "unread" : "seen")[1]]
+                      : [`${glyph.asks} `, pending ? c.warning : c.faint],
                     [notice ? "Notice" : "Question", notice ? c.muted : c.text, bold],
                   ],
                   c.text,
@@ -1294,8 +1301,10 @@ export const feed = part({
           const lines = message.split("\n").filter((one) => one.trim()).length;
           const more = !opened && lines > 1 ? `+${lines - 1} ${lines === 2 ? "line" : "lines"}` : "";
           const meta = [more, from].filter(Boolean).join("  ");
-          const room = this.feedWidth - indent - 12 - Bun.stringWidth(meta);
+          const room = this.feedWidth - indent - 14 - Bun.stringWidth(meta);
           const tone = threadTone(act.id);
+          // A notice shows ● until a fact seen of its chain covers it, and a faint ✓ once one does.
+          const [mark, ink, weight] = markOf(w.unreadThread(act.id, [act]) ? "unread" : "seen");
           const toggle = () => {
             w.folds[act.id] = opened;
             w.save();
@@ -1303,7 +1312,7 @@ export const feed = part({
           };
           add(
             act.id,
-            `${message}\n${opened}\n${this.feedWidth}\n${this.theme}`,
+            `${message}\n${opened}\n${mark}\n${this.feedWidth}\n${this.theme}`,
             [],
             (box) => {
               const row = this.box({ flexDirection: "row" });
@@ -1314,6 +1323,7 @@ export const feed = part({
               text.flexShrink = 1;
               row.add(text);
               if (meta) row.add(this.text(meta, c.faint, { marginLeft: space.between, run: toggle }));
+              row.add(this.text([[mark, ink, weight]], ink, { marginLeft: space.between }));
               this.panel(box, tone).add(row);
             },
             { group: "user", heading: false, separate: true, open: true, act, indent, shown: message },
