@@ -1,10 +1,10 @@
-//! furb, the command line: the TUI, a JSON-RPC on stdin and stdout, and one command of the operator on one life.
+//! furb, the command line: the TUI, and one command of the operator on one life.
 //!
-//! With no command, furb hands the terminal to the TUI, or, with `--mode rpc`, serves a client on its stdin and its
-//! stdout. `prompt`, `turns`, `run` and `extensions` each open one life and print what it came to, and `facts` prints a record
-//! as it is. Every life runs on
-//! the engine of the crate, on the ears of the World that the crate writes, the extensions among them, and on the
-//! provider of the model of its default actor and of the models that `--roster` names, or of every model that the
+//! With no command, furb hands the terminal to the TUI. `prompt`, `turns`, `run` and
+//! `extensions` each open one life and print what it came to, and `facts` prints a record as
+//! it is. Every life runs on the engine of the crate, on the ears of the World that the
+//! crate writes, the extensions among them, and on the provider of the model of its default
+//! actor and of the models that `--roster` names, or of every model that the
 //! catalog of the crate offers when `--roster` names none.
 
 #![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
@@ -21,7 +21,6 @@
 mod console;
 mod host;
 mod life;
-mod rpc;
 mod tui;
 
 use std::{
@@ -30,7 +29,7 @@ use std::{
   process::ExitCode,
 };
 
-use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum, error::ErrorKind};
+use clap::{Args, Parser, Subcommand};
 use furb::{life::Opening, value::entry, verbs, world};
 
 use crate::life::Life;
@@ -39,9 +38,6 @@ use crate::life::Life;
 #[derive(Parser)]
 #[command(name = "furb", version, about, args_conflicts_with_subcommands = true)]
 struct Furb {
-  /// What furb serves with no command: the TUI, or a JSON-RPC on stdin and stdout, which docs/rpc.md describes.
-  #[arg(long, value_enum, default_value_t = Mode::Tui)]
-  mode: Mode,
   /// Open the TUI on its demo session, which asks no model.
   #[arg(long)]
   demo: bool,
@@ -54,15 +50,6 @@ struct Furb {
   more: Vec<String>,
   #[command(subcommand)]
   command: Option<Command>,
-}
-
-/// What furb serves with no command.
-#[derive(Clone, Copy, PartialEq, ValueEnum)]
-enum Mode {
-  /// The TUI, which takes the terminal.
-  Tui,
-  /// A JSON-RPC: a command on each line of stdin, and a response or an event on each line of stdout.
-  Rpc,
 }
 
 /// The record a life keeps and resumes from, and the directory its chains start in.
@@ -227,13 +214,6 @@ fn main() -> ExitCode {
     Some(Command::Checkpoint { record, cwd }) => {
       checkpoint(Place { record: Some(record.clone()), cwd }.opening(false), &record)
     }
-    None if furb.mode == Mode::Rpc => {
-      if furb.demo || !furb.more.is_empty() {
-        let why = "--demo and the words after -- are for the TUI, and --mode rpc serves no TUI";
-        Furb::command().error(ErrorKind::ArgumentConflict, why).exit();
-      }
-      rpc::serve(furb.stand.on(furb.place.opening(true)), furb.place.record.as_deref())
-    }
     None => {
       tui::launch(furb.demo, &furb.place, &furb.stand, &furb.more).map(|never| match never {})
     }
@@ -342,7 +322,7 @@ fn run(opening: Opening, word: String) -> Result<(), String> {
     let named: Vec<String> = pending.iter().map(|(id, on)| format!("{id} on {on}")).collect();
     eprintln!(
       "furb: an earlier life left {} pending, and it runs again only at a wake: from the word, as wake({chain:?}), \
-       from the TUI, or from `furb --mode rpc`.",
+       from a client of the daemon.",
       named.join(", ")
     );
   }
