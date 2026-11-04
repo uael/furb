@@ -27,7 +27,7 @@ monty="monty-macros monty-types monty monty-typeshed monty-type-checking"
 (cd "$root" && git ls-files -z | tar --null -T - -cf -) | tar -xf - -C "$work/furb"
 sed -i.git 's/^\(monty[a-z-]* = { git = "https:\/\/github.com\/uael\/monty", rev = "[0-9a-f]*"\) }$/\1, version = "'"$fork"'" }/' \
   "$work/furb/Cargo.toml"
-test "$(grep -c "version = \"$fork\" }" "$work/furb/Cargo.toml")" = 4
+test "$(grep -c "version = \"$fork\" }" "$work/furb/Cargo.toml")" = 3
 rm "$work/furb/Cargo.lock"
 printf '[patch.crates-io]\n' > "$work/config.toml"
 unpack() {
