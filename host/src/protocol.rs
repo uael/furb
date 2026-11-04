@@ -74,6 +74,8 @@ pub enum Verb {
   /// The life of a record opened, in a folder or in the folder of its record. A life that this
   /// open makes stands on the actor, the roster and the extensions that the peer names, and the
   /// peer answers each request of its models in their place when it asks to, as a demo does.
+  /// With `attach`, the peer attaches the life in the same step, from that place in its log, so
+  /// the life has a holder before its grace can pass.
   Open {
     life: String,
     cwd: Option<String>,
@@ -82,6 +84,8 @@ pub enum Verb {
     extensions: Option<bool>,
     #[serde(default)]
     answers: bool,
+    #[serde(default)]
+    attach: Option<Seq>,
   },
   /// The events of a life from a place in its log, which the daemon pushes to the peer.
   Attach {

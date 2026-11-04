@@ -50,7 +50,7 @@ it is not given. The daemon answers requests in any order.
 | Verb | Fields | Role |
 | --- | --- | --- |
 | `list` | | read |
-| `open` | `life`, `cwd`, `actor`, `roster`, `extensions`, `answers` | write |
+| `open` | `life`, `cwd`, `actor`, `roster`, `extensions`, `answers`, `attach` | write |
 | `attach` | `life`, `from` | read |
 | `detach` | `life` | read |
 | `pin`, `unpin` | `life`, `holder` | write |
@@ -96,6 +96,8 @@ it is not given. The daemon answers requests in any order.
   `request`: its `actor`, `chain`, `messages` and `settings`. The peer tells what it writes with `wrote`, and gives the
   turn, written as the record writes a value, or `why` it gives none, with `answered`. A request fails once its peer
   is gone.
+- An `open` with `attach` attaches its peer in the same step, from that place in the log, as `attach` does. The life
+  then has a holder before its grace can pass, even a grace of none.
 - `queue` sends a message that a window queued once: the record keeps its `entry` and the `hash` of its words, so a
   second `queue` of the same entry, from any window, gives the act of the first.
 - After `attach`, the daemon pushes each event of the life as a frame `event`, with the `life`, the `seq` of the event

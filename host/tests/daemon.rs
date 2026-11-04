@@ -229,6 +229,7 @@ mod daemon {
       roster: None,
       extensions: None,
       answers: false,
+      attach: None,
     };
     assert_eq!(window.ask(verb).await, Ok(Answer::Done));
     life
@@ -284,6 +285,31 @@ mod daemon {
     assert!(!window.lives(&life).await);
     let refused = window.ask(pin()).await;
     assert!(matches!(refused, Err(ProtocolError::Closed { .. })), "{refused:?}");
+  }
+
+  #[tokio::test]
+  async fn a_life_that_its_open_attaches_has_a_holder_before_a_grace_of_none_passes() {
+    let at = place();
+    let (local, _daemon) = started(&at, Duration::ZERO).await;
+    let mut window = Window::dialed(&local).await;
+    let life = at.join("a.jsonl").display().to_string();
+    let open = Verb::Open {
+      life: life.clone(),
+      cwd: Some(at.display().to_string()),
+      actor: None,
+      roster: None,
+      extensions: None,
+      answers: false,
+      attach: Some(0),
+    };
+    assert_eq!(window.ask(open).await, Ok(Answer::Done));
+    window.until(present(1)).await;
+    tokio::time::sleep(PAST).await;
+    assert!(window.lives(&life).await);
+    window.ran(&life, "x = 1").await;
+    assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+    tokio::time::sleep(PAST).await;
+    assert!(!window.lives(&life).await);
   }
 
   #[tokio::test]
@@ -497,8 +523,15 @@ mod daemon {
     let life = at.join("a.jsonl").display().to_string();
     let roster = Some(vec!["claude-cli:sonnet".to_owned()]);
     let cwd = Some(at.display().to_string());
-    let open =
-      Verb::Open { life: life.clone(), cwd, actor: None, roster, extensions: None, answers: true };
+    let open = Verb::Open {
+      life: life.clone(),
+      cwd,
+      actor: None,
+      roster,
+      extensions: None,
+      answers: true,
+      attach: None,
+    };
     assert_eq!(window.ask(open).await, Ok(Answer::Done));
     window.attach(&life).await;
     let prompt = Verb::Prompt {
