@@ -12,6 +12,11 @@
 //! it, and a new conversation that grows out of one the command line holds forks it. A subscription
 //! pays for the turns, and no key is read.
 
+#![expect(
+  clippy::single_match_else,
+  reason = "debt: a match of one arm and else, where if let serves"
+)]
+
 use std::{
   env,
   path::{Path, PathBuf},

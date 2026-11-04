@@ -106,7 +106,14 @@ no network.
 
 | File | What it holds |
 | --- | --- |
-| `src/world/provider.rs` | The ear: the standing, each reply, the messages of a turn, what a model writes as it writes it, and the usage of a turn. |
+| `src/world/provider.rs` | The provider: the models that it offers, the default actor, its refresh, and what the host is told while a model writes. |
+| `src/world/provider/hearer.rs` | The ear: one method for each event that it hears, the replies that it took, and the notes that it tells a chain. |
+| `src/world/provider/model.rs` | A model: its class, its settings, the standing that a chain reads, and the request of a reply. |
+| `src/world/provider/word.rs` | The word of a reply as its model writes it: what the gate finds against it, and each part of it that runs. |
+| `src/world/provider/messages.rs` | The turns of a chain as the messages that a model reads. |
+| `src/world/provider/answer.rs` | The call of a model for a reply: the stream, the retries, and the turn that its answer gives, with its usage. |
+| `src/world/provider/retry.rs` | The failures of a call that pass, and the wait before the provider asks the model again. |
+| `src/world/provider/thinking.rs` | The most tokens of thought of a model in one turn, and how a model takes them. |
 | `src/world/provider/catalog.rs` | The catalog: the snapshot and its cache, which models it offers, the credential and the address of each, the efforts of each kind of request, the default actor, and the roster. |
 | `src/world/provider/local.rs` | The local server: its address, its key, the models it lists, and the window of each. |
 | `src/world/provider/catalog.json` | The snapshot of models.dev and of the data of pi-ai, one model on each line, which `script/catalog.py` makes again. |
