@@ -80,8 +80,6 @@ deletes the record.
 - `furb_monty.engine.parked()` names each run of a word or reply that a crash loop parked, which a wake does not run.
 - `furb_monty.engine.retry(id)` runs a parked act again.
 
-[A resumed life](https://github.com/uael/furb/blob/main/docs/rpc.md#a-resumed-life) says which acts each one names.
-
 ## Make an act once
 
 `furb_monty.engine.keyed(key, kind, *args, **kwargs)` makes the act of a verb once for a key of the client, across a

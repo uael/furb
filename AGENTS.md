@@ -62,7 +62,7 @@ API of its own:
   `FURB_ENGINE=monty` makes `from furb import engine` give it.
 - `cli/` is `furb-cli`, the second package of the workspace of the crate, whose program is `furb`, on clap. With no
   command it hands the terminal to the TUI, which it finds in `FURB_TUI`, as `furb-tui` on PATH, or in the checkout it
-  was built from. `--mode rpc` serves one life as a JSON-RPC on stdin and stdout, which `docs/rpc.md` says. `prompt`,
+  was built from. A program that wants a life dials the daemon, as `docs/protocol.md` says. `prompt`,
   `turns`, `run` and `extensions` each open one life on a record, `facts` prints each fact of a record with no life,
   `checkpoint` writes the checkpoint of a life, `catalog` shows where the models came from, and `host` serves the
   daemon of the machine of `furb-host`. The package `furb`
