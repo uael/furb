@@ -810,14 +810,23 @@ export class App {
   /** A node whose background takes a color while the pointer is on it, and gives it back when the pointer leaves. */
   hoverable<T extends BoxRenderable | TextRenderable>(node: T, color = c.raised): T {
     // A box has a background, and a text the color behind its cells.
-    const property = node instanceof BoxRenderable ? "backgroundColor" : "bg";
-    const rest: unknown = Reflect.get(node, property);
-    node.onMouseOver = () => {
-      Reflect.set(node, property, color);
-    };
-    node.onMouseOut = () => {
-      Reflect.set(node, property, rest);
-    };
+    if (node instanceof BoxRenderable) {
+      const rest = node.backgroundColor;
+      node.onMouseOver = () => {
+        node.backgroundColor = color;
+      };
+      node.onMouseOut = () => {
+        node.backgroundColor = rest;
+      };
+    } else {
+      const rest = node.bg;
+      node.onMouseOver = () => {
+        node.bg = color;
+      };
+      node.onMouseOut = () => {
+        node.bg = rest;
+      };
+    }
     return node;
   }
   /** The mode of the terminal changed, so the theme that follows it changes too. */
