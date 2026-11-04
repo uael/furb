@@ -26,17 +26,17 @@ pub enum Role {
   Write,
 }
 
-/// What a peer is: a window of an operator, the process of a kit, or the daemon of a new build,
+/// What a peer is: a window of an operator, the process of a skill, or the daemon of a new build,
 /// which asks the handover.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Kind {
   Window,
-  Kit,
+  Skill,
   Daemon,
 }
 
-/// The first frame of a peer: the protocol that it speaks, its kind, and the name of a kit.
+/// The first frame of a peer: the protocol that it speaks, its kind, and the name of a skill.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Hello {
   pub protocol: u32,
@@ -45,7 +45,7 @@ pub struct Hello {
 }
 
 /// A peer as the daemon knows it after its hello: the login that its transport proved, its role,
-/// its kind, and the name of a kit.
+/// its kind, and the name of a skill.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Peer {
   pub login: String,
@@ -214,12 +214,12 @@ impl Verb {
   }
 
   /// The kind of peer that says the verb, when it is a frame of a view: a window mounts, says what
-  /// a person did and disposes, and a kit serves the trees and the effects. Any other peer is
+  /// a person did and disposes, and a skill serves the trees and the effects. Any other peer is
   /// refused it.
   pub fn speaker(&self) -> Option<Kind> {
     match self {
       Self::ViewMount(_) | Self::ViewEvent(_) | Self::ViewDispose(_) => Some(Kind::Window),
-      Self::ViewTree(_) | Self::ViewEffect(_) => Some(Kind::Kit),
+      Self::ViewTree(_) | Self::ViewEffect(_) => Some(Kind::Skill),
       _ => None,
     }
   }
@@ -298,13 +298,13 @@ pub struct Listed {
   pub open: bool,
 }
 
-/// A view that a window mounts in a slot of a life, which the process of a kit serves.
+/// A view that a window mounts in a slot of a life, which the process of a skill serves.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Mount {
   pub viewer: String,
   pub life: String,
   pub slot: Slot,
-  pub kit: String,
+  pub skill: String,
 }
 
 /// The tree of a view, which takes the place of each tree of a lower version.
@@ -325,7 +325,7 @@ pub struct ViewEvent {
   pub value: Option<String>,
 }
 
-/// What a kit asks of the one window of a view.
+/// What a skill asks of the one window of a view.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ViewEffect {
   pub viewer: String,
@@ -349,15 +349,15 @@ pub enum Slot {
   },
   /// A section of the sidebar.
   Sidebar,
-  /// The row of one act, of a kind that the kit draws.
+  /// The row of one act, of a kind that the skill draws.
   Row {
     act: String,
   },
-  /// The detail of one act, of a kind that the kit draws.
+  /// The detail of one act, of a kind that the skill draws.
   Detail {
     act: String,
   },
-  /// A mark in the feed, after one act, of a kind that the kit marks.
+  /// A mark in the feed, after one act, of a kind that the skill marks.
   Mark {
     act: String,
   },
@@ -375,7 +375,7 @@ pub enum Gesture {
   Submit,
 }
 
-/// What a kit asks of a window.
+/// What a skill asks of a window.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "effect", rename_all = "snake_case")]
 pub enum Effect {

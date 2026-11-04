@@ -342,10 +342,10 @@ mod daemon {
     assert!(!new.is_finished());
   }
 
-  /// The view of a kit that a window mounts in the footer of a life.
+  /// The view of a skill that a window mounts in the footer of a life.
   fn mount(life: &str, viewer: &str) -> Verb {
-    let (viewer, life, kit) = (viewer.to_owned(), life.to_owned(), "k".to_owned());
-    Verb::ViewMount(Mount { viewer, life, slot: Slot::Footer, kit })
+    let (viewer, life, skill) = (viewer.to_owned(), life.to_owned(), "k".to_owned());
+    Verb::ViewMount(Mount { viewer, life, slot: Slot::Footer, skill })
   }
 
   /// A tree with a button, which only a window that writes may press.
@@ -375,31 +375,31 @@ mod daemon {
   }
 
   #[tokio::test]
-  async fn a_kit_serves_a_tree_to_a_writer_and_a_reader_and_hears_the_writer_alone() {
+  async fn a_skill_serves_a_tree_to_a_writer_and_a_reader_and_hears_the_writer_alone() {
     let at = place();
     let local = started_as(&at, &[Role::Write, Role::Write, Role::Read]).await;
-    let mut kit = Window::dialed_as(&local, Kind::Kit, Some("k")).await;
+    let mut skill = Window::dialed_as(&local, Kind::Skill, Some("k")).await;
     let (mut writer, mut reader) = (Window::dialed(&local).await, Window::dialed(&local).await);
     let life = opened(&mut writer, &at, "a.jsonl").await;
-    for peer in [&mut kit, &mut writer, &mut reader] {
+    for peer in [&mut skill, &mut writer, &mut reader] {
       peer.attach(&life).await;
     }
     for (window, viewer) in [(&mut writer, "w"), (&mut reader, "r")] {
       assert_eq!(window.ask(mount(&life, viewer)).await, Ok(Answer::Done));
-      kit.until(|frame| matches!(frame, Frame::ViewMount(one) if one.viewer == viewer)).await;
-      assert_eq!(kit.ask(tree(viewer)).await, Ok(Answer::Done));
+      skill.until(|frame| matches!(frame, Frame::ViewMount(one) if one.viewer == viewer)).await;
+      assert_eq!(skill.ask(tree(viewer)).await, Ok(Answer::Done));
     }
     assert_eq!(inert(&writer.until(|frame| inert(frame).is_some()).await), Some(false));
     assert_eq!(inert(&reader.until(|frame| inert(frame).is_some()).await), Some(true));
     let notice = Effect::Notice { text: "done".to_owned() };
     let effect = Verb::ViewEffect(ViewEffect { viewer: "w".to_owned(), effect: notice });
-    assert_eq!(kit.ask(effect).await, Ok(Answer::Done));
+    assert_eq!(skill.ask(effect).await, Ok(Answer::Done));
     writer.until(|frame| matches!(frame, Frame::ViewEffect(_))).await;
     assert!(writer.pushed.iter().all(|frame| inert(frame).is_none()));
     let refused = reader.ask(pressed("r")).await;
     assert_eq!(refused, Err(ProtocolError::Role { needs: Role::Write, has: Role::Read }));
     assert_eq!(writer.ask(pressed("w")).await, Ok(Answer::Done));
-    let heard = kit.until(|frame| matches!(frame, Frame::ViewEvent(_))).await;
+    let heard = skill.until(|frame| matches!(frame, Frame::ViewEvent(_))).await;
     assert_eq!(
       heard,
       Frame::ViewEvent(ViewEvent {
@@ -412,20 +412,20 @@ mod daemon {
   }
 
   #[tokio::test]
-  async fn a_mount_needs_a_kit_and_a_holder_and_a_view_ends_with_its_peer() {
+  async fn a_mount_needs_a_skill_and_a_holder_and_a_view_ends_with_its_peer() {
     let at = place();
     let local = started_as(&at, &[Role::Write, Role::Write]).await;
-    let (mut writer, mut kit) =
-      (Window::dialed(&local).await, Window::dialed_as(&local, Kind::Kit, Some("k")).await);
+    let (mut writer, mut skill) =
+      (Window::dialed(&local).await, Window::dialed_as(&local, Kind::Skill, Some("k")).await);
     let life = opened(&mut writer, &at, "a.jsonl").await;
     writer.attach(&life).await;
-    let nokit = ProtocolError::NoKit { life: life.clone(), kit: "k".to_owned() };
-    assert_eq!(writer.ask(mount(&life, "v")).await, Err(nokit));
-    kit.attach(&life).await;
+    let noskill = ProtocolError::NoSkill { life: life.clone(), skill: "k".to_owned() };
+    assert_eq!(writer.ask(mount(&life, "v")).await, Err(noskill));
+    skill.attach(&life).await;
     assert_eq!(writer.ask(mount(&life, "v")).await, Ok(Answer::Done));
     let taken = writer.ask(mount(&life, "v")).await;
     assert_eq!(taken, Err(ProtocolError::Mounted { viewer: "v".to_owned() }));
-    let stranger = kit
+    let stranger = skill
       .ask(Verb::ViewEvent(ViewEvent {
         viewer: "v".to_owned(),
         node: "go".to_owned(),
@@ -434,7 +434,7 @@ mod daemon {
       }))
       .await;
     assert!(matches!(stranger, Err(ProtocolError::Speaker { .. })), "{stranger:?}");
-    drop(kit);
+    drop(skill);
     let ended = Frame::ViewDispose(Dispose { viewer: "v".to_owned() });
     assert_eq!(writer.until(|frame| matches!(frame, Frame::ViewDispose(_))).await, ended);
     let gone = writer.ask(pressed("v")).await;

@@ -66,15 +66,15 @@ pub enum ProtocolError {
   Unattached { life: String },
   #[error("no pin of the holder {holder} holds the life on the record {life}")]
   Unpinned { life: String, holder: String },
-  /// A frame of a view that only a window says, or only a kit, and the peer is of another kind.
+  /// A frame of a view that only a window says, or only a skill, and the peer is of another kind.
   #[error("the verb is said by a peer of the kind {needs:?}, and the peer is of the kind {has:?}")]
   Speaker { needs: Kind, has: Kind },
-  /// A kit says its name at its hello, since a window mounts the views of a kit by it.
-  #[error("a kit says its name at its hello")]
+  /// A skill says its name at its hello, since a window mounts the views of a skill by it.
+  #[error("a skill says its name at its hello")]
   Nameless,
-  #[error("no kit {kit} is attached to the life on the record {life}")]
-  NoKit { life: String, kit: String },
-  /// A view belongs to the window that mounted it and to the kit that serves it, and to no other
+  #[error("no skill {skill} is attached to the life on the record {life}")]
+  NoSkill { life: String, skill: String },
+  /// A view belongs to the window that mounted it and to the skill that serves it, and to no other
   /// peer.
   #[error("the peer holds no view {viewer}")]
   Unmounted { viewer: String },
