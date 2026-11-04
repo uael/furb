@@ -173,7 +173,13 @@ test("a damaged journal of file changes says what broke, with no word of the par
       const feed = shown
         .split("\n")
         .filter((row) => row.startsWith("  ┃"))
-        .map((row) => row.slice(3).trim().split(/\s{3,}/)[0])
+        .map(
+          (row) =>
+            row
+              .slice(3)
+              .trim()
+              .split(/\s{3,}/)[0],
+        )
         .join(" ");
       expect(feed).toContain("change 1 cannot be read.");
       expect(shown).toContain("Repair the journal");
