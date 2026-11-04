@@ -71,13 +71,20 @@ export type ChainRead = {
 };
 
 /** The mark of a thread in the list of the threads of a chain: it asks the operator, a pause holds it, it failed, a
- * cancel ended it, it is resolved and seen, or it runs. */
-export const threadMarks = (thread: ChainThread, state: ChainThread["state"] = thread.state): Part =>
+ * cancel ended it, it is resolved with work that the operator did not read, it is resolved and seen, or it runs. Work
+ * that the operator did not read concerns him only on a thread that he started. */
+export const threadMarks = (
+  thread: ChainThread,
+  state: ChainThread["state"] = thread.state,
+  unread = false,
+): Part =>
   markOf(
     state === "asks" || state === "paused" || state === "failed" || state === "cancelled"
       ? state
       : thread.resolved
-        ? "seen"
+        ? unread && thread.yours
+          ? "unread"
+          : "seen"
         : busy(state)
           ? state
           : "runs",

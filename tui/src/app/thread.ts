@@ -90,17 +90,6 @@ export const thread = part({
     return part;
   },
 
-  /** Whether a thread that stands folded has new work since it was last seen open. A thread that stands open is seen. */
-  unread(id: string, seen: string, folded: boolean): boolean {
-    const known = this.seenThreads.get(id);
-    // The work that came before the thread folded was seen, whoever folded it.
-    if (!folded || !known?.folded) {
-      this.seenThreads.set(id, { seen, folded });
-      return false;
-    }
-    return known.seen !== seen;
-  },
-
   /** The row at the end of a thread, a button that makes the thread the target of the input: the input then sends its
    * messages to it, and a message to a thread that is over opens it again. While the thread is the target, the row
    * says so in the color of the thread, the color of the line of the input. */

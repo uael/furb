@@ -422,6 +422,29 @@ test("a session that keeps a record keeps a snapshot of its life, and a later se
   }
 });
 
+test("a fact seen that the operator says covers what came before it, and a later life on its record reads it", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "furb-seen-"));
+  const record = join(cwd, "life.jsonl");
+  const place = (session: Session, id: string) => session.activity.acts.get(id)?.began ?? 0;
+  const first = new Session({ cwd, record, extensions: false });
+  const engine = first.open();
+  const before = engine.prompt("None", { message: "noted", to: "operator", on: engine.root }).id;
+  engine.say("seen", engine.root, []);
+  const after = engine.prompt("None", { message: "later", to: "operator", on: engine.root }).id;
+  const seen = first.activity.seen.get(engine.root) ?? 0;
+  expect([place(first, before) < seen, place(first, after) > seen]).toEqual([true, true]);
+  await first.dispose();
+  const second = new Session({ cwd, record, extensions: false });
+  try {
+    second.open();
+    const again = second.activity.seen.get(second.engine?.root ?? "") ?? 0;
+    expect([place(second, before) < again, place(second, after) > again]).toEqual([true, true]);
+  } finally {
+    await second.dispose();
+    await rm(cwd, { recursive: true });
+  }
+});
+
 test("a session that ends keeps the checkpoint of its life at the tip of its record, and a later session opens on it", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-checkpoint-"));
   const record = join(cwd, "life.jsonl");
@@ -746,7 +769,7 @@ test("a whole number from the operator answers a float prompt as a float, typed 
   }
 });
 
-test("a prompt of None to the operator is closed as the console takes it, and stays a notice until a dismiss", async () => {
+test("a prompt of None to the operator is closed as the console takes it, and the console keeps nothing of it", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-notice-"));
   const session = boot({ cwd });
   try {
@@ -754,9 +777,7 @@ test("a prompt of None to the operator is closed as the console takes it, and st
     const told = engine.prompt("None", { message: "The build is green.", to: "operator", on: engine.root });
     expect(await told).toBeNull();
     expect(session.console.prompts.size).toBe(0);
-    expect([...session.console.notices.values()]).toEqual([{ id: told.id, message: "The build is green." }]);
-    session.console.dismiss(told.id);
-    expect(session.console.notices.size).toBe(0);
+    expect(session.activity.acts.get(told.id)?.done).toBe(true);
   } finally {
     await session.dispose();
     await rm(cwd, { recursive: true });

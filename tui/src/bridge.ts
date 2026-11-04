@@ -94,9 +94,6 @@ export type Engine = {
 };
 /** A question that waits for the operator. */
 type Prompt = { id: string; shape: string; message: string };
-/** A prompt of None to the operator, which asks nothing and was closed as the console took it, until the operator
- * dismisses it. */
-type Notice = { id: string; message: string };
 /** What the session in the worker holds that the host keeps as it comes. */
 interface Plain {
   completed: number;
@@ -125,7 +122,8 @@ interface Plain {
 export interface HostState extends Plain {
   facts: number;
   prompts: Prompt[];
-  notices: Notice[];
+  /** The place up to which the operator read each chain or thread, as the facts seen of the record say it. */
+  seen?: [string, number][];
   streams: [string, Stream][];
   pending: [string, string][];
 }
@@ -145,7 +143,7 @@ export class HostView extends EventEmitter implements Plain {
   compactions: Compaction[] = [];
   seq = 0;
   prompts = new Map<string, Prompt>();
-  notices = new Map<string, Notice>();
+  seen = new Map<string, number>();
   streams = new Map<string, Stream>();
   pending = new Map<string, string>();
   constructor(private request: (target: string, method: string, args: unknown[]) => Promise<unknown>) {
@@ -164,7 +162,7 @@ export class HostView extends EventEmitter implements Plain {
   update({
     facts,
     prompts,
-    notices,
+    seen = [],
     streams,
     pending,
     measures = {},
@@ -176,8 +174,8 @@ export class HostView extends EventEmitter implements Plain {
     if (compactions.length) this.compactions = [...this.compactions, ...compactions];
     if (this.changed("prompts", prompts))
       this.prompts = new Map(prompts.map((prompt) => [prompt.id, prompt]));
-    if (this.changed("notices", notices))
-      this.notices = new Map(notices.map((notice) => [notice.id, notice]));
+    if (this.changed("seen", seen)) this.seen = new Map(seen);
+    if (this.changed("seen", seen)) this.seen = new Map(seen);
     this.streams = new Map(streams);
     if (this.changed("pending", pending)) this.pending = new Map(pending);
     if (facts) this.emit("facts");
@@ -222,8 +220,8 @@ export class HostView extends EventEmitter implements Plain {
   answer = (id: string, value: string) => this.ask<unknown>("console", "answer", id, value);
   /** The words of the operator in place of each value that a question offers, which close it as Refused. */
   decline = (id: string, words: string) => this.ask<unknown>("console", "decline", id, words);
-  /** The notice that the operator read, which the TUI shows no more as unread. */
-  dismiss = (id: string) => this.ask<unknown>("console", "dismiss", id);
+  /** The operator read a chain or a thread up to a place, which the record keeps as a fact seen. */
+  see = (about: string, place: number) => this.ask<null>("library", "seen", about, place);
   attachImage = (path: string) => this.ask<ImageAttachment>("session", "attachImage", path);
   sendQueued = (entry: FollowUp) => this.ask<string>("library", "queue", entry);
   resume = () => this.ask<unknown>("session", "resume");
