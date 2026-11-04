@@ -1439,9 +1439,10 @@ pub struct Engine {
   watchers: HashMap<String, Vec<Watcher>>,
   root: String,
   raised: Option<Fault>,
-  /// The fault that cut a run of the sandbox, when one did. monty ends the run at a fault that no code catches, as the
-  /// memory bound, with no `finally` of the frames it cuts: the bus of the engine stays busy with the ear that it
-  /// stepped, and hears no fact after it. So each later entry is refused with this fault.
+  /// The fault that cut a run of the sandbox, when one did. monty ends the run at a fault
+  /// that no code catches, as a second excess of the turn bound, with no `finally` of the
+  /// frames it cuts: the bus of the engine stays busy with the ear that it stepped, and hears
+  /// no fact after it. So each later entry is refused with this fault.
   stopped: Option<Fault>,
   /// The acts that the record showed started and not done, which the journal holds from the outside and which this
   /// life has not taken up yet, in the order of the record.

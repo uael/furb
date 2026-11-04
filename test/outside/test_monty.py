@@ -9,16 +9,13 @@ holds its own, a gate that accepts a builtin or a name of a module exactly when 
 crate writes, which serves a life of either engine, a life longer than the tables of its session could count, a
 word that awaits in a lambda, which the gate lets pass and the sandbox refuses as python does, an engine and an
 ear that the collector of cycles drops on another thread, a value too deep or that holds its parts too often,
-which a host is given cut, and a word that grows past the memory bound of the sandbox, which ends with a
-`MemoryError` and leaves its process alive. What the ears of the crate do, the crate proves.
+which a host is given cut. What the ears of the crate do, the crate proves.
 """
 
 import asyncio
 import builtins
 import gc
 import json
-import os
-import subprocess
 import sys
 import threading
 from collections.abc import Generator
@@ -589,49 +586,3 @@ close([
     got.append(await engine.rung(word, on=root))
   expected = ["a2 b44", [3, 4], None, ["na"], "e001"]
   assert got == [expected, expected]
-
-
-GROWN = """import asyncio, sys
-sys.path.insert(0, sys.argv[1])
-from conftest import STANDS, Dead, swapped
-import furb_monty.engine as engine
-async def grown(word):
-  swapped(engine)
-  root = engine.boot((), world=Dead(stands=STANDS).hears())
-  try:
-    print(await asyncio.wait_for(engine.rung(word, on=root), 60))
-  except MemoryError as no:
-    print(type(no).__name__)
-asyncio.run(grown(sys.argv[2]))
-"""
-
-
-@pytest.mark.timeout(120)
-@pytest.mark.parametrize(
-  "word",
-  ["x = []\nfor _ in range(10**4):\n  x.append([0] * 1000)\nclose(len(x))", "close(len([0] * 10**7))"],
-  ids=["grows", "repeats"],
-)
-def test_a_word_that_grows_past_the_memory_bound_ends_with_a_memory_error_and_its_process_lives(
-  tmp_path: Path, word: str
-) -> None:
-  """A word that asks for more memory than the bound of the sandbox, 64 MiB here, ends with a MemoryError where it
-  stands, in a process of its own, which lives on to say it."""
-  script = tmp_path / "grown.py"
-  script.write_text(GROWN, encoding="utf-8")
-  test = str(Path(__file__).resolve().parents[1])
-  env = {**os.environ, "FURB_SANDBOX_MEMORY": "64"}
-  got = subprocess.run(  # noqa: S603
-    [sys.executable, "-I", str(script), test, word], capture_output=True, text=True, env=env, timeout=110, check=False
-  )
-  assert (got.returncode, got.stdout.strip()) == (0, "MemoryError"), got.stderr[-2000:]
-
-
-def test_the_door_gives_the_memory_that_the_sandboxes_hold_and_the_bound_that_stops_them(
-  monkeypatch: pytest.MonkeyPatch,
-) -> None:
-  """The bound is what FURB_SANDBOX_MEMORY gives in MiB, 64 here, and the memory that the sandboxes hold is a count of
-  bytes, which no sandbox makes negative."""
-  monkeypatch.setenv("FURB_SANDBOX_MEMORY", "64")
-  assert _monty.sandbox_bound() == 64 << 20
-  assert _monty.sandbox_held() >= 0
