@@ -63,6 +63,11 @@ pub(crate) fn login(stream: &Accepted) -> Result<String, TransportError> {
   named(uid)
 }
 
+/// The login of the user of the daemon.
+pub(crate) fn own() -> Result<String, TransportError> {
+  named(user())
+}
+
 /// The folder of the socket made, of mode 0700, and refused when another user owns it or may
 /// enter it.
 fn guarded(folder: &Path) -> Result<(), TransportError> {

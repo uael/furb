@@ -16,6 +16,19 @@ A transport has two parts: a dialer, which reaches the daemon, and an identity, 
 - The identity of a local peer is the login of the user, and it has the role to write.
 - A second daemon cannot listen where a daemon listens. A socket that no daemon answers is stale, and gives its place.
 
+### The door of the windows
+
+A web view reaches no socket and no pipe, so `furb host` also opens a door of the windows: a WebSocket on a free port
+of loopback. A page of any origin can reach loopback, so the door lets in only a peer that gives the token of the
+daemon.
+
+- The daemon writes the address of the door, with its token, in `window.json` beside its socket, which only the user
+  reads: `{"url": "ws://127.0.0.1:52011/?token=..."}`. Each start and each upgrade draws a new port and a new token.
+- A peer that gives no token in the query of its upgrade, or another one, gets the HTTP status 403 and no socket.
+- The identity of a peer of the door is the login of the user, and it has the role to write.
+- A window dials the socket first: `window.json` stays after a daemon that a kill ended, and only a daemon that
+  answers on its socket holds the door that the file names.
+
 ### The tailnet
 
 The daemon also listens on the address of the machine on the tailnet of Tailscale when `host.json`, in the config

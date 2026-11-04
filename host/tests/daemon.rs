@@ -84,7 +84,7 @@ mod daemon {
   async fn started(at: &Path, grace: Duration) -> (Local, JoinHandle<Result<(), DaemonError>>) {
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
-    let settings = Settings { opening: opening(at), grace, tailnet: None };
+    let settings = Settings { opening: opening(at), grace, tailnet: None, door: None };
     let served = local.clone();
     (local, tokio::spawn(async move { run(&served, listener, settings).await }))
   }
@@ -112,7 +112,7 @@ mod daemon {
   async fn started_as(at: &Path, roles: &[Role]) -> Local {
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
-    let settings = Settings { opening: opening(at), grace: GRACE, tailnet: None };
+    let settings = Settings { opening: opening(at), grace: GRACE, tailnet: None, door: None };
     let identity = Grants { local: local.clone(), next: Arc::default(), roles: roles.into() };
     tokio::spawn(async move { run(&identity, listener, settings).await });
     local
@@ -412,7 +412,7 @@ mod daemon {
     let pin = Verb::Pin { life: life.clone(), holder: "job".to_owned() };
     assert_eq!(window.ask(pin).await, Ok(Answer::Done));
     window.ran(&life, "x = 41 + 1").await;
-    let settings = Settings { opening: opening(&at), grace: SHORT, tailnet: None };
+    let settings = Settings { opening: opening(&at), grace: SHORT, tailnet: None, door: None };
     let next = local.clone();
     let new = tokio::spawn(async move { upgrade(&next, settings).await });
     assert!(window.closed().await);
