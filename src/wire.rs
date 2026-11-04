@@ -4,46 +4,26 @@
 //! JSON holds plain data, and the wire keeps the rest whole: a value that JSON holds only in part crosses as a map
 //! that names its type under `is`, with what that type is made again from, so it comes back in as it went out.
 
-#![expect(clippy::cast_possible_truncation, reason = "debt: an as cast that can truncate")]
-#![expect(clippy::cast_precision_loss, reason = "debt: an as cast that loses precision")]
-#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
-#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
-
 use crate::{
   Fault, Object, ObjectRef, Text,
-  value::{DEEPEST, IS, marked},
+  value::{DEEPEST, Given, IS, marked},
 };
 use monty_types::unstable::{self, MontyGraph, MontyNode, NodeId};
-use serde_json::{Value, json, value::RawValue};
+use serde_json::{Number, Value, json, value::RawValue};
 
 /// The largest integer a JavaScript number holds exactly.
 const SAFE: u64 = 9_007_199_254_740_991;
 
-/// A value of JavaScript, as the sandbox takes it. A JavaScript number that is whole is an int, and one with a
-/// fraction is a float; a whole number past the safe range is refused, since JavaScript holds it rounded. napi
-/// gives a whole number as an integer only within 32 bits, so the integer that reaches here past them is a BigInt,
-/// which is exact.
+/// A value of JavaScript, as the sandbox takes it. A JavaScript number that is whole is an int,
+/// and one with a fraction is a float; a whole number past the safe range is refused, since
+/// JavaScript holds it rounded. napi gives a whole number as an integer only within 32 bits, so
+/// the integer that reaches here past them is a `BigInt`, which is exact.
 pub(crate) fn inward(value: &Value) -> Result<Object, Fault> {
   Ok(match value {
     Value::Null => Object::none(),
     Value::Bool(value) => Object::bool(*value),
     Value::String(value) => Object::string(value),
-    Value::Number(value) => {
-      if let Some(value) = value.as_i64() {
-        Object::int(value)
-      } else if let Some(value) = value.as_u64() {
-        marked("int", [("args", Object::list([Object::string(value.to_string())]))])
-      } else {
-        let value = value.as_f64().ok_or_else(|| Fault::refused("invalid number"))?;
-        if value.fract() != 0.0 {
-          Object::float(value)
-        } else if value.abs() <= SAFE as f64 {
-          Object::int(value as i64)
-        } else {
-          return Err(Fault::refused("the number exceeds the safe integer range of JavaScript"));
-        }
-      }
-    }
+    Value::Number(number) => counted(number)?,
     Value::Array(values) => Object::list(values.iter().map(inward).collect::<Result<Vec<_>, _>>()?),
     Value::Object(values) => Object::dict(
       values
@@ -54,10 +34,33 @@ pub(crate) fn inward(value: &Value) -> Result<Object, Fault> {
   })
 }
 
+/// The one rule of an integer that comes in: JavaScript holds it exactly only within the safe
+/// range, and the wire refuses the rest.
+fn safe(number: Option<i64>) -> Result<i64, Fault> {
+  number
+    .filter(|one| one.unsigned_abs() <= SAFE)
+    .ok_or_else(|| Fault::refused("the number exceeds the safe integer range of JavaScript"))
+}
+
+/// A number of a value of `serde_json`, as the sandbox takes it.
+fn counted(number: &Number) -> Result<Object, Fault> {
+  if let Some(whole) = number.as_i64() {
+    return Ok(Object::int(whole));
+  }
+  if let Some(big) = number.as_u64() {
+    return Ok(marked("int", [("args", Object::list([Object::string(big.to_string())]))]));
+  }
+  let float = number.as_f64().ok_or_else(|| Fault::refused("invalid number"))?;
+  if float.fract() != 0.0 {
+    return Ok(Object::float(float));
+  }
+  safe(float.to_string().parse().ok()).map(Object::int)
+}
+
 /// A value of the sandbox, as JSON reads it, and JavaScript with it: a whole float is a number like any other. Every
 /// value crosses, so an ear hears every fact.
 pub fn outward(value: ObjectRef<'_>) -> Value {
-  outward_at(value, 0, false)
+  outward_at(value, 0, Form::Host)
 }
 
 /// One value of JSON, read with every number exact, as the sandbox takes it: a number with a point stays a float, and
@@ -117,8 +120,8 @@ impl Reader<'_> {
 
   /// The value at the place, as a node of the graph.
   fn value(&mut self, graph: &mut MontyGraph, depth: usize) -> Result<NodeId, Fault> {
-    if depth > 64 {
-      return Err(Fault::refused("the record exceeds 64 levels"));
+    if depth > DEEPEST {
+      return Err(Fault::refused(format!("the record exceeds {DEEPEST} levels")));
     }
     self.space();
     let node = match self.byte() {
@@ -177,10 +180,7 @@ impl Reader<'_> {
     }
     let raw = &self.text[start..self.at];
     if !raw.contains(['.', 'e', 'E']) {
-      let number = raw.parse::<i64>().ok().filter(|number| number.unsigned_abs() <= SAFE);
-      let number = number
-        .ok_or_else(|| Fault::refused("the number exceeds the safe integer range of JavaScript"))?;
-      return Ok(graph.push(MontyNode::Int(number)));
+      return Ok(graph.push(MontyNode::Int(safe(raw.parse().ok())?)));
     }
     let number = raw.parse::<f64>().ok().filter(|number| number.is_finite());
     let number = number.ok_or_else(|| Fault::refused("invalid float"))?;
@@ -199,15 +199,22 @@ impl Reader<'_> {
 /// A value of the sandbox, as the record holds it: a whole float and a tuple keep their marks, so a later life reads
 /// a float and a tuple.
 pub(crate) fn record(value: ObjectRef<'_>) -> Value {
-  outward_at(value, 0, true)
+  outward_at(value, 0, Form::Record)
+}
+
+/// How a value crosses: as a host reads it, or as the record keeps it, where a whole float and a
+/// tuple keep their marks.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Form {
+  Host,
+  Record,
 }
 
 /// Plain data crosses as itself. A value that JSON holds only in part crosses as a map that names its type under
 /// `is` and holds under `args` what that type makes it again from, as a fault does, so it comes back in whole: an
 /// int past the safe range, a float that is not finite, a map with a key that is no string. Anything else, and a
 /// part past the levels that a host is given, `DEEPEST`, crosses as python shows it, as the Python door gives it.
-fn outward_at(value: ObjectRef<'_>, depth: usize, durable: bool) -> Value {
-  let mark = |name: &str, args: Value| json!({"is": name, "args": [args]});
+fn outward_at(value: ObjectRef<'_>, depth: usize, form: Form) -> Value {
   if depth >= DEEPEST {
     return json!(value.py_repr());
   }
@@ -215,68 +222,94 @@ fn outward_at(value: ObjectRef<'_>, depth: usize, durable: bool) -> Value {
     return json!({"is": "Text", "path": text.path, "content": text.content});
   }
   if let Some(fault) = Fault::of(value) {
-    let args = fault.args.iter().map(|arg| outward_at(arg.as_ref(), depth + 1, durable));
+    let args = fault.args.iter().map(|arg| outward_at(arg.as_ref(), depth + 1, form));
     return json!({"is": fault.name, "args": args.collect::<Vec<_>>()});
   }
-  if value.type_name() == "NoneType" {
-    return Value::Null;
-  }
-  if let Some(value) = value.as_bool() {
-    return json!(value);
-  }
-  if let Some(value) = value.as_str() {
-    return json!(value);
-  }
-  // An int past 64 bits has no reading as one, and python shows every int as its digits.
-  if value.type_name() == "int" {
-    return match value.as_int().filter(|value| value.unsigned_abs() <= SAFE) {
-      Some(value) => json!(value),
-      None => mark("int", json!(value.py_repr())),
-    };
-  }
-  if let Some(value) = value.as_float() {
-    return if !value.is_finite() || (durable && value.fract() == 0.0) {
-      mark("float", json!(value.to_string()))
-    } else {
-      json!(value)
-    };
+  if let Some(plain) = plain(value, form) {
+    return plain;
   }
   // A class holds its attributes as pairs, but it is no map of them.
   if value.type_name() == "type" {
     return json!(value.py_repr());
   }
   if let Some(values) = value.items() {
-    let values =
-      Value::Array(values.into_iter().map(|value| outward_at(value, depth + 1, durable)).collect());
-    // The store reads a line as an entry that holds one fact, and boot takes both as the tuples they are, so in the
-    // record a tuple keeps its mark only below them.
-    return if durable && depth > 1 && value.type_name() == "tuple" {
-      mark("tuple", values)
-    } else {
-      values
-    };
+    return listed(value, values, depth, form);
   }
   if let Some(values) = value.pairs() {
-    let dict = value.type_name() == "dict";
-    if values.iter().any(|(key, _)| key.as_str().is_none()) {
-      if !dict {
-        return json!(value.py_repr());
-      }
-      let pairs = values.into_iter().map(|(key, value)| {
-        json!([outward_at(key, depth + 1, durable), outward_at(value, depth + 1, durable)])
-      });
-      return mark("dict", Value::Array(pairs.collect()));
-    }
-    let mut result = serde_json::Map::new();
-    if !dict {
-      result.insert("is".into(), json!(value.type_name()));
-    }
-    for (key, value) in values {
-      result.insert(key.as_str().unwrap_or_default().into(), outward_at(value, depth + 1, durable));
-    }
-    return Value::Object(result);
+    return mapped(value, values, depth, form);
   }
   json!(value.py_repr())
+}
+
+/// A value that crosses as a map of its type under `is`, with what makes it again under `args`.
+fn mark(name: &str, args: Value) -> Value {
+  json!({"is": name, "args": Value::Array(vec![args])})
+}
+
+/// A value that JSON holds as it is, or by a mark: `None`, a bool, a text, an int and a float.
+fn plain(value: ObjectRef<'_>, form: Form) -> Option<Value> {
+  if value.is_none() {
+    return Some(Value::Null);
+  }
+  if let Some(value) = value.as_bool() {
+    return Some(json!(value));
+  }
+  if let Some(value) = value.as_str() {
+    return Some(json!(value));
+  }
+  // An int past 64 bits has no reading as one, and python shows every int as its digits.
+  if value.type_name() == "int" {
+    return Some(match value.as_int().filter(|value| value.unsigned_abs() <= SAFE) {
+      Some(value) => json!(value),
+      None => mark("int", json!(value.py_repr())),
+    });
+  }
+  let float = value.as_float()?;
+  Some(if !float.is_finite() || (form == Form::Record && float.fract() == 0.0) {
+    mark("float", json!(float.to_string()))
+  } else {
+    json!(float)
+  })
+}
+
+/// A list, a tuple, a set or a namedtuple, as an array.
+fn listed(value: ObjectRef<'_>, items: Vec<ObjectRef<'_>>, depth: usize, form: Form) -> Value {
+  let items = items.into_iter().map(|one| outward_at(one, depth + 1, form));
+  let items = Value::Array(items.collect());
+  // The store reads a line as an entry that holds one fact, and boot takes both as the tuples they
+  // are, so in the record a tuple keeps its mark only below them.
+  if form == Form::Record && depth > 1 && value.type_name() == "tuple" {
+    mark("tuple", items)
+  } else {
+    items
+  }
+}
+
+/// A dict or an instance, as an object, or as a mark when a key is no text.
+fn mapped(
+  value: ObjectRef<'_>,
+  pairs: Vec<(ObjectRef<'_>, ObjectRef<'_>)>,
+  depth: usize,
+  form: Form,
+) -> Value {
+  let dict = value.type_name() == "dict";
+  if pairs.iter().any(|(key, _)| key.as_str().is_none()) {
+    if !dict {
+      return json!(value.py_repr());
+    }
+    let pairs = pairs.into_iter().map(|(key, one)| {
+      json!([outward_at(key, depth + 1, form), outward_at(one, depth + 1, form)])
+    });
+    return mark("dict", Value::Array(pairs.collect()));
+  }
+  let mut result = serde_json::Map::new();
+  if !dict {
+    result.insert("is".into(), json!(value.type_name()));
+  }
+  for (key, one) in pairs {
+    result.insert(key.as_str().unwrap_or_default().into(), outward_at(one, depth + 1, form));
+  }
+  Value::Object(result)
 }
 
 #[cfg(test)]
