@@ -40,7 +40,7 @@ Put each item in queue as (key, brief, thread), in the order of the work, the ha
 6. While the newest run of the gates on main failed, the round sends no order and no fixer for a red PR, and tells you once. A red PR whose failed checks all fail on main too gets no fixer either, and the round says so in one line.
 7. A green PR merges by the auto-merge of GitHub, which the round turns on for each PR of the round, else by a plain merge, else by gh stack merge for a layer of a stack, behind a ruleset of main that requires the check GATE. With no such ruleset, the round turns on no auto-merge and tells you once. A draft, an open box of its checklist, or the label hold, hold:owner-review or owner-merge keeps a PR from the merge, and the label paused takes it out of the round.
 8. At ALIGN_EVERY merged PRs since the last audit of alignment, by prompt260, the round queues the next free alignN, of kind audit, which checks main against the words of the owner, and each row of its register becomes an item, queued in the order of the register after the items of queue, unless the coordinator asks for the rows before the items that no worker holds yet.
-9. Each message of the owner that no ask of owner_asks names is one notice, by prompt362, and so is each ask that is not done or a decision while no item in queue, in backlog, at work or on an open PR of the round carries it, by prompt361: no word of the owner drops between his message and main. A worker that ends with a line Left: <ids> queues one follow-up for each ask that no other item carries, and a follow-up that leaves it again is a decision.
+9. Each message of the owner that no ask of owner_asks names is one line, by prompt362, and so is each ask that is not done or a decision while no item in queue, in backlog, at work or on an open PR of the round carries it, by prompt361. asked() gives the new lines in one notice, and no new notice while its last one stands open: no word of the owner drops between his message and main. A worker that ends with a line Left: <ids> queues one follow-up for each ask that no other item carries, and a follow-up that leaves it again is a decision.
 10. Each new comment of the owner on a PR of the round goes to the worker on it, else to a fixer, and the label hold comes on the PR until its worker pushes the fix and takes hold off.
 11. A fix of the round does not become its own item or PR, by pick R1 of the owner: it waits in scratch://round/frozen.md, while the live module carries it, and the waiting fixes land together in one change.
 A step that fails is one notice, and the round goes on at the next round. The whole state lives in the module of your chain, so a word that a checkpoint cuts loses nothing: await conduct() again in a turn that shows.
@@ -602,16 +602,25 @@ def asked() -> None:
   if not owner_asks:
     return
   named = {p for a in owner_asks.values() for p in re.findall(r"prompt\d+", str(a.get("prompt", "")))}
+  lines: dict[str, str] = {}
   for x in transcript(lead.get("home") or ROOT, "prompt"):
     if operated(str(x[2])) and x[4] == "str" and str(x[1]) not in named:
-      notice(f"unasked {x[1]}", f"The message {x[1]} of the owner holds no ask in owner_asks. Split it into its asks, each with his quote and the items that carry it, before anything else.")
+      lines[f"unasked {x[1]}"] = f"The message {x[1]} of the owner holds no ask in owner_asks."
   carrying = {q[0] for q in [*queue, *backlog]} | {working[w] for w in living()} | {maker_key(pr) for pr in prs.values()}
   for aid, a in owner_asks.items():
     items = [str(i) for i in a.get("items") or []]
     if a.get("state") in ("done", "decision") or carrying & set(items):
       continue
     why = f"no item carries it now: its items {', '.join(items)} ended" if items else "no item names it"
-    notice(f"uncarried {aid} {' '.join(items)}", f"The ask {aid} of the owner ({a.get('prompt')}) is {a.get('state') or 'open'}, and {why}. Queue an item for it, or mark it done with the evidence of main, before anything else.")
+    lines[f"uncarried {aid} {' '.join(items)}"] = f"The ask {aid} of the owner ({a.get('prompt')}) is {a.get('state') or 'open'}, and {why}."
+  fresh = [k for k in lines if k not in noticed]
+  last = lead.get("asked", "")
+  if not fresh or last and not over(last):
+    return
+  noticed.update(fresh)
+  head = "The words of the owner need the round before anything else:\n"
+  tail = "\nSplit each message that holds no ask into its asks, each with his quote and the items that carry it. Queue an item for each ask that no item carries, or mark it done with the evidence of main."
+  lead["asked"] = str(quietly(prompt, None, head + "\n".join(f"- {lines[k]}" for k in fresh) + tail + merged_since()))
 
 
 def owner_words() -> None:
