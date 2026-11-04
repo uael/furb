@@ -21,7 +21,7 @@ use crate::{Place, Stand, life};
 
 /// How to get a TUI when none is found.
 const NONE: &str = "no TUI is found: set FURB_TUI to the program of the furb TUI, put furb-tui on PATH, or run furb \
-                    from a checkout of furb after `bun install && bun run build`; `furb --mode rpc` needs no TUI";
+                    from a checkout of furb after `bun install && bun run build`";
 
 /// The TUI, run with the words it takes, in the place of furb: on the demo session, on the record and in the
 /// directory furb is given, on the default actor and the roster furb is given, and with the words after `--`. The
