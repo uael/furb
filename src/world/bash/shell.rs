@@ -118,7 +118,8 @@ pub(super) async fn spawned(
   if let Some(login) = login_path().await {
     command.env("PATH", merged_path(login, &env::var_os("PATH").unwrap_or_default()));
   }
-  grouped(&mut command);
+  let lead = grouped(&mut command)
+    .map_err(|no| Fault::refused(format!("{shown} could not be held: {no}: {}", dir.display())))?;
   let mut child = tokio::process::Command::from(command).spawn().map_err(|no| {
     let why = if cfg!(windows) && no.kind() == ErrorKind::NotFound {
       format!("no POSIX sh runs it: install Git for Windows, whose sh furb runs: {no}")
@@ -127,7 +128,7 @@ pub(super) async fn spawned(
     };
     Fault::refused(format!("{shown} did not start: {why}: {}", dir.display()))
   })?;
-  match Group::of(&child) {
+  match Group::of(&child, lead) {
     Ok(group) => Ok((child, group)),
     Err(no) => {
       let ended = match child.start_kill() {
