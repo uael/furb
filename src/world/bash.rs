@@ -1,288 +1,253 @@
-//! Commands: each runs in a shell of the machine, in the working directory of its chain, says what it writes as it
-//! writes it, and ends at its exit, at its timeout, or at the done that a control said of it first.
+//! Commands: each runs in a shell of the machine, in the working directory of its chain, says what
+//! it writes as it writes it, and ends at its exit, at its timeout, or at the done that a control
+//! said of it first.
 
-#![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
-#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+mod group;
+mod kept;
+mod shell;
 
 use std::{
   collections::{HashMap, HashSet},
-  env,
-  ffi::{OsStr, OsString},
   future,
-  io::ErrorKind,
-  path::{Path, PathBuf},
+  path::PathBuf,
   pin::pin,
   process::{Command, Stdio},
-  sync::OnceLock,
   time::Duration,
 };
 
 use futures::{
-  Stream, StreamExt,
+  FutureExt, StreamExt,
   channel::mpsc::{TrySendError, UnboundedSender, unbounded},
+  future::FusedFuture,
   stream,
 };
 use tokio::{
-  io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
-  process::{Child, ChildStdin},
+  io::AsyncWriteExt,
+  process::ChildStdin,
   task::JoinHandle,
+  time::{Instant, sleep, sleep_until},
 };
 use unsync::{oneshot, spsc};
 
+pub(crate) use self::group::{Group, grouped};
+#[cfg(test)]
+pub(super) use self::kept::whole;
+pub use self::shell::{program, shell};
+use self::{
+  kept::{HEAD, Kept, Stream, TAIL, Unread, read},
+  shell::{reaped, spawned},
+};
 use super::{Scratch, here};
 use crate::{
-  ear::{Co, Ear, Next, hearing, runtime, say},
+  ear::{Co, Ear, Next, hearing, say},
   engine::left,
   fact::{Fact, named},
   value::{Exit, Fault, Given, Object, Text},
 };
 
-/// The POSIX sh that runs a command: `/bin/sh`, and on Windows, which has none of its own, the sh of Git for Windows,
-/// which [`git_sh`] finds, or `sh` when it finds none, which a command then names in the refusal of its start.
-pub fn shell() -> &'static Path {
-  static FOUND: OnceLock<PathBuf> = OnceLock::new();
-  FOUND.get_or_init(|| {
-    if !cfg!(windows) {
-      return PathBuf::from("/bin/sh");
-    }
-    let folders: Vec<PathBuf> =
-      env::split_paths(&env::var_os("PATH").unwrap_or_default()).collect();
-    git_sh(&folders, env::var_os("ProgramFiles").map(PathBuf::from))
-      .unwrap_or_else(|| PathBuf::from("sh"))
-  })
-}
-
-/// How long the login shell of the user may take to say its PATH, which a slow profile needs.
-const LOGIN_LIMIT: Duration = Duration::from_secs(5);
-
-/// The PATH that the login shell of the user sets, read once for the process, or none on Windows, with no `SHELL`, or
-/// when that shell fails to give one. A life started from a desktop or a service has the short PATH of its parent, which
-/// lacks the folders that the profile of the user adds, as `/opt/homebrew/bin`.
-async fn login_path() -> Option<&'static OsString> {
-  static FOUND: tokio::sync::OnceCell<Option<OsString>> = tokio::sync::OnceCell::const_new();
-  let found = async {
-    if cfg!(windows) {
-      None
-    } else {
-      asked_path(Path::new(&env::var_os("SHELL")?), LOGIN_LIMIT).await
-    }
-  };
-  FOUND.get_or_init(|| found).await.as_ref()
-}
-
-/// What the login shell `shell` says its PATH is, between two marks that a profile which writes to
-/// its output cannot forge by accident, or none when it fails, gives no path, or runs past `limit`,
-/// when it is ended.
-async fn asked_path(shell: &Path, limit: Duration) -> Option<OsString> {
-  let mut command = tokio::process::Command::new(shell);
-  command
-    .args(["-l", "-c", "printf '<furb-path>%s</furb-path>' \"$PATH\""])
-    .stdin(Stdio::null())
-    .stdout(Stdio::piped())
-    .stderr(Stdio::null())
-    .kill_on_drop(true);
-  let out = tokio::time::timeout(limit, command.output()).await.ok()?.ok()?;
-  let said = String::from_utf8_lossy(&out.stdout);
-  let path = said.split_once("<furb-path>")?.1.split_once("</furb-path>")?.0;
-  (out.status.success() && !path.is_empty()).then(|| OsString::from(path))
-}
-
-/// The folders of `login` in order, then those of `current` that it lacks.
-fn merged_path(login: &OsStr, current: &OsStr) -> OsString {
-  let mut seen = HashSet::new();
-  let kept: Vec<PathBuf> = env::split_paths(login)
-    .chain(env::split_paths(current))
-    .filter(|one| seen.insert(one.clone()))
-    .collect();
-  env::join_paths(kept).unwrap_or_else(|_| current.to_owned())
-}
-
-/// The sh of Git for Windows: the `sh` in these folders, else the one of the Git whose `git` stands in them, in a
-/// `bin` or a `usr/bin` of a folder above that program, as a Git that puts only its `cmd` on PATH holds it, else the one
-/// of the Git in the folder of the programs of the machine.
-pub(crate) fn git_sh(folders: &[PathBuf], programs: Option<PathBuf>) -> Option<PathBuf> {
-  program("sh", folders.iter().cloned())
-    .or_else(|| {
-      let git = program("git", folders.iter().cloned())?;
-      let roots = git.ancestors().skip(2).take(3).map(Path::to_path_buf).collect::<Vec<_>>();
-      program("sh", roots.iter().flat_map(|one| [one.join("bin"), one.join("usr").join("bin")]))
-    })
-    .or_else(|| program("sh", [programs?.join("Git").join("bin")]))
-}
-
-/// The first program of a name in these folders, with the endings of a program on Windows.
-pub fn program(name: &str, folders: impl IntoIterator<Item = PathBuf>) -> Option<PathBuf> {
-  let endings: &[&str] = if cfg!(windows) { &[".exe", ".cmd", ""] } else { &[""] };
-  let folders = folders.into_iter().filter(|one| !one.as_os_str().is_empty());
-  folders
-    .flat_map(|one| endings.iter().map(move |end| one.join(format!("{name}{end}"))))
-    .find(|one| runs(one))
-}
-
-/// Whether a path is a program that this machine runs.
-fn runs(path: &Path) -> bool {
-  let Ok(info) = path.metadata() else { return false };
-  #[cfg(unix)]
-  {
-    use std::os::unix::fs::PermissionsExt;
-    info.is_file() && info.permissions().mode() & 0o111 != 0
-  }
-  #[cfg(not(unix))]
-  {
-    info.is_file()
-  }
-}
-
-/// The ear of commands: it takes a command, says what it writes, answers a write of a door of it, feeds it what a
-/// write of its stdin gives, and says it done with its exit.
+/// The ear of commands: it takes a command, says what it writes, answers a write of a door of it,
+/// feeds it what a write of its stdin gives, and says it done with its exit.
 ///
-/// A command that the record shows started and not done was cut by the end of the life that ran it: the ear runs it
-/// no more, and when a wake puts it to the ear, the ear takes it and closes it with a refusal that says it was
-/// interrupted, so the model sees that outcome and runs it again if it wants, and its doors keep what it wrote before.
-/// It takes no write.
+/// A command that the record shows started and not done was cut by the end of the life that ran it:
+/// the ear runs it no more, and when a wake puts it to the ear, the ear takes it and closes it with
+/// a refusal that says it was interrupted, so the model sees that outcome and runs it again if it
+/// wants, and its doors keep what it wrote before. It takes no write.
 ///
-/// A stream keeps at most `HEAD` bytes at its start and `TAIL` bytes at its end: the ear reads the pipe to its end, says
-/// the first bytes as they come and then a line that says the rest is cut, and its exit gives the first bytes, a line that
-/// counts the bytes cut, and the last bytes.
+/// A stream keeps at most `HEAD` bytes at its start and `TAIL` bytes at its end: the ear reads the
+/// pipe to its end, says the first bytes as they come and then a line that says the rest is cut,
+/// and its exit gives the first bytes, a line that counts the bytes cut, and the last bytes.
 ///
-/// A command runs with the PATH of the login shell of the user, read once, ahead of the PATH of the process, so it finds
-/// the programs that the profile of the user adds. A command runs with `TMPDIR` set to the scratch directory of the life, and `TMP` and `TEMP` too on Windows, which
-/// the ear makes first, so a command finds there the files of `scratch://`. A command ends with every process it started, which its group holds. A
-/// command that a control ended first, which the engine says done, is ended so and says nothing more.
+/// A command runs with the PATH of the login shell of the user, read once, ahead of the PATH of the
+/// process, so it finds the programs that the profile of the user adds. A command runs with
+/// `TMPDIR` set to the scratch directory of the life, and `TMP` and `TEMP` too on Windows, which
+/// the ear makes first, so a command finds there the files of `scratch://`. A command ends with
+/// every process it started, which its group holds. A command that a control ended first, which the
+/// engine says done, is ended so and says nothing more.
 pub fn bash(scratch: Scratch, record: &[Object]) -> Box<dyn Ear> {
-  let left: HashSet<String> = left(record).into_iter().collect();
-  // Each command that a crash cut, with its chain and its line, so a later act that only shares its name, as after a
-  // drift, is no command of the record.
-  let mut cut: HashMap<String, (String, String)> = record
-    .iter()
-    .filter_map(|one| Fact::of(*one.as_ref().items()?.first()?))
-    .filter(|a| a.kind() == "bash" && a.question() && left.contains(a.about()))
-    .map(|a| (a.about().to_owned(), held(&a)))
-    .collect();
+  let mut commands =
+    Commands { scratch, running: HashMap::new(), closed: HashSet::new(), cut: crashed(record) };
   hearing(&["bash", "write"], move |mut co: Co<Said>| async move {
-    let mut running: HashMap<String, Running> = HashMap::new();
-    // The commands whose stdin a write closed.
-    let mut closed: HashSet<String> = HashSet::new();
     loop {
-      let a = match co.next().await {
-        Next::Heard(a) => a,
-        // What a command says while it runs, which a control that ended it first silences.
-        Next::Worked(one) => {
-          let saying = match one {
-            Said::Out { about, text, stream } if running.contains_key(&about) => {
-              Fact::says("out", &about, [Object::string(text), Object::string(stream)])
-            }
-            Said::Exit { about, exit } if running.remove(&about).is_some() => {
-              Fact::says("done", &about, [exit.object()])
-            }
-            // The machine would not start it, so the ear closes it with why, as a prompt that the
-            // operator cannot answer is closed, and the chain is told why.
-            Said::Failed { about, fault } if running.remove(&about).is_some() => {
-              co.call("close", vec![fault.object()], vec![("id", Object::string(&about))]).await?;
-              continue;
-            }
-            _ => continue,
-          };
-          say(&mut co, saying);
-          continue;
-        }
-      };
-      let about = a.about().to_owned();
-      match a.kind() {
-        "bash" if a.question() && cut.get(&about).is_some_and(|it| *it == held(&a)) => {
-          cut.remove(&about);
-          say(&mut co, Fact::says("started", &about, []));
-          let line = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
-          let why = Fault::refused(format!(
-            "{line:?} was interrupted: the life that ran it ended before it did"
-          ));
-          co.call("close", vec![why.object()], vec![("id", Object::string(&about))]).await?;
-        }
-        "bash" if a.question() => {
-          say(&mut co, Fact::says("started", &about, []));
-          match begun(&mut co, &a, &scratch).await {
-            Ok(mut begun) => {
-              let (stdin, fed_in) = spsc::unbounded();
-              let (stop, stopped) = oneshot::channel();
-              let mut one = Running { stdin, _stop: stop };
-              // A stdin of text goes in whole at the start, and then it closes.
-              if let Some(text) = begun.given.take().filter(|text| !text.is_empty()) {
-                one.feed(Some(text))?;
-                one.feed(None)?;
-              }
-              co.work(command(begun, fed_in, stopped));
-              running.insert(about, one);
-            }
-            // The machine would not start it, so the ear closes it with why, as a prompt that the operator cannot
-            // answer is closed, and the chain is told why.
-            Err(fault) => {
-              co.call("close", vec![fault.object()], vec![("id", Object::string(&about))]).await?;
-            }
-          }
-        }
-        // A write of a door of a command: the stdin of a command whose stdin is None takes it while the command
-        // runs and until a write of nothing closes it, and every other door takes no write.
-        "write" if a.question() => {
-          let Some((text, command, stream)) = door(&a) else { continue };
-          let act = co.call("get", vec![Object::string(&command)], vec![]).await?;
-          let Some(act) = Fact::of(act.as_ref()) else { continue };
-          let over = co.call("over", vec![Object::string(&command)], vec![]).await?;
-          let open = stream == "stdin"
-            && over.as_ref().as_bool() != Some(true)
-            && act.word(2).is_some_and(|one| one.type_name() == "NoneType")
-            && !closed.contains(&command)
-            && !cut.contains_key(&command);
-          let answer = if open {
-            match written(&mut running, &mut closed, &command, &text.content) {
-              Ok(()) => text.object(),
-              Err(fault) => fault.object(),
-            }
-          } else {
-            Fault::refused(format!("{} takes no write", text.path)).object()
-          };
-          say(&mut co, Fact::says("done", &about, [answer]));
-        }
-        "done" => {
-          running.remove(&about);
-          closed.remove(&about);
-          cut.remove(&about);
-        }
-        _ => {}
+      match co.next().await {
+        Next::Heard(a) => commands.heard(&mut co, &a).await?,
+        Next::Worked(one) => commands.worked(&mut co, one).await?,
       }
     }
   })
 }
 
-/// The chain and the line of a command, which say whether an act is the command of the record under its name.
-fn held(a: &Fact) -> (String, String) {
-  let line = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
-  (a.on().to_owned(), line)
+/// What the ear of the commands holds: the scratch directory of the life, each command that runs,
+/// the commands whose stdin a write closed, and each command that a crash cut, so that a later act
+/// that only shares its name, as after a drift, is no command of the record.
+struct Commands {
+  scratch: Scratch,
+  running: HashMap<String, Running>,
+  closed: HashSet<String>,
+  cut: HashMap<String, Held>,
 }
 
-/// The text of a write of a door of a command, the command and the stream of the door, when the write is of one.
-pub(super) fn door(a: &Fact) -> Option<(Text, String, String)> {
+impl Commands {
+  /// What a command says while it runs, which a control that ended it first silences.
+  async fn worked(&mut self, co: &mut Co<Said>, said: Said) -> Result<(), Fault> {
+    let saying = match said {
+      Said::Out { about, text, stream } if self.running.contains_key(&about) => {
+        Fact::says("out", &about, [Object::string(text), Object::string(stream.to_string())])
+      }
+      Said::Exit { about, exit } if self.running.remove(&about).is_some() => {
+        Fact::says("done", &about, [exit.object()])
+      }
+      // The machine would not start it, so the ear closes it with why, as a prompt that the
+      // operator cannot answer is closed, and the chain is told why.
+      Said::Failed { about, fault } if self.running.remove(&about).is_some() => {
+        return closing(co, &about, fault).await;
+      }
+      _ => return Ok(()),
+    };
+    say(co, saying);
+    Ok(())
+  }
+
+  /// What a fact that the ear hears asks of it.
+  async fn heard(&mut self, co: &mut Co<Said>, a: &Fact) -> Result<(), Fault> {
+    let about = a.about().to_owned();
+    match a.kind() {
+      "bash" if a.question() && self.cut.get(&about).is_some_and(|it| *it == held(a)) => {
+        self.cut.remove(&about);
+        interrupted(co, a, &about).await
+      }
+      "bash" if a.question() => self.started(co, a, about).await,
+      "write" if a.question() => self.wrote(co, a, &about).await,
+      "done" => {
+        self.running.remove(&about);
+        self.closed.remove(&about);
+        self.cut.remove(&about);
+        Ok(())
+      }
+      _ => Ok(()),
+    }
+  }
+
+  /// A command that starts: its stdin and its stop kept, and its streams worked.
+  async fn started(&mut self, co: &mut Co<Said>, a: &Fact, about: String) -> Result<(), Fault> {
+    say(co, Fact::says("started", &about, []));
+    match begun(co, a, &self.scratch).await {
+      Ok(mut begun) => {
+        let (stdin, fed_in) = spsc::unbounded();
+        let (stop, stopped) = oneshot::channel();
+        let mut one = Running { stdin, _stop: stop };
+        // A stdin of text goes in whole at the start, and then it closes.
+        if let Some(text) = begun.given.take().filter(|text| !text.is_empty()) {
+          one.feed(Some(text))?;
+          one.feed(None)?;
+        }
+        co.work(command(begun, fed_in, stopped));
+        self.running.insert(about, one);
+        Ok(())
+      }
+      // The machine would not start it, so the ear closes it with why, as a prompt that the
+      // operator cannot answer is closed, and the chain is told why.
+      Err(fault) => closing(co, &about, fault).await,
+    }
+  }
+
+  /// A write of a door of a command: the stdin of a command whose stdin is None takes it while the
+  /// command runs and until a write of nothing closes it, and every other door takes no write.
+  async fn wrote(&mut self, co: &mut Co<Said>, a: &Fact, about: &str) -> Result<(), Fault> {
+    let Some(at) = door(a) else { return Ok(()) };
+    let act = co.call("get", vec![Object::string(&at.command)], vec![]).await?;
+    let Some(act) = Fact::of(act.as_ref()) else { return Ok(()) };
+    let over = co.call("over", vec![Object::string(&at.command)], vec![]).await?;
+    let open = at.stdin
+      && over.as_ref().as_bool() != Some(true)
+      && act.word(2).is_some_and(|one| one.type_name() == "NoneType")
+      && !self.closed.contains(&at.command)
+      && !self.cut.contains_key(&at.command);
+    let answer = if open {
+      match self.written(&at.command, &at.text.content) {
+        Ok(()) => at.text.object(),
+        Err(fault) => fault.object(),
+      }
+    } else {
+      Fault::refused(format!("{} takes no write", at.text.path)).object()
+    };
+    say(co, Fact::says("done", about, [answer]));
+    Ok(())
+  }
+
+  /// What a write of the stdin of a command gives it: the text, or nothing for an empty text, which
+  /// closes the stdin.
+  fn written(&mut self, command: &str, content: &str) -> Result<(), Fault> {
+    let text = (!content.is_empty()).then(|| content.to_owned());
+    if text.is_none() {
+      self.closed.insert(command.to_owned());
+    }
+    self.running.get_mut(command).map_or(Ok(()), |one| one.feed(text))
+  }
+}
+
+/// The line of a command, as its act gives it.
+fn command_line(a: &Fact) -> String {
+  a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default()
+}
+
+/// The chain and the line of a command, which say whether an act is the command of the record under
+/// its name.
+#[derive(PartialEq)]
+struct Held {
+  on: String,
+  line: String,
+}
+
+fn held(a: &Fact) -> Held {
+  Held { on: a.on().to_owned(), line: command_line(a) }
+}
+
+/// Each command that the record shows started and not done, which a crash cut, with its chain and
+/// its line.
+fn crashed(record: &[Object]) -> HashMap<String, Held> {
+  let left: HashSet<String> = left(record).into_iter().collect();
+  record
+    .iter()
+    .filter_map(|one| Fact::of(*one.as_ref().items()?.first()?))
+    .filter(|a| a.kind() == "bash" && a.question() && left.contains(a.about()))
+    .map(|a| (a.about().to_owned(), held(&a)))
+    .collect()
+}
+
+/// A command that a crash cut, started and closed with a refusal that says it was interrupted.
+async fn interrupted(co: &mut Co<Said>, a: &Fact, about: &str) -> Result<(), Fault> {
+  say(co, Fact::says("started", about, []));
+  let line = command_line(a);
+  let why =
+    Fault::refused(format!("{line:?} was interrupted: the life that ran it ended before it did"));
+  closing(co, about, why).await
+}
+
+/// An act closed with a fault, as the engine closes a prompt that nobody can answer.
+async fn closing(co: &mut Co<Said>, about: &str, fault: Fault) -> Result<(), Fault> {
+  co.call("close", vec![fault.object()], vec![("id", Object::string(about))]).await?;
+  Ok(())
+}
+
+/// A write of a door of a command: the text, the command, and whether the door is its stdin.
+pub(super) struct Door {
+  text: Text,
+  pub(super) command: String,
+  stdin: bool,
+}
+
+/// The write of a door of a command, when the act is one: the stdin takes a write, the stdout and
+/// the stderr do not.
+pub(super) fn door(a: &Fact) -> Option<Door> {
   let text = a.word(1).and_then(Text::of)?;
   let (command, stream) = text.path.split_once('/')?;
-  let (command, stream) = (command.to_owned(), stream.to_owned());
-  (named(&command, "bash") && matches!(stream.as_str(), "stdin" | "stdout" | "stderr"))
-    .then_some((text, command, stream))
+  let (command, stdin, out) =
+    (command.to_owned(), stream == "stdin", matches!(stream, "stdout" | "stderr"));
+  (named(&command, "bash") && (stdin || out)).then_some(Door { text, command, stdin })
 }
 
-/// What a write of the stdin of a command gives it: the text, or nothing for an empty text, which closes the stdin.
-fn written(
-  running: &mut HashMap<String, Running>,
-  closed: &mut HashSet<String>,
-  command: &str,
-  content: &str,
-) -> Result<(), Fault> {
-  let text = (!content.is_empty()).then(|| content.to_owned());
-  if text.is_none() {
-    closed.insert(command.to_owned());
-  }
-  running.get_mut(command).map_or(Ok(()), |one| one.feed(text))
-}
-
-/// One command that runs, as the ear holds it: the door to its stdin, and its stop, which ends it when it drops.
+/// One command that runs, as the ear holds it: the door to its stdin, and its stop, which ends it
+/// when it drops.
 struct Running {
   stdin: spsc::Sender<Option<String>>,
   _stop: oneshot::Sender<()>,
@@ -303,7 +268,7 @@ impl Running {
 /// What a command says: a text that one of its streams wrote, its exit, or why the machine would
 /// not start it.
 enum Said {
-  Out { about: String, text: String, stream: &'static str },
+  Out { about: String, text: String, stream: Stream },
   Exit { about: String, exit: Exit },
   Failed { about: String, fault: Fault },
 }
@@ -325,10 +290,11 @@ struct Begun {
 async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, Fault> {
   let about = a.about().to_owned();
   let on = a.on().to_owned();
-  let line = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
+  let line = command_line(a);
   let shown = format!("{line:?}");
-  // A stdin of text goes in whole and closes, None stays open for what is fed, and any other word, as the flag of a
-  // record made before the stdin was a text, gives a stdin that is empty and closed.
+  // A stdin of text goes in whole and closes, None stays open for what is fed, and any other word,
+  // as the flag of a record made before the stdin was a text, gives a stdin that is empty and
+  // closed.
   let given = match a.word(2) {
     Some(one) if one.type_name() == "NoneType" => None,
     one => Some(one.and_then(|it| it.as_str()).unwrap_or_default().to_owned()),
@@ -355,57 +321,96 @@ async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, 
   Ok(Begun { about, command, shown, dir, timeout, given })
 }
 
-/// The shell of a command spawned with the PATH of the login shell of the user, and the group of
-/// its processes, or why the machine would not start it or hold it.
-async fn spawned(mut command: Command, shown: &str, dir: &Path) -> Result<(Child, Group), Fault> {
-  if let Some(login) = login_path().await {
-    command.env("PATH", merged_path(login, &env::var_os("PATH").unwrap_or_default()));
-  }
-  grouped(&mut command);
-  let mut child = tokio::process::Command::from(command).spawn().map_err(|no| {
-    let why = if cfg!(windows) && no.kind() == ErrorKind::NotFound {
-      format!("no POSIX sh runs it: install Git for Windows, whose sh furb runs: {no}")
-    } else {
-      no.to_string()
-    };
-    Fault::refused(format!("{shown} did not start: {why}: {}", dir.display()))
-  })?;
-  match Group::of(&child) {
-    Ok(group) => Ok((child, group)),
-    Err(no) => {
-      let ended = match child.start_kill() {
-        Ok(()) => String::new(),
-        Err(late) => format!(", and it could not be ended: {late}"),
-      };
-      drop(reaped(child));
-      Err(Fault::refused(format!("{shown} could not be held: {no}{ended}")))
-    }
-  }
-}
-
-/// What a command says as it runs: each text its streams write, then its exit; or nothing more once it stops.
+/// What a command says as it runs: each text its streams write, then its exit; or nothing more once
+/// it stops.
 fn command(
   begun: Begun,
   fed: spsc::Receiver<Option<String>>,
   stopped: oneshot::Receiver<()>,
-) -> impl Stream<Item = Said> {
+) -> impl futures::Stream<Item = Said> {
   let (says, said) = unbounded();
   let ran = ran(begun, fed, stopped, says);
   // The command says through the channel alone, so its exit comes after all it wrote.
   stream::select(said, stream::once(ran).filter_map(future::ready))
 }
 
-/// A command run to its end: what its streams write is said as it comes, what is fed goes into its stdin, and its
-/// exit is said at its end; or the command is ended at its stop, with every process of it.
+/// A command run to its end: what its streams write is said as it comes, what is fed goes into its
+/// stdin, and its exit is said at its end; or the command is ended at its stop, with every process
+/// of it.
 ///
-/// A command that outlives its timeout is ended with every process of it, and exits with no code. Its exit comes once
-/// its shell exited and its streams closed, or once its shell exited and DRAIN passed with a stream open, as when a
-/// process that the command started holds a stream: then the exit gives what its streams wrote until then, and that
-/// process is left to run, with no reader on its stream. The shell is reaped as it exits, and its group keeps its
-/// number for as long as a process of it lives, so an end signals no group that another took, but in the moment
-/// after the last process of the group ended and before that end.
+/// A command that outlives its timeout is ended with every process of it, and exits with no code.
+/// Its exit comes once its shell exited and its streams closed, or once its shell exited and DRAIN
+/// passed with a stream open, as when a process that the command started holds a stream: then the
+/// exit gives what its streams wrote until then, and that process is left to run, with no reader on
+/// its stream. The shell is reaped as it exits, and its group keeps its number for as long as a
+/// process of it lives, so an end signals no group that another took, but in the moment after the
+/// last process of the group ended and before that end.
 ///
 /// What the channel cannot take, because its stream is going, comes back for that stream to give.
+/// What ended the wait on a command before its exit.
+enum Cut {
+  Stopped,
+  Unread(Unread),
+  Unslain(std::io::Error),
+}
+
+/// How a command exited: the code of its shell, and whether its timeout ended it.
+struct Exited {
+  status: Option<i32>,
+  late: bool,
+}
+
+/// Where a command stands: it runs; its shell exited and its streams have DRAIN to give what they
+/// hold, which is the one timeout that follows the exit; or it is done.
+enum Phase {
+  Running,
+  Draining { status: Option<i32>, until: Instant },
+  Done(Option<i32>),
+}
+
+/// The wait on a command through its three phases. A stop ends it at once, a fault of a stream or a
+/// signal that cannot reach the group ends it with that fault, and the timeout of the command ends
+/// its processes at any time.
+async fn watch(
+  shell: JoinHandle<Option<i32>>,
+  streams: impl Future<Output = Result<(), Unread>>,
+  expired: impl Future<Output = ()>,
+  feeding: impl Future<Output = ()>,
+  stopped: oneshot::Receiver<()>,
+  group: &mut Group,
+) -> Result<Exited, Cut> {
+  let (mut shell, mut streams) = (pin!(shell), pin!(streams.fuse()));
+  let (mut expired, mut feeding) = (pin!(expired.fuse()), pin!(feeding.fuse()));
+  let mut stopped = pin!(stopped);
+  let mut phase = Phase::Running;
+  loop {
+    let until = if let Phase::Draining { until, .. } = phase { Some(until) } else { None };
+    tokio::select! {
+      biased;
+      _ = &mut stopped => return Err(Cut::Stopped),
+      got = &mut shell, if matches!(phase, Phase::Running) => {
+        phase = Phase::Draining { status: got.ok().flatten(), until: Instant::now() + DRAIN };
+      }
+      read = &mut streams => read.map_err(Cut::Unread)?,
+      () = &mut expired => group.slay().map_err(Cut::Unslain)?,
+      () = &mut feeding => {}
+      () = sleep_until(until.unwrap_or_else(Instant::now)), if until.is_some() => {
+        if let Phase::Draining { status, .. } = phase {
+          phase = Phase::Done(status);
+        }
+      }
+    }
+    if let Phase::Draining { status, .. } = phase
+      && streams.is_terminated()
+    {
+      phase = Phase::Done(status);
+    }
+    if let Phase::Done(status) = phase {
+      return Ok(Exited { status, late: expired.is_terminated() });
+    }
+  }
+}
+
 async fn ran(
   begun: Begun,
   fed: spsc::Receiver<Option<String>>,
@@ -415,69 +420,39 @@ async fn ran(
   let Begun { about, command, shown, dir, timeout, .. } = begun;
   let (mut child, mut group) = match spawned(command, &shown, &dir).await {
     Ok(one) => one,
-    Err(fault) => {
-      return failed(&says, &about, fault);
-    }
+    Err(fault) => return failed(&says, &about, fault),
   };
   let (stdout, stderr, stdin) = (child.stdout.take(), child.stderr.take(), child.stdin.take());
   let (mut out, mut err) = (Kept::new(HEAD, TAIL), Kept::new(HEAD, TAIL));
   let streams = async {
     let (one, two) = tokio::join!(
-      read(stdout, "stdout", &about, &says, &mut out),
-      read(stderr, "stderr", &about, &says, &mut err)
+      read(stdout, Stream::Out, &about, &says, &mut out),
+      read(stderr, Stream::Err, &about, &says, &mut err)
     );
     one.and(two)
   };
-  let shell = reaped(child);
   let expired = async {
     match timeout {
-      Some(left) => tokio::time::sleep(left).await,
+      Some(left) => sleep(left).await,
       None => future::pending().await,
     }
   };
-  let (late, status) = {
-    let (mut streams, mut shell) = (pin!(streams), pin!(shell));
-    let (mut expired, mut feeding) = (pin!(expired), pin!(feed(stdin, fed)));
-    let (mut late, mut closed, mut drained, mut status) = (false, false, false, None);
-    let (mut until, mut ended) = (None, false);
-    let mut stopped = pin!(stopped);
-    loop {
-      tokio::select! {
-        biased;
-        _ = &mut stopped => return None,
-        got = &mut shell, if status.is_none() => {
-          status = Some(got);
-          until = Some(tokio::time::Instant::now() + DRAIN);
-        }
-        read = &mut streams, if !drained => {
-          drained = true;
-          if let Err(no) = read {
-            return failed(&says, &about, Fault::refused(format!("{shown} failed: {no}")));
-          }
-        }
-        () = &mut expired, if !late => {
-          late = true;
-          if let Err(no) = group.slay() {
-            let fault = Fault::refused(format!("{shown} outlived its timeout and could not be ended: {no}"));
-            return failed(&says, &about, fault);
-          }
-        }
-        () = &mut feeding, if !closed => closed = true,
-        // A process that the command started can hold a stream for longer than the shell lives, so the streams have
-        // DRAIN after the shell exits to give what they hold, and then the command ends.
-        () = tokio::time::sleep_until(until.unwrap_or_else(tokio::time::Instant::now)), if until.is_some() && !drained && !ended => {
-          ended = true;
-        }
-      }
-      if let Some(got) = status.take_if(|_| drained || ended) {
-        break (late, got);
-      }
+  let shell = reaped(child);
+  let watching = Box::pin(watch(shell, streams, expired, feed(stdin, fed), stopped, &mut group));
+  let exited = match watching.await {
+    Ok(exited) => exited,
+    Err(Cut::Stopped) => return None,
+    Err(Cut::Unread(no)) => {
+      return failed(&says, &about, Fault::refused(format!("{shown} failed: {no}")));
+    }
+    Err(Cut::Unslain(no)) => {
+      let why = format!("{shown} outlived its timeout and could not be ended: {no}");
+      return failed(&says, &about, Fault::refused(why));
     }
   };
   group.free();
-  let code = status.ok().flatten().map(i64::from);
   let exit = Exit {
-    code: if late { None } else { code },
+    code: if exited.late { None } else { exited.status.map(i64::from) },
     stdout: Text::new(format!("{about}/stdout"), out.finish()),
     stderr: Text::new(format!("{about}/stderr"), err.finish()),
   };
@@ -493,32 +468,8 @@ fn failed(says: &UnboundedSender<Said>, about: &str, fault: Fault) -> Option<Sai
     .map(TrySendError::into_inner)
 }
 
-/// The shell of a command, awaited by one task of the runtime that gives its code, so the shell
-/// is reaped as it exits, whether the command still waits for it or dropped before.
-fn reaped(mut child: Child) -> JoinHandle<Option<i32>> {
-  runtime().spawn(async move { child.wait().await.ok().and_then(coded) })
-}
-
-/// The code of an exit, and for a command that a signal ended, 128 and the number of the signal, as a shell gives, so
-/// no code says only that the timeout ended the command.
-fn coded(status: std::process::ExitStatus) -> Option<i32> {
-  #[cfg(unix)]
-  {
-    use std::os::unix::process::ExitStatusExt;
-    status.code().or_else(|| status.signal().map(|signal| 128 + signal))
-  }
-  #[cfg(not(unix))]
-  status.code().map(signalled)
-}
-
-/// The code of an exit of the sh of Git for Windows, which a signal ends with the number of the signal times 256, as
-/// 128 and that number, as a shell gives; and every other code as it is.
-#[cfg_attr(all(unix, not(test)), expect(dead_code, reason = "only Windows and the tests call it"))]
-pub(super) fn signalled(code: i32) -> i32 {
-  if code % 256 == 0 && (1..=64).contains(&(code / 256)) { 128 + code / 256 } else { code }
-}
-
-/// What is fed to a command, written into its stdin, until nothing closes it or the command reads no more.
+/// What is fed to a command, written into its stdin, until nothing closes it or the command reads
+/// no more.
 async fn feed(stdin: Option<ChildStdin>, mut fed: spsc::Receiver<Option<String>>) {
   let Some(mut stdin) = stdin else { return };
   while let Some(Some(text)) = fed.recv().await {
@@ -528,239 +479,9 @@ async fn feed(stdin: Option<ChildStdin>, mut fed: spsc::Receiver<Option<String>>
   }
 }
 
-/// How long the streams of a command have to give what they hold once its shell exited, before the command ends with a
-/// process of it still holding one.
+/// How long the streams of a command have to give what they hold once its shell exited, before the
+/// command ends with a process of it still holding one.
 const DRAIN: Duration = Duration::from_millis(250);
-
-/// How much of a stream a command keeps: its first `HEAD` bytes, which it says as they come, and its last `TAIL`
-/// bytes, which its exit gives with the first. A command that writes more has the rest of it cut, whatever it writes,
-/// so no command fills the memory of the host or the record.
-pub(crate) const HEAD: usize = 4 << 20;
-pub(crate) const TAIL: usize = 4 << 20;
-
-/// What a stream keeps of its text: the first bytes whole, then the last bytes, and how many bytes lie between.
-struct Kept {
-  head: String,
-  tail: String,
-  full: bool,
-  cut: usize,
-  caps: (usize, usize),
-}
-
-impl Kept {
-  fn new(head: usize, tail: usize) -> Self {
-    Kept { head: String::new(), tail: String::new(), full: false, cut: 0, caps: (head, tail) }
-  }
-
-  /// The text to say now: the part of a new text that the head takes, and, once the head is full, a line that says
-  /// the cut. The rest of a text goes to the tail, which keeps its last bytes.
-  fn push(&mut self, text: &str) -> String {
-    let mut said = String::new();
-    let mut rest = text;
-    if !self.full {
-      let mut at = (self.caps.0 - self.head.len()).min(text.len());
-      while !text.is_char_boundary(at) {
-        at -= 1;
-      }
-      self.head.push_str(&text[..at]);
-      said.push_str(&text[..at]);
-      rest = &text[at..];
-      if rest.is_empty() {
-        return said;
-      }
-      self.full = true;
-      said.push_str(&format!(
-        "\n[output over {} bytes: the exit keeps its first and its last bytes]\n",
-        self.caps.0
-      ));
-    }
-    self.tail.push_str(rest);
-    if self.tail.len() > 2 * self.caps.1 {
-      self.trim();
-    }
-    said
-  }
-
-  /// The tail cut to its cap, at a character.
-  fn trim(&mut self) {
-    let mut at = self.tail.len().saturating_sub(self.caps.1);
-    while !self.tail.is_char_boundary(at) {
-      at += 1;
-    }
-    self.tail.drain(..at);
-    self.cut += at;
-  }
-
-  /// The text of the exit: all of the stream, or its head, a line that counts the bytes cut, and its tail.
-  fn finish(mut self) -> String {
-    if !self.full {
-      return self.head;
-    }
-    if self.tail.len() > self.caps.1 {
-      self.trim();
-    }
-    match self.cut {
-      0 => self.head + &self.tail,
-      cut => format!("{}\n[... {cut} bytes cut ...]\n{}", self.head, self.tail),
-    }
-  }
-}
-
-/// A stream of a command that its pipe could not read.
-#[derive(Debug, thiserror::Error)]
-#[error("its {stream} could not be read: {source}")]
-struct Unread {
-  stream: &'static str,
-  source: std::io::Error,
-}
-
-/// One stream of a command: each text said as it comes, whole in utf-8, as far as its head holds, and kept in `all`
-/// until the stream ends. The stream is read to its end, whatever it holds, so the command never blocks on a full pipe.
-/// A read that fails is no end of the stream: it is the fault of the command.
-async fn read(
-  stream: Option<impl AsyncRead + Unpin>,
-  name: &'static str,
-  about: &str,
-  says: &UnboundedSender<Said>,
-  all: &mut Kept,
-) -> Result<(), Unread> {
-  let Some(mut stream) = stream else { return Ok(()) };
-  let (mut held, mut chunk) = (Vec::new(), [0u8; 8192]);
-  loop {
-    let n = stream.read(&mut chunk).await.map_err(|source| Unread { stream: name, source })?;
-    held.extend_from_slice(&chunk[..n]);
-    let text = whole(&mut held, n == 0);
-    let text = if text.is_empty() { text } else { all.push(&text) };
-    if !text.is_empty() {
-      // The stream that holds the receiver is going, and this read goes with it.
-      if says.unbounded_send(Said::Out { about: about.to_owned(), text, stream: name }).is_err() {
-        return Ok(());
-      }
-    }
-    if n == 0 {
-      return Ok(());
-    }
-  }
-}
-
-/// The text of the bytes held that is whole in utf-8, which leaves them: a character cut at the end of a read waits
-/// for the next, unless the stream is over, and a byte that no utf-8 holds reads as the character that replaces it.
-pub(super) fn whole(held: &mut Vec<u8>, over: bool) -> String {
-  let mut text = String::new();
-  loop {
-    match std::str::from_utf8(held) {
-      Ok(all) => {
-        text.push_str(all);
-        held.clear();
-        return text;
-      }
-      Err(no) => {
-        let good = no.valid_up_to();
-        text.push_str(std::str::from_utf8(&held[..good]).unwrap_or_default());
-        match no.error_len() {
-          Some(bad) => {
-            text.push(char::REPLACEMENT_CHARACTER);
-            held.drain(..good + bad);
-          }
-          None if over => {
-            text.push(char::REPLACEMENT_CHARACTER);
-            held.clear();
-            return text;
-          }
-          None => {
-            held.drain(..good);
-            return text;
-          }
-        }
-      }
-    }
-  }
-}
-
-/// The command leads a process group of its own, or on Windows opens no window.
-pub(crate) fn grouped(command: &mut Command) {
-  #[cfg(unix)]
-  {
-    use std::os::unix::process::CommandExt;
-    command.process_group(0);
-  }
-  #[cfg(windows)]
-  {
-    use std::os::windows::process::CommandExt;
-    const NO_WINDOW: u32 = 0x0800_0000;
-    command.creation_flags(NO_WINDOW);
-  }
-}
-
-/// Every process a command started: on Unix the process group it leads, and on Windows, where a shell of Git does
-/// not keep the tree of its processes, a job that holds the command and every process it starts.
-///
-/// Every process of it ends when the group goes before the command is over: at a stop, or at the end of the ear.
-pub(crate) struct Group {
-  #[cfg(unix)]
-  leader: Option<rustix::process::Pid>,
-  #[cfg(windows)]
-  job: Option<win32job::Job>,
-}
-
-impl Group {
-  /// The group of a command that just started. On Windows the job takes the command before its shell has read a
-  /// word, since the shell starts slower than the job takes it, and it ends every process it holds when it closes.
-  pub(crate) fn of(child: &Child) -> std::io::Result<Self> {
-    let gone = || std::io::Error::other("the command is over already");
-    #[cfg(unix)]
-    {
-      let pid = child.id().and_then(|pid| i32::try_from(pid).ok());
-      let leader = pid.and_then(rustix::process::Pid::from_raw).ok_or_else(gone)?;
-      Ok(Group { leader: Some(leader) })
-    }
-    #[cfg(windows)]
-    {
-      let mut ends = win32job::ExtendedLimitInfo::new();
-      ends.limit_kill_on_job_close();
-      let job = win32job::Job::create_with_limit_info(&ends).map_err(std::io::Error::other)?;
-      let process = child.raw_handle().ok_or_else(gone)?;
-      job.assign_process(process as isize).map_err(std::io::Error::other)?;
-      Ok(Group { job: Some(job) })
-    }
-  }
-
-  /// Every process of the group, ended, or why a signal did not reach them.
-  #[cfg_attr(windows, expect(clippy::unnecessary_wraps, reason = "only a signal of Unix can fail"))]
-  fn slay(&mut self) -> std::io::Result<()> {
-    #[cfg(unix)]
-    if let Some(leader) = self.leader {
-      match rustix::process::kill_process_group(leader, rustix::process::Signal::KILL) {
-        // The group has no process left, so no process is left to end.
-        Ok(()) | Err(rustix::io::Errno::SRCH) => {}
-        Err(no) => return Err(no.into()),
-      }
-    }
-    #[cfg(windows)]
-    self.job.take();
-    Ok(())
-  }
-
-  /// The group let go once the command is over, and every process of it that outlives the command left to run.
-  fn free(&mut self) {
-    #[cfg(unix)]
-    self.leader.take();
-    #[cfg(windows)]
-    if let Some(job) = self.job.take()
-      && job.set_extended_limit_info(&win32job::ExtendedLimitInfo::new()).is_err()
-    {
-      // A job that cannot be let go keeps its limit, so it ends each process when it drops.
-      self.job = Some(job);
-    }
-  }
-}
-
-impl Drop for Group {
-  fn drop(&mut self) {
-    // A drop has no caller to tell a failure to.
-    drop(self.slay());
-  }
-}
 
 #[cfg(test)]
 #[path = "bash.test.rs"]

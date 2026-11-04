@@ -26,8 +26,8 @@ use tokio::{
 use super::{
   Error,
   binding::binding,
-  config::{self, CONNECT, Choice, Places, Server},
-  oauth::{self, Opener, Vault},
+  config::{self, CONNECT, Choice, Places, Run, Server},
+  oauth::{self, Opener, Vault, VaultError},
   session::{self, Changed, Info, Offered, Session},
   wire::{Failure, Heard},
 };
@@ -65,11 +65,11 @@ impl Link {
   /// The link of a server that the configs define, before any connect: failed when its definition
   /// is broken.
   fn defined(server: &Server) -> Link {
-    match () {
-      () if !server.error.is_empty() => Link::Failed(server.error.clone()),
-      () if server.disabled => Link::Disabled,
-      () if !server.approved => Link::Unapproved,
-      () => Link::Pending,
+    match &server.run {
+      Err(why) => Link::Failed(why.to_string()),
+      Ok(_) if server.disabled => Link::Disabled,
+      Ok(_) if !server.approved => Link::Unapproved,
+      Ok(_) => Link::Pending,
     }
   }
 
@@ -130,6 +130,8 @@ struct Entry {
   link: Link,
   info: Info,
   offered: Offered,
+  /// Why the store kept no tokens that were refreshed for the connection, which serve all the same.
+  unsaved: Option<VaultError>,
   generation: u64,
   keeper: Option<AbortHandle>,
 }
@@ -186,6 +188,7 @@ impl Hub {
           link,
           info: Info::default(),
           offered: Offered::default(),
+          unsaved: None,
           generation: 0,
           keeper: None,
         };
@@ -280,10 +283,7 @@ impl Hub {
   }
 
   /// The session of a server and its definition, once it settled, or why it has none.
-  pub(super) async fn session(
-    self: &Arc<Self>,
-    name: &str,
-  ) -> Result<(Arc<Session>, Server), Error> {
+  pub(super) async fn session(self: &Arc<Self>, name: &str) -> Result<(Arc<Session>, Run), Error> {
     self.loaded();
     self.settled(&[name], CONNECT + Duration::from_secs(5)).await;
     let entries = self.entries();
@@ -292,7 +292,10 @@ impl Hub {
       .find(|one| one.server.name == name)
       .ok_or_else(|| Error::NoServer(name.to_owned()))?;
     match &entry.link {
-      Link::Connected { session } => Ok((Arc::clone(session), entry.server.clone())),
+      Link::Connected { session } => match &entry.server.run {
+        Ok(run) => Ok((Arc::clone(session), run.clone())),
+        Err(why) => Err(Error::Broken { name: name.to_owned(), source: Arc::clone(why) }),
+      },
       Link::NeedsAuth { .. } => Err(Error::Login(name.to_owned())),
       other => Err(Error::Down {
         name: name.to_owned(),
@@ -312,29 +315,26 @@ impl Hub {
       .entries()
       .iter()
       .find(|one| one.server.name == name)
-      .and_then(|one| one.server.transport.url().map(str::to_owned));
+      .and_then(|one| one.server.url().map(str::to_owned));
     let Some(url) = url else { return false };
     let (vault, key) = (Arc::clone(&self.settings.vault), oauth::key(name, &url));
     let held = {
       let (vault, key) = (Arc::clone(&vault), key.clone());
-      oauth::blocking(move || oauth::stored(vault.as_ref(), &key)).await
+      oauth::blocking(move || oauth::stored(vault.as_ref(), &key)).await.ok().flatten()
     };
     let fresh = match held {
       Some(held) => oauth::refreshed(&held).await.ok(),
       None => None,
     };
-    let Some(fresh) = fresh else {
-      let mut entries = self.entries();
-      if let Some(entry) = entries.iter_mut().find(|one| one.server.name == name) {
-        entry.link = Link::NeedsAuth { hint };
-      }
-      drop(entries);
-      self.moved.notify_waiters();
-      self.tell(name);
-      return false;
+    let Some(fresh) = fresh else { return self.relinked(name, Link::NeedsAuth { hint }) };
+    let kept = match oauth::blocking(move || oauth::store(vault.as_ref(), &key, &fresh)).await {
+      Ok(stored) => stored.map_err(Error::from),
+      Err(no) => Err(Error::from(no)),
     };
-    // The fresh tokens serve this connect even when the store does not keep them.
-    oauth::blocking(move || oauth::store(vault.as_ref(), &key, &fresh)).await.ok();
+    if let Err(no) = kept {
+      let said = format!("the refreshed tokens were not kept: {no}");
+      return self.relinked(name, Link::Failed(said));
+    }
     self.restart(name).is_ok() && {
       self.settled(&[name], CONNECT + Duration::from_secs(5)).await;
       self
@@ -342,6 +342,19 @@ impl Hub {
         .iter()
         .any(|one| one.server.name == name && matches!(one.link, Link::Connected { .. }))
     }
+  }
+
+  /// The link of a server changed, and the change is told.
+  /// The result is always false, because the server is not connected then.
+  fn relinked(&self, name: &str, link: Link) -> bool {
+    let mut entries = self.entries();
+    if let Some(entry) = entries.iter_mut().find(|one| one.server.name == name) {
+      entry.link = link;
+    }
+    drop(entries);
+    self.moved.notify_waiters();
+    self.tell(name);
+    false
   }
 
   /// A server that may run, connected again from the start.
@@ -352,10 +365,10 @@ impl Hub {
       .find(|one| one.server.name == name)
       .ok_or_else(|| Error::NoServer(name.to_owned()))?;
     let name = name.to_owned();
+    if let Err(why) = &entry.server.run {
+      return Err(Error::Broken { name, source: Arc::clone(why) });
+    }
     match () {
-      () if !entry.server.error.is_empty() => {
-        Err(Error::Broken { name, why: entry.server.error.clone() })
-      }
       () if entry.server.disabled => Err(Error::Disabled(name)),
       () if !entry.server.approved => Err(Error::Unapproved(name)),
       () => {
@@ -384,14 +397,13 @@ impl Hub {
       Action::Login => {
         let (url, vault, key) = self.door(name, &server)?;
         let tokens =
-          oauth::login(url, hint.as_deref(), &self.settings.opener, &server.transport.oauth())
-            .await?;
-        oauth::blocking(move || oauth::store(vault.as_ref(), &key, &tokens)).await?;
+          oauth::login(url, hint.as_deref(), &self.settings.opener, &server.oauth()).await?;
+        oauth::blocking(move || oauth::store(vault.as_ref(), &key, &tokens)).await??;
         self.restart(name)?;
       }
       Action::Logout => {
         let (_, vault, key) = self.door(name, &server)?;
-        oauth::blocking(move || vault.forget(&key)).await?;
+        oauth::blocking(move || vault.forget(&key)).await??;
         self.restart(name)?;
       }
     }
@@ -406,7 +418,7 @@ impl Hub {
     name: &str,
     server: &'a Server,
   ) -> Result<(&'a str, Arc<dyn Vault>, String), Error> {
-    let url = server.transport.url().ok_or_else(|| Error::Local(name.to_owned()))?;
+    let url = server.url().ok_or_else(|| Error::Local(name.to_owned()))?;
     Ok((url, Arc::clone(&self.settings.vault), oauth::key(name, url)))
   }
 
@@ -495,11 +507,16 @@ fn prompts(offered: &[Value]) -> Vec<Value> {
 /// in it.
 fn dict(entry: &Entry) -> Value {
   let server = &entry.server;
+  let deny = server.run.as_ref().map(|run| run.deny.as_slice()).unwrap_or_default();
+  let (kind, target) = server
+    .run
+    .as_ref()
+    .map_or(("", String::new()), |run| (run.transport.kind(), run.transport.target()));
   let allowed: Vec<Value> = entry
     .offered
     .tools
     .iter()
-    .filter(|tool| !server.deny.iter().any(|denied| tool["name"].as_str() == Some(denied)))
+    .filter(|tool| !deny.iter().any(|denied| tool["name"].as_str() == Some(denied)))
     .cloned()
     .collect();
   let resources: Vec<Value> = entry
@@ -525,10 +542,16 @@ fn dict(entry: &Entry) -> Value {
   json!({
     "name": server.name,
     "scope": server.scope.name(),
-    "transport": server.transport.kind(),
-    "target": server.transport.target(),
+    "transport": kind,
+    "target": target,
     "state": entry.link.name(),
-    "error": entry.link.why(&server.name).unwrap_or_default(),
+    "error": entry
+      .link
+      .why(&server.name)
+      .or_else(|| {
+        entry.unsaved.as_ref().map(|no| format!("the refreshed tokens were not kept: {no}"))
+      })
+      .unwrap_or_default(),
     "version": entry.info.version,
     "instructions": entry.info.instructions,
     "tools": tools(&allowed),
@@ -544,6 +567,26 @@ fn backoff(failures: u32) -> Duration {
   Duration::from_secs(1u64 << failures.min(5)).min(Duration::from_secs(30))
 }
 
+/// A server connected: its session, what it hears of its own accord, and what it offers.
+struct Connected {
+  session: Session,
+  heard: mpsc::UnboundedReceiver<Heard>,
+  offered: Offered,
+  unsaved: Option<VaultError>,
+}
+
+/// A server connected: its session, started with the token of its login.
+async fn connected(hub: &Hub, name: &str, run: &Run) -> Result<Connected, Failure> {
+  let access = match run.transport.url() {
+    Some(url) => oauth::token(Arc::clone(&hub.settings.vault), oauth::key(name, url)).await,
+    None => None,
+  };
+  let (token, unsaved) = access.map_or((None, None), |one| (Some(one.token), one.unsaved));
+  let (session, heard) = session::start(&run.transport, token, hub.roots(), CONNECT).await?;
+  let offered = session::offered(&session, CONNECT).await?;
+  Ok(Connected { session, heard, offered, unsaved })
+}
+
 /// The keeper of a server: it connects the server, keeps what the server offers as the server changes it, and
 /// connects it again when its connection ends. A keeper whose entry changed generation ends.
 async fn keep(hub: Arc<Hub>, name: String, generation: u64) {
@@ -557,21 +600,13 @@ async fn keep(hub: Arc<Hub>, name: String, generation: u64) {
     else {
       return;
     };
-    let token = match server.transport.url() {
-      Some(url) => oauth::token(Arc::clone(&hub.settings.vault), oauth::key(&name, url)).await,
-      None => None,
-    };
-    let started = async {
-      let (session, heard) = session::start(&server.transport, token, hub.roots(), CONNECT).await?;
-      let offered = session::offered(&session, CONNECT).await?;
-      Ok::<_, Failure>((session, heard, offered))
-    };
-    let wait = match started.await {
-      Ok((session, heard, offered)) => {
+    let Ok(run) = &server.run else { return };
+    let wait = match connected(&hub, &name, run).await {
+      Ok(Connected { session, heard, offered, unsaved }) => {
         let info = session.info.clone();
         let session = Arc::new(session);
         if !hub.set(&name, generation, |entry| {
-          (entry.info, entry.offered) = (info, offered);
+          (entry.info, entry.offered, entry.unsaved) = (info, offered, unsaved);
           entry.link = Link::Connected { session: Arc::clone(&session) };
         }) {
           return;

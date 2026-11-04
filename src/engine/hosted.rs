@@ -205,7 +205,7 @@ impl Outside {
     let Some(on) = over.map(|(on, _)| *on) else {
       return false;
     };
-    if !self.hosted.handed.ears.get_mut(&name).is_some_and(|ear| ear.again()) {
+    if !self.hosted.handed.ears.get_mut(&name).is_some_and(|ear| ear.restart()) {
       return false;
     }
     self.hosted.waits.remove(&on);
@@ -326,11 +326,10 @@ impl Outside {
     };
     let a = a.filter(|one| !one.as_ref().is_none());
     let heard = match (at, a) {
-      (At::Over, _) => return Answer::Fault(Fault::new("StopIteration", vec![])),
+      (At::Over, _) => return Answer::Fault(Fault::stop_iteration()),
       (At::Unborn, Some(_)) => {
-        return Answer::Fault(Fault::new(
-          "TypeError",
-          vec![Object::string("can't send non-None value to a just-started generator")],
+        return Answer::Fault(Fault::type_error(
+          "can't send non-None value to a just-started generator",
         ));
       }
       (At::Unborn, None) => Heard::Born,
@@ -358,7 +357,7 @@ impl Outside {
         self.hosted.waits.insert(on, wait.clone());
         (At::Waiting, Answer::Value(wait))
       }
-      Stepped::Over => (At::Over, Answer::Fault(Fault::new("StopIteration", vec![]))),
+      Stepped::Over => (At::Over, Answer::Fault(Fault::stop_iteration())),
       Stepped::Raised(fault) => (At::Over, self.raising(sand, fault)),
     };
     self.hosted.handed.ears.insert(name.clone(), ear);

@@ -2,8 +2,6 @@
 //! joined. An image goes to the directory of the images of the life, as the images of a turn do, and its text names
 //! it, so a model that reads the text sees it. A text past [`LONGEST`] characters is cut, and says so.
 
-#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
-
 use std::path::Path;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -12,11 +10,11 @@ use serde_json::{Value, json};
 use crate::world::images;
 
 /// The most characters of a text that an answer holds.
-pub const LONGEST: usize = 100_000;
+pub(super) const LONGEST: usize = 100_000;
 
 /// What a call of a tool gives: its text, its blocks and its structured content; or the text of a result that is an
 /// error.
-pub fn called(got: &Value, gallery: Option<&Path>) -> Result<Value, String> {
+pub(super) fn called(got: &Value, gallery: Option<&Path>) -> Result<Value, String> {
   let (mut text, content) = blocks(listed(&got["content"]), gallery);
   let structured = got.get("structuredContent").cloned().unwrap_or(Value::Null);
   if got["isError"] == true {
@@ -29,7 +27,7 @@ pub fn called(got: &Value, gallery: Option<&Path>) -> Result<Value, String> {
 }
 
 /// What a read of a resource gives: its text and its blocks.
-pub fn read(got: &Value, gallery: Option<&Path>) -> Value {
+pub(super) fn read(got: &Value, gallery: Option<&Path>) -> Value {
   let (mut texts, mut content) = (Vec::new(), Vec::new());
   for one in listed(&got["contents"]) {
     let (text, block) = embedded(one, gallery);
@@ -40,7 +38,7 @@ pub fn read(got: &Value, gallery: Option<&Path>) -> Value {
 }
 
 /// What a prompt of a server gives: its messages, each with its role and its block, and their texts joined.
-pub fn prompted(got: &Value, gallery: Option<&Path>) -> Value {
+pub(super) fn prompted(got: &Value, gallery: Option<&Path>) -> Value {
   let (mut texts, mut messages) = (Vec::new(), Vec::new());
   for one in listed(&got["messages"]) {
     let (text, mut content) = blocks(std::slice::from_ref(&one["content"]), gallery);
@@ -140,7 +138,7 @@ fn image(data: &str, mime: &str, gallery: Option<&Path>) -> (String, Value) {
 }
 
 /// A text cut at [`LONGEST`] characters, which then says so.
-pub fn cut(text: &str) -> String {
+pub(super) fn cut(text: &str) -> String {
   let size = text.chars().count();
   if size <= LONGEST {
     return text.to_owned();

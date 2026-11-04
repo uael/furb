@@ -33,12 +33,6 @@
 //! The extensions and memory do no work, so they call each verb while they hear, where the life
 //! answers it in their place.
 
-#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
-#![expect(
-  clippy::redundant_closure_for_method_calls,
-  reason = "debt: a closure where a method path serves"
-)]
-
 use std::{
   cell::{Cell, RefCell},
   collections::VecDeque,
@@ -59,7 +53,7 @@ use tokio::runtime::Handle;
 use crate::{
   engine::Life,
   fact::Fact,
-  value::{Fault, Object},
+  value::{Fault, Given, Object, ObjectRef},
 };
 
 /// What an ear is resumed with.
@@ -106,7 +100,7 @@ impl Step {
   )]
   pub(crate) fn of(yielded: &Object) -> Result<Step, Fault> {
     let got = yielded.as_ref();
-    if got.type_name() == "NoneType" {
+    if got.is_none() {
       return Ok(Step::Wait(None));
     }
     if matches!(got.type_name(), "set" | "frozenset") {
@@ -115,11 +109,11 @@ impl Step {
     if let Some(pairs) = got.pairs() {
       let field =
         |key: &str| pairs.iter().find(|(name, _)| name.as_str() == Some(key)).map(|(_, one)| one);
-      let verb = field("call").and_then(|one| one.as_str()).map(str::to_owned);
+      let verb = field("call").and_then(ObjectRef::as_str).map(str::to_owned);
       let verb = verb
         .ok_or_else(|| Fault::refused("an ear yields a verb as a map that names it under call"))?;
-      let args = field("args").and_then(|one| one.items()).unwrap_or_default();
-      let kwargs = field("kwargs").and_then(|one| one.pairs()).unwrap_or_default();
+      let args = field("args").and_then(ObjectRef::items).unwrap_or_default();
+      let kwargs = field("kwargs").and_then(ObjectRef::pairs).unwrap_or_default();
       let kwargs =
         kwargs.iter().filter_map(|(key, one)| Some((key.as_str()?.to_owned(), one.to_owned())));
       let args = args.into_iter().map(|one| one.to_owned()).collect();
@@ -163,7 +157,7 @@ pub trait Ear {
 
   /// Whether the ear starts again after it raised: a fresh ear stands in its place and hears from its birth. An ear
   /// that [`lasting`] made does, and any other ear stays over.
-  fn again(&mut self) -> bool {
+  fn restart(&mut self) -> bool {
     false
   }
 
@@ -457,7 +451,7 @@ impl Ear for Lasting {
     self.ear.ran()
   }
 
-  fn again(&mut self) -> bool {
+  fn restart(&mut self) -> bool {
     self.ear = (self.make)();
     true
   }
@@ -523,6 +517,10 @@ pub fn runtime() -> Handle {
 
 /// The reactor of the process, for a door that drives a life with no runtime of tokio: one runtime, driven by a
 /// thread of its own, while every ear runs on the thread of its life.
+#[expect(
+  clippy::expect_used,
+  reason = "no life runs without a reactor, and the machine gives the process one or none"
+)]
 #[expect(
   clippy::disallowed_methods,
   reason = "the thread of the reactor blocks on the runtime that it drives, which waits for nothing"

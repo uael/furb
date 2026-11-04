@@ -45,12 +45,7 @@ impl Outside {
 
   /// A callable the engine made or a class a word defined, by the number the host holds it by.
   pub(super) fn held(&self, n: i64) -> Result<Object, Fault> {
-    self
-      .crossing
-      .numbered
-      .get(&n)
-      .cloned()
-      .ok_or_else(|| Fault::new("KeyError", vec![Object::int(n)]))
+    self.crossing.numbered.get(&n).cloned().ok_or_else(|| Fault::key_error(n))
   }
 
   /// A callable the engine made or a class a word defined, forgotten by the host, so the sandbox
@@ -357,16 +352,12 @@ fn builtin_of(mark: &str, first: Option<ObjectRef<'_>>) -> Result<Option<Object>
     "int" => match first.and_then(|one| one.as_str().map(str::to_owned)) {
       Some(text) => Some(match text.trim().parse::<i64>() {
         Ok(n) => Object::int(n),
-        Err(_) => Object::bigint(
-          text.trim().parse().map_err(|_| Fault::new("ValueError", vec![Object::string(text)]))?,
-        ),
+        Err(_) => Object::bigint(text.trim().parse().map_err(|_| Fault::value_error(text))?),
       }),
       None => first.map(|one| one.to_owned()),
     },
     "float" => match first.and_then(|one| one.as_str().map(str::to_owned)) {
-      Some(text) => Some(Object::float(
-        text.trim().parse().map_err(|_| Fault::new("ValueError", vec![Object::string(text)]))?,
-      )),
+      Some(text) => Some(Object::float(text.trim().parse().map_err(|_| Fault::value_error(text))?)),
       None => first
         .and_then(|one| one.as_float().or_else(|| one.as_int().map(|n| n as f64)))
         .map(Object::float),

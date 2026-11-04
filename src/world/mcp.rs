@@ -53,7 +53,7 @@ use unsync::oneshot;
 pub use self::{
   config::Places,
   hub::Settings,
-  oauth::{Filed, Opener, Vault},
+  oauth::{Filed, Opener, Vault, VaultError},
 };
 use self::{
   config::Transport,
@@ -117,8 +117,8 @@ enum Error {
     why.as_ref().map(|one| format!(": {one}")).unwrap_or_default()
   )]
   Down { name: String, state: &'static str, why: Option<String> },
-  #[error("the server {name} cannot run: {why}")]
-  Broken { name: String, why: String },
+  #[error("the server {name} cannot run: {source}")]
+  Broken { name: String, source: Arc<config::Error> },
   #[error("the server {0} is disabled: mcp_control('enable', {0:?})")]
   Disabled(String),
   #[error("the server {0} of the project waits for approval: mcp_control('approve', {0:?})")]
@@ -136,6 +136,12 @@ enum Error {
   /// A fault that the configs, the logins or the content of a server give as a text.
   #[error("{0}")]
   Said(String),
+  #[error(transparent)]
+  Config(#[from] config::Error),
+  #[error(transparent)]
+  Oauth(#[from] oauth::Error),
+  #[error(transparent)]
+  Vault(#[from] VaultError),
   #[error(transparent)]
   Task(#[from] tokio::task::JoinError),
 }

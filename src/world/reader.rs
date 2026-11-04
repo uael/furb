@@ -454,7 +454,7 @@ impl Reader<'_> {
       }
       "cancel" if !self.done.contains(about) => {
         let why = fact.word(0).map(|one| one.to_owned()).filter(|one| *one != Object::none());
-        self.end(about, Fault::new("CancelledError", why.into_iter().collect()).object());
+        self.end(about, Fault::cancelled(why).object());
       }
       _ => {}
     }
@@ -579,7 +579,7 @@ impl Reader<'_> {
       &rung,
       [Object::list([Object::string(format!("#{rung} refused\n{bound}"))])],
     ));
-    self.end(&rung, Fault::new("Refused", vec![]).object());
+    self.end(&rung, Fault::refusal().object());
   }
 
   /// An act done with a value, with the rung of it that runs and the run of a rung, as the engine ends them.
