@@ -39,7 +39,13 @@ use serde_json::{Map, Value, json};
 use super::{Cached, Listed};
 use crate::{
   ear::{reactor, runtime},
-  world::cache,
+  world::{
+    cache,
+    provider::{
+      atomic::{self, Access},
+      numbers,
+    },
+  },
 };
 
 /// Where models.dev serves its catalog.
@@ -210,10 +216,6 @@ pub(super) fn applied(listed: &mut IndexMap<String, Listed>, text: Option<&str>)
   }
 }
 
-fn numbers(version: &str) -> Vec<u64> {
-  version.split(|one: char| !one.is_ascii_digit()).filter_map(|part| part.parse().ok()).collect()
-}
-
 async fn get(url: &str) -> Result<String, String> {
   let asked =
     ReqwestClient::new().get(url).header("user-agent", "furb").timeout(Duration::from_secs(60));
@@ -226,11 +228,7 @@ async fn get(url: &str) -> Result<String, String> {
 }
 
 fn keep(at: &Path, text: &str) -> Result<(), String> {
-  let partial = at.with_extension("part");
-  let wrote = at.parent().is_some_and(|parent| fs::create_dir_all(parent).is_ok())
-    && fs::write(&partial, text).is_ok()
-    && fs::rename(&partial, at).is_ok();
-  if wrote { Ok(()) } else { Err(format!("no write of {}", at.display())) }
+  atomic::write(at, text.as_bytes(), Access::Shared).map_err(|no| no.to_string())
 }
 
 async fn models_dev(dir: &Path) -> Result<(), String> {

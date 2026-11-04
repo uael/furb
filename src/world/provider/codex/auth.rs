@@ -3,8 +3,7 @@
 use std::{
   collections::HashMap,
   fmt,
-  fs::{self, File, OpenOptions},
-  io::Write,
+  fs::{self, File},
   net::TcpListener,
   path::{Path, PathBuf},
   sync::{Mutex, MutexGuard, OnceLock, PoisonError},
@@ -22,7 +21,11 @@ use tokio::{
   sync::watch,
 };
 
-use crate::{ear::runtime, extension::Places};
+use crate::{
+  ear::runtime,
+  extension::Places,
+  world::provider::atomic::{self, Access},
+};
 
 /// The provider of models paid for by a ChatGPT subscription.
 pub const NAME: &str = "codex";
@@ -102,6 +105,8 @@ pub enum AuthError {
   Json(#[from] serde_json::Error),
   #[error("{0}")]
   Random(#[from] getrandom::Error),
+  #[error("{0}")]
+  Write(#[from] atomic::Error),
   #[error("{0}")]
   Task(#[from] tokio::task::JoinError),
   #[error("{0}")]
@@ -236,24 +241,8 @@ fn save(path: &Path, value: &impl Serialize) -> Result<(), AuthError> {
     use std::os::unix::fs::PermissionsExt;
     fs::set_permissions(parent, fs::Permissions::from_mode(0o700))?;
   }
-  let mut options = OpenOptions::new();
-  options.write(true).create_new(true);
-  #[cfg(unix)]
-  {
-    use std::os::unix::fs::OpenOptionsExt;
-    options.mode(0o600);
-  }
-  let temporary = path.with_extension(format!("{}.tmp", random()?));
-  let mut file = options.open(&temporary)?;
-  let result = (|| -> Result<(), AuthError> {
-    file.write_all(&serde_json::to_vec(value)?)?;
-    file.sync_all()?;
-    fs::rename(&temporary, path).map_err(AuthError::from)
-  })();
-  if result.is_err() {
-    drop(fs::remove_file(&temporary));
-  }
-  result
+  atomic::write(path, &serde_json::to_vec(value)?, Access::Owner)?;
+  Ok(())
 }
 
 fn random() -> Result<String, AuthError> {

@@ -44,6 +44,7 @@
 #![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
 #![expect(clippy::used_underscore_binding, reason = "debt: a binding named with _ that is used")]
 
+mod atomic;
 pub mod catalog;
 pub mod claude;
 mod clients;
@@ -2225,6 +2226,11 @@ fn uuid_from(
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   let hex: String = bytes.iter().map(|one| format!("{one:02x}")).collect();
   Ok(format!("{}-{}-{}-{}-{}", &hex[..8], &hex[8..12], &hex[12..16], &hex[16..20], &hex[20..]))
+}
+
+/// The numbers of a text, in order, which sort as a version does: `1.10.0` is greater than `1.4.0`.
+fn numbers(text: &str) -> Vec<u64> {
+  text.split(|one: char| !one.is_ascii_digit()).filter_map(|part| part.parse().ok()).collect()
 }
 
 #[cfg(test)]

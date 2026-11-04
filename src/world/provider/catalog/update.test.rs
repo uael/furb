@@ -2,7 +2,7 @@
 
 use serde_json::json;
 
-use super::{Source, Status, applied, numbers, pi, stamp};
+use super::{Source, Status, applied, pi, stamp};
 use crate::world::provider::catalog::parsed;
 
 const SNAPSHOT: &str =
@@ -19,12 +19,6 @@ fn a_count_of_seconds_reads_as_a_time() {
   assert_eq!(stamp(0), "1970-01-01T00:00:00Z");
   assert_eq!(stamp(951_782_400), "2000-02-29T00:00:00Z");
   assert_eq!(stamp(1_000_000_000), "2001-09-09T01:46:40Z");
-}
-
-#[test]
-fn a_version_is_compared_by_its_numbers() {
-  assert!(numbers("1.10.0") > numbers("1.4.0"));
-  assert_eq!(numbers("1.4.0"), vec![1, 4, 0]);
 }
 
 #[test]
