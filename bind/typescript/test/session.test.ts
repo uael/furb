@@ -769,7 +769,7 @@ test("a whole number from the operator answers a float prompt as a float, typed 
   }
 });
 
-test("a prompt of None to the operator is closed as the console takes it, and stays a notice until a dismiss", async () => {
+test("a prompt of None to the operator is closed as the console takes it, and the console keeps nothing of it", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-notice-"));
   const session = boot({ cwd });
   try {
@@ -777,9 +777,7 @@ test("a prompt of None to the operator is closed as the console takes it, and st
     const told = engine.prompt("None", { message: "The build is green.", to: "operator", on: engine.root });
     expect(await told).toBeNull();
     expect(session.console.prompts.size).toBe(0);
-    expect([...session.console.notices.values()]).toEqual([{ id: told.id, message: "The build is green." }]);
-    session.console.dismiss(told.id);
-    expect(session.console.notices.size).toBe(0);
+    expect(session.activity.acts.get(told.id)?.done).toBe(true);
   } finally {
     await session.dispose();
     await rm(cwd, { recursive: true });

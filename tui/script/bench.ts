@@ -253,7 +253,6 @@ async function facts({ record, session, app, screen }: Opened, top: Map<string, 
     seq: host.seq,
     facts: 0,
     prompts: [...host.prompts.values()],
-    notices: [...host.notices.values()],
     streams,
     pending: [...host.pending],
   });

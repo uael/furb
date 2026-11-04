@@ -64,7 +64,7 @@ test("no worker and no host of the TUI loads OpenTUI, so its native library stay
 });
 test("a window reads a state with no measures and no compactions, as a host of an older build sends it", () => {
   const view = new HostView(() => Promise.resolve(undefined));
-  const state = { facts: 1, prompts: [], notices: [], streams: [], pending: [], seq: 7 };
+  const state = { facts: 1, prompts: [], streams: [], pending: [], seq: 7 };
   expect(() => view.update(state as unknown as HostState)).not.toThrow();
   expect(view.measures).toEqual({});
   expect(view.compactions).toEqual([]);

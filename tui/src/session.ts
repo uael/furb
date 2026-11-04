@@ -109,6 +109,9 @@ export const statusLabels: Record<Status, string> = {
   saved: "Saved",
 };
 /** Whether an act is at work: it lives, no pause holds it, and its kind is one whose work takes time. */
+/** Whether an act is a notice to the operator: a prompt of None to him, which tells and asks nothing. */
+export const notice = (act: ActRow): boolean =>
+  act.kind === "prompt" && act.words[0] === "None" && act.words[2] === "operator";
 export const working = (act: ActRow): boolean =>
   !act.done && !act.paused && !act.unfinished && WORK.includes(act.kind);
 /** The phase of an act that a view of the whole life reads: whether it is done or held, when it began and ended, and
@@ -546,17 +549,8 @@ export class Session extends EventEmitter {
     this.emit("change");
   }
   private changed = () => {
-    // A notice asks nothing, so it settles as the console takes it, and no key of the operator dismisses it.
-    for (const id of this.host.notices.keys())
-      if (!this.settled.has(id)) {
-        this.settled.add(id);
-        void this.host.dismiss(id).catch(this.fail);
-      }
-    for (const id of this.settled) if (!this.host.notices.has(id)) this.settled.delete(id);
     this.emit("change");
   };
-  /** The notices that the session dismissed, until the console drops them. */
-  private readonly settled = new Set<string>();
   /** The theme that the session shows: the one that the preferences name, or the one of the mode of the terminal. */
   get theme(): ThemeName {
     return themeOf(this.preferences.theme, this.preferences.terminalMode);
@@ -973,7 +967,11 @@ export class Session extends EventEmitter {
     const mine = chain?.by === "operator" || this.actOf(chain?.by ?? "")?.by === "operator";
     if (!mine) return false;
     const owed = new Set(this.host.prompts.keys());
-    return chainThreads(this.activityByChain.get(id) ?? [], index.ids, owed, this.threadsKnown).some(
+    const on = this.activityByChain.get(id) ?? [];
+    // A notice to the operator on the chain itself, out of any thread, is unread until a fact seen of the chain covers it.
+    const read = this.read(id);
+    if (on.some((act) => notice(act) && !act.thread && act.began > read)) return true;
+    return chainThreads(on, index.ids, owed, this.threadsKnown).some(
       (thread) => thread.resolved && thread.yours && this.unreadThread(thread.act.id, threadWork(thread)),
     );
   }
