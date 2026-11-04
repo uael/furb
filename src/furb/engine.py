@@ -238,9 +238,17 @@ def prompt[T](shape: type[T] | object, message="", to="", on="") -> Act[T]:
       while crafted(id):
         yield {"rung"}
     yield opened(id, named, message=message, thread=thread)
+    a: tuple = ()
     while not says:
-      asks and not (paused(id) or any(id in x[2:4] and not over(x[1]) for x in transcript(id, "rung"))) and rung(to=to)
-      yield {id}
+      heard = a[:1] == ("done",) and prompted(a[1]) and get(a[1])[3:5] == (id, "None")
+      asks and not (
+        paused(id)
+        or any(
+          id in x[2:4] and not over(x[1]) and not (heard and any(y[2] == x[1] for y in transcript(id, "reply")))
+          for x in transcript(id, "rung")
+        )
+      ) and rung(to=to)
+      a = yield {id}
     yield "done", id, None
 
   return act("prompt", on, controlled(ear), named, message, to)
