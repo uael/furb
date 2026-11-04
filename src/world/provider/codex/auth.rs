@@ -1,29 +1,13 @@
 //! OpenAI models on a ChatGPT subscription, with credentials kept outside the project.
 
-#![expect(clippy::cast_possible_truncation, reason = "debt: an as cast that can truncate")]
-#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
-#![expect(clippy::items_after_statements, reason = "debt: an item declared after a statement")]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
-#![expect(clippy::map_unwrap_or, reason = "debt: map then unwrap_or, where map_or serves")]
-#![expect(
-  clippy::redundant_closure_for_method_calls,
-  reason = "debt: a closure where a method path serves"
-)]
-#![expect(clippy::struct_field_names, reason = "debt: fields that repeat the name of their struct")]
-#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
-
 use std::{
   collections::HashMap,
+  fmt,
   fs::{self, File, OpenOptions},
   io::Write,
   net::TcpListener,
   path::{Path, PathBuf},
-  sync::{Mutex, OnceLock},
+  sync::{Mutex, MutexGuard, OnceLock, PoisonError},
   time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
@@ -47,13 +31,127 @@ const AUTH: &str = "https://auth.openai.com";
 const CLIENT: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
 const REDIRECT: &str = "http://localhost:1455/auth/callback";
 const CLIENT_VERSION: &str = "0.163.0";
+const AGAIN: &str = "Sign in to Codex again from Providers.";
 
-/// The state of a sign-in, with a browser address while it waits and a message when it fails.
-#[derive(Clone, Default)]
-pub struct Status {
-  pub state: String,
-  pub url: Option<String>,
-  pub message: Option<String>,
+/// The state of a sign-in. It shows as the word that the World shows.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum SignIn {
+  #[default]
+  Disconnected,
+  /// The browser address to open while the sign-in waits for its callback.
+  Waiting {
+    url: String,
+  },
+  Connecting,
+  Connected,
+  NeedsLogin,
+  Failed(String),
+  Canceled,
+}
+
+impl SignIn {
+  /// The word of the state, as the World shows it.
+  pub fn state(&self) -> &'static str {
+    match self {
+      Self::Disconnected => "disconnected",
+      Self::Waiting { .. } => "waiting",
+      Self::Connecting => "connecting",
+      Self::Connected => "connected",
+      Self::NeedsLogin => "needs-login",
+      Self::Failed(_) => "failed",
+      Self::Canceled => "canceled",
+    }
+  }
+
+  /// The browser address, while the sign-in waits.
+  pub fn url(&self) -> Option<&str> {
+    match self {
+      Self::Waiting { url } => Some(url),
+      _ => None,
+    }
+  }
+
+  /// What to tell the operator when the sign-in needs him or failed.
+  pub fn message(&self) -> Option<&str> {
+    match self {
+      Self::NeedsLogin => Some(AGAIN),
+      Self::Failed(message) => Some(message),
+      _ => None,
+    }
+  }
+
+  /// Whether a browser sign-in or a connection runs now.
+  fn running(&self) -> bool {
+    matches!(self, Self::Waiting { .. } | Self::Connecting)
+  }
+}
+
+impl fmt::Display for SignIn {
+  fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    formatter.write_str(self.state())
+  }
+}
+
+/// Why a sign-in, a refresh or a listing of models did not go.
+#[derive(Debug, thiserror::Error)]
+pub enum AuthError {
+  #[error("The credential has no directory")]
+  NoDirectory,
+  #[error("{0}")]
+  Io(#[from] std::io::Error),
+  #[error("{0}")]
+  Json(#[from] serde_json::Error),
+  #[error("{0}")]
+  Random(#[from] getrandom::Error),
+  #[error("{0}")]
+  Task(#[from] tokio::task::JoinError),
+  #[error("{0}")]
+  Url(#[from] url::ParseError),
+  #[error("{0}")]
+  Request(#[from] reqwest::Error),
+  #[error("Sign in to codex from Providers")]
+  SignInNeeded,
+  #[error("Sign in to codex again")]
+  SignInAgain,
+  #[error("OpenAI did not return a ChatGPT account")]
+  NoAccount,
+  #[error("OpenAI did not return a refresh credential. Sign in again.")]
+  NoRefresh,
+  #[error("OpenAI sign-in failed (HTTP {status}). {}", advice(*.status))]
+  Rejected { status: u16 },
+  #[error("OpenAI returned an invalid sign-in response")]
+  InvalidToken(#[source] serde_json::Error),
+  #[error("OpenAI could not list this account's models (HTTP {status}).")]
+  ListRefused { status: u16 },
+  #[error("OpenAI returned a model list that is too large")]
+  ListTooLarge,
+  #[error("OpenAI returned an invalid model list")]
+  InvalidList(#[source] serde_json::Error),
+  #[error("This ChatGPT account offers no model to furb")]
+  NoModels,
+  #[error("Another OpenAI sign-in uses port 1455. Finish it, then try again.")]
+  PortBusy(#[source] std::io::Error),
+  #[error("Sign-in canceled")]
+  Canceled,
+  #[error("OpenAI sign-in was canceled or timed out")]
+  Ended,
+  #[error("OpenAI sign-in was refused")]
+  Declined,
+}
+
+fn advice(status: u16) -> &'static str {
+  if matches!(status, 400 | 401 | 403) { "Sign in again." } else { "Try again." }
+}
+
+impl AuthError {
+  /// Whether the account must sign in again for this to go.
+  fn login(&self) -> bool {
+    match self {
+      Self::Rejected { status } => matches!(status, 400 | 401 | 403),
+      Self::ListRefused { status } => matches!(status, 401 | 403),
+      _ => false,
+    }
+  }
 }
 
 #[derive(Clone, Deserialize, Serialize)]
@@ -94,58 +192,50 @@ struct Catalog {
   models: Vec<Listing>,
 }
 
+#[derive(Deserialize)]
+struct Listed {
+  models: Vec<Listing>,
+}
+
+/// A sign-in that runs, with the way to cancel it. It outlives the call that began it: the
+/// host asks for the state in later calls, with no object of its own to hold it between them.
 struct Flow {
-  status: Status,
+  status: SignIn,
   canceled: watch::Sender<bool>,
 }
 
-pub(super) struct Failure {
-  message: String,
-  login: bool,
-}
-
-impl std::fmt::Display for Failure {
-  fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    formatter.write_str(&self.message)
-  }
-}
-
-impl From<String> for Failure {
-  fn from(message: String) -> Self {
-    Self { message, login: false }
-  }
-}
-
-impl From<&str> for Failure {
-  fn from(message: &str) -> Self {
-    message.to_owned().into()
-  }
+/// What a browser sign-in waits with: its port, its state and its verifier.
+struct Pending {
+  listener: TcpListener,
+  state: String,
+  verifier: String,
 }
 
 fn now() -> u64 {
-  SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64
+  let since = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
+  u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
 }
 
 pub(super) fn directory(config: Option<&Path>) -> PathBuf {
-  config.map(Path::to_path_buf).unwrap_or_else(|| Places::here().config).join("auth")
+  config.map_or_else(|| Places::here().config, Path::to_path_buf).join("auth")
 }
 
-fn flows() -> &'static Mutex<HashMap<PathBuf, Flow>> {
+fn flows() -> MutexGuard<'static, HashMap<PathBuf, Flow>> {
   static FLOWS: OnceLock<Mutex<HashMap<PathBuf, Flow>>> = OnceLock::new();
-  FLOWS.get_or_init(Mutex::default)
+  FLOWS.get_or_init(Mutex::default).lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 fn read<T: serde::de::DeserializeOwned>(path: &Path) -> Option<T> {
   serde_json::from_slice(&fs::read(path).ok()?).ok()
 }
 
-fn save(path: &Path, value: &impl Serialize) -> Result<(), String> {
-  let parent = path.parent().ok_or("The credential has no directory")?;
-  fs::create_dir_all(parent).map_err(|no| no.to_string())?;
+fn save(path: &Path, value: &impl Serialize) -> Result<(), AuthError> {
+  let parent = path.parent().ok_or(AuthError::NoDirectory)?;
+  fs::create_dir_all(parent)?;
   #[cfg(unix)]
   {
     use std::os::unix::fs::PermissionsExt;
-    fs::set_permissions(parent, fs::Permissions::from_mode(0o700)).map_err(|no| no.to_string())?;
+    fs::set_permissions(parent, fs::Permissions::from_mode(0o700))?;
   }
   let mut options = OpenOptions::new();
   options.write(true).create_new(true);
@@ -155,23 +245,21 @@ fn save(path: &Path, value: &impl Serialize) -> Result<(), String> {
     options.mode(0o600);
   }
   let temporary = path.with_extension(format!("{}.tmp", random()?));
-  let mut file = options.open(&temporary).map_err(|no| no.to_string())?;
-  let result = (|| {
-    file
-      .write_all(&serde_json::to_vec(value).map_err(|no| no.to_string())?)
-      .map_err(|no| no.to_string())?;
-    file.sync_all().map_err(|no| no.to_string())?;
-    fs::rename(&temporary, path).map_err(|no| no.to_string())
+  let mut file = options.open(&temporary)?;
+  let result = (|| -> Result<(), AuthError> {
+    file.write_all(&serde_json::to_vec(value)?)?;
+    file.sync_all()?;
+    fs::rename(&temporary, path).map_err(AuthError::from)
   })();
   if result.is_err() {
-    let _ = fs::remove_file(temporary);
+    drop(fs::remove_file(&temporary));
   }
   result
 }
 
-fn random() -> Result<String, String> {
+fn random() -> Result<String, AuthError> {
   let mut bytes = [0; 32];
-  getrandom::fill(&mut bytes).map_err(|no| no.to_string())?;
+  getrandom::fill(&mut bytes)?;
   Ok(URL_SAFE_NO_PAD.encode(bytes))
 }
 
@@ -206,137 +294,106 @@ fn held(config: &Path) -> Option<Credential> {
   read(&config.join("codex.json")).or_else(borrowed)
 }
 
+/// The credential that serves now, or that a refresh can renew.
+fn usable(path: &Path) -> Option<Credential> {
+  held(path).filter(|one| one.expires > now() + 60_000 || one.refresh.is_some())
+}
+
 /// The current sign-in state. This view starts no sign-in and makes no request.
-pub fn status(config: Option<&Path>) -> Status {
+pub fn status(config: Option<&Path>) -> SignIn {
   let path = directory(config);
-  if let Some(flow) = flows().lock().unwrap_or_else(|no| no.into_inner()).get(&path)
-    && flow.status.state != "connected"
+  if let Some(flow) = flows().get(&path)
+    && flow.status != SignIn::Connected
   {
     return flow.status.clone();
   }
-  let connected = held(&path).is_some_and(|one| {
-    (one.expires > now() + 60_000 || one.refresh.is_some())
-      && read::<Catalog>(&path.join("codex.models.json"))
-        .is_some_and(|catalog| catalog.account == one.account && !catalog.models.is_empty())
+  let connected = usable(&path).is_some_and(|one| {
+    read::<Catalog>(&path.join("codex.models.json"))
+      .is_some_and(|catalog| catalog.account == one.account && !catalog.models.is_empty())
   });
-  Status {
-    state: if connected { "connected" } else { "disconnected" }.to_owned(),
-    ..Status::default()
-  }
+  if connected { SignIn::Connected } else { SignIn::Disconnected }
 }
 
 /// Cancel a sign-in that has not finished. Saved credentials stay available.
 pub fn cancel(config: Option<&Path>) {
-  let path = directory(config);
-  if let Some(flow) = flows()
-    .lock()
-    .unwrap_or_else(|no| no.into_inner())
-    .get_mut(&path)
-    .filter(|flow| ["waiting", "connecting"].contains(&flow.status.state.as_str()))
-  {
+  if let Some(flow) = flows().get_mut(&directory(config)).filter(|flow| flow.status.running()) {
     flow.canceled.send_replace(true);
-    flow.status = Status { state: "canceled".to_owned(), ..Status::default() };
+    flow.status = SignIn::Canceled;
   }
 }
 
-fn update(path: &Path, canceled: &watch::Receiver<bool>, status: Status) {
+fn update(path: &Path, canceled: &watch::Receiver<bool>, status: SignIn) {
   if *canceled.borrow() {
     return;
   }
-  if let Some(flow) = flows().lock().unwrap_or_else(|no| no.into_inner()).get_mut(path) {
+  if let Some(flow) = flows().get_mut(path) {
     flow.status = status;
   }
 }
 
 pub(super) fn models(config: Option<&Path>) -> Vec<Listing> {
   let path = directory(config);
-  if flows()
-    .lock()
-    .unwrap_or_else(|no| no.into_inner())
-    .get(&path)
-    .is_some_and(|flow| flow.status.state == "needs-login")
-  {
+  if flows().get(&path).is_some_and(|flow| flow.status == SignIn::NeedsLogin) {
     return Vec::new();
   }
   let Some(credential) = held(&path) else { return Vec::new() };
   read::<Catalog>(&path.join("codex.models.json"))
     .filter(|one| one.account == credential.account)
-    .map(|one| one.models)
-    .unwrap_or_default()
+    .map_or_else(Vec::new, |one| one.models)
 }
 
 pub(super) fn needs_login(path: &Path) {
-  let mut flows = flows().lock().unwrap_or_else(|no| no.into_inner());
-  if flows
-    .get(path)
-    .is_some_and(|flow| ["waiting", "connecting"].contains(&flow.status.state.as_str()))
-  {
+  let mut all = flows();
+  if all.get(path).is_some_and(|flow| flow.status.running()) {
     return;
   }
-  flows.insert(
+  all.insert(
     path.to_owned(),
-    Flow {
-      status: Status {
-        state: "needs-login".to_owned(),
-        url: None,
-        message: Some("Sign in to Codex again from Providers.".to_owned()),
-      },
-      canceled: watch::channel(false).0,
-    },
+    Flow { status: SignIn::NeedsLogin, canceled: watch::channel(false).0 },
   );
 }
 
-pub(super) fn failed(path: &Path, failure: &Failure) {
-  if failure.login {
+pub(super) fn failed(path: &Path, failure: &AuthError) {
+  if failure.login() {
     needs_login(path);
   }
 }
 
 /// Refresh an account's model list when it is more than five minutes old. This never starts a browser sign-in.
-pub fn refresh(config: Option<&Path>) -> Result<Status, String> {
+pub fn refresh(config: Option<&Path>) -> Result<SignIn, AuthError> {
   let path = directory(config);
   let status = status(config);
-  if ["waiting", "connecting", "needs-login"].contains(&status.state.as_str()) {
+  if status.running() || status == SignIn::NeedsLogin {
     return Ok(status);
   }
-  let Some(credential) =
-    held(&path).filter(|one| one.expires > now() + 60_000 || one.refresh.is_some())
-  else {
-    return Ok(Status { state: "disconnected".to_owned(), ..Status::default() });
-  };
+  let Some(credential) = usable(&path) else { return Ok(SignIn::Disconnected) };
   let fresh = read::<Catalog>(&path.join("codex.models.json")).is_some_and(|one| {
     one.account == credential.account && now().saturating_sub(one.fetched) < 300_000
   });
-  if fresh && status.state != "failed" {
-    return Ok(Status { state: "connected".to_owned(), ..Status::default() });
+  if fresh && !matches!(status, SignIn::Failed(_)) {
+    return Ok(SignIn::Connected);
   }
   begin(config)
 }
 
-pub(super) async fn credential(path: &Path) -> Result<Credential, Failure> {
-  let held = held(path).ok_or("Sign in to codex from Providers")?;
+pub(super) async fn credential(path: &Path) -> Result<Credential, AuthError> {
+  let held = held(path).ok_or(AuthError::SignInNeeded)?;
   if held.expires > now() + 60_000 {
     return Ok(held);
   }
-  fs::create_dir_all(path).map_err(|no| no.to_string())?;
+  fs::create_dir_all(path)?;
   let path_of_lock = path.join("codex.lock");
-  let _lock = tokio::task::spawn_blocking(move || {
-    let file = File::options()
-      .create(true)
-      .truncate(false)
-      .write(true)
-      .open(path_of_lock)
-      .map_err(|no| no.to_string())?;
-    file.lock().map_err(|no| no.to_string())?;
-    Ok::<_, String>(file)
+  let _lock = tokio::task::spawn_blocking(move || -> Result<File, AuthError> {
+    let file = File::options().create(true).truncate(false).write(true).open(path_of_lock)?;
+    file.lock()?;
+    Ok(file)
   })
-  .await
-  .map_err(|no| no.to_string())??;
-  let held: Credential = read(&path.join("codex.json")).ok_or("Sign in to codex again")?;
+  .await??;
+  let held: Credential = read(&path.join("codex.json")).ok_or(AuthError::SignInAgain)?;
   if held.expires > now() + 60_000 {
     return Ok(held);
   }
-  let refresh = held.refresh.ok_or("Sign in to codex again")?;
+  let refresh = held.refresh.ok_or(AuthError::SignInAgain)?;
   let token =
     token(&[("grant_type", "refresh_token"), ("refresh_token", &refresh), ("client_id", CLIENT)])
       .await?;
@@ -347,20 +404,19 @@ pub(super) async fn credential(path: &Path) -> Result<Credential, Failure> {
 
 #[derive(Deserialize)]
 struct Token {
-  access_token: String,
-  refresh_token: Option<String>,
+  #[serde(rename = "access_token")]
+  access: String,
+  #[serde(rename = "refresh_token")]
+  refresh: Option<String>,
   expires_in: u64,
 }
 
 impl Token {
-  fn credential(self, refresh: Option<String>) -> Result<Credential, String> {
-    let account = account(&self.access_token).ok_or("OpenAI did not return a ChatGPT account")?;
-    let refresh = self
-      .refresh_token
-      .or(refresh)
-      .ok_or("OpenAI did not return a refresh credential. Sign in again.")?;
+  fn credential(self, refresh: Option<String>) -> Result<Credential, AuthError> {
+    let account = account(&self.access).ok_or(AuthError::NoAccount)?;
+    let refresh = self.refresh.or(refresh).ok_or(AuthError::NoRefresh)?;
     Ok(Credential {
-      access: self.access_token,
+      access: self.access,
       refresh: Some(refresh),
       expires: now().saturating_add(self.expires_in.saturating_mul(1000)),
       account,
@@ -368,7 +424,7 @@ impl Token {
   }
 }
 
-async fn token(fields: &[(&str, &str)]) -> Result<Token, Failure> {
+async fn token(fields: &[(&str, &str)]) -> Result<Token, AuthError> {
   let body: String = url::form_urlencoded::Serializer::new(String::new())
     .extend_pairs(fields.iter().copied())
     .finish();
@@ -378,24 +434,14 @@ async fn token(fields: &[(&str, &str)]) -> Result<Token, Failure> {
     .header("content-type", "application/x-www-form-urlencoded")
     .body(body)
     .send()
-    .await
-    .map_err(|no| no.to_string())?;
+    .await?;
   if !response.status().is_success() {
-    let login = matches!(response.status().as_u16(), 400 | 401 | 403);
-    return Err(Failure {
-      message: format!(
-        "OpenAI sign-in failed (HTTP {}). {}",
-        response.status().as_u16(),
-        if login { "Sign in again." } else { "Try again." }
-      ),
-      login,
-    });
+    return Err(AuthError::Rejected { status: response.status().as_u16() });
   }
-  serde_json::from_slice(&response.bytes().await.map_err(|no| no.to_string())?)
-    .map_err(|_| Failure::from("OpenAI returned an invalid sign-in response"))
+  serde_json::from_slice(&response.bytes().await?).map_err(AuthError::InvalidToken)
 }
 
-async fn listed(path: &Path, credential: &Credential) -> Result<(), Failure> {
+async fn listed(path: &Path, credential: &Credential) -> Result<(), AuthError> {
   let response = ReqwestClient::new()
     .get(format!("{API}/models?client_version={CLIENT_VERSION}"))
     .bearer_auth(&credential.access)
@@ -404,125 +450,109 @@ async fn listed(path: &Path, credential: &Credential) -> Result<(), Failure> {
     .header("user-agent", concat!("furb/", env!("CARGO_PKG_VERSION")))
     .timeout(Duration::from_secs(20))
     .send()
-    .await
-    .map_err(|no| no.to_string())?;
+    .await?;
   if !response.status().is_success() {
-    return Err(Failure {
-      message: format!(
-        "OpenAI could not list this account's models (HTTP {}).",
-        response.status().as_u16()
-      ),
-      login: matches!(response.status().as_u16(), 401 | 403),
-    });
+    return Err(AuthError::ListRefused { status: response.status().as_u16() });
   }
-  let bytes = response.bytes().await.map_err(|no| no.to_string())?;
+  let bytes = response.bytes().await?;
   if bytes.len() > 1024 * 1024 {
-    return Err("OpenAI returned a model list that is too large".into());
+    return Err(AuthError::ListTooLarge);
   }
-  #[derive(Deserialize)]
-  struct Response {
-    models: Vec<Listing>,
-  }
-  let mut response: Response =
-    serde_json::from_slice(&bytes).map_err(|_| "OpenAI returned an invalid model list")?;
-  response.models.retain(|one| {
+  let mut listed: Listed = serde_json::from_slice(&bytes).map_err(AuthError::InvalidList)?;
+  listed.models.retain(|one| {
     one.visibility == "list"
       && one.context_window.or(one.max_context_window).is_some_and(|size| size > 0)
   });
-  if response.models.is_empty() {
-    return Err("This ChatGPT account offers no model to furb".into());
+  if listed.models.is_empty() {
+    return Err(AuthError::NoModels);
   }
   save(
     &path.join("codex.models.json"),
-    &Catalog { account: credential.account.clone(), fetched: now(), models: response.models },
+    &Catalog { account: credential.account.clone(), fetched: now(), models: listed.models },
   )
-  .map_err(Failure::from)
 }
 
 /// Start a ChatGPT sign-in, or connect with an existing sign-in. The browser address is returned to the host.
-pub fn begin(config: Option<&Path>) -> Result<Status, String> {
+pub fn begin(config: Option<&Path>) -> Result<SignIn, AuthError> {
   let path = directory(config);
   let retry;
   {
-    let flows = flows().lock().unwrap_or_else(|no| no.into_inner());
-    if let Some(flow) =
-      flows.get(&path).filter(|one| ["connecting", "waiting"].contains(&one.status.state.as_str()))
-    {
+    let all = flows();
+    if let Some(flow) = all.get(&path).filter(|one| one.status.running()) {
       return Ok(flow.status.clone());
     }
-    retry = flows.get(&path).is_some_and(|flow| flow.status.state == "needs-login");
+    retry = all.get(&path).is_some_and(|flow| flow.status == SignIn::NeedsLogin);
   }
   let (stop, canceled) = watch::channel(false);
-  let existing =
-    held(&path).filter(|one| !retry && (one.expires > now() + 60_000 || one.refresh.is_some()));
-  let (status, callback) = if existing.is_some() {
-    (Status { state: "connecting".to_owned(), ..Status::default() }, None)
+  let (status, pending) = if !retry && usable(&path).is_some() {
+    (SignIn::Connecting, None)
   } else {
-    let listener = TcpListener::bind(("127.0.0.1", 1455))
-      .map_err(|_| "Another OpenAI sign-in uses port 1455. Finish it, then try again.")?;
-    listener.set_nonblocking(true).map_err(|no| no.to_string())?;
-    let verifier = random()?;
-    let state = random()?;
-    let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
-    let mut url =
-      url::Url::parse(&format!("{AUTH}/oauth/authorize")).map_err(|no| no.to_string())?;
-    url.query_pairs_mut().extend_pairs([
-      ("response_type", "code"),
-      ("client_id", CLIENT),
-      ("redirect_uri", REDIRECT),
-      ("scope", "openid profile email offline_access"),
-      ("code_challenge", &challenge),
-      ("code_challenge_method", "S256"),
-      ("state", &state),
-      ("id_token_add_organizations", "true"),
-      ("codex_cli_simplified_flow", "true"),
-      ("originator", "furb"),
-    ]);
-    (
-      Status { state: "waiting".to_owned(), url: Some(url.to_string()), message: None },
-      Some((listener, state, verifier)),
-    )
+    let (url, pending) = authorize()?;
+    (SignIn::Waiting { url }, Some(pending))
   };
-  flows()
-    .lock()
-    .unwrap_or_else(|no| no.into_inner())
-    .insert(path.clone(), Flow { status: status.clone(), canceled: stop });
-  runtime().spawn(async move {
-    let result = async {
-      let credential = match callback {
-        Some((listener, state, verifier)) => {
-          let code = callback_code(listener, &state, canceled.clone()).await?;
-          let token = token(&[
-            ("grant_type", "authorization_code"),
-            ("client_id", CLIENT),
-            ("code", &code),
-            ("code_verifier", &verifier),
-            ("redirect_uri", REDIRECT),
-          ])
-          .await?;
-          let credential = token.credential(None)?;
-          if *canceled.borrow() {
-            return Err(Failure::from("Sign-in canceled"));
-          }
-          save(&path.join("codex.json"), &credential)?;
-          credential
-        }
-        None => credential(&path).await?,
-      };
-      listed(&path, &credential).await
-    }
-    .await;
-    let status = match result {
-      Ok(()) => Status { state: "connected".to_owned(), ..Status::default() },
-      Err(error) => Status {
-        state: if error.login { "needs-login" } else { "failed" }.to_owned(),
-        message: Some(error.message),
-        url: None,
-      },
-    };
-    update(&path, &canceled, status);
-  });
+  flows().insert(path.clone(), Flow { status: status.clone(), canceled: stop });
+  runtime().spawn(finish(path, pending, canceled));
   Ok(status)
+}
+
+/// The browser address of a new sign-in, with the port that waits for its callback.
+fn authorize() -> Result<(String, Pending), AuthError> {
+  let listener = TcpListener::bind(("127.0.0.1", 1455)).map_err(AuthError::PortBusy)?;
+  listener.set_nonblocking(true)?;
+  let verifier = random()?;
+  let state = random()?;
+  let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
+  let mut url = url::Url::parse(&format!("{AUTH}/oauth/authorize"))?;
+  url.query_pairs_mut().extend_pairs([
+    ("response_type", "code"),
+    ("client_id", CLIENT),
+    ("redirect_uri", REDIRECT),
+    ("scope", "openid profile email offline_access"),
+    ("code_challenge", &challenge),
+    ("code_challenge_method", "S256"),
+    ("state", &state),
+    ("id_token_add_organizations", "true"),
+    ("codex_cli_simplified_flow", "true"),
+    ("originator", "furb"),
+  ]);
+  Ok((url.to_string(), Pending { listener, state, verifier }))
+}
+
+async fn finish(path: PathBuf, pending: Option<Pending>, canceled: watch::Receiver<bool>) {
+  let status = match signed(&path, pending, &canceled).await {
+    Ok(()) => SignIn::Connected,
+    Err(error) if error.login() => SignIn::NeedsLogin,
+    Err(error) => SignIn::Failed(error.to_string()),
+  };
+  update(&path, &canceled, status);
+}
+
+async fn signed(
+  path: &Path,
+  pending: Option<Pending>,
+  canceled: &watch::Receiver<bool>,
+) -> Result<(), AuthError> {
+  let credential = match pending {
+    Some(Pending { listener, state, verifier }) => {
+      let code = callback_code(listener, &state, canceled.clone()).await?;
+      let token = token(&[
+        ("grant_type", "authorization_code"),
+        ("client_id", CLIENT),
+        ("code", &code),
+        ("code_verifier", &verifier),
+        ("redirect_uri", REDIRECT),
+      ])
+      .await?;
+      let credential = token.credential(None)?;
+      if *canceled.borrow() {
+        return Err(AuthError::Canceled);
+      }
+      save(&path.join("codex.json"), &credential)?;
+      credential
+    }
+    None => credential(path).await?,
+  };
+  listed(path, &credential).await
 }
 
 /// The code of the sign-in that the browser gives back on the callback of furb, awaited on the
@@ -531,11 +561,11 @@ async fn callback_code(
   listener: TcpListener,
   state: &str,
   mut canceled: watch::Receiver<bool>,
-) -> Result<String, String> {
-  let listener = tokio::net::TcpListener::from_std(listener).map_err(|no| no.to_string())?;
+) -> Result<String, AuthError> {
+  let listener = tokio::net::TcpListener::from_std(listener)?;
   let heard = async {
     loop {
-      let (mut stream, _) = listener.accept().await.map_err(|no| no.to_string())?;
+      let (mut stream, _) = listener.accept().await?;
       let mut bytes = [0; 8192];
       let mut count = 0;
       while count < bytes.len() && !bytes[..count].windows(4).any(|part| part == b"\r\n\r\n") {
@@ -543,7 +573,7 @@ async fn callback_code(
         match read.await {
           Ok(Ok(0)) | Err(_) => break,
           Ok(Ok(read)) => count += read,
-          Ok(Err(no)) => return Err(no.to_string()),
+          Ok(Err(no)) => return Err(AuthError::from(no)),
         }
       }
       let text = String::from_utf8_lossy(&bytes[..count]);
@@ -570,19 +600,18 @@ async fn callback_code(
         body.len()
       );
       // The browser shows the answer when it can; the code holds whether or not it does.
-      let _: std::io::Result<()> = stream.write_all(answer.as_bytes()).await;
+      drop(stream.write_all(answer.as_bytes()).await);
       if let Some(code) = code {
         return Ok(code);
       }
       if valid && pairs.contains_key("error") {
-        return Err("OpenAI sign-in was refused".to_owned());
+        return Err(AuthError::Declined);
       }
     }
   };
-  let ended = "OpenAI sign-in was canceled or timed out".to_owned();
   tokio::select! {
-    got = tokio::time::timeout(Duration::from_secs(600), heard) => got.unwrap_or(Err(ended)),
-    _ = canceled.wait_for(|one| *one) => Err(ended),
+    got = tokio::time::timeout(Duration::from_secs(600), heard) => got.unwrap_or(Err(AuthError::Ended)),
+    _ = canceled.wait_for(|one| *one) => Err(AuthError::Ended),
   }
 }
 

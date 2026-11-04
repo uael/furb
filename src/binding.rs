@@ -680,15 +680,19 @@ pub fn codex_auth(action: Option<String>, config: Option<String>) -> Result<Code
   let path = config.map(std::path::PathBuf::from);
   let status = match action.as_deref().unwrap_or("status") {
     "status" => auth::status(path.as_deref()),
-    "start" => auth::begin(path.as_deref()).map_err(Fault::refused)?,
-    "refresh" => auth::refresh(path.as_deref()).map_err(Fault::refused)?,
+    "start" => auth::begin(path.as_deref()).map_err(|no| Fault::refused(no.to_string()))?,
+    "refresh" => auth::refresh(path.as_deref()).map_err(|no| Fault::refused(no.to_string()))?,
     "cancel" => {
       auth::cancel(path.as_deref());
       auth::status(path.as_deref())
     }
     _ => return Err(Fault::refused("Use status, start, refresh or cancel for codex")),
   };
-  Ok(CodexAuthInfo { state: status.state, url: status.url, message: status.message })
+  Ok(CodexAuthInfo {
+    state: status.state().to_owned(),
+    url: status.url().map(str::to_owned),
+    message: status.message().map(str::to_owned),
+  })
 }
 
 /// The levels of effort, from least to most, which an actor names after its model.
