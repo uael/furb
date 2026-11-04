@@ -2,7 +2,7 @@ import type { BoxRenderable, RGBA, TextRenderable } from "@opentui/core";
 import { busy, gist } from "furb/life";
 import { shortenHome, shortenHomes } from "../files.ts";
 import { clip, count, modelName, retryLine } from "../format.ts";
-import { readOnly } from "../reading.ts";
+import { readOnly, sameBuild } from "../reading.ts";
 import { statusLabels, views } from "../session.ts";
 import { theme as c, glyph, markOf, spacing as space, spin, threadTone } from "../theme.ts";
 import { bold, type Part, plain, styled } from "../ui.ts";
@@ -358,7 +358,9 @@ export const chrome = part({
       ...(this.renderer.width < 100 && !this.reader
         ? ([["⌃\\", "sidebar", () => this.toggleSidebar()]] as readonly Offer[])
         : []),
-      ...(w.host.reading ? ([["/new", "Start a new life", () => this.startFrom()]] as readonly Offer[]) : []),
+      ...(w.host.reading && !sameBuild(w.host.reading)
+        ? ([["/new", "Start a new life", () => this.startFrom()]] as readonly Offer[])
+        : []),
       ...(group === "" && w.paused
         ? ([["/wake", "wake the chain", () => this.action("/wake")]] as const)
         : []),
