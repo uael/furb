@@ -447,7 +447,7 @@ def test_an_ask_that_a_worker_leaves_queues_one_follow_up_unless_another_item_ca
   assert [q[0] for q in conductor.queue] == ["later"]
 
 
-def test_a_message_of_the_owner_that_no_ask_names_is_one_notice(conductor: Round) -> None:
+def test_a_message_of_the_owner_that_no_ask_names_is_one_line_of_a_notice(conductor: Round) -> None:
   conductor.owner_asks["A1"] = {"prompt": "prompt1, prompt3", "items": [], "state": "done"}
   conductor.facts_of["chain1"] = [
     ("prompt", "prompt1", "operator", "chain1", "str", "a"),
@@ -457,12 +457,12 @@ def test_a_message_of_the_owner_that_no_ask_names_is_one_notice(conductor: Round
   ]
   conductor.asked()
   conductor.asked()
-  assert conductor.notices() == [
-    "The message prompt2 of the owner holds no ask in owner_asks. Split it into its asks, each with his quote and the items that carry it, before anything else."
-  ]
+  [notice] = conductor.notices()
+  assert "\n- The message prompt2 of the owner holds no ask in owner_asks.\n" in notice
+  assert notice.count("\n- ") == 1
 
 
-def test_an_ask_of_the_owner_that_no_live_item_carries_is_one_notice(conductor: Round) -> None:
+def test_an_ask_of_the_owner_that_no_live_item_carries_is_one_line_of_a_notice(conductor: Round) -> None:
   conductor.owner_asks.update(
     A1={"prompt": "prompt1", "items": [], "state": "missing"},
     A2={"prompt": "prompt2", "items": ["gone"], "state": "partly"},
@@ -473,13 +473,37 @@ def test_an_ask_of_the_owner_that_no_live_item_carries_is_one_notice(conductor: 
   conductor.queue.append(("q", "b", "t"))
   conductor.asked()
   conductor.asked()
-  assert conductor.notices() == [
-    "The ask A1 of the owner (prompt1) is missing, and no item names it. Queue an item for it, or mark it done with the evidence of main, before anything else.",
-    "The ask A2 of the owner (prompt2) is partly, and no item carries it now: its items gone ended. Queue an item for it, or mark it done with the evidence of main, before anything else.",
-  ]
+  [notice] = conductor.notices()
+  assert (
+    "\n- The ask A1 of the owner (prompt1) is missing, and no item names it."
+    "\n- The ask A2 of the owner (prompt2) is partly, and no item carries it now: its items gone ended.\n"
+  ) in notice
+  assert notice.count("\n- ") == 2
   conductor.owner_asks["A2"]["items"].append("again")
   conductor.asked()
-  assert len(conductor.notices()) == 3
+  assert len(conductor.notices()) == 1
+  conductor.end("prompt101", None)
+  conductor.asked()
+  assert len(conductor.notices()) == 2
+  assert "its items gone, again ended" in conductor.notices()[1]
+  assert conductor.notices()[1].count("\n- ") == 1
+
+
+def test_a_round_with_five_uncarried_asks_gives_one_notice_and_the_next_none_while_it_stands_open(conductor: Round) -> None:
+  for i in range(1, 6):
+    conductor.owner_asks[f"A{i}"] = {"prompt": f"prompt{i}", "items": [], "state": "open"}
+  conductor.asked()
+  assert len(conductor.notices()) == 1
+  assert all(f"The ask A{i} of the owner" in conductor.notices()[0] for i in range(1, 6))
+  conductor.owner_asks["A6"] = {"prompt": "prompt6", "items": [], "state": "open"}
+  conductor.asked()
+  assert len(conductor.notices()) == 1
+  conductor.end("prompt101", None)
+  conductor.asked()
+  assert len(conductor.notices()) == 2
+  assert "The ask A6 of the owner" in conductor.notices()[1]
+  assert "The ask A1 of the owner" not in conductor.notices()[1]
+
 
 def test_the_words_of_the_owner_hold_his_messages_and_his_answers_in_order(conductor: Round) -> None:
   conductor.facts_of["chain1"] = [
