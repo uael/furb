@@ -1,24 +1,16 @@
 //! The file of lines, proved where no life reaches it: the line it keeps of an entry, and the record it reads again.
 
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-
-use std::{fs, io::Write, path::PathBuf};
+use std::{fs, io::Write};
 
 use serde_json::json;
 
 use super::{Lines, heads, stamped};
+use crate::testing::Yard;
 use crate::world::{kept, store::Store};
 
 /// A record of its own for one test, which does not stand yet.
-fn place(name: &str) -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-lines-{name}-{}", std::process::id()));
-  let _ = fs::remove_dir_all(&at);
-  fs::create_dir_all(&at).unwrap();
-  at.join("record.jsonl")
+fn place(name: &str) -> Yard {
+  Yard::new(format!("furb-lines-{name}-{}", std::process::id())).within("record.jsonl")
 }
 
 #[test]

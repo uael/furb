@@ -361,7 +361,7 @@ fn the_newer_of_the_cache_and_the_snapshot_holds_for_each_provider() {
 
 #[test]
 fn the_parse_of_the_caches_is_made_again_only_when_a_file_changes() {
-  let root = std::env::temp_dir().join(format!("furb-listed-{}", std::process::id()));
+  let root = crate::testing::Yard::unmade(format!("furb-listed-{}", std::process::id()));
   fs::create_dir_all(&root).unwrap();
   let at = root.join(MODELS);
   fs::write(&at, "{}").unwrap();
@@ -372,7 +372,6 @@ fn the_parse_of_the_caches_is_made_again_only_when_a_file_changes() {
   assert!(!Arc::ptr_eq(&first, &second), "a change of the data of pi-ai is read");
   fs::write(&at, "not json").unwrap();
   assert!(!Arc::ptr_eq(&second, &listed(Some(&at))), "a change of the cache is read");
-  fs::remove_dir_all(&root).unwrap();
 }
 
 #[test]
@@ -411,7 +410,7 @@ fn a_provider_is_offered_when_the_environment_holds_its_credential_and_each_plac
   assert!(offered(&["AWS_PROFILE"], "amazon-bedrock:qwen.qwen3"));
   assert!(!offered(&["GOOGLE_CLOUD_API_KEY"], "google-vertex:gemini-pro"), "Google asks a project");
   assert!(offered(&["GOOGLE_CLOUD_API_KEY", "GOOGLE_CLOUD_PROJECT=p"], "google-vertex:gemini-pro"));
-  let home = std::env::temp_dir().join(format!("furb-adc-{}", std::process::id()));
+  let home = crate::testing::Yard::new(format!("furb-adc-{}", std::process::id()));
   let (root, gcloud) =
     if cfg!(windows) { ("APPDATA", "gcloud") } else { ("HOME", ".config/gcloud") };
   std::fs::create_dir_all(home.join(gcloud)).expect("the folder of gcloud");
@@ -580,7 +579,7 @@ fn an_id_alone_of_the_local_server_whose_part_before_its_colon_is_a_provider_is_
 #[test]
 fn a_first_run_reads_whether_the_claude_command_line_is_signed_in() {
   use std::os::unix::fs::PermissionsExt;
-  let folder = std::env::temp_dir().join(format!("furb-signed-{}", std::process::id()));
+  let folder = crate::testing::Yard::unmade(format!("furb-signed-{}", std::process::id()));
   std::fs::create_dir_all(&folder).expect("a folder for the programs");
   let signed = |name: &str, script: &str| {
     let bin = folder.join(name);
@@ -598,7 +597,6 @@ fn a_first_run_reads_whether_the_claude_command_line_is_signed_in() {
     signed("old", "echo 'unknown command: auth' >&2; exit 1"),
     "a version with no such command passes"
   );
-  let _ = std::fs::remove_dir_all(&folder);
 }
 
 #[test]
@@ -737,7 +735,7 @@ fn a_configured_claude_prefix_reaches_completions_and_search_and_project_setting
 fn an_invalid_claude_command_is_refused_before_it_starts_a_process() {
   use std::fs;
   let root =
-    std::env::temp_dir().join(format!("furb-invalid-claude-command-{}", std::process::id()));
+    crate::testing::Yard::unmade(format!("furb-invalid-claude-command-{}", std::process::id()));
   fs::create_dir_all(root.join(".furb")).unwrap();
   for command in
     [json!([]), json!(""), json!([" "]), json!(12), json!(["claude", 3]), json!(["claude", "\0"])]
@@ -751,13 +749,12 @@ fn an_invalid_claude_command_is_refused_before_it_starts_a_process() {
     let Err(no) = result else { panic!("invalid command {command} was accepted") };
     assert!(no.to_string().contains("claude-cli"), "{no}");
   }
-  fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
 fn a_model_of_a_chat_provider_of_the_settings_takes_the_efforts_that_it_lists_as_a_local_model() {
   use std::fs;
-  let root = std::env::temp_dir().join(format!("furb-chat-efforts-{}", std::process::id()));
+  let root = crate::testing::Yard::unmade(format!("furb-chat-efforts-{}", std::process::id()));
   fs::create_dir_all(root.join(".furb")).unwrap();
   let settings = |models: Value, protocol: &str| {
     let provider =
@@ -801,7 +798,6 @@ fn a_model_of_a_chat_provider_of_the_settings_takes_the_efforts_that_it_lists_as
     };
     assert!(no.to_string().contains("strata"), "{no}");
   }
-  fs::remove_dir_all(root).unwrap();
 }
 
 /// A first turn of a model of the claude command line, which the fake answers with its first reply.
@@ -878,7 +874,7 @@ fn configured_claude_accounts_give_their_token_to_a_turn_and_to_a_search() {
 fn invalid_claude_accounts_are_refused_before_they_start_a_process() {
   use std::fs;
   let root =
-    std::env::temp_dir().join(format!("furb-invalid-claude-accounts-{}", std::process::id()));
+    crate::testing::Yard::unmade(format!("furb-invalid-claude-accounts-{}", std::process::id()));
   fs::create_dir_all(root.join(".furb")).unwrap();
   let one = json!({"name": "a", "token_env": "X"});
   for settings in [
@@ -902,14 +898,12 @@ fn invalid_claude_accounts_are_refused_before_they_start_a_process() {
     let Err(no) = result else { panic!("invalid accounts {settings} were accepted") };
     assert!(no.to_string().contains("claude-cli"), "{no}");
   }
-  fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
 fn the_doctrine_of_a_project_comes_first_then_the_checkout_of_dev_mode_then_the_official_copy_in_the_home()
  {
-  let at = std::env::temp_dir().join(format!("furb-doctrine-{}", std::process::id()));
-  let _ = std::fs::remove_dir_all(&at);
+  let at = crate::testing::Yard::unmade(format!("furb-doctrine-{}", std::process::id()));
   let (project, checkout, home) = (at.join("project"), at.join("checkout"), at.join("home"));
   for one in [&project, &checkout, &home] {
     std::fs::create_dir_all(one).unwrap();
@@ -948,13 +942,12 @@ fn the_doctrine_of_a_project_comes_first_then_the_checkout_of_dev_mode_then_the_
     Some(local),
     "a doctrine of the project prevails"
   );
-  let _ = std::fs::remove_dir_all(&at);
 }
 
 #[test]
 fn the_local_config_of_a_project_wins_over_its_config_for_a_provider() {
   use std::fs;
-  let root = std::env::temp_dir().join(format!("furb-local-config-{}", std::process::id()));
+  let root = crate::testing::Yard::unmade(format!("furb-local-config-{}", std::process::id()));
   fs::create_dir_all(root.join(".furb")).unwrap();
   let local = root.join(".furb/config.local.json");
   let _ = fs::remove_file(&local);
@@ -977,5 +970,4 @@ fn the_local_config_of_a_project_wins_over_its_config_for_a_provider() {
     got.find("strata:other").is_some() && got.find("strata:qwen").is_none(),
     "the local config wins for each field that it gives"
   );
-  fs::remove_dir_all(root).unwrap();
 }

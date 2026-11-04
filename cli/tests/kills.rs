@@ -14,6 +14,9 @@
   reason = "the tests block on the runtime that tokio starts for them"
 )]
 
+#[path = "../../tests/common/yard.rs"]
+mod yard;
+
 #[cfg(test)]
 mod kills {
   use std::{
@@ -65,21 +68,15 @@ mod kills {
   /// claude and its FIFO, the config of the user and the cache of furb, where the daemon listens.
   struct Yard {
     root: PathBuf,
-  }
-
-  impl Drop for Yard {
-    fn drop(&mut self) {
-      fs::remove_dir_all(&self.root).ok();
-    }
+    /// The folder of the yard, which goes with it.
+    _base: super::yard::Yard,
   }
 
   impl Yard {
     fn new() -> Yard {
       static NEXT: AtomicU32 = AtomicU32::new(0);
       let n = NEXT.fetch_add(1, Ordering::Relaxed);
-      let base = std::env::temp_dir().join(format!("fk{}-{n}", std::process::id()));
-      fs::remove_dir_all(&base).ok();
-      fs::create_dir_all(&base).unwrap();
+      let base = super::yard::Yard::new(format!("fk{}-{n}", std::process::id()));
       let root = fs::canonicalize(&base).unwrap();
       for folder in ["work", "fake", "config"] {
         fs::create_dir_all(root.join(folder)).unwrap();
@@ -88,7 +85,7 @@ mod kills {
       let claude = root.join("fake/claude");
       fs::write(&claude, FAKE).unwrap();
       fs::set_permissions(&claude, fs::Permissions::from_mode(0o755)).unwrap();
-      Yard { root }
+      Yard { root, _base: base }
     }
 
     fn life(&self) -> String {

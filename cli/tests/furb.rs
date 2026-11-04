@@ -15,6 +15,8 @@
 
 #[path = "../../tests/common/pipes.rs"]
 mod pipes;
+#[path = "../../tests/common/yard.rs"]
+mod yard;
 
 use std::{
   fs,
@@ -609,10 +611,10 @@ fn ended(mut child: Child) -> std::process::ExitStatus {
 fn furb_host_serves_one_daemon_on_the_machine_and_an_upgrade_takes_its_place() {
   let yard = Yard::new("host");
   // The cache of the yard is too deep for the path of a socket, which macOS bounds at 104 bytes.
-  let cache = std::env::temp_dir().join(format!("fc{}", std::process::id()));
+  let cache = yard::Yard::unmade(format!("fc{}", std::process::id()));
   let host = |words: &[&str]| {
     let mut command = yard.furb(words);
-    command.env("XDG_CACHE_HOME", &cache);
+    command.env("XDG_CACHE_HOME", &*cache);
     command
   };
   let refused = |output: Output| {
@@ -629,5 +631,4 @@ fn furb_host_serves_one_daemon_on_the_machine_and_an_upgrade_takes_its_place() {
   refused(host(&["host"]).output().expect("furb host runs"));
   upgraded.kill().expect("the new daemon ends");
   ended(upgraded);
-  fs::remove_dir_all(&cache).ok();
 }

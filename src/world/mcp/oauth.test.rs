@@ -5,14 +5,9 @@
   clippy::disallowed_methods,
   reason = "debt: a call that blocks: sleep, block_on or try_wait"
 )]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
 #![expect(clippy::redundant_clone, reason = "debt: a clone of a value that is not used again")]
 
-use std::{fs, future::Future, path::PathBuf};
+use std::future::Future;
 
 use reqwest::Client;
 
@@ -20,13 +15,12 @@ use super::{
   Endpoints, Filed, Keychain, Tokens, Vault, authority, challenged, protected, refreshed, store,
   stored,
 };
+use crate::testing::Yard;
 use crate::{ear::reactor, world::mcp::fixture};
 
 /// A directory of its own for one test, and empty.
-fn place(name: &str) -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-mcp-oauth-{name}-{}", std::process::id()));
-  let _ = fs::remove_dir_all(&at);
-  at
+fn place(name: &str) -> Yard {
+  Yard::unmade(format!("furb-mcp-oauth-{name}-{}", std::process::id()))
 }
 
 /// What a work on the reactor came to.
@@ -60,7 +54,8 @@ fn a_challenge_names_the_metadata_of_its_resource_quoted_or_not() {
 
 #[test]
 fn a_file_of_tokens_keeps_each_by_its_key_and_only_the_user_reads_it() {
-  let at = place("file").join("mcp-tokens.json");
+  let yard = place("file");
+  let at = yard.join("mcp-tokens.json");
   let vault = Filed::new(at.clone());
   assert_eq!(vault.get("a"), None);
   vault.put("a", "one").unwrap();
@@ -74,7 +69,7 @@ fn a_file_of_tokens_keeps_each_by_its_key_and_only_the_user_reads_it() {
   assert_eq!(stored(&vault, "s"), Some(held));
   #[cfg(unix)]
   assert_eq!(
-    std::os::unix::fs::PermissionsExt::mode(&fs::metadata(&at).unwrap().permissions()) & 0o777,
+    std::os::unix::fs::PermissionsExt::mode(&std::fs::metadata(&at).unwrap().permissions()) & 0o777,
     0o600
   );
 }

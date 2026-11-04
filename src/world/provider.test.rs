@@ -69,14 +69,12 @@ use super::{
 };
 use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, Text, verbs, world};
 
+use crate::testing::Yard;
 use crate::testing::{block_on, waker};
 
 /// A yard of one test, empty.
-fn yard(name: &str) -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-provider-{name}-{}", std::process::id()));
-  let _ = fs::remove_dir_all(&at);
-  fs::create_dir_all(&at).expect("a yard of the test");
-  at
+fn yard(name: &str) -> Yard {
+  Yard::new(format!("furb-provider-{name}-{}", std::process::id()))
 }
 
 /// A life of the real engine on a provider in a yard of its own, and the ears of the World.
@@ -100,7 +98,7 @@ fn seeing(provider: Provider, gallery: Option<PathBuf>) -> Engine {
 }
 
 /// A life of the real engine on the provider of these models and the ears of the World, in a yard of its own.
-fn life(name: &str, models: Vec<Model>) -> (Engine, PathBuf) {
+fn life(name: &str, models: Vec<Model>) -> (Engine, Yard) {
   let at = yard(name);
   (lived(Provider::new(at.display().to_string(), models)), at)
 }
