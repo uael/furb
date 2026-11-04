@@ -1775,3 +1775,51 @@ fn an_ear_that_ends_after_it_says_still_has_each_saying_heard() {
   let heard: Vec<&str> = facts.iter().filter(|one| one.about() == id).map(Fact::kind).collect();
   assert_eq!(heard, ["wait", "started", "done"]);
 }
+/// Each sandbox that this thread makes from now on, with a turn bound short enough that the replay
+/// of a life of many facts, as a whole, outlasts it.
+fn bounded_short() {
+  crate::sand::BOUND.set(Duration::from_millis(50));
+}
+
+#[test]
+fn a_life_whose_words_each_ran_within_the_bound_replays_and_keeps_its_checkpoint_past_it() {
+  bounded_short();
+  let word = "for i in range(1500):\n  await wait(0)\nclose(8)";
+  let (root, facts) = {
+    let mut first = Lived::new("outlasts", &[word], true).unwrap();
+    let root = first.root();
+    let with = verbs::Prompt { on: on(&root), ..Default::default() };
+    let act = first.engine.prompt(Object::string("int"), with).unwrap();
+    assert_eq!(
+      block_on(act).unwrap().as_ref().as_int(),
+      Some(8),
+      "each word runs within the bound live"
+    );
+    let facts = first.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
+    (root, facts.iter().filter_map(said).collect::<Vec<_>>())
+  };
+  let began = std::time::Instant::now();
+  let mut second = Lived::new("outlasts", &[], false).expect("the replay opens the life");
+  assert!(began.elapsed() > crate::sand::BOUND.get(), "the replay as a whole outlasts the bound");
+  assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
+  assert!(second.engine.stopped().is_none(), "{:?}", second.engine.stopped());
+  let again = second.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
+  let again = again.iter().filter_map(said).collect::<Vec<_>>();
+  // The time and the Kernel say their facts in an order of their own, so the replay holds each
+  // fact, in any order.
+  let mut missing = facts;
+  for one in &again {
+    if let Some(at) = missing.iter().position(|was| was == one) {
+      missing.swap_remove(at);
+    }
+  }
+  assert!(
+    missing.is_empty(),
+    "the replay holds each fact of the record: {:?}",
+    &missing[..missing.len().min(3)]
+  );
+  second.engine.checkpoint().expect("the checkpoint of the life is written whole");
+  let third = Lived::new("outlasts", &[], false).expect("the life goes on from its checkpoint");
+  assert!(third.engine.raised().is_none(), "{:?}", third.engine.raised());
+  assert_eq!(third.root(), root);
+}
