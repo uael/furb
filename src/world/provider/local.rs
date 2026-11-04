@@ -1,4 +1,5 @@
-//! A local server of models: a server that serves the chat completions of OpenAI under `/v1` and lists its models at
+//! A local server of models: a server that serves the chat completions of `OpenAI` under `/v1` and
+//! lists its models at
 //! `/v1/models`, as llama.cpp, LM Studio, Ollama, vLLM and Strata do.
 //!
 //! `FURB_LOCAL_URL` names its address, of http when it names no scheme, with `/v1` at its end or without it and with no
@@ -10,11 +11,12 @@
 //! `max_thinking_tokens` of a config of the project gives, 32768 by default, an eighth of it at the effort `low` and a
 //! quarter at `medium`: past it, the provider asks the model again
 //! with that thought and with its thought turned off, as llama.cpp and vLLM read `enable_thinking` in
-//! `chat_template_kwargs`, so it writes its word at once, and at 0 the provider asks with its thought off from the
-//! first request. Each of its models is named `local:` and the id that the server lists, and costs nothing. It takes
-//! the efforts `off`, `low`, `medium` and `high`: `off` turns its thought off with `enable_thinking` false, and each
-//! other level is the effort of reasoning of OpenAI, `reasoning_effort`, which the server hands the template of its
-//! chat, so the level bounds how long it thinks before each word.
+//! `chat_template_kwargs`, so it writes its word at once, and at 0 the provider asks with its
+//! thought off from the first request. Each of its models is named `local:` and the id that the
+//! server lists, and costs nothing. It takes the efforts `off`, `low`, `medium` and `high`: `off`
+//! turns its thought off with `enable_thinking` false, and each other level is the effort of
+//! reasoning of `OpenAI`, `reasoning_effort`, which the server hands the template of its chat, so
+//! the level bounds how long it thinks before each word.
 //!
 //! A model reads the window that the server gives it: `meta.n_ctx` of llama.cpp or `max_model_len` of vLLM in the list,
 //! or, from a server that gives none there, `default_generation_settings.n_ctx` at `/props` of llama.cpp, the window of
@@ -25,8 +27,6 @@
 //! holds for the process, but for a name of a model that it does not offer, or, for a host that lists the models, a
 //! model for chat with no window, after which the server is asked again once a delay passed. A host that lists the
 //! models waits for the server, five seconds at most and once in each delay while the server does not answer.
-
-#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
 
 use std::{
   error::Error as StdError,
@@ -441,15 +441,15 @@ fn names(name: &str, id: &str) -> bool {
 }
 
 /// The settings that ask a model of a local server again with its thought off, once its thought passed the most of a
-/// turn: no effort of OpenAI, and `enable_thinking` false for the template of its chat.
+/// turn: no effort of `OpenAI`, and `enable_thinking` false for the template of its chat.
 pub(super) fn silenced() -> Map<String, Value> {
   let off = json!({"reasoning_effort": null, "chat_template_kwargs": {"enable_thinking": false}});
   off.as_object().cloned().unwrap_or_default()
 }
 
-/// The efforts that a model of a local server takes, each with what its request says: `off` turns its thought off as
-/// the template of its chat reads it, and each other level is the effort of reasoning of OpenAI, which the server hands
-/// that template.
+/// The efforts that a model of a local server takes, each with what its request says: `off` turns
+/// its thought off as the template of its chat reads it, and each other level is the effort of
+/// reasoning of `OpenAI`, which the server hands that template.
 pub(super) fn efforts() -> Vec<(String, Map<String, Value>)> {
   let off = ("off", json!({"chat_template_kwargs": {"enable_thinking": false}}));
   let levels = ["low", "medium", "high"].map(|level| (level, json!({"reasoning_effort": level})));

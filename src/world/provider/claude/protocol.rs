@@ -3,11 +3,6 @@
 //! lacks it fails the turn. A kind of event, of block or of delta that this does not read is
 //! `Other`, and it is ignored. The reply of a turn is made of these events as they come.
 
-#![expect(
-  clippy::single_match_else,
-  reason = "debt: a match of one arm and else, where if let serves"
-)]
-
 use std::collections::HashMap;
 
 use rig_core::{
@@ -309,27 +304,24 @@ impl<'a> Reply<'a> {
         }
         Whole::Other => None,
       };
-      match &self.streamed {
-        Some(streamed) => {
-          let at = streamed.get(&self.settled).copied();
-          self.settled += 1;
-          if let (Some(at), Some(block)) = (at, block) {
-            self.blocks[at] = block;
-          }
+      if let Some(streamed) = &self.streamed {
+        let at = streamed.get(&self.settled).copied();
+        self.settled += 1;
+        if let (Some(at), Some(block)) = (at, block) {
+          self.blocks[at] = block;
         }
-        None => {
-          let Some(block) = block else { continue };
-          let whole = match &block {
-            Block::Text(text) | Block::Thinking(text, _) => text.clone(),
-          };
-          let at = self.blocks.len();
-          self.opened(match block {
-            Block::Text(_) => Block::Text(String::new()),
-            Block::Thinking(_, signature) => Block::Thinking(String::new(), signature),
-          });
-          self.grew(at, &whole);
-          self.closed(at);
-        }
+      } else {
+        let Some(block) = block else { continue };
+        let whole = match &block {
+          Block::Text(text) | Block::Thinking(text, _) => text.clone(),
+        };
+        let at = self.blocks.len();
+        self.opened(match block {
+          Block::Text(_) => Block::Text(String::new()),
+          Block::Thinking(_, signature) => Block::Thinking(String::new(), signature),
+        });
+        self.grew(at, &whole);
+        self.closed(at);
       }
     }
   }
