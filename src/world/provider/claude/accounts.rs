@@ -54,7 +54,8 @@ pub struct Account {
 }
 
 /// How a new conversation takes its account among those that are not parked.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Switch {
   /// The first account of the list.
   #[default]
