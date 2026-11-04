@@ -27,6 +27,10 @@ pub enum Event {
   Notice(String),
   /// A chain whose queries give another answer now, once each fact that changed it was told.
   Changed(String),
+  /// The life opened again from its checkpoint, on the same thread and for the same readers, with
+  /// the fault that stopped it when one did. Each event after it is of the new open, which tells
+  /// each chain, its turns and each open prompt again as it stood.
+  Reborn(Option<String>),
   /// The end of the life, with the fault that ended it, or none when a client ended it. It is the
   /// last event.
   Ended(Option<String>),

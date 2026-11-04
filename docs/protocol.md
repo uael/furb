@@ -73,7 +73,8 @@ it is not given. The daemon answers requests in any order.
 - A refusal is a frame `refused` with the `id`, or none for a frame that could not be read, the `error` as data, and
   `why`, the text that a person reads.
 - After `attach`, the daemon pushes each event of the life as a frame `event`, with the `life`, the `seq` of the event
-  in the log of the life and the `event`: `fact`, `act`, `text`, `notice`, `changed` or `ended`.
+  in the log of the life and the `event`: `fact`, `act`, `text`, `notice`, `changed`, `reborn` or `ended`. After
+  `reborn`, the life goes on from its checkpoint, and its acts come again as they stand.
 
 ## Views
 

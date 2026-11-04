@@ -37,6 +37,7 @@ pub use crate::{
   ear::{Ear, Heard, Spoken, Step},
   engine::{Act, Engine, Life, Plain, verbs},
   fact::Fact,
+  sand::{bound as sandbox_bound, held as sandbox_held},
   value::{Exit, Fault, Object, ObjectRef, Text},
 };
 

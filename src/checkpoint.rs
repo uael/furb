@@ -20,7 +20,8 @@
 //! holds. A later life boots on the last checkpoint of its record, whatever engine wrote it, as
 //! [`booted`] says, so it replays the checkpoint and the entries after it alone. When a build of
 //! another engine made those entries, the life first keeps the checkpoint that `crossed` gives,
-//! which carries them as data, so it replays none of them.
+//! which carries them as data, so it replays none of them. A host carries so the tail of a life
+//! that a fault stopped, with [`carry`], whatever build made it.
 //!
 //! The checkpoint of the build before the schema holds `entries` in the place of the data: facts
 //! that the journal of any engine replays, and `("reserve", kind, "store", n)`, which stands for
@@ -217,4 +218,5 @@ fn carried(checkpoint: &Object) -> Vec<Object> {
 }
 
 mod tail;
+pub use tail::carry;
 pub(crate) use tail::crossed;

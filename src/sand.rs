@@ -321,11 +321,7 @@ fn count() {
 /// What the sandboxes of the program hold of the memory that bounds them, in bytes: what the counting allocator holds
 /// above the least that the program held when a sandbox began. It is nothing before a sandbox began, and in a
 /// program with no counting allocator. A host reads it from any thread, to warn before the [`bound`].
-#[cfg_attr(
-  not(any(test, feature = "python", feature = "typescript")),
-  expect(dead_code, reason = "only a door and the tests call it")
-)]
-pub(crate) fn held() -> usize {
+pub fn held() -> usize {
   let base = monty_types::BASELINE_MEMORY.load(Ordering::Relaxed);
   if base == usize::MAX {
     return 0;
@@ -334,11 +330,7 @@ pub(crate) fn held() -> usize {
 }
 
 /// The memory at which a sandbox raises a `MemoryError`, in bytes: [`MEMORY`], or what `FURB_SANDBOX_MEMORY` gives.
-#[cfg_attr(
-  not(any(test, feature = "python", feature = "typescript")),
-  expect(dead_code, reason = "only a door and the tests call it")
-)]
-pub(crate) fn bound() -> usize {
+pub fn bound() -> usize {
   memory()
 }
 

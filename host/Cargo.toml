@@ -42,4 +42,12 @@ windows-sys = { version = "0.61", features = [
 ] }
 
 [dev-dependencies]
+# The counting allocator, which the memory of a sandbox needs to be read, in the tests of a rebirth.
+furb = { path = "..", features = ["allocator"] }
 tokio = { version = "1", features = ["rt", "macros", "time"] }
+
+[[test]]
+# The memory of the sandboxes is a count of the whole process, so the test of a rebirth runs alone
+# in a process of its own, which sets the bound of the memory before it starts a thread.
+name = "rebirth"
+harness = false
