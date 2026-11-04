@@ -36,7 +36,7 @@ sys.stdout.write(out)
 sys.exit(code)
 """
 SONNET, OPUS = "claude-cli:sonnet/high", "claude-cli:opus/medium"
-RULED = [{"type": "required_status_checks", "parameters": {"required_status_checks": [{"context": "the hooks"}]}}]
+RULED = [{"type": "required_status_checks", "parameters": {"required_status_checks": [{"context": "the gates"}]}}]
 
 
 @dataclass
@@ -60,7 +60,7 @@ class Refused(Exception):
   pass
 
 
-def raw(n: int, key: str = "", checks: tuple = (("the hooks", "SUCCESS"),), labels: tuple = (), **more: object) -> dict:
+def raw(n: int, key: str = "", checks: tuple = (("the gates", "SUCCESS"),), labels: tuple = (), **more: object) -> dict:
   marks = [*([f"w:{key}"] if key else []), *labels]
   rollup = [
     {"__typename": "CheckRun", "name": name, "status": "COMPLETED" if end else "IN_PROGRESS", "conclusion": end, "startedAt": "2026-11-03T10:00:00Z"}
@@ -228,7 +228,7 @@ def test_the_file_loads_over_a_module_that_holds_the_state_of_the_old_one(tmp_pa
   kept = {name: id(value) for name, value in old.items()}
   got = Round(tmp_path, dict(old))
   assert {name: id(got.ns[name]) for name in old} == kept
-  assert got.cap() == 5
+  assert got.cap() == 6
   assert got.model_of("a") == OPUS
 
 
@@ -240,17 +240,28 @@ def test_an_old_module_that_bound_owner_asks_to_a_function_reads_the_asks_from_t
   assert got.owner_asks == {}
 
 
-def test_cap_is_five_at_most_and_room_counts_live_workers_of_a_family(conductor: Round) -> None:
-  conductor.limits["room"] = {"sonnet": 4, "opus": 4}
-  assert conductor.cap() == 5
+def test_cap_is_ten_at_most_and_room_counts_live_workers_of_a_family(conductor: Round) -> None:
+  conductor.limits["room"] = {"sonnet": 4, "opus": 8}
+  assert conductor.cap() == 10
   for n in range(4):
     conductor.busy(f"w{n}", f"k{n}")
   assert not conductor.room(SONNET)
   assert conductor.room(OPUS)
-  conductor.busy("w4", "k4", OPUS)
+  for n in range(4, 10):
+    conductor.busy(f"w{n}", f"k{n}", OPUS)
   assert not conductor.room(OPUS)
   conductor.end("w0", (1, "r"))
   assert conductor.room(OPUS)
+
+
+def test_a_load_with_no_limits_binds_the_room_of_the_owner_and_caps_at_ten(tmp_path: Path) -> None:
+  got = Round(tmp_path)
+  del got.ns["limits"]
+  exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), got.ns)  # noqa: S102
+  assert got.limits["room"] == {"opus/high": 2, "opus/medium": 2, "sonnet/high": 3, "sonnet/medium": 3}
+  assert got.cap() == 10
+  assert got.GATE == "the gates"
+  assert got.family("claude-cli:opus/high") == "opus/high"
 
 
 def test_staff_hires_queue_then_backlog_in_order_while_the_cap_has_room(conductor: Round) -> None:
@@ -493,7 +504,7 @@ async def test_with_no_ruleset_on_main_the_round_turns_on_no_auto_merge_and_tell
   await conductor.sweep()
   await conductor.sweep()
   assert "pr merge" not in conductor.log()
-  assert conductor.notices() == ["main has no ruleset that requires the check the hooks, so the round turns on no auto-merge and merges no PR."]
+  assert conductor.notices() == ["main has no ruleset that requires the check the gates, so the round turns on no auto-merge and merges no PR."]
 
 
 @POSIX
@@ -513,7 +524,7 @@ async def test_a_pr_of_the_round_that_merged_is_named_in_the_next_notice(conduct
 @JQ
 async def test_a_red_pr_gets_one_order_to_its_live_maker_then_a_fixer_after_owned(conductor: Round) -> None:
   conductor.busy("prompt1", "a")
-  conductor.github(raw(1, "a", checks=(("the hooks", "FAILURE"),), labels=("thread:t",)))
+  conductor.github(raw(1, "a", checks=(("the gates", "FAILURE"),), labels=("thread:t",)))
   await conductor.sweep()
   await conductor.sweep()
   assert [on for _, on in conductor.prompts] == ["chain-a"]
@@ -543,7 +554,7 @@ async def test_a_red_pr_with_no_live_maker_gets_at_most_two_fixers_for_a_head_th
 @JQ
 async def test_a_red_main_sends_no_fixer_to_a_red_pr_and_tells_once(conductor: Round) -> None:
   conductor.ends["a"] = []
-  conductor.github(raw(1, "a", checks=(("the hooks", "FAILURE"),)), main="failure")
+  conductor.github(raw(1, "a", checks=(("the gates", "FAILURE"),)), main="failure")
   await conductor.sweep()
   await conductor.sweep()
   assert conductor.hired == []
@@ -556,7 +567,7 @@ async def test_a_red_main_sends_no_fixer_to_a_red_pr_and_tells_once(conductor: R
 @JQ
 async def test_a_pr_whose_checks_still_run_is_no_red_pr(conductor: Round) -> None:
   conductor.ends["a"] = []
-  conductor.github(raw(1, "a", checks=(("the hooks", ""), ("ruff", "FAILURE"))))
+  conductor.github(raw(1, "a", checks=(("the gates", ""), ("ruff", "FAILURE"))))
   await conductor.sweep()
   assert conductor.prs[1]["state"] == "running"
   assert conductor.hired == []

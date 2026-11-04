@@ -32,7 +32,7 @@ from furb.engine import (
 CONDUCTING = """The round conducts the workers of the repository in one loop. It is a way for the work, not the work: a rule that a worker, a tool or GitHub can hold does not live here.
 The round is autonomous, by the ruling of the owner on 10-31: "#916 should have never been queued. Make it clear in conductor doc that it's designed to be autonomous. The word of the owner (me) can be asynchronous". So it asks the owner nothing and waits for nothing of his. His word comes by his labels on a PR, his comments and his rulings, which change what the round does from then on.
 Put each item in queue as (key, brief, thread), in the order of the work, the hard work first by prompt266, or in backlog to wait behind queue, then await conduct(). Each round runs tend(), sweep(), review(), staff(), asked() and align(), then waits every seconds or until a worker ends.
-1. staff() hires the first item of queue, then of backlog, whose after[key] all merged, whose model has room, and whose files no live worker and no open PR of the round holds, while fewer than cap() workers live: at most MOST, by prompt30, and limits["room"][family] for each model family.
+1. staff() hires the first item of queue, then of backlog, whose after[key] all merged, whose model has room, and whose files no live worker and no open PR of the round holds, while fewer than cap() workers live: at most MOST, by prompt574, and limits["room"][family] for each model family.
 2. The files of an item are areas[key], which you write, and a test file holds no item. An item with no areas holds no file. Each item that waits is one line of the next notice, with its cause, once.
 3. A worker runs on a chain thread/key, at model_of(key), and an edit or a fix in a workspace {repo}-wN of its own. Its brief starts with the asks of the owner that its item carries. kinds[key] is edit (a PR), audit (a register in scratch and no PR) or fix (one red PR), and efforts[key] names its model.
 4. A worker that ends gives its report whole in the next notice. A worker that ends with no PR is a decision, and its notice wakes you.
@@ -46,12 +46,11 @@ A step that fails is one notice, and the round goes on at the next round. The wh
 Each act of the round goes through quietly(verb, ...), so its end wakes nobody: you hear only a notice. Make each act that you do not await the same way.
 A change of the round loads as the whole file, run again as a rung: each name of the state binds with setdefault and keeps its value."""
 
-LUNA = "codex:gpt-6-luna/medium"
-MOST = 5
+MOST = 10
 OWNED = 900.0
 ALIGN_EVERY = 8
 OWNER = "uael"
-GATE = "the hooks"
+GATE = "the gates"
 FAILS = ("FAILURE", "ERROR", "TIMED_OUT", "STARTUP_FAILURE", "ACTION_REQUIRED", "CANCELLED")
 GREEN = ("SUCCESS", "SKIPPED", "NEUTRAL")
 HOLDS = ("hold", "hold:owner-review", "owner-merge", "paused")
@@ -63,7 +62,14 @@ ROW = re.compile(r"^\|\s*(D\d+)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|\s*([^|]*?)\
 TESTS = re.compile(r"(^|/)(tests?|__tests__)/|\.test\.[a-z]+$|_test\.[a-z]+$|(^|/)test_[^/]+\.py$|(^|/)conftest\.py$")
 
 # The module of a chain may hold these names already, with values: a name binds its default only when it is not there.
-limits: dict[str, Any] = globals().setdefault("limits", {"room": {"gpt-6-luna": MOST}, "fixer": LUNA, "models": {"editor": LUNA, "audit": LUNA}})
+limits: dict[str, Any] = globals().setdefault(
+  "limits",
+  {
+    "room": {"opus/high": 2, "opus/medium": 2, "sonnet/high": 3, "sonnet/medium": 3},
+    "fixer": "claude-cli:sonnet/medium",
+    "models": {"editor": "claude-cli:sonnet/high", "audit": "claude-cli:opus/high", "lead": "claude-cli:opus/medium"},
+  },
+)
 queue: list[tuple[str, str, str]] = globals().setdefault("queue", [])
 backlog: list[tuple[str, str, str]] = globals().setdefault("backlog", [])
 working: dict[str, str] = globals().setdefault("working", {})

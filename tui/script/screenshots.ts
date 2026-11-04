@@ -1,7 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, delimiter, join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { busy, type Exit } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
@@ -24,15 +23,9 @@ import { click, end, find, highlighting, home, mount, watch } from "./stage.ts";
 const conductor = resolve(import.meta.dir, "..", "fixtures", "conductor.jsonl");
 // The model of the demo writes slowly, so that its work stays in progress while a capture shows it. The session runs
 // in a worker, which reads the environment once, as it starts.
-// The gallery finds no model: no claude command line on its PATH, no key, and no local server, so that the first run
+// The gallery finds no model: no claude command line, no key, and no local server, so that the first run
 // of a real life shows the check of the setup as a new machine does. The demo needs no model.
 const bare = {
-  PATH: (process.env.PATH ?? "")
-    .split(delimiter)
-    .filter(
-      (folder) => folder && !existsSync(join(folder, process.platform === "win32" ? "claude.exe" : "claude")),
-    )
-    .join(delimiter),
   FURB_CLAUDE_BIN: "",
   FURB_LOCAL_URL: "",
   ...Object.fromEntries(
