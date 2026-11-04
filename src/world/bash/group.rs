@@ -15,6 +15,10 @@ pub(crate) struct Lead {
 
 /// The command set to join a group of its own, which a watch leads on Unix, or on Windows set to
 /// open no window.
+#[cfg_attr(
+  windows,
+  expect(clippy::unnecessary_wraps, reason = "only a watch of Unix can fail to start")
+)]
 pub(crate) fn grouped(command: &mut Command) -> std::io::Result<Lead> {
   #[cfg(unix)]
   {
@@ -71,6 +75,13 @@ impl Group {
   /// The group of a command that just started in the group of its lead. On Windows the job takes
   /// the command before its shell has read a word, since the shell starts slower than the job takes
   /// it, and it ends every process it holds when it closes.
+  #[cfg_attr(
+    windows,
+    expect(
+      clippy::needless_pass_by_value,
+      reason = "the lead of Unix moves its watch into the group"
+    )
+  )]
   pub(crate) fn of(child: &Child, lead: Lead) -> std::io::Result<Self> {
     let gone = || std::io::Error::other("the command is over already");
     #[cfg(unix)]
