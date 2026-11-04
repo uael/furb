@@ -64,7 +64,8 @@ pub async fn upgrade(local: &Local, settings: Settings) -> Result<(), DaemonErro
     Err(TransportError::Dial { .. }) => (Vec::new(), None),
     Err(no) => return Err(no.into()),
   };
-  let listener = local.listen().await?;
+  let listener =
+    if asker.is_some() { local.listen_after_handover().await? } else { local.listen().await? };
   // The daemon that ran closes its windows once this peer is gone, so each window dials again
   // when this daemon listens.
   drop(asker);

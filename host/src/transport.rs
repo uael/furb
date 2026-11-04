@@ -63,6 +63,15 @@ impl Local {
   }
 }
 
+impl Local {
+  /// The transport listening in the place of a daemon that handed its lives over: that daemon still
+  /// holds a peer, and a pipe of Windows keeps its name while a peer of it stands, so no first
+  /// instance is asked for.
+  pub async fn listen_after_handover(&self) -> Result<Listener, TransportError> {
+    local::succeed(&self.folder).await.map(Listener)
+  }
+}
+
 impl Listener {
   pub async fn accept(&mut self) -> Result<Accepted, TransportError> {
     self.0.accept().await
