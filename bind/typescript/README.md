@@ -156,10 +156,14 @@ drifts.
 
 ## Work that waits
 
-`session.pending` names the work that an earlier life left, which waits for a wake that this life says, by the kind of
-each act, as `engine.pending()` finds it: among each act that the outside started and did not end, and the acts that
-made it, each prompt, rung, command and wait that is not done and that no pause holds. `session.resume()` wakes each
-chain that holds some, and an act that a wake puts to the outside again is pending no more. The engine reads the
+A session that does work goes on from the tip of its record: as it opens, it puts the work that an earlier life left
+to the outside again with no wake, so the model is asked each reply of it again, each wait and each prompt to the
+operator of it waits again, and each command of it ends as interrupted. `session.pending` names the work that an
+earlier life left and that still waits for a wake, by the kind of each act, as `engine.pending()` finds it: among each
+act that the outside started and did not end, and the acts that made it, each prompt, rung, command and wait that is
+not done and that no pause holds. That is none in a session that does work, and the work of the record in an
+inspection. `session.resume()` wakes each chain that holds some, and an act that a wake puts to the outside again is
+pending no more. The engine reads the
 pending work off the transcripts, so the session asks it again only after a pause, a wake, or a start or a done of
 an act of that work, and keeps what it gave until then.
 

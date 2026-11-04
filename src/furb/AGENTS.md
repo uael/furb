@@ -195,7 +195,9 @@ meanings. The entry of such a name here gives only its form in the engine.
   string, a list of plain, or a table from a string to plain.
 - drift: an act that, made again, does not agree with the record.
 - pending: what the record shows started and not done when boot returns: a command, a wait, a prompt to the operator
-  or a reply that the outside took, which the life holds with no fact until a wake that the life says.
+  or a reply that the outside took, which the life holds with no fact until a wake that the life says; the opening of
+  a life that does work, in `src/life.rs`, says that wake at the tip for each act that no pause holds and no crash
+  loop parked, so a resume goes on from the state of the tip.
 - extension: python that extends the engine from a rung: its word, which defines its names, and, for one that a host
   gives a life, its life word, which starts its work; an official one may have an ear of the World that answers the
   questions that its word defines.

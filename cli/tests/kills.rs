@@ -1,8 +1,8 @@
 //! `furb host` ended by a signal at each moment of the work of a life, then started again: the
 //! kill matrix of #591, which proves D8 of #983 on the daemon. After each kill, the life opens
 //! on its record with no drift and with its module as it stood, no model answers a turn twice,
-//! no command runs twice, a reply that was asked is answered, no process of the life outlives
-//! the daemon, and the open replays at most `TAIL` facts after the last checkpoint.
+//! no command runs twice, a reply that was asked is answered with no wake, no process of the
+//! life outlives the daemon, and the open replays at most `TAIL` facts after the last checkpoint.
 //!
 //! A scripted claude stands in for the models. Each process of it, and each command that holds
 //! the life at a moment, holds the write end of the FIFO `lifeline`, so the test knows that no
@@ -354,16 +354,10 @@ mod kills {
       value
     }
 
-    /// Each act that waits for a wake, woken.
-    async fn woken(&mut self) {
-      let Answer::Values(pending) = self.ask(Verb::Pending { life: self.life.clone() }).await
-      else {
-        panic!("no pending work")
-      };
-      for one in pending {
-        let act = one[0].as_str().unwrap().to_owned();
-        assert_eq!(self.ask(Verb::Wake { life: self.life.clone(), act }).await, Answer::Done);
-      }
+    /// That no act waits for a wake, since the open put each act that the kill cut to the outside.
+    async fn unheld(&mut self) {
+      let pending = self.ask(Verb::Pending { life: self.life.clone() }).await;
+      assert_eq!(pending, Answer::Values(Vec::new()), "the open left work that waits for a wake");
     }
   }
 
@@ -454,7 +448,7 @@ mod kills {
       lifeline.ended().await;
       fs::remove_file(yard.fake("hold")).unwrap();
       let (_daemon, mut window) = reopened(&yard).await;
-      window.woken().await;
+      window.unheld().await;
       assert!(window.done(&prompt).await.is_string(), "the reply that was asked is answered");
       assert_eq!(yard.answered(), 1);
     }
@@ -471,7 +465,7 @@ mod kills {
       lifeline.ended().await;
       fs::remove_file(yard.fake("hold")).unwrap();
       let (_daemon, mut window) = reopened(&yard).await;
-      window.woken().await;
+      window.unheld().await;
       assert!(window.done(&prompt).await.is_string(), "the reply that streamed is answered");
       assert_eq!(yard.answered(), 1);
     }
@@ -498,13 +492,17 @@ mod kills {
     for signal in SIGNALS {
       let (yard, mut lifeline, daemon, mut window) = begun().await;
       yard.words(&[&held(&lifeline, "bash")]);
-      window.prompt("run it").await;
+      let prompt = window.prompt("run it").await;
       lifeline.heard("up").await;
       daemon.killed(signal).await;
       lifeline.ended().await;
-      reopened(&yard).await;
+      let (_daemon, mut window) = reopened(&yard).await;
+      // The open ends the command that the kill cut as interrupted, with no wake, and the model
+      // reads that end in the one turn that it is asked after.
+      window.unheld().await;
+      assert!(window.done(&prompt).await.is_string(), "the model goes on after the command");
       assert_eq!(yard.lines("out.txt"), ["bash"]);
-      assert_eq!(yard.answered(), 1);
+      assert_eq!(yard.answered(), 2);
     }
   }
 
