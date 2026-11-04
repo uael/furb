@@ -205,8 +205,9 @@ The suite drives the engine through its public API alone, end to end, from the m
   values: names, entries of `sand.record`, results through `engine.peek`, turns through `engine.turns(on=root)`,
   and the calls of the doubles. It reads a fact by position, as the contract declares it, and never weakens an
   assertion to pass: a sentence the engine fails stays red until the engine, or the sentence, is right.
-- A test of speed compares two times that it measures in one run, and takes the least of several runs of each. A bound
-  in seconds fails on a machine under load.
+- A test of speed compares two times that it measures in one run, and takes the least of several runs of each, or
+  better counts the work that the code does, which no load changes. A bound in seconds fails on a machine under load.
+  A test of a process that a timeout ends gives it a limit that a loaded machine cannot cross.
 - A helper that only one file needs lives in that file. A helper that several files need lives in
   `test/conftest.py`, and one that only the suites of the extensions need lives in `extensions/conftest.py`.
   A test folder of an extension takes no `conftest.py`: it shadows the module `conftest` that `extensions/conftest.py`
