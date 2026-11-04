@@ -9,6 +9,7 @@ use std::{
   collections::{HashSet, VecDeque},
   future::poll_fn,
   hash::{DefaultHasher, Hash, Hasher},
+  path::PathBuf,
   sync::Arc,
   task::Poll,
   thread,
@@ -34,6 +35,7 @@ use tokio::{
 };
 
 use crate::{
+  changes::journal,
   ears::ears,
   error::LifeError,
   event::{Event, Seq},
@@ -290,8 +292,9 @@ async fn lives(
   told: &UnboundedSender<Event>,
 ) -> Option<String> {
   let record = opening.record.clone().filter(|_| opening.keeps());
+  let journal = || record.as_deref().map(|one| (PathBuf::from(&opening.directory), journal(one)));
   loop {
-    let engine = match opening.clone().open(ears(told.clone())).await {
+    let engine = match opening.clone().open(ears(told.clone(), journal())).await {
       Ok((engine, _)) => engine,
       Err(fault) => return Some(fault.to_string()),
     };
