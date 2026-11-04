@@ -23,7 +23,7 @@ async def test_the_order_of_the_record_is_what_puts_an_entry_back_in_its_place()
   assert over == root
   assert [one[1] for one in said(again, "prompt")] == [said(log, "prompt")[0][1]]
   assert engine.peek(said(log, "prompt")[0][1]) == 1
-  facts = [(e[0][0], e[0][1], *e[0][3:]) for e in sand.record if e[0][0] != "started" and not engine.question(e[0])]
+  facts = [(e[0][0], e[0][1], *e[0][3:]) for e in sand.record if not engine.question(e[0])]
   heard = [(a[0], a[1], *a[3:]) for a in again if a[2] == "journal" and a[0] != "keep"]
   assert [a for a in heard if not engine.question(a)] == facts != []
 
