@@ -6,10 +6,12 @@ hear by, so no name of them stands in the globals of the engine. Every fact is a
 """
 
 import asyncio
+import atexit
 import json
 import os
 import re
 import shlex
+import shutil
 import sys
 import tempfile
 from collections.abc import Generator, Sequence
@@ -32,6 +34,18 @@ CONFIG = Path(tempfile.mkdtemp(prefix="furb-config-"))
 process and each process that it starts: a provider, an extension or a memory file in the config directory of the
 machine changes no test. A test that needs a config of the user writes it in a directory of its own."""
 os.environ["FURB_CONFIG_DIR"] = str(CONFIG)
+
+
+@atexit.register
+def gone() -> None:
+  """The config directory of the process goes when the process ends, on a pass and on a failure, unless the env var
+  `FURB_KEEP_YARDS` is set, so that a failure can still be read there."""
+  if os.environ.get("FURB_KEEP_YARDS") is not None:
+    sys.stderr.write(f"FURB_KEEP_YARDS keeps {CONFIG}\n")
+  else:
+    shutil.rmtree(CONFIG, ignore_errors=True)
+
+
 ENGINE = vars(furb.python)
 """ENGINE is the module of the engine of this interpreter, whose names the Kernel and the gate read."""
 HERE = Path(__file__).resolve().parent
