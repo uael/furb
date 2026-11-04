@@ -36,7 +36,9 @@ use crate::{
 
 /// A directory of its own for one test, and empty.
 fn place(name: &str) -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-life-{name}-{}", std::process::id()));
+  static MADE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+  let n = MADE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+  let at = std::env::temp_dir().join(format!("furb-life-{name}-{}-{n}", std::process::id()));
   let _ = fs::remove_dir_all(&at);
   fs::create_dir_all(&at).unwrap();
   at
