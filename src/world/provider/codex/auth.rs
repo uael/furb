@@ -44,7 +44,7 @@ pub enum SignIn {
   },
   Connecting,
   Connected,
-  NeedsLogin,
+  NeedsLogin(String),
   Failed(String),
   Canceled,
 }
@@ -57,7 +57,7 @@ impl SignIn {
       Self::Waiting { .. } => "waiting",
       Self::Connecting => "connecting",
       Self::Connected => "connected",
-      Self::NeedsLogin => "needs-login",
+      Self::NeedsLogin(_) => "needs-login",
       Self::Failed(_) => "failed",
       Self::Canceled => "canceled",
     }
@@ -74,8 +74,7 @@ impl SignIn {
   /// What to tell the operator when the sign-in needs him or failed.
   pub fn message(&self) -> Option<&str> {
     match self {
-      Self::NeedsLogin => Some(AGAIN),
-      Self::Failed(message) => Some(message),
+      Self::NeedsLogin(message) | Self::Failed(message) => Some(message),
       _ => None,
     }
   }
@@ -333,7 +332,7 @@ fn update(path: &Path, canceled: &watch::Receiver<bool>, status: SignIn) {
 
 pub(super) fn models(config: Option<&Path>) -> Vec<Listing> {
   let path = directory(config);
-  if flows().get(&path).is_some_and(|flow| flow.status == SignIn::NeedsLogin) {
+  if flows().get(&path).is_some_and(|flow| matches!(flow.status, SignIn::NeedsLogin(_))) {
     return Vec::new();
   }
   let Some(credential) = held(&path) else { return Vec::new() };
@@ -349,7 +348,7 @@ pub(super) fn needs_login(path: &Path) {
   }
   all.insert(
     path.to_owned(),
-    Flow { status: SignIn::NeedsLogin, canceled: watch::channel(false).0 },
+    Flow { status: SignIn::NeedsLogin(AGAIN.to_owned()), canceled: watch::channel(false).0 },
   );
 }
 
@@ -363,7 +362,7 @@ pub(super) fn failed(path: &Path, failure: &AuthError) {
 pub fn refresh(config: Option<&Path>) -> Result<SignIn, AuthError> {
   let path = directory(config);
   let status = status(config);
-  if status.running() || status == SignIn::NeedsLogin {
+  if status.running() || matches!(status, SignIn::NeedsLogin(_)) {
     return Ok(status);
   }
   let Some(credential) = usable(&path) else { return Ok(SignIn::Disconnected) };
@@ -481,7 +480,7 @@ pub fn begin(config: Option<&Path>) -> Result<SignIn, AuthError> {
     if let Some(flow) = all.get(&path).filter(|one| one.status.running()) {
       return Ok(flow.status.clone());
     }
-    retry = all.get(&path).is_some_and(|flow| flow.status == SignIn::NeedsLogin);
+    retry = all.get(&path).is_some_and(|flow| matches!(flow.status, SignIn::NeedsLogin(_)));
   }
   let (stop, canceled) = watch::channel(false);
   let (status, pending) = if !retry && usable(&path).is_some() {
@@ -521,7 +520,7 @@ fn authorize() -> Result<(String, Pending), AuthError> {
 async fn finish(path: PathBuf, pending: Option<Pending>, canceled: watch::Receiver<bool>) {
   let status = match signed(&path, pending, &canceled).await {
     Ok(()) => SignIn::Connected,
-    Err(error) if error.login() => SignIn::NeedsLogin,
+    Err(error) if error.login() => SignIn::NeedsLogin(error.to_string()),
     Err(error) => SignIn::Failed(error.to_string()),
   };
   update(&path, &canceled, status);

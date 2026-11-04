@@ -157,7 +157,7 @@ fn a_sign_in_shows_the_words_that_the_world_shows() {
     SignIn::Waiting { url: url.clone() },
     SignIn::Connecting,
     SignIn::Connected,
-    SignIn::NeedsLogin,
+    SignIn::NeedsLogin("again".to_owned()),
     SignIn::Failed("no".to_owned()),
     SignIn::Canceled,
   ];
@@ -166,7 +166,7 @@ fn a_sign_in_shows_the_words_that_the_world_shows() {
     ["disconnected", "waiting", "connecting", "connected", "needs-login", "failed", "canceled"]
   );
   assert_eq!(states[1].url(), Some(url.as_str()));
-  assert_eq!(states[4].message(), Some("Sign in to Codex again from Providers."));
+  assert_eq!(states[4].message(), Some("again"));
   assert_eq!(states[5].message(), Some("no"));
   assert_eq!(states[3].message(), None);
 }
