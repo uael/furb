@@ -16,10 +16,31 @@ A transport has two parts: a dialer, which reaches the daemon, and an identity, 
 - The identity of a local peer is the login of the user, and it has the role to write.
 - A second daemon cannot listen where a daemon listens. A socket that no daemon answers is stale, and gives its place.
 
+### The tailnet
+
+The daemon also listens on the address of the machine on the tailnet of Tailscale when `host.json`, in the config
+folder of furb (`~/.config/furb` by default), turns it on. WireGuard encrypts each frame between two machines.
+
+```json
+{"tailnet": {"tcp": 7860, "websocket": 7861}, "roles": {"alice@github": "write", "bob@github": "read"}}
+```
+
+- `tailnet` gives the port of each transport. The daemon listens by TCP, by WebSocket, or both, on the first address
+  that Tailscale gives the machine, IPv4 before IPv6. With no `tailnet`, the daemon listens on the machine alone.
+- The identity of a peer is the login that the local API of Tailscale gives for its address. `roles` gives each login
+  its role, and the daemon closes the peer of a login that it does not name, before its hello.
+- The daemon reads `host.json` when it starts. A change takes effect at the next start or upgrade.
+- The daemon finds the local API on the socket of `tailscaled`, or on the port of the app for macOS from the
+  standalone download. It does not find the app of the App Store.
+- Plain TCP listens only on loopback or on the tailnet, `100.64.0.0/10` and `fd7a:115c:a1e0::/48`, since no other
+  network encrypts the frames.
+
 ## Framing
 
-- Each frame is one JSON object and a line feed, in each direction. A blank line is no frame.
-- A frame holds at most 16 MiB. A frame past the bound gets a refusal, and the daemon closes the peer.
+- Each frame is one JSON object and a line feed, in each direction. A blank line is no frame. On WebSocket, each
+  frame is one text message, with no line feed.
+- A frame holds at most 16 MiB. A frame past the bound gets a refusal, and the daemon closes the peer. A message of
+  WebSocket past the bound breaks the stream.
 - A frame that the daemon cannot read gets a refusal with no id, and the peer stays.
 
 ## The hello
