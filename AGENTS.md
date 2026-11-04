@@ -11,7 +11,7 @@ link to that folder.
 The crate at the root, `furb`, runs the same file in monty, a python interpreter written in rust, behind an async
 API of its own:
 
-- `src/lib.rs` says what the crate gives: `Engine`, whose methods are the verbs of the contract, which `build.rs`
+- `src/lib.rs` says what the crate gives: `Engine`, whose methods are the verbs of the contract, which `build/verbs.rs`
   makes from the contract, and `Ear`, the one trait of an ear, which a host writes as a generator of rust with `ear`.
 - `src/world/` holds the ears of the World that the crate writes, one file for each concern: the files, the commands,
   the pages of the web, the client of the MCP servers, the time, the store of the record, the log of a life, the reader of a record with no life, the

@@ -11,6 +11,7 @@ readme = "README.md"
 # doctrine, and the examples. The rest of the repository is other packages and their tests.
 include = [
   "/build.rs",
+  "/build/*.rs",
   "/src/**",
   "/extensions/*/SKILL.md",
   "/extensions/*/*.py",
