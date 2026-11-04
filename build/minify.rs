@@ -42,6 +42,23 @@ impl Line<'_> {
     )
   }
 
+  /// The line as a module that the parser takes alone: a header gets a body, and a line that only
+  /// follows another gets the statement that it follows, so its program is the one it has in the
+  /// engine.
+  fn alone(&self) -> String {
+    let text = self.text();
+    let body = if matches!(self.parts.last(), Some((TokenKind::Colon, _))) { "pass" } else { "" };
+    match self.parts.first().map(|(kind, _)| kind) {
+      Some(TokenKind::Elif | TokenKind::Else) => format!("if 0:pass\n{text}{body}"),
+      Some(TokenKind::Except | TokenKind::Finally) => format!("try:pass\n{text}{body}"),
+      Some(TokenKind::Case) => format!("match 0:\n {text}{body}"),
+      Some(TokenKind::At) => format!("{text}\ndef f():pass"),
+      Some(TokenKind::Try) => format!("{text}{body}\nfinally:pass"),
+      Some(TokenKind::Match) if !body.is_empty() => format!("{text}\n case 0:pass"),
+      _ => format!("{text}{body}"),
+    }
+  }
+
   /// The line as the prompt writes it: the parts with a space only where two would run together,
   /// and a pattern of a case without the parentheses around it, which change nothing when a colon
   /// or a guard follows them.
@@ -144,15 +161,17 @@ pub(crate) fn minified(source: &str) -> String {
   let parsed = parse_module(source).expect("the engine parses");
   let program = ComparableModModule::from(parsed.syntax());
   let mut lines = logical(source, parsed.tokens());
-  // Each pair of parentheses goes, one after the other, when the program without it is the same
-  // program.
-  for at in 0..lines.len() {
+  // Each pair of parentheses goes, one after the other, when its line without it is the same
+  // program. A cut changes nothing outside its line, so only that line is parsed.
+  for line in &mut lines {
+    let Ok(alone) = parse_module(&line.alone()) else { continue };
+    let program = ComparableModModule::from(alone.syntax());
     let mut open = 0;
-    while open < lines[at].parts.len() {
-      if lines[at].parts[open].0 == TokenKind::Lpar {
+    while open < line.parts.len() {
+      if line.parts[open].0 == TokenKind::Lpar {
         let mut depth = 0;
         let close = open
-          + lines[at].parts[open..]
+          + line.parts[open..]
             .iter()
             .position(|(kind, _)| {
               depth += match kind {
@@ -163,13 +182,13 @@ pub(crate) fn minified(source: &str) -> String {
               depth == 0
             })
             .expect("a line closes each parenthesis that it opens");
-        let mut fewer = lines.clone();
-        fewer[at].parts.remove(close);
-        fewer[at].parts.remove(open);
-        if parse_module(&laid(&fewer).join("\n"))
+        let mut fewer = line.clone();
+        fewer.parts.remove(close);
+        fewer.parts.remove(open);
+        if parse_module(&fewer.alone())
           .is_ok_and(|one| ComparableModModule::from(one.syntax()) == program)
         {
-          lines = fewer;
+          *line = fewer;
           continue;
         }
       }
