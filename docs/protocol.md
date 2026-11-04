@@ -114,8 +114,9 @@ once it listens. A second daemon refuses to start there.
   for each write of a file, with its `path`, the text `before` and `after` it, its `act`, and `made` when the write
   made the file. A window reads it to show and to undo what each write changed.
 - A holder keeps a life: each window that attached it, and each pin, by the name of its holder. Work that runs holds
-  nothing. A life with no holder for 30 seconds writes its checkpoint and ends, and `list` gives it as not `open`
-  from then on. An `open` of a life that ends waits for its end, then opens it again from its checkpoint.
+  nothing. A life with no holder for the grace of the daemon, 30 seconds unless `furb host --grace <seconds>` says
+  otherwise, writes its checkpoint and ends, and `list` gives it as not `open` from then on. An `open` of a life
+  that ends waits for its end, then opens it again from its checkpoint.
 - `detach` lets go of the window that says it alone, as `/end` does, and a window whose peer leaves is detached.
 - `furb host upgrade` serves the daemon of a new build in the place of the daemon that runs, which has no takeover.
   The new daemon says `handover`. The daemon that runs writes the checkpoint of each life, ends it, stops to listen
