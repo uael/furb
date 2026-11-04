@@ -141,9 +141,10 @@ pub(super) async fn spawned(
 }
 
 /// The shell of a command, awaited by one task of the runtime that gives its code, so the shell
-/// is reaped as it exits, whether the command still waits for it or dropped before.
-pub(super) fn reaped(mut child: Child) -> JoinHandle<Option<i32>> {
-  runtime().spawn(async move { child.wait().await.ok().and_then(coded) })
+/// is reaped as it exits, whether the command still waits for it or dropped before. An error of the
+/// wait is given, not read as an exit with no code.
+pub(super) fn reaped(mut child: Child) -> JoinHandle<std::io::Result<Option<i32>>> {
+  runtime().spawn(async move { child.wait().await.map(coded) })
 }
 
 /// The code of an exit, and for a command that a signal ended, 128 and the number of the signal, as

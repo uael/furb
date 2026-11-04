@@ -352,6 +352,7 @@ enum Cut {
   Stopped,
   Unread(Unread),
   Unslain(std::io::Error),
+  Unwaited(std::io::Error),
 }
 
 /// How a command exited: the code of its shell, and whether its timeout ended it.
@@ -372,7 +373,7 @@ enum Phase {
 /// signal that cannot reach the group ends it with that fault, and the timeout of the command ends
 /// its processes at any time.
 async fn watch(
-  shell: JoinHandle<Option<i32>>,
+  shell: JoinHandle<std::io::Result<Option<i32>>>,
   streams: impl Future<Output = Result<(), Unread>>,
   expired: impl Future<Output = ()>,
   feeding: impl Future<Output = ()>,
@@ -389,7 +390,8 @@ async fn watch(
       biased;
       _ = &mut stopped => return Err(Cut::Stopped),
       got = &mut shell, if matches!(phase, Phase::Running) => {
-        phase = Phase::Draining { status: got.ok().flatten(), until: Instant::now() + DRAIN };
+        let status = got.map_err(std::io::Error::other).and_then(|waited| waited).map_err(Cut::Unwaited)?;
+        phase = Phase::Draining { status, until: Instant::now() + DRAIN };
       }
       read = &mut streams => read.map_err(Cut::Unread)?,
       () = &mut expired => group.slay().map_err(Cut::Unslain)?,
@@ -444,6 +446,10 @@ async fn ran(
     Err(Cut::Stopped) => return None,
     Err(Cut::Unread(no)) => {
       return failed(&says, &about, Fault::refused(format!("{shown} failed: {no}")));
+    }
+    Err(Cut::Unwaited(no)) => {
+      let why = format!("{shown} failed: the wait on its shell failed: {no}");
+      return failed(&says, &about, Fault::refused(why));
     }
     Err(Cut::Unslain(no)) => {
       let why = format!("{shown} outlived its timeout and could not be ended: {no}");
