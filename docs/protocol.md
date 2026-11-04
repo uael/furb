@@ -42,6 +42,8 @@ folder of furb (`~/.config/furb` by default), turns it on. WireGuard encrypts ea
   that Tailscale gives the machine, IPv4 before IPv6. With no `tailnet`, the daemon listens on the machine alone.
 - The identity of a peer is the login that the local API of Tailscale gives for its address. `roles` gives each login
   its role, and the daemon closes the peer of a login that it does not name, before its hello.
+- `stall` gives the seconds after which the daemon tells that a life with an open act and no new fact stalled, as
+  the section on attach says. With no `stall`, the bound is 1200 seconds.
 - The daemon reads `host.json` when it starts. A change takes effect at the next start or upgrade.
 - The daemon finds the local API on the socket of `tailscaled`, or on the port of the app for macOS from the
   standalone download. It does not find the app of the App Store.
@@ -152,6 +154,13 @@ it is not given. The daemon answers requests in any order.
   brought back from its checkpoint hears the life whole, and hears no fact twice.
 - After each `attach` and `detach`, the daemon pushes to each window of the life a frame `presence` with the `life`
   and its `peers`, each window that is attached now. Presence is no fact of the record.
+- The daemon watches each life that it holds, from outside the life: no word and no ear of the life runs the watch.
+  When a life holds an open act, a run of a word, a reply of a model or a command, and says no fact for the bound of
+  a stall, 20 minutes unless `stall` in `host.json` gives other seconds, the daemon pushes to each window of the life
+  a frame `stalled` with the `life`, its open `acts`, each with its `act`, its `kind` and its `chain`, and the
+  `notice` that a window shows as it stands. It also sends the notice to the root chain of the life as a prompt of
+  `None`, so that its actor wakes. It tells nothing more until a fact of an act that its message did not make, and a
+  new stall after that fact. A stall is no fact of the record.
 
 ## The daemon
 

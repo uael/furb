@@ -1832,6 +1832,34 @@
             "life": {
               "type": "string"
             },
+            "acts": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Open"
+              }
+            },
+            "notice": {
+              "type": "string"
+            },
+            "frame": {
+              "type": "string",
+              "const": "stalled"
+            }
+          },
+          "required": [
+            "frame",
+            "life",
+            "acts",
+            "notice"
+          ],
+          "description": "A life that holds open acts and said no fact for the bound of the daemon, pushed once to each\nof its windows by the watch of the daemon, which no word of the life runs: each open act, and\nthe notice that a window shows as it stands."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
             "ask": {
               "type": "integer",
               "format": "uint64",
@@ -3030,6 +3058,26 @@
         "message"
       ],
       "description": "One follow-up that waits on a chain: its entry, which the window that queued it chose, the shape\nthat its prompt wants, its message, and why its send failed, when it did. A follow-up that\nfailed holds the queue of its chain until the operator takes it out."
+    },
+    "Open": {
+      "type": "object",
+      "properties": {
+        "act": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "chain": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "act",
+        "kind",
+        "chain"
+      ],
+      "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
   "x-protocol": 1

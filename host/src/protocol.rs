@@ -365,6 +365,10 @@ pub enum Frame {
   Event { life: String, seq: Seq, event: Event },
   /// Who is attached to a life now, pushed to each of its windows after each attach and detach.
   Presence { life: String, peers: Vec<Peer> },
+  /// A life that holds open acts and said no fact for the bound of the daemon, pushed once to each
+  /// of its windows by the watch of the daemon, which no word of the life runs: each open act, and
+  /// the notice that a window shows as it stands.
+  Stalled { life: String, acts: Vec<Open>, notice: String },
   /// A request of a model of a life that the peer answers: its number, and the request with the
   /// actor, the chain, the messages and the settings.
   Ask { life: String, ask: u64, request: Value },
@@ -411,6 +415,15 @@ pub enum Answer {
   Presence(Vec<Peer>),
   /// The lives that a daemon gave at its handover.
   Handed(Vec<Handed>),
+}
+
+/// An act that stays open in a life that stalled: its name, its kind, and the chain that it stands
+/// in.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Open {
+  pub act: String,
+  pub kind: String,
+  pub chain: String,
 }
 
 /// A life that a daemon gave at its handover: its record, its folder, and the holder of each pin.

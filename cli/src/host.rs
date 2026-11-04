@@ -1,12 +1,13 @@
 //! `furb host`: the daemon of this machine, which holds each life by its record, at one place in
 //! the cache of furb, as `furb-host` serves it. The file `host.json` of the config folder of furb
-//! turns on the daemon on the tailnet, and gives each login of the network its role.
+//! turns on the daemon on the tailnet, gives each login of the network its role, and gives the
+//! bound of a stall.
 
-use std::time::Duration;
+use std::{path::Path, time::Duration};
 
 use furb::{extension::Places, life::Opening, world};
 use furb_host::{
-  DaemonError, Settings, Tailnet,
+  DaemonError, STALL, Settings, Tailnet,
   access::Config,
   run,
   transport::{Local, LocalApi, Tailscale},
@@ -28,7 +29,11 @@ pub(crate) fn serve(grace: Duration, upgrading: bool) -> Result<(), String> {
   let folder = cache.join("host");
   let door = Some(folder.join(DOOR));
   let host = Some(folder.clone());
-  let settings = Settings { opening: Opening::default(), grace, tailnet: tailnet()?, door, host };
+  let path = Places::here().config.join("host.json");
+  let config = Config::load(&path).map_err(|no| no.to_string())?;
+  let stall = config.stall.map_or(STALL, Duration::from_secs);
+  let tailnet = tailnet(&path, config)?;
+  let settings = Settings { opening: Opening::default(), grace, stall, tailnet, door, host };
   let local = Local::new(&folder);
   let runtime = runtime::Builder::new_multi_thread().enable_all().build();
   let runtime = runtime.map_err(|no| format!("the daemon has no runtime: {no}"))?;
@@ -47,10 +52,9 @@ pub(crate) fn serve(grace: Duration, upgrading: bool) -> Result<(), String> {
 /// its token.
 const DOOR: &str = "window.json";
 
-/// The daemon on the tailnet, when `host.json` turns it on.
-fn tailnet() -> Result<Option<Tailnet>, String> {
-  let path = Places::here().config.join("host.json");
-  let Config { tailnet, roles } = Config::load(&path).map_err(|no| no.to_string())?;
+/// The daemon on the tailnet, when the settings of `host.json` at a path turn it on.
+fn tailnet(path: &Path, config: Config) -> Result<Option<Tailnet>, String> {
+  let Config { tailnet, roles, .. } = config;
   let Some(ports) = tailnet else { return Ok(None) };
   let api = LocalApi::find().ok_or_else(|| {
     format!("{} turns on the tailnet, and no Tailscale runs on this machine", path.display())
