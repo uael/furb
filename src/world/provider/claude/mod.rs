@@ -1726,9 +1726,10 @@ fn patience() -> Duration {
 
 /// The command line of this machine: the one `FURB_CLAUDE_BIN` names, or the first program named claude on the
 /// PATH, in the local programs of the home, or, on macOS, in the newest version of Claude Desktop.
+/// A `FURB_CLAUDE_BIN` that is set and empty names none, and the machine is searched no more.
 pub(super) fn located() -> Option<PathBuf> {
-  if let Some(bin) = env::var_os("FURB_CLAUDE_BIN").filter(|one| !one.is_empty()) {
-    return Some(bin.into());
+  if let Some(bin) = env::var_os("FURB_CLAUDE_BIN") {
+    return Some(bin).filter(|one| !one.is_empty()).map(PathBuf::from);
   }
   let mut folders: Vec<PathBuf> =
     env::split_paths(&env::var_os("PATH").unwrap_or_default()).collect();

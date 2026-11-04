@@ -55,6 +55,8 @@ async function opened(role: "read" | "write" = "write") {
   const app = new App(screen.renderer, session, { quit() {}, workspaces: library });
   const said: ViewEvent[] = [];
   app.viewEvents = (event) => said.push(event);
+  // The end of a load of the parts draws the dock again, and a new input would lose its focus in a test.
+  await app.partsReady;
   const tree = (version: number, node = kit, on = session.selected): Tree => ({
     viewer: "v1",
     slot: { slot: "dock", on },
