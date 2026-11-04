@@ -1846,6 +1846,26 @@
           "properties": {
             "event": {
               "type": "string",
+              "const": "reborn"
+            },
+            "data": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "event",
+            "data"
+          ],
+          "description": "The life opened again from its checkpoint, on the same thread and for the same readers, with\nthe fault that stopped it when one did. Each event after it is of the new open, which tells\neach chain, its turns and each open prompt again as it stood."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
               "const": "ended"
             },
             "data": {

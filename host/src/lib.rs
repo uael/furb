@@ -16,6 +16,7 @@ mod error;
 mod event;
 mod life;
 pub mod protocol;
+mod rebirth;
 mod serve;
 pub mod transport;
 pub mod view;

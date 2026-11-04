@@ -39,7 +39,8 @@ API of its own:
   whatever engine wrote it, and replays the entries after it alone when its own engine made them. When a build of
   another engine or of another version made them, the life first writes at the tip a checkpoint that carries them as
   data, as `src/checkpoint/tail.rs` says: each chain keeps its turns and its open prompts, and is told each name of its
-  module that a word of that tail changed, which it lost.
+  module that a word of that tail changed, which it lost. `checkpoint::carry` gives that checkpoint for a tail of any
+  build, which a host keeps after a fault stopped the life of that tail.
 - `src/snapshot.rs` holds the snapshot of a life beside its record: the session of the sandbox that monty dumps and
   what the engine holds of the ears, which a later life on the same record and build opens from with no replay.
 - `src/engine.rs` opens a life in the sandbox: it loads the engine, the sheet and the Kernel, each in a namespace of its
@@ -68,6 +69,10 @@ API of its own:
 - `host/` is `furb-host`, the third package of the workspace of the crate, on the public API of `furb` alone. Its
   `Life::spawn` opens a life on a thread of its own, which owns the engine, and gives a `LifeHandle` that any thread
   holds: it says a command to the life and reads the events of the life in order, from any place of its log. The
+  thread writes the checkpoint of a life that keeps its record at its end, and opens the life again from it for the
+  same handles when its sandbox holds half of its memory bound or when it said a tail of facts, as
+  `host/src/rebirth.rs` says. After a fault that stops the sandbox, it carries the tail of the record as data and
+  opens from it, since a replay would run again the word that the fault cut. The
   crate holds the one list of the ears of the host that each life hears: the console of the operator, and the ear
   that tells each fact as events. `protocol` holds the one protocol of the daemon, a `Verb` and a `Frame` of JSON
   lines with the version `PROTOCOL`, `transport` the socket or the pipe of the machine behind a `Dialer` and an
