@@ -63,6 +63,10 @@ impl Store for Sqlite {
   fn sync(&mut self) -> Result<(), Fault> {
     Ok(())
   }
+
+  fn room(&self) -> Option<(&Path, u64)> {
+    super::room(&self.path)
+  }
 }
 
 /// Each entry of the database at a path, in the order of its rows, read with no lease and changed in nothing, one row

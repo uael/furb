@@ -702,6 +702,7 @@ def bash(
   It runs until it ends, until its timeout or until a cancel: the World is the one that ends it, at the timeout it reads off the act as at a cancel, since the World is the one running it, and the engine says nothing to make it.
   A pause stops no command: it runs on, the World says it done when it ends, and its ear tells its exit at the wake.
   Its close tells what its stdout shows, and what its stderr shows when that stream has a show of its own that is no hidden one, so a merged command tells no stderr.
+  Of a stream whose show picks more than LARGEST // 8 characters, its close tells the first LARGEST // 16 and the last LARGEST // 16 around a line that says how many it picks, as ... (2100000 chars), so the streams that it tells hold at most LARGEST bytes besides those lines, while its Exit holds them whole, and the model narrows its show or reads a door of the command.
   The stdout of a command without a show is told as TAIL, which is the span of its last 250 lines.
   The World refuses a write to the door bash1/stdout or bash1/stderr, and a write to bash1/stdin once the command ended or was cancelled, once its stdin is closed, as a stdin of text is from the start, or once a crash cut the command.
   The World asks a command whether its stderr flows into its stdout, and the command answers from what its verb was given.

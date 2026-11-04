@@ -214,20 +214,12 @@ impl Store for Refusing {
 
 #[test]
 fn a_stop_message_that_failed_to_reach_the_operator_is_said_again_at_the_next_pass() {
-  use std::task::Context;
-
-  use crate::{
-    ear::{Heard, Step},
-    fact::Fact,
-    testing::waker,
-  };
-
   let (_, mut ear) = keeping(Refusing).unwrap();
   let wake = waker();
   let mut cx = Context::from_waker(&wake);
   let keep = || Fact::says("keep", "", [Object::string("journal"), facts()[0].clone()]);
   assert!(matches!(ear.resume(Heard::Born, &mut cx), Step::Wait(_)));
-  let mut asked = |ear: &mut Box<dyn crate::ear::Ear>, answer: Result<Object, Fault>| {
+  let mut asked = |ear: &mut Box<dyn Ear>, answer: Result<Object, Fault>| {
     let Step::Call(call) = ear.resume(Heard::Fact(keep()), &mut cx) else {
       panic!("a pass that finds the record stopped tells the operator")
     };
@@ -244,4 +236,122 @@ fn a_stop_message_that_failed_to_reach_the_operator_is_said_again_at_the_next_pa
   assert_eq!(first, second);
   // The second send went, so the next pass says nothing.
   assert!(matches!(ear.resume(Heard::Fact(keep()), &mut cx), Step::Wait(_)));
+}
+
+use std::{cell::Cell, rc::Rc, task::Context};
+
+use crate::{
+  ear::{Ear, Heard, Step},
+  fact::Fact,
+  testing::waker,
+};
+
+/// A file of lines whose disk the test fills and empties: a keep and a sync fail while it is full,
+/// and its room is what the test gives.
+struct Disk {
+  lines: Lines,
+  space: Rc<Space>,
+}
+
+/// What the test makes of the disk: whether it is full, and the bytes that it still takes.
+struct Space {
+  full: Cell<bool>,
+  free: Cell<u64>,
+}
+
+impl Store for Disk {
+  fn entries(&mut self) -> Result<Vec<Object>, Fault> {
+    self.lines.entries()
+  }
+
+  fn keep(&mut self, entry: crate::value::ObjectRef<'_>) -> Result<(), Fault> {
+    if self.space.full.get() {
+      return Err(Fault::refused("No space left on device (os error 28): the record"));
+    }
+    self.lines.keep(entry)
+  }
+
+  fn sync(&mut self) -> Result<(), Fault> {
+    if self.space.full.get() {
+      return Err(Fault::refused("No space left on device (os error 28): the record"));
+    }
+    self.lines.sync()
+  }
+
+  fn room(&self) -> Option<(&Path, u64)> {
+    Some((Path::new("/the/folder"), self.space.free.get()))
+  }
+}
+
+/// The record at a path of its own on a disk with room, the ear that keeps it, born, and the disk.
+fn disk(name: &str) -> (PathBuf, Box<dyn Ear>, Rc<Space>) {
+  let path = place(name, "record.jsonl");
+  let space = Rc::new(Space { full: Cell::new(false), free: Cell::new(u64::MAX) });
+  let store = Disk { lines: Lines::open(&path).unwrap(), space: Rc::clone(&space) };
+  let (_, mut ear) = keeping(store).unwrap();
+  let wake = waker();
+  assert!(matches!(ear.resume(Heard::Born, &mut Context::from_waker(&wake)), Step::Wait(_)));
+  (path, ear, space)
+}
+
+/// One pass of the ear on the keep of an entry: the message that it tells the operator, which
+/// goes, or nothing.
+fn pass(ear: &mut Box<dyn Ear>, entry: &Object) -> Option<String> {
+  let wake = waker();
+  let mut cx = Context::from_waker(&wake);
+  let keep = Fact::says("keep", "", [Object::string("journal"), entry.clone()]);
+  match ear.resume(Heard::Fact(keep), &mut cx) {
+    Step::Wait(_) => None,
+    Step::Call(call) => {
+      assert_eq!(call.verb, "prompt");
+      let message = call.args[1].as_ref().as_str().unwrap().to_owned();
+      assert!(matches!(
+        ear.resume(Heard::Answer(Ok(Object::string("prompt1"))), &mut cx),
+        Step::Wait(_)
+      ));
+      Some(message)
+    }
+    _ => panic!("a pass of the ear keeps, tells or waits"),
+  }
+}
+
+#[test]
+fn a_record_on_a_full_disk_tells_the_operator_once_and_takes_each_entry_in_order_once_the_disk_has_room()
+ {
+  let (path, mut ear, space) = disk("full");
+  let entries = facts();
+  space.full.set(true);
+  let first = pass(&mut ear, &entries[0]).expect("the first keep that fails tells the operator");
+  assert!(first.contains("cannot be written: No space left on device"), "{first}");
+  assert_eq!(pass(&mut ear, &entries[1]), None, "the operator knows already");
+  assert!(kept(&path).unwrap().is_empty());
+  space.full.set(false);
+  // The end of a run keeps each entry that waits and syncs them, which ends the fault.
+  ear.ran().unwrap();
+  let again = pass(&mut ear, &entries[2])
+    .expect("the record that takes the entries again tells the operator");
+  assert!(again.contains("is written again"), "{again}");
+  assert_eq!(shown(&kept(&path).unwrap()), shown(&entries), "each entry, in order, once");
+}
+
+#[test]
+fn a_record_on_a_disk_that_is_almost_full_tells_the_operator_once_with_its_folder_and_the_space_left()
+ {
+  let (path, mut ear, space) = disk("low");
+  let entries = facts();
+  space.free.set(5_000_000);
+  let low = pass(&mut ear, &entries[0]).expect("a disk under the bound tells the operator");
+  assert!(low.contains("almost full: /the/folder has 5 MB left"), "{low}");
+  assert_eq!(pass(&mut ear, &entries[1]), None, "the operator knows already");
+  space.free.set(3 << 30);
+  assert_eq!(pass(&mut ear, &entries[2]), None, "a disk with room again tells nothing");
+  space.free.set(5_000_000);
+  let again =
+    pass(&mut ear, &entries[0]).expect("a disk that falls under the bound again tells again");
+  assert_eq!(again, low);
+  assert_eq!(
+    kept(&path).unwrap().len(),
+    4,
+    "the disk was never full, so each entry landed at once"
+  );
 }

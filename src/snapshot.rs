@@ -35,7 +35,8 @@ use crate::{
   engine::Table,
   sand::Sand,
   value::{Object, hex},
-  wire, world,
+  wire,
+  world::{self, free},
 };
 
 /// The version of the form of a snapshot.
@@ -44,18 +45,6 @@ const VERSION: u64 = 3;
 /// How many times its size the disk must hold free for a snapshot to be written: the new snapshot stands beside the old
 /// one until it takes its name, and the record and the log must still grow.
 const ROOM: u64 = 2;
-
-/// The bytes that a process may still write on the disk that holds a folder, none when the disk does not say.
-#[cfg(unix)]
-fn free(folder: &Path) -> Option<u64> {
-  let stat = rustix::fs::statvfs(folder).ok()?;
-  stat.f_bavail.checked_mul(stat.f_frsize)
-}
-
-#[cfg(not(unix))]
-fn free(_: &Path) -> Option<u64> {
-  None
-}
 
 /// Whether a snapshot of a size fits on a disk with this much free. A disk that does not say is taken to hold it.
 fn fits(room: Option<u64>, size: usize) -> bool {

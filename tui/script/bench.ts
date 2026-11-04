@@ -12,7 +12,8 @@
  * the ratios of 150 pairs, after a first batch of 20 pairs that warms the code of the kind and counts not. In the long
  * life it measures too the first frame, from the open of the life to its first frame, once cold and twice warm, and
  * the frames while the feed scrolls and a command streams a line of output each frame at the target rate of the
- * renderer, each round after a measure of the renderer with nothing to show, and how much memory a process of its own
+ * renderer, with the time from a key that the operator presses ten times each second to the first frame that begins
+ * after it, each round after a measure of the renderer with nothing to show, and how much memory a process of its own
  * holds once it opened the life. It takes the best of the warm first frames and the round that draws the most of the
  * frames of its empty renderer, since other work of the machine makes a measure worse and
  * never better. The memory stands on Linux alone, where the resident size of the process counts the pages that it
@@ -26,7 +27,9 @@
  *
  * It fails when the warm first frame takes 32 paces or more, when the renderer draws fewer than 95 in each hundred of
  * the frames that it draws with nothing to show, when the 95th percentile of the frames takes a pace or more, or
- * longer than a frame at the target rate, or when a new fact of a kind costs in the long life more than 2 ms, and its
+ * longer than a frame at the target rate, when the 95th percentile of the keys waits longer than that budget of a
+ * frame and one frame at the target rate, since a key waits for the next frame and no more, whatever the view has to
+ * draw again, or when a new fact of a kind costs in the long life more than 2 ms, and its
  * pairs cost in the long life more than twice what they cost in the short life. FURB_BENCH_JSON names a file that
  * takes one line of the measures of each run, and FURB_BENCH_FACTS sets about how many facts the long life holds.
  * A local bench takes a lock that serializes the benches of all worktrees, prints the load average, and refuses when
@@ -72,6 +75,8 @@ const FLOOR = 2;
 const FRAME = 1000 / fps;
 /** The steps of a round, one for each frame at the target rate: three seconds. */
 const STEPS = fps * 3;
+/** A round presses a key once in each count of its steps. */
+const KEYED = 6;
 const ROUNDS = 3;
 /** The pairs of new facts of each kind that warm the code of the kind and count not, and the pairs that count. */
 const WARM = 20;
@@ -330,13 +335,27 @@ step();`,
   const frames: number[] = [];
   const stamp = () => frames.push(performance.now());
   screen.renderer.on("frame", stamp);
+  // A key waits for the first frame that begins after it, which shows it.
+  const keys: number[] = [];
+  const waiting: { after: number; at: number }[] = [];
+  const shown = ({ frameId }: { frameId: number }) => {
+    while (waiting[0] && frameId > waiting[0].after)
+      keys.push(performance.now() - (waiting.shift()?.at ?? 0));
+  };
+  screen.renderer.on("frame", shown);
   const began = performance.now();
   for (let step = 0; step < STEPS; step++) {
     app.scroll.scrollBy(step < STEPS / 2 ? -12 : 12);
+    if (step % KEYED === KEYED / 2) {
+      waiting.push({ after: screen.renderer.frameId, at: performance.now() });
+      screen.mockInput.pressKey("x");
+    }
     await Bun.sleep(Math.max(0, began + (step + 1) * FRAME - performance.now()));
   }
   const took = performance.now() - began;
   screen.renderer.off("frame", stamp);
+  screen.renderer.off("frame", shown);
+  app.composer.setText("");
   await writer.exited;
   add(record, [
     "done",
@@ -345,7 +364,7 @@ step();`,
     { is: "Exit", code: 0, stdout: { is: "Text", content: "" }, stderr: { is: "Text", content: "" } },
   ]);
   const times = screen.renderer.getStats().frameTimes.slice(skip);
-  return { rate: (frames.length * 1000) / took, times };
+  return { rate: (frames.length * 1000) / took, times, keys };
 }
 
 /** The frames each second that the renderer draws at its target rate with nothing to show. start draws one frame
@@ -494,6 +513,12 @@ const rows: Row[] = [
     { under: Math.min(FRAME, SMOOTH * unit) },
   ],
   ["frame, longest", least((one) => Math.max(...one.times)), "ms", {}],
+  [
+    "a key, 95th percentile",
+    least((one) => percentile(one.keys, 0.95)),
+    "ms",
+    { under: Math.min(FRAME, SMOOTH * unit) + FRAME },
+  ],
   ["a line, short life", before.line, "ms", {}],
   ["a line, long life", after.line, "ms", floor("line")],
   ["a line, growth", growth.line, "x", grown("line")],

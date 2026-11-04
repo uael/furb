@@ -3,10 +3,21 @@ import type { Furb, Line, Mark, Seen } from "../../tui/src/parts.ts";
 /** The first word on the chain after the place of a compaction that reads the files again with reground(), as
  * compact() gives it, in place or in a new chain. A clear gives none. */
 function regrounding(seen: Seen, chain: string, at: number): string | undefined {
-  return seen.acts
-    .filter((act) => act.kind === "rung" && act.on === chain && act.began > at)
-    .map((act) => String(act.words[0] ?? ""))
-    .find((one) => one.trimEnd().endsWith("reground()"));
+  // The acts stand in the order that they began, so the search starts at the first act after the place.
+  const acts = seen.acts;
+  let low = 0;
+  let high = acts.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if ((acts[middle]?.began ?? 0) > at) high = middle;
+    else low = middle + 1;
+  }
+  for (const act of acts.slice(low)) {
+    if (act.kind !== "rung" || act.on !== chain) continue;
+    const word = String(act.words[0] ?? "");
+    if (word.trimEnd().endsWith("reground()")) return word;
+  }
+  return undefined;
 }
 
 /** Whether the command may go on: it takes no argument, and the life runs the extension, since a life that does not

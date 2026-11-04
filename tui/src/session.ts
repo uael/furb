@@ -33,7 +33,6 @@ import {
   failed,
   rollUp,
   type State,
-  sessionNamed,
   threadWork,
   working as workOf,
 } from "furb/life";
@@ -159,6 +158,9 @@ interface Index {
   /** The last act on each chain that is no chain and no grant, and the chains whose last act failed. */
   latest: Map<string, ActRow>;
   failing: Set<string>;
+  /** The last rename_session that is done and the last name_session that gave a name, on each chain, from which the
+   * root gives the name of the session. */
+  named: Map<string, { said?: ActRow; given?: ActRow }>;
 }
 
 /** The place of an act in each list of an index that holds it, and whether it is among the writes that are done. */
@@ -208,6 +210,13 @@ function placed(index: Index, act: ActRow): void {
     index.latest.set(act.on, act);
     if (failed(act)) index.failing.add(act.on);
     else index.failing.delete(act.on);
+  }
+  const naming = act.kind === "rename_session" ? "said" : act.kind === "name_session" ? "given" : undefined;
+  if (naming && act.done && typeof act.value === "string" && (naming === "said" || act.value)) {
+    const names = index.named.get(act.on) ?? {};
+    index.named.set(act.on, names);
+    const past = names[naming];
+    if (!past || (index.at.get(past.id) ?? 0) <= (index.at.get(act.id) ?? 0)) names[naming] = act;
   }
   if (act.kind === "read" && act.done && act.words[0] === "skills://") {
     const past = index.skills;
@@ -582,7 +591,9 @@ export class Session extends EventEmitter {
    * with rename_session, else the name that the extension naming gave with name_session. An empty name from the
    * operator gives the name of the directory again. */
   get recordName(): string | undefined {
-    const name = sessionNamed(this.activityByChain.get(this.engine.root) ?? [], this.engine.root);
+    const names = this.indexed().named.get(this.engine.root);
+    const said = names?.said?.value ?? names?.given?.value;
+    const name = said === undefined ? undefined : String(said);
     return name === undefined ? undefined : name || basename(this.host.directory);
   }
   /** Whether a chain is the one where the extension naming asks a model for the name of the session, which the
@@ -1115,6 +1126,7 @@ export class Session extends EventEmitter {
       work: new Map(),
       latest: new Map(),
       failing: new Set(),
+      named: new Map(),
     };
     for (const [place, act] of this.acts.entries()) {
       index.ids.set(act.id, act);
