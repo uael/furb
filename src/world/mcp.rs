@@ -33,11 +33,6 @@
 //! The ear says the fact `("mcp_changed", "chain1", "mcp", server)` of its own accord when a server changes with no
 //! act that asked: a list that the server says has changed, a connection that ends, and one that comes back.
 
-#![expect(
-  clippy::clone_on_ref_ptr,
-  reason = "debt: a clone of an Arc or an Rc that hides its kind"
-)]
-
 pub mod binding;
 mod config;
 mod content;
@@ -83,7 +78,72 @@ const ROOT: &str = "chain1";
 /// What a work of the ear came to: a change of a server, or an act and its answer or why it has none.
 enum Worked {
   Changed(String),
-  Done(String, Result<Value, String>),
+  Done(String, Result<Value, Error>),
+}
+
+/// An act that the ear answers.
+#[derive(Clone, Copy)]
+enum Kind {
+  Servers,
+  Call,
+  Read,
+  Prompt,
+  Control,
+}
+
+impl Kind {
+  /// The act of a kind of [`KINDS`], or none.
+  fn of(kind: &str) -> Option<Kind> {
+    match kind {
+      "mcp_servers" => Some(Kind::Servers),
+      "mcp_call" => Some(Kind::Call),
+      "mcp_read" => Some(Kind::Read),
+      "mcp_prompt" => Some(Kind::Prompt),
+      "mcp_control" => Some(Kind::Control),
+      _ => None,
+    }
+  }
+}
+
+/// Why an act of the ear comes to nothing. The text of each is what the act is refused with.
+#[derive(Debug, thiserror::Error)]
+enum Error {
+  #[error("there is no server {0}")]
+  NoServer(String),
+  #[error("the server {0} asks for a login: mcp_control('login', {0:?})")]
+  Login(String),
+  #[error(
+    "the server {name} is not connected, it is {state}{}",
+    why.as_ref().map(|one| format!(": {one}")).unwrap_or_default()
+  )]
+  Down { name: String, state: &'static str, why: Option<String> },
+  #[error("the server {name} cannot run: {why}")]
+  Broken { name: String, why: String },
+  #[error("the server {0} is disabled: mcp_control('enable', {0:?})")]
+  Disabled(String),
+  #[error("the server {0} of the project waits for approval: mcp_control('approve', {0:?})")]
+  Unapproved(String),
+  #[error("the server {0} runs on this machine and takes no login")]
+  Local(String),
+  #[error("the action {0} is none of reconnect, enable, disable, approve, login and logout")]
+  Action(String),
+  #[error("the config of the server {server} denies its tool {tool}")]
+  Denied { server: String, tool: String },
+  #[error("{what} took more than {} seconds, so furb cancelled it", seconds(*bound))]
+  Late { what: String, bound: std::time::Duration },
+  #[error("{what} failed: {said}")]
+  Request { what: String, said: String },
+  /// A fault that the configs, the logins or the content of a server give as a text.
+  #[error("{0}")]
+  Said(String),
+  #[error(transparent)]
+  Task(#[from] tokio::task::JoinError),
+}
+
+impl From<String> for Error {
+  fn from(said: String) -> Error {
+    Error::Said(said)
+  }
 }
 
 impl Settings {
@@ -117,7 +177,7 @@ pub fn mcp(settings: Settings) -> Box<dyn Ear> {
   hearing(&KINDS, move |mut co: Co<Worked>| async move {
     let (told, changes) = mpsc::unbounded_channel();
     let hub = Hub::new(settings, told);
-    let _ends = Ends(hub.clone());
+    let _ends = Ends(Arc::clone(&hub));
     co.work(stream::unfold(changes, |mut changes| async move {
       changes.recv().await.map(|name| (Worked::Changed(name), changes))
     }));
@@ -131,7 +191,8 @@ pub fn mcp(settings: Settings) -> Box<dyn Ear> {
         }
         Next::Worked(Worked::Done(id, got)) => {
           if stops.remove(&id).is_some() {
-            let got = got.map_or_else(|no| Fault::refused(no).object(), |one| object(&one));
+            let got =
+              got.map_or_else(|no| Fault::refused(no.to_string()).object(), |one| object(&one));
             say(&mut co, Fact::says("done", &id, [got]));
           }
           continue;
@@ -142,19 +203,19 @@ pub fn mcp(settings: Settings) -> Box<dyn Ear> {
         stops.remove(&about);
         continue;
       }
-      if !a.question() || !KINDS.contains(&a.kind()) {
+      let Some(kind) = Kind::of(a.kind()).filter(|_| a.question()) else {
         continue;
-      }
+      };
       // A list of servers that no server makes wait is answered at once, so a life whose servers are all settled,
       // or that has none, says the same facts in the same order whenever it runs.
-      if a.kind() == "mcp_servers"
+      if matches!(kind, Kind::Servers)
         && let Some(listed) = hub.settled_now()
       {
         say(&mut co, Fact::says("done", &about, [object(&Value::Array(listed))]));
         continue;
       }
       let words: Vec<Value> = (1..4).map(|at| a.word(at).map_or(Value::Null, valued)).collect();
-      let work = running(answered(hub.clone(), a.kind().to_owned(), words));
+      let work = running(answered(Arc::clone(&hub), kind, words));
       say(&mut co, Fact::says("started", &about, []));
       let (stop, stopped) = oneshot::channel();
       let id = about.clone();
@@ -166,8 +227,8 @@ pub fn mcp(settings: Settings) -> Box<dyn Ear> {
 
 /// A work on the runtime of the ears, which ends when what awaits it goes.
 fn running<T: Send + 'static>(
-  work: impl Future<Output = Result<T, String>> + Send + 'static,
-) -> impl Future<Output = Result<T, String>> {
+  work: impl Future<Output = Result<T, Error>> + Send + 'static,
+) -> impl Future<Output = Result<T, Error>> {
   /// The task, which ends when its handle goes.
   struct Aborted(tokio::task::AbortHandle);
   impl Drop for Aborted {
@@ -180,7 +241,7 @@ fn running<T: Send + 'static>(
   async move {
     let got = task.await;
     drop(aborted);
-    got.unwrap_or_else(|no| Err(no.to_string()))
+    got.unwrap_or_else(|no| Err(Error::Task(no)))
   }
 }
 
@@ -190,27 +251,27 @@ fn text(words: &[Value], at: usize) -> String {
 }
 
 /// What an act of the extension comes to, or why it comes to nothing.
-async fn answered(hub: Arc<Hub>, kind: String, words: Vec<Value>) -> Result<Value, String> {
+async fn answered(hub: Arc<Hub>, kind: Kind, words: Vec<Value>) -> Result<Value, Error> {
   let server = text(&words, 0);
   let arguments = || match words.get(2) {
     Some(Value::Object(held)) => Value::Object(held.clone()),
     _ => json!({}),
   };
-  match kind.as_str() {
-    "mcp_servers" => Ok(Value::Array(hub.listed().await)),
-    "mcp_control" => hub.control(&text(&words, 0), &text(&words, 1)).await,
-    "mcp_call" => {
+  match kind {
+    Kind::Servers => Ok(Value::Array(hub.listed().await)),
+    Kind::Control => hub.control(&text(&words, 0), &text(&words, 1)).await,
+    Kind::Call => {
       let tool = text(&words, 1);
       let (_, held) = hub.session(&server).await?;
       if held.deny.contains(&tool) {
-        return Err(format!("the config of the server {server} denies its tool {tool}"));
+        return Err(Error::Denied { server, tool });
       }
       let asked = json!({"name": tool, "arguments": arguments()});
       let got =
         asked_again(&hub, &server, "tools/call", asked, &format!("{server}.{tool}")).await?;
-      content::called(&got, hub.gallery())
+      Ok(content::called(&got, hub.gallery())?)
     }
-    "mcp_read" => {
+    Kind::Read => {
       let uri = text(&words, 1);
       let got = asked_again(
         &hub,
@@ -222,7 +283,7 @@ async fn answered(hub: Arc<Hub>, kind: String, words: Vec<Value>) -> Result<Valu
       .await?;
       Ok(content::read(&got, hub.gallery()))
     }
-    "mcp_prompt" => {
+    Kind::Prompt => {
       let name = text(&words, 1);
       let given: Map<String, Value> = match arguments() {
         Value::Object(held) => held
@@ -239,7 +300,6 @@ async fn answered(hub: Arc<Hub>, kind: String, words: Vec<Value>) -> Result<Valu
           .await?;
       Ok(content::prompted(&got, hub.gallery()))
     }
-    other => Err(format!("the ear of MCP takes no {other}")),
   }
 }
 
@@ -251,7 +311,7 @@ async fn asked_again(
   method: &str,
   params: Value,
   what: &str,
-) -> Result<Value, String> {
+) -> Result<Value, Error> {
   let mut tried = false;
   loop {
     let (session, held) = hub.session(server).await?;
@@ -263,18 +323,11 @@ async fn asked_again(
         tried = true;
         drop(session);
         if !hub.renewed(server, hint).await {
-          return Err(format!(
-            "the server {server} asks for a login: mcp_control('login', {server:?})"
-          ));
+          return Err(Error::Login(server.to_owned()));
         }
       }
-      Err(Failure::Late(bound)) => {
-        return Err(format!(
-          "{what} took more than {} seconds, so furb cancelled it",
-          seconds(bound)
-        ));
-      }
-      Err(no) => return Err(format!("{what} failed: {}", no.said())),
+      Err(Failure::Late(bound)) => return Err(Error::Late { what: what.to_owned(), bound }),
+      Err(no) => return Err(Error::Request { what: what.to_owned(), said: no.said() }),
     }
   }
 }
