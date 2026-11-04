@@ -182,7 +182,15 @@ mod daemon {
   /// A life opened on a new record in a folder.
   async fn opened(window: &mut Window, at: &Path, name: &str) -> String {
     let life = at.join(name).display().to_string();
-    let verb = Verb::Open { life: life.clone(), cwd: Some(at.display().to_string()) };
+    let cwd = Some(at.display().to_string());
+    let verb = Verb::Open {
+      life: life.clone(),
+      cwd,
+      actor: None,
+      roster: None,
+      extensions: None,
+      answers: false,
+    };
     assert_eq!(window.ask(verb).await, Ok(Answer::Done));
     life
   }
@@ -310,5 +318,54 @@ mod daemon {
     let (local, _daemon) = started(&at, GRACE).await;
     let refused = local.listen().await;
     assert!(matches!(refused, Err(furb_host::TransportError::Taken { .. })));
+  }
+
+  #[tokio::test]
+  async fn a_window_that_answers_the_models_of_its_life_gives_each_turn() {
+    let at = place();
+    let (local, _daemon) = started(&at, GRACE).await;
+    let mut window = Window::dialed(&local).await;
+    let life = at.join("a.jsonl").display().to_string();
+    let roster = Some(vec!["claude-cli:sonnet".to_owned()]);
+    let cwd = Some(at.display().to_string());
+    let open =
+      Verb::Open { life: life.clone(), cwd, actor: None, roster, extensions: None, answers: true };
+    assert_eq!(window.ask(open).await, Ok(Answer::Done));
+    window.attach(&life).await;
+    let prompt = Verb::Prompt {
+      life: life.clone(),
+      shape: "str".to_owned(),
+      message: "Say ok.".to_owned(),
+      to: None,
+      on: None,
+    };
+    let Ok(Answer::Act(id)) = window.ask(prompt).await else { panic!("no prompt") };
+    let Frame::Ask { ask, request, .. } =
+      window.until(|one| matches!(one, Frame::Ask { .. })).await
+    else {
+      panic!("no ask")
+    };
+    assert!(request["actor"].as_str().is_some_and(|one| one.contains("sonnet")), "{request}");
+    let wrote = |ask| Verb::Wrote {
+      life: life.clone(),
+      ask,
+      text: "close(".to_owned(),
+      thinking: "So.".to_owned(),
+    };
+    assert_eq!(window.ask(wrote(ask)).await, Ok(Answer::Done));
+    let thought = |one: &Frame| matches!(one, Frame::Event { event: Event::Text { thinking, .. }, .. } if thinking == "So.");
+    window.until(thought).await;
+    let turn = Some(json!(["assistant", "close('ok')", null, null]));
+    let answered = Verb::Answered { life: life.clone(), ask, turn, why: None };
+    assert_eq!(window.ask(answered.clone()).await, Ok(Answer::Done));
+    let Frame::Event { event: Event::Act(act), .. } = window.until(done(&id)).await else {
+      panic!("no act")
+    };
+    assert_eq!(act.value(), Some(&json!("ok")));
+    let again = window.ask(answered).await;
+    assert_eq!(again, Err(ProtocolError::Unasked { life: life.clone(), ask }));
+    let other = opened(&mut window, &at, "b.jsonl").await;
+    let answered = Verb::Answered { life: other.clone(), ask, turn: None, why: None };
+    assert_eq!(window.ask(answered).await, Err(ProtocolError::Answerless { life: other }));
   }
 }

@@ -18,6 +18,10 @@ export type Request1 =
   | {
       life: string;
       cwd?: string | null;
+      actor?: string | null;
+      roster?: string[] | null;
+      extensions?: boolean | null;
+      answers?: boolean;
       verb: "open";
     }
   | {
@@ -191,6 +195,20 @@ export type Request1 =
       verb: "queue";
     }
   | {
+      life: string;
+      ask: number;
+      turn?: unknown;
+      why?: string | null;
+      verb: "answered";
+    }
+  | {
+      life: string;
+      ask: number;
+      text: string;
+      thinking: string;
+      verb: "wrote";
+    }
+  | {
       verb: "handover";
     }
   | (Mount & {
@@ -354,6 +372,12 @@ export type Frame =
       peers: Peer[];
       frame: "presence";
     }
+  | {
+      life: string;
+      ask: number;
+      request: unknown;
+      frame: "ask";
+    }
   | (Mount & {
       frame: "view.mount";
     })
@@ -470,6 +494,15 @@ export type ProtocolError =
       life: string;
       holder: string;
       error: "unpinned";
+    }
+  | {
+      life: string;
+      ask: number;
+      error: "unasked";
+    }
+  | {
+      life: string;
+      error: "answerless";
     }
   | {
       error: "viewless";
