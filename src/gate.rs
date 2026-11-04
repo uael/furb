@@ -50,6 +50,7 @@
 use std::{
   cell::RefCell,
   collections::{HashMap, HashSet},
+  fmt,
   rc::Rc,
 };
 
@@ -76,14 +77,73 @@ const SHEET: &str = "sheet.py";
 /// The name the checker holds the engine under, which is `MODULE` of `furb.sheet`: the sheet alone imports it.
 const MODULE: &str = "__engine__";
 
-/// The rule of the checker that a finding on an import is under, which the findings of the sandbox take too.
-const IMPORT: &str = "error[unresolved-import]";
+/// The rule that a finding of the gate breaks: a rule that the gate checks itself, or any other
+/// that the checker names.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Rule {
+  /// An import that the sandbox cannot run, a rule that the checker names too.
+  Import,
+  /// An await in a function that is not async.
+  Await,
+  /// A read of asyncio in a word.
+  Asyncio,
+  /// A name that the transcript binds.
+  Told,
+  /// A value that is not of the type that its name is declared with.
+  Assign,
+  /// Any other rule of the checker, by its name.
+  Checker(String),
+}
 
-/// The rule of a finding on an await in a function that is not async.
-const AWAIT: &str = "error[await-outside-async]";
+impl Rule {
+  /// The rule that the checker names.
+  fn named(name: &str) -> Rule {
+    match name {
+      "unresolved-import" => Rule::Import,
+      "invalid-assignment" => Rule::Assign,
+      other => Rule::Checker(other.to_owned()),
+    }
+  }
 
-/// The rule of a finding on a read of asyncio in a word.
-const ASYNCIO: &str = "error[asyncio-in-word]";
+  /// The name of the rule, as the model reads it between the brackets.
+  fn name(&self) -> &str {
+    match self {
+      Rule::Import => "unresolved-import",
+      Rule::Await => "await-outside-async",
+      Rule::Asyncio => "asyncio-in-word",
+      Rule::Told => "transcript-name",
+      Rule::Assign => "invalid-assignment",
+      Rule::Checker(name) => name,
+    }
+  }
+}
+
+impl fmt::Display for Rule {
+  fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(out, "error[{}]", self.name())
+  }
+}
+
+/// One finding of the gate: where it stands on the sheet, the rule it breaks and what it says.
+/// Its text is what the model reads, `error[rule] (column N) why`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Finding {
+  /// The line of the sheet that it stands on, counted from 1.
+  pub line: usize,
+  /// The column of that line, counted from 1 in characters.
+  pub column: usize,
+  /// The rule that it breaks.
+  pub rule: Rule,
+  /// What it says, with no rule and no column.
+  pub why: String,
+}
+
+impl fmt::Display for Finding {
+  fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(out, "{} (column {})", self.rule, self.column)?;
+    if self.why.is_empty() { Ok(()) } else { write!(out, " {}", self.why) }
+  }
+}
 
 /// The most brackets, one in another, that the checker reads in a literal. The checker takes time of about the fourth
 /// power of the depth of a literal, and more again when a part has no type that it knows, as an empty list: a list of
@@ -92,17 +152,11 @@ const ASYNCIO: &str = "error[asyncio-in-word]";
 /// levels.
 const DEEP: usize = 12;
 
-/// The rule of a finding on a name that the transcript binds.
-const TOLD: &str = "error[transcript-name]";
-
 /// The name the sheet binds to the names of the acts of the chain, which is `ACTS` of `furb.sheet`.
 const ACTS: &str = "__acts";
 
 /// The name the sheet binds to the names of the rungs of the program, which is `WORDS` of `furb.sheet`.
 const WORDS: &str = "__words";
-
-/// The rule of a finding on a value that is not of the type that its name is declared with.
-const ASSIGN: &str = "error[invalid-assignment]";
 
 thread_local! {
   /// The one checker of this thread, which every life of the thread and the Kernel of a python host read with,
@@ -124,7 +178,7 @@ struct Held {
 /// async; and each name that the word binds and that the transcript binds. An error on a value of another type for
 /// a name that a rung of the program declares names that rung. Each is read on the sheet with each literal that
 /// holds more than `DEEP` brackets cut, which the checker could not read in time.
-pub fn checked(sheet: &str) -> Result<Vec<(usize, String)>, Fault> {
+pub fn checked(sheet: &str) -> Result<Vec<Finding>, Fault> {
   let lines: Vec<&str> = sheet.split_inclusive('\n').collect();
   let shaped = program_lines(&lines).and_then(|(first, tail)| {
     let short = shallowed(&shortened(&lines, first, tail));
@@ -139,7 +193,7 @@ pub fn checked(sheet: &str) -> Result<Vec<(usize, String)>, Fault> {
     found.extend(unawaited(sheet));
     found.extend(unscheduled(sheet));
     found.extend(told(sheet));
-    found.sort_by_key(|(line, _)| *line);
+    found.sort_by_key(|one| one.line);
     return Ok(signed(found, &[sheet, ENGINE]));
   };
   let mut found =
@@ -148,7 +202,7 @@ pub fn checked(sheet: &str) -> Result<Vec<(usize, String)>, Fault> {
   found.extend(unawaited(&short));
   found.extend(unscheduled(&short));
   found.extend(told(&short));
-  found.sort_by_key(|(line, _)| *line);
+  found.sort_by_key(|one| one.line);
   let mut sources: Vec<&str> = vec![&laid.main];
   sources.extend(laid.modules.iter().rev().map(|(_, module)| &**module));
   sources.push(ENGINE);
@@ -162,7 +216,7 @@ fn typed(
   modules: &[(String, Rc<str>)],
   text: &str,
   stands: &[usize],
-) -> Result<Vec<(usize, String)>, Fault> {
+) -> Result<Vec<Finding>, Fault> {
   let config = TypeCheckingConfig { format: TypeCheckingFormat::Concise, color: false };
   let path = format!("{MODULE}/__init__.py");
   let engine = SourceFile::new(ENGINE, &path);
@@ -198,7 +252,10 @@ fn typed(
             let found = said.to_string().lines().filter_map(read).collect::<Vec<_>>();
             found
               .into_iter()
-              .map(|(line, why)| (stands.get(line - 1).copied().unwrap_or(line), why))
+              .map(|one| {
+                let line = stands.get(one.line - 1).copied().unwrap_or(one.line);
+                Finding { line, ..one }
+              })
               .collect()
           })
           .unwrap_or_default()
@@ -972,10 +1029,10 @@ fn word_of(body: &[Stmt]) -> &[Stmt] {
 /// rung.
 fn declared(
   sheet: &str,
-  found: Vec<(usize, String)>,
+  found: Vec<Finding>,
   program: Option<&HashMap<String, usize>>,
-) -> Vec<(usize, String)> {
-  if !found.iter().any(|(_, why)| why.starts_with(ASSIGN)) {
+) -> Vec<Finding> {
+  if !found.iter().any(|one| one.rule == Rule::Assign) {
     return found;
   }
   let Ok(parsed) = parse_module(sheet) else { return found };
@@ -1016,23 +1073,23 @@ fn declared(
   let line = |at: usize| sheet[..at].matches('\n').count() + 1;
   found
     .into_iter()
-    .map(|(at, why)| {
-      let by = stored.0.iter().filter(|(start, _)| line(*start) == at).find_map(|(_, name)| {
-        declares.iter().find(|(held, _)| held == name).map(|(_, rung)| (*name, *rung))
-      });
+    .map(|it| {
+      let by =
+        stored.0.iter().filter(|(start, _)| line(*start) == it.line).find_map(|(_, name)| {
+          declares.iter().find(|(held, _)| held == name).map(|(_, rung)| (*name, *rung))
+        });
       match by {
-        Some((name, rung)) if why.starts_with(ASSIGN) => {
+        Some((name, rung)) if it.rule == Rule::Assign => {
           let who = rung.map_or("a word of the program of this chain".to_owned(), |one| {
             format!("the word of {one}")
           });
-          (
-            at,
-            format!(
-              "{why}; {who} declares `{name}` with that type, so give this value another name"
-            ),
-          )
+          let why = format!(
+            "{}; {who} declares `{name}` with that type, so give this value another name",
+            it.why
+          );
+          Finding { why, ..it }
         }
-        _ => (at, why),
+        _ => it,
       }
     })
     .collect()
@@ -1119,18 +1176,21 @@ fn named(target: &Expr) -> Vec<&str> {
 /// The form is `path:line:column: severity[rule] why`, and a line that is not of that form, or that is no
 /// error, is no finding of the sheet, so it is dropped rather than read as one. What the checker says of an import
 /// is dropped too, since the sandbox says it.
-fn read(said: &str) -> Option<(usize, String)> {
+fn read(said: &str) -> Option<Finding> {
   let (_, rest) = said.split_once(':')?;
   let (line, rest) = rest.split_once(':')?;
   let (column, rest) = rest.split_once(": ")?;
-  if !rest.starts_with("error[") || rest.starts_with(IMPORT) {
+  let (rule, why) = rest.trim().split_once(' ').unwrap_or((rest.trim(), ""));
+  let rule = Rule::named(rule.strip_prefix("error[")?.strip_suffix(']')?);
+  if rule == Rule::Import {
     return None;
   }
-  let (rule, why) = rest.trim().split_once(' ').unwrap_or((rest.trim(), ""));
-  Some((
-    line.trim().parse().ok()?,
-    format!("{rule} (column {}) {why}", column.trim()).trim_end().to_owned(),
-  ))
+  Some(Finding {
+    line: line.trim().parse().ok()?,
+    column: column.trim().parse().ok()?,
+    rule,
+    why: why.to_owned(),
+  })
 }
 
 /// The column of a place of a text, counted from 1 in characters, as the checker counts it.
@@ -1145,21 +1205,23 @@ const SIGNED: usize = 300;
 /// function: its name, its parameters and what it gives, as the last def of that name in the sources reads, which
 /// stand from the nearest to the word to the farthest, the engine last. A model that called a function wrongly then
 /// reads in the same finding how to call it.
-fn signed(found: Vec<(usize, String)>, sources: &[&str]) -> Vec<(usize, String)> {
+fn signed(found: Vec<Finding>, sources: &[&str]) -> Vec<Finding> {
   found
     .into_iter()
-    .map(|(line, why)| {
-      let name = why
+    .map(|one| {
+      let name = one
+        .why
         .split_once("function `")
         .and_then(|(_, rest)| rest.split_once('`'))
         .map(|(name, _)| name)
         .filter(|name| !name.contains('.'));
       match name.and_then(|name| sources.iter().find_map(|source| signature(source, name))) {
-        Some(sign) => (
-          line,
-          format!("{why}; the signature of `{name}` is `{sign}`", name = name.unwrap_or_default()),
-        ),
-        None => (line, why),
+        Some(sign) => {
+          let name = name.unwrap_or_default();
+          let why = format!("{}; the signature of `{name}` is `{sign}`", one.why);
+          Finding { why, ..one }
+        }
+        None => one,
       }
     })
     .collect()
@@ -1200,7 +1262,7 @@ impl<'a> StatementVisitor<'a> for Defs<'a> {
 /// says what the sandbox of the word will. Each import is read where it stands, in a function or under a test that
 /// is false alike, as the checker reads it. The import of the engine that opens the sheet is the sheet's own, and a
 /// word that imports the engine by that name is refused, since no chain holds a module of that name.
-fn unrun(sheet: &str) -> Vec<(usize, String)> {
+fn unrun(sheet: &str) -> Vec<Finding> {
   // A sheet that does not parse is refused by what the checker says of it, whatever it imports.
   let Ok(parsed) = parse_module(sheet) else { return vec![] };
   let mut imports = Imports(vec![]);
@@ -1215,7 +1277,7 @@ fn unrun(sheet: &str) -> Vec<(usize, String)> {
         Sand::new().run(&sheet[at], NamedValues::new(), &mut Nobody("an import")).err()?;
       let start = at.start().to_usize();
       let (line, column) = (sheet[..start].matches('\n').count() + 1, column(sheet, start));
-      Some((line, format!("{IMPORT} (column {column}) {raised}")))
+      Some(Finding { line, column, rule: Rule::Import, why: raised.to_string() })
     })
     .collect()
 }
@@ -1226,7 +1288,7 @@ fn unrun(sheet: &str) -> Vec<(usize, String)> {
 /// with there. The sandbox then refuses the word with the SyntaxError of python before it runs, which the model sees
 /// only after its turn, so the gate refuses it first and names the fix. An await at the top of the sheet is the word's
 /// own, which a word may hold.
-fn unawaited(sheet: &str) -> Vec<(usize, String)> {
+fn unawaited(sheet: &str) -> Vec<Finding> {
   let Ok(parsed) = parse_module(sheet) else { return vec![] };
   let mut awaits = Awaits { function: None, found: vec![] };
   awaits.visit_body(&parsed.syntax().body);
@@ -1234,12 +1296,13 @@ fn unawaited(sheet: &str) -> Vec<(usize, String)> {
   awaits
     .found
     .into_iter()
-    .map(|(at, name)| {
-      let why = format!(
-        "{AWAIT} (column {}) `await` stands in `def {name}`, which is not async: write `async def {name}`, and await each call of it",
-        column(sheet, at)
-      );
-      (line(at), why)
+    .map(|(at, name)| Finding {
+      line: line(at),
+      column: column(sheet, at),
+      rule: Rule::Await,
+      why: format!(
+        "`await` stands in `def {name}`, which is not async: write `async def {name}`, and await each call of it"
+      ),
     })
     .collect()
 }
@@ -1249,7 +1312,7 @@ fn unawaited(sheet: &str) -> Vec<(usize, String)> {
 /// A word runs in a call of the host, where the sandbox refuses each future of asyncio: `asyncio.sleep` raises a
 /// RuntimeError, and `asyncio.gather` refuses an act with a TypeError, since an act is a name. The stubs of monty type
 /// both as right, so the gate refuses each read of asyncio in the word first, and names the verbs that do its work.
-fn unscheduled(sheet: &str) -> Vec<(usize, String)> {
+fn unscheduled(sheet: &str) -> Vec<Finding> {
   let Ok(parsed) = parse_module(sheet) else { return vec![] };
   let Some(body) = bodied(parsed.syntax()) else { return vec![] };
   let mut modules = Asyncio(HashSet::new());
@@ -1260,12 +1323,13 @@ fn unscheduled(sheet: &str) -> Vec<(usize, String)> {
   reads
     .found
     .into_iter()
-    .map(|(at, name)| {
-      let why = format!(
-        "{ASYNCIO} (column {}) `asyncio.{name}` cannot run in a word, which runs in a call of the host: await wait(seconds) to pause, and await each act by itself",
-        column(sheet, at)
-      );
-      (line(at), why)
+    .map(|(at, name)| Finding {
+      line: line(at),
+      column: column(sheet, at),
+      rule: Rule::Asyncio,
+      why: format!(
+        "`asyncio.{name}` cannot run in a word, which runs in a call of the host: await wait(seconds) to pause, and await each act by itself"
+      ),
     })
     .collect()
 }
@@ -1361,7 +1425,7 @@ impl<'a> Visitor<'a> for Awaits<'a> {
 /// one says what no act gave, as the output of a command that did not run, and a model reads it as true, so the gate
 /// refuses it, also for an act that the chain did not tell yet. The word is what stands after the last try of a word
 /// of the program, and a name that it binds at any depth counts.
-fn told(sheet: &str) -> Vec<(usize, String)> {
+fn told(sheet: &str) -> Vec<Finding> {
   let Ok(parsed) = parse_module(sheet) else { return vec![] };
   let Some(body) = bodied(parsed.syntax()) else { return vec![] };
   let acts = strings(body, ACTS);
@@ -1377,14 +1441,11 @@ fn told(sheet: &str) -> Vec<(usize, String)> {
         name.strip_prefix(act).is_some_and(|rest| rest.is_empty() || rest.starts_with('_'))
       })
     })
-    .map(|(at, name)| {
-      (
-        line(at),
-        format!(
-          "{TOLD} (column {}) the transcript binds `{name}`: a word reads it and never binds it",
-          column(sheet, at)
-        ),
-      )
+    .map(|(at, name)| Finding {
+      line: line(at),
+      column: column(sheet, at),
+      rule: Rule::Told,
+      why: format!("the transcript binds `{name}`: a word reads it and never binds it"),
     })
     .collect()
 }
@@ -1487,7 +1548,8 @@ mod tests {
   }
 
   fn found(text: &str) -> Vec<(usize, String)> {
-    checked(text).expect("the gate reads the sheet")
+    let found = checked(text).expect("the gate reads the sheet");
+    found.into_iter().map(|one| (one.line, one.to_string())).collect()
   }
 
   /// What the checker found below the word, each by its line in the word.
@@ -1576,7 +1638,7 @@ mod tests {
     );
     let why = |column: usize, name: &str| {
       format!(
-        "{ASYNCIO} (column {column}) `asyncio.{name}` cannot run in a word, which runs in a call of the host: await wait(seconds) to pause, and await each act by itself"
+        "error[asyncio-in-word] (column {column}) `asyncio.{name}` cannot run in a word, which runs in a call of the host: await wait(seconds) to pause, and await each act by itself"
       )
     };
     assert_eq!(found, vec![(2, why(23, "gather")), (4, why(11, "sleep"))]);
@@ -1586,7 +1648,7 @@ mod tests {
   fn an_await_in_a_function_that_is_not_async_is_a_finding_of_its_line() {
     let found = said(&[], "def fix():\n  got = await wait(0)\n  return got\nfix()");
     let why = "`await` stands in `def fix`, which is not async: write `async def fix`, and await each call of it";
-    assert_eq!(found, vec![(2, format!("{AWAIT} (column 11) {why}"))]);
+    assert_eq!(found, vec![(2, format!("error[await-outside-async] (column 11) {why}"))]);
   }
 
   #[test]
@@ -1651,7 +1713,7 @@ mod tests {
       .collect();
     let told = |column: usize, name: &str| {
       format!(
-        "{TOLD} (column {column}) the transcript binds `{name}`: a word reads it and never binds it"
+        "error[transcript-name] (column {column}) the transcript binds `{name}`: a word reads it and never binds it"
       )
     };
     assert_eq!(
@@ -1671,7 +1733,7 @@ mod tests {
       .map(|(line, why)| (line - above, why))
       .collect();
     assert_eq!(got.iter().map(|(line, _)| *line).collect::<Vec<_>>(), vec![1, 2], "{got:?}");
-    assert!(got[0].1.starts_with(ASSIGN), "{got:?}");
+    assert!(got[0].1.starts_with("error[invalid-assignment]"), "{got:?}");
     assert!(
       got[0].1.ends_with(
         "; the word of rung1 declares `pr` with that type, so give this value another name"

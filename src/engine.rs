@@ -553,8 +553,9 @@ impl Host for Outside {
 fn gated(sheet: Option<&Object>) -> Result<Object, Fault> {
   let sheet = sheet.and_then(|one| one.as_ref().as_str().map(str::to_owned)).unwrap_or_default();
   let found = checked(&sheet)?;
-  Ok(Object::list(found.into_iter().map(|(line, why)| {
-    Object::tuple([Object::int(i64::try_from(line).unwrap_or_default()), Object::string(why)])
+  Ok(Object::list(found.into_iter().map(|one| {
+    let line = i64::try_from(one.line).unwrap_or_default();
+    Object::tuple([Object::int(line), Object::string(one.to_string())])
   })))
 }
 
