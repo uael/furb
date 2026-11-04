@@ -30,22 +30,7 @@
 //!
 //! [`local`]: super::local
 
-#![expect(
-  clippy::semicolon_if_nothing_returned,
-  reason = "debt: a unit expression with no semicolon"
-)]
-#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
-#![expect(
-  clippy::clone_on_ref_ptr,
-  reason = "debt: a clone of an Arc or an Rc that hides its kind"
-)]
-#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
-#![expect(clippy::match_same_arms, reason = "debt: match arms with the same body")]
-#![expect(
-  clippy::return_self_not_must_use,
-  reason = "debt: a method that returns Self with no must_use"
-)]
-#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
+#![expect(clippy::expect_used, reason = "the snapshot is a file of the build, which a test reads")]
 
 mod config;
 mod error;
@@ -329,6 +314,7 @@ impl Catalog {
   /// The catalog with the claude command line at a path, or the one of this machine when only a stall is given, which
   /// it offers, and whose turn may go with no progress for the stall; and the catalog as it stands when neither is
   /// given, or when it finds no program.
+  #[must_use]
   pub fn claude(self, bin: Option<PathBuf>, stall: Option<Duration>) -> Catalog {
     blocking(self.discovered(bin, stall))
   }
@@ -512,9 +498,9 @@ impl Catalog {
     let (mut found, mut left) = (Vec::new(), Vec::new());
     for name in names.unwrap_or_default() {
       if self.seek(name).await.is_some() {
-        found.push(name.clone())
+        found.push(name.clone());
       } else {
-        left.push(name.clone())
+        left.push(name.clone());
       }
     }
     let held = match actor {
@@ -566,9 +552,9 @@ impl Catalog {
         let Some((model, level)) = self.actor(actor).await else {
           return Err(self.unknown(actor).await);
         };
-        let named = model.at(level);
+        let chosen = model.at(level);
         models.insert(0, model);
-        Some(named)
+        Some(chosen)
       }
       None => None,
     };
@@ -618,7 +604,7 @@ impl Catalog {
       Some(host) => models.into_iter().map(|model| model.hosted(Arc::clone(&host))).collect(),
       None => models,
     };
-    let thinking = super::thinking(self.thinking.as_deref(), std::path::Path::new(&directory));
+    let thinking = super::thinking(self.thinking.as_deref(), Path::new(&directory));
     Ok(Provider::new(directory, models).actor(actor).thinking(thinking))
   }
 }
@@ -752,7 +738,7 @@ impl Listing {
       Dialect::Anthropic if level == "off" && self.reasons("toggle") => {
         json!({"thinking": {"type": "disabled"}})
       }
-      Dialect::Anthropic if level == "off" => json!({}),
+      Dialect::Anthropic | Dialect::Pi if level == "off" => json!({}),
       Dialect::Anthropic if named && self.reasons("budget_tokens") => {
         json!({"output_config": {"effort": level}, "thinking": thought})
       }
@@ -773,7 +759,6 @@ impl Listing {
       Dialect::OpenRouter if level == "off" => json!({"reasoning": {"enabled": false}}),
       Dialect::OpenRouter => json!({"reasoning": {"max_tokens": budget(level)}}),
       Dialect::Chat => json!({"reasoning_effort": word}),
-      Dialect::Pi if level == "off" => json!({}),
       Dialect::Pi => json!({"reasoning": level}),
       Dialect::Silent => json!({}),
     };
@@ -987,13 +972,13 @@ fn listed(cached: Option<&PathBuf>) -> Arc<IndexMap<String, Listed>> {
   let pi = cached.and_then(|at| fs::read_to_string(at.with_file_name(update::PI)).ok());
   let mut kept = KEPT.get_or_init(Default::default).lock().unwrap_or_else(PoisonError::into_inner);
   match kept.get(&cached.cloned()) {
-    Some((was, was_pi, made)) if *was == text && *was_pi == pi => return made.clone(),
+    Some((was, was_pi, made)) if *was == text && *was_pi == pi => return Arc::clone(made),
     _ => {}
   }
   let mut made = parsed(SNAPSHOT, text.as_deref());
   update::applied(&mut made, pi.as_deref());
   let made = Arc::new(made);
-  kept.insert(cached.cloned(), (text, pi, made.clone()));
+  kept.insert(cached.cloned(), (text, pi, Arc::clone(&made)));
   made
 }
 
