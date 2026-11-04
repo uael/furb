@@ -53,7 +53,7 @@ pub use store::{
   CHECKPOINT_SCHEMA, Lines, MADE, RECORD_SCHEMA, Schema, SchemaError, Sqlite, Store, VERSION,
   engine, heads, keeping, kept, made, readable, release, store, version,
 };
-pub(crate) use store::{database, each};
+pub(crate) use store::{Format, each};
 pub use time::time;
 
 use crate::{

@@ -26,17 +26,17 @@ pub enum Role {
   Write,
 }
 
-/// What a peer is: a window of an operator, the process of a skill, or the daemon of a new build,
+/// What a peer is: a window of an operator, the process of a kit, or the daemon of a new build,
 /// which asks the handover.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Kind {
   Window,
-  Skill,
+  Kit,
   Daemon,
 }
 
-/// The first frame of a peer: the protocol that it speaks, its kind, and the name of a skill.
+/// The first frame of a peer: the protocol that it speaks, its kind, and the name of a kit.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Hello {
   pub protocol: u32,
@@ -45,7 +45,7 @@ pub struct Hello {
 }
 
 /// A peer as the daemon knows it after its hello: the login that its transport proved, its role,
-/// its kind, and the name of a skill.
+/// its kind, and the name of a kit.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Peer {
   pub login: String,
@@ -307,11 +307,21 @@ impl Verb {
         | Self::Gate { .. }
         | Self::ViewMount(_)
         | Self::ViewTree(_)
-        | Self::ViewEvent(_)
         | Self::ViewEffect(_)
         | Self::ViewDispose(_)
     );
     if reads { Role::Read } else { Role::Write }
+  }
+
+  /// The kind of peer that says the verb, when it is a frame of a view: a window mounts, says what
+  /// a person did and disposes, and a kit serves the trees and the effects. Any other peer is
+  /// refused it.
+  pub fn speaker(&self) -> Option<Kind> {
+    match self {
+      Self::ViewMount(_) | Self::ViewEvent(_) | Self::ViewDispose(_) => Some(Kind::Window),
+      Self::ViewTree(_) | Self::ViewEffect(_) => Some(Kind::Kit),
+      _ => None,
+    }
   }
 }
 
@@ -391,13 +401,13 @@ pub struct Listed {
   pub open: bool,
 }
 
-/// A view that a window mounts in a slot of a life, which the process of a skill serves.
+/// A view that a window mounts in a slot of a life, which the process of a kit serves.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Mount {
   pub viewer: String,
   pub life: String,
   pub slot: Slot,
-  pub skill: String,
+  pub kit: String,
 }
 
 /// The tree of a view, which takes the place of each tree of a lower version.
@@ -418,7 +428,7 @@ pub struct ViewEvent {
   pub value: Option<String>,
 }
 
-/// What a skill asks of the one window of a view.
+/// What a kit asks of the one window of a view.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct ViewEffect {
   pub viewer: String,
@@ -442,15 +452,15 @@ pub enum Slot {
   },
   /// A section of the sidebar.
   Sidebar,
-  /// The row of one act, of a kind that the skill draws.
+  /// The row of one act, of a kind that the kit draws.
   Row {
     act: String,
   },
-  /// The detail of one act, of a kind that the skill draws.
+  /// The detail of one act, of a kind that the kit draws.
   Detail {
     act: String,
   },
-  /// A mark in the feed, after one act, of a kind that the skill marks.
+  /// A mark in the feed, after one act, of a kind that the kit marks.
   Mark {
     act: String,
   },
@@ -468,7 +478,7 @@ pub enum Gesture {
   Submit,
 }
 
-/// What a skill asks of a window.
+/// What a kit asks of a window.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "effect", rename_all = "snake_case")]
 pub enum Effect {
@@ -483,6 +493,34 @@ pub struct Node {
   pub id: String,
   #[serde(flatten)]
   pub shape: Shape,
+}
+
+impl Node {
+  /// The node as a window that only reads gets it: each node that acts, inert.
+  #[must_use]
+  pub fn inert(self) -> Node {
+    let shape = match self.shape {
+      Shape::Input { value, hint, .. } => Shape::Input { value, hint, inert: true },
+      Shape::Button { label, .. } => Shape::Button { label, inert: true },
+      Shape::Box { axis, gap, border, children } => {
+        Shape::Box { axis, gap, border, children: inerts(children) }
+      }
+      Shape::List { items } => Shape::List { items: inerts(items) },
+      Shape::Table { header, rows } => {
+        Shape::Table { header, rows: rows.into_iter().map(inerts).collect() }
+      }
+      shape @ (Shape::Text { .. }
+      | Shape::Progress { .. }
+      | Shape::Code { .. }
+      | Shape::Diff { .. }
+      | Shape::Markdown { .. }) => shape,
+    };
+    Node { shape, ..self }
+  }
+}
+
+fn inerts(nodes: Vec<Node>) -> Vec<Node> {
+  nodes.into_iter().map(Node::inert).collect()
 }
 
 /// The closed set of the nodes of a view, which each window draws in its own way.
@@ -508,9 +546,15 @@ pub enum Shape {
   Input {
     value: String,
     hint: Option<String>,
+    /// A node that acts is inert in the window of a peer that only reads: it draws and takes no
+    /// gesture.
+    #[serde(default)]
+    inert: bool,
   },
   Button {
     label: String,
+    #[serde(default)]
+    inert: bool,
   },
   /// The share of the work that is done, from 0 to 1, or none while it is not known.
   Progress {

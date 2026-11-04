@@ -1,6 +1,6 @@
 # The protocol of the host
 
-`furb-host` is the daemon of a machine: it holds each life, and each window or skill reaches it over one protocol. This
+`furb-host` is the daemon of a machine: it holds each life, and each window or kit reaches it over one protocol. This
 page says that protocol. Its version is `PROTOCOL`, now 1. The crate gives its JSON Schema in
 `host/protocol.schema.json`, and `bind/typescript/src/protocol.ts` holds the types that `bun run protocol` makes from
 that schema. A test of each side fails when the schema or the types do not agree with the code.
@@ -30,8 +30,8 @@ The first frame of a peer is its hello:
 {"id": 0, "verb": "hello", "protocol": 1, "kind": "window", "name": null}
 ```
 
-- `kind` is `window`, `skill`, or `daemon` for the daemon of a new build that asks the handover, and a skill gives
-  its `name`.
+- `kind` is `window`, `kit`, or `daemon` for the daemon of a new build that asks the handover, and a kit gives
+  its `name`, which it must.
 - The daemon answers with its protocol and the peer as it knows it: its login, its role, its kind and its name.
 
   ```json
@@ -79,7 +79,9 @@ it is not given. The daemon answers requests in any order.
 | `answered` | `life`, `ask`, `turn`, `why` | write |
 | `wrote` | `life`, `ask`, `text`, `thinking` | write |
 | `handover` | | write |
-| `view.mount`, `view.tree`, `view.event`, `view.effect`, `view.dispose` | see below | read |
+| `view.mount`, `view.dispose` | see below | read |
+| `view.event` | see below | write |
+| `view.tree`, `view.effect` | see below | read |
 
 - The role to write holds each right of the role to read. A verb needs the role to write unless this table says read,
   and the daemon refuses it to a reader with the refusal `role`, which names both roles.
@@ -122,28 +124,37 @@ once it listens. A second daemon refuses to start there.
   and answers `handed` with each life, its folder and its pins. The new daemon listens and opens each life again with
   its pins, then the old one closes each window and ends. Each window dials again and attaches, and the life goes on
   from its checkpoint.
-- A frame of a view gets the refusal `viewless` until the daemon routes views.
+- A kit attaches a life as a window does, under its name, and hears its events from the place that it asks. It holds no
+  life, so a life with no window and no pin ends while a kit is attached. A kit that attaches again under its name takes
+  the place of the first, and its views end. A kit that detaches, or whose peer leaves, ends its views.
 
 ## Views
 
-A view is a tree of nodes that the process of a skill with code serves, and a window draws. The types of this section
+A view is a tree of nodes that the process of a kit with code serves, and a window draws. The types of this section
 are versioned with the protocol, and `@uael/furb/protocol` gives them to TypeScript.
 
-- `view.mount {viewer, life, slot, skill}`: a window mounts a view of a skill in a slot of a life. A slot follows a
-  chain or the life:
+- `view.mount {viewer, life, slot, kit}`: a window that attached the life mounts a view of the kit of that name, which
+  is attached to it, in a slot of the life. The kit hears the frame. A viewer names one view of the daemon, so a viewer
+  that is mounted refuses `mounted`, and a kit that is not attached refuses `no_kit`. A slot follows a chain or the
+  life:
   - `dock {on}` follows the chain `on`.
   - `row {act}`, `detail {act}` and `mark {act}` follow the chain of the act: its row, its detail, or a mark in the
-    feed after it, for an act of a kind that the skill draws.
+    feed after it, for an act of a kind that the kit draws.
   - `sidebar`, a section of the sidebar, `footer`, `screen` and `overlay` follow the life. An overlay takes the place of
     a choice, a form or a confirmation.
 - `view.tree {viewer, slot, version, tree}`: the tree of a view, which takes the place of each tree of a lower
-  version.
+  version. The kit says it, and only the window of that viewer gets it.
 - `view.event {viewer, node, kind, value}`: a person pressed, changed or submitted a node, by its `id`, with the value
-  of an input.
-- `view.effect {viewer, effect}`: the skill asks the one window of the view to open a URL, to set the draft, or to show a
+  of an input. The window says it, and the kit of the view hears it. It is an act, so a window that reads is refused
+  it with `role`.
+- `view.effect {viewer, effect}`: the kit asks the one window of the view to open a URL, to set the draft, or to show a
   notice.
-- `view.dispose {viewer}`: the view ends in its window.
+- `view.dispose {viewer}`: the view ends in its window. The window says it, and the kit hears it. When the kit goes,
+  the daemon says it to the window.
+
+A window says `view.mount`, `view.event` and `view.dispose`, and a kit says `view.tree` and `view.effect`. A peer of
+the other kind is refused with `speaker`, and a frame of a viewer that the peer does not hold with `unmounted`.
 
 Each node has an `id`, and its `node` names one of a closed set: `box` (a row or a column, with a gap and a border),
 `text` (runs, each in a tone), `list`, `table`, `input`, `button`, `progress`, `code`, `diff` and `markdown`. A window
-that reads gets each tree with its acting nodes inert.
+that reads gets each tree with its `input` and `button` nodes `inert`: it draws them and takes no gesture.
