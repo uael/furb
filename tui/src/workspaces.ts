@@ -321,7 +321,8 @@ export class Workspaces extends EventEmitter {
     if (state.name) entry.name = state.name;
     // A record that a build of another version made drifts, and opens to read: that is no error.
     entry.error = state.reading ? undefined : state.error;
-    entry.status = state.reading ? "reading" : state.error ? "failed" : state.pending ? "paused" : "saved";
+    // Work that the record holds resumes as the record opens, so it shows as work that runs, not as paused.
+    entry.status = state.reading ? "reading" : state.error ? "failed" : state.pending ? "runs" : "saved";
   }
   /** Keep what the replays told in a file beside the list, so that the next run replays only the records that changed
    * since. */
