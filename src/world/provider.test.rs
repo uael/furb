@@ -81,9 +81,11 @@ fn lived(provider: Provider) -> Engine {
 /// image that a read gives in a gallery.
 fn seeing(provider: Provider, gallery: Option<PathBuf>) -> Engine {
   let scratch = world::Scratch::own();
+  // The config directory of the user is a place that no one writes, never the one of the machine.
+  let config = std::env::temp_dir().join(format!("furb-provider-user-{}", std::process::id()));
   let ears: [(&str, Box<dyn Ear>); 4] = [
-    ("provider", provider.ear()),
-    ("files", world::files(scratch.clone(), crate::extension::Places::here().config, gallery)),
+    ("provider", provider.config(config.clone()).ear()),
+    ("files", world::files(scratch.clone(), config, gallery)),
     ("bash", world::bash(scratch, &[])),
     ("time", world::time()),
   ];

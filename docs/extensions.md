@@ -13,8 +13,8 @@ caches of the chain stays valid.
 
 ## The official extensions
 
-Eight extensions come with furb, and each life runs them unless a config turns them off. `catchup`, `memory` and
-`compaction` play by default, as their manifests say.
+Eight extensions come with furb, and each life runs them unless a config turns them off. `catchup`, `memory`,
+`compaction` and `naming` play by default, as their manifests say.
 
 - **`catchup`** keeps a chain up to date with the machine. At each stand, as when a later life opens on a record, it
   reads again each file that the chain read or wrote, and tells the chain in one paragraph headed caught up the lines
@@ -42,8 +42,7 @@ Eight extensions come with furb, and each life runs them unless a config turns t
   `skills://<name>` writes the word in `.furb/extensions/<name>` of the project, after a copy of the folder there
   when it stands elsewhere, and reloads the skill when the life runs it. Its life word, `await listed()`, reads
   `skills://`
-  in the setup of the root, which every new chain holds. It carries one skill of its own, `extending`, which shows a
-  model how to extend furb, with an example for each way. A skill named `extending` in a folder takes its place. The TUI
+  in the setup of the root, which every new chain holds. The TUI
   lists each skill after `/`, and its command reads the skill for the chain. `/skills`, or `/reload-skills`, reads the
   skills of the disk again.
 - **`compaction`** cuts a chain to the work that it still needs, and the chain goes on under its name. `compact()` keeps
@@ -52,10 +51,7 @@ Eight extensions come with furb, and each life runs them unless a config turns t
   commands, `recent(n)`, the acts of the last `n` replies, and `await chosen()`, which asks a model.
   `together(*filters)` joins them, and `supersede(keep)` applies one. `await condense()` asks a model what to keep and
   compacts at once. `compacted()` does the same for one chain each time an answer fills more than `SHARE`, 0.6, of the
-  window, and moves, stops and pauses nothing. `imported(record, source)` makes a chain that goes on from the chain
-  `source`, `chain1` by default, of another record: its turns and its open prompts come, and the values of its module,
-  its words and its open commands do not. Only the log of a record shows the close of a prompt by a word, so from a
-  record whose log does not agree, only the open prompts that no model worked on come. The extension has no life word.
+  window, and moves, stops and pauses nothing. The extension has no life word.
   A project changes `SHARE`, `FILTERS`, `CHOOSER`, `LISTED` or `BRIEF` in an extension of its own. In the TUI, a rule
   with the summary marks each compaction in the feed, and `/compact` runs `await condense()` on the chain on screen.
 - **`naming`** gives the session a name from the first message of the operator. Its life word, `name_session()`, plays
@@ -67,11 +63,11 @@ Eight extensions come with furb, and each life runs them unless a config turns t
   shows the name that the record holds, and the sidebar hides the chain `naming`. A
   config that turns `naming` off, as `{"extensions": {"naming": false}}`, saves the call of that model. A rename in a
   client is the same act, which the client makes with an ear of its own, so it lasts whatever extension plays.
-- **`ouroboros`** teaches a model to extend furb. Its file holds the lore, which every chain reads in the setup, so it
-  has no life word. The lore says the three ways to extend furb and when to take each: a def in a word, which lives with
-  its chain; `extend(name, *rungs)`, which writes the words of those rungs as an extension of the project and turns it
-  on, so every later chain runs it; and an official extension, which lives in furb. `extend(name, *rungs, tui=module)`
-  also writes a [part for the TUI](#a-part-for-the-tui). `enabled()` gives the extensions that the life runs. `bound_by()` gives each name that a word of the chain bound, with the rung of that word.
+- **`ouroboros`** gives `extend(name, *rungs)`, which writes the words of those rungs as an extension of the project
+  and turns it on, so every later chain runs it, and `extend(name, *rungs, tui=module)`, which also writes a [part for
+  the TUI](#a-part-for-the-tui). How to extend furb stands in one home, the text of its
+  [`SKILL.md`](../extensions/ouroboros/SKILL.md), which a model reads with `skill("ouroboros")`: the three ways to extend
+  furb and when to take each, with an example for each. `enabled()` gives the extensions that the life runs. `bound_by()` gives each name that a word of the chain bound, with the rung of that word.
 - **`web`** searches the web and reads its pages. `web_search(query)` uses the search of the provider of the model of
   the chain, or of the actor that `to` names: the web search of the APIs of Anthropic, OpenAI and xAI, Gemini grounded
   in Google Search, and the search of DeepSeek. For a provider with no search, it uses the free search of Parallel for
@@ -164,8 +160,8 @@ What the notes are for.
   It only defines: it holds no comment and binds no name of the engine. It can hold one quote of guidance for the
   model, which holds no law.
 - `furb-interface` is the file of the interface of the extension, its contract. It can be absent.
-- `furb-default` is `"true"` for an extension that plays by default, as `catchup`, `memory` and `compaction`. It can be
-  absent, which is `"false"`.
+- `furb-default` is `"true"` for an extension that plays by default, as `catchup`, `memory`, `compaction` and
+  `naming`. It can be absent, which is `"false"`.
 - `furb-life` is the life word, a line of Python that starts the work of the extension, such as `await recall()`. It
   awaits each act that it starts whose first answer comes later, as `await mcp_index()` does, so what that act tells
   stands in the turn of the life words of the setup. It can be absent.
@@ -181,7 +177,7 @@ A field of furb that the manifest does not know is refused with its path, so a t
 A word reaches the machine only through the acts that furb has already: a read, a write, a command, a wait, the
 clock, a chance, and a prompt to the operator. It can also make acts that an ear of its own answers, written in
 Python, as `remember()` does, and answer the reads of a scheme of its own. An extension that needs an ear in Rust is
-a change of furb. The skill `extending` gives an example of each.
+a change of furb. The skill `ouroboros` gives an example of each.
 
 A word sets the actor of a chain that it made, or of a chain that waits, with a rung on that chain: `rung("actor =
 'claude-cli:sonnet/medium'", on=chain)` rebinds the default actor, and `wake(chain)` lets a paused chain go on. The next
@@ -299,8 +295,8 @@ When a part fails, the TUI goes on. A module that does not load, that exports no
 shows its error in plain words in a panel under its name. A panel or a row that throws shows its error in its place,
 and a key or a command that throws shows its error in the footer.
 
-A model adds a part to a life that runs with `extend(name, *rungs, tui=module)` of `ouroboros`, which the skill
-`extending` teaches. The write lands in `.furb`, so the TUI loads the part at once. The config turns the extension on in
+A model adds a part to a life that runs with `extend(name, *rungs, tui=module)` of `ouroboros`, whose skill
+teaches it. The write lands in `.furb`, so the TUI loads the part at once. The config turns the extension on in
 the same life. A config that sets the extension to `false` takes its part away again. `/extensions` opens a dialog of
 the extensions that the life runs, each with what its part gives, or with the error that stopped its load. Only the
 operator sees an error of a part, so the skill tells the model to check its module with `bun build --no-bundle` and to

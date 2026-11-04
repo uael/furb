@@ -6,19 +6,9 @@
 //! the engine of the crate, on the ears of the World that the crate writes, the extensions among them, and on the
 //! provider of the model of its default actor and of the models that `--roster` names, or of every model that the
 //! catalog of the crate offers when `--roster` names none.
-//!
-//! Each run puts the program in the store of builds of the machine under its version. A life on a record of an older
-//! version is upgraded as it opens, and a command that opens a record of a newer version runs the build of that version
-//! in its place, when the store holds one.
 
 #![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
 #![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(clippy::match_same_arms, reason = "debt: match arms with the same body")]
 #![expect(
   clippy::needless_pass_by_value,
   reason = "debt: an argument taken by value and only borrowed"
@@ -35,13 +25,12 @@ mod tui;
 
 use std::{
   collections::HashMap,
-  env,
   path::{Path, PathBuf},
-  process::{self, ExitCode},
+  process::ExitCode,
 };
 
 use clap::{Args, CommandFactory, Parser, Subcommand, ValueEnum, error::ErrorKind};
-use furb::{checkpoint, life::Opening, value::entry, verbs, world};
+use furb::{life::Opening, value::entry, verbs, world};
 
 use crate::life::Life;
 
@@ -201,13 +190,7 @@ impl Stand {
 }
 
 fn main() -> ExitCode {
-  if let Ok(program) = env::current_exe() {
-    let _ = world::shelve(&program);
-  }
   let furb = Furb::parse();
-  if let Some(ended) = handed(&furb) {
-    return ended;
-  }
   let done = match furb.command {
     Some(Command::Prompt { message, to, shape, place, mut stand }) => {
       // The actor of the prompt is one the life offers, which a roster that names models must name too.
@@ -243,38 +226,6 @@ fn main() -> ExitCode {
     Err(why) => {
       eprintln!("furb: {why}");
       ExitCode::FAILURE
-    }
-  }
-}
-
-/// The record of the life that a command opens, and nothing for a command that opens no life on a record.
-fn opened(furb: &Furb) -> Option<&Path> {
-  match &furb.command {
-    Some(
-      Command::Prompt { place, .. } | Command::Run { place, .. } | Command::Extensions { place },
-    ) => place.record.as_deref(),
-    Some(Command::Turns { record, .. } | Command::Checkpoint { record, .. }) => Some(record),
-    Some(Command::Facts { .. } | Command::Catalog { .. }) => None,
-    None if furb.mode == Mode::Rpc => furb.place.record.as_deref(),
-    None => None,
-  }
-}
-
-/// How the build of a newer version ended, which ran this command in its place with the same words, when the record
-/// that the command opens names that version and the store of builds holds its program: only a build of that version
-/// replays the record with no drift. A record of an older version is upgraded as the life opens, as
-/// [`furb::life::Opening`] says. Nothing runs when the store holds no such build, and the life says why.
-fn handed(furb: &Furb) -> Option<ExitCode> {
-  let kept = world::kept(opened(furb)?).ok()?;
-  let theirs = world::version(checkpoint::segment(&kept)).filter(|one| *one > world::VERSION)?;
-  let program = world::stored(theirs)?;
-  match process::Command::new(&program).args(env::args_os().skip(1)).status() {
-    Ok(status) => {
-      Some(ExitCode::from(status.code().map_or(1, |code| u8::try_from(code).unwrap_or(1))))
-    }
-    Err(no) => {
-      eprintln!("furb: the build of version {theirs} at {} does not run: {no}", program.display());
-      Some(ExitCode::FAILURE)
     }
   }
 }

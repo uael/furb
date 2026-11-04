@@ -50,7 +50,7 @@ test("a new life draws its first frame with the composer before its life opens, 
   withProject(["claude-cli:sonnet"], async ({ directory, library, screen }) => {
     const begun = performance.now();
     const group = await library.add(join(directory, "project"), false);
-    const entry = await library.create(group, undefined, undefined, false, group.directory, true);
+    const entry = await library.create(group, undefined, undefined, group.directory, true);
     const app = follow(screen.renderer, { quit() {}, workspaces: library });
     await screen.flush();
     const first = performance.now() - begun;
@@ -78,7 +78,7 @@ test("a life that fails to open after its window drew it leaves its row with the
     const failed = new Promise<unknown>((resolve) =>
       library.once("failed", (_entry, error) => resolve(error)),
     );
-    const entry = await library.create(group, undefined, undefined, false, group.directory, true);
+    const entry = await library.create(group, undefined, undefined, group.directory, true);
     const app = follow(screen.renderer, { quit() {}, workspaces: library });
     expect(entry.session).toBeDefined();
     expect(String(await failed)).toContain("Invalid config at");

@@ -21,7 +21,6 @@
 #![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
 #![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
 
-pub mod compaction;
 pub mod skills;
 
 use std::{

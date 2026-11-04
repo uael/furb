@@ -19,7 +19,6 @@
 )]
 #![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
 #![expect(clippy::match_bool, reason = "debt: a match on a bool")]
-#![expect(clippy::redundant_clone, reason = "debt: a clone of a value that is not used again")]
 #![expect(
   clippy::semicolon_if_nothing_returned,
   reason = "debt: a unit expression with no semicolon"
@@ -138,7 +137,7 @@ impl Lived {
     let scratch = world::Scratch::own();
     let ears = [
       ("provider", provider(at.clone(), words, Rc::clone(&read))),
-      ("files", world::files(scratch.clone(), crate::extension::Places::here().config, None)),
+      ("files", world::files(scratch.clone(), at.join("config"), None)),
       ("bash", world::bash(scratch, &record)),
       ("time", world::time()),
       ("store", store),
@@ -685,8 +684,8 @@ fn a_life_syncs_its_store_at_the_end_of_each_run_and_not_after_each_entry() {
   let words = Rc::new(RefCell::new(VecDeque::from(["close(1)".to_owned()])));
   let scratch = world::Scratch::own();
   let ears = [
-    ("provider", provider(at, words, Rc::default())),
-    ("files", world::files(scratch.clone(), crate::extension::Places::here().config, None)),
+    ("provider", provider(at.clone(), words, Rc::default())),
+    ("files", world::files(scratch.clone(), at.join("config"), None)),
     ("bash", world::bash(scratch, &record)),
     ("time", world::time()),
     ("store", store),
@@ -745,8 +744,8 @@ fn a_store_on_a_full_disk_loses_no_entry_keeps_none_twice_and_tells_the_operator
   let words = Rc::new(RefCell::new(VecDeque::from(["close(1)".to_owned(), "close(2)".to_owned()])));
   let scratch = world::Scratch::own();
   let ears = [
-    ("provider", provider(at, words, Rc::default())),
-    ("files", world::files(scratch.clone(), crate::extension::Places::here().config, None)),
+    ("provider", provider(at.clone(), words, Rc::default())),
+    ("files", world::files(scratch.clone(), at.join("config"), None)),
     ("bash", world::bash(scratch, &record)),
     ("time", world::time()),
     ("store", store),
@@ -813,7 +812,7 @@ fn a_life_writes_no_snapshot_while_its_store_is_behind_the_sandbox() {
   let scratch = world::Scratch::own();
   let ears = [
     ("provider", provider(at.clone(), words, Rc::default())),
-    ("files", world::files(scratch.clone(), crate::extension::Places::here().config, None)),
+    ("files", world::files(scratch.clone(), at.join("config"), None)),
     ("bash", world::bash(scratch, &record)),
     ("time", world::time()),
     ("store", store),
@@ -1542,7 +1541,7 @@ fn a_statement_that_a_model_streams_and_that_prompts_another_chain_has_its_reply
     let scratch = world::Scratch::own();
     let ears: [(&str, Box<dyn Ear>); 4] = [
       ("provider", provider.ear()),
-      ("files", world::files(scratch.clone(), crate::extension::Places::here().config, None)),
+      ("files", world::files(scratch.clone(), at.join("config"), None)),
       ("bash", world::bash(scratch, &record)),
       ("store", store),
     ];

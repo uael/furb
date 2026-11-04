@@ -121,9 +121,7 @@ pub const MADE: &str = "made";
 ///
 /// The gate of the replays holds the versions few: each record in `tests/replay` replays with no
 /// drift on each build of its version. A change that makes one of them drift adds one to the
-/// version, and makes the record again in the same change, as `tests/replay/README.md` says. The
-/// command line of each version puts its program in the store of builds of the machine, where
-/// [`build`](super::build) says, so a build of a later version hands a record of this one to it.
+/// version, and makes the record again in the same change, as `tests/replay/README.md` says.
 pub const VERSION: i64 = 9;
 
 /// The engine of this build, which a record names: a digest of the engine and of the Kernel, which make each act of

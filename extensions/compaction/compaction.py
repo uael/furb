@@ -21,9 +21,7 @@ from furb.engine import (
   rung,
   say,
   scope,
-  site,
   take,
-  told,
   transcript,
   under,
 )
@@ -44,9 +42,6 @@ compaction = """Compaction cuts this chain to the work that it still needs, and 
 - compacted() wraps a chain: after an answer that reads more than SHARE of the window, it asks choice(), and at the
   next reply once that came, it compacts the chain to what the model chose. It moves, stops and pauses nothing. No
   chain is wrapped unless a word wraps it.
-- imported(record, source) makes a chain that goes on from the chain source of another record: its turns, and each
-  of its open prompts under a new name. No value of its module, no word that ran and no command that was open comes
-  with it.
 - A project changes the defaults in an extension of its own, whose word rebinds SHARE, FILTERS, CHOOSER, LISTED or
   BRIEF."""
 SHARE = 0.6
@@ -237,38 +232,3 @@ async def condense(to: str = "", on: str = "") -> str:
 
       return compact([chose, latest()], summary.strip(), here)
   return compact(on=here)
-
-
-def carry(record: str, source: str = "chain1", on: str = "") -> Act:
-  return act("carry", on, None, record, source)
-
-
-async def inherit(record: str, source: str = "chain1", on: str = "") -> str:
-  here = on or scope(acting())
-  brought = carry(record, source, here)
-  got = await brought
-  assert isinstance(got, dict)
-  mine = transcript(here)
-  say(
-    "prefix",
-    here,
-    [
-      *transcript(here, "module")[-1:],
-      *got["turns"],
-      *[x for x in mine if question(x)],
-      *[x for x in mine if x[0] == "tell" and x[1] == here],
-    ],
-  )
-  moved = {str(prompt(shape, message, to, on=here)): name for name, shape, message, to in got["prompts"]}
-  lost = "each value of its module, each word that ran and each command that was open"
-  record, entries, digest, logged, facts = (got[key] for key in ("record", "entries", "digest", "logged", "turns"))
-  carried = {"turns": len(facts), "lost": lost, "prompts": moved}
-  say(*told(brought, "carried", source=source, record=record, entries=entries, digest=digest, logged=logged, **carried))
-  return here
-
-
-def imported(record: str, source: str = "chain1", label: str = "", on: str = "") -> str:
-  here = on or chain(label or f"{source} of {record}")
-  with site.set(here):
-    rung(f"await inherit({record!r}, {source!r})", on=here)
-  return here
