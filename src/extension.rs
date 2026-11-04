@@ -34,6 +34,7 @@ use ruff_python_ast::{Expr, Stmt};
 use ruff_python_parser::parse_module;
 use ruff_text_size::Ranged;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 use crate::{
   ear::{Co, Ear, hear, hearing, say},
@@ -66,7 +67,7 @@ pub(crate) const WORD: &str = "furb-word";
 const LIFE: &str = "furb-life";
 
 /// The field of the manifest that names the file of the interface of the extension, its contract.
-const INTERFACE: &str = "furb-interface";
+pub(crate) const INTERFACE: &str = "furb-interface";
 
 /// The field of the manifest that says whether the extension plays by default, `"true"` or
 /// `"false"`.
@@ -93,42 +94,54 @@ const ROOTED: &str = "root";
 
 /// The official extensions, each as its manifest, the file of its word, and the file of the part for a TUI that its
 /// manifest names, in the order a life runs them.
-const OFFICIAL: [(&str, &str, Option<&str>); 8] = [
+const OFFICIAL: [(&str, &str, Option<&str>, &str); 8] = [
   (
     include_str!("../extensions/catchup/SKILL.md"),
     include_str!("../extensions/catchup/catchup.py"),
     None,
+    include_str!("../extensions/catchup/catchup.pyi"),
   ),
   (
     include_str!("../extensions/memory/SKILL.md"),
     include_str!("../extensions/memory/memory.py"),
     None,
+    include_str!("../extensions/memory/memory.pyi"),
   ),
   (
     include_str!("../extensions/skills/SKILL.md"),
     include_str!("../extensions/skills/skills.py"),
     None,
+    include_str!("../extensions/skills/skills.pyi"),
   ),
   (
     include_str!("../extensions/compaction/SKILL.md"),
     include_str!("../extensions/compaction/compaction.py"),
     Some(include_str!("../extensions/compaction/tui.ts")),
+    include_str!("../extensions/compaction/compaction.pyi"),
   ),
   (
     include_str!("../extensions/naming/SKILL.md"),
     include_str!("../extensions/naming/naming.py"),
     None,
+    include_str!("../extensions/naming/naming.pyi"),
   ),
   (
     include_str!("../extensions/ouroboros/SKILL.md"),
     include_str!("../extensions/ouroboros/ouroboros.py"),
     None,
+    include_str!("../extensions/ouroboros/ouroboros.pyi"),
   ),
-  (include_str!("../extensions/web/SKILL.md"), include_str!("../extensions/web/web.py"), None),
+  (
+    include_str!("../extensions/web/SKILL.md"),
+    include_str!("../extensions/web/web.py"),
+    None,
+    include_str!("../extensions/web/web.pyi"),
+  ),
   (
     include_str!("../extensions/mcp/SKILL.md"),
     include_str!("../extensions/mcp/mcp.py"),
     Some(include_str!("../extensions/mcp/tui.ts")),
+    include_str!("../extensions/mcp/mcp.pyi"),
   ),
 ];
 
@@ -196,7 +209,7 @@ pub fn frontmatter(text: &str) -> Frontmatter {
 
 /// Whether a line imports furb or a module of it, as `from furb import`, `from furb.engine import` or `import
 /// furb`, which the word of a file leaves out. A module whose name only starts with furb is another module.
-fn imports_furb(line: &str) -> bool {
+pub(crate) fn imports_furb(line: &str) -> bool {
   let module = line.strip_prefix("from ").or_else(|| line.strip_prefix("import "));
   let after = module.and_then(|one| one.strip_prefix("furb"));
   after.is_some_and(|rest| rest.is_empty() || rest.starts_with([' ', '\t', '.', ',']))
@@ -227,12 +240,20 @@ impl Extension {
     Some(Extension { name: text(0)?, word: text(1)?, life: text(2)?, root, file })
   }
 
-  /// The saying that enables the extension, about the root: its name, its word, its life word, whether it plays on the
-  /// root alone, and the file of its word. An enable of a build before the file holds no file.
-  fn enable(&self) -> Fact {
+  /// The saying that enables the extension, about the root: its name, its word, its life word,
+  /// whether it plays on the root alone, the file of its word, and the sha256 of its word in hex.
+  /// An enable of a build before the file holds no file, and one before the digest holds none.
+  pub(crate) fn enable(&self) -> Fact {
     let rooted = if self.root { ROOTED } else { "" };
-    let words =
-      [self.name.as_str(), self.word.as_str(), self.life.as_str(), rooted, self.file.as_str()];
+    let digest = format!("{:x}", Sha256::digest(self.word.as_bytes()));
+    let words = [
+      self.name.as_str(),
+      self.word.as_str(),
+      self.life.as_str(),
+      rooted,
+      self.file.as_str(),
+      digest.as_str(),
+    ];
     Fact::says(ENABLE, ROOT, words.map(Object::string))
   }
 }
@@ -288,7 +309,7 @@ fn officials(places: &Places) -> Vec<Extension> {
   let whole = "an official extension is whole";
   OFFICIAL
     .iter()
-    .map(|(manifest, word, _)| {
+    .map(|(manifest, word, _, _)| {
       let mut one = manifested(manifest, |_| Ok(word)).expect(whole);
       one.file = copy(&one.name, &one.file, &one.word, places);
       one
@@ -304,12 +325,13 @@ pub(crate) fn manifests() -> impl Iterator<Item = &'static str> {
 /// Each file that the crate carries of the official extension of a name, by its name in the folder
 /// of that extension: its manifest, its word and its view.
 pub(crate) fn shipped(name: &str) -> Option<Vec<(String, &'static str)>> {
-  OFFICIAL.iter().find_map(|(manifest, word, view)| {
+  OFFICIAL.iter().find_map(|(manifest, word, view, interface)| {
     let front = frontmatter(manifest);
     (front.field("name") == Some(name)).then(|| {
       let file = front.meta(WORD).unwrap_or_default().to_owned();
       let mut files = vec![(MANIFEST.to_owned(), *manifest), (file, *word)];
       files.extend(front.meta(VIEW).zip(*view).map(|(one, text)| (one.to_owned(), text)));
+      files.extend(front.meta(INTERFACE).map(|one| (one.to_owned(), *interface)));
       files
     })
   })
@@ -327,7 +349,7 @@ fn names() -> Vec<String> {
 /// source imports from `furb.engine`, and a word of a chain imports nothing of furb. Each life of a
 /// config directory shares the copy, so a life of another build in the same directory can write
 /// another word there: a host or a test that runs builds at once gives each a directory of its own.
-fn copy(name: &str, file: &str, text: &str, places: &Places) -> String {
+pub(crate) fn copy(name: &str, file: &str, text: &str, places: &Places) -> String {
   let copied = places.config.join("words").join(name).join(file);
   if fs::read_to_string(&copied).ok().as_deref() != Some(text)
     && copied
@@ -360,7 +382,7 @@ pub fn load(name: &str, root: &Path, places: &Places) -> Result<Extension, Fault
 }
 
 /// An extension from the text of its manifest, with the text of its word as `read` gives it for the file named.
-fn manifested<T: AsRef<str>>(
+pub(crate) fn manifested<T: AsRef<str>>(
   text: &str,
   read: impl FnOnce(&str) -> Result<T, String>,
 ) -> Result<Extension, String> {
@@ -496,7 +518,7 @@ pub fn parts(places: &Places, project: &Path) -> Result<Vec<Part>, Fault> {
 
 /// The part that the crate carries for an official extension, when its manifest names one.
 fn carried(name: &str) -> Option<Part> {
-  OFFICIAL.iter().find_map(|(manifest, _, text)| {
+  OFFICIAL.iter().find_map(|(manifest, _, text, _)| {
     let manifest = frontmatter(manifest);
     let file = format!("extensions/{name}/{}", manifest.meta(VIEW)?);
     (manifest.field("name") == Some(name)).then(|| Part {

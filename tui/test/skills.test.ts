@@ -17,7 +17,7 @@ function skill(directory: string, name: string, detail: string): void {
   writeFileSync(join(folder, "SKILL.md"), `---\nname: ${name}\ndescription: ${detail}\n---\nSteps.\n`);
 }
 
-test("a skill added on the disk shows in the list of / commands after /skills, and its command reads its SKILL.md", async () => {
+test("a skill added on the disk shows in the list of / commands after /skills, and its command loads the skill", async () => {
   const directory = mkdtempSync(join(tmpdir(), "furb-skills-"));
   made.push(directory);
   skill(directory, "brew", "Brew a pot of tea");
@@ -47,11 +47,11 @@ test("a skill added on the disk shows in the list of / commands after /skills, a
       await app.submit();
       for (
         let tries = 0;
-        tries < 400 && !session.acts.some((act) => act.words[0] === "skills://bake");
+        tries < 400 && !session.acts.some((act) => act.kind === "skill" && act.words[0] === "bake");
         tries++
       )
         await Bun.sleep(25);
-      expect(session.acts.some((act) => act.kind === "read" && act.words[0] === "skills://bake")).toBe(true);
+      expect(session.acts.some((act) => act.kind === "skill" && act.words[0] === "bake")).toBe(true);
     },
     { width: 132, height: 50 },
     session,

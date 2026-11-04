@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from conftest import of
-from extensions.conftest import extended, index, skilled
+from extensions.conftest import extended, index, skilled, tilded
 from furb import engine
 from furb.engine import Refused, Text
 from furb_monty import _monty
@@ -19,7 +19,7 @@ async def lines(tmp_path: Path) -> list[str]:
 
 
 async def test_the_skills_of_a_chain_as_a_text_that_the_chain_reads(tmp_path: Path) -> None:
-  """The skills of a chain, as a text that the chain reads: a first line that says how to read a skill, then one line for each skill that the World finds, with its name, its marks and what it is for."""
+  """The skills of a chain, as a text that the chain reads: a first line that says how to load and read a skill, then one line for each skill that the World finds, with its name, its marks and what it is for."""
   skilled(tmp_path / "work" / ".furb" / "skills", "brew", "name: brew\ndescription: Make tea.")
   skilled(tmp_path / "work" / ".furb" / "skills", "steep", "name: steep\ndescription: Wait for the leaves.")
   _, root = extended("skills", tmp_path, _monty.skills)
@@ -76,7 +76,7 @@ async def test_a_skill_whose_metadata_names_a_word_has_code(tmp_path: Path) -> N
   assert [x for x in got if x.startswith(("note ", "skills ", "memory "))] == [
     "memory (code, default): Tells a chain the AGENTS.md or CLAUDE.md files of the project that apply to the files that it reads.",
     "note (code, default): A note.",
-    "skills (code, on): Lists the skills of the project and of the user, and reads one.",
+    "skills (code, on): Lists the skills of the project and of the user, and loads one.",
   ]
 
 
@@ -108,3 +108,67 @@ async def test_the_world_answers_a_file_of_the_folder_of_a_skill(tmp_path: Path)
     await engine.rung('close(read("skills://brew/../x", HIDDEN))', on=root)
   with pytest.raises(Refused, match=r"The skill catchup holds no file tui\.ts\."):
     await engine.rung('close(read("skills://catchup/tui.ts", HIDDEN))', on=root)
+
+
+async def test_the_world_answers_the_name_of_a_skill_with_its_word_or_its_skill_md(tmp_path: Path) -> None:
+  """The World answers skills:// and the name of a skill with code with the word that the life last enabled for it, else with the word of its file, and with the SKILL.md file of a skill with no code."""
+  folder = skilled(
+    tmp_path / "work" / ".furb" / "skills", "note", "name: note\ndescription: A note.\nmetadata:\n  furb-word: note.py"
+  ).parent
+  (folder / "note.py").write_text(
+    "from furb.engine import Text, read\n\n\ndef note() -> Text:\n  return read('n')\n", encoding="utf-8"
+  )
+  path = skilled(tmp_path / "work" / ".furb" / "skills", "brew", "name: brew\ndescription: Make tea.")
+  _, root = extended("skills", tmp_path, _monty.skills)
+  got = await engine.rung('close(read("skills://note", HIDDEN))', on=root)
+  assert got == Text("skills://note", "def note() -> Text:\n  return read('n')")
+  enabled = [a[4] for a in engine.transcript(on=root) if a[0] == "enable" and a[3] == "skills"]
+  assert await engine.rung('close(read("skills://skills", HIDDEN))', on=root) == Text(
+    "skills://skills", str(enabled[-1])
+  )
+  got = await engine.rung('close(read("skills://brew", HIDDEN))', on=root)
+  assert got == Text(tilded(path), path.read_text(encoding="utf-8"))
+
+
+async def test_a_write_of_a_skill_writes_its_word_in_the_project(tmp_path: Path) -> None:
+  """A write of skills:// and the name of a skill with code writes the word in its folder in .furb/extensions of the project, after a copy of its folder there when it stands elsewhere, and keeps the imports of furb at the top of its file."""
+  folder = skilled(
+    tmp_path / "config" / "skills", "note", "name: note\ndescription: A note.\nmetadata:\n  furb-word: note.py"
+  ).parent
+  (folder / "note.py").write_text(
+    "from furb.engine import read\n\n\ndef note():\n  return read('n')\n", encoding="utf-8"
+  )
+  _, root = extended("skills", tmp_path, _monty.skills)
+  await engine.rung('write(Text("skills://note", "def note():\\n  return 2"))', on=root)
+  there = tmp_path / "work" / ".furb" / "extensions" / "note"
+  assert (there / "note.py").read_text(
+    encoding="utf-8"
+  ) == "from furb.engine import read\n\n\ndef note():\n  return 2\n"
+  assert (there / "SKILL.md").read_text(encoding="utf-8") == (folder / "SKILL.md").read_text(encoding="utf-8")
+  assert "return read('n')" in (folder / "note.py").read_text(encoding="utf-8"), (
+    "the folder that stands elsewhere stays"
+  )
+  await engine.rung('write(Text("skills://web", "X = 1"))', on=root)
+  web = tmp_path / "work" / ".furb" / "extensions" / "web"
+  assert sorted(x.name for x in web.iterdir()) == ["SKILL.md", "web.py", "web.pyi"]
+  assert (web / "web.py").read_text(encoding="utf-8").endswith("\n\n\nX = 1\n")
+  assert (web / "web.py").read_text(encoding="utf-8").startswith("from furb.engine import ")
+  with pytest.raises(Refused, match=r"The skill extending has no code to write\."):
+    await engine.rung('close(write(Text("skills://extending", "X = 1")))', on=root)
+
+
+async def test_a_write_of_a_skill_that_the_life_runs_reloads_it(tmp_path: Path) -> None:
+  """When the life runs the skill that a write of skills:// writes, the World enables it again with the new word, and each chain plays the definitions of that word."""
+  folder = skilled(
+    tmp_path / "work" / ".furb" / "skills", "note", "name: note\ndescription: A note.\nmetadata:\n  furb-word: note.py"
+  ).parent
+  (folder / "note.py").write_text("def note() -> int:\n  return 1\n", encoding="utf-8")
+  _, root = extended("skills", tmp_path, _monty.skills)
+  await engine.rung('await skill("note")', on=root)
+  assert await engine.rung("close(note())", on=root) == 1
+  await engine.rung('write(Text("skills://note", "def note() -> int:\\n  return 2"))', on=root)
+  assert [a[4] for a in engine.transcript(on=root) if a[0] == "enable" and a[3] == "note"] == [
+    "def note() -> int:\n  return 1",
+    "def note() -> int:\n  return 2",
+  ]
+  assert await engine.rung("close(note())", on=root) == 2
