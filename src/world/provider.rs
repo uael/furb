@@ -2223,8 +2223,15 @@ fn uuid_from(
   })?;
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  let hex: String = bytes.iter().map(|one| format!("{one:02x}")).collect();
-  Ok(format!("{}-{}-{}-{}-{}", &hex[..8], &hex[8..12], &hex[12..16], &hex[16..20], &hex[20..]))
+  let digits = crate::value::hex(&bytes);
+  Ok(format!(
+    "{}-{}-{}-{}-{}",
+    &digits[..8],
+    &digits[8..12],
+    &digits[12..16],
+    &digits[16..20],
+    &digits[20..]
+  ))
 }
 
 #[cfg(test)]

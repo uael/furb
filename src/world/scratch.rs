@@ -2,15 +2,10 @@
 //! word names as `scratch://` and a command as `$TMPDIR`, so no text that the World answers names its place.
 
 #![expect(
-  clippy::format_collect,
-  reason = "debt: a format! for each item, collected into a String"
-)]
-#![expect(
   clippy::let_underscore_must_use,
   reason = "debt: a let _ drops a value that must be used"
 )]
 #![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
 
 use std::{
   collections::HashMap,
@@ -24,12 +19,12 @@ use sha2::{Digest, Sha256};
 
 use super::{
   cache,
-  files::{ended, failed, stored, text},
+  files::{filed, text},
   resolved,
 };
 use crate::{
   fact::named,
-  value::{Fault, Object, Text},
+  value::{Fault, Object, Text, hex},
 };
 
 /// The scheme of the paths of the scratch directory.
@@ -61,18 +56,22 @@ impl Drop for Held {
 
 impl Scratch {
   /// The scratch directory at a path, resolved against the working directory of the process, which outlives the
-  /// life.
-  pub fn at(path: impl Into<PathBuf>) -> Scratch {
-    let here = std::env::current_dir().unwrap_or_default();
-    let at = resolved(&here, &path.into().to_string_lossy());
+  /// life. It is refused when the path is relative and the process has no working directory.
+  pub fn at(path: impl Into<PathBuf>) -> Result<Scratch, Fault> {
+    absolute(&path.into()).map(Scratch::kept)
+  }
+
+  /// The scratch directory at an absolute path, which outlives the life.
+  fn kept(at: PathBuf) -> Scratch {
     Scratch(Arc::new(Held { at, owned: false }))
   }
 
   /// The scratch directory of a record: in the cache of furb, under the digest of the canonical path of the record,
   /// so every later life on that record finds it again, however the path is spelled, and its path stays short enough
-  /// for a socket that a command makes in it. Nothing when the machine has no cache of furb.
-  pub fn of(record: &Path) -> Option<Scratch> {
-    let path = resolved(&std::env::current_dir().unwrap_or_default(), &record.to_string_lossy());
+  /// for a socket that a command makes in it. Nothing when the machine has no cache of furb, and
+  /// a refusal when the record is a relative path and the process has no working directory.
+  pub fn of(record: &Path) -> Result<Option<Scratch>, Fault> {
+    let path = absolute(record)?;
     let path = match (path.parent(), path.file_name()) {
       (Some(folder), Some(name)) => {
         fs::canonicalize(folder).map_or(path.clone(), |real| real.join(name))
@@ -80,7 +79,7 @@ impl Scratch {
       _ => path,
     };
     let digest = Sha256::digest(path.to_string_lossy().as_bytes());
-    Some(Scratch::at(cache()?.join("scratch").join(hex(&digest[..8]))))
+    Ok(cache().map(|cache| Scratch::kept(cache.join("scratch").join(hex(&digest[..8])))))
   }
 
   /// A scratch directory of its own, in the temporary directory of the machine under a short name, which goes when
@@ -158,7 +157,7 @@ impl Scratch {
     files.sort();
     let mut name = at.file_name().unwrap_or_default().to_os_string();
     name.push(".new");
-    let beside = Scratch::at(at.with_file_name(name));
+    let beside = Scratch::kept(at.with_file_name(name));
     let _ = fs::remove_dir_all(beside.path());
     if let Err(no) = beside.made() {
       log(&format!("the scratch directory of the record was not made again: {}", no.message()));
@@ -233,17 +232,15 @@ pub(crate) fn beneath(
   let Beneath { root, scheme, place } = dir;
   let at = resolved(root, path);
   let outside = || Fault::refused(format!("{scheme}{path} is outside {place}."));
-  let under = at.strip_prefix(root).map_err(|_| outside())?.to_path_buf();
+  let Ok(under) = at.strip_prefix(root) else { return Err(outside()) };
+  let under = under.to_path_buf();
   if !inside(root, &at) {
     return Err(outside());
   }
   let name = format!("{scheme}{}", slashed(&under));
   if let Some(content) = content {
     make()?;
-    if let Some(parent) = at.parent() {
-      fs::create_dir_all(parent).map_err(|no| failed(&no, &name))?;
-    }
-    stored(&at, ended(&at, content).as_bytes()).map_err(|no| failed(&no, &name))?;
+    filed(&at, content, &name)?;
   }
   // The scratch directory is a folder before anything made it, and a directory of another scheme
   // only when it stands.
@@ -288,9 +285,20 @@ fn slashed(under: &Path) -> String {
   parts.join("/")
 }
 
-/// Bytes as the digits of base sixteen.
-fn hex(bytes: &[u8]) -> String {
-  bytes.iter().map(|one| format!("{one:02x}")).collect()
+/// A path placed against the working directory of the process, which it needs only for a
+/// relative path.
+fn absolute(path: &Path) -> Result<PathBuf, Fault> {
+  let here = if path.is_absolute() {
+    PathBuf::new()
+  } else {
+    std::env::current_dir().map_err(|no| {
+      Fault::refused(format!(
+        "The working directory could not be read for {}: {no}",
+        path.display()
+      ))
+    })?
+  };
+  Ok(resolved(&here, &path.to_string_lossy()))
 }
 
 #[cfg(test)]

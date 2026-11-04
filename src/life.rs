@@ -217,13 +217,20 @@ impl Opening {
       Some(log) => log(line),
       None => eprintln!("furb: {line}"),
     };
-    let scratch = works.then(|| {
-      let kept =
-        self.record.as_ref().filter(|_| keeps).and_then(|path| Scratch::of(Path::new(path)));
-      let scratch = kept.unwrap_or_else(Scratch::own);
-      scratch.remade(&record, &told);
-      scratch
-    });
+    let scratch = works
+      .then(|| -> Result<Scratch, Fault> {
+        let kept = self
+          .record
+          .as_ref()
+          .filter(|_| keeps)
+          .map(|path| Scratch::of(Path::new(path)))
+          .transpose()?
+          .flatten();
+        let scratch = kept.unwrap_or_else(Scratch::own);
+        scratch.remade(&record, &told);
+        Ok(scratch)
+      })
+      .transpose()?;
     let gallery = self.gallery();
     let project = PathBuf::from(&self.directory);
     let provider = provider.ear();

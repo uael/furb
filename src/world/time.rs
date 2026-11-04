@@ -1,11 +1,5 @@
 //! Time: a reading of the clock, a chance drawn, and a wait, which ends when its time is up.
 
-#![expect(clippy::cast_precision_loss, reason = "debt: an as cast that loses precision")]
-#![expect(
-  clippy::single_match_else,
-  reason = "debt: a match of one arm and else, where if let serves"
-)]
-
 use std::{
   collections::HashMap,
   future,
@@ -18,7 +12,7 @@ use unsync::oneshot;
 use crate::{
   ear::{Co, Ear, Next, hearing, say},
   fact::Fact,
-  value::{Fault, Object},
+  value::{Fault, Given, Object},
 };
 
 /// The ear of time: it answers a clock with the seconds since the epoch and a chance with a number drawn, at least
@@ -54,15 +48,13 @@ pub fn time() -> Box<dyn Ear> {
         }
         "wait" if a.question() => {
           say(&mut co, Fact::says("started", &about, []));
-          let seconds =
-            a.word(1).and_then(|one| one.as_float().or_else(|| one.as_int().map(|n| n as f64)));
-          let deadline = match due.get(&about) {
-            Some(deadline) => *deadline,
-            None => {
-              let deadline = now() + seconds.unwrap_or_default();
-              say(&mut co, Fact::says("due", &about, [Object::float(deadline)]));
-              deadline
-            }
+          let seconds = a.word(1).and_then(|one| one.seconds());
+          let deadline = if let Some(deadline) = due.get(&about) {
+            *deadline
+          } else {
+            let deadline = now() + seconds.unwrap_or_default();
+            say(&mut co, Fact::says("due", &about, [Object::float(deadline)]));
+            deadline
           };
           let (stop, stopped) = oneshot::channel();
           co.work(waited(about.clone(), deadline, stopped));
@@ -108,6 +100,10 @@ fn now() -> f64 {
 }
 
 /// A number drawn by the system, at least zero and under one.
+#[expect(
+  clippy::cast_precision_loss,
+  reason = "the 53 bits kept fit the mantissa of a float exactly"
+)]
 fn drawn() -> Result<f64, Fault> {
   let bits = getrandom::u64().map_err(|no| Fault::refused(no.to_string()))?;
   Ok((bits >> 11) as f64 / (1u64 << 53) as f64)
