@@ -101,6 +101,9 @@ it is not given. The daemon answers requests in any order.
 - After `attach`, the daemon pushes each event of the life as a frame `event`, with the `life`, the `seq` of the event
   in the log of the life and the `event`: `fact`, `act`, `text`, `notice`, `changed`, `reborn` or `ended`. After
   `reborn`, the life goes on from its checkpoint, and its acts come again as they stand.
+- The log of a life that opens on a record with a checkpoint starts with each fact that the record told before that
+  checkpoint, as the log after a rebirth holds them. So a window of a life that a later open, a handover or an end
+  brought back from its checkpoint hears the life whole, and hears no fact twice.
 - After each `attach` and `detach`, the daemon pushes to each window of the life a frame `presence` with the `life`
   and its `peers`, each window that is attached now. Presence is no fact of the record.
 

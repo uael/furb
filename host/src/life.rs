@@ -16,11 +16,11 @@ use std::{
 };
 
 use furb::{
-  Engine, Fault, Object, Text,
+  Engine, Fact, Fault, Object, Text, checkpoint,
   life::{Log, Opening, Stream},
   verbs,
   wire::{outward, parsed},
-  world::answered,
+  world::{self, answered},
 };
 use futures::stream::{self, Stream as Streams};
 use serde_json::{Value, json};
@@ -36,7 +36,7 @@ use tokio::{
 
 use crate::{
   changes::journal,
-  ears::ears,
+  ears::{ears, json_of},
   error::LifeError,
   event::{Event, Seq},
   rebirth::{self, Watch},
@@ -215,6 +215,25 @@ impl Life {
     }
   }
 
+  /// The facts of a record before its last checkpoint, told first: the life boots on that
+  /// checkpoint and replays none of them, so each reader hears the life whole, as after a rebirth,
+  /// and the open tells no fact again that the checkpoint restates. A record that the store cannot
+  /// read tells nothing here, and its open says why.
+  fn recalled(&mut self, record: &str) {
+    let Some(at) = world::kept(record).ok().and_then(|entries| checkpoint::last(&entries)) else {
+      return;
+    };
+    let Ok(told) = world::retold(record) else { return };
+    let mut facts = Vec::new();
+    if told.before(at + 1, &mut |one| facts.extend(Fact::of(one.as_ref()))).is_err() {
+      return;
+    }
+    for fact in facts.iter().filter(|one| one.kind() != checkpoint::CHECKPOINT) {
+      self.put(Event::Fact(json_of(fact)));
+    }
+    self.watch.reborn();
+  }
+
   /// The life opened again, after each event that the engine before it told.
   fn reborn(&mut self, fault: Option<String>) {
     self.told(None);
@@ -296,6 +315,9 @@ async fn lives(
 ) -> Option<String> {
   let record = opening.record.clone().filter(|_| opening.keeps());
   let journal = || record.as_deref().map(|one| (PathBuf::from(&opening.directory), journal(one)));
+  if let Some(one) = record.as_deref() {
+    life.recalled(one);
+  }
   loop {
     let engine = match opening.clone().open(ears(told.clone(), journal())).await {
       Ok((engine, _)) => engine,
