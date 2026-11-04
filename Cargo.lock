@@ -1541,7 +1541,6 @@ dependencies = [
  "jsonschema",
  "memchr",
  "monty",
- "monty-alloc",
  "monty-type-checking",
  "monty-types",
  "napi",
@@ -3016,14 +3015,6 @@ dependencies = [
  "unicode-general-category",
  "unicode-normalization",
  "unicode_names2",
-]
-
-[[package]]
-name = "monty-alloc"
-version = "1.3.0"
-source = "git+https://github.com/uael/monty?rev=9f7098d6#9f7098d6407c9fefe4b9ba9c5bf7715f43c4b394"
-dependencies = [
- "monty-types",
 ]
 
 [[package]]

@@ -1,17 +1,17 @@
 //! The rebirth of a life: its actor writes its checkpoint, drops its engine and opens it again
-//! from that checkpoint on the same thread, for the same readers. A life is born again when the
-//! memory of its sandbox passes half of its bound, so the engine lets go of what its words left,
-//! and when it said [`TAIL`] facts since it opened while no command and no reply runs, so an open
-//! after a crash replays a short tail. A rebirth cuts each word that runs, which the new open ends
-//! as interrupted, and each chain goes on as it stood.
+//! from that checkpoint on the same thread, for the same readers. A life is born again when it
+//! said [`TAIL`] facts since it opened while no command and no reply runs, so an open after a
+//! crash replays a short tail, and the engine lets go of what its words left. A rebirth cuts
+//! each word that runs, which the new open ends as interrupted, and each chain goes on as it
+//! stood.
 //!
-//! A fault that stops the sandbox, as its memory bound, cuts the life with no checkpoint. Then the
-//! actor carries the facts after the last checkpoint as data and opens from them, since a replay
-//! runs again the word that the fault cut, and stops at the same fault.
+//! A fault that stops the sandbox cuts the life with no checkpoint. Then the actor carries the
+//! facts after the last checkpoint as data and opens from them, since a replay runs again the
+//! word that the fault cut, and stops at the same fault.
 
 use std::collections::HashSet;
 
-use furb::{Engine, Fault, checkpoint, sandbox_bound, sandbox_held};
+use furb::{Engine, Fault, checkpoint};
 use tokio::task;
 
 use crate::{event::Event, view::Phase};
@@ -21,12 +21,11 @@ use crate::{event::Event, view::Phase};
 pub(crate) const TAIL: u64 = 10_000;
 
 /// What the actor watches of a life since it opened: the facts that it said, the commands and the
-/// replies that run, and whether the memory of its sandbox stood past half of its bound.
+/// replies that run.
 #[derive(Default)]
 pub(crate) struct Watch {
   facts: u64,
   running: HashSet<String>,
-  heavy: bool,
 }
 
 impl Watch {
@@ -44,14 +43,10 @@ impl Watch {
     }
   }
 
-  /// Whether the life is born again now: its memory passed half of its bound since it last stood
-  /// under it, or it said [`TAIL`] facts since it opened and no command and no reply runs. A
-  /// rebirth that leaves the memory past half of its bound does not start another.
-  pub(crate) fn due(&mut self) -> bool {
-    let heavy = sandbox_held() > sandbox_bound() / 2;
-    let passed = heavy && !self.heavy;
-    self.heavy = heavy;
-    passed || (self.facts >= TAIL && self.running.is_empty())
+  /// Whether the life is born again now: it said [`TAIL`] facts since it opened and no command and
+  /// no reply runs.
+  pub(crate) fn due(&self) -> bool {
+    self.facts >= TAIL && self.running.is_empty()
   }
 
   /// The life opened again, with no fact said and nothing that runs.
