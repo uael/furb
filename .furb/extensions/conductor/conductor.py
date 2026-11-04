@@ -19,6 +19,7 @@ from furb.engine import (
   module,
   operated,
   over,
+  paused,
   peek,
   prompt,
   read,
@@ -31,10 +32,10 @@ from furb.engine import (
 
 CONDUCTING = """The round conducts the workers of the repository in one loop. It is a way for the work, not the work: a rule that a worker, a tool or GitHub can hold does not live here.
 The round is autonomous, by the ruling of the owner on 10-31: "#916 should have never been queued. Make it clear in conductor doc that it's designed to be autonomous. The word of the owner (me) can be asynchronous". So it asks the owner nothing and waits for nothing of his. His word comes by his labels on a PR, his comments and his rulings, which change what the round does from then on.
-Put each item in queue as (key, brief, thread), in the order of the work, the hard work first by prompt266, or in backlog to wait behind queue, then await conduct(). Each round runs tend(), sweep(), review(), staff(), asked() and align(), then waits every seconds or until a worker ends.
-1. staff() hires the first item of queue, then of backlog, whose after[key] all merged, whose model has room, else the next model of UPGRADE that has room, and whose files that must change ALONE no live worker and no open PR of the round holds, while fewer than cap() - 1 workers live, so one slot stays for a fixer: cap() is at most MOST, by prompt574, and limits["room"][family] for each model family.
+Put each item in queue as (key, brief, thread), in the order of the work, the hard work first by prompt266, or in backlog to wait behind queue, then await conduct(). Each round runs tend(), sweep(), review(), probe_memory(), staff(), asked() and align(), then waits every seconds or until a worker ends.
+1. staff() hires the first item of queue, then of backlog, whose after[key] all merged, whose model has room, else the next model of UPGRADE that has room, and whose files that must change ALONE no live worker and no open PR of the round holds, while fewer than cap() - 1 workers live, so one slot stays for a fixer: cap() is at most MOST, by prompt574, and limits["room"][family] for each model family, and while the machine has MEMORY GB of memory free: probe_memory() reads it each round, and each hire counts WORKER_MEMORY GB of it.
 2. The files of an item are areas[key], which you write, and a test file holds no item. An item with no areas holds no file. A conflict on a file that need not change alone gets a fixer, by E3 of #1084. Each item that waits on a PR or a file is one line of the next notice, with its cause, once.
-3. A worker runs on a chain thread/key, at model_of(key), and an edit or a fix in a workspace {repo}-wN of its own. Its brief starts with the asks of the owner that its item carries. kinds[key] is edit (a PR), audit (a register in scratch and no PR) or fix (one red PR), and efforts[key] names its model.
+3. A worker runs on a chain thread/key, at model_of(key), and an edit or a fix in a workspace {repo}-wN of its own. Its brief starts with the asks of the owner that its item carries. kinds[key] is edit (a PR), audit (a register in scratch and no PR) or fix (one red PR), and efforts[key] names its model. Its brief sends each build of the worker through script/build-slot.sh, which holds the slots of builds that all the workers of the machine share and caps the jobs of cargo: the tool holds that rule, and the round only briefs it.
 4. A worker that ends gives its report whole in the next notice. A worker that ends with no PR is a decision, and its notice wakes you.
 5. A PR of the round is an open PR whose label w:key names an item that the round holds. A red or conflicting one gets one order, to its maker while the maker lives, else to one fixer, and at most 2 fixers for a head, then a notice. A maker whose head did not move in OWNED seconds gives the PR to a fixer. A PR whose head differs from its branch on origin for two sweeps is closed and reopened once for that head, since GitHub did not read the branch.
 6. While the newest run of the gates on main failed, the round sends no order and no fixer for a red PR, and tells you once. A red PR whose failed checks all fail on main too gets no fixer either, and the round says so in one line.
@@ -50,6 +51,9 @@ A change of the round loads as the whole file, run again as a rung: each name of
 MOST = 10
 OWNED = 900.0
 ALIGN_EVERY = 8
+# A rustc takes about 0.5 GB: a hire needs MEMORY GB free, and counts WORKER_MEMORY GB of it until the next round.
+MEMORY = 6.0
+WORKER_MEMORY = 1.0
 OWNER = "uael"
 GATE = "the gates"
 FAILS = ("FAILURE", "ERROR", "TIMED_OUT", "STARTUP_FAILURE", "ACTION_REQUIRED", "CANCELLED")
@@ -95,6 +99,7 @@ heard: list[str] = globals().setdefault("heard", [])
 landed: list[int] = globals().setdefault("landed", [])
 align_state: dict[str, str] = globals().setdefault("align_state", {})
 comments: set[str] = globals().setdefault("comments", set())
+machine: dict[str, float] = globals().setdefault("machine", {})
 green_since: dict[int, float] = globals().setdefault("green_since", {})
 lagged: dict[int, str] = globals().setdefault("lagged", {})
 reopened: set[str] = globals().setdefault("reopened", set())
@@ -111,7 +116,7 @@ def asks_kept() -> dict[str, dict]:
 # The file of origin/main bound owner_asks to a function, and the live round to the dict of the asks.
 owner_asks: dict[str, dict] = globals()["owner_asks"] if isinstance(globals().get("owner_asks"), dict) else asks_kept()
 
-RULES = """Run no real life of a model. Never open a window on this machine, not even for a test: the owner works on it, and each window takes his mouse and his keyboard. Run a check of the app only on the runners of CI. Start each comment, review, issue and PR body that you write on GitHub with 🤖, since you write from the owner's account and his own words carry no mark; a title keeps its own rule. Never take off the label owner-merge: only the owner takes it off, and that is his approval to merge. The owner sleeps or is away: ask him nothing and wait for nothing of his. Take each decision yourself from the brief and the rulings, say it in your PR body, and go on. A cause that a brief names is a hypothesis: check it in the log before you build on it. Ask the one who gave you this work on its chain only when it alone can decide: await prompt(str, question, on="{home}"). Set each timeout and each wait to about twice the time that the step should take, never a round bound in case, and make a long step print its progress, so that a hang shows at once. Never wait on CI in a bash for more than 10 minutes: not gh pr checks --watch, not gh run watch, not a loop of sleep around gh. To wait for the checks of your PR, await checked(number) and never write a loop of your own. Rerun a check only when its line says [machine] or [cancelled], once for each head, with gh run rerun <run> --failed, and then await checked(number) again; a [defect] is yours to fix. Once your push is done, read the checks once and close with the PR and its checks as they stand, since the round tends them."""
+RULES = """Run no real life of a model. Never open a window on this machine, not even for a test: the owner works on it, and each window takes his mouse and his keyboard. Run a check of the app only on the runners of CI. Start each comment, review, issue and PR body that you write on GitHub with 🤖, since you write from the owner's account and his own words carry no mark; a title keeps its own rule. Never take off the label owner-merge: only the owner takes it off, and that is his approval to merge. The owner sleeps or is away: ask him nothing and wait for nothing of his. Take each decision yourself from the brief and the rulings, say it in your PR body, and go on. A cause that a brief names is a hypothesis: check it in the log before you build on it. Ask the one who gave you this work on its chain only when it alone can decide: await prompt(str, question, on="{home}"). Set each timeout and each wait to about twice the time that the step should take, never a round bound in case, and make a long step print its progress, so that a hang shows at once. Never wait on CI in a bash for more than 10 minutes: not gh pr checks --watch, not gh run watch, not a loop of sleep around gh. To wait for the checks of your PR, await checked(number) and never write a loop of your own. Rerun a check only when its line says [machine] or [cancelled], once for each head, with gh run rerun <run> --failed, and then await checked(number) again; a [defect] is yours to fix. Once your push is done, read the checks once and close with the PR and its checks as they stand, since the round tends them. A build with no cap took this machine down out of memory, so each build goes through sh script/build-slot.sh <command>, from the root of your workspace: cargo, bun run build, uv sync, uv run, pytest, git commit, whose hooks run cargo and the suite, and sh script/hooks/pre-commit. It holds one of the slots of builds that all the workers of the machine share, waits for a free one, and caps the jobs of cargo at 4. Give its bash a timeout of 2400 seconds: when it exits 75, no slot freed in 1200 seconds, so run it again. Run one build at a time, give cargo no -j and no CARGO_BUILD_JOBS above 4, and start no build in the background."""
 
 WORKER = """You are a worker on the repository {repo}. Do one item, and open its PR yourself.
 1. Your branch is w/{key}. {workspace} Build on origin/main, and stack your branch on an open PR only when your change needs its code, and say why in the body. Make a stack with gh stack, and run skill("gh-stack") in a word of your own before you make or touch one.
@@ -124,7 +129,7 @@ WORKER = """You are a worker on the repository {repo}. Do one item, and open its
 The item, {key}:
 {what}"""
 
-WORKSPACE = """Work in the workspace {path}, which the round gives to you alone, and to a later item once you end, so that each build starts warm. If it does not stand, make it: {repo}/script/worktree.sh {path} <your branch>, then give cd({path!r}) in a word of your own and write your chain in it: echo {chain} > "$(git -C {path} rev-parse --absolute-git-dir)/furb-holder". If it stands, the round committed and pushed the work of the earlier item there and wrote your chain in it: git fetch origin, then git switch -C <your branch> onto origin/<your branch> when that branch is on origin, else onto origin/main. Before your first command of each prompt there, read the file furb-holder in its git dir: when it names another chain than {chain}, the round gave the workspace to another worker, so run nothing in it. Leave the workspace clean when you close, each change committed and pushed."""
+WORKSPACE = """Work in the workspace {path}, which the round gives to you alone, and to a later item once you end, so that each build starts warm. If it does not stand, make it: sh {repo}/script/build-slot.sh {repo}/script/worktree.sh {path} <your branch>, then give cd({path!r}) in a word of your own and write your chain in it: echo {chain} > "$(git -C {path} rev-parse --absolute-git-dir)/furb-holder". If it stands, the round committed and pushed the work of the earlier item there and wrote your chain in it: git fetch origin, then git switch -C <your branch> onto origin/<your branch> when that branch is on origin, else onto origin/main. Before your first command of each prompt there, read the file furb-holder in its git dir: when it names another chain than {chain}, the round gave the workspace to another worker, so run nothing in it. Leave the workspace clean when you close, each change committed and pushed."""
 
 AUDIT = """You are an auditor on the repository {repo}. Do one item: read the code, the records and the logs that it names, find each fact that it asks for, and write each in a register, scratch://audit/{key}.md ($TMPDIR/audit/{key}.md), with its evidence: the file and the line, or the command and the lines that it printed. Check each claim of the item in the code, since it is a claim. Change no file of the repository, make no worktree, push nothing and open no PR. When your work yields items for workers, write them in that register as a table with one row for each item, in order of rank, the hard work first by prompt266: a row that reshapes a module, a contract or a protocol ranks before a row of polish or a simple row: | Dn | key | model | area | after | brief |, where Dn is its rank, key a short name in letters and dashes, model one of {models}, area the folder or the file that the item changes, after the Dn of each row that it waits for, or nothing, and brief what the worker does, as a task. The round queues each row as an item when you end. Close with a tuple: 0, and your report in 200 words at most: the path of the register, what you found, and what is left.
 """ + RULES + """
@@ -185,6 +190,27 @@ gh api "repos/{owner}/{repo}/pulls/$n/comments" --jq '.[] | "\(.pull_request_url
 gh api "repos/{owner}/{repo}/pulls/$n/reviews" --jq '.[] | select(.body != "") | "\(.pull_request_url | split("/") | last)\tr\(.id)\t\(.user.login)\t-\t\(.body | gsub("[\r\n\t]"; " "))"' || exit 1
 gh api "repos/{owner}/{repo}/issues/$n/comments" --jq '.[] | "\(.issue_url | split("/") | last)\ti\(.id)\t\(.user.login)\t-\t\(.body | gsub("[\r\n\t]"; " "))"' || exit 1
 done"""
+
+
+PROBE = r"""if [ -r /proc/meminfo ]; then
+  awk '/^MemAvailable:/ {printf "%.1f\n", $2 / 1048576}' /proc/meminfo
+else
+  vm_stat | awk '/page size of/ {s = $8} /^Pages (free|inactive|speculative):/ {n += $NF} END {printf "%.1f\n", n * s / 1073741824}'
+fi
+"""
+
+
+def low_memory() -> str:
+  return f"the machine has under {MEMORY:g} GB of memory free" if machine.get("free", MEMORY) < MEMORY else ""
+
+
+async def probe_memory() -> None:
+  got = await shell(PROBE, timeout=30)
+  said = got.stdout.content.strip()
+  try:
+    machine["free"] = float(said)
+  except ValueError:
+    raise Refused(f"the probe of the memory said {said[-100:] or 'nothing'}: {got.stderr.content.strip()[-200:]}") from None
 
 
 def quietly(verb, *args, **words):
@@ -257,9 +283,13 @@ def living() -> list[str]:
   return [n for n in working if not over(n)]
 
 
+def running() -> list[str]:
+  return [n for n in living() if not paused(n)]
+
+
 def room(model: str) -> bool:
   mine = family(model)
-  return len(living()) < cap() and len([n for n in living() if family(models.get(n, "")) == mine]) < limits["room"].get(mine, 0)
+  return len(running()) < cap() and len([n for n in running() if family(models.get(n, "")) == mine]) < limits["room"].get(mine, 0)
 
 
 def held_keys() -> set[str]:
@@ -350,6 +380,8 @@ async def hire(key: str, what: str, thread: str = "", brief: str = "", model: st
   working[name], models[name], homes[key] = key, model, where
   if slot:
     slots[name] = slots[where] = slot
+  if "free" in machine:
+    machine["free"] -= WORKER_MEMORY
   return name
 
 
@@ -364,6 +396,8 @@ def waiting(key: str) -> str:
       return f"#{shut[0]} of {dep} has not merged"
   if not room(model):
     return f"{family(model)} has no room"
+  if cause := low_memory():
+    return cause
   mine = files(key)
   for w in living():
     if working[w] != key and (hit := overlap(mine, files(working[w]))):
@@ -376,7 +410,7 @@ def waiting(key: str) -> str:
 
 async def staff() -> None:
   for item in [*queue, *backlog]:
-    if len(living()) >= cap() - 1:
+    if len(running()) >= cap() - 1:
       return
     cause = waiting(item[0])
     if cause.endswith("has no room") and (up := fit(model_of(item[0]))) != model_of(item[0]):
@@ -496,8 +530,8 @@ async def mend(pr: dict, now: str) -> None:
   if tries >= 2:
     notice(f"spent {n} {sha}", f"#{n} {problem} at {sha[:7]}, and 2 fixers ended at this head and did not move it, so the round sends no third one.")
     return
-  if not room(fixer := fit(limits["fixer"])):
-    once(f"fixer {n} {sha}", f"#{n} {problem} at {sha[:7]}, and waits for a fixer on {limits['fixer']}, which has no room.")
+  if not room(fixer := fit(limits["fixer"])) or low_memory():
+    once(f"fixer {n} {sha}", f"#{n} {problem} at {sha[:7]}, and waits for a fixer on {limits['fixer']}, which has no room, or the machine has under {MEMORY:g} GB of memory free.")
     return
   brief = FIX.replace("{n}", str(n)).replace("{problem}", problem).replace("{sha}", sha).replace("{head}", pr["head"])
   thread = next((m[7:] for m in pr["labels"] if m.startswith("thread:")), "")
@@ -673,10 +707,10 @@ async def conduct(every: float = 300) -> dict[str, object]:
     cd(cwd(), on=lead["shell"])
     await shell(LABELS, timeout=120)
     while lead.get("home") == here:
-      for at in ("tend", "sweep", "review", "staff", "asked", "align"):
+      for at in ("tend", "sweep", "review", "measure", "staff", "asked", "align"):
         try:
-          if at in ("sweep", "review", "staff"):
-            await {"sweep": sweep, "review": review, "staff": staff}[at]()
+          if at in ("sweep", "review", "measure", "staff"):
+            await {"sweep": sweep, "review": review, "measure": probe_memory, "staff": staff}[at]()
           else:
             {"tend": tend, "asked": asked, "align": align}[at]()
           for done in [k for k in noticed if k.startswith(f"fault {at} ")]:
