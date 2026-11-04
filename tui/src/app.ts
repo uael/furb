@@ -383,6 +383,15 @@ export class App {
   statusKey = "";
   /** Whether the footer shows a spinner, which the tick turns. */
   statusMoves = false;
+  /** When the last draw of the view ended, and how long it took. The next draw waits for a time that these give. */
+  drawnAt = 0;
+  drawing = 0;
+  /** Whether a key came since the last frame, whose frame shows it before the view draws again. */
+  keyed = false;
+  /** A key marks the next frame as the frame of a key. */
+  keyHeard = (): void => {
+    this.keyed = true;
+  };
   /** The whole text of the footer, which a notice cut to its room shows in a tip. */
   statusWhole = "";
   readonly tick: ReturnType<typeof setInterval>;
@@ -710,6 +719,7 @@ export class App {
     renderer.on("selection", this.copySelection);
     renderer.on("theme_mode", this.modeChanged);
     renderer.setFrameCallback(this.drawDue);
+    renderer.keyInput.on("keypress", this.keyHeard);
     renderer.on("focus", this.focusTaken);
     renderer.on("blur", this.focusLost);
     // A renderer that ends on its own, as on a signal, ends the App before it frees the buffers of the view.
@@ -758,13 +768,18 @@ export class App {
       sameBuild(reading) ? "This record does not replay" : "This record was made by another build",
       [
         { label: "Read it", detail: "See what it kept. No word runs again.", run: () => {} },
-        {
-          label: "Start a new life from it",
-          detail: "A new session with its earlier work as text",
-          run: () => this.startFrom(),
-        },
+        // A record that this build made and whose replay drifts is a defect, and a carry from it loses the module.
+        ...(sameBuild(reading)
+          ? []
+          : [
+              {
+                label: "Start a new life from it",
+                detail: "A new session with its earlier work as text",
+                run: () => this.startFrom(),
+              },
+            ]),
       ],
-      { note: readingNote(reading) },
+      { note: readingNote(reading, this.session.host.record) },
     );
   }
   /** A new life in the workspace of a record open to read, whose first word carries the earlier work of the record as

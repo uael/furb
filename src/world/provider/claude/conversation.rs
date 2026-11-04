@@ -2,6 +2,12 @@
 //! that furb writes for its first process to resume, and each turn, which writes to its process
 //! only what the command line has not heard and settles what that turn came to.
 
+#![expect(clippy::format_push_string, reason = "debt: push_str of a format!, where write! serves")]
+#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
+#![expect(
+  clippy::single_match_else,
+  reason = "debt: a match of one arm and else, where if let serves"
+)]
 #![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
 
 use std::{

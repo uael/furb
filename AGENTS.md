@@ -296,6 +296,13 @@ fix what your change broke, and report what was broken before.
   a worktree of `git worktree add`. Copy on write needs APFS, Btrfs or XFS; on another file system, the script makes a
   plain worktree. Remove a worktree with `git worktree remove --force <path>`, then `git branch -D <branch>`. The
   checkout at the root can stand behind `origin/main`, so read and change code in a worktree.
+- `sh script/build-slot.sh <command> [argument...]`: run a command that builds, as `cargo`, `bun run build`, `uv sync`,
+  `uv run pytest` or `git commit` (its hooks run cargo and the suite), in one of the slots of builds that all the
+  worktrees of the machine share, with at most 4 jobs of cargo. A slot is a folder of `/tmp/furb-build-slots-<uid>`
+  that holds the pid of its holder, and the slot of a holder that ended goes to the next build. `FURB_BUILD_SLOTS` sets
+  the slots (2), `FURB_BUILD_JOBS` the cap of jobs (4), `FURB_BUILD_WAIT` the seconds to wait for a slot (1200, then
+  exit 75) and `FURB_BUILD_DIR` the folder. The workers of the conductor build only through it: with no cap, 28 rustc
+  processes took 13.8 GB, and the machine ran out of memory.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
   whole.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.

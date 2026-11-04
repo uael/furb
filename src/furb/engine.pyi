@@ -606,7 +606,7 @@ def chain(label: str = "", source: str = "", filter: Filter | None = None, on: s
   When nothing was told on the chain since the word of the last rung that the chain did not make was ready, the chain tells that rung under the header told nothing before the advance, so the model sees that the word showed it nothing.
   When no word of the chain runs, the chain advances no rung while a prompt, or an act that the outside started, that the word of a rung that is no crafted rung made is not over, until a fact comes after that word ended, a tell or the end of such an act, and it advances at once when no such act is open, so a word with no close waits for what it made.
   A message or a prompt of a person on the chain tells its open, so the chain asks it at once while an act that a word of the chain made runs.
-  Of the rungs that wait, the chain advances first the one whose maker said the fewest facts on the chain, so a new prompt waits for no turn of an older one.
+  Of the rungs that wait, the chain advances first the one that was made first, so no prompt, of the operator or of a model, waits behind a prompt that came after it, and each other prompt delays a new one by one turn at most.
   A new prompt on a chain is asked while a word of the chain awaits a wait that is not over, so no wait holds a prompt.
   The chain holds the text of each paragraph told on it but the word of a rung, in order.
   At the advance of the next rung, before it asks the reply, or at the first ready of a rung that it does not advance, the chain runs that text as the told rung of that rung, and holds nothing more.
@@ -701,6 +701,7 @@ def bash(
   It runs until it ends, until its timeout or until a cancel: the World is the one that ends it, at the timeout it reads off the act as at a cancel, since the World is the one running it, and the engine says nothing to make it.
   A pause stops no command: it runs on, the World says it done when it ends, and its ear tells its exit at the wake.
   Its close tells what its stdout shows, and what its stderr shows when that stream has a show of its own that is no hidden one, so a merged command tells no stderr.
+  Of a stream whose show picks more than LARGEST // 8 characters, its close tells the first LARGEST // 16 and the last LARGEST // 16 around a line that says how many it picks, as ... (2100000 chars), so the streams that it tells hold at most LARGEST bytes besides those lines, while its Exit holds them whole, and the model narrows its show or reads a door of the command.
   The stdout of a command without a show is told as TAIL, which is the span of its last 250 lines.
   The World refuses a write to the door bash1/stdout or bash1/stderr, and a write to bash1/stdin once the command ended or was cancelled, once its stdin is closed, as a stdin of text is from the start, or once a crash cut the command.
   The World asks a command whether its stderr flows into its stdout, and the command answers from what its verb was given.

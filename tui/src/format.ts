@@ -71,14 +71,23 @@ export const graphemes = new Intl.Segmenter();
  * the end of a path. */
 export function clip(line: string, width: number, keep: "start" | "end" = "start"): string {
   if (Bun.stringWidth(line) <= width) return line;
-  const parts = [...graphemes.segment(line)].map(({ segment }) => segment);
-  if (keep === "end") parts.reverse();
-  let result = "";
+  // The width of a text is the sum of the widths of its graphemes, so a cut at the end reads only the graphemes that
+  // it keeps, and a long text costs what the room shows.
+  const kept: string[] = [];
+  let taken = 0;
+  const parts =
+    keep === "end"
+      ? [...graphemes.segment(line)].map(({ segment }) => segment).reverse()
+      : (function* () {
+          for (const { segment } of graphemes.segment(line)) yield segment;
+        })();
   for (const part of parts) {
-    if (Bun.stringWidth(result + part) >= width - 1) break;
-    result = keep === "end" ? part + result : result + part;
+    const cells = Bun.stringWidth(part);
+    if (taken + cells >= width - 1) break;
+    kept.push(part);
+    taken += cells;
   }
-  return keep === "end" ? `…${result}` : `${result}…`;
+  return keep === "end" ? `…${kept.reverse().join("")}` : `${kept.join("")}…`;
 }
 
 /** A span of time, short: 42s, 3m 05s, 1h 02m. */

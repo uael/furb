@@ -1,0 +1,88 @@
+import os
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+import pytest
+
+SCRIPT = Path(__file__).resolve().parents[4] / "script" / "build-slot.sh"
+pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="the script runs in sh")
+
+
+def env(tmp: Path, **more: str) -> dict[str, str]:
+  kept = {n: v for n, v in os.environ.items() if not n.startswith(("FURB_BUILD_", "CARGO_BUILD_JOBS"))}
+  return {**kept, "FURB_BUILD_DIR": str(tmp / "slots"), "FURB_BUILD_POLL": "0.05", **more}
+
+
+def start(tmp: Path, *command: str, **more: str) -> subprocess.Popen[str]:
+  pipe = subprocess.PIPE
+  return subprocess.Popen(["sh", str(SCRIPT), *command], env=env(tmp, **more), text=True, stdout=pipe, stderr=pipe)
+
+
+def run(tmp: Path, *command: str, **more: str) -> subprocess.CompletedProcess[str]:
+  got = subprocess.run(["sh", str(SCRIPT), *command], env=env(tmp, **more), text=True, capture_output=True, timeout=60)
+  return got
+
+
+def test_a_call_with_no_command_exits_2_and_says_its_use(tmp_path: Path) -> None:
+  got = run(tmp_path)
+  assert got.returncode == 2 and "usage: sh script/build-slot.sh" in got.stderr
+
+
+@pytest.mark.parametrize(("given", "seen"), [(None, "4"), ("2", "2"), ("14", "4")])
+def test_cargo_jobs_stay_at_four_or_the_lower_cap_of_the_caller(tmp_path: Path, given: str | None, seen: str) -> None:
+  more = {} if given is None else {"CARGO_BUILD_JOBS": given}
+  got = run(tmp_path, "sh", "-c", "echo $CARGO_BUILD_JOBS; exit 7", **more)
+  assert (got.returncode, got.stdout) == (7, seen + "\n")
+
+
+def test_each_slot_goes_back_when_its_command_ends(tmp_path: Path) -> None:
+  assert run(tmp_path, "true").returncode == 0
+  assert list((tmp_path / "slots").iterdir()) == []
+
+
+def test_no_more_commands_run_at_once_than_the_slots(tmp_path: Path) -> None:
+  log = tmp_path / "log"
+  body = f"echo in >> {log}; sleep 0.4; echo out >> {log}"
+  runs = [start(tmp_path, "sh", "-c", body, FURB_BUILD_SLOTS="2") for _ in range(5)]
+  for one in runs:
+    one.communicate(timeout=60)
+  assert [one.returncode for one in runs] == [0] * 5
+  held = peak = 0
+  for line in log.read_text(encoding="utf-8").split():
+    held += 1 if line == "in" else -1
+    peak = max(peak, held)
+  assert peak == 2
+
+
+def test_the_slot_of_a_holder_that_ended_goes_to_the_next_build(tmp_path: Path) -> None:
+  gone = subprocess.Popen(["true"])
+  gone.wait()
+  folder = tmp_path / "slots" / "slot1"
+  folder.mkdir(parents=True)
+  (folder / "pid").write_text(f"{gone.pid}\n", encoding="utf-8")
+  assert run(tmp_path, "true", FURB_BUILD_SLOTS="1", FURB_BUILD_WAIT="5").returncode == 0
+
+
+def test_the_slot_of_a_live_holder_holds_until_the_wait_ends(tmp_path: Path) -> None:
+  folder = tmp_path / "slots" / "slot1"
+  folder.mkdir(parents=True)
+  (folder / "pid").write_text(f"{os.getpid()}\n", encoding="utf-8")
+  got = run(tmp_path, "true", FURB_BUILD_SLOTS="1", FURB_BUILD_WAIT="1")
+  assert got.returncode == 75 and "no slot of 1 freed in 1s" in got.stderr
+  assert folder.is_dir()
+
+
+def test_a_slot_with_no_pid_frees_after_a_minute_and_not_before(tmp_path: Path) -> None:
+  folder = tmp_path / "slots" / "slot1"
+  folder.mkdir(parents=True)
+  assert run(tmp_path, "true", FURB_BUILD_SLOTS="1", FURB_BUILD_WAIT="1").returncode == 75
+  old = time.time() - 120
+  os.utime(folder, (old, old))
+  assert run(tmp_path, "true", FURB_BUILD_SLOTS="1", FURB_BUILD_WAIT="5").returncode == 0
+
+
+def test_a_build_inside_a_slot_takes_no_second_slot(tmp_path: Path) -> None:
+  got = run(tmp_path, "sh", str(SCRIPT), "echo", "inner", FURB_BUILD_SLOTS="1", FURB_BUILD_WAIT="3")
+  assert (got.returncode, got.stdout) == (0, "inner\n")

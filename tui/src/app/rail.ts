@@ -542,11 +542,14 @@ export const rail = part({
       this.railSession.add(
         this.railSplit([[`↑ ${from} more`, c.faint]], [], () => this.workspacePicker(), edge),
       );
+    // The switcher and the threads under it draw apart, so each takes the place of its own rows in the order.
+    const switched: string[] = [];
+    this.railOrder = this.railOrder.filter((id) => !id.startsWith("ws:"));
     for (const group of groups.slice(from, from + SWITCHER)) {
       const mine = group === current;
       const attention = this.attentionOf(group.sessions);
       const id = `ws:${group.directory}`;
-      this.railOrder.push(id);
+      switched.push(id);
       this.railHandlers.set(id, { enter: () => void this.focusWorkspace(group).catch(this.report) });
       const row = this.railSplit(
         [[mine ? glyph.mark : " ", c.accent], [" "], [group.name, mine ? c.text : c.muted, mine ? bold : 0]],
@@ -557,6 +560,7 @@ export const rail = part({
       );
       this.railSession.add(row);
     }
+    this.railOrder = [...switched, ...this.railOrder];
     if (groups.length > from + SWITCHER)
       this.railSession.add(
         this.railSplit(
@@ -637,10 +641,9 @@ export const rail = part({
       this.railHeading.add(this.text("Workspaces", c.text, { attributes: bold, flexGrow: 1 }));
       this.railHeading.add(this.text("⌃W", c.faint, { run: () => void this.workspacePicker() }));
     }
-    if (style !== "cards") {
-      this.railOrder = [];
-      this.railHandlers.clear();
-    }
+    this.railOrder = style === "cards" ? this.railOrder.filter((id) => id.startsWith("ws:")) : [];
+    for (const id of [...this.railHandlers.keys()])
+      if (!this.railOrder.includes(id)) this.railHandlers.delete(id);
     const order = (id: string, handler: RailHandler) => {
       this.railOrder.push(id);
       this.railHandlers.set(id, handler);

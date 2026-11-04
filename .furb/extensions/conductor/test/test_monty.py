@@ -24,7 +24,7 @@ class GitHub(Sand):
   def hear(self, a: tuple):
     match a:
       case ("bash", about, _, _, command, *_):
-        out = ""
+        out = "64.0\n" if "MemAvailable" in command else ""
         if "gh pr list --state open" in command:
           first = not any("gh pr list --state open" in str(x[4]) for x in self.calls[:-1] if x[0] == "bash")
           out = LISTED.format(OPEN if first else "[]", "" if first else "7")
