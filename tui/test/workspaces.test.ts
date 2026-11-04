@@ -92,7 +92,7 @@ async function fooAndBar(directory: string, open: () => Workspaces) {
   return { library, group, first, second };
 }
 
-test("workspaces keep sessions alive, report background completion and input, and reopen saved records paused", () =>
+test("workspaces keep sessions alive, report background completion and input, and reopen saved records whose work goes on", () =>
   withLibrary(async ({ directory, open }) => {
     await mkdir(join(directory, "alpha"));
     await mkdir(join(directory, "beta"));
@@ -160,8 +160,10 @@ test("workspaces keep sessions alive, report background completion and input, an
     const restored = library.groups[0]?.sessions.find((entry) => entry.path === record);
     if (!restored) throw new Error("The saved session is missing.");
     await library.select(restored);
-    expect(restored.status).toBe("paused");
-    expect(restored.session?.host.pending.has(waiting)).toBe(true);
+    // The open put the wait to the outside again, so it runs with no choice of the operator.
+    await until(library, () => ["thinks", "runs", "delegates"].includes(restored.status));
+    expect(restored.session?.host.pending.size).toBe(0);
+    expect((await restored.session?.engine.outcome(waiting))?.done).toBe(false);
     const metadata = JSON.parse(await readFile(`${record}.session.json`, "utf8"));
     expect(metadata.pending).toBeUndefined();
   }));

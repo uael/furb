@@ -263,7 +263,7 @@ fn a_checkpoint_at_the_tip_of_a_record_carries_the_module_of_its_root_to_the_nex
 }
 
 #[test]
-fn a_word_run_on_a_record_that_holds_pending_work_names_that_work_and_wakes_none_of_it() {
+fn a_word_run_on_a_record_that_holds_pending_work_asks_that_work_again_with_no_wake() {
   let yard = Yard::new("pending");
   // The fake claude gives no answer to a turn that holds WAIT, so the reply runs until the life ends.
   let said = printed(yard.kept(&["run", "prompt(str, 'WAIT', on=chain('w'))\nclose(1)"]), "");
@@ -271,10 +271,26 @@ fn a_word_run_on_a_record_that_holds_pending_work_names_that_work_and_wakes_none
   let output = ran(yard.kept(&["run", "close(2)"]), "");
   assert!(output.status.success());
   assert_eq!(String::from_utf8_lossy(&output.stdout), "2\n");
-  let err = String::from_utf8_lossy(&output.stderr);
-  assert!(err.starts_with("furb: an earlier life left "), "{err}");
-  assert!(err.contains("prompt1 on chain2") && err.contains("as wake(\"chain2\")"), "{err}");
-  assert_eq!(yard.answered(), 0, "the reply that waits is not asked again");
+  assert_eq!(String::from_utf8_lossy(&output.stderr), "", "the open names no work that waits");
+  // The reply that waits is the one whose start the record holds and whose end it lacks.
+  let record = fs::read_to_string(yard.record()).expect("the record");
+  let named = |line: &str, kind: &str| {
+    let rest = line.strip_prefix(&format!(r#"[["{kind}",""#))?;
+    Some(rest.split('"').next().unwrap_or_default().to_owned())
+  };
+  let started: Vec<String> = record
+    .lines()
+    .filter(|line| line.contains(r#""provider"]"#))
+    .filter_map(|line| named(line, "started"))
+    .collect();
+  let done: Vec<String> = record.lines().filter_map(|line| named(line, "done")).collect();
+  let left: Vec<&String> = started.iter().filter(|id| !done.contains(id)).collect();
+  assert_eq!(
+    left.len(),
+    2,
+    "the second life asked again the reply that the first one left: {left:?}"
+  );
+  assert_eq!(left[0], left[1], "one reply, asked once in each life: {left:?}");
 }
 
 /// What a command did, or nothing when it still ran after this many seconds and was killed.
@@ -300,19 +316,6 @@ fn a_command_that_runs_past_the_bound_is_killed_and_gives_nothing() {
   let started = Instant::now();
   assert!(ran_within(command, 1).is_none());
   assert!(started.elapsed() < Duration::from_secs(20));
-}
-
-#[test]
-fn a_word_run_that_awaits_only_work_that_no_wake_runs_ends_with_an_error_that_names_that_work() {
-  let yard = Yard::new("stranded");
-  printed(yard.kept(&["run", "prompt(str, 'WAIT', on=chain('w'))\nclose(1)"]), "");
-  let output = ran_within(yard.kept(&["run", "close(await Act('prompt1'))"]), 20);
-  let output = output.expect("furb ends, as no ear can move the act that its word awaits");
-  assert_eq!(output.status.code(), Some(1), "{}", String::from_utf8_lossy(&output.stderr));
-  assert_eq!(String::from_utf8_lossy(&output.stdout), "");
-  let err = String::from_utf8_lossy(&output.stderr);
-  assert!(err.contains("the word awaits prompt1 on chain2, and no wake runs it"), "{err}");
-  assert_eq!(yard.answered(), 0, "the reply that waits is not asked again");
 }
 
 #[test]
