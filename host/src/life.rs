@@ -57,12 +57,12 @@ pub enum Command {
   /// A prompt to the operator, closed with a line that the operator wrote, read as the shape that
   /// the prompt wants.
   Answer { id: String, line: String },
-  /// A pause of an act or of a chain.
-  Pause { id: String },
+  /// A pause of an act or of a chain, with a cause.
+  Pause { id: String, why: Option<String> },
   /// A wake of an act or of a chain.
   Wake { id: String },
-  /// A cancel of an act or of a chain.
-  Cancel { id: String },
+  /// A cancel of an act or of a chain, with a cause.
+  Cancel { id: String, why: Option<String> },
   /// The turns of a chain, each as JSON.
   Turns { on: Option<String> },
   /// The words of a chain that run, by the rung that gave each one.
@@ -82,7 +82,7 @@ pub enum Command {
   /// The folder of a chain.
   Cwd { on: Option<String> },
   /// A chain made on a chain, under a label: the act of the chain.
-  Chain { label: Option<String>, on: Option<String> },
+  Chain { label: Option<String>, source: Option<String>, on: Option<String> },
   /// The acts that wait for a wake, each as its name and its kind.
   Pending,
   /// A close of an act with a value, as the record writes a value: `2.0` stays a float, and
@@ -91,7 +91,10 @@ pub enum Command {
   /// A ceiling of the spend of a chain, in dollars or in a share of its window: the act.
   Grant { usd: Option<f64>, share: Option<f64>, on: Option<String> },
   /// A command that runs on a chain: the act.
-  Bash { command: String, on: Option<String> },
+  ///
+  /// Its stdin is the text given, the default of the engine when it is none, and open for a feed
+  /// when it is `None` within.
+  Bash { command: String, stdin: Option<Option<String>>, on: Option<String> },
   /// The text at a path, read where a chain stands, as `{"path", "content"}`.
   Read { path: String, on: Option<String> },
   /// A text written at a path, where a chain stands.
@@ -407,8 +410,9 @@ fn answered_by(engine: &mut Engine, command: Command) -> Result<Reply, LifeError
     Command::Grant { usd, share, on: chain } => {
       id(engine.grant(verbs::Grant { usd, share, on: on(chain) })?.id())
     }
-    Command::Bash { command, on: chain } => {
-      id(engine.bash(&command, verbs::Bash { on: on(chain), ..verbs::Bash::default() })?.id())
+    Command::Bash { command, stdin, on: chain } => {
+      let with = verbs::Bash { stdin, on: on(chain), ..verbs::Bash::default() };
+      id(engine.bash(&command, with)?.id())
     }
     Command::Read { path, on: chain } => {
       let text = engine.read(&path, verbs::Read { on: on(chain), ..verbs::Read::default() })?;
@@ -438,15 +442,29 @@ fn answered_by(engine: &mut Engine, command: Command) -> Result<Reply, LifeError
       engine.close(answered(&shape, &line)?, verbs::Close { id: Some(id) })?;
       Reply::Done
     }
-    Command::Pause { id } => engine.pause(&id, verbs::Pause::default()).map(|()| Reply::Done)?,
-    Command::Wake { id } => engine.wake(&id).map(|()| Reply::Done)?,
-    Command::Cancel { id } => engine.cancel(&id, verbs::Cancel::default()).map(|()| Reply::Done)?,
-    Command::Chain { label, on: chain } => {
-      let with = verbs::Chain { label, on: on(chain), ..verbs::Chain::default() };
+    control @ (Command::Pause { .. } | Command::Wake { .. } | Command::Cancel { .. }) => {
+      controlled(engine, control)?
+    }
+    Command::Chain { label, source, on: chain } => {
+      let with = verbs::Chain { label, source, on: on(chain), ..verbs::Chain::default() };
       id(engine.chain(with)?.id())
     }
     Command::End => Reply::Done,
     query => queried(engine, query, &root)?,
+  })
+}
+
+/// What a pause, a wake or a cancel comes to on the engine.
+fn controlled(engine: &mut Engine, control: Command) -> Result<Reply, LifeError> {
+  Ok(match control {
+    Command::Pause { id, why } => {
+      engine.pause(&id, verbs::Pause { why: why.map(Object::string) }).map(|()| Reply::Done)?
+    }
+    Command::Wake { id } => engine.wake(&id).map(|()| Reply::Done)?,
+    Command::Cancel { id, why } => {
+      engine.cancel(&id, verbs::Cancel { why: why.map(Object::string) }).map(|()| Reply::Done)?
+    }
+    other => return Err(LifeError::Refused(format!("{other:?} is no control"))),
   })
 }
 

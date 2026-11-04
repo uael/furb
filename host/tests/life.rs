@@ -239,7 +239,7 @@ async fn each_act_is_told_with_its_meaning_and_each_chain_with_the_state_of_its_
   until(&mut events, stands("chain1".to_owned(), State::Done)).await;
   made(&life, rung("await wait(60)")).await;
   until(&mut events, |event| matches!(event, Event::Act(act) if act.kind == "wait")).await;
-  life.send(Command::Pause { id: "chain1".to_owned() }).await.unwrap();
+  life.send(Command::Pause { id: "chain1".to_owned(), why: None }).await.unwrap();
   let held = until(
     &mut events,
     |event| matches!(event, Event::Act(act) if act.kind == "wait" && act.state == State::Paused),
@@ -264,7 +264,8 @@ async fn the_verbs_of_the_operator_act_on_the_life_as_a_word_of_his_would() {
   assert_eq!(life.send(write).await.unwrap(), Reply::Done);
   let read = life.send(Command::Read { path: text("note.txt"), on: None }).await.unwrap();
   assert!(matches!(&read, Reply::Value(got) if got["content"] == json!("hi\n")), "{read:?}");
-  let bash = made(&life, Command::Bash { command: text("cat note.txt"), on: None }).await;
+  let bash =
+    made(&life, Command::Bash { command: text("cat note.txt"), stdin: None, on: None }).await;
   until(&mut events, done(&bash)).await;
   let Reply::Value(exit) = life.send(Command::Peek { id: bash }).await.unwrap() else {
     panic!("a command comes to a value")
@@ -363,5 +364,47 @@ async fn each_write_keeps_its_change_in_the_journal_beside_the_record() {
   assert_eq!(changes[1]["path"], json!(file("b.txt")));
   assert_eq!((&changes[1]["before"], &changes[1]["made"]), (&json!(""), &json!(true)));
   life.send(Command::End).await.unwrap();
+  fs::remove_dir_all(&at).unwrap();
+}
+#[tokio::test]
+async fn a_verb_of_the_operator_gives_the_words_of_its_act() {
+  let at = place("words");
+  let life = Life::spawn(scripted(&at, &[])).unwrap();
+  let mut events = Box::pin(life.events(0));
+  let given = Some(Some("hi\n".to_owned()));
+  let bash = made(&life, Command::Bash { command: "cat".to_owned(), stdin: given, on: None }).await;
+  until(&mut events, done(&bash)).await;
+  let Reply::Value(exit) = life.send(Command::Peek { id: bash }).await.unwrap() else {
+    panic!("a command comes to a value")
+  };
+  assert!(exit.to_string().contains("hi"), "{exit}");
+  let fed =
+    made(&life, Command::Bash { command: "cat".to_owned(), stdin: Some(None), on: None }).await;
+  let stdin =
+    Command::Write { path: format!("{fed}/stdin"), content: "fed\n".to_owned(), on: None };
+  life.send(stdin).await.unwrap();
+  let close = Command::Write { path: format!("{fed}/stdin"), content: String::new(), on: None };
+  life.send(close).await.unwrap();
+  until(&mut events, done(&fed)).await;
+  let Reply::Value(exit) = life.send(Command::Peek { id: fed }).await.unwrap() else {
+    panic!("a command comes to a value")
+  };
+  assert!(exit.to_string().contains("fed"), "{exit}");
+  let bound = made(&life, rung("x = 7")).await;
+  until(&mut events, done(&bound)).await;
+  let label = Some("copy".to_owned());
+  let fork =
+    made(&life, Command::Chain { label, source: Some("chain1".to_owned()), on: None }).await;
+  let Reply::Value(program) = life.send(Command::Program { on: Some(fork) }).await.unwrap() else {
+    panic!("the program is a value")
+  };
+  assert_eq!(program[bound.as_str()], json!("x = 7"));
+  let why = Some("for lunch".to_owned());
+  life.send(Command::Pause { id: "chain1".to_owned(), why }).await.unwrap();
+  let paused = |event: &Event| {
+    matches!(event, Event::Act(act) if act.id == "chain1"
+      && act.pause.as_ref().is_some_and(|one| one.why == Some(json!("for lunch"))))
+  };
+  until(&mut events, paused).await;
   fs::remove_dir_all(&at).unwrap();
 }
