@@ -32,13 +32,13 @@ from furb.engine import (
 CONDUCTING = """The round conducts the workers of the repository in one loop. It is a way for the work, not the work: a rule that a worker, a tool or GitHub can hold does not live here.
 The round is autonomous, by the ruling of the owner on 10-31: "#916 should have never been queued. Make it clear in conductor doc that it's designed to be autonomous. The word of the owner (me) can be asynchronous". So it asks the owner nothing and waits for nothing of his. His word comes by his labels on a PR, his comments and his rulings, which change what the round does from then on.
 Put each item in queue as (key, brief, thread), in the order of the work, the hard work first by prompt266, or in backlog to wait behind queue, then await conduct(). Each round runs tend(), sweep(), review(), staff(), asked() and align(), then waits every seconds or until a worker ends.
-1. staff() hires the first item of queue, then of backlog, whose after[key] all merged, whose model has room, and whose files no live worker and no open PR of the round holds, while fewer than cap() workers live: at most MOST, by prompt574, and limits["room"][family] for each model family.
-2. The files of an item are areas[key], which you write, and a test file holds no item. An item with no areas holds no file. Each item that waits is one line of the next notice, with its cause, once.
+1. staff() hires the first item of queue, then of backlog, whose after[key] all merged, whose model has room, else the next model of UPGRADE that has room, and whose files that must change ALONE no live worker and no open PR of the round holds, while fewer than cap() - 1 workers live, so one slot stays for a fixer: cap() is at most MOST, by prompt574, and limits["room"][family] for each model family.
+2. The files of an item are areas[key], which you write, and a test file holds no item. An item with no areas holds no file. A conflict on a file that need not change alone gets a fixer, by E3 of #1084. Each item that waits on a PR or a file is one line of the next notice, with its cause, once.
 3. A worker runs on a chain thread/key, at model_of(key), and an edit or a fix in a workspace {repo}-wN of its own. Its brief starts with the asks of the owner that its item carries. kinds[key] is edit (a PR), audit (a register in scratch and no PR) or fix (one red PR), and efforts[key] names its model.
 4. A worker that ends gives its report whole in the next notice. A worker that ends with no PR is a decision, and its notice wakes you.
 5. A PR of the round is an open PR whose label w:key names an item that the round holds. A red or conflicting one gets one order, to its maker while the maker lives, else to one fixer, and at most 2 fixers for a head, then a notice. A maker whose head did not move in OWNED seconds gives the PR to a fixer.
 6. While the newest run of the gates on main failed, the round sends no order and no fixer for a red PR, and tells you once.
-7. A green PR merges by the auto-merge of GitHub, which the round turns on for each PR of the round, behind a ruleset of main that requires the check GATE. With no such ruleset, the round turns on no auto-merge and tells you once. A draft, an open box of its checklist, or the label hold, hold:owner-review or owner-merge keeps a PR from the merge, and the label paused takes it out of the round.
+7. A green PR merges by the auto-merge of GitHub, which the round turns on for each PR of the round, else by a plain merge, else by gh stack merge for a layer of a stack, behind a ruleset of main that requires the check GATE. With no such ruleset, the round turns on no auto-merge and tells you once. A draft, an open box of its checklist, or the label hold, hold:owner-review or owner-merge keeps a PR from the merge, and the label paused takes it out of the round.
 8. At ALIGN_EVERY merged PRs since the last audit of alignment, by prompt260, the round queues the next free alignN, of kind audit, which checks main against the words of the owner, and each row of its register becomes an item.
 9. Each message of the owner that no ask of owner_asks names is one notice, by prompt362, and so is each ask that is not done or a decision while no item in queue, in backlog, at work or on an open PR of the round carries it, by prompt361: no word of the owner drops between his message and main. A worker that ends with a line Left: <ids> queues one follow-up for each ask that no other item carries, and a follow-up that leaves it again is a decision.
 10. Each new comment of the owner on a PR of the round goes to the worker on it, else to a fixer, and the label hold comes on the PR until its worker pushes the fix and takes hold off.
@@ -58,7 +58,9 @@ ASKS = "scratch://owner/asks.json"
 WORDS = "scratch://owner/words.md"
 PRIVATE = ".furb/extensions/conductor/private.json"
 ASK_LEFT = re.compile(r"Left: ([^\n]*)")
-ROW = re.compile(r"^\|\s*(D\d+)\s*\|\s*([^|]+?)\s*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|\s*(.+?)\s*\|?$")
+ALONE = re.compile(r"^(src/furb/engine\.pyi?|DOCTRINE\.md|\.github/budgets\.json|\.furb/extensions/conductor/conductor\.py)$")
+UPGRADE = {"claude-cli:sonnet/medium": "claude-cli:sonnet/high", "claude-cli:sonnet/high": "claude-cli:opus/medium", "claude-cli:opus/medium": "claude-cli:opus/high"}
+STALE = 2700.0
 TESTS = re.compile(r"(^|/)(tests?|__tests__)/|\.test\.[a-z]+$|_test\.[a-z]+$|(^|/)test_[^/]+\.py$|(^|/)conftest\.py$")
 
 # The module of a chain may hold these names already, with values: a name binds its default only when it is not there.
@@ -92,6 +94,7 @@ heard: list[str] = globals().setdefault("heard", [])
 landed: list[int] = globals().setdefault("landed", [])
 align_state: dict[str, str] = globals().setdefault("align_state", {})
 comments: set[str] = globals().setdefault("comments", set())
+green_since: dict[int, float] = globals().setdefault("green_since", {})
 
 
 def asks_kept() -> dict[str, dict]:
@@ -120,7 +123,7 @@ The item, {key}:
 
 WORKSPACE = """Work in the workspace {path}, which the round gives to you alone, and to a later item once you end, so that each build starts warm. If it does not stand, make it: {repo}/script/worktree.sh {path} <your branch>, then give cd({path!r}) in a word of your own and write your chain in it: echo {chain} > "$(git -C {path} rev-parse --absolute-git-dir)/furb-holder". If it stands, the round committed and pushed the work of the earlier item there and wrote your chain in it: git fetch origin, then git switch -C <your branch> onto origin/<your branch> when that branch is on origin, else onto origin/main. Before your first command of each prompt there, read the file furb-holder in its git dir: when it names another chain than {chain}, the round gave the workspace to another worker, so run nothing in it. Leave the workspace clean when you close, each change committed and pushed."""
 
-AUDIT = """You are an auditor on the repository {repo}. Do one item: read the code, the records and the logs that it names, find each fact that it asks for, and write each in a register, scratch://audit/{key}.md ($TMPDIR/audit/{key}.md), with its evidence: the file and the line, or the command and the lines that it printed. Check each claim of the item in the code, since it is a claim. Change no file of the repository, make no worktree, push nothing and open no PR. When your work yields items for workers, write them in that register as a table with one row for each item, in order of rank: | Dn | key | model | area | brief |, where Dn is its rank, key a short name in letters and dashes, model one of {models}, area the folder or the file that the item changes, and brief what the worker does, as a task. The round queues each row as an item when you end. Close with a tuple: 0, and your report in 200 words at most: the path of the register, what you found, and what is left.
+AUDIT = """You are an auditor on the repository {repo}. Do one item: read the code, the records and the logs that it names, find each fact that it asks for, and write each in a register, scratch://audit/{key}.md ($TMPDIR/audit/{key}.md), with its evidence: the file and the line, or the command and the lines that it printed. Check each claim of the item in the code, since it is a claim. Change no file of the repository, make no worktree, push nothing and open no PR. When your work yields items for workers, write them in that register as a table with one row for each item, in order of rank: | Dn | key | model | area | after | brief |, where Dn is its rank, key a short name in letters and dashes, model one of {models}, area the folder or the file that the item changes, after the Dn of each row that it waits for, or nothing, and brief what the worker does, as a task. The round queues each row as an item when you end. Close with a tuple: 0, and your report in 200 words at most: the path of the register, what you found, and what is left.
 """ + RULES + """
 
 The item, {key}:
@@ -142,15 +145,19 @@ ALIGN = """The audit of alignment {key}: {count} PRs merged since the last one. 
 
 SETTLE = """cd "$1" 2>/dev/null || exit 0
 if [ "$(cat "$(git rev-parse --absolute-git-dir)/furb-holder" 2>/dev/null)" != "$2" ]; then
-  b=$(git branch --show-current)
   dirty=$(git status --porcelain)
   if [ -n "$dirty$(git rev-list HEAD --not --remotes | head -1)" ]; then
-    [ -n "$b" ] || { b=w/wip-$(git rev-parse --short HEAD); git switch -q -c "$b"; }
-    [ -z "$dirty" ] || { git add -A && git commit -q --no-verify -m "chore(wip): Keep the work of an earlier item"; }
+    b=w/wip-$(git rev-parse --short HEAD)-$(date +%s)
+    git switch -q -c "$b" || exit 0
+    [ -z "$dirty" ] || { git add -A && git commit -q --no-verify -m "chore(wip): Keep the work that an earlier item left in this workspace"; }
     git push -q origin "$b"
   fi
 fi
 echo "$2" > "$(git rev-parse --absolute-git-dir)/furb-holder"
+"""
+
+FREE = """[ "$(df -g "$HOME" | tail -1 | awk '{print $4}')" -lt 40 ] || exit 0
+for p in "$@"; do rm -rf "$p/target"; done
 """
 
 LABELS = "gh label create hold -c FBCA04 -d 'It waits for the fix of a review before a merge' 2>/dev/null; gh label create hold:owner-review -c FBCA04 -d 'The owner iterates with its worker: no merge until he takes it off' 2>/dev/null; gh label create owner-merge -c 5319E7 -d 'The owner merges it or not' 2>/dev/null; gh label create paused -c BFBFBF -d 'The owner paused it: no fix and no merge' 2>/dev/null; true"
@@ -286,15 +293,26 @@ def files(key: str) -> set[str]:
 
 
 def overlap(mine: set[str], theirs: set[str]) -> list[str]:
-  return sorted({x for x in mine for y in theirs if x == y or x.startswith(y + "/") or y.startswith(x + "/")})
+  pairs = [(x, y) for x in mine for y in theirs if x == y or x.startswith(y + "/") or y.startswith(x + "/")]
+  return sorted({p for x, y in pairs if ALONE.search(p := y if y.startswith(x + "/") else x)})
 
 
-def placed(where: str) -> tuple[str, str]:
-  held = {slots[n] for n in living() if n in slots} | {slots.get("coordinator", "")}
-  last = slots.get(where, "")
+def fit(model: str) -> str:
+  up = model
+  while up and not room(up):
+    up = UPGRADE.get(up, "")
+  return up if up in runs() else model
+
+
+def seated() -> set[str]:
+  return {slots[n] for n in living() if n in slots} | {slots.get("coordinator", "")}
+
+
+async def placed(where: str) -> tuple[str, str]:
+  held, last = seated(), slots.get(where, "")
   slot = last if last and last not in held else next(f"w{i}" for i in range(1, MOST + 3) if f"w{i}" not in held)
   path = f"{cwd()}-{slot}"
-  quietly(shell, f"sh -c {shq(SETTLE)} sh {shq(path)} {shq(where)}")
+  await shell(f"sh -c {shq(SETTLE)} sh {shq(path)} {shq(where)}", timeout=120)
   quietly(rung, f"try:\n  cd({path!r})\nexcept Refused:\n  pass", on=where)
   return WORKSPACE.replace("{path!r}", repr(path)).replace("{path}", path), slot
 
@@ -308,7 +326,7 @@ def carried(key: str) -> str:
   return f'This item carries the asks {ids} of the owner, in his words:\n{lines}\nServe each of them whole. End your report with the line "Served: <ids>" and, for each part that stays undone, "Left: <id> (why)".\n\n'
 
 
-def hire(key: str, what: str, thread: str = "", brief: str = "", model: str = "") -> str:
+async def hire(key: str, what: str, thread: str = "", brief: str = "", model: str = "") -> str:
   model, kind = model or model_of(key), kind_of(key)
   marks = f" --label w:{key}" + (f" --label thread:{thread}" if thread else "")
   where = str(quietly(chain, f"{thread or 'w'}/{key}"))
@@ -316,7 +334,7 @@ def hire(key: str, what: str, thread: str = "", brief: str = "", model: str = ""
   text, slot = (brief or {"audit": AUDIT, "edit": WORKER, "fix": "{what}"}[kind]).replace("{what}", what), ""
   if kind != "audit":
     quietly(shell, "".join(f"gh label create {m} --force >/dev/null 2>&1; " for m in marks.split(" --label ")[1:]))
-    space, slot = placed(where)
+    space, slot = await placed(where)
     text = text.replace("{workspace}", space)
   for old, new in (("{labels}", marks), ("{repo}", cwd()), ("{key}", key), ("{home}", scope(acting())), ("{models}", ", ".join(runs())), ("{chain}", where)):
     text = text.replace(old, new)
@@ -332,7 +350,7 @@ def waiting(key: str) -> str:
   if model not in runs():
     return f"it asks {model}, and a worker runs only {', '.join(runs())}"
   for dep in after.get(key, []):
-    if dep not in ends:
+    if dep not in ends or dep in {q[0] for q in [*queue, *backlog]} | {working[w] for w in living()}:
       return f"{dep} has not ended" + ("" if dep in held_keys() else ", and no item holds it")
     if shut := [n for _, n in ends[dep] if n and n not in merged]:
       return f"#{shut[0]} of {dep} has not merged"
@@ -343,21 +361,25 @@ def waiting(key: str) -> str:
     if working[w] != key and (hit := overlap(mine, files(working[w]))):
       return f"the worker of {working[w]} holds {hit[0]}"
   for n, one in touched.items():
-    if f"w:{key}" not in prs.get(n, {}).get("labels", []) and (hit := overlap(mine, {p for p in one["paths"] if not TESTS.search(p)})):
+    if f"w:{key}" not in prs.get(n, {}).get("labels", []) and (hit := overlap(mine, set(one["paths"]))):
       return f"#{n} changes {hit[0]}"
   return ""
 
 
-def staff() -> None:
+async def staff() -> None:
   for item in [*queue, *backlog]:
-    if len(living()) >= cap():
+    if len(living()) >= cap() - 1:
       return
     cause = waiting(item[0])
+    if cause.endswith("has no room") and (up := fit(model_of(item[0]))) != model_of(item[0]):
+      efforts[item[0]] = up
+      cause = waiting(item[0])
     if cause:
-      once(f"waits {item[0]} {cause}", f"{item[0]} waits: {cause}.")
+      if not cause.endswith("has not ended"):
+        once(f"waits {item[0]} {cause}", f"{item[0]} waits: {cause}.")
       continue
     (queue if item in queue else backlog).remove(item)
-    hire(*item)
+    await hire(*item)
 
 
 def register(key: str) -> None:
@@ -365,24 +387,29 @@ def register(key: str) -> None:
     rows = read(f"scratch://audit/{key}.md", HIDDEN).lines
   except Refused:
     return
-  stem, made = key if key.startswith("align") else "triage", []
+  stem, made, ranks, waits = key if key.startswith("align") else "triage", [], {}, {}
+  wide = int(any(re.fullmatch(r"\|\s*Dn\s*\|.*\|\s*after\s*\|.*", x.strip()) for x in rows))
   for line in rows:
-    found = ROW.match(line.strip())
-    item = f"{stem}-{slug(found[2])}" if found else ""
-    if not found or item == stem + "-" or item in made:
+    cells = [x.strip() for x in line.strip().strip("|").split("|")]
+    rank, item = cells[0], f"{stem}-{slug(cells[1])}" if len(cells) > 4 + wide else ""
+    if not item or not re.fullmatch(r"D\d+", rank) or item == stem + "-" or item in made:
       continue
+    ranks[rank], waits[item] = item, re.findall(r"D\d+", cells[4]) if wide else []
     if item in held_keys():
-      heard.append(f"The row {found[1]} of the register of {key} is {item}, which the round holds already, so it queued nothing for it.")
+      heard.append(f"The row {rank} of the register of {key} is {item}, which the round holds already, so it queued nothing for it.")
       continue
-    _, _, model, area, brief = found.groups()
+    model, area, brief = cells[2], cells[3], "|".join(cells[4 + wide :]).strip()
     full = model if ":" in model else f"claude-cli:{model}"
     if full in runs():
       efforts[item] = full
     if "/" in area:
       areas[item] = [area.strip("`/ ")]
     kinds[item] = "edit"
-    queue.append((item, f"{TRUTH}{brief}\n\nThis item is row {found[1]} of the register scratch://audit/{key}.md.", item))
+    queue.append((item, f"{TRUTH}{brief}\n\nThis item is row {rank} of the register scratch://audit/{key}.md.", item))
     made.append(item)
+  for item in made:
+    if deps := [ranks[d] for d in waits[item] if d in ranks]:
+      after[item] = deps
   if made:
     heard.append(f"The register of {key} queued {', '.join(made)}.")
 
@@ -431,6 +458,8 @@ def tend() -> None:
     else:
       notice(f"end {name}", f"The worker {key} ({name}) ended with no PR, which needs your decision:\n\n{report}")
     left(key, report)
+  if idle := sorted({s for s in slots.values() if s not in seated()}):
+    quietly(shell, f"sh -c {shq(FREE)} sh " + " ".join(shq(f"{cwd()}-{s}") for s in idle))
 
 
 def state(pr: dict) -> str:
@@ -442,7 +471,7 @@ def state(pr: dict) -> str:
   return "green" if GATE in pr["names"] and all(c in GREEN for c in checks) else "running"
 
 
-def mend(pr: dict, now: str) -> None:
+async def mend(pr: dict, now: str) -> None:
   n, sha = pr["n"], pr["sha"]
   held = assigned.get(n) or {}
   turn = held if held.get("sha") == sha else {}
@@ -459,12 +488,12 @@ def mend(pr: dict, now: str) -> None:
   if tries >= 2:
     notice(f"spent {n} {sha}", f"#{n} {problem} at {sha[:7]}, and 2 fixers ended at this head and did not move it, so the round sends no third one.")
     return
-  if not room(limits["fixer"]):
+  if not room(fixer := fit(limits["fixer"])):
     once(f"fixer {n} {sha}", f"#{n} {problem} at {sha[:7]}, and waits for a fixer on {limits['fixer']}, which has no room.")
     return
   brief = FIX.replace("{n}", str(n)).replace("{problem}", problem).replace("{sha}", sha).replace("{head}", pr["head"])
   thread = next((m[7:] for m in pr["labels"] if m.startswith("thread:")), "")
-  who = hire(f"fix{n}", "", thread, brief, limits["fixer"])
+  who = await hire(f"fix{n}", "", thread, brief, fixer)
   assigned[n] = {"sha": sha, "who": who, "at": clock(), "fixer": True, "maker": turn.get("maker", ""), "tries": tries + 1}
 
 
@@ -487,8 +516,9 @@ async def sweep() -> None:
     notice(f"red {main['sha']}", f"main is red at {str(main['sha'])[:7]}: find its cause first. The round sends no order and no fixer for a red PR until the gates of main pass.")
   if not gated:
     notice("ruleset", f"main has no ruleset that requires the check {GATE}, so the round turns on no auto-merge and merges no PR.")
-  for gone in [k for k in [*touched, *assigned] if k not in prs]:
+  for gone in [k for k in [*touched, *assigned, *green_since] if k not in prs]:
     touched.pop(gone, None)
+    green_since.pop(gone, None)
     assigned.pop(gone, None)
   flips = []
   for n in sorted(prs):
@@ -498,15 +528,19 @@ async def sweep() -> None:
     touched[n] = {"sha": pr["sha"], "paths": pr["files"]}
     now = pr["state"] = state(pr)
     labelled = bool(set(HOLDS) & set(pr["labels"]))
+    if now != "green":
+      green_since.pop(n, None)
+    elif clock() - green_since.setdefault(n, clock()) > STALE and not labelled:
+      once(f"stale {n} {pr['sha']}", f"#{n} is green at {pr['sha'][:7]} for {int(STALE // 60)} minutes and has not merged.")
     want = gated and not (labelled or pr["draft"] or pr["open"]) and now != "conflicting"
     if want != pr["auto"]:
-      flips.append(f"gh pr merge {n} --auto --squash" if want else f"gh pr merge {n} --disable-auto")
+      flips.append(f"gh pr merge {n} --auto --squash || gh pr merge {n} --squash || gh stack merge {n} --yes --squash" if want else f"gh pr merge {n} --disable-auto")
     if now == "red" and red:
       once(f"main waits {n} {pr['sha']}", f"#{n} is red at {pr['sha'][:7]} while main is red, so it waits for main.")
     elif now in ("red", "conflicting") and not labelled and not (pr["draft"] and maker_of(pr)):
-      mend(pr, now)
+      await mend(pr, now)
   if flips:
-    await shell("".join(f"{x} >/dev/null 2>&1; " for x in flips), timeout=300)
+    await shell("".join(f"{{ {x}; }} >/dev/null 2>&1; " for x in flips), timeout=300)
 
 
 async def review() -> None:
@@ -603,11 +637,12 @@ async def conduct(every: float = 300) -> dict[str, object]:
     while lead.get("home") == here:
       for at in ("tend", "sweep", "review", "staff", "asked", "align"):
         try:
-          if at in ("sweep", "review"):
-            await (sweep() if at == "sweep" else review())
+          if at in ("sweep", "review", "staff"):
+            await {"sweep": sweep, "review": review, "staff": staff}[at]()
           else:
-            {"tend": tend, "staff": staff, "asked": asked, "align": align}[at]()
-          noticed.difference_update([k for k in noticed if k.startswith(f"fault {at} ")])
+            {"tend": tend, "asked": asked, "align": align}[at]()
+          for done in [k for k in noticed if k.startswith(f"fault {at} ")]:
+            noticed.discard(done)
         except Exception as fault:
           notice(f"fault {at} {type(fault).__name__}", f"The round on {here} met a fault in its step {at}: {type(fault).__name__}: {str(fault)[:1000]}. It goes on at the next round, and tells this fault again only after a round of this step with no fault.")
       if not (queue or backlog or living() or any(ours(pr) and "paused" not in pr["labels"] for pr in prs.values())):
