@@ -344,7 +344,8 @@ impl Hub {
     }
   }
 
-  /// The link of a server changed, and told; always false, since the server is not connected then.
+  /// The link of a server changed, and the change is told.
+  /// The result is always false, because the server is not connected then.
   fn relinked(&self, name: &str, link: Link) -> bool {
     let mut entries = self.entries();
     if let Some(entry) = entries.iter_mut().find(|one| one.server.name == name) {

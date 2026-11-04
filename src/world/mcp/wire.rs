@@ -364,9 +364,9 @@ impl Drop for Process {
   }
 }
 
-/// The messages of a process handed on until its stdout ends, and then the end of the wire: the
-/// status of the process and the last lines of its stderr, which the wire reads to their end first,
-/// so that none is lost.
+/// The messages of a process, handed on until its stdout ends. Then the wire ends.
+/// The end holds the status of the process and the last lines of its stderr.
+/// The wire reads the stderr to its end first, so that no line is lost.
 async fn ended(mut child: Child, stdout: ChildStdout, stderr: ChildStderr, inbox: Inbox) {
   let ((), tail) = tokio::join!(forwarded(stdout, &inbox), tailed(stderr));
   let status = child.wait().await.map(|status| format!(" with {status}")).unwrap_or_default();

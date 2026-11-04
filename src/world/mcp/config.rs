@@ -261,8 +261,8 @@ impl Choices {
     }
   }
 
-  /// A server of a scope, off or approved as the operator chose, and as its definition says when
-  /// he chose nothing.
+  /// A server of a scope. The operator can turn it off or approve it.
+  /// When he chose nothing, its definition decides.
   fn judged(&self, mut server: Server, off: bool) -> Server {
     server.disabled =
       self.disabled.contains(&server.name) || (off && !self.enabled.contains(&server.name));
@@ -339,7 +339,7 @@ pub(super) fn choose(places: &Places, choice: Choice, name: &str) -> Result<(), 
   fs::write(&path, text + "\n").map_err(|source| Error::Write { path, source })
 }
 
-/// A name in a list of the file, once, or no more; a key that holds no list holds one.
+/// Adds a name to a list of the file once, or removes it. A key that holds no list gets a new list.
 fn listed(held: &mut Map<String, Value>, key: &str, name: &str, add: bool) {
   let slot = held.entry(key.to_owned()).or_insert_with(|| Value::Array(Vec::new()));
   if !slot.is_array() {

@@ -184,16 +184,17 @@ pub(super) fn store(vault: &dyn Vault, key: &str, tokens: &Tokens) -> Result<(),
   vault.put(key, &serde_json::to_string(tokens)?)
 }
 
-/// The access token of a server, and the failure of the store to keep the tokens that were
-/// refreshed for it.
+/// The access token of a server.
+/// It also holds the failure of the store, if the store kept no refreshed tokens.
 pub(super) struct Access {
   pub(super) token: String,
   pub(super) unsaved: Option<VaultError>,
 }
 
-/// The access token of a server, refreshed first when it ends within a minute; none when there is
-/// none or it cannot be refreshed. A refreshed token serves even when the store does not keep it,
-/// and the failure of the store stays with it.
+/// The access token of a server. It is refreshed first when it ends within a minute.
+/// The result is none when there is no token or it cannot be refreshed.
+/// A refreshed token still serves when the store does not keep it.
+/// The failure of the store stays with it.
 pub(super) async fn token(vault: Arc<dyn Vault>, key: String) -> Option<Access> {
   let (held, place) = (Arc::clone(&vault), key.clone());
   let tokens = blocking(move || stored(held.as_ref(), &place)).await.ok()??;
@@ -375,8 +376,9 @@ pub(super) async fn protected(
   Ok((origin, None))
 }
 
-/// The endpoints of an authorization server, from its metadata at the well-known paths of OAuth and
-/// of `OpenID`; or the endpoints at the root of its origin when it gives none.
+/// The endpoints of an authorization server.
+/// They come from its metadata, at the well-known paths of OAuth and of `OpenID`.
+/// When the server gives none, the endpoints are at the root of its origin.
 pub(super) async fn authority(client: &Client, issuer: &str) -> Result<Endpoints, Error> {
   let (origin, path) = split(issuer)?;
   let candidates = if path.is_empty() {
