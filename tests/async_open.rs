@@ -5,6 +5,8 @@
 #[path = "common/yard.rs"]
 mod yard;
 
+#[cfg(target_os = "linux")]
+use std::fs;
 use std::path::Path;
 
 use furb::{Exit, life::Opening, verbs};
