@@ -5,6 +5,7 @@ metadata:
   furb-word: naming.py
   furb-life: name_session()
   furb-interface: naming.pyi
+  furb-default: "true"
   furb-plays: root
 ---
 `name_session()` asks a model for a name of a few words at the first prompt of the operator. Its contract is

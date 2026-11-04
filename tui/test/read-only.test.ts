@@ -117,6 +117,7 @@ for (const width of [80, 160]) {
     try {
       const record = await lived(directory, "other");
       await made(record, true);
+      await drifting(record);
       const open = await shown(record, directory, width);
       try {
         const reading = open.session.host.reading;

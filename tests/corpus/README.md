@@ -13,12 +13,6 @@ few.
   cargo test -p furb --lib life::test::make_the_corpus -- --ignored
   ```
 
-  A life that keeps a record of an older version has the build of that version write a checkpoint at the tip of the
-  record as it opens, when the store of builds of the machine holds that build, and goes on from the checkpoint on the
-  new build. `script/builds.sh <version>` puts a build in the store. With no such build, or for a record of a newer
-  version, the life is refused before any replay, with both versions, and the command line runs the build of a newer
-  version in its place when the store holds it.
-
 `work.jsonl` is the life that `make_the_corpus` runs, on a model that answers from a script. Its root writes, reads,
 runs a command, waits, reads the clock and chance, and asks a chain of its own. A second life on the record takes
 one prompt more, so the record holds two openings. Each official extension runs on it.

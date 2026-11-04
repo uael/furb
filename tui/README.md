@@ -443,7 +443,7 @@ module of TypeScript beside its word, which adds panels over the input, the hint
 keys, commands that it can give from the life, completions of the input after a trigger, a status in the footer, and
 dialogs of a list, a form or a confirm that its commands await, and which the TUI loads again live, as [the guide of the
 extensions](../docs/extensions.md#a-part-for-the-tui) says. A model adds a part to a life that runs with `extend(name,
-*rungs, tui=module)`, which the extension ouroboros and the skill extending teach it: the panel stands at once, with no
+*rungs, tui=module)`, which the skill ouroboros teaches it: the panel stands at once, with no
 restart. A part that fails shows its error in plain words in its own panel, and the TUI goes on. `/extensions` opens a
 dialog of what the life runs, each extension with what its part gives or the error that stopped it, and `/run` runs a
 word of one on the chain on screen, as `/run skill("pdf")`. A cancel ends one act and the work under it, and not what an

@@ -84,14 +84,18 @@ async def test_skill_with_no_name_plays_each_default_skill(tmp_path: Path) -> No
   noted(tmp_path, default=True)
   _, root = extended("skills", tmp_path, _monty.skills)
   got = await engine.rung("close(await skill())", on=root)
-  defaults = [x for x in official_lines(on=["catchup", "memory", "compaction"]) if "default" in x.split(":")[0]]
+  lines = official_lines(on=["catchup", "memory", "compaction", "naming"])
+  defaults = [x for x in lines if "default" in x.split(":")[0]]
   assert got == Text("skills://", "\n".join(sorted([*defaults, "note (code, on, default): A note."])))
   assert sorted(str(a[3]) for a in engine.transcript(on=root) if a[0] == "enable" and a[2] == "skills") == [
     "catchup",
     "compaction",
     "memory",
+    "naming",
     "note",
   ]
+
+  assert [a[5] for a in engine.transcript(on=root) if a[0] == "enable" and a[3] == "naming"] == ["name_session()"]
 
 
 async def test_a_skill_of_a_name_that_no_skill_has_raises_refused(tmp_path: Path) -> None:

@@ -5,9 +5,8 @@
 //! files of the [`Scratch`] directory of the life among them, [`bash`] runs a command, [`fetch`]
 //! gets a page of the web, [`mcp`] speaks to the MCP servers that a user adds,
 //! [`time`] reads the clock, draws a chance and ends a wait, [`store`]
-//! keeps the record on the disk under a lease, as a file of lines or a database of SQLite, the
-//! store of builds holds the program of each version that ran on this machine, which [`stored`]
-//! finds, [`log`] writes the log of the life beside the record, which [`logged`] reads, [`retold`]
+//! keeps the record on the disk under a lease, as a file of lines or a database of SQLite, [`log`]
+//! writes the log of the life beside the record, which [`logged`] reads, [`retold`]
 //! reads a record with no life, and the [`Provider`] answers what the chains stand on and asks the
 //! models of rig for their turns, which the [`Catalog`] knows, the claude command line among them.
 //! The host names the models it offers, and gives the rest, its console, which reads what the
@@ -17,7 +16,6 @@
 //! its place, and an ear that takes a question and asks it again wraps it.
 
 mod bash;
-mod builds;
 mod fetch;
 pub(crate) mod files;
 mod log;
@@ -36,7 +34,6 @@ use std::{
 
 pub(crate) use bash::{Group, grouped};
 pub use bash::{bash, program, shell};
-pub use builds::{build, shelve, stored};
 pub use fetch::fetch;
 pub use files::{CONFIG, files};
 pub(crate) use log::continued;
