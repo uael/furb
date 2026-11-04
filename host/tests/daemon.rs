@@ -80,7 +80,7 @@ mod daemon {
   async fn started(at: &Path, grace: Duration) -> (Local, JoinHandle<Result<(), DaemonError>>) {
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
-    let settings = Settings { opening: opening(at), grace };
+    let settings = Settings { opening: opening(at), grace, tailnet: None };
     let served = local.clone();
     (local, tokio::spawn(async move { run(&served, listener, settings).await }))
   }
@@ -287,7 +287,7 @@ mod daemon {
     let pin = Verb::Pin { life: life.clone(), holder: "job".to_owned() };
     assert_eq!(window.ask(pin).await, Ok(Answer::Done));
     window.ran(&life, "x = 41 + 1").await;
-    let settings = Settings { opening: opening(&at), grace: SHORT };
+    let settings = Settings { opening: opening(&at), grace: SHORT, tailnet: None };
     let next = local.clone();
     let new = tokio::spawn(async move { upgrade(&next, settings).await });
     assert!(window.closed().await);

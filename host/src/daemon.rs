@@ -12,14 +12,26 @@
 //! takeover: the daemon that runs writes the checkpoint of each life, stops to listen, and gives
 //! its lives and their pins, which the new one opens again. Each window then dials again and
 //! attaches, with no loss.
+//!
+//! When the operator turns it on, the daemon also listens on the address of the machine on the
+//! tailnet, by TCP and by WebSocket, and lets in each peer whose login the access list names, with
+//! the role that it gives (#983, D6).
 
 use std::{
-  collections::HashMap, fmt::Display, iter, path::Path, pin::pin, sync::Arc, time::Duration,
+  collections::HashMap,
+  fmt::Display,
+  iter,
+  net::{IpAddr, SocketAddr},
+  path::Path,
+  pin::pin,
+  sync::Arc,
+  time::Duration,
 };
 
 use furb::life::{Log, Opening};
 use futures::{SinkExt, Stream, StreamExt, future};
 use tokio::{
+  net::{TcpListener, TcpStream},
   sync::{mpsc, oneshot},
   task::JoinSet,
   time::{Instant, sleep_until},
@@ -27,13 +39,14 @@ use tokio::{
 use tokio_util::codec::{Framed, LinesCodec};
 
 use crate::{
+  access::Ports,
   error::{DaemonError, ProtocolError, TransportError},
   event::{Event, Seq},
   holders::{Holders, Window},
   life::{Command, Life, LifeHandle, Reply},
   protocol::{Answer, BOUND, Frame, Handed, Hello, Kind, Listed, PROTOCOL, Peer, Request, Verb},
   serve::{Host, Outbox, serve},
-  transport::{Accepted, Dialer, Identity, Listener, Local},
+  transport::{Accepted, Dialer, Identity, Listener, Local, Tailscale, Tcp, upgraded},
 };
 
 /// How long a life with no holder lives, unless the settings of the daemon say otherwise.
@@ -47,6 +60,16 @@ pub struct Settings {
   pub opening: Opening,
   /// How long a life with no holder lives before it writes its checkpoint and ends.
   pub grace: Duration,
+  /// The daemon on the tailnet, when the operator turns it on in `host.json`.
+  pub tailnet: Option<Tailnet>,
+}
+
+/// The daemon on the tailnet: who each peer is, and the ports where it listens on the address of
+/// the machine.
+#[derive(Debug, Clone)]
+pub struct Tailnet {
+  pub identity: Tailscale,
+  pub ports: Ports,
 }
 
 /// The daemon of the machine served on the transport where it listens, until a daemon of a new
@@ -106,6 +129,10 @@ async fn served(
   handed: Vec<Handed>,
 ) -> Result<(), DaemonError> {
   let log = settings.opening.log.clone();
+  let doors = match &settings.tailnet {
+    Some(tailnet) => Doors::listen(tailnet, log.as_ref()).await,
+    None => None,
+  };
   let (daemon, mut leave) = Daemon::spawn(settings, handed);
   let mut peers = JoinSet::new();
   let leaving = loop {
@@ -113,6 +140,12 @@ async fn served(
       accepted = listener.accept() => match accepted {
         Ok(stream) => {
           peers.spawn(peer(daemon.clone(), local.clone(), stream));
+        }
+        Err(no) => report(log.as_ref(), &no),
+      },
+      arrived = Doors::arrival(doors.as_ref()) => match arrived {
+        Ok((identity, arrival)) => {
+          peers.spawn(remote(daemon.clone(), identity, arrival));
         }
         Err(no) => report(log.as_ref(), &no),
       },
@@ -124,7 +157,7 @@ async fn served(
       leaving = &mut leave => break leaving,
     }
   };
-  drop(listener);
+  drop((listener, doors));
   if let Ok(Leaving { handed, asker, reply }) = leaving {
     reply.send(Ok(Answer::Handed(handed))).ok();
     asker.closed().await;
@@ -134,8 +167,83 @@ async fn served(
 
 /// One peer of the local transport, identified, then served until it leaves.
 async fn peer(daemon: Daemon, local: Local, stream: Accepted) -> Result<(), TransportError> {
-  let who = local.identify(&stream)?;
+  let who = local.identify(&stream).await?;
   serve(&daemon, stream, who).await
+}
+
+/// One peer of the tailnet, identified by Tailscale, upgraded when it came by WebSocket, then
+/// served until it leaves.
+async fn remote(
+  daemon: Daemon,
+  identity: Tailscale,
+  arrival: Arrival,
+) -> Result<(), TransportError> {
+  match arrival {
+    Arrival::Tcp(stream) => {
+      let who = identity.identify(&stream).await?;
+      serve(&daemon, stream, who).await
+    }
+    Arrival::WebSocket(stream) => {
+      let who = identity.identify(&stream).await?;
+      serve(&daemon, upgraded(stream).await?, who).await
+    }
+  }
+}
+
+/// The listeners of the daemon on the address of the machine on the tailnet, each where the
+/// settings give a port.
+struct Doors {
+  identity: Tailscale,
+  tcp: Option<TcpListener>,
+  websocket: Option<TcpListener>,
+}
+
+/// A stream of a peer of the tailnet, by the transport that it came by.
+enum Arrival {
+  Tcp(TcpStream),
+  WebSocket(TcpStream),
+}
+
+impl Doors {
+  /// The doors listening on the first address of the machine on the tailnet, an address of IPv4
+  /// before one of IPv6. A daemon that cannot listen there reports why, and serves the machine
+  /// alone.
+  async fn listen(tailnet: &Tailnet, log: Option<&Log>) -> Option<Doors> {
+    let opened = async {
+      let mut ips = tailnet.identity.addresses().await?;
+      ips.sort_by_key(IpAddr::is_ipv6);
+      let ip = *ips.first().ok_or(TransportError::Tailless)?;
+      let door = async |port: Option<u16>| match port {
+        Some(port) => Tcp::new(SocketAddr::new(ip, port)).listen().await.map(Some),
+        None => Ok(None),
+      };
+      let (tcp, websocket) = (door(tailnet.ports.tcp).await?, door(tailnet.ports.websocket).await?);
+      for (name, one) in [("TCP", &tcp), ("WebSocket", &websocket)] {
+        if let Some(at) = one.as_ref().and_then(|one| one.local_addr().ok()) {
+          report(log, &format_args!("listens on the tailnet at {at} by {name}"));
+        }
+      }
+      Ok::<_, TransportError>(Doors { identity: tailnet.identity.clone(), tcp, websocket })
+    };
+    opened.await.inspect_err(|no| report(log, &format_args!("no door on the tailnet: {no}"))).ok()
+  }
+
+  /// The next peer of the tailnet, with the identity that says who it is, or never with no door.
+  async fn arrival(doors: Option<&Doors>) -> Result<(Tailscale, Arrival), TransportError> {
+    let Some(doors) = doors else { return future::pending().await };
+    let arrival = tokio::select! {
+      stream = accepted(doors.tcp.as_ref()) => Arrival::Tcp(stream?),
+      stream = accepted(doors.websocket.as_ref()) => Arrival::WebSocket(stream?),
+    };
+    Ok((doors.identity.clone(), arrival))
+  }
+}
+
+async fn accepted(listener: Option<&TcpListener>) -> Result<TcpStream, TransportError> {
+  match listener {
+    Some(listener) => Ok(listener.accept().await.map_err(TransportError::Accept)?.0),
+    None => future::pending().await,
+  }
 }
 
 /// A report of the daemon that no model reads, to the log of the opening, or to stderr.
