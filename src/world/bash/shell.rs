@@ -5,10 +5,14 @@ use std::{
   collections::HashSet,
   env,
   ffi::{OsStr, OsString},
+  fs,
   io::ErrorKind,
   path::{Path, PathBuf},
   process::{Command, Stdio},
-  sync::OnceLock,
+  sync::{
+    OnceLock,
+    atomic::{AtomicUsize, Ordering},
+  },
   time::Duration,
 };
 
@@ -54,19 +58,34 @@ async fn login_path() -> Option<&'static OsString> {
 
 /// What the login shell `shell` says its PATH is, between two marks that a profile which writes to
 /// its output cannot forge by accident, or none when it fails, gives no path, or runs past `limit`,
-/// when it is ended.
+/// when it is ended. The shell writes to a file and not to a pipe, since a pipe ends only
+/// when each process that holds its write end is gone, and a process that a profile starts in the
+/// background, or that another thread forks while the pipe is made, holds it past the shell.
 async fn asked_path(shell: &Path, limit: Duration) -> Option<OsString> {
-  let mut command = tokio::process::Command::new(shell);
-  command
-    .args(["-l", "-c", "printf '<furb-path>%s</furb-path>' \"$PATH\""])
-    .stdin(Stdio::null())
-    .stdout(Stdio::piped())
-    .stderr(Stdio::null())
-    .kill_on_drop(true);
-  let out = tokio::time::timeout(limit, command.output()).await.ok()?.ok()?;
-  let said = String::from_utf8_lossy(&out.stdout);
+  static MADE: AtomicUsize = AtomicUsize::new(0);
+  let file = env::temp_dir().join(format!(
+    "furb-login-path-{}-{}",
+    std::process::id(),
+    MADE.fetch_add(1, Ordering::Relaxed)
+  ));
+  let stdout = fs::OpenOptions::new().write(true).create_new(true).open(&file).ok()?;
+  let ran = async {
+    let mut child = tokio::process::Command::new(shell)
+      .args(["-l", "-c", "printf '<furb-path>%s</furb-path>' \"$PATH\""])
+      .stdin(Stdio::null())
+      .stdout(stdout)
+      .stderr(Stdio::null())
+      .kill_on_drop(true)
+      .spawn()
+      .ok()?;
+    child.wait().await.ok()
+  };
+  let status = tokio::time::timeout(limit, ran).await.ok().flatten();
+  let said = fs::read(&file);
+  drop(fs::remove_file(&file));
+  let said = String::from_utf8_lossy(&said.ok()?).into_owned();
   let path = said.split_once("<furb-path>")?.1.split_once("</furb-path>")?.0;
-  (out.status.success() && !path.is_empty()).then(|| OsString::from(path))
+  (status?.success() && !path.is_empty()).then(|| OsString::from(path))
 }
 
 /// The folders of `login` in order, then those of `current` that it lacks.
