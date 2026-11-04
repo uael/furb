@@ -358,6 +358,8 @@ impl Opening {
   /// The life, booted on the ears of the host and then on the ears of the crate, and the record it
   /// opened on: the entries of its last checkpoint and those after it, as [`checkpoint::booted`]
   /// gives them. A life whose record drifted is refused, since it would keep nothing more.
+  /// A life that does work then puts the work that an earlier life left to the outside again, as
+  /// [`Engine::resume`] says, so no act of the record stays running with no process.
   pub fn boot<N: Into<String>>(
     self,
     host: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
@@ -394,11 +396,17 @@ impl Opening {
     host: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
     prepared: Prepared,
   ) -> Result<(Engine, Vec<Object>), Fault> {
+    let works = self.works();
     let (record, ears) = self.parted(prepared)?;
     let host = host.into_iter().map(|(name, ear)| (name.into(), ear));
-    let engine = Engine::boot(record.clone(), host.chain(ears))?;
+    let mut engine = Engine::boot(record.clone(), host.chain(ears))?;
     if let Some(no) = engine.raised() {
       return Err(no.clone());
+    }
+    // A resume returns to the state at the tip of the record, so the work that the stop cut goes
+    // on with no wake.
+    if works {
+      engine.resume()?;
     }
     Ok((engine, record))
   }

@@ -295,8 +295,8 @@ export class Session extends EventEmitter {
     }
   }
 
-  /** The work that an earlier life left, which waits for a wake that this life says, by the kind of each act, as the
-   * engine of the crate finds it. */
+  /** The work that an earlier life left and that still waits for a wake, by the kind of each act, as the engine of the
+   * crate finds it: none once a life that does work opened, since its open puts that work to the outside again. */
   get pending(): Map<string, string> {
     if (!this.engine) return new Map();
     this.held ??= new Map(this.engine.pending());

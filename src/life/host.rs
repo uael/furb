@@ -156,17 +156,13 @@ impl Open {
       opening.directory = here.display().to_string();
     }
     let asked = Rc::new(RefCell::new(VecDeque::new()));
-    let (mut engine, record) = opening.open([("console", console(Rc::clone(&asked)))]).await?;
+    let (engine, record) = opening.open([("console", console(Rc::clone(&asked)))]).await?;
     let made = record
       .iter()
       .filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of))
       .filter(|one| one.by() == "operator" && MADE.contains(&one.kind()) && one.question())
       .filter(|one| one.about() != "chain1")
       .collect();
-    for (id, _) in engine.pending()? {
-      let chain = engine.word("scope(id)", vec![("id", Object::string(&id))])?;
-      engine.wake(chain.as_ref().as_str().unwrap_or_default())?;
-    }
     Ok(Life { engine, made, asked })
   }
 }
