@@ -108,7 +108,7 @@ typescript = ["dep:napi", "dep:napi-derive", "dep:napi-build", "allocator"]
 # The sandbox the engine runs in, and its type checker, which is the gate of the
 # Kernel. A revision of the fork, since the interpreter the engine needs is not
 # released, and a revision reads the same interpreter at every build.
-monty = { git = "https://github.com/uael/monty", rev = "9f7098d6" }
+monty = { git = "https://github.com/uael/monty", rev = "9f7098d6" } # same rev
 monty-type-checking = { git = "https://github.com/uael/monty", rev = "9f7098d6" }
 monty-types = { git = "https://github.com/uael/monty", rev = "9f7098d6" }
 # The allocator that counts each byte the program asks for, which is how the interpreter reads its memory.
