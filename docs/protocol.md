@@ -59,6 +59,7 @@ it is not given. The daemon answers requests in any order.
 | `transcript` | `life`, `on`, `of` | read |
 | `turns`, `program`, `cwd` | `life`, `on` | read |
 | `standing`, `pending` | `life` | read |
+| `filled` | `life`, `act` | read |
 | `inspect` | `life`, `name`, `on` | read |
 | `prompt` | `life`, `shape`, `message`, `to`, `on` | write |
 | `answer` | `life`, `act`, `line` | write |

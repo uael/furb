@@ -69,6 +69,8 @@ pub enum Command {
   Program { on: Option<String> },
   /// The standing of the life.
   Standing,
+  /// The share of the window that the answer of a reply filled.
+  Filled { id: String },
   /// The facts of a chain, of one kind or of each kind.
   Transcript { on: Option<String>, of: Option<String> },
   /// One name that the module of a chain binds.
@@ -512,6 +514,9 @@ fn queried(engine: &mut Engine, query: Command, root: &str) -> Result<Reply, Lif
       Reply::Value(outward(engine.verb("program", vec![], named(chain))?.as_ref()))
     }
     Command::Standing => Reply::Value(outward(engine.standing()?.as_ref())),
+    Command::Filled { id } => {
+      Reply::Value(outward(engine.verb("filled", vec![Object::string(id)], vec![])?.as_ref()))
+    }
     Command::Inspect { name, on: chain } => {
       let (kind, repr, value) = engine.inspect(&name, Some(&on(chain)))?;
       Reply::Inspected { kind, repr, value: outward(value.as_ref()) }

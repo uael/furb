@@ -137,6 +137,12 @@ pub enum Verb {
   Standing {
     life: String,
   },
+  /// The share of the window of its model that the prompt of an answer filled, as `filled` of
+  /// the engine gives it from the reply that took that answer, and nothing before an answer.
+  Filled {
+    life: String,
+    act: String,
+  },
   Cwd {
     life: String,
     on: Option<String>,
@@ -310,6 +316,7 @@ impl Verb {
         | Self::Turns { .. }
         | Self::Program { .. }
         | Self::Standing { .. }
+        | Self::Filled { .. }
         | Self::Cwd { .. }
         | Self::Inspect { .. }
         | Self::Pending { .. }
