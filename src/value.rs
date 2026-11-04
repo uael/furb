@@ -19,7 +19,7 @@ pub use monty_types::{MontyObject as Object, ObjectRef};
 /// The key of the one mark: a map whose `is` names a class of the engine is an instance of it, by its fields.
 pub const IS: &str = "is";
 
-/// What the World reads of a value that monty gives.
+/// What the crate reads of a value that monty gives.
 pub(crate) trait Given {
   /// Whether the value is `None`.
   fn is_none(&self) -> bool;
