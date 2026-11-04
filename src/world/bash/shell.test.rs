@@ -13,7 +13,9 @@
 )]
 #![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
 
-use std::{fs, time::Duration};
+use std::fs;
+#[cfg(unix)]
+use std::time::Duration;
 
 #[cfg(unix)]
 use super::asked_path;
