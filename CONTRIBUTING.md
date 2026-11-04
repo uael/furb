@@ -76,7 +76,7 @@ contract needs a request of the owner.
 | --- | --- |
 | `src/furb/kernel.py` | The Kernel, which runs the word of a rung in the module of its chain. Both engines load it. |
 | `src/furb/sheet.py` | The sheet that the gate reads a word on, and the findings that it reads off it. |
-| `src/gate.rs` | The gate: the type checker of monty, which reads a sheet. |
+| `src/gate.rs`, `src/gate/` | The gate: the type checker of monty, which reads a sheet. |
 
 ### The World and the life
 
