@@ -1,8 +1,6 @@
-//! The clients of rig that ask the providers of the catalog: each client that rig or a crate of rig gives, the chat
-//! completions of OpenAI at the address of a provider or of a local server, and the protocol of pi-ai.
-
-#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
-#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+//! The clients of rig that ask the providers of the catalog: each client that rig or a crate of rig
+//! gives, the chat completions of `OpenAI` at the address of a provider or of a local server, and
+//! the protocol of pi-ai.
 
 use std::future::Future;
 
@@ -43,8 +41,8 @@ pub(super) enum Client {
   Zai,
   Huggingface,
   Xiaomi,
-  /// The chat completions of OpenAI at the address of the provider, which take no credential when it is empty, as a
-  /// local server may take none.
+  /// The chat completions of `OpenAI` at the address of the provider, which take no credential when
+  /// it is empty, as a local server may take none.
   Chat,
   /// The chat completions of the gateway of Cloudflare, which takes the credential of Cloudflare alone.
   Gateway,
@@ -108,15 +106,7 @@ impl Client {
     }
     let api = || reach.api.clone().ok_or(Error::NoAddress);
     Ok(match self {
-      Client::Anthropic if reach.bearer => {
-        let mut built =
-          anthropic::Client::builder().api_key(UNSENT).http_client(Amended::new(Unsent));
-        built = built.http_headers(headed("authorization", &format!("Bearer {key}"))?);
-        if let Some(api) = &reach.api {
-          built = built.base_url(api);
-        }
-        streams(built.build()?.completion_model(id).with_automatic_caching())
-      }
+      Client::Anthropic if reach.bearer => bearer_streams(reach, &key, id)?,
       Client::Anthropic => {
         let mut built = anthropic::Client::builder().api_key(key);
         if let Some(api) = &reach.api {
@@ -155,38 +145,58 @@ impl Client {
       Client::Zai => streams(asked!(zai::Client)),
       Client::Huggingface => streams(asked!(huggingface::Client)),
       Client::Xiaomi => streams(asked!(xiaomimimo::Client)),
-      Client::Copilot => {
-        let built = copilot::Client::builder().github_access_token(key).allow_device_flow(false);
-        let built = match cache() {
-          Some(at) => built.token_dir(at.join("copilot")),
-          None => built,
-        };
-        streams(built.build()?.completion_model(id))
-      }
-      Client::Azure => {
-        let built = azure::Client::builder().api_key(azure::AzureOpenAIAuth::ApiKey(key));
-        let built = built.azure_endpoint(api()?);
-        let built = built.api_version(reach.version.as_deref().unwrap_or("2024-10-21"));
-        streams(built.build()?.completion_model(id))
-      }
+      Client::Copilot => copilot_streams(key, id)?,
+      Client::Azure => azure_streams(reach, key, id)?,
       Client::Bedrock => {
         let built =
           rig_bedrock::client::Client::from_env().map_err(|no| Error::Bedrock(no.to_string()))?;
         streams(built.completion_model(id))
       }
-      Client::Vertex => {
-        let (project, location) = reach.project.clone().unwrap_or_default();
-        let mut built =
-          rig_vertexai::Client::builder().with_project(&project).with_location(&location);
-        if !key.is_empty() {
-          let credentials = google_cloud_auth::credentials::api_key_credentials::Builder::new(key);
-          built = built.with_credentials(credentials.build());
-        }
-        whole(built.build().map_err(|no| Error::Vertex(no.to_string()))?.completion_model(id))
-      }
+      Client::Vertex => vertex_streams(reach, key, id)?,
       Client::Pi => streams(Pi::new(api()?, key, id)),
     })
   }
+}
+
+/// The responses of a model of Anthropic, with a bearer token that the provider takes under the
+/// header of
+/// `authorization`, in the place of the key of rig.
+fn bearer_streams(reach: &Reach, key: &str, id: String) -> Result<Streams, Error> {
+  let mut built = anthropic::Client::builder().api_key(UNSENT).http_client(Amended::new(Unsent));
+  built = built.http_headers(headed("authorization", &format!("Bearer {key}"))?);
+  if let Some(api) = &reach.api {
+    built = built.base_url(api);
+  }
+  Ok(streams(built.build()?.completion_model(id).with_automatic_caching()))
+}
+
+/// The responses of a model that GitHub Copilot serves, on the token of its sign-in.
+fn copilot_streams(key: String, id: String) -> Result<Streams, Error> {
+  let built = copilot::Client::builder().github_access_token(key).allow_device_flow(false);
+  let built = match cache() {
+    Some(at) => built.token_dir(at.join("copilot")),
+    None => built,
+  };
+  Ok(streams(built.build()?.completion_model(id)))
+}
+
+/// The responses of a model that an Azure endpoint serves.
+fn azure_streams(reach: &Reach, key: String, id: String) -> Result<Streams, Error> {
+  let built = azure::Client::builder().api_key(azure::AzureOpenAIAuth::ApiKey(key));
+  let built = built.azure_endpoint(reach.api.clone().ok_or(Error::NoAddress)?);
+  let built = built.api_version(reach.version.as_deref().unwrap_or("2024-10-21"));
+  Ok(streams(built.build()?.completion_model(id)))
+}
+
+/// The responses of a model that Vertex AI serves, whole, since it does not stream.
+fn vertex_streams(reach: &Reach, key: String, id: String) -> Result<Streams, Error> {
+  let (project, location) = reach.project.clone().unwrap_or_default();
+  let mut built = rig_vertexai::Client::builder().with_project(&project).with_location(&location);
+  if !key.is_empty() {
+    let credentials = google_cloud_auth::credentials::api_key_credentials::Builder::new(key);
+    built = built.with_credentials(credentials.build());
+  }
+  Ok(whole(built.build().map_err(|no| Error::Vertex(no.to_string()))?.completion_model(id)))
 }
 
 /// A map of one header.

@@ -66,6 +66,12 @@ pub enum ProtocolError {
   Unattached { life: String },
   #[error("no pin of the holder {holder} holds the life on the record {life}")]
   Unpinned { life: String, holder: String },
+  /// A turn or a write for a request of a model that the life does not wait for.
+  #[error("no model of the life on the record {life} waits for the turn of the request {ask}")]
+  Unasked { life: String, ask: u64 },
+  /// A turn for a life whose models no peer answers.
+  #[error("no peer answers the models of the life on the record {life}")]
+  Answerless { life: String },
   /// A frame of a view that only a window says, or only a skill, and the peer is of another kind.
   #[error("the verb is said by a peer of the kind {needs:?}, and the peer is of the kind {has:?}")]
   Speaker { needs: Kind, has: Kind },
@@ -134,6 +140,13 @@ pub enum TransportError {
   /// Plain TCP listens only where `WireGuard` or the machine keeps the frames.
   #[error("plain TCP listens only on loopback or on the tailnet, not on {addr}")]
   Open { addr: SocketAddr },
+  #[error("the door of the windows draws no token")]
+  Random(#[source] getrandom::Error),
+  #[error("the address of the door of the windows cannot be written in {}", file.display())]
+  Door { file: PathBuf, source: io::Error },
+  /// A peer of the door of the windows gave no token of the daemon, or another.
+  #[error("a peer of the door of the windows gave no token of the daemon")]
+  Tokenless,
   #[error("the WebSocket of a peer did not open")]
   Upgrade(#[source] Box<tokio_tungstenite::tungstenite::Error>),
   #[error(transparent)]

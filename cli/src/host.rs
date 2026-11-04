@@ -2,9 +2,11 @@
 //! the cache of furb, as `furb-host` serves it. The file `host.json` of the config folder of furb
 //! turns on the daemon on the tailnet, and gives each login of the network its role.
 
+use std::time::Duration;
+
 use furb::{extension::Places, life::Opening, world};
 use furb_host::{
-  DaemonError, GRACE, Settings, Tailnet,
+  DaemonError, Settings, Tailnet,
   access::Config,
   run,
   transport::{Local, LocalApi, Tailscale},
@@ -13,17 +15,20 @@ use furb_host::{
 use tokio::runtime;
 
 /// The daemon of this machine, served until a daemon of a new build takes its place, or, with
-/// `upgrading`, served in the place of the daemon that runs. It says where it listens once it
-/// listens, so a program that starts it knows when to dial it.
+/// `upgrading`, served in the place of the daemon that runs, where a life with no holder lives
+/// for `grace`. It says where it listens once it listens, so a program that starts it knows when
+/// to dial it.
 #[expect(
   clippy::disallowed_methods,
   reason = "the program blocks on the runtime of the daemon, which is all that it runs"
 )]
-pub(crate) fn serve(upgrading: bool) -> Result<(), String> {
+pub(crate) fn serve(grace: Duration, upgrading: bool) -> Result<(), String> {
   let cache =
     world::cache().ok_or("this machine has no cache of furb, so the daemon has no place")?;
-  let settings = Settings { opening: Opening::default(), grace: GRACE, tailnet: tailnet()? };
   let folder = cache.join("host");
+  let door = Some(folder.join(DOOR));
+  let host = Some(folder.clone());
+  let settings = Settings { opening: Opening::default(), grace, tailnet: tailnet()?, door, host };
   let local = Local::new(&folder);
   let runtime = runtime::Builder::new_multi_thread().enable_all().build();
   let runtime = runtime.map_err(|no| format!("the daemon has no runtime: {no}"))?;
@@ -37,6 +42,10 @@ pub(crate) fn serve(upgrading: bool) -> Result<(), String> {
   });
   served.map_err(|no| no.to_string())
 }
+
+/// The file of the folder of the daemon that holds the address of its door of the windows, with
+/// its token.
+const DOOR: &str = "window.json";
 
 /// The daemon on the tailnet, when `host.json` turns it on.
 fn tailnet() -> Result<Option<Tailnet>, String> {

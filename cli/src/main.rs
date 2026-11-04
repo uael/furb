@@ -27,10 +27,12 @@ use std::{
   collections::HashMap,
   path::{Path, PathBuf},
   process::ExitCode,
+  time::Duration,
 };
 
 use clap::{Args, Parser, Subcommand};
 use furb::{life::Opening, value::entry, verbs, world};
+use furb_host::GRACE;
 
 use crate::life::Life;
 
@@ -154,6 +156,10 @@ enum Command {
   /// Serve the daemon of this machine, which holds each life by its record while a window or a pin
   /// holds it, and refuses to start where a daemon serves already.
   Host {
+    /// How many seconds a life that no window and no pin holds lives before it writes its
+    /// checkpoint and ends.
+    #[arg(long, value_name = "SECONDS", default_value_t = GRACE.as_secs_f64(), value_parser = grace)]
+    grace: f64,
     #[command(subcommand)]
     then: Option<Hosting>,
   },
@@ -163,6 +169,15 @@ enum Command {
     #[command(flatten)]
     place: Place,
   },
+}
+
+/// A grace in seconds, which is a duration.
+fn grace(given: &str) -> Result<f64, String> {
+  let seconds: f64 =
+    given.parse().map_err(|no| format!("{given} is no number of seconds: {no}"))?;
+  Duration::try_from_secs_f64(seconds)
+    .map(|_| seconds)
+    .map_err(|no| format!("{given} s is no grace: {no}"))
 }
 
 /// What `furb host` does beside serving.
@@ -210,7 +225,9 @@ fn main() -> ExitCode {
     Some(Command::Run { word, place, stand }) => run(stand.on(place.opening(true)), word),
     Some(Command::Extensions { place }) => extensions(place.opening(false)),
     Some(Command::Catalog { update }) => catalog(update),
-    Some(Command::Host { then }) => host::serve(matches!(then, Some(Hosting::Upgrade))),
+    Some(Command::Host { grace, then }) => {
+      host::serve(Duration::from_secs_f64(grace), matches!(then, Some(Hosting::Upgrade)))
+    }
     Some(Command::Checkpoint { record, cwd }) => {
       checkpoint(Place { record: Some(record.clone()), cwd }.opening(false), &record)
     }

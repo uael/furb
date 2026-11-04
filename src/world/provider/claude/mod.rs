@@ -12,11 +12,6 @@
 //! it, and a new conversation that grows out of one the command line holds forks it. A subscription
 //! pays for the turns, and no key is read.
 
-#![expect(
-  clippy::single_match_else,
-  reason = "debt: a match of one arm and else, where if let serves"
-)]
-
 use std::{
   env,
   path::{Path, PathBuf},
@@ -458,17 +453,16 @@ impl Claude {
     let accounts = &self.program.accounts;
     let now = SystemTime::now();
     let held = lent.conversation();
-    let at = match held.account.filter(|at| accounts.free(*at, now)) {
-      Some(at) => at,
-      None => {
-        let Some(at) = accounts.pick(now) else { return Err(self.exhausted(now)) };
-        if held.account.is_some() {
-          // The conversation of a parked account stays in its config dir, so this one begins again.
-          *held = Conversation::new(&held.name, &held.system, uuid()?);
-        }
-        held.account = Some(at);
-        at
+    let at = if let Some(at) = held.account.filter(|at| accounts.free(*at, now)) {
+      at
+    } else {
+      let Some(at) = accounts.pick(now) else { return Err(self.exhausted(now)) };
+      if held.account.is_some() {
+        // The conversation of a parked account stays in its config dir, so this one begins again.
+        *held = Conversation::new(&held.name, &held.system, uuid()?);
       }
+      held.account = Some(at);
+      at
     };
     held.store = accounts.store(Some(at)).map(Path::to_path_buf);
     let program = self.program.under(at);

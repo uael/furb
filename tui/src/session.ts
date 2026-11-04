@@ -881,7 +881,6 @@ export class Session extends EventEmitter {
     if (chain ? this.error : Object.entries(this.errors).some(([key, error]) => error && !this.damaged[key]))
       return "failed";
     if (this.queueHeld && this.queued.length) return "asks";
-    if (this.host.pending.size) return "paused";
     if (!chain && this.host.prompts.size) return "asks";
     const state = this.actStatus(chain);
     return this.paused && (state === "idle" || state === "failed") ? "paused" : state;
@@ -926,7 +925,6 @@ export class Session extends EventEmitter {
       act !== undefined && act.kind !== "chain" && act.kind !== "grant" && (!chain || act.on === chain);
     const asked = (ids: Iterable<string>) => [...ids].some((id) => mine(index.ids.get(id)));
     if (asked(this.host.prompts.keys())) return "asks";
-    if (asked(this.host.pending.keys())) return "paused";
     // Only an act that is not done works or waits under a pause, and the index holds each such act.
     const live = (chain ? (this.liveOn().get(chain) ?? []) : [...index.live.values()]).filter(
       (act) => mine(act) && !act.unfinished,

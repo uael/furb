@@ -944,11 +944,9 @@ fn a_call_whose_attempts_are_spent_is_refused_with_its_last_failure() {
 }
 
 #[test]
-fn cut_turns_context_overflow_and_transient_provider_errors_are_recoverable() {
+fn cut_turns_and_transient_provider_errors_are_recoverable() {
   let cases = [
     CompletionError::ResponseError("the turn reached the most it writes before its end".into()),
-    CompletionError::ResponseError("prompt exceeds the model context window".into()),
-    CompletionError::ProviderError("400 prompt is too long".into()),
     CompletionError::ProviderError("connection reset by peer".into()),
     CompletionError::ProviderError("503 Service Unavailable".into()),
   ];
@@ -958,6 +956,9 @@ fn cut_turns_context_overflow_and_transient_provider_errors_are_recoverable() {
   for no in [
     CompletionError::ProviderError("the model does not accept images".into()),
     CompletionError::ResponseError("invalid response format".into()),
+    CompletionError::ResponseError("prompt exceeds the model context window".into()),
+    CompletionError::ProviderError("400 prompt is too long".into()),
+    CompletionError::ProviderError("Prompt is too long · automatic compaction failed".into()),
   ] {
     assert!(!recoverable(&no), "{no}");
   }
@@ -968,7 +969,6 @@ fn an_exhausted_recoverable_provider_error_gives_the_model_another_turn_without_
   for (label, why) in [
     ("transient", "connection reset"),
     ("cut", "the turn reached the most it writes before its end"),
-    ("context", "400 prompt exceeds the model context window"),
   ] {
     let reasons = [why, why];
     let (host, calls) = failing(&reasons);
@@ -987,6 +987,27 @@ fn an_exhausted_recoverable_provider_error_gives_the_model_another_turn_without_
     assert!(!facts.iter().any(|(kind, _, _)| kind == "pause"), "{label}: {facts:?}");
     assert!(calls.load(Ordering::SeqCst) >= 3, "{label}: {:?}", calls.load(Ordering::SeqCst));
   }
+}
+
+#[test]
+fn a_model_whose_prompt_is_always_too_long_pauses_the_chain_with_why_after_two_replies() {
+  let why = "Prompt is too long · automatic compaction failed";
+  let (host, calls) = failing(&[why; 50]);
+  let model = scripted(&MockCompletionModel::default()).hosted(host);
+  let backoff = Backoff { most: 1, first: Duration::from_millis(1) };
+  let provider =
+    Provider::new(yard("too-long").display().to_string(), vec![model]).backoff(backoff);
+  let mut engine = lived(provider);
+  let root = engine.root().to_owned();
+  asked(&mut engine);
+  let paused = |engine: &mut Engine| {
+    said(engine).into_iter().find(|(kind, about, _)| kind == "pause" && *about == root)
+  };
+  assert!(until(&mut engine, |engine| paused(engine).is_some()), "{:?}", said(&mut engine));
+  let (_, _, told) = paused(&mut engine).expect("the chain paused");
+  assert!(told.contains(why), "the pause says why: {told}");
+  let more = within(&mut engine, Duration::from_millis(300), |_| calls.load(Ordering::SeqCst) > 2);
+  assert!(!more, "the paused chain asks the model no more: {}", calls.load(Ordering::SeqCst));
 }
 
 #[test]

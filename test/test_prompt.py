@@ -600,6 +600,35 @@ async def test_a_message_makes_a_rung_of_its_thread_while_a_word_of_the_thread_a
   assert told.index("#prompt2") < told.index(f"#{later} advance on {first}")
 
 
+async def test_a_message_of_the_operator_stays_owed_until_a_prompt_to_the_operator_answers_it() -> None:
+  """A message of the operator stays owed until a prompt to the operator that a word under its thread makes comes after it, or until the thread closes: when a rung of the thread ends while a message is owed and no rung of the thread that was made after that message is open, the prompt of the thread makes a message of its own on the thread that names it, as prompt3 with the message 'prompt2 unanswered', so its model reads at its next step that the operator still waits for an answer."""
+  _, log, root = born("await wait(60)", "x = 1", "close(prompt2_message)", auto=False)
+  first = engine.prompt(str, "work", on=root)
+  await settle()
+  (pause,) = [a[1] for a in said(log, "wait")]
+  assert engine.prompt(None, "use this", on=first) == "prompt2"
+  assert await first == "use this"
+  assert not engine.over(pause)
+  (_, quiet, later) = [a[1] for a in said(log, "rung") if a[2] == first]
+  told = [one.split("\n")[0] for one in paragraphs(engine.turns(on=root))]
+  (reminder,) = [a for a in said(log, "prompt") if a[3] == first and a[2] == first]
+  assert reminder[4:6] == ("None", "prompt2 unanswered")
+  assert (
+    told.index(f"#{quiet} advance on {first}")
+    < told.index(f"#{reminder[1]}")
+    < told.index(f"#{later} advance on {first}")
+  )
+  _, log, root = born("await wait(60)", "prompt(None, 'on it', to=OPERATOR)", "close(1)", auto=False)
+  first = engine.prompt(str, "work", on=root)
+  await settle()
+  engine.prompt(None, "use this", on=first)
+  await settle()
+  await settle()
+  told = [one.split("\n")[0] for one in paragraphs(engine.turns(on=root))]
+  assert len([a for a in said(log, "rung") if a[2] == first]) == 2
+  assert not [a for a in said(log, "prompt") if a[3] == first and a[2] == first] and engine.peek(first) is None
+
+
 async def test_every_other_prompt_on_a_thread_is_answered_in_steps() -> None:
   """Every other prompt on a thread is answered in steps, with a ladder and a door of its own, and on a thread that is closed it opens the thread again, so the model of the thread goes on with the whole transcript of its chain."""
   _, log, root = born("close(1)", "x = 2", "close(x + 1)")

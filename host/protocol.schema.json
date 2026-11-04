@@ -71,6 +71,54 @@
                 "null"
               ]
             },
+            "actor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "roster": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            },
+            "extensions": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
+            "config": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "claude": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
+            "answers": {
+              "type": "boolean",
+              "default": false
+            },
+            "attach": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0,
+              "default": null
+            },
             "verb": {
               "type": "string",
               "const": "open"
@@ -80,7 +128,7 @@
             "verb",
             "life"
           ],
-          "description": "The life of a record opened, in a folder or in the folder of its record."
+          "description": "The life of a record opened, in a folder or in the folder of its record. A life that this\nopen makes stands on the actor, the roster and the extensions that the peer names, reads the\nsettings of the user in the folder `config` and runs the claude command line `claude` when\nthe peer names them, as the window of the peer reads them, and the peer answers each request\nof its models in their place when it asks to, as a demo does.\nWith `attach`, the peer attaches the life in the same step, from that place in its log, so\nthe life has a holder before its grace can pass."
         },
         {
           "type": "object",
@@ -312,6 +360,27 @@
             "life": {
               "type": "string"
             },
+            "act": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "filled"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "act"
+          ],
+          "description": "The share of the window of its model that the prompt of an answer filled, as `filled` of\nthe engine gives it from the reply that took that answer, and nothing before an answer."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
             "on": {
               "type": [
                 "string",
@@ -441,6 +510,12 @@
             "act": {
               "type": "string"
             },
+            "why": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "verb": {
               "type": "string",
               "const": "pause"
@@ -450,7 +525,8 @@
             "verb",
             "life",
             "act"
-          ]
+          ],
+          "description": "A pause of an act or of a chain, with the cause that the operator gives."
         },
         {
           "type": "object",
@@ -481,6 +557,12 @@
             "act": {
               "type": "string"
             },
+            "why": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "verb": {
               "type": "string",
               "const": "cancel"
@@ -490,7 +572,8 @@
             "verb",
             "life",
             "act"
-          ]
+          ],
+          "description": "A cancel of an act or of a chain, with the cause that the operator gives."
         },
         {
           "type": "object",
@@ -499,6 +582,12 @@
               "type": "string"
             },
             "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
               "type": [
                 "string",
                 "null"
@@ -518,7 +607,8 @@
           "required": [
             "verb",
             "life"
-          ]
+          ],
+          "description": "A chain made on a chain, under a label, or a fork of the chain `source` with its transcript\nand its program."
         },
         {
           "type": "object",
@@ -546,6 +636,351 @@
             "word"
           ],
           "description": "A word that runs on a chain as a turn of the operator."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "act": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "close"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "act",
+            "value"
+          ],
+          "description": "A close of an act with a value, written as the record writes a value: `2.0` stays a float,\nand `{\"is\": \"Refused\", \"args\": [\"why\"]}` is a refusal."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "usd": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "share": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "grant"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "A ceiling of the spend of a chain, in dollars or in a share of its window."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "command": {
+              "type": "string"
+            },
+            "stdin": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "feed": {
+              "type": "boolean",
+              "default": false
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "bash"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "command"
+          ],
+          "description": "A command that runs on a chain, with the text of its stdin, or with its stdin kept open for\nthe lines that a write to `<act>/stdin` feeds it."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "read"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "path"
+          ],
+          "description": "The text at a path, read where a chain stands, as an act of the operator."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "path": {
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "write"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "path",
+            "content"
+          ],
+          "description": "A text written at a path, where a chain stands, as an act of the operator."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "names"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "The names that the module of a chain binds."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "word": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "gate"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "word"
+          ],
+          "description": "What the gate finds in a word on a chain, which runs nothing."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "stand"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "A stand of the life, which reads the roster and the actor again."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "about": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "seen"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "about"
+          ],
+          "description": "The fact that the operator read a chain or a thread up to now, which each window and each\nlater life reads in the record."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "entry": {
+              "type": "string"
+            },
+            "hash": {
+              "type": "string"
+            },
+            "shape": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "queue"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "entry",
+            "hash",
+            "shape",
+            "message"
+          ],
+          "description": "A message that the operator queued, sent once as a prompt on a chain. The record keeps the\nentry and the hash of its words, so a second send of the entry, from any window, gives the\nact of the first."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "ask": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "turn": true,
+            "why": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "answered"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "ask"
+          ],
+          "description": "The turn that the peer gave for a request of a model of a life that it answers, written as\nthe record writes a value, or why it gives none."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "ask": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "text": {
+              "type": "string"
+            },
+            "thinking": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "wrote"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "ask",
+            "text",
+            "thinking"
+          ],
+          "description": "What the peer added to the text and to the thought of the turn of a request, as it writes."
         },
         {
           "type": "object",
@@ -1352,6 +1787,31 @@
           "description": "Who is attached to a life now, pushed to each of its windows after each attach and detach."
         },
         {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "ask": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "request": true,
+            "frame": {
+              "type": "string",
+              "const": "ask"
+            }
+          },
+          "required": [
+            "frame",
+            "life",
+            "ask",
+            "request"
+          ],
+          "description": "A request of a model of a life that the peer answers: its number, and the request with the\nactor, the chain, the messages and the settings."
+        },
+        {
           "required": [
             "frame"
           ],
@@ -1904,6 +2364,46 @@
             "life",
             "holder"
           ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "ask": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "error": {
+              "type": "string",
+              "const": "unasked"
+            }
+          },
+          "required": [
+            "error",
+            "life",
+            "ask"
+          ],
+          "description": "A turn or a write for a request of a model that the life does not wait for."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "answerless"
+            }
+          },
+          "required": [
+            "error",
+            "life"
+          ],
+          "description": "A turn for a life whose models no peer answers."
         },
         {
           "type": "object",

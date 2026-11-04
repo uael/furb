@@ -1,6 +1,4 @@
-//! The Responses API of a ChatGPT subscription, on the sign-in that furb keeps.
-
-#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
+//! The Responses API of a `ChatGPT` subscription, on the sign-in that furb keeps.
 
 use std::path::{Path, PathBuf};
 

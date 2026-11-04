@@ -76,8 +76,9 @@ API of its own:
   opens from it, since a replay would run again the word that the fault cut. The
   crate holds the one list of the ears of the host that each life hears: the console of the operator, and the ear
   that tells each fact as events. `protocol` holds the one protocol of the daemon, a `Verb` and a `Frame` of JSON
-  lines with the version `PROTOCOL`, `transport` the socket or the pipe of the machine, and TCP and WebSocket on the
-  tailnet, behind a `Dialer` and an `Identity`, `access` the role of each login of the network from `host.json`,
+  lines with the version `PROTOCOL`, `transport` the socket or the pipe of the machine, TCP and WebSocket on the
+  tailnet, behind a `Dialer` and an `Identity`, and the door of the windows, a WebSocket on loopback that lets in the
+  peer that gives the token of `window.json`, `access` the role of each login of the network from `host.json`,
   `serve` the door to one peer, which checks the role of each verb, and `daemon` the daemon of the
   machine, which holds each life by its record while a window or a pin of `holders` holds it, and gives its place to
   a new build at a handover. `furb host` serves it, and `furb host upgrade` hands it over. `docs/protocol.md` says the
@@ -225,7 +226,7 @@ is the folder `test` beside it.
 2. Every test carries a sentence of the contract.
 3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
 4. The module docstring of each contract is empty.
-5. `engine.py`, minified with its program kept as it is, costs fewer than 9446 tokens of `o200k_base`, the
+5. `engine.py`, minified with its program kept as it is, costs fewer than 9562 tokens of `o200k_base`, the
    tokenizer of OpenAI, and the doctrine of furb, `DOCTRINE.md`, costs at most 1000. The test counts with `o200k_base`
    because it is local and the same on each machine: the tokenizer of Claude is not public, and only the network
    counts with it. The wall is a proxy for the cost to Claude, which reads about 1.5 tokens for each token of

@@ -6,11 +6,6 @@
 //! program changes or [`refresh`] is called. A command line that does not answer, as an older one does not, leaves the
 //! fixed table of [`fallback`].
 
-#![expect(
-  clippy::single_match_else,
-  reason = "debt: a match of one arm and else, where if let serves"
-)]
-
 use std::{
   collections::HashMap,
   fs,
@@ -129,15 +124,14 @@ pub(super) async fn models(program: &Program) -> Option<Vec<Found>> {
   if let Some(held) = held {
     return held;
   }
-  let found = match stored(&stamp) {
-    Some(found) => Some(found),
-    None => {
-      let found = probe(program).await;
-      if let Some(found) = &found {
-        store(&stamp, found);
-      }
-      found
+  let found = if let Some(found) = stored(&stamp) {
+    Some(found)
+  } else {
+    let found = probe(program).await;
+    if let Some(found) = &found {
+      store(&stamp, found);
     }
+    found
   };
   let kept = found.clone().map_or(Seen::Failed(Instant::now()), Seen::Found);
   seen().lock().unwrap_or_else(PoisonError::into_inner).insert(stamp, kept);

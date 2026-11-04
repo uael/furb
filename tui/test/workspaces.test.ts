@@ -155,7 +155,7 @@ test("workspaces keep sessions alive, report background completion and input, an
     expect(
       library.groups
         .flatMap((group) => group.sessions)
-        .every((entry) => !entry.session && ["saved", "paused"].includes(entry.status)),
+        .every((entry) => !entry.session && ["saved", "runs"].includes(entry.status)),
     ).toBe(true);
     const restored = library.groups[0]?.sessions.find((entry) => entry.path === record);
     if (!restored) throw new Error("The saved session is missing.");
@@ -413,7 +413,7 @@ test("the list of saved sessions comes before their replays, and a row shows its
     const row = (await library.add(directory)).sessions.find((candidate) => candidate.path === entry.path);
     // The replay runs in a worker that loads the native engine first, so the list is there before it.
     expect(row?.status).toBe("saved");
-    await until(library, () => row?.status === "paused");
+    await until(library, () => row?.status === "runs");
   }));
 
 test("a session that opens keeps its row through a refresh that comes before its record", () =>

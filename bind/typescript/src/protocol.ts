@@ -18,6 +18,13 @@ export type Request1 =
   | {
       life: string;
       cwd?: string | null;
+      actor?: string | null;
+      roster?: string[] | null;
+      extensions?: boolean | null;
+      config?: string | null;
+      claude?: string | null;
+      answers?: boolean;
+      attach?: number | null;
       verb: "open";
     }
   | {
@@ -75,6 +82,11 @@ export type Request1 =
     }
   | {
       life: string;
+      act: string;
+      verb: "filled";
+    }
+  | {
+      life: string;
       on?: string | null;
       verb: "cwd";
     }
@@ -105,6 +117,7 @@ export type Request1 =
   | {
       life: string;
       act: string;
+      why?: string | null;
       verb: "pause";
     }
   | {
@@ -115,11 +128,13 @@ export type Request1 =
   | {
       life: string;
       act: string;
+      why?: string | null;
       verb: "cancel";
     }
   | {
       life: string;
       label?: string | null;
+      source?: string | null;
       on?: string | null;
       verb: "chain";
     }
@@ -128,6 +143,83 @@ export type Request1 =
       word: string;
       on?: string | null;
       verb: "run";
+    }
+  | {
+      life: string;
+      act: string;
+      value: string;
+      verb: "close";
+    }
+  | {
+      life: string;
+      usd?: number | null;
+      share?: number | null;
+      on?: string | null;
+      verb: "grant";
+    }
+  | {
+      life: string;
+      command: string;
+      stdin?: string | null;
+      feed?: boolean;
+      on?: string | null;
+      verb: "bash";
+    }
+  | {
+      life: string;
+      path: string;
+      on?: string | null;
+      verb: "read";
+    }
+  | {
+      life: string;
+      path: string;
+      content: string;
+      on?: string | null;
+      verb: "write";
+    }
+  | {
+      life: string;
+      on?: string | null;
+      verb: "names";
+    }
+  | {
+      life: string;
+      word: string;
+      on?: string | null;
+      verb: "gate";
+    }
+  | {
+      life: string;
+      verb: "stand";
+    }
+  | {
+      life: string;
+      about: string;
+      verb: "seen";
+    }
+  | {
+      life: string;
+      entry: string;
+      hash: string;
+      shape: string;
+      message: string;
+      on?: string | null;
+      verb: "queue";
+    }
+  | {
+      life: string;
+      ask: number;
+      turn?: unknown;
+      why?: string | null;
+      verb: "answered";
+    }
+  | {
+      life: string;
+      ask: number;
+      text: string;
+      thinking: string;
+      verb: "wrote";
     }
   | {
       verb: "handover";
@@ -299,6 +391,12 @@ export type Frame =
       peers: Peer[];
       frame: "presence";
     }
+  | {
+      life: string;
+      ask: number;
+      request: unknown;
+      frame: "ask";
+    }
   | (Mount & {
       frame: "view.mount";
     })
@@ -415,6 +513,15 @@ export type ProtocolError =
       life: string;
       holder: string;
       error: "unpinned";
+    }
+  | {
+      life: string;
+      ask: number;
+      error: "unasked";
+    }
+  | {
+      life: string;
+      error: "answerless";
     }
   | {
       needs: Kind;

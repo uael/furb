@@ -249,7 +249,17 @@ mod kills {
     async fn attached(yard: &Yard) -> Window {
       let mut window = Window::dialed(yard).await;
       window.hello().await;
-      let open = Verb::Open { life: window.life.clone(), cwd: None };
+      let open = Verb::Open {
+        life: window.life.clone(),
+        cwd: None,
+        actor: None,
+        roster: None,
+        extensions: None,
+        config: None,
+        claude: None,
+        answers: false,
+        attach: None,
+      };
       assert_eq!(window.ask(open).await, Answer::Done);
       let attach = Verb::Attach { life: window.life.clone(), from: 0 };
       assert_eq!(window.ask(attach).await, Answer::Done);
@@ -417,7 +427,19 @@ mod kills {
       let daemon = Daemon::started(&yard).await;
       let mut window = Window::dialed(&yard).await;
       window.hello().await;
-      window.said(Verb::Open { life: yard.life(), cwd: None }).await;
+      window
+        .said(Verb::Open {
+          life: yard.life(),
+          cwd: None,
+          actor: None,
+          roster: None,
+          extensions: None,
+          config: None,
+          claude: None,
+          answers: false,
+          attach: None,
+        })
+        .await;
       daemon.killed(signal).await;
       lifeline.ended().await;
       reopened(&yard).await;

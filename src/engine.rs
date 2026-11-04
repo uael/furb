@@ -65,6 +65,9 @@ use crate::{
 const GATE: &str = "gate";
 /// The function of the host that starts an ear of the host again after it raised, by its name.
 const AGAIN: &str = "again";
+/// The function of the host by which the Kernel bounds the turn while a word of a rung steps, and
+/// says whether it was bounded before.
+const TURN: &str = "turn";
 
 /// The kinds of act that are work an operator waits for: a prompt, a rung, a command and a wait.
 const WORK: [&str; 4] = ["prompt", "rung", "bash", "wait"];
@@ -152,6 +155,10 @@ impl Host for Outside {
       // A gate that cannot read a word raises where the gate was called, so the ear of the gate answers that word.
       None if name == GATE => return gated(args.first()).map_or_else(Answer::Fault, Answer::Value),
       None if name == AGAIN => Ok(Object::bool(self.reborn(args.first()))),
+      None if name == TURN => {
+        let bounded = args.first().is_some_and(|one| one.as_ref().as_bool().unwrap_or(false));
+        Ok(Object::bool(sand.bound(bounded)))
+      }
       None => self.called(sand, name, &args),
       Some(on) if name == "send" => return self.sent(sand, on, args.first()),
       Some(on) => Err(Fault::refused(format!("{on} is no generator of the host that has {name}"))),
@@ -469,12 +476,16 @@ impl Engine {
   ) -> Result<Engine, Fault> {
     let (given, names) = Handed::of(ears)?;
     let mut sand = Sand::new();
+    // The opening, the seed and the replay are the engine's own work: unbounded, but for each word
+    // they run again.
+    sand.bound(false);
     let mut inputs = NamedValues::new();
     inputs.push("__source", Object::string(ENGINE));
     inputs.push("__sheet_source", Object::string(SHEET));
     inputs.push("__kernel_source", Object::string(KERNEL));
     inputs.push("__gate", Object::function(GATE, None));
     inputs.push("__again", Object::function(AGAIN, None));
+    inputs.push("__turn", Object::function(TURN, None));
     let opened = sand.run(OPENING, inputs, &mut Nobody("the opening"))?;
     let mut outside = Outside::new(given, &opened)?;
     let Opened { kernel, gate, lasting, parking, park, .. } = outside.opened.clone();
@@ -525,9 +536,19 @@ impl Engine {
       outside.bound(sand)?;
       Ok(opened)
     })?;
+    engine.sand.bound(true);
     engine.root = root;
     engine.raised = raised;
     Ok(engine)
+  }
+
+  /// What `body` gives, run as the engine's own work, with no bound of the turn but for each word
+  /// that it steps.
+  pub(crate) fn unbounded<T>(&mut self, body: impl FnOnce(&mut Engine) -> T) -> T {
+    let was = self.sand.bound(false);
+    let got = body(self);
+    self.sand.bound(was);
+    got
   }
 
   /// The highest number that each kind took in the record that the life opened on.

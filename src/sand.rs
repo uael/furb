@@ -25,11 +25,14 @@ use crate::value::{Fault, Object};
 /// is most of the heap.
 const GC_INTERVAL: usize = 10_000_000;
 
-/// The longest stretch of the code of the sandbox between two round trips to the host. Past it, monty raises a
+/// The longest stretch of a word of a rung between two round trips to the host. Past it, monty
+/// raises a
 /// `TimeoutError` where the code stands, which the code may catch, so its `finally` blocks run on a new stretch; a
 /// second excess in the same stretch ends the run. So a word that never yields ends there with the exception, and the
-/// life goes on. The longest stretch of a legal life is about 180 ms in the dev profile, over the replay of a record of
-/// 96322 entries, so the bound stands far above every legal one, on a slower machine too.
+/// life goes on. The bound holds while a word steps, live or run again by a replay, and in each
+/// live entry of the host; the replay, the seed and the gather of a checkpoint around the words are
+/// the engine's own work, which grows with the life, so they run unbounded and a life that ran
+/// within its bounds always resumes.
 pub(crate) const TURN: Duration = Duration::from_secs(30);
 
 #[cfg(test)]
@@ -87,6 +90,13 @@ pub(crate) struct Sand {
   state: State,
   /// How many runs the session began. It holds a name for each one until the life ends.
   fed: usize,
+  /// Whether the bound of the turn holds now: while a word of a rung steps, which the Kernel says,
+  /// and in each live entry of the host. The replay, the seed and the gather of a checkpoint are
+  /// the engine's own work over words that already ran within the bound, so they run unbounded,
+  /// while each word that they run again keeps it.
+  bounded: bool,
+  /// The bound that the session holds, which a round trip brings to `bounded`.
+  applied: bool,
 }
 
 impl Sand {
@@ -95,12 +105,12 @@ impl Sand {
     let limits = ResourceLimits::default().gc_interval(GC_INTERVAL).max_turn_duration(turn());
     let limits = ResourceTracker::new(limits);
     let repl = MontyRepl::new("furb", limits, CompileOptions::default()).with_handles();
-    Self { state: State::Idle(repl), fed: 0 }
+    Self { state: State::Idle(repl), fed: 0, bounded: true, applied: true }
   }
 
   /// A sandbox of nothing, which holds no session, and stands in for one that is lent to code of a host.
   pub(crate) fn none() -> Self {
-    Self { state: State::Lent, fed: 0 }
+    Self { state: State::Lent, fed: 0, bounded: true, applied: true }
   }
 
   /// How many runs the session began.
@@ -126,6 +136,10 @@ impl Sand {
       }
     };
     self.fed += 1;
+    let mut repl = repl;
+    if let Some(limit) = self.changed() {
+      repl.tracker_mut().set_max_turn_duration(limit);
+    }
     let step = repl.feed_start(code, inputs, PrintWriter::Disabled);
     self.drive(step, host)
   }
@@ -154,10 +168,35 @@ impl Sand {
     kwargs: Vec<(&str, Object)>,
   ) -> Result<Object, Fault> {
     let call = self.taken()?;
+    let call = self.limited(call);
     let kwargs = kwargs.into_iter().map(|(key, value)| (Object::string(key), value)).collect();
     let step =
       call.call_first(callable.clone(), CallArgs::from((args, kwargs)), PrintWriter::Disabled);
     self.drive(step, host)
+  }
+
+  /// Whether the bound of the turn holds from the next round trip to the host on, and whether it
+  /// held before.
+  pub(crate) fn bound(&mut self, bounded: bool) -> bool {
+    mem::replace(&mut self.bounded, bounded)
+  }
+
+  /// The bound of the turn that the session must hold from now, when it holds another.
+  fn changed(&mut self) -> Option<Duration> {
+    (self.applied != self.bounded).then(|| {
+      self.applied = self.bounded;
+      if self.bounded { turn() } else { Duration::MAX }
+    })
+  }
+
+  /// A call that the session goes on with, under the bound that holds now, as a fresh turn when it
+  /// changed.
+  fn limited(&mut self, call: ReplFunctionCall) -> ReplFunctionCall {
+    let Some(limit) = self.changed() else { return call };
+    let mut progress = ReplProgress::FunctionCall(call);
+    progress.tracker_mut().set_max_turn_duration(limit);
+    let ReplProgress::FunctionCall(call) = progress else { unreachable!("the call stays a call") };
+    call
   }
 
   /// The host holds the handle `id` no more, so the session lets go of what it held under it.
@@ -202,6 +241,7 @@ impl Sand {
           let answer = host.answer(self, on, &name, args);
           // The call is gone when the run ended while the host answered it.
           let call = self.taken()?;
+          let call = self.limited(call);
           match answer {
             Answer::Value(value) => call.resume(value, PrintWriter::Disabled),
             Answer::Raise(exception) => call.raise(exception, PrintWriter::Disabled),

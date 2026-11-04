@@ -16,6 +16,19 @@ A transport has two parts: a dialer, which reaches the daemon, and an identity, 
 - The identity of a local peer is the login of the user, and it has the role to write.
 - A second daemon cannot listen where a daemon listens. A socket that no daemon answers is stale, and gives its place.
 
+### The door of the windows
+
+A web view reaches no socket and no pipe, so `furb host` also opens a door of the windows: a WebSocket on a free port
+of loopback. A page of any origin can reach loopback, so the door lets in only a peer that gives the token of the
+daemon.
+
+- The daemon writes the address of the door, with its token, in `window.json` beside its socket, which only the user
+  reads: `{"url": "ws://127.0.0.1:52011/?token=..."}`. Each start and each upgrade draws a new port and a new token.
+- A peer that gives no token in the query of its upgrade, or another one, gets the HTTP status 403 and no socket.
+- The identity of a peer of the door is the login of the user, and it has the role to write.
+- A window dials the socket first: `window.json` stays after a daemon that a kill ended, and only a daemon that
+  answers on its socket holds the door that the file names.
+
 ### The tailnet
 
 The daemon also listens on the address of the machine on the tailnet of Tailscale when `host.json`, in the config
@@ -71,7 +84,7 @@ it is not given. The daemon answers requests in any order.
 | Verb | Fields | Role |
 | --- | --- | --- |
 | `list` | | read |
-| `open` | `life`, `cwd` | write |
+| `open` | `life`, `cwd`, `actor`, `roster`, `extensions`, `config`, `claude`, `answers`, `attach` | write |
 | `attach` | `life`, `from` | read |
 | `detach` | `life` | read |
 | `pin`, `unpin` | `life`, `holder` | write |
@@ -80,12 +93,26 @@ it is not given. The daemon answers requests in any order.
 | `transcript` | `life`, `on`, `of` | read |
 | `turns`, `program`, `cwd` | `life`, `on` | read |
 | `standing`, `pending` | `life` | read |
+| `filled` | `life`, `act` | read |
 | `inspect` | `life`, `name`, `on` | read |
 | `prompt` | `life`, `shape`, `message`, `to`, `on` | write |
 | `answer` | `life`, `act`, `line` | write |
-| `pause`, `wake`, `cancel` | `life`, `act` | write |
-| `chain` | `life`, `label`, `on` | write |
+| `pause`, `cancel` | `life`, `act`, `why` | write |
+| `wake` | `life`, `act` | write |
+| `chain` | `life`, `label`, `source` (a chain to fork), `on` | write |
 | `run` | `life`, `word`, `on` | write |
+| `close` | `life`, `act`, `value` (a value as the record writes it) | write |
+| `grant` | `life`, `usd`, `share`, `on` | write |
+| `bash` | `life`, `command`, `stdin`, `feed` (its stdin open), `on` | write |
+| `read` | `life`, `path`, `on` | write |
+| `write` | `life`, `path`, `content`, `on` | write |
+| `names` | `life`, `on` | read |
+| `gate` | `life`, `word`, `on` | read |
+| `stand` | `life` | write |
+| `seen` | `life`, `about` | write |
+| `queue` | `life`, `entry`, `hash`, `shape`, `message`, `on` | write |
+| `answered` | `life`, `ask`, `turn`, `why` | write |
+| `wrote` | `life`, `ask`, `text`, `thinking` | write |
 | `handover` | | write |
 | `view.mount`, `view.dispose` | see below | read |
 | `view.event` | see below | write |
@@ -97,9 +124,25 @@ it is not given. The daemon answers requests in any order.
   `lives`, `act` (the name of the act that the verb made), `value`, `values`, `inspected` or `presence`.
 - A refusal is a frame `refused` with the `id`, or none for a frame that could not be read, the `error` as data, and
   `why`, the text that a person reads.
+- An `open` that makes a life gives it the `actor`, the `roster` and the `extensions` that it names, and the settings
+  of the daemon give each one that it does not name. It reads the settings of the user in the folder `config` and runs
+  the claude command line `claude` that it names, as the window that opens it reads them. An open of a life that
+  lives changes none of them.
+- An `open` with `answers` makes its peer answer the models of the life in their place, as a demo or a test does. The
+  daemon pushes each request of a model to that peer as a frame `ask`, with the `life`, the number `ask` and the
+  `request`: its `actor`, `chain`, `messages` and `settings`. The peer tells what it writes with `wrote`, and gives the
+  turn, written as the record writes a value, or `why` it gives none, with `answered`. A request fails once its peer
+  is gone.
+- An `open` with `attach` attaches its peer in the same step, from that place in the log, as `attach` does. The life
+  then has a holder before its grace can pass, even a grace of none.
+- `queue` sends a message that a window queued once: the record keeps its `entry` and the `hash` of its words, so a
+  second `queue` of the same entry, from any window, gives the act of the first.
 - After `attach`, the daemon pushes each event of the life as a frame `event`, with the `life`, the `seq` of the event
   in the log of the life and the `event`: `fact`, `act`, `text`, `notice`, `changed`, `reborn` or `ended`. After
   `reborn`, the life goes on from its checkpoint, and its acts come again as they stand.
+- The log of a life that opens on a record with a checkpoint starts with each fact that the record told before that
+  checkpoint, as the log after a rebirth holds them. So a window of a life that a later open, a handover or an end
+  brought back from its checkpoint hears the life whole, and hears no fact twice.
 - After each `attach` and `detach`, the daemon pushes to each window of the life a frame `presence` with the `life`
   and its `peers`, each window that is attached now. Presence is no fact of the record.
 
@@ -111,9 +154,13 @@ once it listens. A second daemon refuses to start there.
 - `open` gives the life of a record, by its absolute path, in the folder `cwd`, the folder of the record when it is
   not given. Each life opens on a thread of its own, so the daemon answers each verb while a life opens, and a fault
   of one life ends that life alone. Each verb of a life refuses with `closed` when no life lives on its record.
+- Each life keeps the journal of the changes of its files beside its record, as `<record>.changes.jsonl`: one line
+  for each write of a file, with its `path`, the text `before` and `after` it, its `act`, and `made` when the write
+  made the file. A window reads it to show and to undo what each write changed.
 - A holder keeps a life: each window that attached it, and each pin, by the name of its holder. Work that runs holds
-  nothing. A life with no holder for 30 seconds writes its checkpoint and ends, and `list` gives it as not `open`
-  from then on. An `open` of a life that ends waits for its end, then opens it again from its checkpoint.
+  nothing. A life with no holder for the grace of the daemon, 30 seconds unless `furb host --grace <seconds>` says
+  otherwise, writes its checkpoint and ends, and `list` gives it as not `open` from then on. An `open` of a life
+  that ends waits for its end, then opens it again from its checkpoint.
 - `detach` lets go of the window that says it alone, as `/end` does, and a window whose peer leaves is detached.
 - `furb host upgrade` serves the daemon of a new build in the place of the daemon that runs, which has no takeover.
   The new daemon says `handover`. The daemon that runs writes the checkpoint of each life, ends it, stops to listen
@@ -123,6 +170,11 @@ once it listens. A second daemon refuses to start there.
 - A skill attaches a life as a window does, under its name, and hears its events from the place that it asks. It holds no
   life, so a life with no window and no pin ends while a skill is attached. A skill that attaches again under its name takes
   the place of the first, and its views end. A skill that detaches, or whose peer leaves, ends its views.
+- The daemon starts the process that the manifest of a skill names under `furb-process` when a life plays the skill: at
+  the end of the replay for each skill that the record enabled, then at each new fact `enable`. It ends the process
+  when the life ends, and when a new fact `enable` of the skill reloads it, which starts the process again. The
+  variables `FURB_HOST`, `FURB_LIFE` and `FURB_SKILL` of the process give the folder of the local transport, the
+  record of the life and the name of the skill. `docs/extensions.md` says the field.
 
 ## Views
 

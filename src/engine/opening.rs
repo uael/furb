@@ -14,6 +14,12 @@ use crate::value::Object;
 /// before that fact. The park waits for what its ear waits for, and for every fact while it holds
 /// an act back.
 ///
+/// The bound of the turn of the sandbox holds while the Kernel steps the word of a rung, in
+/// `starts` and `carry`, and what held before holds again after: a live word keeps its bound, and
+/// so does each word that a replay runs again, while the replay, the seed and the gather of a
+/// checkpoint around them are the engine's own work, which the host runs unbounded. The bound is
+/// the crate's, so the opening sets it, and the Kernel, which python runs too, holds none.
+///
 /// The module of the engine holds the names python gives a module before the engine runs, so a word
 /// reads them in a chain as it reads them in python, and as the gate reads them. No loader made the
 /// module here, so it has no spec and no loader. Python binds `__debug__` among its builtins, and
@@ -26,6 +32,18 @@ __sheet = {}
 exec(__sheet_source, __sheet)
 __kernel = {}
 exec(__kernel_source, __kernel)
+
+def __bounding(step):
+  def bounded(*args, **kwargs):
+    was = __turn(True)
+    try:
+      return step(*args, **kwargs)
+    finally:
+      __turn(was)
+  return bounded
+
+for __step in ("starts", "carry"):
+  setattr(__kernel["Running"], __step, __bounding(getattr(__kernel["Running"], __step)))
 __parked = set()
 
 def __parking(ear):
@@ -106,7 +124,7 @@ def __lasting(name, ear):
 }"#;
 
 /// What the opening gave, by name: the callables of the sandbox that the host calls it by, each
-/// held under its handle, as a snapshot holds them too.
+/// held under its handle.
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub(crate) struct Opened {

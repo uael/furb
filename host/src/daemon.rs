@@ -15,20 +15,24 @@
 //!
 //! When the operator turns it on, the daemon also listens on the address of the machine on the
 //! tailnet, by TCP and by WebSocket, and lets in each peer whose login the access list names, with
-//! the role that it gives (#983, D6).
+//! the role that it gives (#983, D6). A web view reaches no socket of the machine, so the daemon
+//! also opens a door of the windows, a WebSocket on loopback, which lets in the user alone: the
+//! peer that gives the token that the daemon wrote in a file of its folder.
 
 use std::{
   collections::HashMap,
   fmt::Display,
-  iter,
   net::{IpAddr, SocketAddr},
-  path::Path,
+  path::{Path, PathBuf},
   pin::pin,
   sync::Arc,
   time::Duration,
 };
 
-use furb::life::{Log, Opening};
+use furb::{
+  life::{Log, Opening},
+  wire::parsed,
+};
 use futures::{SinkExt, Stream, StreamExt, future};
 use tokio::{
   net::{TcpListener, TcpStream},
@@ -40,15 +44,19 @@ use tokio_util::codec::{Framed, LinesCodec};
 
 use crate::{
   access::Ports,
+  answers::Answerer,
   error::{DaemonError, ProtocolError, TransportError},
   event::{Event, Seq},
   holders::{Holders, Window},
   life::{Command, Life, LifeHandle, Reply},
+  processes::{self, Played},
   protocol::{
     Answer, BOUND, Frame, Handed, Hello, Kind, Listed, Mount, PROTOCOL, Peer, Request, Verb,
   },
   serve::{Host, Outbox, serve},
-  transport::{Accepted, Dialer, Identity, Listener, Local, Tailscale, Tcp, upgraded},
+  transport::{
+    Accepted, Dialer, Door, Identity, Listener, Local, Tailscale, Tcp, Ticket, upgraded,
+  },
   views::{Skill, Views},
 };
 
@@ -65,6 +73,12 @@ pub struct Settings {
   pub grace: Duration,
   /// The daemon on the tailnet, when the operator turns it on in `host.json`.
   pub tailnet: Option<Tailnet>,
+  /// The file where the daemon writes the address and the token of its door of the windows, the
+  /// WebSocket on loopback that a web view dials, when it opens one.
+  pub door: Option<PathBuf>,
+  /// The folder of the local transport, where the process of each skill that a life plays dials
+  /// the daemon. With none, the daemon starts no process.
+  pub host: Option<PathBuf>,
 }
 
 /// The daemon on the tailnet: who each peer is, and the ports where it listens on the address of
@@ -142,6 +156,10 @@ where
     Some(tailnet) => Doors::listen(tailnet, log.as_ref()).await,
     None => None,
   };
+  let door = match &settings.door {
+    Some(file) => Some(Door::open(file).await?),
+    None => None,
+  };
   let (daemon, mut leave) = Daemon::spawn(settings, handed);
   let mut peers = JoinSet::new();
   let leaving = loop {
@@ -158,6 +176,12 @@ where
         }
         Err(no) => report(log.as_ref(), &no),
       },
+      knocked = knock(door.as_ref()) => match knocked {
+        Ok((stream, ticket)) => {
+          peers.spawn(window(daemon.clone(), ticket, stream));
+        }
+        Err(no) => report(log.as_ref(), &no),
+      },
       Some(ended) = peers.join_next() => match ended {
         Ok(Ok(())) => {}
         Ok(Err(no)) => report(log.as_ref(), &no),
@@ -166,7 +190,7 @@ where
       leaving = &mut leave => break leaving,
     }
   };
-  drop((listener, doors));
+  drop((listener, doors, door));
   if let Ok(Leaving { handed, asker, reply }) = leaving {
     reply.send(Ok(Answer::Handed(handed))).ok();
     asker.closed().await;
@@ -201,6 +225,21 @@ async fn remote(
       serve(&daemon, upgraded(stream).await?, who).await
     }
   }
+}
+
+/// The next peer of the door of the windows, or never with no door.
+async fn knock(door: Option<&Door>) -> Result<(TcpStream, Ticket), TransportError> {
+  match door {
+    Some(door) => door.accept().await,
+    None => future::pending().await,
+  }
+}
+
+/// One peer of the door of the windows, let in once it gave the token, then served until it
+/// leaves.
+async fn window(daemon: Daemon, ticket: Ticket, stream: TcpStream) -> Result<(), TransportError> {
+  let (stream, who) = ticket.admitted(stream).await?;
+  serve(&daemon, stream, who).await
 }
 
 /// The listeners of the daemon on the address of the machine on the tailnet, each where the
@@ -361,6 +400,7 @@ fn routed(verb: Verb) -> Routed {
     Verb::Turns { life, on } => (life, Command::Turns { on }),
     Verb::Program { life, on } => (life, Command::Program { on }),
     Verb::Standing { life } => (life, Command::Standing),
+    Verb::Filled { life, act } => (life, Command::Filled { id: act }),
     Verb::Cwd { life, on } => (life, Command::Cwd { on }),
     Verb::Inspect { life, name, on } => (life, Command::Inspect { name, on }),
     Verb::Pending { life } => (life, Command::Pending),
@@ -368,11 +408,25 @@ fn routed(verb: Verb) -> Routed {
       (life, Command::Prompt { shape, message, to, on })
     }
     Verb::Answer { life, act, line } => (life, Command::Answer { id: act, line }),
-    Verb::Pause { life, act } => (life, Command::Pause { id: act }),
+    Verb::Pause { life, act, why } => (life, Command::Pause { id: act, why }),
     Verb::Wake { life, act } => (life, Command::Wake { id: act }),
-    Verb::Cancel { life, act } => (life, Command::Cancel { id: act }),
-    Verb::Chain { life, label, on } => (life, Command::Chain { label, on }),
+    Verb::Cancel { life, act, why } => (life, Command::Cancel { id: act, why }),
+    Verb::Chain { life, label, source, on } => (life, Command::Chain { label, source, on }),
     Verb::Run { life, word, on } => (life, Command::Rung { word, on }),
+    Verb::Close { life, act, value } => (life, Command::Close { id: act, value }),
+    Verb::Grant { life, usd, share, on } => (life, Command::Grant { usd, share, on }),
+    Verb::Bash { life, command, stdin, feed, on } => {
+      (life, Command::Bash { command, stdin: if feed { Some(None) } else { stdin.map(Some) }, on })
+    }
+    Verb::Read { life, path, on } => (life, Command::Read { path, on }),
+    Verb::Write { life, path, content, on } => (life, Command::Write { path, content, on }),
+    Verb::Names { life, on } => (life, Command::Names { on }),
+    Verb::Gate { life, word, on } => (life, Command::Gate { word, on }),
+    Verb::Stand { life } => (life, Command::Stand),
+    Verb::Seen { life, about } => (life, Command::Seen { about }),
+    Verb::Queue { life, entry, hash, shape, message, on } => {
+      (life, Command::Queue { entry, hash, shape, message, on })
+    }
     other => return Routed::Daemon(other),
   };
   Routed::Life(life, command)
@@ -390,6 +444,30 @@ impl From<Reply> for Answer {
   }
 }
 
+/// What an open names of the life that it makes: its folder, the actor, the roster, the
+/// extensions, the folder of the settings of the user and the claude command line that its peer
+/// chose, and the peer that answers its models, when one does. A choice that is unsaid takes the
+/// one of the settings of the daemon.
+#[derive(Clone, Default)]
+struct Birth {
+  cwd: String,
+  actor: Option<String>,
+  roster: Option<Vec<String>>,
+  extensions: Option<bool>,
+  config: Option<String>,
+  claude: Option<String>,
+  answerer: Option<Answerer>,
+  holder: Option<Holder>,
+}
+
+/// The peer that attaches the life that it opens, and the place in the log that it hears from.
+#[derive(Clone)]
+struct Holder {
+  peer: Peer,
+  outbox: Outbox,
+  from: Seq,
+}
+
 /// The lives of the daemon, each under the path of its record, which one task owns: the count of
 /// the births of a life, where the task tells the listener of a handover, and the views that the
 /// skills of the lives serve.
@@ -402,19 +480,21 @@ struct Lives {
   views: Views,
 }
 
-/// A life of the daemon: its handle, its folder, its birth, and its stage.
+/// A life of the daemon: its handle, its folder, its birth, its stage, and the peer that answers
+/// its models, when one does.
 struct Held {
   handle: LifeHandle,
   cwd: String,
   born: u64,
   stage: Stage,
+  answerer: Option<Answerer>,
 }
 
 /// A life lives under its holders, or ends, with each open that waits for its end to open it
 /// again, in its folder.
 enum Stage {
   Living(Holders),
-  Ending(Vec<(String, Replied)>),
+  Ending(Vec<(Birth, Replied)>),
 }
 
 impl Lives {
@@ -454,13 +534,19 @@ impl Lives {
           holders.present(&life);
         }
       }
-      Asked::Ended { life, born } => self.ended(life, born),
+      Asked::Ended { life, born } => self.ended(&life, born),
     }
   }
 
   fn verb(&mut self, peer: Peer, verb: Verb, outbox: &Outbox, reply: Replied) {
     let answer = match verb {
-      Verb::Open { life, cwd } => return self.open(life, cwd, reply),
+      Verb::Open { life, cwd, actor, roster, extensions, config, claude, answers, attach } => {
+        let answerer = answers.then(|| Answerer::new(life.clone(), outbox.clone()));
+        let holder = attach.map(|from| Holder { peer, outbox: outbox.clone(), from });
+        let cwd = cwd.unwrap_or_default();
+        let birth = Birth { cwd, actor, roster, extensions, config, claude, answerer, holder };
+        return self.open(life, birth, reply);
+      }
       Verb::List => Ok(Answer::Lives(self.listed())),
       Verb::Attach { life, from } => self.attach(&life, from, peer, outbox),
       Verb::Detach { life } => self.detach(&life, outbox),
@@ -477,6 +563,16 @@ impl Lives {
       Verb::Presence { life } => {
         living(&mut self.held, &life).map(|(_, holders)| Answer::Presence(holders.presence()))
       }
+      Verb::Answered { life, ask, turn, why } => self.answerer(&life).and_then(|one| {
+        let turn = match turn {
+          Some(turn) => parsed(&turn.to_string()).map_err(|fault| fault.to_string()),
+          None => Err(why.unwrap_or_else(|| "the window gave no turn".to_owned())),
+        };
+        one.answered(ask, turn).map(|()| Answer::Done)
+      }),
+      Verb::Wrote { life, ask, text, thinking } => {
+        self.answerer(&life).and_then(|one| one.wrote(ask, &text, &thinking).map(|()| Answer::Done))
+      }
       Verb::ViewMount(mount) => self.mount(mount, &peer, outbox),
       Verb::ViewEvent(event) => self.views.event(event, outbox).map(|()| Answer::Done),
       Verb::ViewDispose(dispose) => self.views.dispose(&dispose, outbox).map(|()| Answer::Done),
@@ -490,41 +586,81 @@ impl Lives {
 
   /// The life of a record opened in a folder, the folder of its record when none is given, unless
   /// it lives. An open of a life that ends waits for its end, then opens it again.
-  fn open(&mut self, life: String, cwd: Option<String>, reply: Replied) {
+  fn open(&mut self, life: String, mut birth: Birth, reply: Replied) {
     let record = Path::new(&life);
     if !record.is_absolute() {
       reply.send(Err(ProtocolError::Relative { life })).ok();
       return;
     }
-    let folder = || record.parent().map_or_else(String::new, |one| one.display().to_string());
-    let cwd = cwd.unwrap_or_else(folder);
+    if birth.cwd.is_empty() {
+      birth.cwd = record.parent().map_or_else(String::new, |one| one.display().to_string());
+    }
+    let holder = birth.holder.clone();
     let opened = match self.held.get_mut(&life).map(|held| &mut held.stage) {
-      Some(Stage::Living(_)) => Ok(Answer::Done),
-      Some(Stage::Ending(waiting)) => return waiting.push((cwd, reply)),
-      None => self.opened(life, cwd).map(|()| Answer::Done),
+      Some(Stage::Living(_)) => Ok(()),
+      Some(Stage::Ending(waiting)) => return waiting.push((birth, reply)),
+      None => self.opened(life.clone(), birth),
     };
-    reply.send(opened).ok();
+    reply.send(opened.and_then(|()| self.held_by(&life, holder))).ok();
+  }
+
+  /// The life attached by the peer that opened it, when that peer asked to, before any end of
+  /// the life can pass: a life with no holder ends after the grace, which may be none.
+  fn held_by(&mut self, life: &str, holder: Option<Holder>) -> Result<Answer, ProtocolError> {
+    match holder {
+      Some(Holder { peer, outbox, from }) => self.attach(life, from, peer, &outbox),
+      None => Ok(Answer::Done),
+    }
   }
 
   /// A life born on a thread of its own, with no holder yet, and watched for its end.
-  fn opened(&mut self, life: String, cwd: String) -> Result<(), ProtocolError> {
+  fn opened(&mut self, life: String, birth: Birth) -> Result<(), ProtocolError> {
+    let Birth { cwd, actor, roster, extensions, config, claude, answerer, holder: _ } = birth;
+    let base = &self.settings.opening;
+    let answer = answerer.as_ref().map(|one| furb::life::Answer(one.hosted()));
     let opening = Opening {
       record: Some(life.clone()),
       directory: cwd.clone(),
-      ..self.settings.opening.clone()
+      actor: actor.or_else(|| base.actor.clone()),
+      roster: roster.or_else(|| base.roster.clone()),
+      extensions: extensions.or(base.extensions),
+      config: config.or_else(|| base.config.clone()),
+      claude: claude.or_else(|| base.claude.clone()),
+      answer: answer.or_else(|| base.answer.clone()),
+      ..base.clone()
     };
     let handle = Life::spawn(opening)?;
     self.born += 1;
     tokio::spawn(watched(handle.clone(), life.clone(), self.born, self.asks.clone()));
+    if let Some(host) = &self.settings.host {
+      let played = Played {
+        handle: handle.clone(),
+        life: life.clone(),
+        cwd: PathBuf::from(&cwd),
+        host: host.clone(),
+        places: processes::places(&self.settings.opening),
+        log: self.settings.opening.log.clone(),
+      };
+      tokio::spawn(played.run());
+    }
     let stage = Stage::Living(Holders::new(self.settings.grace));
-    self.held.insert(life, Held { handle, cwd, born: self.born, stage });
+    self.held.insert(life, Held { handle, cwd, born: self.born, stage, answerer });
     Ok(())
+  }
+
+  /// The peer that answers the models of a life, or the refusal that none does.
+  fn answerer(&self, life: &str) -> Result<&Answerer, ProtocolError> {
+    match self.held.get(life) {
+      Some(Held { answerer: Some(one), .. }) => Ok(one),
+      Some(_) => Err(ProtocolError::Answerless { life: life.to_owned() }),
+      None => Err(ProtocolError::Closed { life: life.to_owned() }),
+    }
   }
 
   /// The lives that a daemon before this one gave, opened again, each with its pins.
   fn adopt(&mut self, handed: Vec<Handed>) {
     for Handed { life, cwd, pins } in handed {
-      if let Err(no) = self.opened(life.clone(), cwd) {
+      if let Err(no) = self.opened(life.clone(), Birth { cwd, ..Birth::default() }) {
         report(self.settings.opening.log.as_ref(), &format_args!("{life} did not open: {no}"));
       } else if let Ok((_, holders)) = living(&mut self.held, &life) {
         for pin in pins {
@@ -621,18 +757,16 @@ impl Lives {
 
   /// A life that ended, in the birth that the daemon holds: gone, and opened again for each open
   /// that waited for its end.
-  fn ended(&mut self, life: String, born: u64) {
-    if self.held.get(&life).is_none_or(|held| held.born != born) {
+  fn ended(&mut self, life: &str, born: u64) {
+    if self.held.get(life).is_none_or(|held| held.born != born) {
       return;
     }
-    self.views.ended(&life);
-    let Some(Held { stage: Stage::Ending(waiting), .. }) = self.held.remove(&life) else { return };
-    let mut waiting = waiting.into_iter();
-    if let Some((cwd, first)) = waiting.next() {
-      let opened = self.opened(life, cwd).map(|()| Answer::Done);
-      for one in iter::once(first).chain(waiting.map(|(_, one)| one)) {
-        one.send(opened.clone()).ok();
-      }
+    self.views.ended(life);
+    let Some(Held { stage: Stage::Ending(waiting), .. }) = self.held.remove(life) else { return };
+    let Some((first, _)) = waiting.first() else { return };
+    let opened = self.opened(life.to_owned(), first.clone());
+    for (birth, one) in waiting {
+      one.send(opened.clone().and_then(|()| self.held_by(life, birth.holder))).ok();
     }
   }
 
