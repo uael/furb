@@ -1320,7 +1320,9 @@ impl Provider {
               let got = search(query.clone()).await;
               Replied::Searched {
                 id,
-                got: got.map(|answer| crate::value::Text::new(query, answer)),
+                got: got
+                  .map(|answer| crate::value::Text::new(query, answer))
+                  .map_err(|no| no.to_string()),
               }
             };
             co.work(stream::once(work).take_until(stopped));
@@ -1722,7 +1724,9 @@ fn messages(
     if python.is_empty() {
       continue;
     }
-    let seen = images.named(python, &mut given).map_err(CompletionError::ProviderError)?;
+    let seen = images
+      .named(python, &mut given)
+      .map_err(|no| CompletionError::ProviderError(no.to_string()))?;
     if !seen.is_empty() && !model.images {
       return Err(CompletionError::ProviderError(format!(
         "{} does not accept images.",

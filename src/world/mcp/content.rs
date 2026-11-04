@@ -133,7 +133,7 @@ fn image(data: &str, mime: &str, gallery: Option<&Path>) -> (String, Value) {
     Ok((uri, media)) => {
       (images::reference("image", &uri), json!({"type": "image", "image": uri, "mime": media}))
     }
-    Err(why) => lost(why),
+    Err(why) => lost(why.to_string()),
   }
 }
 
