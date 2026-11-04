@@ -8,27 +8,9 @@
 //! request that waits for it, and hands each notification on. A wire that drops ends what it holds: the process and
 //! every process that it started, and each stream.
 
-#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
-#![expect(
-  clippy::assigning_clones,
-  reason = "debt: an assignment of a clone, where clone_from serves"
-)]
-#![expect(
-  clippy::clone_on_ref_ptr,
-  reason = "debt: a clone of an Arc or an Rc that hides its kind"
-)]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
-#![expect(clippy::match_bool, reason = "debt: a match on a bool")]
-#![expect(clippy::ref_option, reason = "debt: &Option<T> where Option<&T> serves")]
-
 use std::{
   collections::{HashMap, VecDeque},
-  path::PathBuf,
+  path::Path,
   process::Stdio,
   sync::{
     Arc, Mutex, MutexGuard,
@@ -37,12 +19,11 @@ use std::{
   time::Duration,
 };
 
-use futures::future::BoxFuture;
 use reqwest::{Client, RequestBuilder, Response};
 use serde_json::{Value, json};
 use tokio::{
   io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-  process::ChildStdin,
+  process::{Child, ChildStderr, ChildStdin, ChildStdout},
   sync::{mpsc, oneshot},
   task::JoinSet,
 };
@@ -58,7 +39,7 @@ const TAIL: usize = 20;
 
 /// Why a request to a server came to nothing.
 #[derive(Debug, Clone, PartialEq)]
-pub enum Failure {
+pub(super) enum Failure {
   /// The server answered with an error of JSON-RPC.
   Answered { code: i64, message: String },
   /// The server asks for a login: it answered 401, with the address of the metadata of its resource when it named one.
@@ -71,7 +52,7 @@ pub enum Failure {
 
 impl Failure {
   /// Why, in words.
-  pub fn said(&self) -> String {
+  pub(super) fn said(&self) -> String {
     match self {
       Failure::Answered { code, message } => format!("{message} (error {code})"),
       Failure::Unauthorized(_) => "the server asks for a login".to_owned(),
@@ -82,7 +63,7 @@ impl Failure {
 }
 
 /// A span of time in seconds, with no fraction when it has none.
-pub fn seconds(span: Duration) -> String {
+pub(super) fn seconds(span: Duration) -> String {
   let held = span.as_secs_f64();
   if held.fract() == 0.0 { format!("{held:.0}") } else { format!("{held}") }
 }
@@ -90,7 +71,7 @@ pub fn seconds(span: Duration) -> String {
 /// What a peer hears of its own accord: a notification of the server, by its method, or the end of the wire, with
 /// why.
 #[derive(Debug)]
-pub enum Heard {
+pub(super) enum Heard {
   Notified(String),
   Closed(String),
 }
@@ -111,20 +92,34 @@ fn locked<T>(held: &Mutex<T>) -> MutexGuard<'_, T> {
   held.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// How a message goes to a server.
-trait Wire: Send + Sync {
+/// How a message goes to a server: the three ways that a server is reached.
+enum Wire {
+  Process(Process),
+  Streamable(Streamable),
+  Legacy(Legacy),
+}
+
+impl Wire {
   /// The message, sent; a request whose answer the server gives at once hands that answer to the peer.
-  fn send(&self, message: Value) -> BoxFuture<'static, Result<(), Failure>>;
+  async fn send(&self, message: Value) -> Result<(), Failure> {
+    match self {
+      Wire::Process(wire) => wire.send(message).await,
+      Wire::Streamable(wire) => wire.send(message).await,
+      Wire::Legacy(wire) => wire.send(message).await,
+    }
+  }
 
   /// The version of the protocol that the server agreed to, after which the wire may open more.
   fn agreed(&self, version: &str) {
-    let _ = version;
+    if let Wire::Streamable(wire) = self {
+      wire.agreed(version);
+    }
   }
 }
 
 /// The client end of one connection to a server.
-pub struct Peer {
-  wire: Arc<dyn Wire>,
+pub(super) struct Peer {
+  wire: Arc<Wire>,
   pending: Pending,
   next: AtomicI64,
   tasks: Mutex<JoinSet<()>>,
@@ -133,31 +128,36 @@ pub struct Peer {
 impl Peer {
   /// A connection to the server of a transport, with the token of its login, which answers a request of the server
   /// for its roots with these; and what it hears of its own accord.
-  pub async fn open(
+  pub(super) async fn open(
     transport: &Transport,
     token: Option<String>,
     roots: Value,
   ) -> Result<(Peer, mpsc::UnboundedReceiver<Heard>), Failure> {
     let (inbox, inbound) = mpsc::unbounded_channel();
-    let wire: Arc<dyn Wire> = match transport {
+    let wire = Arc::new(match transport {
       Transport::Stdio { command, args, env, cwd } => {
-        Arc::new(Process::start(command, args, env, cwd, inbox)?)
+        Wire::Process(Process::start(command, args, env, cwd.as_deref(), inbox)?)
       }
-      Transport::Http { url, headers, .. } => Arc::new(Streamable::new(url, headers, token, inbox)),
+      Transport::Http { url, headers, .. } => {
+        Wire::Streamable(Streamable::new(url, headers, token, inbox))
+      }
       Transport::Sse { url, headers, .. } => {
-        Arc::new(Legacy::connect(url, headers, token, inbox).await?)
+        Wire::Legacy(Legacy::connect(url, headers, token, inbox).await?)
       }
-    };
+    });
     let (told, heard) = mpsc::unbounded_channel();
     let pending: Pending = Arc::default();
     let mut tasks = JoinSet::new();
-    tasks.spawn_on(dispatch(wire.clone(), pending.clone(), inbound, told, roots), &runtime());
+    tasks.spawn_on(
+      dispatch(Arc::clone(&wire), Arc::clone(&pending), inbound, told, roots),
+      &runtime(),
+    );
     Ok((Peer { wire, pending, next: AtomicI64::new(1), tasks: Mutex::new(tasks) }, heard))
   }
 
   /// What the server answers a request with, within a bound. A request past its bound, or that its caller drops, is
   /// cancelled at the server.
-  pub async fn request(
+  pub(super) async fn request(
     &self,
     method: &str,
     params: Value,
@@ -167,11 +167,10 @@ impl Peer {
     let (answer, answered) = oneshot::channel();
     locked(&self.pending).insert(id, answer);
     let mut waiting =
-      Waiting { wire: self.wire.clone(), pending: self.pending.clone(), id, done: false };
+      Waiting { wire: Arc::clone(&self.wire), pending: Arc::clone(&self.pending), id, done: false };
     let message = json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
-    let send = self.wire.send(message);
-    let got = tokio::time::timeout(bound, async move {
-      send.await?;
+    let got = tokio::time::timeout(bound, async {
+      self.wire.send(message).await?;
       answered
         .await
         .unwrap_or_else(|_| Err(Failure::Broken("the server closed the connection".to_owned())))
@@ -187,7 +186,7 @@ impl Peer {
   }
 
   /// A notification to the server.
-  pub async fn notify(&self, method: &str, params: Option<Value>) -> Result<(), Failure> {
+  pub(super) async fn notify(&self, method: &str, params: Option<Value>) -> Result<(), Failure> {
     let mut message = json!({"jsonrpc": "2.0", "method": method});
     if let Some(params) = params {
       message["params"] = params;
@@ -196,7 +195,7 @@ impl Peer {
   }
 
   /// The version of the protocol that the server agreed to.
-  pub fn agreed(&self, version: &str) {
+  pub(super) fn agreed(&self, version: &str) {
     self.wire.agreed(version);
   }
 }
@@ -210,7 +209,7 @@ impl Drop for Peer {
 /// A request that waits for its answer: one that its caller drops before the answer is forgotten, and cancelled at
 /// the server.
 struct Waiting {
-  wire: Arc<dyn Wire>,
+  wire: Arc<Wire>,
   pending: Pending,
   id: i64,
   done: bool,
@@ -221,20 +220,44 @@ impl Drop for Waiting {
     locked(&self.pending).remove(&self.id);
     if !self.done {
       let params = json!({"requestId": self.id, "reason": "the client stopped waiting"});
-      let send = self
-        .wire
-        .send(json!({"jsonrpc": "2.0", "method": "notifications/cancelled", "params": params}));
+      let message =
+        json!({"jsonrpc": "2.0", "method": "notifications/cancelled", "params": params});
+      let wire = Arc::clone(&self.wire);
       runtime().spawn(async move {
-        let _ = send.await;
+        // A server that is gone takes no cancel.
+        wire.send(message).await.ok();
       });
     }
+  }
+}
+
+/// The reply to a request of the server: furb answers a ping and the roots, and no other method.
+fn replied(method: &str, id: &Value, roots: &Value) -> Value {
+  match method {
+    "ping" => json!({"jsonrpc": "2.0", "id": id, "result": {}}),
+    "roots/list" => json!({"jsonrpc": "2.0", "id": id, "result": {"roots": roots}}),
+    _ => {
+      let error = json!({"code": -32601, "message": format!("furb does not answer {method}")});
+      json!({"jsonrpc": "2.0", "id": id, "error": error})
+    }
+  }
+}
+
+/// What an answer of the server gives the request that waits for it.
+fn answered(message: &Value) -> Result<Value, Failure> {
+  match message.get("error") {
+    Some(error) => Err(Failure::Answered {
+      code: error.get("code").and_then(Value::as_i64).unwrap_or_default(),
+      message: error.get("message").and_then(Value::as_str).unwrap_or("an error").to_owned(),
+    }),
+    None => Ok(message.get("result").cloned().unwrap_or(Value::Null)),
   }
 }
 
 /// Each message of a server, handed on: an answer to the request that waits for it, a request of the server answered,
 /// and a notification to what the peer hears. At the end of the wire, each request that waits fails.
 async fn dispatch(
-  wire: Arc<dyn Wire>,
+  wire: Arc<Wire>,
   pending: Pending,
   mut inbound: mpsc::UnboundedReceiver<Inbound>,
   told: mpsc::UnboundedSender<Heard>,
@@ -254,53 +277,35 @@ async fn dispatch(
       let method = message.get("method").and_then(Value::as_str).map(str::to_owned);
       match (method, message.get("id").cloned()) {
         (Some(method), Some(id)) => {
-          let reply = match method.as_str() {
-            "ping" => json!({"jsonrpc": "2.0", "id": id, "result": {}}),
-            "roots/list" => json!({"jsonrpc": "2.0", "id": id, "result": {"roots": roots}}),
-            _ => {
-              let error =
-                json!({"code": -32601, "message": format!("furb does not answer {method}")});
-              json!({"jsonrpc": "2.0", "id": id, "error": error})
-            }
-          };
-          let send = wire.send(reply);
+          let (wire, reply) = (Arc::clone(&wire), replied(&method, &id, &roots));
           tokio::spawn(async move {
-            let _ = send.await;
+            // A server that is gone takes no reply.
+            wire.send(reply).await.ok();
           });
         }
         (Some(method), None) => {
-          let _ = told.send(Heard::Notified(method));
+          // A peer that is dropped hears no more.
+          told.send(Heard::Notified(method)).ok();
         }
         (None, Some(id)) => {
-          let Some(answer) = id.as_i64().and_then(|id| locked(&pending).remove(&id)) else {
-            continue;
-          };
-          let got = match message.get("error") {
-            Some(error) => Err(Failure::Answered {
-              code: error.get("code").and_then(Value::as_i64).unwrap_or_default(),
-              message: error
-                .get("message")
-                .and_then(Value::as_str)
-                .unwrap_or("an error")
-                .to_owned(),
-            }),
-            None => Ok(message.get("result").cloned().unwrap_or(Value::Null)),
-          };
-          let _ = answer.send(got);
+          if let Some(answer) = id.as_i64().and_then(|id| locked(&pending).remove(&id)) {
+            // A caller that gave up waits for no answer.
+            answer.send(answered(&message)).ok();
+          }
         }
         (None, None) => {}
       }
     }
   };
   for (_, answer) in locked(&pending).drain() {
-    let _ = answer.send(Err(Failure::Broken(why.clone())));
+    answer.send(Err(Failure::Broken(why.clone()))).ok();
   }
-  let _ = told.send(Heard::Closed(why));
+  told.send(Heard::Closed(why)).ok();
 }
 
 /// A server that runs as a process of its own group, which ends with the wire, with every process that it started.
 struct Process {
-  stdin: Arc<tokio::sync::Mutex<ChildStdin>>,
+  stdin: tokio::sync::Mutex<ChildStdin>,
   tasks: Mutex<JoinSet<()>>,
   group: Option<Group>,
 }
@@ -313,7 +318,7 @@ impl Process {
     command: &str,
     args: &[String],
     env: &[(String, String)],
-    cwd: &Option<PathBuf>,
+    cwd: Option<&Path>,
     inbox: Inbox,
   ) -> Result<Process, Failure> {
     let mut made = std::process::Command::new(command);
@@ -336,55 +341,19 @@ impl Process {
     else {
       return Err(Failure::Broken(format!("{command} gave no pipes")));
     };
-    let tail: Arc<Mutex<VecDeque<String>>> = Arc::default();
     let mut tasks = JoinSet::new();
-    let kept = tail.clone();
-    tasks.spawn_on(
-      async move {
-        let mut lines = BufReader::new(stderr).lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-          let mut held = locked(&kept);
-          held.push_back(line);
-          if held.len() > TAIL {
-            held.pop_front();
-          }
-        }
-      },
-      &runtime(),
-    );
-    tasks.spawn_on(
-      async move {
-        let mut lines = BufReader::new(stdout).lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-          if let Ok(message) = serde_json::from_str::<Value>(line.trim()) {
-            let _ = inbox.send(Inbound::Message(message));
-          }
-        }
-        let status = child.wait().await.map(|status| format!(" with {status}")).unwrap_or_default();
-        tokio::time::sleep(Duration::from_millis(50)).await;
-        let said: Vec<String> = locked(&tail).iter().cloned().collect();
-        let said = if said.is_empty() { String::new() } else { format!(": {}", said.join("\n")) };
-        let _ =
-          inbox.send(Inbound::Closed(format!("the process of the server ended{status}{said}")));
-      },
-      &runtime(),
-    );
-    Ok(Process { stdin: Arc::new(tokio::sync::Mutex::new(stdin)), tasks: Mutex::new(tasks), group })
+    tasks.spawn_on(ended(child, stdout, stderr, inbox), &runtime());
+    Ok(Process { stdin: tokio::sync::Mutex::new(stdin), tasks: Mutex::new(tasks), group })
   }
-}
 
-impl Wire for Process {
-  fn send(&self, message: Value) -> BoxFuture<'static, Result<(), Failure>> {
-    let stdin = self.stdin.clone();
-    Box::pin(async move {
-      let line = message.to_string() + "\n";
-      let mut stdin = stdin.lock().await;
-      let broken = |no: std::io::Error| {
-        Failure::Broken(format!("the process of the server took no request: {no}"))
-      };
-      stdin.write_all(line.as_bytes()).await.map_err(broken)?;
-      stdin.flush().await.map_err(broken)
-    })
+  async fn send(&self, message: Value) -> Result<(), Failure> {
+    let line = message.to_string() + "\n";
+    let mut stdin = self.stdin.lock().await;
+    let broken = |no: std::io::Error| {
+      Failure::Broken(format!("the process of the server took no request: {no}"))
+    };
+    stdin.write_all(line.as_bytes()).await.map_err(broken)?;
+    stdin.flush().await.map_err(broken)
   }
 }
 
@@ -393,6 +362,40 @@ impl Drop for Process {
     locked(&self.tasks).abort_all();
     self.group.take();
   }
+}
+
+/// The messages of a process, handed on until its stdout ends. Then the wire ends.
+/// The end holds the status of the process and the last lines of its stderr.
+/// The wire reads the stderr to its end first, so that no line is lost.
+async fn ended(mut child: Child, stdout: ChildStdout, stderr: ChildStderr, inbox: Inbox) {
+  let ((), tail) = tokio::join!(forwarded(stdout, &inbox), tailed(stderr));
+  let status = child.wait().await.map(|status| format!(" with {status}")).unwrap_or_default();
+  let said = tail.into_iter().collect::<Vec<_>>().join("\n");
+  let said = if said.is_empty() { said } else { format!(": {said}") };
+  // A peer that is dropped hears no more.
+  inbox.send(Inbound::Closed(format!("the process of the server ended{status}{said}"))).ok();
+}
+
+/// Each line of the stdout of a process that is JSON, handed on as a message.
+async fn forwarded(stdout: ChildStdout, inbox: &Inbox) {
+  let mut lines = BufReader::new(stdout).lines();
+  while let Ok(Some(line)) = lines.next_line().await {
+    if let Ok(message) = serde_json::from_str::<Value>(line.trim()) {
+      inbox.send(Inbound::Message(message)).ok();
+    }
+  }
+}
+
+/// The last lines of the stderr of a process, to its end.
+async fn tailed(stderr: ChildStderr) -> VecDeque<String> {
+  let (mut lines, mut tail) = (BufReader::new(stderr).lines(), VecDeque::new());
+  while let Ok(Some(line)) = lines.next_line().await {
+    tail.push_back(line);
+    if tail.len() > TAIL {
+      tail.pop_front();
+    }
+  }
+  tail
 }
 
 /// What a server answered with a status that is no success: a login it asks for, or why it failed.
@@ -415,7 +418,7 @@ async fn streamed(mut response: Response, inbox: Inbox) {
   while let Ok(Some(chunk)) = response.chunk().await {
     for (_, data) in events.feed(&chunk) {
       if let Ok(message) = serde_json::from_str::<Value>(&data) {
-        let _ = inbox.send(Inbound::Message(message));
+        inbox.send(Inbound::Message(message)).ok();
       }
     }
   }
@@ -443,10 +446,10 @@ struct Streamable {
   headers: Vec<(String, String)>,
   token: Option<String>,
   client: Client,
-  session: Arc<Mutex<Option<String>>>,
-  version: Arc<Mutex<Option<String>>>,
+  session: Mutex<Option<String>>,
+  version: Mutex<Option<String>>,
   inbox: Inbox,
-  tasks: Arc<Mutex<JoinSet<()>>>,
+  tasks: Mutex<JoinSet<()>>,
 }
 
 impl Streamable {
@@ -456,10 +459,10 @@ impl Streamable {
       headers: headers.to_vec(),
       token,
       client: Client::new(),
-      session: Arc::default(),
-      version: Arc::default(),
+      session: Mutex::default(),
+      version: Mutex::default(),
       inbox,
-      tasks: Arc::default(),
+      tasks: Mutex::default(),
     }
   }
 
@@ -474,52 +477,44 @@ impl Streamable {
     }
     request
   }
-}
 
-impl Wire for Streamable {
-  fn send(&self, message: Value) -> BoxFuture<'static, Result<(), Failure>> {
+  async fn send(&self, message: Value) -> Result<(), Failure> {
     let request = self
       .request(self.client.post(&self.url))
       .header("content-type", "application/json")
       .header("accept", "application/json, text/event-stream")
       .body(message.to_string());
-    let (url, session, inbox, tasks) =
-      (self.url.clone(), self.session.clone(), self.inbox.clone(), self.tasks.clone());
     let had = locked(&self.session).is_some();
-    Box::pin(async move {
-      let response = request.send().await.map_err(|no| Failure::Broken(format!("{url}: {no}")))?;
-      let status = response.status();
-      if status.as_u16() == 404 && had {
-        let why = "the server ended the session".to_owned();
-        let _ = inbox.send(Inbound::Closed(why.clone()));
-        return Err(Failure::Broken(why));
-      }
-      if !status.is_success() {
-        return Err(refused(&url, response).await);
-      }
-      if let Some(named) =
-        response.headers().get("mcp-session-id").and_then(|one| one.to_str().ok())
-      {
-        *locked(&session) = Some(named.to_owned());
-      }
-      let kind = response
-        .headers()
-        .get("content-type")
-        .and_then(|one| one.to_str().ok())
-        .unwrap_or_default();
-      if kind.starts_with("text/event-stream") {
-        locked(&tasks).spawn_on(streamed(response, inbox), &runtime());
-        return Ok(());
-      }
-      let text = response.text().await.map_err(|no| Failure::Broken(format!("{url}: {no}")))?;
-      if text.trim().is_empty() {
-        return Ok(());
-      }
-      let message = serde_json::from_str::<Value>(&text)
-        .map_err(|no| Failure::Broken(format!("{url} answered no JSON: {no}")))?;
-      let _ = inbox.send(Inbound::Message(message));
-      Ok(())
-    })
+    let url = &self.url;
+    let response = request.send().await.map_err(|no| Failure::Broken(format!("{url}: {no}")))?;
+    let status = response.status();
+    if status.as_u16() == 404 && had {
+      let why = "the server ended the session".to_owned();
+      // A peer that is dropped hears no more.
+      self.inbox.send(Inbound::Closed(why.clone())).ok();
+      return Err(Failure::Broken(why));
+    }
+    if !status.is_success() {
+      return Err(refused(url, response).await);
+    }
+    if let Some(named) = response.headers().get("mcp-session-id").and_then(|one| one.to_str().ok())
+    {
+      *locked(&self.session) = Some(named.to_owned());
+    }
+    let kind =
+      response.headers().get("content-type").and_then(|one| one.to_str().ok()).unwrap_or_default();
+    if kind.starts_with("text/event-stream") {
+      locked(&self.tasks).spawn_on(streamed(response, self.inbox.clone()), &runtime());
+      return Ok(());
+    }
+    let text = response.text().await.map_err(|no| Failure::Broken(format!("{url}: {no}")))?;
+    if text.trim().is_empty() {
+      return Ok(());
+    }
+    let message = serde_json::from_str::<Value>(&text)
+      .map_err(|no| Failure::Broken(format!("{url} answered no JSON: {no}")))?;
+    self.inbox.send(Inbound::Message(message)).ok();
+    Ok(())
   }
 
   /// The stream of what the server tells of its own accord, opened by a GET once the server agreed to a version. A
@@ -552,7 +547,8 @@ impl Drop for Streamable {
     if locked(&self.session).is_some() {
       let request = self.request(self.client.delete(&self.url));
       runtime().spawn(async move {
-        let _ = tokio::time::timeout(Duration::from_secs(5), request.send()).await;
+        // A server that does not answer in time frees the session by itself.
+        tokio::time::timeout(Duration::from_secs(5), request.send()).await.ok();
       });
     }
   }
@@ -592,20 +588,20 @@ impl Legacy {
           for (event, data) in events.feed(&chunk) {
             if event == "endpoint" {
               if let Some(found) = found.take() {
-                let _ = found.send(data);
+                found.send(data).ok();
               }
             } else if let Ok(message) = serde_json::from_str::<Value>(&data) {
-              let _ = inbox.send(Inbound::Message(message));
+              inbox.send(Inbound::Message(message)).ok();
             }
           }
         }
-        let _ = inbox.send(Inbound::Closed("the stream of events of the server ended".to_owned()));
+        inbox.send(Inbound::Closed("the stream of events of the server ended".to_owned())).ok();
       },
       &runtime(),
     );
-    let named = named
-      .await
-      .map_err(|_| Failure::Broken(format!("{url} named no endpoint before its stream ended")))?;
+    let Ok(named) = named.await else {
+      return Err(Failure::Broken(format!("{url} named no endpoint before its stream ended")));
+    };
     let endpoint = url::Url::parse(url).and_then(|base| base.join(&named)).map_err(|no| {
       Failure::Broken(format!("{url} named the endpoint {named}, which is not valid: {no}"))
     })?;
@@ -617,22 +613,15 @@ impl Legacy {
       tasks: Mutex::new(tasks),
     })
   }
-}
 
-impl Wire for Legacy {
-  fn send(&self, message: Value) -> BoxFuture<'static, Result<(), Failure>> {
+  async fn send(&self, message: Value) -> Result<(), Failure> {
     let request = headed(self.client.post(&self.endpoint), &self.headers, self.token.as_deref())
       .header("content-type", "application/json")
       .body(message.to_string());
-    let endpoint = self.endpoint.clone();
-    Box::pin(async move {
-      let response =
-        request.send().await.map_err(|no| Failure::Broken(format!("{endpoint}: {no}")))?;
-      match response.status().is_success() {
-        true => Ok(()),
-        false => Err(refused(&endpoint, response).await),
-      }
-    })
+    let endpoint = &self.endpoint;
+    let response =
+      request.send().await.map_err(|no| Failure::Broken(format!("{endpoint}: {no}")))?;
+    if response.status().is_success() { Ok(()) } else { Err(refused(endpoint, response).await) }
   }
 }
 
@@ -675,7 +664,7 @@ impl Events {
       let (field, value) = line.split_once(':').unwrap_or((line, ""));
       let value = value.strip_prefix(' ').unwrap_or(value);
       match field {
-        "event" => self.event = value.to_owned(),
+        "event" => value.clone_into(&mut self.event),
         "data" => self.data.push(value.to_owned()),
         _ => {}
       }

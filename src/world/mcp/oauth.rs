@@ -9,25 +9,9 @@
 //! The tokens of a server stand in the Keychain of macOS, and elsewhere in a file of the config directory that only
 //! the user reads.
 
-#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
-#![expect(
-  clippy::clone_on_ref_ptr,
-  reason = "debt: a clone of an Arc or an Rc that hides its kind"
-)]
-#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
-#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
-#![expect(clippy::match_bool, reason = "debt: a match on a bool")]
-#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
-
 use std::{
   collections::HashMap,
-  fs,
+  fs, io,
   path::{Path, PathBuf},
   process::{Command, Stdio},
   sync::{Arc, Mutex},
@@ -35,17 +19,20 @@ use std::{
 };
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use reqwest::Client;
+use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tokio::{
   io::{AsyncReadExt, AsyncWriteExt},
-  net::TcpListener,
+  net::{TcpListener, TcpStream},
+  task::JoinError,
 };
 
+use super::config::Login;
+
 /// How long a login waits for the browser to hand back its code.
-pub const LOGIN: Duration = Duration::from_secs(300);
+pub(super) const LOGIN: Duration = Duration::from_secs(300);
 
 /// How long before its end a token is refreshed.
 const EARLY: u64 = 60;
@@ -54,48 +41,113 @@ const EARLY: u64 = 60;
 const SERVICE: &str = "furb-mcp";
 
 /// What opens an address in the browser of the system, or why it did not.
-pub type Opener = Arc<dyn Fn(&str) -> Result<(), String> + Send + Sync>;
+pub type Opener = Arc<dyn Fn(&str) -> io::Result<()> + Send + Sync>;
+
+/// Why a store of secrets kept or forgot nothing.
+#[derive(Debug, thiserror::Error)]
+pub enum VaultError {
+  #[error("{}: {source}", path.display())]
+  File { path: PathBuf, source: io::Error },
+  #[error("the secrets are not JSON: {0}")]
+  Json(#[from] serde_json::Error),
+  #[error("the Keychain did not open: {0}")]
+  Open(io::Error),
+  #[error("the Keychain took nothing: {0}")]
+  Write(io::Error),
+  #[error("the Keychain did not answer: {0}")]
+  Wait(io::Error),
+  /// The program of the Keychain failed, and what it wrote on its stderr.
+  #[error("the Keychain kept nothing: {0}")]
+  Kept(String),
+}
+
+/// Why a login or a refresh came to nothing.
+#[derive(Debug, thiserror::Error)]
+pub(super) enum Error {
+  #[error("the address {url} is not valid: {source}")]
+  Address { url: String, source: url::ParseError },
+  #[error("the endpoint {url} is not valid: {source}")]
+  Endpoint { url: String, source: url::ParseError },
+  #[error("no port for the login: {0}")]
+  Port(io::Error),
+  #[error("the login listened no more: {0}")]
+  Listen(io::Error),
+  #[error("the machine gave no random bytes: {0}")]
+  Random(getrandom::Error),
+  #[error("the browser did not open ({source}): open {address} to log in")]
+  Browser { address: String, source: io::Error },
+  #[error("no login came back within {} seconds from {address}", LOGIN.as_secs())]
+  Waited { address: String },
+  #[error("the login failed, {error}{}", described(.description.as_deref()))]
+  Denied { error: String, description: Option<String> },
+  #[error("the login came back with the state of another login")]
+  Forged,
+  #[error("the login came back with no code")]
+  NoCode,
+  #[error("the authorization server {issuer} registers no client, so furb cannot log in to it")]
+  Unregistered { issuer: String },
+  #[error("{url}: {source}")]
+  Unreachable { url: String, source: reqwest::Error },
+  #[error("{url} registered no client: {status} {text}")]
+  NotRegistered { url: String, status: StatusCode, text: String },
+  #[error("{url} answered {status}, {error}{}", described(.description.as_deref()))]
+  Refused { url: String, status: StatusCode, error: String, description: Option<String> },
+  #[error("the login gave no refresh token")]
+  NoRefresh,
+  #[error(transparent)]
+  Vault(#[from] VaultError),
+}
+
+/// The description that an authorization server gave of an error, set after it.
+fn described(description: Option<&str>) -> String {
+  description.map(|one| format!(": {one}")).unwrap_or_default()
+}
 
 /// The tokens of a login, with what refreshes them: the client that furb registered, the endpoint of the tokens, and
 /// the address of the server that they serve.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Tokens {
-  pub access: String,
+pub(super) struct Tokens {
+  pub(super) access: String,
   #[serde(default)]
-  pub refresh: Option<String>,
+  pub(super) refresh: Option<String>,
   /// When the access token ends, in seconds since the epoch of Unix.
   #[serde(default)]
-  pub expires: Option<u64>,
-  pub client: String,
+  pub(super) expires: Option<u64>,
+  pub(super) client: String,
   #[serde(default)]
-  pub secret: Option<String>,
-  pub endpoint: String,
-  pub resource: String,
+  pub(super) secret: Option<String>,
+  pub(super) endpoint: String,
+  pub(super) resource: String,
 }
 
 /// A store of secrets by key.
 pub trait Vault: Send + Sync {
   fn get(&self, key: &str) -> Option<String>;
-  fn put(&self, key: &str, value: &str) -> Result<(), String>;
-  fn forget(&self, key: &str) -> Result<(), String>;
+  /// # Errors
+  /// When the store keeps nothing.
+  fn put(&self, key: &str, value: &str) -> Result<(), VaultError>;
+  /// # Errors
+  /// When the store cannot forget.
+  fn forget(&self, key: &str) -> Result<(), VaultError>;
 }
 
 /// The key of the tokens of a server: its name and its address.
-pub fn key(name: &str, url: &str) -> String {
+pub(super) fn key(name: &str, url: &str) -> String {
   format!("{name} {url}")
 }
 
 /// The store of the tokens of this machine: the Keychain on macOS, and else the file `mcp-tokens.json` of the config
 /// directory.
-pub fn vault(config: &Path) -> Arc<dyn Vault> {
-  match cfg!(target_os = "macos") && Path::new(KEYCHAIN).exists() {
-    true => Arc::new(Keychain),
-    false => Arc::new(Filed::new(config.join("mcp-tokens.json"))),
+pub(super) fn vault(config: &Path) -> Arc<dyn Vault> {
+  if cfg!(target_os = "macos") && Path::new(KEYCHAIN).exists() {
+    Arc::new(Keychain)
+  } else {
+    Arc::new(Filed::new(config.join("mcp-tokens.json")))
   }
 }
 
 /// The opener of the system, which opens an address in the default browser.
-pub fn opener() -> Opener {
+pub(super) fn opener() -> Opener {
   Arc::new(|address: &str| {
     let mut command = if cfg!(target_os = "macos") {
       Command::new("open")
@@ -107,12 +159,12 @@ pub fn opener() -> Opener {
       Command::new("xdg-open")
     };
     command.arg(address).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
-    command.spawn().map(drop).map_err(|no| no.to_string())
+    command.spawn().map(drop)
   })
 }
 
 /// The address of the metadata of the resource that a challenge of a server names, in its `resource_metadata`.
-pub fn challenged(header: &str) -> Option<String> {
+pub(super) fn challenged(header: &str) -> Option<String> {
   let at = header.find("resource_metadata=")?;
   let rest = &header[at + "resource_metadata=".len()..];
   let named = match rest.strip_prefix('"') {
@@ -123,32 +175,46 @@ pub fn challenged(header: &str) -> Option<String> {
 }
 
 /// The tokens of a server, from a store.
-pub fn stored(vault: &dyn Vault, key: &str) -> Option<Tokens> {
+pub(super) fn stored(vault: &dyn Vault, key: &str) -> Option<Tokens> {
   vault.get(key).and_then(|held| serde_json::from_str(&held).ok())
 }
 
 /// The tokens of a server, kept in a store.
-pub fn store(vault: &dyn Vault, key: &str, tokens: &Tokens) -> Result<(), String> {
-  vault.put(key, &serde_json::to_string(tokens).expect("tokens are JSON"))
+pub(super) fn store(vault: &dyn Vault, key: &str, tokens: &Tokens) -> Result<(), VaultError> {
+  vault.put(key, &serde_json::to_string(tokens)?)
 }
 
-/// The access token of a server, refreshed first when it ends within a minute; none when there is none or it cannot
-/// be refreshed.
-pub async fn token(vault: Arc<dyn Vault>, key: String) -> Option<String> {
-  let (held, place) = (vault.clone(), key.clone());
-  let tokens = blocking(move || stored(held.as_ref(), &place)).await?;
+/// The access token of a server.
+/// It also holds the failure of the store, if the store kept no refreshed tokens.
+pub(super) struct Access {
+  pub(super) token: String,
+  pub(super) unsaved: Option<VaultError>,
+}
+
+/// The access token of a server. It is refreshed first when it ends within a minute.
+/// The result is none when there is no token or it cannot be refreshed.
+/// A refreshed token still serves when the store does not keep it.
+/// The failure of the store stays with it.
+pub(super) async fn token(vault: Arc<dyn Vault>, key: String) -> Option<Access> {
+  let (held, place) = (Arc::clone(&vault), key.clone());
+  let tokens = blocking(move || stored(held.as_ref(), &place)).await.ok()??;
   if tokens.expires.is_none_or(|at| at > now() + EARLY) {
-    return Some(tokens.access);
+    return Some(Access { token: tokens.access, unsaved: None });
   }
   let fresh = refreshed(&tokens).await.ok()?;
-  let access = fresh.access.clone();
-  let _ = blocking(move || store(vault.as_ref(), &key, &fresh)).await;
-  Some(access)
+  let token = fresh.access.clone();
+  let unsaved = match blocking(move || store(vault.as_ref(), &key, &fresh)).await {
+    Ok(Err(no)) => Some(no),
+    Ok(Ok(())) | Err(_) => None,
+  };
+  Some(Access { token, unsaved })
 }
 
 /// A work that blocks, done on a thread that may block.
-pub async fn blocking<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> T {
-  tokio::task::spawn_blocking(work).await.expect("the work of a store ended")
+pub(super) async fn blocking<T: Send + 'static>(
+  work: impl FnOnce() -> T + Send + 'static,
+) -> Result<T, JoinError> {
+  tokio::task::spawn_blocking(work).await
 }
 
 /// The seconds since the epoch of Unix.
@@ -158,27 +224,26 @@ fn now() -> u64 {
 
 /// The endpoints of an authorization server.
 #[derive(Debug, PartialEq)]
-pub struct Endpoints {
-  pub authorize: String,
-  pub token: String,
-  pub register: Option<String>,
+pub(super) struct Endpoints {
+  pub(super) authorize: String,
+  pub(super) token: String,
+  pub(super) register: Option<String>,
 }
 
 /// The tokens of a login to the server at an address, whose challenge named the metadata of its resource, or not:
 /// the page of the login opened by the opener, and the code that the browser hands back traded for tokens.
-pub async fn login(
+pub(super) async fn login(
   url: &str,
   hint: Option<&str>,
   opener: &Opener,
-  preset: &super::config::Login,
-) -> Result<Tokens, String> {
+  preset: &Login,
+) -> Result<Tokens, Error> {
   let client = Client::new();
   let (issuer, scope) = protected(&client, url, hint).await?;
   let ends = authority(&client, &issuer).await?;
-  let listener = TcpListener::bind(("127.0.0.1", preset.port.unwrap_or(0)))
-    .await
-    .map_err(|no| format!("no port for the login: {no}"))?;
-  let port = listener.local_addr().map_err(|no| format!("no port for the login: {no}"))?.port();
+  let listener =
+    TcpListener::bind(("127.0.0.1", preset.port.unwrap_or(0))).await.map_err(Error::Port)?;
+  let port = listener.local_addr().map_err(Error::Port)?.port();
   let host = if preset.port.is_some() { "localhost" } else { "127.0.0.1" };
   let redirect = format!("http://{host}:{port}/callback");
   let (id, secret) = match &preset.client {
@@ -188,7 +253,7 @@ pub async fn login(
   let (verifier, state) = (random(48)?, random(24)?);
   let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
   let mut address = url::Url::parse(&ends.authorize)
-    .map_err(|no| format!("the endpoint {} is not valid: {no}", ends.authorize))?;
+    .map_err(|source| Error::Endpoint { url: ends.authorize.clone(), source })?;
   {
     let mut query = address.query_pairs_mut();
     query.append_pair("response_type", "code").append_pair("client_id", &id);
@@ -200,10 +265,11 @@ pub async fn login(
     }
   }
   opener(address.as_str())
-    .map_err(|why| format!("the browser did not open ({why}): open {address} to log in"))?;
-  let code = tokio::time::timeout(LOGIN, callback(&listener, &state)).await.map_err(|_| {
-    format!("no login came back within {} seconds from {address}", LOGIN.as_secs())
-  })??;
+    .map_err(|source| Error::Browser { address: address.to_string(), source })?;
+  let Ok(code) = tokio::time::timeout(LOGIN, callback(&listener, &state)).await else {
+    return Err(Error::Waited { address: address.to_string() });
+  };
+  let code = code?;
   let mut form = vec![
     ("grant_type", "authorization_code"),
     ("code", &code),
@@ -220,8 +286,8 @@ pub async fn login(
 }
 
 /// Tokens refreshed with their refresh token, or why they cannot be.
-pub async fn refreshed(held: &Tokens) -> Result<Tokens, String> {
-  let refresh = held.refresh.as_deref().ok_or("the login gave no refresh token")?;
+pub(super) async fn refreshed(held: &Tokens) -> Result<Tokens, Error> {
+  let refresh = held.refresh.as_deref().ok_or(Error::NoRefresh)?;
   let mut form = vec![
     ("grant_type", "refresh_token"),
     ("refresh_token", refresh),
@@ -263,16 +329,16 @@ fn tokens(
 }
 
 /// A text of random bytes, as base64 that an address carries.
-fn random(bytes: usize) -> Result<String, String> {
+fn random(bytes: usize) -> Result<String, Error> {
   let mut held = vec![0u8; bytes];
-  getrandom::fill(&mut held).map_err(|no| format!("the machine gave no random bytes: {no}"))?;
+  getrandom::fill(&mut held).map_err(Error::Random)?;
   Ok(URL_SAFE_NO_PAD.encode(held))
 }
 
 /// The origin of an address, and its path with no slash at its end.
-fn split(url: &str) -> Result<(String, String), String> {
+fn split(url: &str) -> Result<(String, String), Error> {
   let parsed =
-    url::Url::parse(url).map_err(|no| format!("the address {url} is not valid: {no}"))?;
+    url::Url::parse(url).map_err(|source| Error::Address { url: url.to_owned(), source })?;
   Ok((parsed.origin().ascii_serialization(), parsed.path().trim_end_matches('/').to_owned()))
 }
 
@@ -288,11 +354,11 @@ async fn fetched(client: &Client, url: &str) -> Option<Value> {
 /// The authorization server of the server at an address and the scopes it asks for, from the metadata of its
 /// resource that its challenge named, or at the well-known path of its address; or the origin of the address when it
 /// names none.
-pub async fn protected(
+pub(super) async fn protected(
   client: &Client,
   url: &str,
   hint: Option<&str>,
-) -> Result<(String, Option<String>), String> {
+) -> Result<(String, Option<String>), Error> {
   let (origin, path) = split(url)?;
   let mut candidates: Vec<String> = hint.map(str::to_owned).into_iter().collect();
   if !path.is_empty() {
@@ -310,20 +376,22 @@ pub async fn protected(
   Ok((origin, None))
 }
 
-/// The endpoints of an authorization server, from its metadata at the well-known paths of OAuth and of OpenID; or the
-/// endpoints at the root of its origin when it gives none.
-pub async fn authority(client: &Client, issuer: &str) -> Result<Endpoints, String> {
+/// The endpoints of an authorization server.
+/// They come from its metadata, at the well-known paths of OAuth and of `OpenID`.
+/// When the server gives none, the endpoints are at the root of its origin.
+pub(super) async fn authority(client: &Client, issuer: &str) -> Result<Endpoints, Error> {
   let (origin, path) = split(issuer)?;
-  let candidates = match path.is_empty() {
-    true => vec![
+  let candidates = if path.is_empty() {
+    vec![
       format!("{origin}/.well-known/oauth-authorization-server"),
       format!("{origin}/.well-known/openid-configuration"),
-    ],
-    false => vec![
+    ]
+  } else {
+    vec![
       format!("{origin}/.well-known/oauth-authorization-server{path}"),
       format!("{origin}/.well-known/openid-configuration{path}"),
       format!("{origin}{path}/.well-known/openid-configuration"),
-    ],
+    ]
   };
   for one in candidates {
     let Some(held) = fetched(client, &one).await else { continue };
@@ -349,10 +417,9 @@ async fn registered(
   issuer: &str,
   ends: &Endpoints,
   redirect: &str,
-) -> Result<(String, Option<String>), String> {
-  let register = ends.register.as_deref().ok_or_else(|| {
-    format!("the authorization server {issuer} registers no client, so furb cannot log in to it")
-  })?;
+) -> Result<(String, Option<String>), Error> {
+  let register =
+    ends.register.as_deref().ok_or_else(|| Error::Unregistered { issuer: issuer.to_owned() })?;
   let body = json!({
     "client_name": "furb",
     "redirect_uris": [redirect],
@@ -367,7 +434,7 @@ async fn registered(
     .body(body.to_string())
     .send()
     .await
-    .map_err(|no| format!("{register}: {no}"))?;
+    .map_err(|source| Error::Unreachable { url: register.to_owned(), source })?;
   let status = response.status();
   let text = response.text().await.unwrap_or_default();
   let got: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
@@ -375,15 +442,16 @@ async fn registered(
     Some(id) if status.is_success() => {
       Ok((id.to_owned(), got["client_secret"].as_str().map(str::to_owned)))
     }
-    _ => Err(format!(
-      "{register} registered no client: {status} {}",
-      text.chars().take(300).collect::<String>()
-    )),
+    _ => Err(Error::NotRegistered {
+      url: register.to_owned(),
+      status,
+      text: text.chars().take(300).collect(),
+    }),
   }
 }
 
 /// What an endpoint of the tokens grants for a form, or why it refused.
-async fn granted(client: &Client, endpoint: &str, form: &[(&str, &str)]) -> Result<Value, String> {
+async fn granted(client: &Client, endpoint: &str, form: &[(&str, &str)]) -> Result<Value, Error> {
   let body = url::form_urlencoded::Serializer::new(String::new()).extend_pairs(form).finish();
   let response = client
     .post(endpoint)
@@ -392,64 +460,76 @@ async fn granted(client: &Client, endpoint: &str, form: &[(&str, &str)]) -> Resu
     .body(body)
     .send()
     .await
-    .map_err(|no| format!("{endpoint}: {no}"))?;
+    .map_err(|source| Error::Unreachable { url: endpoint.to_owned(), source })?;
   let status = response.status();
   let got: Value =
     serde_json::from_str(&response.text().await.unwrap_or_default()).unwrap_or(Value::Null);
   if !status.is_success() || got["access_token"].as_str().is_none_or(str::is_empty) {
-    let error = got["error"].as_str().unwrap_or("no token");
-    let described =
-      got["error_description"].as_str().map(|one| format!(": {one}")).unwrap_or_default();
-    return Err(format!("{endpoint} answered {status}, {error}{described}"));
+    return Err(Error::Refused {
+      url: endpoint.to_owned(),
+      status,
+      error: got["error"].as_str().unwrap_or("no token").to_owned(),
+      description: got["error_description"].as_str().map(str::to_owned),
+    });
   }
   Ok(got)
 }
 
+/// The path and the query of the request that a stream holds, as far as its head reaches.
+async fn requested(stream: &mut TcpStream) -> String {
+  let (mut held, mut buffer) = (Vec::new(), [0u8; 4096]);
+  while !held.windows(4).any(|four| four == b"\r\n\r\n") && held.len() < 16384 {
+    match stream.read(&mut buffer).await {
+      Ok(0) | Err(_) => break,
+      Ok(size) => held.extend_from_slice(&buffer[..size]),
+    }
+  }
+  let text = String::from_utf8_lossy(&held);
+  text.split_whitespace().nth(1).unwrap_or_default().to_owned()
+}
+
+/// The page that tells the person at the browser how the login went.
+fn page(got: &Result<String, Error>) -> String {
+  let said = match got {
+    Ok(_) => "You are logged in. Close this window and go back to furb.".to_owned(),
+    Err(why) => format!("The login failed: {why}."),
+  };
+  let page = format!("<!doctype html><title>furb</title><p>{}</p>", said.replace('<', "&lt;"));
+  format!(
+    "HTTP/1.1 200 OK\r\ncontent-type: text/html; charset=utf-8\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{page}",
+    page.len()
+  )
+}
+
 /// The code that the browser hands back to the listener, with the state of this login; or why the login failed. A
 /// request to any other path is answered 404, and the listener waits on.
-async fn callback(listener: &TcpListener, state: &str) -> Result<String, String> {
+async fn callback(listener: &TcpListener, state: &str) -> Result<String, Error> {
   loop {
-    let (mut stream, _) =
-      listener.accept().await.map_err(|no| format!("the login listened no more: {no}"))?;
-    let (mut held, mut buffer) = (Vec::new(), [0u8; 4096]);
-    while !held.windows(4).any(|four| four == b"\r\n\r\n") && held.len() < 16384 {
-      match stream.read(&mut buffer).await {
-        Ok(0) | Err(_) => break,
-        Ok(size) => held.extend_from_slice(&buffer[..size]),
-      }
-    }
-    let head = String::from_utf8_lossy(&held);
-    let target = head.split_whitespace().nth(1).unwrap_or_default();
+    let (mut stream, _) = listener.accept().await.map_err(Error::Listen)?;
+    let target = requested(&mut stream).await;
     let asked = url::Url::parse(&format!("http://127.0.0.1{target}"))
       .ok()
       .filter(|one| one.path() == "/callback");
     let Some(asked) = asked else {
-      let _ = stream
+      // A browser that went away is answered no more.
+      stream
         .write_all(b"HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
-        .await;
+        .await
+        .ok();
       continue;
     };
     let pairs: HashMap<String, String> = asked.query_pairs().into_owned().collect();
     let got = match (pairs.get("error"), pairs.get("state"), pairs.get("code")) {
-      (Some(error), _, _) => {
-        let described =
-          pairs.get("error_description").map(|one| format!(": {one}")).unwrap_or_default();
-        Err(format!("the login failed, {error}{described}"))
-      }
+      (Some(error), _, _) => Err(Error::Denied {
+        error: error.clone(),
+        description: pairs.get("error_description").cloned(),
+      }),
       (None, Some(given), Some(code)) if given == state => Ok(code.clone()),
-      (None, Some(_), _) => Err("the login came back with the state of another login".to_owned()),
-      _ => Err("the login came back with no code".to_owned()),
+      (None, Some(_), _) => Err(Error::Forged),
+      _ => Err(Error::NoCode),
     };
-    let said = match &got {
-      Ok(_) => "You are logged in. Close this window and go back to furb.".to_owned(),
-      Err(why) => format!("The login failed: {why}."),
-    };
-    let page = format!("<!doctype html><title>furb</title><p>{}</p>", said.replace('<', "&lt;"));
-    let reply = format!(
-      "HTTP/1.1 200 OK\r\ncontent-type: text/html; charset=utf-8\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{page}",
-      page.len()
-    );
-    let _ = stream.write_all(reply.as_bytes()).await;
+    // A browser that went away needs no page.
+    stream.write_all(page(&got).as_bytes()).await.ok();
     return got;
   }
 }
@@ -482,7 +562,7 @@ impl Vault for Keychain {
     Some(String::from_utf8_lossy(&got.stdout).trim_end_matches('\n').to_owned())
   }
 
-  fn put(&self, key: &str, value: &str) -> Result<(), String> {
+  fn put(&self, key: &str, value: &str) -> Result<(), VaultError> {
     let hex = crate::value::hex(value.as_bytes());
     let line =
       format!("add-generic-password -U -s {SERVICE} -a {} -X {hex}\n", Keychain::account(key));
@@ -492,27 +572,24 @@ impl Vault for Keychain {
       .stdout(Stdio::null())
       .stderr(Stdio::piped())
       .spawn()
-      .map_err(|no| format!("the Keychain did not open: {no}"))?;
+      .map_err(VaultError::Open)?;
     if let Some(mut stdin) = child.stdin.take() {
-      std::io::Write::write_all(&mut stdin, line.as_bytes())
-        .map_err(|no| format!("the Keychain took nothing: {no}"))?;
+      io::Write::write_all(&mut stdin, line.as_bytes()).map_err(VaultError::Write)?;
     }
-    let got =
-      child.wait_with_output().map_err(|no| format!("the Keychain did not answer: {no}"))?;
-    match got.status.success() && got.stderr.is_empty() {
-      true => Ok(()),
-      false => {
-        Err(format!("the Keychain kept nothing: {}", String::from_utf8_lossy(&got.stderr).trim()))
-      }
+    let got = child.wait_with_output().map_err(VaultError::Wait)?;
+    if got.status.success() && got.stderr.is_empty() {
+      Ok(())
+    } else {
+      Err(VaultError::Kept(String::from_utf8_lossy(&got.stderr).trim().to_owned()))
     }
   }
 
-  fn forget(&self, key: &str) -> Result<(), String> {
+  fn forget(&self, key: &str) -> Result<(), VaultError> {
     let account = Keychain::account(key);
     let got = Command::new(KEYCHAIN)
       .args(["delete-generic-password", "-s", SERVICE, "-a", &account])
       .output();
-    got.map(drop).map_err(|no| format!("the Keychain did not open: {no}"))
+    got.map(drop).map_err(VaultError::Open)
   }
 }
 
@@ -536,8 +613,8 @@ impl Filed {
   }
 
   /// The secrets, written whole in place of the file, which only the user reads.
-  fn wrote(&self, held: &HashMap<String, String>) -> Result<(), String> {
-    let failed = |no: std::io::Error| format!("{}: {no}", self.path.display());
+  fn wrote(&self, held: &HashMap<String, String>) -> Result<(), VaultError> {
+    let failed = |source: io::Error| VaultError::File { path: self.path.clone(), source };
     if let Some(parent) = self.path.parent() {
       fs::create_dir_all(parent).map_err(failed)?;
     }
@@ -547,8 +624,8 @@ impl Filed {
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
     let mut file = options.open(&next).map_err(failed)?;
-    let text = serde_json::to_string_pretty(held).expect("secrets are JSON");
-    std::io::Write::write_all(&mut file, text.as_bytes()).map_err(failed)?;
+    let text = serde_json::to_string_pretty(held)?;
+    io::Write::write_all(&mut file, text.as_bytes()).map_err(failed)?;
     drop(file);
     fs::rename(&next, &self.path).map_err(failed)
   }
@@ -560,14 +637,14 @@ impl Vault for Filed {
     self.held().remove(key)
   }
 
-  fn put(&self, key: &str, value: &str) -> Result<(), String> {
+  fn put(&self, key: &str, value: &str) -> Result<(), VaultError> {
     let _held = self.lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     let mut held = self.held();
     held.insert(key.to_owned(), value.to_owned());
     self.wrote(&held)
   }
 
-  fn forget(&self, key: &str) -> Result<(), String> {
+  fn forget(&self, key: &str) -> Result<(), VaultError> {
     let _held = self.lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     let mut held = self.held();
     match held.remove(key) {

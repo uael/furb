@@ -118,9 +118,9 @@ fn tokens_with_no_refresh_token_are_not_refreshed_and_a_refused_grant_says_why()
   let endpoint = format!("{}/auth/token", program.address);
   let (none, wrong) = (tokens(None, &endpoint), tokens(Some("wrong"), &endpoint));
   let got = reacted(async move { (refreshed(&none).await, refreshed(&wrong).await) });
-  assert_eq!(got.0.unwrap_err(), "the login gave no refresh token");
+  assert_eq!(got.0.unwrap_err().to_string(), "the login gave no refresh token");
   assert_eq!(
-    got.1.unwrap_err(),
+    got.1.unwrap_err().to_string(),
     format!("{endpoint} answered 400 Bad Request, invalid_grant: no such grant")
   );
 }
