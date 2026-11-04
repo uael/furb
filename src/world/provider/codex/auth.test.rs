@@ -1,7 +1,4 @@
-#![expect(
-  clippy::disallowed_methods,
-  reason = "debt: a call that blocks: sleep, block_on or try_wait"
-)]
+#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
 
 use std::{
   io::{Read, Write},
