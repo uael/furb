@@ -69,6 +69,19 @@ pub(crate) fn beside(record: &Path, suffix: &str) -> PathBuf {
   PathBuf::from(name)
 }
 
+/// The bytes that a process may still write on the disk that holds a folder, none when the disk
+/// does not say.
+#[cfg(unix)]
+pub(crate) fn free(folder: &Path) -> Option<u64> {
+  let stat = rustix::fs::statvfs(folder).ok()?;
+  stat.f_bavail.checked_mul(stat.f_frsize)
+}
+
+#[cfg(not(unix))]
+pub(crate) fn free(_: &Path) -> Option<u64> {
+  None
+}
+
 /// The directory a chain stands in, which a path of it resolves against: where the chain went last, resolved against
 /// the directory the life stands on, each read as a path of the machine where it names the home of the user with `~`,
 /// as the World writes it.
