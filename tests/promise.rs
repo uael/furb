@@ -14,6 +14,9 @@
   reason = "the test blocks on the act of a rung, as the tests of the crate do"
 )]
 
+#[path = "common/yard.rs"]
+mod yard;
+
 use std::{
   fs,
   path::{Path, PathBuf},
@@ -32,13 +35,8 @@ fn corpus() -> PathBuf {
 }
 
 /// A directory of its own for one test, and empty.
-fn place(name: &str) -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-promise-{name}-{}", std::process::id()));
-  if at.exists() {
-    fs::remove_dir_all(&at).unwrap();
-  }
-  fs::create_dir_all(&at).unwrap();
-  at
+fn place(name: &str) -> yard::Yard {
+  yard::Yard::new(format!("furb-promise-{name}-{}", std::process::id()))
 }
 
 /// A life on the record of a directory, with each default kit unless `kits` is false, whose one

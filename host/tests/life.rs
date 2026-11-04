@@ -6,6 +6,9 @@
   reason = "the tests block on the runtime that tokio starts for them"
 )]
 
+#[path = "../../tests/common/yard.rs"]
+mod yard;
+
 use std::{
   fs,
   path::{Path, PathBuf},
@@ -31,13 +34,8 @@ use serde_json::json;
 type Logged = (Seq, Arc<Event>);
 
 /// A directory of one test, empty.
-fn place(name: &str) -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-host-{name}-{}", std::process::id()));
-  fs::remove_dir_all(&at).ok();
-  if let Err(no) = fs::create_dir_all(&at) {
-    panic!("the test has no directory {}: {no}", at.display());
-  }
-  at
+fn place(name: &str) -> yard::Yard {
+  yard::Yard::new(format!("furb-host-{name}-{}", std::process::id()))
 }
 
 /// A life with no record and no extension, whose model answers each request with the next word of a
@@ -141,7 +139,6 @@ async fn a_prompt_is_told_as_its_facts_and_its_acts_in_order_with_no_gap_until_t
   assert_eq!(rest[0].0, got.len() as Seq);
   assert!(events.next().await.is_none());
   assert!(matches!(life.send(Command::Standing).await, Err(LifeError::Ended)));
-  fs::remove_dir_all(&at).unwrap();
 }
 
 #[tokio::test]
@@ -158,7 +155,6 @@ async fn a_reader_that_stands_behind_the_life_reads_its_events_again_from_the_lo
   assert_eq!(until(&mut late, done(&id)).await, heard);
   let mut tail = Box::pin(life.events(heard.len() as Seq - 1));
   assert_eq!(until(&mut tail, done(&id)).await, heard[heard.len() - 1..]);
-  fs::remove_dir_all(&at).unwrap();
 }
 
 #[tokio::test]
@@ -197,7 +193,6 @@ async fn a_query_is_a_command_that_the_life_answers() {
   assert!(
     matches!(wrong, Err(LifeError::Refused(why)) if why == format!("No prompt is named {id}."))
   );
-  fs::remove_dir_all(&at).unwrap();
 }
 
 #[tokio::test]
@@ -210,7 +205,6 @@ async fn a_life_that_does_not_open_ends_with_its_fault() {
   assert!(matches!(&*got.last().unwrap().1, Event::Ended(Some(why)) if !why.is_empty()));
   assert!(events.next().await.is_none());
   assert!(matches!(life.send(Command::Standing).await, Err(LifeError::Ended)));
-  fs::remove_dir_all(&at).unwrap();
 }
 #[tokio::test]
 async fn each_act_is_told_with_its_meaning_and_each_chain_with_the_state_of_its_work() {
@@ -252,7 +246,6 @@ async fn each_act_is_told_with_its_meaning_and_each_chain_with_the_state_of_its_
     panic!("an act")
   };
   assert_eq!(root.state, State::Paused);
-  fs::remove_dir_all(&at).unwrap();
 }
 #[tokio::test]
 async fn the_verbs_of_the_operator_act_on_the_life_as_a_word_of_his_would() {
@@ -281,7 +274,9 @@ async fn the_verbs_of_the_operator_act_on_the_life_as_a_word_of_his_would() {
   assert!(made(&life, grant).await.starts_with("grant"));
   let stand = made(&life, Command::Stand).await;
   until(&mut events, done(&stand)).await;
-  fs::remove_dir_all(&at).unwrap();
+  // The scratch directory that a command of the life made goes as the thread of the life ends.
+  life.send(Command::End).await.unwrap();
+  while events.next().await.is_some() {}
 }
 
 #[tokio::test]
@@ -328,7 +323,6 @@ async fn the_operator_closes_an_act_and_says_what_he_saw_and_what_he_queued() {
   let Reply::Values(queued) = life.send(of("queue")).await.unwrap() else { panic!("values") };
   let steps: Vec<_> = queued.iter().map(|fact| (fact[3].clone(), fact[5].clone())).collect();
   assert_eq!(steps, [(json!("begin"), json!("h1")), (json!("sent"), json!(first))]);
-  fs::remove_dir_all(&at).unwrap();
 }
 #[tokio::test]
 async fn each_write_keeps_its_change_in_the_journal_beside_the_record() {
@@ -364,7 +358,6 @@ async fn each_write_keeps_its_change_in_the_journal_beside_the_record() {
   assert_eq!(changes[1]["path"], json!(file("b.txt")));
   assert_eq!((&changes[1]["before"], &changes[1]["made"]), (&json!(""), &json!(true)));
   life.send(Command::End).await.unwrap();
-  fs::remove_dir_all(&at).unwrap();
 }
 #[tokio::test]
 async fn a_verb_of_the_operator_gives_the_words_of_its_act() {
@@ -406,5 +399,7 @@ async fn a_verb_of_the_operator_gives_the_words_of_its_act() {
       && act.pause.as_ref().is_some_and(|one| one.why == Some(json!("for lunch"))))
   };
   until(&mut events, paused).await;
-  fs::remove_dir_all(&at).unwrap();
+  // The scratch directory that a command of the life made goes as the thread of the life ends.
+  life.send(Command::End).await.unwrap();
+  while events.next().await.is_some() {}
 }

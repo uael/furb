@@ -6,17 +6,23 @@
   reason = "the tests block on the runtime that tokio starts for them"
 )]
 
+#[path = "../../tests/common/yard.rs"]
+mod yard;
+
 #[cfg(test)]
 mod daemon {
+  use super::yard::Yard;
+
   use std::{
+    cell::RefCell,
     collections::{HashSet, VecDeque},
-    fs,
+    fs::{self, File},
     path::{Path, PathBuf},
     sync::{
       Arc,
       atomic::{AtomicU32, AtomicUsize, Ordering},
     },
-    time::Duration,
+    time::{Duration, Instant},
   };
 
   use furb::{
@@ -47,14 +53,71 @@ mod daemon {
   const SHORT: Duration = Duration::from_millis(300);
   const PAST: Duration = Duration::from_millis(1500);
 
-  /// A folder of one test, empty, and short enough for the path of a socket.
-  fn place() -> PathBuf {
+  /// A folder of one test, empty, and short enough for the path of a socket. It goes at the end of
+  /// the test, and again once the thread of the test ends: the end of the runtime of the test ends
+  /// the daemon, and each life that it held and whose grace is short then writes its checkpoint
+  /// there, on a thread of its own, before it lets its lease go.
+  fn place() -> Place {
     static NEXT: AtomicU32 = AtomicU32::new(0);
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
-    let at = std::env::temp_dir().join(format!("fd{}-{n}", std::process::id()));
-    fs::remove_dir_all(&at).ok();
-    fs::create_dir_all(&at).unwrap();
-    at
+    Place(Yard::new(format!("fd{}-{n}", std::process::id())))
+  }
+
+  /// The folder of one test, which goes with it.
+  struct Place(Yard);
+
+  impl std::ops::Deref for Place {
+    type Target = Path;
+
+    fn deref(&self) -> &Path {
+      &self.0
+    }
+  }
+
+  impl Drop for Place {
+    fn drop(&mut self) {
+      let entries = fs::read_dir(&*self.0).into_iter().flatten().flatten();
+      // Each lease is open before the yard goes, since a lock holds the file and not its name.
+      let leases = entries
+        .map(|one| one.path())
+        .filter(|one| one.extension().is_some_and(|ext| ext == "lock"))
+        .filter_map(|one| File::open(one).ok())
+        .collect();
+      HELD.with(|held| held.0.borrow_mut().push((self.0.to_path_buf(), leases)));
+    }
+  }
+
+  thread_local! {
+    static HELD: Held = const { Held(RefCell::new(Vec::new())) };
+  }
+
+  /// The folder of each test of this thread, and the leases of its records, which go again when
+  /// the thread ends, once no life holds them.
+  struct Held(RefCell<Vec<(PathBuf, Vec<File>)>>);
+
+  impl Drop for Held {
+    fn drop(&mut self) {
+      let kept = std::env::var_os("FURB_KEEP_YARDS").is_some();
+      for (folder, leases) in self.0.take() {
+        // A write of a life that lives on makes its folder again, and a life that the test asked
+        // may still open, so the folder goes at each look until each lease is free, with a bound
+        // twice the time that a life of a short grace takes to end.
+        let end = Instant::now() + 2 * PAST;
+        loop {
+          if !kept {
+            drop(fs::remove_dir_all(&folder));
+          }
+          let free = !leases.is_empty() && leases.iter().all(|lease| lease.try_lock().is_ok());
+          if free || Instant::now() > end {
+            break;
+          }
+          std::thread::sleep(Duration::from_millis(20));
+        }
+        if !kept {
+          drop(fs::remove_dir_all(&folder));
+        }
+      }
+    }
   }
 
   /// The opening of each life of a daemon of a test: no extension, and a model that closes each

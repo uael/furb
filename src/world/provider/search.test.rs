@@ -13,17 +13,6 @@
   unix,
   expect(clippy::items_after_statements, reason = "debt: an item declared after a statement")
 )]
-#![cfg_attr(
-  unix,
-  expect(
-    clippy::let_underscore_must_use,
-    reason = "debt: a let _ drops a value that must be used"
-  )
-)]
-#![cfg_attr(
-  unix,
-  expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")
-)]
 
 #[cfg(unix)]
 use std::fs;
@@ -34,7 +23,7 @@ use serde_json::json;
 use super::claude;
 use super::{anthropic, deepseek, found, gemini, responses, sourced};
 #[cfg(unix)]
-use crate::{ear::reactor, world::provider::claude::Program};
+use crate::{ear::reactor, testing::Yard, world::provider::claude::Program};
 
 fn pair(title: &str, url: &str) -> (String, String) {
   (title.to_owned(), url.to_owned())
@@ -111,22 +100,20 @@ fn deepseek_answers_with_each_result_its_title_its_address_and_its_summary() {
 /// A command line that starts with these words, writes its arguments and what its stdin holds, or fails, in a folder
 /// of its own.
 #[cfg(unix)]
-fn program(name: &str, args: &[&str], body: &str) -> Program {
-  let at = std::env::temp_dir().join(format!("furb-search-{name}-{}", std::process::id()));
-  let _ = fs::remove_dir_all(&at);
-  fs::create_dir_all(&at).unwrap();
+fn program(name: &str, args: &[&str], body: &str) -> (Yard, Program) {
+  let at = Yard::new(format!("furb-search-{name}-{}", std::process::id()));
   let bin = at.join("claude");
   fs::write(&bin, format!("#!/bin/sh\n{body}\n")).unwrap();
   use std::os::unix::fs::PermissionsExt;
   fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).unwrap();
-  Program::new(bin, args.iter().map(|one| (*one).to_owned()).collect())
+  (at, Program::new(bin, args.iter().map(|one| (*one).to_owned()).collect()))
 }
 
 #[cfg(unix)]
 #[test]
 fn the_claude_command_line_searches_on_its_model_with_its_tool_web_search_alone_and_the_query_on_its_stdin()
  {
-  let bin = program("echo", &[], r#"echo "$@"; cat"#);
+  let (_yard, bin) = program("echo", &[], r#"echo "$@"; cat"#);
   let got = reactor().block_on(claude(bin, "haiku".to_owned())("what is rust".to_owned())).unwrap();
   let (args, query) = got.split_once('\n').unwrap();
   assert!(
@@ -135,7 +122,7 @@ fn the_claude_command_line_searches_on_its_model_with_its_tool_web_search_alone_
   );
   assert!(args.ends_with("--allowedTools WebSearch --tools WebSearch"), "{args}");
   assert_eq!(query, "what is rust");
-  let bin = program("fails", &[], "echo out; echo 'no credit' >&2; exit 3");
+  let (_yard, bin) = program("fails", &[], "echo out; echo 'no credit' >&2; exit 3");
   let no = reactor().block_on(claude(bin, "haiku".to_owned())("q".to_owned())).unwrap_err();
   assert_eq!(no.to_string(), "claude exit status: 3: no credit");
 }
@@ -144,7 +131,7 @@ fn the_claude_command_line_searches_on_its_model_with_its_tool_web_search_alone_
 #[test]
 fn the_claude_command_line_searches_with_its_command_prefix_once_before_its_flags() {
   let show = r#"printf '[%s]\n' "$@"; echo ---; cat"#;
-  let bin = program("prefix", &["run", "two words"], show);
+  let (_yard, bin) = program("prefix", &["run", "two words"], show);
   let got = reactor().block_on(claude(bin, "haiku".to_owned())("what is rust".to_owned())).unwrap();
   let (args, query) = got.split_once("---\n").unwrap();
   assert!(args.starts_with("[run]\n[two words]\n[-p]\n[--model]\n[haiku]\n"), "{args}");

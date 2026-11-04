@@ -2,7 +2,10 @@
 //! reactor of the process.
 #![cfg(unix)]
 
-use std::{fs, path::Path};
+#[path = "common/yard.rs"]
+mod yard;
+
+use std::path::Path;
 
 use furb::{Exit, life::Opening, verbs};
 use tokio::task::LocalSet;
@@ -34,11 +37,7 @@ fn opening(at: &Path) -> Opening {
 )]
 #[tokio::test(flavor = "current_thread")]
 async fn a_life_opens_and_runs_its_ears_on_the_runtime_of_the_thread_that_awaits_it() {
-  let at = std::env::temp_dir().join(format!("furb-async-open-{}", std::process::id()));
-  if at.exists() {
-    fs::remove_dir_all(&at).unwrap();
-  }
-  fs::create_dir_all(&at).unwrap();
+  let at = yard::Yard::new(format!("furb-async-open-{}", std::process::id()));
   LocalSet::new()
     .run_until(async {
       let (mut engine, _) = opening(&at).open::<String>([]).await.unwrap();
@@ -52,5 +51,4 @@ async fn a_life_opens_and_runs_its_ears_on_the_runtime_of_the_thread_that_awaits
     .await;
   #[cfg(target_os = "linux")]
   assert!(!threads().is_empty() && !threads().contains(&"furb-reactor".to_owned()));
-  fs::remove_dir_all(&at).unwrap();
 }

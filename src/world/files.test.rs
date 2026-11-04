@@ -1,14 +1,9 @@
 //! The paths and the texts of the files, proved where no life reaches the home of the user.
 
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-
 use std::{fs, path::PathBuf};
 
 use super::{crlf, homed, native, placed, read, replace, stored, text, tilded};
+use crate::testing::Yard;
 
 #[test]
 fn a_path_that_is_a_tilde_or_starts_with_one_and_a_slash_resolves_against_the_home_of_the_user() {
@@ -65,8 +60,7 @@ fn a_path_that_a_chain_names_is_placed_against_the_home_or_else_against_its_dire
 
 #[test]
 fn a_read_gives_the_whole_text_of_a_file_of_any_size_and_the_entries_of_a_folder() {
-  let at = std::env::temp_dir().join(format!("furb-files-large-{}", std::process::id()));
-  let _ = fs::remove_dir_all(&at);
+  let at = Yard::unmade(format!("furb-files-large-{}", std::process::id()));
   fs::create_dir_all(&at).unwrap();
   let content = "x".repeat(1_000_000) + "\n";
   fs::write(at.join("large.txt"), &content).unwrap();
@@ -77,13 +71,11 @@ fn a_read_gives_the_whole_text_of_a_file_of_any_size_and_the_entries_of_a_folder
   fs::write(at.join("B.txt"), "b").unwrap();
   let listing = read(&at).unwrap();
   assert_eq!((listing.path, listing.content), (shown, "B.txt\nlarge.txt\nsub/".to_owned()));
-  fs::remove_dir_all(&at).unwrap();
 }
 
 #[test]
 fn a_read_of_an_image_keeps_it_in_the_gallery_and_gives_the_markdown_image_that_names_it() {
-  let at = std::env::temp_dir().join(format!("furb-files-image-{}", std::process::id()));
-  let _ = fs::remove_dir_all(&at);
+  let at = Yard::unmade(format!("furb-files-image-{}", std::process::id()));
   fs::create_dir_all(&at).unwrap();
   fs::write(at.join("a.png"), b"\x89PNG\r\n\x1a\nthe rest").unwrap();
   fs::write(at.join("b.bin"), b"\x89 no image").unwrap();
@@ -100,7 +92,6 @@ fn a_read_of_an_image_keeps_it_in_the_gallery_and_gives_the_markdown_image_that_
   assert_eq!(blind.message(), said);
   let binary = text(&at.join("b.bin"), "b.bin".to_owned(), Some(&gallery)).unwrap_err();
   assert_eq!(binary.message(), "Read needs a text file in utf-8: b.bin");
-  fs::remove_dir_all(&at).unwrap();
 }
 
 #[test]
@@ -128,11 +119,8 @@ fn a_path_of_the_sh_of_git_is_the_path_of_windows_on_windows_alone() {
 }
 
 /// A new folder for a test, which the test removes at its end.
-fn folder(name: &str) -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-files-{name}-{}", std::process::id()));
-  let _ = fs::remove_dir_all(&at);
-  fs::create_dir_all(&at).unwrap();
-  at
+fn folder(name: &str) -> Yard {
+  Yard::new(format!("furb-files-{name}-{}", std::process::id()))
 }
 
 #[test]
@@ -143,7 +131,6 @@ fn a_write_replaces_a_file_and_makes_one_that_is_not_there() {
   stored(&at.join("a.txt"), b"two\n").unwrap();
   assert_eq!(fs::read(at.join("a.txt")).unwrap(), b"two\n");
   assert_eq!(fs::read_dir(&at).unwrap().count(), 1, "no temporary file stays");
-  fs::remove_dir_all(&at).unwrap();
 }
 
 #[test]
@@ -158,7 +145,6 @@ fn a_write_that_fails_midway_leaves_the_old_file_whole_and_no_temporary_file() {
   assert_eq!(torn.unwrap_err().to_string(), "the disk is full");
   assert_eq!(fs::read_to_string(at.join("a.txt")).unwrap(), "old\n");
   assert_eq!(fs::read_dir(&at).unwrap().count(), 1, "no temporary file stays");
-  fs::remove_dir_all(&at).unwrap();
 }
 
 #[cfg(unix)]
@@ -173,7 +159,6 @@ fn a_reader_that_holds_a_file_open_during_a_write_reads_the_old_bytes_whole() {
   held.read_to_string(&mut seen).unwrap();
   assert_eq!(seen, "old text\n", "the write never touched the bytes that the reader holds");
   assert_eq!(fs::read_to_string(at.join("a.txt")).unwrap(), "new\n");
-  fs::remove_dir_all(&at).unwrap();
 }
 
 #[cfg(unix)]
@@ -185,7 +170,6 @@ fn a_write_keeps_the_mode_of_the_old_file() {
   fs::set_permissions(at.join("run.sh"), fs::Permissions::from_mode(0o751)).unwrap();
   stored(&at.join("run.sh"), b"new\n").unwrap();
   assert_eq!(fs::metadata(at.join("run.sh")).unwrap().permissions().mode() & 0o7777, 0o751);
-  fs::remove_dir_all(&at).unwrap();
 }
 
 #[cfg(unix)]
@@ -206,7 +190,6 @@ fn a_write_to_a_link_keeps_the_link_and_changes_its_target() {
   stored(&at.join("dangling"), b"made\n").unwrap();
   assert!(fs::symlink_metadata(at.join("dangling")).unwrap().file_type().is_symlink());
   assert_eq!(fs::read_to_string(at.join("gone/made.txt")).unwrap(), "made\n");
-  fs::remove_dir_all(&at).unwrap();
 }
 
 #[cfg(unix)]
@@ -221,5 +204,4 @@ fn a_write_to_a_file_that_the_user_cannot_write_is_refused_as_a_plain_write_refu
     assert!(stored(&at.join("a.txt"), b"new\n").is_err());
     assert_eq!(fs::read_to_string(at.join("a.txt")).unwrap(), "old\n");
   }
-  fs::remove_dir_all(&at).unwrap();
 }

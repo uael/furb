@@ -17,9 +17,12 @@
 use std::{
   fs,
   os::unix::fs::PermissionsExt,
-  path::{Path, PathBuf},
+  path::PathBuf,
   process::{Command, Stdio},
-  sync::OnceLock,
+  sync::{
+    Arc, Mutex, PoisonError, Weak,
+    atomic::{AtomicUsize, Ordering},
+  },
   time::{Duration, SystemTime},
 };
 
@@ -35,25 +38,26 @@ use rig_core::{
 use serde_json::{Value, json};
 
 use super::{Account, Claude, Completion, Source, Switch, conversation::cached};
-use crate::ear::reactor;
+use crate::{ear::reactor, testing};
 
 /// The fake command line, which the tests of the command line of furb run too.
 const FAKE: &str = include_str!("fake-claude.sh");
 
 /// A yard of the test that holds the fake command line and what it wrote.
 pub(crate) struct Yard {
-  pub at: PathBuf,
+  pub at: testing::Yard,
+  /// The folder of the fake that the yard links to, which goes with the last yard that holds it.
+  _fake: Arc<Fake>,
 }
 
 impl Yard {
   pub fn new(name: &str) -> Yard {
     // The name holds the id of the process, as every yard of the tests of the crate does: two runs of the suite at
     // once, as a hook and a check in two checkouts, would otherwise remove the files of each other.
-    let at = std::env::temp_dir().join(format!("furb-claude-{name}-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&at);
-    fs::create_dir_all(&at).expect("a yard of the test");
-    fs::hard_link(ran(), at.join("claude")).expect("the fake is linked");
-    Yard { at }
+    let at = testing::Yard::new(format!("furb-claude-{name}-{}", std::process::id()));
+    let fake = ran();
+    fs::hard_link(&fake.bin, at.join("claude")).expect("the fake is linked");
+    Yard { at, _fake: fake }
   }
 
   /// The fake as the command line, with a stall of these milliseconds.
@@ -113,16 +117,29 @@ impl Yard {
   }
 }
 
-/// The fake, written once for all the tests of this process, after it ran once. The system examines a new program
-/// the first time it runs it. On macOS this takes more than a tenth of a second when the machine is idle, and much
-/// more when many tests start new programs at the same time. The result holds for the file, so each yard links to
-/// this file, and no clock of a test includes that examination.
-fn ran() -> &'static Path {
-  static RAN: OnceLock<PathBuf> = OnceLock::new();
-  RAN.get_or_init(|| {
-    let at = std::env::temp_dir().join(format!("furb-claude-fake-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&at);
-    fs::create_dir_all(&at).expect("the folder of the fake");
+/// The folder of the fake and the fake in it, which the yards that stand at once share.
+struct Fake {
+  _at: testing::Yard,
+  bin: PathBuf,
+}
+
+/// The fake, written once for the yards that stand at once, after it ran once, in a folder that the
+/// last of them removes. The system examines a new program the first time it runs it. On macOS
+/// this takes more than a tenth of a second when the machine is idle, and much more when many tests
+/// start new programs at the same time. The result holds for the file, so each yard links to this
+/// file, and no clock of a test includes that examination.
+fn ran() -> Arc<Fake> {
+  static RAN: Mutex<Weak<Fake>> = Mutex::new(Weak::new());
+  static MADE: AtomicUsize = AtomicUsize::new(0);
+  let mut held = RAN.lock().unwrap_or_else(PoisonError::into_inner);
+  if let Some(fake) = held.upgrade() {
+    return fake;
+  }
+  // Each folder has a name of its own, so the removal of an earlier one, which its last yard runs,
+  // meets none later.
+  let n = MADE.fetch_add(1, Ordering::Relaxed);
+  let fake = {
+    let at = testing::Yard::new(format!("furb-claude-fake-{}-{n}", std::process::id()));
     let bin = at.join("claude");
     fs::write(&bin, FAKE).expect("the fake is written");
     fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).expect("the fake runs");
@@ -137,8 +154,10 @@ fn ran() -> &'static Path {
       std::thread::sleep(Duration::from_millis(10));
     };
     assert!(status.expect("the fake starts").success(), "the fake ran once");
-    bin
-  })
+    Arc::new(Fake { _at: at, bin })
+  };
+  *held = Arc::downgrade(&fake);
+  fake
 }
 
 /// The word after a flag among the words of a process.

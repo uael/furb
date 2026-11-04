@@ -1,29 +1,20 @@
 //! The images of a turn, on files of a yard of each test.
 
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(clippy::redundant_clone, reason = "debt: a clone of a value that is not used again")]
-
-use std::{fs, path::PathBuf};
+use std::fs;
 
 use rig_core::message::{DocumentSourceKind, ImageMediaType, UserContent};
 
 use std::collections::HashSet;
 
 use super::{Images, attach, kind, read, reference, references};
+use crate::testing::Yard;
 
 /// The first bytes of a PNG, which is all the type of an image is read by.
 const PNG: &[u8] = b"\x89PNG\r\n\x1a\nthe rest";
 
 /// A yard of one test, empty.
-fn yard(name: &str) -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-images-{name}-{}", std::process::id()));
-  let _ = fs::remove_dir_all(&at);
-  fs::create_dir_all(&at).expect("a yard of the test");
-  at
+fn yard(name: &str) -> Yard {
+  Yard::new(format!("furb-images-{name}-{}", std::process::id()))
 }
 
 #[test]
@@ -93,7 +84,7 @@ fn a_turn_hands_a_model_each_image_that_a_read_gives_and_no_image_that_a_text_na
   let named = reference("a.png", &kept.uri);
   let read = format!("#read1\nread1_path = '/x/a.png'\nread1_text = '{named}'");
   let text = format!("#read2\nread2_path = '/x/a.md'\nread2_text = 'see {named}'");
-  let mut images = Images::new(Some(at.clone()));
+  let mut images = Images::new(Some(at.to_path_buf()));
   assert_eq!(
     images.named(&read, &mut HashSet::new()).map(|seen| seen.len()).map_err(|no| no.to_string()),
     Ok(2),
@@ -115,7 +106,7 @@ fn a_turn_hands_a_model_each_image_that_the_message_of_a_prompt_it_opens_names_o
   let python = format!(
     "#prompt1 look at {named} and {named}\nprompt1: Act[str] = Act('prompt1')\n\n#read a.txt\n# {named}\n\n#prompt2 no open"
   );
-  let mut images = Images::new(Some(at.clone()));
+  let mut images = Images::new(Some(at.to_path_buf()));
   let seen = images.named(&python, &mut HashSet::new()).expect("the images of the turn");
   let [UserContent::Text(told), UserContent::Image(image)] = &seen[..] else {
     panic!("one image after the text that names it: {seen:?}")

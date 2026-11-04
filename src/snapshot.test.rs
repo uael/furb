@@ -2,11 +2,6 @@
 
 #![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
 #![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(
   clippy::unchecked_time_subtraction,
   reason = "debt: a subtraction of times that can underflow"
 )]
@@ -15,18 +10,17 @@ use std::{fs, path::PathBuf, time::Instant};
 
 use super::{Keeper, aside, fits, path};
 use crate::engine::Table;
+use crate::testing::Yard;
 
 /// A new folder of the test, empty.
-fn place(name: &str) -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-snapshot-{name}-{}", std::process::id()));
-  let _ = fs::remove_dir_all(&at);
-  fs::create_dir_all(&at).unwrap();
-  at
+fn place(name: &str) -> Yard {
+  Yard::new(format!("furb-snapshot-{name}-{}", std::process::id()))
 }
 
 #[test]
 fn a_keeper_says_that_the_life_said_nothing_new_from_the_length_of_its_log_alone() {
-  let record = place("grew").join("record.jsonl");
+  let yard = place("grew");
+  let record = yard.join("record.jsonl");
   let log = format!("{}.log", record.display());
   let mut keeper = Keeper::new(record, "build".to_owned());
   assert!(keeper.grew(), "a life with no log yet is asked for its snapshot");
@@ -63,7 +57,8 @@ fn measure_each_step_of_an_open_from_the_snapshot_of_a_record() {
 
 #[test]
 fn a_snapshot_that_fails_to_land_leaves_no_part_of_it_on_the_disk() {
-  let record = place("aside").join("record.jsonl");
+  let yard = place("aside");
+  let record = yard.join("record.jsonl");
   fs::write(&record, "[[\"stand\",\"stand1\",\"operator\",\"chain1\"]]\n").unwrap();
   fs::write(format!("{}.log", record.display()), "{}\n").unwrap();
   // A folder in the place of the snapshot refuses the new one.
@@ -101,7 +96,8 @@ fn the_files_of_a_record_whose_name_is_no_text_keep_its_bytes() {
     os::unix::ffi::{OsStrExt, OsStringExt},
   };
 
-  let mut name = place("bytes").into_os_string().into_vec();
+  let yard = place("bytes");
+  let mut name = yard.to_path_buf().into_os_string().into_vec();
   name.extend_from_slice(b"/record\xff.jsonl");
   let record = PathBuf::from(OsString::from_vec(name.clone()));
   let mut snapshot = name.clone();

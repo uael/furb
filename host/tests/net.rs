@@ -7,11 +7,14 @@
   reason = "the tests block on the runtime that tokio starts for them"
 )]
 
+#[path = "../../tests/common/yard.rs"]
+mod yard;
+
 #[cfg(test)]
 mod net {
+  use super::yard::Yard;
   use std::{
     net::SocketAddr,
-    path::PathBuf,
     sync::atomic::{AtomicU32, Ordering},
     time::Duration,
   };
@@ -67,22 +70,23 @@ mod net {
   }
 
   /// A folder of its own for one test, short enough for the path of a socket.
-  fn folder() -> PathBuf {
+  fn folder() -> Yard {
     static NEXT: AtomicU32 = AtomicU32::new(0);
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
-    let place = std::env::temp_dir().join(format!("fn{}-{n}", std::process::id()));
-    std::fs::create_dir_all(&place).unwrap();
-    place
+    Yard::new(format!("fn{}-{n}", std::process::id()))
   }
 
   /// A fake of the local API of Tailscale on a socket, which gives one login for each address, and
   /// says the path of each request that it heard.
   fn tailscale(login: &str) -> (LocalApi, mpsc::UnboundedReceiver<String>) {
-    let socket = folder().join("ts.sock");
+    let yard = folder();
+    let socket = yard.join("ts.sock");
     let listener = UnixListener::bind(&socket).unwrap();
     let (tell, heard) = mpsc::unbounded_channel();
     let login = login.to_owned();
     tokio::spawn(async move {
+      // The folder of the socket goes with the fake, when the runtime of the test ends.
+      let _held = &yard;
       loop {
         let (mut stream, _) = listener.accept().await.unwrap();
         let (read, mut write) = stream.split();
@@ -211,7 +215,8 @@ mod net {
 
   #[test]
   fn host_json_gives_the_ports_of_the_tailnet_and_the_role_of_each_login() {
-    let path = folder().join("host.json");
+    let held = folder();
+    let path = held.join("host.json");
     assert_eq!(Config::load(&path).unwrap(), Config::default());
     let written = json!({
       "tailnet": {"tcp": 7860, "websocket": 7861},
@@ -240,7 +245,8 @@ mod net {
       grace: Duration::from_secs(1),
       tailnet: Some(Tailnet { identity, ports }),
     };
-    let local = Local::new(folder().join("host"));
+    let held = folder();
+    let local = Local::new(held.join("host"));
     let listener = local.listen().await.unwrap();
     tokio::spawn(async move { run(&local, listener, settings).await });
     let at = |port: Option<u16>| SocketAddr::new([127, 0, 0, 1].into(), port.unwrap());
