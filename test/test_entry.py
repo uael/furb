@@ -23,7 +23,7 @@ async def test_the_order_of_the_record_is_what_puts_an_entry_back_in_its_place()
   assert over == root
   assert [one[1] for one in said(again, "prompt")] == [said(log, "prompt")[0][1]]
   assert engine.peek(said(log, "prompt")[0][1]) == 1
-  facts = [(e[0][0], e[0][1], *e[0][3:]) for e in sand.record if e[0][0] != "started" and not engine.question(e[0])]
+  facts = [(e[0][0], e[0][1], *e[0][3:]) for e in sand.record if not engine.question(e[0])]
   heard = [(a[0], a[1], *a[3:]) for a in again if a[2] == "journal" and a[0] != "keep"]
   assert [a for a in heard if not engine.question(a)] == facts != []
 
@@ -44,8 +44,8 @@ async def test_the_record_is_a_sequence_of_entries_about_acts() -> None:
   """The record is a sequence of entries about acts."""
   sand, log, _ = await lived()
   assert all(isinstance(e, tuple) for e in sand.record)
-  assert all(e[0][1] in acts(log) for e in sand.record)
+  assert all(e[0][1] in acts(log) for e in sand.record if e[0][0] != "joined")
   kinds = ["chain", "stand", "done", "prompt", "reply", "started", "done", "gate", "done", "read"]
   kinds += ["done"]
-  kinds += ["bash", "started", "merged", "out", "done"]
+  kinds += ["bash", "started", "joined", "merged", "out", "done"]
   assert [e[0][0] for e in sand.record] == kinds
