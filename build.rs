@@ -74,6 +74,8 @@ impl Kind {
       | "type[T] | object"
       | "Show"
       | "Filter"
+      | "Callable[[str], str]"
+      | "dict[str, int]"
       | "tuple[int | None, ...] | bool | None" => Kind::Object,
       "Text" => Kind::Text,
       "list[str]" => Kind::Strs,

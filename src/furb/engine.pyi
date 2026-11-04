@@ -628,6 +628,14 @@ def seed(data: object) -> list[Entry]:
   A rung of the operator on each chain binds its definitions and its values, says its turns as its prefix, tells what the checkpoint lost and cut, and runs again each word that ran on it.
   """
 
+def gathered(define: Callable[[str], str], floor: dict[str, int]) -> dict:
+  """gathered gives the data of a checkpoint of the life at its tip, which seed reads, as plain data that each build of the major reads: taken, chains and acts.
+  taken gives the highest number of each kind that an act of a chain took, and at least the number that floor gives, since a later life makes no act again that an ear of the outside made.
+  chains holds the root, the chain of each open prompt and each chain that a plain value of a chain in chains names, each with its parent, its label, its source, whether it is paused, its turns, what define gives of each word that ran on it, the text that binds each plain value of its module again, the names of the other values, the acts that it cut, and each word that still runs on it.
+  acts holds the last stand, the last clock, and each act of a verb that a value names or that is a command of a chain in chains: an act that is over with its value, an open prompt with its shape, its message, its actor and the ear that started it, and another act as cut, with a refusal that says why.
+  gathered is a view: it makes nothing and says nothing.
+  """
+
 def grant(usd: float | None = None, share: float | None = None, on: str = "") -> Act[None]:
   """A ceiling on a chain, in dollars, in the share of the window that one answer fills, or both: it holds the ledger of the chain from the moment it is made, the dollars of the answers since then and the share of the window the last one filled, and it tells the dollars of that ledger at each answer of a model, since the advance binds the share before the next reply, so no turn a reply has sent grows a line after it.
   grant on a chain puts a ceiling on it: dollars, a share of the window, or both.

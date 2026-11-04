@@ -8,10 +8,11 @@
 //! source, whether it is paused, its turns, the text of its definitions, its plain values by name,
 //! the names that it lost, the acts that the checkpoint cut, and each word that ran on it; and
 //! `acts`, each act that a value names, the last stand and the last clock, with its value, or, for
-//! an open prompt, with its shape, its message, its actor and the ear that held it. No contract
-//! holds it, so this is the one home of its shape. It holds no word that the crate crafts and no
-//! word of a verb by its place: `seed` of the engine that opens it makes the entries that a life
-//! boots on, so any later engine of the major opens it.
+//! an open prompt, with its shape, its message, its actor and the ear that held it. `gathered` of
+//! the engine gathers it and `seed` of the engine reads it, so the engine is the one home of its
+//! shape, and this file holds the fact, the store and the boot alone. It holds no word that the
+//! crate crafts and no word of a verb by its place: `seed` of the engine that opens it makes the
+//! entries that a life boots on, so any later engine of the major opens it.
 //!
 //! A life ends with its checkpoint, which the ear of its store keeps, since a life born from a
 //! checkpoint makes acts of its own at its birth; [`keep`] writes one on a record that no life
@@ -27,10 +28,6 @@
 #![expect(
   clippy::needless_pass_by_value,
   reason = "debt: an argument taken by value and only borrowed"
-)]
-#![expect(
-  clippy::needless_raw_string_hashes,
-  reason = "debt: a raw string with hashes that it does not need"
 )]
 #![expect(
   clippy::redundant_closure_for_method_calls,
@@ -65,150 +62,6 @@ const RESERVE: &str = "reserve";
 /// chain.
 const CARRIED: &str = "carried";
 
-/// The python that gathers the data of a checkpoint, in a copy of the names of the engine, with the
-/// definitions of a word as [`definitions`] gives them: a view, which makes nothing and says
-/// nothing. Each value that it gives is plain, so a build of any version reads it.
-const GATHER: &str = r##"def _plain(value):
-  if value is None or isinstance(value, (bool, int, float, str, Text, Exit, BaseException)):
-    return True
-  if isinstance(value, (list, tuple, set)):
-    return all(_plain(one) for one in value)
-  if isinstance(value, dict):
-    return all(_plain(k) and _plain(v) for k, v in value.items())
-  return False
-
-
-def _named(value, found):
-  if isinstance(value, str) and get(value) is not None:
-    found.add(value)
-  elif isinstance(value, (list, tuple, set)):
-    for one in value:
-      _named(one, found)
-  elif isinstance(value, dict):
-    for k, v in value.items():
-      _named(k, found)
-      _named(v, found)
-  return found
-
-
-def _number(name):
-  return int(re.sub(r"^[a-z_]+", "", name) or 0)
-
-
-def _shown(value):
-  if isinstance(value, Act):
-    return f"Act({str(value)!r})"
-  if isinstance(value, list):
-    return "[" + ", ".join(_shown(one) for one in value) + "]"
-  if isinstance(value, tuple):
-    return "(" + ", ".join(_shown(one) for one in value) + ("," if len(value) == 1 else "") + ")"
-  if isinstance(value, set):
-    return "{" + ", ".join(_shown(one) for one in value) + "}" if value else "set()"
-  if isinstance(value, dict):
-    return "{" + ", ".join(f"{_shown(k)}: {_shown(v)}" for k, v in value.items()) + "}"
-  return repr(value)
-
-
-def _debug(text):
-  return '"' + text.replace(chr(92), chr(92) * 2).replace(chr(34), chr(92) + chr(34)) + '"'
-
-
-def _lives():
-  chains = []
-  while get(f"chain{len(chains) + 1}") is not None:
-    chains.append(f"chain{len(chains) + 1}")
-  asked = [get(c) for c in chains] + [x for c in chains for x in transcript(c) if question(x) and x[0] != "chain"]
-  opened = [x[1] for x in asked if x[0] == "prompt" and not over(x[1])]
-  runs = sorted((x for x in asked if x[0] == "run" and not over(x[1]) and get(x[4])), key=lambda x: _number(x[1]))
-  waits = {x[2]: x[4] for x in asked if x[0] == "wants" and not over(x[1])}
-  resumed, dropped = [], set()
-  for x in runs:
-    maker = get(x[4])[2]
-    kind = (get(maker) or ("",))[0]
-    if maker == OPERATOR or kind == "chain" or kind == "prompt" and not over(maker) and maker not in dropped:
-      resumed.append(x)
-      if (get(waits.get(x[1], "")) or ("",))[0] == "prompt":
-        dropped.add(waits[x[1]])
-  opened = [one for one in opened if one not in dropped]
-  live = {ROOT} | {scope(one) for one in opened}
-  values, lost, named = {}, {}, set(opened)
-  while live - values.keys():
-    for c in sorted(live - values.keys(), key=_number):
-      here = module(c)
-      values[c], lost[c] = [], []
-      for name, value in here.items():
-        if name.startswith("__") or callable(value) or globals().get(name, here) is value:
-          continue
-        if _plain(value):
-          values[c].append((name, _shown(value)))
-          _named(value, named)
-        else:
-          lost[c].append(name)
-    live |= {get(one)[1] if get(one)[0] == "chain" else scope(one) for one in named}
-  live = sorted(live, key=_number)
-  return asked, live, named, values, lost, [x for x in resumed if scope(x[1]) in live]
-
-
-def gathered(define, floor):
-  asked, live, named, values, lost, resumed = _lives()
-  taken = dict(floor)
-  for x in asked:
-    taken[x[0]] = max(taken.get(x[0], 0), _number(x[1]))
-  verbs = ("prompt", "bash", "read", "write", "wait", "cd", "chance")
-  done = {x[1] for x in asked if x[0] == "bash" and scope(x[1]) in live}
-  carried = sorted((one for one in named | done if get(one)[0] in verbs), key=lambda one: (get(one)[0], _number(one)))
-  stands = [x[1] for x in transcript(ROOT, "stand") if question(x) and over(x[1])][-1:]
-  clocks = [x[1] for x in transcript(ROOT, "clock") if question(x) and isinstance(peek(x[1]), float)][-1:]
-  acts, cut, asking = [], [], {scope(one) for one in carried if get(one)[0] == "prompt"}
-  for one in [*stands, *clocks, *carried]:
-    act = get(one)
-    if act[0] == "prompt" and not over(one):
-      held = [x[2] for x in transcript(scope(one)) if x[0] == "started" and x[1] == one and get(x[2]) is None]
-      acts.append(
-        {"kind": "prompt", "id": one, "on": act[3], "shape": act[4], "message": act[5], "to": act[6], "held": (held or [""])[0]}
-      )
-    elif over(one):
-      if _plain(peek(one)):
-        acts.append({"kind": act[0], "id": one, "on": act[3], "value": peek(one)})
-    else:
-      cut.append(one)
-      why = f"{one} was cut by the checkpoint"
-      if act[0] == "bash":
-        why = _debug(act[4]) + " was interrupted: the life that ran it ended before it did"
-      acts.append({"kind": act[0], "id": one, "on": act[3], "value": Refused(why)})
-  chains = []
-  for c in live:
-    act = get(c)
-    said = {x[1]: x[3] for x in transcript(c) if x[0] == "ready"}
-    words = [define(w) for r, w in program(c).items() if (get(r) or ("", "", ""))[2] != "extensions"]
-    turns = [
-      x
-      for x in transcript(c)
-      if x[0] not in ("module", "carried") and _plain(x) and (not question(x) or x[0] == "reply" or x[1] in carried)
-    ]
-    held = {ROOT, *live, *carried, *(x[1] for x in turns if question(x))}
-    chains.append(
-      {
-        "id": c,
-        "on": act[3] if act[3] in live else "",
-        "label": act[4],
-        "source": act[5],
-        "paused": c in asking or paused(c),
-        "turns": [x for x in turns if x[0] not in ("started", "done") or x[1] in held],
-        "definitions": "\n\n".join(w for w in words if w),
-        "values": dict(values[c]),
-        "lost": lost[c],
-        "cut": [x for x in cut if scope(x) == c],
-        "again": [
-          {"rung": x[4], "by": get(x[4])[2], "word": said.get(x[4], x[5])} for x in resumed if scope(x[1]) == c
-        ],
-      }
-    )
-  return {"taken": taken, "chains": chains, "acts": acts}
-"##;
-const WRITE: &str =
-  "(exec(__source, __names := {**globals()}), __names['gathered'](__define, __floor))[1]";
-
 /// The entry of the checkpoint of a life at its tip, as the store keeps it.
 pub fn written(engine: &mut Engine) -> Result<Object, Fault> {
   let define = callable(|args: Vec<Object>| {
@@ -216,8 +69,7 @@ pub fn written(engine: &mut Engine) -> Result<Object, Fault> {
     Ok(Object::string(definitions(&word.unwrap_or_default())))
   });
   let floor = engine.taken().clone();
-  let words = vec![("__source", Object::string(GATHER)), ("__define", define), ("__floor", floor)];
-  let data = engine.word(WRITE, words)?;
+  let data = engine.gathered(define, floor)?;
   let mut fields = vec![
     (Object::string("schema"), Object::int(SCHEMA)),
     (Object::string("version"), Object::int(VERSION)),
