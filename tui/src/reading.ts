@@ -62,18 +62,26 @@ export function readOnly(reading: Reading): string {
   return `Read only: ${sameBuild(reading) ? "its replay drifts" : "made by another build"}`;
 }
 
-/** The lines of the dialog of a record open to read: each engine on a line of its own, why it opens to read, and what
- * a new life carries. */
-export function readingNote(reading: Reading): string[] {
+/** The lines of the dialog of a record open to read: each engine on a line of its own, and why it opens to read. A
+ * record that this build made drifts on its own, which is a defect: the dialog says so, gives the drift and the path of
+ * the record, and carries nothing, since a carry loses the module and is no resume. A record of another build says what a
+ * new life carries. */
+export function readingNote(reading: Reading, record?: string): string[] {
   const { made, build } = engines(reading);
   const { turns = 0, files = 0 } = reading.carries ?? {};
   const count = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+  if (sameBuild(reading))
+    return [
+      `Made by: ${made}`,
+      `This build: ${build}`,
+      "This is a defect: this build made the record, and its replay drifts.",
+      reading.why,
+      ...(record ? [`Record: ${record}`] : []),
+    ];
   return [
     `Made by: ${made}`,
     `This build: ${build}`,
-    sameBuild(reading)
-      ? `This build made it, and its replay drifts: ${reading.why}`
-      : "A replay would drift, so it opens to read. No word runs again.",
+    "A replay would drift, so it opens to read. No word runs again.",
     ...(reading.carries
       ? [
           `A new life carries ${count(turns, "turn")} of its root chain and the ${count(files, "file")} that it wrote.`,

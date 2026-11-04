@@ -758,13 +758,18 @@ export class App {
       sameBuild(reading) ? "This record does not replay" : "This record was made by another build",
       [
         { label: "Read it", detail: "See what it kept. No word runs again.", run: () => {} },
-        {
-          label: "Start a new life from it",
-          detail: "A new session with its earlier work as text",
-          run: () => this.startFrom(),
-        },
+        // A record that this build made and whose replay drifts is a defect, and a carry from it loses the module.
+        ...(sameBuild(reading)
+          ? []
+          : [
+              {
+                label: "Start a new life from it",
+                detail: "A new session with its earlier work as text",
+                run: () => this.startFrom(),
+              },
+            ]),
       ],
-      { note: readingNote(reading) },
+      { note: readingNote(reading, this.session.host.record) },
     );
   }
   /** A new life in the workspace of a record open to read, whose first word carries the earlier work of the record as
