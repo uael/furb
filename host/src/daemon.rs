@@ -245,14 +245,16 @@ fn routed(verb: Verb) -> Routed {
       (life, Command::Prompt { shape, message, to, on })
     }
     Verb::Answer { life, act, line } => (life, Command::Answer { id: act, line }),
-    Verb::Pause { life, act } => (life, Command::Pause { id: act }),
+    Verb::Pause { life, act, why } => (life, Command::Pause { id: act, why }),
     Verb::Wake { life, act } => (life, Command::Wake { id: act }),
-    Verb::Cancel { life, act } => (life, Command::Cancel { id: act }),
-    Verb::Chain { life, label, on } => (life, Command::Chain { label, on }),
+    Verb::Cancel { life, act, why } => (life, Command::Cancel { id: act, why }),
+    Verb::Chain { life, label, source, on } => (life, Command::Chain { label, source, on }),
     Verb::Run { life, word, on } => (life, Command::Rung { word, on }),
     Verb::Close { life, act, value } => (life, Command::Close { id: act, value }),
     Verb::Grant { life, usd, share, on } => (life, Command::Grant { usd, share, on }),
-    Verb::Bash { life, command, on } => (life, Command::Bash { command, on }),
+    Verb::Bash { life, command, stdin, feed, on } => {
+      (life, Command::Bash { command, stdin: if feed { None } else { Some(stdin) }, on })
+    }
     Verb::Read { life, path, on } => (life, Command::Read { path, on }),
     Verb::Write { life, path, content, on } => (life, Command::Write { path, content, on }),
     Verb::Names { life, on } => (life, Command::Names { on }),

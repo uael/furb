@@ -62,12 +62,13 @@ it is not given. The daemon answers requests in any order.
 | `inspect` | `life`, `name`, `on` | read |
 | `prompt` | `life`, `shape`, `message`, `to`, `on` | write |
 | `answer` | `life`, `act`, `line` | write |
-| `pause`, `wake`, `cancel` | `life`, `act` | write |
-| `chain` | `life`, `label`, `on` | write |
+| `pause`, `cancel` | `life`, `act`, `why` | write |
+| `wake` | `life`, `act` | write |
+| `chain` | `life`, `label`, `source` (a chain to fork), `on` | write |
 | `run` | `life`, `word`, `on` | write |
 | `close` | `life`, `act`, `value` (a value as the record writes it) | write |
 | `grant` | `life`, `usd`, `share`, `on` | write |
-| `bash` | `life`, `command`, `on` | write |
+| `bash` | `life`, `command`, `stdin`, `feed` (its stdin open), `on` | write |
 | `read` | `life`, `path`, `on` | write |
 | `write` | `life`, `path`, `content`, `on` | write |
 | `names` | `life`, `on` | read |

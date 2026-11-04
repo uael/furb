@@ -153,21 +153,28 @@ pub enum Verb {
     act: String,
     line: String,
   },
+  /// A pause of an act or of a chain, with the cause that the operator gives.
   Pause {
     life: String,
     act: String,
+    why: Option<String>,
   },
   Wake {
     life: String,
     act: String,
   },
+  /// A cancel of an act or of a chain, with the cause that the operator gives.
   Cancel {
     life: String,
     act: String,
+    why: Option<String>,
   },
+  /// A chain made on a chain, under a label, or a fork of the chain `source` with its transcript
+  /// and its program.
   Chain {
     life: String,
     label: Option<String>,
+    source: Option<String>,
     on: Option<String>,
   },
   /// A word that runs on a chain as a turn of the operator.
@@ -190,10 +197,14 @@ pub enum Verb {
     share: Option<f64>,
     on: Option<String>,
   },
-  /// A command that runs on a chain.
+  /// A command that runs on a chain, with the text of its stdin, or with its stdin kept open for
+  /// the lines that a write to `<act>/stdin` feeds it.
   Bash {
     life: String,
     command: String,
+    stdin: Option<String>,
+    #[serde(default)]
+    feed: bool,
     on: Option<String>,
   },
   /// The text at a path, read where a chain stands, as an act of the operator.

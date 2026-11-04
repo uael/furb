@@ -79,10 +79,10 @@ mod protocol {
         on: on(),
       },
       Verb::Answer { life: life(), act: id(), line: "yes".to_owned() },
-      Verb::Pause { life: life(), act: id() },
+      Verb::Pause { life: life(), act: id(), why: Some("later".to_owned()) },
       Verb::Wake { life: life(), act: id() },
-      Verb::Cancel { life: life(), act: id() },
-      Verb::Chain { life: life(), label: Some("work".to_owned()), on: on() },
+      Verb::Cancel { life: life(), act: id(), why: None },
+      Verb::Chain { life: life(), label: Some("work".to_owned()), source: on(), on: on() },
       Verb::Run { life: life(), word: "1 + 1".to_owned(), on: on() },
       Verb::Handover,
     ]
@@ -100,7 +100,7 @@ mod protocol {
     vec![
       Verb::Close { life: life(), act: id(), value: "2.0".to_owned() },
       Verb::Grant { life: life(), usd: Some(2.0), share: None, on: on() },
-      Verb::Bash { life: life(), command: "ls".to_owned(), on: on() },
+      Verb::Bash { life: life(), command: "ls".to_owned(), stdin: None, feed: true, on: on() },
       Verb::Read { life: life(), path: "a.txt".to_owned(), on: on() },
       Verb::Write { life: life(), path: "a.txt".to_owned(), content: "a".to_owned(), on: on() },
       Verb::Names { life: life(), on: on() },

@@ -109,6 +109,7 @@ export type Request1 =
   | {
       life: string;
       act: string;
+      why?: string | null;
       verb: "pause";
     }
   | {
@@ -119,11 +120,13 @@ export type Request1 =
   | {
       life: string;
       act: string;
+      why?: string | null;
       verb: "cancel";
     }
   | {
       life: string;
       label?: string | null;
+      source?: string | null;
       on?: string | null;
       verb: "chain";
     }
@@ -149,6 +152,8 @@ export type Request1 =
   | {
       life: string;
       command: string;
+      stdin?: string | null;
+      feed?: boolean;
       on?: string | null;
       verb: "bash";
     }

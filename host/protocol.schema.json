@@ -466,6 +466,12 @@
             "act": {
               "type": "string"
             },
+            "why": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "verb": {
               "type": "string",
               "const": "pause"
@@ -475,7 +481,8 @@
             "verb",
             "life",
             "act"
-          ]
+          ],
+          "description": "A pause of an act or of a chain, with the cause that the operator gives."
         },
         {
           "type": "object",
@@ -506,6 +513,12 @@
             "act": {
               "type": "string"
             },
+            "why": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "verb": {
               "type": "string",
               "const": "cancel"
@@ -515,7 +528,8 @@
             "verb",
             "life",
             "act"
-          ]
+          ],
+          "description": "A cancel of an act or of a chain, with the cause that the operator gives."
         },
         {
           "type": "object",
@@ -524,6 +538,12 @@
               "type": "string"
             },
             "label": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
               "type": [
                 "string",
                 "null"
@@ -543,7 +563,8 @@
           "required": [
             "verb",
             "life"
-          ]
+          ],
+          "description": "A chain made on a chain, under a label, or a fork of the chain `source` with its transcript\nand its program."
         },
         {
           "type": "object",
@@ -643,6 +664,16 @@
             "command": {
               "type": "string"
             },
+            "stdin": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "feed": {
+              "type": "boolean",
+              "default": false
+            },
             "on": {
               "type": [
                 "string",
@@ -659,7 +690,7 @@
             "life",
             "command"
           ],
-          "description": "A command that runs on a chain."
+          "description": "A command that runs on a chain, with the text of its stdin, or with its stdin kept open for\nthe lines that a write to `<act>/stdin` feeds it."
         },
         {
           "type": "object",
