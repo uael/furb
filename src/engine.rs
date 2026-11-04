@@ -393,15 +393,8 @@ fn seeded(
     return Ok(record);
   };
   let pairs = data.as_ref().pairs().unwrap_or_default();
-  let schema =
-    pairs.iter().find(|(key, _)| key.as_str() == Some("schema")).and_then(|one| one.1.as_int());
-  if let Some(schema) = schema.filter(|one| *one > crate::checkpoint::SCHEMA) {
-    return Err(Fault::refused(format!(
-      "the checkpoint of the record holds the schema {schema}, and this build reads the schema {} at most: open \
-       the record with a later build",
-      crate::checkpoint::SCHEMA
-    )));
-  }
+  let schema = pairs.iter().find(|(key, _)| key.as_str() == Some("schema")).map(|one| one.1);
+  crate::world::Schema::opens_checkpoint(schema)?;
   let made = sand.enter(outside, |sand, outside| {
     outside.bound(sand)?;
     let data = outside.inward(sand, &data)?;

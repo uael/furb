@@ -50,7 +50,8 @@ pub(crate) use reader::plain;
 pub use reader::{READER, Retold, retold};
 pub use scratch::{SCRATCH, Scratch};
 pub use store::{
-  Lines, MADE, Sqlite, Store, VERSION, engine, heads, keeping, kept, made, store, version,
+  CHECKPOINT_SCHEMA, Lines, MADE, RECORD_SCHEMA, Schema, SchemaError, Sqlite, Store, VERSION,
+  engine, heads, keeping, kept, made, readable, release, store, version,
 };
 pub(crate) use store::{database, each};
 pub use time::time;

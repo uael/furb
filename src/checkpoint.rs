@@ -3,7 +3,7 @@
 //! replay of what came before it.
 //!
 //! The fact is `("checkpoint", "chain1", "store", data)`. Its data is a map: `schema`, the version
-//! of its own shape, [`SCHEMA`]; `version` and `engine`, the build that wrote it; `taken`, the
+//! of its own shape, [`CHECKPOINT_SCHEMA`]; `engine`, the engine that wrote it; `taken`, the
 //! highest number of each kind; `chains`, each chain that lives with its parent, its label, its
 //! source, whether it is paused, its turns, the text of its definitions, its plain values by name,
 //! the names that it lost, and the acts that the checkpoint cut, each word that ran on it among
@@ -13,7 +13,9 @@
 //! the engine gathers it and `seed` of the engine reads it, so the engine is the one home of its
 //! shape, and this file holds the fact, the store and the boot alone. It holds no word that the
 //! crate crafts and no word of a verb by its place: `seed` of the engine that opens it makes the
-//! entries that a life boots on, so any later engine of the major opens it.
+//! entries that a life boots on, so any later engine of the major opens it. Each reader skips each
+//! field that it does not know, so a build opens a checkpoint of each minor of its schema, and
+//! refuses only one of another major.
 //!
 //! A life ends with its checkpoint, which the ear of its store keeps, since a life born from a
 //! checkpoint makes acts of its own at its birth; [`keep`] writes one on a record that no life
@@ -49,22 +51,18 @@ use crate::{
   extension::definitions,
   fact::Fact,
   value::{Fault, Object, ObjectRef, entry},
-  world::{self, Lines, Sqlite, Store, VERSION},
+  world::{self, CHECKPOINT_SCHEMA, Lines, Sqlite, Store},
 };
 
 /// The kind of the fact of a checkpoint.
 pub const CHECKPOINT: &str = "checkpoint";
 
-/// The version of the shape of the data of a checkpoint, apart from the version of the record. The
-/// data of schema 1 also holds `again`, each word that ran on a chain, which `seed` names as cut.
-pub const SCHEMA: i64 = 2;
-
-/// The kind of an entry of a checkpoint of the form before [`SCHEMA`] that stands for the names of
-/// a kind that no entry carries.
+/// The kind of an entry of a checkpoint of the form before [`CHECKPOINT_SCHEMA`] that stands for
+/// the names of a kind that no entry carries.
 const RESERVE: &str = "reserve";
 
-/// The kind of an entry of a checkpoint of the form before [`SCHEMA`] that holds the turns of a
-/// chain.
+/// The kind of an entry of a checkpoint of the form before [`CHECKPOINT_SCHEMA`] that holds the
+/// turns of a chain.
 const CARRIED: &str = "carried";
 
 /// The entry of the checkpoint of a life at its tip, as the store keeps it.
@@ -76,8 +74,7 @@ pub fn written(engine: &mut Engine) -> Result<Object, Fault> {
   let floor = engine.taken().clone();
   let data = engine.gathered(define, floor)?;
   let mut fields = vec![
-    (Object::string("schema"), Object::int(SCHEMA)),
-    (Object::string("version"), Object::int(VERSION)),
+    (Object::string("schema"), CHECKPOINT_SCHEMA.object()),
     (Object::string("engine"), Object::string(world::engine())),
   ];
   let pairs = data.as_ref().pairs().unwrap_or_default();
@@ -176,8 +173,9 @@ pub fn booted(record: Vec<Object>) -> Vec<Object> {
 }
 
 /// The entries that a checkpoint carries: the fact itself when it holds data, which boot gives
-/// `seed` of the engine, or, for the form before [`SCHEMA`], its entries, each reserve as the
-/// questions of the root that it stands for, and the turns of each chain just after that chain.
+/// `seed` of the engine, or, for the form before [`CHECKPOINT_SCHEMA`], its entries, each reserve
+/// as the questions of the root that it stands for, and the turns of each chain just after that
+/// chain.
 fn carried(checkpoint: &Object) -> Vec<Object> {
   let Some(a) = fact(checkpoint) else { return Vec::new() };
   let pairs = a.word(0).and_then(|one| one.pairs()).unwrap_or_default();
