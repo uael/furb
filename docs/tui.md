@@ -55,13 +55,13 @@ The captures of the feed show a real life: a conductor and the workers that it h
 life of furb, with 23 chains, 21 of them at work, and ladders of up to 76 rungs. `tui/fixtures/conductor.jsonl`
 holds it, with no key and no path of a home in it, and `bun run demo` opens it beside the scripted life.
 
-The sidebar shows the workspaces, and the threads of the workspace where you work. Its default shape is cards. A
-switcher on top lists each workspace on one row, the one shown lit, with the marks of what needs a look in it: ◆ for a
-question that waits, ✗ for a session that failed, ◌ for a pause, ◉ for work, and ● for a finished session that you did
-not see. When a question waits in any workspace, a line on top says how many, and ⌥A goes to the next one, in the
-session where it waits. Under the switcher stand the folder and the sessions of the workspace shown, then its threads
-as cards. A card holds the whole title of a thread, its state, the count of its messages, the time since it works, and
-its chain when it is not Main. The sidebar is wide, 56 columns by default, and it scrolls with the wheel.
+The sidebar shows the workspaces as one tree. Each workspace is one row, with the marks of what needs a look in it: ◆
+for a question that waits, ✗ for a session that failed, ◌ for a pause, ◉ for work, and ● for a finished session that
+you did not see. The workspace shown is open, with its sessions, and under the session shown stand its threads, one row
+for each. A row of a thread holds its title, and at its right why it needs a look and how long ago it last changed, as
+`5m`. A line on top says how many questions wait for you in all the workspaces, or that nothing waits, and ⌥A goes to
+the next question, in the session where it waits. The sidebar is wide, 56 columns by default, and it scrolls with the
+wheel.
 
 A click on a workspace gives it the focus: its session that asks, else one that lives, else its newest, opens in the
 feed. A click on the arrow of a workspace that has not the focus shows its sessions without a change of focus. A click
@@ -83,12 +83,7 @@ the footer, as ^P commands and F1 help, stand under it, on the row of the footer
 corner stands in the footer. On a narrow terminal, or with the sidebar hidden, the context folds into a short line of
 the footer, as `8% · $0.16`, and the keys stay there.
 
-`/sidebar outline` and `/sidebar inbox` give the other shapes, and the flag `FURB_SIDEBAR` does the same at the start.
-The outline lists all workspaces in one tree: the workspace shown is open, with its sessions and, under the session
-shown, its threads, one row for each, and each other workspace is one row with its marks. The inbox is the outline with
-the questions of every workspace under its top line, each with the buttons that answer it.
-
-![The sidebar](screenshots/110-sidebar-cards.png)
+![The sidebar](screenshots/110-sidebar.png)
 
 The feed shows the threads of the chain, each as one box. A thread is a prompt: its message heads the box as markdown,
 with a line at its left in the color of the thread, which starts half a row above the message and ends half a row under
@@ -178,11 +173,9 @@ or a ... once the window rolled, the line that runs stands second to last, and t
 come, or the row where the model writes. A click on a ... opens the lines in a block that scrolls, up to four
 hundred, and Roll up closes it. The feed shows one line in place of its earlier threads, as "28 earlier messages". A
 click on the line shows them. A long message shows its first rows, with a line that shows the rest. A jump to an act
-opens each fold over it. In the sidebar, the marks of a row and of the head count what concerns you: a question that
-waits anywhere, and the failure or the pause of a thread that you started. The failure of an agent does not count,
-and no mark counts the work in progress. A workspace lists the session shown and
-each session that works, asks or failed, then its newest other sessions until it lists three, and the older ones fold
-under Earlier.
+opens each fold over it. In the sidebar, a question in an agent marks the thread over it, and the failure of an agent
+marks the agent alone. A workspace lists the session shown and each session that works, asks or failed, then its newest
+other sessions until it lists three, and the older ones fold under Earlier.
 
 ![Feed](screenshots/02-feed.png)
 

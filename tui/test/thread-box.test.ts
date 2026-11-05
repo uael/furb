@@ -82,7 +82,7 @@ test("a terminal narrower than 100 columns shows the sidebar in place of the fee
       app.toggleSidebar();
       text = await frame();
       expect(text).toContain("Back to the feed");
-      expect(text).toContain("Threads");
+      expect(text).toContain("Workspaces");
       expect(text).not.toContain("commands");
       expect(app.screen.visible).toBe(false);
       app.toggleSidebar();
