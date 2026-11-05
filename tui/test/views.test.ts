@@ -103,10 +103,10 @@ test("a command that printed more than a row holds sends the tail and its length
 test("the views say each quantity one way, read the changes of a scope once, and set a heading only when it changes", () =>
   composing(
     async ({ session, app, frame }) => {
-      const reads: (string[] | null)[] = [];
+      const reads: string[] = [];
       const netChanges = session.host.netChanges.bind(session.host);
       session.host.netChanges = (writes) => {
-        reads.push(writes);
+        reads.push(JSON.stringify([writes, session.host.changes]));
         return netChanges(writes);
       };
       try {
@@ -143,7 +143,9 @@ test("the views say each quantity one way, read the changes of a scope once, and
         );
         await until(session.host, () => session.host.changes === 2);
         await session.refresh();
-        expect(reads.length).toBe(2);
+        // The files and the journal of a write arrive apart, so a read between them may come: no state is read twice.
+        expect(reads.length).toBeGreaterThanOrEqual(2);
+        expect(new Set(reads).size).toBe(reads.length);
         // The review shows the net change of the file: the second write replaced the first.
         expect(session.changes.map((change) => change.hunks.flatMap((hunk) => hunk.lines))).toEqual([
           ["+two"],
