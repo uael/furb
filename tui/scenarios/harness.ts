@@ -4,7 +4,7 @@
 // record and the model.
 import { test as each, setDefaultTimeout } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
@@ -12,7 +12,7 @@ import { executable, programs } from "../../bind/typescript/test/executable.ts";
 import * as stage from "../script/stage.ts";
 import { App } from "../src/app.ts";
 import { type Engine, openEngine } from "../src/bridge.ts";
-import { aboutOf, hostPlace } from "../src/hosting.ts";
+import { daemon, furbProgram } from "../src/client.ts";
 import type { EngineOptions } from "../src/models.ts";
 import { Preferences } from "../src/preferences.ts";
 import { Session } from "../src/session.ts";
@@ -58,6 +58,13 @@ export function alive(pid: number): boolean {
   }
 }
 
+/** The grace of the daemon of a yard, in seconds: a window that quits and one that opens just after hold one life, and
+ * a life that a window ends is gone soon after. */
+const GRACE = 2;
+
+/** The program furb of the run, read before a yard names its own in FURB_BIN. */
+const PROGRAM = furbProgram();
+
 /** The yard of a scenario: its folders, its record, its model and the options of each window that it opens. */
 export class Yard {
   constructor(
@@ -65,8 +72,22 @@ export class Yard {
     readonly work: string,
     readonly model: string,
     readonly record: string,
+    readonly cache: string,
   ) {}
   static async make(script: Rule[], config: Record<string, unknown> = {}): Promise<Yard> {
+    // The daemon of the yard is its own, in a cache of its own, so that a scenario that kills it kills no life of
+    // another test. Its socket needs a short path, since a socket has a bound on it.
+    const cache = await realpath(await mkdtemp(join("/tmp", "furb-scenario-")));
+    const program = PROGRAM;
+    const served = join(cache, "furb-host");
+    // The daemon that a window starts writes its process beside its socket, which a scenario kills.
+    await writeFile(
+      served,
+      `#!/bin/sh\necho $$ > '${join(cache, "pid")}'\nexec '${program}' "$@" --grace ${GRACE}\n`,
+    );
+    await chmod(served, 0o755);
+    process.env.XDG_CACHE_HOME = cache;
+    process.env.FURB_BIN = served;
     const root = await realpath(await mkdtemp(join(tmpdir(), "furb-scenario-")));
     const [work, home, configs] = [join(root, "work"), join(root, "model"), join(root, "config")];
     for (const one of [work, home, configs, join(work, ".furb", "sessions")])
@@ -77,14 +98,12 @@ export class Yard {
       JSON.stringify({ extensions: { naming: false }, ...config }),
     );
     executable(join(programs, "scenario.ts"), home, "claude");
-    const yard = new Yard(root, work, home, join(work, ".furb", "sessions", "life.jsonl"));
+    const yard = new Yard(root, work, home, join(work, ".furb", "sessions", "life.jsonl"), cache);
     await yard.script(script);
     // The host that a window starts reads the configs of the yard alone.
     process.env.FURB_CONFIG_DIR = configs;
     return yard;
   }
-  /** Each record that a window of the yard opened, whose host the end of the yard ends. */
-  readonly records = new Set<string>();
   /** The script that the model answers from, which a scenario may change while the life runs. */
   async script(rules: Rule[]): Promise<void> {
     await writeFile(join(this.model, "script.json"), JSON.stringify(rules));
@@ -105,38 +124,61 @@ export class Yard {
   /** The options of a window on the record of the yard, or on another record in its folder of sessions. */
   options(record = this.record): EngineOptions {
     const claude = join(this.model, process.platform === "win32" ? "claude.exe" : "claude");
-    return { host: true, cwd: this.work, record, claude, model: MODEL, roster: [MODEL] };
+    return { cwd: this.work, record, claude, model: MODEL, roster: [MODEL] };
   }
-  /** The process of the host of a record of the yard, while one runs. */
-  host(record = this.record): number | undefined {
-    const place = hostPlace(record);
-    const about = place && aboutOf(place);
-    return about && alive(about.pid) ? about.pid : undefined;
+  /** The process of the daemon of the yard, which holds its lives, while one runs. */
+  host(): number | undefined {
+    const file = join(this.cache, "pid");
+    const pid = existsSync(file) ? Number(readFileSync(file, "utf8").trim()) : 0;
+    return pid && alive(pid) ? pid : undefined;
   }
-  /** End the host that a scenario left, then remove the yard. */
+  /** The end of the life of a record of the yard, which its daemon holds no more. */
+  async ended(record = this.record): Promise<void> {
+    await daemon().ended(record, (GRACE + 30) * 1000);
+  }
+  /** The record as it stood before the end of its life wrote its checkpoint, which a life that opens on it goes on
+   * from with turns of its own: with the checkpoint cut, the next life replays each word from the first entry. It
+   * gives how many lines of checkpoint it cut. */
+  async uncheckpoint(record = this.record): Promise<number> {
+    const lines = readFileSync(record, "utf8").split("\n").filter(Boolean);
+    let kept = lines.length;
+    while (kept > 0 && (JSON.parse(lines[kept - 1] ?? "[]") as unknown[][])[0]?.[0] === "checkpoint") kept--;
+    await writeFile(
+      record,
+      lines
+        .slice(0, kept)
+        .map((line) => `${line}\n`)
+        .join(""),
+    );
+    return lines.length - kept;
+  }
+  /** End the daemon that a scenario left, then remove the yard. */
   async remove(): Promise<void> {
-    for (const record of this.records) {
-      const pid = this.host(record);
-      if (!pid) continue;
+    // The window dials no more, so it starts no daemon again.
+    daemon().close();
+    const pid = this.host();
+    if (pid) {
       process.kill(pid, "SIGTERM");
-      await until(() => !alive(pid), "the host to end", 15).catch(() => process.kill(pid, "SIGKILL"));
+      await until(() => !alive(pid), "the daemon to end", 15).catch(() => process.kill(pid, "SIGKILL"));
     }
     await rm(this.root, { recursive: true, force: true });
+    await rm(this.cache, { recursive: true, force: true });
   }
 }
 
-/** A headless window of the TUI on the life of a yard, in a host of its own: the session, the App on a test terminal,
- * and what a scenario does through them. */
+/** A headless window of the TUI on the life of a yard, in the daemon of the yard: the session, the App on a test
+ * terminal, and what a scenario does through them. */
 export class Window {
   private constructor(
     readonly session: Session,
     readonly app: App,
     readonly screen: Awaited<ReturnType<typeof createTestRenderer>>,
     readonly library: Workspaces,
+    readonly yard: Yard,
+    readonly record: string,
   ) {}
   static async open(yard: Yard, record = yard.record, size = { width: 140, height: 44 }): Promise<Window> {
     const options = yard.options(record);
-    yard.records.add(record);
     const { engine, host } = await openEngine(options);
     const preferences = new Preferences(join(yard.root, "ui", "ui.json"));
     const session = new Session(engine, host, false, preferences);
@@ -147,7 +189,7 @@ export class Window {
     const app = new App(screen.renderer, session, { quit() {}, workspaces: library });
     await screen.flush();
     app.composer.focus();
-    return new Window(session, app, screen, library);
+    return new Window(session, app, screen, library, yard, record);
   }
   /** The columns of the test terminal. */
   get width(): number {
@@ -179,6 +221,9 @@ export class Window {
   }
   /** Type a line in the input, and send it with Enter, as the operator does. */
   async type(line: string): Promise<void> {
+    // The composer takes no Enter while it sends the text before, and a life in the daemon answers that send later
+    // than a life in the window did.
+    await until(() => !this.app.submitting, "the send before this line", 30);
     this.app.composer.focus();
     await this.screen.mockInput.typeText(line);
     this.screen.mockInput.pressEnter();
@@ -190,12 +235,13 @@ export class Window {
     await stage.click(this.screen, text);
     await this.frame();
   }
-  /** The window goes, and the life goes on in its host, unless `end` ends it. */
+  /** The window goes, and the life goes on in the daemon for its grace, or, with `end`, the window waits for its end. */
   async close(end = false): Promise<void> {
     this.app.dispose();
     this.screen.renderer.destroy();
-    if (end) await this.session.host.end().catch(() => {});
     await this.library.dispose();
+    await this.session.host.dispose().catch(() => {});
+    if (end) await this.yard.ended(this.record).catch(() => {});
   }
 }
 

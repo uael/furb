@@ -29,7 +29,24 @@ fn writer() -> (Append, held::Sender<()>, Arc<Mutex<Vec<String>>>) {
 }
 
 fn said(journal: &Journal, change: &str) {
-  journal.lines.send(Line::Change(change.to_owned())).unwrap();
+  let line = Line::Change { chain: "chain1".to_owned(), change: change.to_owned() };
+  journal.lines.send(line).unwrap();
+}
+
+#[tokio::test]
+async fn the_chain_of_a_change_hears_that_it_changed_only_once_the_change_is_on_the_disk() {
+  let (append, release, kept) = writer();
+  let (told, mut heard) = mpsc::unbounded_channel();
+  let journal = Journal::appending(PathBuf::new(), PathBuf::from("j"), told, append);
+  said(&journal, "a");
+  for _ in 0..16 {
+    tokio::task::yield_now().await;
+  }
+  assert!(heard.try_recv().is_err());
+  release.send(()).unwrap();
+  journal.flushed().await.unwrap();
+  assert_eq!(*kept.lock().unwrap(), ["a"]);
+  assert!(matches!(heard.try_recv(), Ok(Event::Changed(chain)) if chain == "chain1"));
 }
 
 #[tokio::test]

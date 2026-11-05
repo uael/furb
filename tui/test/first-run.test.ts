@@ -3,12 +3,16 @@ import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { remove } from "../../bind/typescript/test/processes.ts";
+import { ownDaemon } from "../script/daemon.ts";
 
 /** The frame of the first run of a real life, not a demo, in a new home whose environment holds no key, and on a
  * PATH that holds only the programs of the system and the claude command line that a test gives, when it gives one;
  * then the acts of its chain, one a line. The folder of bun stays off the PATH, since it can hold a claude. */
 async function firstRun(claude?: string): Promise<{ frame: string; acts: string[] }> {
   const home = await mkdtemp(join(tmpdir(), "furb-first-run-"));
+  // The cache of the home holds the socket of its daemon, which needs a short path, since a socket has a bound on it.
+  const cache = await mkdtemp(join("/tmp", "furb-cache-"));
+  let ended = async () => {};
   try {
     const project = join(home, "project");
     const programs = join(home, "programs");
@@ -18,16 +22,27 @@ async function firstRun(claude?: string): Promise<{ frame: string; acts: string[
       await writeFile(join(programs, "claude"), `#!/bin/sh\n${claude}\n`);
       await chmod(join(programs, "claude"), 0o755);
     }
+    // The program furb is found as the build left it: a PATH of the system alone holds none, and the build of a runner
+    // stands in the folder of its triple.
+    const env = {
+      ...Object.fromEntries(
+        ["FURB_BIN", "CARGO_TARGET_DIR", "CARGO_BUILD_TARGET"].flatMap((name) =>
+          process.env[name] === undefined ? [] : [[name, process.env[name]]],
+        ),
+      ),
+      HOME: home,
+      XDG_CACHE_HOME: cache,
+      TMPDIR: join(home, "tmp"),
+      PATH: [programs, "/usr/bin", "/bin"].join(delimiter),
+    };
+    await mkdir(env.TMPDIR, { recursive: true });
+    // The daemon of the home answers the window, as it would answer a first run of the user, and ends with the test.
+    ended = await ownDaemon(env);
     const run = Bun.spawn([process.execPath, join(import.meta.dir, "first-run.ts"), project], {
-      env: {
-        HOME: home,
-        TMPDIR: join(home, "tmp"),
-        PATH: [programs, "/usr/bin", "/bin"].join(delimiter),
-      },
+      env,
       stdout: "pipe",
       stderr: "pipe",
     });
-    await mkdir(join(home, "tmp"), { recursive: true });
     const [out, err, code] = await Promise.all([
       new Response(run.stdout).text(),
       new Response(run.stderr).text(),
@@ -37,7 +52,9 @@ async function firstRun(claude?: string): Promise<{ frame: string; acts: string[
     const [frame = "", acts = ""] = out.split("\n---\n");
     return { frame, acts: acts.trim().split("\n") };
   } finally {
+    await ended();
     await remove(home);
+    await remove(cache);
   }
 }
 

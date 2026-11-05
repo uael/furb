@@ -14,6 +14,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Glob } from "bun";
+import { ownDaemon } from "./daemon.ts";
 import { environment } from "./environment.ts";
 import { stale, warning } from "./stale.ts";
 
@@ -91,6 +92,8 @@ const compiling = Promise.all(
     return { file: join(programs, file), text: out + err, passed: code === 0 };
   }),
 );
+// Each life of a test lives in the daemon of the cache of the tests, which the run owns.
+const ended = await ownDaemon(env);
 const listing = await mkdtemp(join(tmpdir(), "furb-tests-"));
 const listed = await deal(files, cores, async (file) => {
   const report = join(listing, `${files.indexOf(file)}.xml`);
@@ -145,4 +148,5 @@ await deal(runs, cores, async ({ file, names }) => {
 if (failed.length > 0) console.log(`\n${failed.length} of ${runs.length} runs failed: ${failed.join(", ")}`);
 if (failed.length > 0 && behind.length > 0) console.log(`\n${warning(behind)}`);
 console.log(`${passes} pass, ${fails} fail`);
+await ended();
 process.exit(failed.length > 0 ? 1 : 0);

@@ -485,7 +485,7 @@ try {
   await session.refresh();
   const record = session.host.record;
   if (!record) throw new Error("The demo session has no record.");
-  await session.engine.wait([session.engine.root], { seconds: 60, on: session.engine.root });
+  await session.engine.bash("sleep 60", { on: session.engine.root });
   app().dispose();
   await library.dispose();
   session = await demoSession({ record });

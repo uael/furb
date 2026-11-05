@@ -12,6 +12,7 @@ import { Preferences } from "../src/preferences.ts";
 import type { Session } from "../src/session.ts";
 import { Workspaces } from "../src/workspaces.ts";
 import { composing } from "./composing.ts";
+import { ended } from "./ended.ts";
 
 const banner = "The journal of file changes is damaged";
 
@@ -33,6 +34,7 @@ async function withDamaged(
       );
     await until(host, () => host.changes === 3);
     await host.dispose();
+    await ended(record);
     const lines = (await readFile(journal, "utf8")).split("\n");
     lines[1] = "{ damaged }";
     await writeFile(journal, lines.join("\n"));

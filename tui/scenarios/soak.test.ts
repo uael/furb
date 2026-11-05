@@ -95,7 +95,10 @@ test(
         };
         const before = await turns(window);
         await window.close(true);
-        await until(() => !yard.host(), "the host to end");
+        await yard.ended();
+        // The end wrote a checkpoint, which a next life goes on from with turns of its own: the replay reads the record
+        // with no checkpoint.
+        await yard.uncheckpoint();
         const replayed = await Window.open(yard);
         try {
           expect(await turns(replayed)).toBe(before);

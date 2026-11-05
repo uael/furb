@@ -162,7 +162,8 @@ and `cli/pyproject.toml` say.
 | --- | --- |
 | `tui/src/app.ts` | The screen: the top line, the feed, the sidebar, the composer, the footer, and the dialogs. |
 | `tui/src/session.ts` | The state of one session: its chains, its views, its drafts, its queue, and its record of the UI. |
-| `tui/src/worker.ts` | The session, in a worker thread, and the demo session with its scripted answers. |
+| `tui/src/client.ts` | The client of the daemon `furb host`: the socket, its verbs, and a life that a window holds there. |
+| `tui/src/bridge.ts` | The life of a session as the window holds it: in the daemon, or a record open to read. |
 | `tui/src/theme.ts` | The palettes, the marks, and the spacing. One mark says one thing everywhere. |
 | `tui/src/keys.ts`, `tui/src/commands.ts` | The keys and the slash commands, which the keymap, the footer, the help and the docs read. |
 | `tui/script/` | The gallery, the animation, and the rasterizer that turns a frame into a PNG. |

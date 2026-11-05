@@ -9,6 +9,7 @@ import { openEngine } from "../src/bridge.ts";
 import { Preferences } from "../src/preferences.ts";
 import { Reader } from "../src/reading.ts";
 import { Workspaces } from "../src/workspaces.ts";
+import { ended } from "./ended.ts";
 
 /** What the folder of a record holds that belongs to it: each file by name, with its time and its bytes. */
 async function folder(record: string): Promise<Map<string, { time: number; bytes: string }>> {
@@ -55,6 +56,8 @@ async function lived(directory: string, name: string): Promise<string> {
     await engine.rung({ word: 'write(Text("note.txt", "x"))\nawait bash("echo hi")', on: engine.root }),
   );
   await first.host.dispose();
+  // The life ends with its checkpoint once its window let it go, and the record is whole then.
+  await ended(record);
   return record;
 }
 

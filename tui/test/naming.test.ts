@@ -112,7 +112,7 @@ test("a rename that the record does not take keeps the old name and says why in 
   try {
     session = await demoSession({ record });
     await session.rename("First");
-    await session.dispose(true);
+    await session.dispose();
     expect(await session.rename("Second")).toBe(false);
     expect(session.sessionName).toBe("First");
     expect(session.notice).toStartWith("The name was not kept: ");

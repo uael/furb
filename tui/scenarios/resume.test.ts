@@ -24,7 +24,14 @@ async function held(window: Window, acts?: string[]) {
     modules: Object.fromEntries(
       await Promise.all(
         chains.map(async (on) => {
-          const module = ((await engine.module({ on })) ?? {}) as Record<string, unknown>;
+          const names = await engine.names(on);
+          const module = Object.fromEntries(
+            await Promise.all(
+              names
+                .filter((key) => WORDS.includes(key))
+                .map(async (key) => [key, (await engine.inspect(key, on)).value]),
+            ),
+          ) as Record<string, unknown>;
           const words = Object.keys((await engine.program({ on })) ?? {});
           return [
             on,
@@ -84,7 +91,7 @@ test("a life that quits opens again, and after its end replays from its first en
   scenario(SCRIPT, async (first, yard) => {
     await work(first);
     const before = await held(first);
-    // A quit detaches the window, and the life goes on in its host.
+    // A quit detaches the window, and the life goes on in the daemon.
     const pid = yard.host() ?? 0;
     await first.close(false);
     expect(alive(pid)).toBe(true);
@@ -94,8 +101,10 @@ test("a life that quits opens again, and after its end replays from its first en
     } finally {
       await attached.close(true);
     }
-    await until(() => !yard.host(), "the host to end");
-    // The record holds no checkpoint, so the next life replays each word from the first entry.
+    await yard.ended();
+    // The daemon ends a life with a checkpoint, which a next life goes on from with turns of its own: cut, the
+    // record holds no checkpoint, so the next life replays each word from the first entry.
+    expect(await yard.uncheckpoint()).toBeGreaterThan(0);
     const kinds = readFileSync(yard.record, "utf8")
       .split("\n")
       .filter(Boolean)

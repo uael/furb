@@ -29,6 +29,13 @@ const command = [
 ];
 const child = Bun.spawn(command, { cwd: root, stdout: "inherit", stderr: "inherit" });
 if (await child.exited) process.exit(1);
+// The program furb serves the daemon of the machine, furb host, in which each window of the TUI holds its lives, of
+// the profile of the engine.
+const program = Bun.spawn(
+  ["cargo", "build", "--package", "furb-cli", ...(process.argv.includes("--release") ? ["--release"] : [])],
+  { cwd: root, stdout: "inherit", stderr: "inherit" },
+);
+if (await program.exited) process.exit(1);
 
 await rm(new URL("dist", import.meta.url), { recursive: true, force: true });
 const javascript = Bun.spawn(

@@ -141,10 +141,7 @@ export const feed = part({
     if (w.host.lost)
       add("life-lost", w.host.lost, [], (box) => {
         const actions: [string, string, () => void][] = w.host.local
-          ? [
-              ["Open the life again", "reaches it again, /reopen", () => void w.reopen().catch(w.fail)],
-              ["Stop the host", "ends its process by force, /stop", () => void w.stopHost().catch(w.fail)],
-            ]
+          ? [["Open the life again", "reaches it again, /reopen", () => void w.reopen().catch(w.fail)]]
           : [];
         this.banner(
           box,

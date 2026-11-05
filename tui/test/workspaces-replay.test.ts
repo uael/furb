@@ -6,6 +6,7 @@ import { store } from "furb";
 import { Preferences } from "../src/preferences.ts";
 import * as records from "../src/records.ts";
 import { Workspaces } from "../src/workspaces.ts";
+import { ended } from "./ended.ts";
 
 // The replay of the saved records comes back when the test lets it, so it lands after an open of the record it read,
 // as a replay that takes long does. This file holds the one test that needs it.
@@ -28,6 +29,7 @@ test("a replay that began before an open of its record leaves the row as the ope
   const first = library();
   const held = await first.create(await first.add(directory), "Held elsewhere");
   await first.dispose();
+  await ended(held.path);
   const second = library();
   const lease = store(held.path)[1];
   try {

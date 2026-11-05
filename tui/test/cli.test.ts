@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { store } from "furb";
 import { alive, printPid, remove } from "../../bind/typescript/test/processes.ts";
-import { openEngine } from "../src/bridge.ts";
+import { ended } from "./ended.ts";
 
 /** The moment a condition holds, read again every 20 ms: a process in a terminal tells its state by no event. */
 async function eventually(ready: () => boolean | Promise<boolean>, what: string): Promise<void> {
@@ -86,8 +86,6 @@ function windowsConsole(
 
 // Unix ends a process by a signal from another; Windows sends Ctrl+Break to the processes of a console.
 const endings = process.platform === "win32" ? ["Ctrl+Break"] : ["SIGHUP", "SIGTERM"];
-// On Unix the life runs in a host of its own, which the quit of the window leaves at work, and on Windows in the window.
-const hosted = process.platform !== "win32";
 for (const ending of endings)
   test(`${ending} ends the TUI as its quit does: the draft is saved, a command ends with the life, and the record is free`, async () => {
     const directory = await mkdtemp(join(tmpdir(), "furb-signal-"));
@@ -119,17 +117,8 @@ for (const ending of endings)
       };
       expect(Object.values(view.drafts)).toContain("draftmarker");
       const running = await pid();
-      if (hosted) {
-        // The window detached, and the command goes on in the host until a window ends the life.
-        expect(alive(running)).toBe(true);
-        const { host } = await openEngine({
-          demo: true,
-          host: true,
-          cwd: project,
-          record: join(sessions, record ?? ""),
-        });
-        await host.end();
-      }
+      // The window let the life go, and the daemon of the tests ends a life with no holder at once.
+      await ended(join(sessions, record ?? ""));
       await eventually(() => !alive(running), "the command to end");
       store(join(sessions, record ?? ""))[1].dispose();
     } finally {

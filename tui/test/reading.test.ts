@@ -8,6 +8,7 @@ import { openEngine } from "../src/bridge.ts";
 import { Preferences } from "../src/preferences.ts";
 import { type Reading, reads, UNRESUMABLE } from "../src/reading.ts";
 import { Workspaces } from "../src/workspaces.ts";
+import { ended } from "./ended.ts";
 
 test("a record whose fact drifts opens to read, with what it kept, and a dialog that names its version", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-drift-"));
@@ -20,6 +21,7 @@ test("a record whose fact drifts opens to read, with what it kept, and a dialog 
     // so the rung of the command comes after them.
     expect(ran).toBe("rung4");
     await first.host.dispose();
+    await ended(record);
     // The record keeps the command with a word that this engine does not make, as an earlier engine kept it.
     const kept = await readFile(record, "utf8");
     expect(kept).toContain('"echo hi",""');

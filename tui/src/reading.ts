@@ -12,8 +12,8 @@ import {
   type Turn,
   WORK,
 } from "furb";
-import type { PauseCause } from "furb/life";
-import { row } from "./snapshots.ts";
+import type { Exit, PauseCause } from "furb/life";
+import type { ActRow } from "./session.ts";
 
 /** Why a record opens to read: the engine and the version of the build that made it, as the record names them, the
  * engine and the version of this build, and what the life that opened on it raised. */
@@ -139,6 +139,43 @@ function shortened<T>(value: T): T {
 export function reads(reading?: Reading): string {
   const open = "This record is open to read, so nothing runs on it.";
   return reading ? `${open} ${UNRESUMABLE}` : open;
+}
+
+/** How many of the last characters of each stream of a command a row carries. */
+const TAIL = 2000;
+
+/** An act as a row of a snapshot: a write carries the lines that its change added and removed, and a command that
+ * printed more than a tail carries the tail of each stream. An act carries its time when this window saw it run. */
+export function row(act: LiveAct, lines?: ActRow["lines"], took?: number): ActRow {
+  if (took !== undefined) return row({ ...act, took } as ActRow, lines);
+  // A read and a write carry the count of the lines of their text, and leave the text out, which the view reads whole
+  // when it shows it.
+  if (act.kind === "read" || act.kind === "write") {
+    const text = (act.kind === "write" ? act.words[0] : act.value) as { content?: unknown } | null;
+    const bare = (one: unknown) =>
+      one && typeof one === "object" && "content" in one ? { ...one, content: "" } : one;
+    const content = typeof text?.content === "string" ? text.content : undefined;
+    return {
+      ...act,
+      words: act.words.map(bare),
+      value: bare(act.value),
+      // A row that a reader made already carries the count of the text that it left out.
+      ...(content === undefined
+        ? {}
+        : { count: content ? content.replace(/\n$/, "").split("\n").length : ((act as ActRow).count ?? 0) }),
+      ...(lines ? { lines } : {}),
+    };
+  }
+  const exit: Exit = act.kind === "bash" ? (act.value as Exit) : {};
+  const streams = [exit?.stdout?.content ?? "", exit?.stderr?.content ?? ""];
+  if (streams.every((content) => content.length <= TAIL)) return act;
+  const tail = (stream?: { content: string }) =>
+    stream && { ...stream, content: stream.content.slice(-TAIL).replace(/^[\uDC00-\uDFFF]/, "") };
+  return {
+    ...act,
+    value: { ...exit, stdout: tail(exit.stdout), stderr: tail(exit.stderr) },
+    output: streams.join("").length,
+  };
 }
 
 /** A record open to read, with no life: the facts that the crate retold of it, in the file that it names, as an engine
@@ -345,9 +382,19 @@ export class Reader {
     return [...(this.held.get(this.activity.scope(on) || on) ?? [])];
   }
 
+  /** The last end of a stand among the facts, and how many facts its search read: the facts only grow, so each read
+   * of the standing reads only the facts that came since the read before, and a view of a long life that reads it at
+   * each fact costs no more than one of a short life. */
+  private stood?: Fact;
+  private stoodAt = 0;
   /** What the root stands on: its roster, its directory and its actor, as the last stand said. */
   standing(): [Actor[], string, string] {
-    const stood = this.facts.findLast(([kind, about]) => kind === "done" && isQuestion("stand", about));
+    if (this.stoodAt > this.facts.length) [this.stood, this.stoodAt] = [undefined, 0];
+    for (; this.stoodAt < this.facts.length; this.stoodAt++) {
+      const fact = this.facts[this.stoodAt];
+      if (fact?.[0] === "done" && isQuestion("stand", String(fact[1]))) this.stood = fact;
+    }
+    const stood = this.stood;
     const [roster = [], directory = this.directory, actor = "operator"] = (stood?.[3] ?? []) as unknown[];
     // A recorded life names no path of this machine, so it stands where the host opens it.
     return [roster as Actor[], this.recorded ? this.directory : String(directory), String(actor)];

@@ -8,6 +8,7 @@ import { until } from "../../bind/typescript/test/until.ts";
 import { recordName } from "../src/names.ts";
 import { Preferences } from "../src/preferences.ts";
 import { Workspaces } from "../src/workspaces.ts";
+import { ended } from "./ended.ts";
 
 /** A test in a temporary directory of its own, whose libraries read the list of workspaces in it, as each run of the
  * TUI does, and end with it. */
@@ -68,6 +69,8 @@ async function saved(directory: string, open: () => Workspaces, name?: string): 
   }
   const path = entry.path;
   await library.dispose();
+  // The life ends in the daemon once its window let it go, and only then does its record stand still.
+  await ended(path);
   return path;
 }
 
