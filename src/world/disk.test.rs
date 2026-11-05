@@ -2,7 +2,7 @@
 
 use std::{fs, io::Write};
 
-use super::{Access, PARTS, filled, write};
+use super::{Access, beside, filled, write};
 use crate::testing::Yard;
 
 /// An empty folder of the test, named with the id of the process, as every yard of the tests of
@@ -68,14 +68,15 @@ fn a_write_that_fails_midway_as_on_a_full_disk_leaves_the_old_file_whole_and_no_
 }
 
 #[test]
-fn a_write_passes_a_part_file_that_a_crash_left_under_its_name() {
+fn a_part_file_passes_each_name_that_a_crash_left() {
   let at = yard("stale");
-  let next = PARTS.load(std::sync::atomic::Ordering::Relaxed);
-  for count in next..next + 3 {
-    fs::write(at.join(format!(".a.txt.{}.{count}.part", std::process::id())), "stale").unwrap();
+  let part = |count: u32| at.join(format!(".a.txt.{}.{count}.part", std::process::id()));
+  for count in 0..3 {
+    fs::write(part(count), "stale").unwrap();
   }
-  write(&at.join("a.txt"), b"new\n", Access::Shared).expect("the write lands");
-  assert_eq!(fs::read_to_string(at.join("a.txt")).unwrap(), "new\n");
+  let counts = std::sync::atomic::AtomicU32::new(0);
+  let (made, _) = beside(&at.join("a.txt"), Access::Shared, &counts).expect("a part file opens");
+  assert_eq!(made, part(3));
 }
 
 #[cfg(unix)]

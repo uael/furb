@@ -56,7 +56,7 @@ fn filled(
     Err(no) if no.kind() == ErrorKind::NotFound => None,
     Err(no) => return Err(failed(no)),
   };
-  let (part, mut opened) = beside(&target, access).map_err(failed)?;
+  let (part, mut opened) = beside(&target, access, &PARTS).map_err(failed)?;
   let done = fill(&mut opened, bytes)
     .and_then(|()| opened.sync_all())
     .and_then(|()| kept.map_or(Ok(()), |mode| opened.set_permissions(mode)));
@@ -67,12 +67,12 @@ fn filled(
   })
 }
 
-/// A new part file beside the target: hidden, and named by the target, this process and a count
-/// that passes each name that a part file left by a crash still holds.
-fn beside(target: &Path, access: Access) -> io::Result<(PathBuf, fs::File)> {
+/// A new part file beside the target: hidden, and named by the target, this process and the next
+/// of `counts`, which passes each name that a part file left by a crash still holds.
+fn beside(target: &Path, access: Access, counts: &AtomicU32) -> io::Result<(PathBuf, fs::File)> {
   let name = target.file_name().unwrap_or_default().to_string_lossy();
   loop {
-    let count = PARTS.fetch_add(1, Ordering::Relaxed);
+    let count = counts.fetch_add(1, Ordering::Relaxed);
     let part = target.with_file_name(format!(".{name}.{}.{count}.part", std::process::id()));
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);

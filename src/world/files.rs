@@ -131,13 +131,10 @@ async fn served(
   text(&at, tilded(&at, std::env::home_dir().as_deref()), gallery)
 }
 
-/// The content of a write put at a path, with the folders above it made, in one step as
-/// [`stored`] says, and with the line ends that the file there has. `name` is the path as a
+/// The content of a write put at a path, with the folders above it made, in one write as
+/// [`disk::write`] says, and with the line ends that the file there has. `name` is the path as a
 /// refusal names it.
 pub(super) fn filed(at: &Path, content: String, name: impl fmt::Display) -> Result<(), Fault> {
-  if let Some(parent) = at.parent() {
-    fs::create_dir_all(parent).map_err(|no| failed(&no, &name))?;
-  }
   disk::write(at, ended(at, content).as_bytes(), Access::Shared)
     .map_err(|no| failed(&no.source, &name))
 }
