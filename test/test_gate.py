@@ -389,7 +389,9 @@ async def test_a_word_that_binds_a_name_of_the_engine_at_its_top_finds_that_each
   ]
 
 
-async def test_a_def_or_a_class_of_a_name_of_the_engine_overrides_it_and_a_word_may_import_a_name_that_the_engine_imports() -> None:
+async def test_a_def_or_a_class_of_a_name_of_the_engine_overrides_it_and_a_word_may_import_a_name_that_the_engine_imports() -> (
+  None
+):
   """A def or a class of a name of the engine overrides it, and a word may import a name that the engine imports under that name, and bind actor, raised and accepts, which a chain binds as its own."""
   _, _, root = born()
   word = "def read(path: str) -> str:\n  return path\nclass Text:\n  pass\nimport re\nactor = 'm/low'\nraised = None\naccepts = None\nclose(read('a'))"
