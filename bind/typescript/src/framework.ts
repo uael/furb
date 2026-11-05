@@ -1,5 +1,6 @@
 import type { Engine } from "../index.cjs";
 import { over } from "./ears.js";
+import { operated } from "./life/acts.js";
 import { Session } from "./session.js";
 import { type Fact, isQuestion, standingOf } from "./types.js";
 
@@ -56,7 +57,7 @@ export class Chain {
   /** The actor that a prompt of this chain goes to when it names none. */
   get actor(): string {
     for (const [kind, , by, on, word] of this.engine.transcript({ on: this.id }).reverse())
-      if (kind === "rung" && by === "operator" && on === this.id && String(word).startsWith("actor = "))
+      if (kind === "rung" && operated(by) && on === this.id && String(word).startsWith("actor = "))
         return String(word)
           .slice("actor = ".length)
           .replace(/^['"]|['"]$/g, "");
@@ -219,8 +220,7 @@ export class Life extends Chain {
     this.made = session.entries
       .map(([fact]) => fact)
       .filter(
-        ([kind, id, by]) =>
-          by === "operator" && MADE.includes(kind) && isQuestion(kind, id) && id !== "chain1",
+        ([kind, id, by]) => operated(by) && MADE.includes(kind) && isQuestion(kind, id) && id !== "chain1",
       );
     session.on("change", () => {
       for (const wake of this.waiting.splice(0)) wake();

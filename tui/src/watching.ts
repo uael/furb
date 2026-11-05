@@ -79,21 +79,6 @@ export function branchTaken<T extends { id: string; on: string; began: number }>
   );
 }
 
-/** The acts as they stood at a moment: each act that began before it, and an act that ended at it or later as not done
- * yet, with no value. */
-export function asOf<T extends { began: number; ended?: number; run?: { status: string; reason: string } }>(
-  acts: readonly T[],
-  moment: number,
-): T[] {
-  return acts
-    .filter((act) => act.began < moment)
-    .map((act) =>
-      act.ended === undefined || act.ended < moment
-        ? act
-        : { ...act, done: false, value: null, run: act.run && { status: "running", reason: "" } },
-    );
-}
-
 /** What a branch takes from the chain that it branched from: the messages before the moment it starts at, with what
  * answered them. */
 export function branchTakes(messages: number): string {

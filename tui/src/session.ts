@@ -24,13 +24,18 @@ import {
   type Ask,
   actState,
   aimed,
+  asOf,
   beside,
   busy,
+  type ChainAside,
+  type ChainThread,
   cancelled,
-  chainThreads,
+  chainSorted,
   type Desk,
   desk,
   failed,
+  momentsOf,
+  operated,
   rollUp,
   type State,
   threadWork,
@@ -47,7 +52,7 @@ import { inspectRecords } from "./records.ts";
 import { type Hunk, type Reviewed, revertWord, reviewed, type Scope, scopes } from "./review.ts";
 import { shareHtml, shareMarkdown } from "./share.ts";
 import { isThemeChoice, palettes, type ThemeChoice, type ThemeName, themeOf } from "./theme.ts";
-import { asOf, branchNotice } from "./watching.ts";
+import { branchNotice } from "./watching.ts";
 
 /** The views of a chain: the feed of what it did, the transcript that the model reads, and the files it changed. */
 export const views = ["feed", "transcript", "changes"] as const;
@@ -63,6 +68,17 @@ export type ActRow = LiveAct & {
   /** How many milliseconds the act took, when this life ran it. */
   took?: number;
 };
+/** The threads of a chain: in order, each by its id, and the thread of each message, by the id of the message. */
+export interface ThreadList {
+  list: ChainThread[];
+  by: Map<string, ChainThread>;
+  of: Map<string, ChainThread>;
+  /** The thread of each question and each notice that a thread made, by the id of the prompt. */
+  asked: Map<string, ChainThread>;
+  /** The prompts of the chain that are no conversation, each by its id, and the aside of each prompt on one. */
+  asides: Map<string, ChainAside>;
+  aside: Map<string, ChainAside>;
+}
 /** The net change of a file in the scope of the review, with its hunks. */
 export type ShownChange = Reviewed;
 /** What a rewind to a point gives back of the files: for each file that a write changed after the point, the change
@@ -224,7 +240,7 @@ function placed(index: Index, act: ActRow): void {
     const past = index.skills;
     if (!past || (index.at.get(past.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.skills = act;
   }
-  if (act.kind !== "rung" || act.by !== "operator") return;
+  if (act.kind !== "rung" || !operated(act.by)) return;
   const word = index.words.get(act.on);
   if (!word || (index.at.get(word.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.words.set(act.on, act);
 }
@@ -393,21 +409,29 @@ export class Session extends EventEmitter {
   /** The thread that the operator chose in the sidebar, to which the input sends each message as prompt(None, message,
    * on=thread): its model reads it at its next step, and a message to a resolved thread opens it again. */
   thread?: string;
-  /** The thread lit in the sidebar, to which the input sends a message by default, as long as the operator chose no
-   * thread and did not ask for a new one. */
-  lit?: string;
-  /** Whether the next message starts a new thread, in place of going to the thread lit. */
+  /** The open thread of the chain shown, to which the input sends a message by default, as long as the operator chose
+   * no thread and did not ask for a new one: its last thread that is not resolved. */
+  get openThread(): ChainThread | undefined {
+    return this.threads.list.findLast((one) => !one.resolved);
+  }
+  /** The thread that the feed shows now: the one that the operator chose, else the open thread, else the last thread
+   * of the chain shown. */
+  get activeThread(): ChainThread | undefined {
+    const { by, list } = this.threads;
+    return by.get(this.thread ?? "") ?? this.openThread ?? list.at(-1);
+  }
+  /** Whether the next message starts a new thread, in place of going to the open thread. */
   fresh = false;
   /** The target of the input as it stood when the operator typed the first character of his message, or null for a new
    * thread. It holds until he sends or clears the message, so a thread that opens while he writes takes nothing that
    * he wrote for another. */
   pinned?: string | null;
-  /** The thread that the input sends its next message to: the thread that the operator chose, else the open thread lit,
+  /** The thread that the input sends its next message to: the thread that the operator chose, else the open thread,
    * unless he asked for a new thread. Python, and a prompt of another shape than str, start no message of a thread. */
   get target(): string | undefined {
     if (this.mode !== "prompt" || this.editing || this.operatorPrompt) return undefined;
     if (this.pinned !== undefined) return this.pinned ?? undefined;
-    return this.thread ?? (this.fresh || this.shape !== "str" ? undefined : this.lit);
+    return this.thread ?? (this.fresh || this.shape !== "str" ? undefined : this.openThread?.act.id);
   }
   /** The shape of a line sent on a thread: None, a message that its model reads at its next step and that is done at
    * once, while the prompt of the thread is open and a model answers it, else str, a prompt that opens a thread over
@@ -441,8 +465,8 @@ export class Session extends EventEmitter {
   setup?: SetupInfo | null;
   /** Whether the operator watches this session: the demo that plays a life by itself and asks no model. */
   watching = false;
-  /** The moment of the life that the feed shows, as the count of facts that the life had said then, or nothing for
-   * now. */
+  /** The moment of the life that the feed shows, as the place of the last fact that the life had said then, or nothing
+   * for now. */
   moment?: number;
   /** The models the operator added to the roster of the session from the catalog, which each later life offers. */
   models: string[] = [];
@@ -1032,19 +1056,48 @@ export class Session extends EventEmitter {
     if (id === this.selected) return false;
     const index = this.indexed();
     const chain = index.ids.get(id);
-    const mine = chain?.by === "operator" || this.actOf(chain?.by ?? "")?.by === "operator";
+    const mine = operated(chain?.by ?? "") || operated(this.actOf(chain?.by ?? "")?.by ?? "");
     if (!mine) return false;
-    const owed = new Set(this.host.prompts.keys());
     const on = this.activityByChain.get(id) ?? [];
     // A notice to the operator on the chain itself, out of any thread, is unread until a fact seen of the chain covers it.
     const read = this.read(id);
     if (on.some((act) => notice(act) && !act.thread && act.began > read)) return true;
-    return chainThreads(on, index.ids, owed, this.threadsKnown).some(
+    return this.threadsOf(id).list.some(
       (thread) => thread.resolved && thread.yours && this.unreadThread(thread.act.id, threadWork(thread)),
     );
   }
   /** What the threads of the chains keep of each prompt that they read. */
   private readonly threadsKnown = new WeakMap<LiveAct, { message: string | undefined; title: string }>();
+  /** The threads of a chain, in the order they began, each by its id, with the thread of each message and of each
+   * question, and its asides, read again only when a prompt on the chain or a question that waits changes. */
+  threadsOf(chain: string): ThreadList {
+    const stamp = this.threadStamp(chain);
+    const owed = [...this.host.prompts.keys()].join(" ");
+    const kept = this.threadsRead.get(chain);
+    if (kept?.stamp === stamp && kept.owed === owed) return kept.threads;
+    const on = this.activityByChain.get(chain) ?? [];
+    const owes = new Set(this.host.prompts.keys());
+    const { threads: list, asides } = chainSorted(on, this.indexed().ids, owes, this.threadsKnown);
+    const threads: ThreadList = {
+      list,
+      by: new Map(list.map((one) => [one.act.id, one])),
+      of: new Map(
+        list.flatMap((one) => one.messages.map((message): [string, ChainThread] => [message.id, one])),
+      ),
+      asked: new Map(list.flatMap((one) => one.asked.map((ask): [string, ChainThread] => [ask.id, one]))),
+      asides: new Map(asides.map((one) => [one.act.id, one])),
+      aside: new Map(
+        asides.flatMap((one) => one.messages.map((message): [string, ChainAside] => [message.id, one])),
+      ),
+    };
+    this.threadsRead.set(chain, { stamp, owed, threads });
+    return threads;
+  }
+  private readonly threadsRead = new Map<string, { stamp: number; owed: string; threads: ThreadList }>();
+  /** The threads of the chain shown. */
+  get threads(): ThreadList {
+    return this.threadsOf(this.selected);
+  }
   /** The place of the last change of some acts: the latest place at which one of them began or ended. */
   placeOf(acts: readonly ActRow[]): number {
     let place = 0;
@@ -1387,7 +1440,7 @@ export class Session extends EventEmitter {
     this.notice = `${said} ${rest ? `${rest} more ${rest === 1 ? "waits" : "wait"}.` : "Nothing else waits."}`;
   }
   isUserPrompt(act: ActRow): boolean {
-    return act.kind === "prompt" && act.by === "operator";
+    return act.kind === "prompt" && operated(act.by);
   }
   /** Whether a prompt has a program that an edit changes and replays: one of its rungs holds a word the gate let run
    * on this chain. */
@@ -1738,26 +1791,21 @@ export class Session extends EventEmitter {
     if (moment === undefined) return acts;
     return asOf(acts, moment);
   }
-  /** Move the moment that the feed shows one step back or on in the selected chain: a step is a moment when an act of
-   * the chain began or ended. A step on to the last moment returns to now. */
-  travel(by: -1 | 1): void {
-    const moments = [
-      ...new Set(
-        this.acts
-          .filter((act) => act.on === this.selected)
-          .flatMap((act) => [act.began + 1, ...(act.ended === undefined ? [] : [act.ended + 1])]),
-      ),
-    ].sort((one, other) => one - other);
+  /** Move the moment that the feed shows a count of steps back or on, over the moments of the selected chain or over
+   * the moments given: a step is a moment when an act began or ended. A step on to the last moment returns to now. */
+  travel(by: number, moments = momentsOf(this.actsOn(this.selected))): void {
     const last = moments.at(-1);
-    const now = this.moment ?? last;
-    if (now === undefined) return;
-    const next =
-      by < 0 ? (moments.findLast((one) => one < now) ?? moments[0]) : moments.find((one) => one > now);
-    this.moment = next === undefined || next === last ? undefined : next;
+    if (last === undefined) return;
+    const at = this.moment ?? last;
+    // A step back counts from the first moment at or after the one shown, and a step on from the last at or before it.
+    const found = moments.findIndex((one) => one >= at);
+    const place = found < 0 ? moments.length : found;
+    const to = Math.max(0, (by > 0 && moments[place] !== at ? place - 1 : place) + by);
+    this.moment = to >= moments.length - 1 ? undefined : moments[to];
     this.emit("change");
   }
   /** A new branch of the selected chain at the moment that the feed shows, which the session selects: it reads the
-   * transcript through the last act that began before that moment, as a rewind to that act does, and the files that a
+   * transcript through the last act that began by that moment, as a rewind to that act does, and the files that a
    * write changed after it come back as they were. */
   async branchHere(): Promise<string> {
     const last = this.at(this.activity).findLast((act) => !["chain", "grant"].includes(act.kind));
@@ -1780,7 +1828,7 @@ export class Session extends EventEmitter {
   /** The last act that the operator made on the chain shown and that is not over: the message, the word or the
    * command of his that the feed shows last. A cancel that names no act ends it. */
   get lastOwn(): ActRow | undefined {
-    return this.activity.findLast((act) => act.by === "operator" && !act.done && WORK.includes(act.kind));
+    return this.activity.findLast((act) => operated(act.by) && !act.done && WORK.includes(act.kind));
   }
   /** The running work that a cancel of an act ends besides the act: each act under it that is not over and whose work
    * takes time, on any chain, with the chains that they stand on. The rungs of a prompt are its own answer, and no
@@ -1830,7 +1878,7 @@ export class Session extends EventEmitter {
     const under = `${ended} ${ended === 1 ? "act" : "acts"} under it on ${this.chainsOf(reach)}`;
     if (back) {
       // The words go back to where they went: the thread that they answered, or a new thread when they began one, and
-      // not to the thread lit at this moment, which may be the thread that this cancel ends.
+      // not to the open thread of this moment, which may be the thread that this cancel ends.
       const into = this.sentTo.get(act.id);
       this.aim(into);
       this.pinned = into ?? null;

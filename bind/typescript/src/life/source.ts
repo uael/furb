@@ -1,4 +1,4 @@
-import type { Exit, LiveAct } from "./acts.js";
+import { type Exit, type LiveAct, operated } from "./acts.js";
 import { valueText } from "./ladder.js";
 import { unmarked } from "./marks.js";
 import { actState, type State } from "./states.js";
@@ -113,8 +113,7 @@ export function source(
       for (const rung of made.get(act.id) ?? []) if (rung.kind === "rung") rungOf(rung);
       const text = act.done ? valueText(act.value) : "";
       if (text) out.push({ type: "value", act, text });
-    } else if (act.kind === "rung" && (act.by === "operator" || rows.get(act.by)?.kind === "chain"))
-      rungOf(act);
+    } else if (act.kind === "rung" && (operated(act.by) || rows.get(act.by)?.kind === "chain")) rungOf(act);
   }
   return out;
 }

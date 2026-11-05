@@ -1,5 +1,5 @@
 import { type Call, call, isFault } from "./ears.js";
-import { type Compaction, type LiveAct, type PauseCause, WORK } from "./life/acts.js";
+import { type Compaction, type LiveAct, operated, type PauseCause, WORK } from "./life/acts.js";
 import { bound, display, type Fact, isQuestion, usageOf } from "./types.js";
 
 /** One answer of a model on a chain: its place in time, the actor whose reply it answered, and its usage, which is
@@ -167,7 +167,7 @@ export class Activity {
     const act = this.acts.get(id);
     // A later life says each fact of its record again as the journal, which names no speaker, and only the operator
     // says seen.
-    if (kind === "seen" && (by === "operator" || by.startsWith("operator/") || by === "journal")) {
+    if (kind === "seen" && (operated(by) || by === "journal")) {
       this.seen.set(id, at);
     } else if (kind === "prefix" && by !== id) {
       // A chain says its own prefix at its birth, as a chain with a source does, and that prefix cuts nothing.

@@ -21,6 +21,7 @@ import {
   failed,
   layout,
   literals,
+  operated,
   type ProgramLine,
   tailOf,
   writing,
@@ -65,13 +66,13 @@ const modelOf = (step: { kind: string; words: readonly unknown[] }) => {
 
 /** The label of the block of a word: the model that wrote it, as opus/high, or the operator. */
 const writerOf = (step?: { kind: string; by?: string; words: readonly unknown[] }) =>
-  (step?.by !== "operator" && step && modelOf(step)) || "operator";
+  (!operated(step?.by ?? "") && step && modelOf(step)) || "operator";
 
 export const details = part({
   /** The rung that took the place of a rung of a model that failed: a later rung for the same prompt, which the model
    * wrote once it read the failure, so the failure no longer stands. */
   retry(act: ActRow): ActRow | undefined {
-    if (act.kind !== "rung" || act.by === "operator" || !failed(act)) return undefined;
+    if (act.kind !== "rung" || operated(act.by) || !failed(act)) return undefined;
     return this.session.madeAfter(act, (other) => other.kind === "rung");
   },
 
@@ -202,7 +203,7 @@ export const details = part({
    * the operator fixes his own word, and the chain asks a model for its word again with the findings. */
   gateHint(act: ActRow): string | undefined {
     if (act.kind !== "rung" || !act.done || !act.run?.refused) return undefined;
-    return act.by === "operator"
+    return operated(act.by)
       ? "Press ↑ in the input to bring the word back, fix the line that the gate names, and send it again."
       : "The chain tells the model these findings and asks it for its word again.";
   },

@@ -98,7 +98,7 @@ who sent it and to which model when you did not, the type of its answer, its sta
 came to the thread later stands in the box the same way, and the answer of the model stands as markdown with no line of
 color. The words of its steps stand in the same box as code, with no surface of their own, as one Python program, line
 by line, with the number of each line in the gutter, in a quiet color. The input of the chain is the only input. By
-default it sends each message to the open thread lit, else it starts a new thread. `↳ Reply` at the end of a box makes
+default it sends each message to the open thread of the chain, else it starts a new thread. `↳ Reply` at the end of a box makes
 that thread its target, and a reply to a thread that is over opens it again. While the input sends to a thread, its line
 takes the color of the thread, its meta line says `to ↳` and the name of the thread, and the box of the thread ends with
 `↳ Replying here` in its color. `+ New thread`, at the right end of the meta line, and `/newthread`, make the next

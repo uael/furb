@@ -16,7 +16,7 @@ import {
 } from "@opentui/core";
 import type { Keymap } from "@opentui/keymap";
 import { safeText, type Turn } from "furb";
-import { type ChainThread, type LiveAct, type Loom, type ProgramLine, wants } from "furb/life";
+import { type ChainThread, type Loom, type ProgramLine, wants } from "furb/life";
 import type { Tree, ViewEvent } from "furb/protocol";
 import { type ActionsPart, actions, actionsBound } from "./app/actions.ts";
 import { type BlocksPart, blocks } from "./app/blocks.ts";
@@ -43,7 +43,6 @@ import {
   noBorder,
   type Suggestion,
   type TextShape,
-  type ThreadList,
   type TreeRow,
   type Value,
 } from "./app/shared.ts";
@@ -226,19 +225,6 @@ export class App {
   /** The key of the unread marks of the threads of the sidebar, by the list that it came from and the count of the
    * reads of the session. */
   railUnreadKey?: { list: ChainThread[]; reads: number; parts: string[]; count: number; text: string };
-  /** The threads of the chain shown, read again only when the acts or the questions that wait change. */
-  threadList: ThreadList = {
-    session: undefined,
-    chain: "",
-    acts: undefined,
-    owed: "",
-    list: [],
-    by: new Map(),
-    of: new Map(),
-    asked: new Map(),
-    asides: new Map(),
-    aside: new Map(),
-  };
   /** The lists of the sidebar that the operator unfolded: the finished chains, under the key finished, and the
    * archived sessions of a workspace, under its folder. */
   readonly unfolded = new Set<string>();
@@ -1140,8 +1126,6 @@ export class App {
   /** What each act that a thread waits on does, and what each thread that ended came to, which hold while their act
    * and their state stay, so that a frame reads none of them again. */
   doing = new Map<string, string>();
-  /** What each prompt that the list of the threads read is: a message to a thread, or a thread and its title. */
-  readonly promptsRead = new WeakMap<LiveAct, { message: string | undefined; title: string }>();
   /** The values that the first argument of a command may take, for each command whose values the TUI knows. A value
    * of a command that takes more after it completes, and a value of any other command runs the command when it is
    * chosen. */
@@ -1173,7 +1157,7 @@ export class App {
     if (!at || at.on !== w.selected) return undefined;
     w.folds[`prompts:${w.selected}`] = false;
     let head: string | undefined;
-    const threads = this.chainThreadsBy(w.selected).by;
+    const threads = w.threads.by;
     for (let step = 0; at && step < 64; step++) {
       const maker = rows.get(at.by);
       if (!maker || maker.on !== w.selected) break;

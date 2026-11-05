@@ -1,4 +1,4 @@
-import { type Exit, failed, type LiveAct } from "./acts.js";
+import { type Exit, failed, type LiveAct, operated } from "./acts.js";
 import { type Chip, tailOf, valueText } from "./ladder.js";
 import { unmarked } from "./marks.js";
 import { reason } from "./plain.js";
@@ -299,7 +299,7 @@ export function threadProgram(
   let last: LiveAct | undefined;
   for (const step of steps) {
     const message = first(String(step.words[1] ?? ""));
-    if (step.kind === "prompt" && step.by !== "operator") {
+    if (step.kind === "prompt" && !operated(step.by)) {
       // The end of an act shows on its own line, so a notice that says only that an act is done tells nothing more.
       if (!/^\w+\d+ done$/.test(message)) notices.push(message);
       last = step;

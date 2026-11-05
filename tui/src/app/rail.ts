@@ -5,7 +5,6 @@ import {
   attentionOf,
   busy,
   type ChainThread,
-  chainThreads,
   gist,
   nestThreads,
   orderThreads,
@@ -153,28 +152,19 @@ export const rail = part({
    * the chain that it stands on is a detail of it. */
   railThreads(): ChainThread[] {
     const w = this.session;
-    const prompts = new Set(w.host.prompts.keys());
-    const owed = [...prompts].join(" ");
+    const owed = [...w.host.prompts.keys()].join(" ");
     const kept = this.railThreadCache;
     if (kept && kept.session === w && kept.version === w.promptsVersion && kept.owed === owed)
       return kept.list;
-    const index = w.ladderIndex;
     const list: ChainThread[] = [];
-    // A chain that no act touched since the last read keeps its threads, so a new act costs one chain and not all.
-    const reads = kept?.session === w && kept.owed === owed ? kept.chains : new Map<string, ChainRead>();
+    const reads = kept?.chains ?? new Map<string, ChainRead>();
     const chains = new Map<string, ChainRead>();
     for (const [chain, acts] of w.activityByChain) {
       if (!acts.length || w.naming(chain)) continue;
-      const stamp = w.threadStamp(chain);
+      const threads = w.threadsOf(chain).list;
       const read = reads.get(chain);
-      // The chain shown has its threads read already, for the feed, at this version.
-      const threads =
-        read && read.stamp === stamp
-          ? read.list
-          : chain === w.selected
-            ? this.chainThreadsBy(chain).list
-            : chainThreads(acts, index.ids, prompts, this.promptsRead);
-      chains.set(chain, read && read.stamp === stamp ? read : { stamp, list: threads });
+      // A chain whose list of threads stands keeps what the keys of the sidebar read of it.
+      chains.set(chain, read?.list === threads ? read : { list: threads });
       list.push(...threads);
     }
     const ordered = list
@@ -194,7 +184,7 @@ export const rail = part({
     const kept = this.railThreadKey;
     if (kept && kept.list === threads && kept.minute === minute) return kept.text;
     // Each chain keeps its part of the key while no act lands on it, so a new act reads the threads of one chain.
-    const reads = this.railThreadCache?.chains.values() ?? [{ stamp: 0, list: threads } as ChainRead];
+    const reads = this.railThreadCache?.chains.values() ?? [{ list: threads } as ChainRead];
     const texts = [...reads].map((part) => {
       if (part.key?.minute !== minute)
         part.key = {
@@ -225,7 +215,7 @@ export const rail = part({
     const reads = this.session.readsVersion;
     const kept = this.railUnreadKey;
     if (kept && kept.list === threads && kept.reads === reads) return kept.text;
-    const parts = this.railThreadCache?.chains.values() ?? [{ stamp: 0, list: threads } as ChainRead];
+    const parts = this.railThreadCache?.chains.values() ?? [{ list: threads } as ChainRead];
     const texts = [...parts].map((part) => {
       if (part.unread?.reads !== reads)
         part.unread = { reads, text: part.list.map((one) => (this.unreadThread(one) ? "1" : "0")).join("") };
@@ -235,22 +225,6 @@ export const rail = part({
     const count = same && kept ? kept.count : (kept?.count ?? 0) + 1;
     this.railUnreadKey = { list: threads, reads, parts: texts, count, text: `unread ${count}` };
     return `unread ${count}`;
-  },
-
-  /** The thread that the feed shows now: the one chosen, else the last that is open on the chain shown. */
-  activeThread(): ChainThread | undefined {
-    const w = this.session;
-    const all = this.railThreads();
-    const chosen = w.thread ? all.find((one) => one.act.id === w.thread) : undefined;
-    const own = all.filter((one) => one.act.on === w.selected);
-    const open = chosen ?? own.findLast((one) => !one.resolved);
-    // The input sends its next message to the thread chosen, else to the open thread lit, else to a new thread. The
-    // feed and the input drew before this part found which thread is lit, so a change draws them again.
-    if (w.lit !== open?.act.id) {
-      w.lit = open?.act.id;
-      this.schedule();
-    }
-    return open ?? own.at(-1);
   },
 
   /** Whether a thread holds work that the operator did not read, as the facts seen of the record say. */
@@ -602,7 +576,7 @@ export const rail = part({
       for (const key of [...this.unfolded]) if (key.startsWith("ws:")) this.unfolded.delete(key);
     }
     const threads = this.railThreads();
-    const active = this.activeThread();
+    const active = this.session.activeThread;
     const cursor = this.railKeys ? this.railAt : undefined;
     const askCount = (entry: SessionEntry) =>
       entry.session ? entry.session.desk.asks.filter((ask) => !ask.notice).length : 0;
@@ -1044,7 +1018,7 @@ export const rail = part({
       if (this.steering) this.steer(false);
       this.composer.blur();
       if (!this.railAt || !this.railHandlers.has(this.railAt)) {
-        const active = this.activeThread();
+        const active = this.session.activeThread;
         this.railAt = active ? `th:${active.act.id}` : `se:${this.options.workspaces.current?.path}`;
       }
     } else this.composer.focus();

@@ -1,12 +1,12 @@
 import type { BoxOptions, BoxRenderable, Renderable, TextRenderable } from "@opentui/core";
 import { unmarked } from "furb";
-import { type ChainAside, type ChainThread, chainSorted } from "furb/life";
+import type { ChainThread } from "furb/life";
 import { count, dollars } from "../format.ts";
 import type { ActRow } from "../session.ts";
 import { theme as c, glyph, spacing as space } from "../theme.ts";
 import { bold, type Part } from "../ui.ts";
 import { part } from "./part.ts";
-import type { TextShape, ThreadList } from "./shared.ts";
+import type { TextShape } from "./shared.ts";
 
 export const sidebar = part({
   /** The context of the chain shown, in one short line for the footer: how full its window is, or the size of its
@@ -105,69 +105,13 @@ export const sidebar = part({
     ]);
   },
 
-  /** The threads of the chain shown, and each by its id. */
-  chainThreadList(chain: string): ChainThread[] {
-    return this.chainThreadsBy(chain).list;
-  },
-
-  chainThreadsBy(chain: string): ThreadList {
-    const w = this.session;
-    if (w.selected !== chain)
-      return {
-        session: w,
-        chain,
-        acts: undefined,
-        owed: "",
-        list: [],
-        by: new Map(),
-        of: new Map(),
-        asked: new Map(),
-        asides: new Map(),
-        aside: new Map(),
-      };
-    const owed = [...w.host.prompts.keys()].join(" ");
-    // A list read from another session or another chain is no list of this one, even when its version is the same.
-    const kept = this.threadList;
-    if (
-      kept.session !== w ||
-      kept.chain !== chain ||
-      kept.acts !== w.threadStamp(chain) ||
-      kept.owed !== owed
-    ) {
-      const index = w.ladderIndex;
-      const { threads: list, asides } = chainSorted(
-        index.on,
-        index.ids,
-        new Set(w.host.prompts.keys()),
-        this.promptsRead,
-      );
-      this.threadList = {
-        session: w,
-        chain,
-        acts: w.threadStamp(chain),
-        owed,
-        list,
-        by: new Map(list.map((one) => [one.act.id, one])),
-        of: new Map(
-          list.flatMap((one) => one.messages.map((message): [string, ChainThread] => [message.id, one])),
-        ),
-        asked: new Map(list.flatMap((one) => one.asked.map((ask): [string, ChainThread] => [ask.id, one]))),
-        asides: new Map(asides.map((one) => [one.act.id, one])),
-        aside: new Map(
-          asides.flatMap((one) => one.messages.map((message): [string, ChainAside] => [message.id, one])),
-        ),
-      };
-    }
-    return this.threadList;
-  },
-
   /** Whether a thread stands folded to its header in the feed: as the operator left it, and else when it is resolved,
    * is not the last thread of its chain, and the preference folds what is over. */
   threadFolded(id: string): boolean {
     const w = this.session;
     const set = w.folds[`thread:${id}`];
     if (set !== undefined) return set;
-    const own = this.chainThreadsBy(w.selected);
+    const own = w.threads;
     const thread = own.by.get(id);
     return Boolean(w.preferences.foldThreads && thread?.resolved && own.list.at(-1) !== thread);
   },
@@ -244,7 +188,7 @@ export const sidebar = part({
   /** The controls of a thread on the header of the thread in the feed: collapse it, and resolve it or open it again.
    * A message of a thread and a prompt that heads no thread have none. */
   threadControls(act: ActRow): BoxRenderable | undefined {
-    const thread = this.chainThreadsBy(this.session.selected).by.get(act.id);
+    const thread = this.session.threads.by.get(act.id);
     if (!thread) return undefined;
     const id = thread.act.id;
     const folded = this.threadFolded(id);

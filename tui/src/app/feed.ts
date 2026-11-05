@@ -3,12 +3,14 @@ import { display, imageReferences } from "furb";
 import {
   actLines,
   asksOperator,
+  asOf,
   cancelled,
   condense,
   earProgram,
   gist,
   ladder,
   makers,
+  operated,
   type ProgramLine,
   pauseSaid,
   stepLines,
@@ -25,7 +27,7 @@ import { hunkPatch, type Scope } from "../review.ts";
 import type { ActRow, View } from "../session.ts";
 import { theme as c, glyph, markOf, spacing as space, spin, threadTone } from "../theme.ts";
 import { bold, italic, type Part, plain } from "../ui.ts";
-import { asOf, branchMessages, branchStart, branchTaken, branchTakes, earlierSteps } from "../watching.ts";
+import { branchMessages, branchStart, branchTaken, branchTakes, earlierSteps } from "../watching.ts";
 import { part } from "./part.ts";
 import { type BlockOptions, MESSAGE_ROWS, PROGRAM_STEPS, spell, viewLabels } from "./shared.ts";
 import { SCROLL } from "./thread.ts";
@@ -218,7 +220,7 @@ export const feed = part({
       w.moment === undefined &&
       !w.paused &&
       !w.actOf(w.selected)?.words[1] &&
-      !w.activity.some((act) => act.by === "operator" || act.kind === "prompt");
+      !w.activity.some((act) => operated(act.by) || act.kind === "prompt");
     if (this.welcoming) {
       const { width, height } = this.scroll.viewport;
       add("welcome", `welcome:${width}:${height}:${this.theme}:${this.welcomeKey()}`, [], (box) =>
@@ -275,7 +277,8 @@ export const feed = part({
           : [],
       );
       const takenLines: typeof own = [];
-      const frozen = branch && taken.size ? asOf(shown, branch.began) : [];
+      // The threads stand as they stood at the fact before the one that made the branch.
+      const frozen = branch && taken.size ? asOf(shown, branch.began - 1) : [];
       let frozenMade: ReturnType<typeof makers> | undefined;
       const takenMade = () => {
         frozenMade ??= makers(frozen);
@@ -296,7 +299,7 @@ export const feed = part({
       // The feed is one program of threads: each thread is its header, then the words of its steps as python, with
       // what each line came to as a quiet comment beside it. A thread that the operator collapsed shows its header
       // line alone.
-      const threadsOwn = this.chainThreadsBy(w.selected);
+      const threadsOwn = w.threads;
       const waiting = new Set(w.desk.asks.map((ask) => ask.id));
       const named = (chain: string) => w.labelOf(chain);
       const madeMap = () => {
@@ -492,7 +495,7 @@ export const feed = part({
       // The marks of the parts stand after the last act that began before their place: a rule with the title of the
       // mark, then its lines. A line that only shows more of an act, or a fold of earlier lines, places no mark.
       const moment = w.moment;
-      const marks = this.parts.marks(this.seen()).filter((one) => moment === undefined || one.at < moment);
+      const marks = this.parts.marks(this.seen()).filter((one) => moment === undefined || one.at <= moment);
       const placing = (line: (typeof lines)[number]) =>
         line.type !== "tail" && line.type !== "value" && line.type !== "more";
       // A mark waits until the first act that began at its place or later, and shows before it: before a line of the
@@ -733,7 +736,7 @@ export const feed = part({
         ];
         const says: ActRow[] = [];
         for (const line of program) {
-          if (line.kind === "note" && line.step.kind === "prompt" && line.step.by === "operator") {
+          if (line.kind === "note" && line.step.kind === "prompt" && operated(line.step.by)) {
             // A message that the operator took back leaves the box, and the message that replaces it stands in its place.
             if (cancelled(line.step)) continue;
             says.push(line.step as ActRow);
@@ -1106,7 +1109,7 @@ export const feed = part({
           // A word of the operator that only made a chain, as a branch or a new chain does, reads as the chain that it
           // made, and a click on it opens that chain.
           const made =
-            act.by === "operator" && /^\s*chain\(/.test(code)
+            operated(act.by) && /^\s*chain\(/.test(code)
               ? w.chains.find((chain) => chain.by === act.id)
               : undefined;
           if (made) {
