@@ -218,6 +218,26 @@ export type Request1 =
     }
   | {
       life: string;
+      notices?: string[];
+      verb: "desk";
+    }
+  | {
+      life: string;
+      on?: string | null;
+      at?: number | null;
+      verb: "threads";
+    }
+  | {
+      life: string;
+      at: number;
+      verb: "as_of";
+    }
+  | {
+      life: string;
+      verb: "moments";
+    }
+  | {
+      life: string;
       ask: number;
       turn?: unknown;
       why?: string | null;

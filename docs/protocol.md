@@ -113,6 +113,10 @@ it is not given. The daemon answers requests in any order.
 | `queue` | `life`, `entry`, `shape`, `message`, `on` | write |
 | `unqueue` | `life`, `entry` | write |
 | `queued` | `life`, `on` | read |
+| `desk` | `life`, `notices` | read |
+| `threads` | `life`, `on`, `at` | read |
+| `as_of` | `life`, `at` | read |
+| `moments` | `life` | read |
 | `answered` | `life`, `ask`, `turn`, `why` | write |
 | `wrote` | `life`, `ask`, `text`, `thinking` | write |
 | `handover` | | write |
@@ -147,6 +151,11 @@ it is not given. The daemon answers requests in any order.
   `queued` gives the follow-ups that wait on a chain, in order. A send that fails holds the queue of its chain, with
   its cause in `failed`, until the operator takes the follow-up out. The record keeps each step as a fact `queue` of
   the operator, so a reopen finds the queue as it stood.
+- `desk`, `threads`, `as_of` and `moments` give the meaning of the acts that the life told as events, which each
+  window draws the same way: `desk` each question that the operator owes and each of the `notices` that the window
+  still shows, the oldest first, with the lines that answer each; `threads` the tree of the threads of a chain, its
+  asides, what the tree says to the operator and the state of the chain, now or just after the moment `at`; `as_of`
+  the acts as they stood just after a moment; `moments` each moment at which an act began or ended.
 - After `attach`, the daemon pushes each event of the life as a frame `event`, with the `life`, the `seq` of the event
   in the log of the life and the `event`: `fact`, `act`, `text`, `queued`, `notice`, `changed`, `reborn` or `ended`. After
   `reborn`, the life goes on from its checkpoint, and its acts come again as they stand.

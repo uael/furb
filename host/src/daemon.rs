@@ -429,6 +429,10 @@ fn routed(verb: Verb) -> Routed {
     }
     Verb::Unqueue { life, entry } => (life, Command::Unqueue { entry }),
     Verb::Queued { life, on } => (life, Command::Queued { on }),
+    Verb::Desk { life, notices } => (life, Command::Desk { notices }),
+    Verb::Threads { life, on, at } => (life, Command::Threads { on, at }),
+    Verb::AsOf { life, at } => (life, Command::AsOf { at }),
+    Verb::Moments { life } => (life, Command::Moments),
     other => return Routed::Daemon(other),
   };
   Routed::Life(life, command)

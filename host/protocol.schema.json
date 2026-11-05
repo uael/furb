@@ -967,6 +967,101 @@
             "life": {
               "type": "string"
             },
+            "notices": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "verb": {
+              "type": "string",
+              "const": "desk"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "What waits for the operator in a life, with each notice that the window still shows."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "at": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "verb": {
+              "type": "string",
+              "const": "threads"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "The threads of a chain with their meaning, now or as they stood just after a moment."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "at": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "verb": {
+              "type": "string",
+              "const": "as_of"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "at"
+          ],
+          "description": "The acts of a life as they stood just after a moment, each with its meaning then."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "moments"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "Each moment of a life at which an act began or ended, in order."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
             "ask": {
               "type": "integer",
               "format": "uint64",
