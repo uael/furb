@@ -15,7 +15,7 @@ pub use desk::{Ask, Desk, Tick, choices, desk, hint, takes_nothing, ticks, wants
 pub(crate) use fold::{Fold, followed};
 pub use state::{State, chain_state, restate, working};
 pub use threads::{
-  Attention, ChainThread, Concern, Origin, Rows, ThreadNode, attention, chain_threads, concerns,
-  nest_threads, root_of, thread_of,
+  Aside, Attention, ChainAside, ChainThread, Concern, Origin, Rows, ThreadNode, attention,
+  chain_asides, chain_threads, concerns, nest_threads, root_of, thread_of,
 };
 pub use time::{as_of, moments_of};
