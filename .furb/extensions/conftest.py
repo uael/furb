@@ -1,8 +1,11 @@
-"""The conftest of the suites of the extensions of the project: no test sees a variable of git that a commit sets."""
+"""The conftest of the suites of the extensions of the project: no test sees a variable of git that a commit sets, and a
+test runs on the engine that engine_of names."""
 
 import os
 
 import pytest
+
+from conftest import engine_of  # noqa: F401
 
 
 @pytest.fixture(autouse=True)
