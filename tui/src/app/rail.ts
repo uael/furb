@@ -611,7 +611,7 @@ export const rail = part({
     this.railHeading.visible = style !== "cards";
     if (!this.paneChanged(this.railSpaces, key)) return;
     // The model orders the threads, the closed ones first and the open ones last, each by the time of its last message.
-    const tree = orderThreads(nestThreads(threads, w.ladderIndex.ids));
+    const tree = orderThreads(nestThreads(threads, w.boardIndex.ids));
     this.clear(this.railHeading);
     this.clear(this.railSpaces);
     this.unhover();

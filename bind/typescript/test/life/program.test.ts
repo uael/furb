@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { makers } from "../../src/life/ladder.ts";
 import {
   actLines,
   earProgram,
@@ -13,7 +12,7 @@ import {
   wrap,
   writing,
 } from "../../src/life/program.ts";
-import { act } from "./acts.ts";
+import { act, makers } from "./acts.ts";
 
 const label = (chain: string) => `label of ${chain}`;
 

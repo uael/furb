@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import { join } from "node:path";
 import type { KeyEvent } from "@opentui/core";
 import type { ProgramLine } from "furb/life";
-import { chainThreads } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { openEngine } from "../src/bridge.ts";
 import { Session } from "../src/session.ts";
@@ -16,8 +15,7 @@ const size = { width: 152, height: 46 };
 const feedOf = (session: Session, row: string) => row.slice(0, size.width - session.preferences.sidebarWidth);
 
 /** The threads of the chain shown. */
-const listed = (session: Session) =>
-  chainThreads(session.ladderIndex.on, session.ladderIndex.ids, new Set(session.host.prompts.keys()));
+const listed = (session: Session) => session.threadsOf(session.selected).list;
 
 /** A session on the recorded life of a conductor, which shows its log and runs nothing. */
 async function recorded(): Promise<Session> {

@@ -1,7 +1,6 @@
 import { expect, setSystemTime, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { RGBA } from "@opentui/core";
-import { chainThreads } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { glyph, palettes, spacing as space } from "../src/theme.ts";
 import { type Composing, cellAt, composing } from "./composing.ts";
@@ -29,8 +28,7 @@ async function railClick({ session, screen, frame }: Composing, text: string): P
 }
 
 /** The threads of the chain shown, as the sidebar lists them. */
-const listed = (session: Composing["session"]) =>
-  chainThreads(session.ladderIndex.on, session.ladderIndex.ids, new Set(session.host.prompts.keys()));
+const listed = (session: Composing["session"]) => session.threadsOf(session.selected).list;
 
 test("the sidebar lists the workspaces and the threads of the session shown, and holds no tree of chains", () =>
   composing(

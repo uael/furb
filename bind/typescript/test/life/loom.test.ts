@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { LiveAct, Measure } from "../../src/life/acts.ts";
 import { measureOf } from "../../src/life/acts.ts";
-import { condense, ladder, makers, thread } from "../../src/life/ladder.ts";
+import { thread } from "../../src/life/ladder.ts";
 import {
   asOf,
   commandDoing,
@@ -16,7 +16,7 @@ import {
   subjectOf,
   weave,
 } from "../../src/life/loom.ts";
-import { act } from "./acts.ts";
+import { act, actIndex } from "./acts.ts";
 
 const loomOf = (
   acts: LiveAct[],
@@ -145,7 +145,14 @@ test("a thread shows each prompt with the rungs of its ladder, the acts of each 
     rung1: 'notes = read("README.md")\nclose("Done.")',
     rung2: "await wait(60, __name__)",
   };
-  const lines = ladder("chain1", acts, (rung) => words[rung.id] ?? "", new Map(), new Set());
+  const lines = thread(
+    "chain1",
+    (rung) => words[rung.id] ?? "",
+    new Map(),
+    new Set(),
+    new Set(),
+    actIndex(acts, "chain1"),
+  );
   expect(
     lines.map((line) => [
       line.type,
@@ -173,7 +180,14 @@ test("the rungs in a row that an ear made on a chain stand on one line, with the
     act("rung2", "rung", "chain1", "extensions", 4, 5),
     act("rung3", "rung", "chain1", "operator", 6, 7, { words: ["x = 1"] }),
   ];
-  const lines = ladder("chain1", acts, (rung) => String(rung.words[0] ?? ""), new Map(), new Set());
+  const lines = thread(
+    "chain1",
+    (rung) => String(rung.words[0] ?? ""),
+    new Map(),
+    new Set(),
+    new Set(),
+    actIndex(acts, "chain1"),
+  );
   expect(
     lines.map((line) => [
       line.type,
@@ -189,35 +203,7 @@ test("the rungs in a row that an ear made on a chain stand on one line, with the
   ]);
 });
 
-test("a ladder that reads the index of a host gives the lines that it gives from every act", () => {
-  const acts = [
-    act("chain1", "chain", "", "operator", 1),
-    act("prompt1", "prompt", "chain1", "operator", 2, 12, { words: ["str", "Explore", ""], value: "Done." }),
-    act("rung1", "rung", "chain1", "prompt1", 3, 11),
-    act("read1", "read", "chain1", "rung1", 4, 4),
-    act("chain2", "chain", "", "rung1", 5),
-    act("prompt2", "prompt", "chain2", "rung1", 6, undefined, { words: ["str", "Look", ""] }),
-    act("rung2", "rung", "chain2", "prompt2", 7),
-    act("rung3", "rung", "chain1", "extensions", 8, 9),
-    act("bash1", "bash", "chain1", "rung3", 9, undefined, {
-      words: ["make"],
-      value: { stdout: { content: "one\n" }, stderr: { content: "" } },
-    }),
-  ];
-  for (const chain of ["chain1", "chain2"]) {
-    const index = {
-      on: acts.filter((one) => one.on === chain && one.kind !== "chain"),
-      made: makers(acts),
-      ids: new Map(acts.map((one) => [one.id, one])),
-    };
-    const word = (rung: LiveAct) => rung.id;
-    expect(ladder(chain, acts, word, new Map(), new Set(["prompt2"]), index)).toEqual(
-      ladder(chain, acts, word, new Map(), new Set(["prompt2"])),
-    );
-  }
-});
-
-test("a condensed thread read from the index of a host gives the lines that condense gives of its ladder", () => {
+test("a thread that a host stamps reads a step again only where an act under it changed, as a thread that keeps nothing reads it", () => {
   // A life of many steps, made by a fixed sequence of choices: prompts with long ladders, rungs that ask prompts on the
   // chain and run commands, rungs of an ear in a row, and work that runs or asks the operator, old and new.
   let seed = 7;
@@ -269,24 +255,16 @@ test("a condensed thread read from the index of a host gives the lines that cond
   const owed = new Set(
     acts.filter((one) => one.kind === "prompt" && one.words[2] === "operator").map((one) => one.id),
   );
-  const index = {
-    on: acts.filter((one) => one.on === "chain1" && one.kind !== "chain"),
-    made: makers(acts),
-    ids: new Map(acts.map((one) => [one.id, one])),
-    live: acts.filter((one) => !one.done || one.run?.status === "running"),
-  };
+  const index = actIndex(acts, "chain1");
   const word = (rung: LiveAct) => `${rung.id}\nmore`;
-  const keys = acts.flatMap((one) => [`rungs:${one.id}`, `prompts:${one.id}`]);
-  for (const opened of [[], ["prompts:chain1"], keys.filter(() => !next(3))]) {
-    const lines = condense(ladder("chain1", acts, word, new Map(), owed, index), new Set(opened));
-    if (!opened.length) expect(lines.some((line) => line.type === "more")).toBe(true);
-    expect(thread("chain1", word, new Map(), owed, new Set(opened), index)).toEqual(lines);
-  }
   // A host that stamps the changes of what each act made has its thread read again only where an act changed.
   const stamps = new Map<string, number>();
   const stamped = { ...index, stamp: (id: string) => stamps.get(id) ?? 0 };
   const read = () => thread("chain1", word, new Map(), owed, new Set(), stamped);
-  expect(read()).toEqual(condense(ladder("chain1", acts, word, new Map(), owed, index), new Set()));
+  const whole = () =>
+    thread("chain1", word, new Map(), owed, new Set(), { ...index, made: new Map(index.made) });
+  expect(read().some((line) => line.type === "more")).toBe(true);
+  expect(read()).toEqual(whole());
   for (const [place, one] of acts.entries())
     if (one.kind === "bash" && !one.done) {
       const done = { ...one, done: true, ended: acts.length + 1 };
@@ -296,8 +274,10 @@ test("a condensed thread read from the index of a host gives the lines that cond
       made[made.indexOf(one)] = done;
       stamps.set(done.by, (stamps.get(done.by) ?? 0) + 1);
     }
-  index.live = acts.filter((one) => !one.done || one.run?.status === "running");
-  expect(read()).toEqual(condense(ladder("chain1", acts, word, new Map(), owed, index), new Set()));
+  index.live = new Map(
+    acts.filter((one) => !one.done || one.run?.status === "running").map((one) => [one.id, one]),
+  );
+  expect(read()).toEqual(whole());
 });
 
 /** The acts of a life of eight chains under the root, each with a prompt and commands in each state. */
@@ -554,9 +534,13 @@ test("a long thread folds its earlier steps into one line of more, and keeps a p
   acts[2] = act("prompt2", "prompt", "chain1", "operator", 20, undefined, {
     words: ["str", "step 2", "operator"],
   });
-  const lines = condense(
-    ladder("chain1", acts, () => "", new Map(), new Set(["prompt2"])),
+  const lines = thread(
+    "chain1",
+    () => "",
+    new Map(),
+    new Set(["prompt2"]),
     new Set(),
+    actIndex(acts, "chain1"),
   );
   expect(lines.map((line) => (line.type === "more" ? `more ${line.count}` : line.act.id))).toEqual([
     "prompt1",
@@ -571,12 +555,15 @@ test("a long thread folds its earlier steps into one line of more, and keeps a p
   ]);
   const more = lines.find((line) => line.type === "more");
   expect(more?.type === "more" && [more.key, more.heads]).toEqual(["prompts:chain1", ["prompt"]]);
-  expect(
-    condense(
-      ladder("chain1", acts, () => "", new Map(), new Set(["prompt2"])),
-      new Set(["prompts:chain1"]),
-    ).some((line) => line.type === "more"),
-  ).toBe(false);
+  const opened = thread(
+    "chain1",
+    () => "",
+    new Map(),
+    new Set(["prompt2"]),
+    new Set(["prompts:chain1"]),
+    actIndex(acts, "chain1"),
+  );
+  expect(opened.some((line) => line.type === "more")).toBe(false);
 });
 
 test("a long ladder folds its earlier rungs into one line of more, keeps a rung that runs, and folds no lone rung", () => {
@@ -584,21 +571,58 @@ test("a long ladder folds its earlier rungs into one line of more, keeps a rung 
   for (let n = 1; n <= 9; n++)
     acts.push(act(`rung${n}`, "rung", "chain1", "prompt1", 2 + n, n === 2 ? undefined : 3 + n));
   const ids = (opened: string[]) =>
-    condense(
-      ladder("chain1", acts, () => "x = 1", new Map(), new Set()),
-      new Set(opened),
-    ).map((line) => (line.type === "more" ? `more ${line.count}` : line.act.id));
+    thread("chain1", () => "x = 1", new Map(), new Set(), new Set(opened), actIndex(acts, "chain1")).map(
+      (line) => (line.type === "more" ? `more ${line.count}` : line.act.id),
+    );
   expect(ids([])).toEqual(["prompt1", "rung1", "rung2", "more 3", "rung6", "rung7", "rung8", "rung9"]);
   expect(ids(["rungs:prompt1"])).toHaveLength(10);
   // Five rungs leave one to fold, and a line of more in place of one rung shows nothing less.
   expect(ids([]).length).toBeLessThan(ids(["rungs:prompt1"]).length);
   const five = acts.slice(0, 7);
   expect(
-    condense(
-      ladder("chain1", five, () => "", new Map(), new Set()),
-      new Set(),
-    ).some((line) => line.type === "more"),
+    thread("chain1", () => "", new Map(), new Set(), new Set(), actIndex(five, "chain1")).some(
+      (line) => line.type === "more",
+    ),
   ).toBe(false);
+});
+
+test("a question deep in an early step of a long thread stays shown with each step over it, and the steps beside them fold", () => {
+  const acts = [act("chain1", "chain", "", "operator", 1)];
+  for (let n = 1; n <= 12; n++)
+    acts.push(act(`prompt${n}`, "prompt", "chain1", "operator", 10 * n, n === 2 ? undefined : 10 * n + 9));
+  // The second prompt holds eight rungs, and its second rung asks the operator a question that waits.
+  for (let n = 1; n <= 8; n++)
+    acts.push(act(`rung${n}`, "rung", "chain1", "prompt2", 20 + n, n === 2 ? undefined : 21 + n));
+  acts.push(
+    act("prompt13", "prompt", "chain1", "rung2", 23, undefined, { words: ["str", "Which?", "operator"] }),
+  );
+  const lines = thread(
+    "chain1",
+    () => "x = 1",
+    new Map(),
+    new Set(["prompt13"]),
+    new Set(),
+    actIndex(acts, "chain1"),
+  );
+  expect(lines.map((line) => (line.type === "more" ? `more ${line.count}` : line.act.id))).toEqual([
+    "prompt1",
+    "prompt2",
+    "rung1",
+    "rung2",
+    "prompt13",
+    "more 2",
+    "rung5",
+    "rung6",
+    "rung7",
+    "rung8",
+    "more 4",
+    "prompt7",
+    "prompt8",
+    "prompt9",
+    "prompt10",
+    "prompt11",
+    "prompt12",
+  ]);
 });
 
 test("the measure of a chain counts its answers, sums their dollars, and names the actor of the last", () => {

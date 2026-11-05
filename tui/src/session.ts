@@ -245,6 +245,49 @@ function placed(index: Index, act: ActRow): void {
   if (!word || (index.at.get(word.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.words.set(act.on, act);
 }
 
+/** The index of a list of acts, each placed in its order, which goes on from the count of prompts of the index
+ * before it. */
+function indexOf(acts: readonly ActRow[], prompts = 0): Index {
+  const index: Index = {
+    of: acts,
+    ids: new Map(),
+    at: new Map(),
+    on: new Map(),
+    made: new Map(),
+    chains: [],
+    places: new Map(),
+    words: new Map(),
+    live: new Map(),
+    stamps: new Map(),
+    chained: new Map(),
+    threaded: new Map(),
+    prompts,
+    touched: [],
+    written: [],
+    work: new Map(),
+    latest: new Map(),
+    failing: new Set(),
+    named: new Map(),
+  };
+  for (const [place, act] of acts.entries()) {
+    index.ids.set(act.id, act);
+    index.at.set(act.id, place);
+    placed(index, act);
+  }
+  return index;
+}
+
+/** What the ladder of a chain reads of an index of the session. */
+function ladderOf(index: Index, chain: string): ActIndex {
+  return {
+    on: index.work.get(chain) ?? [],
+    made: index.made,
+    ids: index.ids,
+    live: index.live,
+    stamp: (id) => index.stamps.get(id) ?? 0,
+  };
+}
+
 /** The running work that a cancel of an act ends, and the chains that it stands on. */
 export interface Reach {
   acts: ActRow[];
@@ -1204,47 +1247,32 @@ export class Session extends EventEmitter {
    * the session did not index, as one that a test sets, is indexed whole. */
   private index?: Index;
   private indexed(): Index {
-    if (this.index?.of === this.acts) return this.index;
-    const index: Index = {
-      of: this.acts,
-      ids: new Map(),
-      at: new Map(),
-      on: new Map(),
-      made: new Map(),
-      chains: [],
-      places: new Map(),
-      words: new Map(),
-      live: new Map(),
-      stamps: new Map(),
-      chained: new Map(),
-      threaded: new Map(),
-      prompts: this.index?.prompts ?? 0,
-      touched: [],
-      written: [],
-      work: new Map(),
-      latest: new Map(),
-      failing: new Set(),
-      named: new Map(),
-    };
-    for (const [place, act] of this.acts.entries()) {
-      index.ids.set(act.id, act);
-      index.at.set(act.id, place);
-      placed(index, act);
+    if (this.index?.of !== this.acts) this.index = indexOf(this.acts, this.index?.prompts);
+    return this.index;
+  }
+  /** The index of the acts that the feed shows, as they stand now or at its moment, which the ladder of the chain shown
+   * reads, so that a frame makes no pass over every act. The index of a moment holds while the moment stands. */
+  get ladderIndex(): ActIndex {
+    const moment = this.moment;
+    if (moment === undefined) {
+      this.past = undefined;
+      return ladderOf(this.indexed(), this.selected);
     }
-    this.index = index;
+    if (this.past?.moment !== moment || this.past.of !== this.acts)
+      this.past = { moment, of: this.acts, index: indexOf(this.at(this.acts)) };
+    return ladderOf(this.past.index, this.selected);
+  }
+  private past?: { moment: number; of: readonly ActRow[]; index: Index };
+  /** The index of the acts of a chain as they stood at a moment, as the threads that a branch took read it, which holds
+   * while the chain shown and that moment stand. */
+  ladderAt(chain: string, moment: number): ActIndex {
+    const kept = this.frozen;
+    if (kept?.chain === chain && kept.moment === moment && kept.of === this.acts) return kept.index;
+    const index = ladderOf(indexOf(asOf(this.acts, moment)), chain);
+    this.frozen = { chain, moment, of: this.acts, index };
     return index;
   }
-  /** The index of the acts that the ladder of the chain shown reads, so that a frame makes no pass over every act. */
-  get ladderIndex(): ActIndex & { live: Iterable<ActRow>; stamp: (id: string) => number } {
-    const index = this.indexed();
-    return {
-      on: this.activity,
-      made: index.made,
-      ids: index.ids,
-      live: index.live.values(),
-      stamp: (id) => index.stamps.get(id) ?? 0,
-    };
-  }
+  private frozen?: { chain: string; moment: number; of: readonly ActRow[]; index: ActIndex };
   /** How many times a prompt came or changed, which the threads of the life read again on, and no other act. */
   get promptsVersion(): number {
     return this.indexed().prompts;
@@ -1518,6 +1546,7 @@ export class Session extends EventEmitter {
     if (id !== this.selected) {
       this.editing = undefined;
       this.held = 0;
+      this.frozen = undefined;
       this.thread = undefined;
       this.fresh = false;
       this.turns = [];

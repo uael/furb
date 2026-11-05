@@ -86,18 +86,12 @@ export type ActIndex = {
   on: readonly LiveAct[];
   made: ReadonlyMap<string, readonly LiveAct[]>;
   ids: ReadonlyMap<string, LiveAct>;
+  /** Each act that is not done, and each rung whose run runs, by its name, which the steps that stay shown hold. */
+  live: ReadonlyMap<string, LiveAct>;
+  /** How many times an act that each act made came or changed, which a host that counts them gives: a thread keeps what
+   * it read of each step until that count changes. */
+  stamp?: (id: string) => number;
 };
-
-/** The acts that each act made, in the order of the acts. */
-export function makers(acts: readonly LiveAct[]): Map<string, LiveAct[]> {
-  const made = new Map<string, LiveAct[]>();
-  for (const act of acts) {
-    const list = made.get(act.by);
-    if (list) list.push(act);
-    else made.set(act.by, [act]);
-  }
-  return made;
-}
 
 /** How a thread reads its acts: the chain, the word of a rung, what each rung streams, and the prompts that the
  * operator owes. */
@@ -183,49 +177,6 @@ function earLine(rungs: LiveAct[], { made, owed }: Reading): Line {
   };
 }
 
-/** The steps at the top of the thread of a chain: each act on it that no act on it made, in the order it began, and
- * the rungs in a row that one maker wrote with no word of its own, as one step. */
-function tops(on: readonly LiveAct[], local: (id: string) => boolean, rows: ReadonlyMap<string, LiveAct>) {
-  const out: { act: LiveAct; ear?: LiveAct[] }[] = [];
-  for (const act of on) {
-    if (local(act.by)) continue;
-    if (written(act, (id) => rows.has(id))) {
-      const last = out.at(-1);
-      if (last?.ear && last.act.by === act.by) last.ear.push(act);
-      else out.push({ act, ear: [act] });
-    } else out.push({ act });
-  }
-  return out;
-}
-
-/** The thread of a chain: each step at its top, and under each step the steps and the lines that it holds. The index
- * of a host that holds one spares a pass over every act, so that a long life draws its thread as fast as a short
- * one. */
-export function ladder(
-  chain: string,
-  acts: readonly LiveAct[],
-  word: (rung: LiveAct) => string,
-  streams: ReadonlyMap<string, { text: string; thinking: string }>,
-  owed: ReadonlySet<string>,
-  index?: ActIndex,
-): Line[] {
-  const on = index?.on ?? acts.filter((act) => act.on === chain && act.kind !== "chain");
-  const local = new Set(on.map((act) => act.id));
-  const reading: Reading = { chain, made: index?.made ?? makers(acts), word, streams, owed };
-  const lines: Line[] = [];
-  const emit = (act: LiveAct, depth: number): void => {
-    const { line, lead, steps, trail } = step(act, depth, reading);
-    lines.push(line, ...lead);
-    for (const one of steps) emit(one, depth + 1);
-    lines.push(...trail);
-  };
-  const rows = index?.ids ?? new Map(acts.map((act) => [act.id, act]));
-  for (const top of tops(on, (id) => local.has(id), rows))
-    if (top.ear) lines.push(earLine(top.ear, reading));
-    else emit(top.act, 0);
-  return lines;
-}
-
 /** The parts of a step that a thread read, and what they were read of. */
 interface Kept {
   act: LiveAct;
@@ -289,17 +240,20 @@ function listed(
   return held;
 }
 
-/** The thread of a chain condensed, as condense gives the ladder of the chain, read from the index of a host: it
- * makes the lines of the steps that it shows, and only counts the steps that a fold holds, so that it takes the time
- * of what it shows and not the time of the life. The live acts of the index are each act that is not done, and each
- * rung whose run runs, which the steps that stay shown hold. */
+/** The thread of a chain as a person reads it at a glance, read from the index of a host: the last steps at each level
+ * of the thread, and a line of more in place of each run of earlier ones, which a key of the opened set opens. At the
+ * top and under a rung, a step is a prompt, or another line that heads lines of its own, and the last prompts show;
+ * under a prompt, a step is a rung, and the last rungs show. A step that asks the operator or runs stays shown, and a
+ * fold holds two steps in a row at least. The key of a fold is prompts: or rungs: and the act that the steps stand
+ * under, or the chain at the top. It makes the lines of the steps that it shows, and only counts the steps that a fold
+ * holds, so that it takes the time of what it shows and not the time of the life. */
 export function thread(
   chain: string,
   word: (rung: LiveAct) => string,
   streams: ReadonlyMap<string, { text: string; thinking: string }>,
   owed: ReadonlySet<string>,
   opened: ReadonlySet<string>,
-  index: ActIndex & { live: Iterable<LiveAct>; stamp?: (id: string) => number },
+  index: ActIndex,
   shown: { prompts: number; rungs: number } = SHOWN,
 ): Line[] {
   const { ids } = index;
@@ -336,7 +290,7 @@ export function thread(
   // A step stays shown when a prompt or a rung under it asks the operator or runs: each such act marks each step from
   // it up to the top, through the lines that the thread makes of it, in the level of the step above it.
   const alive = new Map<string, string[]>();
-  for (const act of [...index.live, ...[...owed].flatMap((id) => ids.get(id) ?? [])]) {
+  for (const act of [...index.live.values(), ...[...owed].flatMap((id) => ids.get(id) ?? [])]) {
     if (
       (act.kind !== "prompt" && act.kind !== "rung") ||
       !["asks", "thinks", "runs", "idle"].includes(actState(act, owed))
@@ -371,9 +325,9 @@ export function thread(
         )
       : empty;
   const out: Line[] = [];
-  /** One level of the thread, as level condenses it: a group of the lines that stand first, which stays, then a group
-   * for each step, and the lines that end the level in the last group. It reads only the steps that it shows, and
-   * the places of the kinds of the steps that a fold holds. */
+  /** One level of the thread: a group of the lines that stand first, which stays, then a group for each step, and the
+   * lines that end the level in the last group. It reads only the steps that it shows, and the places of the kinds of
+   * the steps that a fold holds. */
   const level = (
     lead: Line[],
     list: Listed,
@@ -471,91 +425,3 @@ const empty: Listed = { seen: 0, steps: [], place: new Map(), kinds: new Map() }
 
 /** How many of the last prompts of a thread, and of the last rungs of each ladder, a condensed thread shows. */
 export const SHOWN = { prompts: 6, rungs: 4 };
-
-/** A long thread as a person reads it at a glance: the last steps at each level of the thread, and a line of more in
- * place of each run of earlier ones, which a key of the opened set opens. At the top and under a rung, a step is a
- * prompt, or another line that heads lines of its own, and the last prompts show; under a prompt, a step is a rung,
- * and the last rungs show. A step that asks the operator or runs stays shown, and a fold holds two steps in a row at
- * least. The key of a fold is prompts: or rungs: and the act that the steps stand under, or the chain at the top. */
-export function condense(
-  lines: readonly Line[],
-  opened: ReadonlySet<string>,
-  shown: { prompts: number; rungs: number } = SHOWN,
-): Line[] {
-  return level(lines, 0, `prompts:${lines[0]?.act.on ?? ""}`, opened, shown);
-}
-
-/** The lines of one level of a thread, condensed, with each level under them condensed in turn. */
-function level(
-  lines: readonly Line[],
-  depth: number,
-  key: string,
-  opened: ReadonlySet<string>,
-  shown: { prompts: number; rungs: number },
-): Line[] {
-  const heads = (line: Line) => line.depth === depth && ["prompt", "rung", "act", "ear"].includes(line.type);
-  const groups: Line[][] = [];
-  for (const line of lines) {
-    if (heads(line) || !groups.length) groups.push([line]);
-    else groups.at(-1)?.push(line);
-  }
-  const stays = (group: Line[]) =>
-    !heads(group[0] as Line) ||
-    group.some(
-      (line) =>
-        (line.type === "prompt" || line.type === "rung") &&
-        ["asks", "thinks", "runs", "idle"].includes(line.state),
-    );
-  const rungs = key.startsWith("rungs:");
-  const keep = rungs ? shown.rungs : shown.prompts;
-  const folds = opened.has(key)
-    ? new Set<number>()
-    : new Set(
-        groups.flatMap((group, index) => (index < groups.length - keep && !stays(group) ? [index] : [])),
-      );
-  for (const index of [...folds]) if (!folds.has(index - 1) && !folds.has(index + 1)) folds.delete(index);
-  const out: Line[] = [];
-  let hidden: Line[][] = [];
-  const flush = () => {
-    const [head] = hidden[0] ?? [];
-    if (head)
-      out.push({
-        type: "more",
-        act: head.act,
-        depth,
-        count: hidden.length,
-        of: rungs ? "rungs" : "prompts",
-        key,
-        heads: [...new Set(hidden.map((group) => group[0]?.act.kind ?? ""))],
-      });
-    hidden = [];
-  };
-  for (const [index, group] of groups.entries()) {
-    if (folds.has(index)) {
-      hidden.push(group);
-      continue;
-    }
-    flush();
-    const [head, ...under] = group as [Line, ...Line[]];
-    out.push(head);
-    if (!heads(head)) {
-      out.push(...under);
-      continue;
-    }
-    // A value or a tail at the level of the head stays with it; the lines under it form the next level.
-    const next = under.filter((line) => line.depth > depth);
-    const after = under.filter((line) => line.depth <= depth);
-    out.push(
-      ...level(
-        next,
-        depth + 1,
-        `${head.type === "prompt" ? "rungs" : "prompts"}:${head.act.id}`,
-        opened,
-        shown,
-      ),
-    );
-    out.push(...after);
-  }
-  flush();
-  return out;
-}
