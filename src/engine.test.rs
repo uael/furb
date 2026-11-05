@@ -1855,3 +1855,43 @@ fn a_kernel_that_raises_ends_each_run_whose_word_it_lost_so_a_later_message_gets
     );
   }
 }
+
+/// The folder, the root and the record of a life that a word of `word` ran in, which a prompt of the
+/// root asked for. The folder goes when the test ends, after the replay reads it.
+fn lived_once(yard: &str, word: &str) -> (Option<Yard>, String, String) {
+  let mut first = Lived::new(yard, &[word], true).unwrap();
+  let root = first.root();
+  let with = verbs::Prompt { on: on(&root), ..Default::default() };
+  let act = first.engine.prompt(Object::string("int"), with).unwrap();
+  assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(8), "the word runs");
+  let record = fs::read_to_string(first.at.join("record.jsonl")).unwrap();
+  (first.yard.take(), root, record)
+}
+
+#[test]
+fn a_life_whose_act_holds_a_callable_in_its_words_replays_with_no_drift() {
+  let (_yard, root, record) =
+    lived_once("callable", "a = act('bash', '', None, 'true', '', 30.0, lambda: 0)\nclose(8)");
+  assert!(record.contains(r#"{"is":"made","id":"#), "the record holds the callable by its number");
+  let second = Lived::new("callable", &[], false).expect("the replay opens the life");
+  assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
+  assert!(second.engine.stopped().is_none(), "{:?}", second.engine.stopped());
+  assert_eq!(second.root(), root);
+}
+
+#[test]
+fn a_life_whose_act_holds_the_address_of_an_object_in_its_words_replays_with_no_drift() {
+  let word = "class A:\n  pass\na = await bash(f\"echo '{A()}'\")\nclose(8)";
+  let (_yard, root, record) = lived_once("address", word);
+  // A life whose heap stood otherwise, as one that opened from a snapshot, gave the object another
+  // address.
+  let at =
+    record.find("A object at 0x").expect("the record holds the address") + "A object at 0x".len();
+  let end = at + record[at..].find(|one: char| !one.is_ascii_hexdigit()).unwrap_or(0);
+  let path = std::env::temp_dir().join(format!("furb-engine-address-{}", std::process::id()));
+  fs::write(path.join("record.jsonl"), format!("{}1{}", &record[..at], &record[end..])).unwrap();
+  let second = Lived::new("address", &[], false).expect("the replay opens the life");
+  assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
+  assert!(second.engine.stopped().is_none(), "{:?}", second.engine.stopped());
+  assert_eq!(second.root(), root);
+}

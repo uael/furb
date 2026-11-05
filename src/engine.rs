@@ -132,6 +132,19 @@ fn templated(pairs: &[(&str, Object)]) -> Object {
   )
 }
 
+/// The entries of a record as boot is given them, each fact alone in an entry, made in the sandbox
+/// as the record of an earlier life comes in.
+fn recorded(sand: &mut Sand, outside: &mut Outside, record: &[Object]) -> Result<Object, Fault> {
+  let mut entries = Vec::new();
+  for one in record {
+    let one = outside.inward(sand, one)?;
+    let fact = entry(&one.as_ref(), 0).and_then(|fact| fact.items());
+    let fact = fact.ok_or_else(|| Fault::refused("a record holds each fact alone in an entry"))?;
+    entries.push(Object::tuple([Object::tuple(fact.into_iter().map(|one| one.to_owned()))]));
+  }
+  Ok(Object::list(entries))
+}
+
 /// The side of the host in one life: its ears and its functions, which the sandbox calls, and what
 /// the host holds of the sandbox, by which each value crosses. Its default is the side of the host
 /// of a life of nothing, which stands in for one that is lent to code of a host.
@@ -542,14 +555,10 @@ impl Engine {
     let parks = !engine.parked.is_empty();
     let (root, raised) = engine.run(|sand, outside| {
       outside.bound(sand)?;
-      let mut entries = Vec::new();
-      for one in &record {
-        let one = outside.inward(sand, one)?;
-        let fact = entry(&one.as_ref(), 0).and_then(|fact| fact.items());
-        let fact =
-          fact.ok_or_else(|| Fault::refused("a record holds each fact alone in an entry"))?;
-        entries.push(Object::tuple([Object::tuple(fact.into_iter().map(|one| one.to_owned()))]));
-      }
+      outside.crossing.recorded = true;
+      let entries = recorded(sand, outside, &record);
+      outside.crossing.recorded = false;
+      let entries = sand.call(outside, &outside.opened.recorded.clone(), vec![entries?], vec![])?;
       let mut given = vec![("kernel".to_owned(), kernel), ("gate".to_owned(), gate)];
       for name in names {
         let on = outside.fresh();
@@ -568,7 +577,7 @@ impl Engine {
         }
       }
       let given = given.iter().map(|(name, one)| (name.as_str(), one.clone())).collect();
-      let got = outside.named_call(sand, "boot", vec![Object::list(entries)], given);
+      let got = outside.named_call(sand, "boot", vec![entries], given);
       // What boot raised comes out of the entry the operator went in by, and the life goes on: a drift breaks the
       // journal and keeps nothing more, so the root stands when the record held it.
       let opened = match got {
