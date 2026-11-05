@@ -103,3 +103,16 @@ async def test_a_control_from_inside_the_chain_of_the_act_it_names_tells_nothing
   assert controls == [("pause", first, word), ("wake", first, word), ("cancel", first, word)]
   assert [a[1] for a in said(log, "close")] == [act]
   assert [a for a in said(log, "tell") if a[1] in (first, act) and " by " in a[3][0]] == []
+
+
+async def test_a_wake_tells_its_header_only_while_a_pause_holds_the_act_it_names() -> None:
+  """A wake tells its header only while a pause holds the act it names, so a model reads no wake over work that nothing paused, as the work that the open of a life resumes."""
+  _, log, _, act = slow()
+  await settle()
+  engine.wake(act)
+  engine.pause(act)
+  engine.wake(act)
+  await settle()
+  assert [one[1:] for one in said(log, "wake")] == [(act, OPERATOR), (act, OPERATOR)]
+  told = [a[3][0] for a in said(log, "tell") if a[1] == act and " by " in a[3][0]]
+  assert told == [f"#{act} paused by {OPERATOR}", f"#{act} woke by {OPERATOR}"]

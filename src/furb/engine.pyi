@@ -1091,6 +1091,7 @@ def control(kind: str, name: str, id: str, *words: object) -> Fact:
   A control is said over any act of the life, and it tells its header only while the act it names is not over, so a control over an act that is over tells nothing and still reaches each act under it that is not over.
   The header of a control names the one that said it, as #rung5 paused by operator, or #prompt4 closed by rung9 when rung9 stands on another chain, so a turn says who paused, woke, cancelled or closed the act.
   A control from inside the chain of the act it names, as one that a word or an ear of that chain says, tells nothing, since the chain shows already what its words and its ears did.
+  A wake tells its header only while a pause holds the act it names, so a model reads no wake over work that nothing paused, as the work that the open of a life resumes.
   """
 
 def headed(id: str, what: str = "", **words: object) -> str:
