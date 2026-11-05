@@ -280,7 +280,7 @@ async fn the_verbs_of_the_operator_act_on_the_life_as_a_word_of_his_would() {
 }
 
 #[tokio::test]
-async fn the_operator_closes_an_act_and_says_what_he_saw_and_what_he_queued() {
+async fn the_operator_closes_an_act_and_says_what_he_saw() {
   let at = place("operator-record");
   let life = Life::spawn(scripted(&at, &[])).unwrap();
   let mut events = Box::pin(life.events(0));
@@ -311,18 +311,122 @@ async fn the_operator_closes_an_act_and_says_what_he_saw_and_what_he_queued() {
     seen.iter().map(|fact| (&fact[1], &fact[2])).collect::<Vec<_>>(),
     [(&json!("chain1"), &json!("operator"))]
   );
-  let queue = || Command::Queue {
-    entry: text("q1"),
-    hash: text("h1"),
-    shape: text("None"),
-    message: text("And the tests."),
+}
+
+/// A follow-up of an entry on the root, with a message that names it.
+fn follow(entry: &str) -> Command {
+  let message = format!("Then {entry}.");
+  Command::Queue { entry: entry.to_owned(), shape: "None".to_owned(), message, on: None }
+}
+
+/// Whether an event tells the follow-ups that wait on the root, by their entries.
+fn waits(entries: &'static [&'static str]) -> impl Fn(&Event) -> bool {
+  move |event| {
+    matches!(event, Event::Queued { chain, waiting } if chain == "chain1"
+      && waiting.iter().map(|one| one.entry.as_str()).eq(entries.iter().copied()))
+  }
+}
+
+/// The facts of the queue of the operator on the root.
+async fn queue_facts(life: &LifeHandle) -> Vec<serde_json::Value> {
+  let of = Command::Transcript { on: None, of: Some("queue".to_owned()) };
+  match life.send(of).await {
+    Ok(Reply::Values(facts)) => facts,
+    other => panic!("the transcript gave no values: {other:?}"),
+  }
+}
+
+/// The steps of the facts of the queue of the operator on the root, each with its entry.
+async fn steps(life: &LifeHandle) -> Vec<(String, String)> {
+  let facts = queue_facts(life).await;
+  let text = |fact: &serde_json::Value, at: usize| fact[at].as_str().unwrap_or_default().to_owned();
+  facts.iter().map(|fact| (text(fact, 3), text(fact, 4))).collect()
+}
+
+/// The prompt that a follow-up went as, which its fact `sent` names.
+async fn went(life: &LifeHandle, entry: &str) -> String {
+  let facts = queue_facts(life).await;
+  let sent = facts.iter().find(|fact| fact[3] == json!("sent") && fact[4] == json!(entry));
+  match sent.and_then(|fact| fact[5].as_str()) {
+    Some(act) => act.to_owned(),
+    None => panic!("the follow-up {entry} went as no prompt: {facts:?}"),
+  }
+}
+
+#[tokio::test]
+async fn a_follow_up_waits_while_its_chain_asks_the_operator_and_goes_once_it_rests() {
+  let at = place("queue-asks");
+  let life = Life::spawn(scripted(&at, &[])).unwrap();
+  let mut events = Box::pin(life.events(0));
+  let prompt = Command::Prompt {
+    shape: "str".to_owned(),
+    message: "Which base?".to_owned(),
+    to: Some("operator".to_owned()),
     on: None,
   };
-  let first = made(&life, queue()).await;
-  assert_eq!(made(&life, queue()).await, first);
-  let Reply::Values(queued) = life.send(of("queue")).await.unwrap() else { panic!("values") };
-  let steps: Vec<_> = queued.iter().map(|fact| (fact[3].clone(), fact[5].clone())).collect();
-  assert_eq!(steps, [(json!("begin"), json!("h1")), (json!("sent"), json!(first))]);
+  let asked = made(&life, prompt).await;
+  until(&mut events, stands("chain1".to_owned(), State::Asks)).await;
+  assert_eq!(life.send(follow("q1")).await.unwrap(), Reply::Done);
+  assert_eq!(life.send(follow("q1")).await.unwrap(), Reply::Done);
+  until(&mut events, waits(&["q1"])).await;
+  let Reply::Values(waiting) = life.send(Command::Queued { on: None }).await.unwrap() else {
+    panic!("values")
+  };
+  assert_eq!(waiting.len(), 1);
+  assert_eq!(waiting[0]["message"], json!("Then q1."));
+  life.send(Command::Answer { id: asked, line: "main".to_owned() }).await.unwrap();
+  until(&mut events, waits(&[])).await;
+  let sent = went(&life, "q1").await;
+  until(&mut events, done(&sent)).await;
+  let pairs = |all: &[&str]| all.iter().map(|step| ((*step).to_owned(), "q1".to_owned())).collect();
+  let expected: Vec<(String, String)> = pairs(&["add", "begin", "sent"]);
+  assert_eq!(steps(&life).await, expected);
+  let refused = life.send(Command::Unqueue { entry: "q1".to_owned() }).await;
+  assert!(matches!(refused, Err(LifeError::Refused(_))), "{refused:?}");
+}
+
+#[tokio::test]
+async fn a_pause_holds_the_queue_and_the_operator_takes_a_follow_up_out_of_it() {
+  let at = place("queue-pause");
+  let life = Life::spawn(scripted(&at, &[])).unwrap();
+  let mut events = Box::pin(life.events(0));
+  life.send(Command::Pause { id: "chain1".to_owned(), why: None }).await.unwrap();
+  life.send(follow("q1")).await.unwrap();
+  life.send(follow("q2")).await.unwrap();
+  until(&mut events, waits(&["q1", "q2"])).await;
+  life.send(Command::Unqueue { entry: "q1".to_owned() }).await.unwrap();
+  until(&mut events, waits(&["q2"])).await;
+  life.send(Command::Wake { id: "chain1".to_owned() }).await.unwrap();
+  until(&mut events, waits(&[])).await;
+  let sent = went(&life, "q2").await;
+  until(&mut events, done(&sent)).await;
+  let kinds: Vec<String> = steps(&life).await.into_iter().map(|(step, _)| step).collect();
+  assert_eq!(kinds, ["add", "add", "drop", "begin", "sent"]);
+}
+
+#[tokio::test]
+async fn a_reopen_of_the_record_finds_the_queue_and_sends_it_once_the_chain_rests() {
+  let at = place("queue-reopen");
+  let record = at.join("a.jsonl").display().to_string();
+  let opening = || Opening { record: Some(record.clone()), ..scripted(&at, &[]) };
+  let life = Life::spawn(opening()).unwrap();
+  let mut events = Box::pin(life.events(0));
+  life.send(Command::Pause { id: "chain1".to_owned(), why: None }).await.unwrap();
+  life.send(follow("q1")).await.unwrap();
+  until(&mut events, waits(&["q1"])).await;
+  life.send(Command::End).await.unwrap();
+  drop(events);
+  let life = Life::spawn(opening()).unwrap();
+  let mut events = Box::pin(life.events(0));
+  until(&mut events, waits(&["q1"])).await;
+  let Reply::Values(waiting) = life.send(Command::Queued { on: None }).await.unwrap() else {
+    panic!("values")
+  };
+  assert_eq!(waiting.iter().map(|one| one["entry"].clone()).collect::<Vec<_>>(), [json!("q1")]);
+  life.send(Command::Wake { id: "chain1".to_owned() }).await.unwrap();
+  until(&mut events, waits(&[])).await;
+  let sent = went(&life, "q1").await;
+  until(&mut events, done(&sent)).await;
 }
 #[tokio::test]
 async fn each_write_keeps_its_change_in_the_journal_beside_the_record() {
