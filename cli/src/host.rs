@@ -7,7 +7,7 @@ use std::{path::Path, time::Duration};
 
 use furb::{extension::Places, life::Opening, world};
 use furb_host::{
-  DaemonError, STALL, Settings, Tailnet,
+  DaemonError, END, STALL, Settings, Tailnet,
   access::Config,
   run,
   transport::{Local, LocalApi, Tailscale},
@@ -29,7 +29,8 @@ pub(crate) async fn serve(grace: Duration, upgrading: bool) -> Result<(), CliErr
   let config = Config::load(&path)?;
   let stall = config.stall.map_or(STALL, Duration::from_secs);
   let tailnet = tailnet(&path, config)?;
-  let settings = Settings { opening: Opening::default(), grace, stall, tailnet, door, host };
+  let settings =
+    Settings { opening: Opening::default(), grace, end: END, stall, tailnet, door, host };
   let local = Local::new(&folder);
   if upgrading {
     return Ok(upgrade(&local, settings).await?);
