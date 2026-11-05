@@ -57,7 +57,7 @@ test("a chain whose model answers and a chain whose command runs both show work 
     act("chain4", "chain", "", "rung1", 5),
     act("prompt1", "prompt", "chain2", "rung1", 6),
     // The rung of the prompt waits for the turn of its model, whose reply is in flight.
-    act("rung2", "rung", "chain2", "prompt1", 7),
+    act("rung2", "rung", "chain2", "prompt1", 7, undefined, { asking: true }),
     act("prompt2", "prompt", "chain3", "rung1", 8),
     { ...act("rung3", "rung", "chain3", "prompt2", 9), word: 'await bash("make")' },
     act("bash1", "bash", "chain3", "rung3", 10),

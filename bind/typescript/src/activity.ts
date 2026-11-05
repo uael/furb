@@ -126,7 +126,14 @@ export class Activity {
       const rung = this.acts.get(String(fact[4]));
       if (rung?.kind === "rung" && rung.word === undefined) this.worded(rung, fact[5]);
     }
-    if (question && kind === "reply") this.replies.set(id, [String(fact[3]), String(fact[4]), by]);
+    if (question && kind === "reply") {
+      this.replies.set(id, [String(fact[3]), String(fact[4]), by]);
+      const rung = this.acts.get(by);
+      if (rung?.kind === "rung") {
+        rung.asking = true;
+        this.mark(rung);
+      }
+    }
     if (question && !STEPS.has(kind)) {
       const act: LiveAct = {
         id,
@@ -184,6 +191,11 @@ export class Activity {
     } else if (kind === "done") {
       const reply = this.replies.get(id);
       this.replies.delete(id);
+      const asked = reply && this.acts.get(reply[2]);
+      if (asked?.asking) {
+        delete asked.asking;
+        this.mark(asked);
+      }
       if (reply && Array.isArray(fact[3]) && Array.isArray(fact[3][2])) {
         const usage: Answered["usage"] = usageOf(fact[3][2]);
         this.cost += usage[4];

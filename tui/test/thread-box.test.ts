@@ -7,7 +7,7 @@ import { until } from "../../bind/typescript/test/until.ts";
 import { openEngine } from "../src/bridge.ts";
 import { Session } from "../src/session.ts";
 import { threadTone } from "../src/theme.ts";
-import { composing } from "./composing.ts";
+import { composing, ownPreferences } from "./composing.ts";
 import { idle } from "./idle.ts";
 
 const size = { width: 152, height: 46 };
@@ -24,7 +24,7 @@ async function recorded(): Promise<Session> {
   const { engine, host } = await openEngine({
     record: join(import.meta.dir, "..", "fixtures", "conductor.jsonl"),
   });
-  return new Session(engine, host, true);
+  return new Session(engine, host, true, ownPreferences());
 }
 
 test("a thread is one box: its message with a line of its color, its program as code, its answer as markdown with a quiet line, and an input at its end in place of Open again", () =>

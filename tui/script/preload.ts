@@ -3,8 +3,10 @@
 import { afterAll, afterEach, beforeEach, setDefaultTimeout } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, join, resolve } from "node:path";
+import { configDirectory } from "furb";
 import { environment } from "./environment.ts";
+import { realConfigs, watch } from "./guard.ts";
 
 const program = process.platform === "win32" ? "claude.exe" : "claude";
 const found = (process.env.PATH ?? "")
@@ -34,9 +36,20 @@ Object.assign(process.env, {
   TMP: yard,
   TEMP: yard,
 });
+// No test writes the config of the machine, whatever the way that it runs. The native part reads the environment that
+// the process started with, so a plain `bun test` gives it the folder of the tests nowhere, and a test that builds
+// Preferences with no path then writes the file of the user. A test that changes a file there fails with its name.
+const tests = resolve(environment().FURB_CONFIG_DIR ?? "");
+const native = configDirectory();
+if (resolve(native) !== tests)
+  console.error(
+    `The native part reads ${native}, not ${tests}: a plain bun test cannot give it that folder, so give each test that builds Preferences or Workspaces a config directory of its own, or run \`bun run test <filter>\`.`,
+  );
+const written = watch(realConfigs(tests, native));
 let before = new Set<string>();
 beforeEach(() => {
   before = new Set(readdirSync(yard));
+  written();
 });
 // On Windows a folder that a demo or a child process still holds raises EBUSY. The cleanup retries, and a folder that
 // stays busy is left to the end of the run, where the runner removes the yard, with one line on stderr: it never fails
@@ -50,10 +63,15 @@ function clear(path: string, what: string): void {
   }
 }
 afterEach(() => {
-  if (kept) return;
-  for (const name of readdirSync(yard)) {
-    if (!before.has(name)) clear(join(yard, name), "a process still holds it");
-  }
+  if (!kept)
+    for (const name of readdirSync(yard)) {
+      if (!before.has(name)) clear(join(yard, name), "a process still holds it");
+    }
+  const wrote = written();
+  if (wrote.length > 0)
+    throw new Error(
+      `This test wrote the config of the machine, which no test may write: ${wrote.join(", ")}`,
+    );
 });
 afterAll(() => {
   if (kept) console.error(`FURB_KEEP_YARDS keeps ${yard}`);

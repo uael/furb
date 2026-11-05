@@ -1,9 +1,20 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { type CapturedFrame, CodeRenderable, type Renderable, type RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import * as stage from "../script/stage.ts";
 import { App } from "../src/app.ts";
 import { demoLibrary, demoSession } from "../src/demo.ts";
+import { Preferences } from "../src/preferences.ts";
 import type { Session } from "../src/session.ts";
+
+/** Preferences in a config directory of the test alone, which the yard of the tests removes. A session on a recorded
+ * life that is given none reads the preferences of the user, and a library that holds it writes the list of the user
+ * beside them. */
+export function ownPreferences(): Preferences {
+  return new Preferences(join(mkdtempSync(join(tmpdir(), "furb-config-")), "ui.json"));
+}
 
 /** What a test of the App holds: the session, the App on it, the test terminal, the frame that the App draws anew,
  * a click on the first place of that frame that shows a text, and how many times the App asked to quit. */
