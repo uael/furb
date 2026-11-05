@@ -406,6 +406,13 @@ impl JsEngine {
     self.held.call(Engine::pending)
   }
 
+  /// The state of the record as a list of records shows it while no life holds it, `runs` or
+  /// `saved`, as the engine of the crate decides it.
+  #[napi]
+  pub fn saved(&self) -> napi::Result<String> {
+    self.held.call(|engine| engine.saved().map(str::to_owned))
+  }
+
   /// The work that a crash loop parked, each act by its name and its kind, as the engine of the crate finds it.
   #[napi]
   pub fn parked(&self) -> napi::Result<Vec<(String, String)>> {

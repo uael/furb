@@ -64,10 +64,18 @@ export const thread = part({
    * rest. The half row lies in the row that parts the message from the part above or under it, which the message
    * holds, or in the edge of the box where the message stands first or last, so the line adds no row. Any other part has
    * no line, and its text starts at the column of the text of a message. A part that a blank row parts from the one
-   * above it holds that row. */
-  barred(box: BoxRenderable, color?: RGBA, gap = 0, ends = { top: true, bottom: true }): BoxRenderable {
+   * above it holds that row. A click on the columns at the left of its text, its line or its margin, folds the thread
+   * when fold is given. */
+  barred(
+    box: BoxRenderable,
+    color?: RGBA,
+    gap = 0,
+    ends = { top: true, bottom: true },
+    fold?: () => void,
+  ): BoxRenderable {
+    const folds = fold ? { onMouseUp: this.click(fold) } : {};
     if (!color) {
-      const plain = this.box({ paddingLeft: space.inset + 1, ...(gap ? { paddingTop: gap } : {}) });
+      const plain = this.box({ paddingLeft: space.inset + 1, ...(gap ? { paddingTop: gap } : {}), ...folds });
       box.add(plain);
       return plain;
     }
@@ -77,12 +85,14 @@ export const thread = part({
         border: ["left"],
         borderColor: color,
         customBorderChars: { ...noBorder, vertical: side === "top" ? glyph.barTop : glyph.barBottom },
+        ...folds,
       });
     const part = this.box({
       border: ["left"],
       borderColor: color,
       customBorderChars: { ...noBorder, vertical: glyph.bar },
       paddingLeft: space.inset,
+      ...folds,
     });
     if (ends.top) box.add(cap("top"));
     box.add(part);

@@ -867,6 +867,27 @@
             "life": {
               "type": "string"
             },
+            "config": {
+              "$ref": "#/definitions/Config"
+            },
+            "verb": {
+              "type": "string",
+              "const": "config"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "config"
+          ],
+          "description": "The configs of the folder of the life, in their layers: what each key holds, a change of a\nkey, or a stand on them as the disk holds them now."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
             "about": {
               "type": "string"
             },
@@ -960,6 +981,101 @@
             "life"
           ],
           "description": "The follow-ups that wait on a chain, in order."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "notices": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "verb": {
+              "type": "string",
+              "const": "desk"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "What waits for the operator in a life, with each notice that the window still shows."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "at": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "verb": {
+              "type": "string",
+              "const": "threads"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "The threads of a chain with their meaning, now or as they stood just after a moment."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "at": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "verb": {
+              "type": "string",
+              "const": "as_of"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "at"
+          ],
+          "description": "The acts of a life as they stood just after a moment, each with its meaning then."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "moments"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "Each moment of a life at which an act began or ended, in order."
         },
         {
           "type": "object",
@@ -1155,6 +1271,77 @@
         "kind"
       ],
       "description": "The first frame of a peer: the protocol that it speaks, its kind, and the name of a skill."
+    },
+    "Config": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "const": "get"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "description": "Each key of the configs with the value that wins for it and its layer."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "value": true,
+            "layer": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Layer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "action": {
+              "type": "string",
+              "const": "set"
+            }
+          },
+          "required": [
+            "action",
+            "key"
+          ],
+          "description": "A key of a layer, the project when none is named, set to a value, or taken out with no\nvalue, then a stand of the life on the configs. A change that the catalog refuses puts its\nconfig back as it was, and the life does not stand."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "const": "reload"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "description": "A stand of the life on the configs as the disk holds them, which asks again each model that\nwaits to retry."
+        }
+      ],
+      "description": "What a peer asks of the configs of a life, which the World writes, so no window writes a disk."
+    },
+    "Layer": {
+      "type": "string",
+      "enum": [
+        "user",
+        "project",
+        "local"
+      ],
+      "description": "A layer of the configs, from the one that wins least to the one that wins most: the config of\nthe user, the config of the project, and its local config, which git ignores."
     },
     "Slot": {
       "oneOf": [
@@ -1825,6 +2012,34 @@
             "peers"
           ],
           "description": "Who is attached to a life now, pushed to each of its windows after each attach and detach."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "acts": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Open"
+              }
+            },
+            "notice": {
+              "type": "string"
+            },
+            "frame": {
+              "type": "string",
+              "const": "stalled"
+            }
+          },
+          "required": [
+            "frame",
+            "life",
+            "acts",
+            "notice"
+          ],
+          "description": "A life that holds open acts and said no fact for the bound of the daemon, pushed once to each\nof its windows by the watch of the daemon, which no word of the life runs: each open act, and\nthe notice that a window shows as it stands."
         },
         {
           "type": "object",
@@ -3053,6 +3268,26 @@
         "message"
       ],
       "description": "One follow-up that waits on a chain: its entry, which the window that queued it chose, the shape\nthat its prompt wants, its message, and why its send failed, when it did. A follow-up that\nfailed holds the queue of its chain until the operator takes it out."
+    },
+    "Open": {
+      "type": "object",
+      "properties": {
+        "act": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "chain": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "act",
+        "kind",
+        "chain"
+      ],
+      "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
   "x-protocol": 1

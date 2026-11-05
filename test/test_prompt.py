@@ -385,7 +385,7 @@ async def test_a_paused_prompt_makes_no_rung_until_the_wake() -> None:
   engine.wake(act)
   await settle()
   assert (await act) == 2 and len([a for a in said(log, "rung") if a[2] == act]) == 2
-  sand.script[root] = ["await wait(9)\nclose(1)"]
+  sand.script[root] = ["await wait(9, __name__)\nclose(1)"]
   other = engine.prompt(int, "wait", on=root)
   await settle()
   engine.cancel(other)
@@ -588,7 +588,7 @@ async def test_a_prompt_of_none_on_a_thread_that_is_open_is_a_message_of_that_th
 
 async def test_a_message_makes_a_rung_of_its_thread_while_a_word_of_the_thread_awaits() -> None:
   """When a message lands and each open rung of its thread has advanced, the prompt of the thread makes a rung for it, even while a word of the thread awaits, so its model reads the message before that wait ends."""
-  _, log, root = born("await wait(60)", "close(prompt2_message)", auto=False)
+  _, log, root = born("await wait(60, __name__)", "close(prompt2_message)", auto=False)
   first = engine.prompt(str, "work", on=root)
   await settle()
   (pause,) = [a[1] for a in said(log, "wait")]
@@ -602,7 +602,7 @@ async def test_a_message_makes_a_rung_of_its_thread_while_a_word_of_the_thread_a
 
 async def test_a_message_of_the_operator_stays_owed_until_a_prompt_to_the_operator_answers_it() -> None:
   """A message of the operator stays owed until a prompt to the operator that a word under its thread makes comes after it, or until the thread closes: when a rung of the thread ends while a message is owed and no rung of the thread that was made after that message is open, the prompt of the thread makes a message of its own on the thread that names it, as prompt3 with the message 'prompt2 unanswered', so its model reads at its next step that the operator still waits for an answer."""
-  _, log, root = born("await wait(60)", "x = 1", "close(prompt2_message)", auto=False)
+  _, log, root = born("await wait(60, __name__)", "x = 1", "close(prompt2_message)", auto=False)
   first = engine.prompt(str, "work", on=root)
   await settle()
   (pause,) = [a[1] for a in said(log, "wait")]
@@ -618,7 +618,7 @@ async def test_a_message_of_the_operator_stays_owed_until_a_prompt_to_the_operat
     < told.index(f"#{reminder[1]}")
     < told.index(f"#{later} advance on {first}")
   )
-  _, log, root = born("await wait(60)", "prompt(None, 'on it', to=OPERATOR)", "close(1)", auto=False)
+  _, log, root = born("await wait(60, __name__)", "prompt(None, 'on it', to=OPERATOR)", "close(1)", auto=False)
   first = engine.prompt(str, "work", on=root)
   await settle()
   engine.prompt(None, "use this", on=first)
@@ -794,7 +794,7 @@ async def test_a_prompt_tells_its_message_and_its_binding_where_it_is_made() -> 
     [f"#{act}\n<s:{act}_message>\nhow many?\nsay one</s:{act}_message>", f"{act}: Act[int] = Act({act!r})"],
   )
   assert [a for a in said(log, "tell") if a[1] == act] == [log[made + 1]] and len(said(log, "reply")) == 3
-  setup = engine.rung("await wait(60)", to="m/low", on=root)
+  setup = engine.rung("await wait(60, __name__)", to="m/low", on=root)
   after = engine.prompt(int, "after the setup", on=root)
   await settle()
   assert [a for a in said(log, "tell") if a[1] == after] == []

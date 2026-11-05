@@ -448,6 +448,23 @@ test("a dialog covers the feed whole and a menu at the sidebar covers the sideba
     { width: 120, height: 30 },
   ));
 
+test("the palette gives each command one row with its key, and the footer keeps the hint of the commands", () =>
+  composing(
+    async ({ app, screen, frame }) => {
+      app.palette();
+      const shown = await frame();
+      const lines = shown.split("\n");
+      // More than the six commands of three rows each stand in the pane, and a row holds the label and its detail.
+      const rows = lines.filter((line) => /(New session|Feed view|Transcript view)/.test(line));
+      expect(rows.length).toBeGreaterThanOrEqual(3);
+      expect(lines.filter((line) => /^\s*▎? ?\S.*\S\s{2,}\S/.test(line)).length).toBeGreaterThan(12);
+      expect(shown).toContain("⌃P commands");
+      app.closeOverlay();
+      expect(screen.renderer.root).toBeDefined();
+    },
+    { width: 120, height: 40 },
+  ));
+
 test("the feed left at its end opens at its end, and one left above its end opens where it was", () =>
   composing(
     async (context) => {

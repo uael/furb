@@ -14,7 +14,7 @@ mock.module("../src/records.ts", () => ({
     return Object.fromEntries(
       paths.map((path) => {
         const replayed = replay.includes(path);
-        return [path, { pending: replayed && path.includes("work") ? 1 : 0, replayed }];
+        return [path, { state: replayed && path.includes("work") ? "runs" : "saved", replayed }];
       }),
     );
   },

@@ -1,11 +1,8 @@
 //! The examples of Rust in docs/examples/rust, each run as a user runs it, on a claude command line that answers from
 //! a script, so no test asks a model. `cargo test` builds the examples before it runs this test.
 #![cfg(unix)]
-#![expect(
-  clippy::disallowed_methods,
-  reason = "debt: a call that blocks: sleep, block_on or try_wait"
-)]
-#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
+#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
+#![expect(clippy::expect_used, reason = "a test blocks on its runtime and fails by a panic")]
 
 #[path = "common/pipes.rs"]
 mod pipes;
@@ -139,6 +136,9 @@ fn a_grant_pauses_the_chain_at_its_ceiling_and_a_larger_grant_lets_it_go_on() {
 
 #[test]
 fn an_edit_of_the_door_of_a_thread_changes_the_plan_of_the_model() {
-  let yard = Yard::new("door", &["await wait(3600)\nclose(\"released\")", "await wait(3600)"]);
-  assert_eq!(yard.run("door", ""), "await wait(3600)\nclose(\"released\")\nreleased\n");
+  let yard = Yard::new(
+    "door",
+    &["await wait(3600, __name__)\nclose(\"released\")", "await wait(3600, __name__)"],
+  );
+  assert_eq!(yard.run("door", ""), "await wait(3600, __name__)\nclose(\"released\")\nreleased\n");
 }

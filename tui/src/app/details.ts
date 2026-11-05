@@ -425,7 +425,7 @@ export const details = part({
   programView(
     lines: readonly ProgramLine[],
     width: number,
-    took: (step: ActRow) => string,
+    took: (step: ActRow, costs?: boolean) => string,
     since: (act?: ActRow) => string,
     heads: ReadonlySet<ProgramLine>,
     digits = 1,
@@ -487,7 +487,7 @@ export const details = part({
         if (heads.has(line) && line.step.kind === "rung" && !this.session.watching) {
           const name = writerOf(line.step);
           const facts = took(line.step as ActRow);
-          if (!first && writing === name) joined = facts;
+          if (!first && writing === name) joined = took(line.step as ActRow, false);
           else {
             if (!first) push("");
             const label = `${name}${" ".repeat(Math.max(2, room - Bun.stringWidth(name + facts)))}${facts}`;

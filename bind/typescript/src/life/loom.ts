@@ -55,8 +55,6 @@ export interface Weave {
   folds: ReadonlySet<string>;
   /** The columns that the cells of a row take. */
   width: number;
-  /** The acts that an earlier life left, which wait for a wake. */
-  pending: ReadonlyMap<string, string>;
   label(id: string): string;
   /** What a host already holds of the acts, which a loom of no width reads in place of a pass over every act: each act
    * by its name, the acts on each chain, the chains, and each act that is not done. */
@@ -173,10 +171,10 @@ export function waitsOn(
 
 /** The loom of a life: the operator, then each chain in the order of the tree, with its cells over the moments of the
  * life, its state, what it waits on and its measure. A moment is the start or the end of an act. */
-export function weave({ acts, prompts, measures, folds, width, pending, label, index }: Weave): Loom {
+export function weave({ acts, prompts, measures, folds, width, label, index }: Weave): Loom {
   // A loom of no width shows no cell, so it reads the index of a host when it has one, in the time of the chains and of
   // the work that is not done, and not of every act.
-  if (index && width <= 0) return board({ prompts, measures, folds, pending, label }, index);
+  if (index && width <= 0) return board({ prompts, measures, folds, label }, index);
   const byId = new Map(acts.map((act) => [act.id, act]));
   const owed: Owed[] = prompts
     .flatMap((prompt) => {
@@ -267,9 +265,9 @@ export function weave({ acts, prompts, measures, folds, width, pending, label, i
  * question on it, its held work, and the last prompt that it asks on another chain. */
 /** What the loom of no width of the index of a host read: the tree of its chains, as many as it read, and the state of
  * each chain with what it was read of. A host that names each chain that an act came or changed on has the board
- * read again only those chains, and the chains whose question of the operator, held work or measure changed: the
- * board keeps its rows, the place of each chain among them, how many names of chains it read, the chains that held a
- * question, held work or a prompt on another chain, and the order of the rows by state. */
+ * read again only those chains, and the chains whose question of the operator or measure changed: the board keeps its
+ * rows, the place of each chain among them, how many names of chains it read, the chains that held a question or a
+ * prompt on another chain, and the order of the rows by state. */
 interface Boarded {
   chains: number;
   tree: ReturnType<typeof treeOf>;
@@ -284,11 +282,10 @@ interface Boarded {
   };
 }
 /** The state of a chain on the board, and what it was read of: the stamp of its acts, whether the operator owes a
- * question on it, its held work, and the last prompt that it asks on another chain. */
+ * question on it, and the last prompt that it asks on another chain. */
 interface Boarding {
   stamp: number;
   owes: boolean;
-  held: string;
   asks: string;
   state: State;
   waits?: string;
@@ -367,9 +364,9 @@ function ordered(rows: readonly Row[], place: ReadonlyMap<string, number>, order
 
 /** The loom of no width of a life, read from the index of a host: its rows, with no cells. A host that stamps each
  * change of the acts on each chain has the state of a chain read again only once an act on it, a question of the
- * operator on it, or its held work changed. */
+ * operator on it changed. */
 function board(
-  { prompts, measures, folds, pending, label }: Omit<Weave, "acts" | "width" | "index">,
+  { prompts, measures, folds, label }: Omit<Weave, "acts" | "width" | "index">,
   { ids, on, chains: listed, live, stamp, touched }: NonNullable<Weave["index"]>,
 ): Loom {
   const owed: Owed[] = prompts
@@ -394,11 +391,6 @@ function board(
     const maker = act.kind === "prompt" ? ids.get(act.by)?.on : undefined;
     if (maker !== undefined && maker !== act.on) put(asked, maker, act);
   }
-  const held = new Map<string, string[]>();
-  for (const id of pending.keys()) {
-    const act = ids.get(id);
-    if (act) held.set(act.on, [...(held.get(act.on) ?? []), id]);
-  }
   // The tree of the chains holds while no chain comes, and a fold of the operator lays it out again.
   const read = boarded.get(ids);
   const same = read?.chains === listed.length;
@@ -412,24 +404,14 @@ function board(
   // work, and whether it holds a prompt, since each prompt of a chain with no work that is not done is done.
   const stateOf = (id: string): Boarding => {
     const owes = owing.has(id);
-    const pend = held.get(id)?.join(" ") ?? "";
     const asks = asked.get(id)?.at(-1)?.id ?? "";
     const changed = stamp?.(id) ?? -1;
     const kept = states.get(id);
-    if (
-      kept &&
-      changed >= 0 &&
-      kept.stamp === changed &&
-      kept.owes === owes &&
-      kept.held === pend &&
-      kept.asks === asks
-    )
+    if (kept && changed >= 0 && kept.stamp === changed && kept.owes === owes && kept.asks === asks)
       return kept;
     const work = (act?: LiveAct): act is LiveAct =>
       act !== undefined && act.on === id && WORK.includes(act.kind) && !act.unfinished;
-    const waiting = [...(openOn.get(id) ?? []), ...(held.get(id) ?? []).map((one) => ids.get(one))].filter(
-      work,
-    );
+    const waiting = (openOn.get(id) ?? []).filter(work);
     const acts = on.get(id) ?? [];
     const latest = acts.findLast(work);
     const state: State = owes
@@ -451,7 +433,7 @@ function board(
         asked.get(id)?.at(-1)?.id ??
         local.findLast((act) => act.kind === "rung")?.id)
       : undefined;
-    const made = { stamp: changed, owes, held: pend, asks, state, waits };
+    const made = { stamp: changed, owes, asks, state, waits };
     states.set(id, made);
     return made;
   };
@@ -487,15 +469,15 @@ function board(
     tally: {},
     cells: [],
   };
-  // The chains that hold a question of the operator, held work or a prompt on another chain now.
-  const marked = new Set([...owing, ...held.keys(), ...asked.keys()]);
+  // The chains that hold a question of the operator or a prompt on another chain now.
+  const marked = new Set([...owing, ...asked.keys()]);
   let rows: Row[];
   let place: Map<string, number>;
   let order: Ordering;
   if (kept && touched) {
     ({ rows, place, order } = kept);
-    // Only a chain that an act came or changed on, or whose question, held work, prompt on another chain or measure
-    // changed, is read again.
+    // Only a chain that an act came or changed on, or whose question, prompt on another chain or measure changed, is
+    // read again.
     const again = new Set([...touched.slice(kept.seen), ...marked, ...kept.marked]);
     if (measures !== kept.measures)
       for (const id of Object.keys(measures))

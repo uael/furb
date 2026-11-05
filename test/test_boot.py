@@ -214,7 +214,7 @@ async def test_a_fact_that_the_journal_says_again_carries_the_speaker_that_the_r
   sand, _, root = born()
   word = (
     "b = bash('echo hi')\nawait b\nseen = [x[:3] for x in transcript(of='world') if x[1] == b]\nwent = peek(b)\n"
-    "t = read('a.txt')\nawait wait(0.01)\nlast = bash('echo ' + str(len(seen)))\nawait last"
+    "t = read('a.txt')\nawait wait(0.01, __name__)\nlast = bash('echo ' + str(len(seen)))\nawait last"
   )
   await engine.rung(word, on=root)
   await settle()
@@ -533,7 +533,7 @@ async def test_what_it_keeps_it_says() -> None:
 async def test_given_at_its_birth_what_the_world_kept_of_an_earlier_life() -> None:
   """Given at its birth what the World kept of an earlier life, it says those entries again in the order it was given them, each once every fact said before it has been heard: an act whose maker is neither an act nor an ear that boot was given it makes again through its verb under the site of its maker, once the chain it is on has been made again, since that maker makes nothing again of what the record holds; an act whose maker is an act it makes not, since the word of that act makes it again; an act whose maker is an ear that boot was given it makes through act under the site of that ear, with no ear of its own, when that ear did not make it again by then, so a view of a later life holds it where the first life held it; and any other fact it says once the act it is about has been made again, so that its controls and its dones land where they landed."""
   sand, log, root = born()
-  step = engine.rung("await wait(100.0)\nclose(7)", on=root)
+  step = engine.rung("await wait(100.0, __name__)\nclose(7)", on=root)
   await settle()
   wait = said(log, "wait")[0][1]
   engine.pause(step)
@@ -710,7 +710,7 @@ async def test_a_later_life_says_such_an_act_again_only_through_a_verb_in_the_gl
 
 async def test_the_journal_says_again_the_first_answer_of_an_act_when_the_act_is_made_again() -> None:
   """The journal says again a done that is the first answer of an act when the act is made again, and every later fact of it at the place where the record holds it, the started of each act that a wake began again among them."""
-  sand, log, root = born("t = read('a.txt')\nawait wait()\nclose(t.content)", "close(None)")
+  sand, log, root = born("t = read('a.txt')\nawait wait(0, __name__)\nclose(t.content)", "close(None)")
   one = engine.prompt(str, "read and wait", on=root)
   assert await one == "one\ntwo\n"
   await settle()

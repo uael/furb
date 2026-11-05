@@ -255,7 +255,7 @@ async def test_the_engine_binds_the_exception_of_every_raise_but_a_cancellederro
     await engine.rung("raise KeyboardInterrupt('stop')", on=root)
   assert isinstance(engine.module(root)["raised"], KeyboardInterrupt)
   with pytest.raises(CancelledError):
-    await engine.rung("w = wait(5)\ncancel(w)\nawait w", on=root)
+    await engine.rung("w = wait(5, __name__)\ncancel(w)\nawait w", on=root)
   assert isinstance(engine.module(root)["raised"], KeyboardInterrupt)
 
 
@@ -265,7 +265,7 @@ async def test_the_engine_binds_the_exception_again_at_each_raise() -> None:
   assert await engine.prompt(int, "try", on=root) == 1
   assert isinstance(engine.module(root)["raised"], KeyError)
   with pytest.raises(CancelledError):
-    await engine.rung("w = wait(5)\ncancel(w)\nawait w", on=root)
+    await engine.rung("w = wait(5, __name__)\ncancel(w)\nawait w", on=root)
   assert isinstance(engine.module(root)["raised"], KeyError)
 
 
@@ -1385,7 +1385,7 @@ async def test_the_chain_advances_first_the_rung_that_was_made_first() -> None:
 
 async def test_the_chain_asks_a_new_prompt_while_a_word_awaits_a_wait_that_is_not_over() -> None:
   """A new prompt on a chain is asked while a word of the chain awaits a wait that is not over, so no wait holds a prompt."""
-  _, log, root = born("w = wait(600)\nawait w", "close(1)", auto=False)
+  _, log, root = born("w = wait(600, __name__)\nawait w", "close(1)", auto=False)
   engine.prompt(int, "one", on=root)
   await settle()
   two = engine.prompt(int, "two", on=root)

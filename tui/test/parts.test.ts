@@ -850,20 +850,23 @@ test("a write of the life whose path starts with ~ and lands in .furb loads the 
   }
 });
 
-test("the parts load again when the config of the project changes, though no part of the project loaded before", async () => {
+test("the parts load again when the operator changed the configs through the World, though no part of the project loaded before", async () => {
   const { directory } = project();
   const config = join(directory, ".furb", "config.json");
   const was = readFileSync(config, "utf8");
   writeFileSync(config, '{"extensions": {}}\n');
-  const parts = new Parts(directory, () => {});
-  try {
-    await parts.load();
-    expect(parts.loaded.map((one) => one.name)).not.toContain("todo");
-    writeFileSync(config, was);
-    for (let tries = 0; tries < 200 && !parts.loaded.some((one) => one.name === "todo"); tries++)
-      await Bun.sleep(25);
-    expect(parts.loaded.map((one) => one.name)).toContain("todo");
-  } finally {
-    parts.dispose();
-  }
+  const session = await demoSession({ cwd: directory });
+  await composing(
+    async ({ app }) => {
+      await app.partsReady;
+      expect(app.parts.loaded.map((one) => one.name)).not.toContain("todo");
+      writeFileSync(config, was);
+      session.emit("configured");
+      for (let tries = 0; tries < 200 && !app.parts.loaded.some((one) => one.name === "todo"); tries++)
+        await Bun.sleep(25);
+      expect(app.parts.loaded.map((one) => one.name)).toContain("todo");
+    },
+    { width: 100, height: 30 },
+    session,
+  );
 });

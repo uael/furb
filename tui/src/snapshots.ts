@@ -101,7 +101,7 @@ export type Views = Pick<Engine, "root" | "standing" | "program" | "turns" | "cw
 };
 /** What a snapshot reads of a session: the facts, the activity and the entries of its life, and, of a life that runs,
  * the changes of its files and the facts that it says as it says them. */
-export type Lived = Pick<Session, "facts" | "activity" | "entries" | "isPaused" | "pauseOf" | "pending"> &
+export type Lived = Pick<Session, "facts" | "activity" | "entries" | "isPaused" | "pauseOf"> &
   Partial<Pick<Session, "on">> & { changes?: Pick<Session["changes"], "length" | "readable"> };
 
 /** Views belong to changes of the life, not to frames or refresh requests. */

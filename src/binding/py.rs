@@ -863,6 +863,12 @@ impl PyEngine {
     self.call(Engine::pending)
   }
 
+  /// The state of the record as a list of records shows it while no life holds it, `runs` or
+  /// `saved`, as the engine of the crate decides it.
+  fn saved(&self) -> Result<String, Fault> {
+    self.call(|engine| engine.saved().map(str::to_owned))
+  }
+
   /// The work that a crash loop parked, each act by its name and its kind, as the engine of the crate finds it.
   fn parked(&self) -> Result<Vec<(String, String)>, Fault> {
     self.call(Engine::parked)
@@ -1511,6 +1517,7 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
     wrap_pyfunction!(models, module)?,
     wrap_pyfunction!(model, module)?,
     wrap_pyfunction!(codex_auth, module)?,
+    wrap_pyfunction!(config_set, module)?,
     wrap_pyfunction!(levels, module)?,
     wrap_pyfunction!(setup, module)?,
     wrap_pyfunction!(attach_image, module)?,

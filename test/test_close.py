@@ -132,7 +132,7 @@ async def test_close_is_given_the_value_first() -> None:
 async def test_a_value_closes_an_act_with_that_value_and_a_prompt_with_a_value_that_has_its_shape() -> None:
   """A value closes an act with that value, and a prompt with a value that has its shape."""
   _, _, root = born()
-  waiting = engine.wait(30.0, on=root)
+  waiting = engine.wait(30.0, root, on=root)
   engine.close("twenty one", waiting)
   assert (await waiting) == "twenty one"
   act = engine.prompt(int, "how many?", to=OPERATOR, on=root)
@@ -195,9 +195,9 @@ async def test_a_close_on_an_act_that_is_over_reaches_only_the_words_that_still_
   assert engine.peek(running) is None
   assert [a[1] for a in said(log, "close")[len(closes) :]] == [act, answered]
   assert engine.turns(on=root) == was
-  engine.write(Text(answered, "await wait(30)"), on=root)
+  engine.write(Text(answered, "await wait(30, __name__)"), on=root)
   await settle()
-  (word,) = [a[1] for a in said(log, "rung") if a[2] == answered and a[4] == "await wait(30)"]
+  (word,) = [a[1] for a in said(log, "rung") if a[2] == answered and a[4] == "await wait(30, __name__)"]
   assert engine.peek(word, ...) is ...
   engine.close(9, answered)
   await settle()

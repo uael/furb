@@ -505,6 +505,10 @@ export const input = part({
       steer: () => this.steer(),
       rail: () => this.railSteer(),
       nextAsk: () => void this.nextAttention().catch(this.report),
+      foldHere: () => {
+        const id = this.threadInView();
+        if (id) this.foldHere(id);
+      },
       repair: () => void this.session.repairJournal().catch(this.session.fail),
       renew: () => void this.session.renewJournal().catch(this.session.fail),
     };
@@ -513,6 +517,7 @@ export const input = part({
   whenTable(): Partial<Record<Action, () => boolean>> {
     return {
       answer: () => this.session.desk.asks.length > 0,
+      foldHere: () => this.session.view === "feed" && this.threadInView() !== undefined,
       scope: () => this.session.view === "changes",
       repair: () => this.session.journalDamaged && !this.session.host.reading,
       renew: () => this.session.journalDamaged && !this.session.host.reading,

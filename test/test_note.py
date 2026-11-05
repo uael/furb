@@ -24,7 +24,7 @@ EVERY = (
   "chance()\n"
   "gate('k = 9')\n"
   "cd('/x')\n"
-  "wait(on=chain('far'))\n"
+  "wait(0, __name__, on=chain('far'))\n"
   "cwd()\n"
   "debug(t'{1}')\n"
   "close(1)\n"

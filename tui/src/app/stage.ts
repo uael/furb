@@ -9,12 +9,7 @@ export const stage = part({
   /** The loom of the chains of the life as it stands, each chain under the label that the operator gave it last. */
   lifeLoom(): Loom {
     const w = this.session;
-    const of = [
-      w.version,
-      [...w.host.prompts.keys()].join(" "),
-      w.host.measures,
-      [...w.host.pending.keys()].join(" "),
-    ];
+    const of = [w.version, [...w.host.prompts.keys()].join(" "), w.host.measures];
     const same = this.woven?.of.every((one, at) => one === of[at]) ? this.woven.loom : undefined;
     const loom =
       same ??
@@ -24,7 +19,6 @@ export const stage = part({
         measures: w.host.measures,
         folds: new Set(),
         width: 0,
-        pending: w.host.pending,
         label: (id) => id,
         index: w.boardIndex,
       });
@@ -77,7 +71,6 @@ export const stage = part({
       measures: w.host.measures,
       folds: this.loom.folds,
       width,
-      pending: then === undefined ? w.host.pending : new Map(),
       label: (id) => w.labelOf(id),
     });
     return this.stageLoom;

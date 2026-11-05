@@ -135,22 +135,24 @@ fn a_read_of_asyncio_in_the_word_is_a_finding_of_its_line_but_its_cancelled_erro
 
 #[test]
 fn an_await_in_a_function_that_is_not_async_is_a_finding_of_its_line() {
-  let found = said(&[], "def fix():\n  got = await wait(0)\n  return got\nfix()");
+  let found = said(&[], "def fix():\n  got = await wait(0, __name__)\n  return got\nfix()");
   let why = "`await` stands in `def fix`, which is not async: write `async def fix`, and await each call of it";
   assert_eq!(found, vec![(2, format!("error[await-outside-async] (column 11) {why}"))]);
 }
 
 #[test]
 fn an_await_in_a_function_that_is_not_async_in_an_async_one_is_a_finding() {
-  let found =
-    said(&[], "async def outer():\n  def inner():\n    return await wait(0)\n  return inner");
+  let found = said(
+    &[],
+    "async def outer():\n  def inner():\n    return await wait(0, __name__)\n  return inner",
+  );
   assert_eq!(found.iter().map(|(line, _)| *line).collect::<Vec<_>>(), vec![3], "{found:?}");
   assert!(found[0].1.contains("`def inner`"), "{found:?}");
 }
 
 #[test]
 fn an_await_in_an_async_function_or_at_the_top_of_the_word_is_no_finding() {
-  let word = "async def fix():\n  return await wait(0)\nawait fix()\nawait wait(0)\nclose(1)";
+  let word = "async def fix():\n  return await wait(0, __name__)\nawait fix()\nawait wait(0, __name__)\nclose(1)";
   assert_eq!(said(&[], word), vec![]);
 }
 

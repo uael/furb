@@ -10,12 +10,14 @@
 //! reads a record with no life, and the [`Provider`] answers what the chains stand on and asks the
 //! models of rig for their turns, which the [`Catalog`] knows, the claude command line among them.
 //! The host names the models it offers, and gives the rest, its console, which reads what the
-//! operator answers by the rules of [`answered`].
+//! operator answers by the rules of [`answered`]. Beside the ears, [`config`] is the one writer of
+//! the configs that the provider and the extensions read, for each host and each window.
 //!
 //! Each is an ear like any other, so an ear that comes before one of them in the order of boot takes a question in
 //! its place, and an ear that takes a question and asks it again wraps it.
 
 mod bash;
+pub mod config;
 mod fetch;
 pub(crate) mod files;
 mod log;

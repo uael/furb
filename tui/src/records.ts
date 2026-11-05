@@ -1,7 +1,9 @@
 /** What the worker tells of a record: the name that a plain scan of the record found, and what its replay told when it
  * replayed it. */
 export interface RecordState {
-  pending: number;
+  /** The state that the engine of the crate gives the record: runs when it holds work that the next open resumes, and
+   * saved when it holds none or was only scanned. */
+  state: "runs" | "saved";
   error?: string;
   reading?: boolean;
   /** The name that the replay found. */

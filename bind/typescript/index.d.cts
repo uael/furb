@@ -67,6 +67,11 @@ export declare class Engine {
    * kind, as the engine of the crate finds it.
    */
   pending(): Array<[string, string]>
+  /**
+   * The state of the record as a list of records shows it while no life holds it, `runs` or
+   * `saved`, as the engine of the crate decides it.
+   */
+  saved(): string
   /** The work that a crash loop parked, each act by its name and its kind, as the engine of the crate finds it. */
   parked(): Array<[string, string]>
   /** A parked act, run again, as the engine of the crate runs it. */
@@ -220,6 +225,14 @@ export interface CodexAuthInfo {
  * preferences of the TUI stand.
  */
 export declare function configDirectory(): string
+
+/**
+ * A key of a layer of the configs of a project set to a value, or taken out with no value, as the
+ * JSON of a change of `world::config` gives it, which then holds when the catalog reads the
+ * configs as a stand of a life reads them, and else puts the file back as it was and gives why.
+ * config is the user config directory when unsaid.
+ */
+export declare function configSet(directory: string, change: string, config?: string | undefined | null): void
 
 /** One line of a record, read with every number exact, as the record keeps it. */
 export declare function decodeRecord(line: string): unknown

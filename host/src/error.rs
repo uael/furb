@@ -24,9 +24,31 @@ pub enum LifeError {
   Thread(#[source] io::Error),
 }
 
+/// Why the journal of the file changes of a life does not hold each change that the life made.
+#[derive(Debug, Error)]
+pub(crate) enum JournalError {
+  /// The disk refused changes, which the life told at once, each as a notice.
+  #[error("the journal of file changes at {} lost {count} of them, the first for: {first}", at.display())]
+  Lost {
+    at: PathBuf,
+    count: usize,
+    #[source]
+    first: io::Error,
+  },
+  /// The task of the journal ended before the life.
+  #[error("the journal of file changes stopped before the life")]
+  Gone,
+}
+
 impl From<furb::Fault> for LifeError {
   fn from(fault: furb::Fault) -> Self {
     LifeError::Refused(fault.to_string())
+  }
+}
+
+impl From<furb::world::config::Error> for LifeError {
+  fn from(no: furb::world::config::Error) -> Self {
+    LifeError::Refused(no.to_string())
   }
 }
 

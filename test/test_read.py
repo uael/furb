@@ -161,7 +161,7 @@ async def test_the_world_refuses_a_read_of_a_path_whose_first_part_is_the_name_o
   """The World refuses a read of a path whose first part is the name of an act, since that path is a door that no ear of the engine served and never a file, and the refusal names the chain of that act."""
   live, root = machine(tmp_path)
   away = engine.chain("away")
-  asked = engine.wait(60.0, on=away)
+  asked = engine.wait(60.0, away, on=away)
   (tmp_path / asked).write_text("a file\n")
   refused = []
   for path in (asked, f"{asked}/x", away):
