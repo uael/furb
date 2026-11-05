@@ -278,7 +278,7 @@ impl Provider {
       loop {
         hearer.answer(&mut co).await?;
         match co.next().await {
-          Next::Resumed(a) if a.kind() == "search" => interrupted(&mut co, &a, a.about()).await?,
+          Next::Resumed(a) if a.kind() == "search" => interrupted(&mut co, &a).await?,
           Next::Heard(a) | Next::Resumed(a) => hearer.heard(&mut co, &a).await?,
           Next::Worked(Replied::Refreshed { about, got }) => hearer.refreshed(&mut co, about, got),
           Next::Worked(Replied::Wrote(wrote)) => hearer.wrote(&mut co, wrote).await,

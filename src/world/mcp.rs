@@ -193,7 +193,7 @@ pub fn mcp(settings: Settings) -> Box<dyn Ear> {
       let a = match co.next().await {
         Next::Heard(a) => a,
         Next::Resumed(a) => {
-          interrupted(&mut co, &a, a.about()).await?;
+          interrupted(&mut co, &a).await?;
           continue;
         }
         Next::Worked(Worked::Changed(name)) => {

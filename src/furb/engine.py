@@ -607,13 +607,7 @@ def gathered(define, floor):
       literal(peek(one), set()) and acts.append({**d, "value": peek(one)})
     else:
       cut.append(one)
-      cmd = a[4] if a[0] == "bash" else ""
-      why = (
-        '"'
-        + cmd.replace("\\", "\\\\").replace('"', '\\"')
-        + '" was interrupted: the life that ran it ended before it did'
-      )
-      acts.append({**d, "value": Refused(why if cmd else one + " was cut by the checkpoint")})
+      acts.append({**d, "value": Refused(one + " was interrupted: the life that ran it ended before it did")})
   out = []
   for c in live:
     a = get(c)

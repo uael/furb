@@ -45,7 +45,7 @@ pub fn fetch() -> Box<dyn Ear> {
           co.take(a.about(), stream::once(fetched(url).map(move |got| (id, got))));
         }
         Next::Heard(_) => {}
-        Next::Resumed(a) => interrupted(&mut co, &a, a.about()).await?,
+        Next::Resumed(a) => interrupted(&mut co, &a).await?,
         Next::Worked((id, got)) => {
           let got =
             got.map_or_else(|no| Fault::refused(no.to_string()).object(), |one| one.object());

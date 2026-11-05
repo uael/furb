@@ -622,7 +622,7 @@ fn a_command_an_earlier_life_did_not_end_runs_no_more_and_ends_as_interrupted_at
   assert_eq!(why.name, "Refused");
   assert_eq!(
     why.message(),
-    format!("\"{line}\" was interrupted: the life that ran it ended before it did")
+    format!("{id} was interrupted: the life that ran it ended before it did")
   );
   assert_eq!(second.engine.read(&format!("{id}/stdout"), door()).unwrap().content, "ready");
   second.engine.wake(&root).unwrap();

@@ -98,16 +98,12 @@ pub(crate) async fn here<W: 'static>(co: &mut Co<W>, on: &str) -> Result<PathBuf
   files::placed(&files::placed(Path::new(""), &directory.unwrap_or_default())?, &cwd)
 }
 
-/// An act that an earlier life took and did not end, named by `what`, taken and closed with a
-/// refusal that says it was interrupted, since its work may have run: the model reads that end,
-/// and asks again if it wants.
-pub(crate) async fn interrupted<W: 'static>(
-  co: &mut Co<W>,
-  a: &Fact,
-  what: &str,
-) -> Result<(), Fault> {
+/// An act that an earlier life took and did not end, taken and closed with a refusal that names it
+/// and says it was interrupted, as a checkpoint ends an act that it cuts, since its work may have
+/// run: the model reads that end, and asks again if it wants.
+pub(crate) async fn interrupted<W: 'static>(co: &mut Co<W>, a: &Fact) -> Result<(), Fault> {
   say(co, Fact::says("started", a.about(), []));
-  let why = format!("{what} was interrupted: the life that ran it ended before it did");
+  let why = format!("{} was interrupted: the life that ran it ended before it did", a.about());
   let id = vec![("id", Object::string(a.about()))];
   co.call("close", vec![Fault::refused(why).object()], id).await.map(drop)
 }

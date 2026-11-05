@@ -68,7 +68,7 @@ pub fn bash(scratch: Scratch) -> Box<dyn Ear> {
     loop {
       match co.next().await {
         Next::Heard(a) => commands.heard(&mut co, &a).await?,
-        Next::Resumed(a) => interrupted(&mut co, &a, &quoted(&command_line(&a))).await?,
+        Next::Resumed(a) => interrupted(&mut co, &a).await?,
         Next::Worked(one) => worked(&mut co, one).await?,
       }
     }
@@ -173,13 +173,6 @@ impl Commands {
 /// The line of a command, as its act gives it.
 fn command_line(a: &Fact) -> String {
   a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default()
-}
-
-/// The line of a command between double quotes, with each backslash and double quote of it
-/// escaped, as the checkpoint quotes a command that it cuts, so a model reads one text for a
-/// command that a crash cut and for one that a checkpoint cut.
-fn quoted(line: &str) -> String {
-  format!("\"{}\"", line.replace('\\', "\\\\").replace('"', "\\\""))
 }
 
 /// An act closed with a fault, as the engine closes a prompt that nobody can answer.
