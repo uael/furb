@@ -955,9 +955,12 @@ export const details = part({
 
   /** A turn, the same for the user and the model: its python, and each quote as the binding that it makes, its name
    * and under it its text, drawn as text. */
-  turnBody(source: string): BoxRenderable {
+  turnBody(source: string): Renderable {
+    const parts = quoteParts(safeText(source));
+    const only = parts[0];
+    if (parts.length === 1 && only && "code" in only) return this.code(only.code);
     const box = this.box({ flexDirection: "column" });
-    for (const part of quoteParts(safeText(source))) {
+    for (const part of parts) {
       if ("code" in part) {
         box.add(this.code(part.code));
         continue;
