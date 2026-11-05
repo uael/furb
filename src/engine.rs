@@ -40,7 +40,7 @@ use monty_types::{ExcType, MontyUuid, NamedValues};
 
 use self::{
   crossing::Crossing,
-  hosted::{At, EAR, Handed, Hosted},
+  hosted::{At, Handed, Hosted},
   opening::OPENING,
 };
 pub use self::{
@@ -58,7 +58,6 @@ use crate::{
   fact::Fact,
   gate::checked,
   sand::{Answer, Host, Nobody, Sand, id, object},
-  snapshot::Keeper,
   value::{Exit, Fault, Given, Object, Text, entry},
 };
 
@@ -80,8 +79,7 @@ const WORK: [&str; 4] = ["prompt", "rung", "bash", "wait"];
 /// Whether this life took up an act that the record shows started and not done: the outside says it started in this
 /// life, which it does once a wake that this life says puts the act to it, or the act is done. A started that the
 /// journal says again is of an earlier life, and the view of the journal holds it.
-/// An act that a snapshot holds as work that ran is taken up only once this life puts it to the outside again.
-const TOOK: &str = "peek(__id, ...) is not ... or __id not in __restored and \
+const TOOK: &str = "peek(__id, ...) is not ... or \
   [x[1] for x in transcript(scope(__id), 'started')].count(__id) > \
   [x[1] for x in transcript(scope(__id), 'journal') if x[0] == 'started'].count(__id)";
 
@@ -159,8 +157,8 @@ struct Outside {
   opened: Opened,
   /// How many ids the host gave, which names the next.
   given: u128,
-  /// Whether a config turned the gate off for this life, which no snapshot keeps: each life reads
-  /// it again.
+  /// Whether a config turned the gate off for this life, which the record does not keep: each
+  /// life reads it again.
   ungated: bool,
 }
 
@@ -334,32 +332,6 @@ impl Outside {
     self.inward(sand, &got?)
   }
 
-  /// The side of the host of a life that a snapshot holds, on the ears that the host gives again: each ear stands
-  /// under the id and at the place where its earlier ear stood, and the host holds what the engine held.
-  fn restored(handed: Handed, table: &Table) -> Result<Outside, Fault> {
-    let mut standing = HashMap::new();
-    for (id, name, waits) in &table.ears {
-      if !handed.ears.contains_key(name) {
-        return Err(Fault::refused(format!(
-          "the snapshot holds the ear {name}, which the host does not give"
-        )));
-      }
-      standing.insert(*id, (name.clone(), if *waits { At::Waiting } else { At::Over }));
-    }
-    let given = table
-      .given
-      .parse()
-      .map_err(|no| Fault::refused(format!("a snapshot counts the ids of the host: {no}")))?;
-    let kept = table.kept.iter().copied().collect();
-    Ok(Outside {
-      hosted: Hosted { handed, standing, ..Hosted::default() },
-      crossing: Crossing { kept, ..Crossing::default() },
-      opened: table.opened.clone(),
-      given,
-      ungated: false,
-    })
-  }
-
   /// What the host calls while the life waits on it, answered at once: who speaks, a callable the engine made, what
   /// the gate finds against a word on a chain with no fact, or a verb of the engine, as it goes out.
   fn asked(&mut self, sand: &mut Sand, call: Call) -> Result<Object, Fault> {
@@ -403,20 +375,6 @@ impl Outside {
   }
 }
 
-/// What a snapshot holds of the side of the host beside the session of the sandbox: the root, each ear of the host by
-/// the id of its object in the sandbox, its name and whether it waits, the handles that the engine keeps, the callables
-/// of the opening, how many ids the host gave, and the work of the outside that ran.
-#[derive(serde::Serialize, serde::Deserialize)]
-pub(crate) struct Table {
-  pub(crate) root: String,
-  pub(crate) ears: Vec<(MontyUuid, String, bool)>,
-  pub(crate) kept: Vec<MontyUuid>,
-  pub(crate) opened: Opened,
-  pub(crate) given: String,
-  /// The work of the outside that ran: each act by its name, with the name of the ear that took it.
-  pub(crate) working: Vec<(String, String)>,
-}
-
 /// One life of the engine, as a host holds it.
 ///
 /// One host holds one engine and says one thing at a time, as an operator does: its methods are the verbs of the
@@ -438,10 +396,6 @@ pub struct Engine {
   holding: Vec<String>,
   /// The acts that the record parks and that this life has not retried, by name and kind, in the order of the record.
   parked: Vec<(String, String)>,
-  /// Where the life keeps its snapshot, when it keeps one.
-  keeper: Option<Keeper>,
-  /// Whether the life opened from a snapshot.
-  restored: bool,
   /// The highest number that each kind took in the record that the life opened on, as a map, which
   /// a checkpoint of the life keeps taken: the journal does not make again an act that an ear of
   /// the outside made, so the transcripts of the life do not hold each of those names.
@@ -518,8 +472,8 @@ impl Engine {
   }
 
   /// An engine on a sandbox and the side of its host, before any run: the record says what work it
-  /// left and what loops, and whether the life opened from a snapshot.
-  fn new(sand: Sand, outside: Outside, record: &[Object], root: String, restored: bool) -> Engine {
+  /// left and what loops.
+  fn new(sand: Sand, outside: Outside, record: &[Object], root: String) -> Engine {
     Engine {
       sand,
       outside,
@@ -529,8 +483,6 @@ impl Engine {
       stopped: None,
       holding: left(record),
       parked: looping(record),
-      keeper: None,
-      restored,
       taken: crate::checkpoint::taken(record),
     }
   }
@@ -574,7 +526,7 @@ impl Engine {
     outside.ungated = !gated;
     let Opened { kernel, gate, lasting, parking, park, .. } = outside.opened.clone();
     let record = seeded(&mut sand, &mut outside, record.into_iter().collect())?;
-    let mut engine = Engine::new(sand, outside, &record, String::new(), false);
+    let mut engine = Engine::new(sand, outside, &record, String::new());
     let names_parked = Object::list(engine.parked.iter().map(|(id, _)| Object::string(id)));
     let parks = !engine.parked.is_empty();
     let (root, raised) = engine.run(|sand, outside| {
@@ -622,65 +574,6 @@ impl Engine {
     Ok(engine)
   }
 
-  /// An engine opened from the snapshot of a life on the same record, on the ears that the host gives again under the
-  /// names that the snapshot holds: the session of the sandbox that the snapshot holds, with each ear born and told
-  /// the past of the life, so no word runs again. The work of the outside that ran when the snapshot was taken waits
-  /// for a wake, as the work that a record left waits in a replay.
-  pub(crate) fn from_snapshot<N: Into<String>>(
-    record: &[Object],
-    ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
-    table: &Table,
-    sand: Sand,
-    past: &[Object],
-    gated: bool,
-  ) -> Result<Engine, Fault> {
-    let (given, _) = Handed::of(ears)?;
-    let mut outside = Outside::restored(given, table)?;
-    outside.ungated = !gated;
-    let mut engine = Engine::new(sand, outside, record, table.root.clone(), true);
-    engine.run(|sand, outside| {
-      outside.bound(sand)?;
-      outside.retold(sand, past)
-    })?;
-    let ran = table.working.iter().filter(|(id, _)| engine.holding.contains(id));
-    let ran = Object::dict(ran.map(|(id, name)| (Object::string(id), Object::string(name))));
-    engine.word("__restored.update(__ran)", vec![("__ran", ran)])?;
-    Ok(engine)
-  }
-
-  /// What a snapshot holds of this life: the side of the host, and the session of the sandbox. Nothing when boot
-  /// raised, or when the sandbox holds what a later host cannot give again: a function of the host, or an ear that a
-  /// verb was given. The work of the outside that runs does not keep a snapshot from a life, since a working life
-  /// always holds some: the snapshot names it, and a later life holds it as a replay holds it.
-  pub(crate) fn snapshot(&self) -> Option<(Table, Vec<u8>)> {
-    let outside = &self.outside;
-    let foreign =
-      outside.hosted.standing.values().any(|(name, at)| name.starts_with(EAR) && *at != At::Over);
-    if self.raised.is_some()
-      || self.stopped.is_some()
-      || !outside.hosted.handed.calls.is_empty()
-      || foreign
-    {
-      return None;
-    }
-    let dump = self.sand.dump().ok()?;
-    let mut ears: Vec<_> = outside
-      .hosted
-      .standing
-      .iter()
-      .map(|(id, (name, at))| (*id, name.clone(), *at == At::Waiting))
-      .collect();
-    ears.sort_unstable_by_key(|one| one.0);
-    let mut kept: Vec<_> = outside.crossing.kept.iter().copied().collect();
-    kept.sort_unstable();
-    let opened = outside.opened.clone();
-    let mut working: Vec<_> =
-      outside.hosted.working.iter().map(|(id, name)| (id.clone(), name.clone())).collect();
-    working.sort_unstable();
-    let given = outside.given.to_string();
-    Some((Table { root: self.root.clone(), ears, kept, opened, given, working }, dump))
-  }
-
   /// What `body` gives, run as the engine's own work, with no bound of the turn but for each word
   /// that it steps.
   pub(crate) fn unbounded<T>(&mut self, body: impl FnOnce(&mut Engine) -> T) -> T {
@@ -688,16 +581,6 @@ impl Engine {
     let got = body(self);
     self.sand.bound(was);
     got
-  }
-
-  /// Whether the life opened from the snapshot of its record, with no replay.
-  pub fn restored(&self) -> bool {
-    self.restored
-  }
-
-  /// The life keeps its snapshot where the keeper says, when it ends.
-  pub(crate) fn keep(&mut self, keeper: Keeper) {
-    self.keeper = Some(keeper);
   }
 
   /// The highest number that each kind took in the record that the life opened on.
@@ -956,24 +839,6 @@ impl Engine {
 // from the contract.
 include!(concat!(env!("OUT_DIR"), "/methods.rs"));
 include!(concat!(env!("OUT_DIR"), "/constants.rs"));
-
-impl Drop for Engine {
-  /// A life that ends keeps its snapshot where its keeper says, only when it said a fact since the
-  /// last one, which is known before the sandbox dumps its session: a failure leaves the snapshot
-  /// before it, since a snapshot is a cache. A life writes none while an ear is behind, since the
-  /// record or its log lacks a fact that the sandbox holds. No run of a life writes one, so the
-  /// thread of the life writes no large file while it goes on.
-  fn drop(&mut self) {
-    if self.outside.behind() || !self.keeper.as_ref().is_some_and(Keeper::grew) {
-      return;
-    }
-    if let Some((table, dump)) = self.snapshot()
-      && let Some(keeper) = self.keeper.as_mut()
-    {
-      keeper.write(&table, &dump);
-    }
-  }
-}
 
 impl std::fmt::Debug for Engine {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

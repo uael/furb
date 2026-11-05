@@ -14,12 +14,6 @@ use crate::value::Object;
 /// before that fact. The park waits for what its ear waits for, and for every fact while it holds
 /// an act back.
 ///
-/// The restored acts are the work of the outside that ran when a snapshot was taken, each by its
-/// name and the ear that took it, which a life that opens from the snapshot holds as a replay holds
-/// the work that its record left: the journal of a replay puts such an act to the outside again at
-/// a wake that covers it, and the ear that took it hears it so, just before that wake, unless the
-/// act is parked, which its park puts again at a retry.
-///
 /// The bound of the turn of the sandbox holds while the Kernel steps the word of a rung, in
 /// `starts` and `carry`, and what held before holds again after: a live word keeps its bound, and
 /// so does each word that a replay runs again, while the replay, the seed and the gather of a
@@ -64,7 +58,6 @@ def __bounding(step):
 for __step in ("starts", "carry"):
   setattr(__kernel["Running"], __step, __bounding(getattr(__kernel["Running"], __step)))
 __parked = set()
-__engine["__restored"] = __restored = {}
 
 def __parking(ear):
   held, heard, wait = [], None, None
@@ -79,7 +72,7 @@ def __parking(ear):
           starts = [x[1] for x in __engine["transcript"](on, "started")].count(a[1])
           again = [x[1] for x in __engine["transcript"](on, "journal") if x[0] == "started"].count(a[1])
           taken = starts > again
-          if not __engine["over"](a[1]) and (a[1] in __restored or not taken):
+          if not __engine["over"](a[1]) and not taken:
             said = ear.send(a)
             while isinstance(said, tuple):
               said = ear.send((yield said))
@@ -140,16 +133,6 @@ def __lasting(name, ear):
         if not isinstance(said, tuple):
           wait = said
         heard = yield said
-        if isinstance(heard, tuple) and heard[0] == "wake":
-          covered = [x for x, by in __restored.items() if by == name and x not in __parked]
-          for one in [x for x in covered if __engine["covers"](heard, x)]:
-            del __restored[one]
-            if not __engine["over"](one):
-              said = ear.send(__engine["get"](one))
-              while isinstance(said, tuple):
-                said = ear.send((yield said))
-        elif isinstance(heard, tuple) and __restored.get(heard[1]) == name and heard is __engine["get"](heard[1]):
-          del __restored[heard[1]]
         said = ear.send(heard)
     except StopIteration:
       return
@@ -205,7 +188,7 @@ def __lasting(name, ear):
 }"#;
 
 /// What the opening gave, by name: the callables of the sandbox that the host calls it by, each
-/// held under its handle, as a snapshot holds them too.
+/// held under its handle.
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub(crate) struct Opened {

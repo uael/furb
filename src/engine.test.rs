@@ -31,7 +31,7 @@ use unsync::oneshot;
 use crate::{
   Act, Ear, Engine, Exit, Fact, Fault, Object, Text,
   ear::{Co, Next, ear, hear, hearing, lasting, say},
-  engine::{CRASHES, callable, hosted::HEARING},
+  engine::{CRASHES, callable},
   verbs, world,
 };
 
@@ -795,40 +795,6 @@ fn a_store_on_a_full_disk_loses_no_entry_keeps_none_twice_and_tells_the_operator
 }
 
 #[test]
-fn a_life_writes_no_snapshot_while_its_store_is_behind_the_sandbox() {
-  let full = Rc::new(std::cell::Cell::new(true));
-  let (kept, refused) = (Rc::new(RefCell::new(Vec::new())), Rc::new(RefCell::new(Vec::new())));
-  let store = Full { refusing: Rc::clone(&full), kept, refused };
-  let (record, store) = world::keeping(store).unwrap();
-  let at = Yard::new(format!("furb-engine-behind-{}", std::process::id()));
-  let path = at.join("record.jsonl");
-  fs::write(&path, "").unwrap();
-  fs::write(format!("{}.log", path.display()), "{}\n").unwrap();
-  let words = Rc::new(RefCell::new(VecDeque::from(["close(1)".to_owned(), "close(2)".to_owned()])));
-  let scratch = world::Scratch::own();
-  let ears = [
-    ("provider", provider(at.to_path_buf(), words, Rc::default())),
-    ("files", world::files(scratch.clone(), at.join("config"), None)),
-    ("bash", world::bash(scratch, &record)),
-    ("time", world::time()),
-    ("store", store),
-  ];
-  let mut engine = Engine::boot(record, ears).unwrap();
-  let root = engine.root().to_owned();
-  let with = verbs::Prompt { on: on(&root), ..Default::default() };
-  let act = engine.prompt(Object::string("int"), with.clone()).unwrap();
-  assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(1));
-  engine.keep(crate::snapshot::Keeper::new(path.clone(), "build".to_owned()));
-  let snapshot = crate::snapshot::path(&path);
-  assert!(!snapshot.exists(), "a snapshot ran ahead of its record");
-  full.set(false);
-  let act = engine.prompt(Object::string("int"), with).unwrap();
-  assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(2));
-  drop(engine);
-  assert!(snapshot.exists(), "the life wrote its snapshot once its record held each fact");
-}
-
-#[test]
 fn a_second_life_on_the_record_the_store_kept_makes_the_same_acts_again() {
   let (root, id, _yard) = {
     let mut first = Lived::new("again", &["close(len(read('a.txt').lines))"], true).unwrap();
@@ -1440,14 +1406,6 @@ fn a_record_whose_word_never_yields_replays_to_the_same_facts() {
   assert!(tip.first().is_some_and(|one| one.starts_with("stand ")), "{tip:?}");
 }
 
-#[test]
-fn the_rule_by_which_a_restore_tells_an_ear_the_past_is_the_rule_of_the_bus_of_the_engine() {
-  let ears = crate::ENGINE.split("  def ears(a):\n").nth(1).expect("boot defines ears");
-  let rule = ears.lines().find_map(|line| line.trim().strip_prefix("k = ")).expect("ears names k");
-  let held = HEARING.split_whitespace().collect::<String>();
-  assert!(held.contains(&rule.split_whitespace().collect::<String>()), "{rule} is not in HEARING");
-}
-
 /// An ear of the test that takes each probe, and raises at the probes that `raises` names, by their count.
 fn prober(count: Rc<RefCell<i64>>, raises: &'static [i64]) -> Box<dyn Ear> {
   hearing(&["probe"], move |mut co| async move {
@@ -1752,7 +1710,7 @@ fn what_an_ear_says_of_its_own_accord_lands_while_it_stands_at_a_yield_and_takes
 }
 
 #[test]
-fn a_fault_that_cuts_a_run_stops_the_life_which_refuses_each_later_entry_and_keeps_no_snapshot() {
+fn a_fault_that_cuts_a_run_stops_the_life_which_refuses_each_later_entry() {
   crate::sand::BOUND.set(Duration::from_millis(100));
   let cutter = "try:\n  while True:\n    pass\nfinally:\n  while True:\n    pass";
   let mut lived = Lived::new("stopped", &[cutter, "close(8)"], true).unwrap();
@@ -1764,10 +1722,6 @@ fn a_fault_that_cuts_a_run_stops_the_life_which_refuses_each_later_entry_and_kee
     .expect_err("the second excess of the turn cuts the run");
   assert_eq!(cut.name, "TimeoutError");
   assert_eq!(lived.engine.stopped().map(|fault| fault.name.as_str()), Some("TimeoutError"));
-  assert!(
-    lived.engine.snapshot().is_none(),
-    "a life that stopped keeps no snapshot of its sandbox"
-  );
   let with = verbs::Prompt { on: on(&root), ..Default::default() };
   let no =
     lived.engine.prompt(Object::string("int"), with).expect_err("a life that stopped makes no act");
@@ -1924,8 +1878,7 @@ fn a_life_whose_act_holds_a_callable_in_its_words_replays_with_no_drift() {
 fn a_life_whose_act_holds_the_address_of_an_object_in_its_words_replays_with_no_drift() {
   let word = "class A:\n  pass\na = await bash(f\"echo '{A()}'\")\nclose(8)";
   let (_yard, root, record) = lived_once("address", word);
-  // A life whose heap stood otherwise, as one that opened from a snapshot, gave the object another
-  // address.
+  // A life whose heap stood otherwise gave the object another address.
   let at =
     record.find("A object at 0x").expect("the record holds the address") + "A object at 0x".len();
   let end = at + record[at..].find(|one: char| !one.is_ascii_hexdigit()).unwrap_or(0);

@@ -78,8 +78,11 @@ impl Watch {
     &self.text[..end]
   }
 
-  /// The word as far as the end of a line of it, counted from 1.
+  /// The word as far as the end of a line of it, counted from 1, or as far as the close mark of a
+  /// quote that stands open at that line: a quote is one statement, which the word as python holds
+  /// on the line of its open mark, so a statement refused there ends where its quote ends.
   pub(super) fn through(&self, line: usize) -> &str {
+    let line = closing(&self.text, line);
     let end = self.text.match_indices('\n').nth(line - 1).map_or(self.text.len(), |(at, _)| at);
     &self.text[..end]
   }
@@ -298,6 +301,16 @@ fn quotes(word: &str) -> Vec<(usize, &str, Option<usize>)> {
     found.push((start, name, Some(from)));
   }
   found
+}
+
+/// The line, counted from 1, of the close mark of the quote of a word that holds this line from its
+/// open mark to before its close mark, or the line itself when no quote that ends holds it.
+fn closing(word: &str, line: usize) -> usize {
+  let at = |place: usize| word[..place].matches('\n').count() + 1;
+  quotes(word)
+    .into_iter()
+    .find_map(|(start, _, end)| end.filter(|end| (at(start)..at(*end)).contains(&line)).map(at))
+    .unwrap_or(line)
 }
 
 /// Whether a quote stands open in a word, since the text of a quote is no python until its end is written.

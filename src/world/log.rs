@@ -107,12 +107,6 @@ pub fn log(record: impl AsRef<Path>, held: &[Object]) -> Box<dyn Ear> {
   heard(Log::open(record.as_ref(), held))
 }
 
-/// The ear of the log of the record at a path, for a life that opens from the snapshot of an earlier life on the
-/// record: it writes the log on after the lines that it holds, since this life says none of them again.
-pub(crate) fn continued(record: impl AsRef<Path>, entries: usize) -> Box<dyn Ear> {
-  heard(Log::continued(record.as_ref(), entries))
-}
-
 /// The ear that writes a log.
 fn heard(mut log: Log) -> Box<dyn Ear> {
   let sink = Rc::clone(&log.sink);
@@ -135,10 +129,6 @@ impl Hooks for Rc<RefCell<Sink>> {
     self.borrow_mut().flush();
     Ok(())
   }
-
-  fn behind(&self, _: &dyn Ear) -> bool {
-    self.try_borrow().map_or(true, |sink| sink.behind)
-  }
 }
 
 /// The file of the log, and the lines that wait for it.
@@ -149,8 +139,6 @@ struct Sink {
   /// The lines that the buffer did not take, as on a full disk, with each line after them, in
   /// order.
   waiting: String,
-  /// Whether the last flush left a line that the file does not hold.
-  behind: bool,
 }
 
 impl Sink {
@@ -174,8 +162,9 @@ impl Sink {
   /// Each line, handed to the file.
   fn flush(&mut self) {
     self.drain();
-    let failed = self.out.as_mut().is_some_and(|out| out.flush().is_err());
-    self.behind = failed || !self.waiting.is_empty();
+    if let Some(out) = self.out.as_mut() {
+      drop(out.flush());
+    }
   }
 }
 
@@ -298,24 +287,10 @@ impl Log {
     log
   }
 
-  /// The log of the record at a path, written on after the lines that it holds, each name of which it has seen.
-  fn continued(record: &Path, entries: usize) -> Log {
-    let path = beside(record, ".log");
-    let mut seen = HashSet::new();
-    for line in std::fs::read_to_string(&path).unwrap_or_default().lines().skip(1) {
-      let about = serde_json::from_str::<Value>(line)
-        .ok()
-        .and_then(|one| one.get(1)?.as_str().map(str::to_owned));
-      seen.extend(about.filter(|one| !one.is_empty()));
-    }
-    let file = OpenOptions::new().append(true).open(&path).ok();
-    Log { path, sink: Log::sink(file), fresh: None, entries, seen, owed: Vec::new() }
-  }
-
   /// The sink of a log file, when it opened.
   fn sink(file: Option<File>) -> Rc<RefCell<Sink>> {
     let out = file.map(|file| BufWriter::with_capacity(BUFFER, file));
-    Rc::new(RefCell::new(Sink { out, waiting: String::new(), behind: false }))
+    Rc::new(RefCell::new(Sink { out, waiting: String::new() }))
   }
 
   /// Whether the log can be written.

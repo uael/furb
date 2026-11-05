@@ -108,27 +108,6 @@ impl Sand {
     Self { state: State::Idle(repl), fed: 0, bounded: true, applied: true }
   }
 
-  /// The session between two runs, as monty dumps it.
-  pub(crate) fn dump(&self) -> Result<Vec<u8>, Fault> {
-    let (State::Idle(repl) | State::Ended(repl, _)) = &self.state else {
-      return Err(Fault::refused("a sandbox dumps its session between two runs"));
-    };
-    monty::dump("furb", None, &[], monty::SessionRef::Idle(repl))
-      .map_err(|no| Fault::refused(no.to_string()))
-  }
-
-  /// A sandbox on the session of a dump, between two runs. The dump holds the limits of its session, so the sandbox
-  /// keeps the bound of the turn that the life that made it set.
-  pub(crate) fn loaded(bytes: &[u8]) -> Result<Self, Fault> {
-    let dump = monty::Dump::load(bytes).map_err(|no| Fault::refused(no.to_string()))?;
-    match dump.state {
-      monty::Session::Idle(repl) => {
-        Ok(Self { state: State::Idle(*repl), fed: 0, bounded: true, applied: false })
-      }
-      _ => Err(Fault::refused("a snapshot holds a session between two runs")),
-    }
-  }
-
   /// A sandbox of nothing, which holds no session, and stands in for one that is lent to code of a host.
   pub(crate) fn none() -> Self {
     Self { state: State::Lent, fed: 0, bounded: true, applied: true }

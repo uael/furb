@@ -15,41 +15,8 @@ use crate::{
   ear::{Call, Ear, Heard, Spoken, Step},
   fact::Fact,
   sand::{Answer, Sand},
-  value::{Fault, Given, Object, ObjectRef, marked},
+  value::{Fault, Given, Object, marked},
 };
-
-/// The views of the engine, which make nothing: the verbs that an ear calls while it hears the past
-/// at a restore, which the life answers. It answers every other verb with nothing, since the life
-/// holds what it made.
-const VIEWS: [&str; 18] = [
-  "get",
-  "peek",
-  "transcript",
-  "question",
-  "scope",
-  "under",
-  "over",
-  "tells",
-  "paused",
-  "covers",
-  "asked",
-  "answer",
-  "standing",
-  "cwd",
-  "module",
-  "program",
-  "turns",
-  "filled",
-];
-
-/// For each fact of the past, the ears of the host that wait for it, among the ears `w`, each by
-/// its name and what it waits for, as the bus of the engine gives a fact, whose `ears` this rule is
-/// word for word: an ear that waits for nothing hears it, as does an ear that waits for its kind,
-/// its act, or the kind, the maker, the chain or the thread of that act, or the chain of that maker
-/// or of that chain or thread, and every ear hears a control.
-pub(crate) const HEARING: &str = "(lambda past, w: [(lambda a: (lambda k: [n for n, x in w if x is None or k & x or a[0] in \
-  ('pause', 'wake', 'cancel', 'close')])((lambda q: {a[0], *q[:4], *map(scope, q[2:4])})(get(a[1]) or \
-  a[:1] * 4)))(a) for a in past])(past, w)";
 
 /// The prefix of the name a function of the host crosses in under: `call:` and its number.
 pub(super) const CALL: &str = "call:";
@@ -177,9 +144,6 @@ pub(super) struct Hosted {
   /// What each ear of the host waits for since its last step, by the id of its object in the
   /// sandbox.
   pub(super) waits: HashMap<MontyUuid, Object>,
-  /// Each act that an ear of the host said started and that is not done, by its name, with the name
-  /// of that ear: the work of the outside that runs now.
-  pub(super) working: HashMap<String, String>,
 }
 
 impl Default for Hosted {
@@ -189,7 +153,6 @@ impl Default for Hosted {
       waker: Waker::noop().clone(),
       standing: HashMap::new(),
       waits: HashMap::new(),
-      working: HashMap::new(),
     }
   }
 }
@@ -217,12 +180,6 @@ impl Outside {
   /// what they give.
   pub(super) fn ran(&mut self) -> Result<(), Fault> {
     self.hosted.handed.ears.values_mut().map(|ear| ear.ran()).fold(Ok(()), Result::and)
-  }
-
-  /// Whether an ear of the host holds a fact that it writes beside the record and could not write
-  /// yet.
-  pub(super) fn behind(&self) -> bool {
-    self.hosted.handed.ears.values().any(|ear| ear.behind())
   }
 
   /// What the first ear that stands at a yield says of its own accord, in the order the host gave
@@ -287,22 +244,11 @@ impl Outside {
 
   /// One step of an ear of the host: what it heard goes to it, and each verb it calls is said here,
   /// under its name, and what it came to is the next thing it hears, until it does something else.
-  /// The life answers a verb when `views` holds it or when no view is asked for, and answers it
-  /// with nothing otherwise.
-  fn stepped(
-    &mut self,
-    sand: &mut Sand,
-    ear: &mut dyn Ear,
-    mut heard: Heard,
-    views: Option<&[&str]>,
-  ) -> Stepped {
+  fn stepped(&mut self, sand: &mut Sand, ear: &mut dyn Ear, mut heard: Heard) -> Stepped {
     let waker = self.hosted.waker.clone();
     loop {
       match self.lent(sand, |life| ear.lent(heard, &mut Context::from_waker(&waker), life)) {
-        Step::Call(call) if views.is_none_or(|views| views.contains(&call.verb.as_str())) => {
-          heard = Heard::Answer(self.asked(sand, call));
-        }
-        Step::Call(_) => heard = Heard::Answer(Ok(Object::none())),
+        Step::Call(call) => heard = Heard::Answer(self.asked(sand, call)),
         Step::Say(saying) => return Stepped::Say(saying),
         Step::Wait(wait) => return Stepped::Wait(wait),
         Step::Over => return Stepped::Over,
@@ -337,10 +283,7 @@ impl Outside {
         return Answer::Value(self.hosted.waits.get(&on).cloned().unwrap_or_else(Object::none));
       }
       (At::Waiting, Some(a)) => match self.outward(sand, a).map(|a| Fact::of(a.as_ref())) {
-        Ok(Some(fact)) => {
-          self.track(&fact);
-          Heard::Fact(fact)
-        }
+        Ok(Some(fact)) => Heard::Fact(fact),
         Ok(None) => return Answer::Abort(Fault::refused("an ear hears a fact or nothing")),
         Err(fault) => return Answer::Abort(fault),
       },
@@ -348,7 +291,7 @@ impl Outside {
     let Some(mut ear) = self.hosted.handed.ears.remove(&name) else {
       return Answer::Abort(Fault::refused(format!("no ear of the host is named {name}")));
     };
-    let (at, answer) = match self.stepped(sand, &mut *ear, heard, None) {
+    let (at, answer) = match self.stepped(sand, &mut *ear, heard) {
       Stepped::Say(saying) => {
         (At::Waiting, self.inward(sand, &saying.0).map_or_else(Answer::Abort, Answer::Value))
       }
@@ -363,149 +306,6 @@ impl Outside {
     self.hosted.handed.ears.insert(name.clone(), ear);
     self.hosted.standing.insert(on, (name, at));
     answer
-  }
-
-  /// The work of the outside that a fact changes: an act that an ear of the host said started runs
-  /// until it is done.
-  pub(super) fn track(&mut self, fact: &Fact) {
-    match fact.kind() {
-      "started" if self.hosted.standing.values().any(|(name, _)| name == fact.by()) => {
-        self.hosted.working.insert(fact.about().to_owned(), fact.by().to_owned());
-      }
-      "done" => {
-        self.hosted.working.remove(fact.about());
-      }
-      _ => {}
-    }
-  }
-
-  /// Each ear that waits, in the order of its id, as the host gives it.
-  pub(super) fn waiting(&self) -> Vec<(MontyUuid, String)> {
-    let mut ears: Vec<_> = self
-      .hosted
-      .standing
-      .iter()
-      .filter(|(_, (_, at))| *at == At::Waiting)
-      .map(|(id, (name, _))| (*id, name.clone()))
-      .collect();
-    ears.sort_unstable();
-    ears
-  }
-
-  /// One fact or the birth, heard by one ear of the host outside the log: each verb it calls is
-  /// answered, by the life when `views` holds it or when no view is asked for, and by nothing
-  /// otherwise, and each saying comes back to it as the fact that the bus would make of it, with
-  /// nothing said into the life. What it waits for after is kept as a wait of the ear is kept. It
-  /// gives whether the ear waits after, and refuses an ear that says something when `speaks`
-  /// refuses it.
-  fn aside(
-    &mut self,
-    sand: &mut Sand,
-    (on, name): &(MontyUuid, String),
-    heard: Heard,
-    views: Option<&[&str]>,
-    speaks: bool,
-  ) -> Result<bool, Fault> {
-    let Some(mut ear) = self.hosted.handed.ears.remove(name) else { return Ok(false) };
-    let mut heard = heard;
-    let waits = loop {
-      match self.stepped(sand, &mut *ear, heard, views) {
-        Stepped::Say(saying) if speaks => {
-          let held = saying.0.as_ref().items().unwrap_or_default();
-          let mut made: Vec<Object> = held.iter().take(2).map(ObjectRef::to_owned).collect();
-          made.push(Object::string(name));
-          made.extend(held.iter().skip(2).map(ObjectRef::to_owned));
-          heard = Heard::Fact(Fact(Object::tuple(made)));
-        }
-        Stepped::Say(_) => {
-          self.hosted.handed.ears.insert(name.clone(), ear);
-          return Err(Fault::refused(format!(
-            "the ear {name} speaks at its birth, so no snapshot opens it"
-          )));
-        }
-        Stepped::Wait(wait) => {
-          self.hosted.waits.insert(*on, wait.unwrap_or_else(Object::none));
-          break true;
-        }
-        Stepped::Over | Stepped::Raised(_) => break false,
-      }
-    };
-    self.hosted.handed.ears.insert(name.clone(), ear);
-    if !waits {
-      self.hosted.standing.insert(*on, (name.clone(), At::Over));
-    }
-    Ok(waits)
-  }
-
-  /// The facts of the past that ears hear again, as a replay of the record tells them: each fact of
-  /// the log that is no act, but the birth of a chain, with the journal as the speaker of each fact
-  /// that no act said.
-  fn journaled(&mut self, sand: &mut Sand, past: &[Object]) -> Result<Vec<Object>, Fault> {
-    let mut acts: HashMap<String, bool> = HashMap::new();
-    let mut told = Vec::new();
-    for one in past {
-      let Some(fact) = Fact::of(one.as_ref()) else { continue };
-      if fact.question() && fact.kind() != "chain" {
-        continue;
-      }
-      let by = fact.by().to_owned();
-      let act = if let Some(act) = acts.get(&by) {
-        *act
-      } else {
-        let got = self.named_call(sand, "get", vec![Object::string(&by)], vec![])?;
-        let act = !got.as_ref().is_none();
-        acts.insert(by.clone(), act);
-        act
-      };
-      let journal = !act && !fact.question();
-      let held = fact.0.as_ref().items().unwrap_or_default();
-      let speaker = |(i, one): (usize, &ObjectRef<'_>)| {
-        if i == 2 && journal { Object::string("journal") } else { one.to_owned() }
-      };
-      told.push(Object::tuple(held.iter().enumerate().map(speaker).collect::<Vec<_>>()));
-    }
-    Ok(told)
-  }
-
-  /// The ears that the host gives again, each born and then told the past of the life, as a replay
-  /// of the record tells it: each fact of the log that is no act, but the birth of a chain, to each
-  /// ear that waits for it, with the journal as the speaker of each fact that no act said, since
-  /// the journal says it again. What an ear says or makes from the past reaches nothing, as the
-  /// journal answers it in a replay, and the log, which holds the past, hears none of it.
-  pub(super) fn retold(&mut self, sand: &mut Sand, past: &[Object]) -> Result<(), Fault> {
-    for one in self.waiting() {
-      self.aside(sand, &one, Heard::Born, None, false)?;
-    }
-    let told = self.journaled(sand, past)?;
-    let ears: Vec<_> = self.waiting().into_iter().filter(|(_, name)| name != "log").collect();
-    let waits = ears.iter().map(|(on, name)| {
-      Object::tuple([
-        Object::string(name),
-        self.hosted.waits.get(on).cloned().unwrap_or_else(Object::none),
-      ])
-    });
-    // The rule reads the kind and the act of a fact alone, so the rest of the fact stays out of the
-    // sandbox: it can be large, and it can hold a callable that only the life that told it held.
-    let heads = told.iter().map(|one| {
-      let held = one.as_ref().items().unwrap_or_default();
-      Object::tuple(held.iter().take(2).map(ObjectRef::to_owned).collect::<Vec<_>>())
-    });
-    let names = Object::dict([
-      (Object::string("past"), Object::list(heads.collect::<Vec<_>>())),
-      (Object::string("w"), Object::list(waits.collect::<Vec<_>>())),
-    ]);
-    let (word, names) = (self.opened.word.clone(), self.inward(sand, &names)?);
-    let hearing = sand.call(self, &word, vec![Object::string(HEARING), names], vec![])?;
-    let hearing = self.outward(sand, &hearing)?;
-    let hearing = hearing.as_ref().items().unwrap_or_default();
-    for (fact, names) in told.into_iter().zip(hearing) {
-      let names = names.items().unwrap_or_default();
-      let names: Vec<&str> = names.iter().filter_map(ObjectRef::as_str).collect();
-      for one in ears.iter().filter(|(_, name)| names.contains(&name.as_str())) {
-        self.aside(sand, one, Heard::Fact(Fact(fact.clone())), Some(&VIEWS), true)?;
-      }
-    }
-    Ok(())
   }
 
   /// What the host does in `step`, with this life lent to it, which answers at once each verb that

@@ -270,8 +270,7 @@ meanings. The entry of such a name here gives only its form in the engine.
 - ty check passes on engine.py.
 - There is one root per record, and one process at a time owns a record.
 - A chain is a function of the record, and a later boot must offer the same interpreter and the same outside, since a
-  record is made again by running its words, or loaded from the snapshot that a run of those words made on the same
-  record, interpreter and outside, which the opening of the life checks against the record. A record names the
+  record is made again by running its words. A record names the
   version of the build that made it, and a life on a build of another version replays none of the segment after its
   last checkpoint: it carries that segment as data.
 - A chain is one conversation, and the transcript that a provider caches grows at one end.

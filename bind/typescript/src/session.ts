@@ -202,9 +202,9 @@ export class Session extends EventEmitter {
     }
   }
 
-  /** The ear that keeps every fact for the host, and every act in the activity. It is an ear of the outside, so a
-   * snapshot of the life holds it by its name. An ear of the outside hears no question that an ear before it took,
-   * so the observer reads such an act by `get` before the first fact about it, as the log of a life holds it. */
+  /** The ear that keeps every fact for the host, and every act in the activity. It is an ear of the outside, which
+   * hears no question that an ear before it took, so the observer reads such an act by `get` before the first fact
+   * about it, as the log of a life holds it. */
   private *observer(): Ear {
     const known = new Set<string>();
     for (;;) {

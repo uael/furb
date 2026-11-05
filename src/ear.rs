@@ -160,16 +160,10 @@ pub trait Ear {
   fn restart(&mut self) -> bool {
     false
   }
-
-  /// Whether the ear holds a fact that it writes beside the record and could not write yet, as on a full disk: a
-  /// snapshot of the life then would hold more than the files that it covers, so the life writes none.
-  fn behind(&self) -> bool {
-    false
-  }
 }
 
-/// What an ear adds to the ear that [`With`] wraps: its end of a run, its restart and its debt,
-/// the three methods that a wrapper of an ear gives its own. Each is lent the ear that the wrapper
+/// What an ear adds to the ear that [`With`] wraps: its end of a run and its restart,
+/// the two methods that a wrapper of an ear gives its own. Each is lent the ear that the wrapper
 /// holds, and by default does what that ear does, except `restart`, which leaves the ear over.
 pub trait Hooks {
   /// What the wrapper does at the end of each run, as [`Ear::ran`] does.
@@ -181,11 +175,6 @@ pub trait Hooks {
   /// fresh ear in the place of `ear`, which hears from its birth.
   fn restart(&mut self, _ear: &mut Box<dyn Ear>) -> bool {
     false
-  }
-
-  /// Whether the wrapper holds a fact that it could not write yet, as [`Ear::behind`] says.
-  fn behind(&self, ear: &dyn Ear) -> bool {
-    ear.behind()
   }
 }
 
@@ -226,10 +215,6 @@ impl<H: Hooks> Ear for With<H> {
 
   fn restart(&mut self) -> bool {
     self.hooks.restart(&mut self.ear)
-  }
-
-  fn behind(&self) -> bool {
-    self.hooks.behind(&*self.ear)
   }
 }
 

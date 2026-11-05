@@ -42,8 +42,6 @@ API of its own:
   data, as `src/checkpoint/tail.rs` says: each chain keeps its turns and its open prompts, and is told each name of its
   module that a word of that tail changed, which it lost. `checkpoint::carry` gives that checkpoint for a tail of any
   build, which a host keeps after a fault stopped the life of that tail.
-- `src/snapshot.rs` holds the snapshot of a life beside its record: the session of the sandbox that monty dumps and
-  what the engine holds of the ears, which a later life on the same record and build opens from with no replay.
 - `src/engine.rs` opens a life in the sandbox, with each of its concerns in a file of `src/engine/`: it loads the
   engine, the sheet and the Kernel, each in a namespace of its own, and carries each value between the sandbox and a
   host, whose ears the engine steps as generators. An ear that raises refuses the act that it heard, and starts again
@@ -51,7 +49,7 @@ API of its own:
   tells the operator once which ear raised and why. A Kernel that raises lost the word of each run it held, so each
   run that is not over then ends refused, with its open wants, and a rung that awaited through a wants is closed, so
   no chain holds a rung as running for ever. A fault that no code of the sandbox catches, as a second excess
-  of the bound of a turn in `src/sand.rs`, cuts the run with no `finally`, so the life stops: it keeps no snapshot,
+  of the bound of a turn in `src/sand.rs`, cuts the run with no `finally`, so the life stops: it
   refuses each later entry with that fault, and gives it to a host as `stopped`.
 - The Kernel is `src/furb/kernel.py`, one module that the sandbox loads and the python package imports, each on the
   names of its engine. The gate, `src/gate.rs`, is the type checker of monty. It reads a word on the sheet of the
@@ -160,9 +158,8 @@ engine does not serve its meaning, the name is wrong, and the name changes.
   `each_run_of_a_chain_of_the_replays_has_a_turn_that_shows_its_word` in `src/life.test.rs` holds the first part.
 - The record is the one truth of a life. A cache of a life is derived from its record and checked against it, and a
   reader drops a cache that does not agree: the log of a life holds every fact that the life said, and each later
-  life writes it again from the record. A record is made again by running its words, or loaded from the snapshot
-  that a run of those words made on the same record, which the life checks, so a chain stays a function of its
-  record.
+  life writes it again from the record. A record is made again by running its words from its last checkpoint, so a
+  chain stays a function of its record.
 
 ## The bar
 

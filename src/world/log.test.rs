@@ -55,7 +55,6 @@ fn a_line_reaches_the_file_when_the_run_ends() {
   let fresh = format!("{}.log.new", record.display());
   assert_eq!(fs::read_to_string(&fresh).unwrap(), "", "the lines wait in the buffer");
   log.sink.borrow_mut().flush();
-  assert!(!log.sink.borrow().behind);
   assert_eq!(
     fs::read_to_string(&fresh).unwrap(),
     "{\"entries\":0}\n[\"stand\",\"stand1\",\"operator\",\"chain1\"]\n"
@@ -70,7 +69,6 @@ fn a_line_that_the_buffer_did_not_take_waits_and_lands_after_the_lines_before_it
   log.sink.borrow_mut().waiting.push_str("[\"done\",\"stand1\",\"journal\",[]]\n");
   log.line(&json!(["stand", "stand2", "operator", "chain1"]));
   log.sink.borrow_mut().flush();
-  assert!(!log.sink.borrow().behind);
   assert_eq!(
     fs::read_to_string(format!("{}.log.new", record.display())).unwrap(),
     "{\"entries\":0}\n[\"stand\",\"stand1\",\"operator\",\"chain1\"]\n[\"done\",\"stand1\",\"journal\",[]]\n[\"stand\",\"stand2\",\"operator\",\"chain1\"]\n"
