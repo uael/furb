@@ -157,8 +157,7 @@ export const rail = part({
     if (kept && kept.session === w && kept.version === w.promptsVersion && kept.owed === owed)
       return kept.list;
     const list: ChainThread[] = [];
-    // A chain that no act touched since the last read keeps its threads, so a new act costs one chain and not all.
-    const reads = kept?.session === w && kept.owed === owed ? kept.chains : new Map<string, ChainRead>();
+    const reads = kept?.chains ?? new Map<string, ChainRead>();
     const chains = new Map<string, ChainRead>();
     for (const [chain, acts] of w.activityByChain) {
       if (!acts.length || w.naming(chain)) continue;

@@ -68,7 +68,7 @@ export type ActRow = LiveAct & {
   /** How many milliseconds the act took, when this life ran it. */
   took?: number;
 };
-/** The threads of the chain shown: in order, each by its id, and the thread of each message, by the id of the message. */
+/** The threads of a chain: in order, each by its id, and the thread of each message, by the id of the message. */
 export interface ThreadList {
   list: ChainThread[];
   by: Map<string, ChainThread>;
