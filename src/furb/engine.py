@@ -977,7 +977,7 @@ def boot(record=(), **outside):
           case (kind, about, by, *_) if (
             (q := get(about)) and by != "journal" and (by or repr(first.get(about)) != repr(a))
           ):
-            if not by and (owed() or about in first):
+            if not by and a != q and (owed() or about in first):
               raise drift(about)
             if by not in known and by not in owned:
               glue = (

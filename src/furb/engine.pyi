@@ -1179,6 +1179,7 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   An act whose maker is neither an act nor an ear that boot was given is said again through its verb, with the words the record holds and the chain it names, so its ear is the verb's, a host finds it made when boot returns and makes it not again, and a show or a filter it was given is not said again, since the record holds none.
   A later life says an act whose maker is neither an act nor an ear that boot was given again only through a verb in the globals of its chain, and an act whose kind no verb binds is a drift.
   The journal says again a done that is the first answer of an act when the act is made again, and every later fact of it at the place where the record holds it, the started of each act that a wake began again among them.
+  An act that the life makes under no site, as the chain makes the reply of an advance whose rung ended, is no fact of the World, so a later life makes it again with no drift.
   A first answer that the record holds with no maker is a refusal of the life, that nothing took the act, so the journal says it again under no site, as the life said it, and neither keeps it again nor reads it as a drift.
   What the record shows started and not done when boot returns is pending: the journal holds it from the outside until a wake that this life says.
   An act whose maker is the journal, as seed gives one, stands known in the transcript of its chain with no verb and runs nothing, and the journal says its later facts at their place.
