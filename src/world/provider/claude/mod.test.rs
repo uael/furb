@@ -491,6 +491,37 @@ fn a_new_conversation_resumes_the_turns_before_its_last_message_from_a_conversat
   assert_eq!(entries[1]["parentUuid"], entries[0]["uuid"]);
 }
 
+#[test]
+fn a_turn_after_a_prefix_resumes_the_thought_of_the_reply_before_it_whole_with_its_signature() {
+  let yard = Yard::new("thought-kept");
+  let dir = yard.at.join("dir");
+  let accounts = vec![Account { name: "a".to_owned(), source: Source::ConfigDir(dir.clone()) }];
+  let model = yard.claude_as(accounts, Switch::Failover).completion_model("sonnet");
+  let session = json!({"session": "chain"});
+  asked(&model, &[user("first")], session.clone()).unwrap();
+  let signed = Reasoning::new_with_signature("a long thought", Some("sig".to_owned()));
+  let cut = Reasoning::new("a thought with no signature");
+  let content = vec![
+    AssistantContent::Reasoning(signed),
+    AssistantContent::Reasoning(cut),
+    AssistantContent::text("read(\"x\")"),
+  ];
+  let reply = Message::Assistant { id: None, content };
+  asked(&model, &[user("summary"), reply, user("next")], session).unwrap();
+  let id =
+    after(&yard.args(&yard.pids()[1]), "--resume").expect("the process resumes a conversation");
+  let projects: Vec<_> = fs::read_dir(dir.join("projects")).unwrap().flatten().collect();
+  let file = projects[0].path().join(format!("{id}.jsonl"));
+  let entries: Vec<Value> = fs::read_to_string(&file)
+    .unwrap()
+    .lines()
+    .map(|one| serde_json::from_str(one).unwrap())
+    .collect();
+  let thought = json!({"type": "thinking", "thinking": "a long thought", "signature": "sig"});
+  let expected = json!([thought, {"type": "text", "text": "read(\"x\")"}]);
+  assert_eq!(entries[1]["message"]["content"], expected);
+}
+
 /// A model of the fake that keeps its conversations in a config dir of the yard, whose command line loses the
 /// conversation that a process resumes as many times as `lost` says.
 fn losing(yard: &Yard, lost: &str) -> Completion {

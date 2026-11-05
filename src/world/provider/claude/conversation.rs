@@ -10,7 +10,9 @@ use std::{
 
 use rig_core::{
   completion::{CompletionError, CompletionResponse},
-  message::{AssistantContent, DocumentSourceKind, Message, MimeType, UserContent},
+  message::{
+    AssistantContent, DocumentSourceKind, Message, MimeType, ReasoningContent, UserContent,
+  },
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -154,11 +156,7 @@ impl Conversation {
           ("user", blocks)
         }
         Message::Assistant { content, .. } => {
-          let blocks = content.iter().filter_map(|one| match one {
-            AssistantContent::Text(text) => Some(json!({"type": "text", "text": text.text})),
-            _ => None,
-          });
-          ("assistant", blocks.collect())
+          ("assistant", content.iter().flat_map(resumed).collect())
         }
       };
       if blocks.is_empty() {
@@ -629,6 +627,26 @@ pub(super) fn cached(blocks: &mut [Value], marked: &mut bool) {
   if let Some(at) = (1..blocks.len()).find(|&at| !*marked && opens(&blocks[at])) {
     blocks[at - 1]["cache_control"] = json!({"type": "ephemeral", "ttl": lasting()});
     *marked = true;
+  }
+}
+
+/// One block of a turn of the model as a conversation of the command line holds it: its text, or
+/// each part of its thought that the model signed, whole with its signature, so the next reply
+/// reads the thought of the turn before it. A thought with no signature, as one that the provider
+/// cut, and one that a record emptied go not at all, since the API takes no thought that its
+/// signature does not prove.
+fn resumed(block: &AssistantContent) -> Vec<Value> {
+  let signed = |one: &ReasoningContent| match one {
+    ReasoningContent::Text { text, signature: Some(signature) } if !text.is_empty() => {
+      Some(json!({"type": "thinking", "thinking": text, "signature": signature}))
+    }
+    ReasoningContent::Redacted { data } => Some(json!({"type": "redacted_thinking", "data": data})),
+    _ => None,
+  };
+  match block {
+    AssistantContent::Text(text) => vec![json!({"type": "text", "text": text.text})],
+    AssistantContent::Reasoning(thought) => thought.content.iter().filter_map(signed).collect(),
+    _ => Vec::new(),
   }
 }
 
