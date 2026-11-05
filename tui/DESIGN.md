@@ -334,16 +334,14 @@ The controls of a debugger act on the selected chain:
 
 | Key | What it does |
 | --- | --- |
-| space | Pause the selection, as a breakpoint, or wake it, as continue |
+| space | Pause the selected chain, as a breakpoint, or wake it, as continue |
 | n | Step: wake the selected chain for one rung, then pause it again |
-| x | Cancel the selection |
-| c | Close the selected act with a value |
-| g | Put a ceiling of dollars on the selected chain, a breakpoint on cost |
-| e | Edit the door of the prompt of the selection, which replays its ladder |
-| i | Ask the model of the selected chain |
+| x | Cancel the act that the selected chain waits on |
 | [ and ] | Move the time cursor. The graph shows the life as it stood then |
-| b | Branch the selected chain at the selection, or at the time cursor |
+| b | Branch the selected chain at the time cursor |
 | arrows | Move to the next program of the map in that direction, by its place |
+| Enter | Give the keys to the input, on the selected chain |
+| Esc | Return to now, then give the keys back to the input |
 
 The layout of the map is stable. A chain takes its place when it is born and keeps it: its column is its depth in
 the tree of hires, and its row is the first free row of that column at or under the row of the chain that hired it.
