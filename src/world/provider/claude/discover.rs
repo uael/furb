@@ -22,7 +22,10 @@ use tokio::{
 };
 
 use super::{EFFORTS, Program};
-use crate::world::provider::atomic::{self, Access};
+use crate::world::{
+  child,
+  provider::atomic::{self, Access},
+};
 
 /// One model of the command line as it said itself: the alias, the window of the model that it resolves to, and the
 /// efforts that it takes, none when it takes no effort.
@@ -166,13 +169,8 @@ pub(super) async fn lists(program: &Program, flag: &str) -> bool {
 /// [`WITHIN`], when it is killed.
 async fn help(program: &Program) -> Option<String> {
   let mut command = program.command().ok()?;
-  command
-    .arg("--help")
-    .stdin(Stdio::null())
-    .stdout(Stdio::piped())
-    .stderr(Stdio::null())
-    .kill_on_drop(true);
-  let out = tokio::time::timeout(WITHIN, command.output()).await.ok()?.ok()?;
+  command.arg("--help").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
+  let out = child::output(&mut command, WITHIN).await?;
   Some(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
@@ -200,12 +198,11 @@ async fn probe(program: &Program) -> Option<Vec<Found>> {
   let mut command = program.base_command(&print).ok()?;
   command.args(["--tools", ""]);
   command.env("FURB_CLAUDE_DISCOVER", "1");
-  command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).kill_on_drop(true);
-  let mut child = command.spawn().ok()?;
+  command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
+  // The group ends the child as it drops, and the runtime reaps it.
+  let (mut child, _group) = child::spawn(&mut command).ok()?;
   let (stdin, stdout) = child.stdin.take().zip(child.stdout.take())?;
   let found = tokio::time::timeout(WITHIN, asked(stdin, BufReader::new(stdout).lines())).await;
-  // The child is killed as it drops, and the runtime reaps it.
-  drop(child);
   found.ok().flatten()
 }
 

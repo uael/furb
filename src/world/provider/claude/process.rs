@@ -15,6 +15,7 @@ use tokio::{
 };
 
 use super::{Error, Program, failed, protocol::Event, refused};
+use crate::world::child::{self, Group, Unborn};
 
 /// How long a turn reads what a process that ended still holds on its stdout and its stderr, since
 /// a process that it started may hold them open.
@@ -35,6 +36,11 @@ const FIRST: Duration = Duration::from_millis(100);
 
 /// The longest pause before a process tries its program again.
 const PAUSE: Duration = Duration::from_secs(5);
+
+/// Whether a program that did not start is missing, or is not one that this machine runs.
+fn unrunnable(no: &std::io::Error) -> bool {
+  matches!(no.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied)
+}
 
 /// What the stdout of a process says: an event of the stream, a line that is none, or its end, with
 /// why when the end is no exit.
@@ -58,6 +64,8 @@ pub(super) struct Process {
   /// What each turn of the process spends, which it started at.
   pub(super) spend: Spend,
   pub(super) child: Child,
+  /// The group of the process, which ends each process that it started when the process goes.
+  _group: Group,
   pub(super) stdin: ChildStdin,
   pub(super) out: Out,
   pub(super) tail: Tail,
@@ -74,24 +82,19 @@ impl Process {
     spend: Spend,
     gone: Duration,
   ) -> Result<Process, CompletionError> {
-    command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
+    command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
     // A program that a process holds open to write it is busy, as a new program is for a moment
     // while a fork of another thread holds it, so it starts at a later try.
     let mut tries = 0;
     let due = Instant::now() + gone;
     let mut pause = FIRST;
-    let mut child = loop {
-      let wait = match command.spawn() {
-        Err(no) if no.raw_os_error() == Some(BUSY) && tries < 50 => {
+    let (mut child, group) = loop {
+      let wait = match child::spawn(&mut command) {
+        Err(Unborn::Start(no)) if no.raw_os_error() == Some(BUSY) && tries < 50 => {
           tries += 1;
           Duration::from_millis(10)
         }
-        Err(no)
-          if matches!(
-            no.kind(),
-            std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied
-          ) && Instant::now() < due =>
-        {
+        Err(Unborn::Start(no)) if unrunnable(&no) && Instant::now() < due => {
           let wait = pause.min(due.saturating_duration_since(Instant::now()));
           pause = (pause * 2).min(PAUSE);
           wait
@@ -101,10 +104,12 @@ impl Process {
       tokio::time::sleep(wait).await;
     }
     .map_err(|no| {
-      let absent =
-        matches!(no.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied);
-      let said = format!("{} did not start: {no}", program.name());
-      if absent { refused(Error::Missing(said)) } else { failed(said) }
+      let said = format!("{} {no}", program.name());
+      if matches!(&no, Unborn::Start(start) if unrunnable(start)) {
+        refused(Error::Missing(said))
+      } else {
+        failed(said)
+      }
     })?;
     let (Some(stdin), Some(stdout), Some(stderr)) =
       (child.stdin.take(), child.stdout.take(), child.stderr.take())
@@ -113,7 +118,7 @@ impl Process {
     };
     let out = Out { reader: BufReader::new(stdout), read: Vec::new() };
     let tail = Tail { stderr: Some(stderr), kept: String::new() };
-    Ok(Process { spend, child, stdin, out, tail, paid: 0.0 })
+    Ok(Process { spend, child, _group: group, stdin, out, tail, paid: 0.0 })
   }
 
   /// Whether the process still stands: what an earlier turn left unread goes, and an end among it

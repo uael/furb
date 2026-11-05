@@ -17,6 +17,7 @@
 //! its place, and an ear that takes a question and asks it again wraps it.
 
 mod bash;
+mod child;
 pub mod config;
 mod fetch;
 pub(crate) mod files;
@@ -34,7 +35,6 @@ use std::{
   path::{Component, Path, PathBuf},
 };
 
-pub(crate) use bash::{Group, grouped};
 pub use bash::{bash, program, shell};
 pub use fetch::fetch;
 pub use files::{CONFIG, files};

@@ -29,6 +29,9 @@ here=$(dirname "$0")
 # When the FIFO lifeline stands beside it, each process holds its end for writing until it ends, so the reader knows
 # when no process of it lives.
 if [ -p "$here/lifeline" ]; then exec 9>>"$here/lifeline"; fi
+# When the file orphan stands beside it, it starts a process in the background that holds the lifeline, reads no stdin
+# and outlives it, as a tool of the real command line may.
+if [ -f "$here/orphan" ]; then sleep 600 </dev/null >/dev/null 2>&1 & fi
 # A process that furb starts to ask for the models (FURB_CLAUDE_DISCOVER) answers control requests and no turn, and
 # leaves no trace of a process of a turn. It writes a line in discoveries for each one. When the file models stands
 # beside it, each of its lines is an alias, its window and its efforts joined by commas, or - for none, and it
