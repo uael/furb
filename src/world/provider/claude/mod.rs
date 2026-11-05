@@ -347,9 +347,9 @@ impl Program {
       .stdin(std::process::Stdio::null())
       .stdout(std::process::Stdio::piped())
       .stderr(std::process::Stdio::piped());
-    let Ok((child, _group)) = child::spawn(&mut command) else { return true };
-    let asked = tokio::time::timeout(Duration::from_secs(10), child.wait_with_output()).await;
-    let Ok(Ok(out)) = asked else { return true };
+    let Some(out) = child::output(&mut command, Duration::from_secs(10)).await else {
+      return true;
+    };
     let said = String::from_utf8_lossy(&out.stdout);
     let logged =
       serde_json::from_str::<Value>(&said).ok().and_then(|one| one["loggedIn"].as_bool());

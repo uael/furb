@@ -328,8 +328,8 @@ impl Process {
       made.current_dir(cwd);
     }
     made.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
-    let (mut child, group) = child::spawn(&mut made)
-      .map_err(|no| Failure::Broken(format!("{command} did not start: {no}")))?;
+    let (mut child, group) =
+      child::spawn(&mut made).map_err(|no| Failure::Broken(format!("{command} {no}")))?;
     let (Some(stdin), Some(stdout), Some(stderr)) =
       (child.stdin.take(), child.stdout.take(), child.stderr.take())
     else {

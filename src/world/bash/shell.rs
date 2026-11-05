@@ -20,7 +20,7 @@ use tokio::process::Child;
 
 use crate::{
   value::Fault,
-  world::child::{self, Group},
+  world::child::{self, Group, Unborn},
 };
 
 /// The POSIX sh that runs a command: `/bin/sh`, and on Windows, which has none of its own, the sh
@@ -147,12 +147,13 @@ pub(super) async fn spawned(
     command.env("PATH", merged_path(login, &env::var_os("PATH").unwrap_or_default()));
   }
   child::spawn(&mut command).map_err(|no| {
-    let why = if cfg!(windows) && no.kind() == ErrorKind::NotFound {
-      format!("no POSIX sh runs it: install Git for Windows, whose sh furb runs: {no}")
-    } else {
-      no.to_string()
+    let why = match &no {
+      Unborn::Start(start) if cfg!(windows) && start.kind() == ErrorKind::NotFound => format!(
+        "did not start: no POSIX sh runs it: install Git for Windows, whose sh furb runs: {start}"
+      ),
+      _ => no.to_string(),
     };
-    Fault::refused(format!("{shown} did not start: {why}: {}", dir.display()))
+    Fault::refused(format!("{shown} {why}: {}", dir.display()))
   })
 }
 

@@ -170,8 +170,7 @@ pub(super) async fn lists(program: &Program, flag: &str) -> bool {
 async fn help(program: &Program) -> Option<String> {
   let mut command = program.command().ok()?;
   command.arg("--help").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null());
-  let (child, _group) = child::spawn(&mut command).ok()?;
-  let out = tokio::time::timeout(WITHIN, child.wait_with_output()).await.ok()?.ok()?;
+  let out = child::output(&mut command, WITHIN).await?;
   Some(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 

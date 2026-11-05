@@ -1,5 +1,7 @@
 //! A child process of a life, in a group of its own that ends with it, and the task that reaps it.
 
+use std::{process::Output, time::Duration};
+
 use tokio::{
   process::{Child, Command},
   task::JoinHandle,
@@ -16,24 +18,45 @@ struct Lead {
   lifeline: std::io::PipeWriter,
 }
 
+/// Why a child did not start, or started and was not held, which a refusal says after its name. A
+/// failed search of the provider carries it, so it is as open as that failure.
+#[derive(Debug, thiserror::Error)]
+pub enum Unborn {
+  /// The machine did not start it.
+  #[error("did not start: {0}")]
+  Start(std::io::Error),
+  /// Its group could not hold it: the watch of the group did not start, or the group did not take
+  /// the child that started, which was then ended, or why it was not.
+  #[error(
+    "could not be held: {source}{}",
+    .ended.as_ref().map(|late| format!(", and it could not be ended: {late}")).unwrap_or_default()
+  )]
+  Held { source: std::io::Error, ended: Option<std::io::Error> },
+}
+
 /// A child of this command, started on the runtime of the World in a group of its own, and that
-/// group, or why it did not start. A child that started and that the group could not hold is ended,
-/// and reaped.
-pub(crate) fn spawn(command: &mut Command) -> std::io::Result<(Child, Group)> {
+/// group, or why it did not start or was not held. A child that started and that the group could
+/// not hold is ended, and reaped.
+pub(super) fn spawn(command: &mut Command) -> Result<(Child, Group), Unborn> {
   let _inside = runtime().enter();
-  let lead = grouped(command.as_std_mut())?;
-  let mut child = command.spawn()?;
+  let lead =
+    grouped(command.as_std_mut()).map_err(|source| Unborn::Held { source, ended: None })?;
+  let mut child = command.spawn().map_err(Unborn::Start)?;
   match Group::of(&child, lead) {
     Ok(group) => Ok((child, group)),
-    Err(no) => {
-      let ended = match child.start_kill() {
-        Ok(()) => String::new(),
-        Err(late) => format!(", and it could not be ended: {late}"),
-      };
+    Err(source) => {
+      let ended = child.start_kill().err();
       drop(reaped(child));
-      Err(std::io::Error::other(format!("it could not be held: {no}{ended}")))
+      Err(Unborn::Held { source, ended })
     }
   }
+}
+
+/// What a child of this command writes, once it ends within `limit`, or none when it does not
+/// start or runs past `limit`, when its group ends it.
+pub(super) async fn output(command: &mut Command, limit: Duration) -> Option<Output> {
+  let (child, _group) = spawn(command).ok()?;
+  tokio::time::timeout(limit, child.wait_with_output()).await.ok()?.ok()
 }
 
 /// The command set to join a group of its own, which a watch leads on Unix, or on Windows set to
@@ -81,7 +104,7 @@ fn watched() -> std::io::Result<(rustix::process::Pid, std::io::PipeWriter)> {
 ///
 /// Every process of it ends when the group goes before it is let go: at a stop, or at the end of
 /// the part of the World that holds it.
-pub(crate) struct Group {
+pub(super) struct Group {
   #[cfg(unix)]
   leader: Option<rustix::process::Pid>,
   /// The end of the pipe that the watch of the group reads. It closes with no line when this
@@ -124,7 +147,7 @@ impl Group {
 
   /// Every process of the group, ended, or why a signal did not reach them.
   #[cfg_attr(windows, expect(clippy::unnecessary_wraps, reason = "only a signal of Unix can fail"))]
-  pub(crate) fn slay(&mut self) -> std::io::Result<()> {
+  pub(super) fn slay(&mut self) -> std::io::Result<()> {
     #[cfg(unix)]
     if let Some(leader) = self.leader {
       match rustix::process::kill_process_group(leader, rustix::process::Signal::KILL) {
@@ -144,7 +167,7 @@ impl Group {
 
   /// The group let go once its child is over, and every process of it that outlives the child left
   /// to run.
-  pub(crate) fn free(&mut self) {
+  pub(super) fn free(&mut self) {
     #[cfg(unix)]
     {
       self.leader.take();
@@ -173,7 +196,7 @@ impl Drop for Group {
 /// A child, awaited by one task of the runtime that gives its code, so it is reaped as it exits,
 /// whether its holder still waits for it or dropped before. An error of the wait is given, not read
 /// as an exit with no code.
-pub(crate) fn reaped(mut child: Child) -> JoinHandle<std::io::Result<Option<i32>>> {
+pub(super) fn reaped(mut child: Child) -> JoinHandle<std::io::Result<Option<i32>>> {
   runtime().spawn(async move { child.wait().await.map(coded) })
 }
 

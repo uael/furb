@@ -41,8 +41,8 @@ impl From<Cut> for String {
 pub enum Error {
   #[error("{0}")]
   Command(String),
-  #[error("{program} did not start: {source}")]
-  Start { program: String, source: io::Error },
+  #[error("{program} {source}")]
+  Start { program: String, source: child::Unborn },
   #[error(transparent)]
   Io(#[from] io::Error),
   #[error("claude {status}: {why}")]
