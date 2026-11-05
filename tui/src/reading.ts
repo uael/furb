@@ -382,9 +382,19 @@ export class Reader {
     return [...(this.held.get(this.activity.scope(on) || on) ?? [])];
   }
 
+  /** The last end of a stand among the facts, and how many facts its search read: the facts only grow, so each read
+   * of the standing reads only the facts that came since the read before, and a view of a long life that reads it at
+   * each fact costs no more than one of a short life. */
+  private stood?: Fact;
+  private stoodAt = 0;
   /** What the root stands on: its roster, its directory and its actor, as the last stand said. */
   standing(): [Actor[], string, string] {
-    const stood = this.facts.findLast(([kind, about]) => kind === "done" && isQuestion("stand", about));
+    if (this.stoodAt > this.facts.length) [this.stood, this.stoodAt] = [undefined, 0];
+    for (; this.stoodAt < this.facts.length; this.stoodAt++) {
+      const fact = this.facts[this.stoodAt];
+      if (fact?.[0] === "done" && isQuestion("stand", String(fact[1]))) this.stood = fact;
+    }
+    const stood = this.stood;
     const [roster = [], directory = this.directory, actor = "operator"] = (stood?.[3] ?? []) as unknown[];
     // A recorded life names no path of this machine, so it stands where the host opens it.
     return [roster as Actor[], this.recorded ? this.directory : String(directory), String(actor)];
