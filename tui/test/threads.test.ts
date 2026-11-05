@@ -60,7 +60,7 @@ test("after ⌥T the keys stand on the thread lit, Space collapses it in the fee
       screen.mockInput.pressKey("t", { meta: true });
       await frame();
       expect(app.railKeys).toBe(true);
-      const id = app.activeThread()?.act.id ?? "";
+      const id = app.session.activeThread?.act.id ?? "";
       expect(id).not.toBe("");
       expect(app.railAt).toBe(`th:${id}`);
       screen.mockInput.pressKey(" ");
@@ -273,10 +273,10 @@ test("a question that waits shows on top of the sidebar and as a mark on its wor
       expect(listed(session).some((one) => one.act.id === question)).toBe(false);
       // The input sends its message to the open thread that the sidebar lights, unless the operator asks for a new thread,
       // and a thread that is over is no target until he chooses it.
-      const lit = use.app.activeThread();
-      expect(lit).toBeDefined();
-      expect(session.lit).toBe(lit && !lit.resolved ? lit.act.id : undefined);
-      expect(session.target).toBe(session.lit);
+      const active = session.activeThread;
+      expect(active).toBeDefined();
+      expect(session.openThread).toBe(active && !active.resolved ? active : undefined);
+      expect(session.target).toBe(session.openThread?.act.id);
       await session.submit("/newthread");
       expect(session.fresh).toBe(true);
       expect(session.target).toBeUndefined();
@@ -647,7 +647,7 @@ test("a line that does not fit lays out in rows at its brackets, and each row ke
     true,
   ));
 
-test("the threads of the chain shown are read again for another chain, even when the version of its acts is the same", () =>
+test("the threads of the chain shown are read again for another chain", () =>
   composing(
     async ({ session }) => {
       await idle(session);

@@ -230,13 +230,6 @@ export const rail = part({
     return `unread ${count}`;
   },
 
-  /** The thread that the feed shows now: the one chosen, else the one lit, else the last of the chain shown. */
-  activeThread(): ChainThread | undefined {
-    const w = this.session;
-    const { by, list } = w.threads;
-    return by.get(w.thread ?? "") ?? by.get(w.lit ?? "") ?? list.at(-1);
-  },
-
   /** Whether a thread holds work that the operator did not read, as the facts seen of the record say. */
   unreadThread(thread: ChainThread): boolean {
     return this.session.unreadThread(thread.act.id, threadWork(thread));
@@ -586,7 +579,7 @@ export const rail = part({
       for (const key of [...this.unfolded]) if (key.startsWith("ws:")) this.unfolded.delete(key);
     }
     const threads = this.railThreads();
-    const active = this.activeThread();
+    const active = this.session.activeThread;
     const cursor = this.railKeys ? this.railAt : undefined;
     const askCount = (entry: SessionEntry) =>
       entry.session ? entry.session.desk.asks.filter((ask) => !ask.notice).length : 0;
@@ -1028,7 +1021,7 @@ export const rail = part({
       if (this.steering) this.steer(false);
       this.composer.blur();
       if (!this.railAt || !this.railHandlers.has(this.railAt)) {
-        const active = this.activeThread();
+        const active = this.session.activeThread;
         this.railAt = active ? `th:${active.act.id}` : `se:${this.options.workspaces.current?.path}`;
       }
     } else this.composer.focus();

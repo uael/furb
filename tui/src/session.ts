@@ -31,7 +31,6 @@ import {
   type ChainThread,
   cancelled,
   chainSorted,
-  chainThreads,
   type Desk,
   desk,
   failed,
@@ -410,23 +409,29 @@ export class Session extends EventEmitter {
   /** The thread that the operator chose in the sidebar, to which the input sends each message as prompt(None, message,
    * on=thread): its model reads it at its next step, and a message to a resolved thread opens it again. */
   thread?: string;
-  /** The thread lit in the sidebar, to which the input sends a message by default, as long as the operator chose no
-   * thread and did not ask for a new one: the last thread of the chain shown that is not resolved. */
-  get lit(): string | undefined {
-    return this.threads.list.findLast((one) => !one.resolved)?.act.id;
+  /** The open thread of the chain shown, to which the input sends a message by default, as long as the operator chose
+   * no thread and did not ask for a new one: its last thread that is not resolved. */
+  get openThread(): ChainThread | undefined {
+    return this.threads.list.findLast((one) => !one.resolved);
   }
-  /** Whether the next message starts a new thread, in place of going to the thread lit. */
+  /** The thread that the feed shows now: the one that the operator chose, else the open thread, else the last thread
+   * of the chain shown. */
+  get activeThread(): ChainThread | undefined {
+    const { by, list } = this.threads;
+    return by.get(this.thread ?? "") ?? this.openThread ?? list.at(-1);
+  }
+  /** Whether the next message starts a new thread, in place of going to the open thread. */
   fresh = false;
   /** The target of the input as it stood when the operator typed the first character of his message, or null for a new
    * thread. It holds until he sends or clears the message, so a thread that opens while he writes takes nothing that
    * he wrote for another. */
   pinned?: string | null;
-  /** The thread that the input sends its next message to: the thread that the operator chose, else the open thread lit,
+  /** The thread that the input sends its next message to: the thread that the operator chose, else the open thread,
    * unless he asked for a new thread. Python, and a prompt of another shape than str, start no message of a thread. */
   get target(): string | undefined {
     if (this.mode !== "prompt" || this.editing || this.operatorPrompt) return undefined;
     if (this.pinned !== undefined) return this.pinned ?? undefined;
-    return this.thread ?? (this.fresh || this.shape !== "str" ? undefined : this.lit);
+    return this.thread ?? (this.fresh || this.shape !== "str" ? undefined : this.openThread?.act.id);
   }
   /** The shape of a line sent on a thread: None, a message that its model reads at its next step and that is done at
    * once, while the prompt of the thread is open and a model answers it, else str, a prompt that opens a thread over
@@ -1065,8 +1070,12 @@ export class Session extends EventEmitter {
   private readonly threadsKnown = new WeakMap<LiveAct, { message: string | undefined; title: string }>();
   /** The threads of a chain, in the order they began. */
   threadsOn(chain: string): ChainThread[] {
+    return this.sorted(chain).threads;
+  }
+  /** The threads and the asides of a chain, in the order they began. */
+  private sorted(chain: string): ReturnType<typeof chainSorted> {
     const on = this.activityByChain.get(chain) ?? [];
-    return chainThreads(on, this.indexed().ids, new Set(this.host.prompts.keys()), this.threadsKnown);
+    return chainSorted(on, this.indexed().ids, new Set(this.host.prompts.keys()), this.threadsKnown);
   }
   /** The threads of the chain shown, read again only when a prompt on it or a question that waits changes. */
   get threads(): ThreadList {
@@ -1075,12 +1084,7 @@ export class Session extends EventEmitter {
     const owed = [...this.host.prompts.keys()].join(" ");
     const kept = this.threadsRead;
     if (kept?.chain === chain && kept.stamp === stamp && kept.owed === owed) return kept.threads;
-    const { threads: list, asides } = chainSorted(
-      this.activity,
-      this.indexed().ids,
-      new Set(this.host.prompts.keys()),
-      this.threadsKnown,
-    );
+    const { threads: list, asides } = this.sorted(chain);
     const threads: ThreadList = {
       list,
       by: new Map(list.map((one) => [one.act.id, one])),
@@ -1795,12 +1799,12 @@ export class Session extends EventEmitter {
   travel(by: number, moments = momentsOf(this.actsOn(this.selected))): void {
     const last = moments.at(-1);
     if (last === undefined) return;
-    let now = this.moment ?? last;
-    for (let steps = Math.min(Math.abs(by), moments.length); steps > 0; steps--)
-      now =
-        (by < 0 ? (moments.findLast((one) => one < now) ?? moments[0]) : moments.find((one) => one > now)) ??
-        last;
-    this.moment = now === last ? undefined : now;
+    const at = this.moment ?? last;
+    // A step back counts from the first moment at or after the one shown, and a step on from the last at or before it.
+    const found = moments.findIndex((one) => one >= at);
+    const place = found < 0 ? moments.length : found;
+    const to = Math.max(0, (by > 0 && moments[place] !== at ? place - 1 : place) + by);
+    this.moment = to >= moments.length - 1 ? undefined : moments[to];
     this.emit("change");
   }
   /** A new branch of the selected chain at the moment that the feed shows, which the session selects: it reads the
@@ -1877,7 +1881,7 @@ export class Session extends EventEmitter {
     const under = `${ended} ${ended === 1 ? "act" : "acts"} under it on ${this.chainsOf(reach)}`;
     if (back) {
       // The words go back to where they went: the thread that they answered, or a new thread when they began one, and
-      // not to the thread lit at this moment, which may be the thread that this cancel ends.
+      // not to the open thread of this moment, which may be the thread that this cancel ends.
       const into = this.sentTo.get(act.id);
       this.aim(into);
       this.pinned = into ?? null;

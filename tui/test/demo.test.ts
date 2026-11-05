@@ -61,39 +61,31 @@ test("the moment that the feed shows steps back through the chain, and a branch 
     expect(session.at(session.activity)).toEqual(now);
     session.travel(-1);
     session.travel(-1);
-    const root = session.selected;
-    const branch = await session.branchHere();
-    expect(branch).not.toBe(root);
-    expect(session.moment).toBeUndefined();
-    expect(session.selected).toBe(branch);
-  } finally {
-    await session.dispose();
-    await removeDemoDirectories();
-  }
-});
-
-test("the feed and the stage stand at one moment: a step lands on a moment of the life, and the act that began at it shows", async () => {
-  const session = await demoSession({ watch: true });
-  try {
-    await session.engine.result(
-      await session.engine.prompt("str", {
-        message: "Read this project and say what it does.",
-        on: session.selected,
-      }),
-    );
-    await session.refresh();
+    // The stage steps on over the moments of the life from the moment of the feed.
     const moments = momentsOf(session.acts);
-    // ⌃← steps over the moments of the chain shown, and ] of the stage on over the moments of the life from there.
-    session.travel(-1);
-    session.travel(-1);
     const back = session.moment ?? 0;
     expect(moments).toContain(back);
     const next = moments.find((one) => one > back);
     session.travel(1, moments);
     expect(session.moment).toBe(next === moments.at(-1) ? undefined : next);
+    // A step back from a cursor that no moment of the chain shown holds lands on its last moment before the cursor.
+    const own = momentsOf(session.actsOn(session.selected));
+    const gap = own.findIndex((one, at) => (own[at + 1] ?? 0) > one + 1);
+    expect(gap).toBeGreaterThanOrEqual(0);
+    session.moment = (own[gap] ?? 0) + 1;
+    session.travel(-1);
+    expect(own[gap]).toBe(session.moment);
+    // The act that began at the moment shown shows.
     const last = session.activity.at(-1);
     session.moment = last?.began;
     expect(session.at(session.activity).map((act) => act.id)).toContain(last?.id ?? "");
+    session.travel(-1);
+    session.travel(-1);
+    const root = session.selected;
+    const branch = await session.branchHere();
+    expect(branch).not.toBe(root);
+    expect(session.moment).toBeUndefined();
+    expect(session.selected).toBe(branch);
   } finally {
     await session.dispose();
     await removeDemoDirectories();
