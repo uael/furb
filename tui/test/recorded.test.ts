@@ -5,14 +5,14 @@ import { until } from "../../bind/typescript/test/until.ts";
 import { clip, scrub, shortened } from "../script/fixture.ts";
 import { openEngine } from "../src/bridge.ts";
 import { Session } from "../src/session.ts";
-import { composing } from "./composing.ts";
+import { composing, ownPreferences } from "./composing.ts";
 
 /** The recorded life of a conductor, which the demo and the gallery show. */
 const conductor = join(import.meta.dir, "..", "fixtures", "conductor.jsonl");
 /** A session on the recorded life, which shows its log and runs nothing. */
 async function recorded(): Promise<Session> {
   const { engine, host } = await openEngine({ record: conductor });
-  return new Session(engine, host, true);
+  return new Session(engine, host, true, ownPreferences());
 }
 
 test("the feed folds the earlier steps of a long thread into one line that a click opens", async () =>
