@@ -88,6 +88,46 @@ def program(on="") -> dict[str, str]:
   return words
 
 
+def literal(v, into=None):
+  isinstance(v, str) and get(v) and into is not None and into.add(v)
+  match v:
+    case Act():
+      return f"Act({str(v)!r})" * (into is not None)
+    case None | bool() | int() | float() | str() | Text() | Exit() | BaseException():
+      return repr(v)
+    case dict():
+      s = [(literal(k, into), literal(y, into)) for k, y in v.items()]
+      return all(p and o for p, o in s) and "{" + ", ".join(f"{p}: {o}" for p, o in s) + "}"
+    case list() | tuple() | set():
+      s = [literal(y, into) for y in v]
+      j = ", ".join(s)
+      return all(s) and (
+        f"[{j}]"
+        if isinstance(v, list)
+        else f"({j}{',' * (len(s) == 1)})"
+        if isinstance(v, tuple)
+        else "{" + j + "}"
+        if s
+        else "set()"
+      )
+  return ""
+
+
+def dump(*names: str, on="") -> str:
+  here, out = module(on), {}
+  for name in names:
+    if name in here and callable(here[name]):
+      text = next(
+        (w for w in reversed(program(on).values()) if re.search(rf"(?m)^(async )?(def|class) {name}\b", w)), ""
+      )
+    else:
+      text = name in here and (got := literal(here[name])) and f"{name} = {got}"
+    if not text:
+      raise Refused("no dump of " + name)
+    out[text] = name
+  return "\n".join(out)
+
+
 def standing():
   return answer("stand", ROOT, [])
 
@@ -526,30 +566,6 @@ def gathered(define, floor):
   def number(called):
     return int(re.sub("^[a-z_]+", "", called) or 0)
 
-  def plain(v, into):
-    isinstance(v, str) and get(v) and into.add(v)
-    match v:
-      case Act():
-        return f"Act({str(v)!r})"
-      case None | bool() | int() | float() | str() | Text() | Exit() | BaseException():
-        return repr(v)
-      case dict():
-        s = [(plain(k, into), plain(y, into)) for k, y in v.items()]
-        return all(p and o for p, o in s) and "{" + ", ".join(f"{p}: {o}" for p, o in s) + "}"
-      case list() | tuple() | set():
-        s = [plain(y, into) for y in v]
-        j = ", ".join(s)
-        return all(s) and (
-          f"[{j}]"
-          if isinstance(v, list)
-          else f"({j}{',' * (len(s) == 1)})"
-          if isinstance(v, tuple)
-          else "{" + j + "}"
-          if s
-          else "set()"
-        )
-    return ""
-
   chains = []
   while get(f"chain{len(chains) + 1}"):
     chains.append(f"chain{len(chains) + 1}")
@@ -565,7 +581,7 @@ def gathered(define, floor):
       for key, value in here.items():
         if not (key.startswith("__") or callable(value) or globals().get(key, here) is value):
           found = set()
-          if text := plain(value, found):
+          if text := literal(value, found):
             values[c][key] = text
             named |= found
           else:
@@ -588,7 +604,7 @@ def gathered(define, floor):
       held = next((x[2] for x in transcript(scope(one), "started") if x[1] == one and get(x[2]) is None), "")
       acts.append({**d, "shape": a[4], "message": a[5], "to": a[6], "held": held})
     elif over(one):
-      plain(peek(one), set()) and acts.append({**d, "value": peek(one)})
+      literal(peek(one), set()) and acts.append({**d, "value": peek(one)})
     else:
       cut.append(one)
       cmd = a[4] if a[0] == "bash" else ""
@@ -604,7 +620,9 @@ def gathered(define, floor):
     saved = [
       x
       for x in transcript(c)
-      if x[0] not in ("module", "carried") and plain(x, set()) and (not question(x) or x[0] == "reply" or x[1] in borne)
+      if x[0] not in ("module", "carried")
+      and literal(x, set())
+      and (not question(x) or x[0] == "reply" or x[1] in borne)
     ]
     held = {ROOT, *live, *borne, *(x[1] for x in saved if question(x))}
     out.append(

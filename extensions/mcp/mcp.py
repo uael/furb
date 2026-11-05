@@ -214,7 +214,7 @@ def mcp_tools(server: str, on: str = "") -> Act[str]:
 
 
 def mcp_tool(server: str, name: str, on: str = "") -> Act[dict]:
-  def dump(value: object) -> str | None:
+  def pretty(value: object) -> str | None:
     return json.dumps(value, indent=1) if value else None
 
   def ear(id: str):
@@ -236,9 +236,9 @@ def mcp_tool(server: str, name: str, on: str = "") -> Act[dict]:
       tool=name,
       title=tool.get("title"),
       description=tool.get("description"),
-      input=dump(tool.get("input")),
-      output=dump(tool.get("output")),
-      annotations=dump(tool.get("annotations")),
+      input=pretty(tool.get("input")),
+      output=pretty(tool.get("output")),
+      annotations=pretty(tool.get("annotations")),
     )
     yield "done", id, tool
 
