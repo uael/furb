@@ -111,6 +111,7 @@ it is not given. The daemon answers requests in any order.
 | `names` | `life`, `on` | read |
 | `gate` | `life`, `word`, `on` | read |
 | `stand` | `life` | write |
+| `config` | `life`, `config`: `{"action": "get"}`, `{"action": "set", "key", "value", "layer"}` or `{"action": "reload"}` | read for get, else write |
 | `seen` | `life`, `about` | write |
 | `queue` | `life`, `entry`, `shape`, `message`, `on` | write |
 | `unqueue` | `life`, `entry` | write |
@@ -126,6 +127,12 @@ it is not given. The daemon answers requests in any order.
 | `view.event` | see below | write |
 | `view.tree`, `view.effect` | see below | read |
 
+- `config` reads and changes the configs of the folder of a life, which the World writes, so no window writes a disk.
+  A get gives `values`, each key with the value that wins for it and its layer, `user`, `project` or `local`. A key has
+  one or two names, as `["providers", "codex"]`. A set writes the key in its layer, `project` when none is named, or
+  takes it out when no value is given, and then the life stands, so the answer is the act of the stand. A change that
+  the catalog cannot read puts its config back as it was, and the life does not stand. A reload is a stand on the
+  configs as the disk holds them, which asks again each model that waits to retry.
 - The role to write holds each right of the role to read. A verb needs the role to write unless this table says read,
   and the daemon refuses it to a reader with the refusal `role`, which names both roles.
 - An answer is a frame `reply` with the `id`, an `answer` that names its kind, and its `data`: `done`, `welcome`,

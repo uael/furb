@@ -22,6 +22,7 @@ use std::{
 use furb::{
   Object,
   life::{Answer, Opening},
+  world::config::{Change, Layer},
 };
 use furb_host::{
   Command, Event, Life, LifeError, LifeHandle, Reply, Seq,
@@ -193,6 +194,32 @@ async fn a_query_is_a_command_that_the_life_answers() {
   assert!(
     matches!(wrong, Err(LifeError::Refused(why)) if why == format!("No prompt is named {id}."))
   );
+}
+
+#[tokio::test]
+async fn the_configs_of_a_life_are_read_and_changed_through_its_commands_and_a_change_stands_it() {
+  let at = place("configs");
+  let life = Life::spawn(scripted(&at, &[])).unwrap();
+  let key = |names: &[&str]| names.iter().map(|one| (*one).to_owned()).collect::<Vec<_>>();
+  let thinking =
+    Change { key: key(&["max_thinking_tokens"]), value: Some(json!(0)), layer: Layer::Local };
+  let Reply::Act(stand) = life.send(Command::Configure(thinking)).await.unwrap() else {
+    panic!("a change gives the act of the stand that follows it")
+  };
+  assert!(stand.starts_with("stand"), "{stand}");
+  let Reply::Values(settings) = life.send(Command::Settings).await.unwrap() else {
+    panic!("the settings are values")
+  };
+  assert_eq!(settings, vec![json!({"key": ["max_thinking_tokens"], "value": 0, "layer": "local"})]);
+  let wrong =
+    Change { key: key(&["providers", "nothing"]), value: Some(json!(true)), layer: Layer::Project };
+  let refused = life.send(Command::Configure(wrong)).await;
+  assert!(
+    matches!(&refused, Err(LifeError::Refused(why)) if why.contains("nothing")),
+    "{refused:?}"
+  );
+  assert!(!at.join(".furb/config.json").exists(), "a refused change leaves no config");
+  fs::remove_dir_all(&at).unwrap();
 }
 
 #[tokio::test]

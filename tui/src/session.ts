@@ -1948,12 +1948,13 @@ export class Session extends EventEmitter {
     const argument = space < 0 ? "" : text.slice(space + 1).trim();
     switch (command) {
       case "reload":
-        await this.host.reload();
+        await this.host.config({ action: "reload" });
+        this.emit("configured");
         await this.reloadCatalog();
         this.notice = "Provider settings reloaded. The life stands on the new settings.";
         break;
       case "retry":
-        await this.host.reload();
+        await this.host.config({ action: "reload" });
         this.notice = "Each model that waited to retry is asked again now, on the provider settings of now.";
         break;
       case "provider": {
@@ -1973,10 +1974,11 @@ export class Session extends EventEmitter {
                   models: { [id || ""]: { window: Number(window) } },
                 }
               : true;
-        if (!(await this.host.provider(name, value))) {
+        if (!(await this.host.config({ action: "set", key: ["providers", name], value, layer: "project" }))) {
           this.notice = "Codex sign-in canceled.";
           break;
         }
+        this.emit("configured");
         await this.reloadCatalog();
         this.notice =
           name === "codex"
@@ -2231,7 +2233,7 @@ export class Session extends EventEmitter {
       this.host.role === "write" &&
       JSON.stringify(authenticated(this.roster)) !== JSON.stringify(authenticated(this.catalog))
     )
-      await this.host.reload();
+      await this.host.config({ action: "reload" });
     this.setup = await this.host.setup();
     await this.refresh();
   }
