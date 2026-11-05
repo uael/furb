@@ -500,7 +500,9 @@ export class RemoteLife extends EventEmitter {
    * tells the facts that the verb said, and the window reads its own acts. */
   private async made(answer: Answer): Promise<string> {
     const id = named(answer);
-    if (this.activity.acts.has(id) || this.lost) return id;
+    // The daemon may tell the facts of the act before its reply to the verb comes, and the acts that it told stand in
+    // the acts of the window, as the activity holds no act of some kinds, as a stand: the wait is for an act unheard.
+    if (this.acts.has(id) || this.activity.acts.has(id) || this.lost) return id;
     await new Promise<void>((resolve) => {
       const heard = this.known.get(id) ?? [];
       heard.push(resolve);
