@@ -244,7 +244,8 @@ export const keys = [
   },
   {
     chord: "⌥C",
-    action: "Collapse or expand the thread in the middle of the feed, as a click on the left edge of its lines does",
+    action:
+      "Collapse or expand the thread in the middle of the feed, as a click on the left edge of its lines does",
     bindings: [{ on: ["meta+c"], run: "foldHere", chord: "⌥C" }],
   },
   {
