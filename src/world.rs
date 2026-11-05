@@ -51,8 +51,8 @@ pub use reader::{READER, Retold, retold};
 pub use scratch::{SCRATCH, Scratch};
 pub(crate) use store::Format;
 pub use store::{
-  CHECKPOINT_SCHEMA, Lines, MADE, RECORD_SCHEMA, Schema, SchemaError, Sqlite, Store, VERSION,
-  engine, heads, keeping, kept, made, readable, release, store, texts, version,
+  CHECKPOINT_SCHEMA, Lines, MADE, RECORD_SCHEMA, Schema, SchemaError, Sqlite, Store, engine, heads,
+  keeping, kept, made, readable, release, store, texts,
 };
 pub use time::time;
 

@@ -79,9 +79,10 @@ async function made(record: string, named: boolean): Promise<void> {
     .split("\n")
     .filter((line) => !line.startsWith('[["checkpoint",'))
     .join("\n");
-  const fact = /\["made","chain1","store","[0-9a-f]{64}",\d+(?:,(?:"(?:[^"\\]|\\.)*"|[^\]",]+))*\]/.exec(
-    text,
-  )?.[0];
+  const fact =
+    /\["made","chain1","store","[0-9a-f]{64}",(?:\d+|null)(?:,(?:"(?:[^"\\]|\\.)*"|[^\]",]+))*\]/.exec(
+      text,
+    )?.[0];
   if (!fact) throw new Error("The record names no engine.");
   const without = text
     .split("\n")
@@ -228,7 +229,7 @@ test("a recorded answer keeps its cost when its tuples have the record wrapper",
       ["done", "reply1", "journal", tuple(["assistant", "", tuple([10, 2, 0, 8, 0.25]), null])],
     ];
     await writeFile(record, `${facts.map((fact) => JSON.stringify(fact)).join("\n")}\n`);
-    const reading = { made: null, engine: "old", version: null, current: 1, why: "drift", logged: false };
+    const reading = { made: null, engine: "old", why: "drift", logged: false };
     const reader = new Reader(directory, record, reading);
     expect(reader.activity.cost).toBe(0.25);
   } finally {
@@ -248,7 +249,7 @@ test("a close in the record ends the work it closed without ending truncated wor
       ["rung", "rung2", "operator", "chain1", "unfinished word", "", ""],
     ];
     await writeFile(record, `${facts.map((fact) => JSON.stringify(fact)).join("\n")}\n`);
-    const reading = { made: null, engine: "old", version: null, current: 1, why: "drift", logged: false };
+    const reading = { made: null, engine: "old", why: "drift", logged: false };
     const reader = new Reader(directory, record, reading);
     expect(reader.activity.acts.get("prompt1")).toMatchObject({ done: true, value: "finished" });
     const closed = reader.activity.acts.get("rung1");
@@ -281,8 +282,6 @@ test("a chain that the record does not keep takes its first prompt as its label 
       {
         made: got.made,
         engine: got.engine,
-        version: got.version,
-        current: got.current,
         why: "x",
         logged: got.logged,
       },

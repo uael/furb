@@ -1019,12 +1019,11 @@ test("Add a workspace in the sidebar works while the session shown is open to re
     await ended(made.path);
     const text = await readFile(made.path, "utf8");
     const found =
-      /\["made","chain1","store","([0-9a-f]{64})",(\d+)(?:,(?:"(?:[^"\\]|\\.)*"|[^\]",]+))*\]/.exec(text);
-    if (!found?.[2]) throw new Error("no build");
-    await writeFile(
-      made.path,
-      text.replace(found[0], `["made","chain1","store","${"0".repeat(64)}",${Number(found[2]) + 1}]`),
-    );
+      /\["made","chain1","store","[0-9a-f]{64}",(?:\d+|null)(?:,(?:"(?:[^"\\]|\\.)*"|[^\]",]+))*\]/.exec(
+        text,
+      );
+    if (!found) throw new Error("no build");
+    await writeFile(made.path, text.replace(found[0], `["made","chain1","store","${"0".repeat(64)}"]`));
     library = open();
     const group = await library.add(directory);
     const row = group.sessions.find((entry) => entry.path === made.path);

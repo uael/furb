@@ -533,16 +533,15 @@ export interface ProviderInfo {
 }
 
 /**
- * What the record at a path tells, read with no life, so no word runs again and a record of any engine opens: the
- * engine that made it, as the record names it, and nothing when it names none; the engine of this build; the
- * version of the build that made it, as the record names it, and nothing when it names none; the version of this
- * build; whether
- * the facts are those of its log; and the file that holds the facts, one on each line, in order. The facts are those
- * of the log when it agrees with the record, and else those that the record kept, with the chains, the rungs, the
- * runs and the dones that they name. A line of the file that does not start with `[`, and a line `["keep", "", n]`,
+ * What the record at a path tells, read with no life, so no word runs again and a record of any
+ * engine opens: the engine that made it, as the record names it, and nothing when it names none;
+ * the engine of this build; whether the facts are those of its log; and the file that holds the
+ * facts, one on each line, in order. The facts are those of the log when it agrees with the
+ * record, and else those that the record kept, with the chains, the rungs, the runs and the dones
+ * that they name. A line of the file that does not start with `[`, and a line `["keep", "", n]`,
  * holds no fact.
  */
-export declare function retold(path: string): { made: string | null; engine: string; version: number | null; current: number; logged: boolean; file: string }
+export declare function retold(path: string): { made: string | null; engine: string; logged: boolean; file: string }
 
 /** ROOT is the name of the root, which every life opens first under that one name, and on which boot stands the life. */
 export declare const ROOT: string

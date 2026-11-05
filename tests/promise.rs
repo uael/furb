@@ -147,8 +147,7 @@ fn woke(engine: &mut Engine) {
 /// engine names them.
 fn crossed(record: &Path) {
   let text = fs::read_to_string(record).unwrap();
-  let made =
-    |engine: &str| format!("[\"made\",\"chain1\",\"store\",\"{engine}\",{}", world::VERSION);
+  let made = |engine: &str| format!("[\"made\",\"chain1\",\"store\",\"{engine}\",null");
   let cut = text
     .rfind("[[\"checkpoint\"")
     .and_then(|at| text[at..].find('\n').map(|end| at + end))

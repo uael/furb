@@ -216,9 +216,8 @@ meanings. The entry of such a name here gives only its form in the engine.
   value, and the life word does not run again. An extension whose word is blank, as one that holds only a part for
   the TUI, plays no word: no turn of its file in a setup, and no rung on a chain.
 - made: the fact by which the store names in the record the build that made it, the digest of the engine and of the
-  Kernel, the version of the build, `VERSION` in `src/world/store.rs`, and the texts of the engine and of the Kernel,
-  which the store says as it hears the root of a new record at its birth. A build keeps the version while each record
-  of `tests/replay` replays on it with no drift. After a checkpoint, only the fact made of the segment after it
+  Kernel, the schema of the record, the release, and the texts of the engine and of the Kernel, which the store says
+  as it hears the root of a new record at its birth. After a checkpoint, only the fact made of the segment after it
   counts, and the store says it again at the root of the first life that goes on from the checkpoint. A life of any
   build of the major replays that segment word by word on the texts that the fact holds, and goes on with them, and
   a drift is a defect.

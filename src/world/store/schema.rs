@@ -1,5 +1,5 @@
-//! The schemas of what a life keeps, each with a version of its own, apart from `VERSION` of the
-//! replay, which says whether a tail replays.
+//! The schemas of what a life keeps, each with a version of its own, apart from the engine that the
+//! fact made names, on whose texts a segment replays.
 //!
 //! - [`RECORD_SCHEMA`] is the schema of the record: the line of an entry, the marks by which the
 //!   record holds a value that JSON holds only in part, as a tuple or a whole float, and the layout

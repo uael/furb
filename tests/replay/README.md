@@ -1,17 +1,21 @@
 # The records of the replay
 
-Each record here is a life that a build of the current version made. `VERSION` in `src/world/store.rs` names that
-version. The test `each_record_of_the_replays_names_this_version_and_replays_on_this_build_with_no_drift` in
+Each record here is a life of an earlier build. Its fact made holds the texts of its engine and of its Kernel, so each
+later build replays it on them. The test `each_record_of_the_replays_replays_on_its_own_engine_with_no_drift` in
 `src/life.test.rs` replays each record. It runs on each build, in `cargo test`. It uses a life that only inspects the
-record. So it keeps the number of versions low.
+record.
 
 These records are not in the promise of a release. `tests/corpus` holds those records, as `tests/corpus/README.md`
 says.
 
-- A change that replays each record to the same acts keeps the version. A life that a build of the version made goes on
-  with the new build. It needs no switch.
-- A change that makes a record drift adds one to `VERSION`. The same change makes the record again, or cuts it to the
-  acts that it proves.
+- A change of the engine or of the Kernel changes no record here, since each replays on its own texts.
+- A change of the host that makes a record drift is a defect of that change. The host drives each engine of the major.
+- A record of a build before the texts takes them once from git with `python3 script/engines.py <record>`.
+  The three records at the top of this folder do not name the engine that made them. `refused.jsonl` and
+  `writing.jsonl` were made on the engine `461b240e`, which cannot replay them, since each was cut later to prove a
+  fix of a build after it. A build of a worktree made `wake.jsonl` on the engine `af2eeb28`, which no commit holds.
+  Each names the engine `d67479fe` of the commit `a4e4f6058`, which last changed the three and replayed them with no
+  drift, and holds its texts. The records of `handover` replay nothing after their checkpoint, so they hold no texts.
 
 The tests of `src/life.test.rs` also make the life `worked`, on a model that answers from a script, and replay it. Its
 root writes, reads, runs a command, waits, reads the clock and chance, and asks a chain of its own. Each official

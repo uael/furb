@@ -423,15 +423,10 @@ export class HostView extends EventEmitter {
   readInstead(why: string): boolean {
     const record = this.record;
     if (!record || !why.includes("Drift")) return false;
-    const { file, made, engine, version, current, logged } = retold(record);
+    const { file, made, engine, logged } = retold(record);
     // The reason of the read is the drift itself, after what the end of the life said before it.
     const drift = why.slice(why.indexOf("Drift"));
-    const reader = new Reader(
-      this.directory,
-      record,
-      { made, engine, version, current, why: drift, logged },
-      file,
-    );
+    const reader = new Reader(this.directory, record, { made, engine, why: drift, logged }, file);
     this.bind(new ReadLife(reader));
     this.lost = "";
     this.emit("reset");

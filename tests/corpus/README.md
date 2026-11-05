@@ -52,5 +52,6 @@ as an operator does.
     TMPDIR=$(mktemp -d) cargo test -p furb --test promise make_the_corpus -- --ignored
   ```
 
-`tests/replay` holds other records. Only a build of the same `VERSION` replays them, word by word. They are not in the
-promise.
+Each record holds the texts of its engine in its fact made, so it replays on that engine, and no change of the engine
+makes a record of `next` again. `tests/replay` holds other records, which each build replays word by word on their
+own engines. They are not in the promise.

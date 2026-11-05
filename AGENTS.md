@@ -31,8 +31,8 @@ API of its own:
   checkpoint word by word on the engine and the Kernel that its fact made holds, and goes on with them, so it opens
   at the exact state of its tip whatever build of the major runs it, as `src/checkpoint.rs` says. Its models read that
   engine, and the gate reads each word on it. `script/engines.py` gives a copy of a record of a build before the texts
-  the texts of its engine from git. `tests/replay` holds the records that each build of the version must
-  replay with no drift. `tests/corpus` holds the records of each release, which each later build must open, as
+  the texts of its engine from git. `tests/replay` holds the records that each build must
+  replay on their own engines with no drift. `tests/corpus` holds the records of each release, which each later build must open, as
   `tests/corpus/README.md` says. Each door gives it as
   `opened` and as `Engine.open`.
 - `src/checkpoint.rs` holds the checkpoint of a life: a fact at the tip of its record with each chain that lives, its
