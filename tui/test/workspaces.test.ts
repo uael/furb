@@ -138,7 +138,10 @@ test("workspaces keep sessions alive, report background completion and input, an
     await until(library, () => first.status === "paused");
     await first.session.submit("/wake");
     await until(library, () => first.status === "idle");
-    const waiting = await first.session.engine.wait([], { seconds: 60, on: first.session.engine.root });
+    const waiting = await first.session.engine.wait([first.session.engine.root], {
+      seconds: 60,
+      on: first.session.engine.root,
+    });
     await until(library, () => ["thinks", "runs", "delegates"].includes(first.status));
     library.preferences.sidebar = false;
     library.preferences.save("paper");
@@ -407,7 +410,7 @@ test("the list of saved sessions comes before their replays, and a row shows its
     let library = open();
     const entry = await library.create(await library.add(directory), "Held");
     const engine = entry.session?.engine;
-    await engine?.wait([], { seconds: 60, on: engine.root });
+    await engine?.wait([engine.root], { seconds: 60, on: engine.root });
     await library.dispose();
     library = open();
     const row = (await library.add(directory)).sessions.find((candidate) => candidate.path === entry.path);

@@ -28,7 +28,7 @@ test("a word of the operator stands as his messages stand, as its program in a p
       await session.refresh();
       const running = await frame();
       expect(running).not.toContain("You ran");
-      expect(line(running)).toMatch(/(?:\d|[\u2800-\u28ff✻]) +await wait\(60\) +waits 60s/);
+      expect(line(running)).toMatch(/(?:\d|[\u2800-\u28ff✻]) +await wait\(60, __name__\) +waits 60s/);
       expect(app.scroll.getChildren().some((card) => card.id === rung)).toBe(true);
       expect(line(running)).toMatch(/^ +┃ /);
       const wait = session.acts.find((act) => act.kind === "wait" && act.by === rung);
@@ -38,7 +38,7 @@ test("a word of the operator stands as his messages stand, as its program in a p
       await session.refresh();
       const done = line(await frame());
       expect(done).not.toContain("◉");
-      expect(done).toMatch(/ 1 {2}await wait\(60\) +woke/);
+      expect(done).toMatch(/ 1 {2}await wait\(60, __name__\) +woke/);
       session.show("transcript");
       await session.refresh();
       await frame();
@@ -67,7 +67,7 @@ test("a word of the operator stands as his messages stand, as its program in a p
     async ({ frame }) => {
       const shown = line(await frame());
       expect(shown).not.toContain("◉");
-      expect(shown).toMatch(/ 1 {2}await wait\(60\) +woke/);
+      expect(shown).toMatch(/ 1 {2}await wait\(60, __name__\) +woke/);
     },
     { width: 140, height: 42, useMouse: true },
     session,

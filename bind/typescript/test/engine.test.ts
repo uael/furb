@@ -80,7 +80,7 @@ function open(record: unknown[] = []) {
 test("a pending result leaves JavaScript and other native operations available", async () => {
   const { engine, release } = open();
   const on = engine.root;
-  const id = engine.wait([], { seconds: 60, on }).id;
+  const id = engine.wait([on], { seconds: 60, on }).id;
   const pending = engine.result(id);
   // A chain that ran no cd has no working directory of its own.
   expect(engine.cwd({ on })).toBe("");
@@ -91,7 +91,7 @@ test("a pending result leaves JavaScript and other native operations available",
 
 test("a cancel rejects a native await", async () => {
   const { engine } = open();
-  const later = engine.wait([], { seconds: 60, on: engine.root }).id;
+  const later = engine.wait([engine.root], { seconds: 60, on: engine.root }).id;
   const result = engine.result(later).then(
     () => "resolved",
     (error: Error) => error.message,
@@ -176,9 +176,9 @@ test("every ear hears a fact whose values have no plain form, and each value cro
   expect(engine.read("a", { on }).content).toBe("one\ntwo\n");
   await engine.rung({ word: 'write(Text("c", "after"))', on });
   expect(files.get("c")).toBe("after");
-  expect(await engine.wait([], { seconds: 0, on })).toBeNull();
+  expect(await engine.wait([on], { seconds: 0, on })).toBeNull();
   // A wait for acts takes its seconds by place, and is done with the name of an act that is done already.
-  const over = engine.wait([], { seconds: 0, on });
+  const over = engine.wait([on], { seconds: 0, on });
   await over;
   expect(await engine.wait([over.id], { seconds: 60, on })).toBe(over.id);
 });
@@ -222,11 +222,11 @@ test("a whole JavaScript number is an int, and a BigInt is one exactly", () => {
 test("a key of the client makes its act once in a life and in a later life", () => {
   const first = open();
   const on = first.engine.root;
-  const id = first.engine.keyed("k1", "wait", [], { seconds: 60, on }).id;
-  expect(first.engine.keyed("k1", "wait", [], { seconds: 60, on }).id).toBe(id);
-  expect(first.engine.keyed("k2", "wait", [], { seconds: 60, on }).id).not.toBe(id);
+  const id = first.engine.keyed("k1", "wait", [60, on], { on }).id;
+  expect(first.engine.keyed("k1", "wait", [60, on], { on }).id).toBe(id);
+  expect(first.engine.keyed("k2", "wait", [60, on], { on }).id).not.toBe(id);
   const second = open(first.entries);
-  expect(second.engine.keyed("k1", "wait", [], { seconds: 60, on }).id).toBe(id);
+  expect(second.engine.keyed("k1", "wait", [60, on], { on }).id).toBe(id);
 });
 
 test("a life whose replay drifts is kept, with what boot raised", () => {
