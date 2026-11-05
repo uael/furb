@@ -836,7 +836,15 @@ export const feed = part({
                     : (() => {
                         // A long answer wears the mark of a short one, so that it reads as his and no line of the question.
                         const answer = this.box({});
-                        answer.add(this.text([[`${glyph.done} `, c.success], ["You answered", c.text, bold]], c.text));
+                        answer.add(
+                          this.text(
+                            [
+                              [`${glyph.done} `, c.success],
+                              ["You answered", c.text, bold],
+                            ],
+                            c.text,
+                          ),
+                        );
                         answer.add(this.inset(space.between, this.markdown(value)));
                         return answer;
                       })(),
