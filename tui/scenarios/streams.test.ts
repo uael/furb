@@ -48,6 +48,27 @@ test("a quote that the model streams in small chunks binds whole, and a quote th
     },
   ));
 
+// A quote that a model streams stands in the window as the binding that it makes from its opening mark on, and its
+// text grows in the quotes of the string before its close mark comes.
+test("a quote that the model streams shows as its binding from its opening mark, its text in the quotes", () =>
+  scenario(
+    [
+      {
+        cue: "Scenario: stream a quote.",
+        word: "<s:note>\nHello there\nworld, and more lines\nto come\n</s:note>\nclose(str(len(note)))",
+        chunk: 4,
+        pause: 300,
+      },
+    ],
+    async (window) => {
+      await window.type("Scenario: stream a quote.");
+      const frame = await window.shows((one) => one.includes("note = 'Hello th"), "the quote as its binding");
+      expect(frame).not.toContain("<s:note>");
+      expect(await answered(window)).toBeUndefined();
+      await until(async () => (await answered(window)) === "42", "the quote to bind whole");
+    },
+  ));
+
 // #1189: the tell of a command gave the model each byte that its show picked, so a stream of megabytes flooded the
 // turn of the model.
 test("a command that writes megabytes tells the model its two ends, and its Exit holds it whole", () =>

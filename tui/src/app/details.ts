@@ -1,7 +1,6 @@
 import { isAbsolute, relative } from "node:path";
 import {
   type BoxRenderable,
-  type CodeRenderable,
   type MouseEvent,
   parseColor,
   type Renderable,
@@ -23,6 +22,7 @@ import {
   literals,
   operated,
   type ProgramLine,
+  quoteParts,
   tailOf,
   writing,
 } from "furb/life";
@@ -330,8 +330,7 @@ export const details = part({
     const waits = act?.kind === "rung" && !act.asking && !stream;
     // The lines that the model finished stand above as python, under the label of the word, so the row takes the
     // number after them.
-    const { lines, tail } = writing(stream);
-    const done = lines ? lines.split("\n").length : 0;
+    const { tail, count: done } = writing(stream);
     const began = w.started[step];
     const ms = began ? clock() - began : 0;
     const label: Part[] = done
@@ -954,24 +953,20 @@ export const details = part({
     }
   },
 
-  /** The python of a turn. A quote is a string region: its two tags are keywords, and its body is a string, or plain
-   * when it is long. The rest of the turn is python, which the parser colors with the quotes left blank. */
-  turnCode(source: string): CodeRenderable {
-    const text = safeText(source);
-    const quotes: SimpleHighlight[] = [];
-    const blank = text.replace(/^<s:(\w+)>\n?([\s\S]*?)<\/s:\1>$/gm, (whole, _name, body, at) => {
-      const open = whole.length - body.length - `</s:${_name}>`.length;
-      quotes.push(
-        [at, at + open, "keyword"],
-        [at + whole.length - `</s:${_name}>`.length, at + whole.length, "keyword"],
-      );
-      if (body.length <= 1000) quotes.push([at + open, at + open + body.length, "string"]);
-      return whole.replace(/[^\n]/g, " ");
-    });
-    return this.code(text, undefined, undefined, async () => {
-      const out = await this.runsOf(blank);
-      return [...out, ...quotes];
-    });
+  /** A turn, the same for the user and the model: its python, and each quote as the binding that it makes, its name
+   * and under it its text, drawn as text. */
+  turnBody(source: string): BoxRenderable {
+    const box = this.box({ flexDirection: "column" });
+    for (const part of quoteParts(safeText(source))) {
+      if ("code" in part) {
+        box.add(this.code(part.code));
+        continue;
+      }
+      box.add(this.code(`${part.quote.name} =`));
+      const body = part.quote.body.replace(/\n$/, "");
+      if (body) box.add(this.inset(space.between, this.text(body, c.text)));
+    }
+    return box;
   },
 });
 
