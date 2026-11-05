@@ -97,12 +97,44 @@ export function threadOf(act: LiveAct, rows: Rows): string | undefined {
 /** The name of an act, as the engine reads it: the name of an ear or of the operator ends with no number. */
 const ACT = /^\w+?\d+$/;
 
-/** Whether a prompt is a message of a thread and no thread of its own: a prompt on a thread, which the engine makes a
- * message of that thread or a prompt that opens it again, or a prompt of None that a chain made on the chain, as the
- * acknowledgment of an act that a rung of the operator made, which belongs to the thread of that act. whole says
- * whether each act that the verdict walked stood in rows: a verdict that an act which has not landed yet would change
- * is no verdict yet. */
-function messageOf(act: LiveAct, rows: Rows): { message: string | undefined; whole: boolean } {
+/** What a prompt of a chain is that is no conversation, which the feed of its chain draws as what it is and the list
+ * of its threads leaves out: a notice of the round, a prompt of None that a rung or a chain made, which no one answers;
+ * what a word of the operator told the chain, a prompt of None that a rung of his made or the acknowledgment of a rung
+ * in no thread; a wake, a prompt of None that an ear or a verb of the round made; or a question of another chain to
+ * this one, a worker that asks its coordinator, with the chain that asks. The view model of the host says the same in
+ * `host/src/view/threads.rs`, which the TUI does not read yet. */
+export type Aside =
+  | { aside: "notice" }
+  | { aside: "rung" }
+  | { aside: "wake" }
+  | { aside: "question"; from: string };
+
+/** A prompt of a chain that is no thread, with what it is and the prompts on it, in order. */
+export interface ChainAside {
+  act: LiveAct;
+  aside: Aside;
+  messages: LiveAct[];
+}
+
+/** Whether a chain stands under another, or is it, walking up the makers of the chains. */
+function within(chain: string, of: string, rows: Rows): boolean {
+  let at = chain;
+  for (let step = 0; step < 64; step++) {
+    if (at === of) return true;
+    const made = rows.get(at);
+    const maker = made ? rows.get(made.by) : undefined;
+    if (!maker || maker.on === at) return false;
+    at = maker.on;
+  }
+  return false;
+}
+
+/** What a prompt to a model is: a message of a thread, as a prompt on a thread, which the engine makes a message of
+ * that thread or a prompt that opens it again, or a prompt of None that a chain made as the acknowledgment of an act of
+ * that thread; an aside, which message gives as ""; or else a thread of its own, as each prompt that the operator made
+ * himself, which message gives as undefined. whole says whether each act that the verdict walked stood in rows: a
+ * verdict that an act which has not landed yet would change is no verdict yet. */
+function messageOf(act: LiveAct, rows: Rows): { message: string | undefined; aside?: Aside; whole: boolean } {
   let whole = true;
   const walked: Rows = {
     get(id) {
@@ -111,17 +143,33 @@ function messageOf(act: LiveAct, rows: Rows): { message: string | undefined; who
       return got;
     },
   };
-  const verdict = (): string | undefined => {
+  const verdict = (): string | Aside | undefined => {
     if (act.thread) return rootOf(act, walked);
-    if (act.words[0] !== "None" || walked.get(act.by)?.kind !== "chain") return undefined;
-    const about = String(act.words[1] ?? "").match(/^(\w+?\d+) /)?.[1];
-    const subject = about ? walked.get(about) : undefined;
-    if (!subject) return "";
-    return subject.kind === "prompt" ? (threadOf(subject, walked) ?? subject.id) : threadOf(subject, walked);
+    const maker = walked.get(act.by);
+    const none = act.words[0] === "None";
+    if (none && maker?.kind === "chain") {
+      const about = String(act.words[1] ?? "").match(/^(\w+?\d+) /)?.[1];
+      const subject = about ? walked.get(about) : undefined;
+      if (!subject) return { aside: "notice" };
+      if (subject.kind === "prompt") return threadOf(subject, walked) ?? subject.id;
+      return threadOf(subject, walked) ?? { aside: subject.kind === "rung" ? "rung" : "notice" };
+    }
+    if (byOperator(act)) return undefined;
+    if (none && maker?.kind === "rung" && byOperator(maker)) return { aside: "rung" };
+    if (none && (maker?.kind === "rung" || maker?.kind === "prompt")) return { aside: "notice" };
+    if (none) return { aside: "wake" };
+    if (maker && maker.on !== act.on && !within(act.on, maker.on, walked))
+      return { aside: "question", from: maker.on };
+    return undefined;
   };
-  const message = verdict();
-  return { message, whole };
+  const said = verdict();
+  if (typeof said === "object") return { message: "", aside: said, whole };
+  return { message: said, whole };
 }
+
+/** What a list of the threads of a chain keeps of each prompt that it read: the thread that it is a message of, what
+ * it is when it is no conversation, and its title. */
+export type PromptRead = { message: string | undefined; title: string; aside?: Aside };
 
 /** The tree of the threads of a life: each prompt under the prompt of the ladder whose rung made it, each with its
  * anchor, its messages, its progress, what waits for the operator in it, and its pull requests. */
@@ -132,6 +180,7 @@ export function threads(acts: readonly LiveAct[], owed: ReadonlySet<string>): Th
   const later: [LiveAct, string][] = [];
   for (const act of acts) {
     if (act.kind !== "prompt") continue;
+    // A message joins its thread, and an aside is no thread.
     const { message } = messageOf(act, rows);
     if (message !== undefined) {
       if (message) later.push([act, message]);
@@ -258,9 +307,31 @@ export function chainThreads(
   on: readonly LiveAct[],
   rows: ReadonlyMap<string, LiveAct>,
   owed: ReadonlySet<string>,
-  known: WeakMap<LiveAct, { message: string | undefined; title: string }> = new WeakMap(),
+  known: WeakMap<LiveAct, PromptRead> = new WeakMap(),
 ): ChainThread[] {
+  return chainSorted(on, rows, owed, known).threads;
+}
+
+/** The asides of one chain, in the order they began: each prompt to a model on the chain that is no conversation, with
+ * the prompts on it, and each message of a thread that is no thread of the chain, as a notice. */
+export function chainAsides(
+  on: readonly LiveAct[],
+  rows: ReadonlyMap<string, LiveAct>,
+  owed: ReadonlySet<string>,
+  known: WeakMap<LiveAct, PromptRead> = new WeakMap(),
+): ChainAside[] {
+  return chainSorted(on, rows, owed, known).asides;
+}
+
+/** The threads and the asides of one chain, in the order they began. */
+export function chainSorted(
+  on: readonly LiveAct[],
+  rows: ReadonlyMap<string, LiveAct>,
+  owed: ReadonlySet<string>,
+  known: WeakMap<LiveAct, PromptRead> = new WeakMap(),
+): { threads: ChainThread[]; asides: ChainAside[] } {
   const out = new Map<string, ChainThread>();
+  const asides = new Map<string, ChainAside>();
   const later: [LiveAct, string][] = [];
   const waits: [string, string][] = [];
   const asked: [string, LiveAct][] = [];
@@ -274,9 +345,10 @@ export function chainThreads(
     }
     let seen = known.get(act);
     if (!seen) {
-      const { message, whole } = messageOf(act, rows);
+      const { message, aside, whole } = messageOf(act, rows);
       seen = {
         message,
+        ...(aside ? { aside } : {}),
         title:
           message === undefined
             ? (String(act.words[1] ?? "")
@@ -287,6 +359,7 @@ export function chainThreads(
       // What a prompt is stays as it was said once each act that it names has landed, and only then a host keeps it.
       if (whole) known.set(act, seen);
     }
+    if (seen.aside) asides.set(act.id, { act, aside: seen.aside, messages: [] });
     if (seen.message !== undefined) {
       if (seen.message) later.push([act, seen.message]);
       continue;
@@ -306,7 +379,12 @@ export function chainThreads(
       yours: by || (origin === "rung" && maker !== undefined && byOperator(maker)),
     });
   }
-  for (const [act, id] of later) out.get(id)?.messages.push(act);
+  for (const [act, id] of later) {
+    const aside = asides.get(id);
+    if (out.has(id)) out.get(id)?.messages.push(act);
+    else if (aside) aside.messages.push(act);
+    else asides.set(act.id, { act, aside: { aside: "notice" }, messages: [] });
+  }
   for (const [id, ask] of asked) out.get(id)?.asked.push(ask);
   for (const [id, ask] of waits) out.get(id)?.asks.push(ask);
   for (const thread of out.values()) {
@@ -314,7 +392,10 @@ export function chainThreads(
     thread.resolved = !open;
     thread.state = thread.asks.length ? "asks" : actState(open ?? thread.act, owed);
   }
-  return [...out.values()];
+  return {
+    threads: [...out.values()],
+    asides: [...asides.values()].sort((a, b) => a.act.began - b.act.began),
+  };
 }
 
 /** A thread of a list with the threads that its ladder made, its agents, each nested the same way. state is the state
