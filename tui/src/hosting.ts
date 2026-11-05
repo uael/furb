@@ -82,7 +82,6 @@ const READS: Record<string, readonly string[]> = {
     "inspect",
     "names",
     "outcome",
-    "pending",
     "parked",
   ],
   library: [

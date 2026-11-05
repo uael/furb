@@ -781,6 +781,13 @@ impl Engine {
     Ok(pending)
   }
 
+  /// The state of the record as a list of records shows it while no life holds it: `runs` when
+  /// it holds the work of [`Engine::pending`], which the open of the next life on it resumes at
+  /// once, so that work runs and no pause holds it, and `saved` when it holds none.
+  pub fn saved(&mut self) -> Result<&'static str, Fault> {
+    Ok(if self.pending()?.is_empty() { "saved" } else { "runs" })
+  }
+
   /// The work that an earlier life left, put to the outside again with no wake from a host: a
   /// wake of each act of [`Engine::pending`] that no other act of it made, so the World asks each
   /// reply of it again, takes each wait and each prompt to the operator of it again, and closes
