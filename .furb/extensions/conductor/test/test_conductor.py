@@ -8,12 +8,13 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 
 import pytest
 
 import conftest
-from conftest import Sand, life, paragraphs, said, settle
+from conftest import Sand, life, paragraphs, said, settle, world_says
 from furb.engine import OPERATOR, Exit, Refused, Text, site
 
 HERE = Path(__file__).resolve().parent.parent
@@ -76,17 +77,25 @@ def stepped(step, *args):
 @dataclass
 class Shell(Sand):
   """A World that runs each command in sh in the working directory of its chain, with the gh of the test first on
-  its PATH, keeps each write of scratch:// in its files, and reads the clock at now, which a test moves."""
+  its PATH, and says its done later, from its loop, but holds the done of each command that hold matches until the test
+  releases it. It keeps each write of scratch:// in its files, and reads the clock at now, which a test moves."""
 
   env: dict[str, str] = field(default_factory=dict)
   now: float = 1000.0
+  hold: str = ""
+  held: list = field(default_factory=list)
 
   def hear(self, a: tuple):
     match a:
       case ("bash", about, _, on, command, stdin, *_):
+        yield "started", about
         here = conftest.engine.cwd(on=on) or None
         got = subprocess.run(["sh", "-c", command], input=stdin or "", capture_output=True, text=True, env=self.env, cwd=here, check=False)
-        yield "done", about, Exit(got.returncode, Text(f"{about}/stdout", got.stdout), Text(f"{about}/stderr", got.stderr))
+        done = partial(world_says, "done", about, Exit(got.returncode, Text(f"{about}/stdout", got.stdout), Text(f"{about}/stderr", got.stderr)))
+        if self.hold and re.search(self.hold, command):
+          self.held.append(done)
+        else:
+          self.loop.call_soon(done)
       case ("clock", qid, *_):
         yield "done", qid, self.now
       case ("write", qid, _, _, Text(path=path, content=content)) if path.startswith("scratch://"):
@@ -94,6 +103,12 @@ class Shell(Sand):
         yield "done", qid, Text(path, content)
       case _:
         yield from super().hear(a)
+
+  def release(self) -> None:
+    self.hold = ""
+    for done in self.held:
+      self.loop.call_soon(done)
+    self.held.clear()
 
 
 class Round:
@@ -351,7 +366,7 @@ async def test_hire_starts_a_worker_on_its_chain_with_the_asks_on_top_and_its_wo
   assert f'on="{conductor.root}"' in message
   assert conductor.words(where) == [f"actor = {SONNET!r}", f"try:\n  cd({path!r})\nexcept Refused:\n  pass"]
   assert (conductor.ns["working"][name], conductor.ns["models"][name], conductor.ns["homes"]["cap"]) == ("cap", SONNET, where)
-  assert conductor.ns["slots"][name] == conductor.ns["slots"][where] == "w1"
+  assert conductor.ns["slots"][name] == "w1"
   assert not [x for x in conductor.gh() if x.startswith("label create")]
 
 
@@ -899,7 +914,7 @@ async def test_a_hire_takes_no_workspace_whose_holder_chain_has_a_live_worker(co
   subprocess.run(["git", "init", "-q", str(space)], check=True)
   (space / ".git" / "furb-holder").write_text(f"{held}\n", encoding="utf-8")
   name = await conductor.step("hire", "names", "x")
-  assert conductor.ns["slots"][conductor.engine.get(name)[3]] == "w2"
+  assert conductor.ns["slots"][name] == "w2"
   assert (space / ".git" / "furb-holder").read_text(encoding="utf-8") == f"{held}\n"
 
 
@@ -994,5 +1009,24 @@ async def test_a_later_conduct_replaces_the_round_at_its_next_step(tmp_path: Pat
   first, second = (x[1] for x in said(made.log, "conduct"))
   await until(lambda: made.engine.over(first))
   assert made.engine.peek(first) is None and not made.engine.over(second)
+  made.engine.close(None, second)
+  await settle()
+
+
+@POSIX
+@JQ
+async def test_a_later_conduct_starts_once_the_round_that_it_replaces_ends_so_one_fixer_takes_a_red_pr(tmp_path: Path) -> None:
+  made = Round(tmp_path)
+  await made.load(TEST, 'ends["a"] = []')
+  made.github(raw(7, "a", checks=(("the gates", "FAILURE"),)))
+  made.sand.hold = r"gh pr list --state open"
+  await made.word("first = conduct(60)")
+  await until(lambda: made.sand.held)
+  await made.word("second = conduct(60)")
+  first, second = (x[1] for x in said(made.log, "conduct"))
+  made.sand.release()
+  await until(lambda: made.engine.over(first) and [x for x in said(made.log, "wait") if second in x[5:]])
+  assert made.hired() == ["fix7"]
+  assert made.engine.peek(first) is None
   made.engine.close(None, second)
   await settle()

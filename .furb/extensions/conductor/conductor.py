@@ -16,6 +16,7 @@ from furb.engine import (
   cd,
   chain,
   clock,
+  close,
   controlled,
   cwd,
   get,
@@ -47,7 +48,7 @@ Put each item in queue as (key, brief, thread), in the order of the work, the ha
 10. Each new comment of the owner on a PR of the round goes to the worker on it, else to a fixer, and the label hold comes on the PR until its worker pushes the fix and takes hold off.
 11. A fix of the round does not become its own item or PR, by pick R1 of the owner: it waits in scratch://round/frozen.md, while the live module carries it, and the waiting fixes land together in one change.
 A step that fails is one notice, and the round goes on at the next round. The whole state lives in the module of your chain, so a word that a checkpoint cuts loses nothing: await conduct() again in a turn that shows.
-The round is an act on a chain of its own, so the end of each of its acts wakes nobody: you hear only its notices, and its done when it holds nothing. lead["round"] names it. close(None, lead["round"]) stops it, and each worker goes on, where a pause of it pauses each worker and a cancel ends them. await conduct() starts it again from any turn, and the round that it replaces ends at its next step.
+The round is an act on a chain of its own, so the end of each of its acts wakes nobody: you hear only its notices, and its done when it holds nothing. lead["round"] names it. close(None, lead["round"]) stops it, and each worker goes on, where a pause of it pauses each worker and a cancel ends them. await conduct() starts it again from any turn: the new round ends the wait of the round before it, which ends at its next step, and starts once that round is over.
 A change of the round loads as the whole file, run again as a rung: each name of the state binds with setdefault and keeps its value."""
 
 MOST = 10
@@ -368,11 +369,11 @@ def seated() -> set[str]:
 
 
 def placed(where: str) -> Generator[set[str], object, tuple[str, str]]:
-  held, last = seated(), slots.get(where, "")
+  held = seated()
   live = " ".join(shq(working_at(n)) for n in living() if working_at(n) != where)
-  for slot in dict.fromkeys([last, *(f"w{i}" for i in range(1, 2 * MOST + 3))]):
+  for slot in (f"w{i}" for i in range(1, 2 * MOST + 3)):
     path = f"{cwd()}-{slot}"
-    if slot and slot not in held and (yield from shell(f"sh -c {shq(SETTLE)} sh {shq(path)} {shq(where)} {live}", timeout=120)).code != 3:
+    if slot not in held and (yield from shell(f"sh -c {shq(SETTLE)} sh {shq(path)} {shq(where)} {live}", timeout=120)).code != 3:
       break
   else:
     raise Refused("each workspace holds a live worker")
@@ -403,7 +404,7 @@ def hire(key: str, what: str, thread: str = "", brief: str = "", model: str = ""
   name = str(prompt(tuple[int, str], carried(key) + text, to=model, on=where))
   working[name], models[name], homes[key] = key, model, where
   if slot:
-    slots[name] = slots[where] = slot
+    slots[name] = slot
   if "free" in machine:
     machine["free"] -= WORKER_MEMORY
   return name
@@ -764,7 +765,14 @@ def conduct(every: float = 300) -> Act:
 
   def ear(id):
     yield "started", id
-    lead["round"] = id
+    old, lead["round"] = lead.get("round", ""), id
+    if get(old) and not over(old):
+      for x in transcript(old, "wait"):
+        if not over(x[1]):
+          close(None, x[1])
+      gone = wait(every, old)
+      while not over(gone):
+        yield {gone}
     bash(LABELS, show=HIDDEN, ok=True, timeout=120)
     while True:
       alive: list[str] = []
