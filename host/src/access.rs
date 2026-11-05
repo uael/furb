@@ -22,6 +22,10 @@ pub struct Config {
   pub tailnet: Option<Ports>,
   #[serde(default)]
   pub roles: Access,
+  /// The seconds that a life that holds an open act says no fact before the daemon tells that it
+  /// stalled, [`crate::STALL`] when none is given.
+  #[serde(default)]
+  pub stall: Option<u64>,
 }
 
 /// The port of each transport of the network that the daemon listens on, if it does.
