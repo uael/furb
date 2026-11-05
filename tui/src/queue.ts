@@ -16,12 +16,24 @@ function queueEvent(fact: Fact): { step: string; key: string; value: unknown } |
 /** Begin and prompt are synchronous calls in one worker message. A following sent fact confirms the ID. */
 export function queueDispatches(entries: readonly Entry[]): Map<string, string> {
   const sent = new Map<string, string>();
-  for (const [index, entry] of entries.entries()) {
-    const [fact] = entry;
-    const event = queueEvent(fact);
+  dispatchesFrom(
+    entries.map(([fact]) => fact),
+    sent,
+  );
+  return sent;
+}
+
+/** The dispatches of the facts from an index on, added to those that sent holds, and the index at which the next
+ * read starts. A view of a long life reads each fact once in this way, since a read of each fact at each change costs
+ * more as the life grows. A begin that is the last fact waits for the fact that follows it, so the next read starts
+ * at it again. */
+export function dispatchesFrom(facts: readonly Fact[], sent: Map<string, string>, from = 0): number {
+  for (let index = from; index < facts.length; index++) {
+    const event = queueEvent(facts[index] as Fact);
     if (event?.step === "sent" && typeof event.value === "string") sent.set(event.key, event.value);
     if (event?.step === "begin") {
-      const next = entries[index + 1]?.[0];
+      if (index + 1 === facts.length) return index;
+      const next = facts[index + 1];
       if (
         next?.[0] === "prompt" &&
         next[2] === "operator" &&
@@ -30,5 +42,5 @@ export function queueDispatches(entries: readonly Entry[]): Map<string, string> 
         sent.set(event.key, next[1]);
     }
   }
-  return sent;
+  return facts.length;
 }

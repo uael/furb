@@ -326,12 +326,12 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/newthread` | Start a new thread with your next message, in place of a message to the thread that the input targets, as `+ New thread` does |
 | `/autocollapse` | Toggle the fold of the threads that are over |
 | `/extensions` | List the extensions that this life runs, with what their parts give the TUI |
-| `/serve [address]` | Give the addresses at which other operators read this life, or read and drive it, over the network |
-| `/end` | End each open life, its commands and its models, then quit |
-| `/reopen` | Reach the life again after it ended in another window or its host was lost, in a host of this machine |
-| `/stop` | End by force the process that holds this life, when the end of the life does not reach it |
+| `/end` | Let the life of this session go from this window: it ends once no window and no pin holds it |
+| `/pin [holder]` | Keep the life of this session open with no window, until the same holder unpins it |
+| `/unpin [holder]` | Let a pin go, so the life ends once no window and no pin holds it |
+| `/reopen` | Reach the life again in the daemon of this machine after it ended or was lost |
 | `/help` | Keys, marks, and slash commands |
-| `/exit or /quit` | Save every session and quit, while a life in a host of its own goes on |
+| `/exit or /quit` | Save every session and quit: each life goes on while a window or a pin holds it |
 | `/compact` | Compact this chain now: a model keeps what the work still needs and sums up the rest (the extension compaction) |
 | `/clear or /reset` | Clear this chain: its model reads from zero, and the chain keeps its name, its prompts and its module (the extension compaction) |
 | `/mcp` | Manage the MCP servers: state, tools, resources, prompts, login (the extension mcp) |

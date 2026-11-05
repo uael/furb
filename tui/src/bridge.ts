@@ -35,7 +35,7 @@ import { expandHome } from "./files.ts";
 import { lineCounts } from "./format.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { changeProvider, type ProviderChoice } from "./providers.ts";
-import { queueDispatches } from "./queue.ts";
+import { dispatchesFrom } from "./queue.ts";
 import { type Carry, isRecorded, Reader, type Reading, row } from "./reading.ts";
 import { branchChanges, net } from "./review.ts";
 import type { ActRow, FollowUp } from "./session.ts";
@@ -395,6 +395,9 @@ export class HostView extends EventEmitter {
     this.answers.clear();
     this.replies.clear();
     this.lines.clear();
+    this.dispatches.clear();
+    this.dispatchedAt = 0;
+    this.measured.clear();
     this.given = undefined;
     this.heardAt = 0;
     this.replayed = this.life.facts.length;
@@ -431,7 +434,7 @@ export class HostView extends EventEmitter {
     this.seen = new Map(activity.seen);
     this.streams = new Map(this.life.streams);
     this.measures = Object.fromEntries(
-      [...activity.answers].map(([chain, list]) => [chain, measureOf(list)]),
+      [...activity.answers].map(([chain, list]) => [chain, this.measure(chain, list)]),
     );
     this.compactions = [...activity.compactions];
     const prompts = new Map<string, Prompt>();
@@ -445,6 +448,19 @@ export class HostView extends EventEmitter {
           });
     this.prompts = prompts;
     this.emit("change");
+  }
+
+  /** The measure of a chain from its answers, which the activity only appends to: the answers that came since the
+   * last change add their dollars to it, and a list of another activity is measured from its start. */
+  private measure(chain: string, list: Parameters<typeof measureOf>[0]): Measure {
+    const known = this.measured.get(chain);
+    if (known?.list === list && known.counted === list.length) return known.measure;
+    const from = known?.list === list && known.counted < list.length ? known.counted : 0;
+    const added = measureOf(list.slice(from));
+    const dollars = (from ? (known?.measure.dollars ?? 0) : 0) + added.dollars;
+    const measure = { ...added, dollars, spent: dollars, answers: list.length };
+    this.measured.set(chain, { list, counted: list.length, measure });
+    return measure;
   }
 
   /** The facts of a change: the view holds them, and the work that waits for a wake is read again. */
@@ -470,6 +486,15 @@ export class HostView extends EventEmitter {
   private readonly began = new Map<string, number>();
   private readonly took = new Map<string, number>();
   private replayed = 0;
+  /** The follow-ups that the life sent, as the facts read so far say, and the index of the fact that the next read
+   * starts at. */
+  private readonly dispatches = new Map<string, string>();
+  private dispatchedAt = 0;
+  /** The measure of each chain, and the answers that it counts, so that a change adds only the new answers. */
+  private readonly measured = new Map<
+    string,
+    { list: readonly unknown[]; counted: number; measure: Measure }
+  >();
   private timed = 0;
   private time(): void {
     const now = clock();
@@ -589,7 +614,8 @@ export class HostView extends EventEmitter {
     if (selected === life.root) this.actor = view.actor;
     // A fact that came while the views were read changes them at the next snapshot, which the session takes then.
     this.heardAt = start;
-    const dispatched = [...queueDispatches(facts.map((fact) => [fact] as [Fact])).keys()];
+    this.dispatchedAt = dispatchesFrom(facts, this.dispatches, this.dispatchedAt);
+    const dispatched = [...this.dispatches.keys()];
     // The daemon writes the journal after it tells the write, so the counts of a write may come after its act: the
     // act whose counts came is given again with them.
     const counted = new Set<string>();
