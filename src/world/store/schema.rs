@@ -93,8 +93,8 @@ impl Schema {
     Some(Self { major: major.parse().ok()?, minor: minor.parse().ok()? })
   }
 
-  /// Whether this build opens the data of a checkpoint that names a schema: one of each minor of the
-  /// major of [`CHECKPOINT_SCHEMA`], or of the major 1, whose `again` `seed` names as cut.
+  /// Whether this build opens the data of a checkpoint that names a schema: one of each minor of
+  /// the major of [`CHECKPOINT_SCHEMA`], or of the major 1, whose `again` `seed` names as cut.
   pub fn opens_checkpoint(held: Option<ObjectRef<'_>>) -> Result<(), SchemaError> {
     let older = held.and_then(Self::read).is_some_and(|one| one.major == 1);
     if older { Ok(()) } else { CHECKPOINT_SCHEMA.opens("checkpoint", held) }

@@ -46,7 +46,6 @@ The words of `opened`, each of which can be left out:
 - `keeps` false keeps nothing in the record, and `inspecting` true opens a life that keeps nothing, enables nothing
   new, and asks no model.
 - `extensions` false enables no new extension, and `config` names the config directory of the user.
-- `snapshot` false opens the life with a replay of its record, and keeps no snapshot of it.
 - `answer`, a function, answers each request in place of the models, as the suite of furb does.
 - `stream`, a function, hears what a model writes as it writes it, and `retrying` each retry of a call of a model.
 - `log`, a function, hears each report of the life that no model reads, one line each, in place of the stderr of the

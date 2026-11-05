@@ -3,11 +3,9 @@
 #![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
 
 use std::{
-  cell::RefCell,
   collections::VecDeque,
   fs,
   path::{Path, PathBuf},
-  rc::Rc,
   sync::{Arc, Mutex},
 };
 
@@ -15,7 +13,7 @@ use super::{Answer, Opening};
 use crate::testing::Yard;
 use crate::{
   Act, Ear, Engine, Fact, Object, Text,
-  ear::{ear, hear, hearing, say},
+  ear::{ear, hear, say},
   extension::enabled,
   value::{ObjectRef, entry},
   verbs, world,
@@ -180,10 +178,16 @@ fn a_life_that_keeps_a_record_writes_the_log_of_every_fact_beside_it_and_a_later
   let again = shown(world::logged(&record).unwrap().expect("a later life writes the log again"));
   // A fact that the journal says again is its own, so a later life says each fact again with its kind and its name.
   let head = |one: &String| one.splitn(3, ", ").take(2).collect::<Vec<_>>().join(", ");
-  let heads = |facts: &[String]| facts.iter().map(head).collect::<Vec<_>>();
+  // The journal says the fact teach again only once the bus is still, so a replay logs it later
+  // than the first life did.
+  let heads = |facts: &[String]| {
+    facts.iter().map(head).filter(|one| !one.starts_with("['teach'")).collect::<Vec<_>>()
+  };
+  assert!(again.iter().any(|one| one.starts_with("['teach', 'chain1'")), "{again:?}");
+  let mine = heads(&first);
   assert_eq!(
-    heads(&again[..first.len()]),
-    heads(&first),
+    heads(&again)[..mine.len()],
+    mine[..],
     "a later life says the log again before its own facts"
   );
   let mut kept = fs::OpenOptions::new().append(true).open(&record).unwrap();
@@ -201,7 +205,7 @@ fn a_later_life_writes_in_its_log_each_act_of_its_record_that_an_ear_of_the_outs
   let at = place("owed");
   let record = at.join("record.jsonl");
   let open = || {
-    let opening = Opening { extensions: Some(false), snapshot: Some(false), ..opening(&at, true) };
+    let opening = Opening { extensions: Some(false), ..opening(&at, true) };
     opening.boot::<String>([]).unwrap().0
   };
   let mut engine = open();
@@ -239,177 +243,6 @@ fn stood(engine: &mut Engine) -> Result<Object, crate::Fault> {
   futures::executor::block_on(stand)
 }
 
-/// The kind and the name of each fact of the log of a record, after the facts that a number of them leave out.
-fn heads(record: &Path, after: usize) -> Vec<String> {
-  let facts = world::logged(record).unwrap().expect("the log agrees with the record");
-  let head =
-    |one: &Object| one.as_ref().py_repr().splitn(3, ", ").take(2).collect::<Vec<_>>().join(", ");
-  facts.iter().skip(after).map(head).collect()
-}
-
-#[test]
-fn a_later_life_opens_from_the_snapshot_that_agrees_with_its_record_and_goes_on_as_a_replay_goes_on()
- {
-  for extensions in [false, true] {
-    goes_on(&place(&format!("snapshot-{extensions}")), extensions);
-  }
-}
-
-/// A life that keeps a snapshot, and two later lives on its record, one from the snapshot and one that replays.
-fn goes_on(at: &Path, extensions: bool) {
-  let (record, again) = (at.join("record.jsonl"), at.join("again.jsonl"));
-  for (name, text) in [("a.txt", "a\n"), ("b.txt", "b\n"), ("CLAUDE.md", "the memory\n")] {
-    fs::write(at.join(name), text).unwrap();
-  }
-  let open = |record: &Path, snapshot: bool| {
-    let record = Some(record.display().to_string());
-    let opening = Opening {
-      extensions: Some(extensions),
-      snapshot: Some(snapshot),
-      record,
-      ..opening(at, true)
-    };
-    opening.boot::<String>([]).unwrap().0
-  };
-  let mut first = open(&record, true);
-  assert!(!first.restored(), "a new record has no snapshot");
-  assert_eq!(closed(&mut first, "x = 41\nread('a.txt')\nclose(x)").as_ref().as_int(), Some(41));
-  drop(first);
-  // A later life says each fact of the first life again, or holds it from the snapshot, before its own.
-  let one = heads(&record, 0).len();
-  for end in ["", ".log", ".snapshot"] {
-    fs::copy(format!("{}{end}", record.display()), format!("{}{end}", again.display())).unwrap();
-  }
-  let mut restored = open(&record, true);
-  let mut replayed = open(&again, false);
-  assert!(restored.restored(), "the snapshot agrees with the record");
-  assert!(!replayed.restored(), "a life that takes no snapshot replays");
-  let word = "read('b.txt')\nclose(x + 1)";
-  assert_eq!(
-    closed(&mut restored, word).as_ref().as_int(),
-    Some(42),
-    "the module holds what the word bound"
-  );
-  assert_eq!(closed(&mut replayed, word).as_ref().as_int(), Some(42));
-  drop((restored, replayed));
-  let (restored, replayed) = (heads(&record, one), heads(&again, one));
-  assert_eq!(restored, replayed, "both lives go on with the same facts");
-  let facts = world::logged(&record).unwrap().unwrap();
-  // The catch-up of a stand reads each file again, so only a tell counts as what a chain is told.
-  let told = facts[one..]
-    .iter()
-    .filter(|one| {
-      one.as_ref().py_repr().starts_with("['tell'") && one.as_ref().py_repr().contains("the memory")
-    })
-    .count();
-  let first =
-    facts[..one].iter().filter(|one| one.as_ref().py_repr().contains("the memory")).count();
-  assert!(!extensions || first > 0, "the first life told the memory");
-  assert_eq!(told, 0, "the memory ear heard the past, so it tells no chain again what it holds");
-}
-
-/// An ear of the host that waits for a chain by its name, and keeps the kind and the act of each fact it hears
-/// that is no act.
-fn listening(chain: &'static str, heard: Rc<RefCell<Vec<String>>>) -> Box<dyn Ear> {
-  hearing(&[chain], move |mut co| async move {
-    loop {
-      let a = hear(&mut co).await;
-      if !a.question() {
-        heard.borrow_mut().push(format!("{} {}", a.kind(), a.about()));
-      }
-    }
-  })
-}
-
-#[test]
-fn an_ear_that_a_life_from_its_snapshot_tells_the_past_hears_what_it_hears_in_a_replay() {
-  let at = place("hearing");
-  let (record, again) = (at.join("record.jsonl"), at.join("again.jsonl"));
-  let open = |record: &Path, snapshot: bool, heard: &Rc<RefCell<Vec<String>>>| {
-    let record = Some(record.display().to_string());
-    let opening = Opening { snapshot: Some(snapshot), record, ..opening(&at, true) };
-    opening.boot([("listening", listening("chain2", heard.clone()))]).unwrap().0
-  };
-  let mut first = open(&record, true, &Rc::default());
-  // A message on the thread of a prompt stands on that prompt, and the chain of that prompt names it alone.
-  let word = "side = chain('side')\nasked = prompt(None, 'ask', to=OPERATOR, on=side)\n\
-    more = prompt(None, 'more', on=asked)\nclose(None, more)\nclose(None, asked)\nclose(1)";
-  assert_eq!(closed(&mut first, word).as_ref().as_int(), Some(1));
-  drop(first);
-  for end in ["", ".log", ".snapshot"] {
-    fs::copy(format!("{}{end}", record.display()), format!("{}{end}", again.display())).unwrap();
-  }
-  let (told, replayed) = (Rc::default(), Rc::default());
-  let restored = open(&record, true, &told);
-  let replay = open(&again, false, &replayed);
-  assert!(restored.restored() && !replay.restored());
-  assert!(replayed.borrow().iter().any(|one| one == "tell prompt2"), "{:?}", replayed.borrow());
-  assert_eq!(*told.borrow(), *replayed.borrow());
-}
-
-#[test]
-fn a_snapshot_that_its_record_outgrew_is_dropped_and_the_life_replays() {
-  let at = place("outgrew");
-  let record = at.join("record.jsonl");
-  let open =
-    || Opening { extensions: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap().0;
-  let mut first = open();
-  closed(&mut first, "x = 1\nclose(x)");
-  drop(first);
-  let snapshot = fs::read(format!("{}.snapshot", record.display())).unwrap();
-  let mut second = open();
-  assert!(second.restored());
-  closed(&mut second, "close(x)");
-  drop(second);
-  fs::write(format!("{}.snapshot", record.display()), snapshot).unwrap();
-  let mut third = open();
-  assert!(!third.restored(), "the record holds entries after those that the snapshot covers");
-  assert_eq!(closed(&mut third, "close(x + 1)").as_ref().as_int(), Some(2));
-}
-
-#[test]
-fn a_life_whose_outside_works_keeps_a_snapshot_and_a_later_life_puts_that_work_to_the_outside_as_a_replay_does()
- {
-  let at = place("works");
-  let (record, again) = (at.join("record.jsonl"), at.join("again.jsonl"));
-  let open = |record: &Path, snapshot: bool| {
-    let record = Some(record.display().to_string());
-    let opening =
-      Opening { extensions: Some(false), snapshot: Some(snapshot), record, ..opening(&at, true) };
-    opening.boot::<String>([]).unwrap().0
-  };
-  let mut first = open(&record, true);
-  let on = Some("chain1".to_owned());
-  drop(first.wait(&["chain1"], verbs::Wait { seconds: Some(60.0), on: on.clone() }).unwrap());
-  drop(first.bash("sleep 30", verbs::Bash { on, ..Default::default() }).unwrap());
-  drop(first);
-  let one = fs::read_to_string(&record).unwrap().lines().count();
-  for end in ["", ".log", ".snapshot"] {
-    fs::copy(format!("{}{end}", record.display()), format!("{}{end}", again.display())).unwrap();
-  }
-  let mut restored = open(&record, true);
-  let mut replayed = open(&again, false);
-  assert!(restored.restored(), "the snapshot covers the work that ran when the life ended");
-  for engine in [&mut restored, &mut replayed] {
-    assert!(engine.pending().unwrap().is_empty(), "the open put that work to the outside again");
-  }
-  drop((restored, replayed));
-  // The record of each life after the first, by the kind and the name of each fact, in no order
-  // since each ear hears the wake in its own order, less what the life from the snapshot reads as
-  // it stands again at its tip.
-  let acts = |record: &Path| {
-    let lines = fs::read_to_string(record).unwrap();
-    let head = |line: &str| line.splitn(3, ',').take(2).collect::<Vec<_>>().join(",");
-    let mut facts: Vec<String> = lines.lines().skip(one).map(head).collect();
-    facts.retain(|fact| !fact.contains("\"stand") && !fact.contains("\"clock"));
-    facts.sort();
-    facts
-  };
-  let (restored, replayed) = (acts(&record), acts(&again));
-  assert!(restored.iter().any(|one| one == "[[\"started\",\"wait1\""), "{restored:?}");
-  assert_eq!(restored, replayed, "both lives go on with the same facts");
-}
-
 #[test]
 fn a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_the_command_with_no_wake()
  {
@@ -426,7 +259,6 @@ fn a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_t
     roster: Some(vec!["claude-cli:opus".to_owned()]),
     answer: Some(streams),
     extensions: Some(false),
-    snapshot: Some(false),
     ..opening(&at, true)
   };
   let mut first = first.boot::<String>([]).unwrap().0;
@@ -442,14 +274,10 @@ fn a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_t
     futures::executor::block_on(futures::future::select(act, streamed));
   }
   drop(first);
-  let mut later = Opening {
-    extensions: Some(false),
-    snapshot: Some(false),
-    ..scripted(&at, &["close('again')"])
-  }
-  .boot::<String>([])
-  .unwrap()
-  .0;
+  let mut later = Opening { extensions: Some(false), ..scripted(&at, &["close('again')"]) }
+    .boot::<String>([])
+    .unwrap()
+    .0;
   assert!(
     later.pending().unwrap().is_empty(),
     "the open put the work that the stop cut to the outside"
@@ -466,34 +294,6 @@ fn a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_t
     "[x[1] for x in transcript(ROOT) if x[0] == 'started' and x[1] != ROOT and not over(x[1])]";
   let running = later.word(running, vec![]).unwrap().as_ref().py_repr();
   assert_eq!(running, "[]", "no act stays running with no process");
-}
-
-#[test]
-fn a_snapshot_of_another_build_or_on_another_log_is_not_taken_and_the_life_replays() {
-  let at = place("another");
-  let record = at.join("record.jsonl");
-  let open =
-    || Opening { extensions: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap().0;
-  let mut first = open();
-  closed(&mut first, "x = 1\nclose(x)");
-  drop(first);
-  let snapshot = PathBuf::from(format!("{}.snapshot", record.display()));
-  let held = fs::read(&snapshot).unwrap();
-  let line = held.iter().position(|one| *one == b'\n').unwrap();
-  let opening = String::from_utf8(held[..line].to_vec()).unwrap();
-  let build = opening.split("\"build\":\"").nth(1).unwrap().split('"').next().unwrap().to_owned();
-  let other =
-    [opening.replace(&build, &"0".repeat(build.len())).into_bytes(), held[line..].to_vec()]
-      .concat();
-  fs::write(&snapshot, other).unwrap();
-  let second = open();
-  assert!(!second.restored(), "a snapshot of another build is not taken");
-  drop(second);
-  assert!(open().restored(), "the life that replayed kept a snapshot of this build");
-  let log = format!("{}.log", record.display());
-  let text = fs::read_to_string(&log).unwrap();
-  fs::write(&log, text.replacen("\"chain1\"", "\"chain1\" ", 1)).unwrap();
-  assert!(!open().restored(), "a snapshot of another log is not taken");
 }
 
 /// The build that each fact made of a record names, in its order: its engine, and its version when it names one.
@@ -541,7 +341,7 @@ fn a_record_names_the_engine_and_the_version_that_made_it_once_in_a_file_of_line
 fn a_record_that_names_no_engine_replays_as_before_and_names_none() {
   let at = place("unnamed");
   let record = at.join("record.jsonl");
-  let open = || Opening { extensions: Some(false), snapshot: Some(false), ..opening(&at, true) };
+  let open = || Opening { extensions: Some(false), ..opening(&at, true) };
   let mut first = open().boot::<String>([]).unwrap().0;
   closed(&mut first, "x = 1\nclose(x)");
   drop(first);
@@ -571,10 +371,8 @@ fn made_of(engine: &str, version: i64) -> String {
 /// A record of one rung that a life of a test kept, and the text of the record with its fact made changed.
 fn made_elsewhere(at: &Path, made: &str) -> (PathBuf, String) {
   let record = at.join("record.jsonl");
-  let mut first = Opening { extensions: Some(false), snapshot: Some(false), ..opening(at, true) }
-    .boot::<String>([])
-    .unwrap()
-    .0;
+  let mut first =
+    Opening { extensions: Some(false), ..opening(at, true) }.boot::<String>([]).unwrap().0;
   closed(&mut first, "x = 1\nclose(x)");
   drop(first);
   let ours = made_of(&world::engine(), world::VERSION);
@@ -590,7 +388,7 @@ fn a_record_of_another_engine_of_the_same_version_replays_and_goes_on() {
   let at = place("same-version");
   let made = made_of(&"0".repeat(64), world::VERSION);
   let (record, _) = made_elsewhere(&at, &made);
-  let open = || Opening { extensions: Some(false), snapshot: Some(false), ..opening(&at, true) };
+  let open = || Opening { extensions: Some(false), ..opening(&at, true) };
   let mut later = open().boot::<String>([]).unwrap().0;
   assert_eq!(closed(&mut later, "close(x + 1)").as_ref().as_int(), Some(2));
   drop(later);
@@ -645,7 +443,6 @@ fn the_boot_of_a_life_asks_the_claude_command_line_its_models_once_and_a_later_s
     claude: Some(bin.display().to_string()),
     roster: Some(vec!["claude-cli:nova".to_owned()]),
     extensions: Some(false),
-    snapshot: Some(false),
     ..opening(&at, true)
   }
   .boot::<String>([])
@@ -674,7 +471,6 @@ fn a_life_opens_when_its_actor_and_a_roster_name_left_the_catalog_and_tells_each
   let at = place("catalog-left");
   let (mut engine, _) = Opening {
     extensions: Some(false),
-    snapshot: Some(false),
     roster: Some(vec!["claude-cli:opus".to_owned(), "claude-cli:gone".to_owned()]),
     actor: Some("claude-cli:vanished/high".to_owned()),
     ..scripted(&at, &[])
@@ -707,7 +503,6 @@ fn a_stand_reloads_provider_settings_and_a_refused_reload_keeps_the_life() {
   fs::write(&path, r#"{"providers":{"claude-cli":false,"local":false}}"#).unwrap();
   let (mut engine, _) = Opening {
     extensions: Some(false),
-    snapshot: Some(false),
     roster: None,
     actor: Some("bench:one".to_owned()),
     ..scripted(&at, &["close(23)", "close(29)"])
@@ -902,33 +697,30 @@ fn a_replay_of_work_shows_each_file_of_an_extension_as_the_rung_of_its_read_then
 
 #[test]
 #[ignore = "a measure, which a person runs in release"]
-fn measure_how_long_a_life_opens_from_its_snapshot_and_by_a_replay() {
-  let open = |at: &Path, snapshot: bool| {
-    let opening = Opening { snapshot: Some(snapshot), ..scripted(at, &[]) };
-    opening.boot::<String>([]).unwrap().0
-  };
+fn measure_how_long_a_life_opens_from_its_checkpoint_and_by_a_replay() {
+  let open = |at: &Path| scripted(at, &[]).boot::<String>([]).unwrap().0;
   let number = |name: &str, or: usize| -> usize {
     std::env::var(name).ok().and_then(|one| one.parse().ok()).unwrap_or(or)
   };
   let (n, size, tail) = (number("RUNGS", 200), number("CHARS", 0), number("TAIL", 20));
   let word = |name: &str, i: usize| match size {
     0 => format!("{name}{i} = [{i}] * 50\nclose(len({name}{i}))"),
-    // A rung that closes with a large text weighs on the record, the log and the snapshot, as a
+    // A rung that closes with a large text weighs on the record, the log and the checkpoint, as a
     // command does.
     _ => format!("{name}{i} = '{i} ' * {}\nclose({name}{i})", size / 2),
   };
   // One record that a life of n rungs made, and one where that life ended with its checkpoint and a
-  // later life added a tail of TAIL rungs: each later life opens from the snapshot that the last
-  // life kept as it ended, from the checkpoint and the tail, or by a replay of the whole record.
+  // later life added a tail of TAIL rungs: a later life replays the first whole, and opens on the
+  // second from the checkpoint and the tail.
   let (whole, cut) = (place("measure"), place("measure-checkpoint"));
   for at in [&whole, &cut] {
-    let mut engine = open(at, true);
+    let mut engine = open(at);
     for i in 0..n {
       closed(&mut engine, &word("x", i));
     }
     if **at == *cut {
       engine.checkpoint().unwrap();
-      engine = open(at, true);
+      engine = open(at);
       for i in 0..tail {
         closed(&mut engine, &word("y", i));
       }
@@ -938,26 +730,17 @@ fn measure_how_long_a_life_opens_from_its_snapshot_and_by_a_replay() {
     drop(engine.wait(&["chain1"], wait).unwrap());
     drop(engine);
   }
-  let timed = |at: &Path, snapshot: bool| {
-    let t = std::time::Instant::now();
-    let engine = open(at, snapshot);
-    let spent = t.elapsed();
-    assert_eq!(engine.restored(), snapshot);
-    spent
-  };
   for at in [&whole, &cut] {
     let kept = world::kept(at.join("record.jsonl")).unwrap();
     let after = kept.len() - crate::checkpoint::last(&kept).map_or(0, |one| one + 1);
     let bytes = fs::metadata(at.join("record.jsonl")).unwrap().len();
-    // A life that a checkpoint cut keeps no snapshot, so that record opens from its checkpoint
-    // alone.
-    let snapshot = fs::metadata(at.join("record.jsonl.snapshot")).map(|one| one.len()).ok();
-    let from = snapshot.map(|_| timed(at, true));
+    let t = std::time::Instant::now();
+    let engine = open(at);
+    let spent = t.elapsed();
+    drop(engine);
     eprintln!(
-      "rungs {n}, tail {tail}, entries {}, {after} to replay, record {bytes} bytes, snapshot {snapshot:?} bytes: \
-       from the snapshot {from:?}, with no snapshot {:?}",
-      kept.len(),
-      timed(at, false)
+      "rungs {n}, tail {tail}, entries {}, {after} to replay, record {bytes} bytes: open {spent:?}",
+      kept.len()
     );
   }
 }
@@ -1634,11 +1417,7 @@ fn facts(engine: &mut Engine) -> Vec<String> {
 fn a_config_that_turns_the_gate_off_runs_a_word_that_the_gate_refuses_and_its_replay_with_the_gate_on_holds_the_same_facts()
  {
   let on = place("gate-on");
-  let open = |at: &Path, keeps: bool| Opening {
-    extensions: Some(false),
-    snapshot: Some(false),
-    ..opening(at, keeps)
-  };
+  let open = |at: &Path, keeps: bool| Opening { extensions: Some(false), ..opening(at, keeps) };
   let (mut engine, _) = open(&on, false).boot::<String>([]).unwrap();
   let refused = rung(&mut engine, MISTYPED).unwrap_err();
   assert!(refused.to_string().contains("int"), "the gate on refuses the word: {refused}");

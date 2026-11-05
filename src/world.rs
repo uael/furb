@@ -38,7 +38,6 @@ pub(crate) use bash::{Group, grouped};
 pub use bash::{bash, program, shell};
 pub use fetch::fetch;
 pub use files::{CONFIG, files};
-pub(crate) use log::continued;
 pub use log::{log, logged};
 pub use operator::{Asked, SHAPES, Shape, answered, answers, named};
 pub(crate) use provider::search::spawned;

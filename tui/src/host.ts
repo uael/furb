@@ -325,14 +325,14 @@ const warn = (kind: string, line: string | undefined): void => {
 };
 
 /** The free space under which the host tells its windows that the disk is nearly full, in bytes: 2 GiB, or what
- * FURB_DISK_WARN says. A full disk stops the record, the log and the snapshot, so the host says so before it is full. */
+ * FURB_DISK_WARN says. A full disk stops the record and the log, so the host says so before it is full. */
 const LOW = Number(process.env.FURB_DISK_WARN ?? 2 * 1024 ** 3);
 
 /** How long the host waits between two looks at the disk, in milliseconds. */
 const EVERY = Number(process.env.FURB_HOST_WATCH ?? 30000);
 
 /** The size of the files of the folder of the sessions of a project over which the host tells its windows, in bytes:
- * 10 GiB, or what FURB_SESSIONS_WARN says. A record, its log and its snapshot grow for as long as a life lives, and
+ * 10 GiB, or what FURB_SESSIONS_WARN says. A record and its log grow for as long as a life lives, and
  * nothing else removes them. */
 const SESSIONS = Number(process.env.FURB_SESSIONS_WARN ?? 10 * 1024 ** 3);
 
@@ -368,7 +368,7 @@ const watch = (): void => {
     warn(
       "disk",
       free < LOW
-        ? `Only ${(free / 1e9).toFixed(1)} GB is free on the disk of this record. A full disk stops the record, the log and the snapshot. Free some space soon.`
+        ? `Only ${(free / 1e9).toFixed(1)} GB is free on the disk of this record. A full disk stops the record and the log. Free some space soon.`
         : undefined,
     );
   } catch {}

@@ -4,8 +4,7 @@
 //! a question in the place of an ear of the crate, or wraps it.
 //!
 //! Every life hears the ear of the extensions and the ear of each official extension, whatever it enables, since a
-//! record is made again by running its words, or loaded from the snapshot that a run of those words made on the same
-//! record, the same build and the same ears, which the life checks against the record: a life whose host turns the
+//! record is made again by running its words: a life whose host turns the
 //! extensions off enables nothing new, and runs what its record enables all the same. The ears are named as every host names them, so the record of one
 //! host opens in another.
 
@@ -26,7 +25,6 @@ use crate::{
   Ear, Engine, Fault, Object, checkpoint,
   ear::{hear, hearing, lasting},
   extension::{self, Places, skills::skills},
-  snapshot::{self, Keeper},
   world::{self, Catalog, Retries, Scratch, Writes, mcp::mcp},
 };
 
@@ -145,10 +143,6 @@ pub struct Opening {
   )]
   #[cfg_attr(feature = "python", pyo3(default))]
   pub retrying: Option<Retrying>,
-  /// Whether the life opens from the snapshot of its record when the snapshot agrees with the record, and keeps one
-  /// when it keeps its record; true when unsaid.
-  #[cfg_attr(feature = "python", pyo3(default))]
-  pub snapshot: Option<bool>,
   /// A function of the host that is told each report of the life that no model reads, one line each; the stderr of
   /// this process when unsaid.
   #[cfg_attr(feature = "typescript", napi(ts_type = "(line: string) => void"))]
@@ -172,7 +166,7 @@ impl Opening {
   /// and the files of the record are made again in one that is missing.
   pub fn parts(self) -> Result<(Vec<Object>, Ears), Fault> {
     let prepared = self.prepared()?;
-    self.parted(false, prepared).map(|(record, ears, _)| (record, ears))
+    self.parted(prepared)
   }
 
   /// Whether the life keeps what it says to its record, under the lease of the store.
@@ -189,19 +183,9 @@ impl Opening {
     }
   }
 
-  /// The names of the ears of the crate, in the order of boot.
-  fn names(&self) -> Vec<String> {
-    let mut names =
-      vec!["provider", "extensions", "skills", "mcp", "fetch", "files", "bash", "time"];
-    if self.keeps() {
-      names.extend(["store", "log"]);
-    }
-    names.into_iter().map(str::to_owned).collect()
-  }
-
-  /// The record and the ears of the crate, as [`Opening::parts`] gives them, with an ear of the log that writes it on
-  /// after the lines that it holds when the life is `continued` from a snapshot.
-  fn parted(self, continued: bool, prepared: Prepared) -> Result<(Vec<Object>, Ears, bool), Fault> {
+  /// The record and the ears of the crate, as [`Opening::parts`] gives them, on what the life
+  /// waited for.
+  fn parted(self, prepared: Prepared) -> Result<(Vec<Object>, Ears), Fault> {
     let works = self.works();
     let keeps = self.keeps != Some(false) && works;
     let Prepared { places, extensions, provider, crossed, .. } = prepared;
@@ -211,12 +195,8 @@ impl Opening {
       (None, _) => (Vec::new(), None),
     };
     record.extend(crossed);
-    let cut = checkpoint::last(&record).is_some();
     // The log reads the record whole, so a life after a checkpoint writes on after the log of the lives before it.
-    let logs = self.record.as_ref().filter(|_| keeps).map(|path| match continued && !cut {
-      true => world::continued(path, record.len()),
-      false => world::log(path, &record),
-    });
+    let logs = self.record.as_ref().filter(|_| keeps).map(|path| world::log(path, &record));
     let record = checkpoint::booted(record);
     let log = self.log.as_ref().map(|log| log.0.clone());
     let told = |line: &str| match &log {
@@ -277,7 +257,7 @@ impl Opening {
     ];
     ears.extend(store.map(|store| ("store", store)));
     ears.extend(logs.map(|log| ("log", log)));
-    Ok((record, ears.into_iter().map(|(name, ear)| (name.to_owned(), ear)).collect(), cut))
+    Ok((record, ears.into_iter().map(|(name, ear)| (name.to_owned(), ear)).collect()))
   }
 
   /// What the life waits for before it boots: the tail of another build carried, the extensions
@@ -378,16 +358,11 @@ impl Opening {
     Ok(provider)
   }
 
-  /// The life, booted on the ears of the host and then on the ears of the crate, and the record it opened on. A life
-  /// whose record drifted is refused, since it would keep nothing more.
-  ///
-  /// A life opens from the snapshot of its record when the snapshot agrees with the record, its log, this build and
-  /// these ears, as [`crate::snapshot`] says, and stands again at its tip, as boot does; else it replays the record.
+  /// The life, booted on the ears of the host and then on the ears of the crate, and the record it
+  /// opened on: the entries of its last checkpoint and those after it, as [`checkpoint::booted`]
+  /// gives them. A life whose record drifted is refused, since it would keep nothing more.
   /// A life that does work then puts the work that an earlier life left to the outside again, as
   /// [`Engine::resume`] says, so no act of the record stays running with no process.
-  /// A life that keeps its record keeps its snapshot when it ends. A snapshot
-  /// that agrees and that the ears of this host cannot take, as an ear that speaks at its birth, is dropped, and the
-  /// life is refused, so the next life on the record replays.
   pub fn boot<N: Into<String>>(
     self,
     host: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
@@ -424,51 +399,13 @@ impl Opening {
     host: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
     prepared: Prepared,
   ) -> Result<(Engine, Vec<Object>), Fault> {
-    let host: Vec<(String, Box<dyn Ear>)> =
-      host.into_iter().map(|(name, ear)| (name.into(), ear)).collect();
-    let mut names: Vec<String> = host.iter().map(|(name, _)| name.clone()).collect();
-    names.extend(self.names());
-    let build = snapshot::build(&names);
-    let (keeps, snapshots, works) = (self.keeps(), self.snapshot != Some(false), self.works());
-    let path = self.record.clone().filter(|_| snapshots).map(PathBuf::from);
-    let restore = path.as_ref().and_then(|path| snapshot::restore(path, &build));
+    let works = self.works();
     let gated = prepared.gated;
-    let (record, ears, cut) = self.parted(restore.is_some() && keeps, prepared)?;
-    let ears = host.into_iter().chain(ears);
-    let mut engine = match restore {
-      // A life that goes on from a checkpoint boots on more entries than its record holds, and keeps no snapshot.
-      // A record that parks work replays: the park stands in front of the ears of a life that booted, which a snapshot
-      // of an earlier life lacks.
-      Some(restore)
-        if restore.entries == record.len()
-          && !cut
-          && crate::engine::looping(&record).is_empty() =>
-      {
-        let opened =
-          Engine::from_snapshot(&record, ears, &restore.table, restore.sand, &restore.past, gated)
-            .and_then(|mut engine| {
-              let on = vec![("on", Object::string("chain1"))];
-              engine.verb("stand", vec![], on).map(|_| engine)
-            });
-        match (opened, &path) {
-          (Ok(engine), _) => engine,
-          (Err(fault), Some(path)) if keeps => {
-            snapshot::dropped(path);
-            return Err(fault);
-          }
-          (Err(fault), _) => return Err(fault),
-        }
-      }
-      Some(restore) if !cut && restore.entries != record.len() => {
-        return Err(Fault::refused("the record changed while the life opened on its snapshot"));
-      }
-      _ => Engine::gated(record.clone(), ears, gated)?,
-    };
+    let (record, ears) = self.parted(prepared)?;
+    let host = host.into_iter().map(|(name, ear)| (name.into(), ear));
+    let mut engine = Engine::gated(record.clone(), host.chain(ears), gated)?;
     if let Some(no) = engine.raised() {
       return Err(no.clone());
-    }
-    if let Some(path) = path.filter(|_| keeps && !cut) {
-      engine.keep(Keeper::new(path, build));
     }
     // A resume returns to the state at the tip of the record, so the work that the stop cut goes
     // on with no wake.

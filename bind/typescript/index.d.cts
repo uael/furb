@@ -485,11 +485,6 @@ export interface Opening {
   /** A function of the host that is told each retry of a call of a model, before its wait. */
   retrying?: (rung: string, chain: string, attempt: number, most: number, seconds: number, why: string) => void
   /**
-   * Whether the life opens from the snapshot of its record when the snapshot agrees with the record, and keeps one
-   * when it keeps its record; true when unsaid.
-   */
-  snapshot?: boolean
-  /**
    * A function of the host that is told each report of the life that no model reads, one line each; the stderr of
    * this process when unsaid.
    */

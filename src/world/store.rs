@@ -387,10 +387,6 @@ impl<S: Store> Hooks for Rc<RefCell<Held<S>>> {
     self.borrow_mut().synced();
     Ok(())
   }
-
-  fn behind(&self, _: &dyn Ear) -> bool {
-    self.try_borrow().map_or(true, |held| held.fault.is_some())
-  }
 }
 
 /// A store that a box holds is a store, so a record opens in the store that its format gives.
