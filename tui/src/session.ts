@@ -632,7 +632,10 @@ export class Session extends EventEmitter {
   async rename(name: string): Promise<boolean> {
     const said = name.trim();
     const before = this.sessionName;
+    const held = [this.legacyName, this.keptName];
     this.renamed = true;
+    this.legacyName = undefined;
+    this.keptName = said;
     this.sessionName = said || basename(this.host.directory);
     this.emit("change");
     const word = renameWord(said);
@@ -641,6 +644,7 @@ export class Session extends EventEmitter {
       return true;
     } catch (error) {
       this.renamed = false;
+      [this.legacyName, this.keptName] = held;
       this.sessionName = before;
       this.notice = `The name was not kept: ${error instanceof Error ? error.message : String(error)}`;
       this.emit("change");
