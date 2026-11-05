@@ -823,8 +823,8 @@ test("a worktree belongs to the workspace of its main checkout, with its session
     expect(await library.add(b)).toBe(group);
     expect(await library.add(main)).toBe(group);
     expect(library.groups.length).toBe(1);
-    const inA = await library.create(group, "in a", undefined, a);
-    const inB = await library.create(group, "in b", undefined, b);
+    const inA = await library.create(group, "in a", a);
+    const inB = await library.create(group, "in b", b);
     const inMain = await library.create(group, "in main");
     expect(dirname(inA.path)).toBe(join(a, ".furb/sessions"));
     expect(dirname(inB.path)).toBe(join(b, ".furb/sessions"));
@@ -882,8 +882,8 @@ test("the sidebar shows a checkout with its two worktrees as one workspace, and 
     const group = await library.add(a);
     await library.add(b);
     await library.create(group, "main work");
-    await library.create(group, "fix", undefined, a);
-    await library.create(group, "review", undefined, b);
+    await library.create(group, "fix", a);
+    await library.create(group, "review", b);
     const { frame, left } = await sidebar(library);
     const lines = (await frame()).map((line) => line.slice(left).trimEnd());
     const text = lines.join("\n");

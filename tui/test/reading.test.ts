@@ -6,7 +6,7 @@ import { createTestRenderer } from "@opentui/core/testing";
 import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { Preferences } from "../src/preferences.ts";
-import { type Reading, reads } from "../src/reading.ts";
+import { type Reading, reads, UNRESUMABLE } from "../src/reading.ts";
 import { Workspaces } from "../src/workspaces.ts";
 import { ended } from "./ended.ts";
 
@@ -46,7 +46,7 @@ test("a record whose fact drifts opens to read, with what it kept, and a dialog 
       expect(bash?.done).toBe(true);
       expect(session.acts.find((act) => act.id === ran)?.by).toBe("operator");
       expect(await session.engine.bash("ls").catch((error: Error) => error.message)).toBe(
-        "This record is open to read, so nothing runs on it. Its replay drifts on the build that made it, which is a defect.",
+        `This record is open to read, so nothing runs on it. ${UNRESUMABLE}`,
       );
       const screen = await createTestRenderer({ width: 120, height: 40, exitSignals: [] });
       const app = new App(screen.renderer, session, { quit() {}, workspaces: library });
@@ -54,13 +54,14 @@ test("a record whose fact drifts opens to read, with what it kept, and a dialog 
         // The dialog opens with the view, before any frame.
         await screen.renderOnce();
         const frame = screen.captureCharFrame();
-        expect(frame).toContain("This record does not replay");
+        expect(frame).toContain("This record does not resume");
         expect(frame).toContain("Read it");
-        // A same-build drift is a defect: the dialog says so, names the record, and offers no carry.
-        expect(frame).toContain("This is a defect");
+        // A drift is a defect: the dialog says so in one line that links its issue, names the record, and offers no
+        // way to fork it.
+        expect(frame).toContain("which is a defect of furb");
+        expect(frame).toContain("issues/988");
         expect(frame).toContain("Record: ");
-        expect(frame).not.toContain("Start a new life from it");
-        expect(frame).not.toContain("A new life carries");
+        expect(frame).not.toContain("new life");
         expect(frame).toContain(`Made by: version ${reading?.version}`);
         expect(frame).toContain(`This build: version ${reading?.current}`);
         expect(frame).toContain("its replay drifts");
@@ -76,11 +77,12 @@ test("a record whose fact drifts opens to read, with what it kept, and a dialog 
   }
 });
 
-test("a record open to read offers a new life only when another build made it", () => {
+test("a record open to read names the defect and offers no new life, whatever build made it", () => {
   const same = { version: 3, current: 3, made: "a", engine: "a" } as Reading;
   const other = { version: 2, current: 3, made: "a", engine: "b" } as Reading;
-  expect(reads(same)).toContain("which is a defect");
-  expect(reads(same)).not.toContain("Start a new life");
-  expect(reads(other)).toContain("Start a new life from it to go on.");
-  expect(reads(other)).not.toContain("defect");
+  for (const one of [same, other]) {
+    expect(reads(one)).toContain(UNRESUMABLE);
+    expect(reads(one)).toContain("https://github.com/uael/furb/issues/988");
+    expect(reads(one)).not.toContain("new life");
+  }
 });

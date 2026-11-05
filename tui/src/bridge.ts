@@ -29,7 +29,7 @@ import {
 } from "furb";
 import { type Compaction, type Measure, measureOf } from "furb/life";
 import type { Config } from "furb/protocol";
-import { type Choices, daemon, type Listener, RemoteLife } from "./client.ts";
+import { type Choices, daemon, type Listener, Refused, RemoteLife } from "./client.ts";
 import { clock } from "./clock.ts";
 import { demoModels } from "./demo/answer.ts";
 import { expandHome } from "./files.ts";
@@ -37,7 +37,7 @@ import { lineCounts } from "./format.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { type ProviderChoice } from "./providers.ts";
 import { dispatchesFrom } from "./queue.ts";
-import { type Carry, isRecorded, Reader, type Reading, row } from "./reading.ts";
+import { isRecorded, Reader, type Reading, row } from "./reading.ts";
 import { branchChanges, net } from "./review.ts";
 import type { ActRow, FollowUp } from "./session.ts";
 
@@ -97,6 +97,7 @@ export type Engine = Pick<
   | "result"
   | "outcome"
   | "peek"
+  | "get"
   | "pause"
   | "wake"
   | "cancel"
@@ -180,6 +181,10 @@ class ReadLife extends EventEmitter {
   }
   async peek(id: string): Promise<unknown> {
     return this.reader.outcome(id).value;
+  }
+  /** The fact that opened an act, as the record holds it, or nothing for an act that it never opened. */
+  async get(id: string): Promise<unknown> {
+    return this.reader.facts.find(([, about]) => about === id) ?? null;
   }
   async transcript({ on }: { on?: string } = {}): Promise<Fact[]> {
     return this.reader.transcript({ on });
@@ -323,7 +328,11 @@ export class HostView extends EventEmitter {
     stand: () => view.life.stand(),
     result: (id) => view.life.result(id),
     outcome: (id) => view.life.outcome(id),
-    peek: (id) => view.life.peek(id),
+    // An act that is not done peeks as nothing, as peek of the engine gives its waiting value, None, where the daemon
+    // refuses the peek. The daemon is asked, since the window may hear the end of an act later than the life made it.
+    peek: (id) =>
+      view.life.peek(id).catch((error: unknown) => (error instanceof Refused ? null : Promise.reject(error))),
+    get: (id) => view.life.get(id),
     pause: (...args) => view.life.pause(...args),
     wake: (id) => view.life.wake(id),
     cancel: (...args) => view.life.cancel(...args),
@@ -778,11 +787,6 @@ export class HostView extends EventEmitter {
   }
   async source(): Promise<string> {
     return ENGINE;
-  }
-  /** What a new life from the record open to read carries, and the first word that binds it. */
-  async carry(): Promise<Carry> {
-    if (!(this.life instanceof ReadLife)) throw new Error("This life is open, so it carries nothing.");
-    return this.life.reader.carry();
   }
   answer = (id: string, value: string) => this.life.answer(id, value);
   /** The words of the operator in place of each value that a question offers, which close it as Refused. */

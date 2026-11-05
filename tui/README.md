@@ -95,14 +95,11 @@ Sessions are saved under `.furb/sessions` in the selected directory. The `.furb`
 An unfinished session opens paused and offers a resume choice. The native engine replays completed work from the
 record.
 
-A record whose replay drifts, as a record that a build of another engine or version made before its first checkpoint,
-opens to read: the TUI shows what the record kept, runs no word again, asks no model, leaves the record and its log as
-they were, and refuses each command that would change the life. A dialog gives the build that made the record and
-this build, and offers two choices:
-
-- **Read it** shows the record. The footer says "Read only" and offers a new life, and the composer is off.
-- **Start a new life from it** opens a new session whose first word carries, as text, the turns of the root chain
-  and the files that the record wrote. It asks no prompt again.
+A record whose replay drifts opens to read only, since this build cannot resume it: the TUI shows what the record
+kept, runs no word again, asks no model, leaves the record and its log as they were, and refuses each command that would
+change the life. A drift is a defect of furb, which [#988](https://github.com/uael/furb/issues/988) tracks, so the TUI
+gives no way to fork the record into a new life. A dialog says so in one plain line that links #988, and gives the build
+that made the record and this build. The footer says "Read only" with the same line, and the composer is off.
 
 ⌃W lists the workspaces and their sessions, each with its state, save time, cost, and record size. It reads unfinished
 work through native replay without locking or changing the saved record. The list shows at once, and each saved session

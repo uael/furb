@@ -1,4 +1,4 @@
-from furb.engine import Act, act, automatic, chain, controlled, operated, over, peek, prompt, question, scope
+from furb.engine import Act, act, automatic, chain, controlled, operated, over, peek, prompt, scope
 
 naming = """name_session() names the session once, at the first message of the operator. It asks a name of the actor that
 automatic() gives, on a chain of its own labelled naming, and with no such actor, or
@@ -24,7 +24,7 @@ def name_session(on: str = "") -> Act:
     yield "started", id
     here = scope(id)
     first = yield {id, "prompt"}
-    while not (question(("prompt", first[1])) and operated(first[2])):
+    while not (first[0] == "prompt" and operated(first[2])):
       first = yield {id, "prompt"}
     message = str(first[5])
     actor_of = automatic()

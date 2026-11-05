@@ -321,9 +321,12 @@ export const details = part({
     step: string,
     display: number,
     room: number,
-  ): { number: number; label: Part[]; tail?: Part[] } {
+  ): { number: number; label: Part[]; tail?: Part[]; waits: boolean } {
     const w = this.session;
     const stream = w.host.streams.get(step);
+    // A rung thinks only while a reply of it runs, and else waits for its turn behind the reply of another rung.
+    const act = w.actOf(step);
+    const waits = act?.kind === "rung" && !act.asking && !stream;
     // The lines that the model finished stand above as python, under the label of the word, so the row takes the
     // number after them.
     const { lines, tail } = writing(stream);
@@ -333,17 +336,27 @@ export const details = part({
     const label: Part[] = done
       ? []
       : [
-          [writerOf(w.actOf(step)), c.muted, bold],
-          [` · thinking${ms >= 1000 ? ` ${spell(Math.floor(ms / 1000) * 1000)}` : ""}`, c.faint],
+          [writerOf(act), c.muted, bold],
+          [
+            waits
+              ? " · waits for its turn"
+              : ` · thinking${ms >= 1000 ? ` ${spell(Math.floor(ms / 1000) * 1000)}` : ""}`,
+            c.faint,
+          ],
         ];
     const text = stream?.text.trim() ? clip(tail, room - STATE) : "";
-    return { number: display + done, label, ...(text || done ? { tail: [[text, c.muted] as Part] } : {}) };
+    return {
+      number: display + done,
+      label,
+      waits,
+      ...(text || done ? { tail: [[text, c.muted] as Part] } : {}),
+    };
   },
 
   /** The rows of a step while its model works on it: the label of the word until a line is written, then the line
    * that comes, with the loader in the column of the states, which the tick draws again. */
   thinkingRow(step: string, display: number, digits: number, room: number): Gutter {
-    const { number, label, tail } = this.thinkingParts(step, display, room);
+    const { number, label, tail, waits } = this.thinkingParts(step, display, room);
     const rows = (label.length ? 1 : 0) + (tail ? 1 : 0);
     const numbered = tail?.[0]?.[0] ? new Map([[rows - 1, number]]) : new Map<number, number>();
     const all = Array.from({ length: rows }, (_, at) => at);
@@ -354,7 +367,8 @@ export const details = part({
       numbers: numbered,
       colors: new Map(all.map((at) => [at, c.raised])),
       // The loader turns in the column of the states, on the last row, where a line that failed shows its mark.
-      loaders: new Set(rows ? [rows - 1] : []),
+      // A rung that waits for its turn does no work, and no loader turns for it.
+      loaders: new Set(rows && !waits ? [rows - 1] : []),
     });
     // The loader is drawn by each frame, the first one too, so no tick is needed before it shows.
     this.thinkingRows.set(step, {
@@ -363,7 +377,7 @@ export const details = part({
       display,
       room,
       said: saidOf(number, thinkingText(label, tail)),
-      shape: `${rows}:${label.length}:${numbered.size}`,
+      shape: `${rows}:${label.length}:${numbered.size}:${waits}`,
       wrote: number - display,
     });
     return view;
@@ -403,11 +417,12 @@ export const details = part({
     const row = this.thinkingRows.get(step);
     if (!row || row.view.isDestroyed) return;
     if (wrote !== undefined) row.wrote = wrote;
-    const { number, label, tail } = this.thinkingParts(step, row.display, row.room);
+    const { number, label, tail, waits } = this.thinkingParts(step, row.display, row.room);
     const rows = (label.length ? 1 : 0) + (tail ? 1 : 0);
     const numbered = tail?.[0]?.[0] ? 1 : 0;
-    // A row that comes or goes changes the numbers and the colors of the rows, which a new card draws.
-    if (number - row.display !== row.wrote || `${rows}:${label.length}:${numbered}` !== row.shape) {
+    // A row that comes or goes, or a rung that begins to think, changes the numbers, the colors and the loader of the
+    // rows, which a new card draws.
+    if (number - row.display !== row.wrote || `${rows}:${label.length}:${numbered}:${waits}` !== row.shape) {
       this.schedule();
       return;
     }

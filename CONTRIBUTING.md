@@ -91,7 +91,6 @@ contract needs a request of the owner.
 | `src/world/store.rs` | The store: the record on the disk, as a file of lines, one fact on each line with the time the store kept it, or as a database of SQLite, which one process at a time owns, and the engine and the version of the build that made it, which the record names. |
 | `src/world/log.rs` | The log of a life beside its record: every fact that the life said, which `logged` reads while it agrees with the record. |
 | `src/checkpoint.rs` | The checkpoint of a life, at the tip of its record, from which a life of any later build goes on: the fact, the store and the boot, while `gathered` of the engine gives its data. |
-| `src/checkpoint/tail.rs` | The checkpoint that carries as data the facts that a build of another engine or of another version said after the last checkpoint, which a life writes before it opens, so it replays none of them. |
 | `src/world/reader.rs` | The reader of a record with no life, which `retold` gives, so a record of any engine opens to read. |
 | `src/world/operator.rs` | The rules by which every console reads what the operator answers. |
 | `src/world/provider.rs`, `src/world/provider/` | The provider of models, which [The provider](#the-provider) gives file by file. |

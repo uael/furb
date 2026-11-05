@@ -260,10 +260,15 @@ type Request = { id: number } & Verb;
 /** What hears an event of an emitter. */
 export type Listener = Parameters<EventEmitter["on"]>[1];
 
-/** The one connection of this window to the daemon of its machine, made at its first use. */
+/** The one connection of this window to the daemon of its machine, made at its first use. A cache of furb named
+ * again, as a scenario of the tests names one of its own, takes a connection to the daemon of that cache. */
 let shared: Daemon | undefined;
 export function daemon(): Daemon {
-  shared ??= new Daemon();
+  const folder = daemonFolder();
+  if (shared?.folder !== folder) {
+    shared?.close();
+    shared = new Daemon(folder);
+  }
   return shared;
 }
 

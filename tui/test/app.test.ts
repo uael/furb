@@ -375,6 +375,34 @@ test("the block of a word whose model works holds the loader in the column of th
     await session.submit("/cancel");
   }));
 
+// The life of 11-05 showed "thinking" under each thread whose rung waited for its turn behind the reply of another
+// rung, as if each model worked at once.
+test("the block of a rung whose model is not asked yet says that it waits for its turn, with no loader, and the rung that is asked thinks", () =>
+  composing(
+    async ({ session, app, frame }) => {
+      app.composer.setText("Think until I cancel.");
+      await app.submit();
+      await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
+      await session.submit("/newthread");
+      app.composer.setText("Think until I cancel, too.");
+      await app.submit();
+      await until(
+        session,
+        () => session.activity.filter((act) => act.kind === "rung" && !act.done).length === 2,
+      );
+      await session.refresh();
+      const rows = (await frame()).split("\n");
+      const thinks = rows.filter((row) => row.includes(" · thinking"));
+      const waits = rows.filter((row) => row.includes(" · waits for its turn"));
+      expect([thinks.length, waits.length]).toEqual([1, 1]);
+      expect(thinks[0]).toMatch(/[\u2800-\u28ff] +\S+ · thinking/);
+      expect(waits[0]).not.toMatch(/[\u2800-\u28ff]/);
+      await session.submit("/cancel");
+      await session.submit("/cancel");
+    },
+    { width: 120, height: 50 },
+  ));
+
 test("each word stands in a block under its label, with the mark of the line that failed at the right of its number, the loader in the place of the number of the line that runs, and what an act came to at the right edge, with no comment mark", () =>
   composing(
     async ({ session, frame }) => {

@@ -125,11 +125,13 @@ for (const width of [80, 160]) {
       try {
         const reading = open.session.host.reading;
         const frame = open.frame();
-        expect(frame).toContain("This record was made by another build");
+        expect(frame).toContain("This record does not resume");
+        expect(frame).toContain("This build cannot resume this record: its replay drifts");
+        expect(frame).toContain("issues/988");
         expect(frame).toContain(`Made by: ${"0".repeat(12)}`);
         expect(frame).toContain(`This build: ${reading?.engine.slice(0, 12)}`);
-        expect(frame).toMatch(/A new life carries \d+ turns? of its root chain and the 1 file/);
-        expect(frame).toContain("Start a new life from it");
+        // A record that cannot resume gives no way to fork it.
+        expect(frame).not.toContain("new life");
       } finally {
         await open.close();
       }
@@ -175,9 +177,8 @@ test("a record open to read says so in its footer and its composer, and shows no
       await open.screen.renderOnce();
       const frame = open.frame();
       expect(open.session.host.reading).toBeDefined();
-      expect(frame).toContain("Read only: its replay drifts");
-      // The replay of this build drifts, which is a defect, so the footer offers no carry.
-      expect(frame).not.toContain("Start a new life");
+      expect(frame).toContain("Read only. This build cannot resume this record");
+      expect(frame).not.toContain("new life");
       expect(frame).not.toMatch(/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/);
       expect(frame).not.toContain("running");
       expect(frame).toContain("not finished when the record ends");
@@ -209,33 +210,6 @@ test("a read leaves the record and the files beside it as they were", async () =
       await open.close();
     }
     expectKept(await folder(record), before);
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-});
-
-test("a new life from a record starts with the turns of its root chain and the files that it wrote", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "furb-carry-"));
-  try {
-    const record = await lived(directory, "drifts");
-    await drifting(record);
-    const open = await shown(record, directory, 120);
-    try {
-      const carry = await open.session.host.carry();
-      expect(carry.turns).toBeGreaterThanOrEqual(2);
-      expect(carry.files).toHaveLength(1);
-      expect(carry.word).toContain("Say hello.");
-      const group = open.library.groupOf();
-      if (!group) throw new Error("No workspace.");
-      const fresh = await open.library.create(group, undefined, carry);
-      expect(fresh.session?.host.reading).toBeUndefined();
-      const kept = await readFile(fresh.path, "utf8");
-      expect(kept).toContain("earlier_files");
-      expect(kept).toContain("Say hello.");
-      expect(kept).toContain("note.txt");
-    } finally {
-      await open.close();
-    }
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -329,26 +303,6 @@ test("a chain that the record does not keep takes its first prompt as its label 
     const two = facts.find((fact) => fact[0] === "chain" && fact[1] === "chain2");
     expect(two?.[2]).toBe("rung1");
     expect(two?.[3]).toBe("chain1");
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-});
-
-test("a record name cannot add Python statements to the word that carries its work", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "furb-carry-name-"));
-  try {
-    const file = join(directory, "facts.jsonl");
-    await writeFile(file, `${JSON.stringify(["chain", "chain1", "operator", "", "root", ""])}\n`);
-    const name = 'earlier\nraise RuntimeError("name is data")';
-    const reader = new Reader(
-      directory,
-      join(directory, name),
-      { made: null, engine: "old", version: null, current: 1, why: "drift", logged: false },
-      file,
-    );
-    const carried = reader.carry().word.split("\n");
-    expect(carried[0]).toContain("\\nraise RuntimeError");
-    expect(carried[1]).toBe("<s:earlier>");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

@@ -61,7 +61,7 @@ import type { Action } from "./keys.ts";
 import { LoomPane } from "./overview.ts";
 import { loadParsers } from "./parsers.ts";
 import { Parts } from "./parts.ts";
-import { readingNote, readOnly, sameBuild } from "./reading.ts";
+import { readingNote, readOnly } from "./reading.ts";
 import type { ActRow, Scroll, Session, View } from "./session.ts";
 import {
   theme as c,
@@ -770,42 +770,21 @@ export class App {
         void this.highlightEditor();
       })
       .catch(session.fail);
-    if (session.host.reading && !session.readingTold) this.readOrRenew();
+    if (session.host.reading && !session.readingTold) this.whyReadOnly();
   }
 
-  /** The dialog of a record that a life refused for a drift, as a record that a build of another version made, which
-   * opens to read: it names the build that made the record and this build, each on a line of its own, says what a new
-   * life from the record carries, and offers to read the record, or to start a new life in its workspace. */
-  readOrRenew(): void {
+  /** The dialog of a record that a life refused for a drift, which opens to read only: it says why in one line, which
+   * names the defect and links its issue, then names the build that made the record and this build, each on a line of
+   * its own. A record that cannot resume gives no way to fork it, since only its replay holds the exact state. */
+  whyReadOnly(): void {
     const reading = this.session.host.reading;
     if (!reading) return;
     this.session.readingTold = true;
     this.openPalette(
-      sameBuild(reading) ? "This record does not replay" : "This record was made by another build",
-      [
-        { label: "Read it", detail: "See what it kept. No word runs again.", run: () => {} },
-        // A record that this build made and whose replay drifts is a defect, and a carry from it loses the module.
-        ...(sameBuild(reading)
-          ? []
-          : [
-              {
-                label: "Start a new life from it",
-                detail: "A new session with its earlier work as text",
-                run: () => this.startFrom(),
-              },
-            ]),
-      ],
+      "This record does not resume",
+      [{ label: "Read it", detail: "See what it kept. No word runs again.", run: () => {} }],
       { note: readingNote(reading, this.session.host.record) },
     );
-  }
-  /** A new life in the workspace of a record open to read, whose first word carries the earlier work of the record as
-   * text. */
-  startFrom(): void {
-    const library = this.options.workspaces;
-    void this.session.host
-      .carry()
-      .then((carry) => library.create(library.groupOf(), undefined, carry))
-      .then(() => {}, this.session.fail);
   }
 
   box(options: BoxOptions = {}): BoxRenderable {
@@ -1070,7 +1049,7 @@ export class App {
     const choosing = this.picking();
     const reading = w.host.reading;
     const [mode, modeColor, placeholder] = reading
-      ? ["Read only", c.faint, readOnly(reading)]
+      ? ["Read only", c.faint, readOnly()]
       : w.editing
         ? ["Edit program", c.warning, "Edit this prompt's Python program"]
         : pending

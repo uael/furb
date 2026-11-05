@@ -1,5 +1,4 @@
 import { closeSync, existsSync, fstatSync, openSync, readSync } from "node:fs";
-import { basename } from "node:path";
 import {
   Activity,
   type Actor,
@@ -27,17 +26,10 @@ export interface Reading {
   /** Whether the facts are those of the log, which holds every fact that the life said, or those that the record
    * kept, with the acts that they name. */
   logged: boolean;
-  /** What a new life from the record carries: the turns of its root chain and the files that its acts wrote. */
-  carries?: { turns: number; files: number };
 }
 
-/** What a new life from a record open to read carries: the turns of the root chain and the files that the record
- * wrote, as the first word of the new life binds them. */
-export interface Carry {
-  turns: number;
-  files: string[];
-  word: string;
-}
+/** The issue that tracks each record that a build cannot resume, whose replay must reach the exact state at its tip. */
+export const RESUME_ISSUE = "https://github.com/uael/furb/issues/988";
 
 /** The build that made a record and this build, as the dialog and the footer name them: an engine by the first twelve
  * characters of its hash, or a version with its engine, or an earlier engine that the record does not name. */
@@ -52,41 +44,26 @@ export function engines(reading: Reading): { made: string; build: string } {
     : { made: theirs ?? "an earlier engine, not named", build: ours };
 }
 
-/** Whether this build made the record, so that its replay drifts on its own. */
-export function sameBuild(reading: Reading): boolean {
-  return reading.version === null ? reading.made === reading.engine : reading.version === reading.current;
-}
+/** The one plain line that says why a record opens to read: this build cannot resume it, since its replay drifts,
+ * which is a defect of furb, whatever build made the record. It links the issue that tracks the defect. A record that
+ * cannot resume gives no way to fork it, since only its replay holds the exact state of its life. */
+export const UNRESUMABLE = `This build cannot resume this record: its replay drifts, which is a defect of furb (${RESUME_ISSUE}).`;
 
 /** The sentence that the footer and the composer of a record open to read say. */
-export function readOnly(reading: Reading): string {
-  return `Read only: ${sameBuild(reading) ? "its replay drifts" : "made by another build"}`;
+export function readOnly(): string {
+  return `Read only. ${UNRESUMABLE}`;
 }
 
-/** The lines of the dialog of a record open to read: each engine on a line of its own, and why it opens to read. A
- * record that this build made drifts on its own, which is a defect: the dialog says so, gives the drift and the path of
- * the record, and carries nothing, since a carry loses the module and is no resume. A record of another build says what a
- * new life carries. */
+/** The lines of the dialog of a record open to read: why it opens to read, each engine on a line of its own, the drift,
+ * and the path of the record. */
 export function readingNote(reading: Reading, record?: string): string[] {
   const { made, build } = engines(reading);
-  const { turns = 0, files = 0 } = reading.carries ?? {};
-  const count = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
-  if (sameBuild(reading))
-    return [
-      `Made by: ${made}`,
-      `This build: ${build}`,
-      "This is a defect: this build made the record, and its replay drifts.",
-      reading.why,
-      ...(record ? [`Record: ${record}`] : []),
-    ];
   return [
+    UNRESUMABLE,
     `Made by: ${made}`,
     `This build: ${build}`,
-    "A replay would drift, so it opens to read. No word runs again.",
-    ...(reading.carries
-      ? [
-          `A new life carries ${count(turns, "turn")} of its root chain and the ${count(files, "file")} that it wrote.`,
-        ]
-      : []),
+    reading.why,
+    ...(record ? [`Record: ${record}`] : []),
   ];
 }
 
@@ -130,10 +107,6 @@ function answerValue(value: unknown): unknown[] | undefined {
   return [items[0], items[1], tupled(items[2]) ?? items[2], items[3]];
 }
 
-/** How many characters of a turn the first word of a new life keeps, and how many it keeps of all turns. */
-const TURN = 1500;
-const BUDGET = 30000;
-
 /** How many characters of a text the reader holds of a fact whose text no view reads whole, and the kinds of fact that
  * it holds whole, since the turns, the program and the rows read their texts. The file holds each fact whole. */
 const HELD = 2000;
@@ -162,12 +135,10 @@ function shortened<T>(value: T): T {
   return (changed ? made : value) as T;
 }
 
-/** What a session that only reads says to a word that would run: a drift of the build that made the record is a defect, so it offers no new life; a record of another build offers one. */
+/** What a session that only reads says to a word that would run: nothing runs on the record, and why. */
 export function reads(reading?: Reading): string {
   const open = "This record is open to read, so nothing runs on it.";
-  return reading && sameBuild(reading)
-    ? `${open} Its replay drifts on the build that made it, which is a defect.`
-    : `${open} Start a new life from it to go on.`;
+  return reading ? `${open} ${UNRESUMABLE}` : open;
 }
 
 /** How many of the last characters of each stream of a command a row carries. */
@@ -236,7 +207,6 @@ export class Reader {
     // rung whose run ended in the facts that the record kept ended with it. A recorded life shows a moment of a life,
     // so its work stands as it stood at that moment.
     if (reading) this.settle();
-    if (reading) reading.carries = this.carries();
     if (reading)
       for (const act of this.activity.acts.values()) {
         // A rung that the record ended, with no run in its facts, has no run left to go on.
@@ -273,60 +243,6 @@ export class Reader {
         asked.call === "covers" ? this.covers(asked.args[0] as Fact, String(asked.args[1])) : null,
       );
     }
-  }
-  /** How many turns of the root chain say something, and how many files the acts of the record wrote. */
-  private carries(): { turns: number; files: number } {
-    return { turns: this.said().length, files: this.written().length };
-  }
-  private said(): [string, string][] {
-    const chain = this.activity.scope(this.root) || this.root;
-    const folded = this.fold(
-      { read: 0, turns: [], told: [], cut: 0 },
-      this.held.get(chain) ?? [],
-      Boolean(this.reading && !this.reading.logged),
-    );
-    return folded.flatMap(([role, text]) =>
-      String(text ?? "").trim() ? [[String(role), String(text)] as [string, string]] : [],
-    );
-  }
-  private written(): string[] {
-    const paths = new Set<string>();
-    for (const act of this.activity.acts.values()) {
-      const path = (act.words[0] as { path?: unknown } | null)?.path;
-      if (act.kind === "write" && typeof path === "string" && !path.includes("://")) paths.add(path);
-    }
-    return [...paths];
-  }
-  /** What a new life from the record carries, and the first word that binds it: the last turns of the root chain, each
-   * cut to a length, up to a budget, and the files that the record wrote. */
-  carry(): Carry {
-    const said = this.said();
-    const files = this.written();
-    const pieces = said.map(([role, text]) => {
-      // The end of a message to the model says what it asked, and the start of an answer says what it did.
-      const user = role === "user";
-      const cut =
-        text.length <= TURN
-          ? text
-          : user
-            ? `[the start is cut at ${TURN} characters]\n${text.slice(-TURN)}`
-            : `${text.slice(0, TURN)}\n[cut at ${TURN} characters]`;
-      return `${user ? "User" : "Assistant"}:\n${cut}`;
-    });
-    let used = 0;
-    let first = pieces.length;
-    while (first > 0 && used + (pieces[first - 1]?.length ?? 0) <= BUDGET)
-      used += pieces[--first]?.length ?? 0;
-    const left = first ? `[${first} earlier turns of the record are left out]\n\n` : "";
-    const body = left + pieces.slice(first).join("\n\n");
-    let name = "earlier";
-    while (body.includes(`</s:${name}>`)) name += "_";
-    const word = [
-      `# The earlier work of the record ${JSON.stringify(basename(this.record))}, which this life carries.`,
-      `<s:${name}>\n${body}\n</s:${name}>`,
-      `earlier_files = ${JSON.stringify(files.slice(0, 200))}`,
-    ].join("\n");
-    return { turns: said.length, files, word };
   }
   /** A recorded life, read from its file: a log of a life whose first line is a header that says so, which the
    * reader shows at the moment where the log ends. */
@@ -494,23 +410,13 @@ export class Reader {
     const chain = this.activity.scope(on) || on;
     const kept = this.turned.get(chain) ?? { read: 0, turns: [], told: [], cut: 0 };
     this.turned.set(chain, kept);
-    return this.fold(kept, this.held.get(chain) ?? [], false);
+    return this.fold(kept, this.held.get(chain) ?? []);
   }
-  /** The turns of the facts of a chain that the fold has not read yet, with the message of each prompt told as a
-   * paragraph when the facts hold no tell, since the facts that a record kept hold the prompts and not the paragraphs
-   * that the engine told. */
-  private fold(kept: Folded, facts: Fact[], prompts: boolean): Turn[] {
+  /** The turns of the facts of a chain that the fold has not read yet. */
+  private fold(kept: Folded, facts: Fact[]): Turn[] {
     for (const fact of facts.slice(kept.read)) {
       const [kind, about] = fact;
-      if (
-        prompts &&
-        kind === "prompt" &&
-        isQuestion("prompt", about) &&
-        typeof fact[5] === "string" &&
-        fact[5]
-      )
-        kept.told.push(fact[5]);
-      else if (kind === "reply" && isQuestion("reply", about)) kept.cut = kept.told.length;
+      if (kind === "reply" && isQuestion("reply", about)) kept.cut = kept.told.length;
       else if (kind === "done" && isQuestion("reply", about) && tupled(fact[3])?.length === 4) {
         kept.turns.push(
           ["user", kept.told.slice(0, kept.cut).join("\n\n"), null, null],

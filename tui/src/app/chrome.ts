@@ -2,7 +2,7 @@ import type { BoxRenderable, RGBA, TextRenderable } from "@opentui/core";
 import { busy, gist } from "furb/life";
 import { shortenHome, shortenHomes } from "../files.ts";
 import { clip, count, modelName, retryLine } from "../format.ts";
-import { readOnly, sameBuild } from "../reading.ts";
+import { readOnly } from "../reading.ts";
 import { statusLabels, views } from "../session.ts";
 import { theme as c, glyph, markOf, spacing as space, spin, threadTone } from "../theme.ts";
 import { bold, type Part, plain, styled } from "../ui.ts";
@@ -332,7 +332,7 @@ export const chrome = part({
       : retry
         ? retryLine(retry, retries.length)
         : w.host.reading
-          ? readOnly(w.host.reading)
+          ? readOnly()
           : w.host.lost
             ? "The life is not open"
             : status === "failed"
@@ -357,9 +357,6 @@ export const chrome = part({
       // A terminal too narrow for the column of the sidebar shows it in place of the feed, which this key does.
       ...(this.renderer.width < 100 && !this.reader
         ? ([["⌃\\", "sidebar", () => this.toggleSidebar()]] as readonly Offer[])
-        : []),
-      ...(w.host.reading && !sameBuild(w.host.reading)
-        ? ([["/new", "Start a new life", () => this.startFrom()]] as readonly Offer[])
         : []),
       ...(group === "" && w.paused
         ? ([["/wake", "wake the chain", () => this.action("/wake")]] as const)
