@@ -69,6 +69,10 @@ pub enum ProtocolError {
   /// A turn or a write for a request of a model that the life does not wait for.
   #[error("no model of the life on the record {life} waits for the turn of the request {ask}")]
   Unasked { life: String, ask: u64 },
+  /// A turn or a write for a request of a model that another peer answers: only the peer that
+  /// opened the life with `answers` speaks for its requests.
+  #[error("another peer answers the request {ask} of a model of the life on the record {life}")]
+  Foreign { life: String, ask: u64 },
   /// A turn for a life whose models no peer answers.
   #[error("no peer answers the models of the life on the record {life}")]
   Answerless { life: String },

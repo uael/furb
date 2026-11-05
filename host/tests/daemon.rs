@@ -664,6 +664,58 @@ mod daemon {
   }
 
   #[tokio::test]
+  async fn a_second_writer_cannot_answer_the_request_of_the_peer_that_answers_the_models() {
+    let at = place();
+    let (local, _daemon) = started(&at, GRACE).await;
+    let (mut window, mut other) = (Window::dialed(&local).await, Window::dialed(&local).await);
+    let life = at.join("a.jsonl").display().to_string();
+    let open = Verb::Open {
+      life: life.clone(),
+      cwd: Some(at.display().to_string()),
+      actor: None,
+      roster: Some(vec!["claude-cli:sonnet".to_owned()]),
+      extensions: None,
+      config: None,
+      claude: None,
+      answers: true,
+      attach: None,
+    };
+    assert_eq!(window.ask(open.clone()).await, Ok(Answer::Done));
+    window.attach(&life).await;
+    assert_eq!(other.ask(open).await, Ok(Answer::Done));
+    other.attach(&life).await;
+    let prompt = Verb::Prompt {
+      life: life.clone(),
+      shape: "str".to_owned(),
+      message: "Say ok.".to_owned(),
+      to: None,
+      on: None,
+    };
+    let Ok(Answer::Act(id)) = other.ask(prompt).await else { panic!("no prompt") };
+    let Frame::Ask { ask, .. } = window.until(|one| matches!(one, Frame::Ask { .. })).await else {
+      panic!("no ask")
+    };
+    let foreign = Err(ProtocolError::Foreign { life: life.clone(), ask });
+    let wrote = Verb::Wrote {
+      life: life.clone(),
+      ask,
+      text: "close('taken')".to_owned(),
+      thinking: String::new(),
+    };
+    assert_eq!(other.ask(wrote).await, foreign);
+    let turn = Some(json!(["assistant", "close('taken')", [10, 10, 0, 0, 0.0], null]));
+    let taken = Verb::Answered { life: life.clone(), ask, turn, why: None };
+    assert_eq!(other.ask(taken).await, foreign);
+    let turn = Some(json!(["assistant", "close('ok')", [10, 10, 0, 0, 0.0], null]));
+    let answered = Verb::Answered { life: life.clone(), ask, turn, why: None };
+    assert_eq!(window.ask(answered).await, Ok(Answer::Done));
+    let Frame::Event { event: Event::Act(act), .. } = window.until(done(&id)).await else {
+      panic!("no act")
+    };
+    assert_eq!(act.value(), Some(&json!("ok")));
+  }
+
+  #[tokio::test]
   async fn a_command_that_a_window_feeds_reads_each_line_that_it_writes() {
     let at = place();
     let (local, _daemon) = started(&at, GRACE).await;

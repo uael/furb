@@ -2434,6 +2434,29 @@
             "life": {
               "type": "string"
             },
+            "ask": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "error": {
+              "type": "string",
+              "const": "foreign"
+            }
+          },
+          "required": [
+            "error",
+            "life",
+            "ask"
+          ],
+          "description": "A turn or a write for a request of a model that another peer answers: only the peer that\nopened the life with `answers` speaks for its requests."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
             "error": {
               "type": "string",
               "const": "answerless"

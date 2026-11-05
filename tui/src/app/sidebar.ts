@@ -1,6 +1,6 @@
 import type { BoxOptions, BoxRenderable, Renderable, TextRenderable } from "@opentui/core";
 import { unmarked } from "furb";
-import { type ChainThread, chainThreads } from "furb/life";
+import { type ChainAside, type ChainThread, chainSorted } from "furb/life";
 import { count, dollars } from "../format.ts";
 import type { ActRow } from "../session.ts";
 import { theme as c, glyph, spacing as space } from "../theme.ts";
@@ -122,6 +122,8 @@ export const sidebar = part({
         by: new Map(),
         of: new Map(),
         asked: new Map(),
+        asides: new Map(),
+        aside: new Map(),
       };
     const owed = [...w.host.prompts.keys()].join(" ");
     // A list read from another session or another chain is no list of this one, even when its version is the same.
@@ -133,7 +135,12 @@ export const sidebar = part({
       kept.owed !== owed
     ) {
       const index = w.ladderIndex;
-      const list = chainThreads(index.on, index.ids, new Set(w.host.prompts.keys()), this.promptsRead);
+      const { threads: list, asides } = chainSorted(
+        index.on,
+        index.ids,
+        new Set(w.host.prompts.keys()),
+        this.promptsRead,
+      );
       this.threadList = {
         session: w,
         chain,
@@ -145,6 +152,10 @@ export const sidebar = part({
           list.flatMap((one) => one.messages.map((message): [string, ChainThread] => [message.id, one])),
         ),
         asked: new Map(list.flatMap((one) => one.asked.map((ask): [string, ChainThread] => [ask.id, one]))),
+        asides: new Map(asides.map((one) => [one.act.id, one])),
+        aside: new Map(
+          asides.flatMap((one) => one.messages.map((message): [string, ChainAside] => [message.id, one])),
+        ),
       };
     }
     return this.threadList;
