@@ -52,8 +52,8 @@ const typesLook = `def around(path, pattern):
 storage, found = around("src/storage.ts", "JSON.parse")
 print(found)
 read("src/storage.ts", grep("JSON.parse"))
-keys, opened = around("src/keys.ts", "open()")
-print(opened)`;
+keys, spot = around("src/keys.ts", "open()")
+print(spot)`;
 
 const typesFix = String.raw`LINE = "if (line) notes.push(JSON.parse(line));"
 storage = read("src/storage.ts", HIDDEN)

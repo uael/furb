@@ -67,8 +67,8 @@ def hire(app):
 
 asked = {app: hire(app) for app in APPS}
 findings = {}
-for app, act in asked.items():
-  findings[app] = await act
+for app, part in asked.items():
+  findings[app] = await part
   print(app, "->", findings[app].splitlines()[0])`;
 
 const table = String.raw`def row(app, text):

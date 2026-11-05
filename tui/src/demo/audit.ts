@@ -19,8 +19,8 @@ def keys_of(label, path):
 
 asked = {label: keys_of(label, path) for label, path in PARTS.items()}
 found = {}
-for label, act in asked.items():
-  found[label] = (await act).strip().splitlines()
+for label, part in asked.items():
+  found[label] = (await part).strip().splitlines()
   print(label, "->", len(found[label]), "line(s)")
 
 owners = {}
