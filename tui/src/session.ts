@@ -119,7 +119,7 @@ export const working = (act: ActRow): boolean =>
  * how its rung ran. The output that a command streams is no part of it. */
 function phaseOf(act?: ActRow): string {
   return act
-    ? `${act.done}|${act.paused}|${act.began}|${act.ended}|${act.run?.status}|${act.run?.reason}`
+    ? `${act.done}|${act.paused}|${act.asking}|${act.began}|${act.ended}|${act.run?.status}|${act.run?.reason}`
     : "";
 }
 

@@ -45,7 +45,7 @@ export const busy = (state: string): boolean =>
   state === "thinks" || state === "runs" || state === "delegates";
 
 /** The state of an act, with the prompts that the operator owes. A rung whose word has not come yet is its model that
- * thinks, and an act that is no work and lives, as a chain or a grant, is work that waits on another chain. */
+ * thinks while a reply of it runs, and it rests while it waits for its turn, and an act that is no work and lives, as a chain or a grant, is work that waits on another chain. */
 export function actState(act: LiveAct, owed: ReadonlySet<string>): State {
   if (owed.has(act.id)) return "asks";
   if ((act.paused || act.unfinished) && !act.done) return "paused";
@@ -53,18 +53,21 @@ export function actState(act: LiveAct, owed: ReadonlySet<string>): State {
   if (failed(act)) return "failed";
   if (!act.done && !WORK.includes(act.kind)) return "delegates";
   if (act.done && (act.kind !== "rung" || act.run?.status !== "running")) return "done";
-  return act.kind === "rung" && !act.done && act.word === undefined ? "thinks" : "runs";
+  if (act.kind === "rung" && !act.done && act.word === undefined) return act.asking ? "thinks" : "idle";
+  return "runs";
 }
 
 /** What the work of a chain that is not done does, from its own acts that are not done and the prompts that its words
  * made on other chains and that are not done: a model that writes a word of it thinks, a command or a wait of it runs,
- * and a word of it that awaits only another chain delegates. */
+ * a word of it that awaits only another chain delegates, and a chain whose open rungs only wait for their turn rests. */
 export function working(
   local: readonly LiveAct[],
   remote: readonly LiveAct[],
-): "thinks" | "runs" | "delegates" {
+): "thinks" | "runs" | "delegates" | "idle" {
   const open = local.filter((act) => !act.done);
-  if (open.some((act) => act.kind === "rung" && act.word === undefined)) return "thinks";
+  if (open.some((act) => act.kind === "rung" && act.word === undefined && act.asking)) return "thinks";
   if (open.some((act) => act.kind === "bash" || act.kind === "wait")) return "runs";
-  return remote.some((act) => !act.done) ? "delegates" : "runs";
+  if (remote.some((act) => !act.done)) return "delegates";
+  const turn = (act: LiveAct) => act.kind === "rung" && act.word === undefined;
+  return open.some(turn) && !open.some((act) => act.kind === "rung" && !turn(act)) ? "idle" : "runs";
 }

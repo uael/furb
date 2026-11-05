@@ -1192,6 +1192,20 @@ test("a rung costs the dollars of the answers that wrote its word", () => {
   expect(activity.acts.get("rung1")?.cost).toBe(0.75);
 });
 
+test("a rung is asking while a reply of it runs, and no more once that reply is done", () => {
+  const activity = new Activity();
+  const hear = (fact: Fact) => {
+    const heard = activity.hear(fact);
+    while (!heard.next().done);
+  };
+  hear(["rung", "rung1", "prompt1", ROOT, "", "", "claude-cli:opus/high"]);
+  expect(activity.acts.get("rung1")?.asking).toBeUndefined();
+  hear(["reply", "reply1", "rung1", ROOT, "claude-cli:opus/high"]);
+  expect(activity.acts.get("rung1")?.asking).toBe(true);
+  hear(["done", "reply1", "world", ["assistant", "close(1)", [100, 10, 80, 0, 0.5], null]]);
+  expect(activity.acts.get("rung1")?.asking).toBeUndefined();
+});
+
 test("the activity keeps each compaction of a chain: a prefix said on it after its birth", () => {
   const activity = new Activity();
   const hear = (fact: Fact) => {
