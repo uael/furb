@@ -138,7 +138,8 @@ export class Activity {
         done: false,
         value: null,
         paused: yield* this.pausedAtBirth(id),
-        began: at,
+        // A question said again, as a later life asks it anew, keeps the place where it first began.
+        began: this.acts.get(id)?.began ?? at,
         ...(kind === "rung" ? { run: { status: "running" as const, reason: "" } } : {}),
       };
       if (kind === "bash")
