@@ -40,7 +40,7 @@ test("a notice and a question of another chain stand as asides of the chain, and
     async ({ session, frame }) => {
       await session.refresh();
       await session.select("chain1");
-      const question = (from: string) => ({ aside: "question", from });
+      const question = (from: string) => ({ aside: "question" as const, from });
       expect(sorted(session, "chain1")).toEqual({
         threads: ["prompt1", "prompt29", "prompt34", "prompt95", "prompt97"],
         asides: [
