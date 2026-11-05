@@ -5,13 +5,6 @@ import { configDirectory, saveFile } from "furb";
 import { isLifeView, type LifeView } from "./overview.ts";
 import { isThemeChoice, type ThemeChoice } from "./theme.ts";
 
-/** The shapes that the sidebar can take: an outline of the workspaces with the threads under the session shown, cards
- * of the threads under a switcher of the workspaces, and the outline with the questions of every session on top. */
-export const railStyles = ["outline", "cards", "inbox"] as const;
-export type RailStyle = (typeof railStyles)[number];
-export const isRailStyle = (value: unknown): value is RailStyle =>
-  typeof value === "string" && (railStyles as readonly string[]).includes(value);
-
 /** The form of the file of the preferences. A file with no version came from a build that saved the width of its sidebar
  * with each save, so the width that it holds is the default of that build and no choice of the person. */
 const VERSION = 2;
@@ -25,8 +18,6 @@ export class Preferences {
   private chosenWidth?: number;
   /** Whether the preferences came from a file of an earlier form, which the next save writes in this form. */
   private earlier = false;
-  /** The shape of the sidebar. */
-  sidebarStyle: RailStyle = "cards";
   /** Whether a thread that is over, and is not the last of its chain, starts folded in the feed. */
   foldThreads = true;
   /** Whether the welcome showed the check of the first run, which it shows once, and again while no model answers. */
@@ -48,7 +39,6 @@ export class Preferences {
         sidebar?: boolean;
         version?: number;
         sidebarWidth?: number;
-        sidebarStyle?: string;
         foldThreads?: boolean;
         foldRungs?: boolean;
         setupSeen?: boolean;
@@ -70,7 +60,6 @@ export class Preferences {
         this.chosenWidth = Math.max(32, Math.min(72, saved.sidebarWidth));
         this.sidebarWidth = this.chosenWidth;
       }
-      if (isRailStyle(saved?.sidebarStyle)) this.sidebarStyle = saved.sidebarStyle;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT")
         this.notice = `Could not read preferences at ${path}. Using the theme of the terminal for this run. The file is unchanged. Click to dismiss.`;
@@ -88,7 +77,6 @@ export class Preferences {
       theme,
       sidebar: this.sidebar,
       ...(this.chosenWidth === undefined ? {} : { sidebarWidth: this.chosenWidth }),
-      sidebarStyle: this.sidebarStyle,
       foldThreads: this.foldThreads,
       setupSeen: this.setupSeen,
       view: this.view,

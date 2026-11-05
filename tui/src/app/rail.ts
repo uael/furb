@@ -1,11 +1,9 @@
 import { basename } from "node:path";
-import { type BoxOptions, type BoxRenderable, InputRenderable, InputRenderableEvents } from "@opentui/core";
+import type { BoxOptions, BoxRenderable } from "@opentui/core";
 import {
   type Ask,
-  attentionOf,
   busy,
   type ChainThread,
-  gist,
   nestThreads,
   orderThreads,
   type ThreadNode,
@@ -14,15 +12,14 @@ import {
 } from "furb/life";
 import { checkoutOf } from "../checkout.ts";
 import { clock } from "../clock.ts";
-import { shortenHome, shortenHomes } from "../files.ts";
-import { clip, dollars, recordLabel } from "../format.ts";
-import { isRailStyle, type RailStyle } from "../preferences.ts";
-import { type Session, statusLabels } from "../session.ts";
+import { shortenHomes } from "../files.ts";
+import { dollars, recordLabel } from "../format.ts";
+import { statusLabels } from "../session.ts";
 import { theme as c, glyph, type MarkState, markOf, spacing as space, threadTone } from "../theme.ts";
 import { bold, type Part, plain } from "../ui.ts";
 import type { SessionEntry, Workspace } from "../workspaces.ts";
 import { part } from "./part.ts";
-import { type ChainRead, inputColors, statusMark, threadMarks, wrapped } from "./shared.ts";
+import { type ChainRead, statusMark, threadMarks } from "./shared.ts";
 
 /** What waits in a part of the library, counted where the operator should look. */
 export interface Attention {
@@ -45,17 +42,12 @@ export interface RailHandler {
 
 /** A question that waits in a session of the library. */
 export interface Waiting {
-  group: Workspace;
   entry: SessionEntry;
   ask: Ask;
 }
 
 const LEFT = space.inset;
 const RIGHT = space.inset;
-/** How many workspaces the switcher of the cards shows at once. */
-const SWITCHER = 8;
-/** How many questions the inbox of the sidebar holds before it counts the rest. */
-const INBOX = 3;
 
 /** The number in the name of an act, which orders the acts as they came. */
 const numberOf = (id: string) => Number(id.replace(/\D+/g, "")) || 0;
@@ -72,25 +64,6 @@ const numbered = (thread: ChainThread): number => {
 };
 
 export const rail = part({
-  /** The shape of the sidebar: the flag FURB_SIDEBAR, else the preference. */
-  get railStyle(): RailStyle {
-    const named = process.env.FURB_SIDEBAR;
-    return isRailStyle(named) ? named : this.session.preferences.sidebarStyle;
-  },
-
-  /** The sidebar takes another shape, which the preferences keep. */
-  setRailStyle(name: string): void {
-    const w = this.session;
-    if (!isRailStyle(name)) {
-      w.notice = `The sidebar takes the shapes outline, cards and inbox, and not ${name}.`;
-      return;
-    }
-    w.preferences.sidebarStyle = name;
-    w.preferences.save();
-    w.notice = `The sidebar is ${name}.`;
-    this.render();
-  },
-
   /** What waits in some sessions: each question, each session held, failed, or finished and not seen. */
   attentionOf(entries: readonly SessionEntry[]): Attention {
     const out: Attention = { asks: 0, paused: 0, failed: 0, unread: 0 };
@@ -140,7 +113,7 @@ export const rail = part({
     for (const group of lib.groups)
       for (const entry of group.sessions) {
         if (entry.archived || !entry.session) continue;
-        for (const ask of entry.session.desk.asks) if (!ask.notice) all.push({ group, entry, ask });
+        for (const ask of entry.session.desk.asks) if (!ask.notice) all.push({ entry, ask });
       }
     return [
       ...all.filter((one) => one.entry === lib.current),
@@ -359,54 +332,15 @@ export const rail = part({
     this.renderWorkspaces();
   },
 
-  /** The top of the sidebar: one line that says whether something waits for you, anywhere, and what a click goes to.
-   * The shape inbox lists the questions under it, and the shape cards puts the switcher of the workspaces there. */
+  /** The top of the sidebar: one line that says whether something waits for you, anywhere, and what a click goes to. */
   renderRailTop(): void {
     const w = this.session;
     const lib = this.options.workspaces;
-    const style = this.railStyle;
     const width = this.rail.width || w.preferences.sidebarWidth;
     const total = this.attentionOf(lib.groups.flatMap((group) => group.sessions));
-    const waiting = this.railAsks();
-    const key = JSON.stringify([
-      this.theme,
-      width,
-      style,
-      total,
-      style === "inbox"
-        ? waiting.map(({ entry, ask }) => [entry.path, ask.id, ask.label, ask.message, ask.choices])
-        : 0,
-      style === "cards"
-        ? [
-            lib.groups.map((group) => [group.name, group.directory, this.attentionOf(group.sessions)]),
-            lib.notice,
-          ]
-        : 0,
-      this.choice,
-      lib.current?.path,
-      lib.groupOf()?.directory,
-    ]);
-    if (!this.paneChanged(this.railSession, key)) return;
+    if (!this.paneChanged(this.railSession, [this.theme, width, total])) return;
     this.clear(this.railSession);
-    const room = width - LEFT - RIGHT;
     const edge: BoxOptions = { paddingLeft: LEFT, paddingRight: RIGHT };
-    if (style === "cards") {
-      // A question that waits shows on top, wherever it waits; the rest of the marks stand on the rows of the switcher.
-      if (total.asks)
-        this.railSession.add(
-          this.railSplit(
-            [
-              [`${glyph.asks} ${total.asks} `, c.warning, bold],
-              [total.asks === 1 ? "needs you" : "need you", c.text, bold],
-            ],
-            [["⌥A", c.faint]],
-            () => void this.nextAttention().catch(this.report),
-            edge,
-          ),
-        );
-      this.renderSwitcher(room, edge);
-      return;
-    }
     const head: Part[] = total.asks
       ? [
           [`${glyph.asks} ${total.asks} `, c.warning, bold],
@@ -420,146 +354,6 @@ export const rail = part({
     this.railSession.add(
       this.railSplit(head, tail, () => void this.nextAttention().catch(this.report), edge),
     );
-    if (style !== "inbox" || !waiting.length) return;
-    for (const one of waiting.slice(0, INBOX)) this.renderInboxItem(one, room);
-    if (waiting.length > INBOX)
-      this.railSession.add(
-        this.railSplit(
-          [[`${waiting.length - INBOX} more`, c.faint]],
-          [["⌥A", c.faint]],
-          () => void this.nextAttention().catch(this.report),
-          edge,
-        ),
-      );
-    this.railSession.add(this.box({ height: space.section }));
-  },
-
-  /** A question of the inbox: where it waits, its first rows, and the chips that answer it. Another session than the
-   * one shown offers to go there. */
-  renderInboxItem(one: Waiting, room: number): void {
-    const lib = this.options.workspaces;
-    const { group, entry, ask } = one;
-    const mine = entry === lib.current;
-    const label = (entry.session?.labelOf(ask.chain) ?? ask.label).split("/").at(-1) ?? "";
-    const where = mine ? [] : [[`${group.name} › ${entry.name}`, c.faint] as Part];
-    const edge: BoxOptions = { paddingLeft: LEFT, paddingRight: RIGHT, marginTop: space.section };
-    this.railSession.add(
-      this.railSplit(
-        [
-          [`${glyph.asks} `, c.warning],
-          [label, c.text, bold],
-        ],
-        where,
-        () => void this.goToAsk(one).catch(this.report),
-        edge,
-      ),
-    );
-    for (const text of wrapped(shortenHomes(gist(ask.message)), room - 2, 2)) {
-      const row = this.row({ paddingLeft: LEFT + 2 });
-      row.add(this.line([[text, c.text]], c.muted, { truncate: true, flexShrink: 1 }));
-      this.railSession.add(row);
-    }
-    const controls = this.row({ gap: 1, paddingLeft: LEFT + 2, flexWrap: "wrap" });
-    const chip = (text: string, run: () => void) =>
-      controls.add(this.text([[` ${text} `, c.text, 0, c.raised]], c.text, { run }));
-    const session = entry.session;
-    if (!mine || !session) chip("Go there", () => void this.goToAsk(one).catch(this.report));
-    else if (ask.choices.length) {
-      for (const [at, value] of ask.choices.entries())
-        chip(`${at + 1} ${value}`, () => void session.answer(ask, value).catch(this.report));
-      chip(`${ask.choices.length + 1} Other`, () => {
-        this.choice = { id: ask.id, at: ask.choices.length, other: true, ticked: [] };
-        void session.point(ask.id).catch(this.report);
-      });
-    } else if (ask.shape === "str") {
-      this.railSession.add(this.railField(ask, session));
-      return;
-    } else chip(`Answer as ${ask.shape}`, () => void session.point(ask.id).catch(this.report));
-    this.railSession.add(controls);
-  },
-
-  /** The field of the card of a question of a str: the operator types the answer there, and Enter sends it. What was
-   * typed stays when the sidebar draws again. */
-  railField(ask: Ask, session: Session): BoxRenderable {
-    const row = this.row({ paddingLeft: LEFT + 2, paddingRight: RIGHT, height: space.bar });
-    const holder = this.box({ flexGrow: 1, height: space.bar });
-    const input = new InputRenderable(this.renderer, {
-      id: `rail-answer-${ask.id}`,
-      width: "100%",
-      value: this.railDraft.get(ask.id) ?? "",
-      placeholder: "Type the answer, Enter sends it",
-      ...inputColors(c.raised),
-    });
-    input.on(InputRenderableEvents.INPUT, (value: string) => this.railDraft.set(ask.id, value));
-    input.on(InputRenderableEvents.ENTER, () => {
-      const text = input.value;
-      if (!text.trim()) return;
-      this.railDraft.delete(ask.id);
-      this.composer.focus();
-      void session.answer(ask, text).catch(this.report);
-    });
-    holder.add(input);
-    row.add(holder);
-    return row;
-  },
-
-  /** The switcher of the shape cards: one row for each workspace, the one shown lit, each with what needs a look in it.
-   * It shows the rows around the workspace shown when they are many. */
-  renderSwitcher(room: number, edge: BoxOptions): void {
-    const lib = this.options.workspaces;
-    const current = lib.groupOf();
-    const heading = this.row({ paddingLeft: LEFT, paddingRight: RIGHT });
-    heading.add(this.text("Workspaces", c.text, { attributes: bold, flexGrow: 1 }));
-    heading.add(this.text("⌃W", c.faint, { run: () => void this.workspacePicker() }));
-    this.railSession.add(heading);
-    const groups = lib.groups;
-    const at = current ? Math.max(0, groups.indexOf(current)) : 0;
-    const from = Math.max(0, Math.min(groups.length - SWITCHER, at - Math.floor(SWITCHER / 2)));
-    if (from > 0)
-      this.railSession.add(
-        this.railSplit([[`↑ ${from} more`, c.faint]], [], () => this.workspacePicker(), edge),
-      );
-    // The switcher and the threads under it draw apart, so each takes the place of its own rows in the order.
-    const switched: string[] = [];
-    this.railOrder = this.railOrder.filter((id) => !id.startsWith("ws:"));
-    for (const group of groups.slice(from, from + SWITCHER)) {
-      const mine = group === current;
-      const attention = this.attentionOf(group.sessions);
-      const id = `ws:${group.directory}`;
-      switched.push(id);
-      this.railHandlers.set(id, { enter: () => void this.focusWorkspace(group).catch(this.report) });
-      const row = this.railSplit(
-        [[mine ? glyph.mark : " ", c.accent], [" "], [group.name, mine ? c.text : c.muted, mine ? bold : 0]],
-        this.badges(attention),
-        () => void this.focusWorkspace(group).catch(this.report),
-        edge,
-        mine || (this.railKeys && this.railAt === id),
-      );
-      this.railSession.add(row);
-    }
-    this.railOrder = [...switched, ...this.railOrder];
-    if (groups.length > from + SWITCHER)
-      this.railSession.add(
-        this.railSplit(
-          [[`↓ ${groups.length - from - SWITCHER} more`, c.faint]],
-          [],
-          () => this.workspacePicker(),
-          edge,
-        ),
-      );
-    this.railSession.add(
-      this.railSplit(
-        [
-          ["+ ", c.faint],
-          ["Add a workspace", c.faint],
-        ],
-        [],
-        () => this.insert("/workspace "),
-        edge,
-      ),
-    );
-    void room;
-    this.railSession.add(this.box({ height: space.section }));
   },
 
   /** The workspaces and the threads in the scroll of the sidebar. The workspace shown stands open, with its sessions
@@ -567,7 +361,6 @@ export const rail = part({
   renderWorkspaces(): void {
     const lib = this.options.workspaces;
     const w = this.session;
-    const style = this.railStyle;
     const width = this.rail.width || w.preferences.sidebarWidth;
     const current = lib.groupOf();
     // Only the workspace shown stands open, and the others fold again once the focus moves.
@@ -583,7 +376,6 @@ export const rail = part({
     const key = JSON.stringify([
       this.theme,
       width,
-      style,
       lib.notice,
       lib.current?.path,
       lib.groups.map((group) => [
@@ -608,20 +400,16 @@ export const rail = part({
       this.menuItem && this.itemKey(this.menuItem),
       cursor,
     ]);
-    this.railHeading.visible = style !== "cards";
     if (!this.paneChanged(this.railSpaces, key)) return;
     // The model orders the threads, the closed ones first and the open ones last, each by the time of its last message.
     const tree = orderThreads(nestThreads(threads, w.boardIndex.ids));
     this.clear(this.railHeading);
     this.clear(this.railSpaces);
     this.unhover();
-    if (style !== "cards") {
-      this.railHeading.add(this.text("Workspaces", c.text, { attributes: bold, flexGrow: 1 }));
-      this.railHeading.add(this.text("⌃W", c.faint, { run: () => void this.workspacePicker() }));
-    }
-    this.railOrder = style === "cards" ? this.railOrder.filter((id) => id.startsWith("ws:")) : [];
-    for (const id of [...this.railHandlers.keys()])
-      if (!this.railOrder.includes(id)) this.railHandlers.delete(id);
+    this.railHeading.add(this.text("Workspaces", c.text, { attributes: bold, flexGrow: 1 }));
+    this.railHeading.add(this.text("⌃W", c.faint, { run: () => void this.workspacePicker() }));
+    this.railOrder = [];
+    this.railHandlers.clear();
     const order = (id: string, handler: RailHandler) => {
       this.railOrder.push(id);
       this.railHandlers.set(id, handler);
@@ -646,9 +434,9 @@ export const rail = part({
       );
 
     // The controls of the thread shown, as the controls of the header of its box in the feed: a mark and a word each.
-    const links = (thread: ChainThread) => {
+    const controls = (thread: ChainThread, indent: number) => {
       const id = thread.act.id;
-      const row = this.row({ gap: 3, flexWrap: "wrap" });
+      const row = this.row({ gap: 3, flexWrap: "wrap", paddingLeft: indent });
       const link = (mark: string, label: string, run: () => void, tone = c.faint) =>
         row.add(
           this.link(
@@ -665,11 +453,6 @@ export const rail = part({
       if (!thread.resolved) link(glyph.done, "Resolve", () => this.resolveThread(thread));
       const ask = thread.asks[0];
       if (ask) link(glyph.asks, "Answer", () => void w.point(ask).catch(this.report), c.warning);
-      return row;
-    };
-    const controls = (thread: ChainThread, indent: number) => {
-      const row = links(thread);
-      row.paddingLeft = indent;
       this.railSpaces.add(row);
       step(1);
     };
@@ -700,74 +483,6 @@ export const rail = part({
       this.railSpaces.add(row);
       step(1, id);
       if (lit) controls(thread, indent + 3);
-    };
-
-    // A thread of the session shown, as a card of its own.
-    const card = (thread: ChainThread, state = thread.state) => {
-      const id = `th:${thread.act.id}`;
-      const lit = active === thread || cursor === id;
-      const [mark, tone] = threadMarks(thread, state, this.unreadThread(thread));
-      order(id, {
-        enter: () => this.chooseThread(thread),
-        space: () => this.foldThread(thread.act.id),
-        thread,
-      });
-      const bar: Part = [glyph.mark, threadTone(thread.act.id)];
-      const box = this.hoverable(
-        // The surface of the card starts at its bar, so no color of the card stands left of it.
-        this.box({
-          marginLeft: LEFT,
-          paddingRight: RIGHT,
-          marginTop: space.section,
-          backgroundColor: lit ? c.selected : c.panel,
-          onMouseUp: this.click(() => this.chooseThread(thread)),
-        }),
-        lit ? c.selected : c.raised,
-      );
-      const shown = active === thread;
-      const words = wrapped(
-        shortenHomes(this.threadTitle(thread)) || thread.act.id,
-        width - LEFT - RIGHT - 4,
-        2,
-      );
-      for (const [row, text] of words.entries())
-        box.add(
-          this.line(
-            [
-              bar,
-              [" "],
-              [row ? "  " : `${mark} `, tone],
-              [text, shown ? c.text : thread.resolved ? c.faint : c.muted, shown ? bold : 0],
-            ],
-            c.muted,
-            { truncate: true },
-          ),
-        );
-      const word = this.stateWord(thread, state);
-      const chain = thread.act.on === w.engine.root ? "" : (w.labelOf(thread.act.on).split("/").at(-1) ?? "");
-      const since = plain(this.threadMeta(thread, state).filter((one) => one[0] !== word[0]));
-      const age = since && `${since} ago`;
-      const notes = [
-        thread.messages.length ? `${thread.messages.length + 1} msgs` : "",
-        age,
-        chain ? `in ${chain}` : "",
-      ].filter(Boolean);
-      box.add(
-        this.line(
-          [bar, ["   "], word, [notes.length ? `  ·  ${notes.join("  ·  ")}` : "", c.faint]],
-          c.muted,
-          { truncate: true },
-        ),
-      );
-      // The controls of the thread shown stand in its card, on a last row with its bar.
-      if (shown) {
-        const row = this.row({});
-        row.add(this.line([bar, ["   "]], c.muted));
-        row.add(links(thread));
-        box.add(row);
-      }
-      this.railSpaces.add(box);
-      step(words.length + 1 + (shown ? 1 : 0), id, space.section);
     };
 
     // The sessions of a workspace that are worth a row: the one shown and each that lives, then the newest others.
@@ -851,19 +566,17 @@ export const rail = part({
       }
     };
 
-    // A thread, as a row or as a card, with the agents that its ladder made folded under it to a count, which a click
-    // opens, each agent one step deeper as a row. A question that waits in an agent marks the thread over it, since
+    // A thread on its row, with the agents that its ladder made folded under it to a count, which a click opens, each
+    // agent one step deeper on its row. A question that waits in an agent marks the thread over it, since
     // `nestThreads` rolls it into the state of that thread.
-    const nodeRow = (node: ThreadNode, indent: number, carded = false) => {
-      if (carded) card(node.thread, node.state);
-      else threadRow(node.thread, indent, node.state);
+    const nodeRow = (node: ThreadNode, indent: number) => {
+      threadRow(node.thread, indent, node.state);
       if (!node.agents.length) return;
       const fold = `agents:${node.thread.act.id}`;
-      const label = `${" ".repeat(carded ? 2 : indent + 2 - LEFT)}${node.agents.length === 1 ? "Agent" : "Agents"}`;
+      const label = `${" ".repeat(indent + 2 - LEFT)}${node.agents.length === 1 ? "Agent" : "Agents"}`;
       this.railSpaces.add(this.foldRow(fold, label, node.agents.length, padding));
       step(1);
-      if (this.unfolded.has(fold))
-        for (const one of node.agents) nodeRow(one, carded ? LEFT + 4 : indent + 2);
+      if (this.unfolded.has(fold)) for (const one of node.agents) nodeRow(one, indent + 2);
     };
     const shows = (node: ThreadNode): boolean => node.thread === active || node.agents.some(shows);
     const unresolved = tree.filter((one) => threadOpen(one) || shows(one));
@@ -886,101 +599,59 @@ export const rail = part({
       for (const one of unresolved) nodeRow(one, LEFT + 4);
     };
 
-    if (style === "cards") {
-      const group = current;
-      if (group) {
-        const { shown, earlier } = sessionsOf(group);
-        // The switcher on top holds the workspace shown, so its folder stands here without a second row for its name.
-        this.railSpaces.add(
-          this.inset(
-            LEFT + 2,
-            this.line(clip(shortenHome(group.directory), width - LEFT - RIGHT - 3, "end"), c.faint, {
-              truncate: true,
-            }),
-          ),
-        );
-        step(1);
-        for (const entry of shown) sessionRow(group, entry);
-        folds(group, earlier);
-        const heading = this.row({ paddingLeft: LEFT, paddingRight: RIGHT, marginTop: space.section });
-        heading.add(this.text("Threads", c.text, { attributes: bold, flexGrow: 1 }));
-        heading.add(this.text(this.badges(this.threadAttention(tree)), c.muted));
-        this.railSpaces.add(heading);
-        step(1, undefined, space.section);
-        if (!threads.length) {
-          plainRow([["No thread yet", c.faint]], () => this.composer.focus());
-          step(1);
-        }
-        if (resolvedNodes.length) {
-          const fold = `resolved:${lib.current?.path}`;
-          this.railSpaces.add(
-            this.foldRow(fold, " Resolved", resolvedNodes.length, { ...padding, marginTop: space.section }),
-          );
-          step(1, undefined, space.section);
-          if (this.unfolded.has(fold)) for (const one of resolvedNodes) nodeRow(one, 0, true);
-        }
-        for (const one of unresolved) nodeRow(one, 0, true);
-      }
-    } else {
-      for (const [index, group] of lib.groups.entries()) {
-        const mine = group === current;
-        // The workspace shown folds to its row when the operator asks, and the others open to peek.
-        const open = mine ? !group.collapsed : this.unfolded.has(`ws:${group.directory}`);
-        const id = `ws:${group.directory}`;
-        const attention = this.attentionOf(group.sessions);
-        const status = lib.groupStatus(group);
-        const focus = mine
-          ? () => lib.toggle(group)
-          : () => void this.focusWorkspace(group).catch(this.report);
-        order(id, {
-          enter: focus,
-          right: mine
-            ? () => {
-                if (!open) lib.toggle(group);
-              }
-            : () => (open ? focus() : this.peekWorkspace(group)),
-          left: mine
-            ? () => (open ? lib.toggle(group) : this.railSteer(false))
-            : () => (open ? this.peekWorkspace(group) : this.railSteer(false)),
-          space: mine ? () => lib.toggle(group) : () => this.peekWorkspace(group),
-        });
-        const margin = index ? space.section : 0;
-        this.itemRow(
-          this.railSpaces,
-          group,
-          {
-            lead: [
-              [mine ? glyph.mark : " ", c.accent],
-              [`${open ? glyph.open : glyph.closed} `, c.faint],
-            ],
-            name: [group.name, mine ? c.text : c.muted, bold],
-            after: true,
-            tail: this.badges(attention),
-            tailTip: () => this.badgeTip(attention),
-            ...(mine ? {} : { peek: () => this.peekWorkspace(group) }),
-          },
-          () => [statusMark(status), [statusLabels[status], c.text, bold]],
-          focus,
-          { marginTop: margin },
-          cursor === id,
-        );
-        step(1, id, margin);
-        if (!open) continue;
-        const { shown, earlier } = sessionsOf(group);
-        for (const entry of shown) {
-          sessionRow(group, entry);
-          if (entry === lib.current) threadBlock(entry);
-        }
-        folds(group, earlier);
-      }
-    }
-    // The shape cards holds the row that adds a workspace in its switcher, and the others hold it here.
-    if (style !== "cards") {
-      plainRow([[" "], ["+ ", c.faint], ["Add a workspace", c.faint]], () => this.insert("/workspace "), {
-        marginTop: space.section,
+    for (const [index, group] of lib.groups.entries()) {
+      const mine = group === current;
+      // The workspace shown folds to its row when the operator asks, and the others open to peek.
+      const open = mine ? !group.collapsed : this.unfolded.has(`ws:${group.directory}`);
+      const id = `ws:${group.directory}`;
+      const attention = this.attentionOf(group.sessions);
+      const status = lib.groupStatus(group);
+      const focus = mine ? () => lib.toggle(group) : () => void this.focusWorkspace(group).catch(this.report);
+      order(id, {
+        enter: focus,
+        right: mine
+          ? () => {
+              if (!open) lib.toggle(group);
+            }
+          : () => (open ? focus() : this.peekWorkspace(group)),
+        left: mine
+          ? () => (open ? lib.toggle(group) : this.railSteer(false))
+          : () => (open ? this.peekWorkspace(group) : this.railSteer(false)),
+        space: mine ? () => lib.toggle(group) : () => this.peekWorkspace(group),
       });
-      step(1, undefined, space.section);
+      const margin = index ? space.section : 0;
+      this.itemRow(
+        this.railSpaces,
+        group,
+        {
+          lead: [
+            [mine ? glyph.mark : " ", c.accent],
+            [`${open ? glyph.open : glyph.closed} `, c.faint],
+          ],
+          name: [group.name, mine ? c.text : c.muted, bold],
+          after: true,
+          tail: this.badges(attention),
+          tailTip: () => this.badgeTip(attention),
+          ...(mine ? {} : { peek: () => this.peekWorkspace(group) }),
+        },
+        () => [statusMark(status), [statusLabels[status], c.text, bold]],
+        focus,
+        { marginTop: margin },
+        cursor === id,
+      );
+      step(1, id, margin);
+      if (!open) continue;
+      const { shown, earlier } = sessionsOf(group);
+      for (const entry of shown) {
+        sessionRow(group, entry);
+        if (entry === lib.current) threadBlock(entry);
+      }
+      folds(group, earlier);
     }
+    plainRow([[" "], ["+ ", c.faint], ["Add a workspace", c.faint]], () => this.insert("/workspace "), {
+      marginTop: space.section,
+    });
+    step(1, undefined, space.section);
     if (found !== undefined && target !== this.railWatched) {
       const line = found;
       this.railWatched = target;
@@ -992,12 +663,6 @@ export const rail = part({
         else if (line + 2 > box.scrollTop + view) box.scrollTo(line + 2 - view);
       }, 0);
     }
-  },
-
-  /** What the threads of the session shown say, counted as the marks of a row: a question anywhere, and the failure
-   * or the pause of a thread that the operator started. The failure of an agent counts for nothing. */
-  threadAttention(tree: readonly ThreadNode[]): Attention {
-    return { ...attentionOf(tree), unread: 0 };
   },
 
   /** The row that the keys of the sidebar stand on. */

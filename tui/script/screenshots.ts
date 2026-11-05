@@ -593,25 +593,19 @@ try {
       entries.Research?.status === "paused",
   );
   await capture("28-workspace-tree");
-  // The sidebar in each of its shapes: with the release shown, with a session of another workspace shown, and with the
-  // keys in it.
+  // The sidebar with the release shown, with a session of another workspace shown, and with the keys in it.
   const away = entries["Offline mode"];
-  for (const shape of ["outline", "cards", "inbox"] as const) {
-    process.env.FURB_SIDEBAR = shape;
-    await capture(`110-sidebar-${shape}`);
-    if (away?.session) {
-      await library.select(away);
-      session = away.session;
-      await capture(`111-sidebar-${shape}-away`);
-      await library.select(main);
-      session = main.session ?? session;
-    }
-    app().railSteer(true);
-    app().moveRail(3);
-    await capture(`112-sidebar-${shape}-keys`);
-    app().railSteer(false);
+  if (away?.session) {
+    await library.select(away);
+    session = away.session;
+    await capture("111-sidebar-away");
+    await library.select(main);
+    session = main.session ?? session;
   }
-  delete process.env.FURB_SIDEBAR;
+  app().railSteer(true);
+  app().moveRail(3);
+  await capture("112-sidebar-keys");
+  app().railSteer(false);
   app().render();
   await test.flush();
   // A click on a line of a program that made an act opens it in place, with what the act gave.
@@ -620,12 +614,10 @@ try {
   if (line >= 0) await test.mockMouse.click((rows[line]?.search(/\d+ /) ?? 0) + 4, line);
   await rest();
   await capture("29-open-line");
-  // A workspace that does not hold the focus opens to peek at its sessions, in the outline.
-  process.env.FURB_SIDEBAR = "outline";
+  // A workspace that does not hold the focus opens to peek at its sessions.
   app().peekWorkspace(second);
   await capture("30-peeked-workspace");
   app().peekWorkspace(second);
-  delete process.env.FURB_SIDEBAR;
   library.toggle();
   await capture("31-hidden-sidebar");
   library.toggle();
@@ -755,7 +747,6 @@ try {
   const stale = library.groups[1]?.sessions.find((entry) => entry.name === "Archive");
   if (!stale) throw new Error("The gallery has no Archive session.");
   await library.archive(stale);
-  process.env.FURB_SIDEBAR = "outline";
   app().peekWorkspace(second);
   app().render();
   await test.flush();
@@ -773,7 +764,6 @@ try {
   await test.mockInput.typeText(" notes");
   await rest();
   await capture("50-rename-session");
-  delete process.env.FURB_SIDEBAR;
   // A life at the scale of a real one: many chains, and questions to the owner open on three of them at once, one of
   // which a conductor relays at its length. The desk over the input counts them, and says which one the input answers.
   test.mockInput.pressEscape();

@@ -23,7 +23,7 @@ test("the feed folds the earlier steps of a long thread into one line that a cli
       const shown = await frame();
       const lines = shown.split("\n");
       // The sidebar lists the workspace and the threads of the life, and no tree of its chains.
-      expect(lines.some((line) => line.includes("Threads"))).toBe(true);
+      expect(lines.some((line) => line.includes("Workspaces"))).toBe(true);
       expect(shown).not.toContain("Chains");
       // The conductor runs one long word, under which its messages pile up: the earlier ones fold into one line.
       const folds = () => app.scroll.getChildren().filter((node) => node.id.startsWith("more-")).length;

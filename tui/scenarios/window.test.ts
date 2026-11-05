@@ -36,8 +36,11 @@ test("a redraw between a press and its release resolves nothing, and a click on 
     const left = window.width - window.session.preferences.sidebarWidth;
     const before = rail(window, await window.frame());
     const x = (before.find((line) => line.includes("✓ Resolve")) ?? "").indexOf("Resolve");
-    const y = before.findIndex((line) => line.includes("Another thread")) + 1;
+    // The press lands on the row of the other thread, under the controls of the thread held open, which the message
+    // moves under that row.
+    const y = before.findIndex((line) => line.includes("Another thread"));
     expect(x).toBeGreaterThan(0);
+    expect(before[y - 1]).toContain("✓ Resolve");
     expect(before[y]?.[x]).toBe(" ");
     await window.screen.mockMouse.pressDown(left + x, y);
     // A message moves the thread held open, and its Resolve comes under the pointer, which did not move.
