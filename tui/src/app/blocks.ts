@@ -201,7 +201,7 @@ export const blocks = part({
     const prior = this.cards.get(id);
     if (prior?.key === key) {
       this.label(prior, heading);
-      Object.assign(prior, { marker, title: options.title, closed });
+      Object.assign(prior, { marker, title: options.title, closed, thread: options.thread });
       if (prior.heading.visible !== visible) prior.heading.visible = visible;
       if (prior.node.marginTop !== margin) prior.node.marginTop = margin;
       if (this.feedChild(index) !== prior.node) this.placeCard(prior.node, index);
@@ -238,6 +238,7 @@ export const blocks = part({
       state,
       closed,
       act: options.act?.id,
+      thread: options.thread,
     };
     this.label(card, heading);
     this.cards.set(id, card);

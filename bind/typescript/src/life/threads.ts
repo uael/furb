@@ -429,6 +429,26 @@ export function nestThreads(list: readonly ChainThread[], rows: Rows): ThreadNod
   return tops;
 }
 
+/** The threads of a tree in the order that the list of the threads shows them: the closed ones first and the open ones
+ * last, so that the open ones stand nearest the input, and in each group by the time of their last message, the oldest
+ * first. The agents of each thread take the same order. The view model of the host says the same in
+ * `host/src/view/threads.rs`, which the TUI does not read yet. */
+export function orderThreads(nodes: readonly ThreadNode[]): ThreadNode[] {
+  const last = (node: ThreadNode) =>
+    Math.max(node.thread.act.began, ...node.thread.messages.map((one) => one.began));
+  return nodes
+    .map((node) => ({ ...node, agents: orderThreads(node.agents) }))
+    .sort((one, other) => Number(threadOpen(one)) - Number(threadOpen(other)) || last(one) - last(other));
+}
+
+/** Whether a thread stands open in the list of the threads: it is not resolved, or a question waits in it or in an
+ * agent under it. */
+export function threadOpen(
+  node: Pick<ThreadNode, "state"> & { thread: Pick<ChainThread, "resolved"> },
+): boolean {
+  return !node.thread.resolved || node.state === "asks";
+}
+
 /** What a tree of threads says to the operator, counted by thread: a question counts once, in the thread where it
  * waits, and the failure or the pause of a thread that they started counts in that thread. */
 export function attentionOf(tops: readonly ThreadNode[]): Record<Concern, number> {
