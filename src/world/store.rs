@@ -111,11 +111,13 @@ pub fn heads(path: impl AsRef<Path>, kinds: &[&str]) -> Result<Vec<Object>, Faul
 }
 
 /// The kind of the fact by which a record names the build that made it: `("made", "chain1",
-/// "store", engine, version, schema, release)`, where engine is what [`engine`] gives, version is
-/// [`VERSION`], schema is [`RECORD_SCHEMA`] and release is the release of furb that made it, as
-/// `0.4.2`. A record of a build before the versions holds no version, and one of a build before the
-/// schemas holds no schema and no release. No contract holds it, so this is the one home of its
-/// shape.
+/// "store", engine, version, schema, release, source, kernel)`, where engine is what [`engine`]
+/// gives, version is [`VERSION`], schema is [`RECORD_SCHEMA`], release is the release of furb that
+/// made it, as `0.4.2`, and source and kernel are the texts of its engine and of its Kernel, which
+/// a later life runs to replay the segment that the fact begins, as [`texts`] says. A record of a
+/// build before the texts holds none, one of a build before the versions holds no version, and one
+/// of a build before the schemas holds no schema and no release. No contract holds it, so this is
+/// the one home of its shape.
 pub const MADE: &str = "made";
 
 /// The version of the replay of this build, which a record names. A record replays on each build of
@@ -134,12 +136,17 @@ pub const VERSION: i64 = 9;
 /// a replay. Another engine can make other acts from the same record, so a record replays only on the engine that
 /// made it.
 pub fn engine() -> String {
-  let mut digest = Sha256::new();
-  for one in [ENGINE, KERNEL] {
-    digest.update(one.as_bytes());
-    digest.update([0]);
+  digest(ENGINE, KERNEL)
+}
+
+/// The digest of the texts of an engine and of its Kernel, which a fact made names.
+fn digest(source: &str, kernel: &str) -> String {
+  let mut hash = Sha256::new();
+  for one in [source, kernel] {
+    hash.update(one.as_bytes());
+    hash.update([0]);
   }
-  format!("{:x}", digest.finalize())
+  format!("{:x}", hash.finalize())
 }
 
 /// The engine that a record names, and nothing when it names none, as a record of a build before the fact made.
@@ -148,6 +155,26 @@ pub fn made(record: &[Object]) -> Option<String> {
     let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
     (fact.kind() == MADE).then(|| fact.word(0)?.as_str().map(str::to_owned)).flatten()
   })
+}
+
+/// The texts of the engine and of the Kernel that a record runs on: those that its first fact made
+/// holds, or this build's own when it holds none. Texts that are not the engine that their fact
+/// names refuse the record.
+pub fn texts(record: &[Object]) -> Result<(String, String), Fault> {
+  let held = record.iter().find_map(|entry| {
+    let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
+    let word = |at| fact.word(at).and_then(|one| one.as_str().map(str::to_owned));
+    (fact.kind() == MADE).then(|| (word(0), word(4), word(5)))
+  });
+  let Some((Some(named), Some(source), Some(kernel))) = held else {
+    return Ok((ENGINE.to_owned(), KERNEL.to_owned()));
+  };
+  if digest(&source, &kernel) != named {
+    return Err(Fault::refused(format!(
+      "the record names the engine {named}, and the texts that it holds are another engine"
+    )));
+  }
+  Ok((source, kernel))
 }
 
 /// The version of the build that a record names, and nothing when it names none, as a record of a build before
@@ -209,14 +236,16 @@ fn streamed(entry: Object) -> Object {
   Object::list([Object::list(said)])
 }
 
-/// The fact made of this build: its engine, its version of the replay, the schema of its record and
-/// its release.
+/// The fact made of this build: its engine, its version of the replay, the schema of its record,
+/// its release, and the texts of its engine and of its Kernel.
 fn named() -> Fact {
   let build = [
     Object::string(engine()),
     Object::int(VERSION),
     RECORD_SCHEMA.object(),
     Object::string(env!("CARGO_PKG_VERSION")),
+    Object::string(ENGINE),
+    Object::string(KERNEL),
   ];
   Fact::says(MADE, ROOT, build)
 }

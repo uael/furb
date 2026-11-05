@@ -98,6 +98,8 @@ pub struct Provider {
   refresh: Option<Refresh>,
   gone: Vec<String>,
   searching: bool,
+  /// The system prompt of each request: the engine of the life, minified.
+  system: Arc<str>,
 }
 
 /// An extension as the standing gives it: its name, the file of its word, its life word, and
@@ -129,6 +131,7 @@ impl Provider {
       refresh: None,
       gone: Vec::new(),
       searching: true,
+      system: Arc::from(crate::SYSTEM),
     }
   }
 
@@ -158,6 +161,14 @@ impl Provider {
   #[must_use]
   pub(crate) fn refreshing(mut self, refresh: Refresh) -> Provider {
     self.refresh = Some(refresh);
+    self
+  }
+
+  /// The system prompt of each request: the engine that the life runs, minified, which is this
+  /// build's own, [`crate::SYSTEM`], unless the record of the life holds another.
+  #[must_use]
+  pub fn system(mut self, system: Arc<str>) -> Provider {
+    self.system = system;
     self
   }
 

@@ -16,6 +16,7 @@ pub mod extension;
 pub mod fact;
 pub mod gate;
 pub mod life;
+mod minify;
 mod sand;
 #[cfg(test)]
 mod testing;

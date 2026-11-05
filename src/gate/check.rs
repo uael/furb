@@ -30,9 +30,11 @@ thread_local! {
   static CHECKER: RefCell<Option<Held>> = const { RefCell::new(None) };
 }
 
-/// The checker of a thread, and the path of each module of a program that it read.
+/// The checker of a thread, the text of the engine that it read, and the path of each module of a
+/// program that it read.
 struct Held {
   checker: TypeChecker,
+  engine: String,
   read: HashSet<String>,
 }
 
@@ -44,6 +46,13 @@ struct Held {
 /// that rung. Each is read on the sheet with each literal that holds more than `DEEP` brackets cut,
 /// which the checker could not read in time.
 pub fn checked(sheet: &str) -> Result<Vec<Finding>, Fault> {
+  checked_on(ENGINE, sheet)
+}
+
+/// What the gate found on a sheet, as [`checked`] gives it, read on the text of an engine: this
+/// build's own, or the one that the record of the life holds. The checker reads the engine again
+/// when the sheet before stood on another.
+pub fn checked_on(engine: &str, sheet: &str) -> Result<Vec<Finding>, Fault> {
   let lines: Vec<&str> = sheet.split_inclusive('\n').collect();
   let shaped = program_lines(&lines).and_then(|(first, tail)| {
     let short = shallowed(&shortened(&lines, first, tail));
@@ -54,15 +63,15 @@ pub fn checked(sheet: &str) -> Result<Vec<Finding>, Fault> {
     let sheet = shallowed(sheet);
     let parsed = Parsed::new(&sheet);
     let (text, stands) = rebound(&parsed);
-    let found = declared(&parsed, typed(&[], &text, &stands)?, None);
-    return Ok(signed(gated(&parsed, found), &[&sheet]));
+    let found = declared(&parsed, typed(engine, &[], &text, &stands)?, None);
+    return Ok(signed(gated(&parsed, found), &[&sheet], engine));
   };
   let parsed = Parsed::new(&short);
   let found =
-    declared(&parsed, typed(&laid.modules, &laid.main, &laid.lines)?, Some(&laid.declares));
+    declared(&parsed, typed(engine, &laid.modules, &laid.main, &laid.lines)?, Some(&laid.declares));
   let mut sources: Vec<&str> = vec![&laid.main];
   sources.extend(laid.modules.iter().rev().map(|(_, module)| &**module));
-  Ok(signed(gated(&parsed, found), &sources))
+  Ok(signed(gated(&parsed, found), &sources, engine))
 }
 
 /// What the checker found with each finding of a rule that the gate checks itself, in the order of
@@ -81,22 +90,27 @@ fn gated(sheet: &Parsed<'_>, mut found: Vec<Finding>) -> Vec<Finding> {
 /// checker that could not read them has said nothing of the word, which is not a finding, so it is
 /// a fault of the gate.
 fn typed(
+  engine: &str,
   modules: &[(String, Rc<str>)],
   text: &str,
   stands: &[usize],
 ) -> Result<Vec<Finding>, Fault> {
   let config = TypeCheckingConfig { format: TypeCheckingFormat::Concise, color: false };
   let path = format!("{MODULE}/__init__.py");
-  let engine = SourceFile::new(ENGINE, &path);
+  let source = engine;
+  let engine = SourceFile::new(source, &path);
   CHECKER.with_borrow_mut(|held| {
-    if held.as_ref().is_some_and(|one| one.read.len() > MODULES) {
+    if held.as_ref().is_some_and(|one| one.read.len() > MODULES || one.engine != source) {
       *held = None;
     }
     // The checker writes again every file it is given and reads again all that hangs on it, so the
     // engine is given to a new checker alone.
     let mut given = held.is_none().then_some(&engine);
-    let one =
-      held.get_or_insert_with(|| Held { checker: TypeChecker::default(), read: HashSet::new() });
+    let one = held.get_or_insert_with(|| Held {
+      checker: TypeChecker::default(),
+      engine: source.to_owned(),
+      read: HashSet::new(),
+    });
     let mut failed = None;
     for (path, module) in modules {
       if one.read.contains(path) {
