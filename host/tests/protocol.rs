@@ -125,6 +125,10 @@ mod protocol {
       },
       Verb::Unqueue { life: life(), entry: "q1".to_owned() },
       Verb::Queued { life: life(), on: on() },
+      Verb::Desk { life: life(), notices: vec![id()] },
+      Verb::Threads { life: life(), on: on(), at: Some(3) },
+      Verb::AsOf { life: life(), at: 3 },
+      Verb::Moments { life: life() },
       Verb::Answered {
         life: life(),
         ask: 1,

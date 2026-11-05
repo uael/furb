@@ -41,6 +41,7 @@ use crate::{
   event::{Event, Seq},
   queue::{FollowUp, QUEUE, Queue},
   rebirth::{self, Watch},
+  view::Held,
 };
 
 /// How many events a reader may stand behind the life before it reads them again from the log of
@@ -115,6 +116,16 @@ pub enum Command {
   Unqueue { entry: String },
   /// The follow-ups that wait on a chain, in order.
   Queued { on: Option<String> },
+  /// What waits for the operator, as a [`crate::view::Desk`], with each notice that the window
+  /// still shows.
+  Desk { notices: Vec<String> },
+  /// The threads of a chain, as [`crate::view::Threads`], now or as they stood just after a
+  /// moment.
+  Threads { on: Option<String>, at: Option<u64> },
+  /// The acts as they stood just after a moment, each with its meaning then.
+  AsOf { at: u64 },
+  /// Each moment at which an act began or ended, in order.
+  Moments,
   /// The end of the life, which replies and then ends the life.
   End,
 }
@@ -154,6 +165,7 @@ pub struct Life {
   facts: HashSet<u64>,
   watch: Watch,
   queue: Queue,
+  held: Held,
 }
 
 /// The handle of a life, which any thread holds: it says a command to the life and reads its
@@ -188,6 +200,7 @@ impl Life {
     }
     self.watch.heard(&event);
     let queued = self.queue.heard(&event);
+    self.held.heard(&event);
     let (seq, event) = (self.log.len() as Seq, Arc::new(event));
     self.log.push(Arc::clone(&event));
     self.readers.send((seq, event)).ok();
@@ -306,6 +319,7 @@ async fn run(
     facts: HashSet::new(),
     watch: Watch::default(),
     queue: Queue::default(),
+    held: Held::default(),
   };
   let writes = told.clone();
   opening.stream = Some(Stream(Arc::new(move |rung, chain, text, thinking| {
@@ -401,7 +415,7 @@ async fn driven(
         return Drove::Ended(ended);
       }
       Woke::Said(Some(Message::Command(command, reply))) => {
-        reply.send(commanded(&mut engine, &life.queue, command)).ok();
+        reply.send(commanded(&mut engine, &life.queue, &life.held, command)).ok();
       }
     }
     drained(&mut engine, life);
@@ -439,9 +453,14 @@ async fn pumped(engine: &mut Engine) -> Fault {
   .await
 }
 
-/// What a command comes to: on the queue of the life for a command of the queue, and else on the
-/// engine.
-fn commanded(engine: &mut Engine, queue: &Queue, command: Command) -> Result<Reply, LifeError> {
+/// What a command comes to: on the queue of the life for a command of the queue, on the acts that
+/// the life told for a query of their meaning, and else on the engine.
+fn commanded(
+  engine: &mut Engine,
+  queue: &Queue,
+  held: &Held,
+  command: Command,
+) -> Result<Reply, LifeError> {
   let root = engine.root().to_owned();
   let chain = |on: Option<String>| on.unwrap_or_else(|| root.clone());
   match command {
@@ -465,8 +484,20 @@ fn commanded(engine: &mut Engine, queue: &Queue, command: Command) -> Result<Rep
       let waiting = waiting.iter().map(serde_json::to_value).collect::<Result<_, _>>();
       Ok(Reply::Values(waiting.map_err(|no| LifeError::Refused(no.to_string()))?))
     }
+    Command::Desk { notices } => valued(&held.desk(&notices)),
+    Command::Threads { on, at } => valued(&held.threads(&chain(on), at)),
+    Command::AsOf { at } => {
+      let acts = held.as_of(at).iter().map(serde_json::to_value).collect::<Result<_, _>>();
+      Ok(Reply::Values(acts.map_err(|no| LifeError::Refused(no.to_string()))?))
+    }
+    Command::Moments => Ok(Reply::Values(held.moments().into_iter().map(Value::from).collect())),
     other => answered_by(engine, other),
   }
+}
+
+/// A meaning as the value of a reply.
+fn valued(meaning: &impl serde::Serialize) -> Result<Reply, LifeError> {
+  serde_json::to_value(meaning).map(Reply::Value).map_err(|no| LifeError::Refused(no.to_string()))
 }
 
 /// Each follow-up that is due sent as a prompt on its chain, or why its send failed, which holds

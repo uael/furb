@@ -277,6 +277,27 @@ pub enum Verb {
     life: String,
     on: Option<String>,
   },
+  /// What waits for the operator in a life, with each notice that the window still shows.
+  Desk {
+    life: String,
+    #[serde(default)]
+    notices: Vec<String>,
+  },
+  /// The threads of a chain with their meaning, now or as they stood just after a moment.
+  Threads {
+    life: String,
+    on: Option<String>,
+    at: Option<u64>,
+  },
+  /// The acts of a life as they stood just after a moment, each with its meaning then.
+  AsOf {
+    life: String,
+    at: u64,
+  },
+  /// Each moment of a life at which an act began or ended, in order.
+  Moments {
+    life: String,
+  },
   /// The turn that the peer gave for a request of a model of a life that it answers, written as
   /// the record writes a value, or why it gives none.
   Answered {
@@ -330,6 +351,10 @@ impl Verb {
         | Self::Inspect { .. }
         | Self::Pending { .. }
         | Self::Queued { .. }
+        | Self::Desk { .. }
+        | Self::Threads { .. }
+        | Self::AsOf { .. }
+        | Self::Moments { .. }
         | Self::Names { .. }
         | Self::Gate { .. }
         | Self::ViewMount(_)

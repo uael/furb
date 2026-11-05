@@ -313,6 +313,47 @@ async fn the_operator_closes_an_act_and_says_what_he_saw() {
   );
 }
 
+#[tokio::test]
+async fn the_life_gives_the_meaning_of_the_acts_that_it_told() {
+  let at = place("meaning");
+  let life = Life::spawn(scripted(&at, &[])).unwrap();
+  let mut events = Box::pin(life.events(0));
+  let prompt = Command::Prompt {
+    shape: "bool".to_owned(),
+    message: "Merge it?".to_owned(),
+    to: Some("operator".to_owned()),
+    on: None,
+  };
+  let asked = made(&life, prompt).await;
+  until(&mut events, stands("chain1".to_owned(), State::Asks)).await;
+  let Reply::Value(desk) = life.send(Command::Desk { notices: vec![] }).await.unwrap() else {
+    panic!("the desk is a value")
+  };
+  assert_eq!(desk["questions"], json!(1), "{desk}");
+  assert_eq!(desk["asks"][0]["id"], json!(asked));
+  assert_eq!(desk["asks"][0]["choices"], json!(["yes", "no"]));
+  let threads = Command::Threads { on: None, at: None };
+  let Reply::Value(now) = life.send(threads).await.unwrap() else { panic!("a value") };
+  assert_eq!(now["state"], json!("asks"), "{now}");
+  let Reply::Values(moments) = life.send(Command::Moments).await.unwrap() else {
+    panic!("the moments are values")
+  };
+  let first = moments.first().and_then(serde_json::Value::as_u64).expect("a moment");
+  let Reply::Values(then) = life.send(Command::AsOf { at: first }).await.unwrap() else {
+    panic!("the acts then are values")
+  };
+  assert!(then.iter().all(|act| act["began"].as_u64() <= Some(first)), "{then:?}");
+  assert!(!then.iter().any(|act| act["id"] == json!(asked)), "{then:?}");
+  life.send(Command::Answer { id: asked, line: "yes".to_owned() }).await.unwrap();
+  until(&mut events, stands("chain1".to_owned(), State::Done)).await;
+  let Reply::Value(desk) = life.send(Command::Desk { notices: vec![] }).await.unwrap() else {
+    panic!("the desk is a value")
+  };
+  assert_eq!(desk["questions"], json!(0), "{desk}");
+  life.send(Command::End).await.unwrap();
+  while events.next().await.is_some() {}
+}
+
 /// A follow-up of an entry on the root, with a message that names it.
 fn follow(entry: &str) -> Command {
   let message = format!("Then {entry}.");
