@@ -253,6 +253,8 @@ interface Given {
 
 /** The place of the first turn of a list that differs from the turn at that place in another list. */
 function firstChange(held: readonly Turn[], turns: readonly Turn[]): number {
+  // The turns of a chain that changed nothing are the list that the session holds, which a long life makes long.
+  if (held === turns) return held.length;
   const same = (one: unknown, other: unknown) =>
     one === other || JSON.stringify(one) === JSON.stringify(other);
   let at = 0;
@@ -442,12 +444,27 @@ export class HostView extends EventEmitter {
     this.completed = activity.completed;
     this.cost = activity.cost;
     this.seq = this.life.facts.length;
-    this.seen = new Map(activity.seen);
     this.streams = new Map(this.life.streams);
-    this.measures = Object.fromEntries(
+    // A view keys on the measures, the compactions, the seen and the prompts, as the loom of the life does on the
+    // measures: each keeps its object while nothing of it changed, so a fact that changes none of them, as a line of a
+    // command, weaves nothing again in a long life.
+    const measures = Object.fromEntries(
       [...activity.answers].map(([chain, list]) => [chain, this.measure(chain, list)]),
     );
-    this.compactions = [...activity.compactions];
+    const held = Object.keys(this.measures);
+    if (
+      held.length !== Object.keys(measures).length ||
+      held.some((chain) => this.measures[chain] !== measures[chain])
+    )
+      this.measures = measures;
+    const { compactions } = activity;
+    if (compactions.length !== this.compactions.length || compactions.at(-1) !== this.compactions.at(-1))
+      this.compactions = [...compactions];
+    if (
+      activity.seen.size !== this.seen.size ||
+      [...activity.seen].some(([id, at]) => this.seen.get(id) !== at)
+    )
+      this.seen = new Map(activity.seen);
     const prompts = new Map<string, Prompt>();
     if (this.life instanceof RemoteLife)
       for (const act of this.life.acts.values())
@@ -457,7 +474,14 @@ export class HostView extends EventEmitter {
             shape: String(act.words[0] ?? ""),
             message: String(act.words[1] ?? ""),
           });
-    this.prompts = prompts;
+    const was = this.prompts;
+    if (
+      prompts.size !== was.size ||
+      [...prompts].some(
+        ([id, one]) => was.get(id)?.shape !== one.shape || was.get(id)?.message !== one.message,
+      )
+    )
+      this.prompts = prompts;
     this.emit("change");
   }
 
