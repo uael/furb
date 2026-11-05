@@ -41,6 +41,8 @@ struct Prepared {
   /// The checkpoint that carries the tail of another build, which a life that keeps no record
   /// holds in memory alone, since it writes nothing.
   crossed: Option<Object>,
+  /// Whether the gate reads each word, as [`crate::gate::configured`] says.
+  gated: bool,
 }
 
 /// A function of the host that answers each request in place of the models: it is given the request and a function
@@ -202,7 +204,7 @@ impl Opening {
   fn parted(self, continued: bool, prepared: Prepared) -> Result<(Vec<Object>, Ears, bool), Fault> {
     let works = self.works();
     let keeps = self.keeps != Some(false) && works;
-    let Prepared { places, extensions, provider, crossed } = prepared;
+    let Prepared { places, extensions, provider, crossed, .. } = prepared;
     let (mut record, store) = match (&self.record, keeps) {
       (Some(path), true) => world::store(path).map(|(held, store)| (held, Some(store)))?,
       (Some(path), false) => (world::kept(path)?, None),
@@ -314,7 +316,8 @@ impl Opening {
       })
       .collect();
     let provider = self.provider(advertised)?;
-    Ok(Prepared { places, extensions, provider, crossed })
+    let gated = crate::gate::configured(&places.config, Path::new(&self.directory));
+    Ok(Prepared { places, extensions, provider, crossed, gated })
   }
 
   /// The provider: the models of the roster that the catalog makes, which the function of the host answers when it
@@ -429,6 +432,7 @@ impl Opening {
     let (keeps, snapshots, works) = (self.keeps(), self.snapshot != Some(false), self.works());
     let path = self.record.clone().filter(|_| snapshots).map(PathBuf::from);
     let restore = path.as_ref().and_then(|path| snapshot::restore(path, &build));
+    let gated = prepared.gated;
     let (record, ears, cut) = self.parted(restore.is_some() && keeps, prepared)?;
     let ears = host.into_iter().chain(ears);
     let mut engine = match restore {
@@ -441,7 +445,7 @@ impl Opening {
           && crate::engine::looping(&record).is_empty() =>
       {
         let opened =
-          Engine::from_snapshot(&record, ears, &restore.table, restore.sand, &restore.past)
+          Engine::from_snapshot(&record, ears, &restore.table, restore.sand, &restore.past, gated)
             .and_then(|mut engine| {
               let on = vec![("on", Object::string("chain1"))];
               engine.verb("stand", vec![], on).map(|_| engine)
@@ -458,7 +462,7 @@ impl Opening {
       Some(restore) if !cut && restore.entries != record.len() => {
         return Err(Fault::refused("the record changed while the life opened on its snapshot"));
       }
-      _ => Engine::boot(record.clone(), ears)?,
+      _ => Engine::gated(record.clone(), ears, gated)?,
     };
     if let Some(no) = engine.raised() {
       return Err(no.clone());
