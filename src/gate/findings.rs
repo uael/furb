@@ -32,6 +32,8 @@ pub enum Rule {
   Asyncio,
   /// A name that the transcript binds.
   Told,
+  /// A name of the engine that a word binds.
+  Engine,
   /// A value that is not of the type that its name is declared with.
   Assign,
   /// Any other rule of the checker, by its name.
@@ -55,6 +57,7 @@ impl Rule {
       Rule::Await => "await-outside-async",
       Rule::Asyncio => "asyncio-in-word",
       Rule::Told => "transcript-name",
+      Rule::Engine => "engine-name",
       Rule::Assign => "invalid-assignment",
       Rule::Checker(name) => name,
     }
@@ -518,6 +521,74 @@ pub(super) fn told(sheet: &Parsed<'_>) -> Vec<Finding> {
       why: format!("the transcript binds `{name}`: a word reads it and never binds it"),
     })
     .collect()
+}
+
+/// The names that a chain binds of its own, though the engine binds each first: the actor, the last
+/// raise and the policy of the codes of a command, which a word binds like any name.
+const OWN: [&str; 3] = ["actor", "raised", "accepts"];
+
+/// Each name of the engine that a statement at the top of the word binds or deletes, by the line it
+/// stands on.
+///
+/// The module of a chain holds each name of the engine, which the sheet binds from `MODULE`, and
+/// each later word and each extension of the chain reads it there: a word that binds one by
+/// accident, as `peek = await bash('ls')`, gives them a wrong value under that name, so the gate
+/// refuses it. A def or a class of such a name overrides the verb on purpose, and a name that a
+/// def, a class, a lambda or a comprehension binds inside itself stays its own.
+pub(super) fn contracted(sheet: &Parsed<'_>) -> Vec<Finding> {
+  let Some(body) = sheet.bodied() else { return vec![] };
+  let engine: Vec<&str> = body
+    .iter()
+    .filter_map(|stmt| match stmt {
+      Stmt::Assign(one) => match (one.targets.as_slice(), &*one.value) {
+        ([Expr::Name(name)], Expr::Attribute(from))
+          if matches!(&*from.value, Expr::Name(module) if module.id.as_str() == MODULE) =>
+        {
+          Some(name.id.as_str())
+        }
+        _ => None,
+      },
+      _ => None,
+    })
+    .filter(|name| !OWN.contains(name) && !imported().iter().any(|one| one == name))
+    .collect();
+  word_of(body)
+    .iter()
+    .flat_map(|stmt| {
+      let names = match stmt {
+        Stmt::FunctionDef(_) | Stmt::ClassDef(_) => vec![],
+        Stmt::AugAssign(one) => named(&one.target),
+        Stmt::For(one) => named(&one.target),
+        Stmt::With(one) => one.items.iter().filter_map(|item| item.optional_vars.as_deref()).flat_map(named).collect(),
+        Stmt::Delete(one) => one.targets.iter().flat_map(named).collect(),
+        _ => binds(stmt),
+      };
+      names.into_iter().filter(|name| engine.contains(name)).map(move |name| (stmt.start().to_usize(), name))
+    })
+    .map(|(at, name)| Finding {
+      line: sheet.line(at),
+      column: sheet.column(at),
+      rule: Rule::Engine,
+      why: format!("`{name}` is a name of the engine, which each later word reads: give the value a name of its own"),
+    })
+    .collect()
+}
+
+/// The names that the engine imports, which a word may import too, since each is no name of the
+/// contract.
+fn imported() -> &'static [String] {
+  static IMPORTED: OnceLock<Vec<String>> = OnceLock::new();
+  IMPORTED.get_or_init(|| {
+    let Ok(parsed) = parse_module(ENGINE) else { return vec![] };
+    parsed
+      .syntax()
+      .body
+      .iter()
+      .filter(|stmt| matches!(stmt, Stmt::Import(_) | Stmt::ImportFrom(_)))
+      .flat_map(binds)
+      .map(str::to_owned)
+      .collect()
+  })
 }
 
 /// The names that a body binds at any depth, each by where it starts: each target of a statement or

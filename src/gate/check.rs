@@ -8,7 +8,7 @@ use monty_types::{TypeCheckingConfig, TypeCheckingFormat};
 
 use super::{
   MODULE, Parsed,
-  findings::{Finding, declared, read, signed, told, unawaited, unrun, unscheduled},
+  findings::{Finding, contracted, declared, read, signed, told, unawaited, unrun, unscheduled},
   layout::{laid, program_lines, rebound, shortened},
   shallow::shallowed,
 };
@@ -81,6 +81,7 @@ fn gated(sheet: &Parsed<'_>, mut found: Vec<Finding>) -> Vec<Finding> {
   found.extend(unawaited(sheet));
   found.extend(unscheduled(sheet));
   found.extend(told(sheet));
+  found.extend(contracted(sheet));
   found.sort_by_key(|one| one.line);
   found
 }
