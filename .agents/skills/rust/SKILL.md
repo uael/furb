@@ -8,7 +8,7 @@ description: The bar of the Rust of furb. The rules that each Rust file meets, e
 Rust here is written as an expert writes it: small, typed, and with one owner for each thing. Simple code is short
 code. Do not add a layer, a trait or a type that the code does not need.
 
-The lints in `[workspace.lints]` of `Cargo.toml` and of `gui/src-tauri/Cargo.toml`, with `clippy.toml`, hold each
+The lints in `[workspace.lints]` of `Cargo.toml`, with `clippy.toml`, hold each
 rule that a machine can hold. The rules below that no lint holds are for you and for the review.
 
 ## The debt
@@ -25,8 +25,7 @@ A module that does not meet the lints yet says so at its top, one line for each 
 - A true exception is an `#[expect(<lint>, reason = "<why>")]` on the item, never an `allow`. An exception that holds
   only for a cfg is a `cfg_attr`, as `#[cfg_attr(not(test), expect(dead_code, reason = "only the tests call it"))]`.
 - The gates run clippy on more than one set of features and systems. Run
-  `cargo clippy --workspace --all-targets -- -D warnings`, the same with `--features typescript`, and the same in
-  `gui/src-tauri`.
+  `cargo clippy --workspace --all-targets -- -D warnings`, and the same with `--features typescript`.
 
 ## The rules
 

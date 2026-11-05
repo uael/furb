@@ -23,9 +23,9 @@ INERT = re.compile(
 )
 # A path that only the suite of python reads.
 PYTHON = re.compile(r"(test/.*|bind/python/.*|pyproject\.toml|uv\.lock|docs/examples/python/.*)")
-# A path that only the bindings of TypeScript, the TUI and the app read.
+# A path that only the bindings of TypeScript and the TUI read.
 TYPESCRIPT = re.compile(
-  r"((tui|gui|bind/typescript)/.*|package\.json|bun\.lock|biome\.json|tsconfig.*\.json|docs/examples/typescript/.*)"
+  r"((tui|bind/typescript)/.*|package\.json|bun\.lock|biome\.json|tsconfig.*\.json|docs/examples/typescript/.*)"
 )
 # A path that the suite of python reads on Linux alone: the extensions of the project and the config that enables
 # them, whose suite in .furb/extensions gates each word as a chain plays it.
@@ -34,18 +34,17 @@ PROJECT = re.compile(r"\.furb/(extensions/.*|config\.json)")
 RUST = re.compile(
   r"((src|cli|tests|extensions|\.cargo)/.*|Cargo\.(toml|lock)|build\.rs|rust-toolchain\.toml|docs/examples/rust/.*)"
 )
-APP = re.compile(r"gui/.*")
 # A render of the gallery changes only these files, which no gate reads, so it runs no gate, by the ruling of the owner
 # on 10-29. The job of the gates alone reports on it.
 GALLERY = re.compile(r"docs/(screenshots/.*|furb[.]gif)")
 
 
 def scope(paths: list[str]) -> dict[str, object]:
-  """The systems of the suite and of the bindings, and whether the crate on Windows and on macOS and the app run.
+  """The systems of the suite and of the bindings, and whether the crate on Windows and on macOS runs.
 
   The hooks run unless the change is a render of the gallery alone.
   """
-  kinds = {"python": False, "typescript": False, "rust": False, "other": False, "app": False, "project": False}
+  kinds = {"python": False, "typescript": False, "rust": False, "other": False, "project": False}
   for path in paths:
     if INERT.fullmatch(path):
       continue
@@ -55,7 +54,6 @@ def scope(paths: list[str]) -> dict[str, object]:
       kinds["python"] = True
     elif TYPESCRIPT.fullmatch(path):
       kinds["typescript"] = True
-      kinds["app"] |= bool(APP.fullmatch(path))
     elif RUST.fullmatch(path):
       kinds["rust"] = True
     else:
@@ -66,7 +64,6 @@ def scope(paths: list[str]) -> dict[str, object]:
     "suite_os": EVERY if every or kinds["python"] else LINUX,
     "ts_os": EVERY if every or kinds["typescript"] else LINUX,
     "crate": every,
-    "gui": every or kinds["app"],
     "code": any(kinds.values()),
     "hooks": not gallery,
   }

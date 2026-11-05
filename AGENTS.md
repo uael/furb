@@ -108,11 +108,6 @@ The TypeScript side is a bun workspace at the root, whose packages are the three
   window: `tui/src/bridge.ts` attaches a window to the host, starts it, or takes over a host of another build, and keeps
   the worker in the window where no socket serves. The host serves the life over the network too, to a window of
   another operator that holds the key of a role, to read and write or to read only, which `tui/README.md` says.
-- `gui` is the desktop app, which runs a life in a window as the TUI runs one in a terminal: its core in
-  `gui/src-tauri`, a Cargo workspace of its own on Tauri 2, holds the window and starts the host of a life in
-  `gui/host`, a program of bun on the `Workspaces` and the `Session` of the TUI, and its UI in `gui/src` reads the
-  model of a life from its source. `gui/README.md` says how to build it, start it and use it, and `gui/DESIGN.md`
-  says its design.
 
 `docs/examples/` holds the examples of the framework: five short programs for each door, in `python/`,
 `typescript/` and `rust/`, which a user runs as they stand, and which `docs/examples/README.md` shows. They stand on

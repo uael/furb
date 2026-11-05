@@ -35,7 +35,6 @@ body:
         - The Python package
         - The TypeScript package
         - The Rust crate
-        - The desktop preview
         - The engine or an extension
         - The documents
         - I do not know

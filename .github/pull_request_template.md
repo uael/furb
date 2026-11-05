@@ -18,7 +18,7 @@ Title: `type(area): What changed`, 70 characters or fewer, as
   package sees. Below 1.0, a feat, a fix or a perf raises the patch version, and a break raises the minor.
   A chore raises nothing and stays out of the changelog. Add a `!` after the area for a break.
 - The area is required. It is the part that owns the change, such as `engine`, `crate`, `tui`,
-  `gui`, `provider`, `ci`, or an extension by its name, as `compaction`. Give the primary area when
+  `provider`, `ci`, or an extension by its name, as `compaction`. Give the primary area when
   the change touches more than one.
 - What changed is one sentence in Simplified Technical English that starts with a capital letter.
 - Do not start with a tool name such as [claude], [codex] or [ai].
