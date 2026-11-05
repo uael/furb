@@ -67,6 +67,7 @@ MONTY_SKIPS = {
   "test_a_run_names_the_rung_that_the_word_retells",
   "test_a_rung_that_retells_is_done_with_nothing",
   "test_a_word_that_the_chain_cannot_gate_or_run_is_refused_as_the_gate_refuses_a_word",
+  "test_an_act_that_the_life_makes_under_no_site_is_no_fact_of_the_world_in_a_replay",
 }
 """MONTY_SKIPS names the tests the engine of monty does not run, for the one reason the skip gives: what the test reads
 is a fact of one interpreter, which the boundary does not carry."""
