@@ -259,11 +259,10 @@ mod tests {
     // SAFETY: the call wrote size units at text.
     let sddl = unsafe { std::slice::from_raw_parts(text, usize::try_from(size).unwrap()) };
     let sddl = String::from_utf16_lossy(sddl).trim_end_matches('\0').to_owned();
-    // SAFETY: both came from the calls above, and nothing reads them after.
-    unsafe {
-      LocalFree(text.cast());
-      LocalFree(descriptor.cast());
-    }
+    // SAFETY: text came from the call above, and nothing reads it after.
+    unsafe { LocalFree(text.cast()) };
+    // SAFETY: descriptor came from the call above, and nothing reads it after.
+    unsafe { LocalFree(descriptor.cast()) };
     sddl
   }
 
