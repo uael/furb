@@ -1,29 +1,16 @@
 //! The config of the servers: the scopes and their order, the definitions and why one cannot run, the variables, and
 //! the choices of the operator in the local scope.
 
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-
-use std::{
-  collections::HashMap,
-  fs,
-  path::{Path, PathBuf},
-  time::Duration,
-};
+use std::{collections::HashMap, fs, path::Path, time::Duration};
 
 use serde_json::{Value, json};
 
 use super::{CALL, Choice, Places, Run, Scope, Server, Transport, choose, expand, servers};
+use crate::testing::Yard;
 
 /// A directory of its own for one test, and empty.
-fn place(name: &str) -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-mcp-config-{name}-{}", std::process::id()));
-  let _ = fs::remove_dir_all(&at);
-  fs::create_dir_all(&at).unwrap();
-  at
+fn place(name: &str) -> Yard {
+  Yard::new(format!("furb-mcp-config-{name}-{}", std::process::id()))
 }
 
 /// A file, written with its folder.

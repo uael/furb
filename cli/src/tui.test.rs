@@ -1,29 +1,28 @@
 //! Where furb finds the TUI, in the order it looks, on a PATH and a checkout that a test makes.
 
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-
 use std::{ffi::OsString, fs, path::PathBuf};
 
-use super::{NONE, found};
+#[path = "../../tests/common/yard.rs"]
+mod yard;
+
+use super::found;
+use crate::error::CliError;
 
 /// A yard of the test: a directory for its PATH and one for its checkout.
 struct Yard {
   bin: PathBuf,
   checkout: PathBuf,
+  /// The folder of the yard, which goes with it.
+  _at: yard::Yard,
 }
 
 impl Yard {
   fn new(name: &str) -> Yard {
-    let at = std::env::temp_dir().join(format!("furb-tui-{name}-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&at);
+    let at = yard::Yard::new(format!("furb-tui-{name}-{}", std::process::id()));
     let (bin, checkout) = (at.join("bin"), at.join("checkout"));
     fs::create_dir_all(&bin).expect("a PATH of the test");
     fs::create_dir_all(&checkout).expect("a checkout of the test");
-    Yard { bin, checkout }
+    Yard { bin, checkout, _at: at }
   }
 
   /// A program of this name on the PATH of the yard.
@@ -49,7 +48,7 @@ impl Yard {
     cli
   }
 
-  fn found(&self, named: Option<&str>) -> Result<Vec<OsString>, String> {
+  fn found(&self, named: Option<&str>) -> Result<Vec<OsString>, CliError> {
     found(named.map(OsString::from), self.bin.as_os_str(), &self.checkout)
   }
 }
@@ -81,14 +80,17 @@ fn the_tui_of_a_built_checkout_runs_on_the_bun_on_path() {
 fn a_checkout_says_what_its_tui_lacks() {
   let yard = Yard::new("lacks");
   yard.tui(false);
-  assert!(yard.found(None).unwrap_err().contains("no bun is on PATH"));
+  assert!(yard.found(None).unwrap_err().to_string().contains("no bun is on PATH"));
   yard.program("bun");
-  assert!(yard.found(None).unwrap_err().contains("run `bun install && bun run build` there"));
+  let unbuilt = yard.found(None).unwrap_err().to_string();
+  assert!(unbuilt.contains("run `bun install && bun run build` there"));
 }
 
 #[test]
 fn with_no_tui_furb_says_how_to_get_one() {
   let yard = Yard::new("none");
   yard.program("bun");
-  assert_eq!(yard.found(None).unwrap_err(), NONE);
+  let none = yard.found(None).unwrap_err();
+  assert!(matches!(none, CliError::NoTui));
+  assert!(none.to_string().starts_with("no TUI is found: set FURB_TUI"), "{none}");
 }

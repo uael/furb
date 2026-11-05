@@ -10,7 +10,7 @@ mod state;
 mod threads;
 mod time;
 
-pub use act::{Act, Answer, Pause, Phase, RunState, Spend, WORK};
+pub use act::{Act, Answer, Kind, Pause, Phase, RunState, Spend, operator};
 pub use desk::{Ask, Desk, Tick, choices, desk, hint, takes_nothing, ticks, wants};
 pub(crate) use fold::{Fold, followed};
 pub use state::{State, chain_state, restate, working};

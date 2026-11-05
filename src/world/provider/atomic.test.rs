@@ -1,14 +1,12 @@
-use std::{fs, path::PathBuf};
+use std::fs;
 
 use super::{Access, Error, write};
+use crate::testing::Yard;
 
 /// An empty folder of the test, named with the id of the process, as every yard of the tests of
 /// the crate is.
-fn yard(name: &str) -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-atomic-{name}-{}", std::process::id()));
-  drop(fs::remove_dir_all(&at));
-  fs::create_dir_all(&at).expect("a yard of the test");
-  at
+fn yard(name: &str) -> Yard {
+  Yard::new(format!("furb-atomic-{name}-{}", std::process::id()))
 }
 
 fn names(folder: &std::path::Path) -> Vec<String> {

@@ -5,7 +5,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::view::Act;
+use crate::{queue::FollowUp, view::Act};
 
 /// The place of an event in the log of its life, counted from 0 with no gap.
 pub type Seq = u64;
@@ -23,6 +23,9 @@ pub enum Event {
   /// What a model added to its text and to its thought, as it writes the reply of a rung on a
   /// chain. It is no fact, and the turn of the reply holds all of it.
   Text { rung: String, chain: String, text: String, thinking: String },
+  /// The follow-ups that wait on a chain, in order, each time that a fact of the operator or a send
+  /// of the life changed them.
+  Queued { chain: String, waiting: Vec<FollowUp> },
   /// A report of the life that no model reads, one line.
   Notice(String),
   /// A chain whose queries give another answer now, once each fact that changed it was told.

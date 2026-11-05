@@ -8,11 +8,6 @@
   clippy::disallowed_methods,
   reason = "debt: a call that blocks: sleep, block_on or try_wait"
 )]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
 #![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
 #![expect(clippy::single_char_pattern, reason = "debt: a string of one char as a pattern")]
 
@@ -26,6 +21,7 @@ use std::{
 };
 
 use super::{Answer, Opening};
+use crate::testing::Yard;
 use crate::{
   Act, Ear, Engine, Fact, Object, Text,
   ear::{ear, hear, hearing, say},
@@ -35,13 +31,10 @@ use crate::{
 };
 
 /// A directory of its own for one test, and empty.
-fn place(name: &str) -> PathBuf {
+fn place(name: &str) -> Yard {
   static MADE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
   let n = MADE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-  let at = std::env::temp_dir().join(format!("furb-life-{name}-{}-{n}", std::process::id()));
-  let _ = fs::remove_dir_all(&at);
-  fs::create_dir_all(&at).unwrap();
-  at
+  Yard::new(format!("furb-life-{name}-{}-{n}", std::process::id()))
 }
 
 /// A life in a directory of the tests, on its record and on the configs of that directory, whose provider offers
@@ -766,7 +759,7 @@ const WORK: [&str; 2] = [
 /// The record of the life of `WORK` in a directory of its own: a first life works, and a second
 /// life on the record takes one prompt more, so the record holds two openings. Each official
 /// extension runs on it.
-fn worked(name: &str) -> PathBuf {
+fn worked(name: &str) -> Yard {
   let at = place(name);
   let mut first = scripted(&at, &WORK).boot::<String>([]).unwrap().0;
   assert_eq!(
@@ -780,7 +773,7 @@ fn worked(name: &str) -> PathBuf {
     Some("done")
   );
   drop(later);
-  at.join("record.jsonl")
+  at.within("record.jsonl")
 }
 
 #[test]
@@ -804,7 +797,8 @@ fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
   let held = |name: &str| fs::read(at.join(name)).unwrap();
   let (text, log) = (held("record.jsonl"), held("record.jsonl.log"));
   // The config directory of the user stands apart, since a life writes there the copy of each word.
-  let config = Some(format!("{}-config", at.display()));
+  let apart = Yard::unmade(format!("furb-life-drifts-config-{}", std::process::id()));
+  let config = Some(apart.display().to_string());
   let refused =
     Opening { config, ..opening(&at, true) }.boot::<String>([]).map(|_| ()).unwrap_err();
   assert!(refused.to_string().starts_with("Drift: "), "{refused}");
@@ -874,7 +868,8 @@ fn replayed(by: &str) -> Vec<(String, Engine)> {
     .filter(|one| one.extension().is_some_and(|named| named == "jsonl"))
     .collect();
   records.sort();
-  let work = worked(&format!("shown-{by}-made")).with_file_name("work.jsonl");
+  let made = worked(&format!("shown-{by}-made"));
+  let work = made.with_file_name("work.jsonl");
   fs::rename(work.with_file_name("record.jsonl"), &work).unwrap();
   records.push(work);
   let open = |one: PathBuf| {
@@ -939,7 +934,7 @@ fn measure_how_long_a_life_opens_from_its_snapshot_and_by_a_replay() {
     for i in 0..n {
       closed(&mut engine, &word("x", i));
     }
-    if *at == cut {
+    if **at == *cut {
       engine.checkpoint().unwrap();
       engine = open(at, true);
       for i in 0..tail {

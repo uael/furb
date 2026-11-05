@@ -257,15 +257,24 @@ pub enum Verb {
     life: String,
     about: String,
   },
-  /// A message that the operator queued, sent once as a prompt on a chain. The record keeps the
-  /// entry and the hash of its words, so a second send of the entry, from any window, gives the
-  /// act of the first.
+  /// A follow-up that the operator queued on a chain, under an entry that the window chose. The
+  /// life sends it as a prompt of its shape and its message once the chain rests, and a second
+  /// queue of the same entry, from any window, changes nothing.
   Queue {
     life: String,
     entry: String,
-    hash: String,
     shape: String,
     message: String,
+    on: Option<String>,
+  },
+  /// A follow-up taken out of its queue before the life sent it.
+  Unqueue {
+    life: String,
+    entry: String,
+  },
+  /// The follow-ups that wait on a chain, in order.
+  Queued {
+    life: String,
     on: Option<String>,
   },
   /// The turn that the peer gave for a request of a model of a life that it answers, written as
@@ -320,6 +329,7 @@ impl Verb {
         | Self::Cwd { .. }
         | Self::Inspect { .. }
         | Self::Pending { .. }
+        | Self::Queued { .. }
         | Self::Names { .. }
         | Self::Gate { .. }
         | Self::ViewMount(_)

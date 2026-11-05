@@ -2,11 +2,6 @@
 //! record makes again in it. The tests of the World drive it in a life.
 
 #![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(
   clippy::redundant_closure_for_method_calls,
   reason = "debt: a closure where a method path serves"
 )]
@@ -18,13 +13,12 @@
 use std::{fs, path::PathBuf};
 
 use super::{SCRATCH, Scratch, WHOLE};
+use crate::testing::Yard;
 use crate::value::{Object, Text};
 
 /// A directory of its own for one test, which does not stand yet.
-fn place(name: &str) -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-scratch-{name}-{}", std::process::id()));
-  let _ = fs::remove_dir_all(&at);
-  at
+fn place(name: &str) -> Yard {
+  Yard::unmade(format!("furb-scratch-{name}-{}", std::process::id()))
 }
 
 /// A log of the host that keeps nothing, for a record whose files the machine takes.

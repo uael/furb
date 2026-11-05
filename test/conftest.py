@@ -6,10 +6,12 @@ hear by, so no name of them stands in the globals of the engine. Every fact is a
 """
 
 import asyncio
+import atexit
 import json
 import os
 import re
 import shlex
+import shutil
 import sys
 import tempfile
 from collections.abc import Generator, Sequence
@@ -32,6 +34,18 @@ CONFIG = Path(tempfile.mkdtemp(prefix="furb-config-"))
 process and each process that it starts: a provider, an extension or a memory file in the config directory of the
 machine changes no test. A test that needs a config of the user writes it in a directory of its own."""
 os.environ["FURB_CONFIG_DIR"] = str(CONFIG)
+
+
+@atexit.register
+def gone() -> None:
+  """The config directory of the process goes when the process ends, on a pass and on a failure, unless the env var
+  `FURB_KEEP_YARDS` is set, so that a failure can still be read there."""
+  if os.environ.get("FURB_KEEP_YARDS") is not None:
+    sys.stderr.write(f"FURB_KEEP_YARDS keeps {CONFIG}\n")
+  else:
+    shutil.rmtree(CONFIG, ignore_errors=True)
+
+
 ENGINE = vars(furb.python)
 """ENGINE is the module of the engine of this interpreter, whose names the Kernel and the gate read."""
 HERE = Path(__file__).resolve().parent
@@ -53,6 +67,7 @@ MONTY_SKIPS = {
   "test_a_run_names_the_rung_that_the_word_retells",
   "test_a_rung_that_retells_is_done_with_nothing",
   "test_a_word_that_the_chain_cannot_gate_or_run_is_refused_as_the_gate_refuses_a_word",
+  "test_an_act_that_the_life_makes_under_no_site_is_no_fact_of_the_world_in_a_replay",
 }
 """MONTY_SKIPS names the tests the engine of monty does not run, for the one reason the skip gives: what the test reads
 is a fact of one interpreter, which the boundary does not carry."""

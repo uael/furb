@@ -6,6 +6,9 @@
   reason = "the tests block on the runtime that tokio starts for them"
 )]
 
+#[path = "../../tests/common/yard.rs"]
+mod yard;
+
 use std::{
   fs,
   path::{Path, PathBuf},
@@ -22,7 +25,7 @@ use furb::{
 };
 use furb_host::{
   Command, Event, Life, LifeError, LifeHandle, Reply, Seq,
-  view::{Phase, RunState, State},
+  view::{Kind, Phase, RunState, State},
 };
 use futures::{Stream, StreamExt};
 use serde_json::json;
@@ -31,13 +34,8 @@ use serde_json::json;
 type Logged = (Seq, Arc<Event>);
 
 /// A directory of one test, empty.
-fn place(name: &str) -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-host-{name}-{}", std::process::id()));
-  fs::remove_dir_all(&at).ok();
-  if let Err(no) = fs::create_dir_all(&at) {
-    panic!("the test has no directory {}: {no}", at.display());
-  }
-  at
+fn place(name: &str) -> yard::Yard {
+  yard::Yard::new(format!("furb-host-{name}-{}", std::process::id()))
 }
 
 /// A life with no record and no extension, whose model answers each request with the next word of a
@@ -141,7 +139,6 @@ async fn a_prompt_is_told_as_its_facts_and_its_acts_in_order_with_no_gap_until_t
   assert_eq!(rest[0].0, got.len() as Seq);
   assert!(events.next().await.is_none());
   assert!(matches!(life.send(Command::Standing).await, Err(LifeError::Ended)));
-  fs::remove_dir_all(&at).unwrap();
 }
 
 #[tokio::test]
@@ -158,7 +155,6 @@ async fn a_reader_that_stands_behind_the_life_reads_its_events_again_from_the_lo
   assert_eq!(until(&mut late, done(&id)).await, heard);
   let mut tail = Box::pin(life.events(heard.len() as Seq - 1));
   assert_eq!(until(&mut tail, done(&id)).await, heard[heard.len() - 1..]);
-  fs::remove_dir_all(&at).unwrap();
 }
 
 #[tokio::test]
@@ -197,7 +193,6 @@ async fn a_query_is_a_command_that_the_life_answers() {
   assert!(
     matches!(wrong, Err(LifeError::Refused(why)) if why == format!("No prompt is named {id}."))
   );
-  fs::remove_dir_all(&at).unwrap();
 }
 
 #[tokio::test]
@@ -210,7 +205,6 @@ async fn a_life_that_does_not_open_ends_with_its_fault() {
   assert!(matches!(&*got.last().unwrap().1, Event::Ended(Some(why)) if !why.is_empty()));
   assert!(events.next().await.is_none());
   assert!(matches!(life.send(Command::Standing).await, Err(LifeError::Ended)));
-  fs::remove_dir_all(&at).unwrap();
 }
 #[tokio::test]
 async fn each_act_is_told_with_its_meaning_and_each_chain_with_the_state_of_its_work() {
@@ -238,11 +232,11 @@ async fn each_act_is_told_with_its_meaning_and_each_chain_with_the_state_of_its_
   until(&mut events, stands(asked, State::Done)).await;
   until(&mut events, stands("chain1".to_owned(), State::Done)).await;
   made(&life, rung("await wait(60)")).await;
-  until(&mut events, |event| matches!(event, Event::Act(act) if act.kind == "wait")).await;
+  until(&mut events, |event| matches!(event, Event::Act(act) if act.kind == Kind::Wait)).await;
   life.send(Command::Pause { id: "chain1".to_owned(), why: None }).await.unwrap();
   let held = until(
     &mut events,
-    |event| matches!(event, Event::Act(act) if act.kind == "wait" && act.state == State::Paused),
+    |event| matches!(event, Event::Act(act) if act.kind == Kind::Wait && act.state == State::Paused),
   )
   .await;
   let Some(Event::Act(wait)) = held.last().map(|one| &*one.1) else { panic!("an act") };
@@ -252,7 +246,6 @@ async fn each_act_is_told_with_its_meaning_and_each_chain_with_the_state_of_its_
     panic!("an act")
   };
   assert_eq!(root.state, State::Paused);
-  fs::remove_dir_all(&at).unwrap();
 }
 #[tokio::test]
 async fn the_verbs_of_the_operator_act_on_the_life_as_a_word_of_his_would() {
@@ -281,11 +274,13 @@ async fn the_verbs_of_the_operator_act_on_the_life_as_a_word_of_his_would() {
   assert!(made(&life, grant).await.starts_with("grant"));
   let stand = made(&life, Command::Stand).await;
   until(&mut events, done(&stand)).await;
-  fs::remove_dir_all(&at).unwrap();
+  // The scratch directory that a command of the life made goes as the thread of the life ends.
+  life.send(Command::End).await.unwrap();
+  while events.next().await.is_some() {}
 }
 
 #[tokio::test]
-async fn the_operator_closes_an_act_and_says_what_he_saw_and_what_he_queued() {
+async fn the_operator_closes_an_act_and_says_what_he_saw() {
   let at = place("operator-record");
   let life = Life::spawn(scripted(&at, &[])).unwrap();
   let mut events = Box::pin(life.events(0));
@@ -316,19 +311,122 @@ async fn the_operator_closes_an_act_and_says_what_he_saw_and_what_he_queued() {
     seen.iter().map(|fact| (&fact[1], &fact[2])).collect::<Vec<_>>(),
     [(&json!("chain1"), &json!("operator"))]
   );
-  let queue = || Command::Queue {
-    entry: text("q1"),
-    hash: text("h1"),
-    shape: text("None"),
-    message: text("And the tests."),
+}
+
+/// A follow-up of an entry on the root, with a message that names it.
+fn follow(entry: &str) -> Command {
+  let message = format!("Then {entry}.");
+  Command::Queue { entry: entry.to_owned(), shape: "None".to_owned(), message, on: None }
+}
+
+/// Whether an event tells the follow-ups that wait on the root, by their entries.
+fn waits(entries: &'static [&'static str]) -> impl Fn(&Event) -> bool {
+  move |event| {
+    matches!(event, Event::Queued { chain, waiting } if chain == "chain1"
+      && waiting.iter().map(|one| one.entry.as_str()).eq(entries.iter().copied()))
+  }
+}
+
+/// The facts of the queue of the operator on the root.
+async fn queue_facts(life: &LifeHandle) -> Vec<serde_json::Value> {
+  let of = Command::Transcript { on: None, of: Some("queue".to_owned()) };
+  match life.send(of).await {
+    Ok(Reply::Values(facts)) => facts,
+    other => panic!("the transcript gave no values: {other:?}"),
+  }
+}
+
+/// The steps of the facts of the queue of the operator on the root, each with its entry.
+async fn steps(life: &LifeHandle) -> Vec<(String, String)> {
+  let facts = queue_facts(life).await;
+  let text = |fact: &serde_json::Value, at: usize| fact[at].as_str().unwrap_or_default().to_owned();
+  facts.iter().map(|fact| (text(fact, 3), text(fact, 4))).collect()
+}
+
+/// The prompt that a follow-up went as, which its fact `sent` names.
+async fn went(life: &LifeHandle, entry: &str) -> String {
+  let facts = queue_facts(life).await;
+  let sent = facts.iter().find(|fact| fact[3] == json!("sent") && fact[4] == json!(entry));
+  match sent.and_then(|fact| fact[5].as_str()) {
+    Some(act) => act.to_owned(),
+    None => panic!("the follow-up {entry} went as no prompt: {facts:?}"),
+  }
+}
+
+#[tokio::test]
+async fn a_follow_up_waits_while_its_chain_asks_the_operator_and_goes_once_it_rests() {
+  let at = place("queue-asks");
+  let life = Life::spawn(scripted(&at, &[])).unwrap();
+  let mut events = Box::pin(life.events(0));
+  let prompt = Command::Prompt {
+    shape: "str".to_owned(),
+    message: "Which base?".to_owned(),
+    to: Some("operator".to_owned()),
     on: None,
   };
-  let first = made(&life, queue()).await;
-  assert_eq!(made(&life, queue()).await, first);
-  let Reply::Values(queued) = life.send(of("queue")).await.unwrap() else { panic!("values") };
-  let steps: Vec<_> = queued.iter().map(|fact| (fact[3].clone(), fact[5].clone())).collect();
-  assert_eq!(steps, [(json!("begin"), json!("h1")), (json!("sent"), json!(first))]);
-  fs::remove_dir_all(&at).unwrap();
+  let asked = made(&life, prompt).await;
+  until(&mut events, stands("chain1".to_owned(), State::Asks)).await;
+  assert_eq!(life.send(follow("q1")).await.unwrap(), Reply::Done);
+  assert_eq!(life.send(follow("q1")).await.unwrap(), Reply::Done);
+  until(&mut events, waits(&["q1"])).await;
+  let Reply::Values(waiting) = life.send(Command::Queued { on: None }).await.unwrap() else {
+    panic!("values")
+  };
+  assert_eq!(waiting.len(), 1);
+  assert_eq!(waiting[0]["message"], json!("Then q1."));
+  life.send(Command::Answer { id: asked, line: "main".to_owned() }).await.unwrap();
+  until(&mut events, waits(&[])).await;
+  let sent = went(&life, "q1").await;
+  until(&mut events, done(&sent)).await;
+  let pairs = |all: &[&str]| all.iter().map(|step| ((*step).to_owned(), "q1".to_owned())).collect();
+  let expected: Vec<(String, String)> = pairs(&["add", "begin", "sent"]);
+  assert_eq!(steps(&life).await, expected);
+  let refused = life.send(Command::Unqueue { entry: "q1".to_owned() }).await;
+  assert!(matches!(refused, Err(LifeError::Refused(_))), "{refused:?}");
+}
+
+#[tokio::test]
+async fn a_pause_holds_the_queue_and_the_operator_takes_a_follow_up_out_of_it() {
+  let at = place("queue-pause");
+  let life = Life::spawn(scripted(&at, &[])).unwrap();
+  let mut events = Box::pin(life.events(0));
+  life.send(Command::Pause { id: "chain1".to_owned(), why: None }).await.unwrap();
+  life.send(follow("q1")).await.unwrap();
+  life.send(follow("q2")).await.unwrap();
+  until(&mut events, waits(&["q1", "q2"])).await;
+  life.send(Command::Unqueue { entry: "q1".to_owned() }).await.unwrap();
+  until(&mut events, waits(&["q2"])).await;
+  life.send(Command::Wake { id: "chain1".to_owned() }).await.unwrap();
+  until(&mut events, waits(&[])).await;
+  let sent = went(&life, "q2").await;
+  until(&mut events, done(&sent)).await;
+  let kinds: Vec<String> = steps(&life).await.into_iter().map(|(step, _)| step).collect();
+  assert_eq!(kinds, ["add", "add", "drop", "begin", "sent"]);
+}
+
+#[tokio::test]
+async fn a_reopen_of_the_record_finds_the_queue_and_sends_it_once_the_chain_rests() {
+  let at = place("queue-reopen");
+  let record = at.join("a.jsonl").display().to_string();
+  let opening = || Opening { record: Some(record.clone()), ..scripted(&at, &[]) };
+  let life = Life::spawn(opening()).unwrap();
+  let mut events = Box::pin(life.events(0));
+  life.send(Command::Pause { id: "chain1".to_owned(), why: None }).await.unwrap();
+  life.send(follow("q1")).await.unwrap();
+  until(&mut events, waits(&["q1"])).await;
+  life.send(Command::End).await.unwrap();
+  drop(events);
+  let life = Life::spawn(opening()).unwrap();
+  let mut events = Box::pin(life.events(0));
+  until(&mut events, waits(&["q1"])).await;
+  let Reply::Values(waiting) = life.send(Command::Queued { on: None }).await.unwrap() else {
+    panic!("values")
+  };
+  assert_eq!(waiting.iter().map(|one| one["entry"].clone()).collect::<Vec<_>>(), [json!("q1")]);
+  life.send(Command::Wake { id: "chain1".to_owned() }).await.unwrap();
+  until(&mut events, waits(&[])).await;
+  let sent = went(&life, "q1").await;
+  until(&mut events, done(&sent)).await;
 }
 #[tokio::test]
 async fn each_write_keeps_its_change_in_the_journal_beside_the_record() {
@@ -364,7 +462,6 @@ async fn each_write_keeps_its_change_in_the_journal_beside_the_record() {
   assert_eq!(changes[1]["path"], json!(file("b.txt")));
   assert_eq!((&changes[1]["before"], &changes[1]["made"]), (&json!(""), &json!(true)));
   life.send(Command::End).await.unwrap();
-  fs::remove_dir_all(&at).unwrap();
 }
 #[tokio::test]
 async fn a_verb_of_the_operator_gives_the_words_of_its_act() {
@@ -406,5 +503,7 @@ async fn a_verb_of_the_operator_gives_the_words_of_its_act() {
       && act.pause.as_ref().is_some_and(|one| one.why == Some(json!("for lunch"))))
   };
   until(&mut events, paused).await;
-  fs::remove_dir_all(&at).unwrap();
+  // The scratch directory that a command of the life made goes as the thread of the life ends.
+  life.send(Command::End).await.unwrap();
+  while events.next().await.is_some() {}
 }

@@ -1,24 +1,13 @@
 //! The catalog of models, read from a snapshot of the tests and from the snapshot the crate carries, with the
 //! credentials a test gives, so no test reads the environment or the network.
 
-#![expect(
-  clippy::disallowed_methods,
-  reason = "debt: a call that blocks: block_on, where a test drives a future on the reactor"
-)]
-#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
-#![cfg_attr(
-  unix,
-  expect(clippy::items_after_statements, reason = "debt: an item declared after a statement")
-)]
+#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
 #![expect(
   clippy::let_underscore_must_use,
   reason = "debt: a let _ drops a value that must be used"
 )]
 #![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(clippy::redundant_clone, reason = "debt: a clone of a value that is not used again")]
 #![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
-#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
-#![expect(clippy::unreadable_literal, reason = "debt: a long literal with no separator")]
 
 use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 
@@ -127,7 +116,7 @@ fn the_catalog_offers_a_provider_whose_credential_stands_and_names_each_model_as
 #[test]
 fn a_name_finds_a_model_by_its_provider_and_its_id_or_by_an_id_that_one_model_alone_holds() {
   let catalog = catalog(&[]);
-  let found = |name: &str| catalog.find(name).map(|model| model.name.clone());
+  let found = |name: &str| catalog.find(name).map(|model| model.name);
   assert_eq!(found("openai:gpt-4o").as_deref(), Some("openai:gpt-4o"));
   assert_eq!(
     found("opus").as_deref(),
@@ -199,6 +188,13 @@ fn each_provider_reads_an_effort_in_its_own_words() {
     Vec::<String>::new(),
     "a model that does not reason takes no effort"
   );
+}
+
+#[test]
+fn each_other_provider_reads_an_effort_in_its_own_words() {
+  let catalog = catalog(&[]);
+  let names =
+    |name: &str| efforts(&catalog, name).into_iter().map(|(level, _)| level).collect::<Vec<_>>();
   assert_eq!(
     efforts(&catalog, "google:gemini-flash")[1].1,
     json!({"generationConfig": {"thinkingConfig": {"thinkingBudget": 2048, "includeThoughts": true}}})
@@ -247,8 +243,7 @@ fn a_level_that_a_model_does_not_take_moves_to_the_nearest_one_it_takes() {
 fn a_roster_holds_the_model_of_its_actor_first_and_the_models_a_host_names_or_every_model_the_catalog_offers()
  {
   let catalog = catalog(&["OPENAI_API_KEY"]);
-  let names =
-    |models: &[super::Model]| models.iter().map(|one| one.name.clone()).collect::<Vec<_>>();
+  let names = |models: &[Model]| models.iter().map(|one| one.name.clone()).collect::<Vec<_>>();
   let (models, actor) = catalog.roster(None, None).expect("the roster of no name");
   assert_eq!(
     (names(&models), actor),
@@ -361,7 +356,7 @@ fn the_newer_of_the_cache_and_the_snapshot_holds_for_each_provider() {
 
 #[test]
 fn the_parse_of_the_caches_is_made_again_only_when_a_file_changes() {
-  let root = std::env::temp_dir().join(format!("furb-listed-{}", std::process::id()));
+  let root = crate::testing::Yard::unmade(format!("furb-listed-{}", std::process::id()));
   fs::create_dir_all(&root).unwrap();
   let at = root.join(MODELS);
   fs::write(&at, "{}").unwrap();
@@ -372,7 +367,6 @@ fn the_parse_of_the_caches_is_made_again_only_when_a_file_changes() {
   assert!(!Arc::ptr_eq(&first, &second), "a change of the data of pi-ai is read");
   fs::write(&at, "not json").unwrap();
   assert!(!Arc::ptr_eq(&second, &listed(Some(&at))), "a change of the cache is read");
-  fs::remove_dir_all(&root).unwrap();
 }
 
 #[test]
@@ -411,12 +405,11 @@ fn a_provider_is_offered_when_the_environment_holds_its_credential_and_each_plac
   assert!(offered(&["AWS_PROFILE"], "amazon-bedrock:qwen.qwen3"));
   assert!(!offered(&["GOOGLE_CLOUD_API_KEY"], "google-vertex:gemini-pro"), "Google asks a project");
   assert!(offered(&["GOOGLE_CLOUD_API_KEY", "GOOGLE_CLOUD_PROJECT=p"], "google-vertex:gemini-pro"));
-  let home = std::env::temp_dir().join(format!("furb-adc-{}", std::process::id()));
+  let home = crate::testing::Yard::new(format!("furb-adc-{}", std::process::id()));
   let (root, gcloud) =
     if cfg!(windows) { ("APPDATA", "gcloud") } else { ("HOME", ".config/gcloud") };
-  std::fs::create_dir_all(home.join(gcloud)).expect("the folder of gcloud");
-  std::fs::write(home.join(gcloud).join("application_default_credentials.json"), "{}")
-    .expect("a file");
+  fs::create_dir_all(home.join(gcloud)).expect("the folder of gcloud");
+  fs::write(home.join(gcloud).join("application_default_credentials.json"), "{}").expect("a file");
   let adc = format!("{root}={}", home.display());
   assert!(
     offered(&[&adc, "GOOGLE_CLOUD_PROJECT=p"], "google-vertex:gemini-pro"),
@@ -501,7 +494,7 @@ fn the_default_actor_is_a_model_of_the_claude_command_line_then_of_the_network_t
   let claude = catalog(&[&url]).claude(Some(PathBuf::from("/bin/true")), None);
   let (models, _) = claude.roster(None, None).expect("the default");
   assert_eq!(names_of(&models)[0], "claude-cli:opus");
-  assert_eq!(claude.find("local:qwen").map(|one| one.name.clone()).as_deref(), Some("local:qwen"));
+  assert_eq!(claude.find("local:qwen").map(|one| one.name).as_deref(), Some("local:qwen"));
 }
 
 #[test]
@@ -568,7 +561,7 @@ fn an_id_alone_of_the_local_server_whose_part_before_its_colon_is_a_provider_is_
   assert_eq!(told.try_iter().count(), 0);
   assert_eq!(names_of(&catalog.offered()), ["local:google:gemma3"]);
   assert_eq!(told.try_iter().count(), 1);
-  let found = catalog.find("google:gemma3").map(|one| one.name.clone());
+  let found = catalog.find("google:gemma3").map(|one| one.name);
   assert_eq!(
     (found.as_deref(), told.try_iter().count()),
     (Some("local:google:gemma3"), 0),
@@ -580,12 +573,12 @@ fn an_id_alone_of_the_local_server_whose_part_before_its_colon_is_a_provider_is_
 #[test]
 fn a_first_run_reads_whether_the_claude_command_line_is_signed_in() {
   use std::os::unix::fs::PermissionsExt;
-  let folder = std::env::temp_dir().join(format!("furb-signed-{}", std::process::id()));
-  std::fs::create_dir_all(&folder).expect("a folder for the programs");
+  let folder = crate::testing::Yard::unmade(format!("furb-signed-{}", std::process::id()));
+  fs::create_dir_all(&folder).expect("a folder for the programs");
   let signed = |name: &str, script: &str| {
     let bin = folder.join(name);
-    std::fs::write(&bin, format!("#!/bin/sh\n{script}\n")).expect("the program");
-    std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).expect("its mode");
+    fs::write(&bin, format!("#!/bin/sh\n{script}\n")).expect("the program");
+    fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).expect("its mode");
     catalog(&[]).claude(Some(bin), None).setup().signed
   };
   assert!(!signed("words", "echo 'Not logged in'; exit 1"), "it says that it is not logged in");
@@ -598,7 +591,6 @@ fn a_first_run_reads_whether_the_claude_command_line_is_signed_in() {
     signed("old", "echo 'unknown command: auth' >&2; exit 1"),
     "a version with no such command passes"
   );
-  let _ = std::fs::remove_dir_all(&folder);
 }
 
 #[test]
@@ -638,6 +630,45 @@ fn a_first_run_checks_the_claude_command_line_each_provider_and_the_local_server
   );
 }
 
+/// A request of one user message with the preamble of the engine only, by this actor.
+#[cfg(unix)]
+fn asked_of(actor: &str) -> Asked {
+  Asked {
+    actor: actor.into(),
+    chain: "chain1".into(),
+    request: CompletionRequest {
+      model: None,
+      preamble: Some("ENGINE ONLY".to_owned()),
+      chat_history: vec![Message::user("first")],
+      documents: Vec::new(),
+      tools: Vec::new(),
+      temperature: None,
+      max_tokens: None,
+      tool_choice: None,
+      additional_params: None,
+      output_schema: None,
+      record_telemetry_content: false,
+    },
+    told: Arc::new(|_, _| {}),
+    thought: None,
+  }
+}
+
+/// Writes a script that anyone may run.
+#[cfg(unix)]
+fn executable(path: &std::path::Path, text: &str) {
+  use std::os::unix::fs::PermissionsExt;
+  fs::write(path, text).unwrap();
+  fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
+}
+
+/// Writes the settings that give the command line of Claude.
+#[cfg(unix)]
+fn claude_command(path: &std::path::Path, command: &Value) {
+  let settings = json!({"providers": {"claude-cli": {"command": command}}});
+  fs::write(path, settings.to_string()).unwrap();
+}
+
 #[cfg(unix)]
 #[test]
 fn a_configured_claude_prefix_reaches_completions_and_search_and_project_settings_win() {
@@ -651,44 +682,14 @@ fn a_configured_claude_prefix_reaches_completions_and_search_and_project_setting
   fs::create_dir_all(project.join(".furb")).unwrap();
   let settings = project.join(".furb/config.json");
   let bin = yard.at.join("claude");
-  fs::write(
-    user.join("config.json"),
-    json!({"providers": {"claude-cli": {"command": [bin, "user-prefix"]}}}).to_string(),
-  )
-  .unwrap();
-  fs::write(
-    &settings,
-    json!({"providers": {"claude-cli": {
-      "command": [bin, "run", "3", "two words", "$HOME;literal"]
-    }}})
-    .to_string(),
-  )
-  .unwrap();
+  claude_command(&user.join("config.json"), &json!([bin, "user-prefix"]));
+  claude_command(&settings, &json!([bin, "run", "3", "two words", "$HOME;literal"]));
   let configured = || catalog(&["OPENAI_API_KEY"]).configured(&project, Some(&user));
   let models = configured().expect("a command prefix is valid");
   assert!(models.setup().claude);
   assert!(models.find("openai:gpt-5").is_some(), "other providers stay");
   let model = models.find("claude-cli:sonnet").unwrap();
-  let request = CompletionRequest {
-    model: None,
-    preamble: Some("ENGINE ONLY".to_owned()),
-    chat_history: vec![Message::user("first")],
-    documents: Vec::new(),
-    tools: Vec::new(),
-    temperature: None,
-    max_tokens: None,
-    tool_choice: None,
-    additional_params: None,
-    output_schema: None,
-    record_telemetry_content: false,
-  };
-  let asked = Asked {
-    actor: "claude-cli:sonnet".into(),
-    chain: "chain1".into(),
-    request,
-    told: Arc::new(|_, _| {}),
-    thought: None,
-  };
+  let asked = asked_of("claude-cli:sonnet");
   let answer = reactor().block_on((model.answers)(asked)).unwrap();
   let Answer::Response(answer) = answer else { panic!("a Claude response") };
   assert_eq!(answer.choice, [rig_core::message::AssistantContent::text("close(\"reply 1\")")]);
@@ -702,21 +703,11 @@ fn a_configured_claude_prefix_reaches_completions_and_search_and_project_setting
   let search_bin = yard.at.join("search");
   // A process that asks for the models ends at once, as one of a command line that lists none: else the discovery
   // waits for its answer until its deadline, twenty seconds.
-  fs::write(
+  executable(
     &search_bin,
     "#!/bin/sh\n[ -n \"$FURB_CLAUDE_DISCOVER\" ] && exit 0\nprintf '[%s]\\n' \"$@\"\necho ---\ncat\n",
-  )
-  .unwrap();
-  use std::os::unix::fs::PermissionsExt;
-  fs::set_permissions(&search_bin, fs::Permissions::from_mode(0o755)).unwrap();
-  fs::write(
-    &settings,
-    json!({"providers": {"claude-cli": {
-      "command": [search_bin, "run", "3", "two words", "$HOME;literal"]
-    }}})
-    .to_string(),
-  )
-  .unwrap();
+  );
+  claude_command(&settings, &json!([search_bin, "run", "3", "two words", "$HOME;literal"]));
   let fresh = configured().unwrap();
   let model = fresh.find("claude-cli:sonnet").unwrap();
   let search = model.search.as_ref().unwrap();
@@ -737,7 +728,7 @@ fn a_configured_claude_prefix_reaches_completions_and_search_and_project_setting
 fn an_invalid_claude_command_is_refused_before_it_starts_a_process() {
   use std::fs;
   let root =
-    std::env::temp_dir().join(format!("furb-invalid-claude-command-{}", std::process::id()));
+    crate::testing::Yard::unmade(format!("furb-invalid-claude-command-{}", std::process::id()));
   fs::create_dir_all(root.join(".furb")).unwrap();
   for command in
     [json!([]), json!(""), json!([" "]), json!(12), json!(["claude", 3]), json!(["claude", "\0"])]
@@ -751,13 +742,12 @@ fn an_invalid_claude_command_is_refused_before_it_starts_a_process() {
     let Err(no) = result else { panic!("invalid command {command} was accepted") };
     assert!(no.to_string().contains("claude-cli"), "{no}");
   }
-  fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
 fn a_model_of_a_chat_provider_of_the_settings_takes_the_efforts_that_it_lists_as_a_local_model() {
   use std::fs;
-  let root = std::env::temp_dir().join(format!("furb-chat-efforts-{}", std::process::id()));
+  let root = crate::testing::Yard::unmade(format!("furb-chat-efforts-{}", std::process::id()));
   fs::create_dir_all(root.join(".furb")).unwrap();
   let settings = |models: Value, protocol: &str| {
     let provider =
@@ -770,9 +760,9 @@ fn a_model_of_a_chat_provider_of_the_settings_takes_the_efforts_that_it_lists_as
     catalog(&[]).configured(&root, Some(&root))
   };
   let models = json!({
-    "qwen": {"window": 262144, "reasoning": true, "efforts": ["high", "off", "low", "medium"]},
-    "thinks": {"window": 262144, "reasoning": true, "efforts": ["medium"]},
-    "plain": {"window": 262144, "reasoning": true}
+    "qwen": {"window": 262_144, "reasoning": true, "efforts": ["high", "off", "low", "medium"]},
+    "thinks": {"window": 262_144, "reasoning": true, "efforts": ["medium"]},
+    "plain": {"window": 262_144, "reasoning": true}
   });
   let got = settings(models, "chat").expect("efforts of the protocol chat are valid");
   let off = json!({"chat_template_kwargs": {"enable_thinking": false}});
@@ -801,7 +791,6 @@ fn a_model_of_a_chat_provider_of_the_settings_takes_the_efforts_that_it_lists_as
     };
     assert!(no.to_string().contains("strata"), "{no}");
   }
-  fs::remove_dir_all(root).unwrap();
 }
 
 /// A first turn of a model of the claude command line, which the fake answers with its first reply.
@@ -878,7 +867,7 @@ fn configured_claude_accounts_give_their_token_to_a_turn_and_to_a_search() {
 fn invalid_claude_accounts_are_refused_before_they_start_a_process() {
   use std::fs;
   let root =
-    std::env::temp_dir().join(format!("furb-invalid-claude-accounts-{}", std::process::id()));
+    crate::testing::Yard::unmade(format!("furb-invalid-claude-accounts-{}", std::process::id()));
   fs::create_dir_all(root.join(".furb")).unwrap();
   let one = json!({"name": "a", "token_env": "X"});
   for settings in [
@@ -902,17 +891,15 @@ fn invalid_claude_accounts_are_refused_before_they_start_a_process() {
     let Err(no) = result else { panic!("invalid accounts {settings} were accepted") };
     assert!(no.to_string().contains("claude-cli"), "{no}");
   }
-  fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
 fn the_doctrine_of_a_project_comes_first_then_the_checkout_of_dev_mode_then_the_official_copy_in_the_home()
  {
-  let at = std::env::temp_dir().join(format!("furb-doctrine-{}", std::process::id()));
-  let _ = std::fs::remove_dir_all(&at);
+  let at = crate::testing::Yard::unmade(format!("furb-doctrine-{}", std::process::id()));
   let (project, checkout, home) = (at.join("project"), at.join("checkout"), at.join("home"));
   for one in [&project, &checkout, &home] {
-    std::fs::create_dir_all(one).unwrap();
+    fs::create_dir_all(one).unwrap();
   }
   let official = home.join(".furb").join("DOCTRINE.md");
   assert!(
@@ -922,44 +909,43 @@ fn the_doctrine_of_a_project_comes_first_then_the_checkout_of_dev_mode_then_the_
   assert!(!official.exists(), "the lookup writes nothing");
   assert_eq!(doctrine_in(&project, None, Some(&home)), Some(official.clone()), "the official copy");
   assert_eq!(
-    std::fs::read_to_string(&official).unwrap(),
+    fs::read_to_string(&official).unwrap(),
     DOCTRINE,
     "furb writes it from the doctrine it carries"
   );
-  std::fs::write(&official, "an older doctrine").unwrap();
+  fs::write(&official, "an older doctrine").unwrap();
   doctrine_in(&project, None, Some(&home));
   assert_eq!(
-    std::fs::read_to_string(&official).unwrap(),
+    fs::read_to_string(&official).unwrap(),
     DOCTRINE,
     "a copy that holds another text is written again"
   );
   assert_eq!(doctrine_in(&project, None, None), None, "no home holds no official copy");
-  std::fs::write(checkout.join("DOCTRINE.md"), "the checkout").unwrap();
+  fs::write(checkout.join("DOCTRINE.md"), "the checkout").unwrap();
   assert_eq!(
     doctrine_in(&project, Some(&checkout), Some(&home)),
     Some(checkout.join("DOCTRINE.md")),
     "dev mode"
   );
-  std::fs::create_dir_all(project.join(".furb")).unwrap();
-  std::fs::write(project.join(".furb").join("DOCTRINE.md"), "the project").unwrap();
+  fs::create_dir_all(project.join(".furb")).unwrap();
+  fs::write(project.join(".furb").join("DOCTRINE.md"), "the project").unwrap();
   let local = project.join(".furb").join("DOCTRINE.md");
   assert_eq!(
     doctrine_in(&project, Some(&checkout), Some(&home)),
     Some(local),
     "a doctrine of the project prevails"
   );
-  let _ = std::fs::remove_dir_all(&at);
 }
 
 #[test]
 fn the_local_config_of_a_project_wins_over_its_config_for_a_provider() {
   use std::fs;
-  let root = std::env::temp_dir().join(format!("furb-local-config-{}", std::process::id()));
+  let root = crate::testing::Yard::unmade(format!("furb-local-config-{}", std::process::id()));
   fs::create_dir_all(root.join(".furb")).unwrap();
   let local = root.join(".furb/config.local.json");
   let _ = fs::remove_file(&local);
   let provider = json!({
-    "protocol": "chat", "url": "http://127.0.0.1:9/v1", "key": "k", "models": {"qwen": {"window": 262144}}
+    "protocol": "chat", "url": "http://127.0.0.1:9/v1", "key": "k", "models": {"qwen": {"window": 262_144}}
   });
   fs::write(root.join(".furb/config.json"), json!({"providers": {"strata": provider}}).to_string())
     .unwrap();
@@ -977,5 +963,4 @@ fn the_local_config_of_a_project_wins_over_its_config_for_a_provider() {
     got.find("strata:other").is_some() && got.find("strata:qwen").is_none(),
     "the local config wins for each field that it gives"
   );
-  fs::remove_dir_all(root).unwrap();
 }

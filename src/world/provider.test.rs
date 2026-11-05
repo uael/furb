@@ -1,12 +1,7 @@
 //! The provider of models in a life of the real engine: models of rig that answer from a script, a model that never
 //! answers, and the claude command line of the tests.
 
-#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
-#![expect(clippy::default_trait_access, reason = "debt: Default::default() where the type serves")]
-#![expect(
-  clippy::disallowed_methods,
-  reason = "debt: a call that blocks: sleep, block_on or try_wait"
-)]
+#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
 #![expect(
   clippy::format_collect,
   reason = "debt: a format! for each item, collected into a String"
@@ -20,7 +15,6 @@
   clippy::needless_pass_by_value,
   reason = "debt: an argument taken by value and only borrowed"
 )]
-#![expect(clippy::redundant_clone, reason = "debt: a clone of a value that is not used again")]
 #![expect(
   clippy::redundant_closure_for_method_calls,
   reason = "debt: a closure where a method path serves"
@@ -29,7 +23,6 @@
   clippy::unnecessary_wraps,
   reason = "debt: a Result or an Option that is always Ok or Some"
 )]
-#![expect(clippy::unused_async_trait_impl, reason = "debt: an async fn that awaits nothing")]
 
 use std::{
   fs,
@@ -69,14 +62,12 @@ use super::{
 };
 use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, Text, verbs, world};
 
+use crate::testing::Yard;
 use crate::testing::{block_on, waker};
 
 /// A yard of one test, empty.
-fn yard(name: &str) -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-provider-{name}-{}", std::process::id()));
-  let _ = fs::remove_dir_all(&at);
-  fs::create_dir_all(&at).expect("a yard of the test");
-  at
+fn yard(name: &str) -> Yard {
+  Yard::new(format!("furb-provider-{name}-{}", std::process::id()))
 }
 
 /// A life of the real engine on a provider in a yard of its own, and the ears of the World.
@@ -100,7 +91,7 @@ fn seeing(provider: Provider, gallery: Option<PathBuf>) -> Engine {
 }
 
 /// A life of the real engine on the provider of these models and the ears of the World, in a yard of its own.
-fn life(name: &str, models: Vec<Model>) -> (Engine, PathBuf) {
+fn life(name: &str, models: Vec<Model>) -> (Engine, Yard) {
   let at = yard(name);
   (lived(Provider::new(at.display().to_string(), models)), at)
 }
@@ -346,8 +337,11 @@ impl Drop for Flag {
 }
 
 impl CompletionModel for Silent {
-  async fn completion(&self, _: CompletionRequest) -> Result<CompletionResponse, CompletionError> {
-    Err(CompletionError::ProviderError("the provider streams".into()))
+  fn completion(
+    &self,
+    _: CompletionRequest,
+  ) -> impl Future<Output = Result<CompletionResponse, CompletionError>> {
+    std::future::ready(Err(CompletionError::ProviderError("the provider streams".into())))
   }
 
   async fn stream(
@@ -366,7 +360,7 @@ fn a_cancel_over_a_reply_ends_the_call_of_its_model_and_the_ear_says_nothing_mor
   let (mut engine, _) = life("cancel", vec![Model::new("m", 1000, model.clone())]);
   let id = asked(&mut engine);
   assert!(until(&mut engine, |_| model.asked.load(Ordering::SeqCst)), "the model is asked");
-  engine.cancel(&id, Default::default()).expect("the prompt is cancelled");
+  engine.cancel(&id, verbs::Cancel::default()).expect("the prompt is cancelled");
   let no = block_on(Act::<Object>::of(&mut engine, "reply1")).expect_err("the reply ends");
   assert_eq!(no.name, "CancelledError");
   assert!(
@@ -397,14 +391,17 @@ impl Halting {
 }
 
 impl CompletionModel for Halting {
-  async fn completion(&self, _: CompletionRequest) -> Result<CompletionResponse, CompletionError> {
-    Err(CompletionError::ProviderError("the provider streams".into()))
-  }
-
-  async fn stream(
+  fn completion(
     &self,
     _: CompletionRequest,
-  ) -> Result<StreamingCompletionResponse, CompletionError> {
+  ) -> impl Future<Output = Result<CompletionResponse, CompletionError>> {
+    std::future::ready(Err(CompletionError::ProviderError("the provider streams".into())))
+  }
+
+  fn stream(
+    &self,
+    _: CompletionRequest,
+  ) -> impl Future<Output = Result<StreamingCompletionResponse, CompletionError>> {
     let flag = Flag(Arc::clone(&self.dropped));
     let said = futures::stream::iter(
       self.parts.clone().into_iter().map(|part| Ok(RawStreamingChoice::Message(part.to_owned()))),
@@ -412,14 +409,20 @@ impl CompletionModel for Halting {
     if self.breaks {
       let broke =
         futures::stream::iter([Err(CompletionError::ProviderError("the stream broke".into()))]);
-      return Ok(StreamingCompletionResponse::stream("halting", Box::pin(said.chain(broke))));
+      return std::future::ready(Ok(StreamingCompletionResponse::stream(
+        "halting",
+        Box::pin(said.chain(broke)),
+      )));
     }
     let held = futures::stream::once(async move {
       let _flag = flag;
       std::future::pending::<()>().await;
     })
     .filter_map(|()| std::future::ready(None::<Result<RawStreamingChoice, CompletionError>>));
-    Ok(StreamingCompletionResponse::stream("halting", Box::pin(said.chain(held))))
+    std::future::ready(Ok(StreamingCompletionResponse::stream(
+      "halting",
+      Box::pin(said.chain(held)),
+    )))
   }
 }
 
@@ -463,7 +466,7 @@ fn a_reply_ends_after_a_fault_that_follows_a_quote_at_the_line_of_the_fault() {
   // The quote is whole python, so it runs, and the reply ends with it, which is the word that ran.
   let parts = ["<s:note>\n", "Hello\n", "</s:note>\n", "Here is the code:\n", "close(1)\n"];
   let model = Halting::writes(&parts);
-  let (mut engine, _) = life("quotes", vec![Model::new("m", 1000, model.clone())]);
+  let (mut engine, _) = life("quotes", vec![Model::new("m", 1000, model)]);
   asked(&mut engine);
   assert_eq!(replied(&mut engine), cut("<s:note>\nHello\n</s:note>"));
   assert!(
@@ -629,7 +632,7 @@ fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line_and_each_l
   let after = |flag: &str| args.iter().position(|one| one == flag).map(|at| args[at + 1].as_str());
   assert_eq!((after("--model"), after("--effort")), (Some("opus"), Some("high")));
   let prompt = after("--system-prompt-file").expect("the system prompt goes by a file");
-  assert_eq!(std::fs::read_to_string(prompt).expect("the file of the system prompt"), SYSTEM);
+  assert_eq!(fs::read_to_string(prompt).expect("the file of the system prompt"), SYSTEM);
   let heard = yard.heard();
   assert_eq!(heard.len(), 2);
   assert!(heard[1].contains("second task") && !heard[1].contains("first task"), "{}", heard[1]);
@@ -1037,8 +1040,8 @@ fn only_a_failure_of_the_network_or_of_the_side_of_the_provider_passes() {
 
 /// A provider on a port of this machine, which reads one request and streams these events. It gives the request it
 /// read.
-pub(super) fn served(listener: TcpListener, events: String) -> std::thread::JoinHandle<String> {
-  std::thread::spawn(move || exchanged(&listener, &events))
+pub(super) fn served(listener: TcpListener, events: String) -> thread::JoinHandle<String> {
+  thread::spawn(move || exchanged(&listener, &events))
 }
 
 /// One request that a provider on a port of this machine reads, and the events it streams in answer; and the request
@@ -1181,7 +1184,7 @@ fn the_host_is_told_nothing_more_of_what_a_model_writes_once_its_reply_is_over()
   let id = asked(&mut engine);
   let parts = |told: &Arc<Mutex<Vec<[String; 4]>>>| told.lock().expect("the parts told").len();
   assert!(until(&mut engine, |_| parts(&told) == 1), "the model wrote a part");
-  engine.cancel(&id, Default::default()).expect("the prompt is cancelled");
+  engine.cancel(&id, verbs::Cancel::default()).expect("the prompt is cancelled");
   let over = |engine: &mut Engine| {
     let root = engine.root().to_owned();
     let facts =
@@ -1324,7 +1327,7 @@ fn chunk(delta: Value, finish: Value) -> String {
 
 /// A life whose root prompts local:qwen, the one model of a local server of the tests, which lists it with a window of
 /// 1000 and streams these events for its one reply; the prompt, and the two requests the server read.
-fn local(name: &str, events: String) -> (Engine, String, std::thread::JoinHandle<[String; 2]>) {
+fn local(name: &str, events: String) -> (Engine, String, thread::JoinHandle<[String; 2]>) {
   thinking_local(name, events, Thinking::default())
 }
 
@@ -1333,7 +1336,7 @@ fn thinking_local(
   name: &str,
   events: String,
   most: Thinking,
-) -> (Engine, String, std::thread::JoinHandle<[String; 2]>) {
+) -> (Engine, String, thread::JoinHandle<[String; 2]>) {
   serving(name, most, move |listener| exchanged(listener, &events))
 }
 
@@ -1342,7 +1345,7 @@ fn serving(
   name: &str,
   most: Thinking,
   serve: impl FnOnce(&TcpListener) -> String + Send + 'static,
-) -> (Engine, String, std::thread::JoinHandle<[String; 2]>) {
+) -> (Engine, String, thread::JoinHandle<[String; 2]>) {
   let listener = TcpListener::bind("127.0.0.1:0").expect("a port of this machine");
   let port = listener.local_addr().expect("the port").port();
   let listing =
@@ -1463,10 +1466,7 @@ fn a_turn_that_the_most_it_writes_ended_is_refused_and_no_part_of_its_word_runs(
 /// A life whose root prompts local:qwen of a local server of the tests whose most thought in a turn is two parts, which
 /// lists it with a window of 1000, streams these events for the first request of its one reply, and those for the
 /// request that asks it again; the prompt, and the three requests the server read.
-fn rethinking(
-  first: String,
-  again: String,
-) -> (Engine, String, std::thread::JoinHandle<Vec<String>>) {
+fn rethinking(first: String, again: String) -> (Engine, String, thread::JoinHandle<Vec<String>>) {
   rethinking_at("local:qwen/high", vec![first, again])
 }
 
@@ -1476,7 +1476,7 @@ fn rethinking(
 fn rethinking_at(
   actor: &str,
   answers: Vec<String>,
-) -> (Engine, String, std::thread::JoinHandle<Vec<String>>) {
+) -> (Engine, String, thread::JoinHandle<Vec<String>>) {
   let listener = TcpListener::bind("127.0.0.1:0").expect("a port of this machine");
   let port = listener.local_addr().expect("the port").port();
   let listing =
@@ -1936,7 +1936,7 @@ fn a_stand_on_new_settings_asks_a_reply_that_waits_for_a_usage_limit_again_on_th
   let (retries, told) = retried();
   let model = spoken(scripted(&MockCompletionModel::default()).hosted(old));
   let stale = model.clone();
-  let switched = Arc::new(std::sync::atomic::AtomicBool::new(false));
+  let switched = Arc::new(AtomicBool::new(false));
   let flipped = Arc::clone(&switched);
   let provider = Provider::new(yard("limit-switch").display().to_string(), vec![model])
     .retries(retries)
@@ -2057,7 +2057,7 @@ fn wrote(engine: &mut Engine, part: &str) -> bool {
 #[test]
 fn a_statement_that_a_model_finished_runs_while_the_model_writes_the_rest_of_its_word() {
   let model = Halting::writes(&["x = 3\n", "y = x\n"]);
-  let (mut engine, _) = life("early", vec![Model::new("m", 1000, model.clone())]);
+  let (mut engine, _) = life("early", vec![Model::new("m", 1000, model)]);
   asked(&mut engine);
   assert!(
     until(&mut engine, |engine| wrote(engine, "x = 3\n")),
@@ -2092,7 +2092,7 @@ fn a_statement_that_raised_ends_the_reply_with_the_word_that_ran_whose_run_is_do
 fn once_a_part_ran_a_fault_after_it_ends_the_reply_with_the_word_that_ran_and_the_chain_is_told_the_fault()
  {
   let model = Halting::writes(&["x = 3\n", "y = nothing_binds_this\n", "z = 1\n"]);
-  let (mut engine, _) = life("after", vec![Model::new("m", 1000, model.clone())]);
+  let (mut engine, _) = life("after", vec![Model::new("m", 1000, model)]);
   asked(&mut engine);
   assert_eq!(replied(&mut engine), cut("x = 3"));
   assert!(
@@ -2363,7 +2363,7 @@ fn a_pause_over_the_chain_holds_the_next_call_of_a_reply_that_waits_for_a_retry_
   let heard = Arc::clone(&told);
   assert!(until(&mut engine, move |_| heard.lock().expect("the retries told").len() == 1));
   let root = engine.root().to_owned();
-  engine.pause(&root, Default::default()).expect("the chain pauses");
+  engine.pause(&root, verbs::Pause::default()).expect("the chain pauses");
   let early = within(&mut engine, Duration::from_millis(800), |_| calls.load(Ordering::SeqCst) > 1);
   assert!(!early, "a paused reply asks its model no more");
   engine.wake(&root).expect("the chain wakes");
@@ -2390,7 +2390,7 @@ fn a_stand_over_a_paused_chain_asks_no_model_until_the_wake() {
   let heard = Arc::clone(&told);
   assert!(until(&mut engine, move |_| heard.lock().expect("the retries told").len() == 1));
   let root = engine.root().to_owned();
-  engine.pause(&root, Default::default()).expect("the chain pauses");
+  engine.pause(&root, verbs::Pause::default()).expect("the chain pauses");
   engine.stand(verbs::Stand { on: Some(root.clone()) }).expect("the life stands");
   let early = within(&mut engine, Duration::from_millis(500), |_| calls.load(Ordering::SeqCst) > 1);
   assert!(!early, "a stand asks no model for a paused reply");
@@ -2573,7 +2573,7 @@ fn the_configs_of_the_user_and_of_the_project_give_the_classes_and_the_list_of_a
   let models: Vec<Model> =
     ["claude-cli:haiku", "claude-cli:opus", "claude-cli:sonnet", "claude-cli:fable"]
       .iter()
-      .map(|name| catalog.find(name).expect("the catalog holds the claude command line").clone())
+      .map(|name| catalog.find(name).expect("the catalog holds the claude command line"))
       .collect();
   let roster = |directory: &Path| {
     let given = standing(&models, &directory.display().to_string(), "a", None, &user);
@@ -2626,10 +2626,9 @@ fn an_id_is_a_uuid_of_version_4_and_variant_1() {
 /// The native search of the tests, which answers with its query.
 fn found_by_native() -> Searches {
   Arc::new(
-    |query| -> futures::future::BoxFuture<
-      'static,
-      Result<String, crate::world::provider::search::Error>,
-    > { Box::pin(async move { Ok(format!("Found {query}.")) }) },
+    |query| -> futures::future::BoxFuture<'static, Result<String, world::provider::search::Error>> {
+      Box::pin(async move { Ok(format!("Found {query}.")) })
+    },
   )
 }
 
