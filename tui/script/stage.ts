@@ -187,7 +187,13 @@ export function find(
 ): [number, number] {
   const rows = screen.captureCharFrame().split("\n");
   const row = rows.findIndex((line) => line.indexOf(text, from) >= 0);
-  if (row < 0) throw new Error(`The screen shows no ${text}.`);
+  if (row < 0)
+    throw new Error(
+      `The screen shows no ${text}. It shows:\n${rows
+        .map((line) => line.trimEnd())
+        .filter(Boolean)
+        .join("\n")}`,
+    );
   return [(rows[row] ?? "").indexOf(text, from), row];
 }
 
