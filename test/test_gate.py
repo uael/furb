@@ -374,3 +374,15 @@ async def test_a_finding_on_a_str_that_a_word_asks_for_the_content_of_a_text_say
       "; a name that a tell binds, as read1_text, holds a str and no Text, so use read(path) to get a Text, whose .content is its text, in "
       in found
     )
+
+
+async def test_a_word_that_binds_a_name_of_the_engine_at_its_top_finds_that_each_later_word_reads_it() -> None:
+  """A word that binds a name of the engine at its top, by an assignment, a for, a with, an import, an except or a del, also in the body of an if, a for, a while, a with, a try or a match, finds that each later word reads that name, but by a def or a class of it, which overrides it, by an import of a name that the engine imports, and for actor, raised and accepts, which a chain binds as its own."""
+  _, _, root = born()
+  bound = "error[engine-name] (column {}) `{}` is a name of the engine, which each later word reads: give the value a name of its own"
+  assert engine.gate("wait = 5", on=root) == [f"line 1: {bound.format(1, 'wait')}, in 'wait = 5'"]
+  assert engine.gate("if chance() > 0.5:\n  turns = []", on=root) == [
+    f"line 2: {bound.format(3, 'turns')}, in 'turns = []'"
+  ]
+  word = "def read(path: str) -> str:\n  return path\nimport re\nactor = 'm/low'\nraised = None\naccepts = None\nclose(read('a'))"
+  assert engine.gate(word, on=root) == []

@@ -289,6 +289,7 @@ def gate(word: str, on: str = "") -> list[str]:
   An open mark that stands inside a quote of its own name is a finding of its own, which names that mark and the line of the quote that holds it, since one close mark ends both.
   A word that is one quote and nothing else finds that it only binds the name of the quote and nothing of it runs, so write the code as the word itself, with no quote around it, and quote only a text that the code uses.
   A word that binds a name that the transcript binds, the name of an act of its chain or a name of a value that a tell of that act binds, as bash12_stdout, finds that the transcript binds that name, also for an act that the chain did not tell yet.
+  A word that binds a name of the engine at its top, by an assignment, a for, a with, an import, an except or a del, also in the body of an if, a for, a while, a with, a try or a match, finds that each later word reads that name, but by a def or a class of it, which overrides it, by an import of a name that the engine imports, and for actor, raised and accepts, which a chain binds as its own.
   A word that binds a name to a value of another type than the one that a rung before it declares for that name, as a def, a class, an import or a name with a type does, finds the rung that declares that name, so the model gives the value another name.
   The gate gives no finding when the gate accepts the rung.
   The journal keeps what the gate found, since the gate is of the outside, so a later life reads the same findings and asks the gate nothing again.

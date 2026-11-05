@@ -212,7 +212,7 @@ fn a_name_that_the_transcript_binds_is_a_finding_of_the_line_that_binds_it() {
 
 #[test]
 fn a_word_that_binds_a_name_of_the_engine_at_its_top_is_a_finding_and_a_def_of_one_overrides_it() {
-  let word = "wait = 5\nfor chance in []:\n  pass\nimport json as cd\ndel turns\ndef read(path: str) -> str:\n  return path\ndef f(grep: int) -> int:\n  return grep\nactor = 'm/low'\naccepts = None\nk = [over for over in ()]\nclose(1)";
+  let word = "wait = 5\nfor chance in []:\n  pass\nimport json as cd\ndel turns\ndef read(path: str) -> str:\n  return path\ndef f(grep: int) -> int:\n  return grep\nactor = 'm/low'\naccepts = None\nraised = None\nk = [over for over in ()]\nimport re\nCancelledError = 5\ntry:\n  scope = 1\nexcept Refused as span:\n  pass\nclose(1)";
   let (text, above) = acted(&[], &[], word);
   let got: Vec<_> = found(&text)
     .into_iter()
@@ -227,7 +227,18 @@ fn a_word_that_binds_a_name_of_the_engine_at_its_top_is_a_finding_and_a_def_of_o
       ),
     )
   };
-  assert_eq!(got, vec![bound(1, "wait"), bound(2, "chance"), bound(4, "cd"), bound(5, "turns")]);
+  assert_eq!(
+    got,
+    vec![
+      bound(1, "wait"),
+      bound(2, "chance"),
+      bound(4, "cd"),
+      bound(5, "turns"),
+      bound(15, "CancelledError"),
+      (17, bound(17, "scope").1.replace("column 3", "column 5")),
+      bound(18, "span"),
+    ]
+  );
 }
 
 #[test]

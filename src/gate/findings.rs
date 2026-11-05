@@ -535,9 +535,10 @@ const OWN: [&str; 3] = ["actor", "raised", "accepts"];
 /// accident, as `peek = await bash('ls')`, gives them a wrong value under that name, so the gate
 /// refuses it. A def or a class of such a name overrides the verb on purpose, and a name that a
 /// def, a class, a lambda or a comprehension binds inside itself stays its own.
-pub(super) fn contracted(sheet: &Parsed<'_>) -> Vec<Finding> {
+pub(super) fn contracted(sheet: &Parsed<'_>, engine: &str) -> Vec<Finding> {
   let Some(body) = sheet.bodied() else { return vec![] };
-  let engine: Vec<&str> = body
+  let imports = imported(engine);
+  let names: Vec<&str> = body
     .iter()
     .filter_map(|stmt| match stmt {
       Stmt::Assign(one) => match (one.targets.as_slice(), &*one.value) {
@@ -550,45 +551,93 @@ pub(super) fn contracted(sheet: &Parsed<'_>) -> Vec<Finding> {
       },
       _ => None,
     })
-    .filter(|name| !OWN.contains(name) && !imported().iter().any(|one| one == name))
+    .filter(|name| !OWN.contains(name))
     .collect();
-  word_of(body)
-    .iter()
-    .flat_map(|stmt| {
-      let names = match stmt {
-        Stmt::FunctionDef(_) | Stmt::ClassDef(_) => vec![],
-        Stmt::AugAssign(one) => named(&one.target),
-        Stmt::For(one) => named(&one.target),
-        Stmt::With(one) => one.items.iter().filter_map(|item| item.optional_vars.as_deref()).flat_map(named).collect(),
-        Stmt::Delete(one) => one.targets.iter().flat_map(named).collect(),
-        _ => binds(stmt),
-      };
-      names.into_iter().filter(|name| engine.contains(name)).map(move |name| (stmt.start().to_usize(), name))
+  let mut found = vec![];
+  topped(word_of(body), &mut found);
+  found
+    .into_iter()
+    .filter(|(_, name, import)| {
+      names.contains(name) && !(*import && imports.iter().any(|one| one == name))
     })
-    .map(|(at, name)| Finding {
+    .map(|(at, name, _)| Finding {
       line: sheet.line(at),
       column: sheet.column(at),
       rule: Rule::Engine,
-      why: format!("`{name}` is a name of the engine, which each later word reads: give the value a name of its own"),
+      why: format!(
+        "`{name}` is a name of the engine, which each later word reads: give the value a name of its own"
+      ),
     })
     .collect()
 }
 
-/// The names that the engine imports, which a word may import too, since each is no name of the
-/// contract.
-fn imported() -> &'static [String] {
-  static IMPORTED: OnceLock<Vec<String>> = OnceLock::new();
-  IMPORTED.get_or_init(|| {
-    let Ok(parsed) = parse_module(ENGINE) else { return vec![] };
-    parsed
-      .syntax()
-      .body
-      .iter()
-      .filter(|stmt| matches!(stmt, Stmt::Import(_) | Stmt::ImportFrom(_)))
-      .flat_map(binds)
-      .map(str::to_owned)
-      .collect()
-  })
+/// Each name that a statement at the top of a body binds or deletes, by where it starts, and
+/// whether an import binds it, into the bodies of an if, a for, a while, a with, a try and a match,
+/// since python binds each name of those bodies in the module too. A def and a class bind their
+/// names apart, and nothing inside them stands at the top.
+fn topped<'a>(body: &'a [Stmt], found: &mut Vec<(usize, &'a str, bool)>) {
+  for stmt in body {
+    let names = match stmt {
+      Stmt::FunctionDef(_) | Stmt::ClassDef(_) => vec![],
+      Stmt::AugAssign(one) => named(&one.target),
+      Stmt::For(one) => named(&one.target),
+      Stmt::With(one) => {
+        one.items.iter().filter_map(|item| item.optional_vars.as_deref()).flat_map(named).collect()
+      }
+      Stmt::Delete(one) => one.targets.iter().flat_map(named).collect(),
+      _ => binds(stmt),
+    };
+    let import = matches!(stmt, Stmt::Import(_) | Stmt::ImportFrom(_));
+    found.extend(names.into_iter().map(|name| (stmt.start().to_usize(), name, import)));
+    match stmt {
+      Stmt::If(one) => {
+        topped(&one.body, found);
+        for clause in &one.elif_else_clauses {
+          topped(&clause.body, found);
+        }
+      }
+      Stmt::For(one) => {
+        topped(&one.body, found);
+        topped(&one.orelse, found);
+      }
+      Stmt::While(one) => {
+        topped(&one.body, found);
+        topped(&one.orelse, found);
+      }
+      Stmt::With(one) => topped(&one.body, found),
+      Stmt::Try(one) => {
+        topped(&one.body, found);
+        for handler in &one.handlers {
+          let ExceptHandler::ExceptHandler(caught) = handler;
+          found.extend(
+            caught.name.iter().map(|name| (caught.start().to_usize(), name.as_str(), false)),
+          );
+          topped(&caught.body, found);
+        }
+        topped(&one.orelse, found);
+        topped(&one.finalbody, found);
+      }
+      Stmt::Match(one) => {
+        for case in &one.cases {
+          topped(&case.body, found);
+        }
+      }
+      _ => {}
+    }
+  }
+}
+
+/// The names that an engine imports, which a word may import too, since each is no name of the
+/// contract. The imports of an engine stand at its head, before its first other statement.
+fn imported(engine: &str) -> Vec<String> {
+  let head: String = engine
+    .split_inclusive('\n')
+    .take_while(|line| {
+      line.trim().is_empty() || line.starts_with("import ") || line.starts_with("from ")
+    })
+    .collect();
+  let Ok(parsed) = parse_module(&head) else { return vec![] };
+  parsed.syntax().body.iter().flat_map(binds).map(str::to_owned).collect()
 }
 
 /// The names that a body binds at any depth, each by where it starts: each target of a statement or
