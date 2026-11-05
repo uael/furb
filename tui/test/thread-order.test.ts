@@ -90,8 +90,8 @@ test("the sidebar lists the closed threads at the top and the open ones last, ne
     await recorded(),
   ));
 
-// Before, main folded a thread from the control of its header alone.
-test("a thread folds from a line in the middle of it, by a click on the left edge of the line and by ⌥C, and its header then shows", async () =>
+// Before, main folded a thread from a click on the left edge of any line of it, so a click in its body folded it.
+test("a click on the left edge of a line in the middle of a thread folds nothing, and ⌥C folds the thread and its header then shows", async () =>
   composing(
     async (use) => {
       const { session, app, screen } = use;
@@ -109,16 +109,10 @@ test("a thread folds from a line in the middle of it, by a click on the left edg
       await settled(use);
       expect(session.folds["thread:prompt1"]).not.toBe(true);
       await screen.mockMouse.click(card.x + 1, card.y + Math.floor(card.height / 2));
-      const folded = await settled(use);
-      keep("fold-from-a-line", folded);
-      expect(session.folds["thread:prompt1"]).toBe(true);
-      const head = app.cards.get("prompt1")?.node;
+      keep("click-on-a-line", await settled(use));
+      expect(session.folds["thread:prompt1"]).not.toBe(true);
+      // ⌥C folds the thread from the line in the middle of the feed.
       const { viewport } = app.scroll;
-      expect(head && head.y >= viewport.y && head.y < viewport.y + viewport.height).toBe(true);
-      expect(folded).toContain("▸ Expand");
-      // The thread opens again, and ⌥C folds it from the line in the middle of the feed.
-      app.foldThread("prompt1", false);
-      await settled(use);
       const again = middle();
       if (!again) throw new Error("no card in the middle of prompt1");
       app.scroll.scrollTo(
@@ -127,8 +121,12 @@ test("a thread folds from a line in the middle of it, by a click on the left edg
       await settled(use);
       expect(app.threadInView()).toBe("prompt1");
       screen.mockInput.pressKey("c", { meta: true });
-      await settled(use);
+      const folded = await settled(use);
+      keep("fold-from-a-line", folded);
       expect(session.folds["thread:prompt1"]).toBe(true);
+      const head = app.cards.get("prompt1")?.node;
+      expect(head && head.y >= viewport.y && head.y < viewport.y + viewport.height).toBe(true);
+      expect(folded).toContain("▸ Expand");
     },
     wide,
     await recorded(),

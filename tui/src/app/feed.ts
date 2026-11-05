@@ -568,16 +568,9 @@ export const feed = part({
               section.id,
               `${section.key}\n${join}\n${gap}\n${Boolean(section.bar)}`,
               section.label ?? [],
-              // The edge at the left of each line of the box of a thread folds the thread, so it folds from any line.
               (box) =>
                 section.body(
-                  this.barred(
-                    box,
-                    section.bar,
-                    gap,
-                    { top: at > 0, bottom: at < sections.length - 1 },
-                    thread ? () => this.foldHere(act.id) : undefined,
-                  ),
+                  this.barred(box, section.bar, gap, { top: at > 0, bottom: at < sections.length - 1 }),
                 ),
               {
                 indent,
@@ -605,9 +598,9 @@ export const feed = part({
         // A message that asks no answer, as a message that a rung adds to a thread, names no type.
         const state = this.promptState(act).filter(([text]) => text !== "None");
         // A long message shows its first rows until a click opens it, so that a brief of a page leaves the feed
-        // readable at a glance.
+        // readable at a glance. A folded thread shows its first rows even when the operator opened its message.
         const [shortened, rest] =
-          w.folds[`message:${act.id}`] === false
+          w.folds[`message:${act.id}`] === false && !folded
             ? [message, 0]
             : this.firstRows(message, folded ? 2 : MESSAGE_ROWS);
         const foldedNote = folded
@@ -631,22 +624,21 @@ export const feed = part({
               ...(foldedNote ? [[`  ${foldedNote}`, c.faint] as Part] : []),
             ];
             // A folded thread stands as its message, the first rows of it, in the block of a message: the bar of the
-            // thread at its left, and at its right how much it holds and the control that opens it. A click opens it.
+            // thread at its left, and at its right how much it holds and the toggle that opens it.
             const text = user ? said(shortened) : this.markdown(shortened);
-            const controls = this.threadControls(act);
+            const toggle = thread && this.threadToggle(act.id);
             const row = this.sided(
               {
                 onMouseDown: (event) => {
                   if (event.button === 2)
                     this.actActions(this.session.acts.find((one) => one.id === act.id) ?? act);
                 },
-                ...(folded ? { onMouseUp: this.click(() => this.foldThread(act.id, false)) } : {}),
               },
               text,
-              [this.text(beside, c.faint, { marginLeft: space.between }), controls],
+              [this.text(beside, c.faint, { marginLeft: space.between }), toggle],
               Bun.stringWidth(plain(beside)) +
                 space.between +
-                (controls ? this.threadControlsWidth(controls) : 0),
+                (toggle ? Bun.stringWidth(toggle.plainText) + space.between : 0),
               this.feedWidth - indent - 8,
               shortened,
             );

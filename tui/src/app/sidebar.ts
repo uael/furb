@@ -3,7 +3,7 @@ import { unmarked } from "furb";
 import type { ChainThread } from "furb/life";
 import { count, dollars } from "../format.ts";
 import type { ActRow } from "../session.ts";
-import { theme as c, glyph, spacing as space } from "../theme.ts";
+import { theme as c, glyph, spacing as space, threadTone } from "../theme.ts";
 import { bold, type Part } from "../ui.ts";
 import { part } from "./part.ts";
 import type { TextShape } from "./shared.ts";
@@ -128,7 +128,7 @@ export const sidebar = part({
     this.render();
   },
 
-  /** A thread folds or unfolds from any line of its box, and the feed then shows its header. */
+  /** A thread folds or unfolds, and the feed then shows its header. */
   foldHere(id: string): void {
     this.foldThread(id);
     this.scrollAfterLayout({ card: id });
@@ -185,40 +185,75 @@ export const sidebar = part({
     this.render();
   },
 
-  /** The controls of a thread on the header of the thread in the feed: collapse it, and resolve it or open it again.
-   * A message of a thread and a prompt that heads no thread have none. */
-  threadControls(act: ActRow): BoxRenderable | undefined {
-    const thread = this.session.threads.by.get(act.id);
-    if (!thread) return undefined;
-    const id = thread.act.id;
+  /** The toggle of a thread on its header in the feed: Collapse, or Expand for a thread that stands folded. It is the
+   * one control of the thread in the feed, and a fold from it shows the header of the thread. */
+  threadToggle(id: string): TextRenderable {
     const folded = this.threadFolded(id);
-    const row = this.row({ gap: 3, paddingLeft: space.between });
-    row.add(
-      this.link(
-        [
-          [`${folded ? glyph.closed : glyph.open} `, c.faint],
-          [folded ? "Expand" : "Collapse", c.faint],
-        ],
-        () => this.foldThread(id, !folded),
-      ),
+    const toggle = this.link(
+      [
+        [`${folded ? glyph.closed : glyph.open} `, c.faint],
+        [folded ? "Expand" : "Collapse", c.faint],
+      ],
+      () => this.foldHere(id),
     );
-    if (!thread.resolved)
-      row.add(
-        this.link(
-          [
-            [`${glyph.done} `, c.faint],
-            ["Resolve", c.faint],
-          ],
-          () => this.resolveThread(thread),
-        ),
-      );
-    return row;
+    // The toggle takes its own row alone: in a row beside a message of many rows it would stretch to the height of the
+    // message, and a click in its column on any row of the message would fold the thread.
+    toggle.marginLeft = space.between;
+    toggle.alignSelf = "flex-start";
+    return toggle;
   },
 
-  /** The columns that the controls of a thread take: the words of its links, the gaps between them, and its margin. */
-  threadControlsWidth(controls: BoxRenderable): number {
-    const links = controls.getChildren().map((one) => Bun.stringWidth((one as TextRenderable).plainText));
-    return links.reduce((sum, one) => sum + one, 0) + 3 * Math.max(0, links.length - 1) + space.between;
+  /** The thread whose box holds the top row of the feed while its header stands above the feed. */
+  pinnedThread(): string | undefined {
+    const order = this.scroll.getChildren();
+    const top = this.scroll.viewport.y;
+    // The cards stand in one column, so the last one that starts on the top row or above it is found by halves.
+    let [low, high] = [0, order.length];
+    while (low < high) {
+      const mid = (low + high) >> 1;
+      if ((order[mid]?.y ?? 0) <= top) low = mid + 1;
+      else high = mid;
+    }
+    const at = order[low - 1];
+    const thread = at && this.cards.get(at.id)?.thread;
+    const head = thread && this.cards.get(thread)?.node;
+    if (!thread || !head || head.y >= top) return undefined;
+    const next = order[low];
+    const holds =
+      at.y + at.height > top || (next !== undefined && this.cards.get(next.id)?.thread === thread);
+    return holds ? thread : undefined;
+  },
+
+  /** The header of the thread whose box holds the top row of the feed, pinned at the top of the feed while the header
+   * itself stands above it: the title of the thread on one row and its toggle, in the colors and the inset of the
+   * header, so that it reads as the header and its toggle stays in view. It reads the layout of the frame that was
+   * drawn, and draws again only when what it shows changed. */
+  renderPin(): void {
+    const id = this.pinnedThread();
+    const thread = id ? this.session.threads.by.get(id) : undefined;
+    const card = id ? this.cards.get(id) : undefined;
+    const folded = Boolean(id && this.threadFolded(id));
+    const key =
+      id && thread && card
+        ? `${id}\n${thread.title}\n${folded}\n${card.indent}\n${this.feedWidth}\n${this.theme}`
+        : "";
+    if (key === this.pinKey) return;
+    this.pinKey = key;
+    this.clear(this.pin);
+    this.pin.visible = Boolean(key);
+    this.renderer.requestRender();
+    if (!id || !thread || !card) return;
+    const row = this.box({ backgroundColor: c.background, paddingLeft: card.indent });
+    const surface = this.box({ paddingRight: space.between, backgroundColor: c.panel });
+    row.add(surface);
+    this.pin.add(row);
+    const user = this.session.isUserPrompt(thread.act as ActRow);
+    const header = this.row();
+    header.add(this.text(thread.title, c.text, { truncate: true, flexGrow: 1, flexShrink: 1 }));
+    header.add(this.threadToggle(id));
+    this.barred(surface, user || folded ? threadTone(id) : undefined, 0, { top: false, bottom: false }).add(
+      header,
+    );
   },
 
   /** A row of the sidebar, whose click runs, which spans the sidebar so that the pointer and the selection show from
@@ -258,3 +293,5 @@ export const sidebar = part({
 });
 
 export type SidebarPart = typeof sidebar;
+
+export const sidebarBound = ["renderPin"] as const;

@@ -46,7 +46,7 @@ import {
   type TreeRow,
   type Value,
 } from "./app/shared.ts";
-import { type SidebarPart, sidebar } from "./app/sidebar.ts";
+import { type SidebarPart, sidebar, sidebarBound } from "./app/sidebar.ts";
 import { type SpacesPart, spaces, spacesBound } from "./app/spaces.ts";
 import { type StagePart, stage } from "./app/stage.ts";
 import { type ThreadPart, thread } from "./app/thread.ts";
@@ -108,6 +108,7 @@ export function follow(renderer: CliRenderer, options: AppOptions): () => App {
 
 const bounds = [
   ...composerBound,
+  ...sidebarBound,
   ...welcomeBound,
   ...deskBound,
   ...questionsBound,
@@ -271,6 +272,10 @@ export class App {
   /** The bar of a life that the operator watches, pinned over the feed, so that it stays as the feed scrolls. */
   readonly watchBar: BoxRenderable;
   watchKey = "";
+  /** The header of a thread pinned at the top of the feed, over the cards, while the header itself stands above the
+   * feed, and the key of what it shows. */
+  readonly pin: BoxRenderable;
+  pinKey = "";
   /** Whether the feed shows the welcome, whose check of the setup takes the key r while the input is empty. */
   welcoming = false;
   /** The view of the life that shows over the feed: the loom or the graph, drawn as rows of text. */
@@ -341,6 +346,8 @@ export class App {
       act?: string;
       /** The thread whose box the card stands in. */
       thread?: string;
+      /** The columns the card stands in from the edge of the feed. */
+      indent: number;
       /** What the card of a done act is made of, which a later render compares to make it again only on a change. */
       same?: readonly unknown[];
     }
@@ -529,6 +536,17 @@ export class App {
     this.scroll.verticalScrollBar.visible = false;
     this.scroll.horizontalScrollBar.visible = false;
     center.add(this.scroll);
+    // The pin stands in the viewport of the feed beside its content, so the cards scroll under it and it stays.
+    this.pin = this.box({
+      id: "thread-pin",
+      position: "absolute",
+      top: 0,
+      left: 0,
+      width: "100%",
+      zIndex: 1,
+    });
+    this.pin.visible = false;
+    this.scroll.viewport.add(this.pin);
     this.dock = this.box({
       id: "parts",
       visible: false,
@@ -721,6 +739,7 @@ export class App {
     renderer.on("selection", this.copySelection);
     renderer.on("theme_mode", this.modeChanged);
     renderer.setFrameCallback(this.drawDue);
+    renderer.on("frame", this.renderPin);
     renderer.keyInput.on("keypress", this.keyHeard);
     renderer.on("focus", this.focusTaken);
     renderer.on("blur", this.focusLost);
