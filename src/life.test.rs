@@ -1,15 +1,6 @@
 //! The opening of a life: what it enables, what it keeps, and the ears it hears, on the record that the store keeps.
 
-#![expect(
-  clippy::clone_on_ref_ptr,
-  reason = "debt: a clone of an Arc or an Rc that hides its kind"
-)]
-#![expect(
-  clippy::disallowed_methods,
-  reason = "debt: a call that blocks: sleep, block_on or try_wait"
-)]
-#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
-#![expect(clippy::single_char_pattern, reason = "debt: a string of one char as a pattern")]
+#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
 
 use std::{
   cell::RefCell,
@@ -174,7 +165,7 @@ fn a_life_that_keeps_a_record_writes_the_log_of_every_fact_beside_it_and_a_later
   let first = shown(world::logged(&record).unwrap().expect("the log agrees with the record"));
   let rung = first.iter().position(|one| one.contains("'operator', 'chain1', 'x = 1"));
   let named =
-    rung.and_then(|at| first[at].split("'").nth(3).map(str::to_owned)).unwrap_or_default();
+    rung.and_then(|at| first[at].split('\'').nth(3).map(str::to_owned)).unwrap_or_default();
   let run = first
     .iter()
     .position(|one| one.starts_with("['run', ") && one.contains(&format!(", '{named}', 'x = 1")));
@@ -489,10 +480,11 @@ fn a_snapshot_of_another_build_or_on_another_log_is_not_taken_and_the_life_repla
   let snapshot = PathBuf::from(format!("{}.snapshot", record.display()));
   let held = fs::read(&snapshot).unwrap();
   let line = held.iter().position(|one| *one == b'\n').unwrap();
-  let head = String::from_utf8(held[..line].to_vec()).unwrap();
-  let build = head.split("\"build\":\"").nth(1).unwrap().split('"').next().unwrap().to_owned();
+  let opening = String::from_utf8(held[..line].to_vec()).unwrap();
+  let build = opening.split("\"build\":\"").nth(1).unwrap().split('"').next().unwrap().to_owned();
   let other =
-    [head.replace(&build, &"0".repeat(build.len())).into_bytes(), held[line..].to_vec()].concat();
+    [opening.replace(&build, &"0".repeat(build.len())).into_bytes(), held[line..].to_vec()]
+      .concat();
   fs::write(&snapshot, other).unwrap();
   let second = open();
   assert!(!second.restored(), "a snapshot of another build is not taken");
@@ -1364,12 +1356,12 @@ fn a_word_that_awaits_a_command_at_a_checkpoint_ends_as_cut_and_its_model_starts
   );
   first.checkpoint().unwrap();
   let mut later = scripted(&at, &["close('again')"]).boot::<String>([]).unwrap().0;
-  let word = format!(
+  let again = format!(
     "wake('chain2')\nclose([await Act('{waiting}'), str(peek('bash1')), \
      any(\"it cut ['{run}', 'bash1']\" in t[1] for t in turns('chain2'))])"
   );
   assert_eq!(
-    closed(&mut later, &word).as_ref().py_repr(),
+    closed(&mut later, &again).as_ref().py_repr(),
     "['again', '\"sleep 60\" was interrupted: the life that ran it ended before it did', True]",
     "the command ends as interrupted, the chain is told that the checkpoint cut the word, and the model of the \
      chain starts the word again in a turn that it reads"
@@ -1456,9 +1448,9 @@ fn a_word_that_ran_at_a_checkpoint_is_cut_with_the_prompt_that_it_awaited() {
   let work = "got = await prompt(str, 'Ask.', on=chain('asked'))\nclose(got)";
   let mut first =
     scripted(&at, &[work, "await wait(3600)\nclose('late')"]).boot::<String>([]).unwrap().0;
-  let word =
+  let again =
     "waiting = prompt(str, 'Wait.', on=chain('work'))\nawait wait(0.5)\nclose(str(waiting))";
-  let waiting = closed(&mut first, word).as_ref().as_str().unwrap().to_owned();
+  let waiting = closed(&mut first, again).as_ref().as_str().unwrap().to_owned();
   drop(first);
   let mut inspected =
     Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
@@ -1466,11 +1458,11 @@ fn a_word_that_ran_at_a_checkpoint_is_cut_with_the_prompt_that_it_awaited() {
   drop(inspected);
   crate::checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
   let mut later = scripted(&at, &["close('fresh')"]).boot::<String>([]).unwrap().0;
-  let word = format!(
+  let again = format!(
     "wake('chain2')\ngot = await Act('{waiting}')\nclose([got, [x[1] for c in ['chain1', 'chain2', 'chain3', 'chain4'] for x in transcript(c, 'prompt') if not over(x[1])], str(chain('more'))])"
   );
   assert_eq!(
-    closed(&mut later, &word).as_ref().py_repr(),
+    closed(&mut later, &again).as_ref().py_repr(),
     "['fresh', [], 'chain4']",
     "the model starts the cut word again in a new turn, no word runs again to make a chain, and the prompt that the \
      cut word awaited at the checkpoint is not carried"

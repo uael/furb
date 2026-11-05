@@ -2,16 +2,7 @@
 //! over the older HTTP with SSE, each act and each state, the controls that write the local scope, the changes that
 //! the ear tells, a login by OAuth, and a later life that replays its record and asks no server.
 
-#![expect(
-  clippy::disallowed_methods,
-  reason = "debt: a call that blocks: sleep, block_on or try_wait"
-)]
-#![expect(clippy::map_unwrap_or, reason = "debt: map then unwrap_or, where map_or serves")]
-#![expect(
-  clippy::needless_pass_by_value,
-  reason = "debt: an argument taken by value and only borrowed"
-)]
-#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
+#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
 
 use std::{
   collections::HashMap,
@@ -57,14 +48,14 @@ fn place(name: &str) -> crate::testing::Yard {
 }
 
 /// A file of JSON, written with its folder.
-fn config(path: &Path, value: Value) {
+fn config(path: &Path, value: &Value) {
   fs::create_dir_all(path.parent().unwrap()).unwrap();
-  fs::write(path, serde_json::to_string_pretty(&value).unwrap()).unwrap();
+  fs::write(path, serde_json::to_string_pretty(value).unwrap()).unwrap();
 }
 
 /// The definition of the server of the tests over stdio, which writes a line at each start in the file `starts` of a
 /// directory, with more keys.
-fn stdio(at: &Path, more: Value) -> Value {
+fn stdio(at: &Path, more: &Value) -> Value {
   let exe = std::env::current_exe().unwrap().display().to_string();
   let starts = at.join("starts").display().to_string();
   let mut server = json!({
@@ -80,7 +71,7 @@ fn stdio(at: &Path, more: Value) -> Value {
 
 /// How many times the server of the tests over stdio started.
 fn starts(at: &Path) -> usize {
-  fs::read_to_string(at.join("starts")).map(|text| text.lines().count()).unwrap_or(0)
+  fs::read_to_string(at.join("starts")).map_or(0, |text| text.lines().count())
 }
 
 /// The settings of a life in a directory of the tests: its configs, its images, a file of tokens, an opener that
@@ -169,11 +160,50 @@ fn until(engine: &mut Engine, mut holds: impl FnMut(&mut Engine) -> bool) {
   }
 }
 
+/// The acts that a server over stdio answers, which the `fixture` of the config serves.
+fn answers_each_act(engine: &mut Engine, at: &Path) {
+  assert_eq!(
+    asked(engine, "mcp_call", "'fixture', 'echo', {'text': 'hi'}").unwrap(),
+    json!({"text": "echo: hi", "content": [{"type": "text", "text": "echo: hi"}], "structured": {"text": "hi"}})
+  );
+  let picture = asked(engine, "mcp_call", "'fixture', 'picture'").unwrap();
+  let uri = picture["content"][0]["image"].as_str().unwrap();
+  assert_eq!(picture["content"][0], json!({"type": "image", "image": uri, "mime": "image/png"}));
+  assert_eq!(picture["text"], images::reference("image", uri));
+  assert_eq!(images::read(&at.join("images"), uri).unwrap(), ("image/png", PICTURE.to_vec()));
+  let long = asked(engine, "mcp_call", "'fixture', 'long'").unwrap();
+  let cut =
+    format!("{}\n\n[furb cut this text at 100000 of its 150000 characters]", "a".repeat(100_000));
+  assert_eq!(long["text"], cut);
+  assert_eq!(asked(engine, "mcp_call", "'fixture', 'fail'").unwrap_err(), "it failed");
+  assert_eq!(
+    asked(engine, "mcp_call", "'fixture', 'secret'").unwrap_err(),
+    "the config of the server fixture denies its tool secret"
+  );
+  assert_eq!(
+    asked(engine, "mcp_call", "'fixture', 'slow', {'seconds': 3}").unwrap_err(),
+    "fixture.slow took more than 1 seconds, so furb cancelled it"
+  );
+  assert_eq!(
+    asked(engine, "mcp_read", "'fixture', 'fixture://readme'").unwrap(),
+    json!({"text": "Read me.", "content": [{"type": "resource", "uri": "fixture://readme", "mime": "text/plain", "text": "Read me."}]})
+  );
+  assert_eq!(
+    asked(engine, "mcp_prompt", "'fixture', 'greet', {'who': 'Ada'}").unwrap(),
+    json!({"text": "Greet Ada.", "messages": [{"role": "user", "content": {"type": "text", "text": "Greet Ada."}}]})
+  );
+  assert_eq!(
+    asked(engine, "mcp_call", "'nobody', 'echo'").unwrap_err(),
+    "there is no server nobody"
+  );
+  assert_eq!(starts(at), 1, "one process served every act");
+}
+
 #[test]
 fn a_server_over_stdio_offers_what_it_lists_but_its_denied_tools_and_answers_each_act() {
   let at = place("stdio");
-  let defined = stdio(&at, json!({"deny": ["secret"], "timeout": 1}));
-  config(&at.join("config").join("mcp.json"), json!({"mcpServers": {"fixture": defined}}));
+  let defined = stdio(&at, &json!({"deny": ["secret"], "timeout": 1}));
+  config(&at.join("config").join("mcp.json"), &json!({"mcpServers": {"fixture": defined}}));
   let mut engine = life(&at, &[]);
   let one = server(&mut engine, "fixture");
   assert_eq!(one["state"], "connected", "{one}");
@@ -226,59 +256,61 @@ fn a_server_over_stdio_offers_what_it_lists_but_its_denied_tools_and_answers_eac
     json!([{"name": "greet", "description": "Greets.", "arguments": [{"name": "who", "description": "Whom.", "required": true}]}])
   );
   assert!(one["binding"].is_string());
+  answers_each_act(&mut engine, &at);
+}
+
+/// What a control writes in the local config, and what it refuses.
+fn controls_write_the_local_scope(engine: &mut Engine, at: &Path, local: &Path) {
+  assert_eq!(asked(engine, "mcp_control", "'approve', 'shared'").unwrap()["state"], "connected");
+  let written =
+    |local: &Path| serde_json::from_str::<Value>(&fs::read_to_string(local).unwrap()).unwrap();
+  assert_eq!(written(local), json!({"theme": "kept", "approved": ["shared"]}));
+  assert_eq!(asked(engine, "mcp_control", "'disable', 'shared'").unwrap()["state"], "disabled");
   assert_eq!(
-    asked(&mut engine, "mcp_call", "'fixture', 'echo', {'text': 'hi'}").unwrap(),
-    json!({"text": "echo: hi", "content": [{"type": "text", "text": "echo: hi"}], "structured": {"text": "hi"}})
+    written(local),
+    json!({"theme": "kept", "approved": ["shared"], "enabled": [], "disabled": ["shared"]})
   );
-  let picture = asked(&mut engine, "mcp_call", "'fixture', 'picture'").unwrap();
-  let uri = picture["content"][0]["image"].as_str().unwrap();
-  assert_eq!(picture["content"][0], json!({"type": "image", "image": uri, "mime": "image/png"}));
-  assert_eq!(picture["text"], images::reference("image", uri));
-  assert_eq!(images::read(&at.join("images"), uri).unwrap(), ("image/png", PICTURE.to_vec()));
-  let long = asked(&mut engine, "mcp_call", "'fixture', 'long'").unwrap();
-  let cut =
-    format!("{}\n\n[furb cut this text at 100000 of its 150000 characters]", "a".repeat(100_000));
-  assert_eq!(long["text"], cut);
-  assert_eq!(asked(&mut engine, "mcp_call", "'fixture', 'fail'").unwrap_err(), "it failed");
+  assert_eq!(asked(engine, "mcp_control", "'enable', 'off'").unwrap()["state"], "connected");
   assert_eq!(
-    asked(&mut engine, "mcp_call", "'fixture', 'secret'").unwrap_err(),
-    "the config of the server fixture denies its tool secret"
+    written(local),
+    json!({"theme": "kept", "approved": ["shared"], "enabled": ["off"], "disabled": ["shared"]})
   );
+  assert_eq!(asked(engine, "mcp_control", "'reconnect', 'off'").unwrap()["state"], "connected");
+  assert_eq!(starts(at), 3, "the approval, the enable and the reconnect each started a process");
   assert_eq!(
-    asked(&mut engine, "mcp_call", "'fixture', 'slow', {'seconds': 3}").unwrap_err(),
-    "fixture.slow took more than 1 seconds, so furb cancelled it"
-  );
-  assert_eq!(
-    asked(&mut engine, "mcp_read", "'fixture', 'fixture://readme'").unwrap(),
-    json!({"text": "Read me.", "content": [{"type": "resource", "uri": "fixture://readme", "mime": "text/plain", "text": "Read me."}]})
-  );
-  assert_eq!(
-    asked(&mut engine, "mcp_prompt", "'fixture', 'greet', {'who': 'Ada'}").unwrap(),
-    json!({"text": "Greet Ada.", "messages": [{"role": "user", "content": {"type": "text", "text": "Greet Ada."}}]})
+    asked(engine, "mcp_control", "'reconnect', 'shared'").unwrap_err(),
+    "the server shared is disabled: mcp_control('enable', \"shared\")"
   );
   assert_eq!(
-    asked(&mut engine, "mcp_call", "'nobody', 'echo'").unwrap_err(),
+    asked(engine, "mcp_control", "'login', 'off'").unwrap_err(),
+    "the server off runs on this machine and takes no login"
+  );
+  assert_eq!(
+    asked(engine, "mcp_control", "'approve', 'nobody'").unwrap_err(),
     "there is no server nobody"
   );
-  assert_eq!(starts(&at), 1, "one process served every act");
+  assert_eq!(
+    asked(engine, "mcp_control", "'fly', 'off'").unwrap_err(),
+    "the action fly is none of reconnect, enable, disable, approve, login and logout"
+  );
 }
 
 #[test]
 fn each_server_has_its_state_and_a_control_writes_the_choice_of_the_operator_to_the_local_scope() {
   let at = place("states");
   let user = json!({"mcpServers": {
-    "off": stdio(&at, json!({"disabled": true})),
+    "off": stdio(&at, &json!({"disabled": true})),
     "unset": {"command": "${MISSING}"},
     "absent": {"command": "/nonexistent/furb-mcp-server"},
     "pigeon": {"type": "carrier-pigeon", "url": "http://127.0.0.1"},
   }});
-  config(&at.join("config").join("mcp.json"), user);
+  config(&at.join("config").join("mcp.json"), &user);
   config(
     &at.join("project").join(".mcp.json"),
-    json!({"mcpServers": {"shared": stdio(&at, json!({}))}}),
+    &json!({"mcpServers": {"shared": stdio(&at, &json!({}))}}),
   );
   let local = at.join("project").join(".furb").join("mcp.json");
-  config(&local, json!({"theme": "kept"}));
+  config(&local, &json!({"theme": "kept"}));
   let mut engine = life(&at, &[]);
   let states: Vec<(String, String, String)> = servers(&mut engine)
     .iter()
@@ -314,47 +346,7 @@ fn each_server_has_its_state_and_a_control_writes_the_choice_of_the_operator_to_
     asked(&mut engine, "mcp_call", "'shared', 'echo'").unwrap_err(),
     "the server shared is not connected, it is unapproved"
   );
-  assert_eq!(
-    asked(&mut engine, "mcp_control", "'approve', 'shared'").unwrap()["state"],
-    "connected"
-  );
-  let written =
-    |local: &Path| serde_json::from_str::<Value>(&fs::read_to_string(local).unwrap()).unwrap();
-  assert_eq!(written(&local), json!({"theme": "kept", "approved": ["shared"]}));
-  assert_eq!(
-    asked(&mut engine, "mcp_control", "'disable', 'shared'").unwrap()["state"],
-    "disabled"
-  );
-  assert_eq!(
-    written(&local),
-    json!({"theme": "kept", "approved": ["shared"], "enabled": [], "disabled": ["shared"]})
-  );
-  assert_eq!(asked(&mut engine, "mcp_control", "'enable', 'off'").unwrap()["state"], "connected");
-  assert_eq!(
-    written(&local),
-    json!({"theme": "kept", "approved": ["shared"], "enabled": ["off"], "disabled": ["shared"]})
-  );
-  assert_eq!(
-    asked(&mut engine, "mcp_control", "'reconnect', 'off'").unwrap()["state"],
-    "connected"
-  );
-  assert_eq!(starts(&at), 3, "the approval, the enable and the reconnect each started a process");
-  assert_eq!(
-    asked(&mut engine, "mcp_control", "'reconnect', 'shared'").unwrap_err(),
-    "the server shared is disabled: mcp_control('enable', \"shared\")"
-  );
-  assert_eq!(
-    asked(&mut engine, "mcp_control", "'login', 'off'").unwrap_err(),
-    "the server off runs on this machine and takes no login"
-  );
-  assert_eq!(
-    asked(&mut engine, "mcp_control", "'approve', 'nobody'").unwrap_err(),
-    "there is no server nobody"
-  );
-  assert_eq!(
-    asked(&mut engine, "mcp_control", "'fly', 'off'").unwrap_err(),
-    "the action fly is none of reconnect, enable, disable, approve, login and logout"
-  );
+  controls_write_the_local_scope(&mut engine, &at, &local);
 }
 
 #[test]
@@ -362,7 +354,7 @@ fn a_server_that_changes_a_list_or_ends_tells_the_root_chain_and_connects_again(
   let at = place("changes");
   config(
     &at.join("config").join("mcp.json"),
-    json!({"mcpServers": {"fixture": stdio(&at, json!({}))}}),
+    &json!({"mcpServers": {"fixture": stdio(&at, &json!({}))}}),
   );
   let mut engine = life(&at, &[]);
   assert_eq!(asked(&mut engine, "mcp_call", "'fixture', 'change'").unwrap()["text"], "changed");
@@ -394,7 +386,7 @@ fn servers_over_the_streamable_http_and_the_older_sse_answer_as_a_server_over_st
     "streamed": {"type": "http", "url": format!("{base}/mcp-sse")},
     "legacy": {"type": "sse", "url": format!("{base}/sse")},
   }});
-  config(&at.join("config").join("mcp.json"), user);
+  config(&at.join("config").join("mcp.json"), &user);
   let mut engine = life(&at, &[]);
   for (name, transport, path) in
     [("plain", "http", "/mcp"), ("streamed", "http", "/mcp-sse"), ("legacy", "sse", "/sse")]
@@ -424,7 +416,7 @@ fn a_server_that_asks_for_a_login_needs_auth_until_a_login_by_oauth_and_refreshe
   let url = format!("{}/secure", program.address);
   config(
     &at.join("config").join("mcp.json"),
-    json!({"mcpServers": {"secure": {"type": "http", "url": url}}}),
+    &json!({"mcpServers": {"secure": {"type": "http", "url": url}}}),
   );
   let mut engine = life(&at, &[]);
   let one = server(&mut engine, "secure");
@@ -468,7 +460,7 @@ fn a_later_life_that_replays_a_record_with_acts_of_mcp_asks_no_server() {
   let at = place("replay");
   config(
     &at.join("config").join("mcp.json"),
-    json!({"mcpServers": {"fixture": stdio(&at, json!({}))}}),
+    &json!({"mcpServers": {"fixture": stdio(&at, &json!({}))}}),
   );
   let opening = || Opening {
     directory: at.join("project").display().to_string(),
@@ -498,7 +490,7 @@ fn the_process_of_a_server_over_stdio_ends_with_the_life() {
   let at = place("ends");
   config(
     &at.join("config").join("mcp.json"),
-    json!({"mcpServers": {"fixture": stdio(&at, json!({}))}}),
+    &json!({"mcpServers": {"fixture": stdio(&at, &json!({}))}}),
   );
   let mut engine = life(&at, &[]);
   assert_eq!(server(&mut engine, "fixture")["state"], "connected");

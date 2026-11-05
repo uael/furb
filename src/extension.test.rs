@@ -2,8 +2,6 @@
 //! configs of the user and of the project. Then the ear of the extensions, in lives of the real engine on the
 //! record that the store keeps.
 
-#![expect(clippy::redundant_clone, reason = "debt: a clone of a value that is not used again")]
-
 use std::{
   fs,
   path::{Path, PathBuf},
@@ -557,7 +555,7 @@ fn an_extension_of_the_root_alone_plays_on_the_root_and_on_a_chain_whose_source_
   let newer = "def note(on=\"\"):\n  return read(\"other.txt\", on=on)";
   let mut engine = lived(&at, vec![rooted(newer)]);
   let expected = [
-    ("chain1".to_owned(), full.clone()),
+    ("chain1".to_owned(), full),
     ("chain1".to_owned(), newer.to_owned()),
     ("chain3".to_owned(), "note()".to_owned()),
     ("chain3".to_owned(), newer.to_owned()),
@@ -787,7 +785,7 @@ fn a_later_life_given_a_new_word_reloads_it_and_each_chain_plays_its_definitions
   let expected = [
     ("chain1".to_owned(), full.clone()),
     ("chain1".to_owned(), defined.to_owned()),
-    ("chain2".to_owned(), full.clone()),
+    ("chain2".to_owned(), full),
     ("chain2".to_owned(), defined.to_owned()),
   ];
   {
@@ -840,7 +838,7 @@ fn a_reload_plays_a_new_function_and_a_new_name_of_state_and_keeps_the_state_tha
   let expected = [
     ("chain1".to_owned(), full.clone()),
     ("chain1".to_owned(), defined.to_owned()),
-    ("chain2".to_owned(), full.clone()),
+    ("chain2".to_owned(), full),
     ("chain2".to_owned(), defined.to_owned()),
   ];
   let mut engine = lived(&at, vec![note(newer)]);

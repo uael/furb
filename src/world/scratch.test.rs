@@ -1,15 +1,6 @@
 //! The scratch directory, proved where no life reaches it: its place, the paths of its scheme, and the files that a
 //! record makes again in it. The tests of the World drive it in a life.
 
-#![expect(
-  clippy::redundant_closure_for_method_calls,
-  reason = "debt: a closure where a method path serves"
-)]
-#![expect(
-  clippy::semicolon_if_nothing_returned,
-  reason = "debt: a unit expression with no semicolon"
-)]
-
 use std::{fs, path::PathBuf};
 
 use super::{SCRATCH, Scratch, WHOLE};
@@ -57,7 +48,7 @@ fn a_record_has_one_scratch_directory_in_the_cache_of_furb_under_a_short_name_of
   let cache = crate::world::cache()
     .map(|cache| Scratch::at(cache.join("scratch")).unwrap().path().to_path_buf());
   assert_eq!(one.path().parent(), cache.as_deref());
-  assert_eq!(one.path().file_name().map(|name| name.len()), Some(16));
+  assert_eq!(one.path().file_name().map(std::ffi::OsStr::len), Some(16));
   assert_eq!(Scratch::at("a/../b").unwrap().path(), std::env::current_dir().unwrap().join("b"));
   fs::remove_dir_all(&at).unwrap();
 }
@@ -145,11 +136,12 @@ fn a_missing_directory_takes_the_last_write_of_each_path_in_the_order_of_those_w
 fn a_file_that_the_machine_refuses_is_told_to_the_log_of_the_host() {
   let at = place("refused");
   let told = std::sync::Mutex::new(Vec::new());
-  Scratch::at(&at)
-    .unwrap()
-    .remade(&[wrote("write1", "../out.md", "out"), wrote("write2", "plan.md", "in")], &|line| {
-      told.lock().unwrap().push(line.to_owned())
-    });
+  Scratch::at(&at).unwrap().remade(
+    &[wrote("write1", "../out.md", "out"), wrote("write2", "plan.md", "in")],
+    &|line| {
+      told.lock().unwrap().push(line.to_owned());
+    },
+  );
   assert_eq!(
     *told.lock().unwrap(),
     [format!(
