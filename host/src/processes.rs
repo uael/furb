@@ -1,10 +1,11 @@
 //! The process of each skill that a life plays (D15 of #984). A skill whose manifest names a
 //! program under `metadata` as `furb-process` gets a process of its own while a life plays it:
 //! the daemon starts it at the tip of the open, for each skill that the record enabled, then at
-//! each new fact enable, and ends it when the life ends or when a new fact enable of the same skill
-//! reloads it. The process speaks the protocol as a window does: it dials the daemon at the folder
-//! that [`HOST`] gives, says its hello as a skill under the name that [`SKILL`] gives, and attaches
-//! the life that [`LIFE`] gives.
+//! each new fact enable, from the program that the fact names, which the folder that the chain
+//! played the skill from gives, and ends it when the life ends or when a new fact enable of the
+//! same skill reloads it. The process speaks the protocol as a window does: it dials the daemon at
+//! the folder that [`HOST`] gives, says its hello as a skill under the name that [`SKILL`] gives,
+//! and attaches the life that [`LIFE`] gives.
 //!
 //! A replay starts no process before the tip, since the record answers each act that a process
 //! said. Code plays only by a fact enable, never because a folder holds a skill.
@@ -19,7 +20,10 @@ use std::{
 };
 
 use furb::{
-  extension::{ENABLE, Places, skills::process},
+  extension::{
+    ENABLE, Places,
+    skills::{process, program as program_of},
+  },
   life::{Log, Opening},
 };
 use futures::StreamExt;
@@ -71,14 +75,15 @@ impl Played {
     let enables = Command::Transcript { on: None, of: Some(ENABLE.to_owned()) };
     let Ok(Reply::Values(tip)) = self.handle.send(enables).await else { return };
     let mut running: HashMap<String, Child> = HashMap::new();
-    let mut named: Vec<&str> = Vec::new();
-    for name in tip.iter().filter_map(enabled) {
-      if !named.contains(&name) {
-        named.push(name);
+    let mut named: Vec<Enabled> = Vec::new();
+    for one in tip.iter().filter_map(enabled) {
+      match named.iter_mut().find(|two| two.name == one.name) {
+        Some(two) => *two = one,
+        None => named.push(one),
       }
     }
-    for name in named {
-      self.start(name, &mut running).await;
+    for one in named {
+      self.start(one, &mut running).await;
     }
     // The log says again each fact enable of the tip before the facts said after it.
     let mut replayed = tip.len();
@@ -87,7 +92,7 @@ impl Played {
       match &*event {
         Event::Fact(fact) => match enabled(fact) {
           Some(_) if replayed > 0 => replayed -= 1,
-          Some(name) => self.start(name, &mut running).await,
+          Some(one) => self.start(one, &mut running).await,
           None => {}
         },
         Event::Ended(_) => break,
@@ -99,12 +104,19 @@ impl Played {
     }
   }
 
-  /// The process of a skill started, once its earlier process ended, when its manifest names one.
-  async fn start(&self, name: &str, running: &mut HashMap<String, Child>) {
+  /// The process of a skill started, once its earlier process ended, when its fact enable names
+  /// one: the program of the folder that the life played the skill from, or, for a fact of a build
+  /// before the program, the program that the folder of the life and its config find by name.
+  async fn start(&self, one: Enabled<'_>, running: &mut HashMap<String, Child>) {
+    let Enabled { name, program } = one;
     if let Some(mut child) = running.remove(name) {
       child.kill().await.ok();
     }
-    let Some(program) = process(name, &self.cwd, &self.places) else { return };
+    let program = match program {
+      Some(named) => program_of(named),
+      None => process(name, &self.cwd, &self.places),
+    };
+    let Some(program) = program else { return };
     match self.spawned(name, &program) {
       Ok(child) => {
         running.insert(name.to_owned(), child);
@@ -148,9 +160,20 @@ impl Played {
   }
 }
 
-/// The name of the skill that a fact enable carries, as JSON reads the fact.
-fn enabled(fact: &Value) -> Option<&str> {
+/// What a fact enable says of the process of its skill: the name of the skill, and the program
+/// that the fact names, empty when the folder of the skill names none, and none for a fact of a
+/// build before the program.
+struct Enabled<'a> {
+  name: &'a str,
+  program: Option<&'a str>,
+}
+
+/// What a fact enable carries of the process of its skill, as JSON reads the fact: its kind, its
+/// about and its speaker, then the name, the word, the life word, the root, the file, the digest
+/// and the program.
+fn enabled(fact: &Value) -> Option<Enabled<'_>> {
   let words = fact.as_array()?;
   (words.first()?.as_str()? == ENABLE).then_some(())?;
-  words.get(3)?.as_str()
+  let name = words.get(3)?.as_str()?;
+  Some(Enabled { name, program: words.get(9).and_then(Value::as_str) })
 }
