@@ -328,7 +328,7 @@ test.skipIf(process.platform === "win32")(
       expect(host.pending.has(cut)).toBe(false);
       expect(await engine.peek(cut)).toMatchObject({
         is: "Refused",
-        args: ['"sleep 60; echo never" was interrupted: the life that ran it ended before it did'],
+        args: [`${cut} was interrupted: the life that ran it ended before it did`],
       });
       await host.end();
     }),
