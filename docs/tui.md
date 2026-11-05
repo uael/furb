@@ -55,13 +55,13 @@ The captures of the feed show a real life: a conductor and the workers that it h
 life of furb, with 23 chains, 21 of them at work, and ladders of up to 76 rungs. `tui/fixtures/conductor.jsonl`
 holds it, with no key and no path of a home in it, and `bun run demo` opens it beside the scripted life.
 
-The sidebar shows the workspaces, and the threads of the workspace where you work. Its default shape is cards. A
-switcher on top lists each workspace on one row, the one shown lit, with the marks of what needs a look in it: ◆ for a
-question that waits, ✗ for a session that failed, ◌ for a pause, ◉ for work, and ● for a finished session that you did
-not see. When a question waits in any workspace, a line on top says how many, and ⌥A goes to the next one, in the
-session where it waits. Under the switcher stand the folder and the sessions of the workspace shown, then its threads
-as cards. A card holds the whole title of a thread, its state, the count of its messages, the time since it works, and
-its chain when it is not Main. The sidebar is wide, 56 columns by default, and it scrolls with the wheel.
+The sidebar shows the workspaces as one tree. Each workspace is one row, with the marks of what needs a look in it: ◆
+for a question that waits, ✗ for a session that failed, ◌ for a pause, and ● for a finished session that
+you did not see. The workspace shown is open, with its sessions, and under the session shown stand its threads, one row
+for each. A row of a thread holds its title, and at its right why it needs a look and how long ago it last changed, as
+`5m`. A line on top says how many questions wait for you in all the workspaces, or that nothing waits, and ⌥A goes to
+the next question, in the session where it waits. The sidebar is wide, 56 columns by default, and it scrolls with the
+wheel.
 
 A click on a workspace gives it the focus: its session that asks, else one that lives, else its newest, opens in the
 feed. A click on the arrow of a workspace that has not the focus shows its sessions without a change of focus. A click
@@ -83,12 +83,7 @@ the footer, as ^P commands and F1 help, stand under it, on the row of the footer
 corner stands in the footer. On a narrow terminal, or with the sidebar hidden, the context folds into a short line of
 the footer, as `8% · $0.16`, and the keys stay there.
 
-`/sidebar outline` and `/sidebar inbox` give the other shapes, and the flag `FURB_SIDEBAR` does the same at the start.
-The outline lists all workspaces in one tree: the workspace shown is open, with its sessions and, under the session
-shown, its threads, one row for each, and each other workspace is one row with its marks. The inbox is the outline with
-the questions of every workspace under its top line, each with the buttons that answer it.
-
-![The sidebar](screenshots/110-sidebar-cards.png)
+![The sidebar](screenshots/28-workspace-tree.png)
 
 The feed shows the threads of the chain, each as one box. A thread is a prompt: its message heads the box as markdown,
 with a line at its left in the color of the thread, which starts half a row above the message and ends half a row under
@@ -98,7 +93,7 @@ who sent it and to which model when you did not, the type of its answer, its sta
 came to the thread later stands in the box the same way, and the answer of the model stands as markdown with no line of
 color. The words of its steps stand in the same box as code, with no surface of their own, as one Python program, line
 by line, with the number of each line in the gutter, in a quiet color. The input of the chain is the only input. By
-default it sends each message to the open thread lit, else it starts a new thread. `↳ Reply` at the end of a box makes
+default it sends each message to the open thread of the chain, else it starts a new thread. `↳ Reply` at the end of a box makes
 that thread its target, and a reply to a thread that is over opens it again. While the input sends to a thread, its line
 takes the color of the thread, its meta line says `to ↳` and the name of the thread, and the box of the thread ends with
 `↳ Replying here` in its color. `+ New thread`, at the right end of the meta line, and `/newthread`, make the next
@@ -178,11 +173,9 @@ or a ... once the window rolled, the line that runs stands second to last, and t
 come, or the row where the model writes. A click on a ... opens the lines in a block that scrolls, up to four
 hundred, and Roll up closes it. The feed shows one line in place of its earlier threads, as "28 earlier messages". A
 click on the line shows them. A long message shows its first rows, with a line that shows the rest. A jump to an act
-opens each fold over it. In the sidebar, the marks of a row and of the head count what concerns you: a question that
-waits anywhere, and the failure or the pause of a thread that you started. The failure of an agent does not count,
-and no mark counts the work in progress. A workspace lists the session shown and
-each session that works, asks or failed, then its newest other sessions until it lists three, and the older ones fold
-under Earlier.
+opens each fold over it. In the sidebar, a question in an agent marks the thread over it, and the failure of an agent
+marks the agent alone. A workspace lists the session shown and each session that works, asks or failed, then its newest
+other sessions until it lists three, and the older ones fold under Earlier.
 
 ![Feed](screenshots/02-feed.png)
 
@@ -343,11 +336,10 @@ for the operator, red a failure, and a quiet green what is done. Paper and Day a
 Midnight, Forest and Dusk are dark. ⌃T opens the themes, each with a swatch of its
 colors.
 
-In Ink, the text is a soft gray and never white. Python has one color for each part, in the feed and in the graph:
-purple for a keyword, green for a string, orange for a number, `None`, `True`, `False` and a backslash sequence, teal
-for a name that the code calls or defines, gold for a type, and gray italic for a comment. An operator keeps the color
-of the text, so a keyword is the one purple on a line. None of these colors is pastel, and each one reads on every
-surface of the feed.
+In Ink, the text is a soft gray and never white. Python has one color for each part: purple for a keyword, green for a
+string, orange for a number, `None`, `True`, `False` and a backslash sequence, teal for a name that the code calls or
+defines, gold for a type, and gray italic for a comment. An operator keeps the color of the text, so a keyword is the
+one purple on a line. None of these colors is pastel, and each one reads on every surface of the feed.
 
 ![The theme of a light terminal](screenshots/78-terminal-light.png)
 
@@ -412,26 +404,16 @@ selected chain, `x` cancels its work, `n` lets it run one more rung, and Tab ans
 
 ![The cursor in time](screenshots/67-loom-time-cursor.png)
 
-The graph shows the life as programs that run: the tree of its threads, one for each prompt, beside the map of its
-programs, one for each chain at the place of its birth, with the lines of the tree of hires and a dot where a
-message flows. Under the name of each program stand what it waits on, its actor, its dollars, and its question.
+The graph shows the life as programs that run: the map of its programs, one for each chain at the place of its birth,
+with the lines of the tree of hires and a dot where a message flows. Under the name of each program stand what it
+waits on, its actor, its dollars, and its question. The map lights the chains of the thread that the sidebar shows:
+the chain of that thread and the chains of its agents.
 
 ![The graph](screenshots/68-graph.png)
 
-After ⌥G, Enter zooms in and Esc zooms out: from the threads to the map, to the source of one program, with what
-each act came to beside the line that made it, to one word, and to one act, whose card the feed shows whole.
-
-![The map](screenshots/69-graph-map.png)
-
-![A program](screenshots/70-graph-program.png)
-
-![A word](screenshots/71-graph-word.png)
-
-![An act](screenshots/72-graph-act.png)
-
-A command that runs shows as it runs at the level of one act, since its card in the feed streams what it prints.
-
-![A command at the level of one act](screenshots/73-graph-command.png)
+⌥G gives the keys to the map, and the keys of the loom act there too. The arrows move to the program nearest in their
+direction, and the feed under the map shows its chain. Enter gives the keys back to the input on that chain, and Esc
+returns to now, then gives the keys back.
 
 ## Keys, marks, and commands
 
@@ -731,12 +713,6 @@ shows a rule with the summary of the compaction under it: the model of the chain
 the last rule. The row of a chain in the sidebar says how many times it compacted.
 
 ![The compactions of a chain](screenshots/75-compaction.png)
-
-An older compaction went on in a new chain with the work that its source still needed. No compaction does that now,
-and a record that holds one shows its chain as a chain of its own, with one note at its start: it goes on from a
-compaction of an older form that is not joined.
-
-![A chain that an older compaction made](screenshots/75-compaction-chains.png)
 
 ## Undo and redo
 

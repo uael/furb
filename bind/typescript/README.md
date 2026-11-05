@@ -239,10 +239,10 @@ record when moving a session.
 The model of a life is the views that a host derives from the acts of a life, in `src/life`, which `furb/life`
 gives. It holds no native code and no module of node, so a terminal and a window of the web read the same views:
 
-- `acts`: the act as a view reads it, `LiveAct`, the kinds of work, `WORK`, what a command came to, `Exit`, the
-  measure of a chain, `Measure`, which `measureOf` gives from the answers of its models, a compaction of a chain,
-  `Compaction`, which an `Activity` keeps for each prefix said on a chain after its birth, and whether an act failed
-  or was cancelled.
+- `acts`: the act as a view reads it, `LiveAct`, the kinds of work, `WORK`, whether a site is the operator or a member
+  of the operator, `operated`, what a command came to, `Exit`, the measure of a chain, `Measure`, which `measureOf`
+  gives from the answers of its models, a compaction of a chain, `Compaction`, which an `Activity` keeps for each
+  prefix said on a chain after its birth, and whether an act failed or was cancelled.
 - `asks`: the desk of the operator, `desk`: each question that waits for him and each notice that he did not dismiss,
   the oldest first, each with its chain and the choices of its shape, `choicesOf`: yes and no for a bool, and each
   value of a Literal. `aimed` gives the ask that the operator acts on, on the chain that he reads, `beside` the ask a
@@ -250,21 +250,20 @@ gives. It holds no native code and no module of node, so a terminal and a window
 - `loom`: the rows of the loom, one for the operator and one for each chain in the order of the tree, with the cells
   of their moments, what each chain does now, `nowOf`, in words that a person reads, a count of seconds as a person
   reads it, `duration`, and the acts as they stood at a moment, `asOf`.
-- `ladder`: the lines of the thread of a chain, each prompt with the rungs of its ladder and their acts, and a long
-  thread as a person reads it at a glance, `condense`: the last steps at each level, and one line in place of each
-  run of earlier ones.
-- `threads`: the tree of the threads of a life, where a thread is a prompt and a prompt that a rung of a thread makes
-  is its sub-thread, each with its anchor, its messages, its progress, what waits for the operator and its pull
-  requests.
+- `ladder`: the lines of the thread of a chain as a person reads it at a glance, `thread`: each prompt with the rungs
+  of its ladder and their acts, the last steps at each level, and one line in place of each run of earlier ones, read
+  from the index of acts that a host holds.
+- `threads`: the threads of a chain, `chainThreads`, where a thread is a prompt to a model with the messages that came
+  to it, and the asides of the chain, `chainAsides`; the tree of a list of threads, `nestThreads`, where each thread
+  that the ladder of a thread made is its agent, in the order of the list of the threads, `orderThreads`; and how a
+  thread concerns the operator, `concerns` and `attentionOf`.
 - `map`: the place of each chain on the map, which no later chain moves, the messages that flow between chains, and
   the way of a message along the tree of hires.
-- `source`: the words of the ladders of a chain as one program, with each act on the line that made it and the line
-  that runs, and what each act came to in a few words.
+- `program`: the program of a thread as the feed shows it, `threadProgram`: the words of its steps as one program,
+  with each act on the line of the word that made it, `placed`, what the acts of each line came to, and the line that
+  runs; and a line of python laid out in rows of a width, `layout`.
 - `plain`: a message as a person reads it, with no name of its exception around it and no path of the directory of
   the life, and what a failed act says in such words.
-- `time`: the marks of a life on its axis of time: each step, each question to the operator, and each end of a thread.
-- `watch`: the last value of each name that a chain told by a moment, under the act whose name it starts with.
-- `debugger`: the call stack of a chain, and the program of the ladder of a prompt, which its door holds.
 
 ## How the package is built
 

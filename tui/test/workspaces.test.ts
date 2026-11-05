@@ -46,8 +46,6 @@ async function withLibrary(
     return library;
   };
   const sidebar = async (library: Workspaces): Promise<Sidebar> => {
-    // These tests read the outline of the workspaces, in which each workspace stands on a row of its own.
-    library.preferences.sidebarStyle = "outline";
     const screen = await createTestRenderer({ width: 152, height: 42, useMouse: true, exitSignals: [] });
     const app = follow(screen.renderer, { quit() {}, workspaces: library });
     const left = 152 - library.preferences.sidebarWidth;
@@ -979,17 +977,13 @@ test("each session row of a workspace opens its session, and New session makes o
     await until(library, () => group.sessions.length === count + 1 && library.current === group.sessions[0]);
   }));
 
-test("a click on another workspace row switches to it, and in the cards a click on the switcher does", () =>
+test("a click on another workspace row switches to it", () =>
   withLibrary(async ({ directory, open, sidebar }) => {
-    const { library, group, other, third } = await twoSpaces(directory, open);
+    const { library, other, third } = await twoSpaces(directory, open);
     const shown = await sidebar(library);
     await shown.frame();
     await shown.screen.mockMouse.click(shown.left + 6, shown.row("other"));
     await until(library, () => library.current === third);
-    library.preferences.sidebarStyle = "cards";
-    await shown.frame();
-    await shown.screen.mockMouse.click(shown.left + 6, shown.row("project"));
-    await until(library, () => library.groupOf() === group);
     expect(other.sessions.length).toBe(1);
   }));
 

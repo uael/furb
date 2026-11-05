@@ -14,7 +14,7 @@ export const lifeViewLabels: Record<LifeView, string> = { main: "Main", loom: "L
 export const lifeViewDetails: Record<LifeView, string> = {
   main: "The feed of the selected chain beside the threads",
   loom: "Each chain as a thread in time over the feed, with a cursor in time",
-  graph: "The threads and the map of the programs, with a zoom into a program, a word and an act",
+  graph: "Each chain as a program on a map over the feed, with the messages that flow between them",
 };
 /** Whether a text names a view of the life. */
 export const isLifeView = (text: unknown): text is LifeView => lifeViews.includes(text as LifeView);
@@ -99,8 +99,6 @@ export function pad(parts: readonly Part[], width: number, ground?: RGBA): Part[
 export class LoomPane {
   /** The rows whose workers the loom folds into them. */
   readonly folds = new Set<string>();
-  /** The moment that the time cursor stands at, and nothing at the present. */
-  cursor?: number;
   /** The first row that shows, which follows the selection. */
   private top = 0;
   /** The chain of each row of the last draw, by its row on the screen, for a click. */

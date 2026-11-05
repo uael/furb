@@ -4,11 +4,9 @@ import {
   actLines,
   asksOperator,
   cancelled,
-  condense,
   earProgram,
   gist,
-  ladder,
-  makers,
+  operated,
   type ProgramLine,
   pauseSaid,
   stepLines,
@@ -25,7 +23,7 @@ import { hunkPatch, type Scope } from "../review.ts";
 import type { ActRow, View } from "../session.ts";
 import { theme as c, glyph, markOf, spacing as space, spin, threadTone } from "../theme.ts";
 import { bold, italic, type Part, plain } from "../ui.ts";
-import { asOf, branchMessages, branchStart, branchTaken, branchTakes, earlierSteps } from "../watching.ts";
+import { branchMessages, branchStart, branchTaken, branchTakes, earlierSteps } from "../watching.ts";
 import { part } from "./part.ts";
 import { type BlockOptions, MESSAGE_ROWS, PROGRAM_STEPS, spell, viewLabels } from "./shared.ts";
 import { SCROLL } from "./thread.ts";
@@ -215,7 +213,7 @@ export const feed = part({
       w.moment === undefined &&
       !w.paused &&
       !w.actOf(w.selected)?.words[1] &&
-      !w.activity.some((act) => act.by === "operator" || act.kind === "prompt");
+      !w.activity.some((act) => operated(act.by) || act.kind === "prompt");
     if (this.welcoming) {
       const { width, height } = this.scroll.viewport;
       add("welcome", `welcome:${width}:${height}:${this.theme}:${this.welcomeKey()}`, [], (box) =>
@@ -230,20 +228,13 @@ export const feed = part({
       }
     } else if (w.view === "feed") {
       if (welcomed) this.scroll.stickyScroll = !this.tree;
-      // The feed shows the acts as they stood at the moment that the operator moved to, or as they stand now.
+      // The feed shows the acts as they stood at the moment that the operator moved to, or as they stand now. Its fold
+      // reads them from the index of the session, which spares the fold a pass over every act in each frame.
       const shown = w.at(w.acts);
-      // The acts of now are found by the index of the session, and those of a moment of the past by a map of their own.
-      const then = shown === w.acts ? undefined : new Map(shown.map((one) => [one.id, one]));
-      const rows = { get: (id: string) => (then ? then.get(id) : w.actOf(id)) };
-      // The acts of now are read from the index of the session, which spares a pass over every act in each frame, and
-      // those of a moment of the past from an index of their own.
-      const index = then ? undefined : w.ladderIndex;
-      // The acts that each act made, in the order of the acts, which each open rung reads once the first one asks.
-      let made: ReadonlyMap<string, readonly ActRow[]> | undefined = index?.made;
-      const madeBy = (id: string): readonly ActRow[] => {
-        made ??= makers(shown);
-        return made?.get(id) ?? [];
-      };
+      const past = w.moment !== undefined;
+      const index = w.ladderIndex;
+      const rows = index.ids;
+      const madeBy = (id: string): readonly ActRow[] => index.made.get(id) ?? [];
       // The feed of a chain is its ladder, which the model of a life gives every host: each prompt with the rungs of
       // its ladder, the acts of each rung, and what the prompt closed with.
       // A fold that the operator opened shows the earlier prompts of the thread, or the earlier rungs of a ladder.
@@ -252,27 +243,14 @@ export const feed = part({
           closed === false && /^(prompts|rungs):/.test(key) ? [key] : [],
         ),
       );
-      // The thread of now is read from the index, in the time of what it shows, and that of a moment of the past whole.
       const owed = new Set(w.host.prompts.keys());
       const word = (rung: ActRow) => this.subject(rung);
-      const own = index
-        ? thread(w.selected, word, w.host.streams, owed, opened, index)
-        : condense(ladder(w.selected, shown, word, w.host.streams, owed), opened);
+      const own = thread(w.selected, word, w.host.streams, owed, opened, index);
       // A branch takes from its source each message before the word that made it, which the word does not leave out,
       // with what answered it. Its feed shows these threads as they stood when the branch began, after the line that
       // names the source and before its own acts, since its model reads them as its own turns.
       const branch = rows.get(w.selected);
       const source = branch?.kind === "chain" ? String(branch.words[1] ?? "") : "";
-      // A chain that an older compaction made has a word on it that restores its source, and no chain is joined to
-      // its source now.
-      const older =
-        source !== "" &&
-        shown.some(
-          (one) =>
-            one.kind === "rung" &&
-            one.on === w.selected &&
-            /^restore\((['"])(\w+)\1\)/.exec(String(one.words[0] ?? ""))?.[2] === source,
-        );
       const maker = branch && (w.actOf(String(branch.by)) ?? branch);
       const taken = new Set(
         source && maker
@@ -281,35 +259,28 @@ export const feed = part({
             )
           : [],
       );
-      const takenLines: typeof own = [];
-      const frozen = branch && taken.size ? asOf(shown, branch.began) : [];
-      let frozenMade: ReturnType<typeof makers> | undefined;
-      const takenMade = () => {
-        frozenMade ??= makers(frozen);
-        return frozenMade;
-      };
-      if (frozen.length) {
-        let keep = false;
-        for (const line of ladder(source, frozen, word, w.host.streams, owed)) {
-          if (line.depth === 0) keep = taken.has(line.act.id);
-          if (keep) takenLines.push(line);
-        }
-      }
+      // The threads that the branch took stand as they stood at the fact before the one that made the branch, and no
+      // other step of its source stands at their top.
+      const frozen = branch && taken.size ? w.ladderAt(source, branch.began - 1) : undefined;
+      const takenMade = () => frozen?.made ?? new Map<string, readonly ActRow[]>();
+      const takenLines = frozen
+        ? thread(source, word, w.host.streams, owed, opened, {
+            ...frozen,
+            on: frozen.on.filter((one) => taken.has(one.id)),
+          })
+        : [];
       // The words that retell the source stand first in the feed of the branch, as the acts that the branch made.
       const retelling = own.findIndex((line) => line.depth === 0 && line.act.by !== w.selected);
       const after = retelling < 0 ? own.length : retelling;
-      const lines = [...own.slice(0, after), ...condense(takenLines, opened), ...own.slice(after)];
+      const lines = [...own.slice(0, after), ...takenLines, ...own.slice(after)];
       let retold = false;
       // The feed is one program of threads: each thread is its header, then the words of its steps as python, with
       // what each line came to as a quiet comment beside it. A thread that the operator collapsed shows its header
       // line alone.
-      const threadsOwn = this.chainThreadsBy(w.selected);
+      const threadsOwn = w.threads;
       const waiting = new Set(w.desk.asks.map((ask) => ask.id));
       const named = (chain: string) => w.labelOf(chain);
-      const madeMap = () => {
-        made ??= makers(shown);
-        return made;
-      };
+      const madeMap = () => index.made;
       // A program is made again only when what it shows changed: a step, its word, its state, or an act of it, as its
       // state and what its command printed. A new act on another thread leaves it as it was.
       const stepOf = (rung: ActRow) => {
@@ -329,7 +300,7 @@ export const feed = part({
           .map((id) =>
             [
               // An act of another branch can take the same id, so the place of the act in its record names it too.
-              `${id}@${index?.ids.get(id)?.began ?? ""}`,
+              `${id}@${index.ids.get(id)?.began ?? ""}`,
               ...madeBy(id)
                 .filter((one) => one.kind === "rung")
                 .map(stepOf),
@@ -338,11 +309,11 @@ export const feed = part({
           .join("|");
       const programFor = (key: string, live: string, make: () => ProgramLine[]): ProgramLine[] => {
         const known = this.programs.get(key);
-        if (!then && known?.version !== -1 && known?.session === w && known?.live === live)
+        if (!past && known?.version !== -1 && known?.session === w && known?.live === live)
           return known.lines;
         const made = make();
         if (this.programs.size > 2000) this.programs.clear();
-        this.programs.set(key, { session: w, version: then ? -1 : w.version, live, lines: made });
+        this.programs.set(key, { session: w, version: past ? -1 : w.version, live, lines: made });
         return made;
       };
       // What a step took and cost once it is done, and how long the line that waits has waited.
@@ -499,7 +470,7 @@ export const feed = part({
       // The marks of the parts stand after the last act that began before their place: a rule with the title of the
       // mark, then its lines. A line that only shows more of an act, or a fold of earlier lines, places no mark.
       const moment = w.moment;
-      const marks = this.parts.marks(this.seen()).filter((one) => moment === undefined || one.at < moment);
+      const marks = this.parts.marks(this.seen()).filter((one) => moment === undefined || one.at <= moment);
       const placing = (line: (typeof lines)[number]) =>
         line.type !== "tail" && line.type !== "value" && line.type !== "more";
       // A mark waits until the first act that began at its place or later, and shows before it: before a line of the
@@ -740,7 +711,7 @@ export const feed = part({
         ];
         const says: ActRow[] = [];
         for (const line of program) {
-          if (line.kind === "note" && line.step.kind === "prompt" && line.step.by === "operator") {
+          if (line.kind === "note" && line.step.kind === "prompt" && operated(line.step.by)) {
             // A message that the operator took back leaves the box, and the message that replaces it stands in its place.
             if (cancelled(line.step)) continue;
             says.push(line.step as ActRow);
@@ -1086,34 +1057,25 @@ export const feed = part({
             if (source)
               add(
                 `retold-${act.by}`,
-                `${source}:${name}:${messages}:${older}:${w.watching}:${this.theme}`,
+                `${source}:${name}:${messages}:${w.watching}:${this.theme}`,
                 [],
                 (box) => {
                   box.add(
                     this.link(
-                      older
+                      w.watching
                         ? [
                             ["↳ ", c.secondary],
-                            [
-                              "This chain goes on from a compaction of an older form that is not joined: ",
-                              c.muted,
-                            ],
-                            [name, c.text, bold],
+                            [branchStart(name), c.muted],
                           ]
-                        : w.watching
-                          ? [
-                              ["↳ ", c.secondary],
-                              [branchStart(name), c.muted],
-                            ]
-                          : [
-                              ["↳ ", c.secondary],
-                              ["Branched from ", c.muted],
-                              [name, c.text, bold],
-                            ],
+                        : [
+                            ["↳ ", c.secondary],
+                            ["Branched from ", c.muted],
+                            [name, c.text, bold],
+                          ],
                       () => void w.select(source).catch(w.fail),
                     ),
                   );
-                  if (messages !== undefined && !older)
+                  if (messages !== undefined)
                     box.add(this.text(branchTakes(messages), c.faint, { paddingLeft: space.between }));
                 },
               );
@@ -1122,7 +1084,7 @@ export const feed = part({
           // A word of the operator that only made a chain, as a branch or a new chain does, reads as the chain that it
           // made, and a click on it opens that chain.
           const made =
-            act.by === "operator" && /^\s*chain\(/.test(code)
+            operated(act.by) && /^\s*chain\(/.test(code)
               ? w.chains.find((chain) => chain.by === act.id)
               : undefined;
           if (made) {

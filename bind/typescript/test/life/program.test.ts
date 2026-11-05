@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { makers } from "../../src/life/ladder.ts";
 import {
   actLines,
   earProgram,
@@ -8,12 +7,13 @@ import {
   joinedLines,
   layout,
   literals,
+  placed,
   stepLines,
   threadProgram,
   wrap,
   writing,
 } from "../../src/life/program.ts";
-import { act } from "./acts.ts";
+import { act, makers } from "./acts.ts";
 
 const label = (chain: string) => `label of ${chain}`;
 
@@ -440,4 +440,19 @@ test("the last line of the setup of an ear runs while an act of its word is at w
   expect(lines([watcher, keeper, command]).at(-1)).toEqual(["await mcp_index()", true]);
   const done = act("bash1", "bash", "chain1", "rung2", 6, 7);
   expect(lines([watcher, keeper, done]).at(-1)).toEqual(["await mcp_index()", false]);
+});
+
+test("the acts of a word stand on the lines that call their verbs, and a loop puts again on its line the acts that it makes again", () => {
+  const made = [
+    act("read1", "read", "chain1", "rung1", 2, 3),
+    act("bash1", "bash", "chain1", "rung1", 4, 5),
+    act("bash2", "bash", "chain1", "rung1", 6, 7),
+    act("bash3", "bash", "chain1", "rung1", 8, 9),
+  ];
+  const word = 'notes = read("README.md")\nfor n in range(3):\n  await bash(f"echo {n}")';
+  expect(placed(word, made).map((line) => line.map((one) => one.id))).toEqual([
+    ["read1"],
+    [],
+    ["bash1", "bash2", "bash3"],
+  ]);
 });

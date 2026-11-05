@@ -93,7 +93,7 @@ test("the real native life drives the feed, the transcript, and responsive views
       const control = async () => {
         const rows = (await frame()).split("\n");
         const at = /▾ Collapse|▸ Expand/;
-        // The cards of the sidebar hold controls of the same name, so the search stays in the feed.
+        // The sidebar holds controls of the same name under the thread lit, so the search stays in the feed.
         const feed = screen.renderer.width - session.preferences.sidebarWidth;
         const y = rows.findIndex((row) => at.test(row.slice(0, feed)));
         const x = rows[y]?.slice(0, feed).search(at) ?? -1;

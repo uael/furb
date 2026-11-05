@@ -47,10 +47,6 @@ export const actions = part({
       await bare[name]?.();
       return true;
     }
-    if (name === "sidebar" && argument) {
-      this.setRailStyle(argument);
-      return true;
-    }
     if (name === "pin" || name === "unpin") {
       await (name === "pin"
         ? this.session.pin(argument || undefined)

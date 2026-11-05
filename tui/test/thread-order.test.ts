@@ -47,7 +47,7 @@ async function settled({ frame }: Composing): Promise<string> {
 
 /** The threads of the session shown, as the sidebar orders them. */
 const ordered = (app: Composing["app"], session: Session) =>
-  orderThreads(nestThreads(app.railThreads(), session.ladderIndex.ids));
+  orderThreads(nestThreads(app.railThreads(), session.boardIndex.ids));
 
 const wide = { width: 152, height: 46 };
 const short = { width: 152, height: 30 };
@@ -79,7 +79,9 @@ test("the sidebar lists the closed threads at the top and the open ones last, ne
       keep("order-sidebar", shown);
       const rows = rail(use, shown, tall.width);
       const at = (text: string) => rows.findIndex((line) => line.includes(text));
-      expect(at("Resolved")).toBeGreaterThan(at("Threads"));
+      // The threads stand under the row of the session that holds them, which bears the name of its record.
+      expect(at("conductor")).toBeGreaterThan(0);
+      expect(at("Resolved")).toBeGreaterThan(at("conductor"));
       expect(at("Have an agent loading")).toBeGreaterThan(at("Resolved"));
       expect(at("This one is a bit more")).toBeGreaterThan(at("Have an agent loading"));
       expect(at("You are the orchestrator")).toBeGreaterThan(at("This one is a bit more"));

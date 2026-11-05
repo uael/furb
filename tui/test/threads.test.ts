@@ -1,7 +1,6 @@
 import { expect, setSystemTime, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { RGBA } from "@opentui/core";
-import { chainThreads } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { glyph, palettes, spacing as space } from "../src/theme.ts";
 import { type Composing, cellAt, composing } from "./composing.ts";
@@ -29,8 +28,7 @@ async function railClick({ session, screen, frame }: Composing, text: string): P
 }
 
 /** The threads of the chain shown, as the sidebar lists them. */
-const listed = (session: Composing["session"]) =>
-  chainThreads(session.ladderIndex.on, session.ladderIndex.ids, new Set(session.host.prompts.keys()));
+const listed = (session: Composing["session"]) => session.threadsOf(session.selected).list;
 
 test("the sidebar lists the workspaces and the threads of the session shown, and holds no tree of chains", () =>
   composing(
@@ -40,7 +38,6 @@ test("the sidebar lists the workspaces and the threads of the session shown, and
       keep("sidebar", shown);
       const text = rail(session, shown).join("\n");
       expect(text).toContain("Workspaces");
-      expect(text).toContain("Threads");
       expect(text).not.toContain("Chains");
       expect(text).not.toContain("← ");
       const first = listed(session)[0];
@@ -60,7 +57,7 @@ test("after ⌥T the keys stand on the thread lit, Space collapses it in the fee
       screen.mockInput.pressKey("t", { meta: true });
       await frame();
       expect(app.railKeys).toBe(true);
-      const id = app.activeThread()?.act.id ?? "";
+      const id = app.session.activeThread?.act.id ?? "";
       expect(id).not.toBe("");
       expect(app.railAt).toBe(`th:${id}`);
       screen.mockInput.pressKey(" ");
@@ -88,7 +85,7 @@ test("after ⌥T the keys stand on the thread lit, Space collapses it in the fee
     true,
   ));
 
-test("a thread resolves from its card, and a message to it opens it again", () =>
+test("a thread resolves from the controls under its row in the sidebar, and a message to it opens it again", () =>
   composing(
     async (use) => {
       const { session, frame } = use;
@@ -102,12 +99,10 @@ test("a thread resolves from its card, and a message to it opens it again", () =
       await until(session, () => session.thread === id);
       const open = await frame();
       keep("chosen", open);
-      // The controls of the thread chosen stand in its card, on a last row with the bar of the card.
-      const side = open.split("\n").map((line) => line.slice(size.width - session.preferences.sidebarWidth));
+      // The controls of the thread chosen stand on the row under its row.
+      const side = rail(session, open);
       const title = side.findIndex((line) => line.includes("Hold this thread open"));
-      const controls = side.findIndex((line) => line.includes("↳ Reply"));
-      expect(controls).toBeGreaterThan(title);
-      expect(side[controls]?.indexOf("▎")).toBe(side[title]?.indexOf("▎"));
+      expect(side[title + 1]).toContain("↳ Reply");
       await railClick(use, " Resolve ");
       await until(session, () => listed(session).find((one) => one.act.id === id)?.resolved === true);
       expect(await session.engine.result(id)).toBe("resolved");
@@ -142,9 +137,10 @@ test("a redraw that puts Resolve under a still pointer between the press and the
       const left = size.width - session.preferences.sidebarWidth;
       const before = rail(session, await frame());
       const x = (before.find((line) => line.includes("✓ Resolve")) ?? "").indexOf("Resolve");
-      // The press lands on the row of the other thread, which stands under the thread held open.
-      const y = before.findIndex((line) => line.includes("Another thread")) + 1;
-      expect(before[y]).toContain("paused");
+      // The press lands on the row of the other thread, under the controls of the thread held open, which the message
+      // moves under that row.
+      const y = before.findIndex((line) => line.includes("Another thread"));
+      expect(before[y - 1]).toContain("✓ Resolve");
       expect(before[y]?.[x]).toBe(" ");
       await screen.mockMouse.pressDown(left + x, y);
       // A message moves the thread held open last, and its Resolve comes under the pointer, which did not move.
@@ -205,32 +201,6 @@ test("a line on an open thread is a message of None, over at once, and a line on
     true,
   ));
 
-test("a question of a str shows a field in its card in the sidebar, and Enter in it answers the question", () =>
-  composing(
-    async ({ session, app, screen, frame }) => {
-      await idle(session);
-      session.preferences.sidebarStyle = "inbox";
-      const question = await session.engine.prompt("str", {
-        message: "Which name should it take?",
-        on: session.engine.root,
-        to: "operator",
-      });
-      await until(session.host, () => session.host.prompts.has(question));
-      await session.refresh();
-      const shown = await frame();
-      expect(shown).toContain("Type the answer");
-      expect(shown).not.toContain("Answer as str");
-      const field = app.railSession.findDescendantById(`rail-answer-${question}`);
-      expect(field).toBeDefined();
-      field?.focus();
-      screen.mockInput.typeText("fieldnotes");
-      screen.mockInput.pressEnter();
-      expect(await session.engine.result(question)).toBe("fieldnotes");
-    },
-    { width: 140, height: 44 },
-    true,
-  ));
-
 test("a thread whose title is longer than the sidebar ends its row in one ellipsis, and keeps its state at the right", () =>
   composing(
     async ({ session, app, frame }) => {
@@ -239,7 +209,6 @@ test("a thread whose title is longer than the sidebar ends its row in one ellips
       expect(first).toBeDefined();
       const title = first?.title ?? "";
       session.preferences.sidebarWidth = 28;
-      session.preferences.sidebarStyle = "outline";
       app.render();
       await frame();
       const rows = (await frame()).split("\n").map((line) => line.slice(size.width - 28));
@@ -273,10 +242,10 @@ test("a question that waits shows on top of the sidebar and as a mark on its wor
       expect(listed(session).some((one) => one.act.id === question)).toBe(false);
       // The input sends its message to the open thread that the sidebar lights, unless the operator asks for a new thread,
       // and a thread that is over is no target until he chooses it.
-      const lit = use.app.activeThread();
-      expect(lit).toBeDefined();
-      expect(session.lit).toBe(lit && !lit.resolved ? lit.act.id : undefined);
-      expect(session.target).toBe(session.lit);
+      const active = session.activeThread;
+      expect(active).toBeDefined();
+      expect(session.openThread).toBe(active && !active.resolved ? active : undefined);
+      expect(session.target).toBe(session.openThread?.act.id);
       await session.submit("/newthread");
       expect(session.fresh).toBe(true);
       expect(session.target).toBeUndefined();
@@ -647,9 +616,9 @@ test("a line that does not fit lays out in rows at its brackets, and each row ke
     true,
   ));
 
-test("the list of the threads of the chain shown is read again for another chain or another session, even when the version of its acts is the same", () =>
+test("the threads of the chain shown are read again for another chain", () =>
   composing(
-    async ({ session, app }) => {
+    async ({ session }) => {
       await idle(session);
       const root = session.engine.root;
       await session.engine.pause(root);
@@ -657,13 +626,10 @@ test("the list of the threads of the chain shown is read again for another chain
       await session.engine.pause(other);
       const there = await session.engine.prompt("str", { message: "A thread of the other chain", on: other });
       await session.refresh();
-      const version = session.version;
-      expect(app.chainThreadsBy(root).list.some((one) => one.act.id === there)).toBe(false);
+      expect(session.threads.list.some((one) => one.act.id === there)).toBe(false);
       await session.select(other);
       // The list of the other chain holds its thread, whatever the version of the acts.
-      const listed = app.chainThreadsBy(other).list.map((one) => one.act.id);
-      expect(listed).toContain(there);
-      if (session.version === version) expect(app.threadList.chain).toBe(other);
+      expect(session.threads.list.map((one) => one.act.id)).toContain(there);
     },
     size,
     true,
@@ -673,11 +639,13 @@ test("a row of a thread says how long ago the thread last changed, as the sessio
   composing(
     async ({ session, frame }) => {
       await idle(session);
+      const row = async () =>
+        (rail(session, await frame()).find((line) => line.includes("Explore this project")) ?? "").trimEnd();
       // The demo ran in the session, so every act changed just now.
-      expect(rail(session, await frame()).join("\n")).not.toContain("ago");
+      expect(await row()).not.toMatch(/\d[mhd]$/);
       setSystemTime(new Date(Date.now() + 5 * 60_000));
       try {
-        expect(rail(session, await frame()).join("\n")).toContain("5m ago");
+        expect(await row()).toMatch(/ 5m$/);
       } finally {
         setSystemTime();
       }
@@ -688,20 +656,20 @@ test("a row of a thread says how long ago the thread last changed, as the sessio
 
 test("an act that is no prompt leaves the list of the threads of the chain shown as it was, and a prompt reads it again", () =>
   composing(
-    async ({ session, app }) => {
+    async ({ session }) => {
       await idle(session);
       const root = session.engine.root;
-      const before = app.chainThreadsBy(root).list;
+      const before = session.threads.list;
       const version = session.version;
       await session.engine.result(await session.engine.rung({ word: "step = 1", on: root }));
       await session.refresh();
       // The act came, and the threads read it not.
       expect(session.version).toBeGreaterThan(version);
-      expect(app.chainThreadsBy(root).list).toBe(before);
+      expect(session.threads.list).toBe(before);
       const there = await session.engine.prompt("str", { message: "A new thread", on: root });
       await session.refresh();
-      expect(app.chainThreadsBy(root).list).not.toBe(before);
-      expect(app.chainThreadsBy(root).list.some((one) => one.act.id === there)).toBe(true);
+      expect(session.threads.list).not.toBe(before);
+      expect(session.threads.list.some((one) => one.act.id === there)).toBe(true);
     },
     size,
     true,
@@ -763,30 +731,12 @@ test("the agents that a thread hires fold under it to their count in the sidebar
     true,
   ));
 
-test("the marks of the threads count a question anywhere and the failure or pause of a thread the operator started, and say nothing of work", () =>
+test("the tip of the marks of a workspace says each count in words, in the order of their weight", () =>
   composing(async ({ app }) => {
-    const base = { title: "", messages: [], asked: [], resolved: false } as const;
-    const one = (
-      state: "asks" | "failed" | "paused" | "runs",
-      yours: boolean,
-      asks: string[] = [],
-    ): Parameters<typeof app.threadAttention>[0][number] => ({
-      thread: { ...base, act: { id: "prompt1" }, state, yours, asks, origin: "rung" } as never,
-      agents: [],
-      state,
-    });
-    const marks = (threads: Parameters<typeof app.threadAttention>[0]) => ({
-      attention: app.threadAttention(threads),
-      tip: app.badgeTip(app.threadAttention(threads))[0]?.[0],
-    });
-    expect(marks([one("asks", false, ["prompt2"]), one("failed", false), one("runs", true)])).toEqual({
-      attention: { asks: 1, paused: 0, failed: 0, unread: 0 },
-      tip: "1 question waits for you",
-    });
-    expect(marks([one("failed", true), one("paused", true), one("runs", false)])).toEqual({
-      attention: { asks: 0, paused: 1, failed: 1, unread: 0 },
-      tip: "1 failed  ·  1 paused",
-    });
+    const tip = (asks: number, failed: number, paused: number) =>
+      app.badgeTip({ asks, failed, paused, unread: 0 })[0]?.[0];
+    expect(tip(1, 0, 0)).toBe("1 question waits for you");
+    expect(tip(0, 1, 1)).toBe("1 failed  ·  1 paused");
   }, size));
 
 test("a done thread of the operator that no fact seen covers shows ●, and a seen that another window says turns it into a faint ✓", () =>
@@ -812,6 +762,25 @@ test("a done thread of the operator that no fact seen covers shows ●, and a se
       }
       expect(seen).toContain(`${glyph.done} Explore this project`);
       expect(seen).not.toContain("●");
+    },
+    size,
+    true,
+  ));
+
+test("after a switch to another chain, the sidebar lights its open thread and shows its controls", () =>
+  composing(
+    async ({ session, frame }) => {
+      await idle(session);
+      const root = session.engine.root;
+      await session.engine.pause(root);
+      const other = await session.engine.chain({ label: "other" });
+      await session.engine.pause(other);
+      const there = await session.engine.prompt("str", { message: "A thread of the other chain", on: other });
+      await session.refresh();
+      await frame();
+      await session.select(other);
+      expect(session.activeThread?.act.id).toBe(there);
+      expect(rail(session, await frame()).join("\n")).toMatch(/Resolve(?!d)/);
     },
     size,
     true,

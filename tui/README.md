@@ -152,9 +152,8 @@ changes when the terminal changes. ⌃T or `/theme` chooses another. Sessions sh
 `$XDG_CONFIG_HOME/furb/ui.json`, or `~/.config/furb/ui.json`, and `%APPDATA%\furb\ui.json` on Windows.
 `FURB_CONFIG_DIR` selects another configuration directory. Tests and screenshot generation use isolated preferences.
 `sidebarWidth` in the preferences file sets the width of the sidebar, from 32 to 72 columns, and 56 by default. The
-TUI reads it only from a file of its own version. `sidebarStyle` picks its shape: cards, outline or inbox. On a
-terminal narrower than 100 columns the sidebar is hidden, and `/workspace` keeps all sessions available from the
-keyboard.
+TUI reads it only from a file of its own version. On a terminal narrower than 100 columns the sidebar is hidden, and
+`/workspace` keeps all sessions available from the keyboard.
 
 A line of a word is 100 columns wide at most, and its hint counts in them as a comment does in ruff format. A string of
 three marks over many lines shows as one string with its escapes, and so does a quote of a word, `<s:name>`, as the
@@ -253,7 +252,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | Space / r / o / a after ⌥T | Collapse or expand / resolve / reply to the thread / go to the next question |
 | ⌥C | Collapse or expand the thread in the middle of the feed, as a click on the left edge of its lines does |
 | ⌥A | Go to the next question that waits for you, in any workspace |
-| ↑↓←→ / Enter / Esc after ⌥G | Move, fold or zoom / zoom in / zoom out or go back |
+| ↑↓←→ / Enter / Esc after ⌥G | Move or fold / back to the input / back to now, or to the input |
 | [ ] / { } after ⌥G | Move the cursor in time by one / ten moments |
 | Space / x / n / b after ⌥G | Pause or wake / cancel / step / branch at the cursor the chain |
 | ⌃PageUp / ⌃PageDown | Previous / next scope of file changes: this turn, this chain, the life, the branch |
@@ -314,7 +313,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/export <path>` | Write the transcript and program to a new JSON file |
 | `/workspace [path] or /resume [path]` | Choose a workspace or add a project folder |
 | `/view [main\|loom\|graph]` | Show the life as main, the loom, or the graph |
-| `/sidebar [outline\|cards\|inbox]` | Show or hide the workspaces with the threads of the session shown and the context, or give the sidebar a shape |
+| `/sidebar` | Show or hide the workspaces with the threads of the session shown and the context |
 | `/delete` | Archive a session, or move it and its files to the workspace trash |
 | `/newthread` | Start a new thread with your next message, in place of a message to the thread that the input targets, as `+ New thread` does |
 | `/autocollapse` | Toggle the fold of the threads that are over |
@@ -400,7 +399,7 @@ files alone, so parallel work on the TUI does not conflict in one file.
 | `feed.ts` | The feed of the conversation: `renderContent`. |
 | `blocks.ts` | The blocks that the feed and the panels draw: cards, panels, code, Markdown, excerpts and chips. |
 | `details.ts` | The details of an act: prompts, commands, programs, and the references that open a value. |
-| `rail.ts` | The sidebar: the switcher of the workspaces, the questions that wait, the sessions and the threads of the workspace shown, and the keys that move in it. |
+| `rail.ts` | The sidebar: the line on top that counts what waits for you, the tree of the workspaces with their sessions and the threads of the session shown, and the keys that move in it. |
 | `sidebar.ts` | The context of the chain shown, the threads of a chain: their fold, their reply and their resolve. |
 | `spaces.ts` | The workspaces and the sessions in the sidebar, with their menus, rename, archive and delete. |
 | `composer.ts` | The input: drafts, history, submit, and the suggestions for a command, a path or a value. |

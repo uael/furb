@@ -110,7 +110,7 @@ let written = 0;
 async function capture(name: string): Promise<void> {
   waits(`the screen ${name}`);
   if (!notices.test(name)) session.notice = "";
-  if (!/^(6[6-9]|7[0-3])-/.test(name)) app().session.preferences.view = view;
+  if (!/^6[6-8]-/.test(name)) app().session.preferences.view = view;
   // A read that a change starts while the last one ends leaves the view loading, so the capture waits for none.
   if (name !== "25-loading" && name !== "27-view-error")
     do await session.refresh();
@@ -593,25 +593,19 @@ try {
       entries.Research?.status === "paused",
   );
   await capture("28-workspace-tree");
-  // The sidebar in each of its shapes: with the release shown, with a session of another workspace shown, and with the
-  // keys in it.
+  // The sidebar with the release shown, with a session of another workspace shown, and with the keys in it.
   const away = entries["Offline mode"];
-  for (const shape of ["outline", "cards", "inbox"] as const) {
-    process.env.FURB_SIDEBAR = shape;
-    await capture(`110-sidebar-${shape}`);
-    if (away?.session) {
-      await library.select(away);
-      session = away.session;
-      await capture(`111-sidebar-${shape}-away`);
-      await library.select(main);
-      session = main.session ?? session;
-    }
-    app().railSteer(true);
-    app().moveRail(3);
-    await capture(`112-sidebar-${shape}-keys`);
-    app().railSteer(false);
+  if (away?.session) {
+    await library.select(away);
+    session = away.session;
+    await capture("111-sidebar-away");
+    await library.select(main);
+    session = main.session ?? session;
   }
-  delete process.env.FURB_SIDEBAR;
+  app().railSteer(true);
+  app().moveRail(3);
+  await capture("112-sidebar-keys");
+  app().railSteer(false);
   app().render();
   await test.flush();
   // A click on a line of a program that made an act opens it in place, with what the act gave.
@@ -620,12 +614,10 @@ try {
   if (line >= 0) await test.mockMouse.click((rows[line]?.search(/\d+ /) ?? 0) + 4, line);
   await rest();
   await capture("29-open-line");
-  // A workspace that does not hold the focus opens to peek at its sessions, in the outline.
-  process.env.FURB_SIDEBAR = "outline";
+  // A workspace that does not hold the focus opens to peek at its sessions.
   app().peekWorkspace(second);
   await capture("30-peeked-workspace");
   app().peekWorkspace(second);
-  delete process.env.FURB_SIDEBAR;
   library.toggle();
   await capture("31-hidden-sidebar");
   library.toggle();
@@ -755,7 +747,6 @@ try {
   const stale = library.groups[1]?.sessions.find((entry) => entry.name === "Archive");
   if (!stale) throw new Error("The gallery has no Archive session.");
   await library.archive(stale);
-  process.env.FURB_SIDEBAR = "outline";
   app().peekWorkspace(second);
   app().render();
   await test.flush();
@@ -773,7 +764,6 @@ try {
   await test.mockInput.typeText(" notes");
   await rest();
   await capture("50-rename-session");
-  delete process.env.FURB_SIDEBAR;
   // A life at the scale of a real one: many chains, and questions to the owner open on three of them at once, one of
   // which a conductor relays at its length. The desk over the input counts them, and says which one the input answers.
   test.mockInput.pressEscape();
@@ -831,10 +821,6 @@ try {
         .length === 2,
   );
   const thread = session.activity.find((act) => session.isUserPrompt(act))?.id ?? "";
-  // The sidebar lights the open thread when it draws, and the input sends to the thread lit: a draw before the message
-  // makes it go to that thread, where with no draw it would start a thread of its own on some runs.
-  app().render();
-  await test.flush();
   if (session.target !== thread)
     throw new Error(`The input aims at ${session.target}, not at the thread ${thread}.`);
   // A line on the open thread is a message of None, over at once, so the later message that runs is a prompt of str on
@@ -867,24 +853,6 @@ try {
   await until(session, () => session.acts.some((act) => act.id === message && act.done));
   await rest();
   await capture("59-take-back");
-  // The graph at the level of one act shows the card of the act in the feed, which says that the command runs.
-  if (view === "main") {
-    const guide = await session.engine.bash(
-      "printf 'Building the page capture\\n'; sleep 30; printf 'The guide has one page\\n'",
-      { on: session.selected },
-    );
-    await until(session, () =>
-      Boolean((session.acts.find((act) => act.id === guide)?.value as Exit | undefined)?.stdout?.content),
-    );
-    app().switchView("graph");
-    app().graph.level = "act";
-    app().render();
-    await capture("73-graph-command");
-    app().graph.level = "threads";
-    app().switchView("main");
-    await session.command(`/cancel ${guide}`);
-    await session.engine.result(guide).catch(() => {});
-  }
   // The last row of a thread while its model works: a loader left of the number of the line that comes, and
   // `# thinking` while the model shows no thought, then the last line of what it thinks.
   const thinks = await session.engine.prompt("str", {
@@ -1004,7 +972,7 @@ try {
   await capture("17-narrow");
   test.resize(152, 46);
   // The views of the life side by side, on the same life: the loom of its chains in time over the feed, with the
-  // cursor in time, then the graph of its programs at each level of its zoom.
+  // cursor in time, then the map of its programs.
   await session.select(session.engine.root);
   app().switchView("loom");
   await capture("66-loom");
@@ -1017,18 +985,6 @@ try {
   await session.select(session.engine.root);
   app().switchView("graph");
   await capture("68-graph");
-  app().steer(true);
-  await app().graph.key("return");
-  await capture("69-graph-map");
-  await app().graph.key("return");
-  await capture("70-graph-program");
-  // The word of the last rung of the conductor that made an act, then that act, whose card the feed shows whole.
-  for (let step = 0; step < 4; step++) await app().graph.key("up");
-  await app().graph.key("return");
-  await capture("71-graph-word");
-  await app().graph.key("return");
-  await capture("72-graph-act");
-  app().steer(false);
   app().switchView("main");
 
   // The panel of the chains on the life of a conductor, whose chains hire chains under them.
@@ -1270,25 +1226,6 @@ try {
   await settle();
   await rest();
   await capture("75-compaction");
-  app().dispose();
-  await library.dispose();
-
-  // A chain that an older compaction made, as a record of before holds it: its feed says in one note that it goes on
-  // from a compaction of an older form that is not joined.
-  await show(await demoSession({ cwd: await project("compacted") }));
-  const root = session.engine.root;
-  await session.command(
-    `/run ${compaction}\ndef restore(source, on=""):\n  return None\nchain("review")\nplan = read("README.md")`,
-  );
-  await settle();
-  await session.command(
-    `/run newer = chain("compacted", "${root}")\nrung("restore('${root}')\\n<s:summary>\\nThe plan stands in README.md, and the parser is done.\\nThe docs wait.</s:summary>\\nreground()", on=newer)\nrung('docs = "The docs of the parser"', on=newer)`,
-  );
-  await settle();
-  await session.refresh();
-  await session.select(session.chains.find((chain) => chain.words[0] === "compacted")?.id ?? root);
-  await rest();
-  await capture("75-compaction-chains");
   app().dispose();
   await library.dispose();
 

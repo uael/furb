@@ -158,7 +158,7 @@ def test_the_doctrine_fits_the_window_it_is_meant_to_be_read_in() -> None:
 
 
 def test_the_doctrine_lets_a_word_await_an_act_that_an_earlier_word_made() -> None:
-  """The owner asked why a word may not await the command that it made: no sentence of the doctrine may forbid it."""
+  """A word may await the command that an earlier word made, so no sentence of the doctrine may forbid it."""
   text = normal((TESTS.parent / "DOCTRINE.md").read_text(encoding="utf-8")).lower()
   assert "never await it" not in text
   assert not re.search(r"\b(never|do not|don't|not) await\b[^.]*\b(earlier|still awaits|it)\b", text)

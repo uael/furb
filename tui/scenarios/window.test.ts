@@ -1,16 +1,10 @@
 // What the owner does in the window: he closes, cancels and resolves threads with the keys and the mouse, a redraw
 // between a press and its release resolves nothing, and "thinking" shows only while a reply of a model runs.
 import { expect } from "bun:test";
-import { chainThreads } from "furb/life";
 import { scenario, test, until, type Window } from "./harness.ts";
 
 /** The threads of the chain shown, as the sidebar lists them. */
-const listed = (window: Window) =>
-  chainThreads(
-    window.session.ladderIndex.on,
-    window.session.ladderIndex.ids,
-    new Set(window.session.host.prompts.keys()),
-  );
+const listed = (window: Window) => window.session.threadsOf(window.session.selected).list;
 
 /** The part of each row of a frame that the sidebar shows. */
 const rail = (window: Window, frame: string) =>
@@ -42,8 +36,11 @@ test("a redraw between a press and its release resolves nothing, and a click on 
     const left = window.width - window.session.preferences.sidebarWidth;
     const before = rail(window, await window.frame());
     const x = (before.find((line) => line.includes("✓ Resolve")) ?? "").indexOf("Resolve");
-    const y = before.findIndex((line) => line.includes("Another thread")) + 1;
+    // The press lands on the row of the other thread, under the controls of the thread held open, which the message
+    // moves under that row.
+    const y = before.findIndex((line) => line.includes("Another thread"));
     expect(x).toBeGreaterThan(0);
+    expect(before[y - 1]).toContain("✓ Resolve");
     expect(before[y]?.[x]).toBe(" ");
     await window.screen.mockMouse.pressDown(left + x, y);
     // A message moves the thread held open, and its Resolve comes under the pointer, which did not move.

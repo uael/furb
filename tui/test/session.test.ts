@@ -367,3 +367,19 @@ test("/copy takes the last answer of the chain and says how many characters", ()
     expect(copied).toEqual([answer ?? ""]);
     expect(session.notice).toBe(`Copied ${answer?.length} characters.`);
   }));
+
+test("a message of a member of the operator is a message of the operator", () =>
+  withDemo(async (session) => {
+    const message = {
+      id: "prompt90",
+      kind: "prompt",
+      by: "operator/a",
+      on: session.selected,
+      words: ["str", "Hello", ""],
+      done: false,
+      value: null,
+      paused: false,
+      began: 1,
+    };
+    expect(session.isUserPrompt(message)).toBe(true);
+  }));

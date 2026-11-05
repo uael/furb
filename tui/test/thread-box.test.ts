@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import { join } from "node:path";
 import type { KeyEvent } from "@opentui/core";
 import type { ProgramLine } from "furb/life";
-import { chainThreads } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { openEngine } from "../src/bridge.ts";
 import { Session } from "../src/session.ts";
@@ -16,8 +15,7 @@ const size = { width: 152, height: 46 };
 const feedOf = (session: Session, row: string) => row.slice(0, size.width - session.preferences.sidebarWidth);
 
 /** The threads of the chain shown. */
-const listed = (session: Session) =>
-  chainThreads(session.ladderIndex.on, session.ladderIndex.ids, new Set(session.host.prompts.keys()));
+const listed = (session: Session) => session.threadsOf(session.selected).list;
 
 /** A session on the recorded life of a conductor, which shows its log and runs nothing. */
 async function recorded(): Promise<Session> {
@@ -84,13 +82,28 @@ test("a terminal narrower than 100 columns shows the sidebar in place of the fee
       app.toggleSidebar();
       text = await frame();
       expect(text).toContain("Back to the feed");
-      expect(text).toContain("Threads");
+      expect(text).toContain("Workspaces");
       expect(text).not.toContain("commands");
       expect(app.screen.visible).toBe(false);
       app.toggleSidebar();
       text = await frame();
       expect(text).not.toContain("Back to the feed");
       expect(app.screen.visible).toBe(true);
+    },
+    { width: 80, height: 30 },
+    true,
+  ));
+
+test("a terminal narrower than 100 columns, which hides the sidebar, aims the input at the open thread of the chain shown", () =>
+  composing(
+    async ({ session, frame }) => {
+      await idle(session);
+      const root = session.engine.root;
+      await session.engine.pause(root);
+      const open = await session.engine.prompt("str", { message: "A thread that stays open", on: root });
+      await session.refresh();
+      await frame();
+      expect(session.target).toBe(open);
     },
     { width: 80, height: 30 },
     true,

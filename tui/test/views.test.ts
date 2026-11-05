@@ -580,34 +580,6 @@ test("the keys of the footer and the palette answer the mouse, and a drag over t
     true,
   ));
 
-test("the sidebar lists the threads, and a question that waits stands first with its values, which a click answers", () =>
-  composing(
-    async ({ session, frame, click }) => {
-      await idle(session);
-      let shown = await frame();
-      expect(shown).toContain("Threads");
-      session.preferences.sidebarStyle = "inbox";
-      const question = await session.engine.prompt("bool", {
-        message: "Apply the search shortcut?",
-        on: session.engine.root,
-        to: "operator",
-      });
-      await until(session.host, () => session.host.prompts.has(question));
-      await session.refresh();
-      shown = await frame();
-      const rows = shown.split("\n");
-      const needs = rows.findIndex((line) => line.includes("needs you"));
-      expect(needs).toBeGreaterThan(-1);
-      expect(rows[needs + 2]).toContain("Main");
-      expect(shown).toContain("Apply the search shortcut?");
-      expect(shown).toContain(" 3 Other ");
-      await click(" 1 yes ");
-      expect(await session.engine.result(question)).toBe(true);
-    },
-    { width: 140, height: 44, useMouse: true },
-    true,
-  ));
-
 test("a folded rung shows the first line of its word in the colors of its grammar", () =>
   composing(
     async ({ session, app, screen, frame }) => {

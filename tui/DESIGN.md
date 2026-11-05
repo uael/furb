@@ -294,10 +294,8 @@ Each variant reads the same views, which the Session gives and which make nothin
 - The acts, each with its place in time, `began` and `ended`, and its state.
 - The loom, in `loom.ts`: the chains in the order of the tree, with the cells of their moments.
 - The ladder, in `ladder.ts`: the prompts of a chain, the rungs of each, and the acts of each rung.
-- The threads, in `threads.ts`: the tree of the prompts of the life, as the next part says.
+- The threads, in `threads.ts`: the threads of each chain, and the agents of each thread nested under it.
 - The map, in `map.ts`: the place of each chain on a plane, and the messages between the chains.
-- The source, in `source.ts`: the words of the ladders of a chain as one program, with each act on the line that
-  made it.
 
 The time cursor is one for every variant: a variant shows the acts as they stood at the cursor.
 
@@ -325,79 +323,32 @@ the taste matters as much as the layout: the accent colors, the motion and the s
 
 ### The graph: the debugger of a living program
 
-The graph shows a life as programs that run, and the messages between them. Zoom is semantic. Each level shows less
-of the life and more of one thing, and Enter goes one level in, and Esc one level out:
+The graph shows a life as programs that run, and the messages between them, on a map. Each chain is a program: its
+mark and its name, and under them, faint, the act that it waits on, its model and its dollars. No box holds a
+program: the space between the programs and the lines of the tree of hires give the structure. The map lights the
+chains of the thread that the sidebar shows, its own chain and the chains of its agents, and the rest fade. A prompt
+from one chain to another flows along the lines as a dot while it is open, and its answer flows back for a moment
+when it closes. A question to the operator flows up to you, in the color of what waits for you.
 
-1. The threads. The tree of the prompts of the life, as the outline of the life: each thread with its state, its
-   first line, its progress as the count of its sub-threads that closed, and what waits for the operator in it. On a
-   wide terminal the threads stand in a sidebar, and the map of the selected thread stands beside it. On a narrow
-   one the threads take the whole stage, with the anchor of each where it hangs, its chain and its pull requests.
-2. The map. Each chain is a program: its mark and its name, and under them, faint, the act that it waits on, its
-   model and its dollars. No box holds a program: the space between the programs and the lines of the tree of hires
-   give the structure. The programs that the selected thread holds stand bright, and the rest fade. A prompt from one
-   chain to another flows along the lines as a dot while it is open, and its answer flows back for a moment when it
-   closes. A question to the operator flows up to you, in the color of what waits for you.
-
-   ```
-    Threads                                Ship the release 0.4: the search, the docs and the animation.   8 of 14
-
-    ✓ Explore this project, run its ch…     ◆ you
-    ⠏ Ship the release 0.4: the…  ◆2 2/9    │ 2 owed
-      ✓ Make the search ignore …  ◆1 0/2    │
-        ⠏ Review the change of …  ◆1 0/1    ├─ ⠏ Main ────••──•─•─────────┬─ ✓ w search ────•──────•────── ◆ review search
-          ◆ Must the search match acce…     │    prompt7  sonnet  $0.0096  │    sonnet  $0.0024               asks you
-      ⠏ Write the docs of the rele…  1/2    │                              │
-        ⠏ Write the guide of the searc…     ├─ ○ Search shortcut           ├• ⠏ w docs ───────•─•────────┬─ ⠏ docs/guide
-        ✓ Write the changelog of the r…     │                              │    prompt11  sonnet  $0.0048 │    bash6  sonnet
-      ⠏ Ask me first, then tidy…  ◆1 0/1    │                              │                              │
-        ◆ Which effort should the next…     ├─ ○ Review notes              ├─ ◆ w ui                      └─ ✓ docs/changelog
-      ◌ Record the animation of the re…     │                              │    asks you  sonnet  $0.0024
-    ⠏ Reach parity with Pi: sessio…  2/3    │                              │
-      ✓ Close the gap of sessions with…     └─ ⠏ Pi parity ──────────•─•──•─ ◌ w gif
-   ```
-
-3. The program. One chain as its source: the words of its ladders, one under the other, each prompt as a line that
-   heads its rungs. The line that runs is marked, and the margin holds what each act came to, beside the line that
-   made it. At the side stand the stack and the watch: the chain of awaits from the operator to the act that the
-   chain waits on now, and the acts of the selected line with their values.
-
-   ```
-    w search  chain3  prompt2  Add the search shortcut, with a test
-     1  # Read the code of search                          │ stack
-     2  search = read("src/search.ts")         read2 ✓ 5 l │   prompt1  Main
-     3  t = search.replace("includes", "has")             │   rung5    conduct
-     4  write(t)                               write4 ✓ +1−1│   prompt2  w search
-     5  r = await bash("bun test")             bash7 ✓ 0  │ ▶ bash9    gh pr create
-     6▶ pr = await bash("gh pr create ...")    bash9 ⠦ 4s │ watch
-                                                          │   bash9  Creating the PR
-   ```
-
-4. The word. One rung, whole: each line of its word, with what each act came to in full, and what the rung told.
-5. The act. One act, whole: a command and its streams, live while it runs, a read and its text, a write and its
-   change, line by line, a prompt and its messages.
-
-The controls of a debugger act on what the level selects:
+The controls of a debugger act on the selected chain:
 
 | Key | What it does |
 | --- | --- |
-| space | Pause the selection, as a breakpoint, or wake it, as continue |
+| space | Pause the selected chain, as a breakpoint, or wake it, as continue |
 | n | Step: wake the selected chain for one rung, then pause it again |
-| x | Cancel the selection |
-| c | Close the selected act with a value |
-| g | Put a ceiling of dollars on the selected chain, a breakpoint on cost |
-| e | Edit the door of the prompt of the selection, which replays its ladder |
-| i | Ask the model of the selected chain |
+| x | Cancel the act that the selected chain waits on |
 | [ and ] | Move the time cursor. The graph shows the life as it stood then |
-| b | Branch the selected chain at the selection, or at the time cursor |
-| arrows | Move to the next thing in that direction: a node of the map by its place, a line of the source |
+| b | Branch the selected chain at the time cursor |
+| arrows | Move to the next program of the map in that direction, by its place |
+| Enter | Give the keys to the input, on the selected chain |
+| Esc | Return to now, then give the keys back to the input |
 
 The layout of the map is stable. A chain takes its place when it is born and keeps it: its column is its depth in
 the tree of hires, and its row is the first free row of that column at or under the row of the chain that hired it.
 A new chain never moves another one. The place follows from the order of the record alone, so a later life draws
 the same map.
 
-The keyboard reaches all of it. A click on a thread or on a line of the source selects it, and a second click zooms
-in. A click on a program of the map is left for later work.
+The keyboard reaches all of it. A click on a program of the map is left for later work.
 
 ### The finish
 
@@ -424,8 +375,12 @@ gave a first draft that the brief changed; and opentui, which this repository ho
 ### As built: the graph
 
 - The variants are `loom` and `graph`, behind `--variant` and the key `v`. The loom keeps its screens. The graph is
-  `tui/src/graph.ts` over `threads.ts`, `map.ts` and `source.ts`, in the App of the loom, which holds the header, the
-  composer, the lens, the lives and the help for both.
+  `tui/src/graph.ts` over `map.ts`, in the App of the loom, which holds the header, the composer, the lens, the lives
+  and the help for both.
+- The graph keeps the map alone, as the owner chose: the sidebar lists the threads, and the feed shows the words of
+  each chain and each act whole. So the levels of the threads, the program, the word and the act are not there, nor
+  what only they showed: the progress of a thread, its count of questions, its anchor and its pull requests, and the
+  stack of awaits of a chain. The map lights the chains of the thread that the sidebar shows.
 - `n` steps a chain: it wakes the chain when a pause holds it, and pauses it again once one more of its rungs ends.
 - The demo is a life of many threads at once: a release that a conductor hires four workers for, a worker that hires
   two writers, a review that hangs on a change and asks the operator, a worker that asks the operator first, a grant
@@ -435,8 +390,7 @@ gave a first draft that the brief changed; and opentui, which this repository ho
   loom takes about 21 ms, a frame of the threads and the map about 20 ms, a frame of the map alone about 52 ms, and a
   key of the map about 8 ms, as `tui/script/measure.ts` of the branch of #255 measured on a laptop that runs other work.
   A place of the map never moves, so the graph finds the line of each edge and the way of each message once.
-- Left for later work: a breakpoint on a kind of act, which the engine does not take; the anchor of a prompt by its
-  `on`, which the engine does not take either, so the anchor comes from the message; a click on a program of the map;
+- Left for later work: a breakpoint on a kind of act, which the engine does not take; a click on a program of the map;
   and a third variant.
 
 ## The feed
@@ -452,10 +406,10 @@ to its end. Three directions differ at the root:
 3. The source: the words of the ladders as one program, with the outcome of each act beside the line that made it,
    the line that runs, and the change of each write under the word that made it.
 
-We choose the source, which is the level "program" of the graph. The program is the conversation: the words are what
-the model said, the margin is what the life answered, and the controls of the debugger act on each line. The page
-lives in the level "threads", where each thread shows its first line and its answer. The transcript stays a lens for
-later work, to read when a model went wrong.
+We choose the source, which the feed shows as the program of each thread. The program is the conversation: the words
+are what the model said, the margin is what the life answered, and the controls of the debugger act on each line. The
+page lives in the threads of the sidebar, each of which shows its first line. The transcript stays a lens for later
+work, to read when a model went wrong.
 
 ## The three views side by side
 
@@ -470,14 +424,12 @@ three now, in one App, so that no view deletes a screen of main.
   view, so each screen of main is reached the same way in each one.
 - A view of the life stands where the board of main stands, over the feed, while the feed shows. Main shows the
   board. The loom shows its rows, with the operator over the chains, and the feed under it shows the selected chain.
-  The graph shows its threads beside its map over the feed. Its level of a program and of a word takes the whole
-  height of the feed, and its level of one act shows the card of that act in the feed, which shows the act whole, a
-  command that runs as it runs. The transcript, the changes and the rewind tree take the place of all of it, as in
-  main.
+  The graph shows its map over the feed in the same way. The transcript, the changes and the rewind tree take the
+  place of all of it, as in main.
 - The composer keeps the keys, so the verbs of the loom and the graph are not single keys at all times. ⌥G gives the
-  keys to the view of the life, and Esc gives them back: the arrows move, fold and zoom, Enter zooms in, `[` `]` and
-  `{` `}` move the cursor in time, Space pauses or wakes the chain, `x` cancels its work, `n` steps it, `b` branches
-  it at the cursor, and Tab answers the oldest question.
+  keys to the view of the life, and Enter or Esc gives them back: the arrows move between the chains, and on the loom
+  fold their workers, Esc returns to now first, `[` `]` and `{` `}` move the cursor in time, Space pauses or wakes the
+  chain, `x` cancels its work, `n` steps it, `b` branches it at the cursor, and Tab answers the oldest question.
 - Each row of a chain shows its state, its actor, its cost and the question that it waits on: the board of main shows
   the actor beside the cost where the feed is wide enough, the loom shows each in a column, and the map of the graph
   shows each under the name of the program. The actor of a chain is the actor of its last answer, else the actor that

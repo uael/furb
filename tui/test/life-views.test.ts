@@ -94,7 +94,8 @@ test("⌥V switches the view of the life between main, the loom and the graph, w
       expect(loom).toContain("waits on");
       screen.mockInput.pressKey("v", { meta: true });
       expect(app.lifeView).toBe("graph");
-      expect(await frame()).toContain("Threads");
+      // The title of the map names the open thread of the conductor, whose ladder hired 10 of the 23 chains.
+      expect(await frame()).toMatch(/You are the orchestrator of the work on furb.* {3}11 of 23/);
       screen.mockInput.pressKey("v", { meta: true });
       expect(app.lifeView).toBe("main");
       // The command.
@@ -121,22 +122,21 @@ test("⌥V switches the view of the life between main, the loom and the graph, w
       screen.mockInput.pressEscape();
       await soon(() => !app.steering);
       expect(app.composer.focused).toBe(true);
-      // The zoom of the graph.
+      // The keys on the map: an arrow selects a chain under the feed, and Enter gives the keys to the input on it.
       app.switchView("graph");
       await frame();
       app.steer(true);
-      for (const level of ["map", "program"] as const) {
-        screen.mockInput.pressEnter();
-        await soon(() => app.graph.level === level);
-      }
-      await frame();
-      expect(app.scroll.visible).toBe(false);
-      expect(await frame()).toContain("the source of its ladders");
-      screen.mockInput.pressEscape();
-      await soon(() => app.graph.level === "map");
+      const before = session.selected;
+      screen.mockInput.pressArrow("down");
+      await soon(() => session.selected !== before);
+      const chosen = session.selected;
+      screen.mockInput.pressEnter();
+      await soon(() => !app.steering);
+      expect(app.composer.focused).toBe(true);
+      expect(session.selected).toBe(chosen);
       await frame();
       expect(app.scroll.visible).toBe(true);
-      app.steer(false);
+      expect(app.renderer.root.findDescendantById("life-stage")?.visible).toBe(true);
       // The screens of main.
       const stage = () => app.renderer.root.findDescendantById("life-stage");
       for (const view of ["loom", "graph"] as const) {
@@ -157,7 +157,6 @@ test("⌥V switches the view of the life between main, the loom and the graph, w
         await frame();
       }
       // A frame of the map of a score of chains takes less than a tenth of a second.
-      app.graph.level = "map";
       app.render();
       const frames = Array.from({ length: 5 }, () => {
         const start = performance.now();
@@ -165,8 +164,33 @@ test("⌥V switches the view of the life between main, the loom and the graph, w
         return performance.now() - start;
       }).sort((one, other) => one - other);
       expect(frames[2]).toBeLessThan(100);
-      app.graph.level = "threads";
       app.switchView("main");
+    },
+    { width: 152, height: 46 },
+    await recorded(),
+  ));
+
+test("the map lights the chain of the thread that the sidebar shows and the chains of its agents, and not the chain of the thread over it", async () =>
+  composing(
+    async ({ session, app }) => {
+      await session.refresh();
+      // The worker ui-research-tui of the coordinator ui-audit, whose ladder hired four rivals.
+      await session.select("chain14");
+      expect(session.activeThread?.act.id).toBe("prompt101");
+      expect([...(app.stageOf().thread?.chains ?? [])].sort()).toEqual([
+        "chain14",
+        "chain20",
+        "chain21",
+        "chain22",
+        "chain23",
+      ]);
+      // In the past the map lights only the agents that had begun: the rival on chain23 begins at the moment 4554.
+      app.cursor = 4553;
+      const before = app.stageOf().thread?.chains;
+      expect([before?.has("chain14"), before?.has("chain23")]).toEqual([true, false]);
+      app.cursor = 4554;
+      expect(app.stageOf().thread?.chains.has("chain23")).toBe(true);
+      app.cursor = undefined;
     },
     { width: 152, height: 46 },
     await recorded(),
