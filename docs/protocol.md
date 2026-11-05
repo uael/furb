@@ -165,8 +165,11 @@ once it listens. A second daemon refuses to start there.
   not given. Each life opens on a thread of its own, so the daemon answers each verb while a life opens, and a fault
   of one life ends that life alone. Each verb of a life refuses with `closed` when no life lives on its record.
 - Each life keeps the journal of the changes of its files beside its record, as `<record>.changes.jsonl`: one line
-  for each write of a file, with its `path`, the text `before` and `after` it, its `act`, and `made` when the write
-  made the file. A window reads it to show and to undo what each write changed.
+  for each write of a file, with its `path`, the text `before` and `after` it, its `act`, `made` when the write
+  made the file, and `unread` with why when the file could not be read as text, whose `before` is then empty and
+  no undo puts back. A window reads it to show and to undo what each write changed. One journal serves each birth
+  of the life, in the order of the writes, and the life ends, and replies to its end, only once the disk holds each
+  change; a fault of the disk is told at once as a notice, and the end of the life says what the journal lost.
 - A holder keeps a life: each window that attached it, and each pin, by the name of its holder. Work that runs holds
   nothing. A life with no holder for the grace of the daemon, 30 seconds unless `furb host --grace <seconds>` says
   otherwise, writes its checkpoint and ends, and `list` gives it as not `open` from then on. An `open` of a life
