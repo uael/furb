@@ -868,6 +868,11 @@ fn the_work_an_earlier_life_left_is_pending_until_a_wake_that_this_life_says() {
       first.engine.pending().unwrap().is_empty(),
       "the work of a life is no work of an earlier one"
     );
+    assert_eq!(
+      first.engine.saved().unwrap(),
+      "saved",
+      "a record with no work of an earlier life rests"
+    );
     (root, first.end())
   };
   let mut second = Lived::new("pending", &[], false).unwrap();
@@ -876,6 +881,11 @@ fn the_work_an_earlier_life_left_is_pending_until_a_wake_that_this_life_says() {
   let pending =
     second.engine.pending().unwrap().into_iter().map(|(id, kind)| format!("{id} {kind}"));
   assert_eq!(pending.collect::<Vec<_>>(), ["rung1 rung", "wait1 wait"]);
+  assert_eq!(
+    second.engine.saved().unwrap(),
+    "runs",
+    "the work that the next open resumes is work that runs"
+  );
   second.engine.wake(&root).unwrap();
   assert!(second.engine.pending().unwrap().is_empty(), "the wake put that work to the World again");
   drop(second);
