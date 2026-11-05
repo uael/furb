@@ -1775,29 +1775,30 @@ fn an_ear_that_ends_after_it_says_still_has_each_saying_heard() {
   let heard: Vec<&str> = facts.iter().filter(|one| one.about() == id).map(Fact::kind).collect();
   assert_eq!(heard, ["wait", "started", "done"]);
 }
-/// Each sandbox that this thread makes from now on, with a turn bound short enough that the replay
-/// of a life of many facts, as a whole, outlasts it.
-fn bounded_short() {
-  crate::sand::BOUND.set(Duration::from_millis(50));
+/// Each sandbox that this thread makes from now on, with a turn bound of three quarters of
+/// `gather`, the time that the gather of a checkpoint of the life took in this run. The gather is
+/// one stretch of the sandbox that grows with the facts of the life, as no word does, and a share
+/// of a time that this run measured follows the load of the machine, so the gather outlasts the
+/// bound, and no word of the life nears it.
+fn bounded_by(gather: Duration) {
+  crate::sand::BOUND.set(gather * 3 / 4);
 }
 
 #[test]
 fn a_life_whose_words_each_ran_within_the_bound_replays_and_keeps_its_checkpoint_past_it() {
-  bounded_short();
-  let word = "for i in range(1500):\n  await wait(0)\nclose(8)";
-  let (root, facts) = {
+  let word = "for i in range(3000):\n  await wait(0)\nclose(8)";
+  let (root, facts, gather) = {
     let mut first = Lived::new("outlasts", &[word], true).unwrap();
     let root = first.root();
     let with = verbs::Prompt { on: on(&root), ..Default::default() };
     let act = first.engine.prompt(Object::string("int"), with).unwrap();
-    assert_eq!(
-      block_on(act).unwrap().as_ref().as_int(),
-      Some(8),
-      "each word runs within the bound live"
-    );
+    assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(8), "the life runs its words");
     let facts = first.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
-    (root, facts.iter().filter_map(said).collect::<Vec<_>>())
+    let began = std::time::Instant::now();
+    crate::checkpoint::written(&mut first.engine).expect("the checkpoint of the life is gathered");
+    (root, facts.iter().filter_map(said).collect::<Vec<_>>(), began.elapsed())
   };
+  bounded_by(gather);
   let began = std::time::Instant::now();
   let mut second = Lived::new("outlasts", &[], false).expect("the replay opens the life");
   assert!(began.elapsed() > crate::sand::BOUND.get(), "the replay as a whole outlasts the bound");
