@@ -587,7 +587,11 @@ fn topped<'a>(body: &'a [Stmt], found: &mut Vec<(usize, &'a str, bool)>) {
       Stmt::Delete(one) => one.targets.iter().flat_map(named).collect(),
       _ => binds(stmt),
     };
-    let import = matches!(stmt, Stmt::Import(_) | Stmt::ImportFrom(_));
+    let import = match stmt {
+      Stmt::Import(one) => one.names.iter().all(|alias| alias.asname.is_none()),
+      Stmt::ImportFrom(one) => one.names.iter().all(|alias| alias.asname.is_none()),
+      _ => false,
+    };
     found.extend(names.into_iter().map(|name| (stmt.start().to_usize(), name, import)));
     match stmt {
       Stmt::If(one) => {
@@ -627,13 +631,15 @@ fn topped<'a>(body: &'a [Stmt], found: &mut Vec<(usize, &'a str, bool)>) {
   }
 }
 
-/// The names that an engine imports, which a word may import too, since each is no name of the
-/// contract. The imports of an engine stand at its head, before its first other statement.
+/// The names that an engine imports, which a word may import too under the same name, since each
+/// is no name of the contract. The imports of an engine stand at its head, before its first other
+/// statement, and one may hold more than one line.
 fn imported(engine: &str) -> Vec<String> {
   let head: String = engine
     .split_inclusive('\n')
     .take_while(|line| {
-      line.trim().is_empty() || line.starts_with("import ") || line.starts_with("from ")
+      line.trim().is_empty()
+        || ["import ", "from ", " ", ")"].iter().any(|start| line.starts_with(start))
     })
     .collect();
   let Ok(parsed) = parse_module(&head) else { return vec![] };
