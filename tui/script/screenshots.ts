@@ -1273,25 +1273,6 @@ try {
   app().dispose();
   await library.dispose();
 
-  // A chain that an older compaction made, as a record of before holds it: its feed says in one note that it goes on
-  // from a compaction of an older form that is not joined.
-  await show(await demoSession({ cwd: await project("compacted") }));
-  const root = session.engine.root;
-  await session.command(
-    `/run ${compaction}\ndef restore(source, on=""):\n  return None\nchain("review")\nplan = read("README.md")`,
-  );
-  await settle();
-  await session.command(
-    `/run newer = chain("compacted", "${root}")\nrung("restore('${root}')\\n<s:summary>\\nThe plan stands in README.md, and the parser is done.\\nThe docs wait.</s:summary>\\nreground()", on=newer)\nrung('docs = "The docs of the parser"', on=newer)`,
-  );
-  await settle();
-  await session.refresh();
-  await session.select(session.chains.find((chain) => chain.words[0] === "compacted")?.id ?? root);
-  await rest();
-  await capture("75-compaction-chains");
-  app().dispose();
-  await library.dispose();
-
   // A program that lives: a line under the pointer shows what its acts came to, a line that the gate refused shows its
   // error under the pointer, and a line that awaits the act of an earlier line runs with its time and lights that line.
   await show(await demoSession({ cwd: await project("living") }));

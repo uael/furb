@@ -417,37 +417,6 @@ test("a mark of a part stands at its place in the feed of its chain, and a mark 
   ]);
 });
 
-test("a chain that an older compaction made shows as a chain of its own, with one note that it goes on from a compaction of an older form that is not joined", async () => {
-  const { directory } = project();
-  const session = await demoSession({ cwd: directory });
-  const root = session.engine.root;
-  await composing(
-    async ({ frame }) => {
-      await session.command(`/run ${COMPACTION}\ndef restore(source, on=""):\n  return None\nchain("aside")`);
-      await session.command('/run before = "the first step"');
-      const summary = "<s:summary>\\nIt read the plan.</s:summary>\\nreground()";
-      await session.command(
-        `/run older = chain("compacted", "${root}")\nrung("restore('${root}')\\n${summary}", on=older)\nrung('after = "the step after"', on=older)`,
-      );
-      await session.refresh();
-      const newer = session.chains.find((chain) => chain.words[0] === "compacted")?.id ?? "";
-      await session.select(root);
-      expect(session.selected).toBe(root);
-      expect(session.labelOf(newer)).toBe("compacted");
-      await session.select(newer);
-      expect(session.selected).toBe(newer);
-      const note = "This chain goes on from a compaction of an older form that is not joined";
-      const shown = await shows(frame, "the step after", (now) => now.includes(note));
-      expect(shown.split(note).length).toBe(2);
-      expect(shown).not.toContain("Branched from");
-      expect(shown).not.toContain("goes on in a new chain");
-      expect(shown.indexOf(note)).toBeLessThan(shown.lastIndexOf("the step after"));
-    },
-    { width: 180, height: 60 },
-    session,
-  );
-});
-
 /** Whether the frame stops showing a text, drawn again until it does. */
 async function hides(frame: () => Promise<string>, text: string): Promise<string> {
   let shown = await frame();

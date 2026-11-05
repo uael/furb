@@ -266,16 +266,6 @@ export const feed = part({
       // names the source and before its own acts, since its model reads them as its own turns.
       const branch = rows.get(w.selected);
       const source = branch?.kind === "chain" ? String(branch.words[1] ?? "") : "";
-      // A chain that an older compaction made has a word on it that restores its source, and no chain is joined to
-      // its source now.
-      const older =
-        source !== "" &&
-        shown.some(
-          (one) =>
-            one.kind === "rung" &&
-            one.on === w.selected &&
-            /^restore\((['"])(\w+)\1\)/.exec(String(one.words[0] ?? ""))?.[2] === source,
-        );
       const maker = branch && (w.actOf(String(branch.by)) ?? branch);
       const taken = new Set(
         source && maker
@@ -1089,34 +1079,25 @@ export const feed = part({
             if (source)
               add(
                 `retold-${act.by}`,
-                `${source}:${name}:${messages}:${older}:${w.watching}:${this.theme}`,
+                `${source}:${name}:${messages}:${w.watching}:${this.theme}`,
                 [],
                 (box) => {
                   box.add(
                     this.link(
-                      older
+                      w.watching
                         ? [
                             ["↳ ", c.secondary],
-                            [
-                              "This chain goes on from a compaction of an older form that is not joined: ",
-                              c.muted,
-                            ],
-                            [name, c.text, bold],
+                            [branchStart(name), c.muted],
                           ]
-                        : w.watching
-                          ? [
-                              ["↳ ", c.secondary],
-                              [branchStart(name), c.muted],
-                            ]
-                          : [
-                              ["↳ ", c.secondary],
-                              ["Branched from ", c.muted],
-                              [name, c.text, bold],
-                            ],
+                        : [
+                            ["↳ ", c.secondary],
+                            ["Branched from ", c.muted],
+                            [name, c.text, bold],
+                          ],
                       () => void w.select(source).catch(w.fail),
                     ),
                   );
-                  if (messages !== undefined && !older)
+                  if (messages !== undefined)
                     box.add(this.text(branchTakes(messages), c.faint, { paddingLeft: space.between }));
                 },
               );
