@@ -29,7 +29,9 @@ test("the program of a thread holds the words of its steps and its messages in o
     words: ["None", "And this too", "opus"],
     thread: "prompt1",
   });
-  const rung2 = act("rung2", "rung", "chain1", "prompt2", 8);
+  const rung2 = act("rung2", "rung", "chain1", "prompt2", 8, undefined, {
+    word: 'more = await bash("tests")',
+  });
   const bash2 = act("bash2", "bash", "chain1", "rung2", 9, undefined, {
     value: {
       code: null,
@@ -130,12 +132,12 @@ test("a line that awaits an act that an earlier line made runs, names that act a
   const prompt = act("prompt1", "prompt", "chain1", "operator", 1, undefined, {
     words: ["str", "Go", "opus"],
   });
-  const rung = act("rung1", "rung", "chain1", "prompt1", 2);
+  const word = 'build = bash("make")\nx = 1\nb = await build';
+  const rung = act("rung1", "rung", "chain1", "prompt1", 2, undefined, { word });
   const bash = act("bash1", "bash", "chain1", "rung1", 3, undefined, {
     words: ["make"],
     value: { code: null, stdout: { path: "", content: "compiling\n" }, stderr: { path: "", content: "" } },
   });
-  const word = 'build = bash("make")\nx = 1\nb = await build';
   const lines = threadProgram([prompt], makers([prompt, rung, bash]), () => word, new Set(), label);
   expect(lines.map((line) => [line.kind, line.text])).toEqual([
     ["code", 'build = bash("make")'],

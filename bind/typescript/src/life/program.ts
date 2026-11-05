@@ -166,7 +166,7 @@ export function stepLines(
         kind: "writes",
         step,
         display: start + 1,
-        text: writing(streams?.get(step.id)).tail || "thinking",
+        text: writing(streams?.get(step.id)).tail || (step.asking ? "thinking" : "waits for its turn"),
       });
     }
     return out;
