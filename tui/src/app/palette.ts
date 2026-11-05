@@ -241,7 +241,17 @@ export const palette = part({
         priority: 100,
         enabled: () => this.overlay === overlay,
         commands: [
-          ...(rich ? [{ name: "palette-close", run: () => !this.closeOverlay() }] : []),
+          ...(rich
+            ? [
+                {
+                  name: "palette-close",
+                  run: () => {
+                    this.closeOverlay();
+                    return true;
+                  },
+                },
+              ]
+            : []),
           ...actions.map(({ key, run }, index) => ({
             name: `palette-action-${index}`,
             run: () => {
