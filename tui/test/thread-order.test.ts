@@ -47,7 +47,7 @@ async function settled({ frame }: Composing): Promise<string> {
 
 /** The threads of the session shown, as the sidebar orders them. */
 const ordered = (app: Composing["app"], session: Session) =>
-  orderThreads(nestThreads(app.railThreads(), session.ladderIndex.ids));
+  orderThreads(nestThreads(app.railThreads(), session.boardIndex.ids));
 
 const wide = { width: 152, height: 46 };
 const short = { width: 152, height: 30 };

@@ -29,13 +29,17 @@ export function act(
 /** The acts that each act made, in the order of the acts. */
 export function makers(acts: readonly LiveAct[]): Map<string, LiveAct[]> {
   const made = new Map<string, LiveAct[]>();
-  for (const one of acts) made.set(one.by, [...(made.get(one.by) ?? []), one]);
+  for (const act of acts) {
+    const list = made.get(act.by);
+    if (list) list.push(act);
+    else made.set(act.by, [act]);
+  }
   return made;
 }
 
 /** The index of the acts of a life that a host holds, as thread reads it: the acts on a chain but its chains, the acts
  * that each act made, each act by its name, and the acts that live. */
-export function indexOf(acts: readonly LiveAct[], chain: string) {
+export function actIndex(acts: readonly LiveAct[], chain: string) {
   return {
     on: acts.filter((one) => one.on === chain && one.kind !== "chain"),
     made: makers(acts),

@@ -1,16 +1,10 @@
 // What the owner does in the window: he closes, cancels and resolves threads with the keys and the mouse, a redraw
 // between a press and its release resolves nothing, and "thinking" shows only while a reply of a model runs.
 import { expect } from "bun:test";
-import { chainThreads } from "furb/life";
 import { scenario, test, until, type Window } from "./harness.ts";
 
 /** The threads of the chain shown, as the sidebar lists them. */
-const listed = (window: Window) =>
-  chainThreads(
-    window.session.ladderIndex.on,
-    window.session.ladderIndex.ids,
-    new Set(window.session.host.prompts.keys()),
-  );
+const listed = (window: Window) => window.session.threadsOn(window.session.selected);
 
 /** The part of each row of a frame that the sidebar shows. */
 const rail = (window: Window, frame: string) =>

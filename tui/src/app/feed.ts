@@ -3,7 +3,6 @@ import { display, imageReferences } from "furb";
 import {
   actLines,
   asksOperator,
-  asOf,
   cancelled,
   earProgram,
   gist,
@@ -21,7 +20,7 @@ import { fromDirectory, shortenHomes } from "../files.ts";
 import { clip, dollars, plainFailure } from "../format.ts";
 import type { Mark as PartMark } from "../parts.ts";
 import { hunkPatch, type Scope } from "../review.ts";
-import { type ActRow, ladderAt, type View } from "../session.ts";
+import type { ActRow, View } from "../session.ts";
 import { theme as c, glyph, markOf, spacing as space, spin, threadTone } from "../theme.ts";
 import { bold, italic, type Part, plain } from "../ui.ts";
 import { branchMessages, branchStart, branchTaken, branchTakes, earlierSteps } from "../watching.ts";
@@ -232,8 +231,8 @@ export const feed = part({
       }
     } else if (w.view === "feed") {
       if (welcomed) this.scroll.stickyScroll = !this.tree;
-      // The feed shows the acts as they stood at the moment that the operator moved to, or as they stand now, from the
-      // index of the session, which spares a pass over every act in each frame.
+      // The feed shows the acts as they stood at the moment that the operator moved to, or as they stand now. Its fold
+      // reads them from the index of the session, which spares the fold a pass over every act in each frame.
       const shown = w.at(w.acts);
       const past = w.moment !== undefined;
       const index = w.ladderIndex;
@@ -265,15 +264,12 @@ export const feed = part({
       );
       // The threads that the branch took stand as they stood at the fact before the one that made the branch, and no
       // other step of its source stands at their top.
-      const frozen = branch && taken.size ? ladderAt(asOf(shown, branch.began - 1), source) : undefined;
+      const frozen = branch && taken.size ? w.ladderAt(source, branch.began - 1) : undefined;
       const takenMade = () => frozen?.made ?? new Map<string, readonly ActRow[]>();
       const takenLines = frozen
         ? thread(source, word, w.host.streams, owed, opened, {
             ...frozen,
-            on: frozen.on.filter((one) => {
-              const maker = frozen.ids.get(one.by);
-              return taken.has(one.id) || (maker?.on === source && maker.kind !== "chain");
-            }),
+            on: frozen.on.filter((one) => taken.has(one.id)),
           })
         : [];
       // The words that retell the source stand first in the feed of the branch, as the acts that the branch made.

@@ -86,6 +86,11 @@ export type ActIndex = {
   on: readonly LiveAct[];
   made: ReadonlyMap<string, readonly LiveAct[]>;
   ids: ReadonlyMap<string, LiveAct>;
+  /** Each act that is not done, and each rung whose run runs, which the steps that stay shown hold. */
+  live: Iterable<LiveAct>;
+  /** How many times an act that each act made came or changed, which a host that counts them gives: a thread keeps what
+   * it read of each step until that count changes. */
+  stamp?: (id: string) => number;
 };
 
 /** How a thread reads its acts: the chain, the word of a rung, what each rung streams, and the prompts that the
@@ -241,15 +246,14 @@ function listed(
  * under a prompt, a step is a rung, and the last rungs show. A step that asks the operator or runs stays shown, and a
  * fold holds two steps in a row at least. The key of a fold is prompts: or rungs: and the act that the steps stand
  * under, or the chain at the top. It makes the lines of the steps that it shows, and only counts the steps that a fold
- * holds, so that it takes the time of what it shows and not the time of the life. The live acts of the index are each act that is not done, and each
- * rung whose run runs, which the steps that stay shown hold. */
+ * holds, so that it takes the time of what it shows and not the time of the life. */
 export function thread(
   chain: string,
   word: (rung: LiveAct) => string,
   streams: ReadonlyMap<string, { text: string; thinking: string }>,
   owed: ReadonlySet<string>,
   opened: ReadonlySet<string>,
-  index: ActIndex & { live: Iterable<LiveAct>; stamp?: (id: string) => number },
+  index: ActIndex,
   shown: { prompts: number; rungs: number } = SHOWN,
 ): Line[] {
   const { ids } = index;
@@ -321,9 +325,9 @@ export function thread(
         )
       : empty;
   const out: Line[] = [];
-  /** One level of the thread: a group of the lines that stand first, which stays, then a group
-   * for each step, and the lines that end the level in the last group. It reads only the steps that it shows, and
-   * the places of the kinds of the steps that a fold holds. */
+  /** One level of the thread: a group of the lines that stand first, which stays, then a group for each step, and the
+   * lines that end the level in the last group. It reads only the steps that it shows, and the places of the kinds of
+   * the steps that a fold holds. */
   const level = (
     lead: Line[],
     list: Listed,

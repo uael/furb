@@ -277,10 +277,8 @@ function indexOf(acts: readonly ActRow[], prompts = 0): Index {
   return index;
 }
 
-/** What the ladder of a chain reads of an index: the acts on the chain but its chains, the acts that each act made,
- * each act by its name, the acts that live, and how many times an act that each act made came or changed. */
-export type Ladder = ActIndex & { live: Iterable<ActRow>; stamp: (id: string) => number };
-function ladderOf(index: Index, chain: string): Ladder {
+/** What the ladder of a chain reads of an index of the session. */
+function ladderOf(index: Index, chain: string): ActIndex {
   return {
     on: index.work.get(chain) ?? [],
     made: index.made,
@@ -288,10 +286,6 @@ function ladderOf(index: Index, chain: string): Ladder {
     live: index.live.values(),
     stamp: (id) => index.stamps.get(id) ?? 0,
   };
-}
-/** The ladder of a chain over a list of acts that the session holds no index of, as the acts of a moment of the past. */
-export function ladderAt(acts: readonly ActRow[], chain: string): Ladder {
-  return ladderOf(indexOf(acts), chain);
 }
 
 /** The running work that a cancel of an act ends, and the chains that it stands on. */
@@ -1258,14 +1252,27 @@ export class Session extends EventEmitter {
   }
   /** The index of the acts that the feed shows, as they stand now or at its moment, which the ladder of the chain shown
    * reads, so that a frame makes no pass over every act. The index of a moment holds while the moment stands. */
-  get ladderIndex(): Ladder {
+  get ladderIndex(): ActIndex {
     const moment = this.moment;
-    if (moment === undefined) return ladderOf(this.indexed(), this.selected);
+    if (moment === undefined) {
+      this.past = undefined;
+      return ladderOf(this.indexed(), this.selected);
+    }
     if (this.past?.moment !== moment || this.past.of !== this.acts)
       this.past = { moment, of: this.acts, index: indexOf(this.at(this.acts)) };
     return ladderOf(this.past.index, this.selected);
   }
   private past?: { moment: number; of: readonly ActRow[]; index: Index };
+  /** The index of the acts of a chain as they stood at a moment, as the threads that a branch took read it, which holds
+   * while the chain shown and that moment stand. */
+  ladderAt(chain: string, moment: number): ActIndex {
+    const kept = this.frozen;
+    if (kept?.chain === chain && kept.moment === moment && kept.of === this.acts) return kept.index;
+    const index = ladderOf(indexOf(asOf(this.acts, moment)), chain);
+    this.frozen = { chain, moment, of: this.acts, index };
+    return index;
+  }
+  private frozen?: { chain: string; moment: number; of: readonly ActRow[]; index: ActIndex };
   /** How many times a prompt came or changed, which the threads of the life read again on, and no other act. */
   get promptsVersion(): number {
     return this.indexed().prompts;
@@ -1539,6 +1546,7 @@ export class Session extends EventEmitter {
     if (id !== this.selected) {
       this.editing = undefined;
       this.held = 0;
+      this.frozen = undefined;
       this.thread = undefined;
       this.fresh = false;
       this.turns = [];
