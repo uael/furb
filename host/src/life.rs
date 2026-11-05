@@ -458,7 +458,7 @@ async fn driven(
       Woke::Told(event) => life.told(Some(event)),
       Woke::Stopped(fault) => {
         drop(engine);
-        return stopped(fault, record).await;
+        return stopped(fault);
       }
       Woke::Said(None) => return Drove::Ended(rebirth::ended(engine, record.is_some()), None),
       Woke::Said(Some(Message::Since(from, reply))) => {
@@ -473,34 +473,28 @@ async fn driven(
         reply.send(replied.await).ok();
         if let Some(fault) = engine.stopped().cloned() {
           drop(engine);
-          return stopped(fault, record).await;
+          return stopped(fault);
         }
       }
     }
     drained(&mut engine, life);
     if let Some(fault) = engine.stopped().cloned() {
       drop(engine);
-      return stopped(fault, record).await;
+      return stopped(fault);
     }
     if record.is_some() && life.watch.due() {
       return match engine.checkpoint() {
         Ok(()) => Drove::Reborn(None),
-        Err(fault) => stopped(fault, record).await,
+        Err(fault) => stopped(fault),
       };
     }
   }
 }
 
-/// What a fault that stopped the sandbox or its checkpoint comes to, once the engine is gone: a
-/// rebirth from the tail carried as data, when the life keeps a record that holds a checkpoint,
-/// and else the end of the life.
-async fn stopped(fault: Fault, record: Option<&str>) -> Drove {
-  let Some(record) = record else { return Drove::Ended(Some(fault), None) };
-  match rebirth::carried(record.to_owned()).await {
-    Ok(true) => Drove::Reborn(Some(fault)),
-    Ok(false) => Drove::Ended(Some(fault), None),
-    Err(no) => Drove::Ended(Some(Fault::refused(format!("{fault}, and then {no}"))), None),
-  }
+/// What a fault that stopped the sandbox or its checkpoint comes to, once the engine is gone: the
+/// end of the life, whose record keeps each fact up to the fault.
+fn stopped(fault: Fault) -> Drove {
+  Drove::Ended(Some(fault), None)
 }
 
 /// The engine pumped until a fault stops it.

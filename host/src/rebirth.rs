@@ -5,14 +5,12 @@
 //! each word that runs, which the new open ends as interrupted, and each chain goes on as it
 //! stood.
 //!
-//! A fault that stops the sandbox cuts the life with no checkpoint. Then the actor carries the
-//! facts after the last checkpoint as data and opens from them, since a replay runs again the
-//! word that the fault cut, and stops at the same fault.
+//! A fault that stops the sandbox cuts the life with no checkpoint, and ends it: the record keeps
+//! each fact up to the fault, and a later open replays them.
 
 use std::collections::HashSet;
 
-use furb::{Engine, Fault, checkpoint};
-use tokio::task;
+use furb::{Engine, Fault};
 
 use crate::{
   event::Event,
@@ -63,16 +61,4 @@ impl Watch {
 /// of that checkpoint when it fails.
 pub(crate) fn ended(engine: Engine, keeps: bool) -> Option<Fault> {
   keeps.then(|| engine.checkpoint()).and_then(Result::err)
-}
-
-/// The facts after the last checkpoint of the record at a path, which a life that a fault stopped
-/// said, carried as data in a checkpoint at its tip, read and written on a blocking thread: whether
-/// the record holds one now.
-pub(crate) async fn carried(record: String) -> Result<bool, Fault> {
-  let written = task::spawn_blocking(move || {
-    let path = std::path::Path::new(&record);
-    let one = checkpoint::carry(path)?;
-    one.map(|one| checkpoint::keep(path, one)).transpose().map(|kept| kept.is_some())
-  });
-  written.await.map_err(|no| Fault::refused(format!("the tail was not carried: {no}")))?
 }

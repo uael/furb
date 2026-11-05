@@ -28,6 +28,15 @@ async def test_name_session_is_the_name_of_the_session(tmp_path: Path) -> None:
   sand.script.update({root: ["close(1)", "close(2)"], "chain2": ["close('Fix the login form')"]})
   await settle(300)
   assert names(root) == [None]
+  # A fact of the operator about a prompt that a model made is no prompt of the operator.
+  token = site.set(root)
+  try:
+    asked = engine.prompt(str, "a model asks", to="operator", on=root)
+  finally:
+    site.reset(token)
+  engine.pause(asked)
+  await settle(300)
+  assert names(root) == [None]
   assert await engine.prompt(int, "the login form fails", on=root) == 1
   await settle(300)
   assert names(root) == ["Fix the login form"]

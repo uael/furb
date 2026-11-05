@@ -9,7 +9,6 @@ import { checkoutOf, checkouts, mainCheckout } from "./checkout.ts";
 import { expandHome } from "./files.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { Preferences } from "./preferences.ts";
-import type { Carry } from "./reading.ts";
 import { inspectRecords } from "./records.ts";
 import { Session, type Status, savedView } from "./session.ts";
 
@@ -561,7 +560,6 @@ export class Workspaces extends EventEmitter {
   async create(
     group = this.groupOf(),
     name?: string,
-    carry?: Carry,
     checkout = group?.directory,
     lazy = false,
   ): Promise<SessionEntry> {
@@ -575,12 +573,6 @@ export class Workspaces extends EventEmitter {
     const entry: SessionEntry = { path, name: label, status: "opening", unread: false };
     group.sessions.unshift(entry);
     await this.load(entry, group, lazy);
-    // A life that starts from a record opens with the earlier work of that record in its first word.
-    if (carry && entry.session) {
-      if (entry.ready && !(await entry.ready)) throw new Error(entry.error ?? "The session did not open.");
-      const { engine } = entry.session;
-      await engine.result(await engine.rung({ word: carry.word, on: engine.root }));
-    }
     if (entry.session) {
       entry.session.sessionName = label;
       // A session that opens in the background says its name when its life opens, and the others wait for the record.
@@ -638,7 +630,7 @@ export class Workspaces extends EventEmitter {
       await this.select(entry);
       return entry;
     } catch (error) {
-      const made = await this.create(group, undefined, undefined, checkoutOf(entry.path, group.directory));
+      const made = await this.create(group, undefined, checkoutOf(entry.path, group.directory));
       const why = error instanceof Error ? error.message : String(error);
       if (made.session)
         made.session.notice = `“${entry.name}” did not open, so this is a new session. ${why}`;
@@ -652,8 +644,7 @@ export class Workspaces extends EventEmitter {
       if (this.current !== entry) break;
       await this.select(next).catch(() => {});
     }
-    if (this.current === entry)
-      await this.create(group, undefined, undefined, checkoutOf(entry.path, group.directory));
+    if (this.current === entry) await this.create(group, undefined, checkoutOf(entry.path, group.directory));
   }
   /** End the life of the open session of an entry, and tell whether it was open. */
   private async release(entry: SessionEntry): Promise<boolean> {
