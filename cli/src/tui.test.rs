@@ -5,7 +5,8 @@ use std::{ffi::OsString, fs, path::PathBuf};
 #[path = "../../tests/common/yard.rs"]
 mod yard;
 
-use super::{NONE, found};
+use super::found;
+use crate::error::CliError;
 
 /// A yard of the test: a directory for its PATH and one for its checkout.
 struct Yard {
@@ -47,7 +48,7 @@ impl Yard {
     cli
   }
 
-  fn found(&self, named: Option<&str>) -> Result<Vec<OsString>, String> {
+  fn found(&self, named: Option<&str>) -> Result<Vec<OsString>, CliError> {
     found(named.map(OsString::from), self.bin.as_os_str(), &self.checkout)
   }
 }
@@ -79,14 +80,17 @@ fn the_tui_of_a_built_checkout_runs_on_the_bun_on_path() {
 fn a_checkout_says_what_its_tui_lacks() {
   let yard = Yard::new("lacks");
   yard.tui(false);
-  assert!(yard.found(None).unwrap_err().contains("no bun is on PATH"));
+  assert!(yard.found(None).unwrap_err().to_string().contains("no bun is on PATH"));
   yard.program("bun");
-  assert!(yard.found(None).unwrap_err().contains("run `bun install && bun run build` there"));
+  let unbuilt = yard.found(None).unwrap_err().to_string();
+  assert!(unbuilt.contains("run `bun install && bun run build` there"));
 }
 
 #[test]
 fn with_no_tui_furb_says_how_to_get_one() {
   let yard = Yard::new("none");
   yard.program("bun");
-  assert_eq!(yard.found(None).unwrap_err(), NONE);
+  let none = yard.found(None).unwrap_err();
+  assert!(matches!(none, CliError::NoTui));
+  assert!(none.to_string().starts_with("no TUI is found: set FURB_TUI"), "{none}");
 }

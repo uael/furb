@@ -19,6 +19,9 @@ import { dirname, join, resolve, sep } from "node:path";
 import { call, type Ear } from "./ears.js";
 import { type Fact, isQuestion } from "./types.js";
 
+/** The text of a file, which refuses bytes that are no UTF-8, so no change keeps a text that the file never held. */
+const utf8 = new TextDecoder("utf-8", { fatal: true });
+
 /** A path that the World writes with `~` for the home of the user, as a path of the machine. */
 function homed(path: string): string {
   return path === "~" || path.startsWith("~/") || path.startsWith(`~${sep}`)
@@ -35,6 +38,9 @@ export interface FileChange {
   /** Whether the write made the file, which did not stand before it. A change that an older session kept says
    * nothing of it. */
   made?: boolean;
+  /** Why the text of the file before the write could not be read, as for a file that holds no UTF-8: its `before` is
+   * empty, and no undo puts it back. */
+  unread?: string;
 }
 
 /** A journal of file changes that holds a line that is no change, as a crash or another program leaves it. Its message
@@ -168,7 +174,7 @@ export class FileChanges {
   /** The ear of the changes, for a life that stands on this directory: it says nothing, so each write goes on to the
    * ear that takes it. */
   *ear(directory: string, changed?: () => void): Ear {
-    const before = new Map<string, { path: string; before: string; made?: boolean }>();
+    const before = new Map<string, { path: string; before: string; made?: boolean; unread?: string }>();
     for (;;) {
       const fact = (yield null) as Fact | undefined;
       if (!fact) continue;
@@ -180,12 +186,14 @@ export class FileChanges {
         const path = resolve(directory, homed(here), homed(text.path));
         let old = "";
         let made = false;
+        let unread: string | undefined;
         try {
-          old = readFileSync(path, "utf8");
-        } catch {
-          made = !existsSync(path);
+          old = utf8.decode(readFileSync(path));
+        } catch (error) {
+          made = (error as { code?: string }).code === "ENOENT";
+          if (!made) unread = error instanceof Error ? error.message : String(error);
         }
-        before.set(id, { path, before: old, ...(made ? { made } : {}) });
+        before.set(id, { path, before: old, ...(made ? { made } : {}), ...(unread ? { unread } : {}) });
       } else if (kind === "done" && before.has(id)) {
         const held = before.get(id);
         before.delete(id);

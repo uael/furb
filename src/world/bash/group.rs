@@ -112,6 +112,10 @@ impl Group {
         Err(no) => return Err(no.into()),
       }
     }
+    // The kill ended the watch with the rest of the group, so a line written to it later finds no
+    // reader and raises SIGPIPE, which a host that does not ignore the signal takes as its own end.
+    #[cfg(unix)]
+    self.lifeline.take();
     #[cfg(windows)]
     self.job.take();
     Ok(())
@@ -144,3 +148,7 @@ impl Drop for Group {
     drop(self.slay());
   }
 }
+
+#[cfg(test)]
+#[path = "group.test.rs"]
+mod test;

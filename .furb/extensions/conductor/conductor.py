@@ -32,10 +32,10 @@ from furb.engine import (
 
 CONDUCTING = """The round conducts the workers of the repository in one loop. It is a way for the work, not the work: a rule that a worker, a tool or GitHub can hold does not live here.
 The round is autonomous, by the ruling of the owner on 10-31: "#916 should have never been queued. Make it clear in conductor doc that it's designed to be autonomous. The word of the owner (me) can be asynchronous". So it asks the owner nothing and waits for nothing of his. His word comes by his labels on a PR, his comments and his rulings, which change what the round does from then on.
-Put each item in queue as (key, brief, thread), in the order of the work, the hard work first by prompt266, or in backlog to wait behind queue, then await conduct(). Each round runs tend(), sweep(), review(), probe_memory(), staff(), asked() and align(), then waits every seconds or until a worker ends.
-1. staff() hires the first item of queue, then of backlog, whose after[key] all merged, whose model has room, else the next model of UPGRADE that has room, and whose files that must change ALONE no live worker and no open PR of the round holds, while fewer than cap() - 1 workers live, so one slot stays for a fixer: cap() is at most MOST, by prompt574, and limits["room"][family] for each model family, and while the machine has MEMORY GB of memory free: probe_memory() reads it each round, and each hire counts WORKER_MEMORY GB of it.
+Put each item in queue as (key, brief, thread), in the order of the work, the hard work first by prompt266, or in backlog to wait behind queue, then await conduct(). Each round runs tend(), sweep(), review(), probe_memory(), keep_disk(), staff(), asked() and align(), then waits every seconds or until a worker ends.
+1. staff() hires the first item of queue, then of backlog, whose after[key] all merged, whose model has room, else the next model of UPGRADE that has room, which moves no item up into opus/high, kept for the core by prompt1103, and whose files that must change ALONE no live worker and no open PR of the round holds, while fewer than cap() - 1 workers live, so one slot stays for a fixer: a worker lives while its chain said a fact in the last QUIET seconds, and one that said none is one notice with its open acts, by the 11-04 stall; cap() is at most MOST, by prompt574, and limits["room"][family] for each model family, and while the machine has MEMORY GB of memory free: probe_memory() reads it each round, and each hire counts WORKER_MEMORY GB of it.
 2. The files of an item are areas[key], which you write, and a test file holds no item. An item with no areas holds no file. A conflict on a file that need not change alone gets a fixer, by E3 of #1084. Each item that waits on a PR or a file is one line of the next notice, with its cause, once.
-3. A worker runs on a chain thread/key, at model_of(key), and an edit or a fix in a workspace {repo}-wN of its own. Its brief starts with the asks of the owner that its item carries. kinds[key] is edit (a PR), audit (a register in scratch and no PR) or fix (one red PR), and efforts[key] names its model. Its brief sends each build of the worker through script/build-slot.sh, which holds the slots of builds that all the workers of the machine share and caps the jobs of cargo: the tool holds that rule, and the round only briefs it.
+3. A worker runs on a chain thread/key, at model_of(key), and an edit or a fix in a workspace {repo}-wN of its own, never one whose furb-holder names the chain of a live worker. Every DISK_EVERY seconds keep_disk() keeps KEEP GB of the disk free, by prompt1180: it deletes the target of the workspace whose item ended first, never of one that a live worker holds, and tells you once when it cannot. Its brief starts with the asks of the owner that its item carries. kinds[key] is edit (a PR), audit (a register in scratch and no PR) or fix (one red PR), and efforts[key] names its model. Its brief sends each build of the worker through script/build-slot.sh, which holds the slots of builds that all the workers of the machine share and caps the jobs of cargo: the tool holds that rule, and the round only briefs it.
 4. A worker that ends gives its report whole in the next notice. A worker that ends with no PR is a decision, and its notice wakes you.
 5. A PR of the round is an open PR whose label w:key names an item that the round holds. A red or conflicting one counts as handled only while a worker that knows of its head acts, by prompt1142: its live maker, which the round tells at once, once for each head and problem, to fix it before any other step, else a fixer that the round sent for that head, at most 2 for a head, then a notice. A head that such a worker has not moved in UNMOVED seconds is one notice, with the worker and its last act. handler() holds that rule for the sweep and for guard_faults(), so the guard flags what the sweep leaves. A PR whose head differs from its branch on origin for two sweeps is closed and reopened once for that head, since GitHub did not read the branch.
 6. While the newest run of the gates on main failed, the round sends no order and no fixer for a red PR, and tells you once. A red PR whose failed checks all fail on main too gets no fixer either, and the round says so in one line.
@@ -64,8 +64,11 @@ WORDS = "scratch://owner/words.md"
 PRIVATE = ".furb/extensions/conductor/private.json"
 ASK_LEFT = re.compile(r"Left: ([^\n]*)")
 ALONE = re.compile(r"^(src/furb/engine\.pyi?|DOCTRINE\.md|\.github/budgets\.json|\.furb/extensions/conductor/conductor\.py)$")
-UPGRADE = {"claude-cli:sonnet/medium": "claude-cli:sonnet/high", "claude-cli:sonnet/high": "claude-cli:opus/medium", "claude-cli:opus/medium": "claude-cli:opus/high"}
+UPGRADE = {"claude-cli:sonnet/medium": "claude-cli:sonnet/high", "claude-cli:sonnet/high": "claude-cli:opus/medium"}
 STALE = 2700.0
+QUIET = 1800.0
+KEEP = 60
+DISK_EVERY = 600.0
 TESTS = re.compile(r"(^|/)(tests?|__tests__)/|\.test\.[a-z]+$|_test\.[a-z]+$|(^|/)test_[^/]+\.py$|(^|/)conftest\.py$")
 
 # The module of a chain may hold these names already, with values: a name binds its default only when it is not there.
@@ -103,6 +106,8 @@ machine: dict[str, float] = globals().setdefault("machine", {})
 green_since: dict[int, float] = globals().setdefault("green_since", {})
 lagged: dict[int, str] = globals().setdefault("lagged", {})
 reopened: set[str] = globals().setdefault("reopened", set())
+progress: dict[str, tuple[int, float]] = globals().setdefault("progress", {})
+rested: dict[str, float] = globals().setdefault("rested", {})
 
 
 def asks_kept() -> dict[str, dict]:
@@ -151,8 +156,12 @@ TRUTH = "The source of truth for this item is the words of the owner, scratch://
 
 ALIGN = """The audit of alignment {key}: {count} PRs merged since the last one. Its window of commits is git log --oneline {window}. Read that window and the diff of each PR in it, and check main against the words of the owner, which are the one source of truth: {words}, scratch://owner/picks.md, and the ledger of his asks, {asks} ($TMPDIR/owner/asks.json). Check each ask of the ledger against origin/main as a claim: set its state to done, open, partly or missing, with its evidence and its gap, and write the ledger back in the same shape. The round holds the items below, so a row of your register queues none of them again: {held}."""
 
-SETTLE = """cd "$1" 2>/dev/null || exit 0
-if [ "$(cat "$(git rev-parse --absolute-git-dir)/furb-holder" 2>/dev/null)" != "$2" ]; then
+SETTLE = """here=$1 mine=$2
+shift 2
+cd "$here" 2>/dev/null || exit 0
+holder=$(cat "$(git rev-parse --absolute-git-dir)/furb-holder" 2>/dev/null)
+for live in "$@"; do [ "$holder" != "$live" ] || exit 3; done
+if [ "$holder" != "$mine" ]; then
   dirty=$(git status --porcelain)
   if [ -n "$dirty$(git rev-list HEAD --not --remotes | head -1)" ]; then
     b=w/wip-$(git rev-parse --short HEAD)-$(date +%s)
@@ -161,11 +170,19 @@ if [ "$(cat "$(git rev-parse --absolute-git-dir)/furb-holder" 2>/dev/null)" != "
     git push -q origin "$b"
   fi
 fi
-echo "$2" > "$(git rev-parse --absolute-git-dir)/furb-holder"
+echo "$mine" > "$(git rev-parse --absolute-git-dir)/furb-holder"
 """
 
-FREE = """[ "$(df -g "$HOME" | tail -1 | awk '{print $4}')" -lt 40 ] || exit 0
-for p in "$@"; do rm -rf "$p/target"; done
+DISK = """need=$1 live=" $2 "
+shift 2
+left() { df -Pk "$HOME" | awk 'NR == 2 {print int($4 / 1048576)}'; }
+for p in "$@"; do
+  [ "$(left)" -lt "$need" ] || exit 0
+  h=$(cat "$(git -C "$p" rev-parse --absolute-git-dir 2>/dev/null)/furb-holder" 2>/dev/null)
+  case "$live" in *" $h "*) [ -z "$h" ] || continue ;; esac
+  [ ! -d "$p/target" ] || { rm -rf "$p/target"; echo "$p"; }
+done
+[ "$(left)" -ge "$need" ] || { left; exit 4; }
 """
 
 LABELS = "gh label create hold -c FBCA04 -d 'It waits for the fix of a review before a merge' 2>/dev/null; gh label create hold:owner-review -c FBCA04 -d 'The owner iterates with its worker: no merge until he takes it off' 2>/dev/null; gh label create owner-merge -c 5319E7 -d 'The owner merges it or not' 2>/dev/null; gh label create paused -c BFBFBF -d 'The owner paused it: no fix and no merge' 2>/dev/null; true"
@@ -283,8 +300,12 @@ def living() -> list[str]:
   return [n for n in working if not over(n)]
 
 
+def unheard(name: str) -> bool:
+  return clock() - progress.get(name, (0, clock()))[1] >= QUIET
+
+
 def running() -> list[str]:
-  return [n for n in living() if not paused(n)]
+  return [n for n in living() if not paused(n) and not unheard(n)]
 
 
 def room(model: str) -> bool:
@@ -348,9 +369,13 @@ def seated() -> set[str]:
 
 async def placed(where: str) -> tuple[str, str]:
   held, last = seated(), slots.get(where, "")
-  slot = last if last and last not in held else next(f"w{i}" for i in range(1, MOST + 3) if f"w{i}" not in held)
-  path = f"{cwd()}-{slot}"
-  await shell(f"sh -c {shq(SETTLE)} sh {shq(path)} {shq(where)}", timeout=120)
+  live = " ".join(shq(working_at(n)) for n in living() if working_at(n) != where)
+  for slot in dict.fromkeys([last, *(f"w{i}" for i in range(1, 2 * MOST + 3))]):
+    path = f"{cwd()}-{slot}"
+    if slot and slot not in held and (await shell(f"sh -c {shq(SETTLE)} sh {shq(path)} {shq(where)} {live}", timeout=120)).code != 3:
+      break
+  else:
+    raise Refused("each workspace holds a live worker")
   quietly(rung, f"try:\n  cd({path!r})\nexcept Refused:\n  pass", on=where)
   return WORKSPACE.replace("{path!r}", repr(path)).replace("{path}", path), slot
 
@@ -487,7 +512,8 @@ def left(key: str, report: str) -> None:
 def tend() -> None:
   for name in [x for x in working if over(x)]:
     key = working.pop(name)
-    slots.pop(name, None)
+    if slot := slots.pop(name, None):
+      rested[slot] = clock()
     got = results[name] = peek(name)
     n = got[0] if isinstance(got, tuple) and got and isinstance(got[0], int) else 0
     report = got[1] if isinstance(got, tuple) and len(got) == 2 and isinstance(got[1], str) else repr(got)[:2000]
@@ -500,8 +526,30 @@ def tend() -> None:
     else:
       notice(f"end {name}", f"The worker {key} ({name}) ended with no PR, which needs your decision:\n\n{report}")
     left(key, report)
-  if idle := sorted({s for s in slots.values() if s not in seated()}):
-    quietly(shell, f"sh -c {shq(FREE)} sh " + " ".join(shq(f"{cwd()}-{s}") for s in idle))
+  for name in living():
+    facts = transcript(working_at(name))
+    if progress.get(name, (-1, 0.0))[0] != len(facts):
+      progress[name] = (len(facts), clock())
+    elif unheard(name):
+      acts = [str(x[1]) for x in facts if re.fullmatch(re.escape(str(x[0])) + r"\d+", str(x[1])) and not over(x[1])]
+      notice(f"quiet {name} {len(facts)}", f"The worker {working[name]} ({name}) said no fact on its chain for {int(QUIET // 60)} minutes, so the round counts it as no live worker. Its open acts: {', '.join(acts[-10:]) or 'none'}.")
+  for gone in [n for n in progress if n not in working]:
+    progress.pop(gone)
+
+
+async def keep_disk() -> None:
+  if "disk" in machine and clock() - machine["disk"] < DISK_EVERY:
+    return
+  machine["disk"] = clock()
+  idle = sorted({*slots.values(), *rested} - seated() - {""}, key=lambda s: rested.get(s, 0.0))
+  live = " ".join(working_at(n) for n in living())
+  got = await shell(f"sh -c {shq(DISK)} sh {KEEP} {shq(live)} " + " ".join(shq(f"{cwd()}-{s}") for s in idle), timeout=600)
+  if got.code == 4:
+    notice("disk short", f"The disk holds {got.stdout.lines[-1]} GB free, under {KEEP} GB, after the round deleted the target of each ended workspace: {', '.join(got.stdout.lines[:-1]) or 'none'}.")
+  elif got.code == 0:
+    noticed.discard("disk short")
+  else:
+    raise Refused(f"the keep of the disk exited {got.code}: {got.stderr.content.strip()[-200:]}")
 
 
 def state(pr: dict) -> str:
@@ -740,10 +788,10 @@ async def conduct(every: float = 300) -> dict[str, object]:
     cd(cwd(), on=lead["shell"])
     await shell(LABELS, timeout=120)
     while lead.get("home") == here:
-      for at in ("tend", "sweep", "review", "measure", "staff", "asked", "align"):
+      for at in ("tend", "sweep", "review", "measure", "disk", "staff", "asked", "align"):
         try:
-          if at in ("sweep", "review", "measure", "staff"):
-            await {"sweep": sweep, "review": review, "measure": probe_memory, "staff": staff}[at]()
+          if at in ("sweep", "review", "measure", "disk", "staff"):
+            await {"sweep": sweep, "review": review, "measure": probe_memory, "disk": keep_disk, "staff": staff}[at]()
           else:
             {"tend": tend, "asked": asked, "align": align}[at]()
           for done in [k for k in noticed if k.startswith(f"fault {at} ")]:

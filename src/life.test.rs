@@ -1,15 +1,6 @@
 //! The opening of a life: what it enables, what it keeps, and the ears it hears, on the record that the store keeps.
 
-#![expect(
-  clippy::clone_on_ref_ptr,
-  reason = "debt: a clone of an Arc or an Rc that hides its kind"
-)]
-#![expect(
-  clippy::disallowed_methods,
-  reason = "debt: a call that blocks: sleep, block_on or try_wait"
-)]
-#![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
-#![expect(clippy::single_char_pattern, reason = "debt: a string of one char as a pattern")]
+#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
 
 use std::{
   cell::RefCell,
@@ -174,7 +165,7 @@ fn a_life_that_keeps_a_record_writes_the_log_of_every_fact_beside_it_and_a_later
   let first = shown(world::logged(&record).unwrap().expect("the log agrees with the record"));
   let rung = first.iter().position(|one| one.contains("'operator', 'chain1', 'x = 1"));
   let named =
-    rung.and_then(|at| first[at].split("'").nth(3).map(str::to_owned)).unwrap_or_default();
+    rung.and_then(|at| first[at].split('\'').nth(3).map(str::to_owned)).unwrap_or_default();
   let run = first
     .iter()
     .position(|one| one.starts_with("['run', ") && one.contains(&format!(", '{named}', 'x = 1")));
@@ -489,10 +480,11 @@ fn a_snapshot_of_another_build_or_on_another_log_is_not_taken_and_the_life_repla
   let snapshot = PathBuf::from(format!("{}.snapshot", record.display()));
   let held = fs::read(&snapshot).unwrap();
   let line = held.iter().position(|one| *one == b'\n').unwrap();
-  let head = String::from_utf8(held[..line].to_vec()).unwrap();
-  let build = head.split("\"build\":\"").nth(1).unwrap().split('"').next().unwrap().to_owned();
+  let opening = String::from_utf8(held[..line].to_vec()).unwrap();
+  let build = opening.split("\"build\":\"").nth(1).unwrap().split('"').next().unwrap().to_owned();
   let other =
-    [head.replace(&build, &"0".repeat(build.len())).into_bytes(), held[line..].to_vec()].concat();
+    [opening.replace(&build, &"0".repeat(build.len())).into_bytes(), held[line..].to_vec()]
+      .concat();
   fs::write(&snapshot, other).unwrap();
   let second = open();
   assert!(!second.restored(), "a snapshot of another build is not taken");
@@ -1363,12 +1355,12 @@ fn a_word_that_awaits_a_command_at_a_checkpoint_ends_as_cut_and_its_model_starts
   );
   first.checkpoint().unwrap();
   let mut later = scripted(&at, &["close('again')"]).boot::<String>([]).unwrap().0;
-  let word = format!(
+  let again = format!(
     "wake('chain2')\nclose([await Act('{waiting}'), str(peek('bash1')), \
      any(\"it cut ['{run}', 'bash1']\" in t[1] for t in turns('chain2'))])"
   );
   assert_eq!(
-    closed(&mut later, &word).as_ref().py_repr(),
+    closed(&mut later, &again).as_ref().py_repr(),
     "['again', '\"sleep 60\" was interrupted: the life that ran it ended before it did', True]",
     "the command ends as interrupted, the chain is told that the checkpoint cut the word, and the model of the \
      chain starts the word again in a turn that it reads"
@@ -1457,8 +1449,8 @@ fn a_word_that_ran_at_a_checkpoint_is_cut_with_the_prompt_that_it_awaited() {
     .boot::<String>([])
     .unwrap()
     .0;
-  let word = "waiting = prompt(str, 'Wait.', on=chain('work'))\nawait wait(0.5, __name__)\nclose(str(waiting))";
-  let waiting = closed(&mut first, word).as_ref().as_str().unwrap().to_owned();
+  let again = "waiting = prompt(str, 'Wait.', on=chain('work'))\nawait wait(0.5, __name__)\nclose(str(waiting))";
+  let waiting = closed(&mut first, again).as_ref().as_str().unwrap().to_owned();
   drop(first);
   let mut inspected =
     Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
@@ -1466,11 +1458,11 @@ fn a_word_that_ran_at_a_checkpoint_is_cut_with_the_prompt_that_it_awaited() {
   drop(inspected);
   crate::checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
   let mut later = scripted(&at, &["close('fresh')"]).boot::<String>([]).unwrap().0;
-  let word = format!(
+  let again = format!(
     "wake('chain2')\ngot = await Act('{waiting}')\nclose([got, [x[1] for c in ['chain1', 'chain2', 'chain3', 'chain4'] for x in transcript(c, 'prompt') if not over(x[1])], str(chain('more'))])"
   );
   assert_eq!(
-    closed(&mut later, &word).as_ref().py_repr(),
+    closed(&mut later, &again).as_ref().py_repr(),
     "['fresh', [], 'chain4']",
     "the model starts the cut word again in a new turn, no word runs again to make a chain, and the prompt that the \
      cut word awaited at the checkpoint is not carried"
@@ -1617,4 +1609,88 @@ fn a_life_reads_the_classes_of_the_config_directory_that_it_opens_on_and_none_of
   // The catalog gives opus the class dear, so only the config of this directory makes it cheap.
   assert!(standing.starts_with("[[['claude-cli:opus', ["), "{standing}");
   assert!(standing.contains("1000000, 'cheap']"), "{standing}");
+}
+
+/// A word that the gate refuses, since it gives a str to a name of type int, and that runs to its
+/// close.
+const MISTYPED: &str = "x: int = 'one'\nclose(x)";
+
+/// What a word that a rung runs on the root closes with, or why it was refused.
+fn rung(engine: &mut Engine, word: &str) -> Result<Object, crate::Fault> {
+  let word = Some(word.to_owned());
+  let rung =
+    engine.rung(verbs::Rung { word, on: Some("chain1".to_owned()), ..Default::default() })?;
+  futures::executor::block_on(rung)
+}
+
+/// Each fact of the root, as python shows it.
+fn facts(engine: &mut Engine) -> Vec<String> {
+  let root =
+    engine.transcript(verbs::Transcript { on: Some("chain1".to_owned()), of: None }).unwrap();
+  root.iter().map(|one| one.0.as_ref().py_repr()).collect()
+}
+
+#[test]
+fn a_config_that_turns_the_gate_off_runs_a_word_that_the_gate_refuses_and_its_replay_with_the_gate_on_holds_the_same_facts()
+ {
+  let on = place("gate-on");
+  let open = |at: &Path, keeps: bool| Opening {
+    extensions: Some(false),
+    snapshot: Some(false),
+    ..opening(at, keeps)
+  };
+  let (mut engine, _) = open(&on, false).boot::<String>([]).unwrap();
+  let refused = rung(&mut engine, MISTYPED).unwrap_err();
+  assert!(refused.to_string().contains("int"), "the gate on refuses the word: {refused}");
+  drop(engine);
+  let off = place("gate-off");
+  fs::create_dir_all(off.join(".furb")).unwrap();
+  fs::write(off.join(".furb/config.json"), r#"{"gate": false}"#).unwrap();
+  let (mut engine, _) = open(&off, true).boot::<String>([]).unwrap();
+  let ran = rung(&mut engine, MISTYPED).unwrap();
+  assert_eq!(ran.as_ref().as_str(), Some("one"), "the gate off lets the word run");
+  let lived = facts(&mut engine);
+  let gated = lived.iter().find(|one| one.starts_with("('gate', ") && one.contains("x: int"));
+  let gated = gated.expect("the record holds the gate of the word");
+  let name = gated.split('\'').nth(3).unwrap_or_default();
+  let answer = format!("('done', '{name}', 'gate', [])");
+  assert!(lived.contains(&answer), "the gate off answers the word with no finding: {gated}");
+  drop(engine);
+  // A config of the project that turns the gate on again: the replay gives the answer that the
+  // record holds.
+  fs::write(off.join(".furb/config.local.json"), r#"{"gate": true}"#).unwrap();
+  let (mut engine, _) = open(&off, false).boot::<String>([]).unwrap();
+  assert!(engine.raised().is_none(), "the replay does not drift: {:?}", engine.raised());
+  let replayed = facts(&mut engine);
+  let mut left = replayed;
+  let missing: Vec<_> = lived
+    .iter()
+    .filter(|one| match left.iter().position(|other| other == *one) {
+      Some(at) => {
+        left.remove(at);
+        false
+      }
+      None => true,
+    })
+    .map(|one| one.chars().take(300).collect::<String>())
+    .collect();
+  assert!(missing.is_empty(), "the replay holds each fact of the life: {missing:#?}");
+  assert_eq!(rung(&mut engine, "close(1)").unwrap().as_ref().as_int(), Some(1));
+  assert!(rung(&mut engine, MISTYPED).is_err(), "the gate on refuses the word again in this life");
+}
+
+#[test]
+fn the_gate_is_on_unless_the_last_config_that_names_it_says_false() {
+  let at = place("gate-configs");
+  let (user, furb) = (at.join("user"), at.join(".furb"));
+  fs::create_dir_all(&user).unwrap();
+  fs::create_dir_all(&furb).unwrap();
+  let gated = || crate::gate::configured(&user, &at);
+  assert!(gated(), "no config names the gate");
+  fs::write(user.join("config.json"), r#"{"gate": false}"#).unwrap();
+  assert!(!gated(), "the config of the user turns it off");
+  fs::write(furb.join("config.json"), r#"{"gate": "no"}"#).unwrap();
+  assert!(!gated(), "a value that is no bool is as unsaid");
+  fs::write(furb.join("config.local.json"), r#"{"gate": true}"#).unwrap();
+  assert!(gated(), "the local config of the project wins");
 }

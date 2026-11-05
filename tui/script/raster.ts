@@ -156,6 +156,11 @@ function mark(glyph: string, x: number, y: number, color: string): string | unde
         1.2,
         `M ${x - 2.8} ${y - 3.8} L ${x - 2.8} ${y + 1.4} L ${x + 3.4} ${y + 1.4} M ${x + 1.2} ${y - 0.8} L ${x + 3.4} ${y + 1.4} L ${x + 1.2} ${y + 3.6}`,
       );
+    case "✻":
+      return stroke(
+        1.5,
+        `M ${x} ${y - 3.6} L ${x} ${y + 3.6} M ${x - 3.12} ${y - 1.8} L ${x + 3.12} ${y + 1.8} M ${x - 3.12} ${y + 1.8} L ${x + 3.12} ${y - 1.8}`,
+      );
     case "✎":
       return stroke(
         1.1,

@@ -4,8 +4,7 @@
   "workspaces": [
     "bind/typescript",
     "tui",
-    "docs/examples",
-    "gui"
+    "docs/examples"
   ],
   "scripts": {
     "build": "bun run bind/typescript/build.ts",
@@ -14,12 +13,12 @@
     "screenshots": "bun run tui/script/screenshots.ts",
     "animation": "bun run tui/script/animation.ts",
     "docs": "bun run tui/script/docs.ts",
-    "check": "tsc --noEmit && tsc --noEmit -p gui",
+    "check": "tsc --noEmit",
     "test": "bun run tui/script/test.ts",
     "bench": "bun run tui/script/bench.ts",
     "protocol": "bun run bind/typescript/script/protocol.ts",
-    "format": "biome format --write bind/typescript tui gui docs/examples extensions package.json tsconfig.json biome.json",
-    "lint": "biome check bind/typescript tui gui docs/examples extensions package.json tsconfig.json biome.json"
+    "format": "biome format --write bind/typescript tui docs/examples extensions package.json tsconfig.json biome.json",
+    "lint": "biome check bind/typescript tui docs/examples extensions package.json tsconfig.json biome.json"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.6",

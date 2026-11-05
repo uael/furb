@@ -87,12 +87,18 @@ function said(act: LiveAct, owed: ReadonlySet<string>, label: (chain: string) =>
     return n ? lines(n) : name;
   }
   if (act.kind === "prompt") {
-    if (act.words[0] === "None") return first(String(act.words[1] ?? ""));
+    // A word to another thread says what this line did, which is to tell it, and not what it told: that is the line of that thread.
+    if (act.words[0] === "None") return "told";
     if (act.done) return first(valueText(act.value)) || "done";
     return act.words[2] === "operator" ? "waits for you" : `waits for ${label(act.on)}`;
   }
   if (act.kind === "chain") return label(act.id);
-  if (act.kind === "wait") return act.done ? `woke: ${valueText(act.value)}` : `waits ${act.words[0] ?? ""}s`;
+  if (act.kind === "wait")
+    return act.done
+      ? valueText(act.value)
+        ? `woke by ${valueText(act.value)}`
+        : "woke"
+      : `waits ${act.words[0] ?? ""}s`;
   if (act.kind === "cd") return valueText(act.value);
   if (act.kind === "grant") return `grant $${unmarked(act.words[0]) ?? ""}`;
   return "";
@@ -107,8 +113,10 @@ export function hintOf(
 ): string {
   const last = acts.at(-1);
   if (!last) return "";
-  if (acts.length > 1 && acts.every((act) => act.kind === last.kind))
-    return `x${acts.length}  ${said(last, owed, label)}`;
+  if (acts.length > 1 && acts.every((act) => act.kind === last.kind)) {
+    const what = said(last, owed, label);
+    return what ? `x${acts.length}  ${what}` : "";
+  }
   return acts
     .map((act) => said(act, owed, label))
     .filter(Boolean)

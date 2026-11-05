@@ -178,7 +178,6 @@ export class Reader {
   readonly activity = new Activity();
   readonly facts: Fact[] = [];
   readonly entries: Entry[] = [];
-  readonly pending = new Map<string, string>();
   readonly streams = new Map<string, never>();
   readonly console = { prompts: new Map<string, never>() };
   readonly changes: FileChanges;

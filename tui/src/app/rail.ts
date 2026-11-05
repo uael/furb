@@ -8,7 +8,9 @@ import {
   chainThreads,
   gist,
   nestThreads,
+  orderThreads,
   type ThreadNode,
+  threadOpen,
   threadWork,
 } from "furb/life";
 import { checkoutOf } from "../checkout.ts";
@@ -322,8 +324,8 @@ export const rail = part({
     return row;
   },
 
-  /** The thread chosen in the sidebar: the feed shows it on its chain, scrolled to it, and the input of its box takes
-   * the reply. */
+  /** The thread chosen in the sidebar: the feed shows it on its chain, scrolled to its end, its last message in view,
+   * and the input of its box takes the reply. */
   chooseThread(thread: ChainThread): void {
     const w = this.session;
     const id = thread.act.id;
@@ -337,6 +339,7 @@ export const rail = part({
       }
       if (this.railKeys) this.railSteer(false);
       this.go("feed", id);
+      this.scrollAfterLayout({ end: id });
     })().catch(this.report);
   },
 
@@ -633,7 +636,8 @@ export const rail = part({
     ]);
     this.railHeading.visible = style !== "cards";
     if (!this.paneChanged(this.railSpaces, key)) return;
-    const tree = nestThreads(threads, w.ladderIndex.ids);
+    // The model orders the threads, the closed ones first and the open ones last, each by the time of its last message.
+    const tree = orderThreads(nestThreads(threads, w.ladderIndex.ids));
     this.clear(this.railHeading);
     this.clear(this.railSpaces);
     this.unhover();
@@ -888,23 +892,24 @@ export const rail = part({
         for (const one of node.agents) nodeRow(one, carded ? LEFT + 4 : indent + 2);
     };
     const shows = (node: ThreadNode): boolean => node.thread === active || node.agents.some(shows);
-    const unresolved = tree.filter((one) => !one.thread.resolved || one.state === "asks" || shows(one));
+    const unresolved = tree.filter((one) => threadOpen(one) || shows(one));
     const resolvedNodes = tree.filter((one) => !unresolved.includes(one));
 
-    // The threads that a session holds: those that live, and the resolved ones folded under a row of their own, each
-    // with its agents nested under it.
+    // The threads that a session holds: the resolved ones folded under a row of their own at the top, then those that
+    // live, nearest the input, each with its agents nested under it.
     const threadBlock = (entry: SessionEntry) => {
       if (!threads.length) {
         plainRow([["     No thread yet", c.faint]], () => this.composer.focus());
         step(1);
         return;
       }
+      if (resolvedNodes.length) {
+        const fold = `resolved:${entry.path}`;
+        this.railSpaces.add(this.foldRow(fold, "      Resolved", resolvedNodes.length, padding));
+        step(1);
+        if (this.unfolded.has(fold)) for (const one of resolvedNodes) nodeRow(one, LEFT + 4);
+      }
       for (const one of unresolved) nodeRow(one, LEFT + 4);
-      if (!resolvedNodes.length) return;
-      const fold = `resolved:${entry.path}`;
-      this.railSpaces.add(this.foldRow(fold, "      Resolved", resolvedNodes.length, padding));
-      step(1);
-      if (this.unfolded.has(fold)) for (const one of resolvedNodes) nodeRow(one, LEFT + 4);
     };
 
     if (style === "cards") {
@@ -932,7 +937,6 @@ export const rail = part({
           plainRow([["No thread yet", c.faint]], () => this.composer.focus());
           step(1);
         }
-        for (const one of unresolved) nodeRow(one, 0, true);
         if (resolvedNodes.length) {
           const fold = `resolved:${lib.current?.path}`;
           this.railSpaces.add(
@@ -941,6 +945,7 @@ export const rail = part({
           step(1, undefined, space.section);
           if (this.unfolded.has(fold)) for (const one of resolvedNodes) nodeRow(one, 0, true);
         }
+        for (const one of unresolved) nodeRow(one, 0, true);
       }
     } else {
       for (const [index, group] of lib.groups.entries()) {

@@ -122,6 +122,18 @@ def test_a_fault_of_the_checker_raises_out_of_the_ear_of_the_gate() -> None:
     ear.send(("gate", "gate1", "chain1", "chain1", "x = 1"))
 
 
+def test_a_gate_turned_off_answers_each_word_with_no_finding_and_reads_none() -> None:
+  """A gate that gated turns off, as the key gate of a config set to false, answers each word with no finding, so the
+  word runs, and reads no sheet: a checker that would break is never called."""
+
+  def checked(_: str) -> list[tuple[int, str]]:
+    raise RuntimeError("the checker broke")
+
+  ear = sheet.gating({}, checked, lambda: False)
+  assert next(ear) == {"gate"}
+  assert ear.send(("gate", "gate1", "chain1", "chain1", "x: int = 'one'")) == ("done", "gate1", [])
+
+
 @pytest.mark.parametrize("which", [furb.python, furb_monty.engine], ids=["python", "monty"])
 async def test_a_word_compares_sets_as_python_does_on_both_engines(which: object) -> None:
   """A set and a frozenset compare by the subset order, by their members and by the methods of sets, on both engines,

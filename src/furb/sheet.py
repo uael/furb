@@ -392,13 +392,17 @@ def against(engine: dict[str, object], checked: Checked, on: str, word: str) -> 
   return gate(engine, {**words, **written}, word, checked, [str(x[1]) for x in facts if question(x)])
 
 
-def gating(engine: dict[str, object], checked: Checked) -> Ear:
+def gating(engine: dict[str, object], checked: Checked, gated: Callable[[], bool] = lambda: True) -> Ear:
   """The gate as the ear of a life: it answers each gate with what it finds against the word, on its chain as the
   chain stands when the gate takes it. A word that is one quote and nothing else is a finding of the gate alone, and
-  not of against, which a host reads while a model writes the word, as a quote that the rest of the word uses."""
+  not of against, which a host reads while a model writes the word, as a quote that the rest of the word uses. When
+  gated says no, as the key gate of a config turned to false, it answers each gate with no finding, so the word runs
+  and the record holds that answer, which a replay gives again whatever the config says then."""
   gates = {"gate"}
   while True:
     match (yield gates):
+      case ("gate", qid, _, on, word) if not gated():
+        yield "done", qid, []
       case ("gate", qid, _, on, word):
         name = lone(word)
         yield "done", qid, [quoted(word, 1, LONE.format(name=name))] if name else against(engine, checked, on, word)

@@ -2,24 +2,13 @@
 //! the host API, an [`PyEngine`] whose verbs are those of the crate, and the act a verb makes. A value of the engine
 //! comes out as the instance of `furb.python` it is, an exception as the one object it is for the life, a generator
 //! of python goes in as an ear, and a function as one the sandbox calls back.
-
+#![deny(clippy::needless_pass_by_value, clippy::map_err_ignore)]
 #![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
 #![expect(
   clippy::clone_on_ref_ptr,
   reason = "debt: a clone of an Arc or an Rc that hides its kind"
 )]
-#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(
-  clippy::single_match_else,
-  reason = "debt: a match of one arm and else, where if let serves"
-)]
 #![expect(clippy::too_many_arguments, reason = "debt: more than 4 parameters is a struct")]
-#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
 #![expect(
   clippy::unnecessary_wraps,
   reason = "debt: a Result or an Option that is always Ok or Some"
@@ -31,7 +20,8 @@
 
 use indexmap::IndexMap;
 use std::{
-  cell::{OnceCell, RefCell},
+  cell::{OnceCell, RefCell, RefMut},
+  rc::{Rc, Weak},
   sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
@@ -128,10 +118,11 @@ impl Made {
   fn class<'py>(&self, py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
     match self.python.bind(py).getattr(name) {
       Ok(held) => Ok(held),
-      Err(_) => py
-        .import("builtins")?
-        .getattr(name)
-        .map_err(|_| PyTypeError::new_err(format!("{name} is no class this interpreter knows"))),
+      Err(_) => py.import("builtins")?.getattr(name).map_err(|cause| {
+        let no = PyTypeError::new_err(format!("{name} is no class this interpreter knows"));
+        no.set_cause(py, Some(cause));
+        no
+      }),
     }
   }
 
@@ -379,7 +370,34 @@ impl Ear for PyEar {
 /// as `furb_monty.engine` does, and it goes back to the life once that code is done.
 #[pyclass(module = "furb_monty._monty", name = "Life")]
 struct PyLife {
-  life: Homed<Option<Life>>,
+  /// The way to the life, a weak one: no code of python keeps the life past the step that lent it.
+  life: Homed<Weak<RefCell<Life>>>,
+}
+
+/// The life, held while python has it lent: the frame of [`with_life`] holds the only strong hold
+/// of it.
+struct Lent(Rc<RefCell<Life>>);
+
+impl Lent {
+  /// The life gives itself to be lent.
+  fn new(life: Life) -> Lent {
+    Lent(Rc::new(RefCell::new(life)))
+  }
+
+  /// The way that python reaches the life by while it is lent.
+  fn way(&self) -> Weak<RefCell<Life>> {
+    Rc::downgrade(&self.0)
+  }
+
+  /// The life, back once the step is done.
+  #[expect(
+    clippy::expect_used,
+    reason = "python holds the lent life weakly, and a call ends before its step"
+  )]
+  fn back(self) -> Life {
+    let shared = Rc::into_inner(self.0);
+    shared.expect("only the frame that lent the life holds it strongly").into_inner()
+  }
 }
 
 #[pymethods]
@@ -388,20 +406,27 @@ impl PyLife {
   /// in it, after the life went back, and a verb it calls is a verb of the operator.
   #[getter]
   fn lent(&self) -> bool {
-    self.life.is_some()
+    self.life.strong_count() > 0
   }
 
   /// One verb of the life, called by its name with its words, and what it gave or raised. Who speaks is the verb
   /// `spoken`, and a callable the engine made is the verb `made`, with its number and its words.
   #[pyo3(signature = (verb, args = None, kwargs = None))]
+  #[expect(
+    clippy::needless_pass_by_value,
+    reason = "pyo3 extracts the kwargs of a call as an owned map"
+  )]
   fn call(
-    &mut self,
+    &self,
     verb: &str,
     args: Option<Vec<Value>>,
     kwargs: Option<IndexMap<String, Value>>,
   ) -> Result<Value, Fault> {
     let refused = || Fault::refused(format!("{verb} is called after the life went back"));
-    let life = self.life.as_mut().ok_or_else(refused)?;
+    let lent = self.life.upgrade().ok_or_else(refused)?;
+    let mut life = lent.try_borrow_mut().map_err(|no| {
+      Fault::refused(format!("{verb} is called while the life is in a call: {no}"))
+    })?;
     let (args, kwargs) = words(args, &kwargs);
     life.call(verb, args, kwargs).map(Value)
   }
@@ -410,21 +435,15 @@ impl PyLife {
 /// What `step` gives, with the life lent to the code of python it runs, which `_monty.life` holds for that code alone,
 /// and the life, taken back once `step` is done.
 fn with_life<T>(py: Python<'_>, life: Life, step: impl FnOnce() -> T) -> (PyResult<T>, Life) {
-  let lent = match Py::new(py, PyLife { life: Homed::new(None) }) {
-    Ok(lent) => lent,
-    Err(no) => return (Err(no), life),
-  };
-  *lent.borrow_mut(py).life = Some(life);
-  let scope = made(py).and_then(|made| made.life.bind(py).call_method1("set", (&lent,)));
-  let got = scope.map(|token| {
+  let lent = Lent::new(life);
+  let got = Py::new(py, PyLife { life: Homed::new(lent.way()) }).and_then(|handle| {
+    let made = made(py)?;
+    let token = made.life.bind(py).call_method1("set", (&handle,))?;
     let got = step();
-    if let Ok(made) = made(py) {
-      let _ = made.life.bind(py).call_method1("reset", (token,));
-    }
-    got
+    made.life.bind(py).call_method1("reset", (token,))?;
+    Ok(got)
   });
-  let life = lent.borrow_mut(py).life.take();
-  (got, life.expect("a life lent to python comes back, since python calls it and never takes it"))
+  (got, lent.back())
 }
 
 impl PyEar {
@@ -593,8 +612,10 @@ impl Wake for Wakes {
   }
 
   fn wake_by_ref(self: &Arc<Self>) {
-    if !self.waiting.swap(true, Ordering::AcqRel) {
-      let _ = self.wanted.send(());
+    if !self.waiting.swap(true, Ordering::AcqRel) && self.wanted.send(()).is_err() {
+      // The thread of the waker ended, with the loop or with the interpreter, and nothing drives
+      // the engine after it: `waiting` stays set, so no later wake sends to a thread that is gone.
+      self.waiting.store(true, Ordering::Release);
     }
   }
 }
@@ -636,10 +657,20 @@ fn waker(
       if *leaving {
         break;
       }
-      Python::attach(|py| {
-        // A loop that is closed drives nothing more, and the engine is gone with it.
-        let _ = running.bind(py).call_method1("call_soon_threadsafe", (drive.bind(py),));
+      let driven = Python::attach(|py| {
+        match running.bind(py).call_method1("call_soon_threadsafe", (drive.bind(py),)) {
+          Ok(_) => true,
+          // A loop that is closed drives nothing more, and the engine is gone with it.
+          Err(no) if no.is_instance_of::<PyRuntimeError>(py) => false,
+          Err(no) => {
+            no.write_unraisable(py, None);
+            true
+          }
+        }
       });
+      if !driven {
+        break;
+      }
     }
   };
   thread::Builder::new()
@@ -679,15 +710,31 @@ impl PyEngine {
       Ok(engine) => engine.borrow().pump().map_err(Into::into),
       Err(_) => Ok(()),
     })?;
-    let _ = held.borrow(py).home.waker.set(waker);
+    held
+      .borrow(py)
+      .home
+      .waker
+      .set(waker)
+      .map_err(|_held| PyRuntimeError::new_err("a new engine holds its waker already"))?;
     held.borrow(py).pump()?;
     Ok(held)
   }
 
+  /// The engine, taken whole: only when no call of the host holds it.
+  fn idle(&self) -> Result<RefMut<'_, Option<Engine>>, Fault> {
+    self
+      .home
+      .engine
+      .try_borrow_mut()
+      .map_err(|no| Fault::refused(format!("the engine is in a call of the host: {no}")))
+  }
+
   /// One call of the engine.
   fn call<T>(&self, call: impl FnOnce(&mut Engine) -> Result<T, Fault>) -> Result<T, Fault> {
-    let mut held = self.home.engine.try_borrow_mut().map_err(|_| {
-      Fault::refused("the engine hears an ear, which calls the engine by its verbs alone")
+    let mut held = self.home.engine.try_borrow_mut().map_err(|no| {
+      Fault::refused(format!(
+        "the engine hears an ear, which calls the engine by its verbs alone: {no}"
+      ))
     })?;
     call(held.as_mut().ok_or_else(|| Fault::refused("the engine is disposed"))?)
   }
@@ -769,12 +816,16 @@ impl PyEngine {
   /// Who speaks in the life, and who speaks from now on when a name is given: the site of the contract, which the
   /// work an ear began sets to the name of that ear before it speaks.
   #[pyo3(signature = (value = None))]
-  fn site(&self, value: Option<String>) -> Result<String, Fault> {
-    self.call(|engine| engine.site(value.as_deref()))
+  fn site(&self, value: Option<&str>) -> Result<String, Fault> {
+    self.call(|engine| engine.site(value))
   }
 
   /// One name of the engine, said by its name with these words, and what it gave.
   #[pyo3(signature = (name, args = None, kwargs = None))]
+  #[expect(
+    clippy::needless_pass_by_value,
+    reason = "pyo3 extracts the kwargs of a call as an owned map"
+  )]
   fn verb(
     &self,
     name: &str,
@@ -787,6 +838,10 @@ impl PyEngine {
 
   /// One callable the engine made, called back by the number it went out under, with these words.
   #[pyo3(signature = (n, args = None, kwargs = None))]
+  #[expect(
+    clippy::needless_pass_by_value,
+    reason = "pyo3 extracts the kwargs of a call as an owned map"
+  )]
   fn made(
     &self,
     n: i64,
@@ -808,6 +863,12 @@ impl PyEngine {
     self.call(Engine::pending)
   }
 
+  /// The state of the record as a list of records shows it while no life holds it, `runs` or
+  /// `saved`, as the engine of the crate decides it.
+  fn saved(&self) -> Result<String, Fault> {
+    self.call(|engine| engine.saved().map(str::to_owned))
+  }
+
   /// The work that a crash loop parked, each act by its name and its kind, as the engine of the crate finds it.
   fn parked(&self) -> Result<Vec<(String, String)>, Fault> {
     self.call(Engine::parked)
@@ -821,6 +882,10 @@ impl PyEngine {
   /// The act of a verb that a key of the client makes once, across a crash of the host and a retry of the client:
   /// the act that the key made before, or a new act, as the engine of the crate finds it.
   #[pyo3(signature = (key, kind, args = None, kwargs = None))]
+  #[expect(
+    clippy::needless_pass_by_value,
+    reason = "pyo3 extracts the kwargs of a call as an owned map"
+  )]
   fn keyed(
     &self,
     key: &str,
@@ -833,12 +898,12 @@ impl PyEngine {
   }
 
   /// What an act comes to, which python awaits: its value, or the exception it completed with, raised.
-  fn result<'py>(&self, py: Python<'py>, act: String) -> PyResult<Bound<'py, PyAny>> {
+  fn result<'py>(&self, py: Python<'py>, act: &str) -> PyResult<Bound<'py, PyAny>> {
     let future =
       py.import("asyncio")?.call_method0("get_running_loop")?.call_method0("create_future")?;
     let settled = future.clone().unbind();
     self.call(|engine| {
-      engine.watch(&act, move |got| {
+      engine.watch(act, move |got| {
         Python::attach(|py| {
           if let Err(no) = settle(settled.bind(py), got) {
             no.write_unraisable(py, None);
@@ -850,47 +915,36 @@ impl PyEngine {
   }
 
   /// What an act came to, and whether it is done.
-  fn outcome(&self, act: String) -> Result<super::Outcome, Fault> {
-    let got = self.call(|engine| engine.outcome(&act))?;
+  fn outcome(&self, act: &str) -> Result<super::Outcome, Fault> {
+    let got = self.call(|engine| engine.outcome(act))?;
     Ok(super::Outcome { done: got.is_some(), value: Value(got.unwrap_or_else(Object::none)) })
   }
 
   /// One name of a chain, the root when none is given, read without calling it.
   #[pyo3(signature = (name, chain = None))]
-  fn inspect(&self, name: String, chain: Option<String>) -> Result<super::Inspection, Fault> {
-    let (kind, representation, value) =
-      self.call(|engine| engine.inspect(&name, chain.as_deref()))?;
-    Ok(super::Inspection { name, kind, representation, value: Value(value) })
+  fn inspect(&self, name: &str, chain: Option<&str>) -> Result<super::Inspection, Fault> {
+    let (kind, representation, value) = self.call(|engine| engine.inspect(name, chain))?;
+    Ok(super::Inspection { name: name.to_owned(), kind, representation, value: Value(value) })
   }
 
   /// Every name the module of a chain binds, the root when none is given, in the order it bound them.
   #[pyo3(signature = (chain = None))]
-  fn names(&self, chain: Option<String>) -> Result<Vec<String>, Fault> {
-    self.call(|engine| engine.names(chain.as_deref()))
+  fn names(&self, chain: Option<&str>) -> Result<Vec<String>, Fault> {
+    self.call(|engine| engine.names(chain))
   }
 
   /// The life ends with its checkpoint at the tip of its record, from which a later life on the
   /// record opens, as the engine of the crate writes it; then the engine is gone, as after a
   /// dispose. A life that keeps no record refuses it, and ends too.
   fn checkpoint(&self) -> Result<(), Fault> {
-    let life = self
-      .home
-      .engine
-      .try_borrow_mut()
-      .map_err(|_| Fault::refused("the engine is in a call of the host"))?
-      .take();
+    let life = self.idle()?.take();
     life.ok_or_else(|| Fault::refused("the engine is disposed"))?.checkpoint()
   }
 
   /// The engine is gone, and its ears with it: a command of the crate ends, a wait ends, and the store lets its
   /// record go.
   fn dispose(&self) -> Result<(), Fault> {
-    let mut held = self
-      .home
-      .engine
-      .try_borrow_mut()
-      .map_err(|_| Fault::refused("the engine is in a call of the host"))?;
-    held.take();
+    self.idle()?.take();
     Ok(())
   }
 }
@@ -915,7 +969,7 @@ pub struct PyAct {
 
 impl PyAct {
   /// The act a verb of the engine made.
-  fn of(engine: &Bound<'_, PyEngine>, got: Object) -> Result<PyAct, Fault> {
+  fn of(engine: &Bound<'_, PyEngine>, got: &Object) -> Result<PyAct, Fault> {
     let id = got
       .as_ref()
       .as_str()
@@ -936,7 +990,7 @@ impl PyAct {
   }
 
   fn __await__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-    self.engine.bind(py).borrow().result(py, self.id.clone())?.call_method0("__await__")
+    self.engine.bind(py).borrow().result(py, &self.id)?.call_method0("__await__")
   }
 }
 
@@ -946,120 +1000,184 @@ include!(concat!(env!("OUT_DIR"), "/py.rs"));
 /// One value of the sandbox, as python holds it: an instance of a class of the engine as that instance, an
 /// exception as the one object it is for the life, and plain data as itself.
 fn to_python<'py>(py: Python<'py>, said: ObjectRef<'_>) -> PyResult<Bound<'py, PyAny>> {
-  if let Some(held) = said.as_bool() {
-    return Ok(PyBool::new(py, held).to_owned().into_any());
-  }
-  if let Some(held) = said.as_int() {
-    return Ok(held.into_pyobject(py)?.into_any());
-  }
-  if let Some(held) = said.as_float() {
-    return Ok(PyFloat::new(py, held).into_any());
-  }
-  if let Some(held) = said.as_str() {
-    return Ok(PyString::new(py, held).into_any());
+  if let Some(held) = plain(py, said)? {
+    return Ok(held);
   }
   let made = made(py)?;
-  let each = |held: Vec<ObjectRef<'_>>| {
-    held.into_iter().map(|one| to_python(py, one)).collect::<PyResult<Vec<_>>>()
-  };
   match said.type_name() {
     "NoneType" | "None" => Ok(py.None().into_bound(py)),
     "ellipsis" => Ok(py.Ellipsis().into_bound(py)),
-    "list" => Ok(PyList::new(py, each(said.items().unwrap_or_default())?)?.into_any()),
-    "tuple" => Ok(PyTuple::new(py, each(said.items().unwrap_or_default())?)?.into_any()),
-    "set" => Ok(PySet::new(py, each(said.items().unwrap_or_default())?)?.into_any()),
-    "frozenset" => Ok(PyFrozenSet::new(py, each(said.items().unwrap_or_default())?)?.into_any()),
-    "dict" => {
-      let pairs = said.pairs().unwrap_or_default();
-      let at = |name: &str| field(&said, name);
-      if let Some(mark) = at(IS).and_then(|one| one.as_str()) {
-        // A map that holds the key of the mark goes out as its pairs, and is the map it is here.
-        if mark == "dict"
-          && let Some(held) = at("args").and_then(|one| entry(&one, 0)).and_then(|one| one.items())
-        {
-          let pairs = held.iter().map(|pair| entry(pair, 0).zip(entry(pair, 1)));
-          let pairs = pairs.collect::<Option<Vec<_>>>().ok_or_else(|| {
-            PyTypeError::new_err("a map that goes out as its pairs holds pairs of two")
-          })?;
-          return Ok(dict(py, pairs)?.into_any());
-        }
-        if mark == "name"
-          && let Some(name) = at("name").and_then(|one| one.as_str())
-          && let Some(held) = made.named(py, name)?
-        {
-          return Ok(held);
-        }
-        if mark == "made"
-          && let Some(n) = at("id").and_then(|one| one.as_int())
-        {
-          return py.import("furb_monty.engine")?.call_method1("made", (n,));
-        }
-        // A class a word defined, as the type python holds it by its number, derived from the type its base is
-        // here, and an instance of one, as an object of that type holding the fields the sandbox carries out.
-        if mark == "class"
-          && let Some(n) = at("id").and_then(|one| one.as_int())
-          && let Some(name) = at("name").and_then(|one| one.as_str())
-          && let Some(base) = at("base")
-        {
-          let base = to_python(py, base)?;
-          return py.import("furb_monty.engine")?.call_method1("classed", (n, name, base));
-        }
-        if mark == "instance"
-          && let Some(class) = at("class")
-          && let Some(value) = at("value")
-        {
-          let class = to_python(py, class)?;
-          let fields = dict(py, value.pairs().unwrap_or_default())?;
-          return py.import("furb_monty.engine")?.call_method1("instanced", (class, fields));
-        }
-        // A value as the record keeps it: an instance of a class of the engine or of the interpreter, by the name of
-        // its class, what it was made with and its fields.
-        if let Ok(class) = made.class(py, mark) {
-          let args = each(at("args").and_then(|one| one.items()).unwrap_or_default())?;
-          if class
-            .cast::<PyType>()
-            .is_ok_and(|one| one.is_subclass_of::<PyBaseException>().unwrap_or_default())
-          {
-            return made.fault(py, mark, args);
-          }
-          let fields = pairs.iter().filter(|(key, _)| !matches!(key.as_str(), Some(IS | "args")));
-          let kwargs = dict(py, fields.copied())?;
-          return class.call(PyTuple::new(py, args)?, Some(&kwargs));
-        }
-      }
-      Ok(dict(py, pairs)?.into_any())
-    }
-    _ => match crate::value::Fault::of(said) {
-      Some(fault) => {
-        made.fault(py, &fault.name, each(fault.args.iter().map(Object::as_ref).collect())?)
-      }
-      None => match said.pairs() {
-        Some(fields) => made.class(py, said.type_name())?.call((), Some(&dict(py, fields)?)),
-        // A class of the engine crosses as its name, which python holds as the class its instances are, and a
-        // builtin type as the builtin it is; anything else that has no fields, a coroutine, a function that
-        // crossed by no mark, shows as what it is.
-        None => {
-          // The interpreter shows a class of the session wrapped as `Repr("<class 'X'>")` and a builtin type
-          // bare as `<class 'X'>`, and the name stands the same in both.
-          let shown = said.py_repr();
-          let name =
-            shown.split_once("<class '").and_then(|(_, rest)| rest.split('\'').next()).filter(
-              |name| !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_'),
-            );
-          let Some(name) = name else {
-            return Ok(PyString::new(py, &shown).into_any());
-          };
-          match made.named(py, name)? {
-            Some(held) => Ok(held),
-            None => match py.import("builtins")?.getattr(name) {
-              Ok(held) => Ok(held),
-              Err(_) => Ok(PyString::new(py, &shown).into_any()),
-            },
-          }
-        }
-      },
-    },
+    "list" => Ok(PyList::new(py, items(py, said)?)?.into_any()),
+    "tuple" => Ok(PyTuple::new(py, items(py, said)?)?.into_any()),
+    "set" => Ok(PySet::new(py, items(py, said)?)?.into_any()),
+    "frozenset" => Ok(PyFrozenSet::new(py, items(py, said)?)?.into_any()),
+    "dict" => mapping(py, said, made),
+    _ => other(py, said, made),
   }
+}
+
+/// Each of these values of the sandbox, as python holds it.
+fn each<'py>(py: Python<'py>, held: Vec<ObjectRef<'_>>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+  held.into_iter().map(|one| to_python(py, one)).collect()
+}
+
+/// The entries of a list, a tuple or a set of the sandbox, as python holds them.
+fn items<'py>(py: Python<'py>, said: ObjectRef<'_>) -> PyResult<Vec<Bound<'py, PyAny>>> {
+  each(py, said.items().unwrap_or_default())
+}
+
+/// A bool, a number or a string of the sandbox, which python holds as itself.
+fn plain<'py>(py: Python<'py>, said: ObjectRef<'_>) -> PyResult<Option<Bound<'py, PyAny>>> {
+  if let Some(held) = said.as_bool() {
+    return Ok(Some(PyBool::new(py, held).to_owned().into_any()));
+  }
+  if let Some(held) = said.as_int() {
+    return Ok(Some(held.into_pyobject(py)?.into_any()));
+  }
+  if let Some(held) = said.as_float() {
+    return Ok(Some(PyFloat::new(py, held).into_any()));
+  }
+  Ok(said.as_str().map(|held| PyString::new(py, held).into_any()))
+}
+
+/// A map of the sandbox: the object its mark says, else the map it is.
+fn mapping<'py>(py: Python<'py>, said: ObjectRef<'_>, made: &Made) -> PyResult<Bound<'py, PyAny>> {
+  let pairs = said.pairs().unwrap_or_default();
+  if let Some(mark) = field(&said, IS).and_then(|one| one.as_str()) {
+    let held = match mark {
+      "dict" => pairs_map(py, said)?,
+      "name" => named(py, said, made)?,
+      "made" => numbered(py, said)?,
+      "class" => classed(py, said)?,
+      "instance" => instanced(py, said)?,
+      _ => None,
+    };
+    if let Some(held) = held {
+      return Ok(held);
+    }
+    if let Some(held) = recorded(py, said, &pairs, mark, made)? {
+      return Ok(held);
+    }
+  }
+  Ok(dict(py, pairs)?.into_any())
+}
+
+/// A map that holds the key of the mark goes out as its pairs, and is the map it is here.
+fn pairs_map<'py>(py: Python<'py>, said: ObjectRef<'_>) -> PyResult<Option<Bound<'py, PyAny>>> {
+  let Some(held) = field(&said, "args").and_then(|one| entry(&one, 0)).and_then(|one| one.items())
+  else {
+    return Ok(None);
+  };
+  let pairs = held.iter().map(|pair| entry(pair, 0).zip(entry(pair, 1)));
+  let pairs = pairs
+    .collect::<Option<Vec<_>>>()
+    .ok_or_else(|| PyTypeError::new_err("a map that goes out as its pairs holds pairs of two"))?;
+  Ok(Some(dict(py, pairs)?.into_any()))
+}
+
+/// A name of the engine, as python holds it.
+fn named<'py>(
+  py: Python<'py>,
+  said: ObjectRef<'_>,
+  made: &Made,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+  match field(&said, "name").and_then(|one| one.as_str()) {
+    Some(name) => made.named(py, name),
+    None => Ok(None),
+  }
+}
+
+/// A class a word defined or a callable the engine made, as python holds it by its number.
+fn numbered<'py>(py: Python<'py>, said: ObjectRef<'_>) -> PyResult<Option<Bound<'py, PyAny>>> {
+  let Some(n) = field(&said, "id").and_then(|one| one.as_int()) else {
+    return Ok(None);
+  };
+  py.import("furb_monty.engine")?.call_method1("made", (n,)).map(Some)
+}
+
+/// A class a word defined, as the type python holds it by its number, derived from the type its
+/// base is here.
+fn classed<'py>(py: Python<'py>, said: ObjectRef<'_>) -> PyResult<Option<Bound<'py, PyAny>>> {
+  let (Some(n), Some(name), Some(base)) = (
+    field(&said, "id").and_then(|one| one.as_int()),
+    field(&said, "name").and_then(|one| one.as_str()),
+    field(&said, "base"),
+  ) else {
+    return Ok(None);
+  };
+  let base = to_python(py, base)?;
+  py.import("furb_monty.engine")?.call_method1("classed", (n, name, base)).map(Some)
+}
+
+/// An instance of a class a word defined, as an object of that type holding the fields the
+/// sandbox carries out.
+fn instanced<'py>(py: Python<'py>, said: ObjectRef<'_>) -> PyResult<Option<Bound<'py, PyAny>>> {
+  let (Some(class), Some(value)) = (field(&said, "class"), field(&said, "value")) else {
+    return Ok(None);
+  };
+  let class = to_python(py, class)?;
+  let fields = dict(py, value.pairs().unwrap_or_default())?;
+  py.import("furb_monty.engine")?.call_method1("instanced", (class, fields)).map(Some)
+}
+
+/// A value as the record keeps it: an instance of a class of the engine or of the interpreter, by
+/// the name of its class, what it was made with and its fields.
+fn recorded<'py>(
+  py: Python<'py>,
+  said: ObjectRef<'_>,
+  pairs: &[(ObjectRef<'_>, ObjectRef<'_>)],
+  mark: &str,
+  made: &Made,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
+  let Ok(class) = made.class(py, mark) else {
+    return Ok(None);
+  };
+  let args = each(py, field(&said, "args").and_then(|one| one.items()).unwrap_or_default())?;
+  if class
+    .cast::<PyType>()
+    .is_ok_and(|one| one.is_subclass_of::<PyBaseException>().unwrap_or_default())
+  {
+    return made.fault(py, mark, args).map(Some);
+  }
+  let fields = pairs.iter().filter(|(key, _)| !matches!(key.as_str(), Some(IS | "args")));
+  let kwargs = dict(py, fields.copied())?;
+  class.call(PyTuple::new(py, args)?, Some(&kwargs)).map(Some)
+}
+
+/// A value that is no plain data and no map: an exception, an instance with fields, or a class.
+fn other<'py>(py: Python<'py>, said: ObjectRef<'_>, made: &Made) -> PyResult<Bound<'py, PyAny>> {
+  if let Some(fault) = crate::value::Fault::of(said) {
+    let args = each(py, fault.args.iter().map(Object::as_ref).collect())?;
+    return made.fault(py, &fault.name, args);
+  }
+  match said.pairs() {
+    Some(fields) => made.class(py, said.type_name())?.call((), Some(&dict(py, fields)?)),
+    None => classified(py, said, made),
+  }
+}
+
+/// A class of the engine crosses as its name, which python holds as the class its instances are,
+/// and a builtin type as the builtin it is; anything else that has no fields, a coroutine, a
+/// function that crossed by no mark, shows as what it is.
+fn classified<'py>(
+  py: Python<'py>,
+  said: ObjectRef<'_>,
+  made: &Made,
+) -> PyResult<Bound<'py, PyAny>> {
+  // The interpreter shows a class of the session wrapped as `Repr("<class 'X'>")` and a builtin
+  // type bare as `<class 'X'>`, and the name stands the same in both.
+  let shown = said.py_repr();
+  let name = shown
+    .split_once("<class '")
+    .and_then(|(_, rest)| rest.split('\'').next())
+    .filter(|name| !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_'));
+  let Some(name) = name else {
+    return Ok(PyString::new(py, &shown).into_any());
+  };
+  if let Some(held) = made.named(py, name)? {
+    return Ok(held);
+  }
+  Ok(py.import("builtins")?.getattr(name).unwrap_or_else(|_| PyString::new(py, &shown).into_any()))
 }
 
 /// A map of python from pairs of the sandbox, each key and each value as python holds it.
@@ -1079,128 +1197,210 @@ fn dict<'py, 'a>(
 /// each handed over to the life it comes into; a template string as its parts; plain data as it is, each
 /// entry as it crosses; an instance of a class or an exception as its name and its fields; and nothing else.
 fn of_python(value: &Bound<'_, PyAny>) -> PyResult<Object> {
-  let py = value.py();
-  let each = |held: &Bound<'_, PyAny>| {
-    held.try_iter()?.map(|one| of_python(&one?)).collect::<PyResult<Vec<_>>>()
-  };
-  if value.is_none() {
-    return Ok(Object::none());
+  for crossing in CROSSINGS {
+    if let Some(held) = crossing(value)? {
+      return Ok(held);
+    }
   }
-  if value.is(py.Ellipsis()) {
-    return Ok(Object::ellipsis());
+  Err(PyTypeError::new_err(format!("{} cannot cross to the engine", kind(value)?)))
+}
+
+/// How a value of python crosses to the sandbox by one of its marks: its object when it bears it.
+type Crossing = fn(&Bound<'_, PyAny>) -> PyResult<Option<Object>>;
+
+/// The marks of a value of python, in the order they are tried.
+const CROSSINGS: [Crossing; 10] = [
+  of_plain,
+  of_made,
+  of_instance,
+  of_shape,
+  of_host,
+  of_template,
+  of_collection,
+  of_dict,
+  of_exception,
+  of_dataclass,
+];
+
+/// The name of the type of a value of python.
+fn kind(value: &Bound<'_, PyAny>) -> PyResult<String> {
+  Ok(value.get_type().name()?.to_string())
+}
+
+/// Each entry of a value of python, as it crosses.
+fn of_each(held: &Bound<'_, PyAny>) -> PyResult<Vec<Object>> {
+  held.try_iter()?.map(|one| of_python(&one?)).collect()
+}
+
+/// Nothing, an ellipsis, a bool, a number or a string.
+fn of_plain(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
+  if value.is_none() {
+    return Ok(Some(Object::none()));
+  }
+  if value.is(value.py().Ellipsis()) {
+    return Ok(Some(Object::ellipsis()));
   }
   if let Ok(held) = value.cast::<PyBool>() {
-    return Ok(Object::bool(held.is_true()));
+    return Ok(Some(Object::bool(held.is_true())));
   }
   if let Ok(held) = value.cast::<PyInt>() {
-    return Ok(Object::int(held.extract::<i64>()?));
+    return Ok(Some(Object::int(held.extract::<i64>()?)));
   }
   if let Ok(held) = value.cast::<PyFloat>() {
-    return Ok(Object::float(held.value()));
+    return Ok(Some(Object::float(held.value())));
   }
   if let Ok(held) = value.cast::<PyString>() {
-    return Ok(Object::string(held.to_str()?));
+    return Ok(Some(Object::string(held.to_str()?)));
   }
-  // A class a word defined and a callable the engine made go back in by their number, and an instance of such a
-  // class by the number of its class and its fields; any other type goes in as its name, which is how a shape is
-  // said.
+  Ok(None)
+}
+
+/// A class a word defined and a callable the engine made go back in by their number.
+fn of_made(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
   if let Ok(n) = value.getattr("__monty__").and_then(|n| n.extract::<i64>())
     && (value.is_instance_of::<PyType>() || value.is_instance_of::<PyFunction>())
   {
-    return Ok(marked("made", [("id", Object::int(n))]));
+    return Ok(Some(marked("made", [("id", Object::int(n))])));
   }
-  if let Ok(n) = value.get_type().getattr("__monty__").and_then(|n| n.extract::<i64>()) {
-    let mut fields = Vec::new();
-    for (key, one) in value.getattr("__dict__")?.cast::<PyDict>()?.iter() {
-      fields.push((of_python(&key)?, of_python(&one)?));
-    }
-    // An exception holds what it was made with apart from its fields.
-    if value.is_instance_of::<PyBaseException>() {
-      fields.push((Object::string("args"), of_python(&value.getattr("args")?)?));
-    }
-    return Ok(marked("instance", [("class", Object::int(n)), ("fields", Object::dict(fields))]));
+  Ok(None)
+}
+
+/// An instance of a class a word defined goes in by the number of its class and its fields.
+fn of_instance(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
+  let Ok(n) = value.get_type().getattr("__monty__").and_then(|n| n.extract::<i64>()) else {
+    return Ok(None);
+  };
+  let mut fields = Vec::new();
+  for (key, one) in value.getattr("__dict__")?.cast::<PyDict>()?.iter() {
+    fields.push((of_python(&key)?, of_python(&one)?));
   }
+  // An exception holds what it was made with apart from its fields.
+  if value.is_instance_of::<PyBaseException>() {
+    fields.push((Object::string("args"), of_python(&value.getattr("args")?)?));
+  }
+  Ok(Some(marked("instance", [("class", Object::int(n)), ("fields", Object::dict(fields))])))
+}
+
+/// Any other type goes in as its name, which is how a shape is said; so does a name of the engine.
+fn of_shape(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
+  let py = value.py();
   if value.is_instance_of::<PyType>() {
-    return Ok(Object::string(value.getattr("__name__")?.extract::<String>()?));
+    return Ok(Some(Object::string(value.getattr("__name__")?.extract::<String>()?)));
   }
   if let Some(name) = made(py)?.name_of(py, value)? {
-    return Ok(marked("name", [("name", Object::string(name))]));
+    return Ok(Some(marked("name", [("name", Object::string(name))])));
   }
-  let kind = value.get_type().name()?.to_string();
-  if matches!(kind.as_str(), "GenericAlias" | "UnionType" | "Union" | "_LiteralGenericAlias") {
-    return Ok(Object::string(bare(&value.repr()?.to_string())));
+  if matches!(
+    kind(value)?.as_str(),
+    "GenericAlias" | "UnionType" | "Union" | "_LiteralGenericAlias"
+  ) {
+    return Ok(Some(Object::string(bare(&value.repr()?.to_string()))));
   }
+  Ok(None)
+}
+
+/// An ear of the crate and a generator go in as an ear, and a function as one the sandbox calls
+/// back.
+fn of_host(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
+  let py = value.py();
   if let Ok(held) = value.cast::<NativeEar>() {
-    return Ok(handed(held.borrow_mut().taken()?, false));
+    return Ok(Some(handed(held.borrow_mut().taken()?, false)));
   }
   if generator(value)? {
     let state = py.import("inspect")?.call_method1("getgeneratorstate", (value,))?;
     let started = state.extract::<String>()? != "GEN_CREATED";
-    return Ok(handed(Box::new(PyEar { ear: Some(value.clone().unbind()) }), started));
+    return Ok(Some(handed(Box::new(PyEar { ear: Some(value.clone().unbind()) }), started)));
   }
   if value.is_callable() {
     let f = value.clone().unbind();
-    return Ok(lending(move |args, life| {
+    return Ok(Some(lending(move |args, life| {
       Python::attach(|py| {
-        let (got, life) = with_life(py, life, || called(&f, args));
+        let (got, life) = with_life(py, life, || called(&f, &args));
         (got.map_err(|no| fault_of(py, &no)).and_then(|got| got), life)
       })
-    }));
+    })));
   }
-  if kind == "Template" {
-    let mut parts = Vec::new();
-    for one in value.try_iter()? {
-      let one = one?;
-      if one.is_instance_of::<PyString>() {
-        parts.push(of_python(&one)?);
-        continue;
-      }
-      let at = |name: &str| one.getattr(name).and_then(|held| of_python(&held));
-      parts.push(Object::list([
-        at("value")?,
-        at("expression")?,
-        at("conversion")?,
-        at("format_spec")?,
-      ]));
+  Ok(None)
+}
+
+/// A template string goes in as its parts.
+fn of_template(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
+  if kind(value)? != "Template" {
+    return Ok(None);
+  }
+  let mut parts = Vec::new();
+  for one in value.try_iter()? {
+    let one = one?;
+    if one.is_instance_of::<PyString>() {
+      parts.push(of_python(&one)?);
+      continue;
     }
-    return Ok(templated(parts));
+    let at = |name: &str| one.getattr(name).and_then(|held| of_python(&held));
+    parts.push(Object::list([
+      at("value")?,
+      at("expression")?,
+      at("conversion")?,
+      at("format_spec")?,
+    ]));
   }
+  Ok(Some(templated(parts)))
+}
+
+/// A list, a tuple, a set or a frozenset, each entry as it crosses.
+fn of_collection(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
   if value.is_instance_of::<PyList>() {
-    return Ok(Object::list(each(value)?));
+    return of_each(value).map(|held| Some(Object::list(held)));
   }
   if value.is_instance_of::<PyTuple>() {
-    return Ok(Object::tuple(each(value)?));
+    return of_each(value).map(|held| Some(Object::tuple(held)));
   }
   if value.is_instance_of::<PySet>() {
-    return Ok(Object::set(each(value)?));
+    return of_each(value).map(|held| Some(Object::set(held)));
   }
   if value.is_instance_of::<PyFrozenSet>() {
-    return Ok(Object::frozenset(each(value)?));
+    return of_each(value).map(|held| Some(Object::frozenset(held)));
   }
-  if let Ok(held) = value.cast::<PyDict>() {
-    let mut pairs = Vec::new();
-    for (key, one) in held.iter() {
-      pairs.push((of_python(&key)?, of_python(&one)?));
-    }
-    // A map that holds the key of the mark goes in as its pairs, so the engine never reads it as a mark.
-    if held.contains(IS)? {
-      let pairs = pairs.into_iter().map(|(key, one)| Object::tuple([key, one]));
-      return Ok(marked("dict", [("args", Object::list([Object::list(pairs)]))]));
-    }
-    return Ok(Object::dict(pairs));
+  Ok(None)
+}
+
+/// A dict, each key and each value as it crosses.
+fn of_dict(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
+  let Ok(held) = value.cast::<PyDict>() else {
+    return Ok(None);
+  };
+  let mut pairs = Vec::new();
+  for (key, one) in held.iter() {
+    pairs.push((of_python(&key)?, of_python(&one)?));
   }
-  if value.is_instance_of::<PyBaseException>() {
-    return Ok(marked(&kind, [("args", Object::list(each(&value.getattr("args")?)?))]));
+  // A map that holds the key of the mark goes in as its pairs, so the engine never reads it as a
+  // mark.
+  if held.contains(IS)? {
+    let pairs = pairs.into_iter().map(|(key, one)| Object::tuple([key, one]));
+    return Ok(Some(marked("dict", [("args", Object::list([Object::list(pairs)]))])));
   }
-  if let Ok(fields) = value.getattr("__dataclass_fields__") {
-    let mut held = Vec::new();
-    for (key, _) in fields.cast::<PyDict>()?.iter() {
-      let key = key.extract::<String>()?;
-      held.push((key.clone(), of_python(&value.getattr(key.as_str())?)?));
-    }
-    return Ok(marked(&kind, held.iter().map(|(key, one)| (key.as_str(), one.clone()))));
+  Ok(Some(Object::dict(pairs)))
+}
+
+/// An exception goes in as its name and what it was made with.
+fn of_exception(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
+  if !value.is_instance_of::<PyBaseException>() {
+    return Ok(None);
   }
-  Err(PyTypeError::new_err(format!("{kind} cannot cross to the engine")))
+  let args = of_each(&value.getattr("args")?)?;
+  Ok(Some(marked(&kind(value)?, [("args", Object::list(args))])))
+}
+
+/// A dataclass goes in as its name and its fields.
+fn of_dataclass(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
+  let Ok(fields) = value.getattr("__dataclass_fields__") else {
+    return Ok(None);
+  };
+  let mut held = Vec::new();
+  for (key, _) in fields.cast::<PyDict>()?.iter() {
+    let key = key.extract::<String>()?;
+    held.push((key.clone(), of_python(&value.getattr(key.as_str())?)?));
+  }
+  Ok(Some(marked(&kind(value)?, held.iter().map(|(key, one)| (key.as_str(), one.clone())))))
 }
 
 /// A value of python as an ear of the crate hears it in a fact: as it goes in, but an ear or a function, which a
@@ -1236,7 +1436,7 @@ fn heard(value: &Bound<'_, PyAny>) -> PyResult<Object> {
 }
 
 /// A function of python, called back by the sandbox with what the word gave it, and what it gave.
-fn called(f: &Py<PyAny>, args: Vec<Object>) -> Result<Object, Fault> {
+fn called(f: &Py<PyAny>, args: &[Object]) -> Result<Object, Fault> {
   Python::attach(|py| {
     let got = (|| {
       let args =

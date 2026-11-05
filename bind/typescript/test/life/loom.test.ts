@@ -28,7 +28,6 @@ const loomOf = (
     measures: {},
     folds: new Set(options.folds ?? []),
     width: 40,
-    pending: new Map(),
     label: (id) => (id === "chain1" ? "conduct" : `w ${id}`),
   });
 
@@ -345,14 +344,13 @@ function boardActs(): LiveAct[] {
 test("a loom of no width read from the index of a host gives the rows that it gives from every act", () => {
   const acts = boardActs();
   const prompts = [{ id: "prompt4", shape: "str", message: "Work" }];
-  const pending = new Map([["bash73", "chain7"]]);
   const index = {
     ids: new Map(acts.map((one) => [one.id, one])),
     on: Map.groupBy(acts, (one) => one.on),
     chains: acts.filter((one) => one.kind === "chain"),
     live: acts.filter((one) => !one.done),
   };
-  const base = { acts, prompts, measures: {}, width: 0, pending, label: (id: string) => id };
+  const base = { acts, prompts, measures: {}, width: 0, label: (id: string) => id };
   for (const folds of [new Set<string>(), new Set(["chain1"])]) {
     const whole = weave({ ...base, folds });
     if (!folds.size) expect(new Set(whole.rows.map((row) => row.state)).size).toBeGreaterThan(3);
@@ -379,7 +377,6 @@ test("a loom of no width read from the index of a host gives the rows that it gi
 test("a board read from the chains that a host names as touched gives the rows and the order of a whole board", () => {
   const acts = boardActs();
   let prompts = [{ id: "prompt4", shape: "str", message: "Work" }];
-  let pending = new Map([["bash73", "chain7"]]);
   let measures: Record<string, Measure> = {};
   const touched: string[] = [];
   const index = {
@@ -406,7 +403,6 @@ test("a board read from the chains that a host names as touched gives the rows a
       measures,
       folds: new Set<string>(),
       width: 0,
-      pending,
       label: (id: string) => id,
     };
     const read = weave({ ...base, index });
@@ -427,10 +423,8 @@ test("a board read from the chains that a host names as touched gives the rows a
     }
   index.live = acts.filter((one) => !one.done);
   same();
-  // The question of the operator moves to another chain, the held work goes, and a chain is measured.
+  // The question of the operator moves to another chain, and a chain is measured.
   prompts = [{ id: "prompt5", shape: "str", message: "Work" }];
-  same();
-  pending = new Map();
   same();
   measures = { chain3: { answers: 2, dollars: 0.5, spent: 0.5, actor: "a" } };
   same();
@@ -665,8 +659,8 @@ test("an act that runs says what it does: a question to the operator, the chains
 });
 
 test("a reopened session with work that an earlier life left shows that work as it runs, not as paused", () => {
-  // The open of a life on its record resumes its cut work at once (#1193), so the work that a host still names as
-  // pending is work, on the loom of each width and on the board of a host.
+  // The open of a life on its record resumes its cut work at once (#1193), so the work that an earlier life left is
+  // work, on the loom of each width and on the board of a host, and the loom reads no list of pending work.
   const acts = [
     act("chain1", "chain", "", "operator", 1),
     act("rung1", "rung", "chain1", "operator", 2),
@@ -675,17 +669,11 @@ test("a reopened session with work that an earlier life left shows that work as 
     { ...act("rung2", "rung", "chain2", "prompt1", 5), word: 'await bash("make")' },
     act("bash1", "bash", "chain2", "rung2", 6),
   ];
-  const pending = new Map([
-    ["prompt1", "prompt"],
-    ["rung2", "rung"],
-    ["bash1", "bash"],
-  ]);
   const base = {
     acts,
     prompts: [],
     measures: {},
     folds: new Set<string>(),
-    pending,
     label: (id: string) => id,
   };
   const index = {

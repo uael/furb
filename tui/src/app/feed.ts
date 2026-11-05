@@ -349,13 +349,14 @@ export const feed = part({
         return made;
       };
       // What a step took and cost once it is done, and how long the line that waits has waited.
-      const took = (step: ActRow) =>
+      // The cost stands on the header of a block alone, so a word that joins the block above it shows its time and no cost.
+      const took = (step: ActRow, costs = true) =>
         step.kind !== "rung" || !step.done
           ? ""
           : [
               // A time under a millisecond is one that this life did not measure, as a step that it replayed.
               (w.took[step.id] ?? 0) < 1 ? "" : spell(w.took[step.id] ?? 0),
-              step.cost ? dollars(step.cost) : "",
+              costs && step.cost ? dollars(step.cost) : "",
             ]
               .filter(Boolean)
               .join(" ");
@@ -563,6 +564,10 @@ export const feed = part({
         const message = this.spoken(act);
         const user = w.isUserPrompt(act);
         const thread = threadsOwn.by.get(act.id);
+        // A question of another chain is no thread: it stands as a block of the chain that asks, with the prompts on
+        // it and its answer under it, and offers no reply.
+        const aside = threadsOwn.asides.get(act.id);
+        const messages = thread?.messages ?? aside?.messages ?? [];
         const tone = threadTone(act.id);
         // A message that a branch took shows what its thread held when the branch began.
         const mine = taken.has(act.id);
@@ -571,10 +576,10 @@ export const feed = part({
         if (folded) collapsed = depth;
         // A thread that stands open shows its work, which the operator read once he leaves it. A folded thread shows
         // the work past the place up to which he read it as unread.
-        const work = [act, ...made, ...(thread?.messages ?? []), ...(thread?.asked ?? [])];
+        const work = [act, ...made, ...messages, ...(thread?.asked ?? [])];
         if (thread && !folded) w.shows(act.id, work);
         const news = folded && w.unreadThread(act.id, work);
-        const steps = made.length + (thread?.messages.length ?? 0);
+        const steps = made.length + messages.length;
         // A folded thread keeps its header alone, drawn as the open thread draws it, with how many steps it holds.
         // Its state stands beside its shape, as the open thread says it.
         const meta = folded && steps ? `${steps} ${steps === 1 ? "step" : "steps"}` : "";
@@ -595,13 +600,21 @@ export const feed = part({
               section.id,
               `${section.key}\n${join}\n${gap}\n${Boolean(section.bar)}`,
               section.label ?? [],
+              // The edge at the left of each line of the box of a thread folds the thread, so it folds from any line.
               (box) =>
                 section.body(
-                  this.barred(box, section.bar, gap, { top: at > 0, bottom: at < sections.length - 1 }),
+                  this.barred(
+                    box,
+                    section.bar,
+                    gap,
+                    { top: at > 0, bottom: at < sections.length - 1 },
+                    thread ? () => this.foldHere(act.id) : undefined,
+                  ),
                 ),
               {
                 indent,
                 join,
+                ...(thread ? { thread: act.id } : {}),
                 ...(section.bar ? { edge: section.bar } : {}),
                 heading: false,
                 separate: at === 0,
@@ -616,7 +629,11 @@ export const feed = part({
         // A message to the thread shows as its sender wrote it, with each image that it attached named by a mark.
         const said = (text: string) =>
           imageReferences(text).length ? this.message(text) : this.markdown(text);
-        const sent = user ? "" : this.sender(act);
+        const sent = user
+          ? ""
+          : aside?.aside.aside === "question"
+            ? `${named(aside.aside.from)} asks`
+            : this.sender(act);
         // A message that asks no answer, as a message that a rung adds to a thread, names no type.
         const state = this.promptState(act).filter(([text]) => text !== "None");
         // A long message shows its first rows until a click opens it, so that a brief of a page leaves the feed
@@ -683,7 +700,7 @@ export const feed = part({
           },
         });
         if (folded) return emit();
-        const parts = [act, ...(thread?.messages ?? [])];
+        const parts = [act, ...messages];
         const program = programFor(
           mine ? `taken:${w.selected}:${act.id}` : act.id,
           liveOf(parts.map((one) => one.id)),
@@ -1003,7 +1020,7 @@ export const feed = part({
         // What the model answered stands last, when no message came after it.
         if (answered && !placed) sections.push(answerOf(act, `${act.id}-answer`));
         // A message that a branch took is answered on its source, so the branch offers no reply to it.
-        if (!w.host.reading && !taken.has(act.id)) {
+        if (!w.host.reading && !taken.has(act.id) && !aside) {
           const over = Boolean(thread?.resolved);
           sections.push({
             id: `${act.id}-reply`,
@@ -1026,6 +1043,9 @@ export const feed = part({
         )
           continue;
         if (line.type === "prompt" && threadsOwn.of.has(line.act.id)) continue;
+        // A prompt on an aside stands in the block of that aside, and the answer of an aside in its block too.
+        if (line.type === "prompt" && threadsOwn.aside.has(line.act.id)) continue;
+        if (line.type === "value" && threadsOwn.asides.has(line.act.id)) continue;
         // A question or a notice that a thread made stands in the box of that thread, with its answer.
         if (threadsOwn.asked.has(line.act.id)) continue;
         // The answer of a thread stands in its box.
@@ -1292,11 +1312,23 @@ export const feed = part({
             indent,
             { frame: true, first: act.id, shown: act.id },
           );
-        } else if (asksOperator(act) && act.words[0] === "None") {
+        } else if (
+          (asksOperator(act) && act.words[0] === "None") ||
+          (threadsOwn.asides.has(act.id) && threadsOwn.asides.get(act.id)?.aside.aside !== "question")
+        ) {
           // A prompt of None asks nothing: the console closed it as it took it. It stands as a message of the
-          // operator stands, a panel of its color, on its first line until a click opens the whole message.
-          const message = String(act.words[1] ?? "");
-          const from = act.by === "operator" ? "" : `from ${act.by}`;
+          // operator stands, a panel of its color, on its first line until a click opens the whole message. A notice
+          // of the round, what a word of the operator told the chain, and a wake stand the same, as no thread.
+          const aside = threadsOwn.asides.get(act.id)?.aside.aside;
+          const message = aside ? this.spoken(act) : String(act.words[1] ?? "");
+          const from =
+            aside === "wake"
+              ? `wake from ${act.by}`
+              : aside === "rung"
+                ? "your word"
+                : act.by === "operator"
+                  ? ""
+                  : `from ${act.by}`;
           const opened = w.folds[act.id] === false;
           const lines = message.split("\n").filter((one) => one.trim()).length;
           const more = !opened && lines > 1 ? `+${lines - 1} ${lines === 2 ? "line" : "lines"}` : "";
@@ -1366,17 +1398,9 @@ export const feed = part({
       // A paused chain says so at the end of its feed, with the cause that its pause gave, and a button that
       // wakes it, since nothing new runs on it until then.
       if (w.paused && !w.search) {
-        // The pause says its own cause: the act that paused the chain and its error, as the fact pause carries them. Work
-        // that the last life left holds the chain until a wake runs it again, and that note is no fault, so it takes a
-        // muted tone and says what the ids mean before it lists them, since the clip of a narrow feed cuts the end.
-        const held = [...w.host.pending.keys()];
-        const acts = held.length === 1 ? "1 act" : `${held.length} acts`;
+        // The pause says its own cause: the act that paused the chain and its error, as the fact pause carries them.
         const said = w.cause ? pauseSaid(w.cause) : undefined;
-        const note =
-          !said && held.length
-            ? `${acts} ran when the last life ended, and run again at a wake: ${held.join(", ")}`
-            : undefined;
-        const failure = said?.text ?? note;
+        const failure = said?.text;
         add("paused", `paused:${failure ?? ""}:${this.theme}`, [], (box) =>
           this.banner(
             box,

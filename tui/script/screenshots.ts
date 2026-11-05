@@ -837,7 +837,9 @@ try {
   await test.flush();
   if (session.target !== thread)
     throw new Error(`The input aims at ${session.target}, not at the thread ${thread}.`);
-  await session.submit("Think until I cancel.");
+  // A line on the open thread is a message of None, over at once, so the later message that runs is a prompt of str on
+  // the thread, which its model answers in steps, and a cancel can take back.
+  await session.engine.prompt("str", { message: "Think until I cancel.", on: thread });
   await until(session, () => {
     const last = session.lastOwn;
     return Boolean(

@@ -1,11 +1,8 @@
 //! The examples of Rust in docs/examples/rust, each run as a user runs it, on a claude command line that answers from
 //! a script, so no test asks a model. `cargo test` builds the examples before it runs this test.
 #![cfg(unix)]
-#![expect(
-  clippy::disallowed_methods,
-  reason = "debt: a call that blocks: sleep, block_on or try_wait"
-)]
-#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
+#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
+#![expect(clippy::expect_used, reason = "a test blocks on its runtime and fails by a panic")]
 
 #[path = "common/pipes.rs"]
 mod pipes;
