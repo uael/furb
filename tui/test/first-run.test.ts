@@ -22,7 +22,14 @@ async function firstRun(claude?: string): Promise<{ frame: string; acts: string[
       await writeFile(join(programs, "claude"), `#!/bin/sh\n${claude}\n`);
       await chmod(join(programs, "claude"), 0o755);
     }
+    // The program furb is found as the build left it: a PATH of the system alone holds none, and the build of a runner
+    // stands in the folder of its triple.
     const env = {
+      ...Object.fromEntries(
+        ["FURB_BIN", "CARGO_TARGET_DIR", "CARGO_BUILD_TARGET"].flatMap((name) =>
+          process.env[name] === undefined ? [] : [[name, process.env[name]]],
+        ),
+      ),
       HOME: home,
       XDG_CACHE_HOME: cache,
       TMPDIR: join(home, "tmp"),
