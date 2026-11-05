@@ -19,15 +19,13 @@ fn a_text_fed_to_a_command_that_reads_no_more_is_refused_and_its_close_is_not() 
 fn an_error_of_the_wait_on_the_shell_ends_the_watch_with_that_error_not_an_exit_with_no_code() {
   use super::{Cut, watch};
   use crate::ear::runtime;
-  use crate::world::bash::group::Group;
+  use crate::world::child::spawn;
   use std::future;
 
   let outcome = runtime().block_on(async {
-    let mut command = std::process::Command::new("sh");
+    let mut command = tokio::process::Command::new("sh");
     command.arg("-c").arg("sleep 5");
-    let lead = crate::world::bash::group::grouped(&mut command).unwrap();
-    let child = tokio::process::Command::from(command).spawn().unwrap();
-    let mut group = Group::of(&child, lead).unwrap();
+    let (_child, mut group) = spawn(&mut command).unwrap();
     let shell = runtime().spawn(async { Err(std::io::Error::other("wait broke")) });
     let got = watch(
       shell,

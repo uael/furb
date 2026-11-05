@@ -1,16 +1,39 @@
-//! The group of the processes of a command, which ends together.
+//! A child process of a life, in a group of its own that ends with it, and the task that reaps it.
 
-use std::process::Command;
+use tokio::{
+  process::{Child, Command},
+  task::JoinHandle,
+};
 
-use tokio::process::Child;
+use crate::ear::runtime;
 
 /// What a command joins before it starts: on Unix the group that the watch of [`watched`] leads,
 /// so the group is watched before the command runs a word, and on Windows nothing.
-pub(crate) struct Lead {
+struct Lead {
   #[cfg(unix)]
   watch: rustix::process::Pid,
   #[cfg(unix)]
   lifeline: std::io::PipeWriter,
+}
+
+/// A child of this command, started on the runtime of the World in a group of its own, and that
+/// group, or why it did not start. A child that started and that the group could not hold is ended,
+/// and reaped.
+pub(crate) fn spawn(command: &mut Command) -> std::io::Result<(Child, Group)> {
+  let _inside = runtime().enter();
+  let lead = grouped(command.as_std_mut())?;
+  let mut child = command.spawn()?;
+  match Group::of(&child, lead) {
+    Ok(group) => Ok((child, group)),
+    Err(no) => {
+      let ended = match child.start_kill() {
+        Ok(()) => String::new(),
+        Err(late) => format!(", and it could not be ended: {late}"),
+      };
+      drop(reaped(child));
+      Err(std::io::Error::other(format!("it could not be held: {no}{ended}")))
+    }
+  }
 }
 
 /// The command set to join a group of its own, which a watch leads on Unix, or on Windows set to
@@ -19,7 +42,7 @@ pub(crate) struct Lead {
   windows,
   expect(clippy::unnecessary_wraps, reason = "only a watch of Unix can fail to start")
 )]
-pub(crate) fn grouped(command: &mut Command) -> std::io::Result<Lead> {
+fn grouped(command: &mut std::process::Command) -> std::io::Result<Lead> {
   #[cfg(unix)]
   {
     use std::os::unix::process::CommandExt;
@@ -38,28 +61,26 @@ pub(crate) fn grouped(command: &mut Command) -> std::io::Result<Lead> {
 
 /// The watch of a new group: a sh that leads it and reads one line from a pipe that this process
 /// alone writes. A line lets the group go. The end of the pipe with no line, as when this process
-/// dies by a signal and runs no drop, ends every process of the group, so no command outlives the
-/// life that runs it.
+/// dies by a signal and runs no drop, ends every process of the group, so no child outlives the
+/// life that runs it. Tokio reaps the watch once it ends, on the runtime that [`spawn`] entered.
 #[cfg(unix)]
 fn watched() -> std::io::Result<(rustix::process::Pid, std::io::PipeWriter)> {
   let (read, write) = std::io::pipe()?;
-  let mut watch = tokio::process::Command::new("/bin/sh");
+  let mut watch = Command::new("/bin/sh");
   watch.args(["-c", "read -r line || kill -KILL 0"]).process_group(0);
   watch.stdin(read).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
-  // Tokio reaps the watch once it ends, on the runtime of the World, with no wait here.
-  let _inside = crate::ear::runtime().enter();
   let child = watch.spawn()?;
   let pid = child.id().and_then(|pid| i32::try_from(pid).ok());
   let watch = pid.and_then(rustix::process::Pid::from_raw);
   Ok((watch.ok_or_else(|| std::io::Error::other("the watch of the group is gone"))?, write))
 }
 
-/// Every process a command started: on Unix the process group it leads, and on Windows, where a
-/// shell of Git does not keep the tree of its processes, a job that holds the command and every
+/// Every process a child started: on Unix the process group it leads, and on Windows, where a
+/// shell of Git does not keep the tree of its processes, a job that holds the child and every
 /// process it starts.
 ///
-/// Every process of it ends when the group goes before the command is over: at a stop, or at the
-/// end of the ear.
+/// Every process of it ends when the group goes before it is let go: at a stop, or at the end of
+/// the part of the World that holds it.
 pub(crate) struct Group {
   #[cfg(unix)]
   leader: Option<rustix::process::Pid>,
@@ -72,8 +93,8 @@ pub(crate) struct Group {
 }
 
 impl Group {
-  /// The group of a command that just started in the group of its lead. On Windows the job takes
-  /// the command before its shell has read a word, since the shell starts slower than the job takes
+  /// The group of a child that just started in the group of its lead. On Windows the job takes
+  /// the child before its shell has read a word, since the shell starts slower than the job takes
   /// it, and it ends every process it holds when it closes.
   #[cfg_attr(
     windows,
@@ -82,8 +103,8 @@ impl Group {
       reason = "the lead of Unix moves its watch into the group"
     )
   )]
-  pub(crate) fn of(child: &Child, lead: Lead) -> std::io::Result<Self> {
-    let gone = || std::io::Error::other("the command is over already");
+  fn of(child: &Child, lead: Lead) -> std::io::Result<Self> {
+    let gone = || std::io::Error::other("the child is over already");
     #[cfg(unix)]
     {
       child.id().ok_or_else(gone)?;
@@ -103,7 +124,7 @@ impl Group {
 
   /// Every process of the group, ended, or why a signal did not reach them.
   #[cfg_attr(windows, expect(clippy::unnecessary_wraps, reason = "only a signal of Unix can fail"))]
-  pub(super) fn slay(&mut self) -> std::io::Result<()> {
+  pub(crate) fn slay(&mut self) -> std::io::Result<()> {
     #[cfg(unix)]
     if let Some(leader) = self.leader {
       match rustix::process::kill_process_group(leader, rustix::process::Signal::KILL) {
@@ -121,9 +142,9 @@ impl Group {
     Ok(())
   }
 
-  /// The group let go once the command is over, and every process of it that outlives the command
-  /// left to run.
-  pub(super) fn free(&mut self) {
+  /// The group let go once its child is over, and every process of it that outlives the child left
+  /// to run.
+  pub(crate) fn free(&mut self) {
     #[cfg(unix)]
     {
       self.leader.take();
@@ -149,6 +170,32 @@ impl Drop for Group {
   }
 }
 
+/// A child, awaited by one task of the runtime that gives its code, so it is reaped as it exits,
+/// whether its holder still waits for it or dropped before. An error of the wait is given, not read
+/// as an exit with no code.
+pub(crate) fn reaped(mut child: Child) -> JoinHandle<std::io::Result<Option<i32>>> {
+  runtime().spawn(async move { child.wait().await.map(coded) })
+}
+
+/// The code of an exit, and for a child that a signal ended, 128 and the number of the signal, as
+/// a shell gives, so no code says only that the timeout ended the command.
+fn coded(status: std::process::ExitStatus) -> Option<i32> {
+  #[cfg(unix)]
+  {
+    use std::os::unix::process::ExitStatusExt;
+    status.code().or_else(|| status.signal().map(|signal| 128 + signal))
+  }
+  #[cfg(not(unix))]
+  status.code().map(signalled)
+}
+
+/// The code of an exit of the sh of Git for Windows, which a signal ends with the number of the
+/// signal times 256, as 128 and that number, as a shell gives; and every other code as it is.
+#[cfg_attr(all(unix, not(test)), expect(dead_code, reason = "only Windows and the tests call it"))]
+fn signalled(code: i32) -> i32 {
+  if code % 256 == 0 && (1..=64).contains(&(code / 256)) { 128 + code / 256 } else { code }
+}
+
 #[cfg(test)]
-#[path = "group.test.rs"]
+#[path = "child.test.rs"]
 mod test;

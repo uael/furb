@@ -16,7 +16,7 @@ use super::{
   claude::Program,
   clients::{Client, Reach},
 };
-use crate::ear::spawned;
+use crate::{ear::spawned, world::child};
 
 /// A search of the web: given a query, the answer in Markdown with its sources, or why it gives none.
 pub type Searches = Arc<dyn Fn(String) -> BoxFuture<'static, Result<String, Error>> + Send + Sync>;
@@ -141,13 +141,8 @@ pub(super) fn claude(program: Program, model: String) -> Searches {
         "--tools",
         "WebSearch",
       ]);
-      command
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-      let mut child = command
-        .spawn()
+      command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+      let (mut child, _group) = child::spawn(&mut command)
         .map_err(|source| Error::Start { program: program.name().to_string(), source })?;
       // A command line that ends before it reads the query closes its stdin, and its exit says why.
       if let Some(mut stdin) = child.stdin.take()

@@ -31,7 +31,7 @@ use tokio::{
 use super::{config::Transport, oauth::challenged};
 use crate::{
   ear::runtime,
-  world::{Group, grouped},
+  world::child::{self, Group},
 };
 
 /// The most lines of the stderr of a process that the reason of its end quotes.
@@ -307,7 +307,8 @@ async fn dispatch(
 struct Process {
   stdin: tokio::sync::Mutex<ChildStdin>,
   tasks: Mutex<JoinSet<()>>,
-  group: Option<Group>,
+  /// The group of the server, which ends each process of it once the tasks that read it are gone.
+  _group: Group,
 }
 
 impl Process {
@@ -321,21 +322,14 @@ impl Process {
     cwd: Option<&Path>,
     inbox: Inbox,
   ) -> Result<Process, Failure> {
-    let mut made = std::process::Command::new(command);
+    let mut made = tokio::process::Command::new(command);
     made.args(args).envs(env.iter().map(|(name, value)| (name, value)));
     if let Some(cwd) = cwd {
       made.current_dir(cwd);
     }
     made.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
-    let lead = grouped(&mut made).ok();
-    let mut spawning = tokio::process::Command::from(made);
-    spawning.kill_on_drop(true);
-    let mut child = {
-      let runtime = runtime();
-      let _inside = runtime.enter();
-      spawning.spawn().map_err(|no| Failure::Broken(format!("{command} did not start: {no}")))?
-    };
-    let group = lead.and_then(|lead| Group::of(&child, lead).ok());
+    let (mut child, group) = child::spawn(&mut made)
+      .map_err(|no| Failure::Broken(format!("{command} did not start: {no}")))?;
     let (Some(stdin), Some(stdout), Some(stderr)) =
       (child.stdin.take(), child.stdout.take(), child.stderr.take())
     else {
@@ -343,7 +337,7 @@ impl Process {
     };
     let mut tasks = JoinSet::new();
     tasks.spawn_on(ended(child, stdout, stderr, inbox), &runtime());
-    Ok(Process { stdin: tokio::sync::Mutex::new(stdin), tasks: Mutex::new(tasks), group })
+    Ok(Process { stdin: tokio::sync::Mutex::new(stdin), tasks: Mutex::new(tasks), _group: group })
   }
 
   async fn send(&self, message: Value) -> Result<(), Failure> {
@@ -360,7 +354,6 @@ impl Process {
 impl Drop for Process {
   fn drop(&mut self) {
     locked(&self.tasks).abort_all();
-    self.group.take();
   }
 }
 

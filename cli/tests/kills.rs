@@ -481,6 +481,17 @@ mod kills {
   }
 
   #[tokio::test]
+  async fn a_daemon_killed_leaves_no_process_that_the_command_line_of_a_model_started() {
+    let (yard, mut lifeline, daemon, mut window) = begun().await;
+    fs::write(yard.fake("orphan"), "").unwrap();
+    fs::write(yard.fake("hold"), "asked").unwrap();
+    window.prompt("HOLD the reply").await;
+    lifeline.heard("held").await;
+    daemon.killed(libc::SIGKILL).await;
+    lifeline.ended().await;
+  }
+
+  #[tokio::test]
   async fn a_daemon_killed_while_a_reply_streams_answers_it_once_after() {
     for signal in SIGNALS {
       let (yard, lifeline, daemon, mut window) = begun().await;

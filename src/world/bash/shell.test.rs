@@ -11,7 +11,7 @@ use std::time::Duration;
 
 #[cfg(unix)]
 use super::asked_path;
-use super::{git_sh, merged_path, signalled};
+use super::{git_sh, merged_path};
 
 /// A program at a path, which this machine runs.
 fn made(at: &std::path::Path) {
@@ -48,16 +48,6 @@ fn the_sh_of_git_is_the_sh_on_path_else_the_one_beside_the_git_on_path_else_the_
   );
   made(&cmd.join("sh"));
   assert_eq!(git_sh(std::slice::from_ref(&cmd), Some(programs)), Some(cmd.join("sh")));
-}
-
-#[test]
-fn a_signal_that_ends_the_sh_of_git_gives_128_and_the_number_of_the_signal() {
-  assert_eq!(signalled(9 * 256), 137);
-  assert_eq!(signalled(15 * 256), 143);
-  assert_eq!(signalled(0), 0);
-  assert_eq!(signalled(1), 1);
-  assert_eq!(signalled(65 * 256), 65 * 256);
-  assert_eq!(signalled(259), 259);
 }
 
 #[cfg(unix)]

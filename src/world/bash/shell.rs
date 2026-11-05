@@ -16,10 +16,12 @@ use std::{
   time::Duration,
 };
 
-use tokio::{process::Child, task::JoinHandle};
+use tokio::process::Child;
 
-use super::group::{Group, grouped};
-use crate::{ear::runtime, value::Fault};
+use crate::{
+  value::Fault,
+  world::child::{self, Group},
+};
 
 /// The POSIX sh that runs a command: `/bin/sh`, and on Windows, which has none of its own, the sh
 /// of Git for Windows, which [`git_sh`] finds, or `sh` when it finds none, which a command then
@@ -70,15 +72,14 @@ async fn asked_path(shell: &Path, limit: Duration) -> Option<OsString> {
   ));
   let stdout = fs::OpenOptions::new().write(true).create_new(true).open(&file).ok()?;
   let ran = async {
-    let mut child = tokio::process::Command::new(shell)
-      .args(["-l", "-c", "printf '<furb-path>%s</furb-path>' \"$PATH\""])
-      .stdin(Stdio::null())
-      .stdout(stdout)
-      .stderr(Stdio::null())
-      .kill_on_drop(true)
-      .spawn()
-      .ok()?;
-    child.wait().await.ok()
+    let mut command = tokio::process::Command::new(shell);
+    command.args(["-l", "-c", "printf '<furb-path>%s</furb-path>' \"$PATH\""]);
+    command.stdin(Stdio::null()).stdout(stdout).stderr(Stdio::null());
+    let (mut child, mut group) = child::spawn(&mut command).ok()?;
+    let status = child.wait().await.ok();
+    // A process that the profile left in the background stays, as it would in a terminal.
+    group.free();
+    status
   };
   let status = tokio::time::timeout(limit, ran).await.ok().flatten();
   let said = fs::read(&file);
@@ -137,60 +138,22 @@ fn runs(path: &Path) -> bool {
 /// The shell of a command spawned with the PATH of the login shell of the user, and the group of
 /// its processes, or why the machine would not start it or hold it.
 pub(super) async fn spawned(
-  mut command: Command,
+  command: Command,
   shown: &str,
   dir: &Path,
 ) -> Result<(Child, Group), Fault> {
+  let mut command = tokio::process::Command::from(command);
   if let Some(login) = login_path().await {
     command.env("PATH", merged_path(login, &env::var_os("PATH").unwrap_or_default()));
   }
-  let lead = grouped(&mut command)
-    .map_err(|no| Fault::refused(format!("{shown} could not be held: {no}: {}", dir.display())))?;
-  let mut child = tokio::process::Command::from(command).spawn().map_err(|no| {
+  child::spawn(&mut command).map_err(|no| {
     let why = if cfg!(windows) && no.kind() == ErrorKind::NotFound {
       format!("no POSIX sh runs it: install Git for Windows, whose sh furb runs: {no}")
     } else {
       no.to_string()
     };
     Fault::refused(format!("{shown} did not start: {why}: {}", dir.display()))
-  })?;
-  match Group::of(&child, lead) {
-    Ok(group) => Ok((child, group)),
-    Err(no) => {
-      let ended = match child.start_kill() {
-        Ok(()) => String::new(),
-        Err(late) => format!(", and it could not be ended: {late}"),
-      };
-      drop(reaped(child));
-      Err(Fault::refused(format!("{shown} could not be held: {no}{ended}")))
-    }
-  }
-}
-
-/// The shell of a command, awaited by one task of the runtime that gives its code, so the shell
-/// is reaped as it exits, whether the command still waits for it or dropped before. An error of the
-/// wait is given, not read as an exit with no code.
-pub(super) fn reaped(mut child: Child) -> JoinHandle<std::io::Result<Option<i32>>> {
-  runtime().spawn(async move { child.wait().await.map(coded) })
-}
-
-/// The code of an exit, and for a command that a signal ended, 128 and the number of the signal, as
-/// a shell gives, so no code says only that the timeout ended the command.
-fn coded(status: std::process::ExitStatus) -> Option<i32> {
-  #[cfg(unix)]
-  {
-    use std::os::unix::process::ExitStatusExt;
-    status.code().or_else(|| status.signal().map(|signal| 128 + signal))
-  }
-  #[cfg(not(unix))]
-  status.code().map(signalled)
-}
-
-/// The code of an exit of the sh of Git for Windows, which a signal ends with the number of the
-/// signal times 256, as 128 and that number, as a shell gives; and every other code as it is.
-#[cfg_attr(all(unix, not(test)), expect(dead_code, reason = "only Windows and the tests call it"))]
-fn signalled(code: i32) -> i32 {
-  if code % 256 == 0 && (1..=64).contains(&(code / 256)) { 128 + code / 256 } else { code }
+  })
 }
 
 #[cfg(test)]

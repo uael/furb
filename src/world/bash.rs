@@ -2,7 +2,6 @@
 //! it writes as it writes it, and ends at its exit, at its timeout, or at the done that a control
 //! said of it first.
 
-mod group;
 mod kept;
 mod shell;
 
@@ -29,15 +28,18 @@ use tokio::{
 };
 use unsync::spsc;
 
-pub(crate) use self::group::{Group, grouped};
 #[cfg(test)]
 pub(super) use self::kept::whole;
 pub use self::shell::{program, shell};
 use self::{
   kept::{HEAD, Kept, Stream, TAIL, Unread, read},
-  shell::{reaped, spawned},
+  shell::spawned,
 };
-use super::{Scratch, here, interrupted};
+use super::{
+  Scratch,
+  child::{Group, reaped},
+  here, interrupted,
+};
 use crate::{
   ear::{Co, Ear, Next, hearing, say},
   fact::{Fact, named},

@@ -31,7 +31,7 @@ use tokio::{process::Command, sync::mpsc};
 use futures::StreamExt;
 
 use super::{Model, ended, search, uuid};
-use crate::ear::runtime;
+use crate::{ear::runtime, world::child};
 
 mod accounts;
 mod conversation;
@@ -346,9 +346,9 @@ impl Program {
       .args(["auth", "status"])
       .stdin(std::process::Stdio::null())
       .stdout(std::process::Stdio::piped())
-      .stderr(std::process::Stdio::piped())
-      .kill_on_drop(true);
-    let asked = tokio::time::timeout(Duration::from_secs(10), command.output()).await;
+      .stderr(std::process::Stdio::piped());
+    let Ok((child, _group)) = child::spawn(&mut command) else { return true };
+    let asked = tokio::time::timeout(Duration::from_secs(10), child.wait_with_output()).await;
     let Ok(Ok(out)) = asked else { return true };
     let said = String::from_utf8_lossy(&out.stdout);
     let logged =
