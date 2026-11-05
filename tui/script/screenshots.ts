@@ -594,7 +594,6 @@ try {
   );
   await capture("28-workspace-tree");
   // The sidebar with the release shown, with a session of another workspace shown, and with the keys in it.
-  await capture("110-sidebar");
   const away = entries["Offline mode"];
   if (away?.session) {
     await library.select(away);

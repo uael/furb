@@ -56,7 +56,7 @@ life of furb, with 23 chains, 21 of them at work, and ladders of up to 76 rungs.
 holds it, with no key and no path of a home in it, and `bun run demo` opens it beside the scripted life.
 
 The sidebar shows the workspaces as one tree. Each workspace is one row, with the marks of what needs a look in it: ◆
-for a question that waits, ✗ for a session that failed, ◌ for a pause, ◉ for work, and ● for a finished session that
+for a question that waits, ✗ for a session that failed, ◌ for a pause, and ● for a finished session that
 you did not see. The workspace shown is open, with its sessions, and under the session shown stand its threads, one row
 for each. A row of a thread holds its title, and at its right why it needs a look and how long ago it last changed, as
 `5m`. A line on top says how many questions wait for you in all the workspaces, or that nothing waits, and ⌥A goes to
@@ -83,7 +83,7 @@ the footer, as ^P commands and F1 help, stand under it, on the row of the footer
 corner stands in the footer. On a narrow terminal, or with the sidebar hidden, the context folds into a short line of
 the footer, as `8% · $0.16`, and the keys stay there.
 
-![The sidebar](screenshots/110-sidebar.png)
+![The sidebar](screenshots/28-workspace-tree.png)
 
 The feed shows the threads of the chain, each as one box. A thread is a prompt: its message heads the box as markdown,
 with a line at its left in the color of the thread, which starts half a row above the message and ends half a row under
