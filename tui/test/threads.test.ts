@@ -121,6 +121,57 @@ test("a thread resolves from its card, and a message to it opens it again", () =
     true,
   ));
 
+// The life of 11-05 showed a prompt of the operator closed as "resolved" that nobody resolved. The sidebar orders the open
+// threads by the time of their last message, so a message moves a thread under a still pointer, and a release that
+// fell on the Resolve link that the redraw put there took it as a click on it.
+test("a redraw that puts Resolve under a still pointer between the press and the release resolves nothing", () =>
+  composing(
+    async (use) => {
+      const { session, screen, frame } = use;
+      await idle(session);
+      const root = session.engine.root;
+      await session.engine.pause(root);
+      const id = await session.engine.prompt("str", { message: "Hold this thread open", on: root });
+      await session.refresh();
+      await until(session, () => listed(session).some((one) => one.act.id === id));
+      await railClick(use, "Hold this thread open");
+      await until(session, () => session.thread === id);
+      const other = await session.engine.prompt("str", { message: "Another thread", on: root });
+      await session.refresh();
+      await until(session, () => listed(session).some((one) => one.act.id === other));
+      const left = size.width - session.preferences.sidebarWidth;
+      const before = rail(session, await frame());
+      const x = (before.find((line) => line.includes("✓ Resolve")) ?? "").indexOf("Resolve");
+      // The press lands on the row of the other thread, which stands under the thread held open.
+      const y = before.findIndex((line) => line.includes("Another thread")) + 1;
+      expect(before[y]).toContain("paused");
+      expect(before[y]?.[x]).toBe(" ");
+      await screen.mockMouse.pressDown(left + x, y);
+      // A message moves the thread held open last, and its Resolve comes under the pointer, which did not move.
+      await session.submit("One more word on it");
+      await until(
+        session,
+        () => (listed(session).find((one) => one.act.id === id)?.messages.length ?? 0) > 0,
+      );
+      let after = before;
+      for (let step = 0; step < 40 && !after[y]?.includes("Resolve"); step++) {
+        await Bun.sleep(25);
+        after = rail(session, await frame());
+      }
+      expect(after[y]?.slice(x, x + "Resolve".length)).toBe("Resolve");
+      await screen.mockMouse.release(left + x, y);
+      await frame();
+      await Bun.sleep(300);
+      expect(listed(session).find((one) => one.act.id === id)?.resolved).toBe(false);
+      // A press and a release on Resolve itself still resolve the thread.
+      await railClick(use, " Resolve ");
+      await until(session, () => listed(session).find((one) => one.act.id === id)?.resolved === true);
+      expect(await session.engine.result(id)).toBe("resolved");
+    },
+    size,
+    true,
+  ));
+
 test("a line on an open thread is a message of None, over at once, and a line on a resolved thread is a prompt of str", () =>
   composing(
     async ({ session }) => {

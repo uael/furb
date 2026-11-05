@@ -120,6 +120,17 @@ const bounds = [
   ...inputBound,
 ] as const;
 
+/** What a node shows: the text of a text, and else the faces of what it holds, so that a node drawn again is known
+ * from another one at its place. */
+function face(node: Renderable | null): string {
+  if (!node) return "";
+  if (node instanceof TextRenderable) return node.plainText;
+  return node
+    .getChildren()
+    .map((one) => face(one as Renderable))
+    .join("\u0000");
+}
+
 export class App {
   /** Binds the old arrow functions of the class, which the parts hold as methods, before a field reads one. */
   readonly bound = bindAll(this, bounds);
@@ -324,9 +335,9 @@ export class App {
   readonly paneKeys = new WeakMap<Renderable, string>();
   /** The node that the last press of a button reached. */
   pressed: Renderable | null = null;
-  /** Where the last press was, so that a click still counts when the view drew its node again between the press and
-   * the release. */
-  pressedAt?: { x: number; y: number };
+  /** Where the last press was, and the face of the node it reached, so that a click still counts when the view drew
+   * that node again between the press and the release, and never when it drew another control in its place. */
+  pressedAt?: { x: number; y: number; face: string };
   readonly cards = new Map<
     string,
     {
@@ -437,7 +448,7 @@ export class App {
       // Every press reaches the root, which keeps what it pressed for the release that makes it a click.
       onMouseDown: (event) => {
         this.pressed = event.target;
-        this.pressedAt = { x: event.x, y: event.y };
+        this.pressedAt = { x: event.x, y: event.y, face: face(event.target) };
       },
     });
     renderer.root.add(this.root);
@@ -814,11 +825,17 @@ export class App {
   /** A handler of the release of the left button that runs only for a click: a press and a release on one node that
    * selected no text between them. A drag over a button selects its text and does nothing else, and the release of
    * a press that opened a dialog does not close it. A node that the view drew again between the press and the
-   * release is the same node when the pointer did not move. */
+   * release is the same node when the pointer did not move and the node under it shows what the pressed one showed:
+   * a redraw that moves another control under a still pointer, as Resolve in place of the row pressed, takes no
+   * click, since the operator never pressed it. */
   click(run: (event: MouseEvent) => void): (event: MouseEvent) => void {
     return (event) => {
+      const at = this.pressedAt;
       const redrawn =
-        Boolean(this.pressed?.isDestroyed) && event.x === this.pressedAt?.x && event.y === this.pressedAt?.y;
+        Boolean(this.pressed?.isDestroyed) &&
+        event.x === at?.x &&
+        event.y === at.y &&
+        face(event.target) === at.face;
       if (
         event.button !== 0 ||
         (event.target !== this.pressed && !redrawn) ||

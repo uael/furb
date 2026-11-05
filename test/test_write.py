@@ -231,7 +231,7 @@ async def test_the_world_refuses_a_write_of_a_path_whose_first_part_is_the_name_
   """The World refuses a write of a path whose first part is the name of an act, and writes no file, since that path is a door that no ear of the engine served, and the refusal names the chain of that act."""
   live, root = machine(tmp_path)
   away = engine.chain("away")
-  asked = engine.wait(60.0, on=away)
+  asked = engine.wait(60.0, away, on=away)
   with pytest.raises(Refused) as one:
     engine.write(Text(asked, "x\n"), on=root)
   live.end()

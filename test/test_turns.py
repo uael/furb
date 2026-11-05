@@ -175,7 +175,7 @@ async def test_the_turns_end_with_a_user_turn() -> None:
   """The turns end with a user turn, empty when nothing was told since the last answer."""
   sand, _, root = born()
   assert engine.turns(on=root)[-1][0] == "user"
-  sand.script[root] = ["await wait(9)\nclose(1)"]
+  sand.script[root] = ["await wait(9, __name__)\nclose(1)"]
   act = engine.prompt(int, "wait", on=root)
   await settle()
   got = engine.turns(on=root)

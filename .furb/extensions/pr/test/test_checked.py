@@ -43,6 +43,8 @@ class World:
     ns: dict = {
       "bash": self.bash,
       "wait": self.wait,
+      "scope": lambda name: "chain1",
+      "acting": lambda: "rung1",
       "clock": lambda: self.now,
       "Exit": Exit,
       "Refused": Refused,
@@ -73,7 +75,8 @@ class World:
       env = {**os.environ, "PATH": folder + os.pathsep + os.environ["PATH"], "LOG": str(Path(folder, "log"))}
       return subprocess.run(["sh", "-c", command], env=env, capture_output=True, text=True, check=True).stdout
 
-  async def wait(self, seconds: float) -> None:
+  async def wait(self, seconds: float, *acts: str) -> None:
+    assert acts == ("chain1",)
     self.waits.append(seconds)
     self.now += seconds
 

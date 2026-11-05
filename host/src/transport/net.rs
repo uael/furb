@@ -26,8 +26,7 @@ use hyper::{
 use hyper_util::rt::TokioIo;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::{
-  fs,
-  io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf},
+  io::{AsyncRead, AsyncWrite, ReadBuf},
   net::{TcpListener, TcpStream},
 };
 use tokio_tungstenite::{
@@ -344,8 +343,8 @@ impl Identity for Tailscale {
 /// The door of the windows of this machine: WebSocket on loopback, since a web view reaches no
 /// socket and no pipe. A page of any origin reaches loopback too, so the door lets in only a peer
 /// that gives the token of the daemon in its query. Only the user reads the token, in the file of
-/// the folder of the daemon that [`Door::open`] writes, and a peer that gives it is the user, who
-/// writes.
+/// the folder of the daemon that [`Door::open`] makes and writes, under the mode 0600 of Unix or
+/// the access list of Windows, and a peer that gives it is the user, who writes.
 pub(crate) struct Door {
   listener: TcpListener,
   ticket: Ticket,
@@ -374,7 +373,10 @@ impl Door {
     getrandom::fill(&mut drawn).map_err(TransportError::Random)?;
     let token = URL_SAFE_NO_PAD.encode(drawn);
     let url = format!("ws://{at}/?token={token}");
-    written(file, &serde_json::to_vec(&Said { url: &url })?)
+    if let Some(folder) = file.parent().filter(|folder| !folder.as_os_str().is_empty()) {
+      super::local::guarded(folder)?;
+    }
+    written(file, serde_json::to_vec(&Said { url: &url })?)
       .await
       .map_err(|source| TransportError::Door { file: file.to_owned(), source })?;
     let ticket = Ticket { token: token.into(), login: super::local::own()?.into() };
@@ -422,17 +424,17 @@ fn same(one: &[u8], other: &[u8]) -> bool {
   one.len() == other.len() && one.iter().zip(other).fold(0, |differ, (a, b)| differ | (a ^ b)) == 0
 }
 
-/// A file written whole or not at all, which only the user reads: a reader never sees a part.
-async fn written(file: &Path, bytes: &[u8]) -> io::Result<()> {
+/// A file written whole or not at all, which only the user reads: a reader never sees a part. Its
+/// draft is new each time, so the mode of Unix or the access list of Windows that it gets at its
+/// creation is the one that it keeps, whatever stood at its place.
+async fn written(file: &Path, bytes: Vec<u8>) -> io::Result<()> {
+  let file = file.to_owned();
   let draft = file.with_extension("draft");
-  let mut options = fs::OpenOptions::new();
-  options.write(true).create(true).truncate(true);
-  #[cfg(unix)]
-  options.mode(0o600);
-  let mut out = options.open(&draft).await?;
-  out.write_all(bytes).await?;
-  out.sync_all().await?;
-  fs::rename(&draft, file).await
+  let wrote = tokio::task::spawn_blocking(move || {
+    super::local::private(&draft, &bytes)?;
+    std::fs::rename(&draft, &file)
+  });
+  wrote.await.map_err(io::Error::other)?
 }
 
 #[cfg(test)]

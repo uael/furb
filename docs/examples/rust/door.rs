@@ -13,7 +13,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
   life.step(&release).await?;
   let plan = life.plan(&release)?;
   println!("{plan}");
-  life.edit(&release, &plan.replace("await wait(3600)\n", ""))?;
+  life.edit(&release, &plan.replace("await wait(3600, __name__)\n", ""))?;
   println!("{}", life.wait(release).await?);
   Ok(())
 }

@@ -10,7 +10,7 @@ k = [1, 'x', {2: (3,)}]
 gone = iter([1])
 shell = bash('echo one')
 asked = prompt(str, 'Which?', to=OPERATOR)
-later = wait(600)"""
+later = wait(600, asked)"""
 """A word of the root that binds a definition, a plain value, a value that is not plain, a command, an open prompt and
 a wait that is not over."""
 
@@ -21,7 +21,7 @@ async def gather() -> tuple[str, dict]:
   _, _, root = born()
   await engine.rung(WORD, on=root)
   await engine.rung("await shell", on=root)
-  engine.rung("await wait(600)", on=root)
+  engine.rung("await wait(600, asked)", on=root)
   await settle()
   return root, engine.gathered(lambda word: word, {"wait": 9})
 
@@ -61,7 +61,7 @@ async def test_chains_holds_the_root_the_chain_of_each_open_prompt_and_each_chai
   assert one["values"]["k"] == "[1, 'x', {2: (3,)}]"
   assert one["values"]["shell"] == f"Act({value(root, 'shell')!r})"
   assert "gone" in one["lost"]
-  [run] = [x[1] for x in engine.transcript(root, "run") if not engine.over(x[1]) and x[5] == "await wait(600)"]
+  [run] = [x[1] for x in engine.transcript(root, "run") if not engine.over(x[1]) and x[5] == "await wait(600, asked)"]
   assert one["cut"] == [run, value(root, "later")] and "again" not in one
   assert {"bash", "prompt", "tell"} <= {x[0] for x in one["turns"]}
 
