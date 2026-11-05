@@ -5,8 +5,7 @@
 
 use std::{
   collections::{HashMap, HashSet},
-  fs::{self, OpenOptions},
-  io::{self, ErrorKind, Write},
+  fs, io,
   path::{Path, PathBuf},
   time::SystemTime,
 };
@@ -14,6 +13,8 @@ use std::{
 use base64::{Engine, engine::general_purpose::STANDARD};
 use rig_core::message::{ImageMediaType, MimeType, UserContent};
 use sha2::{Digest, Sha256};
+
+use crate::world::disk::{self, Access};
 
 /// The most bytes an image holds: 20 MiB.
 const LARGEST: u64 = 20 * 1024 * 1024;
@@ -102,15 +103,11 @@ pub fn keep(directory: &Path, bytes: &[u8]) -> Result<(String, &'static str), Er
   }
   let (media, extension) = kind(bytes)?;
   let file = format!("{}.{extension}", digest(bytes));
-  fs::create_dir_all(directory)?;
-  let mut options = OpenOptions::new();
-  options.write(true).create_new(true);
-  #[cfg(unix)]
-  std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-  match options.open(directory.join(&file)) {
-    Ok(mut kept) => kept.write_all(bytes)?,
-    Err(no) if no.kind() == ErrorKind::AlreadyExists => {}
-    Err(no) => return Err(no.into()),
+  let at = directory.join(&file);
+  // An image is named by the digest of its bytes, and lands whole, so a file that stands under that
+  // name is that image.
+  if !at.exists() {
+    disk::write(&at, bytes, Access::Owner).map_err(|no| no.source)?;
   }
   Ok((format!("{SCHEME}{file}"), media))
 }

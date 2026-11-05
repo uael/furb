@@ -15,7 +15,6 @@
 //! this ear for a reply, which it takes only at a yield.
 
 mod answer;
-pub(crate) mod atomic;
 pub mod catalog;
 pub mod claude;
 mod clients;

@@ -57,7 +57,10 @@ use super::{
   local::{self, ENV_URL, Heard, LOCAL, Server},
   search,
 };
-use crate::world::cache;
+use crate::world::{
+  cache,
+  disk::{self, Access},
+};
 
 /// The levels of effort, from least to most, which an actor names after its model, as `claude-cli:opus/low`.
 pub const LEVELS: [&str; 7] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
@@ -103,8 +106,7 @@ fn doctrine_place(directory: &Path, checkout: Option<&Path>, home: Option<&Path>
 /// The official copy of the doctrine, written from [`DOCTRINE`] when that file holds another text.
 fn write_official(official: &Path) -> Option<()> {
   if fs::read_to_string(official).ok().as_deref() != Some(DOCTRINE) {
-    fs::create_dir_all(official.parent()?).ok()?;
-    fs::write(official, DOCTRINE).ok()?;
+    disk::write(official, DOCTRINE.as_bytes(), Access::Shared).ok()?;
   }
   Some(())
 }

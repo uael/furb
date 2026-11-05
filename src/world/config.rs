@@ -15,7 +15,7 @@ use serde_json::{Map, Value};
 
 use super::{
   Catalog, catalog,
-  provider::atomic::{self, Access},
+  disk::{self, Access},
 };
 use crate::extension::{Places, configs};
 
@@ -68,11 +68,11 @@ pub enum Error {
   #[error("The {name} of the config at {} is no object, so it holds no key", path.display())]
   Within { path: PathBuf, name: String },
   #[error(transparent)]
-  Write(#[from] atomic::Error),
+  Write(#[from] disk::Error),
   #[error("The change was not kept: {0}")]
   Refused(#[source] catalog::Error),
   #[error("The change was not kept: {refused}, and its config was not put back: {source}")]
-  Restore { refused: catalog::Error, source: atomic::Error },
+  Restore { refused: catalog::Error, source: disk::Error },
 }
 
 /// The three configs of a project, under the config directory of a user.
@@ -126,7 +126,7 @@ impl Layers {
     let mut text = serde_json::to_vec_pretty(&config)
       .map_err(|source| Error::Parse { path: path.clone(), source })?;
     text.push(b'\n');
-    atomic::write(&path, &text, Access::Owner)?;
+    disk::write(&path, &text, Access::Owner)?;
     let configured = Catalog::loaded().await.configure(&self.project, Some(&self.user)).await;
     let Err(refused) = configured else { return Ok(()) };
     match restored(&path, before.as_deref()) {
@@ -182,12 +182,10 @@ fn changed(
 }
 
 /// A config put back as its text was, or taken away when it was not on the disk.
-fn restored(path: &Path, before: Option<&str>) -> Result<(), atomic::Error> {
+fn restored(path: &Path, before: Option<&str>) -> Result<(), disk::Error> {
   match before {
-    Some(text) => atomic::write(path, text.as_bytes(), Access::Owner),
-    None => {
-      fs::remove_file(path).map_err(|source| atomic::Error::Write { path: path.to_owned(), source })
-    }
+    Some(text) => disk::write(path, text.as_bytes(), Access::Owner),
+    None => fs::remove_file(path).map_err(|source| disk::Error { path: path.to_owned(), source }),
   }
 }
 

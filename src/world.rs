@@ -19,6 +19,7 @@
 mod bash;
 mod child;
 pub mod config;
+mod disk;
 mod fetch;
 pub(crate) mod files;
 mod log;

@@ -26,10 +26,8 @@ use crate::{
   ear::{reactor, runtime},
   world::{
     cache,
-    provider::{
-      atomic::{self, Access},
-      numbers,
-    },
+    disk::{self, Access},
+    provider::numbers,
   },
 };
 
@@ -102,7 +100,7 @@ enum Error {
   #[error("the status is not JSON: {source}")]
   Status { source: serde_json::Error },
   #[error("{0}")]
-  Write(#[from] atomic::Error),
+  Write(#[from] disk::Error),
 }
 
 #[derive(Deserialize, Default)]
@@ -284,7 +282,7 @@ async fn get(url: &str) -> Result<String, Error> {
 }
 
 fn keep(at: &Path, text: &str) -> Result<(), Error> {
-  Ok(atomic::write(at, text.as_bytes(), Access::Shared)?)
+  Ok(disk::write(at, text.as_bytes(), Access::Shared)?)
 }
 
 async fn models_dev(dir: &Path) -> Result<(), Error> {

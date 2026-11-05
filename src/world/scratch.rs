@@ -13,6 +13,7 @@ use sha2::{Digest, Sha256};
 
 use super::{
   cache,
+  disk::{self, Access},
   files::{filed, text},
   resolved,
 };
@@ -202,10 +203,7 @@ fn put(root: &Path, path: &str, content: &str) -> io::Result<()> {
   if fs::symlink_metadata(&at).is_ok_and(|one| one.is_dir()) {
     fs::remove_dir_all(&at)?;
   }
-  if let Some(parent) = at.parent() {
-    fs::create_dir_all(parent)?;
-  }
-  fs::write(&at, content)
+  disk::write(&at, content.as_bytes(), Access::Shared).map_err(|no| no.source)
 }
 
 /// A directory that a scheme names: its place on the machine, the scheme, and how a refusal names

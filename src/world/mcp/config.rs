@@ -16,6 +16,8 @@ use std::{
 
 use serde_json::{Map, Value};
 
+use crate::world::disk::{self, Access};
+
 /// How long a call of a tool may take when its server names no `"timeout"`.
 pub(super) const CALL: Duration = Duration::from_secs(60);
 
@@ -330,13 +332,10 @@ pub(super) fn choose(places: &Places, choice: Choice, name: &str) -> Result<(), 
     }
     Choice::Approve => listed(&mut held, "approved", name, true),
   }
-  if let Some(parent) = path.parent() {
-    fs::create_dir_all(parent)
-      .map_err(|source| Error::Write { path: parent.to_owned(), source })?;
-  }
   let text = serde_json::to_string_pretty(&Value::Object(held))
     .map_err(|source| Error::Encode { path: path.clone(), source })?;
-  fs::write(&path, text + "\n").map_err(|source| Error::Write { path, source })
+  disk::write(&path, (text + "\n").as_bytes(), Access::Shared)
+    .map_err(|no| Error::Write { path: no.path, source: no.source })
 }
 
 /// Adds a name to a list of the file once, or removes it. A key that holds no list gets a new list.

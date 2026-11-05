@@ -2,14 +2,14 @@
 
 use std::{
   fmt, fs,
-  io::{self, ErrorKind, Write},
+  io::{self, ErrorKind},
   path::{Path, PathBuf},
-  sync::atomic::{AtomicU32, Ordering},
 };
 
 use super::{
   SCRATCH, Scratch,
   bash::door,
+  disk::{self, Access},
   here, images, resolved,
   scratch::{Beneath, beneath},
 };
@@ -138,73 +138,8 @@ pub(super) fn filed(at: &Path, content: String, name: impl fmt::Display) -> Resu
   if let Some(parent) = at.parent() {
     fs::create_dir_all(parent).map_err(|no| failed(&no, &name))?;
   }
-  stored(at, ended(at, content).as_bytes()).map_err(|no| failed(&no, &name))
-}
-
-/// Writes bytes to the file at a path in one step, so a crash or a failure midway leaves the old file whole and a
-/// reader sees the old bytes or the new, and never a part. The bytes go to a temporary file in the same folder, which
-/// is synced, takes the mode of the old file, and is renamed over the target. A link is resolved to its target first,
-/// so it stays a link. A file that cannot be opened for writing is refused as a plain write refuses it. Where a
-/// temporary file cannot be made, or the rename fails, as on Windows while another program holds the file open, the
-/// write is the plain write in place, which is not atomic. A hard link to the file does not see the new bytes, and a
-/// crash may leave a temporary file `.<name>.<pid>.<n>.tmp` in the folder.
-fn stored(at: &Path, bytes: &[u8]) -> io::Result<()> {
-  replace(at, bytes, Write::write_all)
-}
-
-/// `stored` with the filling of the temporary file given, so a test can make it fail midway.
-fn replace(
-  at: &Path,
-  bytes: &[u8],
-  feed: impl FnOnce(&mut fs::File, &[u8]) -> io::Result<()>,
-) -> io::Result<()> {
-  static TEMPS: AtomicU32 = AtomicU32::new(0);
-  let Some(target) = linked(at) else { return fs::write(at, bytes) };
-  let mode = match fs::metadata(&target) {
-    Ok(info) if info.is_file() => {
-      fs::OpenOptions::new().write(true).open(&target)?;
-      Some(info.permissions())
-    }
-    Err(no) if no.kind() == ErrorKind::NotFound => None,
-    _ => return fs::write(&target, bytes),
-  };
-  let Some(name) = target.file_name() else { return fs::write(&target, bytes) };
-  let temp = target.with_file_name(format!(
-    ".{}.{}.{}.tmp",
-    name.to_string_lossy(),
-    std::process::id(),
-    TEMPS.fetch_add(1, Ordering::Relaxed)
-  ));
-  let Ok(mut file) = fs::OpenOptions::new().write(true).create_new(true).open(&temp) else {
-    return fs::write(&target, bytes);
-  };
-  let done = feed(&mut file, bytes)
-    .and_then(|()| file.sync_all())
-    .and_then(|()| mode.map_or(Ok(()), |mode| file.set_permissions(mode)));
-  drop(file);
-  // A temp that stays is a hidden file of its own name, which no write reads again.
-  if let Err(no) = done {
-    fs::remove_file(&temp).unwrap_or_default();
-    return Err(no);
-  }
-  if fs::rename(&temp, &target).is_err() {
-    fs::remove_file(&temp).unwrap_or_default();
-    return fs::write(&target, bytes);
-  }
-  Ok(())
-}
-
-/// The file that a path names after its links: a link is followed to its target, each relative link from the folder
-/// that holds it, and nothing for a chain of more than 40 links, which a plain write refuses.
-fn linked(at: &Path) -> Option<PathBuf> {
-  let mut at = at.to_path_buf();
-  for _ in 0..40 {
-    match fs::read_link(&at) {
-      Ok(to) => at = at.parent().unwrap_or(Path::new("")).join(to),
-      Err(_) => return Some(at),
-    }
-  }
-  None
+  disk::write(at, ended(at, content).as_bytes(), Access::Shared)
+    .map_err(|no| failed(&no.source, &name))
 }
 
 /// Whether bytes end each of their lines with CRLF: they hold a line break, and a CR comes before each one.
