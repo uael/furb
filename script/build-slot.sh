@@ -2,7 +2,7 @@
 # Runs a command in one of the slots of builds that this machine holds, and caps its jobs of cargo. Each worktree builds
 # on its own, so with no slot the builds add up: 28 rustc processes took 13.8 GB, and the machine ran out of memory.
 # A slot is a folder of FURB_BUILD_DIR that holds the pid of its holder.
-# FURB_BUILD_SLOTS: the slots, 2. FURB_BUILD_JOBS: the cap of CARGO_BUILD_JOBS, 4. FURB_BUILD_WAIT: the seconds to
+# FURB_BUILD_SLOTS: the slots, one for each 12 GB of memory of the machine and at least 1. FURB_BUILD_JOBS: the cap of CARGO_BUILD_JOBS, 4. FURB_BUILD_WAIT: the seconds to
 # wait for a slot, 1200, and then exit 75. FURB_BUILD_POLL: the seconds between two looks at the slots, 2.
 [ $# -gt 0 ] || { echo "usage: sh script/build-slot.sh <command> [argument...]" >&2; exit 2; }
 jobs=${FURB_BUILD_JOBS:-4}
@@ -13,7 +13,15 @@ esac
 export CARGO_BUILD_JOBS=$jobs
 # A command that this script started holds its slot already, so a build inside it takes no second one.
 [ -z "${FURB_BUILD_SLOT:-}" ] || exec "$@"
-slots=${FURB_BUILD_SLOTS:-2}
+# FURB_BUILD_MEM_GB replaces the memory that the machine reports.
+memory() {
+  if [ -n "${FURB_BUILD_MEM_GB:-}" ]; then echo "$FURB_BUILD_MEM_GB"
+  elif bytes=$(sysctl -n hw.memsize 2>/dev/null); then echo $((bytes / 1073741824))
+  else echo $(($(awk '/MemTotal/ { print $2 }' /proc/meminfo 2>/dev/null || echo 0) / 1048576))
+  fi
+}
+slots=${FURB_BUILD_SLOTS:-$(($(memory) / 12))}
+[ "$slots" -ge 1 ] || slots=1
 limit=${FURB_BUILD_WAIT:-1200}
 poll=${FURB_BUILD_POLL:-2}
 dir=${FURB_BUILD_DIR:-/tmp/furb-build-slots-$(id -u)}
