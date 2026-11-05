@@ -553,3 +553,98 @@ async fn a_verb_of_the_operator_gives_the_words_of_its_act() {
   life.send(Command::End).await.unwrap();
   while events.next().await.is_some() {}
 }
+
+/// A life that keeps its record at a place, with no extension, whose model closes each request.
+fn kept(at: &Path) -> Opening {
+  Opening { record: Some(at.join("record.jsonl").display().to_string()), ..scripted(at, &[]) }
+}
+
+/// The facts of a log, in order, but each that says the record kept an entry, which the log of a
+/// record holds as its place and no reader of a later life hears.
+fn facts_of(log: &[Logged]) -> Vec<serde_json::Value> {
+  let facts = log.iter().filter_map(|one| match &*one.1 {
+    Event::Fact(fact) if fact[0] != "keep" => Some(fact.clone()),
+    _ => None,
+  });
+  facts.collect()
+}
+
+/// The facts of one birth of a life on a record: a word on its root, then each command, then its
+/// end, which keeps its checkpoint.
+async fn birth(at: &Path, word: &str, commands: Vec<Command>) -> Vec<serde_json::Value> {
+  let Ok(life) = Life::spawn(kept(at)) else { panic!("the life has no thread") };
+  let mut events = Box::pin(life.events(0));
+  let id = made(&life, rung(word)).await;
+  let mut log = until(&mut events, done(&id)).await;
+  for command in commands {
+    let sent = life.send(command).await;
+    assert!(matches!(sent, Ok(Reply::Done)), "{sent:?}");
+  }
+  assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
+  log.extend(until(&mut events, |event| matches!(event, Event::Ended(_))).await);
+  facts_of(&log)
+}
+
+/// That a later log starts with each fact of an earlier one, each as many times, with each fact
+/// that one holds more times than the other when they part.
+fn retells(later: &[serde_json::Value], earlier: &[serde_json::Value], what: &str) {
+  let counted = |facts: &[serde_json::Value]| {
+    let mut counts = std::collections::BTreeMap::<String, i64>::new();
+    for one in facts {
+      *counts.entry(one.to_string()).or_default() += 1;
+    }
+    counts
+  };
+  let (mut parted, theirs) = (counted(earlier), counted(&later[..earlier.len().min(later.len())]));
+  for (fact, n) in theirs {
+    *parted.entry(fact).or_default() -= n;
+  }
+  parted.retain(|_, n| *n != 0);
+  let parted: Vec<String> = parted.iter().map(|(fact, n)| format!("{n:+} {fact:.200}")).collect();
+  assert!(parted.is_empty(), "{what}, but for these facts, earlier less later: {parted:#?}");
+}
+
+#[tokio::test]
+async fn a_life_on_its_checkpoints_tells_each_repeated_fact_of_its_history_in_order() {
+  let at = place("repeated");
+  let (pause, wake) = (
+    || Command::Pause { id: "chain2".to_owned(), why: Some("hold".to_owned()) },
+    || Command::Wake { id: "chain2".to_owned() },
+  );
+  let word = "w = chain('w')\npause(w, 'hold'); wake(w); pause(w, 'hold'); wake(w)";
+  let first = birth(&at, word, vec![pause(), wake()]).await;
+  let second = birth(&at, "z = 0", vec![pause(), wake()]).await;
+  let third = birth(&at, "y = 1", vec![pause(), wake()]).await;
+  let controls = |facts: &[serde_json::Value]| -> Vec<(String, String)> {
+    let controls = facts.iter().filter(|one| {
+      one[1] == "chain2" && ["pause", "wake"].contains(&one[0].as_str().unwrap_or_default())
+    });
+    controls.map(|one| (one[0].to_string(), one[2].to_string())).collect()
+  };
+  let pauses =
+    |facts: &[serde_json::Value]| controls(facts).iter().filter(|one| one.0 == "\"pause\"").count();
+  assert_eq!(pauses(&first), 3, "{:?}", controls(&first));
+  // Each later birth tells first the whole history of the births before it, with each fact that
+  // repeats an earlier one, as it was told, and no fact that only a checkpoint restates.
+  retells(&second, &first, "the second birth retells the first whole");
+  assert_eq!(third[..first.len()], second[..first.len()], "each birth retells the first alike");
+  let times = |facts: &[serde_json::Value], one: &serde_json::Value| {
+    facts.iter().filter(|other| *other == one).count()
+  };
+  // The second and the third births do alike, so each adds as many occurrences of each fact of
+  // the first: a restatement told again would add more, and a repeat dropped fewer.
+  let added =
+    |later: &[serde_json::Value], earlier: &[serde_json::Value], one: &serde_json::Value| {
+      i64::try_from(times(later, one)).unwrap() - i64::try_from(times(earlier, one)).unwrap()
+    };
+  let again: Vec<String> = first
+    .iter()
+    .filter(|one| added(&third, &second, one) != added(&second, &first, one))
+    .map(|one| format!("{:.200}", one.to_string()))
+    .collect();
+  assert!(again.is_empty(), "the births add these facts unlike: {again:#?}");
+  assert_eq!(pauses(&second), 4, "{:?}", controls(&second));
+  assert_eq!(pauses(&third), 5, "{:?}", controls(&third));
+  let (later, earlier) = (controls(&third), controls(&second));
+  assert_eq!(later[..earlier.len()], earlier[..], "the pauses and wakes keep their order");
+}

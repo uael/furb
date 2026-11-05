@@ -15,7 +15,7 @@ mod daemon {
 
   use std::{
     cell::RefCell,
-    collections::{HashSet, VecDeque},
+    collections::VecDeque,
     fs::{self, File},
     path::{Path, PathBuf},
     sync::{
@@ -429,20 +429,27 @@ mod daemon {
     opened(&mut later, &at, "a.jsonl").await;
     later.attach(&life).await;
     later.ran(&life, "y = 1").await;
-    let facts: Vec<Value> = later
-      .pushed
-      .iter()
-      .filter_map(|frame| match frame {
-        Frame::Event { event: Event::Fact(fact), .. } => Some(fact.clone()),
+    let facts_of = |window: &Window| -> Vec<Value> {
+      let facts = window.pushed.iter().filter_map(|frame| match frame {
+        Frame::Event { event: Event::Fact(fact), .. } if fact[0] != "keep" => Some(fact.clone()),
         _ => None,
-      })
-      .collect();
+      });
+      facts.collect()
+    };
+    let (once, twice, facts) = (facts_of(&window), facts_of(&between), facts_of(&later));
     let about = |kind: &str| facts.iter().filter(|one| one[0] == kind && one[1] == first).count();
     let mine: Vec<&Value> = facts.iter().filter(|one| one[1] == first).collect();
     assert_eq!((about("rung"), about("done")), (1, 1), "{mine:?}");
-    let mut seen = HashSet::new();
-    let again: Vec<&Value> = facts.iter().filter(|one| !seen.insert(one.to_string())).collect();
-    assert!(again.is_empty(), "the window heard these facts twice: {again:?}");
+    // The second and the third births do alike, so each adds as many occurrences of each fact of
+    // the first: a fact that a checkpoint restates told again would add more, and a fact that
+    // repeats an earlier one, dropped, fewer.
+    let times = |facts: &[Value], one: &Value| facts.iter().filter(|other| *other == one).count();
+    let added = |later: &[Value], earlier: &[Value], one: &Value| {
+      i64::try_from(times(later, one)).unwrap() - i64::try_from(times(earlier, one)).unwrap()
+    };
+    let unlike = |one: &&Value| added(&facts, &twice, one) != added(&twice, &once, one);
+    let again: Vec<&Value> = once.iter().filter(unlike).collect();
+    assert!(again.is_empty(), "the births add these facts unlike: {again:?}");
   }
 
   #[tokio::test]

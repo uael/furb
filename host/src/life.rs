@@ -228,39 +228,55 @@ impl Life {
     }
   }
 
-  /// What an open told, less each fact that the log told before it: an open after a rebirth says
-  /// again each fact that the checkpoint restates, which each reader already heard.
+  /// What an open told, less each fact of its opening that restates one that the log told before
+  /// it: an open on a checkpoint says again what the checkpoint restates, which each reader
+  /// already heard, then goes on with facts of its own, which the log tells whole.
   fn opened(&mut self) {
     let mut told = Vec::new();
     while let Ok(event) = self.heard.try_recv() {
       told.push(event);
     }
-    let heard =
-      |event: &Event| matches!(event, Event::Fact(fact) if self.facts.contains(&digest(fact)));
-    let told: Vec<Event> = told.into_iter().filter(|event| !heard(event)).collect();
+    let mut opening = true;
     for event in told {
-      self.told(Some(event));
+      if !matches!(&event, Event::Fact(fact) if self.restates(&mut opening, fact)) {
+        self.told(Some(event));
+      }
     }
   }
 
-  /// The facts of a record before its last checkpoint, told first: the life boots on that
-  /// checkpoint and replays none of them, so each reader hears the life whole, as after a rebirth,
-  /// and the open tells no fact again that the checkpoint restates. A record that the store cannot
-  /// read tells nothing here, and its open says why.
+  /// Whether a fact of an opening restates a fact that the log told, which ends the opening when it
+  /// is the stand of its boot: the facts after it are those of the life, each occurrence of an
+  /// equal fact among them.
+  fn restates(&self, opening: &mut bool, fact: &Value) -> bool {
+    let word = |at: usize| fact.get(at).and_then(Value::as_str);
+    *opening &=
+      !checkpoint::opened(word(0).unwrap_or_default(), word(2).unwrap_or_default(), word(3));
+    *opening && self.facts.contains(&digest(fact))
+  }
+
+  /// The facts of a record before its last checkpoint, told first, in order: the life boots on that
+  /// checkpoint and replays none of them, so each reader hears the life whole, as after a rebirth.
+  /// Each birth on a checkpoint before the last opened by saying again what that checkpoint
+  /// restates, which its log told no reader twice, and this one tells none twice either; each other
+  /// fact is told, though it equals one before it, as a second pause of a chain. A record that the
+  /// store cannot read tells nothing here, and its open says why.
   fn recalled(&mut self, record: &str) {
-    let Some(at) = world::kept(record).ok().and_then(|entries| checkpoint::last(&entries)) else {
-      return;
-    };
+    let Ok(entries) = world::kept(record) else { return };
+    let marks: Vec<usize> = checkpoint::all(&entries).into_iter().map(|at| at + 1).collect();
+    let Some(&last) = marks.last() else { return };
     let Ok(told) = world::retold(record) else { return };
     let mut facts = Vec::new();
-    if told.before(at + 1, &mut |one| facts.extend(Fact::of(one.as_ref()))).is_err() {
+    let mut take = |kept, one: Object| facts.extend(Fact::of(one.as_ref()).map(|a| (kept, a)));
+    if told.before_kept(last, &mut take).is_err() {
       return;
     }
-    // Each birth that a checkpoint opened said again the facts that its checkpoint restates, which
-    // the log of that birth told no reader twice, and the log of this one tells none twice either.
-    for fact in facts.iter().filter(|one| one.kind() != checkpoint::CHECKPOINT) {
-      let fact = json_of(fact);
-      if !self.facts.contains(&digest(&fact)) {
+    let (mut passed, mut opening) = (0, false);
+    for (kept, a) in facts.iter().filter(|one| one.1.kind() != checkpoint::CHECKPOINT) {
+      while marks.get(passed).is_some_and(|mark| kept >= mark) {
+        (passed, opening) = (passed + 1, true);
+      }
+      let fact = json_of(a);
+      if !self.restates(&mut opening, &fact) {
         self.put(Event::Fact(fact));
       }
     }
