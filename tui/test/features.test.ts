@@ -26,6 +26,9 @@ test("a word of the operator stands as his messages stand, as its program in a p
   await composing(
     async ({ session, app, frame }) => {
       const rung = await session.engine.rung({ word: "await wait(60, __name__)", on: session.engine.root });
+      // The daemon runs the word after the verb made its rung, so the window hears of the wait that the line awaits
+      // only then: the line says what it waits for once the wait stands.
+      await until(session, () => session.acts.some((act) => act.kind === "wait" && act.by === rung));
       await session.refresh();
       const running = await frame();
       expect(running).not.toContain("You ran");
