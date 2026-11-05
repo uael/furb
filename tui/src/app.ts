@@ -714,6 +714,8 @@ export class App {
     this.layersOff = this.layers();
     this.parts = new Parts(session.host.directory, this.partsChanged);
     this.partsReady = this.parts.load();
+    // The World writes the configs, so a change that the operator asked loads the parts again.
+    session.on("configured", () => this.parts.soon());
     renderer.on("resize", this.render);
     renderer.on("selection", this.copySelection);
     renderer.on("theme_mode", this.modeChanged);

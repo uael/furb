@@ -1317,6 +1317,7 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
     wrap_pyfunction!(models, module)?,
     wrap_pyfunction!(model, module)?,
     wrap_pyfunction!(codex_auth, module)?,
+    wrap_pyfunction!(config_set, module)?,
     wrap_pyfunction!(levels, module)?,
     wrap_pyfunction!(setup, module)?,
     wrap_pyfunction!(attach_image, module)?,

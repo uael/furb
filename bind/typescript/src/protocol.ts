@@ -195,6 +195,11 @@ export type Request1 =
     }
   | {
       life: string;
+      config: Config;
+      verb: "config";
+    }
+  | {
+      life: string;
       about: string;
       verb: "seen";
     }
@@ -244,6 +249,27 @@ export type Request1 =
  * which asks the handover.
  */
 export type Kind = "window" | "skill" | "daemon";
+/**
+ * What a peer asks of the configs of a life, which the World writes, so no window writes a disk.
+ */
+export type Config =
+  | {
+      action: "get";
+    }
+  | {
+      key: string[];
+      value?: unknown;
+      layer?: Layer | null;
+      action: "set";
+    }
+  | {
+      action: "reload";
+    };
+/**
+ * A layer of the configs, from the one that wins least to the one that wins most: the config of
+ * the user, the config of the project, and its local config, which git ignores.
+ */
+export type Layer = "user" | "project" | "local";
 /**
  * Where a window shows a view. The dock follows the chain that it names, and the row, the detail
  * and the mark follow the chain of the act that they name. The sidebar, the footer, a screen and

@@ -367,6 +367,13 @@ def codex_auth(action: str | None = None, config: str | None = None) -> CodexAut
   The config directory is the user config directory when unsaid. A start returns before the browser completes.
   """
 
+def config_set(directory: str, change: str, config: str | None = None) -> None:
+  """A key of a layer of the configs of a project set to a value, or taken out with no value, as the
+  JSON of a change gives it, which then holds when the catalog reads the configs as a stand of a life
+  reads them, and else puts the file back as it was and gives why.
+  config is the user config directory when unsaid.
+  """
+
 def setup(claude: str | None = None, directory: str | None = None, config: str | None = None) -> SetupInfo:
   """What a first run checks with the user and project settings, and the claude command line at a path when given.
   The directory is the current directory when unsaid, and config is the user config directory when unsaid.

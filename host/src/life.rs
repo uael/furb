@@ -20,7 +20,10 @@ use furb::{
   life::{Log, Opening, Stream},
   verbs,
   wire::{outward, parsed},
-  world::{self, Shape, answered},
+  world::{
+    self, Shape, answered,
+    config::{Change, Layers},
+  },
 };
 use futures::stream::{self, Stream as Streams};
 use serde_json::{Value, json};
@@ -105,6 +108,12 @@ pub enum Command {
   Names { on: Option<String> },
   /// A stand of the life on its root, which reads the roster and the actor again: the act.
   Stand,
+  /// Each key of the configs of the folder of the life, with the value that wins for it and its
+  /// layer.
+  Settings,
+  /// A change of a key of a layer of the configs, which the World keeps only when the catalog
+  /// reads it, then a stand of the life on them: the act of the stand.
+  Configure(Change),
   /// The fact that the operator read a chain or a thread up to now.
   Seen { about: String },
   /// A message that the operator queued, sent as a prompt on a chain once: the act of the prompt.
@@ -149,6 +158,7 @@ pub struct Life {
   heard: UnboundedReceiver<Event>,
   facts: HashSet<u64>,
   watch: Watch,
+  configs: Layers,
 }
 
 /// The handle of a life, which any thread holds: it says a command to the life and reads its
@@ -289,8 +299,9 @@ async fn run(
   readers: broadcast::Sender<Logged>,
 ) {
   let (told, heard) = mpsc::unbounded_channel();
-  let mut life =
-    Life { log: Vec::new(), readers, heard, facts: HashSet::new(), watch: Watch::default() };
+  let configs = Layers::new(&opening.directory, opening.config.as_ref().map(PathBuf::from));
+  let (log, facts, watch) = (Vec::new(), HashSet::new(), Watch::default());
+  let mut life = Life { log, readers, heard, facts, watch, configs };
   let writes = told.clone();
   opening.stream = Some(Stream(Arc::new(move |rung, chain, text, thinking| {
     let (rung, chain) = (rung.to_owned(), chain.to_owned());
@@ -385,7 +396,7 @@ async fn driven(
         return Drove::Ended(ended);
       }
       Woke::Said(Some(Message::Command(command, reply))) => {
-        reply.send(answered_by(&mut engine, command)).ok();
+        reply.send(configured(&mut engine, &life.configs, command).await).ok();
         if let Some(fault) = engine.stopped().cloned() {
           drop(engine);
           return stopped(fault, record).await;
@@ -420,6 +431,26 @@ async fn pumped(engine: &mut Engine) -> Fault {
     Err(fault) => Poll::Ready(fault),
   })
   .await
+}
+
+/// What a command comes to on the engine, and on the configs of the life for a command of its
+/// configs.
+async fn configured(
+  engine: &mut Engine,
+  configs: &Layers,
+  command: Command,
+) -> Result<Reply, LifeError> {
+  match command {
+    Command::Settings => {
+      let settings = configs.get()?.into_iter().map(|one| json!(one));
+      Ok(Reply::Values(settings.collect()))
+    }
+    Command::Configure(change) => {
+      configs.set(change).await?;
+      answered_by(engine, Command::Stand)
+    }
+    command => answered_by(engine, command),
+  }
 }
 
 /// What a command comes to on the engine.

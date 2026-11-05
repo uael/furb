@@ -616,7 +616,7 @@ impl Catalog {
   reason = "debt: the one bridge from the sync doors of the bindings and of the boot of a life to the catalog that \
             awaits, until the design of the host (#983) makes those doors async"
 )]
-fn blocking<T>(work: impl Future<Output = T>) -> T {
+pub(crate) fn blocking<T>(work: impl Future<Output = T>) -> T {
   crate::ear::runtime().block_on(work)
 }
 
