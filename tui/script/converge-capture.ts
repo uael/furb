@@ -1,19 +1,17 @@
 /**
- * The captures of real lives for the extension converge. Each record that FURB_CONVERGE_RECORDS names, one path on
- * each line, is a copy that opens read-only, so it asks no model and runs nothing. The real renderer draws its root
- * and its two newest other chains with no window, at each size, as PNG files in the folder FURB_CONVERGE_OUT, each with
- * the cells that the renderer drew, as JSON beside it.
- * converge copies this file into tui/script of the tree that it captures, and runs it there with bun.
+ * The captures of real lives for the audit of the TUI, which the skill converge-tui runs. Each record that
+ * FURB_CONVERGE_RECORDS names, one path on each line, is a copy that opens read-only, so it asks no model and runs
+ * nothing. The real renderer draws its root and its two newest other chains with no window, at each size, as PNG files
+ * in the folder FURB_CONVERGE_OUT, each with the cells that the renderer drew, as JSON beside it.
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import type { CapturedFrame, RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import { openEngine } from "../src/bridge.ts";
 import { loadParsers } from "../src/parsers.ts";
 import { Session } from "../src/session.ts";
 import { paletteOf } from "../src/theme.ts";
-import { rasterize } from "./raster.ts";
+import { cells, rasterize } from "./raster.ts";
 import { highlighting, home, mount } from "./stage.ts";
 
 // The home of the user is a folder of its own, so that the preferences of the captures never touch those of the owner.
@@ -29,20 +27,6 @@ await mkdir(folder, { recursive: true });
 const test = await createTestRenderer({ width: 200, height: 56 });
 await loadParsers();
 let failed = 0;
-/** The cells of a frame, as cells in raster.ts of the tree gives them. This file runs on trees that are older than
- * that function, so it holds its own. */
-function cells(frame: CapturedFrame): string {
-  const hex = (value: RGBA) =>
-    `#${value
-      .toInts()
-      .slice(0, 3)
-      .map((part) => part.toString(16).padStart(2, "0"))
-      .join("")}`;
-  const lines = frame.lines.map((line) =>
-    line.spans.map((span) => [span.text, hex(span.fg), hex(span.bg), span.attributes]),
-  );
-  return JSON.stringify({ cols: frame.cols, rows: frame.rows, lines });
-}
 for (const record of records) {
   const name = basename(record, ".jsonl");
   try {

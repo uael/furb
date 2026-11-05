@@ -430,7 +430,7 @@ fix what your change broke, and report what was broken before.
   `FURB_GALLERY_ROOT` names another folder for it; `tui/script/stage.ts` says how long a run waits.
   `FURB_GALLERY_ONLY=<pattern>` writes only the captures whose names match, `FURB_GALLERY_TEXT=<folder>` writes the text
   of each capture, which a model that cannot see an image reads, `FURB_GALLERY_CELLS=<folder>` writes the cells of each
-  capture as JSON, which the extension `converge-tui` of the project reads, and `FURB_STILL_CLOCK` sets the time of the
+  capture as JSON, which the skill `converge-tui` of the project reads, and `FURB_STILL_CLOCK` sets the time of the
   view, which stands still by default. A model sees a capture as an image when its word reads the PNG.
   Both draw in process, with the test renderer of `@opentui/core` and the rasterizer `tui/script/raster.ts`, and open no
   window.

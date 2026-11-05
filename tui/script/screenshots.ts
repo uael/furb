@@ -53,7 +53,7 @@ async function project(name: string): Promise<string> {
 const output = resolve(process.env.FURB_GALLERY_OUT ?? "docs/screenshots");
 const only = process.env.FURB_GALLERY_ONLY ? new RegExp(process.env.FURB_GALLERY_ONLY) : undefined;
 await mkdir(output, { recursive: true });
-// FURB_GALLERY_CELLS writes the cells of each shot as JSON to a folder, which the extension converge compares and
+// FURB_GALLERY_CELLS writes the cells of each shot as JSON to a folder, which the audit of the TUI compares and
 // reads as text.
 const grid = process.env.FURB_GALLERY_CELLS;
 if (grid) await mkdir(grid, { recursive: true });
