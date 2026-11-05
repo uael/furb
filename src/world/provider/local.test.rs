@@ -1,17 +1,12 @@
 //! The local server of the catalog, asked on servers of the tests on ports of this machine, so no test asks a real
 //! one.
 
-#![expect(
-  clippy::disallowed_methods,
-  reason = "debt: a call that blocks: sleep, block_on or try_wait"
-)]
+#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
 #![expect(
   clippy::let_underscore_must_use,
   reason = "debt: a let _ drops a value that must be used"
 )]
 #![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
-#![expect(clippy::unreadable_literal, reason = "debt: a long literal with no separator")]
 
 use std::{
   io::{BufRead, BufReader, Read, Write},
@@ -174,7 +169,7 @@ fn the_environment_names_the_address_of_the_server_its_key_and_the_window_and_th
 fn each_model_for_chat_that_the_server_lists_is_offered_with_the_window_and_the_images_that_it_gives()
  {
   let list = json!({"object": "list", "data": [
-    {"id": "qwen", "meta": {"n_ctx": 262144}, "architecture": {"input_modalities": ["text", "image"],
+    {"id": "qwen", "meta": {"n_ctx": 262_144}, "architecture": {"input_modalities": ["text", "image"],
       "output_modalities": ["text"]}},
     {"id": "llama", "max_model_len": 32768},
     {"id": "odd", "meta": null, "architecture": null, "max_model_len": 8192},
@@ -259,6 +254,11 @@ fn a_server_that_lists_no_window_gives_it_where_its_kind_of_server_gives_it() {
     Some("the local server gives no window of it: set FURB_LOCAL_WINDOW"),
     "LM Studio loads it in its own"
   );
+}
+
+#[test]
+fn a_server_of_ollama_gives_the_window_that_it_serves_and_one_that_gives_none_waits_for_the_environment()
+ {
   let (address, _) = fake(|request| {
     let shows =
       |id: &str| at(request, "/api/show") && request.contains(&format!("{{\"model\":\"{id}\"}}"));
@@ -272,10 +272,10 @@ fn a_server_that_lists_no_window_gives_it_where_its_kind_of_server_gives_it() {
         "model_info": {"qwen3.context_length": 40960}}))
     } else if shows("y") {
       Some(
-        json!({"capabilities": ["completion", "vision"], "model_info": {"llama.context_length": 131072}}),
+        json!({"capabilities": ["completion", "vision"], "model_info": {"llama.context_length": 131_072}}),
       )
     } else if shows("w") {
-      Some(json!({"capabilities": ["completion"], "model_info": {"llama.context_length": 131072}}))
+      Some(json!({"capabilities": ["completion"], "model_info": {"llama.context_length": 131_072}}))
     } else {
       shows("e")
         .then(|| json!({"capabilities": ["embedding"], "model_info": {"bert.context_length": 512}}))
@@ -312,18 +312,11 @@ fn a_server_that_lists_no_window_gives_it_where_its_kind_of_server_gives_it() {
   );
 }
 
-#[test]
-fn a_server_that_answers_nothing_in_time_offers_no_model_and_is_asked_again_once_a_delay_passed() {
-  let port = dropping();
-  let server = on(&format!("http://user:secret@127.0.0.1:{port}"), &[]);
-  let heard = server.heard_now(None);
-  let why = heard.why("local:any").unwrap_or_default().to_owned();
-  let shown = format!("the local server at http://127.0.0.1:{port} lists no model: ");
-  assert!(why.starts_with(&shown) && !why.contains("secret"), "{why}");
-  assert!(heard.models.is_empty());
+/// A server whose first list is an error, then two models, then four.
+fn counting_server() -> (String, mpsc::Receiver<String>) {
   let asked = Arc::new(AtomicUsize::new(0));
   let counted = Arc::clone(&asked);
-  let (address, told) = fake(move |request| {
+  fake(move |request| {
     if !at(request, "/v1/models") {
       return None;
     }
@@ -337,7 +330,12 @@ fn a_server_that_answers_nothing_in_time_offers_no_model_and_is_asked_again_once
       _ => json!({"id": id, "max_model_len": 1000}),
     };
     Some(json!({"data": ids.iter().map(entry).collect::<Vec<_>>()}))
-  });
+  })
+}
+
+#[test]
+fn a_server_that_answers_nothing_in_time_offers_no_model_and_is_asked_again_once_a_delay_passed() {
+  let (address, told) = counting_server();
   let server = on(&address, &[]);
   assert!(
     server.heard_now(None).why("local:m").is_some(),
@@ -392,6 +390,17 @@ fn a_server_that_answers_nothing_in_time_offers_no_model_and_is_asked_again_once
     1,
     "a list that gives no window of a model for chat is asked again after the delay"
   );
+}
+
+#[test]
+fn a_server_that_answers_nothing_at_all_is_given_up_on_at_the_deadline() {
+  let port = dropping();
+  let server = on(&format!("http://user:secret@127.0.0.1:{port}"), &[]);
+  let heard = server.heard_now(None);
+  let why = heard.why("local:any").unwrap_or_default().to_owned();
+  let shown = format!("the local server at http://127.0.0.1:{port} lists no model: ");
+  assert!(why.starts_with(&shown) && !why.contains("secret"), "{why}");
+  assert!(heard.models.is_empty());
   let silent = TcpListener::bind("127.0.0.1:0").expect("a port of this machine");
   let port = silent.local_addr().expect("the port").port();
   let began = Instant::now();

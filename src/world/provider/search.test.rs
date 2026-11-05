@@ -3,10 +3,7 @@
 
 #![cfg_attr(
   unix,
-  expect(
-    clippy::disallowed_methods,
-    reason = "debt: a call that blocks: block_on, where a test drives a future on the reactor"
-  )
+  expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")
 )]
 #![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
 #![cfg_attr(

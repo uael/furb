@@ -1,7 +1,4 @@
-#![expect(
-  clippy::disallowed_methods,
-  reason = "debt: a call that blocks: block_on, where a test drives a future on the reactor"
-)]
+#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
 use std::{
   io::{BufRead, BufReader, Write},
   net::TcpListener,
