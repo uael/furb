@@ -250,9 +250,9 @@ gives. It holds no native code and no module of node, so a terminal and a window
 - `loom`: the rows of the loom, one for the operator and one for each chain in the order of the tree, with the cells
   of their moments, what each chain does now, `nowOf`, in words that a person reads, a count of seconds as a person
   reads it, `duration`, and the acts as they stood at a moment, `asOf`.
-- `ladder`: the lines of the thread of a chain, each prompt with the rungs of its ladder and their acts, and a long
-  thread as a person reads it at a glance, `condense`: the last steps at each level, and one line in place of each
-  run of earlier ones.
+- `ladder`: the lines of the thread of a chain as a person reads it at a glance, `thread`: each prompt with the rungs
+  of its ladder and their acts, the last steps at each level, and one line in place of each run of earlier ones, read
+  from the index of acts that a host holds.
 - `threads`: the tree of the threads of a life, where a thread is a prompt and a prompt that a rung of a thread makes
   is its sub-thread, each with its anchor, its messages, its progress, what waits for the operator and its pull
   requests.
