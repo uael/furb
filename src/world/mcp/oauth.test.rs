@@ -51,8 +51,7 @@ fn a_challenge_names_the_metadata_of_its_resource_quoted_or_not() {
 #[test]
 fn a_file_of_tokens_keeps_each_by_its_key_and_only_the_user_reads_it() {
   let yard = place("file");
-  let at = yard.join("mcp-tokens.json");
-  let vault = Filed::new(at.clone());
+  let vault = Filed::new(yard.join("mcp-tokens.json"));
   assert_eq!(vault.get("a"), None);
   vault.put("a", "one").unwrap();
   vault.put("b", "two").unwrap();
@@ -65,7 +64,9 @@ fn a_file_of_tokens_keeps_each_by_its_key_and_only_the_user_reads_it() {
   assert_eq!(stored(&vault, "s"), Some(held));
   #[cfg(unix)]
   assert_eq!(
-    std::os::unix::fs::PermissionsExt::mode(&std::fs::metadata(&at).unwrap().permissions()) & 0o777,
+    std::os::unix::fs::PermissionsExt::mode(
+      &std::fs::metadata(yard.join("mcp-tokens.json")).unwrap().permissions()
+    ) & 0o777,
     0o600
   );
 }
