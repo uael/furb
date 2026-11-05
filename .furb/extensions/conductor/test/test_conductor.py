@@ -1015,7 +1015,8 @@ async def test_a_later_conduct_replaces_the_round_at_its_next_step(tmp_path: Pat
 
 @POSIX
 @JQ
-async def test_a_later_conduct_starts_once_the_round_that_it_replaces_ends_so_one_fixer_takes_a_red_pr(tmp_path: Path) -> None:
+@pytest.mark.parametrize("engine_of", ["python", "monty"], indirect=True)
+async def test_a_later_conduct_starts_once_the_round_that_it_replaces_ends_so_one_fixer_takes_a_red_pr(tmp_path: Path, engine_of: str) -> None:
   made = Round(tmp_path)
   await made.load(TEST, 'ends["a"] = []')
   made.github(raw(7, "a", checks=(("the gates", "FAILURE"),)))
