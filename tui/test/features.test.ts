@@ -13,6 +13,7 @@ import { fileReferences, projectFiles } from "../src/files.ts";
 import { Session } from "../src/session.ts";
 import { publishShare, shareHtml, shareMarkdown } from "../src/share.ts";
 import { composing } from "./composing.ts";
+import { ended } from "./ended.ts";
 import { idle } from "./idle.ts";
 import { transcriptOf } from "./transcript.ts";
 
@@ -32,7 +33,7 @@ test("a word of the operator stands as his messages stand, as its program in a p
       expect(line(running)).toMatch(/^ +┃ /);
       const wait = session.acts.find((act) => act.kind === "wait" && act.by === rung);
       if (!wait) throw new Error("No pending wait.");
-      await session.engine.close(null, { id: wait.id });
+      await session.engine.close("null", { id: wait.id });
       await session.engine.result(rung);
       await session.refresh();
       const done = line(await frame());
@@ -45,10 +46,12 @@ test("a word of the operator stands as his messages stand, as its program in a p
       await session.refresh();
       expect(line(await frame())).toBe(done);
       await session.submit("/run this is invalid python !!!");
-      const refused = session.activity.findLast(
-        (act) => act.kind === "rung" && act.words[0] === "this is invalid python !!!",
-      );
-      expect(refused?.run?.status).toBe("failed");
+      const refused = () =>
+        session.activity.findLast(
+          (act) => act.kind === "rung" && act.words[0] === "this is invalid python !!!",
+        );
+      // The daemon gates the word after the submit made its rung, and the window hears the refusal then.
+      await until(session, () => refused()?.run?.status === "failed" && session.findings.length > 0);
       expect(session.error).toBe("");
       expect(session.findings.join("\n")).toContain("line 1");
       await session.refresh();
@@ -68,7 +71,9 @@ test("a word of the operator stands as his messages stand, as its program in a p
       expect(shown).not.toContain("◉");
       expect(shown).toMatch(/ 1 {2}await wait\(60\) +woke/);
     },
-    { width: 140, height: 42, useMouse: true },
+    // The later life boots on the checkpoint that the end of the first one wrote, and the word of that boot stands
+    // under the words of the first life, so the frame is tall enough to hold both.
+    { width: 140, height: 90, useMouse: true },
     session,
   );
 });
@@ -135,12 +140,23 @@ test("queued follow-ups wait for current work, attach files, and message undo an
     await session.refresh();
     const sent = session.acts.filter((act) => session.isUserPrompt(act)).length;
     await session.dispose();
+    // The life ends in the daemon once its window let it go, and only then does its view stand still to be written.
+    await ended(record);
     const stale = JSON.parse(await readFile(`${record}.ui.json`, "utf8"));
     stale.queued = saved.queued;
     await writeFile(`${record}.ui.json`, JSON.stringify(stale));
     session = await demoSession({ record });
+    // The checkpoint holds the chain paused on the thread that it asks, so the reopened life waits for a wake. The queue
+    // that the stale view names was sent already, so the open drops it and sends no prompt again.
+    await until(session, () => session.acts.length > 0);
+    await Bun.sleep(1000);
+    await session.refresh();
     expect(session.queued).toHaveLength(0);
-    expect(session.acts.filter((act) => session.isUserPrompt(act))).toHaveLength(sent);
+    const resent = (await readFile(record, "utf8"))
+      .split("\n")
+      .filter((line) => line.startsWith('[["prompt",') && line.includes("Keep this follow-up through exit."));
+    expect(resent).toHaveLength(1);
+    expect(sent).toBeGreaterThan(0);
   } finally {
     await session.dispose();
   }
@@ -474,56 +490,18 @@ test("an act that ended and told nothing shows nothing in the feed, as a read of
   }
 });
 
-test("a queued dispatch recovers both sides of the prompt-write boundary without sending twice", async () => {
-  let session = await demoSession();
+test("a follow-up that a window sends goes through the queue of the life, which sends it once for its entry", async () => {
+  // The life holds the queue and sends a follow-up once its chain rests; a reopen that finds the queue as it stood is
+  // a test of the life, in host/tests/life.rs.
+  const session = await demoSession();
   try {
-    const record = session.host.record;
-    if (!record) throw new Error("No record.");
-    const entry = {
-      id: "recovery-check",
-      chain: session.selected,
-      shape: "str",
-      text: "A queued question",
-    };
-    session.queued = [entry];
-    session.queueHeld = true;
-    session.save();
+    await idle(session);
+    const entry = { id: "once-check", chain: session.selected, shape: "str", text: "A queued question" };
     const sent = await session.host.sendQueued(entry);
+    expect(await session.host.sendQueued(entry)).toBe(sent);
     await session.refresh();
-    await session.dispose();
-    const lines = (await readFile(record, "utf8")).trimEnd().split("\n");
-    const begin = lines.findIndex(
-      (line) => JSON.parse(line)[0][0] === "queue" && JSON.parse(line)[0][3] === "begin",
-    );
-    expect(JSON.parse(lines[begin + 1] ?? "null")[0][0]).toBe("prompt");
-    const state = JSON.parse(await readFile(`${record}.ui.json`, "utf8"));
-    state.queued = [entry];
-    await writeFile(`${record}.ui.json`, JSON.stringify(state));
-    await writeFile(
-      record,
-      `${lines.filter((line) => !(JSON.parse(line)[0][0] === "queue" && JSON.parse(line)[0][3] === "sent")).join("\n")}\n`,
-    );
-    session = await demoSession({ record });
-    expect(session.queued).toHaveLength(0);
-    expect(session.dispatched).toContain(entry.id);
-    expect(session.acts.filter((act) => act.kind === "prompt")).toHaveLength(1);
-    expect(session.acts.some((act) => act.id === sent)).toBe(true);
-    await session.dispose();
-    await writeFile(record, `${lines.slice(0, begin + 1).join("\n")}\n`);
-    await writeFile(`${record}.ui.json`, JSON.stringify(state));
-    session = await demoSession({ record });
-    expect(session.queued).toHaveLength(1);
-    const manual = await session.engine.prompt(entry.shape, {
-      message: entry.text,
-      on: entry.chain,
-    });
-    await session.refresh();
-    expect(session.queued).toHaveLength(1);
-    const dispatched = await session.host.sendQueued(entry);
-    expect(dispatched).not.toBe(manual);
-    expect(await session.host.sendQueued(entry)).toBe(dispatched);
-    await session.refresh();
-    expect(session.acts.filter((act) => act.kind === "prompt")).toHaveLength(2);
+    const asked = session.acts.filter((act) => act.kind === "prompt" && act.words[1] === entry.text);
+    expect(asked.map((act) => act.id)).toEqual([sent]);
   } finally {
     await session.dispose();
   }

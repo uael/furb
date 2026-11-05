@@ -10,8 +10,7 @@ const turn = (prompt: string, message: string, advances: number) => [
     content: [
       {
         type: "text",
-        text:
-          `#${prompt}\n${prompt}_message = '${message}'\n` + `#rung1 advance on ${prompt}\n`.repeat(advances),
+        text: `#${prompt}\n${prompt}_message = '${message}'\n${`#rung1 advance on ${prompt}\n`.repeat(advances)}`,
       },
     ],
   },

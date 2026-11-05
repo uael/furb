@@ -258,21 +258,22 @@ test("the footer says the end of a usage limit and how many chains wait for it, 
     { width: 152, height: 40 },
   ));
 
-test("a window whose life ended says so in plain words, and offers to open the life again and to stop its host", () =>
+test("a window whose life ended says so in plain words, and offers to open the life again", () =>
   composing(
     async ({ session, frame }) => {
       session.host.local = true;
-      session.host.lost = "The life was ended from another window.";
+      session.host.lost = "The daemon of this machine closed.";
       session.host.emit("change");
       let shown = await frame();
-      for (let tries = 0; tries < 40 && !shown.includes("Stop the host"); tries++) {
+      for (let tries = 0; tries < 40 && !shown.includes("Open the life again"); tries++) {
         await Bun.sleep(50);
         shown = await frame();
       }
       expect(shown).toContain("The life is not open in this window");
-      expect(shown).toContain("The life was ended from another window.");
+      expect(shown).toContain("The daemon of this machine closed.");
       expect(shown).toContain("Open the life again");
-      expect(shown).toContain("Stop the host");
+      // The daemon ends a life once no window and no pin holds it, so no window stops it.
+      expect(shown).not.toContain("Stop the host");
       expect(shown).not.toContain("view could not load");
     },
     { width: 152, height: 52 },

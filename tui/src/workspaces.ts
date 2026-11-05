@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { mkdir, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { furbDirectory, saveFile, scratch, store } from "furb";
 import { openEngine, openingEngine } from "./bridge.ts";
 import { checkoutOf, checkouts, mainCheckout } from "./checkout.ts";
+import { daemon } from "./client.ts";
 import { expandHome } from "./files.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import { Preferences } from "./preferences.ts";
@@ -455,7 +456,9 @@ export class Workspaces extends EventEmitter {
     first.catch(() => {});
     entry.ready = life.ready.then(
       async () => {
-        await first;
+        // A life that drifts on its record ends while its first read runs, and opens to read in its place, which
+        // the session reads again.
+        await first.catch(() => session.refresh());
         return !this.closed;
       },
       async (error: unknown) => {
@@ -652,7 +655,18 @@ export class Workspaces extends EventEmitter {
     if (this.current === entry)
       await this.create(group, undefined, undefined, checkoutOf(entry.path, group.directory));
   }
-  /** End the life of the open session of an entry, and tell whether it was open. */
+  /** /end: this window lets the life of the session shown go, and shows the next session of its workspace, or a new
+   * one. The life ends once no window and no pin holds it. */
+  async end(): Promise<void> {
+    const entry = this.current;
+    const group = entry && this.groupOf(entry);
+    if (!entry || !group) return;
+    await this.release(entry);
+    const next = group.sessions.find((one) => one !== entry && !one.archived);
+    if (next) await this.select(next);
+    else await this.create(group, undefined, undefined, checkoutOf(entry.path, group.directory));
+  }
+  /** This window lets the life of the open session of an entry go, and tells whether it was open. */
   private async release(entry: SessionEntry): Promise<boolean> {
     const session = entry.session;
     if (!session) return false;
@@ -660,7 +674,7 @@ export class Workspaces extends EventEmitter {
     if (listener) session.off("change", listener);
     this.subscriptions.delete(session);
     entry.session = undefined;
-    await session.dispose(true);
+    await session.dispose();
     return true;
   }
   /** Give a session or a workspace the name that the operator chose. The record of a session keeps its name, as a fact
@@ -725,11 +739,13 @@ export class Workspaces extends EventEmitter {
     if (!group) throw new Error("This session has no workspace.");
     await this.leave(entry, group);
     await this.release(entry);
+    // The daemon ends the life once no window and no pin held it for its grace, and frees its record then.
+    await daemon().ended(entry.path);
     // The record and its files move to the trash while this store holds the lease, so no other process opens them
     // meanwhile. The lock file stays at its path, empty: on macOS a lookup of a renamed path can go on giving the
     // moved file for seconds, so the lease holds only while no holder moves or removes the lock file. The scratch
-    // directory of the record goes from the cache of furb, since a life on the record that is restored makes again
-    // the files that its writes made.
+    // directory of the record moves to the place of the record in the trash, since a life that opens the record
+    // again goes on from the checkpoint that its end wrote, and makes none of the files that its writes made.
     const lease = store(entry.path)[1];
     const scratchDirectory = scratch(entry.path);
     const moved: [string, string][] = [];
@@ -750,14 +766,10 @@ export class Workspaces extends EventEmitter {
       group.sessions = group.sessions.filter((candidate) => candidate !== entry);
       this.save({ directory: group.directory, remove: entry.path });
       this.emit("change");
-      // The delete is done: the scratch directory moves aside before it goes, so a remove that stops part of the way
-      // leaves no directory in its place, and a failure here undoes nothing.
-      if (scratchDirectory) {
-        const aside = `${scratchDirectory}.gone-${randomUUID()}`;
-        await rename(scratchDirectory, aside)
-          .then(() => rm(aside, { recursive: true, force: true }))
-          .catch(() => {});
-      }
+      // The delete is done, so a failure to move the scratch directory undoes nothing.
+      const kept = scratch(join(directory, basename(entry.path)));
+      if (scratchDirectory && kept && existsSync(scratchDirectory))
+        await rename(scratchDirectory, kept).catch(() => {});
       if (this.current?.session) this.current.session.notice = `Session moved to ${directory}`;
       return directory;
     } catch (error) {
@@ -767,14 +779,13 @@ export class Workspaces extends EventEmitter {
       lease.dispose();
     }
   }
-  /** Close the workspaces: the window detaches from each life, which goes on when it runs in a host of its own, or
-   * each life ends when end is set. */
-  async dispose(end = false): Promise<void> {
+  /** Close the workspaces: the window lets each life go, which ends once no window and no pin holds it. */
+  async dispose(): Promise<void> {
     this.closed = true;
     this.stop.abort(new Error("The workspaces are closed."));
     await Promise.allSettled([...this.opening.values()]);
     for (const [session, changed] of this.subscriptions) session.off("change", changed);
-    await Promise.all([...this.subscriptions.keys()].map((session) => session.dispose(end)));
+    await Promise.all([...this.subscriptions.keys()].map((session) => session.dispose()));
     this.subscriptions.clear();
     this.removeAllListeners();
   }

@@ -93,24 +93,29 @@ export const commands = {
     "",
     "List the extensions that this life runs, with what their parts give the TUI",
   ],
-  serve: [
-    "Serve to operators",
-    "[address]",
-    "Give the addresses at which other operators read this life, or read and drive it, over the network",
+  end: [
+    "Detach this window",
+    "",
+    "Let the life of this session go from this window: it ends once no window and no pin holds it",
   ],
-  end: ["End the lives", "", "End each open life, its commands and its models, then quit"],
+  pin: [
+    "Pin the life",
+    "[holder]",
+    "Keep the life of this session open with no window, until the same holder unpins it",
+  ],
+  unpin: ["Unpin the life", "[holder]", "Let a pin go, so the life ends once no window and no pin holds it"],
   reopen: [
     "Open the life again",
     "",
-    "Reach the life again after it ended in another window or its host was lost, in a host of this machine",
-  ],
-  stop: [
-    "Stop the host",
-    "",
-    "End by force the process that holds this life, when the end of the life does not reach it",
+    "Reach the life again in the daemon of this machine after it ended or was lost",
   ],
   help: ["Help", "", "Keys, marks, and slash commands"],
-  exit: ["Exit", "", "Save every session and quit, while a life in a host of its own goes on", "quit"],
+  exit: [
+    "Exit",
+    "",
+    "Save every session and quit: each life goes on while a window or a pin holds it",
+    "quit",
+  ],
 } as const satisfies Record<string, readonly [string, string, string, string?]>;
 const typed = (name: string, argument: string) => `/${name}${argument ? ` ${argument}` : ""}`;
 /** Each slash command with its name, its other name or none, and as it is typed with its arguments: `usage` by its

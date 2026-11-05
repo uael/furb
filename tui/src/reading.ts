@@ -13,8 +13,8 @@ import {
   type Turn,
   WORK,
 } from "furb";
-import type { PauseCause } from "furb/life";
-import { row } from "./snapshots.ts";
+import type { Exit, PauseCause } from "furb/life";
+import type { ActRow } from "./session.ts";
 
 /** Why a record opens to read: the engine and the version of the build that made it, as the record names them, the
  * engine and the version of this build, and what the life that opened on it raised. */
@@ -168,6 +168,43 @@ export function reads(reading?: Reading): string {
   return reading && sameBuild(reading)
     ? `${open} Its replay drifts on the build that made it, which is a defect.`
     : `${open} Start a new life from it to go on.`;
+}
+
+/** How many of the last characters of each stream of a command a row carries. */
+const TAIL = 2000;
+
+/** An act as a row of a snapshot: a write carries the lines that its change added and removed, and a command that
+ * printed more than a tail carries the tail of each stream. An act carries its time when this window saw it run. */
+export function row(act: LiveAct, lines?: ActRow["lines"], took?: number): ActRow {
+  if (took !== undefined) return row({ ...act, took } as ActRow, lines);
+  // A read and a write carry the count of the lines of their text, and leave the text out, which the view reads whole
+  // when it shows it.
+  if (act.kind === "read" || act.kind === "write") {
+    const text = (act.kind === "write" ? act.words[0] : act.value) as { content?: unknown } | null;
+    const bare = (one: unknown) =>
+      one && typeof one === "object" && "content" in one ? { ...one, content: "" } : one;
+    const content = typeof text?.content === "string" ? text.content : undefined;
+    return {
+      ...act,
+      words: act.words.map(bare),
+      value: bare(act.value),
+      // A row that a reader made already carries the count of the text that it left out.
+      ...(content === undefined
+        ? {}
+        : { count: content ? content.replace(/\n$/, "").split("\n").length : ((act as ActRow).count ?? 0) }),
+      ...(lines ? { lines } : {}),
+    };
+  }
+  const exit: Exit = act.kind === "bash" ? (act.value as Exit) : {};
+  const streams = [exit?.stdout?.content ?? "", exit?.stderr?.content ?? ""];
+  if (streams.every((content) => content.length <= TAIL)) return act;
+  const tail = (stream?: { content: string }) =>
+    stream && { ...stream, content: stream.content.slice(-TAIL).replace(/^[\uDC00-\uDFFF]/, "") };
+  return {
+    ...act,
+    value: { ...exit, stdout: tail(exit.stdout), stderr: tail(exit.stderr) },
+    output: streams.join("").length,
+  };
 }
 
 /** A record open to read, with no life: the facts that the crate retold of it, in the file that it names, as an engine

@@ -567,8 +567,8 @@ workspace shows the marks of its state, as [Keys, marks, and commands](#keys-mar
 a completed session clears its unread mark. ⌃\ hides the sidebar. ⌃W lists the workspaces and their sessions, each
 with its state, the time since its last save, its cost, and its size.
 
-On macOS and Linux, each session is a life in a host of its own, which outlives the window and which other
-operators can reach over the network. [The TUI](../tui/README.md#a-host-that-outlives-the-window) says how.
+Each session is a life in the daemon of the machine, which outlives the window.
+[The TUI](../tui/README.md#a-life-that-outlives-the-window) says how.
 
 ![Workspace tree](screenshots/28-workspace-tree.png)
 

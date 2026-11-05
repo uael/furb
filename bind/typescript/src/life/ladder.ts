@@ -249,6 +249,8 @@ interface Listed {
   steps: { id: string; kind: string; by: string; ear?: string[] }[];
   place: Map<string, number>;
   kinds: Map<string, number[]>;
+  /** The places in the list of the acts that were taken as steps, by the act that made them. */
+  makers: Map<string, number[]>;
 }
 /** The steps of each level that a thread read, by the index of the host, and by the list that gives them. */
 const levels = new WeakMap<object, Map<string, Listed>>();
@@ -263,13 +265,23 @@ function listed(
 ): Listed {
   let held = kept.get(key);
   if (!held || acts.length < held.seen) {
-    held = { seen: 0, steps: [], place: new Map(), kinds: new Map() };
+    held = { seen: 0, steps: [], place: new Map(), kinds: new Map(), makers: new Map() };
     kept.set(key, held);
   }
   for (; held.seen < acts.length; held.seen++) {
     const act = acts[held.seen] as LiveAct;
+    // An ear that an act starts can make an act before the life tells the act that started it, so a step whose maker
+    // comes later in the list can stand under that maker once it came: the list is read again whole then.
+    const before = held.makers.get(act.id) ?? [];
+    if (before.some((at) => take(acts[at] as LiveAct) === "")) {
+      kept.delete(key);
+      return listed(kept, key, acts, take);
+    }
     const taken = take(act);
     if (!taken) continue;
+    const made = held.makers.get(act.by);
+    if (made) made.push(held.seen);
+    else held.makers.set(act.by, [held.seen]);
     const last = held.steps.at(-1);
     // The rungs in a row that one maker wrote with no word of its own stand as one step.
     if (taken === "ear" && last?.ear && last.by === act.by) {
@@ -469,7 +481,7 @@ function lowest(places: readonly number[], place: number): number {
 }
 
 /** The steps of a list that gives none. */
-const empty: Listed = { seen: 0, steps: [], place: new Map(), kinds: new Map() };
+const empty: Listed = { seen: 0, steps: [], place: new Map(), kinds: new Map(), makers: new Map() };
 
 /** How many of the last prompts of a thread, and of the last rungs of each ladder, a condensed thread shows. */
 export const SHOWN = { prompts: 6, rungs: 4 };

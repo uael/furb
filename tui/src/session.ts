@@ -540,7 +540,7 @@ export class Session extends EventEmitter {
     // acts are of the host that made them.
     host.on("reset", () => {
       this.counted = 0;
-      void this.refresh();
+      void this.refresh().catch(this.fail);
     });
     // A report of the life that no model reads, such as a file that the scratch directory leaves out, shows as a
     // notice, since a write to stderr would draw over the screen.
@@ -1338,7 +1338,7 @@ export class Session extends EventEmitter {
       : shape === "str"
         ? "resolved"
         : { is: "Refused", args: ["resolved by the operator"] };
-    await this.engine.close(value, { id });
+    await this.engine.close(JSON.stringify(value), { id });
     this.notice = `You resolved ${act.thread ?? id}. A message to it opens it again.`;
     await this.refresh();
   }
@@ -1512,7 +1512,8 @@ export class Session extends EventEmitter {
     delete this.images[this.selected];
     this.save();
     this.notice = "Follow-up queued.";
-    void this.drainQueue().catch(this.fail);
+    // The queue sends once the acts of the chain are read as they stand now, which the end of a refresh drains.
+    void this.refresh().catch(this.fail);
   }
   async drainQueue(): Promise<void> {
     if (this.closed || this.draining || this.queueHeld || this.host.pending.size || !this.queued.length)
@@ -1536,6 +1537,8 @@ export class Session extends EventEmitter {
       for (let entry = next(); entry; entry = next()) {
         passed.add(entry.id);
         await this.attachFiles(entry.text, entry.chain);
+        // A session that closed while the files attached sends nothing: the queue waits in its view for the next one.
+        if (this.closed) return;
         if (!queued(entry)) continue;
         this.track(await this.host.sendQueued(entry));
         this.queued = this.queued.filter((item) => item.id !== entry.id);
@@ -2174,9 +2177,10 @@ export class Session extends EventEmitter {
       case "close": {
         const split = argument.indexOf(" ");
         if (split < 0) throw new Error("Use /close followed by an act id and a JSON value.");
-        // The record reader keeps what JSON.parse loses: 2.0 stays a float, and a whole number past the safe range
-        // is refused.
-        await this.engine.close(decodeRecord(argument.slice(split + 1)), { id: argument.slice(0, split) });
+        // The value goes as the operator wrote it, which the record reads as it reads a value: 2.0 stays a float.
+        const value = argument.slice(split + 1);
+        decodeRecord(value);
+        await this.engine.close(value, { id: argument.slice(0, split) });
         break;
       }
       case "export": {
@@ -2259,15 +2263,20 @@ export class Session extends EventEmitter {
     this.notice = this.host.lost || "The life is open again.";
     this.emit("change");
   }
-  /** The host of the life ends by force, for a host that the end of the life does not reach. */
-  async stopHost(): Promise<void> {
-    await this.host.stop();
-    this.notice = "The host of the life was stopped. /reopen opens the life again.";
+  /** The life pinned under the name of a holder, so that it lives with no window until that holder unpins it. */
+  async pin(holder = "operator"): Promise<void> {
+    await this.host.pin(holder);
+    this.notice = `The life is pinned by ${holder}: it lives with no window, until /unpin ${holder}.`;
     this.emit("change");
   }
-  /** Save the view, then let the session go whatever the save came to: the window detaches from the life, which goes
-   * on when it runs in a host of its own, or the life ends when end is set. */
-  async dispose(end = false): Promise<void> {
+  async unpin(holder = "operator"): Promise<void> {
+    await this.host.unpin(holder);
+    this.notice = `The pin of ${holder} is gone: the life ends once no window and no pin holds it.`;
+    this.emit("change");
+  }
+  /** Save the view, then let the session go whatever the save came to: the window detaches from the life, which ends
+   * once no window and no pin holds it. */
+  async dispose(): Promise<void> {
     clearTimeout(this.noticeTimer);
     this.leave();
     this.closed = true;
@@ -2278,7 +2287,7 @@ export class Session extends EventEmitter {
       this.save();
     } finally {
       await this.refreshTask?.catch(() => {});
-      await (end ? this.host.end() : this.host.dispose());
+      await this.host.dispose();
     }
   }
 }

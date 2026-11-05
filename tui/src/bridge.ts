@@ -1,47 +1,43 @@
-import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { closeSync, openSync, readFileSync, rmSync } from "node:fs";
-import { createConnection, type Socket } from "node:net";
+import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { createTwoFilesPatch } from "diff";
 import {
-  type Act,
+  type Activity,
+  actorParts,
+  attachImage,
+  codexAuth,
+  ENGINE,
+  type Fact,
   type FileChange,
+  FileChanges,
   type ImageAttachment,
+  isQuestion,
   type LiveAct,
-  type Engine as Native,
+  model,
+  models,
+  questionKind,
   type Repaired,
-  ROOT,
+  retold,
   type SetupInfo,
   type Stream,
+  saveFile,
+  setup,
   type Turn,
+  usageOf,
+  WINDOW,
 } from "furb";
-import type { Compaction, Measure, PauseCause } from "furb/life";
-import {
-  aboutOf,
-  buildOf,
-  failureOf,
-  framed,
-  type Hello,
-  hostPlace,
-  isHost,
-  OWNED,
-  type Place,
-  PROTOCOL,
-  RIVAL,
-  type Role,
-  reachOf,
-  type Served,
-  stopProcess,
-} from "./hosting.ts";
-
-/** The reason of a link that a window ended by its own hand, which is no loss of the life. */
-const DISPOSED = "The session is disposed.";
-/** Why a window that stopped its host holds no life. */
-const STOPPED = "The host of the life was stopped from this window.";
-
-import type { EngineOptions } from "./models.ts";
-import type { ProviderChoice } from "./providers.ts";
-import { type Carry, isRecorded, type Reading } from "./reading.ts";
+import { type Compaction, type Measure, measureOf } from "furb/life";
+import { type Choices, daemon, type Listener, RemoteLife } from "./client.ts";
+import { clock } from "./clock.ts";
+import { demoModels } from "./demo/answer.ts";
+import { expandHome } from "./files.ts";
+import { lineCounts } from "./format.ts";
+import { type EngineOptions, roster } from "./models.ts";
+import { changeProvider, type ProviderChoice } from "./providers.ts";
+import { queueDispatches } from "./queue.ts";
+import { type Carry, isRecorded, Reader, type Reading, row } from "./reading.ts";
+import { branchChanges, net } from "./review.ts";
 import type { ActRow, FollowUp } from "./session.ts";
 
 /** What one answer of a model read and wrote: its whole prompt, its output, the reads and the writes of the cache,
@@ -50,21 +46,21 @@ export type Usage = NonNullable<Turn[2]>;
 
 /** The models of the roster, each as its name, its efforts and its window. */
 export type Roster = [string, string[], number][];
-/** The items of a list from a place on, which take the place of the items that the host holds from that place. */
+/** The items of a list from a place on, which take the place of the items that the view holds from that place. */
 export interface Tail<T> {
   from: number;
   list: T[];
 }
 
-/** A view of a chain. A host that gives the mark of the last snapshot it took takes only what changed since then: the
+/** A view of a chain. A view that gives the mark of the last snapshot it took takes only what changed since then: the
  * roster when it changed, the words that the program changed, and the tails of the turns and of the answers. */
 export interface Snapshot {
-  /** The mark of this snapshot, which the host gives with its next request once it holds this snapshot. */
+  /** The mark of this snapshot, which the session gives with its next request once it holds this snapshot. */
   mark: number;
   dispatched: string[];
   paused: boolean;
   /** The cause that the pause over the chain gave, null when none stands or none was given. */
-  cause: PauseCause | null;
+  cause: import("furb/life").PauseCause | null;
   roster?: Roster;
   /** The acts that changed after the count the session asked with. */
   acts: ActRow[];
@@ -72,728 +68,834 @@ export interface Snapshot {
   count: number;
   selected: string;
   turns: Tail<Turn>;
-  /** The usage of each answer of the chain, in order. A chain with a source reads the answers of its origin in its
-   * turns, and they are not among these. */
+  /** The usage of each answer of the chain, in order. */
   answers: Tail<Usage>;
-  /** The share of the window that the last answer of the chain filled, as filled of the engine gives it. Nothing
-   * before the first answer. */
+  /** The share of the window that the last answer of the chain filled. Nothing before the first answer. */
   filled?: number;
-  /** The word of each rung of the program, whole, or the words that changed since the snapshot of the mark that the
-   * host gave. */
+  /** The word of each rung of the program, whole, or the words that changed since the snapshot of the mark given. */
   program?: { whole: boolean; words: Record<string, string> };
   actor: string;
   directory: string;
 }
 
-type Returned<T> = T extends Act ? string : Awaited<T>;
-/** Async calls are a choice of the TUI. The library's methods remain synchronous. */
-export type Engine = {
-  [K in keyof Native]: Native[K] extends (...args: infer A) => infer R
-    ? (...args: A) => Promise<Returned<R>>
-    : Native[K];
-};
+/** What a chain stands on: its roster, its directory and its actor. */
+type Standing = [Roster, string, string];
+
+/** The named verbs that a window says to a life: to the daemon that holds it, or to a record open to read, which
+ * refuses each verb that would change it. */
+export type Engine = Pick<
+  RemoteLife,
+  | "root"
+  | "disposed"
+  | "prompt"
+  | "rung"
+  | "chain"
+  | "bash"
+  | "grant"
+  | "stand"
+  | "result"
+  | "outcome"
+  | "peek"
+  | "pause"
+  | "wake"
+  | "cancel"
+  | "close"
+  | "read"
+  | "write"
+  | "transcript"
+  | "turns"
+  | "program"
+  | "cwd"
+  | "names"
+  | "inspect"
+>;
+
+/** How long a recorded life waits before it reads its file again, in milliseconds. */
+const FOLLOW = 100;
+
+/** Why a record open to read refuses a verb. */
+const READS = "This record is open to read: no word runs, no model is asked, and nothing is kept.";
+
+/** A record open to read, with no life, as the named verbs of a life read it: each view of the record, and a refusal
+ * of each verb that would change it. A recorded life follows its file. */
+class ReadLife extends EventEmitter {
+  readonly root: string;
+  readonly disposed = false;
+  readonly lost = "";
+  readonly daemon = undefined;
+  readonly streams = new Map<string, Stream>();
+  readonly acts = new Map<string, never>();
+  /** The pace at which a recorded life reads its file for the lines that it added. */
+  private readonly following?: ReturnType<typeof setInterval>;
+  constructor(readonly reader: Reader) {
+    super();
+    this.root = reader.root;
+    // A recorded life follows its file: each fact that a later line adds is heard as the life said it, and the view
+    // hears of it as it hears of a life that runs. The file is read at a pace and not at the event of a watch: on
+    // Windows the watch says nothing of an append that comes within a millisecond of the one before.
+    if (reader.recorded)
+      this.following = setInterval(() => {
+        try {
+          if (reader.follow()) this.emit("facts");
+        } catch {
+          // A file that went away, with its folder, adds no line more.
+          clearInterval(this.following);
+        }
+      }, FOLLOW).unref();
+  }
+  get activity(): Activity {
+    return this.reader.activity;
+  }
+  get facts(): readonly Fact[] {
+    return this.reader.facts;
+  }
+  private refuse = async (): Promise<never> => this.reader.refuse();
+  prompt = this.refuse;
+  rung = this.refuse;
+  chain = this.refuse;
+  bash = this.refuse;
+  grant = this.refuse;
+  stand = this.refuse;
+  pause = this.refuse;
+  wake = this.refuse;
+  cancel = this.refuse;
+  close = this.refuse;
+  write = this.refuse;
+  read = this.refuse;
+  answer = this.refuse;
+  seen = async (): Promise<void> => {};
+  queue = this.refuse;
+  pin = this.refuse;
+  unpin = this.refuse;
+  names = async (): Promise<string[]> => [];
+  async result(id: string): Promise<unknown> {
+    const { done, value } = this.reader.outcome(id);
+    if (!done) throw new Error(READS);
+    return value;
+  }
+  async outcome(id: string): Promise<{ done: boolean; value: unknown }> {
+    return this.reader.outcome(id);
+  }
+  async peek(id: string): Promise<unknown> {
+    return this.reader.outcome(id).value;
+  }
+  async transcript({ on }: { on?: string } = {}): Promise<Fact[]> {
+    return this.reader.transcript({ on });
+  }
+  async turns({ on }: { on?: string } = {}): Promise<Turn[]> {
+    return this.reader.turns({ on });
+  }
+  async program({ on }: { on?: string } = {}): Promise<Record<string, string>> {
+    return this.reader.program({ on });
+  }
+  async cwd({ on }: { on?: string } = {}): Promise<string> {
+    return this.reader.cwd({ on });
+  }
+  async standing(): Promise<Standing> {
+    return this.reader.standing() as unknown as Standing;
+  }
+  async inspect(name: string): Promise<{ kind: string; representation: string; value: unknown }> {
+    const { value } = this.reader.inspect(name);
+    return { kind: typeof value, representation: String(value), value };
+  }
+  async pending(): Promise<Map<string, string>> {
+    return new Map();
+  }
+  /** The share of the window of its model that an answer filled, as filled of the engine gives it, for a record that
+   * no engine holds. */
+  async filled(id: string): Promise<number | undefined> {
+    const turn = this.reader.outcome(id).value;
+    if (!Array.isArray(turn) || !Array.isArray(turn[2])) return undefined;
+    const to = String(this.activity.acts.get(id)?.words[0] ?? "");
+    const roster = ((await this.standing())[0] ?? []) as Roster;
+    const window =
+      roster.find(
+        ([name, efforts]) => to === name || efforts.some((effort) => to === `${name}/${effort}`),
+      )?.[2] ?? WINDOW;
+    return Math.round((Number(turn[2][0]) / window) * 100) / 100;
+  }
+  async detach(): Promise<void> {
+    clearInterval(this.following);
+    this.reader.dispose();
+  }
+}
+
+/** A life as a window holds it: through the daemon, or a record open to read. */
+type Held = RemoteLife | ReadLife;
+
+/** What a snapshot knows of one chain. A value that it must read again is undefined. */
+interface ChainView {
+  roster?: Roster;
+  program?: Record<string, string>;
+  /** The words that the runs of the chain gave since the last snapshot, or every word when the program was read
+   * again whole. */
+  worded?: { whole: boolean; words: Record<string, string> };
+  turns?: Turn[];
+  directory?: string;
+  actor?: string;
+}
+
+/** What the last snapshot gave, which the session holds once it takes that snapshot. */
+interface Given {
+  mark: number;
+  chain: string;
+  roster: Roster;
+  turns: readonly Turn[];
+  answers: number;
+}
+
+/** The place of the first turn of a list that differs from the turn at that place in another list. */
+function firstChange(held: readonly Turn[], turns: readonly Turn[]): number {
+  const same = (one: unknown, other: unknown) =>
+    one === other || JSON.stringify(one) === JSON.stringify(other);
+  let at = 0;
+  while (at < held.length && at < turns.length) {
+    if (held[at] === turns[at]) {
+      at++;
+      continue;
+    }
+    const [one, other] = [held[at] as Turn, turns[at] as Turn];
+    if (one.length !== other.length || !one.every((part, place) => same(part, other[place]))) break;
+    at++;
+  }
+  return at;
+}
+
+/** Each change of a journal that one of the writes made, or each change when no list of writes is given. */
+function* written(changes: FileChanges, writes: string[] | null): Generator<FileChange> {
+  const named = writes ? new Set(writes) : undefined;
+  // A failed read of even an empty journal must not look like a scope with no changes.
+  changes.read(0, 0);
+  for (let start = 0; start < changes.length; start += 50)
+    for (const change of changes.read(start, 50))
+      if (!named || (change.act && named.has(change.act))) yield change;
+}
+
 /** A question that waits for the operator. */
 type Prompt = { id: string; shape: string; message: string };
-/** What the session in the worker holds that the host keeps as it comes. */
-interface Plain {
-  completed: number;
-  cost: number;
+
+/** A life as the session of a window sees it: what the life holds, as the window reads it from its events, a view of
+ * each chain as of now, and what the window reads of this machine for the life, as its catalog and its providers. It
+ * tells `change` when what it holds changed, `facts` after the facts of a change, `fault`, `log` with a notice,
+ * `reset` once the window reads the life again from its start, and `authentication` with the state of a sign-in. */
+export class HostView extends EventEmitter {
+  completed = 0;
+  cost = 0;
   directory: string;
   imageDirectory: string;
-  actor: string;
-  /** The path of the record, when the session keeps one. */
+  actor = "";
   record?: string;
-  /** How many file changes the session holds. */
-  changes: number;
+  /** How many file changes the life holds. */
+  changes = 0;
   /** Why the record is open to read, when a life on it was refused for a drift, as on a record of another engine. */
   reading?: Reading;
   /** Whether the life is a recording, which shows its log and runs nothing. */
   recorded?: boolean;
   /** The measure of each chain whose models answered, by the chain. */
-  measures: Record<string, Measure>;
-  /** Each compaction of a chain, in the order of the record. A state holds those since the state before it. */
-  compactions: Compaction[];
-  /** The count of facts that the life said, which each state carries, so a window knows what it missed. */
-  seq: number;
-}
-/** What the session in the worker holds, as it sends it to the host, and how many facts the life said since the last
- * state, which the host needs to know of and not to hold. Its measures are those of the chains whose models answered
- * since the last state, which join the measures that the host holds. */
-export interface HostState extends Plain {
-  facts: number;
-  prompts: Prompt[];
-  /** The place up to which the operator read each chain or thread, as the facts seen of the record say it. */
-  seen?: [string, number][];
-  streams: [string, Stream][];
-  pending: [string, string][];
-}
-
-/** The session in the worker, as the host sees it: what it holds, and the requests the host makes of it. */
-export class HostView extends EventEmitter implements Plain {
-  completed = 0;
-  cost = 0;
-  directory = "";
-  imageDirectory = "";
-  actor = "";
-  record?: string;
-  changes = 0;
-  reading?: Reading;
-  recorded?: boolean;
   measures: Record<string, Measure> = {};
   compactions: Compaction[] = [];
+  /** The count of facts that the window heard. */
   seq = 0;
   prompts = new Map<string, Prompt>();
   seen = new Map<string, number>();
   streams = new Map<string, Stream>();
   pending = new Map<string, string>();
-  constructor(private request: (target: string, method: string, args: unknown[]) => Promise<unknown>) {
-    super();
-  }
-  /** The text of each part of the state as the host read it last. A part that did not change keeps its object, which
-   * a view that reads the whole life keys on. */
-  private read: Record<string, string> = {};
-  private changed(part: string, value: unknown): boolean {
-    const text = JSON.stringify(value);
-    if (this.read[part] === text) return false;
-    this.read[part] = text;
-    return true;
-  }
-  // A host of an older build that speaks the same protocol sends a state with no measures and no compactions.
-  update({
-    facts,
-    prompts,
-    seen = [],
-    streams,
-    pending,
-    measures = {},
-    compactions = [],
-    ...plain
-  }: HostState): void {
-    Object.assign(this, plain);
-    if (Object.keys(measures).length) this.measures = { ...this.measures, ...measures };
-    if (compactions.length) this.compactions = [...this.compactions, ...compactions];
-    if (this.changed("prompts", prompts))
-      this.prompts = new Map(prompts.map((prompt) => [prompt.id, prompt]));
-    if (this.changed("seen", seen)) this.seen = new Map(seen);
-    if (this.changed("seen", seen)) this.seen = new Map(seen);
-    this.streams = new Map(streams);
-    if (this.changed("pending", pending)) this.pending = new Map(pending);
-    if (facts) this.emit("facts");
-    this.emit("change");
-  }
-  /** A request of the worker: the method of one of its targets, the session, its console, or the library, which
-   * answers what the host reads of the life. */
-  private ask<T>(
-    target: "session" | "console" | "library" | "host",
-    method: string,
-    ...args: unknown[]
-  ): Promise<T> {
-    return this.request(target, method, args) as Promise<T>;
-  }
-  /** Whether the model of an actor takes an image, as the catalog of the crate says. */
-  sees = (actor: string) => this.ask<boolean>("library", "sees", actor);
-  /** What this window does in the life, as the hello of its host gave it: a window that reads changes nothing. */
-  role: Role = "write";
+  /** What this window does in the life, as the daemon welcomed it: a window that reads changes nothing. */
+  role: "read" | "write" = "write";
   /** Why this window holds no life now, in plain words, and nothing while the life is open. */
   lost = "";
-  /** Whether the life runs in a host of this machine, which this window can stop and open again. */
-  local = false;
-  /** The window reaches the life again: the host of the record that answers, or a host that it starts, and the view
-   * reads the life from the start. */
-  reopen = () => this.ask<void>("host", "reopen");
-  /** The end of the host of this life by force, for a host that does not answer the end of the life. */
-  stop = () => this.ask<void>("host", "stop");
-  /** The addresses at which other operators reach the life over the network, to read or to write. The first serve
-   * opens the door of the host at the address that it is given, host:port or a port, on 127.0.0.1 and a free port by
-   * default, and each later one gives the same addresses. */
-  serve = (address = "") => this.ask<Served>("host", "serve", address);
-  /** The models the catalog of the crate offers, each as its name, its efforts and its window. */
-  catalog = () => this.ask<[string, string[], number][]>("library", "catalog");
-  /** What the first run checks of this machine, and nothing in the demo, which needs no model. */
-  setup = () => this.ask<SetupInfo | null>("library", "setup");
-  providers = () => this.ask<ProviderChoice[]>("library", "providers");
-  provider = (name: string, value: unknown) => this.ask<boolean>("library", "provider", name, value);
-  codexAuth = (action = "status") => this.ask<import("furb").CodexAuthInfo>("library", "codexAuth", action);
-  reload = () => this.ask<boolean>("library", "reload");
-  /** The name of the model that a name gives in the roster or in the catalog, and nothing when it gives none. */
-  model = (name: string) => this.ask<string | null>("library", "model", name);
-  answer = (id: string, value: string) => this.ask<unknown>("console", "answer", id, value);
-  /** The words of the operator in place of each value that a question offers, which close it as Refused. */
-  decline = (id: string, words: string) => this.ask<unknown>("console", "decline", id, words);
-  /** The operator read a chain or a thread up to a place, which the record keeps as a fact seen. */
-  see = (about: string, place: number) => this.ask<null>("library", "seen", about, place);
-  attachImage = (path: string) => this.ask<ImageAttachment>("session", "attachImage", path);
-  sendQueued = (entry: FollowUp) => this.ask<string>("library", "queue", entry);
-  resume = () => this.ask<unknown>("session", "resume");
-  source = () => this.ask<string>("library", "source");
-  /** What a new life from the record open to read carries, and the first word that binds it. */
-  carry = () => this.ask<Carry>("library", "carry");
-  snapshot = (chain: string, since = 0, held = 0) =>
-    this.ask<Snapshot>("library", "snapshot", chain, since, held);
-  readChanges = (start: number, count: number) => this.ask<FileChange[]>("library", "changes", start, count);
-  /** The net change of each file across the changes that the writes made, or across every change of the life when
-   * no list of writes is given. */
-  netChanges = (writes: string[] | null) => this.ask<FileChange[]>("library", "net", writes);
-  /** The change of each file of the branch against main, as git holds it in the directory of the session. */
-  branchChanges = () => this.ask<FileChange[]>("library", "branch");
-  /** The journal of file changes written again with each change that it holds, and the counts of changes kept and of
-   * lines removed. */
-  repairChanges = () => this.ask<Repaired>("library", "repairChanges");
-  /** A new journal of file changes, and the path that the damaged one is kept at. */
-  renewChanges = () => this.ask<string>("library", "renewChanges");
-  /** An act whole, with all that a command printed, and nothing when the life holds no such act. */
-  act = (id: string) => this.ask<LiveAct | undefined>("library", "act", id);
-  /** The text the World reads at a path, from where a chain stands, which makes no act and keeps nothing. */
-  look = (path: string, chain: string) =>
-    this.ask<{ path: string; content: string }>("library", "look", path, chain);
-  /** The end of the window's hold on the life: a life in the window ends with it, and a life in a host of its own
-   * goes on. */
-  dispose = () => this.ask<void>("session", "dispose");
-  /** The end of the life, its commands and its models, wherever it runs. */
-  end = () => this.ask<void>("session", "end");
-}
+  /** Whether the life runs in the daemon of this machine, which this window can reach again. */
+  local = true;
+  /** The named verbs of the life that the view reads now, which a record open to read refuses when it would change
+   * it. */
+  readonly engine: Engine = ((view: HostView): Engine => ({
+    root: "chain1",
+    get disposed() {
+      return view.life.disposed;
+    },
+    prompt: (...args) => view.life.prompt(...args),
+    rung: (...args) => view.life.rung(...args),
+    chain: (...args) => view.life.chain(...args),
+    bash: (...args) => view.life.bash(...args),
+    grant: (...args) => view.life.grant(...args),
+    stand: () => view.life.stand(),
+    result: (id) => view.life.result(id),
+    outcome: (id) => view.life.outcome(id),
+    peek: (id) => view.life.peek(id),
+    pause: (...args) => view.life.pause(...args),
+    wake: (id) => view.life.wake(id),
+    cancel: (...args) => view.life.cancel(...args),
+    close: (...args) => view.life.close(...args),
+    read: (...args) => view.life.read(...args),
+    write: (...args) => view.life.write(...args),
+    transcript: (...args) => view.life.transcript(...args),
+    turns: (...args) => view.life.turns(...args),
+    program: (...args) => view.life.program(...args),
+    cwd: (...args) => view.life.cwd(...args),
+    names: (chain) => view.life.names(chain),
+    inspect: (name, chain) => view.life.inspect(name, chain),
+  }))(this);
+  /** The journal of the changes of files of the life, as the daemon writes it beside the record. */
+  private journal?: FileChanges;
+  private life: Held;
+  private unheard?: () => void;
+  constructor(
+    life: Held,
+    private readonly options: EngineOptions,
+  ) {
+    super();
+    this.life = life;
+    this.directory = resolve(options.cwd ?? (options.record ? dirname(options.record) : "."));
+    this.record = options.record && resolve(options.record);
+    this.imageDirectory = this.record ? `${this.record}.images` : resolve(this.directory, ".furb/images");
+    this.bind(life);
+  }
 
-type Request = { id: number; target: string; method: string; args: unknown[] };
-/** What the holder of a life sends a window: an answer to a request, or a push of the life. */
-type Message = {
-  authentication?: import("furb").CodexAuthInfo;
-  id?: number;
-  value?: unknown;
-  error?: string;
-  name?: string;
-  disposed?: boolean;
-  fault?: string;
-  log?: string;
-  state?: HostState;
-  ended?: string;
-};
+  /** The life that the view reads, and each of its events heard. */
+  private bind(life: Held): void {
+    this.unheard?.();
+    this.life = life;
+    this.journal?.dispose();
+    this.journal = this.record ? new FileChanges(this.record, true) : undefined;
+    if (life instanceof ReadLife) {
+      this.reading = life.reader.reading;
+      this.recorded = life.reader.recorded;
+      this.directory = life.reader.directory;
+    } else this.role = life.daemon.peer?.role ?? "write";
+    const facts = () => this.heard();
+    const change = () => this.update();
+    const log = (line: string) => this.emit("log", line);
+    const ended = (why: string) => {
+      this.lost = why;
+      this.emit("fault", new Error(why));
+      this.emit("change");
+    };
+    const reset = () => {
+      this.forget();
+      this.lost = "";
+      this.emit("reset");
+    };
+    const heard: [string, Listener][] = [
+      ["facts", facts],
+      ["change", change],
+      ["log", log],
+      ["ended", ended],
+      ["reset", reset],
+    ];
+    for (const [name, listener] of heard) life.on(name, listener);
+    this.unheard = () => {
+      for (const [name, listener] of heard) life.off(name, listener);
+    };
+    this.forget();
+  }
 
-/** The requests of a window to the holder of its life, and what comes back: each request takes a number, and each
- * answer goes to its request, while each push goes to the host view. */
-export class Link {
-  closed = false;
-  /** Why the link ended, which each later request fails with. */
-  private why = DISPOSED;
-  readonly host: HostView;
-  private sequence = 0;
-  private readonly waiting = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
-  /** The requests that wait for a transport, as a window that attaches again holds them, or for the open of the life. */
-  private held: Request[] = [];
-  private sender?: (message: Request) => void;
-  /** Whether the life is not open yet, so that a request waits for it, in the order it was made, but for the requests
-   * that open the life and for the end of the window's hold on it. */
-  opening = false;
-  /** The requests that go while the life opens. */
-  private readonly early = new WeakSet<Request>();
-  constructor(local?: (target: string, method: string) => Promise<unknown> | undefined) {
-    this.host = new HostView(
-      (target, method, args) => local?.(target, method) ?? this.request(target, method, args),
+  /** The view of the life read again from its start. */
+  private forget(): void {
+    this.chains.clear();
+    this.answers.clear();
+    this.replies.clear();
+    this.lines.clear();
+    this.given = undefined;
+    this.heardAt = 0;
+    this.replayed = this.life.facts.length;
+    this.timed = this.replayed;
+    this.update();
+  }
+
+  /** A record that a build of another engine made drifts on a replay, so it opens to read in its place, with the
+   * facts that it kept. */
+  readInstead(why: string): boolean {
+    const record = this.record;
+    if (!record || !why.includes("Drift")) return false;
+    const { file, made, engine, version, current, logged } = retold(record);
+    // The reason of the read is the drift itself, after what the end of the life said before it.
+    const drift = why.slice(why.indexOf("Drift"));
+    const reader = new Reader(
+      this.directory,
+      record,
+      { made, engine, version, current, why: drift, logged },
+      file,
+    );
+    this.bind(new ReadLife(reader));
+    this.lost = "";
+    this.emit("reset");
+    return true;
+  }
+
+  /** What the view holds after a change of the life. */
+  private update(): void {
+    const { activity } = this.life;
+    this.completed = activity.completed;
+    this.cost = activity.cost;
+    this.seq = this.life.facts.length;
+    this.seen = new Map(activity.seen);
+    this.streams = new Map(this.life.streams);
+    this.measures = Object.fromEntries(
+      [...activity.answers].map(([chain, list]) => [chain, measureOf(list)]),
+    );
+    this.compactions = [...activity.compactions];
+    const prompts = new Map<string, Prompt>();
+    if (this.life instanceof RemoteLife)
+      for (const act of this.life.acts.values())
+        if (act.kind === "prompt" && act.operator && act.phase.phase !== "done")
+          prompts.set(act.id, {
+            id: act.id,
+            shape: String(act.words[0] ?? ""),
+            message: String(act.words[1] ?? ""),
+          });
+    this.prompts = prompts;
+    this.emit("change");
+  }
+
+  /** The facts of a change: the view holds them, and the work that waits for a wake is read again. */
+  private heard(): void {
+    this.time();
+    this.update();
+    if (this.journal) {
+      this.journal.readable(0, 0);
+      this.changes = this.journal.length;
+    }
+    this.emit("facts");
+    void this.life.pending().then(
+      (pending) => {
+        this.pending = pending;
+        this.emit("change");
+      },
+      () => {},
     );
   }
-  set send(sender: ((message: Request) => void) | undefined) {
-    this.sender = sender;
-    this.flush();
-  }
-  /** Sends the requests that wait, but for those that wait for the open of the life while it opens. */
-  private flush(): void {
-    const sender = this.sender;
-    if (!sender) return;
-    const goes = (message: Request) => !this.opening || this.early.has(message);
-    const now = this.held.filter(goes);
-    this.held = this.held.filter((message) => !goes(message));
-    for (const message of now) sender(message);
-  }
-  /** The life answered its open: the requests that waited for it go. */
-  open(): void {
-    this.opening = false;
-    this.flush();
-  }
-  request(target: string, method: string, args: unknown[], first = false): Promise<unknown> {
-    return new Promise<unknown>((resolve, reject) => {
-      if (this.closed) {
-        reject(new Error(this.why));
-        return;
+
+  /** When this window saw each act begin, and how long each act that it saw begin took to be done. The record holds
+   * no time, so an act that the life told as the window attached took no time that it knows. */
+  private readonly began = new Map<string, number>();
+  private readonly took = new Map<string, number>();
+  private replayed = 0;
+  private timed = 0;
+  private time(): void {
+    const now = clock();
+    const facts = this.life.facts;
+    for (; this.timed < facts.length; this.timed++) {
+      const [kind, id] = facts[this.timed] as Fact;
+      const began = this.began.get(id);
+      if (isQuestion(kind, id)) this.began.set(id, now);
+      else if (kind === "done" && began !== undefined) {
+        this.began.delete(id);
+        this.took.set(id, now - began);
       }
-      const message = { id: ++this.sequence, target, method, args };
-      this.waiting.set(message.id, { resolve, reject });
-      if (first || (target === "session" && method === "dispose")) this.early.add(message);
-      if (this.sender && (!this.opening || this.early.has(message))) this.sender(message);
-      else this.held.push(message);
+    }
+  }
+
+  private readonly chains = new Map<string, ChainView>();
+  /** The usage of each answer of each chain, by the chain that the reply stands on. */
+  private readonly answers = new Map<string, Usage[]>();
+  /** The last reply of each chain that an answer settled. */
+  private readonly replies = new Map<string, string>();
+  /** The lines that each write added and removed, by the write. */
+  private readonly lines = new Map<string, NonNullable<ActRow["lines"]>>();
+  private heardAt = 0;
+  private given?: Given;
+  private marks = 0;
+
+  /** What a fact changes of the views of the chains, which each read again what it changed. */
+  private changed(fact: Fact): void {
+    const [kind, id] = fact;
+    const answered = kind === "done" ? questionKind(id) : undefined;
+    // A word may bind the actor of its chain again, so the actor is read again at each step of a word.
+    if (
+      ["run", "writing", "ran", "ready", "wants"].includes(kind) ||
+      ["run", "writing", "wants"].includes(answered ?? "")
+    )
+      for (const cached of this.chains.values()) cached.actor = undefined;
+    // The standing has one home, the root, and every chain that takes it tells it and holds its actor.
+    if (answered === "stand")
+      for (const cached of this.chains.values())
+        Object.assign(cached, {
+          roster: undefined,
+          directory: undefined,
+          actor: undefined,
+          turns: undefined,
+        });
+    const turn = fact[3];
+    const scope = this.life.activity.scope(id);
+    if (answered === "reply" && Array.isArray(turn) && Array.isArray(turn[2])) {
+      const answers = this.answers.get(scope) ?? [];
+      answers.push(usageOf(turn[2]));
+      this.answers.set(scope, answers);
+      this.replies.set(scope, id);
+    }
+    const view = this.chains.get(scope);
+    if (!view) return;
+    if (
+      ["tell", "pause", "wake", "cancel", "close", "reply", "prefix"].includes(kind) ||
+      answered === "reply"
+    )
+      view.turns = undefined;
+    // A run adds its word to the program as the program reads it.
+    if (kind === "run" && isQuestion(kind, id) && view.program) {
+      const [rung, word, donor] = fact.slice(4).map(String);
+      const key = donor || rung || "";
+      view.program[key] = word ?? "";
+      view.worded ??= { whole: false, words: {} };
+      view.worded.words[key] = word ?? "";
+    } else if (kind === "run" || kind === "module" || kind === "prefix") view.program = undefined;
+    if (kind === "cd") view.directory = undefined;
+    // A write of the door of a prompt edits the program of its ladder and replays it.
+    const wrote = kind === "write" ? fact[4] : answered === "write" ? fact[3] : undefined;
+    if (
+      wrote &&
+      typeof wrote === "object" &&
+      isQuestion("prompt", String((wrote as { path?: unknown }).path))
+    ) {
+      view.turns = undefined;
+      view.program = undefined;
+      view.actor = undefined;
+    }
+  }
+
+  /** The view of a chain, with the acts that changed after a count of changes of the act table. A session that holds
+   * the snapshot of a mark takes only the parts of the chain that changed since that snapshot. */
+  async snapshot(requested: string, since = 0, held = 0): Promise<Snapshot> {
+    const life = this.life;
+    try {
+      return await this.snapshotOf(life, requested, since, held);
+    } catch (error) {
+      // A life that drifted on its record ended while the view read it, and the record opened to read in its place,
+      // which the view reads from its start.
+      if (this.life !== life) return await this.snapshot(requested, 0, 0);
+      throw error;
+    }
+  }
+
+  private async snapshotOf(life: Held, requested: string, since: number, held: number): Promise<Snapshot> {
+    const facts = life.facts;
+    for (const fact of facts.slice(this.heardAt)) this.changed(fact);
+    const start = facts.length;
+    const selected = life.activity.acts.get(requested)?.kind === "chain" ? requested : life.root;
+    const view = this.chains.get(selected) ?? {};
+    this.chains.set(selected, view);
+    view.roster ??= ((await life.standing())[0] ?? []).map(([name, efforts, window]) => [
+      name,
+      efforts,
+      window,
+    ]);
+    if (!view.program) {
+      view.program = { ...(await life.program({ on: selected })) };
+      view.worded = { whole: true, words: view.program };
+    }
+    view.turns ??= await life.turns({ on: selected });
+    view.directory ??= expandHome(await life.cwd({ on: selected }));
+    view.actor ??= String((await life.inspect("actor", selected)).value ?? "");
+    // The actor of the root is the actor of the life, which a chain with no actor of its own takes.
+    if (selected === life.root) this.actor = view.actor;
+    // A fact that came while the views were read changes them at the next snapshot, which the session takes then.
+    this.heardAt = start;
+    const dispatched = [...queueDispatches(facts.map((fact) => [fact] as [Fact])).keys()];
+    // The daemon writes the journal after it tells the write, so the counts of a write may come after its act: the
+    // act whose counts came is given again with them.
+    const counted = new Set<string>();
+    for (const change of this.journal?.readable(0, this.journal.length) ?? [])
+      if (change.act && !this.lines.has(change.act)) {
+        this.lines.set(
+          change.act,
+          lineCounts(createTwoFilesPatch(change.path, change.path, change.before, change.after)),
+        );
+        counted.add(change.act);
+      }
+    const { acts, count } = life.activity.since(since);
+    for (const act of acts) counted.delete(act.id);
+    for (const id of counted) {
+      const act = life.activity.acts.get(id);
+      if (act) acts.push(act);
+    }
+    const given = this.given?.mark === held && this.given.chain === selected ? this.given : undefined;
+    const answers = this.answers.get(selected) ?? [];
+    const reply = this.replies.get(selected);
+    const filled = reply ? await life.filled(reply) : undefined;
+    const from = { turns: given ? firstChange(given.turns, view.turns) : 0, answers: given?.answers ?? 0 };
+    const program = given ? view.worded : { whole: true, words: view.program };
+    view.worded = undefined;
+    const mark = ++this.marks;
+    this.given = { mark, chain: selected, roster: view.roster, turns: view.turns, answers: answers.length };
+    const chain = life.activity.acts.get(selected);
+    return {
+      mark,
+      selected,
+      // Each row is a copy of its act as it stands now: the activity changes its acts in place, and the session finds
+      // what changed by the rows that it held before.
+      acts: acts.map((act) => row(structuredClone(act), this.lines.get(act.id), this.took.get(act.id))),
+      count,
+      paused: Boolean(chain?.paused),
+      cause: (chain?.paused && chain.pause) || null,
+      dispatched,
+      ...(given?.roster === view.roster ? {} : { roster: view.roster }),
+      ...(program ? { program } : {}),
+      turns: { from: from.turns, list: view.turns.slice(from.turns) },
+      answers: { from: from.answers, list: answers.slice(from.answers) },
+      filled,
+      directory: view.directory,
+      actor: view.actor,
+    };
+  }
+
+  /** The demo asks no model, so it reads nothing of the providers of this machine. */
+  private get demo(): boolean {
+    return Boolean(this.options.demo || this.options.watch);
+  }
+  private async refreshCodex(): Promise<void> {
+    const { claude, config } = this.options;
+    if (
+      this.demo ||
+      !setup(claude, this.directory, config).providers.some((one) => one.provider === "codex" && one.enabled)
+    )
+      return;
+    let status = codexAuth("refresh", config);
+    while (status.state === "connecting") {
+      await Bun.sleep(200);
+      status = codexAuth("status", config);
+    }
+  }
+  /** The models the catalog of the crate offers, each as its name, its efforts and its window. */
+  async catalog(): Promise<Roster> {
+    if (this.demo) return [];
+    await this.refreshCodex();
+    return models(this.options.claude, this.directory, this.options.config).map(
+      ({ name, efforts, window }) => [name, efforts, window],
+    );
+  }
+  /** What the first run checks of this machine, and nothing in the demo, which needs no model. */
+  async setup(): Promise<SetupInfo | null> {
+    return this.demo ? null : setup(this.options.claude, this.directory, this.options.config);
+  }
+  async providers(): Promise<ProviderChoice[]> {
+    if (this.demo) return [{ name: "claude-cli", enabled: true, models: 4 }];
+    const found = setup(this.options.claude, this.directory, this.options.config);
+    const offered = found.providers.map((one) => ({
+      name: one.provider,
+      enabled: one.enabled,
+      models: one.offered,
+    }));
+    if (!offered.some((one) => one.name === "claude-cli"))
+      offered.push({ name: "claude-cli", enabled: true, models: found.claude ? 4 : 0 });
+    if (!offered.some((one) => one.name === "local"))
+      offered.push({ name: "local", enabled: true, models: found.local?.offered ?? 0 });
+    return offered.sort((a, b) => a.name.localeCompare(b.name));
+  }
+  /** A provider saved in the settings of the project, which the life stands on at once. */
+  async provider(name: string, value: unknown): Promise<boolean> {
+    if (this.demo) throw new Error("Provider settings are not available in the demo.");
+    const { config } = this.options;
+    if (name === "codex" && value === false) codexAuth("cancel", config);
+    else if (name === "codex" && value === true) {
+      let status = codexAuth("refresh", config);
+      if (["disconnected", "needs-login", "failed", "canceled"].includes(status.state))
+        status = codexAuth("start", config);
+      this.emit("authentication", status);
+      while (["waiting", "connecting"].includes(status.state)) {
+        await Bun.sleep(200);
+        const next = codexAuth("status", config);
+        if (next.state !== status.state) this.emit("authentication", next);
+        status = next;
+      }
+      if (status.state === "canceled") return false;
+      if (status.state !== "connected") throw new Error(status.message || "OpenAI sign-in did not complete.");
+    }
+    await changeProvider(this.directory, name, value, () => this.stand());
+    return true;
+  }
+  codexAuth = async (action = "status") => codexAuth(action, this.options.config);
+  /** The settings of the providers read again, and the life stood on them. */
+  async reload(): Promise<boolean> {
+    if (this.demo) throw new Error("Provider settings are not available in the demo.");
+    await this.refreshCodex();
+    await this.stand();
+    return true;
+  }
+  private async stand(): Promise<void> {
+    await this.life.result(await this.life.stand());
+  }
+  /** The name of the model that a name gives in the roster or in the catalog, and nothing when it gives none. */
+  async model(name: string): Promise<string | null> {
+    const names = ((await this.life.standing())[0] ?? []).map(([one]) => one);
+    const found = model(name, this.directory, this.options.config);
+    const held = found?.name ?? name;
+    const offered =
+      names.includes(held) ||
+      (!this.demo &&
+        models(this.options.claude, this.directory, this.options.config).some((one) => one.name === held));
+    return offered ? held : null;
+  }
+  /** Whether the model of an actor takes an image, as the catalog of the crate says. */
+  async sees(actor: string): Promise<boolean> {
+    const names = ((await this.life.standing())[0] ?? []).map(([one]) => one);
+    return model(actorParts(actor, names).model, this.directory, this.options.config)?.images ?? false;
+  }
+  async source(): Promise<string> {
+    return ENGINE;
+  }
+  /** What a new life from the record open to read carries, and the first word that binds it. */
+  async carry(): Promise<Carry> {
+    if (!(this.life instanceof ReadLife)) throw new Error("This life is open, so it carries nothing.");
+    return this.life.reader.carry();
+  }
+  answer = (id: string, value: string) => this.life.answer(id, value);
+  /** The words of the operator in place of each value that a question offers, which close it as Refused. */
+  decline = (id: string, words: string) =>
+    this.life.close(JSON.stringify({ is: "Refused", args: [words] }), { id });
+  /** The operator read a chain or a thread up to a place, which the record keeps as a fact seen. */
+  async see(about: string, place: number): Promise<null> {
+    if (place > (this.life.activity.seen.get(about) ?? 0)) await this.life.seen(about);
+    return null;
+  }
+  async attachImage(path: string): Promise<ImageAttachment> {
+    if (this.role === "read" || this.reading) throw new Error("Record inspection cannot attach an image.");
+    return attachImage(this.imageDirectory, resolve(this.directory, path));
+  }
+  /** A message that the operator queued, sent once on its chain, whichever window sends it: the life sends it once its
+   * chain rests, and tells the prompt that it made, or why its send failed, in a fact `queue` of the operator. */
+  async sendQueued(entry: FollowUp): Promise<string> {
+    await this.life.queue(entry.id, entry.shape, entry.text, entry.chain);
+    return await new Promise<string>((resolve, reject) => {
+      const look = () => {
+        const facts = this.life.facts;
+        for (let at = facts.length - 1; at >= 0; at--) {
+          const fact = facts[at] as Fact;
+          if (fact[0] !== "queue" || fact[2] !== "operator" || fact[4] !== entry.id) continue;
+          if (fact[3] === "sent") return end(() => resolve(String(fact[5])));
+          if (fact[3] === "failed") return end(() => reject(new Error(String(fact[5]))));
+          if (fact[3] === "drop")
+            return end(() => reject(new Error("The follow-up was taken out of the queue.")));
+        }
+        if (this.lost) end(() => reject(new Error(this.lost)));
+      };
+      const end = (settle: () => void) => {
+        this.off("facts", look);
+        this.off("fault", look);
+        settle();
+      };
+      this.on("facts", look);
+      this.on("fault", look);
+      look();
     });
   }
-  receive(data: Message): void {
-    if (data.authentication) {
-      this.host.emit("authentication", data.authentication);
-      return;
-    }
-    if (data.fault) {
-      this.host.emit("fault", new Error(data.fault));
-      return;
-    }
-    if (data.log) {
-      this.host.emit("log", data.log);
-      return;
-    }
-    if (data.state) {
-      this.host.update(data.state);
-      return;
-    }
-    if (data.ended) {
-      this.end(data.ended);
-      this.host.emit("fault", new Error(data.ended));
-      return;
-    }
-    const promise = this.waiting.get(data.id ?? 0);
-    this.waiting.delete(data.id ?? 0);
-    if (data.error)
-      promise?.reject(Object.assign(new Error(data.error), data.name ? { name: data.name } : {}));
-    else promise?.resolve(data.value);
-    if (data.disposed) this.end("The session is disposed.");
+  /** The work that waits for a wake started again: a wake of each chain that holds some. */
+  async resume(): Promise<void> {
+    const chains = new Set([...this.pending.keys()].map((id) => this.life.activity.acts.get(id)?.on));
+    for (const chain of chains) if (chain) await this.life.wake(chain);
   }
-  /** Each request that waits fails with a reason, as the holder of the life will not answer it. */
-  drop(why: string): void {
-    for (const pending of this.waiting.values()) pending.reject(new Error(why));
-    this.waiting.clear();
-    this.held = [];
+  private get files(): FileChanges {
+    if (!this.journal) throw new Error("This life keeps no record, so it keeps no journal of file changes.");
+    return this.journal;
   }
-  /** The end of the link: no request goes any more. */
-  end(why: string): void {
-    this.closed = true;
-    this.why = why;
-    this.drop(why);
-    if (why === DISPOSED) return;
-    this.host.lost = why;
-    this.host.emit("change");
+  /** A page of the changes of the journal, as the rewind reads them, past each line that is no change. */
+  readChanges = async (start: number, count: number) => this.files.readable(start, count);
+  /** The net change of each file across the changes that the writes made, or across every change of the life. */
+  netChanges = async (writes: string[] | null) => (this.journal ? net(written(this.journal, writes)) : []);
+  /** The change of each file of the branch against main, as git holds it in the directory of the session. */
+  branchChanges = async () => branchChanges(this.directory);
+  /** The journal written again with each change that it holds, and the counts of changes kept and of lines removed. */
+  async repairChanges(): Promise<Repaired> {
+    const writable = new FileChanges(this.record);
+    try {
+      return writable.repair();
+    } finally {
+      writable.dispose();
+      this.heard();
+    }
   }
-  /** The link takes requests again, as the window reaches a host again. */
-  revive(): void {
-    this.closed = false;
-    this.why = DISPOSED;
-    this.host.lost = "";
+  /** A new journal of file changes, and the path that the damaged one is kept at. */
+  async renewChanges(): Promise<string> {
+    const writable = new FileChanges(this.record);
+    try {
+      return writable.renew();
+    } finally {
+      writable.dispose();
+      this.heard();
+    }
   }
-  /** The engine of the life, as a proxy whose methods are requests. */
-  engine(root: string): Engine {
-    return new Proxy(
-      { root },
-      {
-        get: (target, key) => {
-          if (key === "root") return target.root;
-          if (key === "disposed") return this.closed;
-          if (key === "then") return undefined;
-          return (...args: unknown[]) => this.request("engine", String(key), args);
-        },
-      },
-    ) as Engine;
+  /** An act whole, with all that a command printed, and nothing when the life holds no such act. */
+  async act(id: string): Promise<LiveAct | undefined> {
+    return this.life instanceof ReadLife ? this.life.reader.act(id) : this.life.activity.acts.get(id);
+  }
+  /** The text at a path, from where a chain stands, which makes no act and keeps nothing. */
+  async look(path: string, chain: string): Promise<{ path: string; content: string }> {
+    const at = resolve(this.directory, expandHome(await this.life.cwd({ on: chain })), expandHome(path));
+    try {
+      return { path: at, content: readFileSync(at, "utf8") };
+    } catch {
+      throw new Error(`There is no file at ${at}.`);
+    }
+  }
+  /** The window reaches the life again, and reads it from its start. */
+  async reopen(): Promise<void> {
+    if (!(this.life instanceof RemoteLife))
+      throw new Error("This record is open to read, so it has no life to reach.");
+    await this.life.open();
+    this.lost = "";
+    this.forget();
+    this.emit("reset");
+  }
+  /** The life pinned under the name of a holder, so it lives with no window, until an unpin of that holder. */
+  pin = (holder: string) => this.life.pin(holder);
+  unpin = (holder: string) => this.life.unpin(holder);
+  /** The window lets the life go: the life ends once no window and no pin holds it, after the grace of the daemon. */
+  async dispose(): Promise<void> {
+    this.unheard?.();
+    this.journal?.dispose();
+    await this.life.detach();
   }
 }
 
-/** The life of a record, in a host of its own when the options ask it and a socket serves, or in a worker of the
- * window. A recorded life runs nothing, so it stays in the window. A window that names the address of a host on the
- * network attaches to that host, and keeps its view at its own record. */
-export async function openEngine(
-  options: EngineOptions,
-  made?: (link: Link) => void,
-): Promise<{ engine: Engine; host: HostView }> {
-  if (options.attach) {
-    const { host, port, key } = reachOf(options.attach);
-    return attach(options, () => dial(host, port), key, false, made);
-  }
-  const place =
-    options.host && options.record && !isRecorded(options.record) ? hostPlace(options.record) : undefined;
-  return place
-    ? attach(options, (stopped, from) => reach(options, place, stopped, from), "", true, made)
-    : inWindow(options, made);
-}
-
-/** A life that opens in the background: its engine and its host stand at once, so a session can draw its view before
- * the life is open. Each request of the view waits for the open, in the order it was made, and ready tells when the
- * life is open, or why it is not. The root of a life is the same for each life, and so is its record. */
+/** The life of a record, as a window holds it: in the daemon of this machine, or open to read for a recorded life, and
+ * a life that drifts on its record opens to read in its place. The demo answers the models of its life in the window.
+ * A life that the open makes stands on the model and the roster that the window names. Each request of the view waits
+ * for the open, in the order it was made, and ready tells when the life is open, or why it is not. */
 export function openingEngine(options: EngineOptions): {
   engine: Engine;
   host: HostView;
   ready: Promise<void>;
 } {
-  const made: { link?: Link } = {};
-  const opened = openEngine(options, (link) => {
-    made.link = link;
-    link.opening = true;
-    link.host.directory = resolve(options.cwd ?? (options.record ? dirname(options.record) : "."));
-    link.host.record = options.record && resolve(options.record);
-  });
-  // The open is begun by now, and it made the link before its first wait.
-  const held = made.link;
-  if (!held) throw new Error("The life did not begin to open.");
-  const ready = opened.then(({ engine }) => {
-    if (engine.root !== ROOT)
-      throw new Error(`The life opened on the chain ${engine.root}, and not on ${ROOT}.`);
-  });
-  return { engine: held.engine(ROOT), host: held.host, ready };
-}
-
-/** The life in a worker of the window, which ends with the window. */
-async function inWindow(
-  options: EngineOptions,
-  made?: (link: Link) => void,
-): Promise<{ engine: Engine; host: HostView }> {
-  const worker = new Worker(new URL("worker.ts", import.meta.url).href, { type: "module" });
-  const link = new Link((target, method) =>
-    target === "host"
-      ? Promise.reject(
-          new Error(
-            method === "stop" || method === "reopen"
-              ? "This life runs in its window, so it has no host to stop or to open again."
-              : "This life runs in its window, so no other operator reaches it.",
-          ),
-        )
-      : undefined,
-  );
-  made?.(link);
-  link.send = (message) => worker.postMessage(message);
-  worker.onmessage = ({ data }) => link.receive(data);
-  worker.onerror = (event) => {
-    link.end(event.message);
-    link.host.emit("fault", new Error(event.message));
+  const record = options.record && resolve(options.record);
+  if (record && isRecorded(record)) {
+    const life = new ReadLife(Reader.recorded(record, resolve(options.cwd ?? dirname(record))));
+    const host = new HostView(life, options);
+    return { engine: host.engine, host, ready: Promise.resolve() };
+  }
+  // The demo of a folder keeps its record in it, and each other life names its record.
+  const kept =
+    record ?? (options.demo || options.watch ? resolve(options.cwd ?? ".", "demo.jsonl") : undefined);
+  if (!kept) throw new Error("A life of the daemon needs a record.");
+  const choices: Choices = {
+    cwd: options.cwd && resolve(options.cwd),
+    actor: [options.model, options.effort].filter(Boolean).join("/") || undefined,
+    roster: roster(options),
+    extensions: options.demo ? options.extensions === true : options.extensions,
+    // The life reads the settings and runs the claude command line that this window reads, whatever the environment
+    // of the daemon names.
+    config: options.config ?? process.env.FURB_CONFIG_DIR,
+    claude: options.claude ?? process.env.FURB_CLAUDE_BIN,
+    models: options.demo || options.watch ? demoModels(options.watch) : undefined,
   };
-  let root: string;
-  try {
-    root = (await link.request("session", "open", [options], true)) as string;
-    link.open();
-  } catch (error) {
-    // No caller holds a worker whose life did not open, so it ends here.
-    link.end("The session is disposed.");
-    worker.terminate();
-    throw error;
-  }
-  return { engine: link.engine(root), host: link.host };
-}
-
-/** A connection to a host on the network, which fails with the reason when no host answers there. */
-function dial(host: string, port: number): Promise<Socket> {
-  return new Promise((resolve, reject) => {
-    const socket = createConnection({ host, port });
-    socket.once("connect", () => {
-      socket.removeAllListeners("error");
-      resolve(socket);
-    });
-    socket.once("error", (error) =>
-      reject(new Error(`No host of a life answers at ${host}:${port}: ${error.message}`)),
-    );
-  });
-}
-
-/** A connection to the socket at a path, and nothing when no host answers there. */
-function connect(path: string): Promise<Socket | undefined> {
-  return new Promise((resolve) => {
-    const socket = createConnection(path);
-    socket.once("connect", () => {
-      socket.removeAllListeners("error");
-      resolve(socket);
-    });
-    socket.once("error", () => resolve(undefined));
-  });
-}
-
-/** How long a window waits for a sign of a host before it starts one again: a host that ends frees the lease at its
- * end, so a lease that no host of furb holds is held by another program or is about to go. */
-const QUIET = 1000;
-
-/** The socket of a host that another window started, or that is about to end, while its process runs: a host that
- * opens a long record takes minutes, so the wait has no end while the process lives. Nothing when no host lives for
- * the time of QUIET. */
-async function waiting(place: Place, stopped: () => boolean): Promise<Socket | undefined> {
-  let seen = Date.now();
-  for (;;) {
-    const socket = await connect(place.socket);
-    if (socket) return socket;
-    if (stopped()) throw new Error(STOPPED);
-    const about = aboutOf(place);
-    if (about && isHost(about.pid)) seen = Date.now();
-    else if (Date.now() - seen > QUIET) return undefined;
-    await Bun.sleep(250);
-  }
-}
-
-/** A host that this window starts as a process of its own, detached from the window: its socket once it listens, or
- * why it ended before. A window that stops its host while the host starts ends it. */
-async function launch(
-  options: EngineOptions,
-  place: Place,
-  stopped: () => boolean,
-  from?: string,
-): Promise<Socket | string> {
-  const log = openSync(place.log, "a", 0o600);
-  const child = spawn(
-    process.execPath,
-    [new URL("host.ts", import.meta.url).pathname, JSON.stringify(from ? { ...options, from } : options)],
-    {
-      detached: true,
-      stdio: ["ignore", log, log],
+  const life = new RemoteLife(daemon(), kept, choices);
+  const host = new HostView(life, { ...options, record: kept });
+  const ready = life.open().then(
+    () => {
+      host.role = life.daemon.peer?.role ?? "write";
+      // The folder of the life stands beside its record, where a later --resume of the record reads it.
+      if (host.role === "write")
+        saveFile(`${kept}.session.json`, JSON.stringify({ options: { cwd: host.directory } }));
+    },
+    (error: unknown) => {
+      const why = error instanceof Error ? error.message : String(error);
+      if (!host.readInstead(why)) throw error;
     },
   );
-  closeSync(log);
-  child.unref();
-  let ended: number | undefined;
-  child.once("exit", (code, signal) => {
-    ended = code ?? (signal ? 128 : 1);
-  });
-  for (;;) {
-    const socket = await connect(place.socket);
-    if (socket) return socket;
-    if (stopped()) {
-      if (child.pid) await stopProcess(child.pid, graceOf());
-      throw new Error(STOPPED);
-    }
-    if (ended !== undefined) {
-      const again = await connect(place.socket);
-      if (again) return again;
-      let failed: { pid?: number; error?: string } = {};
-      try {
-        failed = JSON.parse(readFileSync(place.failed, "utf8"));
-      } catch {}
-      return failed.pid === child.pid && failed.error
-        ? failed.error
-        : `The host of the life ended with ${ended} before it listened: ${place.log} says why.`;
-    }
-    await Bun.sleep(20);
-  }
+  life.once("ended", (why: string) => host.readInstead(why));
+  return { engine: host.engine, host, ready };
 }
 
-/** How long a host that a window stops has to end the life before the window kills it, in milliseconds. */
-const graceOf = () => Number(process.env.FURB_HOST_GRACE ?? 12000);
-/** How long a host has to answer the end of the life before the window stops it, in milliseconds. */
-const endingOf = () => Number(process.env.FURB_HOST_ENDING ?? 15000);
-/** What a window says when a program that is no host holds the life. */
-const HELD =
-  "Another program holds the life, and it is no host that this window can reach. End that program, then open the life again.";
-
-/** A connection to the host of a life: the host that answers at its place, or a host that the window starts as a
- * process of its own, detached from the window, which it waits for. A host that ends before it listens says why. A
- * host that finds the life owned waits for that owner while it runs: the host of another window that opens a long
- * record, or one that ends. A lease that no host of furb holds fails with the words to end that program. */
-async function reach(
-  options: EngineOptions,
-  place: Place,
-  stopped: () => boolean = () => false,
-  from?: string,
-): Promise<Socket> {
-  for (let tries = 1; ; tries++) {
-    const found = await connect(place.socket);
-    if (found) return found;
-    if (stopped()) throw new Error(STOPPED);
-    const got = await launch(options, place, stopped, from);
-    if (typeof got !== "string") return got;
-    if (!got.includes(RIVAL) && !got.includes(OWNED)) throw new Error(got);
-    const host = await waiting(place, stopped);
-    if (host) return host;
-    if (tries >= 3) throw new Error(HELD);
-  }
-}
-
-/** How long a window waits for a host of another build to end once it asked it to hand the life over: the host waits
- * up to 10 seconds for what runs, then ends the life. */
-const TAKEOVER = 60000;
-
-/** The life in a host of its own, which outlives the window. A dispose of the window detaches it, and the life goes
- * on; an end ends the life. When the host goes away with the life open, the window attaches again, to a host that it
- * starts again when none answers, and reads the acts from the start when it is another host. Its hello gives the key
- * of the window, which a host on the network asks. A window of a host of this machine, which takes, takes over a host
- * of another build: the host ends the life, and the window starts a host of its own build, which opens the life again
- * on the same record. */
-async function attach(
-  options: EngineOptions,
-  reachHost: (stopped: () => boolean, from?: string) => Promise<Socket>,
-  key = "",
-  takes = false,
-  made?: (link: Link) => void,
-): Promise<{ engine: Engine; host: HostView }> {
-  let socket: Socket | undefined;
-  /** Whether this window stopped its host, which ends each reach of it. */
-  let stopping = false;
-  const place = takes && options.record ? hostPlace(options.record) : undefined;
-  const link: Link = new Link((target, method) => {
-    if (target === "host" && (method === "stop" || method === "reopen"))
-      return method === "stop" ? stop() : reopen();
-    if (target === "session" && method === "end" && place) return ending();
-    if (target !== "session" || method !== "dispose") return undefined;
-    link.end(DISPOSED);
-    socket?.end();
-    return Promise.resolve();
-  });
-  link.host.local = Boolean(place);
-  made?.(link);
-  const lost = "The host of the life ended before it answered.";
-  const mine = buildOf().catch((error: unknown) => `unknown: ${error}`);
-  let first: Hello | undefined;
-  let reaching: Promise<void> | undefined;
-  const hello = async (): Promise<Hello> => {
-    let from: string | undefined;
-    let tries = 0;
-    for (let took = false; ; ) {
-      const held = await reachHost(() => stopping, from);
-      socket = held;
-      // The record of a host on the network stands on another machine, or is the record of another operator, so the
-      // window keeps its view at its own record.
-      const send = framed(held, (data: Message) => {
-        if (socket !== held) return;
-        link.receive(
-          options.attach && data.state ? { ...data, state: { ...data.state, record: options.record } } : data,
-        );
-      });
-      link.send = send;
-      held.on("close", () => {
-        if (socket !== held) return;
-        link.send = undefined;
-        link.drop(lost);
-        // A host that wrote its fault before it ended is not started again by the window: the same fault would end the
-        // next host after a replay of minutes. The window says it, and /reopen tries once more.
-        const fault = place && first ? failureOf(place, first.pid) : undefined;
-        if (fault && !link.closed) {
-          const why = `The host of the life stopped with a fault: ${fault}. Open the life again to try once more.`;
-          link.end(why);
-          link.host.emit("fault", new Error(why));
-          return;
-        }
-        if (!link.closed && first) void reconnect();
-      });
-      held.on("error", () => {});
-      // A host that ends its side of the socket ends it whole: bun closes no socket whose peer ended while a write of
-      // the window waits on it, so the socket would wait with no close.
-      held.on("end", () => held.destroy());
-      const build = await mine;
-      let said: Hello;
-      try {
-        said = (await link.request(
-          "host",
-          "hello",
-          [{ window: process.pid, protocol: PROTOCOL, build, key }],
-          true,
-        )) as Hello;
-      } catch (error) {
-        // A host whose open met another owner of the life says so in the answer to the hello, as it ends: the window
-        // waits for that owner, as it does for a host that ends before it listens.
-        const why = error instanceof Error ? error.message : String(error);
-        if (!place || !(why.includes(RIVAL) || why.includes(OWNED))) throw error;
-        socket = undefined;
-        link.send = undefined;
-        held.destroy();
-        if (++tries >= 3) throw new Error(HELD);
-        (await waiting(place, () => stopping))?.destroy();
-        continue;
-      }
-      // A host that this window started after a takeover keeps its build, so two windows of two builds that open
-      // the life at once do not take it over from each other with no end. A host that took the life from the build
-      // of this window is not taken back: a window of an old build attaches to it.
-      if (takes && !took && said.build !== build && said.from !== build) {
-        socket = undefined;
-        link.send = undefined;
-        await takeOver(held, send, said, build);
-        from = said.build;
-        took = true;
-        continue;
-      }
-      if (said.protocol !== PROTOCOL) {
-        held.end();
-        throw new Error(
-          `The host of ${said.record} speaks the protocol ${said.protocol}, and this window ${PROTOCOL}. End the life in a window of its build first.`,
-        );
-      }
-      link.host.role = said.role ?? "write";
-      return said;
-    }
-  };
-  // A host that a kill ends can take a connection while its process ends, and then drops it before it answers the
-  // hello: the window reaches the place again, where no host answers any more, and starts a new one.
-  const again = async () => {
-    for (let tries = 1; ; tries++) {
-      try {
-        const next = await hello();
-        if (next.pid !== first?.pid || next.started !== first?.started) link.host.emit("reset");
-        first = next;
-        return;
-      } catch (error) {
-        if (error instanceof Error && error.message === lost && tries < 5 && !link.closed) continue;
-        link.end(error instanceof Error ? error.message : String(error));
-        link.host.emit("fault", error instanceof Error ? error : new Error(String(error)));
-        return;
-      }
-    }
-  };
-  /** The one reach of the host that is under way: a drop of the link and a reopen that come together join it, since
-   * two reaches would start two hosts, which write one file of faults, and one reach would read the fault of the other. */
-  const reconnect = (): Promise<void> =>
-    (reaching ??= again().finally(() => {
-      reaching = undefined;
-    }));
-  /** The end of the host by force: the window lets the life go, ends the process of the host, and removes what the
-   * host left. The window does this when the host does not answer, and no end of the life reaches it. */
-  const stop = async (): Promise<void> => {
-    if (!place) throw new Error("This window reaches no host of this machine, so it cannot stop one.");
-    stopping = true;
-    const pid = aboutOf(place)?.pid ?? first?.pid;
-    link.end(STOPPED);
-    socket?.destroy();
-    if (pid && isHost(pid)) await stopProcess(pid, graceOf());
-    rmSync(place.socket, { force: true });
-    rmSync(place.about, { force: true });
-  };
-  /** The end of the life, which waits for the host a bounded time: a host that does not answer is stopped. */
-  const ending = async (): Promise<void> => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const answered = link.request("session", "end", [], true).then(
-      () => true,
-      () => true,
-    );
-    const late = new Promise<boolean>((resolve) => {
-      timer = setTimeout(() => resolve(false), endingOf());
-    });
-    const done = await Promise.race([answered, late]);
-    clearTimeout(timer);
-    if (!done) await stop();
-  };
-  /** The life reached again, whatever ended the link: a host that answers, or a host that the window starts. */
-  const reopen = async (): Promise<void> => {
-    if (!place)
-      throw new Error("This window reaches no host of this machine, so it cannot open the life again.");
-    stopping = false;
-    const old = socket;
-    socket = undefined;
-    link.send = undefined;
-    old?.destroy();
-    link.revive();
-    await reconnect();
-    if (!link.closed) link.host.emit("reset");
-  };
-  try {
-    first = await hello();
-  } catch (error) {
-    // The requests that wait for the open of the life fail with the reason it did not open.
-    link.end(error instanceof Error ? error.message : String(error));
-    throw error;
-  }
-  link.open();
-  return { engine: link.engine(first.root), host: link.host };
-}
-
-/** The end of a host of another build, which hands the life over: the window asks it to end the life, and waits until
- * it closes the socket. The ask is an end of the session, so a host that does not know the hand over ends the life
- * as at any end. */
-async function takeOver(
-  held: Socket,
-  send: (message: object) => void,
-  said: Hello,
-  build: string,
-): Promise<void> {
-  let timer: Timer | undefined;
-  const closed = new Promise<boolean>((resolve) => {
-    held.once("close", () => resolve(true));
-    timer = setTimeout(() => resolve(false), TAKEOVER);
-  });
-  send({ id: 0, target: "session", method: "end", args: [{ handover: { build, protocol: PROTOCOL } }] });
-  const ended = await closed;
-  clearTimeout(timer);
-  if (ended) return;
-  held.destroy();
-  throw new Error(
-    `The host of ${said.record}, of the build ${said.build}, did not hand the life over to the build ${build} in ${TAKEOVER / 1000} seconds.`,
-  );
+/** The life of a record once it is open, or why it did not open. */
+export async function openEngine(options: EngineOptions): Promise<{ engine: Engine; host: HostView }> {
+  const { engine, host, ready } = openingEngine(options);
+  await ready;
+  return { engine, host };
 }

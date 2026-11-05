@@ -49,7 +49,6 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { App } from "../src/app.ts";
-import type { HostState } from "../src/bridge.ts";
 import { demoLibrary, demoSession } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
 import { fps } from "../src/theme.ts";
@@ -243,24 +242,11 @@ async function facts({ record, session, app, screen }: Opened, top: Map<string, 
   const output = () =>
     (session.actOf(bash)?.value as { stdout?: { content?: string } } | undefined)?.stdout?.content;
   const { host } = session;
-  const state = (streams: HostState["streams"]): HostState => ({
-    completed: host.completed,
-    cost: host.cost,
-    directory: host.directory,
-    imageDirectory: host.imageDirectory,
-    actor: host.actor,
-    record: host.record,
-    changes: host.changes,
-    reading: host.reading,
-    recorded: host.recorded,
-    measures: {},
-    compactions: [],
-    seq: host.seq,
-    facts: 0,
-    prompts: [...host.prompts.values()],
-    streams,
-    pending: [...host.pending],
-  });
+  /** A stream of a model, as the daemon tells its text to the window. */
+  const stream = (said: string) => {
+    host.streams = new Map([[rung, { chain: "chain1", text: said, thinking: "" }]]);
+    host.emit("change");
+  };
   let text = "";
   return {
     line: (at: number) => {
@@ -293,7 +279,7 @@ async function facts({ record, session, app, screen }: Opened, top: Map<string, 
       text += `token ${at} `;
       const said = text;
       return one(
-        () => host.update(state([[rung, { chain: "chain1", text: said, thinking: "" }]])),
+        () => stream(said),
         () => host.streams.get(rung)?.text === said,
       );
     },

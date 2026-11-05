@@ -124,73 +124,20 @@ Quit saves each open session and detaches the window from its life, and SIGINT, 
 the same way. On Windows, a console that closes and Ctrl+Break quit the same way. `/end` ends the life of each open
 session, its commands and its models, then quits.
 
-### A host that outlives the window
+### A life that outlives the window
 
-On macOS and Linux, the life of each session runs in a host of its own: a Bun process, `src/host.ts`, that holds the
-record, its lease, the World, the provider, the commands and the views of the life. The window draws and attaches to
-the host through a socket of Unix, so a quit or a crash of the window ends no command and no model of the life, and a
-window of a new build takes the life over with its record whole.
+The life of each session runs in the daemon of the machine, `furb host`, which holds the record, its lease, the World,
+the provider, the commands and the views of the life. The window draws, and speaks to the daemon by the protocol that
+[`docs/protocol.md`](../docs/protocol.md) says, so a quit or a crash of the window ends no command and no model of the
+life.
 
-- The host of a record listens at `hosts/<key>.sock` in the cache of furb, in a folder that only the user can open,
-  where `<key>` is the key of the scratch directory of the record. Beside it, `<key>.json` says the process of the
-  host, its record, its build, the engine of its life and the version of its protocol, and `<key>.log` holds what the
-  host writes. When the path of the socket is too long for the system, the folder is `furb-hosts-<uid>` in the
-  temporary directory.
-- A window that opens a record connects to its socket. When no host answers, the window starts one, as a process of
-  its own detached from the window, and waits until it listens. A host that cannot open the life, as on a record whose
-  lease another process holds, ends, and the window shows why.
-- Two windows can attach to one life. Each sees each change of the life, and the first answer to a question of the
-  operator wins. `/end` in one window ends the life, and each other window shows that the life ended.
-- When a host ends while the life goes on, as at a crash or at a signal such as the one of `kill`, the window starts a
-  host again and reads the acts of the life again from the start. A window hears that a window ended the life only
-  when a window did. A host that ends because its worker raised writes the fault in `<key>.failed`. A window starts no
-  host for that fault: it shows the fault, and `/reopen` tries once more.
-- A host looks at the free space of the disk of the record every 30 seconds. Under 2 GiB of disk, it shows a notice in
-  each window. A full disk stops the record, the log and the snapshot. `FURB_DISK_WARN` sets the disk limit in bytes.
-  A record in `.furb/sessions` adds a notice when the files of that folder hold more than 10 GiB, since nothing else
-  removes them. `FURB_SESSIONS_WARN` sets that limit in bytes.
-- A host says of itself in `<key>.json` as soon as it starts, and it listens at its socket before it opens the life. A
-  window that finds a host that still opens the life, as on a long record, attaches to it and waits for the open on
-  that socket, and starts no second one. A signal, or `/end` from a window, cuts the open: the host ends, removes its
-  socket and its file, and tells each window that waits why. A record that another program holds, which is no host,
-  fails with the words to end that program.
-- A window that lost its life, as one that another window ended or one whose host was stopped, shows why in plain
-  words, with two actions. `/reopen` reaches the life again, in the host that answers or in a host that the window
-  starts, and reads the acts from the start. `/stop` ends the process of the host by force. `/end` does the same
-  when the host does not answer the end of the life in 15 seconds, so no `pkill` is needed. `FURB_HOST_ENDING` sets
-  that wait, and `FURB_HOST_GRACE` the 12 seconds that a host that a window stops has to end the life before the
-  window kills it, each in milliseconds.
-- A window whose build is not the build of the host takes the host over. The host waits up to 10 seconds for each
-  command and each reply of a model that runs, ends the life, and exits, and each other window shows that a window of
-  another build took the life. Then the window starts a host of its own build, which opens the life again on the same
-  record. A command that runs past the wait stays pending in the new host, and a resume ends it as interrupted, so its
-  model runs it again if it wants. `FURB_BUILD` names the build of a window and of the hosts that it starts in place
-  of the build of the program, as the tests do.
-- The demo of a new project, which `bun run demo` opens with no `--cwd` and no record, stays in the window, since its
-  folder goes when the window quits. A recorded life, which runs nothing, stays in the window too. On Windows, each
-  life stays in the window.
-
-### Many operators
-
-One host serves one life to many operators: one record, one World, and one protocol, on this machine or over the
-network. Each window that comes through the socket of Unix reads and drives the life, since only the user opens its
-folder. Each other operator comes over the network, with a key that gives a role:
-
-- `/serve [address]` opens the door of the host on the network, at `host:port` or at a port, on `127.0.0.1` and a
-  free port by default, and gives two addresses: one to read and drive the life, and one to read it only. Each has the
-  form `furb://host:port/key`, and each holds the key of its role. The door stays open until the host ends, and a
-  later `/serve` gives the same two addresses. A host that listens at `0.0.0.0` names its machine in each address.
-- `bun run tui -- --attach <address>`, or `furb -- --attach <address>`, opens a window on that life. The window
-  keeps its view in a temporary folder, which goes when it quits, so the life of another operator joins no list of
-  its machine. A quit detaches the window, and a window that writes ends the life with `/end`.
-- A window that reads sees each change of the life, and the host refuses each request that would change it: a
-  prompt, a word, a command, an answer, a control, a serve and an end. It opens no file of the machine of the host by
-  its path, so it reads only what the life holds and the changes of its project.
-- A peer of the network says its hello first, with a key, in ten seconds and in 64 KiB, or the host ends its socket.
-  The host compares each key in a time that does not depend on its content.
-- The door carries each message as it is, with no encryption. Over a network that you do not trust, open the door
-  at `127.0.0.1` and reach it through a tunnel, as `ssh -L 7700:127.0.0.1:7700 <host>`, or through a private
-  network.
+- The daemon listens at `host/host.sock` in the cache of furb, or at a named pipe on Windows, and writes what it says in
+  `host/host.log` beside it. A window that finds no daemon there starts one, as a process of its own detached from the
+  window, and waits until it listens.
+- A window opens a life on its record, on its model, its roster and its settings, and the daemon tells it each fact of
+  the life from its start. A life that no window holds ends once the grace of the daemon passes, 30 seconds, and writes
+  its checkpoint: a later open boots on that checkpoint.
+- A recorded life, which runs nothing, and a record that drifts on this build open to read in the window, with no life.
 
 ## The demo
 

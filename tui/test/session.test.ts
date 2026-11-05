@@ -3,13 +3,14 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { store } from "furb";
 import { alive, printPid, remove } from "../../bind/typescript/test/processes.ts";
 import { until } from "../../bind/typescript/test/until.ts";
 import type { Engine } from "../src/bridge.ts";
+import { daemon } from "../src/client.ts";
 import { demoSession, removeDemoDirectories } from "../src/demo.ts";
 import type { Session } from "../src/session.ts";
 import { withDemo } from "./composing.ts";
+import { ended } from "./ended.ts";
 import { idle } from "./idle.ts";
 
 afterAll(removeDemoDirectories);
@@ -74,7 +75,7 @@ test("a view whose field has another form opens that field empty and names it, a
   }
 });
 
-test("a session that cannot save its view still ends its life, its commands and its lease", async () => {
+test("a session that cannot save its view still lets its life go, which ends in the daemon of the tests with its command", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-dispose-"));
   const record = join(directory, "life.jsonl");
   const session = await demoSession({ record });
@@ -91,9 +92,13 @@ test("a session that cannot save its view still ends its life, its commands and 
     const failed = await session.dispose().catch((error: unknown) => error);
     expect(String(failed)).toContain("life.jsonl.ui.json.tmp");
     expect(session.engine.disposed).toBe(true);
-    for (let tries = 0; alive(pid()) && tries < 100; tries++) await Bun.sleep(20);
+    // No window holds the life now, and the daemon of the tests gives a life no grace, so the life ends, and its
+    // checkpoint cuts the command that ran.
+    await ended(record);
+    const listed = await daemon().ask({ verb: "list" });
+    expect(listed.answer === "lives" && listed.data.find((one) => one.life === record)?.open).toBeFalsy();
+    for (const until = Date.now() + 10_000; alive(pid()) && Date.now() < until; ) await Bun.sleep(50);
     expect(alive(pid())).toBe(false);
-    store(record)[1].dispose();
   } finally {
     await remove(directory);
   }

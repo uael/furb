@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
-import { type NativeEar, scratch, store } from "furb";
+import { boot, type NativeEar, scratch, store } from "furb";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
@@ -14,6 +14,7 @@ import { Session, savedView } from "../src/session.ts";
 import { spacing } from "../src/theme.ts";
 import { type SessionEntry, Workspaces } from "../src/workspaces.ts";
 import { cellAt } from "./composing.ts";
+import { ended } from "./ended.ts";
 
 /** A library in the sidebar of an App on a test terminal: the terminal, the App that shows the session that the
  * library selects now, the first column of the sidebar, the rows of the frame that the App draws anew, and the row of
@@ -92,7 +93,7 @@ async function fooAndBar(directory: string, open: () => Workspaces) {
   return { library, group, first, second };
 }
 
-test("workspaces keep sessions alive, report background completion and input, and reopen saved records whose work goes on", () =>
+test("workspaces keep sessions alive, report background completion and input, and reopen a saved record with the work that its end cut done", () =>
   withLibrary(async ({ directory, open }) => {
     await mkdir(join(directory, "alpha"));
     await mkdir(join(directory, "beta"));
@@ -138,7 +139,7 @@ test("workspaces keep sessions alive, report background completion and input, an
     await until(library, () => first.status === "paused");
     await first.session.submit("/wake");
     await until(library, () => first.status === "idle");
-    const waiting = await first.session.engine.wait([], { seconds: 60, on: first.session.engine.root });
+    const waiting = await first.session.engine.bash("sleep 60", { on: first.session.engine.root });
     await until(library, () => ["thinks", "runs", "delegates"].includes(first.status));
     library.preferences.sidebar = false;
     library.preferences.save("paper");
@@ -146,6 +147,9 @@ test("workspaces keep sessions alive, report background completion and input, an
     library.toggle(beta);
     const record = first.path;
     await library.dispose();
+    // The life ends once no window holds it, with its checkpoint, which cuts the command that ran: work that runs
+    // holds no life.
+    await ended(record);
     library = open();
     await library.refresh();
     expect(library.groups.map((group) => group.name)).toEqual(["alpha", "beta"]);
@@ -160,10 +164,9 @@ test("workspaces keep sessions alive, report background completion and input, an
     const restored = library.groups[0]?.sessions.find((entry) => entry.path === record);
     if (!restored) throw new Error("The saved session is missing.");
     await library.select(restored);
-    // The open put the wait to the outside again, so it runs with no choice of the operator.
-    await until(library, () => ["thinks", "runs", "delegates"].includes(restored.status));
+    expect(restored.status).toBe("idle");
     expect(restored.session?.host.pending.size).toBe(0);
-    expect((await restored.session?.engine.outcome(waiting))?.done).toBe(false);
+    expect(restored.session?.acts.find((act) => act.id === waiting)?.done).toBe(true);
     const metadata = JSON.parse(await readFile(`${record}.session.json`, "utf8"));
     expect(metadata.pending).toBeUndefined();
   }));
@@ -209,7 +212,8 @@ test("deleting a session moves its record and state to trash, removes its scratc
       if (!entry) throw new Error("The locked session was not listed.");
       const error = await library.delete(entry).catch((error: unknown) => error);
       expect(error).toBeInstanceOf(Error);
-      expect(String(error)).toContain("Another process owns");
+      // The other owner is another window of the daemon, which holds the life of the record.
+      expect(String(error)).toContain("Another window holds the life");
       expect((await stat(locked)).isFile()).toBe(true);
     } finally {
       await external?.dispose();
@@ -350,7 +354,6 @@ test("the model picker keeps a roster model distinct from the same id in the cat
   const library = new Workspaces(new Preferences(join(config, "ui.json")), {
     config,
     claude: join(directory, "claude"),
-    host: false,
     roster: ["claude-cli:opus", "subscription:gpt-6.1-sol"],
   });
   const screen = await createTestRenderer({ width: 130, height: 44, exitSignals: [] });
@@ -404,13 +407,17 @@ test("a provider added during a life can be selected by its full model name", as
 
 test("the list of saved sessions comes before their replays, and a row shows its state when its replay lands", () =>
   withLibrary(async ({ directory, open }) => {
-    let library = open();
-    const entry = await library.create(await library.add(directory), "Held");
-    const engine = entry.session?.engine;
-    await engine?.wait([], { seconds: 60, on: engine.root });
-    await library.dispose();
-    library = open();
-    const row = (await library.add(directory)).sessions.find((candidate) => candidate.path === entry.path);
+    // A life that a crash cut leaves its command as work that waits for a wake, and a life of the daemon ends with a
+    // checkpoint, which cuts it. So a life of this process, which ends with no checkpoint, makes the record.
+    const record = join(directory, ".furb/sessions/held.jsonl");
+    await mkdir(dirname(record), { recursive: true });
+    const life = boot({ record, cwd: directory, extensions: false });
+    life.engine.bash("sleep 60", { on: life.engine.root });
+    await life.dispose();
+    const library = open();
+    const row = (await library.add(directory)).sessions.find(
+      (candidate) => basename(candidate.path) === "held.jsonl",
+    );
     // The replay runs in a worker that loads the native engine first, so the list is there before it.
     expect(row?.status).toBe("saved");
     await until(library, () => row?.status === "runs");
@@ -442,6 +449,7 @@ test("deleting the current session moves to the next session that opens, and to 
     try {
       const held = await library.create(await library.add(directory), "Held elsewhere");
       await library.dispose();
+      await ended(held.path);
       library = open();
       const group = await library.add(directory);
       const sibling = group.sessions.find((entry) => entry.path === held.path);
@@ -469,6 +477,7 @@ test("a rename of a session that cannot open keeps the old name and shows the re
     try {
       const held = await library.create(await library.add(directory), "Held elsewhere");
       await library.dispose();
+      await ended(held.path);
       lease = store(held.path)[1];
       library = open();
       const group = await library.add(directory);
@@ -490,6 +499,7 @@ test("a workspace whose newest session cannot open opens on a new session that n
     try {
       const held = await library.create(await library.add(directory), "Held elsewhere");
       await library.dispose();
+      await ended(held.path);
       lease = store(held.path)[1];
       library = open();
       const group = await library.add(directory);
@@ -1012,6 +1022,7 @@ test("Add a workspace in the sidebar works while the session shown is open to re
     let library = open();
     const made = await library.create(await library.add(directory), "Made elsewhere");
     await library.dispose();
+    await ended(made.path);
     const text = await readFile(made.path, "utf8");
     const found = /\["made","chain1","store","([0-9a-f]{64})",(\d+)(?:,[^\]]*)?\]/.exec(text);
     if (!found?.[2]) throw new Error("no build");
