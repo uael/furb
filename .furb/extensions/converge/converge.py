@@ -6,6 +6,7 @@ from furb.engine import (
   ROOT,
   Refused,
   Text,
+  act,
   acting,
   bash,
   cancel,
@@ -100,6 +101,17 @@ The gaps:
 
 def conductor() -> dict:
   return module()
+
+
+def quietly(verb, *args, **words):
+  got = []
+
+  def ear(id):
+    got.append(verb(*args, **words))
+    yield "done", id, None
+
+  act("quiet", "", ear)
+  return got[0]
 
 
 def tree_of(target: dict) -> str:
