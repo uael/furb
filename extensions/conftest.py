@@ -383,7 +383,14 @@ class Shell(Sand):
         args, merged = ["sh", "-c", command], conftest.engine.ask("merged", on, about)
         err = subprocess.STDOUT if merged else subprocess.PIPE
         got = subprocess.run(  # noqa: S603
-          args, input=stdin or "", stdout=subprocess.PIPE, stderr=err, text=True, env=self.env, cwd=here, check=False
+          args,
+          input=stdin or "",
+          stdout=subprocess.PIPE,
+          stderr=err,
+          encoding="utf-8",
+          env=self.env,
+          cwd=here,
+          check=False,
         )
         done = partial(
           world_says,
