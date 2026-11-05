@@ -1,7 +1,7 @@
 import type { BoxOptions, BoxRenderable, Renderable, TextRenderable } from "@opentui/core";
 import { unmarked } from "furb";
 import type { ChainThread } from "furb/life";
-import { count, dollars } from "../format.ts";
+import { clip, count, dollars } from "../format.ts";
 import { theme as c, glyph, spacing as space, threadTone } from "../theme.ts";
 import { bold, type Part, plain } from "../ui.ts";
 import { part } from "./part.ts";
@@ -217,8 +217,8 @@ export const sidebar = part({
 
   /** The header of the thread whose box holds the top row of the feed, pinned at the top of the feed while the header
    * itself stands above it: on one row, who sent the message, the title of the thread in bold, its state and its
-   * toggle, with the line and the inset of the header, on the raised surface that parts it from the body under it. It
-   * reads the layout of the frame that was drawn, and draws again only when what it shows changed. */
+   * toggle, on the panel of the header with its line and its inset, and a rule under it. It reads the layout of the
+   * frame that was drawn, and draws again only when what it shows changed. */
   renderPin(): void {
     const w = this.session;
     const id = this.pinnedThread();
@@ -246,26 +246,44 @@ export const sidebar = part({
     this.renderer.requestRender();
     if (!id || !thread || !card || !head) return;
     const row = this.box({ backgroundColor: c.background, paddingLeft: card.indent });
-    const surface = this.box({ paddingRight: space.between, backgroundColor: c.raised });
+    // A rule under the pin parts it from what scrolls under it, on the panel of the header, whatever the theme.
+    const surface = this.box({
+      paddingRight: space.between,
+      backgroundColor: c.panel,
+      border: ["bottom"],
+      borderColor: c.border,
+    });
     row.add(surface);
     this.pin.add(row);
+    const sender: Part[] = user
+      ? [["You  ", threadTone(id)]]
+      : head.sent
+        ? [[`${head.sent}  `, c.faint]]
+        : [];
+    const toggle = this.threadToggle(id);
+    const state = head.state.length
+      ? this.text(head.state, c.faint, { marginLeft: space.between })
+      : undefined;
+    // The title is cut at its end, as the feed cuts the title of a row, in the room that the line leaves it: the
+    // columns of the line, of the bar and the insets, and of the sender, the state and the toggle.
+    const room =
+      this.feedWidth -
+      card.indent -
+      space.inset * 2 -
+      space.between -
+      Bun.stringWidth(plain(sender)) -
+      (state ? space.between + Bun.stringWidth(plain(head.state)) : 0) -
+      space.between -
+      Bun.stringWidth(toggle.plainText);
     const line = this.row();
     line.add(
-      this.text(
-        [
-          ...(user
-            ? [["You  ", threadTone(id)] as Part]
-            : head.sent
-              ? [[`${head.sent}  `, c.faint] as Part]
-              : []),
-          [thread.title, c.text, bold],
-        ],
-        c.text,
-        { truncate: true, flexGrow: 1, flexShrink: 1 },
-      ),
+      this.text([...sender, [clip(thread.title, Math.max(1, room)), c.text, bold]], c.text, {
+        flexGrow: 1,
+        flexShrink: 1,
+      }),
     );
-    line.add(this.text(head.state, c.faint, { marginLeft: space.between }));
-    line.add(this.threadToggle(id));
+    if (state) line.add(state);
+    line.add(toggle);
     this.barred(surface, head.bar, 0, { top: false, bottom: false }).add(line);
   },
 
