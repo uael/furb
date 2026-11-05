@@ -483,6 +483,8 @@ export class Session extends EventEmitter {
   private scanned = false;
   /** Whether the operator named the session in this life, whose name the older scan of the record must not hide. */
   private renamed = false;
+  /** The renames of the operator that the record has not taken yet, while which the facts hold an older name. */
+  private renaming = 0;
   /** Ends the scan of the record in the worker when the session goes. */
   private readonly scanning = new AbortController();
   private carrying = false;
@@ -621,6 +623,7 @@ export class Session extends EventEmitter {
   }
   /** The session takes the name that its record gives it. */
   private named(): void {
+    if (this.renaming) return;
     const name = this.recordName;
     if (name === undefined || name === this.sessionName) return;
     this.sessionName = name;
@@ -636,11 +639,14 @@ export class Session extends EventEmitter {
     this.renamed = true;
     this.legacyName = undefined;
     this.keptName = said;
+    this.renaming++;
     this.sessionName = said || basename(this.host.directory);
     this.emit("change");
     const word = renameWord(said);
     try {
       await this.engine.result(await this.engine.rung({ word, on: this.engine.root }));
+      // The facts of the session show the name before the guard lifts, so no stale name takes the row back.
+      await this.refresh().catch(() => {});
       return true;
     } catch (error) {
       this.renamed = false;
@@ -649,6 +655,8 @@ export class Session extends EventEmitter {
       this.notice = `The name was not kept: ${error instanceof Error ? error.message : String(error)}`;
       this.emit("change");
       return false;
+    } finally {
+      this.renaming--;
     }
   }
   /** The name that the operator said is in the record, which only a scan of its bytes finds. The worker that lists the
