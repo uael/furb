@@ -251,6 +251,12 @@ pub enum Verb {
   Stand {
     life: String,
   },
+  /// The configs of the folder of the life, in their layers: what each key holds, a change of a
+  /// key, or a stand on them as the disk holds them now.
+  Config {
+    life: String,
+    config: Config,
+  },
   /// The fact that the operator read a chain or a thread up to now, which each window and each
   /// later life reads in the record.
   Seen {
@@ -357,6 +363,7 @@ impl Verb {
         | Self::Moments { .. }
         | Self::Names { .. }
         | Self::Gate { .. }
+        | Self::Config { config: Config::Get, .. }
         | Self::ViewMount(_)
         | Self::ViewTree(_)
         | Self::ViewEffect(_)
@@ -373,6 +380,41 @@ impl Verb {
       Self::ViewMount(_) | Self::ViewEvent(_) | Self::ViewDispose(_) => Some(Kind::Window),
       Self::ViewTree(_) | Self::ViewEffect(_) => Some(Kind::Skill),
       _ => None,
+    }
+  }
+}
+
+/// What a peer asks of the configs of a life, which the World writes, so no window writes a disk.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum Config {
+  /// Each key of the configs with the value that wins for it and its layer.
+  Get,
+  /// A key of a layer, the project when none is named, set to a value, or taken out with no
+  /// value, then a stand of the life on the configs. A change that the catalog refuses puts its
+  /// config back as it was, and the life does not stand.
+  Set { key: Vec<String>, value: Option<Value>, layer: Option<Layer> },
+  /// A stand of the life on the configs as the disk holds them, which asks again each model that
+  /// waits to retry.
+  Reload,
+}
+
+/// A layer of the configs, from the one that wins least to the one that wins most: the config of
+/// the user, the config of the project, and its local config, which git ignores.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Layer {
+  User,
+  Project,
+  Local,
+}
+
+impl From<Layer> for furb::world::config::Layer {
+  fn from(layer: Layer) -> Self {
+    match layer {
+      Layer::User => Self::User,
+      Layer::Project => Self::Project,
+      Layer::Local => Self::Local,
     }
   }
 }

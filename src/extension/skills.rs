@@ -82,6 +82,13 @@ impl Skill {
     one.file = copy(&one.name, &one.file, &one.word, places);
     Ok(one)
   }
+
+  /// The program of the process of the skill, as the fact enable names it: under `~` when it
+  /// stands in the home of these places, and empty when the skill names none.
+  fn program(&self, places: &Places) -> String {
+    let Place::Folder(folder) = &self.place else { return String::new() };
+    programmed(folder, &self.manifest).map(|at| tilded(&at, places)).unwrap_or_default()
+  }
 }
 
 /// What the ear holds to answer one act: the chain that asked, the skills that it finds, the
@@ -188,7 +195,7 @@ fn loaded(co: &mut Co, seen: &Seen, name: &str) -> Result<Text, Fault> {
       seen.found.iter().filter(|one| one.default && one.word.is_some()).collect();
     for one in &defaults {
       if !seen.runs.iter().any(|two| two.name == one.name) {
-        say(co, one.extension(&seen.places)?.enable());
+        say(co, one.extension(&seen.places)?.played(&one.program(&seen.places)));
       }
     }
     let lines = defaults.iter().map(|one| one.line(true)).collect::<Vec<_>>().join("\n");
@@ -201,7 +208,7 @@ fn loaded(co: &mut Co, seen: &Seen, name: &str) -> Result<Text, Fault> {
   }
   let extension = one.extension(&seen.places)?;
   if !seen.runs.iter().any(|two| two.name == name && two.word == extension.word) {
-    say(co, extension.enable());
+    say(co, extension.played(&one.program(&seen.places)));
   }
   let shown = match frontmatter(&one.manifest).meta(INTERFACE) {
     Some(file) => filed(one, file, &path)?.content,
@@ -240,7 +247,8 @@ fn written(co: &mut Co, seen: &Seen, name: &str, content: &str) -> Result<Text, 
     if imports.is_empty() { format!("{given}\n") } else { format!("{imports}\n\n\n{given}\n") };
   fs::write(&at, whole).map_err(|no| Fault::refused(format!("{no}: {}", at.display())))?;
   if seen.runs.iter().any(|two| two.name == name) {
-    say(co, load(name, &target, &seen.places)?.enable());
+    let program = programmed(&target, &one.manifest).map(|at| tilded(&at, &seen.places));
+    say(co, load(name, &target, &seen.places)?.played(&program.unwrap_or_default()));
   }
   Ok(Text::new(format!("{SCHEME}{name}"), given))
 }
@@ -321,12 +329,30 @@ fn filed(one: &Skill, file: &str, path: &str) -> Result<Text, Fault> {
 /// skill: the file of its folder that its manifest names under `metadata` as `furb-process`. It is
 /// none when the manifest names none, when the file leaves the folder, and when the skill is
 /// official, since the crate carries no process yet.
+/// A fact enable of a build before the program names none, so a life finds the process of such a
+/// fact by the name of its skill, as it finds it now.
 pub fn process(name: &str, here: &Path, places: &Places) -> Option<PathBuf> {
   let one = found(here, here, places).into_iter().find(|one| one.name == name)?;
   let Place::Folder(folder) = &one.place else { return None };
-  let file = frontmatter(&one.manifest).meta(PROCESS)?.to_owned();
+  programmed(folder, &one.manifest)
+}
+
+/// The program that a fact enable names, as a path of the machine, or none when it names none.
+pub fn program(named: &str) -> Option<PathBuf> {
+  (!named.is_empty()).then(|| files::placed(Path::new(""), named).ok()).flatten()
+}
+
+/// The program of the process that the manifest of a skill in a folder names under `metadata` as
+/// `furb-process`, unless the file leaves the folder.
+fn programmed(folder: &Path, manifest: &str) -> Option<PathBuf> {
+  let file = frontmatter(manifest).meta(PROCESS)?.to_owned();
   let inside = Path::new(&file).components().all(|part| matches!(part, Component::Normal(_)));
   inside.then(|| folder.join(file))
+}
+
+/// A path of the machine under `~` when it stands in the home of these places.
+fn tilded(path: &Path, places: &Places) -> String {
+  files::tilded(path, places.home.as_deref())
 }
 
 /// The skills of a chain that stands in `here`, in the order of their names: each folder that holds

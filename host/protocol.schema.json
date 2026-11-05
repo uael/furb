@@ -867,6 +867,27 @@
             "life": {
               "type": "string"
             },
+            "config": {
+              "$ref": "#/definitions/Config"
+            },
+            "verb": {
+              "type": "string",
+              "const": "config"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "config"
+          ],
+          "description": "The configs of the folder of the life, in their layers: what each key holds, a change of a\nkey, or a stand on them as the disk holds them now."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
             "about": {
               "type": "string"
             },
@@ -1250,6 +1271,77 @@
         "kind"
       ],
       "description": "The first frame of a peer: the protocol that it speaks, its kind, and the name of a skill."
+    },
+    "Config": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "const": "get"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "description": "Each key of the configs with the value that wins for it and its layer."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "value": true,
+            "layer": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/Layer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "action": {
+              "type": "string",
+              "const": "set"
+            }
+          },
+          "required": [
+            "action",
+            "key"
+          ],
+          "description": "A key of a layer, the project when none is named, set to a value, or taken out with no\nvalue, then a stand of the life on the configs. A change that the catalog refuses puts its\nconfig back as it was, and the life does not stand."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "const": "reload"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "description": "A stand of the life on the configs as the disk holds them, which asks again each model that\nwaits to retry."
+        }
+      ],
+      "description": "What a peer asks of the configs of a life, which the World writes, so no window writes a disk."
+    },
+    "Layer": {
+      "type": "string",
+      "enum": [
+        "user",
+        "project",
+        "local"
+      ],
+      "description": "A layer of the configs, from the one that wins least to the one that wins most: the config of\nthe user, the config of the project, and its local config, which git ignores."
     },
     "Slot": {
       "oneOf": [

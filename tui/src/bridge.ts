@@ -28,13 +28,14 @@ import {
   WINDOW,
 } from "furb";
 import { type Compaction, type Measure, measureOf } from "furb/life";
+import type { Config } from "furb/protocol";
 import { type Choices, daemon, type Listener, RemoteLife } from "./client.ts";
 import { clock } from "./clock.ts";
 import { demoModels } from "./demo/answer.ts";
 import { expandHome } from "./files.ts";
 import { lineCounts } from "./format.ts";
 import { type EngineOptions, roster } from "./models.ts";
-import { changeProvider, type ProviderChoice } from "./providers.ts";
+import { type ProviderChoice } from "./providers.ts";
 import { dispatchesFrom } from "./queue.ts";
 import { type Carry, isRecorded, Reader, type Reading, row } from "./reading.ts";
 import { branchChanges, net } from "./review.ts";
@@ -156,6 +157,7 @@ class ReadLife extends EventEmitter {
   bash = this.refuse;
   grant = this.refuse;
   stand = this.refuse;
+  config = this.refuse;
   pause = this.refuse;
   wake = this.refuse;
   cancel = this.refuse;
@@ -706,34 +708,37 @@ export class HostView extends EventEmitter {
       offered.push({ name: "local", enabled: true, models: found.local?.offered ?? 0 });
     return offered.sort((a, b) => a.name.localeCompare(b.name));
   }
-  /** A provider saved in the settings of the project, which the life stands on at once. */
-  async provider(name: string, value: unknown): Promise<boolean> {
-    if (this.demo) throw new Error("Provider settings are not available in the demo.");
+  /** The sign-in of codex that a change of its provider asks: a cancel when it turns codex off, and a sign-in, which
+   * waits for the browser, when it turns codex on. False when the operator canceled the sign-in. */
+  private async codexSigned(value: unknown): Promise<boolean> {
     const { config } = this.options;
-    if (name === "codex" && value === false) codexAuth("cancel", config);
-    else if (name === "codex" && value === true) {
-      let status = codexAuth("refresh", config);
-      if (["disconnected", "needs-login", "failed", "canceled"].includes(status.state))
-        status = codexAuth("start", config);
-      this.emit("authentication", status);
-      while (["waiting", "connecting"].includes(status.state)) {
-        await Bun.sleep(200);
-        const next = codexAuth("status", config);
-        if (next.state !== status.state) this.emit("authentication", next);
-        status = next;
-      }
-      if (status.state === "canceled") return false;
-      if (status.state !== "connected") throw new Error(status.message || "OpenAI sign-in did not complete.");
+    if (value === false) codexAuth("cancel", config);
+    if (value !== true) return true;
+    let status = codexAuth("refresh", config);
+    if (["disconnected", "needs-login", "failed", "canceled"].includes(status.state))
+      status = codexAuth("start", config);
+    this.emit("authentication", status);
+    while (["waiting", "connecting"].includes(status.state)) {
+      await Bun.sleep(200);
+      const next = codexAuth("status", config);
+      if (next.state !== status.state) this.emit("authentication", next);
+      status = next;
     }
-    await changeProvider(this.directory, name, value, () => this.stand());
+    if (status.state === "canceled") return false;
+    if (status.state !== "connected") throw new Error(status.message || "OpenAI sign-in did not complete.");
     return true;
   }
   codexAuth = async (action = "status") => codexAuth(action, this.options.config);
-  /** The settings of the providers read again, and the life stood on them. */
-  async reload(): Promise<boolean> {
+  /** A change of a key of a layer of the configs, which the World writes in the daemon, or a reload of them, each then
+   * a stand of the life. False when the operator canceled the sign-in that the change asked. */
+  async config(config: Config): Promise<boolean> {
     if (this.demo) throw new Error("Provider settings are not available in the demo.");
-    await this.refreshCodex();
-    await this.stand();
+    if (config.action === "get") throw new Error("A window reads the configs from the host.");
+    if (config.action === "set") {
+      const [group, name] = config.key;
+      if (group === "providers" && name === "codex" && !(await this.codexSigned(config.value))) return false;
+    } else await this.refreshCodex();
+    await this.life.result(await this.life.config(config));
     return true;
   }
   private async stand(): Promise<void> {

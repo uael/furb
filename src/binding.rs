@@ -684,6 +684,18 @@ pub fn codex_auth(action: Option<String>, config: Option<String>) -> Result<Code
   })
 }
 
+/// A key of a layer of the configs of a project set to a value, or taken out with no value, as the
+/// JSON of a change of `world::config` gives it, which then holds when the catalog reads the
+/// configs as a stand of a life reads them, and else puts the file back as it was and gives why.
+/// config is the user config directory when unsaid.
+#[cfg_attr(feature = "python", pyfunction, pyo3(signature = (directory, change, config = None)))]
+#[cfg_attr(feature = "typescript", napi)]
+pub fn config_set(directory: String, change: String, config: Option<String>) -> Result<(), Fault> {
+  let change = serde_json::from_str(&change).map_err(|no| Fault::refused(no.to_string()))?;
+  let layers = world::config::Layers::new(directory, config.map(Into::into));
+  world::catalog::blocking(layers.set(change)).map_err(|no| Fault::refused(no.to_string()))
+}
+
 /// The levels of effort, from least to most, which an actor names after its model.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]

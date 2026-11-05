@@ -20,7 +20,10 @@ use furb::{
   life::{Log, Opening, Stream},
   verbs,
   wire::{outward, parsed},
-  world::{self, Shape, answered},
+  world::{
+    self, Shape, answered,
+    config::{Change, Layers},
+  },
 };
 use futures::stream::{self, Stream as Streams};
 use serde_json::{Value, json};
@@ -107,6 +110,12 @@ pub enum Command {
   Names { on: Option<String> },
   /// A stand of the life on its root, which reads the roster and the actor again: the act.
   Stand,
+  /// Each key of the configs of the folder of the life, with the value that wins for it and its
+  /// layer.
+  Settings,
+  /// A change of a key of a layer of the configs, which the World keeps only when the catalog
+  /// reads it, then a stand of the life on them: the act of the stand.
+  Configure(Change),
   /// The fact that the operator read a chain or a thread up to now.
   Seen { about: String },
   /// A follow-up that the operator queued on a chain, under an entry that a second queue finds,
@@ -167,6 +176,7 @@ pub struct Life {
   heard: UnboundedReceiver<Event>,
   facts: HashSet<u64>,
   watch: Watch,
+  configs: Layers,
   queue: Queue,
   held: Held,
 }
@@ -331,12 +341,14 @@ async fn run(
   readers: broadcast::Sender<Logged>,
 ) {
   let (told, heard) = mpsc::unbounded_channel();
+  let configs = Layers::new(&opening.directory, opening.config.as_ref().map(PathBuf::from));
   let mut life = Life {
     log: Vec::new(),
     readers,
     heard,
     facts: HashSet::new(),
     watch: Watch::default(),
+    configs,
     queue: Queue::default(),
     held: Held::default(),
   };
@@ -457,7 +469,12 @@ async fn driven(
         return Drove::Ended(rebirth::ended(engine, record.is_some()), Some(reply));
       }
       Woke::Said(Some(Message::Command(command, reply))) => {
-        reply.send(commanded(&mut engine, &life.queue, &life.held, command)).ok();
+        let replied = commanded(&mut engine, &life.configs, &life.queue, &life.held, command);
+        reply.send(replied.await).ok();
+        if let Some(fault) = engine.stopped().cloned() {
+          drop(engine);
+          return stopped(fault, record).await;
+        }
       }
     }
     drained(&mut engine, life);
@@ -495,10 +512,12 @@ async fn pumped(engine: &mut Engine) -> Fault {
   .await
 }
 
-/// What a command comes to: on the queue of the life for a command of the queue, on the acts that
-/// the life told for a query of their meaning, and else on the engine.
-fn commanded(
+/// What a command comes to: on the configs of the life for a command of its configs, on the queue
+/// of the life for a command of the queue, on the acts that the life told for a query of their
+/// meaning, and else on the engine.
+async fn commanded(
   engine: &mut Engine,
+  configs: &Layers,
   queue: &Queue,
   held: &Held,
   command: Command,
@@ -533,6 +552,14 @@ fn commanded(
       Ok(Reply::Values(acts.map_err(|no| LifeError::Refused(no.to_string()))?))
     }
     Command::Moments => Ok(Reply::Values(held.moments().into_iter().map(Value::from).collect())),
+    Command::Settings => {
+      let settings = configs.get()?.into_iter().map(|one| json!(one));
+      Ok(Reply::Values(settings.collect()))
+    }
+    Command::Configure(change) => {
+      configs.set(change).await?;
+      answered_by(engine, Command::Stand)
+    }
     other => answered_by(engine, other),
   }
 }

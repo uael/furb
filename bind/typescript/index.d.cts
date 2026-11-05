@@ -226,6 +226,14 @@ export interface CodexAuthInfo {
  */
 export declare function configDirectory(): string
 
+/**
+ * A key of a layer of the configs of a project set to a value, or taken out with no value, as the
+ * JSON of a change of `world::config` gives it, which then holds when the catalog reads the
+ * configs as a stand of a life reads them, and else puts the file back as it was and gives why.
+ * config is the user config directory when unsaid.
+ */
+export declare function configSet(directory: string, change: string, config?: string | undefined | null): void
+
 /** One line of a record, read with every number exact, as the record keeps it. */
 export declare function decodeRecord(line: string): unknown
 

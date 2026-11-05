@@ -851,6 +851,9 @@ mod daemon {
     let sock = at.join("sock").display().to_string();
     assert_eq!(first[..3], ["probe", life.as_str(), sock.as_str()]);
     window.ran(&life, r#"write(Text("skills://probe", "PROBED = 2"))"#).await;
+    // The write copies the folder of the skill in the project, whose word the reload plays, so the
+    // process of that copy, which keeps the lines of the file, starts.
+    let started = at.join(".furb").join("extensions").join("probe").join("started");
     let second = lines(&started, 2).await.remove(1);
     assert!(gone(first[3]).await, "a reload ends the process that ran");
     let second = second.rsplit(' ').next().unwrap().to_owned();
@@ -948,5 +951,88 @@ mod daemon {
     let Ok(Answer::Values(prompts)) = window.ask(prompts).await else { panic!("no prompts") };
     let messages = prompts.iter().filter(|one| one[4] == "None").count();
     assert_eq!(messages, 2, "a new fact and a new stall send a new message: {prompts:?}");
+  }
+
+  /// The skill probe in a folder of skills, whose process writes the file `started` of its folder,
+  /// which this gives.
+  #[cfg(unix)]
+  fn probed(skills: &Path) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let skill = skills.join("probe");
+    fs::create_dir_all(&skill).unwrap();
+    fs::write(skill.join("SKILL.md"), PROBE).unwrap();
+    fs::write(skill.join("probe.py"), "PROBED = 1\n").unwrap();
+    let program = skill.join("probe.sh");
+    fs::write(&program, "#!/bin/sh\necho \"$FURB_SKILL $$\" >> started\nexec sleep 600\n").unwrap();
+    fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
+    skill.join("started")
+  }
+
+  /// A daemon of a test that starts the processes of skills, and a window dialed to it.
+  #[cfg(unix)]
+  async fn hosting(at: &Path) -> Window {
+    let local = Local::new(at.join("sock"));
+    let listener = local.listen().await.unwrap();
+    let host = Some(at.join("sock"));
+    let settings = Settings {
+      opening: opening(at),
+      grace: SHORT,
+      stall: STALL,
+      tailnet: None,
+      door: None,
+      host,
+    };
+    let served = local.clone();
+    tokio::spawn(async move { run(&served, listener, settings).await });
+    Window::dialed(&local).await
+  }
+
+  #[cfg(unix)]
+  #[tokio::test]
+  async fn the_process_of_a_skill_comes_from_the_folder_that_the_chain_played_it_from() {
+    let at = place();
+    let (one, two) = (at.join("one"), at.join("two"));
+    let first = probed(&one.join(".furb").join("skills"));
+    let second = probed(&two.join(".furb").join("skills"));
+    let mut window = hosting(&at).await;
+    let life = opened(&mut window, &one, "a.jsonl").await;
+    window.attach(&life).await;
+    window.ran(&life, &format!("cd({:?})", two.display().to_string())).await;
+    window.ran(&life, r#"act("skill", "", None, "probe")"#).await;
+    let started = lines(&second, 1).await.remove(0);
+    tokio::time::sleep(PAST).await;
+    assert!(!first.exists(), "the skill of the folder of the birth starts no process");
+    assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+    tokio::time::sleep(PAST).await;
+    assert!(gone(started.rsplit(' ').next().unwrap()).await, "the end of the life ends it");
+    opened(&mut window, &one, "a.jsonl").await;
+    lines(&second, 2).await;
+    tokio::time::sleep(PAST).await;
+    assert!(!first.exists(), "a reopen starts the process of the folder that the record names");
+  }
+
+  #[cfg(unix)]
+  #[tokio::test]
+  async fn the_process_of_a_skill_of_the_config_of_an_open_starts() {
+    let at = place();
+    let config = at.join("other");
+    let started = probed(&config.join("skills"));
+    let mut window = hosting(&at).await;
+    let life = at.join("a.jsonl").display().to_string();
+    let verb = Verb::Open {
+      life: life.clone(),
+      cwd: Some(at.display().to_string()),
+      actor: None,
+      roster: None,
+      extensions: None,
+      config: Some(config.display().to_string()),
+      claude: None,
+      answers: false,
+      attach: None,
+    };
+    assert_eq!(window.ask(verb).await, Ok(Answer::Done));
+    window.attach(&life).await;
+    window.ran(&life, r#"act("skill", "", None, "probe")"#).await;
+    assert!(lines(&started, 1).await[0].starts_with("probe "));
   }
 }

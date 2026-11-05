@@ -46,6 +46,12 @@ impl From<furb::Fault> for LifeError {
   }
 }
 
+impl From<furb::world::config::Error> for LifeError {
+  fn from(no: furb::world::config::Error) -> Self {
+    LifeError::Refused(no.to_string())
+  }
+}
+
 /// Why the daemon refuses a frame of a peer. It crosses the protocol as data, beside its text.
 #[derive(Debug, Clone, PartialEq, Eq, Error, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "error", rename_all = "snake_case")]

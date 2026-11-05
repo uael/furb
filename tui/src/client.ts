@@ -5,7 +5,7 @@ import { createConnection, type Socket } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { Activity, type Call, type Fact, type Standing, type Turn } from "furb";
-import type { Act, Answer, Event, Frame, Peer, Request1 as Verb } from "furb/protocol";
+import type { Act, Answer, Config, Event, Frame, Peer, Request1 as Verb } from "furb/protocol";
 import { PROTOCOL } from "furb/protocol";
 
 export type { Verb };
@@ -567,6 +567,9 @@ export class RemoteLife extends EventEmitter {
     return await this.made(await this.verb({ verb: "stand", life: this.record }));
   }
   /** What an act came to once it is done, which throws the fault that ended it. */
+  async config(config: Config): Promise<string> {
+    return await this.made(await this.verb({ verb: "config", life: this.record, config }));
+  }
   async result(id: string): Promise<unknown> {
     const act = this.acts.get(id);
     if (act?.phase.phase === "done") {

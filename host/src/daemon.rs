@@ -32,6 +32,7 @@ use std::{
 use furb::{
   life::{Log, Opening},
   wire::parsed,
+  world::config::Change,
 };
 use futures::{SinkExt, Stream, StreamExt, future};
 use tokio::{
@@ -51,7 +52,8 @@ use crate::{
   life::{Command, Life, LifeHandle, Reply},
   processes::{self, Played},
   protocol::{
-    Answer, BOUND, Frame, Handed, Hello, Kind, Listed, Mount, Open, PROTOCOL, Peer, Request, Verb,
+    Answer, BOUND, Config, Frame, Handed, Hello, Kind, Listed, Mount, Open, PROTOCOL, Peer,
+    Request, Verb,
   },
   serve::{Host, Outbox, serve},
   stall::Quiet,
@@ -429,6 +431,7 @@ fn routed(verb: Verb) -> Routed {
     Verb::Names { life, on } => (life, Command::Names { on }),
     Verb::Gate { life, word, on } => (life, Command::Gate { word, on }),
     Verb::Stand { life } => (life, Command::Stand),
+    Verb::Config { life, config } => (life, configured(config)),
     Verb::Seen { life, about } => (life, Command::Seen { about }),
     Verb::Queue { life, entry, shape, message, on } => {
       (life, Command::Queue { entry, shape, message, on })
@@ -442,6 +445,17 @@ fn routed(verb: Verb) -> Routed {
     other => return Routed::Daemon(other),
   };
   Routed::Life(life, command)
+}
+
+/// The command of a life that a verb on its configs comes to: a reload is a stand.
+fn configured(config: Config) -> Command {
+  match config {
+    Config::Get => Command::Settings,
+    Config::Set { key, value, layer } => {
+      Command::Configure(Change { key, value, layer: layer.map(Into::into).unwrap_or_default() })
+    }
+    Config::Reload => Command::Stand,
+  }
 }
 
 impl From<Reply> for Answer {
@@ -649,6 +663,7 @@ impl Lives {
       answer: answer.or_else(|| base.answer.clone()),
       ..base.clone()
     };
+    let places = processes::places(&opening);
     let handle = Life::spawn(opening)?;
     self.born += 1;
     let watch = Watch {
@@ -665,7 +680,7 @@ impl Lives {
         life: life.clone(),
         cwd: PathBuf::from(&cwd),
         host: host.clone(),
-        places: processes::places(&self.settings.opening),
+        places,
         log: self.settings.opening.log.clone(),
       };
       tokio::spawn(played.run());
