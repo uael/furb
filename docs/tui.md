@@ -69,8 +69,8 @@ on a thread shows it in the feed, on its chain, scrolled to its end with its las
 on=thread)` while the thread is open: its model reads it at its next step, and it is over at once, so no close answers it.
 A message to a resolved thread is a `prompt(str, message, on=thread)`, which opens it again. Under
 the thread lit, Collapse folds it in the feed to its box on one line, Resolve closes it, as `close(None, thread)` does,
-and Reply makes it the target of the input, as Reply at the end of its box does. A thread folds from any line of
-it too: a click on the left edge of the line, or ⌥C for the thread in the middle of the feed. The resolved threads stand
+and Reply makes it the target of the input, as Reply at the end of its box does. ⌥C folds the thread in the middle
+of the feed too. The resolved threads stand
 at the top, folded under one row, Resolved, which a click opens, and the open threads stand last, nearest the input,
 each group in the order of its last message. The threads that the ladder of a thread made, its agents, fold under it to one row
 with their count, Agents, which a click opens, each agent one step deeper, and a question in an agent shows on the row
@@ -162,7 +162,12 @@ blocks no word: the word that awaits it goes on at once, and no row of the feed 
 
 Collapse on the header
 of a thread, or ⌥D, which lists the threads, folds the thread to its box on one line, which says its state, the
-first line of its message and the count of its steps, and Expand, or a click on that line, opens it again. A dot
+first line of its message and the count of its steps, and Expand opens it again. This toggle is the one control of a
+thread in the feed: a click in the body of a thread never folds it and never resolves it. When the header of a thread
+taller than the feed scrolls above the feed, the header stands pinned at the top of the feed on one row, with a rule
+under it: who sent the message, the title of the thread in bold, its state and the same toggle, until the box of the
+thread leaves the top. A fold from the toggle scrolls the
+feed so that the header of the thread shows. A dot
 before a folded thread says that work came to it since you folded it, and the mark of a question says that it asks
 you. A resolved thread that is
 not the last of its chain starts folded, and `/autocollapse` turns that fold off, and on again. A right click on a

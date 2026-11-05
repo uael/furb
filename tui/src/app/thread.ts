@@ -1,6 +1,8 @@
 import type { BoxRenderable, RGBA } from "@opentui/core";
 import type { ProgramLine } from "furb/life";
-import { theme as c, glyph, spacing as space } from "../theme.ts";
+import type { ActRow } from "../session.ts";
+import { theme as c, glyph, spacing as space, threadTone } from "../theme.ts";
+import type { Part } from "../ui.ts";
 import { part } from "./part.ts";
 import { noBorder } from "./shared.ts";
 
@@ -59,23 +61,32 @@ export const thread = part({
     this.renderContent();
   },
 
+  /** What the header of a thread says beside its message, which the box of the thread and its pin both show: who sent
+   * the message, unless the operator did, its state, and the color of the line at its left, which a message of the
+   * operator and a folded thread have. */
+  threadHead(act: ActRow, folded: boolean): { sent: string; state: Part[]; bar?: RGBA } {
+    const w = this.session;
+    const user = w.isUserPrompt(act);
+    const aside = w.threads.asides.get(act.id);
+    const sent = user
+      ? ""
+      : aside?.aside.aside === "question"
+        ? `${w.labelOf(aside.aside.from)} asks`
+        : this.sender(act);
+    // A message that asks no answer, as a message that a rung adds to a thread, names no type.
+    const state = this.promptState(act).filter(([text]) => text !== "None");
+    return { sent, state, ...(user || folded ? { bar: threadTone(act.id) } : {}) };
+  },
+
   /** A part of the box of a thread. A message of the operator has a line of the color of the thread at its left, which
    * starts half a row above it and ends half a row under it, as the line of a panel does, so that it stands out of the
    * rest. The half row lies in the row that parts the message from the part above or under it, which the message
    * holds, or in the edge of the box where the message stands first or last, so the line adds no row. Any other part has
    * no line, and its text starts at the column of the text of a message. A part that a blank row parts from the one
-   * above it holds that row. A click on the columns at the left of its text, its line or its margin, folds the thread
-   * when fold is given. */
-  barred(
-    box: BoxRenderable,
-    color?: RGBA,
-    gap = 0,
-    ends = { top: true, bottom: true },
-    fold?: () => void,
-  ): BoxRenderable {
-    const folds = fold ? { onMouseUp: this.click(fold) } : {};
+   * above it holds that row. */
+  barred(box: BoxRenderable, color?: RGBA, gap = 0, ends = { top: true, bottom: true }): BoxRenderable {
     if (!color) {
-      const plain = this.box({ paddingLeft: space.inset + 1, ...(gap ? { paddingTop: gap } : {}), ...folds });
+      const plain = this.box({ paddingLeft: space.inset + 1, ...(gap ? { paddingTop: gap } : {}) });
       box.add(plain);
       return plain;
     }
@@ -85,14 +96,12 @@ export const thread = part({
         border: ["left"],
         borderColor: color,
         customBorderChars: { ...noBorder, vertical: side === "top" ? glyph.barTop : glyph.barBottom },
-        ...folds,
       });
     const part = this.box({
       border: ["left"],
       borderColor: color,
       customBorderChars: { ...noBorder, vertical: glyph.bar },
       paddingLeft: space.inset,
-      ...folds,
     });
     if (ends.top) box.add(cap("top"));
     box.add(part);

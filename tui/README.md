@@ -250,7 +250,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ⌥T | Move in the sidebar: the workspaces, their sessions, and the threads of the session shown |
 | ↑↓ / Enter / → / ← or Esc after ⌥T | Move / open a workspace, a session or a thread / peek at a workspace / fold it again, or back to the input |
 | Space / r / o / a after ⌥T | Collapse or expand / resolve / reply to the thread / go to the next question |
-| ⌥C | Collapse or expand the thread in the middle of the feed, as a click on the left edge of its lines does |
+| ⌥C | Collapse or expand the thread in the middle of the feed, as the toggle on its header does |
 | ⌥A | Go to the next question that waits for you, in any workspace |
 | ↑↓←→ / Enter / Esc after ⌥G | Move or fold / back to the input / back to now, or to the input |
 | [ ] / { } after ⌥G | Move the cursor in time by one / ten moments |

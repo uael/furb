@@ -779,6 +779,24 @@ try {
   // The question that a thread asks and the notice that it gives stand in its box, in time, with the rest of its work.
   await session.select(session.chains.find((chain) => session.labelOf(chain.id) === "w/storage")?.id ?? "");
   await capture("102-thread-question");
+  // The header of a thread that scrolled above the feed stands pinned at the top of the feed, with its toggle, while
+  // the box of the thread holds the top row.
+  const notes = session.acts.find(
+    (act) => act.kind === "prompt" && String(act.words[1]).startsWith("Keep the notes"),
+  );
+  const header = notes && app().cards.get(notes.id)?.node;
+  if (!header) throw new Error("No header of the thread that keeps the notes.");
+  // Its windows of code open whole, so the thread is taller than the feed.
+  session.folds[`window:${notes.id}`] = false;
+  app().renderContent();
+  await test.flush();
+  app().scroll.scrollTo(app().scroll.scrollTop + header.y + 8 - app().scroll.viewport.y);
+  await test.flush();
+  await test.flush();
+  await capture("103-thread-pinned");
+  delete session.folds[`window:${notes.id}`];
+  app().renderContent();
+  app().scrollNow("end");
   await session.select(session.engine.root);
   await rest();
   app().question();
