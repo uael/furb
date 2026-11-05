@@ -157,11 +157,11 @@ pub fn made(record: &[Object]) -> Option<String> {
   })
 }
 
-/// The texts of the engine and of the Kernel that a record runs on: those that its first fact made
-/// holds, or this build's own when it holds none. Texts that are not the engine that their fact
-/// names refuse the record.
+/// The texts of the engine and of the Kernel that a segment of a record runs on: those that its
+/// last fact made holds, or this build's own when it holds none. Texts that are not the engine that
+/// their fact names refuse the record.
 pub fn texts(record: &[Object]) -> Result<(String, String), Fault> {
-  let held = record.iter().find_map(|entry| {
+  let held = record.iter().rev().find_map(|entry| {
     let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
     let word = |at| fact.word(at).and_then(|one| one.as_str().map(str::to_owned));
     (fact.kind() == MADE).then(|| (word(0), word(4), word(5)))

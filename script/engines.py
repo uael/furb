@@ -5,6 +5,10 @@ no texts, this finds in git the commit whose src/furb/engine.py and src/furb/ker
 engine the change of FIX where it applies, and writes the texts and their digest into the fact. It rewrites the file, so
 give it a copy of a record, and never the record of a life.
 
+A build before the texts replayed an older record on its own engine and went on with no fact made of its own, so a
+segment of several lives may hold the entries of several engines. The script says how many lives each segment holds,
+and tests/tip.rs opens the copy to check it: a segment that the texts of one engine cannot replay drifts.
+
 Usage: python3 script/engines.py <copy of a record>
 """
 
@@ -62,6 +66,7 @@ def main() -> None:
   """Writes the texts of its engine into each fact made of the copy that holds none."""
   path = Path(sys.argv[1])
   lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+  lives = [at for at, line in enumerate(lines) if line.startswith('[["stand","stand') and '"operator","chain1"' in line]
   for at, line in enumerate(lines):
     entry = json.loads(line) if '"made"' in line else None
     fact = entry and entry[0]
@@ -72,7 +77,9 @@ def main() -> None:
     fact[3] = digest(engine, kernel)
     fact += [engine, kernel]
     lines[at] = json.dumps(entry, ensure_ascii=False, separators=(",", ":")) + "\n"
-    sys.stdout.write(f"line {at + 1}: the engine {fact[3]}\n")
+    after = [n for n in lives if n > at]
+    end = next((n for n, x in enumerate(lines) if n > at and x.startswith('[["checkpoint"')), len(lines))
+    sys.stdout.write(f"line {at + 1}: the engine {fact[3]}, for {len([n for n in after if n < end])} lives\n")
   path.write_text("".join(lines), encoding="utf-8")
 
 
