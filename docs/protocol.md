@@ -133,8 +133,11 @@ it is not given. The daemon answers requests in any order.
 - An `open` with `answers` makes its peer answer the models of the life in their place, as a demo or a test does. The
   daemon pushes each request of a model to that peer as a frame `ask`, with the `life`, the number `ask` and the
   `request`: its `actor`, `chain`, `messages` and `settings`. The peer tells what it writes with `wrote`, and gives the
-  turn, written as the record writes a value, or `why` it gives none, with `answered`. A request fails once its peer
-  is gone.
+  turn, written as the record writes a value, or `why` it gives none, with `answered`. That peer alone speaks for each
+  request of the life, by its connection, for the whole life: the daemon refuses a `wrote` or an `answered` of any
+  other peer with `foreign`, and the request still waits for its peer. A later `open` with `answers` moves nothing. A
+  request ends at its turn, when the life drops it, or when the connection of its peer ends, and fails in the last
+  case. A `wrote` or an `answered` after its end is refused with `unasked`.
 - An `open` with `attach` attaches its peer in the same step, from that place in the log, as `attach` does. The life
   then has a holder before its grace can pass, even a grace of none.
 - `queue` puts a follow-up of the operator in the queue of a chain, under an `entry` that the window chooses, and a
