@@ -194,13 +194,13 @@ test.skipIf(process.platform === "win32")(
 );
 
 test.skipIf(process.platform === "win32")(
-  "a window of a new build takes over a host of another build, the life goes on in a host of its build, and a window of the old host hears the end",
+  "a window of another build attaches to the host that runs the life, which stays alive, and both windows go on with the life",
   () =>
     demoLife(async (record, directory) => {
       const place = hostPlace(record);
       if (!place) throw new Error("No socket serves here.");
       const options = { demo: true, host: true, cwd: directory, record };
-      // A window of the old build starts a host of that build, which takes it from the window.
+      // A window of an earlier build starts a host of that build.
       process.env.FURB_BUILD = "0.0.0+0ld0b0i1d000";
       let old: Awaited<ReturnType<typeof openEngine>>;
       try {
@@ -214,52 +214,20 @@ test.skipIf(process.platform === "win32")(
       await eventually(async () => (await old.engine.peek(kept)) !== null, "the first command to end");
       const faults: string[] = [];
       old.host.on("fault", (error: Error) => faults.push(error.message));
-      // A command that runs as the window takes the host over lands before the old host ends its life.
-      const late = await old.engine.bash("sleep 1; echo late", { on: old.engine.root });
-      const start = performance.now();
       const { engine, host } = await openEngine(options);
-      const took = performance.now() - start;
-      console.log(`The takeover took ${Math.round(took)} ms.`);
-      const after = said(place);
-      expect(after.pid).not.toBe(before.pid);
-      expect(after.build).toMatch(/\+[0-9a-f]{12}$/);
-      expect(alive(before.pid)).toBe(false);
-      expect(engine.root).toBe(old.engine.root);
+      expect(said(place)).toMatchObject({ pid: before.pid, build: before.build });
+      expect(alive(before.pid)).toBe(true);
       expect(await engine.peek(kept)).toMatchObject({ code: 0, stdout: { content: "kept\n" } });
-      expect(await engine.peek(late)).toMatchObject({ code: 0, stdout: { content: "late\n" } });
-      await eventually(() => faults.length > 0, "the window of the old host to hear the end");
-      expect(faults[0]).toStartWith(`A window of the build ${after.build} took the life over`);
-      expect(await old.engine.peek(kept).catch((error: Error) => error.message)).toBe(faults[0]);
+      const next = await engine.bash("echo next", { on: engine.root });
+      await eventually(
+        async () => (await old.engine.peek(next)) !== null,
+        "the old window to hear the command",
+      );
+      expect(await old.engine.peek(next)).toMatchObject({ code: 0, stdout: { content: "next\n" } });
+      expect(faults).toEqual([]);
+      await old.host.dispose();
       await host.end();
-      await eventually(() => !alive(after.pid), "the new host to end");
-    }),
-);
-
-test.skipIf(process.platform === "win32")(
-  "a window of the old build that finds the host that took its build attaches to that host and takes the life back from no one",
-  () =>
-    demoLife(async (record, directory) => {
-      const place = hostPlace(record);
-      if (!place) throw new Error("No socket serves here.");
-      const options = { demo: true, host: true, cwd: directory, record };
-      const asOld = async () => {
-        process.env.FURB_BUILD = "0.0.0+0ld0b0i1d000";
-        try {
-          return await openEngine(options);
-        } finally {
-          delete process.env.FURB_BUILD;
-        }
-      };
-      await asOld();
-      const { host } = await openEngine(options);
-      const after = said(place);
-      expect(after.from).toBe("0.0.0+0ld0b0i1d000");
-      const again = await asOld();
-      expect(said(place)).toMatchObject({ pid: after.pid, build: after.build });
-      expect(alive(after.pid)).toBe(true);
-      expect(again.engine.root).toBeString();
-      await host.end();
-      await eventually(() => !alive(after.pid), "the host to end");
+      await eventually(() => !alive(before.pid), "the host to end");
     }),
 );
 
@@ -302,36 +270,6 @@ test.skipIf(process.platform === "win32")(
       host.kill();
     }
   },
-);
-
-test.skipIf(process.platform === "win32")(
-  "a command that runs past the wait of a host that hands its life over ends in the new host as interrupted",
-  () =>
-    demoLife(async (record, directory) => {
-      const options = { demo: true, host: true, cwd: directory, record };
-      process.env.FURB_BUILD = "0.0.0+0ld0b0i1d000";
-      let old: Awaited<ReturnType<typeof openEngine>>;
-      try {
-        old = await openEngine(options);
-      } finally {
-        delete process.env.FURB_BUILD;
-      }
-      const cut = await old.engine.bash("sleep 60; echo never", { on: old.engine.root });
-      await eventually(
-        async () => (await old.engine.peek(cut)) === null && old.host.seq > 0,
-        "the command to start",
-      );
-      const start = performance.now();
-      const { engine, host } = await openEngine(options);
-      expect(performance.now() - start).toBeGreaterThan(10000);
-      await eventually(async () => (await engine.peek(cut)) !== null, "the checkpoint to end the command");
-      expect(host.pending.has(cut)).toBe(false);
-      expect(await engine.peek(cut)).toMatchObject({
-        is: "Refused",
-        args: ['"sleep 60; echo never" was interrupted: the life that ran it ended before it did'],
-      });
-      await host.end();
-    }),
 );
 
 test.skipIf(process.platform === "win32")(

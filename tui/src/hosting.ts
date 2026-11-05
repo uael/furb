@@ -8,9 +8,9 @@ import { hostname, tmpdir, userInfo } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { scratch } from "furb";
 
-/** The version of the protocol between a window and the host of a life, which the hello of each says. Each version
- * keeps the hello and the end of the life as they are, so a window takes over a host of any build: it ends that host
- * with an end that names the hand over, and a host that does not know the hand over ends as by any end. */
+/** The version of the protocol between a window and the host of a life, which the hello of each says. A window
+ * attaches to a host of any build that speaks its protocol, and reads the life of a host of another protocol from its
+ * record: no window ends a host. */
 export const PROTOCOL = 1;
 /** The longest path of a socket that this module makes: macOS takes 104 bytes with the end of the string. */
 const LONGEST = 100;
@@ -34,8 +34,6 @@ export interface About {
   engine: string;
   protocol: number;
   started: number;
-  /** The build that a window of this build took the life from, when a takeover started this host. */
-  from?: string;
 }
 
 /** What the hello of the host gives a window: what it says of itself, the root of its life, the count of facts that
@@ -200,8 +198,8 @@ export function framed(
 }
 
 /** The build of this program: the version of the package furb and the digest of its native library, which holds the
- * engine, the Kernel, the interpreter and the ears of the crate, so a window of a new build knows a host of an old one
- * and takes it over. FURB_BUILD names another build in its place, as a test of a takeover does. */
+ * engine, the Kernel, the interpreter and the ears of the crate, so a window says which build runs the life that it reads.
+ * FURB_BUILD names another build in its place, as a test of a window of another build does. */
 export async function buildOf(): Promise<string> {
   if (process.env.FURB_BUILD) return process.env.FURB_BUILD;
   const index = Bun.resolveSync("furb", import.meta.dir);

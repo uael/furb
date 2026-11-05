@@ -401,7 +401,7 @@ export async function openEngine(
   const place =
     options.host && options.record && !isRecorded(options.record) ? hostPlace(options.record) : undefined;
   return place
-    ? attach(options, (stopped, from) => reach(options, place, stopped, from), "", true, made)
+    ? attach(options, (stopped) => reach(options, place, stopped), "", true, made)
     : inWindow(options, made);
 }
 
@@ -435,7 +435,6 @@ async function inWindow(
   options: EngineOptions,
   made?: (link: Link) => void,
 ): Promise<{ engine: Engine; host: HostView }> {
-  const worker = new Worker(new URL("worker.ts", import.meta.url).href, { type: "module" });
   const link = new Link((target, method) =>
     target === "host"
       ? Promise.reject(
@@ -448,23 +447,29 @@ async function inWindow(
       : undefined,
   );
   made?.(link);
+  const root = await worked(link, options);
+  return { engine: link.engine(root), host: link.host };
+}
+
+/** A worker of the window that serves a link, and the root of the life that it opened. */
+async function worked(link: Link, options: EngineOptions): Promise<string> {
+  const worker = new Worker(new URL("worker.ts", import.meta.url).href, { type: "module" });
   link.send = (message) => worker.postMessage(message);
   worker.onmessage = ({ data }) => link.receive(data);
   worker.onerror = (event) => {
     link.end(event.message);
     link.host.emit("fault", new Error(event.message));
   };
-  let root: string;
   try {
-    root = (await link.request("session", "open", [options], true)) as string;
+    const root = (await link.request("session", "open", [options], true)) as string;
     link.open();
+    return root;
   } catch (error) {
     // No caller holds a worker whose life did not open, so it ends here.
     link.end("The session is disposed.");
     worker.terminate();
     throw error;
   }
-  return { engine: link.engine(root), host: link.host };
 }
 
 /** A connection to a host on the network, which fails with the reason when no host answers there. */
@@ -519,12 +524,11 @@ async function launch(
   options: EngineOptions,
   place: Place,
   stopped: () => boolean,
-  from?: string,
 ): Promise<Socket | string> {
   const log = openSync(place.log, "a", 0o600);
   const child = spawn(
     process.execPath,
-    [new URL("host.ts", import.meta.url).pathname, JSON.stringify(from ? { ...options, from } : options)],
+    [new URL("host.ts", import.meta.url).pathname, JSON.stringify(options)],
     {
       detached: true,
       stdio: ["ignore", log, log],
@@ -574,13 +578,12 @@ async function reach(
   options: EngineOptions,
   place: Place,
   stopped: () => boolean = () => false,
-  from?: string,
 ): Promise<Socket> {
   for (let tries = 1; ; tries++) {
     const found = await connect(place.socket);
     if (found) return found;
     if (stopped()) throw new Error(STOPPED);
-    const got = await launch(options, place, stopped, from);
+    const got = await launch(options, place, stopped);
     if (typeof got !== "string") return got;
     if (!got.includes(RIVAL) && !got.includes(OWNED)) throw new Error(got);
     const host = await waiting(place, stopped);
@@ -589,28 +592,34 @@ async function reach(
   }
 }
 
-/** How long a window waits for a host of another build to end once it asked it to hand the life over: the host waits
- * up to 10 seconds for what runs, then ends the life. */
-const TAKEOVER = 60000;
+/** A host that speaks another protocol than the window, whose life the window reads from its record. */
+class Foreign extends Error {}
+
+/** Why a window that reads the life of a host of another protocol cannot stop it or open it again. */
+const FOREIGN =
+  "This window reads the life of a host of another build from its record, and leaves that host as it runs.";
 
 /** The life in a host of its own, which outlives the window. A dispose of the window detaches it, and the life goes
  * on; an end ends the life. When the host goes away with the life open, the window attaches again, to a host that it
  * starts again when none answers, and reads the acts from the start when it is another host. Its hello gives the key
- * of the window, which a host on the network asks. A window of a host of this machine, which takes, takes over a host
- * of another build: the host ends the life, and the window starts a host of its own build, which opens the life again
- * on the same record. */
+ * of the window, which a host on the network asks. A window of any build attaches to the host that runs the life when they
+ * speak one protocol, and else reads the life from its record: a window never ends a host, and never waits for one to
+ * end. */
 async function attach(
   options: EngineOptions,
-  reachHost: (stopped: () => boolean, from?: string) => Promise<Socket>,
+  reachHost: (stopped: () => boolean) => Promise<Socket>,
   key = "",
-  takes = false,
+  local = false,
   made?: (link: Link) => void,
 ): Promise<{ engine: Engine; host: HostView }> {
   let socket: Socket | undefined;
   /** Whether this window stopped its host, which ends each reach of it. */
   let stopping = false;
-  const place = takes && options.record ? hostPlace(options.record) : undefined;
+  const place = local && options.record ? hostPlace(options.record) : undefined;
+  /** Whether this window reads the life from its record, in a worker of its own, as the host speaks another protocol. */
+  let reads = false;
   const link: Link = new Link((target, method) => {
+    if (reads) return target === "host" ? Promise.reject(new Error(FOREIGN)) : undefined;
     if (target === "host" && (method === "stop" || method === "reopen"))
       return method === "stop" ? stop() : reopen();
     if (target === "session" && method === "end" && place) return ending();
@@ -626,10 +635,9 @@ async function attach(
   let first: Hello | undefined;
   let reaching: Promise<void> | undefined;
   const hello = async (): Promise<Hello> => {
-    let from: string | undefined;
     let tries = 0;
-    for (let took = false; ; ) {
-      const held = await reachHost(() => stopping, from);
+    for (;;) {
+      const held = await reachHost(() => stopping);
       socket = held;
       // The record of a host on the network stands on another machine, or is the record of another operator, so the
       // window keeps its view at its own record.
@@ -680,21 +688,14 @@ async function attach(
         (await waiting(place, () => stopping))?.destroy();
         continue;
       }
-      // A host that this window started after a takeover keeps its build, so two windows of two builds that open
-      // the life at once do not take it over from each other with no end. A host that took the life from the build
-      // of this window is not taken back: a window of an old build attaches to it.
-      if (takes && !took && said.build !== build && said.from !== build) {
+      // A host of another build that speaks the protocol of the window serves it as a host of its build does. A host
+      // of another protocol is left as it runs, and the window reads the life from its record.
+      if (said.protocol !== PROTOCOL) {
         socket = undefined;
         link.send = undefined;
-        await takeOver(held, send, said, build);
-        from = said.build;
-        took = true;
-        continue;
-      }
-      if (said.protocol !== PROTOCOL) {
         held.end();
-        throw new Error(
-          `The host of ${said.record} speaks the protocol ${said.protocol}, and this window ${PROTOCOL}. End the life in a window of its build first.`,
+        throw new Foreign(
+          `The life runs in a host of the build ${said.build}, which speaks the protocol ${said.protocol}, and this window ${PROTOCOL}: this window reads it from its record.`,
         );
       }
       link.host.role = said.role ?? "write";
@@ -766,34 +767,16 @@ async function attach(
   try {
     first = await hello();
   } catch (error) {
+    if (error instanceof Foreign && options.record) {
+      reads = true;
+      link.host.local = false;
+      const root = await worked(link, { ...options, host: false, reads: error.message });
+      return { engine: link.engine(root), host: link.host };
+    }
     // The requests that wait for the open of the life fail with the reason it did not open.
     link.end(error instanceof Error ? error.message : String(error));
     throw error;
   }
   link.open();
   return { engine: link.engine(first.root), host: link.host };
-}
-
-/** The end of a host of another build, which hands the life over: the window asks it to end the life, and waits until
- * it closes the socket. The ask is an end of the session, so a host that does not know the hand over ends the life
- * as at any end. */
-async function takeOver(
-  held: Socket,
-  send: (message: object) => void,
-  said: Hello,
-  build: string,
-): Promise<void> {
-  let timer: Timer | undefined;
-  const closed = new Promise<boolean>((resolve) => {
-    held.once("close", () => resolve(true));
-    timer = setTimeout(() => resolve(false), TAKEOVER);
-  });
-  send({ id: 0, target: "session", method: "end", args: [{ handover: { build, protocol: PROTOCOL } }] });
-  const ended = await closed;
-  clearTimeout(timer);
-  if (ended) return;
-  held.destroy();
-  throw new Error(
-    `The host of ${said.record}, of the build ${said.build}, did not hand the life over to the build ${build} in ${TAKEOVER / 1000} seconds.`,
-  );
 }

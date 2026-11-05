@@ -621,10 +621,11 @@ export class Workspaces extends EventEmitter {
     this.save({ directory: group.directory, add: entry.path, archive: entry.path });
     this.emit("change");
   }
-  /** Show a workspace on a session of it, its newest when none is named, or on a new session when it holds none. A
-   * session that does not open keeps its error on its row, and a new session of the workspace opens in its place with
-   * the refusal as its notice, so a workspace whose record cannot open still opens. */
-  async enter(group: Workspace, entry = group.sessions.find((one) => !one.archived)): Promise<SessionEntry> {
+  /** Show a workspace on the session of it that the operator picked, or on a new session when he picked none: a session
+   * that stands opens only when he picks it. A session that does not open keeps its error on its row, and a new session
+   * of the workspace opens in its place with the refusal as its notice, so a workspace whose record cannot open still
+   * opens. */
+  async enter(group: Workspace, entry?: SessionEntry): Promise<SessionEntry> {
     if (!entry) return this.create(group);
     try {
       await this.select(entry);

@@ -13,6 +13,9 @@ export type EngineOptions = Omit<SessionOptions, "answer" | "operator" | "ears">
   /** The address of a host on the network, furb://host:port/key, which the window attaches to in place of a host of
    * this machine. */
   attach?: string;
+  /** Why the window reads the record with no life, as when a host of another protocol runs the life: the reason that
+   * the view names. */
+  reads?: string;
 };
 
 /** The roster of a session of the TUI: the models the operator names, or those of the demo, and the models the

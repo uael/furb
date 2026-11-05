@@ -330,6 +330,18 @@ async function answer(data: { target: string; method: string; args: unknown[] })
       }, FOLLOW).unref();
       return recorded.root;
     }
+    // A record whose life runs in a host of another protocol opens to read, and leaves that host as it runs.
+    if (options.reads && options.record) {
+      const { file, made, engine: ours, version, current, logged } = retold(options.record);
+      reader = new Reader(
+        options.cwd ?? dirname(options.record),
+        options.record,
+        { made, engine: ours, version, current, why: options.reads, logged },
+        file,
+      );
+      snapshots = new Snapshots(reader, reader);
+      return reader.root;
+    }
     claude = options.claude;
     userConfig = options.config;
     demo = (scripted || watch) ?? false;
@@ -556,10 +568,8 @@ function read(data: { target: string; method: string; args: unknown[] }): unknow
 
 self.onmessage = async ({ data }) => {
   // The end of the life is the dispose of its session: a window of its own ends it so, and a window of a host ends it
-  // by end, since a dispose there only detaches the window. A host that hands the life over to another build ends it
-  // with its checkpoint, so the host of that build goes on from it with no replay of what this build made.
-  if (data.target === "session" && data.method === "end")
-    data.method = data.args?.[0]?.handover ? "end" : "dispose";
+  // by end, since a dispose there only detaches the window.
+  if (data.target === "session" && data.method === "end") data.method = "dispose";
   let reply: { value?: unknown; error?: string; name?: string };
   try {
     reply = { value: await answer(data) };

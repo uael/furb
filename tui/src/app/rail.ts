@@ -317,14 +317,12 @@ export const rail = part({
     })().catch(this.report);
   },
 
-  /** A workspace takes the focus: the session of it that needs the operator, else one that lives, else its newest. */
+  /** A workspace takes the focus on a new session of it: a session that stands opens only when the operator picks
+   * it, since its life may run in a window of another build. */
   async focusWorkspace(group: Workspace): Promise<void> {
     const lib = this.options.workspaces;
     if (group === lib.groupOf()) return;
-    const kept = group.sessions.filter((entry) => !entry.archived);
-    const asks = (entry: SessionEntry) => Boolean(entry.session?.desk.asks.some((ask) => !ask.notice));
-    const pick = kept.find(asks) ?? kept.find((entry) => entry.session) ?? kept[0];
-    await lib.enter(group, pick);
+    await lib.enter(group);
   },
 
   /** A workspace that does not hold the focus opens to show its sessions, or folds again. */

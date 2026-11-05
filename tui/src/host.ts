@@ -32,11 +32,7 @@ type Send = (message: object) => void;
 /** Who waits for an answer of the worker: a window, with the number of its request there, or the host itself. */
 type Asker = { send?: Send; id: number; settle?: (value: unknown, error?: string) => void };
 
-const {
-  host: _,
-  from,
-  ...options
-} = JSON.parse(process.argv[2] ?? "{}") as EngineOptions & { from?: string };
+const { host: _, ...options } = JSON.parse(process.argv[2] ?? "{}") as EngineOptions;
 const record = options.record;
 const place = record ? hostPlace(record) : undefined;
 if (!record || !place) {
@@ -53,7 +49,6 @@ const about: About = {
   engine: "",
   protocol: PROTOCOL,
   started,
-  ...(from ? { from } : {}),
 };
 const tell = () => tellAbout(place, about);
 // Another host of the life that runs owns it, so this one ends before it opens a second life on the record. The host
@@ -82,7 +77,7 @@ let sequence = 0;
 let last: HostState | undefined;
 let ending = false;
 /** What each other window hears when the life ends. */
-let why = "The life was ended from another window.";
+const why = "The life was ended from another window.";
 /** Whether a signal ends the host: no window ended the life, so no window is told that one did, and each window
  * that stays reaches a new host, as it does when a kill ends the host. */
 let signalled = false;
@@ -95,11 +90,6 @@ let refusal = "";
 /** What the host told its windows of the disk and of the memory, by the kind of warning, which a window that attaches
  * later hears too. */
 const warnings = new Map<string, string>();
-/** How long a host that hands its life over waits for the commands and the replies of the models that run, so that
- * each that ends in time lands in the record. Each other ends as interrupted in the life of the next host, as a
- * command that a crash cut does. */
-const HANDOVER = 10000;
-let handing = false;
 
 function ask(target: string, method: string, args: unknown[], to: Asker): void {
   const id = ++sequence;
@@ -277,37 +267,18 @@ function heard(message: Request, send: Send, role: Role): void {
     return;
   }
   if (message.target === "session" && message.method === "end") {
-    const taker = (message.args[0] as { handover?: { build?: string } } | undefined)?.handover;
-    if (taker) {
-      if (!handing && !ending) void handOver(String(taker.build ?? ""));
+    // A window of an earlier build asks a host of another build to hand its life over: no window ends a host, so the
+    // host refuses, and its life goes on.
+    if ((message.args[0] as { handover?: unknown } | undefined)?.handover) {
+      send({
+        id: message.id,
+        error: "This host hands its life to no window: a window of any build attaches to it.",
+      });
       return;
     }
     ending = true;
   }
   ask(message.target, message.method, message.args, { send, id: message.id });
-}
-
-/** The ids of the commands and of the replies of the models that run, or none when the life cannot say. */
-const running = () =>
-  asked("library", "running").then(
-    (ids) => new Set(Array.isArray(ids) ? ids.map(String) : []),
-    () => new Set<string>(),
-  );
-
-/** The hand over of the life to a window of another build: the host waits a bounded time for what runs, then ends
- * the life, so its record and its lease are free for the host that the window starts. */
-async function handOver(build: string): Promise<void> {
-  handing = true;
-  const left = await running();
-  for (const deadline = Date.now() + HANDOVER; left.size && Date.now() < deadline; ) {
-    await Bun.sleep(50);
-    const now = await running();
-    for (const id of left) if (!now.has(id)) left.delete(id);
-  }
-  if (ending) return;
-  ending = true;
-  why = `A window of the build ${build} took the life over, and a host of that build goes on with it. Open the life again in a window of that build.`;
-  ask("session", "end", [{ handover: true }], { id: 0 });
 }
 
 /** A warning of a kind: a window hears it once when it begins, in one notice with each warning that stands, since a later

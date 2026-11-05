@@ -932,7 +932,7 @@ async function railTo(sidebar: Sidebar, id: string): Promise<boolean> {
   return sidebar.app().railAt === id;
 }
 
-test("after ⌥T, Enter on a workspace row switches to it", () =>
+test("after ⌥T, Enter on a workspace row switches to it on a new session", () =>
   withLibrary(async ({ directory, open, sidebar }) => {
     const { library, other, third } = await twoSpaces(directory, open);
     const shown = await sidebar(library);
@@ -942,7 +942,8 @@ test("after ⌥T, Enter on a workspace row switches to it", () =>
     expect(await railTo(shown, `ws:${other.directory}`)).toBe(true);
     shown.screen.mockInput.pressEnter();
     await until(library, () => library.groupOf() === other);
-    expect(library.current).toBe(third);
+    expect(library.current).not.toBe(third);
+    expect(other.sessions.length).toBe(2);
   }));
 
 test("after ⌥T, the right arrow peeks at a workspace and shows its sessions", () =>
@@ -972,18 +973,21 @@ test("each session row of a workspace opens its session, and New session makes o
     await until(library, () => group.sessions.length === count + 1 && library.current === group.sessions[0]);
   }));
 
-test("a click on another workspace row switches to it, and in the cards a click on the switcher does", () =>
+test("a click on another workspace row switches to it on a new session, and in the cards a click on the switcher does", () =>
   withLibrary(async ({ directory, open, sidebar }) => {
     const { library, group, other, third } = await twoSpaces(directory, open);
     const shown = await sidebar(library);
     await shown.frame();
     await shown.screen.mockMouse.click(shown.left + 6, shown.row("other"));
-    await until(library, () => library.current === third);
+    await until(library, () => library.groupOf() === other);
+    expect(library.current).not.toBe(third);
+    expect(other.sessions.length).toBe(2);
+    const count = group.sessions.length;
     library.preferences.sidebarStyle = "cards";
     await shown.frame();
     await shown.screen.mockMouse.click(shown.left + 6, shown.row("project"));
     await until(library, () => library.groupOf() === group);
-    expect(other.sessions.length).toBe(1);
+    expect(group.sessions.length).toBe(count + 1);
   }));
 
 test("an archived session comes back to the list of its workspace", () =>
