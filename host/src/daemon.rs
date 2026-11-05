@@ -473,7 +473,8 @@ impl From<Reply> for Answer {
 /// What an open names of the life that it makes: its folder, the actor, the roster, the
 /// extensions, the folder of the settings of the user and the claude command line that its peer
 /// chose, and the peer that answers its models, when one does. A choice that is unsaid takes the
-/// one of the settings of the daemon.
+/// one of the settings of the daemon, and an actor or a roster that both leave unsaid takes the
+/// one that the record of the life stood on last, as [`Opening`] says.
 #[derive(Clone, Default)]
 struct Birth {
   cwd: String,
