@@ -274,7 +274,9 @@ test("a thread that a host stamps reads a step again only where an act under it 
       made[made.indexOf(one)] = done;
       stamps.set(done.by, (stamps.get(done.by) ?? 0) + 1);
     }
-  index.live = acts.filter((one) => !one.done || one.run?.status === "running");
+  index.live = new Map(
+    acts.filter((one) => !one.done || one.run?.status === "running").map((one) => [one.id, one]),
+  );
   expect(read()).toEqual(whole());
 });
 

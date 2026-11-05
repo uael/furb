@@ -283,7 +283,7 @@ function ladderOf(index: Index, chain: string): ActIndex {
     on: index.work.get(chain) ?? [],
     made: index.made,
     ids: index.ids,
-    live: index.live.values(),
+    live: index.live,
     stamp: (id) => index.stamps.get(id) ?? 0,
   };
 }

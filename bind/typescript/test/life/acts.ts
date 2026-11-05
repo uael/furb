@@ -29,10 +29,10 @@ export function act(
 /** The acts that each act made, in the order of the acts. */
 export function makers(acts: readonly LiveAct[]): Map<string, LiveAct[]> {
   const made = new Map<string, LiveAct[]>();
-  for (const act of acts) {
-    const list = made.get(act.by);
-    if (list) list.push(act);
-    else made.set(act.by, [act]);
+  for (const one of acts) {
+    const list = made.get(one.by);
+    if (list) list.push(one);
+    else made.set(one.by, [one]);
   }
   return made;
 }
@@ -44,6 +44,8 @@ export function actIndex(acts: readonly LiveAct[], chain: string) {
     on: acts.filter((one) => one.on === chain && one.kind !== "chain"),
     made: makers(acts),
     ids: new Map(acts.map((one) => [one.id, one])),
-    live: acts.filter((one) => !one.done || one.run?.status === "running"),
+    live: new Map(
+      acts.filter((one) => !one.done || one.run?.status === "running").map((one) => [one.id, one]),
+    ),
   };
 }

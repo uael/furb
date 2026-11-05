@@ -86,8 +86,8 @@ export type ActIndex = {
   on: readonly LiveAct[];
   made: ReadonlyMap<string, readonly LiveAct[]>;
   ids: ReadonlyMap<string, LiveAct>;
-  /** Each act that is not done, and each rung whose run runs, which the steps that stay shown hold. */
-  live: Iterable<LiveAct>;
+  /** Each act that is not done, and each rung whose run runs, by its name, which the steps that stay shown hold. */
+  live: ReadonlyMap<string, LiveAct>;
   /** How many times an act that each act made came or changed, which a host that counts them gives: a thread keeps what
    * it read of each step until that count changes. */
   stamp?: (id: string) => number;
@@ -290,7 +290,7 @@ export function thread(
   // A step stays shown when a prompt or a rung under it asks the operator or runs: each such act marks each step from
   // it up to the top, through the lines that the thread makes of it, in the level of the step above it.
   const alive = new Map<string, string[]>();
-  for (const act of [...index.live, ...[...owed].flatMap((id) => ids.get(id) ?? [])]) {
+  for (const act of [...index.live.values(), ...[...owed].flatMap((id) => ids.get(id) ?? [])]) {
     if (
       (act.kind !== "prompt" && act.kind !== "rung") ||
       !["asks", "thinks", "runs", "idle"].includes(actState(act, owed))
