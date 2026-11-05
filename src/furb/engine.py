@@ -323,7 +323,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
     t = transcript(source or ROOT)
     h = [(x[0] == "tell" and x[3][0][:6]) or x[0] for x in t] + ["chain(", "#chain", "setup"]
     hi = h.index("#chain", lo := h.index("chain("))
-    blocked, running, waiting, last, heard, seen = set(), {}, {}, standing(), [], set()
+    blocked, running, waiting, last, heard, seen, loud, dull = set(), {}, {}, standing(), [], set(), [], 0
     step = news = ran = reply = note = to = mute = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
@@ -457,6 +457,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
         case ("tell", *_, notes) if notes not in (["chain()"], [*r[4:5]]):
           heard.append("\n".join(notes))
           ran = mute = ""
+          loud.append(a[2])
           if a is note:
             note = bind(step)
         case ("done", about, *_) if about == note:
@@ -479,16 +480,22 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
           pause(id, why)
       if r[0] == "run":
         running[r[4]] = a[0] != "done"
-        a[0] == "done" and (mute := (get(r[4]) or a)[2] * (repr(a[1]) not in str(transcript(id, "wants"))))
+        a[0] == "done" and (
+          mute := (get(r[4]) or a)[2] * (repr(a[1]) not in str(transcript(id, "wants")) and r[4] not in loud)
+        )
       elif r[0] == "wants":
         running[get(r[2])[4]] = a[0] != "started"
       a[0] == "done" and a[1] in seen and (mute := "")
       if any(running.values()):
         continue
       waits = [c for *_, c in transcript(id, "wants") if not over(c)]
-      if step not in waiting and (
-        step := next(
-          (x for x in waiting if not (paused(x) or over(x) or (mute == get(x)[2] and not all(map(over, seen))))), ""
+      if (
+        step not in waiting
+        and ladder.get(ran) != dull
+        and (
+          step := next(
+            (x for x in waiting if not (paused(x) or over(x) or (mute == get(x)[2] and not all(map(over, seen))))), ""
+          )
         )
       ):
         maker, to = get(step)[2::4]
@@ -496,6 +503,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
           close(Refused(to + " no actor"), maker * prompted(maker) or step)
         else:
           if ran:
+            dull = ladder.get(ran)
             yield told(ran, "told nothing")
           note = yield told(step, "advance on " + maker, share=filled(reply) or None, waits=waits or None)
           news = ""
