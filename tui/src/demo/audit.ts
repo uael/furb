@@ -12,12 +12,12 @@ PARTS = {
 }
 
 
-def ask(label, path):
+def keys_of(label, path):
   where = chain(label)
   return prompt(str, f"List the keys that {path} answers, one for each line as 'key: what it does'. Say 'none' if it answers no key.", on=where)
 
 
-asked = {label: ask(label, path) for label, path in PARTS.items()}
+asked = {label: keys_of(label, path) for label, path in PARTS.items()}
 found = {}
 for label, act in asked.items():
   found[label] = (await act).strip().splitlines()
