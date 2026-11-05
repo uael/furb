@@ -667,6 +667,7 @@ def grant(usd: float | None = None, share: float | None = None, on: str = "") ->
   A grant of nothing, of a ceiling under zero, or of a share past one is no ceiling: it is done with the refusal, which whoever made it takes by awaiting it, and it tells nothing, since it never stood; a prompt to no actor of the roster is closed the same way after it has told its open.
   A later grant that stands closes every grant of the chain before it that stands, and none that is over, so the ledger counts from the new one alone; one that is no ceiling closes nothing, and the ceiling that stands stands on.
   A cancel of it lifts the ceiling, since it is an act like any other.
+  A reply that a cancel ended fills no share of the window, so an answer that its model gives after the cancel counts its dollars alone.
   A grant is any caller's, on any chain.
   A grant finds the grants of its chain among the acts of the life, so a grant on a chain with a source closes no grant of its origin.
   """
