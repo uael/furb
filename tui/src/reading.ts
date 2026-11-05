@@ -15,13 +15,11 @@ import {
 import type { Exit, PauseCause } from "furb/life";
 import type { ActRow } from "./session.ts";
 
-/** Why a record opens to read: the engine and the version of the build that made it, as the record names them, the
- * engine and the version of this build, and what the life that opened on it raised. */
+/** Why a record opens to read: the engine that made it, as the record names it, the engine of this build, and what
+ * the life that opened on it raised. */
 export interface Reading {
   made: string | null;
   engine: string;
-  version: number | null;
-  current: number;
   why: string;
   /** Whether the facts are those of the log, which holds every fact that the life said, or those that the record
    * kept, with the acts that they name. */
@@ -32,16 +30,12 @@ export interface Reading {
 export const RESUME_ISSUE = "https://github.com/uael/furb/issues/988";
 
 /** The build that made a record and this build, as the dialog and the footer name them: an engine by the first twelve
- * characters of its hash, or a version with its engine, or an earlier engine that the record does not name. */
+ * characters of its hash, or an earlier engine that the record does not name. */
 export function engines(reading: Reading): { made: string; build: string } {
-  const ours = reading.engine.slice(0, 12);
-  const theirs = reading.made?.slice(0, 12);
-  return reading.version !== null
-    ? {
-        made: `version ${reading.version}${theirs ? ` (${theirs})` : ""}`,
-        build: `version ${reading.current} (${ours})`,
-      }
-    : { made: theirs ?? "an earlier engine, not named", build: ours };
+  return {
+    made: reading.made?.slice(0, 12) ?? "an earlier engine, not named",
+    build: reading.engine.slice(0, 12),
+  };
 }
 
 /** The one plain line that says why a record opens to read: this build cannot resume it, since its replay drifts,

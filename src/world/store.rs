@@ -112,25 +112,14 @@ pub fn heads(path: impl AsRef<Path>, kinds: &[&str]) -> Result<Vec<Object>, Faul
 
 /// The kind of the fact by which a record names the build that made it: `("made", "chain1",
 /// "store", engine, version, schema, release, source, kernel)`, where engine is what [`engine`]
-/// gives, version is [`VERSION`], schema is [`RECORD_SCHEMA`], release is the release of furb that
+/// gives, version is null, which a build before the texts gave its version of the replay, schema
+/// is [`RECORD_SCHEMA`], release is the release of furb that
 /// made it, as `0.4.2`, and source and kernel are the texts of its engine and of its Kernel, which
 /// a later life runs to replay the segment that the fact begins, as [`texts`] says. A record of a
 /// build before the texts holds none, one of a build before the versions holds no version, and one
 /// of a build before the schemas holds no schema and no release. No contract holds it, so this is
 /// the one home of its shape.
 pub const MADE: &str = "made";
-
-/// The version of the replay of this build, which a record names. A record replays on each build of
-/// the version that made it. It is no version of a schema: the record and the checkpoint each have
-/// a schema of their own, in [`schema`], which a later build of the major reads. A tail of the
-/// record replays only on a build of the engine and of the version that made it: one of another
-/// engine or version is carried as data after a checkpoint, and refused when the record holds no
-/// checkpoint.
-///
-/// The gate of the replays holds the versions few: each record in `tests/replay` replays with no
-/// drift on each build of its version. A change that makes one of them drift adds one to the
-/// version, and makes the record again in the same change, as `tests/replay/README.md` says.
-pub const VERSION: i64 = 9;
 
 /// The engine of this build, which a record names: a digest of the engine and of the Kernel, which make each act of
 /// a replay. Another engine can make other acts from the same record, so a record replays only on the engine that
@@ -175,15 +164,6 @@ pub fn texts(record: &[Object]) -> Result<(String, String), Fault> {
     )));
   }
   Ok((source, kernel))
-}
-
-/// The version of the build that a record names, and nothing when it names none, as a record of a build before
-/// the versions.
-pub fn version(record: &[Object]) -> Option<i64> {
-  record.iter().find_map(|entry| {
-    let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
-    (fact.kind() == MADE).then(|| fact.word(1)?.as_int()).flatten()
-  })
 }
 
 /// The release of furb that a record names, as `0.4.2`, and nothing when it names none, as a record
@@ -236,12 +216,12 @@ fn streamed(entry: Object) -> Object {
   Object::list([Object::list(said)])
 }
 
-/// The fact made of this build: its engine, its version of the replay, the schema of its record,
+/// The fact made of this build: its engine, no version, the schema of its record,
 /// its release, and the texts of its engine and of its Kernel.
 fn named() -> Fact {
   let build = [
     Object::string(engine()),
-    Object::int(VERSION),
+    Object::none(),
     RECORD_SCHEMA.object(),
     Object::string(env!("CARGO_PKG_VERSION")),
     Object::string(ENGINE),

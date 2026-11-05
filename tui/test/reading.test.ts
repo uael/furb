@@ -10,7 +10,7 @@ import { type Reading, reads, UNRESUMABLE } from "../src/reading.ts";
 import { Workspaces } from "../src/workspaces.ts";
 import { ended } from "./ended.ts";
 
-test("a record whose fact drifts opens to read, with what it kept, and a dialog that names its version", async () => {
+test("a record whose fact drifts opens to read, with what it kept, and a dialog that names its engine", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-drift-"));
   const record = join(directory, "drifts.jsonl");
   try {
@@ -39,7 +39,6 @@ test("a record whose fact drifts opens to read, with what it kept, and a dialog 
       const reading = session.host.reading;
       expect(reading?.why).toStartWith("Drift: bash1 drifts");
       expect(reading?.made).toBe(reading?.engine ?? "");
-      expect(reading?.version).toBe(reading?.current ?? -1);
       // The replay that drifted leaves the log of the life before it as it was.
       expect(await readFile(`${record}.log`, "utf8")).toBe(log);
       const bash = session.acts.find((act) => act.id === "bash1");
@@ -62,8 +61,8 @@ test("a record whose fact drifts opens to read, with what it kept, and a dialog 
         expect(frame).toContain("issues/988");
         expect(frame).toContain("Record: ");
         expect(frame).not.toContain("new life");
-        expect(frame).toContain(`Made by: version ${reading?.version}`);
-        expect(frame).toContain(`This build: version ${reading?.current}`);
+        expect(frame).toContain(`Made by: ${reading?.made?.slice(0, 12)}`);
+        expect(frame).toContain(`This build: ${reading?.engine.slice(0, 12)}`);
         expect(frame).toContain("its replay drifts");
       } finally {
         app.dispose();
@@ -78,8 +77,8 @@ test("a record whose fact drifts opens to read, with what it kept, and a dialog 
 });
 
 test("a record open to read names the defect and offers no new life, whatever build made it", () => {
-  const same = { version: 3, current: 3, made: "a", engine: "a" } as Reading;
-  const other = { version: 2, current: 3, made: "a", engine: "b" } as Reading;
+  const same = { made: "a", engine: "a", why: "drift", logged: false } satisfies Reading;
+  const other = { made: "a", engine: "b", why: "drift", logged: false } satisfies Reading;
   for (const one of [same, other]) {
     expect(reads(one)).toContain(UNRESUMABLE);
     expect(reads(one)).toContain("https://github.com/uael/furb/issues/988");

@@ -21,7 +21,7 @@ from pathlib import Path
 
 WORDS = 7
 """The words of a fact made that holds no texts: its kind, its chain, its speaker, the digest, the version, the schema and
-the release."""
+the release, each null that an older build did not write."""
 
 FIX = "656c26163"
 """The commit by which a replay goes on past the raise of an ear (#1281), which each older engine takes where it applies."""
@@ -70,8 +70,9 @@ def main() -> None:
   for at, line in enumerate(lines):
     entry = json.loads(line) if '"made"' in line else None
     fact = entry and entry[0]
-    if not (isinstance(fact, list) and fact[:1] == ["made"] and len(fact) == WORDS):
+    if not (isinstance(fact, list) and fact[:1] == ["made"] and len(fact) <= WORDS):
       continue
+    fact += [None] * (WORDS - len(fact))
     engine, kernel = found(fact[3])
     engine = fixed(engine)
     fact[3] = digest(engine, kernel)

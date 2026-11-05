@@ -296,20 +296,16 @@ fn a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_t
   assert_eq!(running, "[]", "no act stays running with no process");
 }
 
-/// The build that each fact made of a record names, in its order: its engine, and its version when it names one.
-fn builds(record: &Path) -> Vec<(String, Option<i64>)> {
+/// The engine that each fact made of a record names, in its order.
+fn builds(record: &Path) -> Vec<String> {
   let kept = world::kept(record).unwrap();
   let fact = |one: &Object| entry(&one.as_ref(), 0).and_then(Fact::of).unwrap();
-  let named = |one: Fact| {
-    let engine = one.word(0).and_then(|word| word.as_str().map(str::to_owned))?;
-    Some((engine, one.word(1).and_then(|word| word.as_int())))
-  };
+  let named = |one: Fact| one.word(0).and_then(|word| word.as_str().map(str::to_owned));
   kept.iter().map(fact).filter(|one| one.kind() == world::MADE).filter_map(named).collect()
 }
 
 #[test]
-fn a_record_names_the_engine_and_the_version_that_made_it_once_in_a_file_of_lines_and_in_a_database()
- {
+fn a_record_names_the_engine_that_made_it_once_in_a_file_of_lines_and_in_a_database() {
   for name in ["record.jsonl", "record.db"] {
     let at = place(&format!("made-{name}"));
     let record = at.join(name);
@@ -318,7 +314,7 @@ fn a_record_names_the_engine_and_the_version_that_made_it_once_in_a_file_of_line
       Opening { record: path, extensions: Some(false), ..opening(&at, true) }.boot::<String>([])
     };
     drop(open().unwrap());
-    let made = vec![(world::engine(), Some(world::VERSION))];
+    let made = vec![world::engine()];
     assert_eq!(builds(&record), made);
     let kept = world::kept(&record).unwrap();
     assert_eq!(
@@ -355,14 +351,14 @@ fn a_record_that_names_no_engine_replays_as_before_and_names_none() {
   let mut later = open().boot::<String>([]).unwrap().0;
   assert_eq!(closed(&mut later, "close(x + 1)").as_ref().as_int(), Some(2));
   drop(later);
-  assert_eq!(builds(&record), Vec::new(), "this engine did not make it");
+  assert_eq!(builds(&record), Vec::<String>::new(), "this engine did not make it");
 }
 
-/// The fact made of a build of an engine and a version of the replay, with the schema of the record
-/// and the release of this build, as a line of the record holds it.
-fn made_of(engine: &str, version: i64) -> String {
+/// The fact made of a build of an engine, with no version, the schema of the record and the release
+/// of this build, as a line of the record holds it.
+fn made_of(engine: &str) -> String {
   format!(
-    "[\"made\",\"chain1\",\"store\",\"{engine}\",{version},\"{}\",\"{}\"]",
+    "[\"made\",\"chain1\",\"store\",\"{engine}\",null,\"{}\",\"{}\"]",
     world::RECORD_SCHEMA,
     env!("CARGO_PKG_VERSION")
   )
@@ -372,11 +368,7 @@ fn made_of(engine: &str, version: i64) -> String {
 /// Kernel.
 fn made_with(engine: &str, source: &str, kernel: &str) -> String {
   let texts = serde_json::to_string(&[source, kernel]).unwrap();
-  format!(
-    "{},{}]",
-    made_of(engine, world::VERSION).trim_end_matches(']'),
-    &texts[1..texts.len() - 1]
-  )
+  format!("{},{}]", made_of(engine).trim_end_matches(']'), &texts[1..texts.len() - 1])
 }
 
 /// The fact made of this build, as its record holds it.
@@ -400,19 +392,15 @@ fn made_elsewhere(at: &Path, made: &str) -> (PathBuf, String) {
 }
 
 #[test]
-fn a_record_of_another_engine_of_the_same_version_replays_and_goes_on() {
+fn a_record_of_another_engine_that_holds_no_texts_replays_and_goes_on() {
   let at = place("same-version");
-  let made = made_of(&"0".repeat(64), world::VERSION);
+  let made = made_of(&"0".repeat(64));
   let (record, _) = made_elsewhere(&at, &made);
   let open = || Opening { extensions: Some(false), ..opening(&at, true) };
   let mut later = open().boot::<String>([]).unwrap().0;
   assert_eq!(closed(&mut later, "close(x + 1)").as_ref().as_int(), Some(2));
   drop(later);
-  assert_eq!(
-    builds(&record),
-    [("0".repeat(64), Some(world::VERSION))],
-    "the build that made it stays named"
-  );
+  assert_eq!(builds(&record), ["0".repeat(64)], "the build that made it stays named");
 }
 
 #[test]
@@ -435,7 +423,7 @@ fn a_record_of_another_engine_replays_on_the_texts_that_it_holds_and_goes_on_wit
     "the life replays and goes on on the engine that its record holds"
   );
   drop(later);
-  assert_eq!(builds(&record), [(named.clone(), Some(world::VERSION))], "the record names it alone");
+  assert_eq!(builds(&record), std::slice::from_ref(&named), "the record names it alone");
   let mut again = open().boot::<String>([]).unwrap().0;
   assert_eq!(
     closed(&mut again, "close(x + 2)").as_ref().as_int(),
@@ -659,7 +647,7 @@ fn a_life_whose_replay_drifts_keeps_nothing_beside_its_record_but_the_lease() {
 }
 
 #[test]
-fn each_record_of_the_replays_names_this_version_and_replays_on_this_build_with_no_drift() {
+fn each_record_of_the_replays_replays_on_its_own_engine_with_no_drift() {
   let mut records: Vec<PathBuf> = fs::read_dir(replays())
     .unwrap()
     .map(|one| one.unwrap().path())
@@ -672,16 +660,17 @@ fn each_record_of_the_replays_names_this_version_and_replays_on_this_build_with_
     let at = place(&format!("replay-{name}"));
     fs::copy(&one, at.join("record.jsonl")).unwrap();
     let kept = world::kept(at.join("record.jsonl")).unwrap();
-    assert_eq!(
-      world::version(&kept),
-      Some(world::VERSION),
-      "{name} is a record of another version: make it again, as tests/replay/README.md says"
+    let made = kept
+      .iter()
+      .filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of))
+      .find(|a| a.kind() == world::MADE);
+    assert!(
+      made.is_some_and(|a| a.word(5).is_some()),
+      "{name} holds no texts of its engine: give them with script/engines.py, as tests/replay/README.md says"
     );
     let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
     if let Err(drift) = inspects.boot::<String>([]) {
-      panic!(
-        "{name} drifts on this build: add one to world::VERSION and make it again, as tests/replay/README.md says. {drift}"
-      );
+      panic!("{name} drifts on its own engine, a defect of this build: {drift}");
     }
   }
 }
@@ -1007,9 +996,8 @@ fn a_record_whose_tail_holds_a_kind_of_fact_that_this_build_does_not_know_opens_
   let at = place("record-kind");
   let waiting = checkpointed(&at);
   let later = format!(
-    "[[\"made\",\"chain1\",\"store\",\"{}\",{},\"{}.9\",\"9.9.9\"]]",
+    "[[\"made\",\"chain1\",\"store\",\"{}\",null,\"{}.9\",\"9.9.9\"]]",
     "0".repeat(64),
-    world::VERSION + 1,
     world::RECORD_SCHEMA.major
   );
   let unknown = [
@@ -1305,37 +1293,6 @@ fn a_word_that_ran_at_a_checkpoint_is_cut_with_the_prompt_that_it_awaited() {
 }
 
 #[test]
-fn a_record_of_another_version_opens_on_this_build_from_its_last_checkpoint() {
-  let at = place("upgrade");
-  let path = at.join("record.jsonl");
-  let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
-  assert_eq!(closed(&mut first, "kept = 1\nclose(kept)").as_ref().as_int(), Some(1));
-  let written = crate::checkpoint::written(&mut first).unwrap();
-  drop(first);
-  crate::checkpoint::keep(&path, written).unwrap();
-  let text = fs::read_to_string(&path).unwrap();
-  let ours = ours();
-  assert!(text.contains(&ours), "{text}");
-  fs::write(&path, text.replace(&ours, &made_of(&"0".repeat(64), world::VERSION + 1))).unwrap();
-  let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
-  assert_eq!(
-    closed(&mut later, "close(kept + 1)").as_ref().as_int(),
-    Some(2),
-    "only the build after the checkpoint counts"
-  );
-  assert_eq!(
-    closed(
-      &mut later,
-      "close([x[3][0] for x in transcript('chain1', 'tell') if 'rai' + 'sed = ' in x[3][0]])"
-    )
-    .as_ref()
-    .py_repr(),
-    "[]",
-    "the carried turns hold no answer of an act that the checkpoint does not carry, so no word of an extension raises"
-  );
-}
-
-#[test]
 fn a_record_that_another_engine_went_on_with_after_a_checkpoint_replays_its_tail_to_the_exact_state_at_its_tip()
  {
   let at = place("crossed");
@@ -1358,7 +1315,7 @@ fn a_record_that_another_engine_went_on_with_after_a_checkpoint_replays_its_tail
     .rfind("[[\"checkpoint\"")
     .and_then(|at| text[at..].find('\n').map(|end| at + end))
     .unwrap();
-  let theirs = text[cut..].replacen(&ours(), &made_of(&"0".repeat(64), world::VERSION), 1);
+  let theirs = text[cut..].replacen(&ours(), &made_of(&"0".repeat(64)), 1);
   fs::write(&path, format!("{}{theirs}", &text[..cut])).unwrap();
   let (mut later, booted) = scripted(&at, &["close('three')"]).boot::<String>([]).unwrap();
   assert!(booted.len() > 1, "the life replays the tail, word by word");

@@ -37,7 +37,6 @@ use super::{
   log::{KEEP, Line, agrees, keep},
   made,
   store::each,
-  version,
 };
 
 /// Who says each fact that the reader adds to the facts that a record kept, but a question.
@@ -48,8 +47,6 @@ pub const READER: &str = "reader";
 pub struct Retold {
   /// The engine that made the record, as the record names it, and nothing when it names none.
   pub made: Option<String>,
-  /// The version of the build that made the record, as the record names it, and nothing when it names none.
-  pub version: Option<i64>,
   /// Whether the facts are those of the log, which holds every fact that the life said.
   pub logged: bool,
   /// The file that holds the facts, in the order that the life said them, each on a line of its own as JSON reads a
@@ -145,14 +142,13 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   if let Some(found) = cached(&cache, &stamp, &log) {
     return Ok(found);
   }
-  let (mut maker, mut built, mut entries, mut last) = (None, None, 0, None);
+  let (mut maker, mut entries, mut last) = (None, 0, None);
   let (mut asked, mut makers) = (HashSet::new(), Makers::default());
   each(path, &mut |entry| {
     let one = std::slice::from_ref(&entry);
     if maker.is_none() {
       maker = made(one);
     }
-    built = built.or_else(|| version(one));
     if let Some(fact) = kept(&entry) {
       makers.hear(&fact);
       if fact.question() {
@@ -164,7 +160,7 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   })?;
   let logged = agrees(path, entries, &asked);
   let last = last.as_ref().map(digest);
-  let head = serde_json::json!({ "stamp": stamp, "made": maker, "version": built, "logged": logged, "entries": entries, "last": last });
+  let head = serde_json::json!({ "stamp": stamp, "made": maker, "logged": logged, "entries": entries, "last": last });
   let fresh = beside(path, ".told.new");
   let failed =
     |no: std::io::Error| Fault::refused(format!("{} cannot be written: {no}", fresh.display()));
@@ -175,14 +171,7 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   }
   file.into_inner().map_err(|no| failed(no.into_error()))?.sync_data().map_err(failed)?;
   std::fs::rename(&fresh, &cache).map_err(failed)?;
-  Ok(Retold {
-    made: maker,
-    version: built,
-    logged,
-    file: if logged { log } else { cache },
-    entries,
-    last,
-  })
+  Ok(Retold { made: maker, logged, file: if logged { log } else { cache }, entries, last })
 }
 
 /// The facts that the reader says over the record at a path, each on a line of its own in a
@@ -235,7 +224,6 @@ fn cached(told: &Path, stamp: &serde_json::Value, log: &Path) -> Option<Retold> 
   let logged = head.get("logged")?.as_bool()?;
   Some(Retold {
     made: head.get("made")?.as_str().map(str::to_owned),
-    version: head.get("version")?.as_i64(),
     logged,
     file: if logged { log.to_path_buf() } else { told.to_path_buf() },
     entries: usize::try_from(head.get("entries")?.as_u64()?).ok()?,
