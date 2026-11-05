@@ -563,22 +563,32 @@ async def test_the_words_of_the_owner_hold_his_messages_and_his_answers_in_order
   )
 
 
-async def test_an_audit_of_alignment_starts_at_four_merges_on_astra_and_the_model_of_audit_in_turn(conductor: Round) -> None:
+async def test_an_audit_of_each_target_starts_at_four_merges_on_astra_and_the_model_of_audit_in_turn(conductor: Round) -> None:
   await conductor.word(f'limits["models"]["astra"] = {ASTRA!r}\nalign()')
-  assert conductor.ns["align_state"] == {"base": "0"}
+  assert conductor.ns["align_state"] == {"align": {"base": "0"}, "tui": {"base": "0"}}
   await conductor.word("merged.update(range(3))\nalign()")
   assert conductor.ns["queue"] == []
   await conductor.word('merged.add(3)\nends.update({f"align{n}": [("p", 0)] for n in range(1, 8)})\nlead["main"] = "abc"\nalign()')
-  key, brief, thread = conductor.ns["queue"][0]
+  (key, brief, thread), (tui, told, other) = conductor.ns["queue"]
   assert (key, thread, conductor.ns["kinds"][key], await conductor.value(f"model_of({key!r})")) == ("align8", "align", "audit", OPUS)
   assert "scratch://owner/words.md, scratch://owner/picks.md" in brief and "scratch://owner/asks.json" in brief
   assert "git log --oneline -40 origin/main" in brief and "align7" in brief
-  assert conductor.ns["align_state"] == {"base": "4", "n": "8", "sha": "abc"}
+  assert conductor.ns["align_state"]["align"] == {"base": "4", "n": "8", "sha": "abc"}
+  assert (tui, other, conductor.ns["kinds"][tui], await conductor.value(f"model_of({tui!r})")) == ("tui1", "tui", "audit", ASTRA)
+  assert 'skill("converge-tui")' in told and "in $TMPDIR/audit/tui." in told and told.endswith("{workspace}")
   await conductor.word("merged.update(range(4, 20))\nalign()")
-  assert len(conductor.ns["queue"]) == 1
-  await conductor.word('queue.clear()\nends["align8"] = [("p", 0)]\nalign()')
-  assert [q[0] for q in conductor.ns["queue"]] == ["align9"]
-  assert await conductor.value("model_of('align9')") == ASTRA
+  assert len(conductor.ns["queue"]) == 2
+  await conductor.word('queue.clear()\nends.update(align8=[("p", 0)], tui1=[("p", 0)])\nalign()')
+  assert [q[0] for q in conductor.ns["queue"]] == ["align9", "tui2"]
+  assert await conductor.value("(model_of('align9'), model_of('tui2'))") == (ASTRA, OPUS)
+
+
+async def test_an_audit_whose_brief_names_a_workspace_takes_one(conductor: Round) -> None:
+  await conductor.word('kinds["tui1"] = "audit"')
+  await conductor.step("hire", "tui1", "Capture the TUI. {workspace}")
+  [brief] = conductor.briefs()
+  assert f"Capture the TUI. Work in the workspace {conductor.tmp}-w1," in brief
+  assert "make no worktree but the workspace that your item names" in brief
 
 
 @POSIX
@@ -842,10 +852,10 @@ async def test_a_register_with_a_column_after_sets_the_waits_of_each_row(conduct
     "| D2 | base | sonnet/high | src | | Build it. |",
     "| D3 | top | sonnet/high | tui | D1, D2 | Use it. |",
   ])
-  await conductor.word('ends["triage-old"] = []\nregister("look")')
-  assert [q[0] for q in conductor.ns["queue"]] == ["triage-base", "triage-top"]
+  await conductor.word('ends["look-old"] = []\nregister("look")')
+  assert [q[0] for q in conductor.ns["queue"]] == ["look-base", "look-top"]
   assert conductor.ns["queue"][1][1].endswith("Use it.\n\nThis item is row D3 of the register scratch://audit/look.md.")
-  assert conductor.ns["after"] == {"triage-top": ["triage-old", "triage-base"]}
+  assert conductor.ns["after"] == {"look-top": ["look-old", "look-base"]}
 
 
 def git(where: Path, *words: str) -> str:

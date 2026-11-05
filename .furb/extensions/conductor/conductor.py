@@ -43,7 +43,7 @@ Put each item in queue as (key, brief, thread), in the order of the work, the ha
 5. A PR of the round is an open PR whose label w:key names an item that the round holds. A red or conflicting one counts as handled only while a worker that knows of its head acts: its live maker, which the round tells at once, once for each head and problem, to fix it before any other step, else a fixer that the round sent for that head, at most 2 for a head, then a notice. A head that such a worker has not moved in UNMOVED seconds is one notice, with the worker and its last act. handler() holds that rule for the sweep. A PR whose head differs from its branch on origin for two sweeps is closed and reopened once for that head, since GitHub did not read the branch.
 6. While the newest run of the gates on main failed, the round sends no order and no fixer for a red PR, and tells you once. A red PR whose failed checks all fail on main too gets no fixer either, and the round says so in one line.
 7. A green PR merges by the auto-merge of GitHub, which the round turns on for each PR of the round, else by a plain merge, else by gh stack merge for a layer of a stack, behind a ruleset of main that requires the check GATE. With no such ruleset, the round turns on no auto-merge and tells you once. A draft, an open box of its checklist, or the label hold, hold:owner-review or owner-merge keeps a PR from the merge, and the label paused takes it out of the round.
-8. At ALIGN_EVERY merged PRs since the last audit of alignment, the round queues the next free alignN, of kind audit, on limits["models"]["astra"] when N is odd, else on the model of audit, which checks main against the words of the owner, and each row of its register becomes an item, queued in the order of the register after the items of queue, unless the coordinator asks for the rows before the items that no worker holds yet.
+8. At ALIGN_EVERY merged PRs since the last audit of each target of AUDITS, the round queues the next free audit of that target, alignN or tuiN, of kind audit, on limits["models"]["astra"] when N is odd, else on the model of audit. alignN checks main against the words of the owner, and tuiN judges the TUI of main in a workspace of its own, as the skill converge-tui says. Each row of its register becomes an item, queued in the order of the register after the items of queue, unless the coordinator asks for the rows before the items that no worker holds yet.
 9. Each message of the owner that no ask of owner_asks names is one line, and so is each ask that is not done or a decision while no item in queue, in backlog, at work or on an open PR of the round carries it. asked() gives the new lines in one notice, and no new notice while its last one stands open: no word of the owner drops between his message and main. A worker that ends with a line Left: <ids> queues one follow-up for each ask that no other item carries, and a follow-up that leaves it again is a decision.
 10. Each new comment of the owner on a PR of the round goes to the worker on it, else to a fixer, and the label hold comes on the PR until its worker pushes the fix and takes hold off.
 11. A fix of the round does not become its own item or PR: it waits in scratch://round/frozen.md, while the live module carries it, and the waiting fixes land together in one change.
@@ -64,7 +64,6 @@ GREEN = ("SUCCESS", "SKIPPED", "NEUTRAL")
 HOLDS = ("hold", "hold:owner-review", "owner-merge", "paused")
 ASKS = "scratch://owner/asks.json"
 WORDS = "scratch://owner/words.md"
-PRIVATE = ".furb/extensions/conductor/private.json"
 ASK_LEFT = re.compile(r"Left: ([^\n]*)")
 ALONE = re.compile(r"^(src/furb/engine\.pyi?|DOCTRINE\.md|\.github/budgets\.json|\.furb/extensions/conductor/conductor\.py)$")
 UPGRADE = {"claude-cli:sonnet/medium": "claude-cli:sonnet/high", "claude-cli:sonnet/high": "claude-cli:opus/medium"}
@@ -103,7 +102,7 @@ lead: dict[str, str] = globals().setdefault("lead", {})
 noticed: set[str] = globals().setdefault("noticed", set())
 heard: list[str] = globals().setdefault("heard", [])
 landed: list[int] = globals().setdefault("landed", [])
-align_state: dict[str, str] = globals().setdefault("align_state", {})
+align_state: dict[str, dict] = globals().setdefault("align_state", {})
 comments: set[str] = globals().setdefault("comments", set())
 machine: dict[str, float] = globals().setdefault("machine", {})
 green_since: dict[int, float] = globals().setdefault("green_since", {})
@@ -124,7 +123,7 @@ def asks_kept() -> dict[str, dict]:
 # The file of origin/main bound owner_asks to a function, and the live round to the dict of the asks.
 owner_asks: dict[str, dict] = globals()["owner_asks"] if isinstance(globals().get("owner_asks"), dict) else asks_kept()
 
-RULES = """Run no real life of a model. Never open a window on this machine, not even for a test: the owner works on it, and each window takes his mouse and his keyboard. Run a check of the app only on the runners of CI. Start each comment, review, issue and PR body that you write on GitHub with 🤖, since you write from the owner's account and his own words carry no mark; a title keeps its own rule. Never take off the label owner-merge: only the owner takes it off, and that is his approval to merge. The owner sleeps or is away: ask him nothing and wait for nothing of his. Take each decision yourself from the brief and the rulings, say it in your PR body, and go on. A cause that a brief names is a hypothesis: check it in the log before you build on it. Ask the one who gave you this work on its chain only when it alone can decide: await prompt(str, question, on="{home}"). Set each timeout and each wait to about twice the time that the step should take, never a round bound in case, and make a long step print its progress, so that a hang shows at once. Never wait on CI in a bash for more than 10 minutes: not gh pr checks --watch, not gh run watch, not a loop of sleep around gh. To wait for the checks of your PR, await checked(number) and never write a loop of your own. Rerun a check only when its line says [machine] or [cancelled], once for each head, with gh run rerun <run> --failed, and then await checked(number) again; a [defect] is yours to fix. Once your push is done, read the checks once and close with the PR and its checks as they stand, since the round tends them. A build with no cap took this machine down out of memory, so each build goes through sh script/build-slot.sh <command>, from the root of your workspace: cargo, bun run build, uv sync, uv run, pytest, git commit, whose hooks run cargo and the suite, and sh script/hooks/pre-commit. It holds one of the slots of builds that all the workers of the machine share, waits for a free one, and caps the jobs of cargo at 4. Give its bash a timeout of 2400 seconds: when it exits 75, no slot freed in 1200 seconds, so run it again. Run one build at a time, give cargo no -j and no CARGO_BUILD_JOBS above 4, and start no build in the background."""
+RULES = """Write no word of the owner in a PR, a commit, a comment, an issue or a file, as a quote, a translation or an attribution: say in your own words what the change does. Run no real life of a model. Never open a window on this machine, not even for a test: the owner works on it, and each window takes his mouse and his keyboard. Run a check of the app only on the runners of CI. Start each comment, review, issue and PR body that you write on GitHub with 🤖, since you write from the owner's account and his own words carry no mark; a title keeps its own rule. Never take off the label owner-merge: only the owner takes it off, and that is his approval to merge. The owner sleeps or is away: ask him nothing and wait for nothing of his. Take each decision yourself from the brief and the rulings, say it in your PR body, and go on. A cause that a brief names is a hypothesis: check it in the log before you build on it. Ask the one who gave you this work on its chain only when it alone can decide: await prompt(str, question, on="{home}"). Set each timeout and each wait to about twice the time that the step should take, never a round bound in case, and make a long step print its progress, so that a hang shows at once. Never wait on CI in a bash for more than 10 minutes: not gh pr checks --watch, not gh run watch, not a loop of sleep around gh. To wait for the checks of your PR, await checked(number) and never write a loop of your own. Rerun a check only when its line says [machine] or [cancelled], once for each head, with gh run rerun <run> --failed, and then await checked(number) again; a [defect] is yours to fix. Once your push is done, read the checks once and close with the PR and its checks as they stand, since the round tends them. A build with no cap took this machine down out of memory, so each build goes through sh script/build-slot.sh <command>, from the root of your workspace: cargo, bun run build, uv sync, uv run, pytest, git commit, whose hooks run cargo and the suite, and sh script/hooks/pre-commit. It holds one of the slots of builds that all the workers of the machine share, waits for a free one, and caps the jobs of cargo at 4. Give its bash a timeout of 2400 seconds: when it exits 75, no slot freed in 1200 seconds, so run it again. Run one build at a time, give cargo no -j and no CARGO_BUILD_JOBS above 4, and start no build in the background."""
 
 WORKER = """You are a worker on the repository {repo}. Do one item, and open its PR yourself.
 1. Your branch is w/{key}. {workspace} Build on origin/main, and stack your branch on an open PR only when your change needs its code, and say why in the body. Make a stack with gh stack, and run skill("gh-stack") in a word of your own before you make or touch one.
@@ -139,7 +138,7 @@ The item, {key}:
 
 WORKSPACE = """Work in the workspace {path}, which the round gives to you alone, and to a later item once you end, so that each build starts warm. If it does not stand, make it: sh {repo}/script/build-slot.sh {repo}/script/worktree.sh {path} <your branch>, then give cd({path!r}) in a word of your own and write your chain in it: echo {chain} > "$(git -C {path} rev-parse --absolute-git-dir)/furb-holder". If it stands, the round committed and pushed the work of the earlier item there and wrote your chain in it: git fetch origin, then git switch -C <your branch> onto origin/<your branch> when that branch is on origin, else onto origin/main. Before your first command of each prompt there, read the file furb-holder in its git dir: when it names another chain than {chain}, the round gave the workspace to another worker, so run nothing in it. Leave the workspace clean when you close, each change committed and pushed."""
 
-AUDIT = """You are an auditor on the repository {repo}. Do one item: read the code, the records and the logs that it names, find each fact that it asks for, and write each in a register, scratch://audit/{key}.md ($TMPDIR/audit/{key}.md), with its evidence: the file and the line, or the command and the lines that it printed. Check each claim of the item in the code, since it is a claim. Change no file of the repository, make no worktree, push nothing and open no PR. When your work yields items for workers, write them in that register as a table with one row for each item, in order of rank, the hard work first: a row that reshapes a module, a contract or a protocol ranks before a row of polish or a simple row: | Dn | key | model | area | after | brief |, where Dn is its rank, key a short name in letters and dashes, model one of {models}, area the folder or the file that the item changes, after the Dn of each row that it waits for, or nothing, and brief what the worker does, as a task. The round queues each row as an item when you end. Close with a tuple: 0, and your report in 200 words at most: the path of the register, what you found, and what is left.
+AUDIT = """You are an auditor on the repository {repo}. Do one item: read the code, the records and the logs that it names, find each fact that it asks for, and write each in a register, scratch://audit/{key}.md ($TMPDIR/audit/{key}.md), with its evidence: the file and the line, or the command and the lines that it printed. Check each claim of the item in the code, since it is a claim. Change no file of the repository, make no worktree but the workspace that your item names, push nothing and open no PR. When your work yields items for workers, write them in that register as a table with one row for each item, in order of rank, the hard work first: a row that reshapes a module, a contract or a protocol ranks before a row of polish or a simple row: | Dn | key | model | area | after | brief |, where Dn is its rank, key a short name in letters and dashes, model one of {models}, area the folder or the file that the item changes, after the Dn of each row that it waits for, or nothing, and brief what the worker does, as a task. The round queues each row as an item when you end. Close with a tuple: 0, and your report in 200 words at most: the path of the register, what you found, and what is left.
 """ + RULES + """
 
 The item, {key}:
@@ -158,6 +157,9 @@ Close with a tuple: the number of the PR, and your report in 200 words at most.
 TRUTH = "The source of truth for this item is the words of the owner, scratch://owner/words.md, and the options that he picked, scratch://owner/picks.md: where a line of this brief bends them, his words and his picks rule.\n\n"
 
 ALIGN = """The audit of alignment {key}: {count} PRs merged since the last one. Its window of commits is git log --oneline {window}. Read that window and the diff of each PR in it, and check main against the words of the owner, which are the one source of truth: {words}, scratch://owner/picks.md, and the ledger of his asks, {asks} ($TMPDIR/owner/asks.json). Check each ask of the ledger against origin/main as a claim: set its state to done, open, partly or missing, with its evidence and its gap, and write the ledger back in the same shape. The round holds the items below, so a row of your register queues none of them again: {held}."""
+
+TUI = """The audit of the TUI {key}: {count} PRs merged since the last one. Its window of commits is git log --oneline {window}. Read the skill converge-tui with skill("converge-tui"), and audit the TUI of origin/main as it says, against the last whole capture of the TUI, in $TMPDIR/audit/tui. The round holds the items below, so a row of your register queues none of them again: {held}. {workspace}"""
+AUDITS = {"align": ALIGN, "tui": TUI}
 
 SETTLE = """here=$1 mine=$2
 shift 2
@@ -259,15 +261,6 @@ def once(key: str, line: str) -> None:
   if key not in noticed:
     noticed.add(key)
     heard.append(line)
-
-
-def ops() -> tuple[str, str]:
-  # converge reads the words of the owner in his private repository through this name of the round.
-  try:
-    got = json.loads(read(PRIVATE, HIDDEN).content)
-  except (Refused, ValueError):
-    return "", ""
-  return str(got.get("repo", "")), str(got.get("digest", ""))
 
 
 def cap() -> int:
@@ -396,7 +389,7 @@ def hire(key: str, what: str, thread: str = "", brief: str = "", model: str = ""
   where = str(chain(f"{thread or 'w'}/{key}"))
   rung(f"actor = {model!r}", on=where)
   text, slot = (brief or {"audit": AUDIT, "edit": WORKER, "fix": "{what}"}[kind]).replace("{what}", what), ""
-  if kind != "audit":
+  if "{workspace}" in text:
     space, slot = yield from placed(where)
     text = text.replace("{workspace}", space)
   for old, new in (("{labels}", marks), ("{repo}", cwd()), ("{key}", key), ("{home}", home()), ("{models}", ", ".join(runs())), ("{chain}", where)):
@@ -454,7 +447,7 @@ def register(key: str) -> None:
     rows = read(f"scratch://audit/{key}.md", HIDDEN).lines
   except Refused:
     return
-  stem, made, ranks, waits = key if key.startswith("align") else "triage", [], {}, {}
+  stem, made, ranks, waits = key, [], {}, {}
   wide = int(any(re.fullmatch(r"\|\s*Dn\s*\|.*\|\s*after\s*\|.*", x.strip()) for x in rows))
   for line in rows:
     cells = [x.strip() for x in line.strip().strip("|").split("|")]
@@ -738,25 +731,28 @@ def owner_words() -> None:
 
 
 def align() -> None:
-  if "base" not in align_state:
-    align_state["base"] = str(len(merged))
-    return
-  count = len(merged) - int(str(align_state["base"]))
-  if count < ALIGN_EVERY or any(re.fullmatch(r"align\d+", k) for k in [*(q[0] for q in queue), *(working[w] for w in living())]):
-    return
-  n, held = 1, held_keys() | set(kinds)
-  while f"align{n}" in held:
-    n += 1
-  key, since, head = f"align{n}", str(align_state.get("sha", "")), lead.get("main", "")
-  owner_words()
-  window = f"{since}..{head}" if since and head else "-40 origin/main"
-  text = ALIGN.replace("{key}", key).replace("{count}", str(count)).replace("{window}", window).replace("{words}", WORDS)
-  kinds[key] = "audit"
-  if n % 2 and (astra := limits["models"].get("astra")):
-    efforts[key] = astra
-  queue.append((key, text.replace("{asks}", ASKS).replace("{held}", ", ".join(sorted(held_keys())) or "none"), "align"))
-  align_state.update(base=str(len(merged)), n=str(n), sha=head or since)
-  heard.append(f"{count} PRs merged since the last audit of alignment, so the round queued {key}.")
+  for name, brief in AUDITS.items():
+    state = align_state.setdefault(name, {})
+    if "base" not in state:
+      state["base"] = str(len(merged))
+      continue
+    count = len(merged) - int(state["base"])
+    if count < ALIGN_EVERY or any(re.fullmatch(rf"{name}\d+", k) for k in [*(q[0] for q in queue), *(working[w] for w in living())]):
+      continue
+    n, held = 1, held_keys() | set(kinds)
+    while f"{name}{n}" in held:
+      n += 1
+    key, since, head = f"{name}{n}", state.get("sha", ""), lead.get("main", "")
+    owner_words()
+    window = f"{since}..{head}" if since and head else "-40 origin/main"
+    for old, new in (("{key}", key), ("{count}", str(count)), ("{window}", window), ("{words}", WORDS), ("{asks}", ASKS), ("{held}", ", ".join(sorted(held_keys())) or "none")):
+      brief = brief.replace(old, new)
+    kinds[key] = "audit"
+    if n % 2 and (astra := limits["models"].get("astra")):
+      efforts[key] = astra
+    queue.append((key, brief, name))
+    state.update(base=str(len(merged)), n=str(n), sha=head or since)
+    heard.append(f"{count} PRs merged since the last audit of {name}, so the round queued {key}.")
 
 
 def conduct(every: float = 300) -> Act:

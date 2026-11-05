@@ -53,7 +53,7 @@ async function project(name: string): Promise<string> {
 const output = resolve(process.env.FURB_GALLERY_OUT ?? "docs/screenshots");
 const only = process.env.FURB_GALLERY_ONLY ? new RegExp(process.env.FURB_GALLERY_ONLY) : undefined;
 await mkdir(output, { recursive: true });
-// FURB_GALLERY_CELLS writes the cells of each shot as JSON to a folder, which the extension converge compares and
+// FURB_GALLERY_CELLS writes the cells of each shot as JSON to a folder, which the audit of the TUI compares and
 // reads as text.
 const grid = process.env.FURB_GALLERY_CELLS;
 if (grid) await mkdir(grid, { recursive: true });
@@ -831,6 +831,10 @@ try {
         .length === 2,
   );
   const thread = session.activity.find((act) => session.isUserPrompt(act))?.id ?? "";
+  // The sidebar lights the open thread when it draws, and the input sends to the thread lit: a draw before the message
+  // makes it go to that thread, where with no draw it would start a thread of its own on some runs.
+  app().render();
+  await test.flush();
   if (session.target !== thread)
     throw new Error(`The input aims at ${session.target}, not at the thread ${thread}.`);
   // A line on the open thread is a message of None, over at once, so the later message that runs is a prompt of str on

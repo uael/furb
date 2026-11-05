@@ -64,13 +64,15 @@ target-version = "py314"
 src = ["src", "test", "bind/python"]
 # A path given on the command line, as a hook or a worker gives it, keeps the exclude.
 force-exclude = true
-# A word of the project reads the names that a word before it in .furb/config.json defines: pr, PR_TITLE, PR_BOXES and
-# shq of pr, and the conductor, tree_of and TARGETS of converge. A test holds each of them to a definition.
-builtins = ["pr", "shq", "conductor", "tree_of", "TARGETS"]
+# A word of the project reads the names that a word before it in .furb/config.json defines: pr and shq of pr. A test
+# holds each of them to a definition.
+builtins = ["pr", "shq"]
 
 [tool.ruff.per-file-target-version]
 # The verifier images use Python versions older than this repository.
 "script/pytest_ids.py" = "py38"
+# The scripts of the skill converge-tui run on the python3 of the machine.
+".agents/skills/converge-tui/*.py" = "py39"
 
 [tool.ruff.lint]
 select = [
@@ -165,7 +167,7 @@ unresolved-import = "ignore"
 # A word of the project reads the names of the words before it, which ty cannot follow from file to file, and get gives
 # nothing for a name of no act, which the contract types as an act (ruff reads these names through its builtins).
 [[tool.ty.overrides]]
-include = [".furb/extensions/conductor/conductor.py", ".furb/extensions/converge-tui/tui.py"]
+include = [".furb/extensions/conductor/conductor.py"]
 
 [tool.ty.overrides.rules]
 unresolved-reference = "ignore"
