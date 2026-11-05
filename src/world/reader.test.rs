@@ -1,10 +1,5 @@
 //! The reader of a record, proved where no life reaches it: the facts that it says of what a record kept.
 
-#![expect(
-  clippy::format_collect,
-  reason = "debt: a format! for each item, collected into a String"
-)]
-
 use std::{fs, path::PathBuf};
 
 use super::{retold, told};
@@ -254,7 +249,7 @@ fn a_record_that_keeps_a_tuple_and_a_whole_float_tells_them_as_the_engine_gives_
   let done = answered("x = 1").replace("0.5]", r#"{"is": "float", "args": ["2"]}]"#);
   fs::write(
     &at,
-    OPENS.iter().chain([&done.as_str()]).map(|one| format!("[{one}]\n")).collect::<String>(),
+    OPENS.iter().chain([&done.as_str()]).flat_map(|one| ["[", *one, "]\n"]).collect::<String>(),
   )
   .unwrap();
   let read = retold(&at).unwrap();

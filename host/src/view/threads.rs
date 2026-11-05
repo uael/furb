@@ -321,6 +321,30 @@ fn node(
   Some(ThreadNode { thread, agents, state })
 }
 
+/// The threads of a tree in the order that the list of the threads shows them: the closed ones
+/// first and the open ones last, so that the open ones stand nearest the input, and in each group
+/// by the time of their last message, the oldest first. The agents of each thread take the same
+/// order.
+pub fn order_threads(mut nodes: Vec<ThreadNode>, rows: &Rows<'_>) -> Vec<ThreadNode> {
+  for node in &mut nodes {
+    node.agents = order_threads(std::mem::take(&mut node.agents), rows);
+  }
+  nodes.sort_by_key(|node| (open(node), last_message(&node.thread, rows)));
+  nodes
+}
+
+/// Whether a thread stands open in the list of the threads: it is not resolved, or a question
+/// waits in it or in an agent under it.
+pub fn open(node: &ThreadNode) -> bool {
+  !node.thread.resolved || node.state == State::Asks
+}
+
+/// When the last message of a thread began: its prompt, or the last prompt on it.
+fn last_message(thread: &ChainThread, rows: &Rows<'_>) -> u64 {
+  let acts = std::iter::once(&thread.prompt).chain(&thread.messages);
+  acts.filter_map(|id| rows.get(id.as_str())).map(|act| act.began).max().unwrap_or_default()
+}
+
 /// How a thread concerns the operator, or none, from the state of its node. The failure of an agent
 /// does not concern him: it rolls into the thread that made it, and only a question escalates.
 pub fn concerns(node: &ThreadNode) -> Option<Concern> {

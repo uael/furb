@@ -121,7 +121,7 @@ class Round:
     exec(compile(IMPORT.sub("", PULL.read_text(encoding="utf-8")), str(PULL), "exec"), ns)  # noqa: S102
     exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), ns)  # noqa: S102
     self.real_hire = ns["hire"]
-    ns.update(quietly=self.quietly, hire=self.hire, PROBE="echo 64")
+    ns.update(quietly=self.quietly, hire=self.hire, PROBE="echo 64", KEEP=0)
     self.ns = ns
 
   def __getattr__(self, name: str) -> object:
@@ -942,3 +942,71 @@ async def test_hire_writes_the_chain_of_the_worker_in_its_workspace_before_its_p
   conductor.ns["prompt"] = prompt
   await conductor.real_hire("cap", "x")
   assert seen == ["chain-w/cap\n"]
+
+
+def test_a_worker_whose_chain_says_no_fact_for_quiet_seconds_is_no_live_worker_and_one_notice(conductor: Round) -> None:
+  conductor.busy("prompt1", "a")
+  conductor.facts_of["chain-a"] = [("bash", "bash7", "prompt1", "chain-a")]
+  conductor.tend()
+  assert conductor.running() == ["prompt1"]
+  conductor.now += conductor.QUIET
+  conductor.tend()
+  conductor.tend()
+  assert conductor.running() == [] and conductor.living() == ["prompt1"]
+  assert conductor.notices() == ["The worker a (prompt1) said no fact on its chain for 30 minutes, so the round counts it as no live worker. Its open acts: bash7."]
+  conductor.facts_of["chain-a"].append(("wait", "wait2", "prompt1", "chain-a"))
+  conductor.tend()
+  assert conductor.running() == ["prompt1"]
+  conductor.end("prompt1", (1, "r"))
+  conductor.tend()
+  assert conductor.progress == {}
+
+
+@POSIX
+async def test_a_hire_takes_no_workspace_whose_holder_chain_has_a_live_worker(conductor: Round) -> None:
+  conductor.busy("prompt7", "tui")
+  space = Path(f"{conductor.tmp}-w1")
+  subprocess.run(["git", "init", "-q", str(space)], check=True)
+  (space / ".git" / "furb-holder").write_text("chain-tui\n", encoding="utf-8")
+  await conductor.real_hire("names", "x")
+  assert conductor.slots["chain-w/names"] == "w2"
+  assert (space / ".git" / "furb-holder").read_text(encoding="utf-8") == "chain-tui\n"
+
+
+async def test_an_item_of_a_full_opus_medium_waits_for_its_family_and_never_moves_up_to_opus_high(conductor: Round) -> None:
+  high = "claude-cli:opus/high"
+  conductor.limits["room"] = {"opus/medium": 1, "opus/high": 3}
+  conductor.limits["models"].update(audit=high, lead=OPUS)
+  conductor.efforts.update(two=OPUS, core=high)
+  conductor.busy("prompt1", "one", OPUS)
+  conductor.queue.extend([("two", "b", "t"), ("core", "b", "t")])
+  await conductor.staff()
+  assert [h[0] for h in conductor.hired] == ["core"]
+  assert conductor.efforts["two"] == OPUS
+  assert conductor.heard == ["two waits: opus/medium has no room."]
+
+
+@POSIX
+async def test_the_disk_frees_the_target_of_the_workspace_that_ended_first_and_tells_once_when_it_stays_short(conductor: Round) -> None:
+  for slot in ("w1", "w2", "w3"):
+    (Path(f"{conductor.tmp}-{slot}") / "target").mkdir(parents=True)
+  for n in (1, 2, 3):
+    conductor.busy(f"prompt{n}", f"k{n}")
+    conductor.slots[f"prompt{n}"] = f"w{n}"
+  conductor.end("prompt3", (1, "r"))
+  conductor.tend()
+  conductor.now += 100
+  conductor.end("prompt2", (2, "r"))
+  conductor.tend()
+  await conductor.keep_disk()
+  assert all((Path(f"{conductor.tmp}-w{n}") / "target").exists() for n in (1, 2, 3))
+  conductor.ns["KEEP"] = 10**9
+  await conductor.keep_disk()
+  assert (Path(f"{conductor.tmp}-w3") / "target").exists()
+  conductor.now += conductor.DISK_EVERY
+  await conductor.keep_disk()
+  conductor.now += conductor.DISK_EVERY
+  await conductor.keep_disk()
+  assert [(Path(f"{conductor.tmp}-w{n}") / "target").exists() for n in (1, 2, 3)] == [True, False, False]
+  [told] = conductor.notices()
+  assert told.startswith("The disk holds ") and f"after the round deleted the target of each ended workspace: {conductor.tmp}-w3, {conductor.tmp}-w2.\n" in told

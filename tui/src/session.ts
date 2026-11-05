@@ -899,12 +899,12 @@ export class Session extends EventEmitter {
     const state = this.actStatus(chain);
     return this.paused && (state === "idle" || state === "failed") ? "paused" : state;
   }
-  /** What the acts of a chain do, or the acts of every chain: one asks the operator, one waits for the resume of a
-   * reopened record, one runs, a pause holds one, or the last act failed. */
+  /** What the acts of a chain do, or the acts of every chain: one asks the operator, one runs, a pause holds one, or
+   * the last act failed. */
   private actStatus(chain?: string): Status {
-    // The state holds while no act starts, ends, pauses or wakes, and the prompts and the held work stay as they are.
+    // The state holds while no act starts, ends, pauses or wakes, and the prompts stay as they are.
     if (this.states.version !== this.version) this.states = { version: this.version, of: new Map() };
-    const key = `${chain ?? ""}\n${[...this.host.prompts.keys()].join(" ")}\n${[...this.host.pending.keys()].join(" ")}`;
+    const key = `${chain ?? ""}\n${[...this.host.prompts.keys()].join(" ")}`;
     const known = this.states.of.get(key);
     if (known) return known;
     const status = this.statusOf(chain);
@@ -1073,9 +1073,7 @@ export class Session extends EventEmitter {
       ...this.liveOn().keys(),
       ...index.failing,
       ...index.chains.flatMap((chain) => (this.unreadChain(chain.id) ? [chain.id] : [])),
-      ...[...this.host.prompts.keys(), ...this.host.pending.keys()].flatMap(
-        (id) => index.ids.get(id)?.on ?? [],
-      ),
+      ...[...this.host.prompts.keys()].flatMap((id) => index.ids.get(id)?.on ?? []),
     ]);
     const active = [...restless]
       .flatMap((id) => {
@@ -1515,8 +1513,7 @@ export class Session extends EventEmitter {
     void this.drainQueue().catch(this.fail);
   }
   async drainQueue(): Promise<void> {
-    if (this.closed || this.draining || this.queueHeld || this.host.pending.size || !this.queued.length)
-      return;
+    if (this.closed || this.draining || this.queueHeld || !this.queued.length) return;
     this.draining = true;
     // The queue is read again before each send, since the operator may remove or take back a follow-up meanwhile.
     const queued = (entry: FollowUp) => this.queued.some((item) => item.id === entry.id);
@@ -1651,10 +1648,11 @@ export class Session extends EventEmitter {
   }
   /** The files given back as a rewind found them, by a rung of the operator on a chain, so that the record holds each
    * write and the chain reads it. A write puts back the text of a file, and a command removes a file that a write
-   * made. */
+   * made. A file whose text before the write could not be read stays as it stands. */
   async restoreFiles({ files }: Restore, on = this.selected): Promise<void> {
-    if (!files.length) return;
-    const word = files
+    const kept = files.filter((change) => !change.unread);
+    if (!kept.length) return;
+    const word = kept
       .map((change) =>
         change.made
           ? `await bash(${JSON.stringify(`rm -f -- ${quoted(change.path)}`)})`
@@ -1674,15 +1672,20 @@ export class Session extends EventEmitter {
   }
   /** What a restore of the files did, in words, with the changes that it could not undo. */
   restored({ files, commands }: Restore): string {
+    const back = files.filter((change) => !change.unread).length;
+    const unread = files.length - back;
     const count = !files.length
       ? "No file changed after that point."
-      : files.length === 1
+      : back === 1
         ? "1 file is back as it was."
-        : `${files.length} files are back as they were.`;
+        : `${back} files are back as they were.`;
+    const kept = unread
+      ? ` ${unread} ${unread === 1 ? "file stays" : "files stay"} as ${unread === 1 ? "it stands" : "they stand"}: the text before the write could not be read.`
+      : "";
     const stays = commands
       ? ` ${commands} ${commands === 1 ? "command" : "commands"} ran after that point, and a change that a command made is not restored.`
       : "";
-    return `${count}${stays}`;
+    return `${count}${kept}${stays}`;
   }
   /** The files of the selected chain given back as they stood at an act, with no branch. */
   async restoreAt(id: string, files?: Restore): Promise<void> {

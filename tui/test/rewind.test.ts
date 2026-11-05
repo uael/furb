@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { until } from "../../bind/typescript/test/until.ts";
@@ -110,4 +110,27 @@ test("a restore removes a file that a write made after the point, with a command
     await session.restoreAt(point, found);
     expect(existsSync(made)).toBe(false);
     expect(await readFile(path, "utf8")).toBe(readme);
+  }));
+
+test("a restore leaves a file whose text before the write could not be read, and says so", () =>
+  withDemo(async (session) => {
+    const { point, readme, path } = await shortcut(session);
+    const blob = join(session.host.directory, "blob.bin");
+    writeFileSync(blob, Buffer.from([0xff, 0xfe, 0x00]));
+    const on = session.engine.root;
+    await session.engine.result(
+      await session.engine.rung({ word: 'write(Text("blob.bin", "text\\n"))', on }),
+    );
+    await session.refresh();
+    const found = await session.filesAt(point);
+    const change = found.files.find((one) => one.path === blob);
+    expect(change?.before).toBe("");
+    expect(change?.unread).toBeTruthy();
+    expect(change?.made).toBeUndefined();
+    await session.restoreAt(point, found);
+    expect(await readFile(blob, "utf8")).toBe("text\n");
+    expect(await readFile(path, "utf8")).toBe(readme);
+    expect(session.notice).toContain(
+      "1 file stays as it stands: the text before the write could not be read.",
+    );
   }));

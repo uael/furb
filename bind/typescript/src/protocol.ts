@@ -218,6 +218,26 @@ export type Request1 =
     }
   | {
       life: string;
+      notices?: string[];
+      verb: "desk";
+    }
+  | {
+      life: string;
+      on?: string | null;
+      at?: number | null;
+      verb: "threads";
+    }
+  | {
+      life: string;
+      at: number;
+      verb: "as_of";
+    }
+  | {
+      life: string;
+      verb: "moments";
+    }
+  | {
+      life: string;
       ask: number;
       turn?: unknown;
       why?: string | null;
@@ -402,6 +422,12 @@ export type Frame =
     }
   | {
       life: string;
+      acts: Open[];
+      notice: string;
+      frame: "stalled";
+    }
+  | {
+      life: string;
       ask: number;
       request: unknown;
       frame: "ask";
@@ -527,6 +553,11 @@ export type ProtocolError =
       life: string;
       ask: number;
       error: "unasked";
+    }
+  | {
+      life: string;
+      ask: number;
+      error: "foreign";
     }
   | {
       life: string;
@@ -818,6 +849,15 @@ export interface FollowUp {
   shape: string;
   message: string;
   failed?: string | null;
+}
+/**
+ * An act that stays open in a life that stalled: its name, its kind, and the chain that it stands
+ * in.
+ */
+export interface Open {
+  act: string;
+  kind: string;
+  chain: string;
 }
 
 export const PROTOCOL = 1;

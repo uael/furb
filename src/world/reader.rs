@@ -68,34 +68,41 @@ impl Retold {
   /// Each fact of the file, in the order that the life said them, read one line at a time, so a reader holds no more
   /// of a large record than it keeps of each fact.
   pub fn each(&self, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
-    self.lines(None, None, take)
+    self.lines(None, None, &mut |_, one| take(one))
   }
 
   /// Each fact of the file that the life said after the record kept its entry n, counted from 1,
   /// in order.
   pub fn after(&self, n: usize, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
-    self.lines(Some(&keep(n)), None, take)
+    self.lines(Some(&keep(n)), None, &mut |_, one| take(one))
   }
 
   /// Each fact of the file that the life said before the record kept its entry n, counted from 1,
   /// in order.
   pub fn before(&self, n: usize, take: &mut dyn FnMut(Object)) -> Result<(), Fault> {
+    self.lines(None, Some(&keep(n)), &mut |_, one| take(one))
+  }
+
+  /// Each fact of the file that the life said before the record kept its entry n, counted from 1,
+  /// in order, with the count of the entries that the record had kept when the life said it, so a
+  /// reader finds where each entry of the record, as a checkpoint, stands among the facts.
+  pub fn before_kept(&self, n: usize, take: &mut dyn FnMut(usize, Object)) -> Result<(), Fault> {
     self.lines(None, Some(&keep(n)), take)
   }
 
   /// Each fact of the file after the line from, or from its start, up to the line until, or to its
-  /// end.
+  /// end, with the count of the entries that the record had kept before it.
   fn lines(
     &self,
     mut from: Option<&str>,
     until: Option<&str>,
-    take: &mut dyn FnMut(Object),
+    take: &mut dyn FnMut(usize, Object),
   ) -> Result<(), Fault> {
     let failed =
       |no: std::io::Error| Fault::refused(format!("{} cannot be read: {no}", self.file.display()));
     let file = std::fs::File::open(&self.file).map_err(failed)?;
     let mut lines = std::io::BufReader::with_capacity(1 << 20, file);
-    let mut line = String::new();
+    let (mut line, mut kept) = (String::new(), 0);
     loop {
       line.clear();
       if lines.read_line(&mut line).map_err(failed)? == 0 {
@@ -105,10 +112,14 @@ impl Retold {
       if until == Some(text) {
         return Ok(());
       }
+      let head = Line::of(text);
+      if let Line::Keep(Some(n)) = head {
+        kept = n;
+      }
       if from.is_some() {
         from = from.filter(|mark| *mark != text);
-      } else if text.starts_with('[') && !matches!(Line::of(text), Line::Keep(_)) {
-        take(parsed(text)?);
+      } else if text.starts_with('[') && !matches!(head, Line::Keep(_)) {
+        take(kept, parsed(text)?);
       }
     }
   }

@@ -313,6 +313,47 @@ async fn the_operator_closes_an_act_and_says_what_he_saw() {
   );
 }
 
+#[tokio::test]
+async fn the_life_gives_the_meaning_of_the_acts_that_it_told() {
+  let at = place("meaning");
+  let life = Life::spawn(scripted(&at, &[])).unwrap();
+  let mut events = Box::pin(life.events(0));
+  let prompt = Command::Prompt {
+    shape: "bool".to_owned(),
+    message: "Merge it?".to_owned(),
+    to: Some("operator".to_owned()),
+    on: None,
+  };
+  let asked = made(&life, prompt).await;
+  until(&mut events, stands("chain1".to_owned(), State::Asks)).await;
+  let Reply::Value(desk) = life.send(Command::Desk { notices: vec![] }).await.unwrap() else {
+    panic!("the desk is a value")
+  };
+  assert_eq!(desk["questions"], json!(1), "{desk}");
+  assert_eq!(desk["asks"][0]["id"], json!(asked));
+  assert_eq!(desk["asks"][0]["choices"], json!(["yes", "no"]));
+  let threads = Command::Threads { on: None, at: None };
+  let Reply::Value(now) = life.send(threads).await.unwrap() else { panic!("a value") };
+  assert_eq!(now["state"], json!("asks"), "{now}");
+  let Reply::Values(moments) = life.send(Command::Moments).await.unwrap() else {
+    panic!("the moments are values")
+  };
+  let first = moments.first().and_then(serde_json::Value::as_u64).expect("a moment");
+  let Reply::Values(then) = life.send(Command::AsOf { at: first }).await.unwrap() else {
+    panic!("the acts then are values")
+  };
+  assert!(then.iter().all(|act| act["began"].as_u64() <= Some(first)), "{then:?}");
+  assert!(!then.iter().any(|act| act["id"] == json!(asked)), "{then:?}");
+  life.send(Command::Answer { id: asked, line: "yes".to_owned() }).await.unwrap();
+  until(&mut events, stands("chain1".to_owned(), State::Done)).await;
+  let Reply::Value(desk) = life.send(Command::Desk { notices: vec![] }).await.unwrap() else {
+    panic!("the desk is a value")
+  };
+  assert_eq!(desk["questions"], json!(0), "{desk}");
+  life.send(Command::End).await.unwrap();
+  while events.next().await.is_some() {}
+}
+
 /// A follow-up of an entry on the root, with a message that names it.
 fn follow(entry: &str) -> Command {
   let message = format!("Then {entry}.");
@@ -429,39 +470,44 @@ async fn a_reopen_of_the_record_finds_the_queue_and_sends_it_once_the_chain_rest
   until(&mut events, done(&sent)).await;
 }
 #[tokio::test]
-async fn each_write_keeps_its_change_in_the_journal_beside_the_record() {
+async fn each_write_keeps_its_change_in_the_journal_beside_the_record_once_the_life_ends() {
   let at = place("journal");
   fs::write(at.join("a.txt"), "old\n").unwrap();
+  fs::write(at.join("c.bin"), [0xff, 0xfe, 0x00]).unwrap();
   let record = at.join("a.jsonl").display().to_string();
-  let opening = Opening { record: Some(record.clone()), ..scripted(&at, &[]) };
-  let life = Life::spawn(opening).unwrap();
+  let opening = || Opening { record: Some(record.clone()), ..scripted(&at, &[]) };
+  let life = Life::spawn(opening()).unwrap();
   let mut events = Box::pin(life.events(0));
-  let word = "write(Text('a.txt', 'new\\n'))\nwrite(Text('b.txt', 'made\\n'))\nwrite(Text('scratch://n', 'x'))";
+  let word = "write(Text('a.txt', 'new\\n'))\nwrite(Text('b.txt', 'made\\n'))\n\
+    write(Text('scratch://n', 'x'))\nwrite(Text('c.bin', 'text\\n'))";
   let id = made(&life, rung(word)).await;
   until(&mut events, done(&id)).await;
+  // The end replies once the disk holds each change, so the test reads the journal at once.
+  assert_eq!(life.send(Command::End).await.unwrap(), Reply::Done);
   let journal = PathBuf::from(format!("{record}.changes.jsonl"));
-  let lines = tokio::time::timeout(Duration::from_secs(60), async {
-    loop {
-      let held = fs::read_to_string(&journal).unwrap_or_default();
-      if held.lines().count() >= 2 {
-        return held;
-      }
-      tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-  })
-  .await
-  .unwrap();
+  let lines = fs::read_to_string(&journal).unwrap();
   let changes: Vec<serde_json::Value> =
     lines.lines().map(|line| serde_json::from_str(line).unwrap()).collect();
   let file = |name: &str| at.join(name).display().to_string();
-  assert_eq!(changes.len(), 2, "{lines}");
+  assert_eq!(changes.len(), 3, "{lines}");
   assert_eq!(changes[0]["path"], json!(file("a.txt")));
   assert_eq!((&changes[0]["before"], &changes[0]["after"]), (&json!("old\n"), &json!("new\n")));
   assert!(changes[0]["act"].as_str().is_some_and(|act| act.starts_with("write")));
   assert_eq!(changes[0].get("made"), None);
   assert_eq!(changes[1]["path"], json!(file("b.txt")));
   assert_eq!((&changes[1]["before"], &changes[1]["made"]), (&json!(""), &json!(true)));
-  life.send(Command::End).await.unwrap();
+  // A file that cannot be read as text gives no empty text that an undo would put back.
+  assert_eq!(changes[2]["path"], json!(file("c.bin")));
+  assert_eq!((changes[2].get("made"), &changes[2]["after"]), (None, &json!("text\n")));
+  assert!(changes[2]["unread"].as_str().is_some_and(|why| !why.is_empty()), "{lines}");
+  drop(events);
+  // A later life on the record makes no change again: it writes no file.
+  let again = Life::spawn(opening()).unwrap();
+  let mut events = Box::pin(again.events(0));
+  let id = made(&again, rung("x = 1")).await;
+  until(&mut events, done(&id)).await;
+  assert_eq!(again.send(Command::End).await.unwrap(), Reply::Done);
+  assert_eq!(fs::read_to_string(&journal).unwrap(), lines);
 }
 #[tokio::test]
 async fn a_verb_of_the_operator_gives_the_words_of_its_act() {
@@ -506,4 +552,99 @@ async fn a_verb_of_the_operator_gives_the_words_of_its_act() {
   // The scratch directory that a command of the life made goes as the thread of the life ends.
   life.send(Command::End).await.unwrap();
   while events.next().await.is_some() {}
+}
+
+/// A life that keeps its record at a place, with no extension, whose model closes each request.
+fn kept(at: &Path) -> Opening {
+  Opening { record: Some(at.join("record.jsonl").display().to_string()), ..scripted(at, &[]) }
+}
+
+/// The facts of a log, in order, but each that says the record kept an entry, which the log of a
+/// record holds as its place and no reader of a later life hears.
+fn facts_of(log: &[Logged]) -> Vec<serde_json::Value> {
+  let facts = log.iter().filter_map(|one| match &*one.1 {
+    Event::Fact(fact) if fact[0] != "keep" => Some(fact.clone()),
+    _ => None,
+  });
+  facts.collect()
+}
+
+/// The facts of one birth of a life on a record: a word on its root, then each command, then its
+/// end, which keeps its checkpoint.
+async fn birth(at: &Path, word: &str, commands: Vec<Command>) -> Vec<serde_json::Value> {
+  let Ok(life) = Life::spawn(kept(at)) else { panic!("the life has no thread") };
+  let mut events = Box::pin(life.events(0));
+  let id = made(&life, rung(word)).await;
+  let mut log = until(&mut events, done(&id)).await;
+  for command in commands {
+    let sent = life.send(command).await;
+    assert!(matches!(sent, Ok(Reply::Done)), "{sent:?}");
+  }
+  assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
+  log.extend(until(&mut events, |event| matches!(event, Event::Ended(_))).await);
+  facts_of(&log)
+}
+
+/// That a later log starts with each fact of an earlier one, each as many times, with each fact
+/// that one holds more times than the other when they part.
+fn retells(later: &[serde_json::Value], earlier: &[serde_json::Value], what: &str) {
+  let counted = |facts: &[serde_json::Value]| {
+    let mut counts = std::collections::BTreeMap::<String, i64>::new();
+    for one in facts {
+      *counts.entry(one.to_string()).or_default() += 1;
+    }
+    counts
+  };
+  let (mut parted, theirs) = (counted(earlier), counted(&later[..earlier.len().min(later.len())]));
+  for (fact, n) in theirs {
+    *parted.entry(fact).or_default() -= n;
+  }
+  parted.retain(|_, n| *n != 0);
+  let parted: Vec<String> = parted.iter().map(|(fact, n)| format!("{n:+} {fact:.200}")).collect();
+  assert!(parted.is_empty(), "{what}, but for these facts, earlier less later: {parted:#?}");
+}
+
+#[tokio::test]
+async fn a_life_on_its_checkpoints_tells_each_repeated_fact_of_its_history_in_order() {
+  let at = place("repeated");
+  let (pause, wake) = (
+    || Command::Pause { id: "chain2".to_owned(), why: Some("hold".to_owned()) },
+    || Command::Wake { id: "chain2".to_owned() },
+  );
+  let word = "w = chain('w')\npause(w, 'hold'); wake(w); pause(w, 'hold'); wake(w)";
+  let first = birth(&at, word, vec![pause(), wake()]).await;
+  let second = birth(&at, "z = 0", vec![pause(), wake()]).await;
+  let third = birth(&at, "y = 1", vec![pause(), wake()]).await;
+  let controls = |facts: &[serde_json::Value]| -> Vec<(String, String)> {
+    let controls = facts.iter().filter(|one| {
+      one[1] == "chain2" && ["pause", "wake"].contains(&one[0].as_str().unwrap_or_default())
+    });
+    controls.map(|one| (one[0].to_string(), one[2].to_string())).collect()
+  };
+  let pauses =
+    |facts: &[serde_json::Value]| controls(facts).iter().filter(|one| one.0 == "\"pause\"").count();
+  assert_eq!(pauses(&first), 3, "{:?}", controls(&first));
+  // Each later birth tells first the whole history of the births before it, with each fact that
+  // repeats an earlier one, as it was told, and no fact that only a checkpoint restates.
+  retells(&second, &first, "the second birth retells the first whole");
+  assert_eq!(third[..first.len()], second[..first.len()], "each birth retells the first alike");
+  let times = |facts: &[serde_json::Value], one: &serde_json::Value| {
+    facts.iter().filter(|other| *other == one).count()
+  };
+  // The second and the third births do alike, so each adds as many occurrences of each fact of
+  // the first: a restatement told again would add more, and a repeat dropped fewer.
+  let added =
+    |later: &[serde_json::Value], earlier: &[serde_json::Value], one: &serde_json::Value| {
+      i64::try_from(times(later, one)).unwrap() - i64::try_from(times(earlier, one)).unwrap()
+    };
+  let again: Vec<String> = first
+    .iter()
+    .filter(|one| added(&third, &second, one) != added(&second, &first, one))
+    .map(|one| format!("{:.200}", one.to_string()))
+    .collect();
+  assert!(again.is_empty(), "the births add these facts unlike: {again:#?}");
+  assert_eq!(pauses(&second), 4, "{:?}", controls(&second));
+  assert_eq!(pauses(&third), 5, "{:?}", controls(&third));
+  let (later, earlier) = (controls(&third), controls(&second));
+  assert_eq!(later[..earlier.len()], earlier[..], "the pauses and wakes keep their order");
 }

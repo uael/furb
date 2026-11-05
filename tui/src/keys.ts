@@ -243,6 +243,12 @@ export const keys = [
     action: "Collapse or expand / resolve / reply to the thread / go to the next question",
   },
   {
+    chord: "⌥C",
+    action:
+      "Collapse or expand the thread in the middle of the feed, as a click on the left edge of its lines does",
+    bindings: [{ on: ["meta+c"], run: "foldHere", chord: "⌥C" }],
+  },
+  {
     chord: "⌥A",
     action: "Go to the next question that waits for you, in any workspace",
     bindings: [{ on: ["meta+a"], run: "nextAsk", chord: "⌥A" }],

@@ -7,7 +7,8 @@ use std::collections::HashMap;
 use furb_host::view::{
   Act, Answer, Attention, ChainThread, Concern, Kind, Origin, Pause, Phase, Rows, RunState, Spend,
   State, ThreadNode, Tick, as_of, attention, chain_threads, choices, concerns, desk, hint,
-  moments_of, nest_threads, operator, restate, takes_nothing, ticks, wants, working,
+  moments_of, nest_threads, open, operator, order_threads, restate, takes_nothing, ticks, wants,
+  working,
 };
 use serde_json::{Value, json};
 
@@ -472,6 +473,47 @@ fn the_threads_that_the_ladder_of_a_thread_made_nest_under_it_and_a_question_in_
   );
   assert!(tree[0].thread.asks.is_empty());
   assert_eq!(tree[0].thread.state, State::Runs);
+}
+
+#[test]
+fn the_closed_threads_stand_first_and_the_open_ones_last_each_group_by_its_last_message() {
+  let late = on_thread(prompt("prompt5", 50), "prompt1");
+  let later = on_thread(prompt("prompt9", 40), "prompt3");
+  let agents = [
+    act("prompt7", "prompt", "chain1", "rung1", 8, None),
+    act("prompt8", "prompt", "chain1", "rung1", 9, None),
+  ];
+  let all: Vec<Act> = [prompt("prompt1", 1), prompt("prompt2", 2), prompt("prompt3", 3)]
+    .into_iter()
+    .chain([prompt("prompt4", 4), late, later, prompt("prompt6", 6)])
+    .chain([act("rung1", "rung", "chain1", "prompt6", 7, None)])
+    .chain(agents.clone())
+    .collect();
+  let rows = rows(&all);
+  let closed = |id: &str, messages: &[&str]| ChainThread {
+    messages: messages.iter().map(|one| (*one).to_owned()).collect(),
+    resolved: true,
+    state: State::Done,
+    ..thread(rows[id], &[])
+  };
+  let list = vec![
+    closed("prompt1", &["prompt5"]),
+    closed("prompt2", &[]),
+    ChainThread { messages: vec!["prompt9".to_owned()], ..thread(rows["prompt3"], &[]) },
+    thread(rows["prompt4"], &[]),
+    closed("prompt6", &[]),
+    thread(&agents[0], &["prompt10"]),
+    closed("prompt8", &[]),
+  ];
+  // Before, main showed the threads in the order they began, and the agents of a thread the same.
+  let before = nest_threads(list.clone(), &rows);
+  assert_eq!(level(&before), ["prompt1", "prompt2", "prompt3", "prompt4", "prompt6"]);
+  let tree = order_threads(nest_threads(list, &rows), &rows);
+  // prompt1 closed last at 50, and prompt3 had its last message at 40. prompt6 is resolved, and it
+  // stands open since a question waits in its agent prompt7.
+  assert_eq!(level(&tree), ["prompt2", "prompt1", "prompt4", "prompt6", "prompt3"]);
+  assert_eq!(tree.iter().map(open).collect::<Vec<_>>(), [false, false, true, true, true]);
+  assert_eq!(level(&tree[3].agents), ["prompt8", "prompt7"]);
 }
 
 #[test]

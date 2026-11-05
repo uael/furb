@@ -56,7 +56,9 @@ API of its own:
 - The Kernel is `src/furb/kernel.py`, one module that the sandbox loads and the python package imports, each on the
   names of its engine. The gate, `src/gate.rs`, is the type checker of monty. It reads a word on the sheet of the
   engine, `src/furb/sheet.py`, against the typeshed of the sandbox, and it runs each import of the word in a sandbox
-  of its own, which alone says which module runs. The gate of the python package reads through it too.
+  of its own, which alone says which module runs. The gate of the python package reads through it too. The key `gate`
+  of a config set to false turns it off for a life, whose ear then answers each word with no finding, as
+  `docs/config.md` says.
 - `src/binding.rs` holds the host API that both doors give, each function once: the ears of the crate, the store, the
   opening of a life, the catalog, the extensions, the images and the gate. A door holds only how a value of its
   language crosses, its `Engine` and its `Act`, and the loop that drives them. The `Engine` of each door has the same
@@ -83,8 +85,9 @@ API of its own:
   lines with the version `PROTOCOL`, `transport` the socket or the pipe of the machine, TCP and WebSocket on the
   tailnet, behind a `Dialer` and an `Identity`, and the door of the windows, a WebSocket on loopback that lets in the
   peer that gives the token of `window.json`, `access` the role of each login of the network from `host.json`,
-  `serve` the door to one peer, which checks the role of each verb, and `daemon` the daemon of the
-  machine, which holds each life by its record while a window or a pin of `holders` holds it, and gives its place to
+  `serve` the door to one peer, which checks the role of each verb, `stall` the watch of each life, which
+  stands outside it and tells its windows and its root when it holds an open act and says no fact, and `daemon` the
+  daemon of the machine, which holds each life by its record while a window or a pin of `holders` holds it, and gives its place to
   a new build at a handover. `furb host` serves it, and `furb host upgrade` hands it over. `docs/protocol.md` says the
   protocol, and `bun run protocol` makes `bind/typescript/src/protocol.ts` again from `host/protocol.schema.json`.
 
@@ -108,11 +111,6 @@ The TypeScript side is a bun workspace at the root, whose packages are the three
   window: `tui/src/bridge.ts` attaches a window to the host, starts it, or takes over a host of another build, and keeps
   the worker in the window where no socket serves. The host serves the life over the network too, to a window of
   another operator that holds the key of a role, to read and write or to read only, which `tui/README.md` says.
-- `gui` is the desktop app, which runs a life in a window as the TUI runs one in a terminal: its core in
-  `gui/src-tauri`, a Cargo workspace of its own on Tauri 2, holds the window and starts the host of a life in
-  `gui/host`, a program of bun on the `Workspaces` and the `Session` of the TUI, and its UI in `gui/src` reads the
-  model of a life from its source. `gui/README.md` says how to build it, start it and use it, and `gui/DESIGN.md`
-  says its design.
 
 `docs/examples/` holds the examples of the framework: five short programs for each door, in `python/`,
 `typescript/` and `rust/`, which a user runs as they stand, and which `docs/examples/README.md` shows. They stand on

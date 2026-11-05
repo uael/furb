@@ -14,7 +14,8 @@
 //! [`run`] serves the daemon of a machine, which holds each life by the path of its record for as
 //! long as a window or a pin holds it, and [`upgrade`] puts the daemon of a new build in its place.
 //! The daemon starts the process of each skill that a life plays, which reads where it dials in
-//! [`processes`].
+//! [`processes`], and watches each life from outside it: a life that holds an open act and says
+//! no fact for [`STALL`] is told to its windows and to its root.
 
 pub mod access;
 mod answers;
@@ -30,6 +31,7 @@ pub mod protocol;
 mod queue;
 mod rebirth;
 mod serve;
+mod stall;
 pub mod transport;
 pub mod view;
 mod views;
@@ -40,3 +42,4 @@ pub use event::{Event, Seq};
 pub use life::{Command, Life, LifeHandle, Reply};
 pub use queue::FollowUp;
 pub use serve::{Host, Outbox, serve};
+pub use stall::STALL;
