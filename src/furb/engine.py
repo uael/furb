@@ -439,7 +439,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
           pause(id, why)
       if r[0] == "run":
         running[r[4]] = a[0] != "done"
-        a[0] == "done" and (mute := (get(r[4]) or a)[2])
+        a[0] == "done" and (mute := (get(r[4]) or a)[2] * (repr(a[1]) not in str(transcript(id, "wants"))))
       elif r[0] == "wants":
         running[get(r[2])[4]] = a[0] != "started"
       a[0] == "done" and a[1] in seen and (mute := "")
