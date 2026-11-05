@@ -600,14 +600,15 @@ export const blocks = part({
       const [mark, color] = markOf(state);
       return { word, mark, color };
     };
-    // A rung whose word has not come yet waits on its model, which thinks, and other work runs.
+    // A rung whose word has not come yet waits on its model, which thinks while a reply of the rung runs, and else
+    // waits for its turn; other work runs.
+    const thinks = act.kind === "rung" && !w.program[act.id];
     const running = () =>
-      w.moment === undefined
-        ? as(
-            `running ${this.progress(act.id)}`,
-            act.kind === "rung" && !w.program[act.id] ? "thinks" : "runs",
-          )
-        : as("not done yet", "idle");
+      w.moment !== undefined
+        ? as("not done yet", "idle")
+        : thinks && !act.asking
+          ? as("waits for its turn", "idle")
+          : as(`running ${this.progress(act.id)}`, thinks ? "thinks" : "runs");
     if (act.kind === "grant" && act.done) return as("ended", "idle");
     // Only work moves: an act of another kind that lives, as a grant or the watcher of an extension, lives until
     // something ends it, as a chain does, and work waits on it.

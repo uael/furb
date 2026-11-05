@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { chainSorted } from "furb/life";
 import { openEngine } from "../src/bridge.ts";
 import { Session } from "../src/session.ts";
-import { composing } from "./composing.ts";
+import { composing, ownPreferences } from "./composing.ts";
 
 const size = { width: 152, height: 46 };
 
@@ -18,7 +18,7 @@ async function recorded(): Promise<Session> {
   const { engine, host } = await openEngine({
     record: join(import.meta.dir, "..", "fixtures", "conductor.jsonl"),
   });
-  return new Session(engine, host, true);
+  return new Session(engine, host, true, ownPreferences());
 }
 
 /** The threads of a chain of the session, and its asides with what each is, as the feed and the sidebar read them. */

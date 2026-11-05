@@ -35,6 +35,8 @@ export interface LiveAct {
   /** Whether the act had no end when the record ended, in a record open to read, where nothing runs to end it. */
   unfinished?: boolean;
   run?: RunState;
+  /** Whether a reply of the rung runs, while its model thinks or writes its word. */
+  asking?: boolean;
   /** The place of the act in time: how many facts the life had said when the act was made, and when it was done. It
    * is the order of the record, so a later life gives the same places. */
   began: number;

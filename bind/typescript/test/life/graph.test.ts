@@ -154,7 +154,7 @@ test("the source of a chain heads the words of each ladder with its prompt, mark
     act("rung1", "rung", "chain1", "prompt1", 3, 8),
     act("bash1", "bash", "chain1", "rung1", 4, 5),
     ask("prompt2", "chain1", "operator", 10),
-    act("rung2", "rung", "chain1", "prompt2", 11),
+    act("rung2", "rung", "chain1", "prompt2", 11, undefined, { word: 'await bash("sleep 9")' }),
     act("bash2", "bash", "chain1", "rung2", 12),
   ];
   const words: Record<string, string> = {

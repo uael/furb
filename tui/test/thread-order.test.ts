@@ -5,7 +5,7 @@ import { nestThreads, orderThreads, threadOpen } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { openEngine } from "../src/bridge.ts";
 import { Session } from "../src/session.ts";
-import { type Composing, composing } from "./composing.ts";
+import { type Composing, composing, ownPreferences } from "./composing.ts";
 
 /** A frame that the QA of a change reads, when FURB_QA names a folder. */
 const keep = (name: string, frame: string) => {
@@ -17,7 +17,7 @@ async function recorded(): Promise<Session> {
   const { engine, host } = await openEngine({
     record: join(import.meta.dir, "..", "fixtures", "conductor.jsonl"),
   });
-  return new Session(engine, host, true);
+  return new Session(engine, host, true, ownPreferences());
 }
 
 /** The rows of a frame that the sidebar shows. */

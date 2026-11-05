@@ -353,7 +353,7 @@ export function thread(
   for (const act of [...index.live, ...[...owed].flatMap((id) => ids.get(id) ?? [])]) {
     if (
       (act.kind !== "prompt" && act.kind !== "rung") ||
-      !["asks", "thinks", "runs"].includes(actState(act, owed))
+      !["asks", "thinks", "runs", "idle"].includes(actState(act, owed))
     )
       continue;
     const path: string[] = [];
@@ -517,7 +517,8 @@ function level(
     !heads(group[0] as Line) ||
     group.some(
       (line) =>
-        (line.type === "prompt" || line.type === "rung") && ["asks", "thinks", "runs"].includes(line.state),
+        (line.type === "prompt" || line.type === "rung") &&
+        ["asks", "thinks", "runs", "idle"].includes(line.state),
     );
   const rungs = key.startsWith("rungs:");
   const keep = rungs ? shown.rungs : shown.prompts;

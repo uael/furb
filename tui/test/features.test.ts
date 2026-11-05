@@ -379,6 +379,16 @@ test("the setup of the root stands as code: a comment that names the setup, then
     const opened = await openEngine({ cwd: directory, record: join(directory, "session.jsonl") });
     await composing(
       async ({ session, frame, click }) => {
+        // The setup of the root ends with its last rung, the stand and the cd. A word of the operator that comes
+        // sooner ends it, and that rung then stands after the word, as it does where the roster is slow to come.
+        const stood = () =>
+          session.activity.filter((act) => act.kind === "rung" && act.by === act.on && act.done).length ===
+          13;
+        for (let step = 0; step < 200 && !stood(); step++) {
+          await Bun.sleep(25);
+          await session.refresh();
+        }
+        expect(stood()).toBe(true);
         await session.command("/run x = 1");
         await until(session, () =>
           session.activity.some((act) => act.kind === "rung" && act.by === "operator" && act.done),
