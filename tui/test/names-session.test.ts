@@ -1,5 +1,5 @@
 import { expect, mock, test } from "bun:test";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 const real = await import("../src/names.ts");
 const scanned: string[] = [];
@@ -55,7 +55,7 @@ test("an empty name that the worker scan finds gives the default name again", as
   try {
     scan.give?.("");
     await until(() => session.recordName !== undefined);
-    expect(session.recordName).toBe(session.host.directory.split("/").pop() || session.host.directory);
+    expect(session.recordName).toBe(basename(session.host.directory));
   } finally {
     await session.dispose();
   }

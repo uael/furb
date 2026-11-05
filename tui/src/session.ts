@@ -481,6 +481,8 @@ export class Session extends EventEmitter {
   private keptName?: string;
   /** Whether the scan of the record in the worker came back, which the move of an old name into the record waits for. */
   private scanned = false;
+  /** Whether the operator named the session in this life, whose name the older scan of the record must not hide. */
+  private renamed = false;
   /** Ends the scan of the record in the worker when the session goes. */
   private readonly scanning = new AbortController();
   private carrying = false;
@@ -630,6 +632,7 @@ export class Session extends EventEmitter {
   async rename(name: string): Promise<boolean> {
     const said = name.trim();
     const before = this.sessionName;
+    this.renamed = true;
     this.sessionName = said || basename(this.host.directory);
     this.emit("change");
     const word = renameWord(said);
@@ -637,6 +640,7 @@ export class Session extends EventEmitter {
       await this.engine.result(await this.engine.rung({ word, on: this.engine.root }));
       return true;
     } catch (error) {
+      this.renamed = false;
       this.sessionName = before;
       this.notice = `The name was not kept: ${error instanceof Error ? error.message : String(error)}`;
       this.emit("change");
@@ -655,7 +659,7 @@ export class Session extends EventEmitter {
   private scannedName(said: string | undefined): void {
     if (this.closed) return;
     this.scanned = true;
-    this.keptName = said;
+    if (!this.renamed) this.keptName = said;
     this.named();
     this.carryName();
     this.emit("change");
