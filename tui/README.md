@@ -47,9 +47,6 @@ Run these commands from the clone. Press ⌃Q to save and quit, and F1 for the k
 welcome checks the setup and says what is missing, as below. When `bun run build` fails with a message about a
 linker, the C tools of your system are missing. When `bun: command not found` shows, open a new terminal.
 
-The desktop app is a preview, and it is not part of this path: [`gui/README.md`](../gui/README.md) says how to build
-and start it.
-
 `furb`, the command line of `pip install furb`, opens this TUI when it has no command. It runs the TUI that
 `FURB_TUI` names, else the `furb-tui` on PATH, else the TUI of the clone that it was built from, so the steps above
 come first. It gives the TUI `--demo`, `--record`, `--cwd`, the model and the effort of its `--model` as `--model`
@@ -106,8 +103,6 @@ this build, and offers two choices:
 - **Read it** shows the record. The footer says "Read only" and offers a new life, and the composer is off.
 - **Start a new life from it** opens a new session whose first word carries, as text, the turns of the root chain
   and the files that the record wrote. It asks no prompt again.
-
-[The desktop preview](../gui/README.md) reads records in a window too.
 
 ⌃W lists the workspaces and their sessions, each with its state, save time, cost, and record size. It reads unfinished
 work through native replay without locking or changing the saved record. The list shows at once, and each saved session
