@@ -1814,7 +1814,13 @@ export class Session extends EventEmitter {
    * no act and ends a message takes the message back, so the operator writes it again. A cancel that ends running
    * work asks him first, and ends it once he confirms. */
   async cancel(id = ""): Promise<void> {
-    const act = id ? this.acts.find((one) => one.id === id) : this.lastOwn;
+    let act = id ? this.acts.find((one) => one.id === id) : this.lastOwn;
+    // The acts of the session are those of its last snapshot, and the life may have told a newer act that the
+    // operator read elsewhere, as in its transcript: the session reads the life again before it says that none runs.
+    if (id && !act) {
+      await this.refresh();
+      act = this.acts.find((one) => one.id === id);
+    }
     if (!act || act.done) {
       this.notice = id
         ? `${id} is no act that runs.`
