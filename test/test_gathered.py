@@ -77,7 +77,7 @@ async def test_acts_holds_the_last_stand_the_last_clock_and_each_act_of_a_verb_t
   held = acts[asked]
   assert (held["kind"], held["shape"], held["message"], held["to"]) == ("prompt", "str", "Which?", OPERATOR)
   cut = acts[later]["value"]
-  assert isinstance(cut, Refused) and str(cut) == f"{later} was cut by the checkpoint"
+  assert isinstance(cut, Refused) and str(cut) == f"{later} was interrupted: the life that ran it ended before it did"
   assert [x["kind"] for x in data["acts"]][:1] == ["stand"]
 
 

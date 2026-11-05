@@ -346,7 +346,7 @@ def wake(id: str) -> None:
   A wake makes no reply twice and loses none.
   A wake of a name of no act of the life raises Refused, which names it, and says nothing.
   A wake that the journal says again says at once each next entry of the record that answers a pending act it is over, as the outside said them while it heard that wake, before any other fact of the life.
-  A wake that this life says past the tip, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each wait, prompt to the operator and reply of them and closes each command of them as interrupted, and a model reads the transcript as it grew.
+  A wake that this life says past the tip, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each wait, stand, prompt to the operator and reply of them again and closes each other act of them that it takes as interrupted, a command among them, and a model reads the transcript as it grew.
   """
 
 def cancel(id: str, why: object = None) -> None:

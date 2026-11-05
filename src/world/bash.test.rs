@@ -5,8 +5,7 @@ use super::Running;
 #[test]
 fn a_text_fed_to_a_command_that_reads_no_more_is_refused_and_its_close_is_not() {
   let (stdin, fed) = unsync::spsc::unbounded();
-  let (stop, _stopped) = unsync::oneshot::channel();
-  let mut one = Running { stdin, _stop: stop };
+  let mut one = Running { stdin };
   assert!(one.feed(Some("one\n".to_owned())).is_ok());
   drop(fed);
   let refused = one.feed(Some("two\n".to_owned())).unwrap_err();
@@ -30,13 +29,11 @@ fn an_error_of_the_wait_on_the_shell_ends_the_watch_with_that_error_not_an_exit_
     let child = tokio::process::Command::from(command).spawn().unwrap();
     let mut group = Group::of(&child, lead).unwrap();
     let shell = runtime().spawn(async { Err(std::io::Error::other("wait broke")) });
-    let (_stop, stopped) = unsync::oneshot::channel();
     let got = watch(
       shell,
       future::pending::<Result<(), super::Unread>>(),
       future::pending(),
       future::pending(),
-      stopped,
       &mut group,
     )
     .await;

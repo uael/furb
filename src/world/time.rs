@@ -6,8 +6,7 @@ use std::{
   time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use futures::{Stream, StreamExt, stream};
-use unsync::oneshot;
+use futures::{Stream, stream};
 
 use crate::{
   ear::{Co, Ear, Next, hearing, say},
@@ -24,16 +23,11 @@ use crate::{
 pub fn time() -> Box<dyn Ear> {
   hearing(&["clock", "chance", "wait", "due"], |mut co: Co<String>| async move {
     let mut due: HashMap<String, f64> = HashMap::new();
-    // The stop of each wait that runs, which ends it when it drops.
-    let mut stops: HashMap<String, oneshot::Sender<()>> = HashMap::new();
     loop {
       let a = match co.next().await {
-        Next::Heard(a) => a,
-        // A wait whose time is up is done, unless a control ended it first.
+        Next::Heard(a) | Next::Resumed(a) => a,
         Next::Worked(id) => {
-          if stops.remove(&id).is_some() {
-            say(&mut co, Fact::says("done", &id, [Object::none()]));
-          }
+          say(&mut co, Fact::says("done", &id, [Object::none()]));
           continue;
         }
       };
@@ -56,9 +50,7 @@ pub fn time() -> Box<dyn Ear> {
             say(&mut co, Fact::says("due", &about, [Object::float(deadline)]));
             deadline
           };
-          let (stop, stopped) = oneshot::channel();
-          co.work(waited(about.clone(), deadline, stopped));
-          stops.insert(about, stop);
+          co.take(&about, waited(about.clone(), deadline));
         }
         "due" => {
           if let Some(deadline) = a.word(0).and_then(|one| one.as_float()) {
@@ -66,7 +58,6 @@ pub fn time() -> Box<dyn Ear> {
           }
         }
         "done" => {
-          stops.remove(&about);
           due.remove(&about);
         }
         _ => {}
@@ -75,23 +66,17 @@ pub fn time() -> Box<dyn Ear> {
   })
 }
 
-/// A wait: its id once its deadline passed, or nothing when it was stopped first. A wait past what the machine
-/// counts waits until it is stopped.
-fn waited(id: String, deadline: f64, stopped: oneshot::Receiver<()>) -> impl Stream<Item = String> {
+/// A wait: its id once its deadline passed. A wait past what the machine counts waits until the
+/// done of its act ends it.
+fn waited(id: String, deadline: f64) -> impl Stream<Item = String> {
   let left = Duration::try_from_secs_f64((deadline - now()).max(0.0)).ok();
-  let up = async move {
+  stream::once(async move {
     match left {
       Some(left) => tokio::time::sleep(left).await,
       None => future::pending().await,
     }
-  };
-  let ended = async move {
-    tokio::select! {
-      () = up => Some(id),
-      _ = stopped => None,
-    }
-  };
-  stream::once(ended).filter_map(future::ready)
+    id
+  })
 }
 
 /// The seconds since the epoch, on the clock of the machine.

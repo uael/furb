@@ -11,12 +11,16 @@
 //! ear in its place, so no ear reaches into a life that hears it. Code of a host that calls a verb while it runs,
 //! as the ears of the engine do, calls it through the [`Life`] lent to it for as long as it runs.
 //!
-//! [`ear`] makes one from an async body: [`hear`] and [`say`] read like the ears of the engine. The work an ear
-//! begins, a command, a wait, a call of a model, is a stream the ear gives its [`Co`] with [`Co::work`], and the ear
-//! takes from [`Co::next`] what it heard and what its work came to, in turn. The life polls the work of every ear
-//! each time it is driven, and never while the ear hears, and it takes one thing that a work says at each poll, so
-//! what a work comes to lands in the log alone, after all that the life was doing, as a later life says it again;
-//! and whatever a work waits for wakes whoever drives.
+//! [`ear`] makes one from an async body: [`hear`] and [`say`] read like the ears of the engine.
+//! The work an ear begins, a command, a wait, a call of a model, is a stream the ear gives its
+//! [`Co`] with [`Co::work`], or with [`Co::take`] when it is the work of an act, which ends at the
+//! first done of that act. The ear takes from [`Co::next`] what it heard and what its work came
+//! to, in turn, and an act that an earlier life took and did not end, which a wake puts to it
+//! again, as [`Next::Resumed`], so each ear says what it does with an act whose work may have run.
+//! The life polls the work of every ear each time it is driven, and never while the ear hears,
+//! and it takes one thing that a work says at each poll, so what a work comes to lands in the log
+//! alone, after all that the life was doing, as a later life says it again; and whatever a work
+//! waits for wakes whoever drives.
 //!
 //! What an ear says or calls of its own accord, from what its work came to, the life says while no ear hears, so
 //! the facts that it makes reach the ears at once, this ear among them. The body of an ear takes nothing more of its
@@ -35,7 +39,7 @@
 
 use std::{
   cell::{Cell, RefCell},
-  collections::VecDeque,
+  collections::{HashMap, HashSet, VecDeque},
   future::{Future, poll_fn},
   pin::Pin,
   rc::Rc,
@@ -48,7 +52,11 @@ use futures::{
   Stream, StreamExt,
   stream::{LocalBoxStream, SelectAll},
 };
-use tokio::runtime::Handle;
+use tokio::{
+  runtime::Handle,
+  task::{AbortHandle, JoinError},
+};
+use unsync::oneshot;
 
 use crate::{
   engine::Life,
@@ -225,10 +233,13 @@ pub enum Spoken {
   Verb(Call),
 }
 
-/// What an ear of rust takes next: a fact it heard, or what one of its works came to.
+/// What an ear of rust takes next: a fact it heard, an act that an earlier life took and did not
+/// end, which the journal said started and a wake puts to the ear again, or what one of its works
+/// came to.
 #[derive(Debug)]
 pub enum Next<W> {
   Heard(Fact),
+  Resumed(Fact),
   Worked(W),
 }
 
@@ -250,15 +261,18 @@ enum Event {
   Driven,
 }
 
-/// What the body of an ear of rust hears, says and works through, which the body owns: what the coroutine tells it,
-/// what it says to the coroutine, how much of that the coroutine has not given the life yet, its works, the facts it
-/// heard and has not taken, whether the life drives it, and whether it began a work while it heard. `W` is what each
-/// of its works gives.
+/// What the body of an ear of rust hears, says and works through, which the body owns: what the
+/// coroutine tells it, what it says to the coroutine, how much of that the coroutine has not given
+/// the life yet, its works, the stop of the work of each act it took, the acts that an earlier
+/// life took and did not end, the facts it heard and has not taken, whether the life drives it,
+/// and whether it began a work while it heard. `W` is what each of its works gives.
 pub struct Co<W = ()> {
   events: Queue<Event>,
   spoken: Queue<Spoken>,
   unsaid: Rc<Cell<usize>>,
   works: SelectAll<LocalBoxStream<'static, W>>,
+  taken: HashMap<String, oneshot::Sender<()>>,
+  resumed: HashSet<String>,
   heard: VecDeque<Fact>,
   driven: bool,
   began: bool,
@@ -273,13 +287,22 @@ impl<W: 'static> Co<W> {
     self.works.push(work.boxed_local());
   }
 
+  /// The work of the act `id`, which ends at the first done of that act, whoever says it, or when
+  /// the ear takes the act again with another work: a work whose act a control ended gives
+  /// nothing more. The ear says the started of the act itself, once.
+  pub fn take(&mut self, id: &str, work: impl Stream<Item = W> + 'static) {
+    let (stop, stopped) = oneshot::channel();
+    self.taken.insert(id.to_owned(), stop);
+    self.work(work.take_until(stopped));
+  }
+
   /// What the ear takes next: the next fact it heard, and when it heard all, what one of its works came to, while
   /// the life drives it and once the life took all that the ear said, so the ear stands here when it lands.
   pub async fn next(&mut self) -> Next<W> {
     poll_fn(|cx| {
       self.told();
       if let Some(fact) = self.heard.pop_front() {
-        return Poll::Ready(Next::Heard(fact));
+        return Poll::Ready(self.noted(fact));
       }
       if std::mem::take(&mut self.began) {
         cx.waker().wake_by_ref();
@@ -294,6 +317,24 @@ impl<W: 'static> Co<W> {
       }
     })
     .await
+  }
+
+  /// A fact heard, as the body takes it: a done ends the work of its act and forgets that an
+  /// earlier life took it, a started that the journal says again is of an act that an earlier life
+  /// took, and such an act, put to the ear, is resumed.
+  fn noted(&mut self, fact: Fact) -> Next<W> {
+    match fact.kind() {
+      "done" => {
+        self.taken.remove(fact.about());
+        self.resumed.remove(fact.about());
+      }
+      "started" if fact.by() == "journal" => {
+        self.resumed.insert(fact.about().to_owned());
+      }
+      _ if fact.question() && self.resumed.contains(fact.about()) => return Next::Resumed(fact),
+      _ => {}
+    }
+    Next::Heard(fact)
   }
 
   /// What the coroutine told since, taken, and what the verb the body called last came to, when it came. The coroutine
@@ -499,6 +540,8 @@ where
     spoken: Rc::clone(&spoken),
     unsaid: Rc::clone(&unsaid),
     works: SelectAll::new(),
+    taken: HashMap::new(),
+    resumed: HashSet::new(),
     heard: VecDeque::new(),
     driven: false,
     began: false,
@@ -517,10 +560,11 @@ where
   })
 }
 
-/// The next fact the ear hears, which is `a = yield` of python, for an ear with no work.
+/// The next fact the ear hears, which is `a = yield` of python, for an ear with no work, which
+/// takes an act that an earlier life took as any act.
 pub async fn hear(co: &mut Co) -> Fact {
   loop {
-    if let Next::Heard(fact) = co.next().await {
+    if let Next::Heard(fact) | Next::Resumed(fact) = co.next().await {
       return fact;
     }
   }
@@ -537,6 +581,27 @@ pub fn say<W: 'static>(co: &mut Co<W>, saying: Fact) {
 /// on: the runtime of the thread that drives the life, or the reactor when that thread runs none.
 pub fn runtime() -> Handle {
   Handle::try_current().unwrap_or_else(|_| reactor().clone())
+}
+
+/// A future as a task of the [`runtime`], so it goes on while the life drives no ear, and which
+/// ends when what awaits it drops it, as the done of the act whose work awaits it does.
+pub(crate) fn spawned<T: Send + 'static>(
+  work: impl Future<Output = T> + Send + 'static,
+) -> impl Future<Output = Result<T, JoinError>> {
+  /// The task, which ends when its handle goes.
+  struct Aborted(AbortHandle);
+  impl Drop for Aborted {
+    fn drop(&mut self) {
+      self.0.abort();
+    }
+  }
+  let task = runtime().spawn(work);
+  let aborted = Aborted(task.abort_handle());
+  async move {
+    let got = task.await;
+    drop(aborted);
+    got
+  }
 }
 
 /// The reactor of the process, for a door that drives a life with no runtime of tokio: one runtime, driven by a

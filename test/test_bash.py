@@ -300,7 +300,7 @@ async def test_the_world_takes_it_once_and_closes_a_command_that_a_crash_cut_as_
   assert said(third.calls, "bash") == [] and engine.peek(two) is None
   engine.wake(over)
   await settle()
-  got, why = engine.peek(two), "'sleep 9' was interrupted: the life that ran it ended before it did"
+  got, why = engine.peek(two), f"{two} was interrupted: the life that ran it ended before it did"
   assert isinstance(got, Refused) and str(got) == why
   assert third.outs == {} and [a[1] for a in heard if a[0] == "close"] == [two]
   assert f"#{two} closed by world\n{two}_value = Refused({why!r})" in paragraphs(engine.turns(on=over))

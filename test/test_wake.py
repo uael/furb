@@ -143,7 +143,7 @@ async def test_a_wake_makes_no_reply_twice_and_loses_none() -> None:
 
 
 async def test_a_wake_that_this_life_says_puts_every_pending_act_it_is_over_on_to_the_outside() -> None:
-  """A wake that this life says past the tip, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each wait, prompt to the operator and reply of them and closes each command of them as interrupted, and a model reads the transcript as it grew."""
+  """A wake that this life says past the tip, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each wait, stand, prompt to the operator and reply of them again and closes each other act of them that it takes as interrupted, a command among them, and a model reads the transcript as it grew."""
   sand, log, root = born(auto=False)
   command = engine.bash("sleep 9", on=root)
   waited = engine.wait(100.0, root, on=root)

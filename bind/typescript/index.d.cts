@@ -203,11 +203,11 @@ export declare function answers(shape: string): boolean
 export declare function attachImage(directory: string, path: string): ImageAttachment
 
 /**
- * The ear of commands, which runs each in a shell of this machine, with `TMPDIR` set to the scratch directory that
- * the host names, which the ear of the files is given too. It is given the record that the life opens on, so it
- * closes as interrupted each command that the record shows started and not done, at the wake.
+ * The ear of commands, which runs each in a shell of this machine, with `TMPDIR` set to the
+ * scratch directory that the host names, which the ear of the files is given too. At the wake it
+ * closes as interrupted each command that an earlier life started and did not end.
  */
-export declare function bash(scratch: string, record: Array<any>): NativeEar
+export declare function bash(scratch: string): NativeEar
 
 /**
  * Read, start, refresh or cancel ChatGPT sign-in for codex. The default action reads its state.

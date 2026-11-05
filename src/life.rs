@@ -218,8 +218,7 @@ impl Opening {
     let provider = provider.ear();
     let working = |made: Option<Box<dyn Ear>>| made.unwrap_or_else(silent);
     let config = places.config.clone();
-    // An ear that holds nothing that a fresh one lacks starts again after it raises. A fresh ear of the commands
-    // reads no record, since the first one ended each command that the record left open.
+    // An ear that holds nothing that a fresh one lacks starts again after it raises.
     let user = config.clone();
     let servers = world::mcp::Settings::of(project, config.clone(), gallery.clone());
     let mut ears = vec![
@@ -245,9 +244,9 @@ impl Opening {
       ),
       (
         "bash",
-        working(scratch.map(|one| {
-          lasting(world::bash(one.clone(), &record), move || world::bash(one.clone(), &[]))
-        })),
+        working(
+          scratch.map(|one| lasting(world::bash(one.clone()), move || world::bash(one.clone()))),
+        ),
       ),
       ("time", working(works.then(|| lasting(world::time(), world::time)))),
     ];

@@ -27,7 +27,7 @@ use tokio::{
   task::JoinHandle,
   time::{Instant, sleep, sleep_until},
 };
-use unsync::{oneshot, spsc};
+use unsync::spsc;
 
 pub(crate) use self::group::{Group, grouped};
 #[cfg(test)]
@@ -37,10 +37,9 @@ use self::{
   kept::{HEAD, Kept, Stream, TAIL, Unread, read},
   shell::{reaped, spawned},
 };
-use super::{Scratch, here};
+use super::{Scratch, here, interrupted};
 use crate::{
   ear::{Co, Ear, Next, hearing, say},
-  engine::left,
   fact::{Fact, named},
   value::{Exit, Fault, Given, Object, Text},
 };
@@ -48,9 +47,9 @@ use crate::{
 /// The ear of commands: it takes a command, says what it writes, answers a write of a door of it,
 /// feeds it what a write of its stdin gives, and says it done with its exit.
 ///
-/// A command that the record shows started and not done was cut by the end of the life that ran it:
-/// the ear runs it no more, and when a wake puts it to the ear, the ear takes it and closes it with
-/// a refusal that says it was interrupted, so the model sees that outcome and runs it again if it
+/// A command that an earlier life started and did not end was cut by the end of that life: the ear
+/// runs it no more, and when a wake puts it to the ear, the ear takes it and closes it with a
+/// refusal that says it was interrupted, so the model sees that outcome and runs it again if it
 /// wants, and its doors keep what it wrote before. It takes no write.
 ///
 /// A stream keeps at most `HEAD` bytes at its start and `TAIL` bytes at its end: the ear reads the
@@ -63,84 +62,71 @@ use crate::{
 /// the ear makes first, so a command finds there the files of `scratch://`. A command ends with
 /// every process it started, which its group holds. A command that a control ended first, which the
 /// engine says done, is ended so and says nothing more.
-pub fn bash(scratch: Scratch, record: &[Object]) -> Box<dyn Ear> {
-  let mut commands =
-    Commands { scratch, running: HashMap::new(), closed: HashSet::new(), cut: crashed(record) };
+pub fn bash(scratch: Scratch) -> Box<dyn Ear> {
+  let mut commands = Commands { scratch, running: HashMap::new(), closed: HashSet::new() };
   hearing(&["bash", "write"], move |mut co: Co<Said>| async move {
     loop {
       match co.next().await {
         Next::Heard(a) => commands.heard(&mut co, &a).await?,
-        Next::Worked(one) => commands.worked(&mut co, one).await?,
+        Next::Resumed(a) => interrupted(&mut co, &a).await?,
+        Next::Worked(one) => worked(&mut co, one).await?,
       }
     }
   })
 }
 
-/// What the ear of the commands holds: the scratch directory of the life, each command that runs,
-/// the commands whose stdin a write closed, and each command that a crash cut, so that a later act
-/// that only shares its name, as after a drift, is no command of the record.
+/// What the ear of the commands holds: the scratch directory of the life, each command that runs
+/// in this life, and the commands whose stdin a write closed.
 struct Commands {
   scratch: Scratch,
   running: HashMap<String, Running>,
   closed: HashSet<String>,
-  cut: HashMap<String, Held>,
+}
+
+/// What a command says while it runs.
+async fn worked(co: &mut Co<Said>, said: Said) -> Result<(), Fault> {
+  let saying = match said {
+    Said::Out { about, text, stream } => {
+      Fact::says("out", &about, [Object::string(text), Object::string(stream.to_string())])
+    }
+    Said::Exit { about, exit } => Fact::says("done", &about, [exit.object()]),
+    // The machine would not start it, so the ear closes it with why, as a prompt that the operator
+    // cannot answer is closed, and the chain is told why.
+    Said::Failed { about, fault } => return closing(co, &about, fault).await,
+  };
+  say(co, saying);
+  Ok(())
 }
 
 impl Commands {
-  /// What a command says while it runs, which a control that ended it first silences.
-  async fn worked(&mut self, co: &mut Co<Said>, said: Said) -> Result<(), Fault> {
-    let saying = match said {
-      Said::Out { about, text, stream } if self.running.contains_key(&about) => {
-        Fact::says("out", &about, [Object::string(text), Object::string(stream.to_string())])
-      }
-      Said::Exit { about, exit } if self.running.remove(&about).is_some() => {
-        Fact::says("done", &about, [exit.object()])
-      }
-      // The machine would not start it, so the ear closes it with why, as a prompt that the
-      // operator cannot answer is closed, and the chain is told why.
-      Said::Failed { about, fault } if self.running.remove(&about).is_some() => {
-        return closing(co, &about, fault).await;
-      }
-      _ => return Ok(()),
-    };
-    say(co, saying);
-    Ok(())
-  }
-
   /// What a fact that the ear hears asks of it.
   async fn heard(&mut self, co: &mut Co<Said>, a: &Fact) -> Result<(), Fault> {
     let about = a.about().to_owned();
     match a.kind() {
-      "bash" if a.question() && self.cut.get(&about).is_some_and(|it| *it == held(a)) => {
-        self.cut.remove(&about);
-        interrupted(co, a, &about).await
-      }
       "bash" if a.question() => self.started(co, a, about).await,
       "write" if a.question() => self.wrote(co, a, &about).await,
       "done" => {
         self.running.remove(&about);
         self.closed.remove(&about);
-        self.cut.remove(&about);
         Ok(())
       }
       _ => Ok(()),
     }
   }
 
-  /// A command that starts: its stdin and its stop kept, and its streams worked.
+  /// A command that starts: its stdin kept, and its streams worked until its act is done.
   async fn started(&mut self, co: &mut Co<Said>, a: &Fact, about: String) -> Result<(), Fault> {
     say(co, Fact::says("started", &about, []));
     match begun(co, a, &self.scratch).await {
       Ok(mut begun) => {
         let (stdin, fed_in) = spsc::unbounded();
-        let (stop, stopped) = oneshot::channel();
-        let mut one = Running { stdin, _stop: stop };
+        let mut one = Running { stdin };
         // A stdin of text goes in whole at the start, and then it closes.
         if let Some(text) = begun.given.take().filter(|text| !text.is_empty()) {
           one.feed(Some(text))?;
           one.feed(None)?;
         }
-        co.work(command(begun, fed_in, stopped));
+        co.take(&about, command(begun, fed_in));
         self.running.insert(about, one);
         Ok(())
       }
@@ -151,17 +137,16 @@ impl Commands {
   }
 
   /// A write of a door of a command: the stdin of a command whose stdin is None takes it while the
-  /// command runs and until a write of nothing closes it, and every other door takes no write.
+  /// command runs in this life and until a write of nothing closes it, and every other door takes
+  /// no write.
   async fn wrote(&mut self, co: &mut Co<Said>, a: &Fact, about: &str) -> Result<(), Fault> {
     let Some(at) = door(a) else { return Ok(()) };
     let act = co.call("get", vec![Object::string(&at.command)], vec![]).await?;
     let Some(act) = Fact::of(act.as_ref()) else { return Ok(()) };
-    let over = co.call("over", vec![Object::string(&at.command)], vec![]).await?;
     let open = at.stdin
-      && over.as_ref().as_bool() != Some(true)
+      && self.running.contains_key(&at.command)
       && act.word(2).is_some_and(|one| one.type_name() == "NoneType")
-      && !self.closed.contains(&at.command)
-      && !self.cut.contains_key(&at.command);
+      && !self.closed.contains(&at.command);
     let answer = if open {
       match self.written(&at.command, &at.text.content) {
         Ok(()) => at.text.object(),
@@ -190,39 +175,6 @@ fn command_line(a: &Fact) -> String {
   a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default()
 }
 
-/// The chain and the line of a command, which say whether an act is the command of the record under
-/// its name.
-#[derive(PartialEq)]
-struct Held {
-  on: String,
-  line: String,
-}
-
-fn held(a: &Fact) -> Held {
-  Held { on: a.on().to_owned(), line: command_line(a) }
-}
-
-/// Each command that the record shows started and not done, which a crash cut, with its chain and
-/// its line.
-fn crashed(record: &[Object]) -> HashMap<String, Held> {
-  let left: HashSet<String> = left(record).into_iter().collect();
-  record
-    .iter()
-    .filter_map(|one| Fact::of(*one.as_ref().items()?.first()?))
-    .filter(|a| a.kind() == "bash" && a.question() && left.contains(a.about()))
-    .map(|a| (a.about().to_owned(), held(&a)))
-    .collect()
-}
-
-/// A command that a crash cut, started and closed with a refusal that says it was interrupted.
-async fn interrupted(co: &mut Co<Said>, a: &Fact, about: &str) -> Result<(), Fault> {
-  say(co, Fact::says("started", about, []));
-  let line = command_line(a);
-  let why =
-    Fault::refused(format!("{line:?} was interrupted: the life that ran it ended before it did"));
-  closing(co, about, why).await
-}
-
 /// An act closed with a fault, as the engine closes a prompt that nobody can answer.
 async fn closing(co: &mut Co<Said>, about: &str, fault: Fault) -> Result<(), Fault> {
   co.call("close", vec![fault.object()], vec![("id", Object::string(about))]).await?;
@@ -246,11 +198,9 @@ pub(super) fn door(a: &Fact) -> Option<Door> {
   (named(&command, "bash") && (stdin || out)).then_some(Door { text, command, stdin })
 }
 
-/// One command that runs, as the ear holds it: the door to its stdin, and its stop, which ends it
-/// when it drops.
+/// One command that runs, as the ear holds it: the door to its stdin.
 struct Running {
   stdin: spsc::Sender<Option<String>>,
-  _stop: oneshot::Sender<()>,
 }
 
 impl Running {
@@ -321,22 +271,17 @@ async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, 
   Ok(Begun { about, command, shown, dir, timeout, given })
 }
 
-/// What a command says as it runs: each text its streams write, then its exit; or nothing more once
-/// it stops.
-fn command(
-  begun: Begun,
-  fed: spsc::Receiver<Option<String>>,
-  stopped: oneshot::Receiver<()>,
-) -> impl futures::Stream<Item = Said> {
+/// What a command says as it runs: each text its streams write, then its exit.
+fn command(begun: Begun, fed: spsc::Receiver<Option<String>>) -> impl futures::Stream<Item = Said> {
   let (says, said) = unbounded();
-  let ran = ran(begun, fed, stopped, says);
+  let ran = ran(begun, fed, says);
   // The command says through the channel alone, so its exit comes after all it wrote.
   stream::select(said, stream::once(ran).filter_map(future::ready))
 }
 
 /// A command run to its end: what its streams write is said as it comes, what is fed goes into its
-/// stdin, and its exit is said at its end; or the command is ended at its stop, with every process
-/// of it.
+/// stdin, and its exit is said at its end; or the command is ended with every process of it when
+/// the done of its act drops it.
 ///
 /// A command that outlives its timeout is ended with every process of it, and exits with no code.
 /// Its exit comes once its shell exited and its streams closed, or once its shell exited and DRAIN
@@ -349,7 +294,6 @@ fn command(
 /// What the channel cannot take, because its stream is going, comes back for that stream to give.
 /// What ended the wait on a command before its exit.
 enum Cut {
-  Stopped,
   Unread(Unread),
   Unslain(std::io::Error),
   Unwaited(std::io::Error),
@@ -369,26 +313,23 @@ enum Phase {
   Done(Option<i32>),
 }
 
-/// The wait on a command through its three phases. A stop ends it at once, a fault of a stream or a
-/// signal that cannot reach the group ends it with that fault, and the timeout of the command ends
-/// its processes at any time.
+/// The wait on a command through its three phases. A fault of a stream or a signal that cannot
+/// reach the group ends it with that fault, and the timeout of the command ends its processes at
+/// any time.
 async fn watch(
   shell: JoinHandle<std::io::Result<Option<i32>>>,
   streams: impl Future<Output = Result<(), Unread>>,
   expired: impl Future<Output = ()>,
   feeding: impl Future<Output = ()>,
-  stopped: oneshot::Receiver<()>,
   group: &mut Group,
 ) -> Result<Exited, Cut> {
   let (mut shell, mut streams) = (pin!(shell), pin!(streams.fuse()));
   let (mut expired, mut feeding) = (pin!(expired.fuse()), pin!(feeding.fuse()));
-  let mut stopped = pin!(stopped);
   let mut phase = Phase::Running;
   loop {
     let until = if let Phase::Draining { until, .. } = phase { Some(until) } else { None };
     tokio::select! {
       biased;
-      _ = &mut stopped => return Err(Cut::Stopped),
       got = &mut shell, if matches!(phase, Phase::Running) => {
         let status = got.map_err(std::io::Error::other).and_then(|waited| waited).map_err(Cut::Unwaited)?;
         phase = Phase::Draining { status, until: Instant::now() + DRAIN };
@@ -416,7 +357,6 @@ async fn watch(
 async fn ran(
   begun: Begun,
   fed: spsc::Receiver<Option<String>>,
-  stopped: oneshot::Receiver<()>,
   says: UnboundedSender<Said>,
 ) -> Option<Said> {
   let Begun { about, command, shown, dir, timeout, .. } = begun;
@@ -440,10 +380,9 @@ async fn ran(
     }
   };
   let shell = reaped(child);
-  let watching = Box::pin(watch(shell, streams, expired, feed(stdin, fed), stopped, &mut group));
+  let watching = Box::pin(watch(shell, streams, expired, feed(stdin, fed), &mut group));
   let exited = match watching.await {
     Ok(exited) => exited,
-    Err(Cut::Stopped) => return None,
     Err(Cut::Unread(no)) => {
       return failed(&says, &about, Fault::refused(format!("{shown} failed: {no}")));
     }

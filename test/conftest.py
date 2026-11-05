@@ -251,12 +251,12 @@ class Sand:
     if not content:
       self.shut.add(command)
 
-  def interrupts(self, about: str, command: str) -> World:
+  def interrupts(self, about: str) -> World:
     """A command that a crash cut, which the World takes and closes with a refusal that says it was interrupted, and
     runs no more."""
     self.cut.pop(about)
     yield "started", about
-    engine.close(Refused(f"{command!r} was interrupted: the life that ran it ended before it did"), about)
+    engine.close(Refused(f"{about} was interrupted: the life that ran it ended before it did"), about)
 
   def placed(self, on: str, path: str) -> str:
     """The path of a cd, a read or a write: one that is ~ or starts with ~/ hangs off the home of the user, and any
@@ -286,8 +286,8 @@ class Sand:
     """
 
     match a:
-      case ("bash", about, _, _, command, *_) if self.cut.get(about) == a:
-        yield from self.interrupts(about, command)
+      case ("bash", about, *_) if self.cut.get(about) == a:
+        yield from self.interrupts(about)
       case ("bash", about, _, on, command, stdin, timeout, *_):
         yield "started", about
         self.outs[about] = [engine.ask("merged", on, about), "", ""]
