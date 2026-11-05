@@ -854,7 +854,7 @@ test("a name inside a transcript tag opens the same live inspector as Python cod
   composing(
     async ({ session, app, screen, frame }) => {
       await session.engine.result(
-        await session.engine.rung({ word: "answer = 17", on: session.engine.root }),
+        await session.engine.rung({ word: "total = 17", on: session.engine.root }),
       );
       await session.refresh();
       session.show("transcript");
@@ -862,11 +862,11 @@ test("a name inside a transcript tag opens the same live inspector as Python cod
       // The transcript opens at its top, where the doctrine of the actor of the chain stands.
       app.scroll.scrollTo(app.scroll.scrollHeight);
       const lines = (await frame()).split("\n");
-      const row = lines.findIndex((line) => line.includes("answer = 17"));
+      const row = lines.findIndex((line) => line.includes("total = 17"));
       expect(row).toBeGreaterThanOrEqual(0);
-      const column = lines[row]?.indexOf("answer") ?? -1;
+      const column = lines[row]?.indexOf("total") ?? -1;
       await screen.mockMouse.click(column + 1, row, 0, { modifiers: { ctrl: true } });
-      await until(screen.renderer, () => screen.captureCharFrame().includes("answer: int"), "frame");
+      await until(screen.renderer, () => screen.captureCharFrame().includes("total: int"), "frame");
       expect(screen.captureCharFrame()).toContain("17");
     },
     { width: 120, height: 44, useMouse: true },
@@ -877,7 +877,7 @@ test("a quote in a turn of the transcript takes the colors of a string region", 
     async ({ session, app, screen, frame }) => {
       await session.engine.result(
         await session.engine.rung({
-          word: "<s:note>\nquoted body\n</s:note>\nanswer = 17",
+          word: "<s:note>\nquoted body\n</s:note>\ntotal = 17",
           on: session.engine.root,
         }),
       );

@@ -89,10 +89,10 @@ print(len(wanted), "tiles around the view,", len(cache.lines), "lines of cache")
 fresh = [tile for tile in wanted if tile[1] >= 0 and tile[2] >= 0]
 close(f"{len(fresh)} of {len(wanted)} tiles are inside the map, and the cache holds {len(cache.lines)} lines.")`;
 
-const tilesAsk = String.raw`answer = await prompt(bool, "Offline mode keeps 200 tiles, about 12 MB on a phone. Keep the 200 as the default?", to=OPERATOR)
-if answer:
+const tilesAsk = String.raw`capped = await prompt(bool, "Offline mode keeps 200 tiles, about 12 MB on a phone. Keep the 200 as the default?", to=OPERATOR)
+if capped:
   write(read("src/cache.ts").append("export const MOST = 200;\n"))
-close("The cache keeps at most 200 tiles." if answer else "The cache has no ceiling yet.")`;
+close("The cache keeps at most 200 tiles." if capped else "The cache has no ceiling yet.")`;
 
 const changelog = String.raw`log = Text("CHANGELOG.md", "# Changelog\n\n## 0.2.0\n\n- Tiles are kept in a cache.\n- A tile has one address.\n")
 write(log)
