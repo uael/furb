@@ -212,7 +212,7 @@ fn a_name_that_the_transcript_binds_is_a_finding_of_the_line_that_binds_it() {
 
 #[test]
 fn a_word_that_binds_a_name_of_the_engine_at_its_top_is_a_finding_and_a_def_of_one_overrides_it() {
-  let word = "wait = 5\nfor chance in []:\n  pass\nimport json as cd\ndel turns\ndef read(path: str) -> str:\n  return path\ndef f(grep: int) -> int:\n  return grep\nactor = 'm/low'\naccepts = None\nraised = None\nk = [over for over in ()]\nimport re\nfrom json import loads as re\nCancelledError = 5\ntry:\n  scope = 1\nexcept Refused as span:\n  pass\nclose(1)";
+  let word = "wait = 5\nfor chance in []:\n  pass\nimport json as cd\ndel turns\ndef read(path: str) -> str:\n  return path\ndef f(grep: int) -> int:\n  return grep\nactor = 'm/low'\naccepts = None\nraised = None\nk = [over for over in ()]\nimport re, json as wait_\nfrom json import loads as re\nCancelledError = 5\ntry:\n  scope = 1\nexcept Refused as span:\n  pass\nclose(1)";
   let (text, above) = acted(&[], &[], word);
   let got: Vec<_> = found(&text)
     .into_iter()

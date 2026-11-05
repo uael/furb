@@ -587,12 +587,17 @@ fn topped<'a>(body: &'a [Stmt], found: &mut Vec<(usize, &'a str, bool)>) {
       Stmt::Delete(one) => one.targets.iter().flat_map(named).collect(),
       _ => binds(stmt),
     };
-    let import = match stmt {
-      Stmt::Import(one) => one.names.iter().all(|alias| alias.asname.is_none()),
-      Stmt::ImportFrom(one) => one.names.iter().all(|alias| alias.asname.is_none()),
-      _ => false,
+    let plain: Vec<bool> = match stmt {
+      Stmt::Import(one) => one.names.iter().map(|alias| alias.asname.is_none()).collect(),
+      Stmt::ImportFrom(one) => one.names.iter().map(|alias| alias.asname.is_none()).collect(),
+      _ => vec![],
     };
-    found.extend(names.into_iter().map(|name| (stmt.start().to_usize(), name, import)));
+    found.extend(
+      names
+        .into_iter()
+        .enumerate()
+        .map(|(at, name)| (stmt.start().to_usize(), name, plain.get(at).copied().unwrap_or(false))),
+    );
     match stmt {
       Stmt::If(one) => {
         topped(&one.body, found);
