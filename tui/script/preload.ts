@@ -38,13 +38,24 @@ let before = new Set<string>();
 beforeEach(() => {
   before = new Set(readdirSync(yard));
 });
+// On Windows a folder that a demo or a child process still holds raises EBUSY. The cleanup retries, and a folder that
+// stays busy is left to the end of the run, where the runner removes the yard, with one line on stderr: it never fails
+// a test, while a failure of the test body still does.
+function clear(path: string, what: string): void {
+  try {
+    rmSync(path, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  } catch (error) {
+    const code = (error as { code?: string }).code ?? "error";
+    console.error(`FURB yard: left ${path} (${code}) for the end of the run; ${what}`);
+  }
+}
 afterEach(() => {
   if (kept) return;
   for (const name of readdirSync(yard)) {
-    if (!before.has(name)) rmSync(join(yard, name), { recursive: true, force: true });
+    if (!before.has(name)) clear(join(yard, name), "a process still holds it");
   }
 });
 afterAll(() => {
   if (kept) console.error(`FURB_KEEP_YARDS keeps ${yard}`);
-  else if (given === undefined) rmSync(yard, { recursive: true, force: true });
+  else if (given === undefined) clear(yard, "the temporary directory of the machine keeps it");
 });
