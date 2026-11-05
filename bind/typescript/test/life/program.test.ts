@@ -233,8 +233,22 @@ test("an act that no word made stands as one line of python, its call bound to i
   expect(line?.kind === "code" && [line.text, line.runs, line.hint]).toEqual([
     'wait1 = wait(60, "bash1")',
     false,
-    "woke: bash1",
+    "woke by bash1",
   ]);
+});
+
+test("the hint of a line says what the line did: no word of another act, no empty wake", () => {
+  const label = (chain: string) => chain;
+  const woke = act("wait1", "wait", "chain1", "operator", 1, 2, { words: [30, "bash1"], value: "bash1" });
+  const late = act("wait2", "wait", "chain1", "operator", 1, 2, { words: [30], value: null });
+  const told = act("prompt1", "prompt", "chain1", "operator", 1, 2, {
+    words: ["None", "The owner added a constraint to the item."],
+    value: null,
+  });
+  expect(hintOf([woke], new Set(), label)).toBe("woke by bash1");
+  expect(hintOf([woke, woke, woke], new Set(), label)).toBe("x3  woke by bash1");
+  expect(hintOf([late], new Set(), label)).toBe("woke");
+  expect(hintOf([told], new Set(), label)).toBe("told");
 });
 
 test("a line too wide for its room folds its longest strings first, each to its start and a fold", () => {

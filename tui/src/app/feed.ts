@@ -349,13 +349,14 @@ export const feed = part({
         return made;
       };
       // What a step took and cost once it is done, and how long the line that waits has waited.
-      const took = (step: ActRow) =>
+      // The cost stands on the header of a block alone, so a word that joins the block above it shows its time and no cost.
+      const took = (step: ActRow, costs = true) =>
         step.kind !== "rung" || !step.done
           ? ""
           : [
               // A time under a millisecond is one that this life did not measure, as a step that it replayed.
               (w.took[step.id] ?? 0) < 1 ? "" : spell(w.took[step.id] ?? 0),
-              step.cost ? dollars(step.cost) : "",
+              costs && step.cost ? dollars(step.cost) : "",
             ]
               .filter(Boolean)
               .join(" ");
