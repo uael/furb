@@ -392,7 +392,12 @@ export class HostView extends EventEmitter {
     const following =
       journal &&
       setInterval(() => {
-        journal.readable(0, 0);
+        try {
+          journal.readable(0, 0);
+        } catch {
+          // A journal that cannot be read says so in its view of the changes, and its count stays.
+          return;
+        }
         if (journal.length !== this.changes) this.heard();
       }, FOLLOW).unref();
     this.unheard = () => {
