@@ -125,9 +125,13 @@ test("a revert of a hunk writes its old lines back through the World, and refuse
     expect(change.hunks.length).toBe(2);
     const [first, second] = change.hunks;
     if (!first || !second) throw new Error("No hunks.");
+    const count = session.host.changes;
     await session.revert(change, first);
     expect(await readFile(path, "utf8")).toBe("a\nb\nc\nd\ne\nf\ng\nh\ni\nJ\n");
-    // The revert is a write of the operator, so the record keeps it and the review shows what is left.
+    // The revert is a write of the operator, so the record keeps it once the journal holds it, and the review shows
+    // what is left.
+    await until(session.host, () => session.host.changes > count);
+    await session.refresh();
     expect(session.changes.map((one) => one.hunks.length)).toEqual([1]);
     await writeFile(path, "moved\n");
     expect(session.revert(change, second)).rejects.toThrow("changed since the review");
