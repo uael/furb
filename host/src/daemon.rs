@@ -583,10 +583,11 @@ impl Lives {
           Some(turn) => parsed(&turn.to_string()).map_err(|fault| fault.to_string()),
           None => Err(why.unwrap_or_else(|| "the window gave no turn".to_owned())),
         };
-        one.answered(ask, turn).map(|()| Answer::Done)
+        one.answered(outbox, ask, turn).map(|()| Answer::Done)
       }),
       Verb::Wrote { life, ask, text, thinking } => {
-        self.answerer(&life).and_then(|one| one.wrote(ask, &text, &thinking).map(|()| Answer::Done))
+        let wrote = |one: &Answerer| one.wrote(outbox, ask, &text, &thinking);
+        self.answerer(&life).and_then(wrote).map(|()| Answer::Done)
       }
       Verb::ViewMount(mount) => self.mount(mount, &peer, outbox),
       Verb::ViewEvent(event) => self.views.event(event, outbox).map(|()| Answer::Done),

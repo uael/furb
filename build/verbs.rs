@@ -653,7 +653,7 @@ pub(crate) fn pythonic(verbs: &[Verb]) -> String {
       })
       .collect();
     let (answer, made) = match verb.answer {
-      Answer::Act(_) => ("PyAct", "PyAct::of(slf, got)?"),
+      Answer::Act(_) => ("PyAct", "PyAct::of(slf, &got)?"),
       _ => ("Value", "Value(got)"),
     };
     out!(out, "  /// {}", verb.doc);

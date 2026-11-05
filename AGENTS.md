@@ -56,7 +56,9 @@ API of its own:
 - The Kernel is `src/furb/kernel.py`, one module that the sandbox loads and the python package imports, each on the
   names of its engine. The gate, `src/gate.rs`, is the type checker of monty. It reads a word on the sheet of the
   engine, `src/furb/sheet.py`, against the typeshed of the sandbox, and it runs each import of the word in a sandbox
-  of its own, which alone says which module runs. The gate of the python package reads through it too.
+  of its own, which alone says which module runs. The gate of the python package reads through it too. The key `gate`
+  of a config set to false turns it off for a life, whose ear then answers each word with no finding, as
+  `docs/config.md` says.
 - `src/binding.rs` holds the host API that both doors give, each function once: the ears of the crate, the store, the
   opening of a life, the catalog, the extensions, the images and the gate. A door holds only how a value of its
   language crosses, its `Engine` and its `Act`, and the loop that drives them. The `Engine` of each door has the same

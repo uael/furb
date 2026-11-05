@@ -13,39 +13,30 @@ use furb_host::{
   transport::{Local, LocalApi, Tailscale},
   upgrade,
 };
-use tokio::runtime;
+
+use crate::error::CliError;
 
 /// The daemon of this machine, served until a daemon of a new build takes its place, or, with
 /// `upgrading`, served in the place of the daemon that runs, where a life with no holder lives
 /// for `grace`. It says where it listens once it listens, so a program that starts it knows when
 /// to dial it.
-#[expect(
-  clippy::disallowed_methods,
-  reason = "the program blocks on the runtime of the daemon, which is all that it runs"
-)]
-pub(crate) fn serve(grace: Duration, upgrading: bool) -> Result<(), String> {
-  let cache =
-    world::cache().ok_or("this machine has no cache of furb, so the daemon has no place")?;
+pub(crate) async fn serve(grace: Duration, upgrading: bool) -> Result<(), CliError> {
+  let cache = world::cache().ok_or(CliError::NoCache)?;
   let folder = cache.join("host");
   let door = Some(folder.join(DOOR));
   let host = Some(folder.clone());
   let path = Places::here().config.join("host.json");
-  let config = Config::load(&path).map_err(|no| no.to_string())?;
+  let config = Config::load(&path)?;
   let stall = config.stall.map_or(STALL, Duration::from_secs);
   let tailnet = tailnet(&path, config)?;
   let settings = Settings { opening: Opening::default(), grace, stall, tailnet, door, host };
   let local = Local::new(&folder);
-  let runtime = runtime::Builder::new_multi_thread().enable_all().build();
-  let runtime = runtime.map_err(|no| format!("the daemon has no runtime: {no}"))?;
-  let served: Result<(), DaemonError> = runtime.block_on(async {
-    if upgrading {
-      return upgrade(&local, settings).await;
-    }
-    let listener = local.listen().await?;
-    println!("furb host listens in {}", folder.display());
-    run(&local, listener, settings).await
-  });
-  served.map_err(|no| no.to_string())
+  if upgrading {
+    return Ok(upgrade(&local, settings).await?);
+  }
+  let listener = local.listen().await.map_err(DaemonError::from)?;
+  println!("furb host listens in {}", folder.display());
+  Ok(run(&local, listener, settings).await?)
 }
 
 /// The file of the folder of the daemon that holds the address of its door of the windows, with
@@ -53,11 +44,9 @@ pub(crate) fn serve(grace: Duration, upgrading: bool) -> Result<(), String> {
 const DOOR: &str = "window.json";
 
 /// The daemon on the tailnet, when the settings of `host.json` at a path turn it on.
-fn tailnet(path: &Path, config: Config) -> Result<Option<Tailnet>, String> {
+fn tailnet(path: &Path, config: Config) -> Result<Option<Tailnet>, CliError> {
   let Config { tailnet, roles, .. } = config;
   let Some(ports) = tailnet else { return Ok(None) };
-  let api = LocalApi::find().ok_or_else(|| {
-    format!("{} turns on the tailnet, and no Tailscale runs on this machine", path.display())
-  })?;
+  let Some(api) = LocalApi::find() else { return Err(CliError::NoTailscale(path.to_path_buf())) };
   Ok(Some(Tailnet { identity: Tailscale::new(api, roles), ports }))
 }

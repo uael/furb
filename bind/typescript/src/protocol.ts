@@ -536,6 +536,11 @@ export type ProtocolError =
     }
   | {
       life: string;
+      ask: number;
+      error: "foreign";
+    }
+  | {
+      life: string;
       error: "answerless";
     }
   | {

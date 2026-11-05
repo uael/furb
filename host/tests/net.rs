@@ -309,7 +309,10 @@ mod net {
     let url = said["url"].as_str().unwrap().to_owned();
     let (base, token) = url.split_once("?token=").unwrap();
     let addr = base.trim_start_matches("ws://").trim_end_matches('/').to_owned();
-    for refused in [base.to_owned(), format!("{base}?token=0{}", &token[1..])] {
+    for refused in [
+      base.to_owned(),
+      format!("{base}?token={}{}", if token.starts_with('0') { '1' } else { '0' }, &token[1..]),
+    ] {
       let stream = tokio::net::TcpStream::connect(&addr).await.unwrap();
       let no = client_async(refused.as_str(), stream).await.unwrap_err();
       assert!(no.to_string().contains("403"), "{refused}: {no}");

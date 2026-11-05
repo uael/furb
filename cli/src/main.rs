@@ -7,18 +7,8 @@
 //! actor and of the models that `--roster` names, or of every model that the
 //! catalog of the crate offers when `--roster` names none.
 
-#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
-#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
-#![expect(
-  clippy::needless_pass_by_value,
-  reason = "debt: an argument taken by value and only borrowed"
-)]
-#![expect(
-  clippy::single_match_else,
-  reason = "debt: a match of one arm and else, where if let serves"
-)]
-
 mod console;
+mod error;
 mod host;
 mod life;
 mod tui;
@@ -33,8 +23,9 @@ use std::{
 use clap::{Args, Parser, Subcommand};
 use furb::{life::Opening, value::entry, verbs, world};
 use furb_host::GRACE;
+use tokio::runtime;
 
-use crate::life::Life;
+use crate::{error::CliError, life::Life};
 
 /// What the command line takes, whose help says the description of the package.
 #[derive(Parser)]
@@ -72,7 +63,7 @@ struct Place {
 #[derive(Args, Default)]
 struct Stand {
   /// The actor a prompt goes to when it names none, as provider:model/effort; when unsaid, a model of the claude
-  /// command line, then of the network, then of the local server that FURB_LOCAL_URL names.
+  /// command line, then of the network, then of the local server that `FURB_LOCAL_URL` names.
   #[arg(long)]
   model: Option<String>,
   /// A model the life offers beside the model of that actor, as provider:model; say it again for each model. When
@@ -172,12 +163,12 @@ enum Command {
 }
 
 /// A grace in seconds, which is a duration.
-fn grace(given: &str) -> Result<f64, String> {
+fn grace(given: &str) -> Result<f64, CliError> {
   let seconds: f64 =
-    given.parse().map_err(|no| format!("{given} is no number of seconds: {no}"))?;
+    given.parse().map_err(|source| CliError::Seconds { given: given.to_owned(), source })?;
   Duration::try_from_secs_f64(seconds)
     .map(|_| seconds)
-    .map_err(|no| format!("{given} s is no grace: {no}"))
+    .map_err(|source| CliError::Grace { given: given.to_owned(), source })
 }
 
 /// What `furb host` does beside serving.
@@ -209,33 +200,7 @@ impl Stand {
 fn main() -> ExitCode {
   let furb = Furb::parse();
   world::catalog::keep_fresh();
-  let done = match furb.command {
-    Some(Command::Prompt { message, to, shape, place, mut stand }) => {
-      // The actor of the prompt is one the life offers, which a roster that names models must name too.
-      if !stand.roster.is_empty() {
-        stand.roster.extend(life::actor(&to).1);
-      }
-      prompt(stand.on(place.opening(true)), &shape, message, to)
-    }
-    Some(Command::Turns { record, cwd, stand }) => {
-      let place = Place { record: Some(record), cwd };
-      turns(stand.on(Opening { inspecting: Some(true), ..place.opening(false) }))
-    }
-    Some(Command::Facts { record, act, chain }) => facts(&record, act.as_deref(), chain.as_deref()),
-    Some(Command::Run { word, place, stand }) => run(stand.on(place.opening(true)), word),
-    Some(Command::Extensions { place }) => extensions(place.opening(false)),
-    Some(Command::Catalog { update }) => catalog(update),
-    Some(Command::Host { grace, then }) => {
-      host::serve(Duration::from_secs_f64(grace), matches!(then, Some(Hosting::Upgrade)))
-    }
-    Some(Command::Checkpoint { record, cwd }) => {
-      checkpoint(Place { record: Some(record.clone()), cwd }.opening(false), &record)
-    }
-    None => {
-      tui::launch(furb.demo, &furb.place, &furb.stand, &furb.more).map(|never| match never {})
-    }
-  };
-  match done {
+  match commanded(furb) {
     Ok(()) => ExitCode::SUCCESS,
     Err(why) => {
       eprintln!("furb: {why}");
@@ -244,9 +209,59 @@ fn main() -> ExitCode {
   }
 }
 
+/// The command, run on the one runtime of the program. The runtime stops with the command and
+/// waits for no read of stdin that the console left.
+#[expect(
+  clippy::disallowed_methods,
+  reason = "the program blocks on the runtime of its command, which is all that it runs"
+)]
+fn commanded(furb: Furb) -> Result<(), CliError> {
+  let runtime =
+    runtime::Builder::new_multi_thread().enable_all().build().map_err(CliError::Runtime)?;
+  let done = runtime.block_on(command(furb));
+  runtime.shutdown_background();
+  done
+}
+
+/// The command that the operator gave, or the TUI when he gave none.
+async fn command(furb: Furb) -> Result<(), CliError> {
+  match furb.command {
+    Some(Command::Prompt { message, to, shape, place, mut stand }) => {
+      // The actor of the prompt is one the life offers, which a roster that names models must
+      // name too.
+      if !stand.roster.is_empty() {
+        stand.roster.extend(life::actor(&to).await.model);
+      }
+      prompt(stand.on(place.opening(true)), &shape, message, &to).await
+    }
+    Some(Command::Turns { record, cwd, stand }) => {
+      let place = Place { record: Some(record), cwd };
+      turns(stand.on(Opening { inspecting: Some(true), ..place.opening(false) })).await
+    }
+    Some(Command::Facts { record, act, chain }) => facts(&record, act.as_deref(), chain.as_deref()),
+    Some(Command::Run { word, place, stand }) => run(stand.on(place.opening(true)), word).await,
+    Some(Command::Extensions { place }) => extensions(place.opening(false)).await,
+    Some(Command::Catalog { update }) => catalog(update).await,
+    Some(Command::Host { grace, then }) => {
+      host::serve(Duration::from_secs_f64(grace), matches!(then, Some(Hosting::Upgrade))).await
+    }
+    Some(Command::Checkpoint { record, cwd }) => {
+      checkpoint(Place { record: Some(record.clone()), cwd }.opening(false), &record).await
+    }
+    None => {
+      tui::launch(furb.demo, &furb.place, &furb.stand, &furb.more).await.map(|never| match never {})
+    }
+  }
+}
+
 /// Where the models of this machine came from, after an update when the operator asks for one.
-fn catalog(update: bool) -> Result<(), String> {
-  let status = if update { world::catalog::updated() } else { world::catalog::status() };
+async fn catalog(update: bool) -> Result<(), CliError> {
+  let status = if update {
+    // The update waits for the network on a thread that may block.
+    tokio::task::spawn_blocking(world::catalog::updated).await.map_err(CliError::Updating)?
+  } else {
+    world::catalog::status()
+  };
   let mut failed = false;
   for (name, one) in [("models.dev", &status.models_dev), ("pi-ai", &status.pi_ai)] {
     let (version, fetched) =
@@ -257,11 +272,7 @@ fn catalog(update: bool) -> Result<(), String> {
       failed = true;
     }
   }
-  if update && failed {
-    Err("the update failed for a source, and the last valid catalog stays".to_owned())
-  } else {
-    Ok(())
-  }
+  if update && failed { Err(CliError::Update) } else { Ok(()) }
 }
 
 /// A prompt of the operator on the root of a life, awaited for the shape it asks for, and what it came to, as python
@@ -270,34 +281,25 @@ fn catalog(update: bool) -> Result<(), String> {
 /// A prompt the record already holds is taken up and never asked twice, so a command said again on a kept record
 /// reads the answer of the life before it and asks no model for it. A prompt it holds that is not done goes on, since
 /// the command wakes it, and a wake of a prompt that is done says nothing.
-fn prompt(opening: Opening, shape: &str, message: String, to: String) -> Result<(), String> {
-  let mut life = Life::lived(opening)?;
-  let to = life::actor(&to).0;
-  let id = match life.again(shape, &message, &to) {
-    Some(id) => {
-      life.engine.wake(&id).map_err(|no| no.to_string())?;
-      id
-    }
-    None => {
-      let with =
-        verbs::Prompt { message: Some(message), to: Some(to), on: Some(life.root.clone()) };
-      life
-        .engine
-        .prompt(furb::world::Shape::object(shape), with)
-        .map_err(|no| no.to_string())?
-        .id()
-        .to_owned()
-    }
+async fn prompt(opening: Opening, shape: &str, message: String, to: &str) -> Result<(), CliError> {
+  let mut life = Life::lived(opening).await?;
+  let to = life::actor(to).await.name;
+  let id = if let Some(id) = life.again(shape, &message, &to) {
+    life.engine.wake(&id)?;
+    id
+  } else {
+    let with = verbs::Prompt { message: Some(message), to: Some(to), on: Some(life.root.clone()) };
+    life.engine.prompt(world::Shape::object(shape), with)?.id().to_owned()
   };
-  println!("{}", life.settled(&id)?.py_repr());
+  println!("{}", life.settled(&id).await?.py_repr());
   Ok(())
 }
 
 /// The turns of the root of a life made again from its record, each as the python a model reads of it.
-fn turns(opening: Opening) -> Result<(), String> {
-  let mut life = Life::lived(opening)?;
+async fn turns(opening: Opening) -> Result<(), CliError> {
+  let mut life = Life::lived(opening).await?;
   let on = Some(life.root.clone());
-  for turn in life.engine.turns(verbs::Turns { on }).map_err(|no| no.to_string())? {
+  for turn in life.engine.turns(verbs::Turns { on })? {
     let text =
       |at: usize| entry(&turn.as_ref(), at).and_then(|one| one.as_str()).unwrap_or_default();
     println!("[{}] {}", text(0), text(1));
@@ -307,12 +309,12 @@ fn turns(opening: Opening) -> Result<(), String> {
 
 /// Each fact of a record after the number of its line, as python shows it: those about an act, those on a chain, or
 /// all of them. A fact is on the chain of the act it is about, and a chain is on itself.
-fn facts(record: &Path, act: Option<&str>, chain: Option<&str>) -> Result<(), String> {
+fn facts(record: &Path, act: Option<&str>, chain: Option<&str>) -> Result<(), CliError> {
   if !record.is_file() {
-    return Err(format!("No record at {}.", record.display()));
+    return Err(CliError::NoRecord(record.to_owned()));
   }
   let mut scopes = HashMap::<String, String>::new();
-  for (at, kept) in furb::world::kept(record).map_err(|no| no.message())?.iter().enumerate() {
+  for (at, kept) in world::kept(record).map_err(CliError::Unread)?.iter().enumerate() {
     let Some(fact) = entry(&kept.as_ref(), 0) else { continue };
     let word = |n: usize| {
       entry(&fact, n).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default()
@@ -332,28 +334,26 @@ fn facts(record: &Path, act: Option<&str>, chain: Option<&str>) -> Result<(), St
 }
 
 /// One word its caller wrote, run as a rung on the root of a life, awaited for what the word gave, as python shows it.
-fn run(opening: Opening, word: String) -> Result<(), String> {
-  let mut life = Life::lived(opening)?;
+async fn run(opening: Opening, word: String) -> Result<(), CliError> {
+  let mut life = Life::lived(opening).await?;
   let with = verbs::Rung { word: Some(word), on: Some(life.root.clone()), ..Default::default() };
-  let id = life.engine.rung(with).map_err(|no| no.to_string())?.id().to_owned();
-  println!("{}", life.settled(&id)?.py_repr());
+  let id = life.engine.rung(with)?.id().to_owned();
+  println!("{}", life.settled(&id).await?.py_repr());
   Ok(())
 }
 
 /// The checkpoint of the life of a record, made in a life that only inspects it and kept at its tip.
-fn checkpoint(opening: Opening, record: &Path) -> Result<(), String> {
-  let failed = |no: furb::Fault| no.to_string();
-  let (mut engine, _) =
-    Opening { inspecting: Some(true), ..opening }.boot::<String>([]).map_err(failed)?;
-  let written = furb::checkpoint::written(&mut engine).map_err(failed)?;
+async fn checkpoint(opening: Opening, record: &Path) -> Result<(), CliError> {
+  let (mut engine, _) = Opening { inspecting: Some(true), ..opening }.open::<String>([]).await?;
+  let written = furb::checkpoint::written(&mut engine)?;
   drop(engine);
-  furb::checkpoint::keep(record, written).map_err(failed)
+  Ok(furb::checkpoint::keep(record, written)?)
 }
 
 /// Each extension that a life on the record runs, as its name and its life word, or its name alone when it has none,
 /// one on each line.
-fn extensions(opening: Opening) -> Result<(), String> {
-  let mut life = Life::lived(opening)?;
+async fn extensions(opening: Opening) -> Result<(), CliError> {
+  let mut life = Life::lived(opening).await?;
   for one in life.extensions()? {
     match one.life.as_str() {
       "" => println!("{}", one.name),

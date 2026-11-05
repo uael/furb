@@ -1651,10 +1651,11 @@ export class Session extends EventEmitter {
   }
   /** The files given back as a rewind found them, by a rung of the operator on a chain, so that the record holds each
    * write and the chain reads it. A write puts back the text of a file, and a command removes a file that a write
-   * made. */
+   * made. A file whose text before the write could not be read stays as it stands. */
   async restoreFiles({ files }: Restore, on = this.selected): Promise<void> {
-    if (!files.length) return;
-    const word = files
+    const kept = files.filter((change) => !change.unread);
+    if (!kept.length) return;
+    const word = kept
       .map((change) =>
         change.made
           ? `await bash(${JSON.stringify(`rm -f -- ${quoted(change.path)}`)})`
@@ -1674,15 +1675,20 @@ export class Session extends EventEmitter {
   }
   /** What a restore of the files did, in words, with the changes that it could not undo. */
   restored({ files, commands }: Restore): string {
+    const back = files.filter((change) => !change.unread).length;
+    const unread = files.length - back;
     const count = !files.length
       ? "No file changed after that point."
-      : files.length === 1
+      : back === 1
         ? "1 file is back as it was."
-        : `${files.length} files are back as they were.`;
+        : `${back} files are back as they were.`;
+    const kept = unread
+      ? ` ${unread} ${unread === 1 ? "file stays" : "files stay"} as ${unread === 1 ? "it stands" : "they stand"}: the text before the write could not be read.`
+      : "";
     const stays = commands
       ? ` ${commands} ${commands === 1 ? "command" : "commands"} ran after that point, and a change that a command made is not restored.`
       : "";
-    return `${count}${stays}`;
+    return `${count}${kept}${stays}`;
   }
   /** The files of the selected chain given back as they stood at an act, with no branch. */
   async restoreAt(id: string, files?: Restore): Promise<void> {

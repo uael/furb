@@ -1617,3 +1617,87 @@ fn a_life_reads_the_classes_of_the_config_directory_that_it_opens_on_and_none_of
   assert!(standing.starts_with("[[['claude-cli:opus', ["), "{standing}");
   assert!(standing.contains("1000000, 'cheap']"), "{standing}");
 }
+
+/// A word that the gate refuses, since it gives a str to a name of type int, and that runs to its
+/// close.
+const MISTYPED: &str = "x: int = 'one'\nclose(x)";
+
+/// What a word that a rung runs on the root closes with, or why it was refused.
+fn rung(engine: &mut Engine, word: &str) -> Result<Object, crate::Fault> {
+  let word = Some(word.to_owned());
+  let rung =
+    engine.rung(verbs::Rung { word, on: Some("chain1".to_owned()), ..Default::default() })?;
+  futures::executor::block_on(rung)
+}
+
+/// Each fact of the root, as python shows it.
+fn facts(engine: &mut Engine) -> Vec<String> {
+  let root =
+    engine.transcript(verbs::Transcript { on: Some("chain1".to_owned()), of: None }).unwrap();
+  root.iter().map(|one| one.0.as_ref().py_repr()).collect()
+}
+
+#[test]
+fn a_config_that_turns_the_gate_off_runs_a_word_that_the_gate_refuses_and_its_replay_with_the_gate_on_holds_the_same_facts()
+ {
+  let on = place("gate-on");
+  let open = |at: &Path, keeps: bool| Opening {
+    extensions: Some(false),
+    snapshot: Some(false),
+    ..opening(at, keeps)
+  };
+  let (mut engine, _) = open(&on, false).boot::<String>([]).unwrap();
+  let refused = rung(&mut engine, MISTYPED).unwrap_err();
+  assert!(refused.to_string().contains("int"), "the gate on refuses the word: {refused}");
+  drop(engine);
+  let off = place("gate-off");
+  fs::create_dir_all(off.join(".furb")).unwrap();
+  fs::write(off.join(".furb/config.json"), r#"{"gate": false}"#).unwrap();
+  let (mut engine, _) = open(&off, true).boot::<String>([]).unwrap();
+  let ran = rung(&mut engine, MISTYPED).unwrap();
+  assert_eq!(ran.as_ref().as_str(), Some("one"), "the gate off lets the word run");
+  let lived = facts(&mut engine);
+  let gated = lived.iter().find(|one| one.starts_with("('gate', ") && one.contains("x: int"));
+  let gated = gated.expect("the record holds the gate of the word");
+  let name = gated.split('\'').nth(3).unwrap_or_default();
+  let answer = format!("('done', '{name}', 'gate', [])");
+  assert!(lived.contains(&answer), "the gate off answers the word with no finding: {gated}");
+  drop(engine);
+  // A config of the project that turns the gate on again: the replay gives the answer that the
+  // record holds.
+  fs::write(off.join(".furb/config.local.json"), r#"{"gate": true}"#).unwrap();
+  let (mut engine, _) = open(&off, false).boot::<String>([]).unwrap();
+  assert!(engine.raised().is_none(), "the replay does not drift: {:?}", engine.raised());
+  let replayed = facts(&mut engine);
+  let mut left = replayed;
+  let missing: Vec<_> = lived
+    .iter()
+    .filter(|one| match left.iter().position(|other| other == *one) {
+      Some(at) => {
+        left.remove(at);
+        false
+      }
+      None => true,
+    })
+    .map(|one| one.chars().take(300).collect::<String>())
+    .collect();
+  assert!(missing.is_empty(), "the replay holds each fact of the life: {missing:#?}");
+  assert_eq!(rung(&mut engine, "close(1)").unwrap().as_ref().as_int(), Some(1));
+  assert!(rung(&mut engine, MISTYPED).is_err(), "the gate on refuses the word again in this life");
+}
+
+#[test]
+fn the_gate_is_on_unless_the_last_config_that_names_it_says_false() {
+  let at = place("gate-configs");
+  let (user, furb) = (at.join("user"), at.join(".furb"));
+  fs::create_dir_all(&user).unwrap();
+  fs::create_dir_all(&furb).unwrap();
+  let gated = || crate::gate::configured(&user, &at);
+  assert!(gated(), "no config names the gate");
+  fs::write(user.join("config.json"), r#"{"gate": false}"#).unwrap();
+  assert!(!gated(), "the config of the user turns it off");
+  fs::write(furb.join("config.json"), r#"{"gate": "no"}"#).unwrap();
+  assert!(!gated(), "a value that is no bool is as unsaid");
+  fs::write(furb.join("config.local.json"), r#"{"gate": true}"#).unwrap();
+  assert!(gated(), "the local config of the project wins");
+}

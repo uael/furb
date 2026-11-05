@@ -135,8 +135,11 @@ it is not given. The daemon answers requests in any order.
 - An `open` with `answers` makes its peer answer the models of the life in their place, as a demo or a test does. The
   daemon pushes each request of a model to that peer as a frame `ask`, with the `life`, the number `ask` and the
   `request`: its `actor`, `chain`, `messages` and `settings`. The peer tells what it writes with `wrote`, and gives the
-  turn, written as the record writes a value, or `why` it gives none, with `answered`. A request fails once its peer
-  is gone.
+  turn, written as the record writes a value, or `why` it gives none, with `answered`. That peer alone speaks for each
+  request of the life, by its connection, for the whole life: the daemon refuses a `wrote` or an `answered` of any
+  other peer with `foreign`, and the request still waits for its peer. A later `open` with `answers` moves nothing. A
+  request ends at its turn, when the life drops it, or when the connection of its peer ends, and fails in the last
+  case. A `wrote` or an `answered` after its end is refused with `unasked`.
 - An `open` with `attach` attaches its peer in the same step, from that place in the log, as `attach` does. The life
   then has a holder before its grace can pass, even a grace of none.
 - `queue` puts a follow-up of the operator in the queue of a chain, under an `entry` that the window chooses, and a
@@ -171,8 +174,11 @@ once it listens. A second daemon refuses to start there.
   not given. Each life opens on a thread of its own, so the daemon answers each verb while a life opens, and a fault
   of one life ends that life alone. Each verb of a life refuses with `closed` when no life lives on its record.
 - Each life keeps the journal of the changes of its files beside its record, as `<record>.changes.jsonl`: one line
-  for each write of a file, with its `path`, the text `before` and `after` it, its `act`, and `made` when the write
-  made the file. A window reads it to show and to undo what each write changed.
+  for each write of a file, with its `path`, the text `before` and `after` it, its `act`, `made` when the write
+  made the file, and `unread` with why when the file could not be read as text, whose `before` is then empty and
+  no undo puts back. A window reads it to show and to undo what each write changed. One journal serves each birth
+  of the life, in the order of the writes, and the life ends, and replies to its end, only once the disk holds each
+  change; a fault of the disk is told at once as a notice, and the end of the life says what the journal lost.
 - A holder keeps a life: each window that attached it, and each pin, by the name of its holder. Work that runs holds
   nothing. A life with no holder for the grace of the daemon, 30 seconds unless `furb host --grace <seconds>` says
   otherwise, writes its checkpoint and ends, and `list` gives it as not `open` from then on. An `open` of a life
