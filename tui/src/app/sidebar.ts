@@ -255,26 +255,27 @@ export const sidebar = part({
     });
     row.add(surface);
     this.pin.add(row);
-    const sender: Part[] = user
-      ? [["You  ", threadTone(id)]]
-      : head.sent
-        ? [[`${head.sent}  `, c.faint]]
-        : [];
     const toggle = this.threadToggle(id);
     const state = head.state.length
       ? this.text(head.state, c.faint, { marginLeft: space.between })
       : undefined;
-    // The title is cut at its end, as the feed cuts the title of a row, in the room that the line leaves it: the
-    // columns of the line, of the bar and the insets, and of the sender, the state and the toggle.
-    const room =
+    // The sender and the title share the room that the line leaves them: the columns of the line, less the bar and the
+    // insets, the state and the toggle. The title takes its room first, up to 20 columns, so the pin always says which
+    // thread it is. The sender takes what remains, with two columns after it, and goes when fewer than 6 remain. Each
+    // is cut at its end, as the feed cuts the title of a row.
+    const shared =
       this.feedWidth -
       card.indent -
       space.inset * 2 -
       space.between -
-      Bun.stringWidth(plain(sender)) -
       (state ? space.between + Bun.stringWidth(plain(head.state)) : 0) -
       space.between -
       Bun.stringWidth(toggle.plainText);
+    const said = user ? "You" : head.sent;
+    const left = shared - Math.min(Bun.stringWidth(thread.title), 20) - 2;
+    const sender: Part[] =
+      said && left >= 6 ? [[`${clip(said, left)}  `, user ? threadTone(id) : c.faint]] : [];
+    const room = shared - Bun.stringWidth(plain(sender));
     const line = this.row();
     line.add(
       this.text([...sender, [clip(thread.title, Math.max(1, room)), c.text, bold]], c.text, {
