@@ -5,8 +5,6 @@
 //! furb becomes the TUI, so the TUI holds the terminal and its signals alone. On Windows, which has no such call,
 //! furb waits for the TUI and ends with its code.
 
-#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
-
 use std::{
   convert::Infallible,
   env,
@@ -17,21 +15,17 @@ use std::{
 
 use furb::world;
 
-use crate::{Place, Stand, life};
-
-/// How to get a TUI when none is found.
-const NONE: &str = "no TUI is found: set FURB_TUI to the program of the furb TUI, put furb-tui on PATH, or run furb \
-                    from a checkout of furb after `bun install && bun run build`";
+use crate::{Place, Stand, error::CliError, life};
 
 /// The TUI, run with the words it takes, in the place of furb: on the demo session, on the record and in the
 /// directory furb is given, on the default actor and the roster furb is given, and with the words after `--`. The
 /// TUI takes the model and the effort of the actor apart.
-pub fn launch(
+pub(crate) async fn launch(
   demo: bool,
   place: &Place,
   stand: &Stand,
   more: &[String],
-) -> Result<Infallible, String> {
+) -> Result<Infallible, CliError> {
   let path = env::var_os("PATH").unwrap_or_default();
   let mut words = found(env::var_os("FURB_TUI"), &path, &checkout())?;
   if demo {
@@ -44,10 +38,10 @@ pub fn launch(
     words.extend(["--cwd".into(), cwd.into()]);
   }
   if let Some(to) = &stand.model {
-    let (actor, model) = life::actor(to);
-    let model = model.unwrap_or_else(|| actor.clone());
+    let actor = life::actor(to).await;
+    let model = actor.model.unwrap_or_else(|| actor.name.clone());
     words.extend(["--model".into(), model.as_str().into()]);
-    if let Some(effort) = actor.strip_prefix(&format!("{model}/")) {
+    if let Some(effort) = actor.name.strip_prefix(&format!("{model}/")) {
       words.extend(["--effort".into(), effort.into()]);
     }
   }
@@ -57,7 +51,7 @@ pub fn launch(
   words.extend(more.iter().map(OsString::from));
   let mut command = Command::new(&words[0]);
   command.args(&words[1..]);
-  handed(command).map_err(|no| format!("{} did not start: {no}", words[0].display()))
+  handed(command).map_err(|source| CliError::Started { program: PathBuf::from(&words[0]), source })
 }
 
 /// The checkout this furb was built from: the root of the repository, above the crate of the command line.
@@ -68,7 +62,11 @@ fn checkout() -> PathBuf {
 
 /// The words that run the TUI, or why none runs: the program a name gives, the `furb-tui` on a PATH, or bun on that
 /// PATH with the TUI of a checkout that is built.
-fn found(named: Option<OsString>, path: &OsStr, checkout: &Path) -> Result<Vec<OsString>, String> {
+fn found(
+  named: Option<OsString>,
+  path: &OsStr,
+  checkout: &Path,
+) -> Result<Vec<OsString>, CliError> {
   if let Some(named) = named.filter(|one| !one.is_empty()) {
     return Ok(vec![named]);
   }
@@ -77,16 +75,13 @@ fn found(named: Option<OsString>, path: &OsStr, checkout: &Path) -> Result<Vec<O
   }
   let cli = checkout.join("tui/src/cli.ts");
   if !cli.is_file() {
-    return Err(NONE.to_owned());
+    return Err(CliError::NoTui);
   }
-  let at = checkout.display();
   let Some(bun) = world::program("bun", env::split_paths(path)) else {
-    return Err(format!(
-      "the TUI of {at} runs on bun 1.4.2 or later, and no bun is on PATH: see https://bun.sh"
-    ));
+    return Err(CliError::NoBun(checkout.to_owned()));
   };
   if !checkout.join("bind/typescript/dist").is_dir() {
-    return Err(format!("the TUI of {at} is not built: run `bun install && bun run build` there"));
+    return Err(CliError::Unbuilt(checkout.to_owned()));
   }
   Ok(vec![bun.into(), "run".into(), cli.into()])
 }

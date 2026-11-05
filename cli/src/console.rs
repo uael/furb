@@ -4,13 +4,6 @@
 //! There is one terminal and one operator, so the prompts are shown and answered one at a time, in the order they
 //! asked, and never two at once on one stream. Stdout is left to what the command prints.
 
-#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-
 use std::{
   collections::VecDeque,
   io::{self, Write},
@@ -32,7 +25,7 @@ type Input = Lines<BufReader<Stdin>>;
 /// the operator writes back, or with why no line came. A notice, which the console closed as it took it, is shown in
 /// its turn as one line, and reads no line. A prompt that is done before its line comes, by a cancel, is
 /// shown no more: a line the operator wrote before that goes nowhere, and the next line goes to the next prompt.
-pub fn terminal() -> Box<dyn Ear> {
+pub(crate) fn terminal() -> Box<dyn Ear> {
   hearing(&["prompt"], |mut co: Co<Read>| async move {
     // The lines of stdin, while no read holds them.
     let mut lines = Some(BufReader::new(tokio::io::stdin()).lines());
@@ -50,7 +43,11 @@ pub fn terminal() -> Box<dyn Ear> {
         }
         let Some(held) = lines.take() else { continue };
         eprint!("{} wants a {}: {}\n> ", next.about, next.shape, next.message);
-        let _ = io::stderr().flush();
+        if let Err(no) = io::stderr().flush() {
+          // The prompt shows when stderr takes it, or not at all: the read waits for its line
+          // either way.
+          eprintln!("furb: {} may not show: {no}", next.about);
+        }
         let (stop, stopped) = oneshot::channel();
         co.work(read(held, stopped));
         shown = Some((next, stop));
@@ -75,7 +72,12 @@ pub fn terminal() -> Box<dyn Ear> {
             Err(no) => Err(Fault::refused(format!("the operator cannot be read: {no}"))),
           };
           let value = value.unwrap_or_else(|no| no.object());
-          let _ = co.call("close", vec![value], vec![("id", Object::string(&about))]).await;
+          let id = vec![("id", Object::string(&about))];
+          if let Err(no) = co.call("close", vec![value], id).await {
+            // The prompt went first, as by a cancel, or the engine refused the line: the
+            // operator reads why, and the console goes on to the next prompt.
+            eprintln!("{about} takes no line: {no}");
+          }
         }
       }
     }
