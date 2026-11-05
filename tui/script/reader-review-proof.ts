@@ -61,7 +61,9 @@ try {
           "\n",
       );
       const text = await readFile(record, "utf8");
-      const made = /\["made","chain1","store","[0-9a-f]{64}",\d+(?:,[^\]]*)?\]/.exec(text)?.[0];
+      const made = /\["made","chain1","store","[0-9a-f]{64}",\d+(?:,(?:"(?:[^"\\]|\\.)*"|[^\]",]+))*\]/.exec(
+        text,
+      )?.[0];
       if (!made) throw new Error("The fixture names no engine.");
       await writeFile(
         record,
