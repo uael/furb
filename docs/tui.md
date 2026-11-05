@@ -732,12 +732,6 @@ the last rule. The row of a chain in the sidebar says how many times it compacte
 
 ![The compactions of a chain](screenshots/75-compaction.png)
 
-An older compaction went on in a new chain with the work that its source still needed. No compaction does that now,
-and a record that holds one shows its chain as a chain of its own, with one note at its start: it goes on from a
-compaction of an older form that is not joined.
-
-![A chain that an older compaction made](screenshots/75-compaction-chains.png)
-
 ## Undo and redo
 
 `/undo` removes the last message from a new branch, and `/redo` returns to the branch before it.
