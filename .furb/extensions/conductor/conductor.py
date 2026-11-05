@@ -40,12 +40,12 @@ Put each item in queue as a dict, in the order of the work, the hard work first:
 2. The files of an item are its areas, which you write, and a test file holds no item. An item with no areas holds no file. A conflict on a file that need not change alone gets a fixer, by E3 of #1084. Each item that waits on a PR or a file is one line of the next notice, with its cause, once.
 3. A worker runs on a chain thread/key, at model_of(item), and an edit or a fix in a workspace {repo}-wN of its own, never one whose furb-holder names the chain of a live worker, and never one that holds work off a branch: a dirty tree, or a commit that no remote holds while its branch is the head of no merged PR. The round skips such a workspace and tells you once. Each round keep_disk() keeps KEEP GB of the disk free: it deletes the target of the idle workspace whose last worker was hired first, never of one that a live worker holds, and tells you once when it cannot. Its brief starts with the asks of the owner that its item carries. Its brief sends each build of the worker through script/build-slot.sh, which holds the slots of builds that all the workers of the machine share and caps the jobs of cargo: the tool holds that rule, and the round only briefs it.
 4. A worker that ends gives its report whole in the next notice. A worker that ends with no PR is a decision, and its notice wakes you.
-5. A PR of the round is an open PR whose label w:key names an item that the round holds. A red or conflicting one counts as handled only while a worker that knows of its head acts: its live maker, which the round tells at once, once for each head and problem, to fix it before any other step, else a fixer that the round sent for that head, at most 2 for a head, then a notice. A head that such a worker has not moved in UNMOVED seconds is one notice, with the worker and its last act. handler() holds that rule for the sweep.
+5. A PR of the round is an open PR whose label w:key names an item that the round holds. A red or conflicting one counts as handled only while a worker that knows of its head acts: its live maker, which the round tells at once, once for each head and problem, to fix it before any other step, else a fixer that the round sent for that head, at most 2 for a head, then a notice. A fixer runs at the model of the fixer on a fork of the chain of the worker that made the PR, when the round holds that worker, so it starts with what that worker read and did. A head that such a worker has not moved in UNMOVED seconds is one notice, with the worker and its last act. handler() holds that rule for the sweep.
 6. While the newest run of the gates on main failed, the round sends no order and no fixer for a red PR, and tells you once. A red PR whose failed checks all fail on main too gets no fixer either, and the round says so in one line.
 7. A green PR merges by the auto-merge of GitHub, which the round turns on for each PR of the round, else by a plain merge, else by gh stack merge for a layer of a stack, behind a ruleset of main that requires the check GATE. With no such ruleset, the round turns on no auto-merge and tells you once. A draft, an open box of its checklist, or the label hold, hold:owner-review or owner-merge keeps a PR from the merge, and the label paused takes it out of the round.
 8. At ALIGN_EVERY merged PRs since the last audit of each target of AUDITS, the round queues the next free audit of that target, alignN or tuiN, of kind audit, on limits["models"]["astra"] when N is odd, else on the model of audit. alignN checks main against the words of the owner, and tuiN judges the TUI of main in a workspace of its own, as the skill converge-tui says. Each row of its register becomes an item, queued in the order of the register after the items of queue, unless the coordinator asks for the rows before the items that no worker holds yet.
 9. Each message of the owner that no ask of owner_asks names is one line, and so is each ask that is not done or a decision while no item in queue, at work or on an open PR of the round carries it. asked() gives the new lines in one notice, and no new notice while its last one stands open: no word of the owner drops between his message and main. A worker that ends with a line Left: <ids> queues one follow-up for each ask that no other item carries, and a follow-up that leaves it again is a decision.
-10. Each new comment of the owner on a PR of the round goes to the worker on it, else to a fixer, and the label hold comes on the PR until its worker pushes the fix and takes hold off.
+10. Each new comment of the owner on a PR of the round goes to the worker on it, else to a fixer on a fork of the chain of its maker, and the label hold comes on the PR until its worker pushes the fix and takes hold off.
 11. A fix of the round does not become its own item or PR: it waits in scratch://round/frozen.md, while the live module carries it, and the waiting fixes land together in one change.
 A step that fails is one notice, and the round goes on at the next round. The whole state lives in the module of your chain, so a word that a checkpoint cuts loses nothing: await conduct() again in a turn that shows.
 The round is an act on a chain of its own, so the end of each of its acts wakes nobody: you hear only its notices, and its done when it holds nothing. lead["round"] names it. close(None, lead["round"]) stops it, and each worker goes on, where a pause of it pauses each worker and a cancel ends them. await conduct() starts it again from any turn: the new round ends the beat of the round before it, which ends at its next step, and starts once that round is over, or after every seconds.
@@ -281,6 +281,11 @@ def working_at(name: str) -> str:
   return str(get(name)[3])
 
 
+def maker_chain(pr: dict) -> str:
+  made = [w for w in working if working[w]["key"] == maker_key(pr)][-1:]
+  return working_at(made[0]) if made else ""
+
+
 def home() -> str:
   return scope(get(acting())[2])
 
@@ -332,7 +337,7 @@ def hire(item: dict) -> Generator[set[str], object, str]:
   key, kind, thread = item["key"], item.get("kind", "edit"), item.get("thread", "")
   model = item["model"] = model_of(item)
   marks = f" --label w:{key}" + (f" --label thread:{thread}" if thread else "")
-  where = str(chain(f"{thread or 'w'}/{key}"))
+  where = str(chain(f"{thread or 'w'}/{key}", source=item.pop("source", "")))
   rung(f"actor = {model!r}", on=where)
   text = {"audit": AUDIT, "edit": WORKER, "fix": "{what}"}[kind].replace("{what}", item["brief"])
   if "{workspace}" in text:
@@ -530,7 +535,7 @@ def mend(pr: dict, problem: str) -> Generator[set[str], object, None]:
     return
   brief = FIX.replace("{n}", str(n)).replace("{problem}", problem).replace("{sha}", sha).replace("{head}", pr["head"])
   thread = next((m[7:] for m in pr["labels"] if m.startswith("thread:")), "")
-  who = yield from hire({"key": f"fix{n}", "brief": brief, "thread": thread, "kind": "fix"})
+  who = yield from hire({"key": f"fix{n}", "brief": brief, "thread": thread, "kind": "fix", "source": maker_chain(pr)})
   assigned[n] = {"sha": sha, "problem": problem, "who": who, "at": clock(), "fixer": True, "tries": tries + 1}
 
 
@@ -599,7 +604,7 @@ def review() -> Generator[set[str], object, None]:
       prompt(None, f"A new comment of the owner on your PR #{p[0]}. Do what it asks, answer it on GitHub with a reply that starts with 🤖, push the fix, and take the label hold off.\n{line}", on=working_at(own))
     elif not taken(f"fix{p[0]}"):
       answer = ANSWER.replace("{n}", p[0]).replace("{head}", pr["head"]).replace("{line}", line)
-      queue.insert(0, {"key": f"fix{p[0]}", "brief": answer, "thread": next((m[7:] for m in pr["labels"] if m.startswith("thread:")), ""), "kind": "fix"})
+      queue.insert(0, {"key": f"fix{p[0]}", "brief": answer, "thread": next((m[7:] for m in pr["labels"] if m.startswith("thread:")), ""), "kind": "fix", "source": maker_chain(pr)})
     if "hold:owner-review" not in pr["labels"]:
       held.add(pr["n"])
   if held:

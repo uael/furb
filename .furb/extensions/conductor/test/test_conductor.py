@@ -517,7 +517,7 @@ async def test_a_pr_of_a_live_maker_that_turns_conflicting_tells_the_maker_once_
 
 @POSIX
 @JQ
-async def test_a_red_pr_whose_told_maker_ends_goes_to_a_fixer_at_the_next_sweep(conductor: Round) -> None:
+async def test_a_red_pr_whose_told_maker_ends_goes_to_a_fixer_on_a_fork_of_the_chain_of_that_maker_at_the_next_sweep(conductor: Round) -> None:
   maker = await conductor.busy("a")
   conductor.github(raw(1, "a", checks=(("the gates", "FAILURE"),), labels=("thread:t",)))
   await conductor.step("sweep")
@@ -525,7 +525,7 @@ async def test_a_red_pr_whose_told_maker_ends_goes_to_a_fixer_at_the_next_sweep(
   await conductor.end(maker, (1, "pushed"))
   await conductor.step("sweep")
   assert conductor.hired() == ["fix1"]
-  assert conductor.engine.get(conductor.engine.get(conductor.ns["assigned"][1]["who"])[3])[4] == "t/fix1"
+  assert conductor.engine.get(conductor.engine.get(conductor.ns["assigned"][1]["who"])[3])[4:6] == ("t/fix1", conductor.engine.get(maker)[3])
   assert conductor.ns["assigned"][1]["fixer"] and conductor.ns["assigned"][1]["tries"] == 1
 
 
@@ -539,6 +539,8 @@ async def test_a_red_pr_with_no_live_maker_gets_at_most_two_fixers_for_a_head_th
     for name in await conductor.value("living()"):
       await conductor.end(name, (1, "no move"))
   assert conductor.hired() == ["fix1", "fix1"]
+  [maker] = [w for w, x in conductor.ns["working"].items() if x["key"] == "a"]
+  assert {conductor.engine.get(conductor.engine.get(w)[3])[5] for w, x in conductor.ns["working"].items() if x["key"] == "fix1"} == {conductor.engine.get(maker)[3]}
   assert "it conflicts with its base at sha1" in conductor.briefs()[0]
   assert conductor.notices() == ["#1 conflicts with its base at sha1, and 2 fixers ended at this head and did not move it, so the round sends no third one."]
 
