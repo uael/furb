@@ -21,8 +21,9 @@ mod protocol {
   use furb_host::{
     Host, Outbox, ProtocolError,
     protocol::{
-      Answer, Axis, BOUND, Dispose, Effect, Frame, Gesture, Hello, Kind, Mount, Node, PROTOCOL,
-      Peer, Request, Role, Run, Shape, Slot, Tone, Tree, Verb, ViewEffect, ViewEvent, schema,
+      Answer, Axis, BOUND, Config, Dispose, Effect, Frame, Gesture, Hello, Kind, Layer, Mount,
+      Node, PROTOCOL, Peer, Request, Role, Run, Shape, Slot, Tone, Tree, Verb, ViewEffect,
+      ViewEvent, schema,
     },
     serve,
     transport::{Dialer, Identity, Local, Who},
@@ -115,6 +116,16 @@ mod protocol {
       Verb::Names { life: life(), on: on() },
       Verb::Gate { life: life(), word: "1 + 1".to_owned(), on: on() },
       Verb::Stand { life: life() },
+      Verb::Config { life: life(), config: Config::Get },
+      Verb::Config {
+        life: life(),
+        config: Config::Set {
+          key: vec!["providers".to_owned(), "codex".to_owned()],
+          value: Some(json!(false)),
+          layer: Some(Layer::Local),
+        },
+      },
+      Verb::Config { life: life(), config: Config::Reload },
       Verb::Seen { life: life(), about: "chain1".to_owned() },
       Verb::Queue {
         life: life(),
@@ -125,6 +136,10 @@ mod protocol {
       },
       Verb::Unqueue { life: life(), entry: "q1".to_owned() },
       Verb::Queued { life: life(), on: on() },
+      Verb::Desk { life: life(), notices: vec![id()] },
+      Verb::Threads { life: life(), on: on(), at: Some(3) },
+      Verb::AsOf { life: life(), at: 3 },
+      Verb::Moments { life: life() },
       Verb::Answered {
         life: life(),
         ask: 1,
@@ -328,6 +343,8 @@ mod protocol {
       "read",
       "write",
       "stand",
+      "config",
+      "config",
       "seen",
       "queue",
       "unqueue",

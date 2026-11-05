@@ -1,15 +1,3 @@
-#![expect(
-  clippy::format_collect,
-  reason = "debt: a format! for each item, collected into a String"
-)]
-#![expect(
-  clippy::needless_pass_by_value,
-  reason = "debt: an argument taken by value and only borrowed"
-)]
-#![expect(clippy::redundant_clone, reason = "debt: a clone of a value that is not used again")]
-#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
-#![expect(clippy::uninlined_format_args, reason = "debt: a format argument that is not inline")]
-
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use monty_types::NamedValues;
@@ -67,7 +55,7 @@ fn found(program: &[&str], word: &str) -> Vec<String> {
 
 /// What each call sends, in order, when the word of a binding runs in the sandbox and the calls run after it.
 fn sent(word: &str, calls: &[String]) -> Vec<Value> {
-  let made: String = calls.iter().map(|one| format!("__got.append({one})\n")).collect();
+  let made: String = calls.iter().flat_map(|one| ["__got.append(", one.as_str(), ")\n"]).collect();
   let code = format!("{SENDS}{word}__got = []\n{made}json.dumps(__got)");
   let got = Sand::new()
     .run(&code, NamedValues::new(), &mut Nobody("a binding"))
@@ -170,7 +158,7 @@ fn tools(file: &Value) -> &[Value] {
 }
 
 /// The shape and the reasons of looseness of one required argument `x` of the schema, with `$defs` beside it.
-fn mapped(schema: Value, defs: Value) -> (String, Vec<String>) {
+fn mapped(schema: &Value, defs: &Value) -> (String, Vec<String>) {
   let input =
     json!({ "type": "object", "properties": { "x": schema }, "required": ["x"], "$defs": defs });
   let made = binding("s", &[json!({ "name": "t", "inputSchema": input })]);
@@ -227,7 +215,7 @@ fn each_type_of_json_schema_maps_to_its_type_of_python() {
   for (schema, python) in cases {
     let shown = schema.to_string();
     assert_eq!(
-      mapped(schema, json!({ "n": { "type": "integer" } })),
+      mapped(&schema, &json!({ "n": { "type": "integer" } })),
       (python.to_owned(), Vec::new()),
       "{shown}"
     );
@@ -255,7 +243,7 @@ fn a_part_that_python_cannot_say_maps_to_any_and_says_why() {
   ];
   for (schema, python, why) in cases {
     let defs = json!({ "t": { "type": "array", "items": { "$ref": "#/$defs/t" } } });
-    assert_eq!(mapped(schema, defs), (python.to_owned(), vec![why.to_owned()]));
+    assert_eq!(mapped(&schema, &defs), (python.to_owned(), vec![why.to_owned()]));
   }
 }
 
@@ -281,7 +269,7 @@ fn an_object_that_names_its_properties_is_a_dict_that_maps_its_tool_loosely() {
   let made = binding("s", &[json!({ "name": "t", "inputSchema": input })]);
   assert_eq!(made.functions[0].params[0].shape, Shape::Dict(Box::new(Shape::Any)));
   assert_eq!(
-    (made.exact, made.loose.clone()),
+    (made.exact, made.loose),
     (0, vec!["t: page: an object whose properties Python cannot type".to_owned()])
   );
 }
@@ -515,7 +503,7 @@ fn each_call_of_a_function_that_maps_its_tool_exactly_sends_what_its_schema_asks
         }
         if let Some(path) = &report {
           fs::create_dir_all(format!("{path}.words")).expect("the folder of the words stands");
-          let line = format!("{}\t{}\n", call, sends);
+          let line = format!("{call}\t{sends}\n");
           let file = format!("{path}.words/{server}.calls");
           let held = fs::read_to_string(&file).unwrap_or_default();
           fs::write(&file, held + &line).expect("the calls write");

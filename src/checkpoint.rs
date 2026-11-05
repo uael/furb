@@ -47,7 +47,7 @@ use std::{
 
 use crate::{
   Engine,
-  engine::{ROOT, callable},
+  engine::{OPERATOR, ROOT, callable},
   extension::definitions,
   fact::Fact,
   value::{Fault, Object, ObjectRef, entry},
@@ -152,6 +152,22 @@ fn fact(one: &Object) -> Option<Fact> {
 /// Where the last checkpoint of a record stands, and nothing when it holds none.
 pub fn last(record: &[Object]) -> Option<usize> {
   record.iter().rposition(|one| fact(one).is_some_and(|a| a.kind() == CHECKPOINT))
+}
+
+/// Where each checkpoint of a record stands, in order.
+pub fn all(record: &[Object]) -> Vec<usize> {
+  let checkpoints =
+    record.iter().enumerate().filter(|(_, one)| fact(one).is_some_and(|a| a.kind() == CHECKPOINT));
+  checkpoints.map(|(at, _)| at).collect()
+}
+
+/// Whether a fact ends the opening of a life born from a checkpoint: the stand of the root that the
+/// operator asks as the life boots, or that the tail after the checkpoint replays. Before it, the
+/// life says again what its checkpoint restates; from it on, each fact is one of its own life, a
+/// fact equal to an earlier one among them. The fact is read by its kind, its speaker and the chain
+/// that it stands on.
+pub fn opened(kind: &str, by: &str, on: Option<&str>) -> bool {
+  kind == "stand" && by == OPERATOR && on == Some(ROOT)
 }
 
 /// The entries that the build of the last life on a record made: those after its last checkpoint,

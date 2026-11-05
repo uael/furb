@@ -39,6 +39,7 @@ const DISPOSED = "The session is disposed.";
 /** Why a window that stopped its host holds no life. */
 const STOPPED = "The host of the life was stopped from this window.";
 
+import type { Config } from "furb/protocol";
 import type { EngineOptions } from "./models.ts";
 import type { ProviderChoice } from "./providers.ts";
 import { type Carry, isRecorded, type Reading } from "./reading.ts";
@@ -212,9 +213,10 @@ export class HostView extends EventEmitter implements Plain {
   /** What the first run checks of this machine, and nothing in the demo, which needs no model. */
   setup = () => this.ask<SetupInfo | null>("library", "setup");
   providers = () => this.ask<ProviderChoice[]>("library", "providers");
-  provider = (name: string, value: unknown) => this.ask<boolean>("library", "provider", name, value);
   codexAuth = (action = "status") => this.ask<import("furb").CodexAuthInfo>("library", "codexAuth", action);
-  reload = () => this.ask<boolean>("library", "reload");
+  /** A change of a key of a layer of the configs, which the World keeps only when the catalog reads it, or a reload of
+   * them, each then a stand of the life. False when the operator canceled the sign-in that the change asked. */
+  config = (config: Config) => this.ask<boolean>("library", "config", config);
   /** The name of the model that a name gives in the roster or in the catalog, and nothing when it gives none. */
   model = (name: string) => this.ask<string | null>("library", "model", name);
   answer = (id: string, value: string) => this.ask<unknown>("console", "answer", id, value);

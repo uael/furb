@@ -184,6 +184,41 @@ export const sidebar = part({
     this.render();
   },
 
+  /** A thread folds or unfolds from any line of its box, and the feed then shows its header. */
+  foldHere(id: string): void {
+    this.foldThread(id);
+    this.scrollAfterLayout({ card: id });
+  },
+
+  /** The cards of the feed in its order, each with the thread whose box it stands in, as the last layout placed them. */
+  threadCards(): { node: Renderable; thread: string }[] {
+    const by = new Map([...this.cards.values()].map((card) => [card.node as Renderable, card.thread]));
+    return this.scroll.getChildren().flatMap((node) => {
+      const thread = by.get(node);
+      return thread ? [{ node, thread }] : [];
+    });
+  },
+
+  /** The last card of the box of a thread in the feed, which ends the thread. */
+  threadEnd(id: string): Renderable | undefined {
+    return this.threadCards().findLast((one) => one.thread === id)?.node;
+  },
+
+  /** The thread whose box holds the middle row of the feed in view, or else the box of a thread in view nearest it. */
+  threadInView(): string | undefined {
+    const { viewport } = this.scroll;
+    const middle = viewport.y + Math.floor(viewport.height / 2);
+    let best: { thread: string; distance: number } | undefined;
+    for (const { node, thread } of this.threadCards()) {
+      const top = node.y;
+      const bottom = node.y + node.height;
+      if (bottom <= viewport.y || top >= viewport.y + viewport.height) continue;
+      const distance = middle < top ? top - middle : middle >= bottom ? middle - bottom + 1 : 0;
+      if (!best || distance < best.distance) best = { thread, distance };
+    }
+    return best?.thread;
+  },
+
   /** A thread resolves: its open prompt closes, and the model that works for it stops. */
   resolveThread(thread: ChainThread): void {
     const open = [thread.act, ...thread.messages].findLast((act) => !act.done);

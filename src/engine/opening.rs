@@ -121,7 +121,7 @@ def __recorded(entries):
     for (x,) in entries
   ]
 
-__fresh = {"kernel": lambda: __kernel["kernel"](__engine), "gate": lambda: __sheet["gating"](__engine, __gate)}
+__fresh = {"kernel": lambda: __kernel["kernel"](__engine), "gate": lambda: __sheet["gating"](__engine, __gate, __gated)}
 
 def __lasting(name, ear):
   told = False
@@ -181,7 +181,7 @@ def __lasting(name, ear):
   "parking": __parking,
   "park": lambda names: __parked.update(names),
   "unpark": lambda name: __parked.discard(name),
-  "against": lambda on, word: __sheet["against"](__engine, __gate, on, word),
+  "against": lambda on, word: __sheet["against"](__engine, __gate, on, word) if __gated() else [],
   "lasting": __lasting,
   "unmade": lambda: __Recorded(),
   "recorded": __recorded,

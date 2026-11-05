@@ -195,6 +195,11 @@ export type Request1 =
     }
   | {
       life: string;
+      config: Config;
+      verb: "config";
+    }
+  | {
+      life: string;
       about: string;
       verb: "seen";
     }
@@ -215,6 +220,26 @@ export type Request1 =
       life: string;
       on?: string | null;
       verb: "queued";
+    }
+  | {
+      life: string;
+      notices?: string[];
+      verb: "desk";
+    }
+  | {
+      life: string;
+      on?: string | null;
+      at?: number | null;
+      verb: "threads";
+    }
+  | {
+      life: string;
+      at: number;
+      verb: "as_of";
+    }
+  | {
+      life: string;
+      verb: "moments";
     }
   | {
       life: string;
@@ -253,6 +278,27 @@ export type Request1 =
  * which asks the handover.
  */
 export type Kind = "window" | "skill" | "daemon";
+/**
+ * What a peer asks of the configs of a life, which the World writes, so no window writes a disk.
+ */
+export type Config =
+  | {
+      action: "get";
+    }
+  | {
+      key: string[];
+      value?: unknown;
+      layer?: Layer | null;
+      action: "set";
+    }
+  | {
+      action: "reload";
+    };
+/**
+ * A layer of the configs, from the one that wins least to the one that wins most: the config of
+ * the user, the config of the project, and its local config, which git ignores.
+ */
+export type Layer = "user" | "project" | "local";
 /**
  * Where a window shows a view. The dock follows the chain that it names, and the row, the detail
  * and the mark follow the chain of the act that they name. The sidebar, the footer, a screen and
@@ -399,6 +445,12 @@ export type Frame =
       life: string;
       peers: Peer[];
       frame: "presence";
+    }
+  | {
+      life: string;
+      acts: Open[];
+      notice: string;
+      frame: "stalled";
     }
   | {
       life: string;
@@ -823,6 +875,15 @@ export interface FollowUp {
   shape: string;
   message: string;
   failed?: string | null;
+}
+/**
+ * An act that stays open in a life that stalled: its name, its kind, and the chain that it stands
+ * in.
+ */
+export interface Open {
+  act: string;
+  kind: string;
+  chain: string;
 }
 
 export const PROTOCOL = 1;

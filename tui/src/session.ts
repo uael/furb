@@ -899,12 +899,12 @@ export class Session extends EventEmitter {
     const state = this.actStatus(chain);
     return this.paused && (state === "idle" || state === "failed") ? "paused" : state;
   }
-  /** What the acts of a chain do, or the acts of every chain: one asks the operator, one waits for the resume of a
-   * reopened record, one runs, a pause holds one, or the last act failed. */
+  /** What the acts of a chain do, or the acts of every chain: one asks the operator, one runs, a pause holds one, or
+   * the last act failed. */
   private actStatus(chain?: string): Status {
-    // The state holds while no act starts, ends, pauses or wakes, and the prompts and the held work stay as they are.
+    // The state holds while no act starts, ends, pauses or wakes, and the prompts stay as they are.
     if (this.states.version !== this.version) this.states = { version: this.version, of: new Map() };
-    const key = `${chain ?? ""}\n${[...this.host.prompts.keys()].join(" ")}\n${[...this.host.pending.keys()].join(" ")}`;
+    const key = `${chain ?? ""}\n${[...this.host.prompts.keys()].join(" ")}`;
     const known = this.states.of.get(key);
     if (known) return known;
     const status = this.statusOf(chain);
@@ -1073,9 +1073,7 @@ export class Session extends EventEmitter {
       ...this.liveOn().keys(),
       ...index.failing,
       ...index.chains.flatMap((chain) => (this.unreadChain(chain.id) ? [chain.id] : [])),
-      ...[...this.host.prompts.keys(), ...this.host.pending.keys()].flatMap(
-        (id) => index.ids.get(id)?.on ?? [],
-      ),
+      ...[...this.host.prompts.keys()].flatMap((id) => index.ids.get(id)?.on ?? []),
     ]);
     const active = [...restless]
       .flatMap((id) => {
@@ -1515,8 +1513,7 @@ export class Session extends EventEmitter {
     void this.drainQueue().catch(this.fail);
   }
   async drainQueue(): Promise<void> {
-    if (this.closed || this.draining || this.queueHeld || this.host.pending.size || !this.queued.length)
-      return;
+    if (this.closed || this.draining || this.queueHeld || !this.queued.length) return;
     this.draining = true;
     // The queue is read again before each send, since the operator may remove or take back a follow-up meanwhile.
     const queued = (entry: FollowUp) => this.queued.some((item) => item.id === entry.id);
@@ -1951,12 +1948,13 @@ export class Session extends EventEmitter {
     const argument = space < 0 ? "" : text.slice(space + 1).trim();
     switch (command) {
       case "reload":
-        await this.host.reload();
+        await this.host.config({ action: "reload" });
+        this.emit("configured");
         await this.reloadCatalog();
         this.notice = "Provider settings reloaded. The life stands on the new settings.";
         break;
       case "retry":
-        await this.host.reload();
+        await this.host.config({ action: "reload" });
         this.notice = "Each model that waited to retry is asked again now, on the provider settings of now.";
         break;
       case "provider": {
@@ -1976,10 +1974,11 @@ export class Session extends EventEmitter {
                   models: { [id || ""]: { window: Number(window) } },
                 }
               : true;
-        if (!(await this.host.provider(name, value))) {
+        if (!(await this.host.config({ action: "set", key: ["providers", name], value, layer: "project" }))) {
           this.notice = "Codex sign-in canceled.";
           break;
         }
+        this.emit("configured");
         await this.reloadCatalog();
         this.notice =
           name === "codex"
@@ -2234,7 +2233,7 @@ export class Session extends EventEmitter {
       this.host.role === "write" &&
       JSON.stringify(authenticated(this.roster)) !== JSON.stringify(authenticated(this.catalog))
     )
-      await this.host.reload();
+      await this.host.config({ action: "reload" });
     this.setup = await this.host.setup();
     await this.refresh();
   }

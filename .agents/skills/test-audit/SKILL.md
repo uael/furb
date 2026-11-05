@@ -24,7 +24,7 @@ tests.
   examples and the life as a program. The hygiene laws do not hold these tests, so this gate holds them.
 - The tests of the crate stand beside each module, `src/<name>.test.rs`, `tests/examples.rs` runs the examples, and
   `cli/tests/furb.rs` runs the command line as a process.
-- The TypeScript tests stand in `bind/typescript/test/`, `tui/test/` and `gui/test/`.
+- The TypeScript tests stand in `bind/typescript/test/` and `tui/test/`.
 
 Each contract has one primary test at its strongest boundary. A sentence of the contract is proved once, by the
 contract suite, on both engines. A test of a door proves what the door carries that no sentence says. A test of

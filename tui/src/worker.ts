@@ -2,15 +2,27 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { Engine, FileChange, SessionOptions, Turn } from "furb";
-import { Act, actorParts, codexAuth, ENGINE, model, models, retold, Session, setup, standingOf } from "furb";
+import {
+  Act,
+  actorParts,
+  codexAuth,
+  configSet,
+  ENGINE,
+  model,
+  models,
+  retold,
+  Session,
+  setup,
+  standingOf,
+} from "furb";
 import { type Compaction, type Measure, measureOf } from "furb/life";
+import type { Config } from "furb/protocol";
 import type { HostState } from "./bridge.ts";
 import { scripts } from "./demo/index.ts";
 import { scripted, transcriptOf } from "./demo/script.ts";
 import { guarded } from "./faults.ts";
 import { expandHome } from "./files.ts";
 import { type EngineOptions, roster } from "./models.ts";
-import { changeProvider } from "./providers.ts";
 import { queueDispatches, queueHash } from "./queue.ts";
 import { isRecorded, Reader } from "./reading.ts";
 import { branchChanges, net } from "./review.ts";
@@ -48,6 +60,26 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 /** The pace at which a recorded life reads its file for the lines that it added. */
 let following: ReturnType<typeof setInterval> | undefined;
 let sentFacts = 0;
+/** The sign-in of codex that a change of its provider asks: a cancel when it turns codex off, and a sign-in, which
+ * waits for the browser, when it turns codex on. False when the operator canceled the sign-in. */
+async function codexSigned(value: unknown): Promise<boolean> {
+  if (value === false) codexAuth("cancel", userConfig);
+  if (value !== true) return true;
+  let status = codexAuth("refresh", userConfig);
+  if (["disconnected", "needs-login", "failed", "canceled"].includes(status.state))
+    status = codexAuth("start", userConfig);
+  self.postMessage({ authentication: status });
+  while (["waiting", "connecting"].includes(status.state)) {
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const next = codexAuth("status", userConfig);
+    if (next.state !== status.state) self.postMessage({ authentication: next });
+    status = next;
+  }
+  if (status.state === "canceled") return false;
+  if (status.state !== "connected") throw new Error(status.message || "OpenAI sign-in did not complete.");
+  return true;
+}
+
 async function refreshCodex(directory?: string): Promise<void> {
   if (
     demo ||
@@ -385,36 +417,19 @@ async function answer(data: { target: string; method: string; args: unknown[] })
       offered.push({ name: "local", enabled: true, models: found.local?.offered ?? 0 });
     return offered.sort((a, b) => a.name.localeCompare(b.name));
   }
-  if (data.target === "library" && (data.method === "provider" || data.method === "reload")) {
+  if (data.target === "library" && data.method === "config") {
     if (!session || !engine) throw new Error("The session is not open.");
     if (demo) throw new Error("Provider settings are not available in the demo.");
     const running = engine;
-    if (data.method === "provider") {
-      if (data.args[0] === "codex") {
-        if (data.args[1] === false) codexAuth("cancel", userConfig);
-        else if (data.args[1] === true) {
-          let status = codexAuth("refresh", userConfig);
-          if (["disconnected", "needs-login", "failed", "canceled"].includes(status.state))
-            status = codexAuth("start", userConfig);
-          self.postMessage({ authentication: status });
-          while (["waiting", "connecting"].includes(status.state)) {
-            await new Promise((resolve) => setTimeout(resolve, 200));
-            const next = codexAuth("status", userConfig);
-            if (next.state !== status.state) self.postMessage({ authentication: next });
-            status = next;
-          }
-          if (status.state === "canceled") return false;
-          if (status.state !== "connected")
-            throw new Error(status.message || "OpenAI sign-in did not complete.");
-        }
-      }
-      await changeProvider(session.directory, String(data.args[0]), data.args[1], () =>
-        running.stand({ on: "chain1" }),
-      );
-    } else {
-      await refreshCodex(session.directory);
-      await engine.stand({ on: "chain1" });
-    }
+    const config = data.args[0] as Config;
+    if (config.action === "get") throw new Error("A window reads the configs from the host.");
+    if (config.action === "set") {
+      const [group, name] = config.key;
+      if (group === "providers" && name === "codex" && !(await codexSigned(config.value))) return false;
+      // The World writes the layer, and puts it back as it was when the catalog cannot read it.
+      configSet(session.directory, JSON.stringify(config), userConfig);
+    } else await refreshCodex(session.directory);
+    await running.stand({ on: "chain1" });
     return true;
   }
   if (data.target === "library" && data.method === "codexAuth")

@@ -81,7 +81,11 @@ impl Holders {
   /// Who is attached now, pushed to each window of the life. A peer that is gone takes no frame,
   /// and the task that pushes its events tells the daemon that it left.
   pub(crate) fn present(&self, life: &str) {
-    let frame = Frame::Presence { life: life.to_owned(), peers: self.presence() };
+    self.tell(&Frame::Presence { life: life.to_owned(), peers: self.presence() });
+  }
+
+  /// A frame pushed to each window of the life. A peer that is gone takes no frame.
+  pub(crate) fn tell(&self, frame: &Frame) {
     for one in &self.windows {
       one.outbox.send(frame.clone()).ok();
     }

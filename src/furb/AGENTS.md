@@ -202,7 +202,9 @@ meanings. The entry of such a name here gives only its form in the engine.
   gives a life, its life word, which starts its work; an official one may have an ear of the World that answers the
   questions that its word defines.
 - enable: the fact by which the World turns an extension on in a life, with its name, its word, its life word and, for
-  an extension that plays on the root alone, root, which the record keeps; the World says it at the tip, and when a
+  an extension that plays on the root alone, root, which the record keeps, and, for a skill that a chain plays, the
+  program of the process of the folder that it played the skill from, by which the daemon starts that process and no
+  other of the same name; the World says it at the tip, and when a
   write of the config of the project lands that turns on an extension by its path, and it plays the extension as a rung
   on every chain there is where it plays when it hears the fact, and after it on each chain at its birth where it plays,
   before the call that made the chain returns. An extension plays on every chain, or on the root alone and on each chain

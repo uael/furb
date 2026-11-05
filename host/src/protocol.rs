@@ -251,6 +251,12 @@ pub enum Verb {
   Stand {
     life: String,
   },
+  /// The configs of the folder of the life, in their layers: what each key holds, a change of a
+  /// key, or a stand on them as the disk holds them now.
+  Config {
+    life: String,
+    config: Config,
+  },
   /// The fact that the operator read a chain or a thread up to now, which each window and each
   /// later life reads in the record.
   Seen {
@@ -276,6 +282,27 @@ pub enum Verb {
   Queued {
     life: String,
     on: Option<String>,
+  },
+  /// What waits for the operator in a life, with each notice that the window still shows.
+  Desk {
+    life: String,
+    #[serde(default)]
+    notices: Vec<String>,
+  },
+  /// The threads of a chain with their meaning, now or as they stood just after a moment.
+  Threads {
+    life: String,
+    on: Option<String>,
+    at: Option<u64>,
+  },
+  /// The acts of a life as they stood just after a moment, each with its meaning then.
+  AsOf {
+    life: String,
+    at: u64,
+  },
+  /// Each moment of a life at which an act began or ended, in order.
+  Moments {
+    life: String,
   },
   /// The turn that the peer gave for a request of a model of a life that it answers, written as
   /// the record writes a value, or why it gives none.
@@ -330,8 +357,13 @@ impl Verb {
         | Self::Inspect { .. }
         | Self::Pending { .. }
         | Self::Queued { .. }
+        | Self::Desk { .. }
+        | Self::Threads { .. }
+        | Self::AsOf { .. }
+        | Self::Moments { .. }
         | Self::Names { .. }
         | Self::Gate { .. }
+        | Self::Config { config: Config::Get, .. }
         | Self::ViewMount(_)
         | Self::ViewTree(_)
         | Self::ViewEffect(_)
@@ -352,6 +384,41 @@ impl Verb {
   }
 }
 
+/// What a peer asks of the configs of a life, which the World writes, so no window writes a disk.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum Config {
+  /// Each key of the configs with the value that wins for it and its layer.
+  Get,
+  /// A key of a layer, the project when none is named, set to a value, or taken out with no
+  /// value, then a stand of the life on the configs. A change that the catalog refuses puts its
+  /// config back as it was, and the life does not stand.
+  Set { key: Vec<String>, value: Option<Value>, layer: Option<Layer> },
+  /// A stand of the life on the configs as the disk holds them, which asks again each model that
+  /// waits to retry.
+  Reload,
+}
+
+/// A layer of the configs, from the one that wins least to the one that wins most: the config of
+/// the user, the config of the project, and its local config, which git ignores.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Layer {
+  User,
+  Project,
+  Local,
+}
+
+impl From<Layer> for furb::world::config::Layer {
+  fn from(layer: Layer) -> Self {
+    match layer {
+      Layer::User => Self::User,
+      Layer::Project => Self::Project,
+      Layer::Local => Self::Local,
+    }
+  }
+}
+
 /// What the daemon says to a peer.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "frame", rename_all = "snake_case")]
@@ -365,6 +432,10 @@ pub enum Frame {
   Event { life: String, seq: Seq, event: Event },
   /// Who is attached to a life now, pushed to each of its windows after each attach and detach.
   Presence { life: String, peers: Vec<Peer> },
+  /// A life that holds open acts and said no fact for the bound of the daemon, pushed once to each
+  /// of its windows by the watch of the daemon, which no word of the life runs: each open act, and
+  /// the notice that a window shows as it stands.
+  Stalled { life: String, acts: Vec<Open>, notice: String },
   /// A request of a model of a life that the peer answers: its number, and the request with the
   /// actor, the chain, the messages and the settings.
   Ask { life: String, ask: u64, request: Value },
@@ -411,6 +482,15 @@ pub enum Answer {
   Presence(Vec<Peer>),
   /// The lives that a daemon gave at its handover.
   Handed(Vec<Handed>),
+}
+
+/// An act that stays open in a life that stalled: its name, its kind, and the chain that it stands
+/// in.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Open {
+  pub act: String,
+  pub kind: String,
+  pub chain: String,
 }
 
 /// A life that a daemon gave at its handover: its record, its folder, and the holder of each pin.

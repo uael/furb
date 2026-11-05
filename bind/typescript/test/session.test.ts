@@ -62,13 +62,16 @@ test("record inspection derives pending work without taking its lock, writing fi
     // The session holds the lease while the inspection runs, so an inspection that took it would be refused.
     const first = await inspectRecord(record);
     expect(first.pending.map(([id]) => id)).toEqual([waiting, prompt]);
+    expect(first.state).toBe("runs");
     expect(await readFile(record, "utf8")).toBe(before);
     expect(await readFile(`${record}.session.json`, "utf8")).toBe(metadata);
     expect(await locked()).toEqual(lock);
     expect(await readFile(join(cwd, "value.txt"), "utf8")).toBe("once");
     engine.cancel(waiting);
     engine.close("answered", { id: prompt });
-    expect((await inspectRecord(record)).pending).toEqual([]);
+    const after = await inspectRecord(record);
+    expect(after.pending).toEqual([]);
+    expect(after.state).toBe("saved");
   } finally {
     await session.dispose();
     await rm(cwd, { recursive: true, force: true });

@@ -42,6 +42,8 @@ folder of furb (`~/.config/furb` by default), turns it on. WireGuard encrypts ea
   that Tailscale gives the machine, IPv4 before IPv6. With no `tailnet`, the daemon listens on the machine alone.
 - The identity of a peer is the login that the local API of Tailscale gives for its address. `roles` gives each login
   its role, and the daemon closes the peer of a login that it does not name, before its hello.
+- `stall` gives the seconds after which the daemon tells that a life with an open act and no new fact stalled, as
+  the section on attach says. With no `stall`, the bound is 1200 seconds.
 - The daemon reads `host.json` when it starts. A change takes effect at the next start or upgrade.
 - The daemon finds the local API on the socket of `tailscaled`, or on the port of the app for macOS from the
   standalone download. It does not find the app of the App Store.
@@ -109,10 +111,15 @@ it is not given. The daemon answers requests in any order.
 | `names` | `life`, `on` | read |
 | `gate` | `life`, `word`, `on` | read |
 | `stand` | `life` | write |
+| `config` | `life`, `config`: `{"action": "get"}`, `{"action": "set", "key", "value", "layer"}` or `{"action": "reload"}` | read for get, else write |
 | `seen` | `life`, `about` | write |
 | `queue` | `life`, `entry`, `shape`, `message`, `on` | write |
 | `unqueue` | `life`, `entry` | write |
 | `queued` | `life`, `on` | read |
+| `desk` | `life`, `notices` | read |
+| `threads` | `life`, `on`, `at` | read |
+| `as_of` | `life`, `at` | read |
+| `moments` | `life` | read |
 | `answered` | `life`, `ask`, `turn`, `why` | write |
 | `wrote` | `life`, `ask`, `text`, `thinking` | write |
 | `handover` | | write |
@@ -120,6 +127,12 @@ it is not given. The daemon answers requests in any order.
 | `view.event` | see below | write |
 | `view.tree`, `view.effect` | see below | read |
 
+- `config` reads and changes the configs of the folder of a life, which the World writes, so no window writes a disk.
+  A get gives `values`, each key with the value that wins for it and its layer, `user`, `project` or `local`. A key has
+  one or two names, as `["providers", "codex"]`. A set writes the key in its layer, `project` when none is named, or
+  takes it out when no value is given, and then the life stands, so the answer is the act of the stand. A change that
+  the catalog cannot read puts its config back as it was, and the life does not stand. A reload is a stand on the
+  configs as the disk holds them, which asks again each model that waits to retry.
 - The role to write holds each right of the role to read. A verb needs the role to write unless this table says read,
   and the daemon refuses it to a reader with the refusal `role`, which names both roles.
 - An answer is a frame `reply` with the `id`, an `answer` that names its kind, and its `data`: `done`, `welcome`,
@@ -147,6 +160,11 @@ it is not given. The daemon answers requests in any order.
   `queued` gives the follow-ups that wait on a chain, in order. A send that fails holds the queue of its chain, with
   its cause in `failed`, until the operator takes the follow-up out. The record keeps each step as a fact `queue` of
   the operator, so a reopen finds the queue as it stood.
+- `desk`, `threads`, `as_of` and `moments` give the meaning of the acts that the life told as events, which each
+  window draws the same way: `desk` each question that the operator owes and each of the `notices` that the window
+  still shows, the oldest first, with the lines that answer each; `threads` the tree of the threads of a chain, its
+  asides, what the tree says to the operator and the state of the chain, now or just after the moment `at`; `as_of`
+  the acts as they stood just after a moment; `moments` each moment at which an act began or ended.
 - After `attach`, the daemon pushes each event of the life as a frame `event`, with the `life`, the `seq` of the event
   in the log of the life and the `event`: `fact`, `act`, `text`, `queued`, `notice`, `changed`, `reborn` or `ended`. After
   `reborn`, the life goes on from its checkpoint, and its acts come again as they stand.
@@ -155,6 +173,13 @@ it is not given. The daemon answers requests in any order.
   brought back from its checkpoint hears the life whole, and hears no fact twice.
 - After each `attach` and `detach`, the daemon pushes to each window of the life a frame `presence` with the `life`
   and its `peers`, each window that is attached now. Presence is no fact of the record.
+- The daemon watches each life that it holds, from outside the life: no word and no ear of the life runs the watch.
+  When a life holds an open act, a run of a word, a reply of a model or a command, and says no fact for the bound of
+  a stall, 20 minutes unless `stall` in `host.json` gives other seconds, the daemon pushes to each window of the life
+  a frame `stalled` with the `life`, its open `acts`, each with its `act`, its `kind` and its `chain`, and the
+  `notice` that a window shows as it stands. It also sends the notice to the root chain of the life as a prompt of
+  `None`, so that its actor wakes. It tells nothing more until a fact of an act that its message did not make, and a
+  new stall after that fact. A stall is no fact of the record.
 
 ## The daemon
 

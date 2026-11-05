@@ -20,7 +20,10 @@ use furb::{
   life::{Log, Opening, Stream},
   verbs,
   wire::{outward, parsed},
-  world::{self, Shape, answered},
+  world::{
+    self, Shape, answered,
+    config::{Change, Layers},
+  },
 };
 use futures::stream::{self, Stream as Streams};
 use serde_json::{Value, json};
@@ -41,6 +44,7 @@ use crate::{
   event::{Event, Seq},
   queue::{FollowUp, QUEUE, Queue},
   rebirth::{self, Watch},
+  view::Held,
 };
 
 /// How many events a reader may stand behind the life before it reads them again from the log of
@@ -106,6 +110,12 @@ pub enum Command {
   Names { on: Option<String> },
   /// A stand of the life on its root, which reads the roster and the actor again: the act.
   Stand,
+  /// Each key of the configs of the folder of the life, with the value that wins for it and its
+  /// layer.
+  Settings,
+  /// A change of a key of a layer of the configs, which the World keeps only when the catalog
+  /// reads it, then a stand of the life on them: the act of the stand.
+  Configure(Change),
   /// The fact that the operator read a chain or a thread up to now.
   Seen { about: String },
   /// A follow-up that the operator queued on a chain, under an entry that a second queue finds,
@@ -115,6 +125,16 @@ pub enum Command {
   Unqueue { entry: String },
   /// The follow-ups that wait on a chain, in order.
   Queued { on: Option<String> },
+  /// What waits for the operator, as a [`crate::view::Desk`], with each notice that the window
+  /// still shows.
+  Desk { notices: Vec<String> },
+  /// The threads of a chain, as [`crate::view::Threads`], now or as they stood just after a
+  /// moment.
+  Threads { on: Option<String>, at: Option<u64> },
+  /// The acts as they stood just after a moment, each with its meaning then.
+  AsOf { at: u64 },
+  /// Each moment at which an act began or ended, in order.
+  Moments,
   /// The end of the life, which replies and then ends the life.
   End,
 }
@@ -156,7 +176,9 @@ pub struct Life {
   heard: UnboundedReceiver<Event>,
   facts: HashSet<u64>,
   watch: Watch,
+  configs: Layers,
   queue: Queue,
+  held: Held,
 }
 
 /// The handle of a life, which any thread holds: it says a command to the life and reads its
@@ -191,6 +213,7 @@ impl Life {
     }
     self.watch.heard(&event);
     let queued = self.queue.heard(&event);
+    self.held.heard(&event);
     let (seq, event) = (self.log.len() as Seq, Arc::new(event));
     self.log.push(Arc::clone(&event));
     self.readers.send((seq, event)).ok();
@@ -215,39 +238,55 @@ impl Life {
     }
   }
 
-  /// What an open told, less each fact that the log told before it: an open after a rebirth says
-  /// again each fact that the checkpoint restates, which each reader already heard.
+  /// What an open told, less each fact of its opening that restates one that the log told before
+  /// it: an open on a checkpoint says again what the checkpoint restates, which each reader
+  /// already heard, then goes on with facts of its own, which the log tells whole.
   fn opened(&mut self) {
     let mut told = Vec::new();
     while let Ok(event) = self.heard.try_recv() {
       told.push(event);
     }
-    let heard =
-      |event: &Event| matches!(event, Event::Fact(fact) if self.facts.contains(&digest(fact)));
-    let told: Vec<Event> = told.into_iter().filter(|event| !heard(event)).collect();
+    let mut opening = true;
     for event in told {
-      self.told(Some(event));
+      if !matches!(&event, Event::Fact(fact) if self.restates(&mut opening, fact)) {
+        self.told(Some(event));
+      }
     }
   }
 
-  /// The facts of a record before its last checkpoint, told first: the life boots on that
-  /// checkpoint and replays none of them, so each reader hears the life whole, as after a rebirth,
-  /// and the open tells no fact again that the checkpoint restates. A record that the store cannot
-  /// read tells nothing here, and its open says why.
+  /// Whether a fact of an opening restates a fact that the log told, which ends the opening when it
+  /// is the stand of its boot: the facts after it are those of the life, each occurrence of an
+  /// equal fact among them.
+  fn restates(&self, opening: &mut bool, fact: &Value) -> bool {
+    let word = |at: usize| fact.get(at).and_then(Value::as_str);
+    *opening &=
+      !checkpoint::opened(word(0).unwrap_or_default(), word(2).unwrap_or_default(), word(3));
+    *opening && self.facts.contains(&digest(fact))
+  }
+
+  /// The facts of a record before its last checkpoint, told first, in order: the life boots on that
+  /// checkpoint and replays none of them, so each reader hears the life whole, as after a rebirth.
+  /// Each birth on a checkpoint before the last opened by saying again what that checkpoint
+  /// restates, which its log told no reader twice, and this one tells none twice either; each other
+  /// fact is told, though it equals one before it, as a second pause of a chain. A record that the
+  /// store cannot read tells nothing here, and its open says why.
   fn recalled(&mut self, record: &str) {
-    let Some(at) = world::kept(record).ok().and_then(|entries| checkpoint::last(&entries)) else {
-      return;
-    };
+    let Ok(entries) = world::kept(record) else { return };
+    let marks: Vec<usize> = checkpoint::all(&entries).into_iter().map(|at| at + 1).collect();
+    let Some(&last) = marks.last() else { return };
     let Ok(told) = world::retold(record) else { return };
     let mut facts = Vec::new();
-    if told.before(at + 1, &mut |one| facts.extend(Fact::of(one.as_ref()))).is_err() {
+    let mut take = |kept, one: Object| facts.extend(Fact::of(one.as_ref()).map(|a| (kept, a)));
+    if told.before_kept(last, &mut take).is_err() {
       return;
     }
-    // Each birth that a checkpoint opened said again the facts that its checkpoint restates, which
-    // the log of that birth told no reader twice, and the log of this one tells none twice either.
-    for fact in facts.iter().filter(|one| one.kind() != checkpoint::CHECKPOINT) {
-      let fact = json_of(fact);
-      if !self.facts.contains(&digest(&fact)) {
+    let (mut passed, mut opening) = (0, false);
+    for (kept, a) in facts.iter().filter(|one| one.1.kind() != checkpoint::CHECKPOINT) {
+      while marks.get(passed).is_some_and(|mark| kept >= mark) {
+        (passed, opening) = (passed + 1, true);
+      }
+      let fact = json_of(a);
+      if !self.restates(&mut opening, &fact) {
         self.put(Event::Fact(fact));
       }
     }
@@ -302,13 +341,16 @@ async fn run(
   readers: broadcast::Sender<Logged>,
 ) {
   let (told, heard) = mpsc::unbounded_channel();
+  let configs = Layers::new(&opening.directory, opening.config.as_ref().map(PathBuf::from));
   let mut life = Life {
     log: Vec::new(),
     readers,
     heard,
     facts: HashSet::new(),
     watch: Watch::default(),
+    configs,
     queue: Queue::default(),
+    held: Held::default(),
   };
   let writes = told.clone();
   opening.stream = Some(Stream(Arc::new(move |rung, chain, text, thinking| {
@@ -427,7 +469,12 @@ async fn driven(
         return Drove::Ended(rebirth::ended(engine, record.is_some()), Some(reply));
       }
       Woke::Said(Some(Message::Command(command, reply))) => {
-        reply.send(commanded(&mut engine, &life.queue, command)).ok();
+        let replied = commanded(&mut engine, &life.configs, &life.queue, &life.held, command);
+        reply.send(replied.await).ok();
+        if let Some(fault) = engine.stopped().cloned() {
+          drop(engine);
+          return stopped(fault, record).await;
+        }
       }
     }
     drained(&mut engine, life);
@@ -465,9 +512,16 @@ async fn pumped(engine: &mut Engine) -> Fault {
   .await
 }
 
-/// What a command comes to: on the queue of the life for a command of the queue, and else on the
-/// engine.
-fn commanded(engine: &mut Engine, queue: &Queue, command: Command) -> Result<Reply, LifeError> {
+/// What a command comes to: on the configs of the life for a command of its configs, on the queue
+/// of the life for a command of the queue, on the acts that the life told for a query of their
+/// meaning, and else on the engine.
+async fn commanded(
+  engine: &mut Engine,
+  configs: &Layers,
+  queue: &Queue,
+  held: &Held,
+  command: Command,
+) -> Result<Reply, LifeError> {
   let root = engine.root().to_owned();
   let chain = |on: Option<String>| on.unwrap_or_else(|| root.clone());
   match command {
@@ -491,8 +545,28 @@ fn commanded(engine: &mut Engine, queue: &Queue, command: Command) -> Result<Rep
       let waiting = waiting.iter().map(serde_json::to_value).collect::<Result<_, _>>();
       Ok(Reply::Values(waiting.map_err(|no| LifeError::Refused(no.to_string()))?))
     }
+    Command::Desk { notices } => valued(&held.desk(&notices)),
+    Command::Threads { on, at } => valued(&held.threads(&chain(on), at)),
+    Command::AsOf { at } => {
+      let acts = held.as_of(at).iter().map(serde_json::to_value).collect::<Result<_, _>>();
+      Ok(Reply::Values(acts.map_err(|no| LifeError::Refused(no.to_string()))?))
+    }
+    Command::Moments => Ok(Reply::Values(held.moments().into_iter().map(Value::from).collect())),
+    Command::Settings => {
+      let settings = configs.get()?.into_iter().map(|one| json!(one));
+      Ok(Reply::Values(settings.collect()))
+    }
+    Command::Configure(change) => {
+      configs.set(change).await?;
+      answered_by(engine, Command::Stand)
+    }
     other => answered_by(engine, other),
   }
+}
+
+/// A meaning as the value of a reply.
+fn valued(meaning: &impl serde::Serialize) -> Result<Reply, LifeError> {
+  serde_json::to_value(meaning).map(Reply::Value).map_err(|no| LifeError::Refused(no.to_string()))
 }
 
 /// Each follow-up that is due sent as a prompt on its chain, or why its send failed, which holds

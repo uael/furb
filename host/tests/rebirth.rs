@@ -108,14 +108,33 @@ fn reborn(fault: bool) -> impl Fn(&Event) -> bool {
   move |event| matches!(event, Event::Reborn(why) if why.is_some() == fault)
 }
 
-/// The facts that a log tells twice.
-fn twice(log: &[Logged]) -> Vec<String> {
-  let mut seen = std::collections::HashSet::new();
-  let facts = log.iter().filter_map(|one| match &*one.1 {
+/// The facts of the opening of each rebirth that the log tells twice: those that the opening says
+/// before the stand of its boot, which restate its checkpoint. A fact after that stand is one of
+/// the life, though it equals an earlier one.
+fn restated(log: &[Logged]) -> Vec<String> {
+  let fact = |one: &Logged| match &*one.1 {
     Event::Fact(fact) => Some(fact.to_string()),
     _ => None,
-  });
-  facts.filter(|fact| !seen.insert(fact.clone())).collect()
+  };
+  let facts: Vec<String> = log.iter().filter_map(fact).collect();
+  let mut opening = false;
+  let mut restated = Vec::new();
+  for one in log {
+    match &*one.1 {
+      Event::Reborn(_) => opening = true,
+      Event::Fact(said) if opening && said[0] == "stand" && said[2] == "operator" => {
+        opening = false;
+      }
+      Event::Fact(said) if opening => {
+        let said = said.to_string();
+        if facts.iter().filter(|other| **other == said).count() > 1 {
+          restated.push(said);
+        }
+      }
+      _ => {}
+    }
+  }
+  restated
 }
 
 async fn a_life_goes_on_through_each_rebirth() {
@@ -151,7 +170,11 @@ async fn a_life_goes_on_through_each_rebirth() {
   assert_eq!(late, log, "a reader that comes late reads the same log");
   let rebirths = log.iter().filter(|one| matches!(*one.1, Event::Reborn(_))).count();
   assert_eq!(rebirths, 1, "each reader heard each rebirth");
-  assert_eq!(twice(&log), Vec::<String>::new(), "no fact is told twice");
+  assert_eq!(
+    restated(&log),
+    Vec::<String>::new(),
+    "no fact that a checkpoint restates is told twice"
+  );
 
   let kept = world::kept(at.join("record.jsonl")).expect("the record reads");
   assert!(checkpoint::segment(&kept).len() <= TAIL, "a later open replays a short tail");

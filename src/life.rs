@@ -39,6 +39,8 @@ struct Prepared {
   /// The checkpoint that carries the tail of another build, which a life that keeps no record
   /// holds in memory alone, since it writes nothing.
   crossed: Option<Object>,
+  /// Whether the gate reads each word, as [`crate::gate::configured`] says.
+  gated: bool,
 }
 
 /// A function of the host that answers each request in place of the models: it is given the request and a function
@@ -186,7 +188,7 @@ impl Opening {
   fn parted(self, prepared: Prepared) -> Result<(Vec<Object>, Ears), Fault> {
     let works = self.works();
     let keeps = self.keeps != Some(false) && works;
-    let Prepared { places, extensions, provider, crossed } = prepared;
+    let Prepared { places, extensions, provider, crossed, .. } = prepared;
     let (mut record, store) = match (&self.record, keeps) {
       (Some(path), true) => world::store(path).map(|(held, store)| (held, Some(store)))?,
       (Some(path), false) => (world::kept(path)?, None),
@@ -294,7 +296,8 @@ impl Opening {
       })
       .collect();
     let provider = self.provider(advertised)?;
-    Ok(Prepared { places, extensions, provider, crossed })
+    let gated = crate::gate::configured(&places.config, Path::new(&self.directory));
+    Ok(Prepared { places, extensions, provider, crossed, gated })
   }
 
   /// The provider: the models of the roster that the catalog makes, which the function of the host answers when it
@@ -397,9 +400,10 @@ impl Opening {
     prepared: Prepared,
   ) -> Result<(Engine, Vec<Object>), Fault> {
     let works = self.works();
+    let gated = prepared.gated;
     let (record, ears) = self.parted(prepared)?;
     let host = host.into_iter().map(|(name, ear)| (name.into(), ear));
-    let mut engine = Engine::boot(record.clone(), host.chain(ears))?;
+    let mut engine = Engine::gated(record.clone(), host.chain(ears), gated)?;
     if let Some(no) = engine.raised() {
       return Err(no.clone());
     }

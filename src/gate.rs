@@ -38,6 +38,22 @@ pub use findings::{Finding, Rule};
 use ruff_python_ast::{ExceptHandler, Expr, ModModule, Stmt};
 use ruff_python_parser::parse_module;
 
+/// The key of a config that turns the gate off when it is false, as `{"gate": false}`.
+pub const KEY: &str = "gate";
+
+/// Whether the gate reads each word of a life, as the configs of the user and of the project say
+/// it, in the order of [`crate::extension::configs`], a later one winning: true unless the key
+/// [`KEY`] of one says false. A value that is no bool, and a config that is no json, are as unsaid.
+/// With the gate off, its ear answers each word with no finding, so the word runs one statement at
+/// a time and stops at the first that raises.
+pub fn configured(user: &std::path::Path, project: &std::path::Path) -> bool {
+  let read = |file: std::path::PathBuf| -> Option<bool> {
+    let text = std::fs::read_to_string(file).ok()?;
+    serde_json::from_str::<serde_json::Value>(&text).ok()?.get(KEY)?.as_bool()
+  };
+  crate::extension::configs(user, project).into_iter().rev().find_map(read).unwrap_or(true)
+}
+
 /// The name the checker holds the engine under, which is `MODULE` of `furb.sheet`: the sheet alone
 /// imports it.
 const MODULE: &str = "__engine__";

@@ -236,26 +236,48 @@ export const palette = part({
     // The keys of the actions on the selected choice stand over the keys of the App while this dialog is open, and a
     // key that types a sign acts only while the filter is empty, so that the filter still takes it otherwise.
     const overlay = this.overlay;
-    if (actions.length)
+    if (actions.length || rich)
       this.paletteKeysOff = this.keymap.registerLayer({
         priority: 100,
         enabled: () => this.overlay === overlay,
-        commands: actions.map(({ key, run }, index) => ({
-          name: `palette-action-${index}`,
-          run: () => {
-            const choice = this.filtered[this.selection];
-            if (!choice) return true;
-            this.overlayClosed = undefined;
-            this.closeOverlay();
-            void Promise.resolve()
-              .then(() => run(choice))
-              .catch(this.report);
-            return true;
-          },
-          enabled: () =>
-            /^(ctrl|meta|alt|super)\+/.test(key) || [...key].length > 1 || !this.paletteInput?.value,
-        })),
-        bindings: actions.map(({ key }, index) => ({ key, cmd: `palette-action-${index}` })),
+        commands: [
+          ...(rich
+            ? [
+                {
+                  name: "palette-close",
+                  run: () => {
+                    this.closeOverlay();
+                    return true;
+                  },
+                },
+              ]
+            : []),
+          ...actions.map(({ key, run }, index) => ({
+            name: `palette-action-${index}`,
+            run: () => {
+              const choice = this.filtered[this.selection];
+              if (!choice) return true;
+              this.overlayClosed = undefined;
+              this.closeOverlay();
+              void Promise.resolve()
+                .then(() => run(choice))
+                .catch(this.report);
+              return true;
+            },
+            enabled: () =>
+              /^(ctrl|meta|alt|super)\+/.test(key) || [...key].length > 1 || !this.paletteInput?.value,
+          })),
+        ],
+        bindings: [
+          ...actions.map(({ key }, index) => ({ key, cmd: `palette-action-${index}` })),
+          // The commands stay offered in the footer while the palette is open, with the way out of it.
+          ...(rich
+            ? [
+                { key: "ctrl+p", cmd: "palette-close", hint: ["⌃P", "commands", "palette"] },
+                { key: "escape", cmd: "palette-close", hint: ["Esc", "close", "palette"] },
+              ]
+            : []),
+        ],
       });
     this.renderChoices();
     this.paletteInput.focus();
@@ -288,9 +310,9 @@ export const palette = part({
       if (!choice) return 0;
       const above = first ? (choice.heading ? 1 : 0) : titled(index) ? 2 : 0;
       const lines = !this.rich && index === this.selection ? Math.min(choice.lines?.length ?? 0, 10) : 0;
-      return (this.rich ? (choice.command ? 3 : 2) : 1) + above + lines;
+      return 1 + above + lines;
     };
-    const gap = this.rich ? space.section : 0;
+    const gap = 0;
     const span = (from: number, to: number) => {
       let sum = (to - from) * gap;
       for (let index = from; index <= to; index++) sum += cost(index, index === from);
@@ -348,7 +370,7 @@ export const palette = part({
         );
       const block = this.box({
         backgroundColor: selected ? c.selected : c.raised,
-        marginTop: offset && this.rich ? gap : 0,
+        marginTop: 0,
         onMouseUp: this.click(() => {
           this.selection = index;
           this.choose();
@@ -360,23 +382,35 @@ export const palette = part({
         },
       });
       if (this.rich) {
-        // The bar of the selected choice runs down all its rows.
-        const bar: Part = [`${selected ? glyph.mark : " "} `, c.accent];
-        const width = inner - 2;
+        // One row for a command: its label, its description faint on the same row, and its key at the end.
         const keys = choice.keys ?? "";
-        const top = this.row();
-        top.add(
-          this.text([bar, [clip(choice.label, width - Bun.stringWidth(keys) - 2), c.text, bold]], c.text, {
-            flexGrow: 1,
-            flexShrink: 1,
+        const bar: Part = [`${selected ? glyph.mark : " "} `, c.accent];
+        block.flexDirection = "row";
+        block.height = space.bar;
+        block.add(
+          this.text([bar, [choice.label, c.text, bold]], c.text, {
+            width: Math.max(8, Math.min(column, inner - Bun.stringWidth(keys) - 8)),
+            flexShrink: 0,
             truncate: true,
           }),
         );
-        if (keys) top.add(this.text(keys, selected ? c.muted : c.faint, { paddingRight: space.inset }));
-        block.add(top);
-        if (choice.command)
-          block.add(this.line([bar, [clip(choice.command, width), selected ? c.accent : c.secondary]]));
-        block.add(this.line([bar, [clip(choice.detail.replace(/\s*\n\s*/g, " "), width), c.muted]], c.muted));
+        block.add(
+          this.whole(
+            this.text(choice.detail.replace(/\s*\n\s*/g, " "), selected ? c.muted : c.faint, {
+              truncate: true,
+              flexGrow: 1,
+              flexShrink: 1,
+            }),
+            () => choice.detail.replace(/\s*\n\s*/g, " "),
+          ),
+        );
+        if (keys)
+          block.add(
+            this.text(keys, selected ? c.muted : c.faint, {
+              paddingLeft: space.between,
+              paddingRight: space.inset,
+            }),
+          );
         this.paletteList.add(block);
         continue;
       }

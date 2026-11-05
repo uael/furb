@@ -1,16 +1,6 @@
 //! The parts of the ears of the World that stand apart from a life: how a path resolves, how the store holds and
 //! mends its record, and how the stream of a command is read whole. The tests of the engine drive each ear in a life.
 
-#![expect(
-  clippy::clone_on_ref_ptr,
-  reason = "debt: a clone of an Arc or an Rc that hides its kind"
-)]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-
 use std::{
   fs,
   path::Path,
@@ -116,15 +106,17 @@ fn two_holders_never_own_the_record_at_once_while_programs_start_and_the_record_
   let over = Arc::new(AtomicBool::new(false));
   let starters: Vec<_> = (0..4)
     .map(|_| {
-      let over = over.clone();
+      let over = Arc::clone(&over);
       thread::spawn(move || {
         let program = std::env::current_exe().unwrap();
         while !over.load(Ordering::Relaxed) {
-          let _ = Command::new(&program)
-            .arg("--help")
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output();
+          drop(
+            Command::new(&program)
+              .arg("--help")
+              .stdout(Stdio::piped())
+              .stderr(Stdio::piped())
+              .output(),
+          );
         }
       })
     })
