@@ -21,8 +21,8 @@ except ImportError:
 ROOT = Path(__file__).resolve().parents[1]
 ENGINE = ROOT / "src" / "furb" / "engine.py"
 # What the engine may cost the model that reads it, counted with o200k_base as law 5 says: a wall, and a shape that
-# will not fit under it is a shape not found yet. The owner raised the wall to 8000 (prompt199), and by E7 each engine
-# item raises it by its measured cost, so BUDGET is that sum. The doctrine of furb, which every chain reads in a turn
+# will not fit under it is a shape not found yet. The wall started at 8000, and each engine item raises
+# it by its measured cost, so BUDGET is that sum. The doctrine of furb, which every chain reads in a turn
 # of its setup, gets one thousand.
 BUDGET = 9_718
 DOCTRINE = 1_000
