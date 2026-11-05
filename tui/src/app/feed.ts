@@ -346,13 +346,14 @@ export const feed = part({
         return made;
       };
       // What a step took and cost once it is done, and how long the line that waits has waited.
-      const took = (step: ActRow) =>
+      // The cost stands on the header of a block alone, so a word that joins the block above it shows its time and no cost.
+      const took = (step: ActRow, costs = true) =>
         step.kind !== "rung" || !step.done
           ? ""
           : [
               // A time under a millisecond is one that this life did not measure, as a step that it replayed.
               (w.took[step.id] ?? 0) < 1 ? "" : spell(w.took[step.id] ?? 0),
-              step.cost ? dollars(step.cost) : "",
+              costs && step.cost ? dollars(step.cost) : "",
             ]
               .filter(Boolean)
               .join(" ");
@@ -596,13 +597,21 @@ export const feed = part({
               section.id,
               `${section.key}\n${join}\n${gap}\n${Boolean(section.bar)}`,
               section.label ?? [],
+              // The edge at the left of each line of the box of a thread folds the thread, so it folds from any line.
               (box) =>
                 section.body(
-                  this.barred(box, section.bar, gap, { top: at > 0, bottom: at < sections.length - 1 }),
+                  this.barred(
+                    box,
+                    section.bar,
+                    gap,
+                    { top: at > 0, bottom: at < sections.length - 1 },
+                    thread ? () => this.foldHere(act.id) : undefined,
+                  ),
                 ),
               {
                 indent,
                 join,
+                ...(thread ? { thread: act.id } : {}),
                 ...(section.bar ? { edge: section.bar } : {}),
                 heading: false,
                 separate: at === 0,
@@ -1386,17 +1395,9 @@ export const feed = part({
       // A paused chain says so at the end of its feed, with the cause that its pause gave, and a button that
       // wakes it, since nothing new runs on it until then.
       if (w.paused && !w.search) {
-        // The pause says its own cause: the act that paused the chain and its error, as the fact pause carries them. Work
-        // that the last life left holds the chain until a wake runs it again, and that note is no fault, so it takes a
-        // muted tone and says what the ids mean before it lists them, since the clip of a narrow feed cuts the end.
-        const held = [...w.host.pending.keys()];
-        const acts = held.length === 1 ? "1 act" : `${held.length} acts`;
+        // The pause says its own cause: the act that paused the chain and its error, as the fact pause carries them.
         const said = w.cause ? pauseSaid(w.cause) : undefined;
-        const note =
-          !said && held.length
-            ? `${acts} ran when the last life ended, and run again at a wake: ${held.join(", ")}`
-            : undefined;
-        const failure = said?.text ?? note;
+        const failure = said?.text;
         add("paused", `paused:${failure ?? ""}:${this.theme}`, [], (box) =>
           this.banner(
             box,

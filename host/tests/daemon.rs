@@ -15,7 +15,7 @@ mod daemon {
 
   use std::{
     cell::RefCell,
-    collections::{HashSet, VecDeque},
+    collections::VecDeque,
     fs::{self, File},
     path::{Path, PathBuf},
     sync::{
@@ -30,7 +30,7 @@ mod daemon {
     life::{Answer as Answered, Opening},
   };
   use furb_host::{
-    DaemonError, Event, GRACE, ProtocolError, Settings, TransportError,
+    DaemonError, Event, GRACE, ProtocolError, STALL, Settings, TransportError,
     protocol::{
       Answer, Axis, Dispose, Effect, Frame, Gesture, Hello, Kind, Listed, Mount, Node, PROTOCOL,
       Request, Role, Shape, Slot, Tree, Verb, ViewEffect, ViewEvent,
@@ -147,7 +147,8 @@ mod daemon {
   async fn started(at: &Path, grace: Duration) -> (Local, JoinHandle<Result<(), DaemonError>>) {
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
-    let settings = Settings { opening: opening(at), grace, tailnet: None, door: None, host: None };
+    let settings =
+      Settings { opening: opening(at), grace, stall: STALL, tailnet: None, door: None, host: None };
     let served = local.clone();
     (local, tokio::spawn(async move { run(&served, listener, settings).await }))
   }
@@ -175,8 +176,14 @@ mod daemon {
   async fn started_as(at: &Path, roles: &[Role]) -> Local {
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
-    let settings =
-      Settings { opening: opening(at), grace: GRACE, tailnet: None, door: None, host: None };
+    let settings = Settings {
+      opening: opening(at),
+      grace: GRACE,
+      stall: STALL,
+      tailnet: None,
+      door: None,
+      host: None,
+    };
     let identity = Grants { local: local.clone(), next: Arc::default(), roles: roles.into() };
     tokio::spawn(async move { run(&identity, listener, settings).await });
     local
@@ -429,20 +436,27 @@ mod daemon {
     opened(&mut later, &at, "a.jsonl").await;
     later.attach(&life).await;
     later.ran(&life, "y = 1").await;
-    let facts: Vec<Value> = later
-      .pushed
-      .iter()
-      .filter_map(|frame| match frame {
-        Frame::Event { event: Event::Fact(fact), .. } => Some(fact.clone()),
+    let facts_of = |window: &Window| -> Vec<Value> {
+      let facts = window.pushed.iter().filter_map(|frame| match frame {
+        Frame::Event { event: Event::Fact(fact), .. } if fact[0] != "keep" => Some(fact.clone()),
         _ => None,
-      })
-      .collect();
+      });
+      facts.collect()
+    };
+    let (once, twice, facts) = (facts_of(&window), facts_of(&between), facts_of(&later));
     let about = |kind: &str| facts.iter().filter(|one| one[0] == kind && one[1] == first).count();
     let mine: Vec<&Value> = facts.iter().filter(|one| one[1] == first).collect();
     assert_eq!((about("rung"), about("done")), (1, 1), "{mine:?}");
-    let mut seen = HashSet::new();
-    let again: Vec<&Value> = facts.iter().filter(|one| !seen.insert(one.to_string())).collect();
-    assert!(again.is_empty(), "the window heard these facts twice: {again:?}");
+    // The second and the third births do alike, so each adds as many occurrences of each fact of
+    // the first: a fact that a checkpoint restates told again would add more, and a fact that
+    // repeats an earlier one, dropped, fewer.
+    let times = |facts: &[Value], one: &Value| facts.iter().filter(|other| *other == one).count();
+    let added = |later: &[Value], earlier: &[Value], one: &Value| {
+      i64::try_from(times(later, one)).unwrap() - i64::try_from(times(earlier, one)).unwrap()
+    };
+    let unlike = |one: &&Value| added(&facts, &twice, one) != added(&twice, &once, one);
+    let again: Vec<&Value> = once.iter().filter(unlike).collect();
+    assert!(again.is_empty(), "the births add these facts unlike: {again:?}");
   }
 
   #[tokio::test]
@@ -476,8 +490,14 @@ mod daemon {
     let pin = Verb::Pin { life: life.clone(), holder: "job".to_owned() };
     assert_eq!(window.ask(pin).await, Ok(Answer::Done));
     window.ran(&life, "x = 41 + 1").await;
-    let settings =
-      Settings { opening: opening(&at), grace: SHORT, tailnet: None, door: None, host: None };
+    let settings = Settings {
+      opening: opening(&at),
+      grace: SHORT,
+      stall: STALL,
+      tailnet: None,
+      door: None,
+      host: None,
+    };
     let next = local.clone();
     let new = tokio::spawn(async move { upgrade(&next, settings).await });
     assert!(window.closed().await);
@@ -809,8 +829,14 @@ mod daemon {
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
     let host = Some(at.join("sock"));
-    let settings =
-      Settings { opening: opening(&at), grace: SHORT, tailnet: None, door: None, host };
+    let settings = Settings {
+      opening: opening(&at),
+      grace: SHORT,
+      stall: STALL,
+      tailnet: None,
+      door: None,
+      host,
+    };
     let served = local.clone();
     tokio::spawn(async move { run(&served, listener, settings).await });
     let mut window = Window::dialed(&local).await;
@@ -837,5 +863,90 @@ mod daemon {
     tokio::time::sleep(PAST).await;
     assert_eq!(lines(&started, 3).await.len(), 3, "a replay starts the process once, at its tip");
     assert!(third.starts_with("probe "));
+  }
+
+  /// The bound of a stall in a test: a gap between two facts of a word that waits 0.05 s in a loop
+  /// stays far below it on a loaded machine.
+  const QUIET: Duration = Duration::from_millis(1500);
+
+  /// Whether a frame tells that a life stalled.
+  fn stall(frame: &Frame) -> bool {
+    matches!(frame, Frame::Stalled { .. })
+  }
+
+  /// Whether a frame is the fact of a prompt of None, the message of a stall to the root.
+  fn message(frame: &Frame) -> bool {
+    matches!(frame, Frame::Event { event: Event::Fact(fact), .. }
+      if fact[0] == "prompt" && fact[3] == "chain1" && fact[4] == "None")
+  }
+
+  impl Window {
+    /// Each frame that the daemon pushed, up to the first that the test waits for.
+    async fn heard_until(&mut self, wanted: impl Fn(&Frame) -> bool) -> Vec<Frame> {
+      let mut heard: Vec<Frame> = self.pushed.drain(..).collect();
+      while !heard.last().is_some_and(&wanted) {
+        heard.push(self.read().await.expect("the daemon pushes the frame"));
+      }
+      heard
+    }
+
+    /// Each frame that the daemon pushed for a while.
+    async fn during(&mut self, span: Duration) -> Vec<Frame> {
+      let mut heard: Vec<Frame> = self.pushed.drain(..).collect();
+      let end = tokio::time::Instant::now() + span;
+      while let Ok(Some(line)) = tokio::time::timeout_at(end, self.lines.next()).await {
+        heard.push(serde_json::from_str(&line.unwrap()).unwrap());
+      }
+      heard
+    }
+  }
+
+  #[tokio::test]
+  async fn a_life_that_holds_an_open_act_and_says_no_fact_is_told_once_to_its_windows_and_root() {
+    let at = place();
+    let local = Local::new(at.join("sock"));
+    let listener = local.listen().await.unwrap();
+    let settings = Settings {
+      opening: opening(&at),
+      grace: GRACE,
+      stall: QUIET,
+      tailnet: None,
+      door: None,
+      host: None,
+    };
+    let served = local.clone();
+    tokio::spawn(async move { run(&served, listener, settings).await });
+    let mut window = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    window.attach(&life).await;
+    let flows = "for _ in range(60):\n  await wait(0.05)";
+    let verb = Verb::Run { life: life.clone(), word: flows.to_owned(), on: None };
+    let Ok(Answer::Act(rung)) = window.ask(verb).await else { panic!("no rung") };
+    let heard = window.heard_until(done(&rung)).await;
+    assert!(!heard.iter().any(stall), "a run whose facts flow for twice the bound never stalls");
+    let asked = r#"await prompt(str, "never answered", to="operator")"#;
+    let verb = Verb::Run { life: life.clone(), word: asked.to_owned(), on: None };
+    let began = tokio::time::Instant::now();
+    let Ok(Answer::Act(_)) = window.ask(verb).await else { panic!("no rung") };
+    let Frame::Stalled { acts, notice, .. } = window.until(stall).await else { unreachable!() };
+    assert!(began.elapsed() >= QUIET, "the daemon tells a stall after its bound alone");
+    assert!(acts.iter().any(|one| one.kind == "run" && one.chain == "chain1"), "{acts:?}");
+    assert!(notice.contains("1.5 seconds") && notice.contains(" on chain1"), "{notice}");
+    let Frame::Event { event: Event::Fact(sent), .. } = window.until(message).await else {
+      unreachable!()
+    };
+    assert_eq!(sent[5], notice.as_str(), "the root takes the notice as its message");
+    let heard = window.during(QUIET * 3).await;
+    assert!(!heard.iter().any(stall), "the watch tells one stall once");
+    assert!(!heard.iter().any(message), "the watch sends one message for one stall");
+    let verb = Verb::Run { life: life.clone(), word: "x = 1".to_owned(), on: None };
+    let Ok(Answer::Act(rung)) = window.ask(verb).await else { panic!("no rung") };
+    let heard = window.heard_until(stall).await;
+    assert!(heard.iter().any(done(&rung)), "a new stall comes after a new fact");
+    window.until(message).await;
+    let prompts = Verb::Transcript { life, on: None, of: Some("prompt".to_owned()) };
+    let Ok(Answer::Values(prompts)) = window.ask(prompts).await else { panic!("no prompts") };
+    let messages = prompts.iter().filter(|one| one[4] == "None").count();
+    assert_eq!(messages, 2, "a new fact and a new stall send a new message: {prompts:?}");
   }
 }

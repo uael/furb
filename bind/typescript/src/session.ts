@@ -385,16 +385,24 @@ export class Session extends EventEmitter {
   }
 }
 
-/** Read pending work through the real replay path, without taking a lock or writing the record. The name of the
- * session is the one that the whole record tells, since a replay boots on the last checkpoint of the record, and the
- * names of the session that came before it are no acts of that replay. */
-export async function inspectRecord(record: string): Promise<{ pending: [string, string][]; name?: string }> {
+/** Read pending work through the real replay path, without taking a lock or writing the record, with the state that
+ * a list of records shows for it, as the engine of the crate decides it: runs when it holds work that the next open
+ * resumes, and saved when it holds none. The name of the session is the one that the whole record tells, since a replay
+ * boots on the last checkpoint of the record, and the names of the session that came before it are no acts of that
+ * replay. */
+export async function inspectRecord(
+  record: string,
+): Promise<{ pending: [string, string][]; state: "runs" | "saved"; name?: string }> {
   const session = new Session({ record, readOnly: true });
   try {
     session.open();
     await Promise.resolve();
     const root = session.engine?.root;
-    return { pending: [...session.pending], name: root ? toldName(record, root) : undefined };
+    return {
+      pending: [...session.pending],
+      state: session.engine?.saved() === "runs" ? "runs" : "saved",
+      name: root ? toldName(record, root) : undefined,
+    };
   } finally {
     await session.dispose();
   }

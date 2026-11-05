@@ -257,6 +257,8 @@ export interface BlockOptions {
   /** The color of the line of a message of the operator that stands first or last in the box of a thread, whose cap
    * the edge of the box holds. */
   edge?: RGBA;
+  /** The thread whose box the card stands in, which a fold from any line of the box folds, and whose last card ends it. */
+  thread?: string;
 }
 
 export interface Choice {

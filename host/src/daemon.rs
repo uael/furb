@@ -51,9 +51,10 @@ use crate::{
   life::{Command, Life, LifeHandle, Reply},
   processes::{self, Played},
   protocol::{
-    Answer, BOUND, Frame, Handed, Hello, Kind, Listed, Mount, PROTOCOL, Peer, Request, Verb,
+    Answer, BOUND, Frame, Handed, Hello, Kind, Listed, Mount, Open, PROTOCOL, Peer, Request, Verb,
   },
   serve::{Host, Outbox, serve},
+  stall::Quiet,
   transport::{
     Accepted, Dialer, Door, Identity, Listener, Local, Tailscale, Tcp, Ticket, upgraded,
   },
@@ -71,6 +72,9 @@ pub struct Settings {
   pub opening: Opening,
   /// How long a life with no holder lives before it writes its checkpoint and ends.
   pub grace: Duration,
+  /// How long a life that holds an open act says no fact before the daemon tells each of its
+  /// windows and its root chain that it stalled.
+  pub stall: Duration,
   /// The daemon on the tailnet, when the operator turns it on in `host.json`.
   pub tailnet: Option<Tailnet>,
   /// The file where the daemon writes the address and the token of its door of the windows, the
@@ -324,6 +328,8 @@ enum Asked {
   Left { life: String, outbox: Outbox },
   /// A life whose thread told its end, in one of its births.
   Ended { life: String, born: u64 },
+  /// A life that stalled, in one of its births: each open act, and the notice.
+  Stalled { life: String, born: u64, acts: Vec<Open>, notice: String },
 }
 
 /// The handover as the listener takes it: the lives to give, the peer that asked them, and its
@@ -429,6 +435,10 @@ fn routed(verb: Verb) -> Routed {
     }
     Verb::Unqueue { life, entry } => (life, Command::Unqueue { entry }),
     Verb::Queued { life, on } => (life, Command::Queued { on }),
+    Verb::Desk { life, notices } => (life, Command::Desk { notices }),
+    Verb::Threads { life, on, at } => (life, Command::Threads { on, at }),
+    Verb::AsOf { life, at } => (life, Command::AsOf { at }),
+    Verb::Moments { life } => (life, Command::Moments),
     other => return Routed::Daemon(other),
   };
   Routed::Life(life, command)
@@ -537,6 +547,13 @@ impl Lives {
         }
       }
       Asked::Ended { life, born } => self.ended(&life, born),
+      Asked::Stalled { life, born, acts, notice } => {
+        if let Some(Held { born: now, stage: Stage::Living(holders), .. }) = self.held.get(&life)
+          && *now == born
+        {
+          holders.tell(&Frame::Stalled { life, acts, notice });
+        }
+      }
     }
   }
 
@@ -634,7 +651,14 @@ impl Lives {
     };
     let handle = Life::spawn(opening)?;
     self.born += 1;
-    tokio::spawn(watched(handle.clone(), life.clone(), self.born, self.asks.clone()));
+    let watch = Watch {
+      life: handle.clone(),
+      record: life.clone(),
+      born: self.born,
+      stall: self.settings.stall,
+      log: self.settings.opening.log.clone(),
+    };
+    tokio::spawn(watch.watched(self.asks.clone()));
     if let Some(host) = &self.settings.host {
       let played = Played {
         handle: handle.clone(),
@@ -819,17 +843,52 @@ async fn end(life: &LifeHandle) {
   life.send(Command::End).await.ok();
 }
 
-/// The end of a life told to the daemon, once the life told it.
-async fn watched(
+/// The watch of one birth of a life, which no word of the life runs: its handle, its record, its
+/// birth, the bound of a stall, and the log of the reports of the daemon.
+struct Watch {
   life: LifeHandle,
   record: String,
   born: u64,
-  asks: mpsc::WeakUnboundedSender<Asked>,
-) {
-  let mut events = pin!(life.events(0));
-  while events.next().await.is_some() {}
-  if let Some(asks) = asks.upgrade() {
-    asks.send(Asked::Ended { life: record, born }).ok();
+  stall: Duration,
+  log: Option<Log>,
+}
+
+impl Watch {
+  /// The life watched until its end, which the daemon hears. Each stall goes to the daemon, which
+  /// tells each window, and to the root chain of the life as a message of None, so its actor wakes.
+  /// A life whose thread hangs takes the message late or never, and the watch goes on.
+  async fn watched(self, asks: mpsc::WeakUnboundedSender<Asked>) {
+    let mut events = pin!(self.life.events(0));
+    let mut quiet = Quiet::new(self.stall);
+    loop {
+      tokio::select! {
+        biased;
+        next = events.next() => match next {
+          Some((_, event)) => quiet.heard(&event),
+          None => break,
+        },
+        () = until(quiet.due()) => {
+          let (acts, notice) = quiet.stalled();
+          let (life, born) = (self.record.clone(), self.born);
+          if let Some(asks) = asks.upgrade() {
+            asks.send(Asked::Stalled { life, born, acts, notice: notice.clone() }).ok();
+          }
+          tokio::spawn(woken(self.life.clone(), self.record.clone(), notice, self.log.clone()));
+        }
+      }
+    }
+    if let Some(asks) = asks.upgrade() {
+      asks.send(Asked::Ended { life: self.record, born: self.born }).ok();
+    }
+  }
+}
+
+/// The message of a stall sent to the root chain of a life as a prompt of None, or the report of
+/// why the life refused it.
+async fn woken(life: LifeHandle, record: String, notice: String, log: Option<Log>) {
+  let message = Command::Prompt { shape: "None".to_owned(), message: notice, to: None, on: None };
+  if let Err(no) = life.send(message).await {
+    report(log.as_ref(), &format_args!("{record} stalled, and its root took no message: {no}"));
   }
 }
 

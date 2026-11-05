@@ -102,11 +102,11 @@ same program in TypeScript and in Rust, and four more.
 | To | Read |
 | --- | --- |
 | Use the TUI | [The TUI](https://github.com/uael/furb/blob/main/tui/README.md), and [a picture of each screen](https://github.com/uael/furb/blob/main/docs/tui.md) |
-| Run a life in a window | [The desktop app](https://github.com/uael/furb/blob/main/gui/README.md) |
 | Choose a model, or use a local one | [Models](https://github.com/uael/furb/blob/main/docs/models.md) |
 | Use furb from a program | [The examples](https://github.com/uael/furb/blob/main/docs/examples/README.md), [Python](https://github.com/uael/furb/blob/main/bind/python/README.md), [TypeScript](https://github.com/uael/furb/blob/main/bind/typescript/README.md) |
 | Use the command line | [The command line](https://github.com/uael/furb/blob/main/cli/README.md), and [its protocol](https://github.com/uael/furb/blob/main/docs/protocol.md) |
 | Extend furb | [Extensions](https://github.com/uael/furb/blob/main/docs/extensions.md) |
+| See what may come | [Ideas for later](https://github.com/uael/furb/blob/main/docs/ideas.md) |
 | Check a record that someone gave you | [The audit](https://github.com/uael/furb/blob/main/docs/audit.md) |
 | Change furb | [Contributing](https://github.com/uael/furb/blob/main/CONTRIBUTING.md), and [the contract](https://github.com/uael/furb/blob/main/src/furb/engine.pyi), every law of the engine |
 

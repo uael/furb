@@ -967,6 +967,101 @@
             "life": {
               "type": "string"
             },
+            "notices": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "verb": {
+              "type": "string",
+              "const": "desk"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "What waits for the operator in a life, with each notice that the window still shows."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "at": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "verb": {
+              "type": "string",
+              "const": "threads"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "The threads of a chain with their meaning, now or as they stood just after a moment."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "at": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "verb": {
+              "type": "string",
+              "const": "as_of"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "at"
+          ],
+          "description": "The acts of a life as they stood just after a moment, each with its meaning then."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "moments"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "Each moment of a life at which an act began or ended, in order."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
             "ask": {
               "type": "integer",
               "format": "uint64",
@@ -1825,6 +1920,34 @@
             "peers"
           ],
           "description": "Who is attached to a life now, pushed to each of its windows after each attach and detach."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "acts": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Open"
+              }
+            },
+            "notice": {
+              "type": "string"
+            },
+            "frame": {
+              "type": "string",
+              "const": "stalled"
+            }
+          },
+          "required": [
+            "frame",
+            "life",
+            "acts",
+            "notice"
+          ],
+          "description": "A life that holds open acts and said no fact for the bound of the daemon, pushed once to each\nof its windows by the watch of the daemon, which no word of the life runs: each open act, and\nthe notice that a window shows as it stands."
         },
         {
           "type": "object",
@@ -3053,6 +3176,26 @@
         "message"
       ],
       "description": "One follow-up that waits on a chain: its entry, which the window that queued it chose, the shape\nthat its prompt wants, its message, and why its send failed, when it did. A follow-up that\nfailed holds the queue of its chain until the operator takes it out."
+    },
+    "Open": {
+      "type": "object",
+      "properties": {
+        "act": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "chain": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "act",
+        "kind",
+        "chain"
+      ],
+      "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
   "x-protocol": 1

@@ -6,12 +6,7 @@
 //! test gave it, and it counts what it answered.
 
 #![cfg(unix)]
-#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::expect_used, reason = "a test blocks on its runtime and fails by a panic")]
 
 #[path = "../../tests/common/pipes.rs"]
 mod pipes;
@@ -54,7 +49,7 @@ impl Drop for Yard {
     if std::env::var_os(KEEP).is_some() {
       eprintln!("{KEEP} keeps {}", self.base.display());
     } else {
-      let _ = fs::remove_dir_all(&self.base);
+      drop(fs::remove_dir_all(&self.base));
     }
   }
 }
@@ -64,7 +59,7 @@ impl Yard {
     // A process that starts in the yard reads its directory as the system gives it, with no link in it: on macOS the
     // temporary directory is under /var, a link to /private/var. So the yard is that path too.
     let base = std::env::temp_dir().join(format!("furb-cli-{name}-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&base);
+    drop(fs::remove_dir_all(&base));
     fs::create_dir_all(&base).expect("the root of the yard");
     let root = fs::canonicalize(&base).expect("the root of the yard, with no link");
     let (at, fake) = (root.join("work"), root.join("fake"));
@@ -165,16 +160,16 @@ fn served(word: &str) -> (u16, mpsc::Receiver<String>) {
         length.parse::<usize>().ok()
       });
       let mut body = vec![0; length.unwrap_or_default()];
-      let _ = reader.read_exact(&mut body);
+      drop(reader.read_exact(&mut body));
       let listed = head.starts_with("GET /v1/models ");
-      let _ = tells.send(format!("{head}{}", String::from_utf8_lossy(&body)));
+      drop(tells.send(format!("{head}{}", String::from_utf8_lossy(&body))));
       let (kind, answer) = if listed {
         ("application/json", listing.to_string())
       } else {
         ("text/event-stream", turn.clone())
       };
       let head = format!("HTTP/1.1 200 OK\r\ncontent-type: {kind}\r\nconnection: close\r\n\r\n");
-      let _ = reader.into_inner().write_all(format!("{head}{answer}").as_bytes());
+      drop(reader.into_inner().write_all(format!("{head}{answer}").as_bytes()));
     }
   });
   (port, told)

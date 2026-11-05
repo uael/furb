@@ -51,7 +51,9 @@ const INSPECT_LIMIT = 16 * 2 ** 20;
 interface InspectedState {
   path: string;
   key: string;
-  pending: number;
+  /** The state that the engine of the crate gives the record: an entry of a release that kept only the count of its
+   * pending work is read again. */
+  state?: "runs" | "saved";
   error?: string;
   reading?: boolean;
   /** The name that the replay of the record found, when it found one. */
@@ -331,22 +333,23 @@ export class Workspaces extends EventEmitter {
   private told(path: string, key: string, replays: boolean): InspectedState | undefined {
     this.remembered ??= readInspected(this.inspectedPath);
     const found = this.remembered.get(path);
-    return found?.key === key && found.scanned && (found.replayed !== false || !replays) ? found : undefined;
+    return found?.key === key && found.scanned && found.state && (found.replayed !== false || !replays)
+      ? found
+      : undefined;
   }
   /** The state of a saved row that a read told, unless the session of the row runs. Its name is the name that the
    * operator gave, which the scan of the record found, else the name that an older release kept beside the record,
    * else the name that the replay found. */
   private apply(
     entry: SessionEntry,
-    state: Pick<InspectedState, "pending" | "error" | "reading" | "name" | "said">,
+    state: Pick<InspectedState, "state" | "error" | "reading" | "name" | "said">,
   ): void {
     if (entry.session) return;
     const name = state.said ?? this.legacy.get(entry.path) ?? state.name;
     if (name) entry.name = name;
     // A record that a build of another version made drifts, and opens to read: that is no error.
     entry.error = state.reading ? undefined : state.error;
-    // Work that the record holds resumes as the record opens, so it shows as work that runs, not as paused.
-    entry.status = state.reading ? "reading" : state.error ? "failed" : state.pending ? "runs" : "saved";
+    entry.status = state.reading ? "reading" : state.error ? "failed" : (state.state ?? "saved");
   }
   /** Keep what the replays told in a file beside the list, so that the next run replays only the records that changed
    * since. */

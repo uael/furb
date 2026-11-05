@@ -1,3 +1,0 @@
-# The app builds in the target of the repository, so it shares the dependencies that the crate built.
-[build]
-target-dir = "../../target"

@@ -65,12 +65,14 @@ its chain when it is not Main. The sidebar is wide, 56 columns by default, and i
 
 A click on a workspace gives it the focus: its session that asks, else one that lives, else its newest, opens in the
 feed. A click on the arrow of a workspace that has not the focus shows its sessions without a change of focus. A click
-on a thread shows it in the feed, on its chain, and the input then sends each message to it, as `prompt(None, message,
+on a thread shows it in the feed, on its chain, scrolled to its end with its last message in view, and the input then sends each message to it, as `prompt(None, message,
 on=thread)` while the thread is open: its model reads it at its next step, and it is over at once, so no close answers it.
 A message to a resolved thread is a `prompt(str, message, on=thread)`, which opens it again. Under
 the thread lit, Collapse folds it in the feed to its box on one line, Resolve closes it, as `close(None, thread)` does,
-and Reply makes it the target of the input, as Reply at the end of its box does. The resolved threads fold under one
-row, Resolved, which a click opens. The threads that the ladder of a thread made, its agents, fold under it to one row
+and Reply makes it the target of the input, as Reply at the end of its box does. A thread folds from any line of
+it too: a click on the left edge of the line, or ⌥C for the thread in the middle of the feed. The resolved threads stand
+at the top, folded under one row, Resolved, which a click opens, and the open threads stand last, nearest the input,
+each group in the order of its last message. The threads that the ladder of a thread made, its agents, fold under it to one row
 with their count, Agents, which a click opens, each agent one step deeper, and a question in an agent shows on the row
 of the thread over it. After ⌥T the arrows move in the sidebar, Enter opens the workspace, the session or
 the thread under them, → peeks at a workspace, Space folds, r resolves, o replies, and Esc gives the keys back to the

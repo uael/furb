@@ -18,7 +18,7 @@ large change, open an issue first, so we can agree on its shape before you do th
 | Python 3.14 or later | The engine and the suite. |
 | [uv](https://docs.astral.sh/uv/) | The Python environment, the hooks, and every Python command. |
 | Rust, from `rust-toolchain.toml` | The crate at the root, which `uv sync` builds into the packages `furb-monty` and `furb-cli`. |
-| [bun](https://bun.sh) 1.4.2 or later | The TypeScript bindings, the TUI and the desktop app. |
+| [bun](https://bun.sh) 1.4.2 or later | The TypeScript bindings and the TUI. |
 | [Git for Windows](https://gitforwindows.org), on Windows | Its sh runs the commands of a life, as /bin/sh does on Linux and on macOS. |
 | The credential of a provider of the network, or a local server that `FURB_LOCAL_URL` names | Only for a real life, such as `bun run tui`, `furb prompt` or `script/smoke.py`, as [`docs/models.md`](docs/models.md) says. The demo and the suite need no model. |
 
@@ -173,12 +173,6 @@ and `cli/pyproject.toml` say.
 A screen must read clearly at first sight. After a change that a screen shows, run `bun run screenshots` and read each
 capture. Do not commit the captures: after a push to `main`, `.github/workflows/gallery.yml` draws them again. The entry
 `bun run screenshots` of [`AGENTS.md`](AGENTS.md#commands) gives each variable that the gallery reads.
-
-### The desktop app
-
-`gui/` is the desktop app on Tauri 2, which runs a life in a window as the TUI runs one in a terminal.
-[`gui/README.md`](gui/README.md) says how to build and use it, and [`gui/DESIGN.md`](gui/DESIGN.md) says its design. Its
-core in `gui/src-tauri/` starts the host of a life in `gui/host`, and its UI is in `gui/src/`.
 
 ### The suite
 

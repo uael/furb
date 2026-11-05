@@ -378,15 +378,22 @@ mod kills {
     let facts = yard.facts();
     let since = facts.iter().rev().take_while(|fact| fact[0][0] != "checkpoint").count();
     assert!(since <= TAIL, "the open replays {since} facts after the last checkpoint");
-    let replies = facts
+    let reply = |fact: &&Value| fact[0][1].as_str().is_some_and(|id| id.starts_with("reply"));
+    let ended: Vec<&Value> =
+      facts.iter().filter(reply).filter(|fact| fact[0][0] == "done").collect();
+    let replies = ended.iter().filter(|fact| fact[0][3]["is"] == "tuple").count();
+    // A reply that the open asks again may be answered by the model before its end is in the
+    // record, so the record holds each turn once, but for the replies that are still open.
+    let open = facts
       .iter()
-      .filter(|fact| {
-        fact[0][0] == "done"
-          && fact[0][1].as_str().is_some_and(|id| id.starts_with("reply"))
-          && fact[0][3]["is"] == "tuple"
-      })
+      .filter(reply)
+      .filter(|fact| fact[0][0] == "reply" && !ended.iter().any(|done| done[0][1] == fact[0][1]))
       .count();
-    assert_eq!(yard.answered(), replies, "each turn that the model answered is in the record once");
+    let answered = yard.answered();
+    assert!(
+      replies <= answered && answered <= replies + open,
+      "each turn that the model answered is in the record once: {answered} answered, {replies} in the record, {open} open"
+    );
     let ran = yard.lines("out.txt");
     for line in &ran {
       let times = ran.iter().filter(|one| *one == line).count();
