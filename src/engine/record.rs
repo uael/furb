@@ -12,8 +12,8 @@ use crate::{
 pub const CRASHES: usize = 5;
 
 /// The kinds of act that a life parks, which are those that can end the process that runs them
-/// again: the run of a word and a reply. A command is none of them, since no later life runs it
-/// again: the ear of commands closes it as interrupted at the wake.
+/// again: the run of a word and a reply. A command, a fetch, a search and an act of MCP are none
+/// of them, since no later life runs one again: its ear closes it as interrupted at the wake.
 const PARKS: [&str; 2] = ["run", "reply"];
 
 /// The acts that the entries of a record show started and not done, by name, in the order of the

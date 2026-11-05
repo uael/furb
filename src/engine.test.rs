@@ -117,7 +117,7 @@ impl Lived {
     let ears = [
       ("provider", provider(at.clone(), words, Rc::clone(&read))),
       ("files", world::files(scratch.clone(), at.join("config"), None)),
-      ("bash", world::bash(scratch, &record)),
+      ("bash", world::bash(scratch)),
       ("time", world::time()),
       ("store", store),
     ];
@@ -622,7 +622,7 @@ fn a_command_an_earlier_life_did_not_end_runs_no_more_and_ends_as_interrupted_at
   assert_eq!(why.name, "Refused");
   assert_eq!(
     why.message(),
-    format!("{line:?} was interrupted: the life that ran it ended before it did")
+    format!("\"{line}\" was interrupted: the life that ran it ended before it did")
   );
   assert_eq!(second.engine.read(&format!("{id}/stdout"), door()).unwrap().content, "ready");
   second.engine.wake(&root).unwrap();
@@ -682,7 +682,7 @@ fn a_life_syncs_its_store_at_the_end_of_each_run_and_not_after_each_entry() {
   let ears = [
     ("provider", provider(at.to_path_buf(), words, Rc::default())),
     ("files", world::files(scratch.clone(), at.join("config"), None)),
-    ("bash", world::bash(scratch, &record)),
+    ("bash", world::bash(scratch)),
     ("time", world::time()),
     ("store", store),
   ];
@@ -743,7 +743,7 @@ fn a_store_on_a_full_disk_loses_no_entry_keeps_none_twice_and_tells_the_operator
   let ears = [
     ("provider", provider(at.to_path_buf(), words, Rc::default())),
     ("files", world::files(scratch.clone(), at.join("config"), None)),
-    ("bash", world::bash(scratch, &record)),
+    ("bash", world::bash(scratch)),
     ("time", world::time()),
     ("store", store),
   ];
@@ -1014,7 +1014,7 @@ fn pauser(gate: oneshot::Receiver<()>) -> Box<dyn Ear> {
     let mut gate = Some(gate);
     loop {
       match co.next().await {
-        Next::Heard(a) => {
+        Next::Heard(a) | Next::Resumed(a) => {
           if a.kind() == "wait"
             && a.question()
             && let Some(opens) = gate.take()
@@ -1087,7 +1087,7 @@ fn quick() -> Box<dyn Ear> {
   ear(move |mut co: Co<String>| async move {
     loop {
       match co.next().await {
-        Next::Heard(a) => {
+        Next::Heard(a) | Next::Resumed(a) => {
           if a.kind() == "wait" && a.question() {
             say(&mut co, Fact::says("started", a.about(), []));
             co.work(stream::once(std::future::ready(a.about().to_owned())));
@@ -1172,7 +1172,7 @@ fn early() -> Box<dyn Ear> {
   ear(move |mut co: Co<String>| async move {
     loop {
       match co.next().await {
-        Next::Heard(a) => {
+        Next::Heard(a) | Next::Resumed(a) => {
           if a.kind() == "wait" && a.question() && a.by() == "caller" {
             say(&mut co, Fact::says("started", a.about(), []));
             co.work(stream::once(std::future::ready(a.about().to_owned())));
@@ -1190,7 +1190,7 @@ fn caller() -> Box<dyn Ear> {
   ear(move |mut co: Co<(String, String)>| async move {
     loop {
       match co.next().await {
-        Next::Heard(a) => {
+        Next::Heard(a) | Next::Resumed(a) => {
           if a.kind() == "wait" && a.question() && a.by() == "operator" {
             say(&mut co, Fact::says("started", a.about(), []));
             co.work(stream::once(std::future::ready((a.about().to_owned(), a.on().to_owned()))));
@@ -1600,7 +1600,7 @@ fn a_statement_that_a_model_streams_and_that_prompts_another_chain_has_its_reply
     let ears: [(&str, Box<dyn Ear>); 4] = [
       ("provider", provider.ear()),
       ("files", world::files(scratch.clone(), at.join("config"), None)),
-      ("bash", world::bash(scratch, &record)),
+      ("bash", world::bash(scratch)),
       ("store", store),
     ];
     Engine::boot(record, ears).expect("the life opens")
@@ -1649,7 +1649,7 @@ fn teller() -> Box<dyn Ear> {
           let (about, on) = (a.about().to_owned(), a.on().to_owned());
           co.work(stream::iter([(1, about.clone(), on.clone()), (2, about, on)]));
         }
-        Next::Heard(_) => {}
+        Next::Heard(_) | Next::Resumed(_) => {}
         Next::Worked((1, about, on)) => {
           say(&mut co, Fact::says("note", &on, [Object::string(about)]));
         }
@@ -1910,4 +1910,55 @@ fn a_life_whose_act_holds_the_address_of_an_object_in_its_words_replays_with_no_
   assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
   assert!(second.engine.stopped().is_none(), "{:?}", second.engine.stopped());
   assert_eq!(second.root(), root);
+}
+
+/// A work that gives nothing, and counts its end in `ends` as it drops.
+fn counted(ends: &Rc<std::cell::Cell<u8>>) -> impl futures::Stream<Item = ()> + 'static {
+  /// What ends with the work.
+  struct Ends(Rc<std::cell::Cell<u8>>);
+  impl Drop for Ends {
+    fn drop(&mut self) {
+      self.0.set(self.0.get() + 1);
+    }
+  }
+  stream::unfold(Ends(Rc::clone(ends)), |held| async move {
+    std::future::pending::<()>().await;
+    Some(((), held))
+  })
+}
+
+/// An ear that takes each wait twice, each time with a work that gives nothing.
+fn twice(ends: Rc<std::cell::Cell<u8>>) -> Box<dyn Ear> {
+  ear(move |mut co: Co<()>| async move {
+    loop {
+      if let Next::Heard(a) = co.next().await
+        && a.kind() == "wait"
+        && a.question()
+      {
+        say(&mut co, Fact::says("started", a.about(), []));
+        co.take(a.about(), counted(&ends));
+        co.take(a.about(), counted(&ends));
+      }
+    }
+  })
+}
+
+#[test]
+fn the_work_of_an_act_ends_at_a_later_take_of_it_and_at_its_first_done_whoever_says_it() {
+  let at = std::env::temp_dir().join(format!("furb-engine-taken-{}", std::process::id()));
+  let ends = Rc::new(std::cell::Cell::new(0));
+  let ears =
+    [("provider", provider(at, Rc::default(), Rc::default())), ("twice", twice(Rc::clone(&ends)))];
+  let mut engine = Engine::boot(Vec::<Object>::new(), ears).unwrap();
+  let root = engine.root().to_owned();
+  let wait = engine
+    .wait(&[root.as_str()], verbs::Wait { seconds: Some(9.0), on: on(&root) })
+    .unwrap()
+    .id()
+    .to_owned();
+  engine.pump(Waker::noop()).unwrap();
+  assert_eq!(ends.get(), 1, "the second take ended the first work");
+  engine.cancel(&wait, verbs::Cancel::default()).unwrap();
+  engine.pump(Waker::noop()).unwrap();
+  assert_eq!(ends.get(), 2, "the done that the cancel said ended the second work");
 }

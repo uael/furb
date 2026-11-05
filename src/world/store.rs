@@ -266,7 +266,7 @@ pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>
     let (mut said, mut again) = (Told::Room, false);
     loop {
       match co.next().await {
-        Next::Heard(a) => match a.kind() {
+        Next::Heard(a) | Next::Resumed(a) => match a.kind() {
           "keep" => {
             let Some(entry) = a.word(0) else { continue };
             held.borrow_mut().waiting.push_back(entry.to_owned());

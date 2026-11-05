@@ -699,8 +699,9 @@ impl Engine {
 
   /// The work that an earlier life left, put to the outside again with no wake from a host: a
   /// wake of each act of [`Engine::pending`] that no other act of it made, so the World asks each
-  /// reply of it again, takes each wait and each prompt to the operator of it again, and closes
-  /// each command of it as interrupted, and the model of its chain reads that end in a turn. A
+  /// reply of it again, takes each wait, stand and prompt to the operator of it again, and closes
+  /// each other act of it that it takes as interrupted, a command among them, and the model of its
+  /// chain reads that end in a turn. A
   /// life that opens on a record and does work says it once, at its tip, since a resume returns to
   /// the state of that tip, whose work goes on. A parked act and an act that a pause holds stay as
   /// they are.

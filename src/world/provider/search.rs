@@ -6,17 +6,17 @@
 
 use std::{future::Future, io, process::ExitStatus, process::Stdio, sync::Arc, time::Duration};
 
-use futures::future::BoxFuture;
+use futures::{FutureExt, future::BoxFuture};
 use reqwest::StatusCode;
 use rig_core::http_client::ReqwestClient;
 use serde_json::{Value, json};
-use tokio::{io::AsyncWriteExt, task::AbortHandle};
+use tokio::io::AsyncWriteExt;
 
 use super::{
   claude::Program,
   clients::{Client, Reach},
 };
-use crate::ear::runtime;
+use crate::ear::spawned;
 
 /// A search of the web: given a query, the answer in Markdown with its sources, or why it gives none.
 pub type Searches = Arc<dyn Fn(String) -> BoxFuture<'static, Result<String, Error>> + Send + Sync>;
@@ -73,29 +73,19 @@ const BRIEF: &str = "Search the web to answer the query of the user. Answer in M
 /// The most a model writes in the answer of one search.
 const TOKENS: u64 = 4096;
 
-/// The work of a search or a fetch, on the runtime of the ears, so that a client of HTTP and a process have the runtime they
-/// need, which ends after [`TIMEOUT`], and when what awaits it goes.
-pub(crate) fn spawned<T: Send + 'static, E: From<Cut> + Send + 'static>(
+/// The work of a search or a fetch, as a task of the runtime of the ears, so that a client of HTTP
+/// and a process have the runtime they need, which ends after [`TIMEOUT`], and when what awaits it
+/// goes.
+pub(crate) fn timed<T: Send + 'static, E: From<Cut> + Send + 'static>(
   work: impl Future<Output = Result<T, E>> + Send + 'static,
 ) -> BoxFuture<'static, Result<T, E>> {
-  /// The task, which ends when its handle goes.
-  struct Aborted(AbortHandle);
-  impl Drop for Aborted {
-    fn drop(&mut self) {
-      self.0.abort();
-    }
-  }
-  let task = runtime().spawn(async move { tokio::time::timeout(TIMEOUT, work).await });
-  let aborted = Aborted(task.abort_handle());
-  Box::pin(async move {
-    let got = task.await;
-    drop(aborted);
-    match got {
+  spawned(async move { tokio::time::timeout(TIMEOUT, work).await })
+    .map(|got| match got {
       Ok(Ok(got)) => got,
       Ok(Err(_)) => Err(Cut::Late.into()),
       Err(no) => Err(Cut::Lost(no.to_string()).into()),
-    }
-  })
+    })
+    .boxed()
 }
 
 /// What an address answers a POST of a body of JSON with, as text, with these headers; or why it answers nothing
@@ -141,7 +131,7 @@ pub(crate) fn sourced(text: &str, sources: &[(String, String)]) -> String {
 pub(super) fn claude(program: Program, model: String) -> Searches {
   Arc::new(move |query| {
     let (program, model) = (program.clone(), model.clone());
-    spawned(async move {
+    timed(async move {
       let first = ["-p", "--model", &model, "--output-format", "text", "--system-prompt", BRIEF];
       let mut command = program.base_command(&first).map_err(Error::Command)?;
       command.args([
@@ -194,7 +184,7 @@ pub(super) fn native(client: Client, reach: &Reach) -> Option<Searches> {
     _ => return None,
   };
   let reach = reach.clone();
-  Some(Arc::new(move |query| spawned(native.asked(reach.clone(), query))))
+  Some(Arc::new(move |query| timed(native.asked(reach.clone(), query))))
 }
 
 /// The API of a native search: the Messages API of Anthropic, the Responses API at its default address, the
@@ -355,7 +345,7 @@ const EXCERPT: usize = 1500;
 /// The free search, which asks the tool `web_search` of [`FREE`] for the query.
 pub(crate) fn free() -> Searches {
   Arc::new(|query| {
-    spawned(async move {
+    timed(async move {
       let arguments = json!({"objective": query, "search_queries": [query]});
       let call = json!({"name": "web_search", "arguments": arguments});
       let body = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": call});

@@ -1,12 +1,11 @@
 //! The fetch of the World: a page over HTTP, which an ear answers as a text.
 
-use std::{collections::HashMap, time::Duration};
+use std::time::Duration;
 
-use futures::{FutureExt, StreamExt, future::BoxFuture, stream};
+use futures::{FutureExt, future::BoxFuture, stream};
 use rig_core::http_client::ReqwestClient;
-use unsync::oneshot;
 
-use super::{provider::search::Cut, spawned};
+use super::{interrupted, provider::search::Cut, timed};
 use crate::{
   ear::{Co, Ear, Next, hearing, say},
   fact::Fact,
@@ -33,38 +32,26 @@ type Worked = (String, Result<Text, Error>);
 /// with the page at that address, as a text at the path of that address: as Markdown when the page
 /// is HTML, and as it is when it is other text. It says done with the refusal when the page is
 /// none, is no text, or is larger than the bound. A control that ends an act first ends its work,
-/// and the ear says nothing more of it.
+/// and the ear says nothing more of it. A fetch that an earlier life took and did not end the ear
+/// closes as interrupted at the wake, and fetches it no more.
 pub fn fetch() -> Box<dyn Ear> {
   hearing(&["fetch"], move |mut co: Co<Worked>| async move {
-    let mut stops: HashMap<String, oneshot::Sender<()>> = HashMap::new();
     loop {
-      let a = match co.next().await {
-        Next::Heard(a) => a,
+      match co.next().await {
+        Next::Heard(a) if a.kind() == "fetch" && a.question() => {
+          say(&mut co, Fact::says("started", a.about(), []));
+          let url = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
+          let id = a.about().to_owned();
+          co.take(a.about(), stream::once(fetched(url).map(move |got| (id, got))));
+        }
+        Next::Heard(_) => {}
+        Next::Resumed(a) => interrupted(&mut co, &a, a.about()).await?,
         Next::Worked((id, got)) => {
-          if stops.remove(&id).is_some() {
-            let got =
-              got.map_or_else(|no| Fault::refused(no.to_string()).object(), |one| one.object());
-            say(&mut co, Fact::says("done", &id, [got]));
-          }
-          continue;
+          let got =
+            got.map_or_else(|no| Fault::refused(no.to_string()).object(), |one| one.object());
+          say(&mut co, Fact::says("done", &id, [got]));
         }
-      };
-      let about = a.about().to_owned();
-      let work = match a.kind() {
-        "fetch" if a.question() => {
-          fetched(a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default())
-        }
-        "done" => {
-          stops.remove(&about);
-          continue;
-        }
-        _ => continue,
-      };
-      say(&mut co, Fact::says("started", &about, []));
-      let (stop, stopped) = oneshot::channel();
-      let id = about.clone();
-      co.work(stream::once(work.map(move |got| (id, got))).take_until(stopped));
-      stops.insert(about, stop);
+      }
     }
   })
 }
@@ -89,7 +76,7 @@ pub(crate) enum Error {
 /// The page at an address, as a text at the path of that address: as Markdown when it is HTML, and
 /// as it is when it is other text; or why it is none.
 pub(crate) fn fetched(url: String) -> BoxFuture<'static, Result<Text, Error>> {
-  spawned(async move {
+  timed(async move {
     let client = ReqwestClient::builder()
       .user_agent(AGENT)
       .timeout(Duration::from_secs(60))

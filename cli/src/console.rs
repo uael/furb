@@ -53,7 +53,7 @@ pub(crate) fn terminal() -> Box<dyn Ear> {
         shown = Some((next, stop));
       }
       match co.next().await {
-        Next::Heard(a) => {
+        Next::Heard(a) | Next::Resumed(a) => {
           if let Some(asked) = Asked::taken(&mut co, &a).await? {
             waiting.push_back(asked);
           } else if a.kind() == "done" {

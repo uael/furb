@@ -6,10 +6,9 @@ use std::{
   sync::{Arc, PoisonError, RwLock},
 };
 
-use futures::{FutureExt, StreamExt, stream};
+use futures::{FutureExt, stream};
 use rig_core::completion::CompletionError;
 use tokio::sync::{mpsc, watch as holding};
-use unsync::oneshot;
 
 use super::{
   Advertised, Provider, Refresh, Retries, Search, Settings, Told, Writes,
@@ -23,7 +22,7 @@ use super::{
   word::{AFTER, Found, RAN, STOPPED, afterward, ending, judged, kept, unquoted, writing},
 };
 use crate::{
-  ear::{Co, runtime, say},
+  ear::{Co, say, spawned},
   engine::OPERATOR,
   fact::Fact,
   value::{Fault, Object},
@@ -48,8 +47,6 @@ pub(super) struct Hearer {
   searching: bool,
   native: Search,
   replies: Replies,
-  /// The stops of the searches that work, which end a search that a control ended first.
-  searches: HashMap<String, oneshot::Sender<()>>,
   /// Whether the ear heard a stand. The opening of the life loaded the settings just now, so the
   /// first stand, which the boot asks, reads them again only after it: a refresh there asks each
   /// program of a model, as the claude command line, a second time.
@@ -102,7 +99,6 @@ impl Hearer {
       searching,
       native,
       replies: Replies::default(),
-      searches: HashMap::new(),
       stood: false,
       stands: None,
       lacked: HashSet::new(),
@@ -134,11 +130,14 @@ impl Hearer {
       // stand awaits them as a task of the runtime of the ears, and every chain of the life
       // goes on meanwhile.
       say(co, Fact::says("started", &about, []));
-      let read = runtime().spawn(refresh());
-      co.work(stream::once(read.map(move |got| {
-        let got = got.map_err(|no| no.to_string()).and_then(|got| got);
-        Replied::Refreshed { about, got }
-      })));
+      let read = spawned(refresh());
+      co.take(
+        a.about(),
+        stream::once(read.map(move |got| {
+          let got = got.map_err(|no| no.to_string()).and_then(|got| got);
+          Replied::Refreshed { about, got }
+        })),
+      );
       return;
     }
     if !self.gone.is_empty() && self.lacked.insert(a.on().to_owned()) {
@@ -238,11 +237,10 @@ impl Hearer {
     let paused = co.call("paused", vec![Object::string(about)], vec![]).await;
     let paused = paused.ok().and_then(|one| one.as_ref().as_bool()).unwrap_or(false);
     let (hold, holds) = holding::channel(paused);
-    let (stop, stopped) = oneshot::channel();
     let id = about.to_owned();
     let backoff = self.backoff;
-    co.work(answered(Answering { id, asked, backoff, tells, told, stopped, hold: holds, again }));
-    Ok(Call { watch: streams.then(Watch::default), hold, _stop: stop })
+    co.take(about, answered(Answering { id, asked, backoff, tells, told, hold: holds, again }));
+    Ok(Call { watch: streams.then(Watch::default), hold })
   }
 
   /// What the model of a reply that still stands writes, told to the host under the rung it writes
@@ -386,7 +384,6 @@ impl Hearer {
   /// refusals on the chain with a turn, or adds to it with a refusal, which is what the ear says
   /// when it says no turn; a done that a control said leaves the row as it is.
   fn done(&mut self, a: &Fact) {
-    self.searches.remove(a.about());
     let Some(Reply { chain, actor, .. }) = self.replies.taken.remove(a.about()) else { return };
     if a.by() == a.about() {
       return;
@@ -416,7 +413,6 @@ impl Hearer {
     }
     say(co, Fact::says("started", &about, []));
     let search = (self.native)(&actor).unwrap_or_else(free);
-    let (stop, stopped) = oneshot::channel();
     let id = about.clone();
     let asked = async move {
       let got = search(query.clone()).await;
@@ -425,21 +421,7 @@ impl Hearer {
         got: got.map(|answer| crate::value::Text::new(query, answer)).map_err(|no| no.to_string()),
       }
     };
-    co.work(stream::once(asked).take_until(stopped));
-    self.searches.insert(about, stop);
-  }
-
-  /// What a search came to: its text, or why it gives none, unless a control ended it first.
-  pub(super) fn searched(
-    &mut self,
-    co: &mut Co<Replied>,
-    id: &str,
-    got: Result<crate::value::Text, String>,
-  ) {
-    if self.searches.remove(id).is_some() {
-      let got = got.map_or_else(|no| Fault::refused(no).object(), |one| one.object());
-      say(co, Fact::says("done", id, [got]));
-    }
+    co.take(&about, stream::once(asked));
   }
 
   /// A pause or a wake changes what holds a reply, so each reply that stands reads whether a pause
@@ -512,14 +494,18 @@ struct Asking<'a> {
 }
 
 /// The call of the model of a reply that works: the watch over its word while its model writes
-/// it, when the model streams its word, what tells the call whether a pause holds its reply, and
-/// what ends the call once dropped.
+/// it, when the model streams its word, and what tells the call whether a pause holds its reply.
 pub(super) struct Call {
   pub(super) watch: Option<Watch>,
   /// Whether a pause holds the reply, which holds the next call of its model: a call that runs
   /// returns, and a call that waits to be made again waits for the wake.
   hold: holding::Sender<bool>,
-  _stop: oneshot::Sender<()>,
+}
+
+/// What a search came to: its text, or why it gives none.
+pub(super) fn searched(co: &mut Co<Replied>, id: &str, got: Result<crate::value::Text, String>) {
+  let got = got.map_or_else(|no| Fault::refused(no).object(), |one| one.object());
+  say(co, Fact::says("done", id, [got]));
 }
 
 /// The wait of a call of a model to be made again while a pause holds its reply, which the wake

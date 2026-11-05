@@ -508,3 +508,34 @@ fn the_process_of_a_server_over_stdio_ends_with_the_life() {
     thread::sleep(Duration::from_millis(50));
   }
 }
+
+#[test]
+fn a_call_that_a_crash_cut_ends_as_interrupted_at_the_wake_and_runs_no_more() {
+  let at = place("cut");
+  config(
+    &at.join("config").join("mcp.json"),
+    &json!({"mcpServers": {"fixture": stdio(&at, &json!({}))}}),
+  );
+  let opening = || Opening {
+    directory: at.join("project").display().to_string(),
+    record: Some(at.join("record.jsonl").display().to_string()),
+    config: Some(at.join("config").display().to_string()),
+    roster: Some(Vec::new()),
+    extensions: Some(false),
+    ..Opening::default()
+  };
+  let (mut first, _) = opening().boot::<String>([]).unwrap();
+  // A word awaits the call, whose ear a close ends, as each verb of the extension gives it.
+  let word =
+    "await act('mcp_call', '', controlled(idle, True), 'fixture', 'slow', {'seconds': 30})";
+  let root = first.root().to_owned();
+  let rung = verbs::Rung { word: Some(word.to_owned()), on: Some(root), ..Default::default() };
+  drop(first.rung(rung).unwrap());
+  until(&mut first, |_| starts(&at) == 1);
+  drop(first);
+  let (mut later, _) = opening().boot::<String>([]).unwrap();
+  let cut = later.peek("mcp_call1", verbs::Peek::default()).unwrap().py_repr();
+  let why = "mcp_call1 was interrupted: the life that ran it ended before it did";
+  assert!(cut.contains(why), "the open closed the call that the crash cut: {cut}");
+  assert_eq!(starts(&at), 1, "no life asked the server again");
+}

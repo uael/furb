@@ -475,13 +475,13 @@ async def test_the_door_parks_a_reply_that_five_lives_left_and_runs_it_again_at_
 
 
 async def test_the_ear_of_commands_closes_as_interrupted_a_command_that_its_record_shows_cut(tmp_path: Path) -> None:
-  """The ear of commands that is given the record of a life that ended while a command ran closes that command, at
+  """The ear of commands of a life on the record of a life that ended while a command ran closes that command, at
   the wake, with a refusal that says it was interrupted, and runs it no more, as the opening of the crate gives it."""
   path = str(tmp_path / "record.jsonl")
   record, store = _monty.store(path)
   root = furb_monty.engine.boot(
     record,
-    bash=_monty.bash(str(tmp_path), record),
+    bash=_monty.bash(str(tmp_path)),
     store=store,
     world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears(),
   )
@@ -492,7 +492,7 @@ async def test_the_ear_of_commands_closes_as_interrupted_a_command_that_its_reco
     await asyncio.sleep(0.05)
   kept = _monty.kept(path)
   furb_monty.engine.boot(
-    kept, bash=_monty.bash(str(tmp_path), kept), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
+    kept, bash=_monty.bash(str(tmp_path)), world=Dead(stands=[STANDS[0], str(tmp_path), STANDS[2]]).hears()
   )
   assert furb_monty.engine.pending() == [("bash1", "bash")]
   engine.wake(root)

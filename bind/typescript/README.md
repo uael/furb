@@ -51,7 +51,7 @@ record it opened on. The extensions enable at the start of the life what the con
 turn on, which [Extensions](https://github.com/uael/furb/blob/main/docs/extensions.md) says: `SessionOptions.extensions`
 is false to enable nothing new, and `config` names the config directory of the user. A life runs what its record enables
 either way. The package also gives the ears of the files, the commands, time and the store one by one, as
-`files(scratch)`, `bash(scratch, record)`, `time()` and `store(path)`, for a host that boots an engine by hand. The
+`files(scratch)`, `bash(scratch)`, `time()` and `store(path)`, for a host that boots an engine by hand. The
 files read and write a path against the directory where its chain stands, and a path of `scratch://` in the scratch
 directory that the host names. The commands stream what a command writes, feed its stdin, and end it at its timeout, and
 each runs with `TMPDIR` set to that scratch directory. They are given the record that the life opens on, and at a wake
