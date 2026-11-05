@@ -71,7 +71,7 @@ async def test_a_done_that_an_ear_says_while_the_act_is_put_to_it_is_the_answer_
 async def test_a_kind_that_ends_when_it_is_told_to() -> None:
   """A kind that ends when it is told to: it starts its ear, and then a done that names it is what it came to; a cancel over it ends it with a CancelledError, and a close of it with the value that close carries."""
   _, _, root = born()
-  assert await engine.wait(0, on=root) is None
+  assert await engine.wait(0, root, on=root) is None
   shut = engine.prompt(int, "how many?", to=OPERATOR, on=root)
   await settle()
   engine.close(21, shut)

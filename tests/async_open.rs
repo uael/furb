@@ -47,7 +47,7 @@ async fn a_life_opens_and_runs_its_ears_on_the_runtime_of_the_thread_that_awaits
       let with = verbs::Bash { on: on(), ..Default::default() };
       let exit: Exit = engine.bash("echo hi", with).unwrap().await.unwrap();
       assert_eq!((exit.code, exit.stdout.content.as_str()), (Some(0), "hi\n"));
-      let waited = engine.wait(&[], verbs::Wait { seconds: Some(0.05), on: on() });
+      let waited = engine.wait(&["chain1"], verbs::Wait { seconds: Some(0.05), on: on() });
       assert_eq!(waited.unwrap().await.unwrap(), None::<String>);
     })
     .await;

@@ -9,8 +9,8 @@ from furb.engine import Refused
 
 async def test_a_wait_the_world_takes_it_and_says_it_is_done_when_its_seconds_have_passed() -> None:
   """A wait: the World takes it and says it is done with nothing when its seconds have passed, and it is over then."""
-  _, log, root = born()
-  act = engine.wait(0.1, on=root)
+  _, log, root = born(auto=False)
+  act = engine.wait(0.1, engine.bash("slow", on=root), on=root)
   # The World takes the wait while it is made, so these hold before the loop runs, whatever the load of the machine.
   assert [a[2] for a in said(log, "started") if a[1] == act] == [WORLD]
   assert engine.peek(act, ...) is ...
@@ -20,9 +20,10 @@ async def test_a_wait_the_world_takes_it_and_says_it_is_done_when_its_seconds_ha
 
 async def test_a_wait_stands_in_no_turns() -> None:
   """A wait stands in no turns, since a wait is no work of a model."""
-  _, _, root = born()
+  _, _, root = born(auto=False)
+  command = engine.bash("slow", on=root)
   was = engine.turns(on=root)
-  act = engine.wait(0, on=root)
+  act = engine.wait(0, command, on=root)
   assert await act is None
   assert engine.turns(on=root) == was
   assert [one for one in paragraphs(was) if act in one] == []
@@ -30,8 +31,8 @@ async def test_a_wait_stands_in_no_turns() -> None:
 
 async def test_it_tells_nothing() -> None:
   """It tells nothing, since a wait is no work of a model."""
-  _, log, root = born()
-  act = engine.wait(0, on=root)
+  _, log, root = born(auto=False)
+  act = engine.wait(0, engine.bash("slow", on=root), on=root)
   assert await act is None
   assert [one for one in said(log, "tell") if one[1] == act] == []
   assert [one for one in paragraphs(engine.turns(on=root)) if act in one] == []
@@ -73,3 +74,19 @@ async def test_the_ear_of_a_wait_says_it_done_when_one_of_its_acts_is_done() -> 
   await settle()
   assert [a[2] for a in said(log, "done") if a[1] == act] == [act]
   assert act not in sand.timers
+
+
+async def test_a_wait_with_no_act_after_its_seconds_is_refused() -> None:
+  """A wait with no act after its seconds is refused, with a refusal that says to await the act itself or to give the act as its second argument, since a wait on no act holds a word for no fact."""
+  sand, log, root = born(auto=False)
+  with pytest.raises(Refused, match=r"no act: await the act, or wait\(seconds, act\)"):
+    engine.wait(5, on=root)
+  assert said(log, "wait") == []
+  command = engine.bash("slow", on=root)
+  act = engine.wait(5, command, on=root)
+  await settle()
+  assert engine.peek(act, ...) is ...
+  sand.exits(command, 0)
+  assert await act == command
+  with pytest.raises(Refused, match="no act: await the act"):
+    await engine.rung("await wait(5)\nclose(1)", on=root)

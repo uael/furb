@@ -20,14 +20,15 @@ afterAll(removeDemoDirectories);
 
 test("a word of the operator stands as his messages stand, as its program in a panel of his color: its line that waits is lit until its act ends, then says what the act came to, in each view and in a later life, and a word that the gate refused shows a cross and its finding", async () => {
   let record: string | undefined;
-  const line = (shown: string) => shown.split("\n").find((row) => row.includes("await wait(60)")) ?? "";
+  const line = (shown: string) =>
+    shown.split("\n").find((row) => row.includes("await wait(60, __name__)")) ?? "";
   await composing(
     async ({ session, app, frame }) => {
-      const rung = await session.engine.rung({ word: "await wait(60)", on: session.engine.root });
+      const rung = await session.engine.rung({ word: "await wait(60, __name__)", on: session.engine.root });
       await session.refresh();
       const running = await frame();
       expect(running).not.toContain("You ran");
-      expect(line(running)).toMatch(/(?:\d|[\u2800-\u28ff✻]) +await wait\(60\) +waits 60s/);
+      expect(line(running)).toMatch(/(?:\d|[\u2800-\u28ff✻]) +await wait\(60, __name__\) +waits 60s/);
       expect(app.scroll.getChildren().some((card) => card.id === rung)).toBe(true);
       expect(line(running)).toMatch(/^ +┃ /);
       const wait = session.acts.find((act) => act.kind === "wait" && act.by === rung);
@@ -37,7 +38,7 @@ test("a word of the operator stands as his messages stand, as its program in a p
       await session.refresh();
       const done = line(await frame());
       expect(done).not.toContain("◉");
-      expect(done).toMatch(/ 1 {2}await wait\(60\) +woke/);
+      expect(done).toMatch(/ 1 {2}await wait\(60, __name__\) +woke/);
       session.show("transcript");
       await session.refresh();
       await frame();
@@ -66,7 +67,7 @@ test("a word of the operator stands as his messages stand, as its program in a p
     async ({ frame }) => {
       const shown = line(await frame());
       expect(shown).not.toContain("◉");
-      expect(shown).toMatch(/ 1 {2}await wait\(60\) +woke/);
+      expect(shown).toMatch(/ 1 {2}await wait\(60, __name__\) +woke/);
     },
     { width: 140, height: 42, useMouse: true },
     session,
@@ -336,7 +337,7 @@ test("/extensions lists what a life runs, and a cancel of a word of the operator
         expect(session.notice).toBe(
           "This life runs catchup with catchup(), memory with await recall(), skills with await listed(), compaction, naming with name_session(), ouroboros, web, mcp with await mcp_index(). Run a word of one with /run.",
         );
-        await session.command("/run await wait(60)");
+        await session.command("/run await wait(60, __name__)");
         // The wait runs under the word, so the cancel asks first.
         await until(session, () => session.activity.some((act) => act.kind === "wait" && !act.done));
         await session.command("/cancel");

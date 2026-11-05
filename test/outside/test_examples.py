@@ -113,5 +113,5 @@ def test_a_grant_pauses_the_chain_at_its_ceiling_and_a_larger_grant_lets_it_go_o
 
 
 def test_an_edit_of_the_door_of_a_thread_changes_the_plan_of_the_model(yard: Yard) -> None:
-  yard.words('await wait(3600)\nclose("released")', "await wait(3600)")
-  assert yard.run("door") == 'await wait(3600)\nclose("released")\nreleased\n'
+  yard.words('await wait(3600, __name__)\nclose("released")', "await wait(3600, __name__)")
+  assert yard.run("door") == 'await wait(3600, __name__)\nclose("released")\nreleased\n'

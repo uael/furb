@@ -138,7 +138,7 @@ async def test_the_raised_paragraph_binds_the_exception_as_rungn_raised() -> Non
 async def test_a_word_that_raises_a_cancellederror_tells_cancelled_and_no_raised_header() -> None:
   """A word that raises a CancelledError tells cancelled and no raised header, since a cancel is no fault of the word."""
   _, _, root = born()
-  act = engine.rung("w = wait(5)\ncancel(w)\nawait w", on=root)
+  act = engine.rung("w = wait(5, __name__)\ncancel(w)\nawait w", on=root)
   with pytest.raises(CancelledError):
     await act
   assert [head for head in heads(engine.turns(on=root)) if head.startswith(f"#{act}")] == [f"#{act} cancelled"]
@@ -204,7 +204,7 @@ async def test_a_rung_may_await_at_its_top_level() -> None:
 
 async def test_a_rung_answers_the_prompt_of_its_chain_with_close() -> None:
   """A rung answers the prompt of its chain with close, wherever in its word the close is said."""
-  _, _, root = born("def answer():\n  close(21)\n\nanswer()\nclose(0)", "x = wait(0)\nawait x\nclose(22)")
+  _, _, root = born("def answer():\n  close(21)\n\nanswer()\nclose(0)", "x = wait(0, __name__)\nawait x\nclose(22)")
   assert await engine.rung("close(20)", on=root) == 20
   assert await engine.prompt(int, "close from a function", on=root) == 21
   assert await engine.prompt(int, "close after an await", on=root) == 22
@@ -382,7 +382,7 @@ async def test_it_is_done_with_what_the_word_gave() -> None:
   assert engine.peek(ended) is None and engine.peek(answered) == 21
   assert isinstance(engine.peek(hurt), ValueError)
   assert of(engine.turns(on=root), hurt) == [f"#{hurt} raised\n{hurt}_raised = ValueError('boom')"]
-  stopped = engine.rung("w = wait(5)\ncancel(w)\nawait w", on=root)
+  stopped = engine.rung("w = wait(5, __name__)\ncancel(w)\nawait w", on=root)
   with pytest.raises(CancelledError):
     await stopped
   assert [one.split("\n")[0] for one in of(engine.turns(on=root), stopped)] == [f"#{stopped} cancelled"]

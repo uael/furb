@@ -647,7 +647,7 @@ test("resume preserves chains, programs, theme, and input drafts, and unfinished
   first.view = "transcript";
   app.render();
   app.composer.setText('draft = "keep this"');
-  const pending = await first.engine.wait([], { seconds: 600, on: fork.id });
+  const pending = await first.engine.wait([fork.id], { seconds: 600, on: fork.id });
   const ids = first.chains.map((chain) => chain.id);
   const program = { ...first.program };
   const record = first.host.record;
@@ -748,10 +748,10 @@ test("an act that no word made stands as a lit line of python in a panel, which 
       const start = Date.now();
       setSystemTime(new Date(start));
       try {
-        const id = await session.engine.wait([], { seconds: 60, on: session.engine.root });
+        const id = await session.engine.wait([session.engine.root], { seconds: 60, on: session.engine.root });
         await session.refresh();
         const before = await frame();
-        expect(before).toContain(`${id} = wait(60)`);
+        expect(before).toContain(`${id} = wait(60, "chain1")`);
         expect(before).not.toContain("1.0s");
         const card = app.scroll.getChildren().find((node) => node.id === id);
         if (!card) throw new Error("No panel for the pending wait.");
@@ -760,7 +760,7 @@ test("an act that no word made stands as a lit line of python in a panel, which 
         await frame();
         expect(app.scroll.getChildren().some((node) => node.id === id)).toBe(true);
         expect(screen.captureCharFrame()).toMatch(
-          new RegExp(`(?:\\d|[\\u2800-\\u28ff✻]) +${id} = wait\\(60\\) +waits 60s +1\\.0s`),
+          new RegExp(`(?:\\d|[\\u2800-\\u28ff✻]) +${id} = wait\\(60, "chain1"\\) +waits 60s +1\\.0s`),
         );
       } finally {
         setSystemTime();
@@ -775,7 +775,7 @@ test("a tick writes only the time of a line that runs, and the text of its progr
       const start = Date.now();
       setSystemTime(new Date(start));
       try {
-        const id = await session.engine.wait([], { seconds: 60, on: session.engine.root });
+        const id = await session.engine.wait([session.engine.root], { seconds: 60, on: session.engine.root });
         await session.refresh();
         session.preferences.reducedMotion = true;
         let layouts = 0;
@@ -787,7 +787,7 @@ test("a tick writes only the time of a line that runs, and the text of its progr
         setSystemTime(new Date(start + 1300));
         const first = (await frame()).split("\n");
         const built = layouts;
-        expect(first.filter((line) => line.includes(`${id} = wait(60)`)).length).toBe(1);
+        expect(first.filter((line) => line.includes(`${id} = wait(60, "chain1")`)).length).toBe(1);
         expect(first.join("\n")).toMatch(/waits 60s +1\.0s/);
         // The tick reads the time of the line again, and asks for a frame when it changed.
         const view = [...app.liveLines.keys()][0];
@@ -1008,7 +1008,7 @@ test("one gutter of furb draws the cells of each block of code: the number, the 
     async ({ session, screen, frame }) => {
       const base = (Math.floor(Date.now() / 2600) + 1) * 2600;
       try {
-        const id = await session.engine.wait([], { seconds: 60, on: session.engine.root });
+        const id = await session.engine.wait([session.engine.root], { seconds: 60, on: session.engine.root });
         const note = await session.engine.prompt("None", {
           message: ["```python", "gamma = 3", "```"].join("\n"),
           to: "operator",
@@ -1034,7 +1034,7 @@ test("one gutter of furb draws the cells of each block of code: the number, the 
           expect([got?.r, got?.g, got?.b].map((one) => Math.round((one ?? -1) * 255))).toEqual(
             [want.r, want.g, want.b].map((one) => Math.round(one * 255)),
           );
-        const word = `${id} = wait(60)`;
+        const word = `${id} = wait(60, "chain1")`;
         for (const [index, text, color] of [
           [0, "1", theme.faint],
           [7, "1", mix(theme.selected, theme.faint, 0.4)],
