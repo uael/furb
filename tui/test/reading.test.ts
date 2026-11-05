@@ -29,7 +29,7 @@ test("a record whose fact drifts opens to read, with what it kept, and a dialog 
       .join("\n");
     await writeFile(record, crashed.replace('"echo hi",""', '"echo hi",false'));
     const log = await readFile(`${record}.log`, "utf8");
-    const library = new Workspaces(new Preferences(), { demo: true });
+    const library = new Workspaces(new Preferences(join(directory, "config/ui.json")), { demo: true });
     try {
       await library.import(record, await library.add(directory));
       const session = library.current?.session;
