@@ -829,7 +829,9 @@ def told(id, what="", *notes, **words):
 def control(kind, name, id, *words):
   if not get(id):
     raise Refused("no act " + repr(id))
-  over(id) or scope(acting()) == scope(id) or say(*told(id, name + " by " + site.get(), value=(*words, None)[0]))
+  over(id) or scope(acting()) == scope(id) or (kind == "wake" and not paused(id)) or say(
+    *told(id, name + " by " + site.get(), value=(*words, None)[0])
+  )
   return say(kind, id, *words)
 
 

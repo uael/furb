@@ -122,6 +122,15 @@ impl Life {
     })
   }
 
+  /// Whether a pause stands over an act of the operator on the root, or over the root.
+  pub(crate) fn paused(&mut self, id: &str) -> Result<bool, CliError> {
+    let facts =
+      self.engine.transcript(verbs::Transcript { on: Some(self.root.clone()), of: None })?;
+    let mut quiet = Quiet::default();
+    quiet.watch(vec![self.root.clone(), id.to_owned()], &facts);
+    Ok(quiet.paused)
+  }
+
   /// What an act of the operator on the root came to, awaited until it is done, as the operator waits on its own
   /// loop; or why it never will be: a pause over the act or over the root, which no one wakes while one command
   /// runs, or work that an earlier life left and that the act awaits alone, which no wake runs while one command

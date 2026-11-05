@@ -531,6 +531,33 @@ fn a_prompt_the_world_paused_ends_its_command_with_why_and_goes_on_when_it_is_ta
 }
 
 #[test]
+#[expect(clippy::disallowed_methods, reason = "the test reads the record of a life that it kills")]
+fn a_prompt_said_again_after_a_kill_cut_its_work_is_woken_once_and_its_model_reads_no_wake() {
+  let yard = Yard::new("cut-prompt");
+  yard.words(&["await bash('sleep 60')", COUNT]);
+  let counted = ["prompt", "count the lines", "--shape", "int"];
+  let mut first = yard.kept(&counted);
+  first.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+  let mut child = first.spawn().expect("furb starts");
+  let started = Instant::now();
+  let running = || {
+    let record = fs::read_to_string(yard.record()).unwrap_or_default();
+    record.lines().any(|line| line.starts_with(r#"[["started","bash"#))
+  };
+  while !running() {
+    assert!(started.elapsed() < Duration::from_secs(240), "the command of the word never started");
+    thread::sleep(Duration::from_millis(100));
+  }
+  child.kill().expect("the kill ends the life");
+  child.wait().expect("the life ended");
+  assert_eq!(printed(yard.kept(&counted), ""), "3\n");
+  let record = fs::read_to_string(yard.record()).expect("the record");
+  let woken = record.lines().filter(|line| line.starts_with(r#"[["wake","prompt1","#)).count();
+  assert_eq!(woken, 1, "the open resumes the prompt, and the command wakes it no more: {record}");
+  assert!(!record.contains("#prompt1 woke by"), "no pause held the prompt: {record}");
+}
+
+#[test]
 fn furb_hands_the_terminal_to_the_tui_with_the_words_it_takes() {
   let yard = Yard::new("tui");
   let tui = yard.at.join("tui");

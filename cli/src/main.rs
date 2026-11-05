@@ -279,13 +279,16 @@ async fn catalog(update: bool) -> Result<(), CliError> {
 /// shows it.
 ///
 /// A prompt the record already holds is taken up and never asked twice, so a command said again on a kept record
-/// reads the answer of the life before it and asks no model for it. A prompt it holds that is not done goes on, since
-/// the command wakes it, and a wake of a prompt that is done says nothing.
+/// reads the answer of the life before it and asks no model for it. A prompt it holds that is not
+/// done goes on: the open resumes it, and the command wakes it only when a pause holds it, so it
+/// is woken once.
 async fn prompt(opening: Opening, shape: &str, message: String, to: &str) -> Result<(), CliError> {
   let mut life = Life::lived(opening).await?;
   let to = life::actor(to).await.name;
   let id = if let Some(id) = life.again(shape, &message, &to) {
-    life.engine.wake(&id)?;
+    if life.paused(&id)? {
+      life.engine.wake(&id)?;
+    }
     id
   } else {
     let with = verbs::Prompt { message: Some(message), to: Some(to), on: Some(life.root.clone()) };
