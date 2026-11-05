@@ -176,6 +176,9 @@ coherence, then read it again.
 Before you design or write, run `skill("ponytail")` and `skill("expert")`. Before you review a design note or a diff,
 run `skill("ponytail-review")` and `skill("expert")`.
 
+Words of a person in a session are private. Never quote them, translate them or attribute them in code, docs, skills,
+commits, PRs or issues: state the rule they carry, in plain English.
+
 Before you write or change a Rust file, read the skill rust.
 
 ## Questions of the owner

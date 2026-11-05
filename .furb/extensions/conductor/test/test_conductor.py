@@ -430,7 +430,7 @@ async def test_conducting_and_audit_hold_the_rules_of_rank_and_of_the_frozen_fix
   assert "in the order of the register after the items of queue" in rule
   assert "unless the coordinator asks" in rule
   audit = " ".join(conductor.ns["AUDIT"].split())
-  assert "the hard work first by prompt266" in audit
+  assert "in order of rank, the hard work first: a row that reshapes" in audit
   assert "reshapes a module, a contract or a protocol ranks before a row of polish or a simple row" in audit
 
 
