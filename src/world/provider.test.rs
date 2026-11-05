@@ -2695,7 +2695,7 @@ fn a_provider_that_searches_no_more_refuses_a_search() {
   let model = streaming(&[]);
   let model = scripted(&model).searches(found_by_native());
   let provider = Provider::new(yard("inspected").display().to_string(), vec![model]);
-  let mut engine = lived(provider.searching(false));
+  let mut engine = lived(provider.inspecting(true));
   let no = closed(&mut engine, "close(await act('search', '', None, 'rust', 'm'))").unwrap_err();
   assert!(no.contains("a life that inspects searches nothing"), "{no}");
 }

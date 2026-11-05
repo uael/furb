@@ -15,6 +15,8 @@ mod tui;
 
 use std::{
   collections::HashMap,
+  fmt::Display,
+  io::{self, Write},
   path::{Path, PathBuf},
   process::ExitCode,
   time::Duration,
@@ -201,12 +203,21 @@ fn main() -> ExitCode {
   let furb = Furb::parse();
   world::catalog::keep_fresh();
   match commanded(furb) {
-    Ok(()) => ExitCode::SUCCESS,
+    Ok(()) | Err(CliError::Closed) => ExitCode::SUCCESS,
     Err(why) => {
       eprintln!("furb: {why}");
       ExitCode::FAILURE
     }
   }
+}
+
+/// One line on stdout. A reader that closes the pipe early, as `head` does, ends the command
+/// with no word.
+fn say(line: impl Display) -> Result<(), CliError> {
+  writeln!(io::stdout().lock(), "{line}").map_err(|why| match why.kind() {
+    io::ErrorKind::BrokenPipe => CliError::Closed,
+    _ => CliError::Printed(why),
+  })
 }
 
 /// The command, run on the one runtime of the program. The runtime stops with the command and
@@ -266,9 +277,9 @@ async fn catalog(update: bool) -> Result<(), CliError> {
   for (name, one) in [("models.dev", &status.models_dev), ("pi-ai", &status.pi_ai)] {
     let (version, fetched) =
       (one.version.as_deref().unwrap_or("-"), one.fetched.as_deref().unwrap_or("never"));
-    println!("{name}: version {version}, fetched {fetched}");
+    say(format_args!("{name}: version {version}, fetched {fetched}"))?;
     if let Some(why) = &one.error {
-      println!("  error: {why}");
+      say(format_args!("  error: {why}"))?;
       failed = true;
     }
   }
@@ -294,7 +305,7 @@ async fn prompt(opening: Opening, shape: &str, message: String, to: &str) -> Res
     let with = verbs::Prompt { message: Some(message), to: Some(to), on: Some(life.root.clone()) };
     life.engine.prompt(world::Shape::object(shape), with)?.id().to_owned()
   };
-  println!("{}", life.settled(&id).await?.py_repr());
+  say(life.settled(&id).await?.py_repr())?;
   Ok(())
 }
 
@@ -305,7 +316,7 @@ async fn turns(opening: Opening) -> Result<(), CliError> {
   for turn in life.engine.turns(verbs::Turns { on })? {
     let text =
       |at: usize| entry(&turn.as_ref(), at).and_then(|one| one.as_str()).unwrap_or_default();
-    println!("[{}] {}", text(0), text(1));
+    say(format_args!("[{}] {}", text(0), text(1)))?;
   }
   Ok(())
 }
@@ -331,7 +342,7 @@ fn facts(record: &Path, act: Option<&str>, chain: Option<&str>) -> Result<(), Cl
     if act.is_some_and(|one| one != about) || chain.is_some_and(|one| one != on) {
       continue;
     }
-    println!("{}: {}", at + 1, fact.py_repr());
+    say(format_args!("{}: {}", at + 1, fact.py_repr()))?;
   }
   Ok(())
 }
@@ -341,7 +352,7 @@ async fn run(opening: Opening, word: String) -> Result<(), CliError> {
   let mut life = Life::lived(opening).await?;
   let with = verbs::Rung { word: Some(word), on: Some(life.root.clone()), ..Default::default() };
   let id = life.engine.rung(with)?.id().to_owned();
-  println!("{}", life.settled(&id).await?.py_repr());
+  say(life.settled(&id).await?.py_repr())?;
   Ok(())
 }
 
@@ -359,8 +370,8 @@ async fn extensions(opening: Opening) -> Result<(), CliError> {
   let mut life = Life::lived(opening).await?;
   for one in life.extensions()? {
     match one.life.as_str() {
-      "" => println!("{}", one.name),
-      life => println!("{}: {life}", one.name),
+      "" => say(&one.name)?,
+      life => say(format_args!("{}: {life}", one.name))?,
     }
   }
   Ok(())

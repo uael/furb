@@ -654,3 +654,42 @@ fn furb_host_serves_one_daemon_on_the_machine_and_an_upgrade_takes_its_place() {
   upgraded.kill().expect("the new daemon ends");
   ended(upgraded);
 }
+
+#[test]
+fn a_command_that_prints_ends_with_no_word_when_the_reader_of_stdout_closes_the_pipe() {
+  let yard = Yard::new("pipe");
+  let asked = ["prompt", "say a number", "--to", "operator", "--shape", "int"];
+  assert_eq!(printed(yard.kept(&asked), "7\n"), "7\n");
+  for words in [["facts", "--record"], ["turns", "--record"]] {
+    let mut command = yard.furb(&words);
+    command.arg(yard.record()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command.spawn().expect("furb starts");
+    // The reader is gone before furb prints its first line, as a `head` that took its line is.
+    drop(child.stdout.take());
+    let ended = child.wait_with_output().expect("furb ends");
+    let said = String::from_utf8_lossy(&ended.stderr).into_owned();
+    assert!(said.is_empty(), "{words:?} says nothing on a closed pipe: {said}");
+    assert_eq!(ended.status.code(), Some(0), "{words:?} ends quietly on a closed pipe");
+  }
+}
+
+#[test]
+fn the_turns_of_a_record_that_a_life_kept_end_with_its_own_last_turn_whatever_model_is_named() {
+  let yard = Yard::new("inspected");
+  let asked = ["prompt", "say a number", "--to", "operator", "--shape", "int"];
+  assert_eq!(printed(yard.kept(&asked), "7\n"), "7\n");
+  let before = fs::read(yard.record()).expect("the record");
+  let turns = |model: &[&str]| {
+    let mut command = yard.furb(&["turns", "--record"]);
+    command.arg(yard.record()).args(model);
+    printed(command, "")
+  };
+  let said = turns(&[]);
+  assert!(said.ends_with("\nprompt1_value = 7\n"), "an inspection adds no turn of its own: {said}");
+  assert!(
+    !said.contains("\n#chain1 caught up"),
+    "no word file is gone for a life that stands as its record: {said}"
+  );
+  assert_eq!(turns(&["--model", "claude-cli:haiku"]), said, "an inspection stands as its record");
+  assert_eq!(fs::read(yard.record()).expect("the record"), before, "an inspection keeps nothing");
+}
