@@ -99,8 +99,6 @@ export function pad(parts: readonly Part[], width: number, ground?: RGBA): Part[
 export class LoomPane {
   /** The rows whose workers the loom folds into them. */
   readonly folds = new Set<string>();
-  /** The moment that the time cursor stands at, and nothing at the present. */
-  cursor?: number;
   /** The first row that shows, which follows the selection. */
   private top = 0;
   /** The chain of each row of the last draw, by its row on the screen, for a click. */

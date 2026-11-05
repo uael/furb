@@ -219,9 +219,8 @@ meanings. The entry of such a name here gives only its form in the engine.
   Kernel and the version of the build, `VERSION` in `src/world/store.rs`, which the store says as it hears the root of
   a new record at its birth. A build keeps the version while each record of `tests/replay` replays on it with no
   drift. After a checkpoint, only the fact made of the segment after it counts,
-  and the store says it again at the root of the first life that goes on from the checkpoint. When it names another
-  engine or another version, a life replays none of that segment: it writes at the tip a checkpoint that carries the
-  segment as data, and goes on from it.
+  and the store says it again at the root of the first life that goes on from the checkpoint. A life replays that
+  segment word by word whatever build of the major made it, and a drift is a defect.
 - checkpoint: the fact by which a record carries the state of its life to a later life of any build of its major, at
   its tip: plain data with a version of its own shape, `schema`, apart from the version of the record. It holds each
   chain that lives with its label, its source, its turns, the text of its definitions, its plain values and whether
@@ -271,8 +270,8 @@ meanings. The entry of such a name here gives only its form in the engine.
 - There is one root per record, and one process at a time owns a record.
 - A chain is a function of the record, and a later boot must offer the same interpreter and the same outside, since a
   record is made again by running its words. A record names the
-  version of the build that made it, and a life on a build of another version replays none of the segment after its
-  last checkpoint: it carries that segment as data.
+  version of the build that made it, and a life replays the segment after its last checkpoint word by word, on any
+  build of the major, to the exact state of its tip.
 - A chain is one conversation, and the transcript that a provider caches grows at one end.
 - Nothing is told twice, and nothing tells what it does not know: an act tells of itself, and a chain of the rungs it
   asks a model for, with the message of the prompt each advances, of a word that told nothing, of the prompts and the

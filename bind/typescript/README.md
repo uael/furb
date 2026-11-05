@@ -239,10 +239,10 @@ record when moving a session.
 The model of a life is the views that a host derives from the acts of a life, in `src/life`, which `furb/life`
 gives. It holds no native code and no module of node, so a terminal and a window of the web read the same views:
 
-- `acts`: the act as a view reads it, `LiveAct`, the kinds of work, `WORK`, what a command came to, `Exit`, the
-  measure of a chain, `Measure`, which `measureOf` gives from the answers of its models, a compaction of a chain,
-  `Compaction`, which an `Activity` keeps for each prefix said on a chain after its birth, and whether an act failed
-  or was cancelled.
+- `acts`: the act as a view reads it, `LiveAct`, the kinds of work, `WORK`, whether a site is the operator or a member
+  of the operator, `operated`, what a command came to, `Exit`, the measure of a chain, `Measure`, which `measureOf`
+  gives from the answers of its models, a compaction of a chain, `Compaction`, which an `Activity` keeps for each
+  prefix said on a chain after its birth, and whether an act failed or was cancelled.
 - `asks`: the desk of the operator, `desk`: each question that waits for him and each notice that he did not dismiss,
   the oldest first, each with its chain and the choices of its shape, `choicesOf`: yes and no for a bool, and each
   value of a Literal. `aimed` gives the ask that the operator acts on, on the chain that he reads, `beside` the ask a
@@ -262,9 +262,6 @@ gives. It holds no native code and no module of node, so a terminal and a window
   that runs, and what each act came to in a few words.
 - `plain`: a message as a person reads it, with no name of its exception around it and no path of the directory of
   the life, and what a failed act says in such words.
-- `time`: the marks of a life on its axis of time: each step, each question to the operator, and each end of a thread.
-- `watch`: the last value of each name that a chain told by a moment, under the act whose name it starts with.
-- `debugger`: the call stack of a chain, and the program of the ladder of a prompt, which its door holds.
 
 ## How the package is built
 

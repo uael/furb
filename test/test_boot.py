@@ -530,8 +530,51 @@ async def test_what_it_keeps_it_says() -> None:
   assert said(third, "bash") == [] and once == root
 
 
+async def raises_again() -> None:
+  """A replay goes on past each raise of an ear that the first life took, in a delivery, in an act made again and at the last entry, and ends at a raise before the act that it makes again exists."""
+  probe, _, top = born()
+  word = (
+    "b = bash('echo hi')\n"
+    "def noisy(id):\n  yield 'started', id\n  while True:\n    a = yield {b}\n"
+    "    if a[0] == 'done':\n      raise TypeError('noisy')\n"
+    "n = act('noisy', '', noisy)\nawait wait(0.05, b)\nwent = peek(b).code\nlast = bash('echo ' + str(went))\nawait last"
+  )
+  await engine.rung(word, on=top)
+  await settle()
+  live, b = viewed(top), engine.module(top)["b"]
+  assert live["modules"][top]["went"] == "0"
+  _, over = await relived(Sand(), list(probe.record))
+  later = viewed(over)
+  assert {k: v[: len(live["facts"][k])] for k, v in later["facts"].items() if k in live["facts"]} == live["facts"]
+  assert live["modules"] == later["modules"]
+  assert {k: later["outcomes"].get(k) for k in live["outcomes"]} == live["outcomes"]
+  cut = next(n for n, (e,) in enumerate(probe.record) if e[:2] == ("done", b))
+  await relived(Sand(), list(probe.record)[: cut + 1])
+  door, _, top = born()
+  await engine.rung(
+    "def touchy(id):\n  yield 'started', id\n  yield {'read'}\n  raise TypeError('touchy')\nt = act('touchy', '', touchy)",
+    on=top,
+  )
+  await settle()
+  with pytest.raises(TypeError, match="touchy"):
+    engine.read("a", on=top)
+  after = engine.bash("echo after", on=top)
+  await settle()
+  live = viewed(top)
+  _, over = await relived(Sand(), list(door.record))
+  later = viewed(over)
+  assert {k: v[: len(live["facts"][k])] for k, v in later["facts"].items() if k in live["facts"]} == live["facts"]
+  assert {k: later["outcomes"].get(k) for k in live["outcomes"]} == live["outcomes"] and after in live["outcomes"]
+  sand, _, top = born()
+  with pytest.raises(Refused):
+    engine.read("missing", on=top)
+  record = [((*e, "x", "y") if e[0] == "read" and e[2] == OPERATOR else e,) for (e,) in sand.record]
+  with pytest.raises(TypeError):
+    await relived(Sand(), record)
+
+
 async def test_given_at_its_birth_what_the_world_kept_of_an_earlier_life() -> None:
-  """Given at its birth what the World kept of an earlier life, it says those entries again in the order it was given them, each once every fact said before it has been heard: an act whose maker is neither an act nor an ear that boot was given it makes again through its verb under the site of its maker, once the chain it is on has been made again, since that maker makes nothing again of what the record holds; an act whose maker is an act it makes not, since the word of that act makes it again; an act whose maker is an ear that boot was given it makes through act under the site of that ear, with no ear of its own, when that ear did not make it again by then, so a view of a later life holds it where the first life held it; and any other fact it says once the act it is about has been made again, so that its controls and its dones land where they landed."""
+  """Given at its birth what the World kept of an earlier life, it says those entries again in the order it was given them, each once every fact said before it has been heard, or once a raise that is no drift stopped the bus with some of them unheard: an act whose maker is neither an act nor an ear that boot was given it makes again through its verb under the site of its maker, once the chain it is on has been made again, since that maker makes nothing again of what the record holds; an act whose maker is an act it makes not, since the word of that act makes it again; an act whose maker is an ear that boot was given it makes through act under the site of that ear, with no ear of its own, when that ear did not make it again by then, so a view of a later life holds it where the first life held it; and any other fact it says once the act it is about has been made again, so that its controls and its dones land where they landed."""
   sand, log, root = born()
   step = engine.rung("await wait(100.0, __name__)\nclose(7)", on=root)
   await settle()
@@ -570,6 +613,8 @@ async def test_given_at_its_birth_what_the_world_kept_of_an_earlier_life() -> No
   life(Sand(), list(noting.record), asker=asking())
   await settle(300)
   assert engine.transcript(root, "asker") == noted and [a[:2] for a in noted] == [("note", "note1")]
+
+  await raises_again()
 
 
 async def test_an_entry_whose_act_this_life_has_not_made_again_the_journal_steps_over() -> None:

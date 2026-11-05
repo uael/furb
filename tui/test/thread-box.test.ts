@@ -96,6 +96,21 @@ test("a terminal narrower than 100 columns shows the sidebar in place of the fee
     true,
   ));
 
+test("a terminal narrower than 100 columns, which hides the sidebar, aims the input at the open thread of the chain shown", () =>
+  composing(
+    async ({ session, frame }) => {
+      await idle(session);
+      const root = session.engine.root;
+      await session.engine.pause(root);
+      const open = await session.engine.prompt("str", { message: "A thread that stays open", on: root });
+      await session.refresh();
+      await frame();
+      expect(session.target).toBe(open);
+    },
+    { width: 80, height: 30 },
+    true,
+  ));
+
 test("a click on Reply makes the thread the target of the input, whose line and meta line take its color and its name, a message then goes to the thread and opens it again, and + New thread sends the next one to a new thread", () =>
   composing(
     async ({ session, app, screen, click, frame }) => {

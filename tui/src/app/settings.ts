@@ -149,7 +149,7 @@ export const settings = part({
   details(): void {
     const w = this.session;
     // Each thread of the chain folds to its header and opens to its program, as a click on its header does.
-    const threads = w.view === "feed" ? this.chainThreadList(w.selected) : [];
+    const threads = w.view === "feed" ? w.threads.list : [];
     this.openPalette("Details", [
       ...threads.map((one) => {
         const folded = this.threadFolded(one.act.id);

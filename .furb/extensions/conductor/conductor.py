@@ -1,11 +1,13 @@
 import json
 import re
-from asyncio import CancelledError
+from collections.abc import Generator
 from typing import Any
 
 from furb.engine import (
   HIDDEN,
   ROOT,
+  Act,
+  Exit,
   Refused,
   Text,
   act,
@@ -14,9 +16,10 @@ from furb.engine import (
   cd,
   chain,
   clock,
+  close,
+  controlled,
   cwd,
   get,
-  module,
   operated,
   over,
   paused,
@@ -37,7 +40,7 @@ Put each item in queue as (key, brief, thread), in the order of the work, the ha
 2. The files of an item are areas[key], which you write, and a test file holds no item. An item with no areas holds no file. A conflict on a file that need not change alone gets a fixer, by E3 of #1084. Each item that waits on a PR or a file is one line of the next notice, with its cause, once.
 3. A worker runs on a chain thread/key, at model_of(key), and an edit or a fix in a workspace {repo}-wN of its own, never one whose furb-holder names the chain of a live worker. Every DISK_EVERY seconds keep_disk() keeps KEEP GB of the disk free, by prompt1180: it deletes the target of the workspace whose item ended first, never of one that a live worker holds, and tells you once when it cannot. Its brief starts with the asks of the owner that its item carries. kinds[key] is edit (a PR), audit (a register in scratch and no PR) or fix (one red PR), and efforts[key] names its model. Its brief sends each build of the worker through script/build-slot.sh, which holds the slots of builds that all the workers of the machine share and caps the jobs of cargo: the tool holds that rule, and the round only briefs it.
 4. A worker that ends gives its report whole in the next notice. A worker that ends with no PR is a decision, and its notice wakes you.
-5. A PR of the round is an open PR whose label w:key names an item that the round holds. A red or conflicting one counts as handled only while a worker that knows of its head acts, by prompt1142: its live maker, which the round tells at once, once for each head and problem, to fix it before any other step, else a fixer that the round sent for that head, at most 2 for a head, then a notice. A head that such a worker has not moved in UNMOVED seconds is one notice, with the worker and its last act. handler() holds that rule for the sweep and for guard_faults(), so the guard flags what the sweep leaves. A PR whose head differs from its branch on origin for two sweeps is closed and reopened once for that head, since GitHub did not read the branch.
+5. A PR of the round is an open PR whose label w:key names an item that the round holds. A red or conflicting one counts as handled only while a worker that knows of its head acts, by prompt1142: its live maker, which the round tells at once, once for each head and problem, to fix it before any other step, else a fixer that the round sent for that head, at most 2 for a head, then a notice. A head that such a worker has not moved in UNMOVED seconds is one notice, with the worker and its last act. handler() holds that rule for the sweep. A PR whose head differs from its branch on origin for two sweeps is closed and reopened once for that head, since GitHub did not read the branch.
 6. While the newest run of the gates on main failed, the round sends no order and no fixer for a red PR, and tells you once. A red PR whose failed checks all fail on main too gets no fixer either, and the round says so in one line.
 7. A green PR merges by the auto-merge of GitHub, which the round turns on for each PR of the round, else by a plain merge, else by gh stack merge for a layer of a stack, behind a ruleset of main that requires the check GATE. With no such ruleset, the round turns on no auto-merge and tells you once. A draft, an open box of its checklist, or the label hold, hold:owner-review or owner-merge keeps a PR from the merge, and the label paused takes it out of the round.
 8. At ALIGN_EVERY merged PRs since the last audit of alignment, by prompt260 and prompt1099, the round queues the next free alignN, of kind audit, on limits["models"]["astra"] when N is odd, else on the model of audit, which checks main against the words of the owner, and each row of its register becomes an item, queued in the order of the register after the items of queue, unless the coordinator asks for the rows before the items that no worker holds yet.
@@ -45,7 +48,7 @@ Put each item in queue as (key, brief, thread), in the order of the work, the ha
 10. Each new comment of the owner on a PR of the round goes to the worker on it, else to a fixer, and the label hold comes on the PR until its worker pushes the fix and takes hold off.
 11. A fix of the round does not become its own item or PR, by pick R1 of the owner: it waits in scratch://round/frozen.md, while the live module carries it, and the waiting fixes land together in one change.
 A step that fails is one notice, and the round goes on at the next round. The whole state lives in the module of your chain, so a word that a checkpoint cuts loses nothing: await conduct() again in a turn that shows.
-Each act of the round goes through quietly(verb, ...), so its end wakes nobody: you hear only a notice. Make each act that you do not await the same way.
+The round is an act on a chain of its own, so the end of each of its acts wakes nobody: you hear only its notices, and its done when it holds nothing. lead["round"] names it. close(None, lead["round"]) stops it, and each worker goes on, where a pause of it pauses each worker and a cancel ends them. await conduct() starts it again from any turn: the new round ends the beat of the round before it, which ends at its next step, and starts once that round is over, or after every seconds.
 A change of the round loads as the whole file, run again as a rung: each name of the state binds with setdefault and keeps its value."""
 
 MOST = 10
@@ -221,8 +224,8 @@ def low_memory() -> str:
   return f"the machine has under {MEMORY:g} GB of memory free" if machine.get("free", MEMORY) < MEMORY else ""
 
 
-async def probe_memory() -> None:
-  got = await shell(PROBE, timeout=30)
+def probe_memory() -> Generator[set[str], object, None]:
+  got = yield from shell(PROBE, timeout=30)
   said = got.stdout.content.strip()
   try:
     machine["free"] = float(said)
@@ -230,19 +233,13 @@ async def probe_memory() -> None:
     raise Refused(f"the probe of the memory said {said[-100:] or 'nothing'}: {got.stderr.content.strip()[-200:]}") from None
 
 
-def quietly(verb, *args, **words):
-  got = []
-
-  def ear(id):
-    got.append(verb(*args, **words))
-    yield "done", id, None
-
-  act("quiet", "", ear)
-  return got[0]
-
-
-def shell(command: str, **words):
-  return bash(command, show=HIDDEN, ok=True, on=str(lead.get("shell", "")), **words)
+def shell(command: str, **words) -> Generator[set[str], object, Exit]:
+  ran = bash(command, show=HIDDEN, ok=True, **words)
+  while not over(ran):
+    yield {ran}
+  if isinstance(got := peek(ran), Exit):
+    return got
+  raise Refused(f"{ran} came to {got!r}")
 
 
 def merged_since() -> str:
@@ -255,7 +252,7 @@ def merged_since() -> str:
 def notice(key: str, message: str) -> None:
   if key not in noticed:
     noticed.add(key)
-    quietly(prompt, None, message + merged_since())
+    prompt(None, message + merged_since(), on=home())
 
 
 def once(key: str, line: str) -> None:
@@ -343,6 +340,10 @@ def working_at(name: str) -> str:
   return str(get(name)[3])
 
 
+def home() -> str:
+  return scope(get(acting())[2])
+
+
 def slug(text: str) -> str:
   return "-".join(re.findall(r"[a-z0-9]+", text.lower()))[:34].strip("-")
 
@@ -367,16 +368,16 @@ def seated() -> set[str]:
   return {slots[n] for n in living() if n in slots} | {slots.get("coordinator", "")}
 
 
-async def placed(where: str) -> tuple[str, str]:
-  held, last = seated(), slots.get(where, "")
+def placed(where: str) -> Generator[set[str], object, tuple[str, str]]:
+  held = seated()
   live = " ".join(shq(working_at(n)) for n in living() if working_at(n) != where)
-  for slot in dict.fromkeys([last, *(f"w{i}" for i in range(1, 2 * MOST + 3))]):
+  for slot in (f"w{i}" for i in range(1, 2 * MOST + 3)):
     path = f"{cwd()}-{slot}"
-    if slot and slot not in held and (await shell(f"sh -c {shq(SETTLE)} sh {shq(path)} {shq(where)} {live}", timeout=120)).code != 3:
+    if slot not in held and (yield from shell(f"sh -c {shq(SETTLE)} sh {shq(path)} {shq(where)} {live}", timeout=120)).code != 3:
       break
   else:
     raise Refused("each workspace holds a live worker")
-  quietly(rung, f"try:\n  cd({path!r})\nexcept Refused:\n  pass", on=where)
+  rung(f"try:\n  cd({path!r})\nexcept Refused:\n  pass", on=where)
   return WORKSPACE.replace("{path!r}", repr(path)).replace("{path}", path), slot
 
 
@@ -389,22 +390,21 @@ def carried(key: str) -> str:
   return f'This item carries the asks {ids} of the owner, in his words:\n{lines}\nServe each of them whole. End your report with the line "Served: <ids>" and, for each part that stays undone, "Left: <id> (why)".\n\n'
 
 
-async def hire(key: str, what: str, thread: str = "", brief: str = "", model: str = "") -> str:
+def hire(key: str, what: str, thread: str = "", brief: str = "", model: str = "") -> Generator[set[str], object, str]:
   model, kind = model or model_of(key), kind_of(key)
   marks = f" --label w:{key}" + (f" --label thread:{thread}" if thread else "")
-  where = str(quietly(chain, f"{thread or 'w'}/{key}"))
-  quietly(rung, f"actor = {model!r}", on=where)
+  where = str(chain(f"{thread or 'w'}/{key}"))
+  rung(f"actor = {model!r}", on=where)
   text, slot = (brief or {"audit": AUDIT, "edit": WORKER, "fix": "{what}"}[kind]).replace("{what}", what), ""
   if kind != "audit":
-    quietly(shell, "".join(f"gh label create {m} --force >/dev/null 2>&1; " for m in marks.split(" --label ")[1:]))
-    space, slot = await placed(where)
+    space, slot = yield from placed(where)
     text = text.replace("{workspace}", space)
-  for old, new in (("{labels}", marks), ("{repo}", cwd()), ("{key}", key), ("{home}", scope(acting())), ("{models}", ", ".join(runs())), ("{chain}", where)):
+  for old, new in (("{labels}", marks), ("{repo}", cwd()), ("{key}", key), ("{home}", home()), ("{models}", ", ".join(runs())), ("{chain}", where)):
     text = text.replace(old, new)
-  name = str(quietly(prompt, tuple[int, str], carried(key) + text, to=model, on=where))
+  name = str(prompt(tuple[int, str], carried(key) + text, to=model, on=where))
   working[name], models[name], homes[key] = key, model, where
   if slot:
-    slots[name] = slots[where] = slot
+    slots[name] = slot
   if "free" in machine:
     machine["free"] -= WORKER_MEMORY
   return name
@@ -433,7 +433,7 @@ def waiting(key: str) -> str:
   return ""
 
 
-async def staff() -> None:
+def staff() -> Generator[set[str], object, None]:
   for item in [*queue, *backlog]:
     if len(running()) >= cap() - 1:
       return
@@ -446,7 +446,7 @@ async def staff() -> None:
         once(f"waits {item[0]} {cause}", f"{item[0]} waits: {cause}.")
       continue
     (queue if item in queue else backlog).remove(item)
-    await hire(*item)
+    yield from hire(*item)
 
 
 def register(key: str) -> None:
@@ -482,7 +482,7 @@ def register(key: str) -> None:
 
 
 def kept_asks() -> None:
-  quietly(write, Text(ASKS, json.dumps([{"id": i, **a} for i, a in owner_asks.items()], indent=1) + "\n"))
+  write(Text(ASKS, json.dumps([{"id": i, **a} for i, a in owner_asks.items()], indent=1) + "\n"))
 
 
 def left(key: str, report: str) -> None:
@@ -537,13 +537,13 @@ def tend() -> None:
     progress.pop(gone)
 
 
-async def keep_disk() -> None:
+def keep_disk() -> Generator[set[str], object, None]:
   if "disk" in machine and clock() - machine["disk"] < DISK_EVERY:
     return
   machine["disk"] = clock()
   idle = sorted({*slots.values(), *rested} - seated() - {""}, key=lambda s: rested.get(s, 0.0))
   live = " ".join(working_at(n) for n in living())
-  got = await shell(f"sh -c {shq(DISK)} sh {KEEP} {shq(live)} " + " ".join(shq(f"{cwd()}-{s}") for s in idle), timeout=600)
+  got = yield from shell(f"sh -c {shq(DISK)} sh {KEEP} {shq(live)} " + " ".join(shq(f"{cwd()}-{s}") for s in idle), timeout=600)
   if got.code == 4:
     notice("disk short", f"The disk holds {got.stdout.lines[-1]} GB free, under {KEEP} GB, after the round deleted the target of each ended workspace: {', '.join(got.stdout.lines[:-1]) or 'none'}.")
   elif got.code == 0:
@@ -581,16 +581,7 @@ def last_act(who: str) -> str:
   return f"{facts[-1][0]} {facts[-1][1]}" if facts else "none"
 
 
-def guard_faults() -> list[str]:
-  ready = [q[0] for q in [*queue, *backlog] if not waiting(q[0])]
-  bad = [", ".join(ready[:5]) + " can start and slots are free, but the round did not hire"] if ready and len(running()) < cap() - 1 else []
-  for n, pr in sorted(prs.items()):
-    if ours(pr) and not set(HOLDS) & set(pr["labels"]) and (problem := trouble(pr)) and not handler(pr):
-      bad.append(f"#{n} {problem} at {pr['sha'][:7]}, and no worker that knows of it acts")
-  return bad
-
-
-async def mend(pr: dict, problem: str) -> None:
+def mend(pr: dict, problem: str) -> Generator[set[str], object, None]:
   n, sha = pr["n"], pr["sha"]
   held = assigned.get(n) or {}
   if who := handler(pr):
@@ -601,7 +592,7 @@ async def mend(pr: dict, problem: str) -> None:
   tries = held.get("tries", 0) if held.get("sha") == sha else 0
   if maker := maker_of(pr):
     order = FIXOWN.replace("{n}", str(n)).replace("{problem}", problem).replace("{sha}", sha[:7]).replace("{minutes}", str(int(UNMOVED // 60)))
-    quietly(prompt, None, order, on=working_at(maker))
+    prompt(None, order, on=working_at(maker))
     assigned[n] = {"sha": sha, "problem": problem, "who": maker, "at": clock(), "fixer": False, "tries": tries}
     return
   if taken(f"fix{n}"):
@@ -614,12 +605,12 @@ async def mend(pr: dict, problem: str) -> None:
     return
   brief = FIX.replace("{n}", str(n)).replace("{problem}", problem).replace("{sha}", sha).replace("{head}", pr["head"])
   thread = next((m[7:] for m in pr["labels"] if m.startswith("thread:")), "")
-  who = await hire(f"fix{n}", "", thread, brief, fixer)
+  who = yield from hire(f"fix{n}", "", thread, brief, fixer)
   assigned[n] = {"sha": sha, "problem": problem, "who": who, "at": clock(), "fixer": True, "tries": tries + 1}
 
 
-async def sweep() -> None:
-  got = await shell(PRS, timeout=300)
+def sweep() -> Generator[set[str], object, None]:
+  got = yield from shell(PRS, timeout=300)
   bits = re.split(r"\n--- (\d+)\n", "\n" + got.stdout.content)
   if len(bits) != 11 or any(code != "0" for code in bits[1:8:2]):
     raise Refused(f"gh listed no PRs: {got.stderr.content.strip()[-300:] or 'it said nothing'}")
@@ -638,7 +629,7 @@ async def sweep() -> None:
   except ValueError:
     broke = set()
   heads = {n: pr for n, pr in prs.items() if ours(pr) and "paused" not in pr["labels"]}
-  sought = await shell(f"sh -c {shq(LAG)} sh " + " ".join(shq(f"{n}={pr['head']}") for n, pr in sorted(heads.items())), timeout=120) if heads else None
+  sought = (yield from shell(f"sh -c {shq(LAG)} sh " + " ".join(shq(f"{n}={pr['head']}") for n, pr in sorted(heads.items())), timeout=120)) if heads else None
   remote = {p[0]: p[1] for p in (x.split("\t") for x in sought.stdout.lines) if len(p) == 2} if sought else {}
   if red:
     notice(f"red {main['sha']}", f"main is red at {str(main['sha'])[:7]}: find its cause first. The round sends no order and no fixer for a red PR until the gates of main pass.")
@@ -680,16 +671,16 @@ async def sweep() -> None:
     elif now == "red" and failing and not pr["open"] and not failing - broke:
       once(f"main fails {n} {pr['sha']}", f"#{n} is red at {pr['sha'][:7]} only on {', '.join(sorted(failing))}, which main fails too, so the round hires no fixer for it.")
     elif (problem := trouble(pr)) and not labelled:
-      await mend(pr, problem)
+      yield from mend(pr, problem)
   if flips:
-    await shell("".join(f"{{ {x}; }} >/dev/null 2>&1; " for x in flips), timeout=300)
+    yield from shell("".join(f"{{ {x}; }} >/dev/null 2>&1; " for x in flips), timeout=300)
 
 
-async def review() -> None:
+def review() -> Generator[set[str], object, None]:
   mine = sorted(n for n, pr in prs.items() if ours(pr))
   if not mine:
     return
-  got = await shell(REVIEWS.replace("{prs}", " ".join(map(str, mine))), timeout=300)
+  got = yield from shell(REVIEWS.replace("{prs}", " ".join(map(str, mine))), timeout=300)
   if got.code != 0:
     raise Refused(f"gh read no comments: {got.stderr.content.strip()[-300:]}")
   rows = [p for p in (x.split("\t", 4) for x in got.stdout.lines) if len(p) == 5 and p[1] not in comments]
@@ -701,14 +692,14 @@ async def review() -> None:
     line = f"#{p[0]} {p[1]} {p[3]}: {p[4][:1500]}"
     own = owner_of(pr)
     if own:
-      quietly(prompt, None, f"A new comment of the owner on your PR #{p[0]}. Do what it asks, answer it on GitHub with a reply that starts with 🤖, push the fix, and take the label hold off.\n{line}", on=working_at(own))
+      prompt(None, f"A new comment of the owner on your PR #{p[0]}. Do what it asks, answer it on GitHub with a reply that starts with 🤖, push the fix, and take the label hold off.\n{line}", on=working_at(own))
     elif not taken(f"fix{p[0]}"):
       answer = ANSWER.replace("{n}", p[0]).replace("{head}", pr["head"]).replace("{line}", line)
       queue.insert(0, (f"fix{p[0]}", answer, next((m[7:] for m in pr["labels"] if m.startswith("thread:")), "")))
     if "hold:owner-review" not in pr["labels"]:
       held.add(pr["n"])
   if held:
-    await shell("".join(f"gh pr edit {n} --add-label hold >/dev/null 2>&1; " for n in sorted(held)), timeout=300)
+    yield from shell("".join(f"gh pr edit {n} --add-label hold >/dev/null 2>&1; " for n in sorted(held)), timeout=300)
 
 
 def asked() -> None:
@@ -716,7 +707,7 @@ def asked() -> None:
     return
   named = {p for a in owner_asks.values() for p in re.findall(r"prompt\d+", str(a.get("prompt", "")))}
   lines: dict[str, str] = {}
-  for x in transcript(lead.get("home") or ROOT, "prompt"):
+  for x in transcript(home(), "prompt"):
     if operated(str(x[2])) and x[4] == "str" and str(x[1]) not in named:
       lines[f"unasked {x[1]}"] = f"The message {x[1]} of the owner holds no ask in owner_asks."
   carrying = {q[0] for q in [*queue, *backlog]} | {working[w] for w in living()} | {maker_key(pr) for pr in prs.values()}
@@ -733,7 +724,7 @@ def asked() -> None:
   noticed.update(fresh)
   head = "The words of the owner need the round before anything else:\n"
   tail = "\nSplit each message that holds no ask into its asks, each with his quote and the items that carry it. Queue an item for each ask that no item carries, or mark it done with the evidence of main."
-  lead["asked"] = str(quietly(prompt, None, head + "\n".join(f"- {lines[k]}" for k in fresh) + tail + merged_since()))
+  lead["asked"] = str(prompt(None, head + "\n".join(f"- {lines[k]}" for k in fresh) + tail + merged_since(), on=home()))
 
 
 def owner_words() -> None:
@@ -743,7 +734,7 @@ def owner_words() -> None:
       rows.append(f"## {x[1]}, his message\n\n{x[5]}\n\n")
     elif x[6] and operated(str(x[6])) and x[4] != "None" and isinstance(said := peek(x[1]), str) and said.strip():
       rows.append(f"## {x[1]}, his answer to my question\n\n{said}\n\n")
-  quietly(write, Text(WORDS, "# The words of the owner in this session, verbatim, in order\n\n" + "".join(rows)))
+  write(Text(WORDS, "# The words of the owner in this session, verbatim, in order\n\n" + "".join(rows)))
 
 
 def align() -> None:
@@ -768,45 +759,43 @@ def align() -> None:
   heard.append(f"{count} PRs merged since the last audit of alignment, so the round queued {key}.")
 
 
-def follow() -> str:
-  here = scope(acting())
-  old = lead.get("home", "")
-  lead["home"] = here
-  if old and old != here and isinstance(was := module(old).get("lead"), dict):
-    was["home"] = here
-  return here
+def conduct(every: float = 300) -> Act:
+  where = chain("round")
+  cd(cwd(), on=where)
 
-
-def ended(here: str, cause: str) -> None:
-  quietly(prompt, None, f"The round on {here} ended: {cause}. Until you await conduct() again, no sweep, no merge, no fixer and no hire runs." + merged_since())
-
-
-async def conduct(every: float = 300) -> dict[str, object]:
-  here, at = follow(), "labels"
-  try:
-    lead["shell"] = str(chain("commands"))
-    cd(cwd(), on=lead["shell"])
-    await shell(LABELS, timeout=120)
-    while lead.get("home") == here:
+  def ear(id):
+    yield "started", id
+    old, lead["round"] = lead.get("round", ""), id
+    if get(old) and not over(old):
+      for x in transcript(old, "wait"):
+        if old in x[5:] and not over(x[1]):
+          close(None, x[1])
+      gone = wait(every, old)
+      while not over(gone):
+        yield {gone}
+    bash(LABELS, show=HIDDEN, ok=True, timeout=120)
+    while True:
+      alive: list[str] = []
       for at in ("tend", "sweep", "review", "measure", "disk", "staff", "asked", "align"):
+        if lead.get("round") != id:
+          yield "done", id, None
+          return
         try:
           if at in ("sweep", "review", "measure", "disk", "staff"):
-            await {"sweep": sweep, "review": review, "measure": probe_memory, "disk": keep_disk, "staff": staff}[at]()
+            yield from {"sweep": sweep, "review": review, "measure": probe_memory, "disk": keep_disk, "staff": staff}[at]()
           else:
             {"tend": tend, "asked": asked, "align": align}[at]()
           for done in [k for k in noticed if k.startswith(f"fault {at} ")]:
             noticed.discard(done)
         except Exception as fault:
-          notice(f"fault {at} {type(fault).__name__}", f"The round on {here} met a fault in its step {at}: {type(fault).__name__}: {str(fault)[:1000]}. It goes on at the next round, and tells this fault again only after a round of this step with no fault.")
+          notice(f"fault {at} {type(fault).__name__}", f"The round {id} met a fault in its step {at}: {type(fault).__name__}: {str(fault)[:1000]}. It goes on at the next round, and tells this fault again only after a round of this step with no fault.")
+        if at == "tend":
+          alive = living()
       if not (queue or backlog or living() or any(ours(pr) and "paused" not in pr["labels"] for pr in prs.values())):
-        ended(here, "it holds no item and no open PR that it tends")
-        return results
-      at = "wait"
-      await wait(every, *living())
-  except CancelledError:
-    ended(here, f"it was cancelled in its step {at}")
-    raise
-  except Exception as fault:
-    ended(here, f"the fault {type(fault).__name__}: {str(fault)[:1000]}, in its step {at}")
-    raise
-  return results
+        yield "done", id, "The round holds no item and no open PR that it tends." + merged_since()
+        return
+      beat = wait(every, id, *dict.fromkeys([*alive, *living()]))
+      while not over(beat):
+        yield {beat}
+
+  return act("conduct", where, controlled(ear))

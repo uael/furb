@@ -230,14 +230,10 @@ export const stage = part({
     this.render();
   },
 
-  /** The time cursor moves back or forward by a count of moments, and past the last moment it stands at the present
-   * again. */
+  /** The time cursor moves back or forward by a count of the moments of the life, and past the last moment it stands
+   * at the present again. */
   travel(by: number): void {
-    const moments = momentsOf(this.session.acts);
-    if (!moments.length) return;
-    const from = this.cursor === undefined ? moments.length - 1 : moments.indexOf(this.cursor);
-    const to = Math.max(0, from + by);
-    this.cursor = to >= moments.length - 1 ? undefined : moments[to];
+    this.session.travel(by, momentsOf(this.session.acts));
     this.render();
   },
 

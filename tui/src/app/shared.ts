@@ -1,7 +1,7 @@
 import type { BoxRenderable, CliRenderer, KeyEvent, Renderable, RGBA, TextOptions } from "@opentui/core";
 import type { Keymap } from "@opentui/keymap";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
-import { busy, type ChainAside, type ChainThread, type Chip } from "furb/life";
+import { busy, type ChainThread, type Chip } from "furb/life";
 import { ago, clip, dollars, kibibytes } from "../format.ts";
 import type { ActRow, Status, View } from "../session.ts";
 import { statusLabels } from "../session.ts";
@@ -49,26 +49,8 @@ export const statusMark = (status: Status): Part => {
   return [`${mark} `, color, attributes];
 };
 
-/** The threads of the chain shown: in order, each by its id, and the thread of each message, by the id of the message. */
-export type ThreadList = {
-  /** The session, the chain and the version of its acts that the list was read from, which a new list replaces. */
-  session: unknown;
-  chain: string;
-  acts: unknown;
-  owed: string;
-  list: ChainThread[];
-  by: Map<string, ChainThread>;
-  of: Map<string, ChainThread>;
-  /** The thread of each question and each notice that a thread made, by the id of the prompt. */
-  asked: Map<string, ChainThread>;
-  /** The prompts of the chain that are no conversation, each by its id, and the aside of each prompt on one. */
-  asides: Map<string, ChainAside>;
-  aside: Map<string, ChainAside>;
-};
-
-/** The threads of one chain, as they stood when the chain had that stamp, which counts the prompts placed on it. */
+/** The threads of one chain, with what the keys of the sidebar read of them while the list stands. */
 export type ChainRead = {
-  stamp: number;
   list: ChainThread[];
   key?: { minute: number; text: string };
   /** Whether each thread of the list holds work that the operator did not read, at a count of the reads. */

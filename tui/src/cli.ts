@@ -139,7 +139,7 @@ try {
   if (record) await library.import(record, group);
   else if (!values.demo || values.cwd) {
     // The life opens in the background, so the window draws at once, and a life that fails to open ends the TUI then.
-    const entry = await library.create(group, undefined, undefined, directory, true);
+    const entry = await library.create(group, undefined, directory, true);
     void entry.ready?.then((open) => {
       if (!open && entry.status === "failed") void fatal(entry.error);
     });

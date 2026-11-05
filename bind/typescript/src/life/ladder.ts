@@ -1,4 +1,4 @@
-import { cancelled, type Exit, failed, type LiveAct } from "./acts.js";
+import { cancelled, type Exit, failed, type LiveAct, operated } from "./acts.js";
 import { actState, type State } from "./states.js";
 
 /** One line of the thread of a chain.
@@ -163,9 +163,7 @@ function step(act: LiveAct, depth: number, { chain, made, word, streams, owed }:
  * another rung, as the setup of the root and each stand and cd. The words of a chain that retell its source, whose
  * donor is a rung, are no such rung. */
 function written(act: LiveAct, known: (id: string) => boolean): boolean {
-  return (
-    act.kind === "rung" && act.by !== "operator" && (!known(act.by) || (act.by === act.on && !act.words[1]))
-  );
+  return act.kind === "rung" && !operated(act.by) && (!known(act.by) || (act.by === act.on && !act.words[1]));
 }
 
 /** The line of the rungs in a row that one maker wrote on the chain with no word of its own, as the words of the

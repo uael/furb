@@ -36,9 +36,6 @@ struct Prepared {
   places: Places,
   extensions: Vec<extension::Extension>,
   provider: world::Provider,
-  /// The checkpoint that carries the tail of another build, which a life that keeps no record
-  /// holds in memory alone, since it writes nothing.
-  crossed: Option<Object>,
   /// Whether the gate reads each word, as [`crate::gate::configured`] says.
   gated: bool,
 }
@@ -188,13 +185,12 @@ impl Opening {
   fn parted(self, prepared: Prepared) -> Result<(Vec<Object>, Ears), Fault> {
     let works = self.works();
     let keeps = self.keeps != Some(false) && works;
-    let Prepared { places, extensions, provider, crossed, .. } = prepared;
-    let (mut record, store) = match (&self.record, keeps) {
+    let Prepared { places, extensions, provider, .. } = prepared;
+    let (record, store) = match (&self.record, keeps) {
       (Some(path), true) => world::store(path).map(|(held, store)| (held, Some(store)))?,
       (Some(path), false) => (world::kept(path)?, None),
       (None, _) => (Vec::new(), None),
     };
-    record.extend(crossed);
     // The log reads the record whole, so a life after a checkpoint writes on after the log of the lives before it.
     let logs = self.record.as_ref().filter(|_| keeps).map(|path| world::log(path, &record));
     let record = checkpoint::booted(record);
@@ -260,26 +256,16 @@ impl Opening {
     Ok((record, ears.into_iter().map(|(name, ear)| (name.to_owned(), ear)).collect()))
   }
 
-  /// What the life waits for before it boots: the tail of another build carried, the extensions
-  /// that the configs turn on, and the provider of the models, whose catalog asks the servers and
-  /// the command lines of the models. A host with a runtime waits for it on a blocking thread.
+  /// What the life waits for before it boots: the extensions that the configs turn on, and the
+  /// provider of the models, whose catalog asks the servers and the command lines of the models. A
+  /// host with a runtime waits for it on a blocking thread.
   fn prepared(&self) -> Result<Prepared, Fault> {
     let works = self.works();
-    let keeps = self.keeps != Some(false) && works;
     // A record of another major of its schema is refused before any build reads it whole or writes
     // on it.
     if let Some(path) = self.record.as_deref().filter(|one| Path::new(one).exists()) {
       world::readable(&world::heads(path, &[world::MADE])?)?;
     }
-    // The tail that another build made after the last checkpoint is carried at the tip of the
-    // record, before the life takes its lease, so the life goes on from it and replays no fact of
-    // another engine.
-    let record = self.record.as_deref().map(Path::new);
-    let crossed = record.map(checkpoint::crossed).transpose()?.flatten();
-    if let (Some(path), Some(one)) = (record.filter(|_| keeps), &crossed) {
-      checkpoint::keep(path, one.clone())?;
-    }
-    let crossed = crossed.filter(|_| !keeps);
     let here = Places::here();
     let places = Places { config: self.config.clone().map_or(here.config, PathBuf::from), ..here };
     let extensions = match self.extensions != Some(false) && works {
@@ -297,7 +283,7 @@ impl Opening {
       .collect();
     let provider = self.provider(advertised)?;
     let gated = crate::gate::configured(&places.config, Path::new(&self.directory));
-    Ok(Prepared { places, extensions, provider, crossed, gated })
+    Ok(Prepared { places, extensions, provider, gated })
   }
 
   /// The provider: the models of the roster that the catalog makes, which the function of the host answers when it

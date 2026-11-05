@@ -1,4 +1,4 @@
-import type { Exit, LiveAct } from "./acts.js";
+import { type Exit, type LiveAct, operated } from "./acts.js";
 import { valueText } from "./ladder.js";
 import { actState, type State } from "./states.js";
 
@@ -154,8 +154,8 @@ function messageOf(act: LiveAct, rows: Rows): { message: string | undefined; asi
       if (subject.kind === "prompt") return threadOf(subject, walked) ?? subject.id;
       return threadOf(subject, walked) ?? { aside: subject.kind === "rung" ? "rung" : "notice" };
     }
-    if (byOperator(act)) return undefined;
-    if (none && maker?.kind === "rung" && byOperator(maker)) return { aside: "rung" };
+    if (operated(act.by)) return undefined;
+    if (none && maker?.kind === "rung" && operated(maker.by)) return { aside: "rung" };
     if (none && (maker?.kind === "rung" || maker?.kind === "prompt")) return { aside: "notice" };
     if (none) return { aside: "wake" };
     if (maker && maker.on !== act.on && !within(act.on, maker.on, walked))
@@ -279,11 +279,6 @@ export function threadWork(thread: Pick<ChainThread, "act" | "messages" | "asked
   return [thread.act, ...thread.messages, ...thread.asked];
 }
 
-/** Whether an act is the operator's own: made by them, or by one of their sessions. */
-function byOperator(act: { by: string }): boolean {
-  return act.by === "operator" || act.by.startsWith("operator/");
-}
-
 /** How a thread concerns the operator: a question waits for them in it, or they started it and it failed or is held. */
 export type Concern = "asks" | "failed" | "paused";
 
@@ -364,7 +359,7 @@ export function chainSorted(
       if (seen.message) later.push([act, seen.message]);
       continue;
     }
-    const by = byOperator(act);
+    const by = operated(act.by);
     const maker = rows.get(act.by);
     const origin = by ? "operator" : maker?.kind === "rung" ? "rung" : "ear";
     out.set(act.id, {
@@ -376,7 +371,7 @@ export function chainSorted(
       state: "done",
       resolved: true,
       origin,
-      yours: by || (origin === "rung" && maker !== undefined && byOperator(maker)),
+      yours: by || (origin === "rung" && maker !== undefined && operated(maker.by)),
     });
   }
   for (const [act, id] of later) {

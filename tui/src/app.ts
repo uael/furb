@@ -16,7 +16,7 @@ import {
 } from "@opentui/core";
 import type { Keymap } from "@opentui/keymap";
 import { safeText, type Turn } from "furb";
-import { type ChainThread, type LiveAct, type Loom, type ProgramLine, wants } from "furb/life";
+import { type ChainThread, type Loom, type ProgramLine, wants } from "furb/life";
 import type { Tree, ViewEvent } from "furb/protocol";
 import { type ActionsPart, actions, actionsBound } from "./app/actions.ts";
 import { type BlocksPart, blocks } from "./app/blocks.ts";
@@ -43,7 +43,6 @@ import {
   noBorder,
   type Suggestion,
   type TextShape,
-  type ThreadList,
   type TreeRow,
   type Value,
 } from "./app/shared.ts";
@@ -61,7 +60,7 @@ import type { Action } from "./keys.ts";
 import { LoomPane } from "./overview.ts";
 import { loadParsers } from "./parsers.ts";
 import { Parts } from "./parts.ts";
-import { readingNote, readOnly, sameBuild } from "./reading.ts";
+import { readingNote, readOnly } from "./reading.ts";
 import type { ActRow, Scroll, Session, View } from "./session.ts";
 import {
   theme as c,
@@ -226,19 +225,6 @@ export class App {
   /** The key of the unread marks of the threads of the sidebar, by the list that it came from and the count of the
    * reads of the session. */
   railUnreadKey?: { list: ChainThread[]; reads: number; parts: string[]; count: number; text: string };
-  /** The threads of the chain shown, read again only when the acts or the questions that wait change. */
-  threadList: ThreadList = {
-    session: undefined,
-    chain: "",
-    acts: undefined,
-    owed: "",
-    list: [],
-    by: new Map(),
-    of: new Map(),
-    asked: new Map(),
-    asides: new Map(),
-    aside: new Map(),
-  };
   /** The lists of the sidebar that the operator unfolded: the finished chains, under the key finished, and the
    * archived sessions of a workspace, under its folder. */
   readonly unfolded = new Set<string>();
@@ -770,42 +756,21 @@ export class App {
         void this.highlightEditor();
       })
       .catch(session.fail);
-    if (session.host.reading && !session.readingTold) this.readOrRenew();
+    if (session.host.reading && !session.readingTold) this.whyReadOnly();
   }
 
-  /** The dialog of a record that a life refused for a drift, as a record that a build of another version made, which
-   * opens to read: it names the build that made the record and this build, each on a line of its own, says what a new
-   * life from the record carries, and offers to read the record, or to start a new life in its workspace. */
-  readOrRenew(): void {
+  /** The dialog of a record that a life refused for a drift, which opens to read only: it says why in one line, which
+   * names the defect and links its issue, then names the build that made the record and this build, each on a line of
+   * its own. A record that cannot resume gives no way to fork it, since only its replay holds the exact state. */
+  whyReadOnly(): void {
     const reading = this.session.host.reading;
     if (!reading) return;
     this.session.readingTold = true;
     this.openPalette(
-      sameBuild(reading) ? "This record does not replay" : "This record was made by another build",
-      [
-        { label: "Read it", detail: "See what it kept. No word runs again.", run: () => {} },
-        // A record that this build made and whose replay drifts is a defect, and a carry from it loses the module.
-        ...(sameBuild(reading)
-          ? []
-          : [
-              {
-                label: "Start a new life from it",
-                detail: "A new session with its earlier work as text",
-                run: () => this.startFrom(),
-              },
-            ]),
-      ],
+      "This record does not resume",
+      [{ label: "Read it", detail: "See what it kept. No word runs again.", run: () => {} }],
       { note: readingNote(reading, this.session.host.record) },
     );
-  }
-  /** A new life in the workspace of a record open to read, whose first word carries the earlier work of the record as
-   * text. */
-  startFrom(): void {
-    const library = this.options.workspaces;
-    void this.session.host
-      .carry()
-      .then((carry) => library.create(library.groupOf(), undefined, carry))
-      .then(() => {}, this.session.fail);
   }
 
   box(options: BoxOptions = {}): BoxRenderable {
@@ -1070,7 +1035,7 @@ export class App {
     const choosing = this.picking();
     const reading = w.host.reading;
     const [mode, modeColor, placeholder] = reading
-      ? ["Read only", c.faint, readOnly(reading)]
+      ? ["Read only", c.faint, readOnly()]
       : w.editing
         ? ["Edit program", c.warning, "Edit this prompt's Python program"]
         : pending
@@ -1161,8 +1126,6 @@ export class App {
   /** What each act that a thread waits on does, and what each thread that ended came to, which hold while their act
    * and their state stay, so that a frame reads none of them again. */
   doing = new Map<string, string>();
-  /** What each prompt that the list of the threads read is: a message to a thread, or a thread and its title. */
-  readonly promptsRead = new WeakMap<LiveAct, { message: string | undefined; title: string }>();
   /** The values that the first argument of a command may take, for each command whose values the TUI knows. A value
    * of a command that takes more after it completes, and a value of any other command runs the command when it is
    * chosen. */
@@ -1194,7 +1157,7 @@ export class App {
     if (!at || at.on !== w.selected) return undefined;
     w.folds[`prompts:${w.selected}`] = false;
     let head: string | undefined;
-    const threads = this.chainThreadsBy(w.selected).by;
+    const threads = w.threads.by;
     for (let step = 0; at && step < 64; step++) {
       const maker = rows.get(at.by);
       if (!maker || maker.on !== w.selected) break;

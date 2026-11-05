@@ -1760,13 +1760,25 @@ fn an_ear_that_ends_after_it_says_still_has_each_saying_heard() {
   let heard: Vec<&str> = facts.iter().filter(|one| one.about() == id).map(Fact::kind).collect();
   assert_eq!(heard, ["wait", "started", "done"]);
 }
-/// Each sandbox that this thread makes from now on, with a turn bound of three quarters of
-/// `gather`, the time that the gather of a checkpoint of the life took in this run. The gather is
-/// one stretch of the sandbox that grows with the facts of the life, as no word does, and a share
-/// of a time that this run measured follows the load of the machine, so the gather outlasts the
-/// bound, and no word of the life nears it.
-fn bounded_by(gather: Duration) {
-  crate::sand::BOUND.set(gather * 3 / 4);
+/// Each sandbox that this thread makes from now on, and each that holds the bound again after
+/// the work of the engine, with this bound of the turn.
+fn bounded_at(bound: Duration) {
+  crate::sand::BOUND.set(bound);
+}
+
+/// The bound of the replay and the bound of the checkpoint that the test proves, from `gather`,
+/// the least time that the gather of a checkpoint of the life took in this run.
+///
+/// A step of a word in a replay holds more than the word: it holds the work of each ear that the
+/// word wakes, and each run of the collector of cycles, whose time grows with the heap of the
+/// life. In the last life of this test, one step took 15 ms with the collector and 0.6 ms with no
+/// collector, and a gather took 190 ms, so a bound under the gather is too near a step on a loaded
+/// machine. A replay as a whole took 50 to 110 gathers, so at eight gathers each step stays about
+/// 100 times under the bound, and the replay as a whole outlasts it. The gather is one stretch of
+/// the work of the engine, and the bound of three quarters of it holds only while the life writes
+/// its checkpoint, when no word steps.
+fn bounds(gather: Duration) -> (Duration, Duration) {
+  (gather * 8, gather * 3 / 4)
 }
 
 #[test]
@@ -1779,15 +1791,23 @@ fn a_life_whose_words_each_ran_within_the_bound_replays_and_keeps_its_checkpoint
     let act = first.engine.prompt(Object::string("int"), with).unwrap();
     assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(8), "the life runs its words");
     let facts = first.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
-    let began = Instant::now();
-    crate::checkpoint::written(&mut first.engine).expect("the checkpoint of the life is gathered");
-    let gather = began.elapsed();
+    // A pause of the machine only makes a gather longer, so the least of three is the gather.
+    let gather = (0..3)
+      .map(|_| {
+        let began = Instant::now();
+        crate::checkpoint::written(&mut first.engine)
+          .expect("the checkpoint of the life is gathered");
+        began.elapsed()
+      })
+      .min()
+      .unwrap_or_default();
     (root, facts.iter().filter_map(said).collect::<Vec<_>>(), gather, first.end())
   };
-  bounded_by(gather);
+  let (replay, checkpoint) = bounds(gather);
+  bounded_at(replay);
   let began = Instant::now();
   let mut second = Lived::new("outlasts", &[], false).expect("the replay opens the life");
-  assert!(began.elapsed() > crate::sand::BOUND.get(), "the replay as a whole outlasts the bound");
+  assert!(began.elapsed() > replay, "the replay as a whole outlasts the bound");
   assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
   assert!(second.engine.stopped().is_none(), "{:?}", second.engine.stopped());
   let again = second.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
@@ -1805,7 +1825,9 @@ fn a_life_whose_words_each_ran_within_the_bound_replays_and_keeps_its_checkpoint
     "the replay holds each fact of the record: {:?}",
     &missing[..missing.len().min(3)]
   );
+  bounded_at(checkpoint);
   second.engine.checkpoint().expect("the checkpoint of the life is written whole");
+  bounded_at(replay);
   let third = Lived::new("outlasts", &[], false).expect("the life goes on from its checkpoint");
   assert!(third.engine.raised().is_none(), "{:?}", third.engine.raised());
   assert_eq!(third.root(), root);

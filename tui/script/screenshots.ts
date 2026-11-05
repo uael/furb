@@ -831,10 +831,6 @@ try {
         .length === 2,
   );
   const thread = session.activity.find((act) => session.isUserPrompt(act))?.id ?? "";
-  // The sidebar lights the open thread when it draws, and the input sends to the thread lit: a draw before the message
-  // makes it go to that thread, where with no draw it would start a thread of its own on some runs.
-  app().render();
-  await test.flush();
   if (session.target !== thread)
     throw new Error(`The input aims at ${session.target}, not at the thread ${thread}.`);
   // A line on the open thread is a message of None, over at once, so the later message that runs is a prompt of str on
@@ -1270,25 +1266,6 @@ try {
   await settle();
   await rest();
   await capture("75-compaction");
-  app().dispose();
-  await library.dispose();
-
-  // A chain that an older compaction made, as a record of before holds it: its feed says in one note that it goes on
-  // from a compaction of an older form that is not joined.
-  await show(await demoSession({ cwd: await project("compacted") }));
-  const root = session.engine.root;
-  await session.command(
-    `/run ${compaction}\ndef restore(source, on=""):\n  return None\nchain("review")\nplan = read("README.md")`,
-  );
-  await settle();
-  await session.command(
-    `/run newer = chain("compacted", "${root}")\nrung("restore('${root}')\\n<s:summary>\\nThe plan stands in README.md, and the parser is done.\\nThe docs wait.</s:summary>\\nreground()", on=newer)\nrung('docs = "The docs of the parser"', on=newer)`,
-  );
-  await settle();
-  await session.refresh();
-  await session.select(session.chains.find((chain) => chain.words[0] === "compacted")?.id ?? root);
-  await rest();
-  await capture("75-compaction-chains");
   app().dispose();
   await library.dispose();
 

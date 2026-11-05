@@ -524,7 +524,6 @@ function read(data: { target: string; method: string; args: unknown[] }): unknow
     return snapshots?.take(String(data.args[0]), Number(data.args[1]), Number(data.args[2] ?? 0));
   if (data.target === "library" && data.method === "source") return ENGINE;
   if (data.target === "library" && data.method === "made") return open.reading?.made ?? null;
-  if (data.target === "library" && data.method === "carry") return open.carry();
   if (data.target === "library" && data.method === "catalog") return [];
   if (data.target === "library" && data.method === "setup") return null;
   if (data.target === "library" && data.method === "sees") return false;

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Entry, Fact } from "furb";
+import { operated } from "furb/life";
 
 /** The hash of the words of a prompt, which the begin fact of a follow-up holds. */
 export function queueHash(chain: string, shape: string, message: string, to: string): string {
@@ -8,7 +9,7 @@ export function queueHash(chain: string, shape: string, message: string, to: str
     .digest("hex");
 }
 function queueEvent(fact: Fact): { step: string; key: string; value: unknown } | undefined {
-  if (fact[2] !== "operator") return undefined;
+  if (!operated(fact[2])) return undefined;
   if (fact[0] === "queue") return { step: String(fact[3]), key: String(fact[4]), value: fact[5] };
   return undefined;
 }
@@ -24,7 +25,7 @@ export function queueDispatches(entries: readonly Entry[]): Map<string, string> 
       const next = entries[index + 1]?.[0];
       if (
         next?.[0] === "prompt" &&
-        next[2] === "operator" &&
+        operated(next[2]) &&
         event.value === queueHash(String(next[3]), String(next[4]), String(next[5]), String(next[6]))
       )
         sent.set(event.key, next[1]);
