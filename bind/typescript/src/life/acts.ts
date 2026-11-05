@@ -4,6 +4,10 @@
 /** The kinds of act that are work which ends later, and the table counts each one that is done. */
 export const WORK = ["prompt", "rung", "bash", "wait"];
 
+/** Whether a site is the operator or a member of the operator: the site operator, or a site of the form operator/id,
+ * as operated of the engine reads it. */
+export const operated = (site: string): boolean => site.split("/")[0] === "operator";
+
 export interface RunState {
   status: "running" | "failed" | "done";
   reason: string;

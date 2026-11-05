@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
+import { momentsOf } from "furb/life";
 import { demoSession, removeDemoDirectories, tour } from "../src/demo.ts";
 
 test("the temporary directory of a demo goes when the process that made it removes its demo directories", async () => {
@@ -53,7 +54,7 @@ test("the moment that the feed shows steps back through the chain, and a branch 
     const moment = session.moment ?? 0;
     expect(moment).toBeGreaterThan(0);
     const then = session.at(session.activity);
-    expect(then.every((act) => act.began < moment)).toBe(true);
+    expect(then.every((act) => act.began <= moment)).toBe(true);
     expect(then.some((act) => !act.done)).toBe(true);
     session.travel(1);
     expect(session.moment).toBeUndefined();
@@ -65,6 +66,34 @@ test("the moment that the feed shows steps back through the chain, and a branch 
     expect(branch).not.toBe(root);
     expect(session.moment).toBeUndefined();
     expect(session.selected).toBe(branch);
+  } finally {
+    await session.dispose();
+    await removeDemoDirectories();
+  }
+});
+
+test("the feed and the stage stand at one moment: a step lands on a moment of the life, and the act that began at it shows", async () => {
+  const session = await demoSession({ watch: true });
+  try {
+    await session.engine.result(
+      await session.engine.prompt("str", {
+        message: "Read this project and say what it does.",
+        on: session.selected,
+      }),
+    );
+    await session.refresh();
+    const moments = momentsOf(session.acts);
+    // ⌃← steps over the moments of the chain shown, and ] of the stage on over the moments of the life from there.
+    session.travel(-1);
+    session.travel(-1);
+    const back = session.moment ?? 0;
+    expect(moments).toContain(back);
+    const next = moments.find((one) => one > back);
+    session.travel(1, moments);
+    expect(session.moment).toBe(next === moments.at(-1) ? undefined : next);
+    const last = session.activity.at(-1);
+    session.moment = last?.began;
+    expect(session.at(session.activity).map((act) => act.id)).toContain(last?.id ?? "");
   } finally {
     await session.dispose();
     await removeDemoDirectories();

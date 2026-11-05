@@ -647,9 +647,9 @@ test("a line that does not fit lays out in rows at its brackets, and each row ke
     true,
   ));
 
-test("the list of the threads of the chain shown is read again for another chain or another session, even when the version of its acts is the same", () =>
+test("the threads of the chain shown are read again for another chain, even when the version of its acts is the same", () =>
   composing(
-    async ({ session, app }) => {
+    async ({ session }) => {
       await idle(session);
       const root = session.engine.root;
       await session.engine.pause(root);
@@ -657,13 +657,10 @@ test("the list of the threads of the chain shown is read again for another chain
       await session.engine.pause(other);
       const there = await session.engine.prompt("str", { message: "A thread of the other chain", on: other });
       await session.refresh();
-      const version = session.version;
-      expect(app.chainThreadsBy(root).list.some((one) => one.act.id === there)).toBe(false);
+      expect(session.threads.list.some((one) => one.act.id === there)).toBe(false);
       await session.select(other);
       // The list of the other chain holds its thread, whatever the version of the acts.
-      const listed = app.chainThreadsBy(other).list.map((one) => one.act.id);
-      expect(listed).toContain(there);
-      if (session.version === version) expect(app.threadList.chain).toBe(other);
+      expect(session.threads.list.map((one) => one.act.id)).toContain(there);
     },
     size,
     true,
@@ -688,20 +685,20 @@ test("a row of a thread says how long ago the thread last changed, as the sessio
 
 test("an act that is no prompt leaves the list of the threads of the chain shown as it was, and a prompt reads it again", () =>
   composing(
-    async ({ session, app }) => {
+    async ({ session }) => {
       await idle(session);
       const root = session.engine.root;
-      const before = app.chainThreadsBy(root).list;
+      const before = session.threads.list;
       const version = session.version;
       await session.engine.result(await session.engine.rung({ word: "step = 1", on: root }));
       await session.refresh();
       // The act came, and the threads read it not.
       expect(session.version).toBeGreaterThan(version);
-      expect(app.chainThreadsBy(root).list).toBe(before);
+      expect(session.threads.list).toBe(before);
       const there = await session.engine.prompt("str", { message: "A new thread", on: root });
       await session.refresh();
-      expect(app.chainThreadsBy(root).list).not.toBe(before);
-      expect(app.chainThreadsBy(root).list.some((one) => one.act.id === there)).toBe(true);
+      expect(session.threads.list).not.toBe(before);
+      expect(session.threads.list.some((one) => one.act.id === there)).toBe(true);
     },
     size,
     true,

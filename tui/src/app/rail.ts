@@ -5,7 +5,6 @@ import {
   attentionOf,
   busy,
   type ChainThread,
-  chainThreads,
   gist,
   nestThreads,
   orderThreads,
@@ -153,12 +152,10 @@ export const rail = part({
    * the chain that it stands on is a detail of it. */
   railThreads(): ChainThread[] {
     const w = this.session;
-    const prompts = new Set(w.host.prompts.keys());
-    const owed = [...prompts].join(" ");
+    const owed = [...w.host.prompts.keys()].join(" ");
     const kept = this.railThreadCache;
     if (kept && kept.session === w && kept.version === w.promptsVersion && kept.owed === owed)
       return kept.list;
-    const index = w.ladderIndex;
     const list: ChainThread[] = [];
     // A chain that no act touched since the last read keeps its threads, so a new act costs one chain and not all.
     const reads = kept?.session === w && kept.owed === owed ? kept.chains : new Map<string, ChainRead>();
@@ -169,11 +166,7 @@ export const rail = part({
       const read = reads.get(chain);
       // The chain shown has its threads read already, for the feed, at this version.
       const threads =
-        read && read.stamp === stamp
-          ? read.list
-          : chain === w.selected
-            ? this.chainThreadsBy(chain).list
-            : chainThreads(acts, index.ids, prompts, this.promptsRead);
+        read && read.stamp === stamp ? read.list : chain === w.selected ? w.threads.list : w.threadsOn(chain);
       chains.set(chain, read && read.stamp === stamp ? read : { stamp, list: threads });
       list.push(...threads);
     }
@@ -237,20 +230,11 @@ export const rail = part({
     return `unread ${count}`;
   },
 
-  /** The thread that the feed shows now: the one chosen, else the last that is open on the chain shown. */
+  /** The thread that the feed shows now: the one chosen, else the one lit, else the last of the chain shown. */
   activeThread(): ChainThread | undefined {
     const w = this.session;
-    const all = this.railThreads();
-    const chosen = w.thread ? all.find((one) => one.act.id === w.thread) : undefined;
-    const own = all.filter((one) => one.act.on === w.selected);
-    const open = chosen ?? own.findLast((one) => !one.resolved);
-    // The input sends its next message to the thread chosen, else to the open thread lit, else to a new thread. The
-    // feed and the input drew before this part found which thread is lit, so a change draws them again.
-    if (w.lit !== open?.act.id) {
-      w.lit = open?.act.id;
-      this.schedule();
-    }
-    return open ?? own.at(-1);
+    const { by, list } = w.threads;
+    return by.get(w.thread ?? "") ?? by.get(w.lit ?? "") ?? list.at(-1);
   },
 
   /** Whether a thread holds work that the operator did not read, as the facts seen of the record say. */
