@@ -583,6 +583,48 @@ fn a_close_mark_inside_a_line_of_a_quote_does_not_end_the_reply_at_its_open_mark
 }
 
 #[test]
+fn a_quote_that_the_model_writes_in_small_chunks_holds_until_its_close_mark_and_binds_whole() {
+  // The close mark comes in a later chunk than the open mark, and no chunk ends at the end of a
+  // line.
+  let parts = ["<s:q", ">\nHel", "lo\nwor", "ld\n</s", ":q>\nclo", "se(len(", "q))"];
+  let usage = Usage { input_tokens: 10, output_tokens: 5, total_tokens: 15, ..Default::default() };
+  let events: Vec<_> = parts
+    .iter()
+    .map(|part| MockStreamEvent::text(*part))
+    .chain([MockStreamEvent::FinalResponse(StreamFinal::new("mock", usage))])
+    .collect();
+  let model = MockCompletionModel::from_stream_turns([events]);
+  let (mut engine, _) = life("chunked", vec![scripted(&model)]);
+  let id = asked(&mut engine);
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(12), "the quote bound whole before close(len(q)) ran");
+  assert!(!told_of(&mut engine, &["has no close mark"]), "no finding of an open quote");
+}
+
+#[test]
+fn a_quote_that_the_gate_refuses_while_it_streams_is_cut_at_its_close_mark_not_its_open_mark() {
+  // The quote binds the name of an act, which the gate refuses on the line of its open mark, and
+  // its close mark comes in a later chunk: the turn holds the whole quote, so the chain is told
+  // that finding, and not that the quote has no close mark.
+  let parts = ["<s:reply1", ">\nHel", "lo\nwor", "ld\n</s", ":reply1>\nclo", "se(len(", "reply1))"];
+  let usage = Usage { input_tokens: 10, output_tokens: 5, total_tokens: 15, ..Default::default() };
+  let events: Vec<_> = parts
+    .iter()
+    .map(|part| MockStreamEvent::text(*part))
+    .chain([MockStreamEvent::FinalResponse(StreamFinal::new("mock", usage))])
+    .collect();
+  let model = MockCompletionModel::from_stream_turns([events]);
+  let (mut engine, _) = life("refused-quote", vec![scripted(&model)]);
+  asked(&mut engine);
+  assert_eq!(replied(&mut engine), cut("<s:reply1>\nHello\nworld\n</s:reply1>"));
+  assert!(
+    until(&mut engine, |engine| told_of(engine, &["refused", "the transcript binds `reply1`"])),
+    "the chain is told the finding of the quote, not that the quote is all of the word"
+  );
+  assert!(!told_of(&mut engine, &["has no close mark"]), "the quote that closes is not told open");
+}
+
+#[test]
 fn what_a_function_of_the_host_tells_is_no_word_that_ends_its_reply() {
   let host: Hosted = Arc::new(|_, told| {
     async move {
