@@ -40,7 +40,7 @@ pub use fetch::fetch;
 pub use files::{CONFIG, files};
 pub use log::{log, logged};
 pub use operator::{Asked, SHAPES, Shape, answered, answers, named};
-pub(crate) use provider::search::spawned;
+pub(crate) use provider::search::timed;
 pub use provider::{
   Advertised, BACKOFF, Backoff, Hosted, Model, Provider, Retries, Retry, Search, Told, Writes,
   catalog::{self, Catalog},
@@ -52,12 +52,13 @@ pub use scratch::{SCRATCH, Scratch};
 pub(crate) use store::Format;
 pub use store::{
   CHECKPOINT_SCHEMA, Lines, MADE, RECORD_SCHEMA, Schema, SchemaError, Sqlite, Store, VERSION,
-  engine, heads, keeping, kept, made, readable, release, store, version,
+  engine, heads, keeping, kept, made, readable, release, store, texts, version,
 };
 pub use time::time;
 
 use crate::{
-  ear::Co,
+  ear::{Co, say},
+  fact::Fact,
   value::{Fault, Object},
 };
 
@@ -95,6 +96,16 @@ pub(crate) async fn here<W: 'static>(co: &mut Co<W>, on: &str) -> Result<PathBuf
     .and_then(|held| held.get(1).and_then(|one| one.as_str().map(str::to_owned)));
   let cwd = cwd.as_ref().as_str().map(str::to_owned).unwrap_or_default();
   files::placed(&files::placed(Path::new(""), &directory.unwrap_or_default())?, &cwd)
+}
+
+/// An act that an earlier life took and did not end, taken and closed with a refusal that names it
+/// and says it was interrupted, as a checkpoint ends an act that it cuts, since its work may have
+/// run: the model reads that end, and asks again if it wants.
+pub(crate) async fn interrupted<W: 'static>(co: &mut Co<W>, a: &Fact) -> Result<(), Fault> {
+  say(co, Fact::says("started", a.about(), []));
+  let why = format!("{} was interrupted: the life that ran it ended before it did", a.about());
+  let id = vec![("id", Object::string(a.about()))];
+  co.call("close", vec![Fault::refused(why).object()], id).await.map(drop)
 }
 
 /// A path resolved against a directory, as a path of the machine: the directory with the path after it, or the path

@@ -38,7 +38,9 @@ async function another(record: string): Promise<void> {
     .split("\n")
     .filter((line) => !line.startsWith('[["checkpoint",'))
     .join("\n");
-  const fact = /\["made","chain1","store","[0-9a-f]{64}",\d+(?:,[^\]]*)?\]/.exec(text)?.[0];
+  const fact = /\["made","chain1","store","[0-9a-f]{64}",\d+(?:,(?:"(?:[^"\\]|\\.)*"|[^\]",]+))*\]/.exec(
+    text,
+  )?.[0];
   if (!fact) throw new Error("The record names no engine.");
   const stand = '["stand","stand1","operator","chain1"]';
   expect(text).toContain(stand);

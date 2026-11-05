@@ -41,13 +41,14 @@ use futures::future::BoxFuture;
 use serde_json::Value;
 
 use self::search::Searches;
+use super::interrupted;
 use crate::{
   ear::{Co, Ear, Next, hearing},
   value::{Fault, Object},
 };
 
 use self::answer::{ended, numbers, uuid};
-use self::hearer::{Hearer, Replied};
+use self::hearer::{Hearer, Replied, searched};
 use self::messages::banner;
 use self::model::{Class, Streams, streams};
 use self::retry::{LIMIT_POLL, resets};
@@ -98,6 +99,8 @@ pub struct Provider {
   refresh: Option<Refresh>,
   gone: Vec<String>,
   searching: bool,
+  /// The system prompt of each request: the engine of the life, minified.
+  system: Arc<str>,
 }
 
 /// An extension as the standing gives it: its name, the file of its word, its life word, and
@@ -129,6 +132,7 @@ impl Provider {
       refresh: None,
       gone: Vec::new(),
       searching: true,
+      system: Arc::from(crate::SYSTEM),
     }
   }
 
@@ -158,6 +162,14 @@ impl Provider {
   #[must_use]
   pub(crate) fn refreshing(mut self, refresh: Refresh) -> Provider {
     self.refresh = Some(refresh);
+    self
+  }
+
+  /// The system prompt of each request: the engine that the life runs, minified, which is this
+  /// build's own, [`crate::SYSTEM`], unless the record of the life holds another.
+  #[must_use]
+  pub fn system(mut self, system: Arc<str>) -> Provider {
+    self.system = system;
     self
   }
 
@@ -265,6 +277,9 @@ impl Provider {
   /// A pause over the chain of a reply holds the next call of its model: the call that waits for a
   /// retry, or that a stand asks again, is made at the wake, and not at the end of its wait. A call
   /// that runs returns.
+  ///
+  /// A search that an earlier life took and did not end the ear closes as interrupted at the wake,
+  /// and searches no more; a stand and a reply of an earlier life it takes again.
   pub fn ear(self) -> Box<dyn Ear> {
     hearing(&["stand", "reply", "search", RAN], move |mut co: Co<Replied>| async move {
       // The ids of chains repeat in every life, so a conversation of this life is keyed by the
@@ -274,12 +289,13 @@ impl Provider {
       loop {
         hearer.answer(&mut co).await?;
         match co.next().await {
-          Next::Heard(a) => hearer.heard(&mut co, &a).await?,
+          Next::Resumed(a) if a.kind() == "search" => interrupted(&mut co, &a).await?,
+          Next::Heard(a) | Next::Resumed(a) => hearer.heard(&mut co, &a).await?,
           Next::Worked(Replied::Refreshed { about, got }) => hearer.refreshed(&mut co, about, got),
           Next::Worked(Replied::Wrote(wrote)) => hearer.wrote(&mut co, wrote).await,
           Next::Worked(Replied::Retried(retried)) => hearer.retried(&mut co, retried).await,
           Next::Worked(Replied::Came(came)) => hearer.came(&mut co, came).await,
-          Next::Worked(Replied::Searched { id, got }) => hearer.searched(&mut co, &id, got),
+          Next::Worked(Replied::Searched { id, got }) => searched(&mut co, &id, got),
         }
       }
     })

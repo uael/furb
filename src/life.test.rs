@@ -368,6 +368,22 @@ fn made_of(engine: &str, version: i64) -> String {
   )
 }
 
+/// The fact made of an engine, as a record holds it, with the texts of that engine and of its
+/// Kernel.
+fn made_with(engine: &str, source: &str, kernel: &str) -> String {
+  let texts = serde_json::to_string(&[source, kernel]).unwrap();
+  format!(
+    "{},{}]",
+    made_of(engine, world::VERSION).trim_end_matches(']'),
+    &texts[1..texts.len() - 1]
+  )
+}
+
+/// The fact made of this build, as its record holds it.
+fn ours() -> String {
+  made_with(&world::engine(), crate::ENGINE, crate::KERNEL)
+}
+
 /// A record of one rung that a life of a test kept, and the text of the record with its fact made changed.
 fn made_elsewhere(at: &Path, made: &str) -> (PathBuf, String) {
   let record = at.join("record.jsonl");
@@ -375,7 +391,7 @@ fn made_elsewhere(at: &Path, made: &str) -> (PathBuf, String) {
     Opening { extensions: Some(false), ..opening(at, true) }.boot::<String>([]).unwrap().0;
   closed(&mut first, "x = 1\nclose(x)");
   drop(first);
-  let ours = made_of(&world::engine(), world::VERSION);
+  let ours = ours();
   let text = fs::read_to_string(&record).unwrap();
   assert!(text.contains(&ours), "the record names this build");
   let text = text.replace(&ours, made);
@@ -396,6 +412,42 @@ fn a_record_of_another_engine_of_the_same_version_replays_and_goes_on() {
     builds(&record),
     [("0".repeat(64), Some(world::VERSION))],
     "the build that made it stays named"
+  );
+}
+
+#[test]
+fn a_record_of_another_engine_replays_on_the_texts_that_it_holds_and_goes_on_with_them() {
+  use sha2::{Digest, Sha256};
+  let at = place("texts");
+  let source = format!("{}\ncrossed = True\n", crate::ENGINE);
+  let mut hash = Sha256::new();
+  for one in [source.as_str(), crate::KERNEL] {
+    hash.update(one.as_bytes());
+    hash.update([0]);
+  }
+  let named = format!("{:x}", hash.finalize());
+  let (record, text) = made_elsewhere(&at, &made_with(&named, &source, crate::KERNEL));
+  let open = || Opening { extensions: Some(false), ..opening(&at, true) };
+  let mut later = open().boot::<String>([]).unwrap().0;
+  assert_eq!(
+    closed(&mut later, "close(crossed and x + 1)").as_ref().as_int(),
+    Some(2),
+    "the life replays and goes on on the engine that its record holds"
+  );
+  drop(later);
+  assert_eq!(builds(&record), [(named.clone(), Some(world::VERSION))], "the record names it alone");
+  let mut again = open().boot::<String>([]).unwrap().0;
+  assert_eq!(
+    closed(&mut again, "close(x + 2)").as_ref().as_int(),
+    Some(3),
+    "it replays its tail on it"
+  );
+  drop(again);
+  fs::write(&record, text.replace(&named, &"0".repeat(64))).unwrap();
+  let refused = open().boot::<String>([]).err().map(|one| format!("{one:?}")).unwrap_or_default();
+  assert!(
+    refused.contains("another engine"),
+    "texts of another engine refuse the record: {refused}"
   );
 }
 
@@ -1116,7 +1168,7 @@ fn a_command_that_ran_at_a_checkpoint_ends_in_the_life_that_goes_on_from_it_as_i
   assert!(later.pending().unwrap().is_empty(), "the checkpoint left nothing to wake");
   assert_eq!(
     closed(&mut later, "close(str(peek('bash1')))").as_ref().as_str(),
-    Some("\"sleep 60\" was interrupted: the life that ran it ended before it did"),
+    Some("bash1 was interrupted: the life that ran it ended before it did"),
     "the command ends as the ear of commands ends one that a life left"
   );
 }
@@ -1144,7 +1196,7 @@ fn a_word_that_awaits_a_command_at_a_checkpoint_ends_as_cut_and_its_model_starts
   );
   assert_eq!(
     closed(&mut later, &again).as_ref().py_repr(),
-    "['again', '\"sleep 60\" was interrupted: the life that ran it ended before it did', True]",
+    "['again', 'bash1 was interrupted: the life that ran it ended before it did', True]",
     "the command ends as interrupted, the chain is told that the checkpoint cut the word, and the model of the \
      chain starts the word again in a turn that it reads"
   );
@@ -1262,7 +1314,7 @@ fn a_record_of_another_version_opens_on_this_build_from_its_last_checkpoint() {
   drop(first);
   crate::checkpoint::keep(&path, written).unwrap();
   let text = fs::read_to_string(&path).unwrap();
-  let ours = made_of(&world::engine(), world::VERSION);
+  let ours = ours();
   assert!(text.contains(&ours), "{text}");
   fs::write(&path, text.replace(&ours, &made_of(&"0".repeat(64), world::VERSION + 1))).unwrap();
   let mut later = scripted(&at, &[]).boot::<String>([]).unwrap().0;
@@ -1302,12 +1354,11 @@ fn a_record_that_another_engine_went_on_with_after_a_checkpoint_replays_its_tail
   // The facts after the checkpoint name another engine, as a build of another engine names them.
   let path = at.join("record.jsonl");
   let text = fs::read_to_string(&path).unwrap();
-  let made = |engine: &str| made_of(engine, world::VERSION);
   let cut = text
     .rfind("[[\"checkpoint\"")
     .and_then(|at| text[at..].find('\n').map(|end| at + end))
     .unwrap();
-  let theirs = text[cut..].replacen(&made(&world::engine()), &made(&"0".repeat(64)), 1);
+  let theirs = text[cut..].replacen(&ours(), &made_of(&"0".repeat(64), world::VERSION), 1);
   fs::write(&path, format!("{}{theirs}", &text[..cut])).unwrap();
   let (mut later, booted) = scripted(&at, &["close('three')"]).boot::<String>([]).unwrap();
   assert!(booted.len() > 1, "the life replays the tail, word by word");

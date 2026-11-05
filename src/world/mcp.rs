@@ -43,12 +43,11 @@ mod oauth;
 mod session;
 mod wire;
 
-use std::{collections::HashMap, future::Future, path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 
-use futures::{FutureExt, StreamExt, stream};
+use futures::{FutureExt, stream};
 use serde_json::{Map, Number, Value, json};
 use tokio::sync::mpsc;
-use unsync::oneshot;
 
 pub use self::{
   config::Places,
@@ -60,8 +59,9 @@ use self::{
   hub::Hub,
   wire::{Failure, seconds},
 };
+use super::interrupted;
 use crate::{
-  ear::{Co, Ear, Next, hearing, runtime, say},
+  ear::{Co, Ear, Next, hearing, say, spawned},
   fact::Fact,
   value::{Fault, Object, ObjectRef},
 };
@@ -176,9 +176,11 @@ impl Drop for Ends {
   }
 }
 
-/// The ear of MCP: it takes each act of the extension, says it started, and says it done later with its answer or
-/// with the refusal; and it says the fact of a change of a server that no act asked for. A control that ends an act
-/// first ends its work, and the ear says nothing more of it.
+/// The ear of MCP: it takes each act of the extension, says it started, and says it done later
+/// with its answer or with the refusal; and it says the fact of a change of a server that no act
+/// asked for. A control that ends an act first ends its work, and the ear says nothing more of it.
+/// An act that an earlier life took and did not end the ear closes as interrupted at the wake, and
+/// asks no server again.
 pub fn mcp(settings: Settings) -> Box<dyn Ear> {
   hearing(&KINDS, move |mut co: Co<Worked>| async move {
     let (told, changes) = mpsc::unbounded_channel();
@@ -187,28 +189,25 @@ pub fn mcp(settings: Settings) -> Box<dyn Ear> {
     co.work(stream::unfold(changes, |mut changes| async move {
       changes.recv().await.map(|name| (Worked::Changed(name), changes))
     }));
-    let mut stops: HashMap<String, oneshot::Sender<()>> = HashMap::new();
     loop {
       let a = match co.next().await {
         Next::Heard(a) => a,
+        Next::Resumed(a) => {
+          interrupted(&mut co, &a).await?;
+          continue;
+        }
         Next::Worked(Worked::Changed(name)) => {
           say(&mut co, Fact::says(CHANGED, ROOT, [Object::string(name)]));
           continue;
         }
         Next::Worked(Worked::Done(id, got)) => {
-          if stops.remove(&id).is_some() {
-            let got =
-              got.map_or_else(|no| Fault::refused(no.to_string()).object(), |one| object(&one));
-            say(&mut co, Fact::says("done", &id, [got]));
-          }
+          let got =
+            got.map_or_else(|no| Fault::refused(no.to_string()).object(), |one| object(&one));
+          say(&mut co, Fact::says("done", &id, [got]));
           continue;
         }
       };
       let about = a.about().to_owned();
-      if a.kind() == "done" {
-        stops.remove(&about);
-        continue;
-      }
       let Some(kind) = Kind::of(a.kind()).filter(|_| a.question()) else {
         continue;
       };
@@ -221,34 +220,13 @@ pub fn mcp(settings: Settings) -> Box<dyn Ear> {
         continue;
       }
       let words: Vec<Value> = (1..4).map(|at| a.word(at).map_or(Value::Null, valued)).collect();
-      let work = running(answered(Arc::clone(&hub), kind, words));
+      let work = spawned(answered(Arc::clone(&hub), kind, words))
+        .map(|got| got.unwrap_or_else(|no| Err(Error::Task(no))));
       say(&mut co, Fact::says("started", &about, []));
-      let (stop, stopped) = oneshot::channel();
       let id = about.clone();
-      co.work(stream::once(work.map(move |got| Worked::Done(id, got))).take_until(stopped));
-      stops.insert(about, stop);
+      co.take(&about, stream::once(work.map(move |got| Worked::Done(id, got))));
     }
   })
-}
-
-/// A work on the runtime of the ears, which ends when what awaits it goes.
-fn running<T: Send + 'static>(
-  work: impl Future<Output = Result<T, Error>> + Send + 'static,
-) -> impl Future<Output = Result<T, Error>> {
-  /// The task, which ends when its handle goes.
-  struct Aborted(tokio::task::AbortHandle);
-  impl Drop for Aborted {
-    fn drop(&mut self) {
-      self.0.abort();
-    }
-  }
-  let task = runtime().spawn(work);
-  let aborted = Aborted(task.abort_handle());
-  async move {
-    let got = task.await;
-    drop(aborted);
-    got.unwrap_or_else(|no| Err(Error::Task(no)))
-  }
 }
 
 /// A word of an act as a text.

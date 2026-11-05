@@ -339,14 +339,13 @@ pub fn files(scratch: String, config: Option<String>) -> Result<NativeEar, Fault
   Ok(NativeEar::of(world::files(world::Scratch::at(scratch)?, config, None)))
 }
 
-/// The ear of commands, which runs each in a shell of this machine, with `TMPDIR` set to the scratch directory that
-/// the host names, which the ear of the files is given too. It is given the record that the life opens on, so it
-/// closes as interrupted each command that the record shows started and not done, at the wake.
+/// The ear of commands, which runs each in a shell of this machine, with `TMPDIR` set to the
+/// scratch directory that the host names, which the ear of the files is given too. At the wake it
+/// closes as interrupted each command that an earlier life started and did not end.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn bash(scratch: String, record: Vec<Value>) -> Result<NativeEar, Fault> {
-  let record: Vec<Object> = record.into_iter().map(|one| one.0).collect();
-  Ok(NativeEar::of(world::bash(world::Scratch::at(scratch)?, &record)))
+pub fn bash(scratch: String) -> Result<NativeEar, Fault> {
+  Ok(NativeEar::of(world::bash(world::Scratch::at(scratch)?)))
 }
 
 /// The scratch directory of the record at a path, in the cache of furb, which a host removes when it deletes the

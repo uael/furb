@@ -346,7 +346,7 @@ def wake(id: str) -> None:
   A wake makes no reply twice and loses none.
   A wake of a name of no act of the life raises Refused, which names it, and says nothing.
   A wake that the journal says again says at once each next entry of the record that answers a pending act it is over, as the outside said them while it heard that wake, before any other fact of the life.
-  A wake that this life says past the tip, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each wait, prompt to the operator and reply of them and closes each command of them as interrupted, and a model reads the transcript as it grew.
+  A wake that this life says past the tip, and not one that the journal says again, puts every pending act it is over on to the outside, so the World takes each wait, stand, prompt to the operator and reply of them again and closes each other act of them that it takes as interrupted, a command among them, and a model reads the transcript as it grew.
   """
 
 def cancel(id: str, why: object = None) -> None:
@@ -649,7 +649,7 @@ def seed(data: object) -> list[Entry]:
 def gathered(define: Callable[[str], str], floor: dict[str, int]) -> dict:
   """gathered gives the data of a checkpoint of the life at its tip, which seed reads, as plain data that each build of the major reads: taken, chains and acts.
   taken gives the highest number of each kind that an act of a chain took, and at least the number that floor gives, since a later life makes no act again that an ear of the outside made.
-  chains holds the root, the chain of each open prompt and each chain that a plain value of a chain in chains names, each with its parent, its label, its source, whether it is paused, its turns, what define gives of each word that ran on it, the text that binds each plain value of its module again, the names of the other values, and the acts that it cut, each word that ran on it among them.
+  chains holds the root, the chain of each open prompt and each chain that a plain value of a chain in chains names, each with its parent, its label, its source, whether it is paused, its turns but the facts made, what define gives of each word that ran on it, the text that binds each plain value of its module again, the names of the other values, and the acts that it cut, each word that ran on it among them.
   acts holds the last stand, the last clock, and each act of a verb that a value names or that is a command of a chain in chains: an act that is over with its value, an open prompt with its shape, its message, its actor and the ear that started it, and another act as cut, with a refusal that says why.
   gathered is a view: it makes nothing and says nothing.
   """

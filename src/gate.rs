@@ -33,7 +33,7 @@ mod findings;
 mod layout;
 mod shallow;
 
-pub use check::checked;
+pub use check::{checked, checked_on};
 pub use findings::{Finding, Rule};
 use ruff_python_ast::{ExceptHandler, Expr, ModModule, Stmt};
 use ruff_python_parser::parse_module;

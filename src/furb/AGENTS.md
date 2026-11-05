@@ -194,10 +194,10 @@ meanings. The entry of such a name here gives only its form in the engine.
 - plain: the form of a value on the wire, which the World may keep an entry as: nothing, a boolean, a number, a
   string, a list of plain, or a table from a string to plain.
 - drift: an act that, made again, does not agree with the record.
-- pending: what the record shows started and not done when boot returns: a command, a wait, a prompt to the operator
-  or a reply that the outside took, which the life holds with no fact until a wake that the life says; the opening of
-  a life that does work, in `src/life.rs`, says that wake at the tip for each act that no pause holds and no crash
-  loop parked, so a resume goes on from the state of the tip.
+- pending: what the record shows started and not done when boot returns: an act that the outside took, as a command, a
+  wait, a prompt to the operator or a reply, which the life holds with no fact until a wake that the life says; the
+  opening of a life that does work, in `src/life.rs`, says that wake at the tip for each act that no pause holds and no
+  crash loop parked, so a resume goes on from the state of the tip.
 - extension: python that extends the engine from a rung: its word, which defines its names, and, for one that a host
   gives a life, its life word, which starts its work; an official one may have an ear of the World that answers the
   questions that its word defines.
@@ -216,11 +216,12 @@ meanings. The entry of such a name here gives only its form in the engine.
   value, and the life word does not run again. An extension whose word is blank, as one that holds only a part for
   the TUI, plays no word: no turn of its file in a setup, and no rung on a chain.
 - made: the fact by which the store names in the record the build that made it, the digest of the engine and of the
-  Kernel and the version of the build, `VERSION` in `src/world/store.rs`, which the store says as it hears the root of
-  a new record at its birth. A build keeps the version while each record of `tests/replay` replays on it with no
-  drift. After a checkpoint, only the fact made of the segment after it counts,
-  and the store says it again at the root of the first life that goes on from the checkpoint. A life replays that
-  segment word by word whatever build of the major made it, and a drift is a defect.
+  Kernel, the version of the build, `VERSION` in `src/world/store.rs`, and the texts of the engine and of the Kernel,
+  which the store says as it hears the root of a new record at its birth. A build keeps the version while each record
+  of `tests/replay` replays on it with no drift. After a checkpoint, only the fact made of the segment after it
+  counts, and the store says it again at the root of the first life that goes on from the checkpoint. A life of any
+  build of the major replays that segment word by word on the texts that the fact holds, and goes on with them, and
+  a drift is a defect.
 - checkpoint: the fact by which a record carries the state of its life to a later life of any build of its major, at
   its tip: plain data with a version of its own shape, `schema`, apart from the version of the record. It holds each
   chain that lives with its label, its source, its turns, the text of its definitions, its plain values and whether
@@ -269,9 +270,9 @@ meanings. The entry of such a name here gives only its form in the engine.
 - ty check passes on engine.py.
 - There is one root per record, and one process at a time owns a record.
 - A chain is a function of the record, and a later boot must offer the same interpreter and the same outside, since a
-  record is made again by running its words. A record names the
-  version of the build that made it, and a life replays the segment after its last checkpoint word by word, on any
-  build of the major, to the exact state of its tip.
+  record is made again by running its words. A record holds the engine and the Kernel that made each segment, and a
+  life of any build of the major replays the segment after its last checkpoint word by word on them, to the exact
+  state of its tip, and goes on with them.
 - A chain is one conversation, and the transcript that a provider caches grows at one end.
 - Nothing is told twice, and nothing tells what it does not know: an act tells of itself, and a chain of the rungs it
   asks a model for, with the message of the prompt each advances, of a word that told nothing, of the prompts and the

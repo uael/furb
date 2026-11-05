@@ -11,7 +11,6 @@ use rig_core::{
 };
 use serde_json::{Map, Value};
 use tokio::sync::{mpsc, watch as holding};
-use unsync::oneshot;
 
 use super::{
   Told, claude,
@@ -200,7 +199,7 @@ pub(super) fn ended(provider: &str, response: CompletionResponse) -> StreamFinal
 /// wait is no attempt. A call that a failed sign in refused is made again every minute until it
 /// succeeds or a stand asks it at once, since a sign in outside furb ends the failure.
 pub(super) fn answered(call: Answering) -> impl Stream<Item = Replied> {
-  let Answering { id, asked, backoff, tells, mut told, stopped, hold, again } = call;
+  let Answering { id, asked, backoff, tells, mut told, hold, again } = call;
   let came = async move {
     let mut waits = Waits { id, backoff, tells, hold, attempt: 1, limited: false, signed: false };
     let got = match asked {
@@ -220,20 +219,19 @@ pub(super) fn answered(call: Answering) -> impl Stream<Item = Replied> {
   // it.
   let told = stream::poll_fn(move |cx| told.poll_recv(cx));
   let came = stream::once(came).filter_map(std::future::ready);
-  stream::select(told, came).take_until(stopped)
+  stream::select(told, came)
 }
 
 /// The work of the call of the model of a reply: the id of the reply, its model and what it asks,
 /// the backoff of its retries, the two ends of the channel through which it tells what the model
-/// writes, what stops it, whether a pause holds the reply, and whether it asks again a call that
-/// waited for a retry.
+/// writes, whether a pause holds the reply, and whether it asks again a call that waited for a
+/// retry.
 pub(super) struct Answering {
   pub(super) id: String,
   pub(super) asked: Result<(Model, Asked), CompletionError>,
   pub(super) backoff: Backoff,
   pub(super) tells: mpsc::UnboundedSender<Replied>,
   pub(super) told: mpsc::UnboundedReceiver<Replied>,
-  pub(super) stopped: oneshot::Receiver<()>,
   pub(super) hold: holding::Receiver<bool>,
   pub(super) again: bool,
 }

@@ -155,10 +155,10 @@ fn logical<'a>(source: &'a str, tokens: &[Token]) -> Vec<Line<'a>> {
 /// The comments go, one space is one level of indentation, and each pair of parentheses goes that
 /// the program does not need, as the formatter adds them to break a long line. A suite of simple
 /// statements stands on the line of its header, the simple statements that follow one another in a
-/// block share one line, and the outer parentheses of a case pattern go. The build stops unless the
-/// text it makes is the program on disk.
-pub(crate) fn minified(source: &str) -> String {
-  let parsed = parse_module(source).expect("the engine parses");
+/// block share one line, and the outer parentheses of a case pattern go. It gives nothing unless
+/// the engine parses and the text it makes is the same program.
+pub(crate) fn minified(source: &str) -> Option<String> {
+  let parsed = parse_module(source).ok()?;
   let program = ComparableModModule::from(parsed.syntax());
   let mut lines = logical(source, parsed.tokens());
   // Each pair of parentheses goes, one after the other, when its line without it is the same
@@ -171,17 +171,14 @@ pub(crate) fn minified(source: &str) -> String {
       if line.parts[open].0 == TokenKind::Lpar {
         let mut depth = 0;
         let close = open
-          + line.parts[open..]
-            .iter()
-            .position(|(kind, _)| {
-              depth += match kind {
-                TokenKind::Lpar => 1,
-                TokenKind::Rpar => -1,
-                _ => 0,
-              };
-              depth == 0
-            })
-            .expect("a line closes each parenthesis that it opens");
+          + line.parts[open..].iter().position(|(kind, _)| {
+            depth += match kind {
+              TokenKind::Lpar => 1,
+              TokenKind::Rpar => -1,
+              _ => 0,
+            };
+            depth == 0
+          })?;
         let mut fewer = line.clone();
         fewer.parts.remove(close);
         fewer.parts.remove(open);
@@ -196,12 +193,8 @@ pub(crate) fn minified(source: &str) -> String {
     }
   }
   let prompt = laid(&lines).join("\n");
-  let again = parse_module(&prompt).expect("the minified engine parses");
-  assert!(
-    ComparableModModule::from(again.syntax()) == program,
-    "the minified engine is the program on disk"
-  );
-  prompt
+  let again = parse_module(&prompt).ok()?;
+  (ComparableModModule::from(again.syntax()) == program).then_some(prompt)
 }
 
 /// The logical lines as the prompt writes them: each line with its indentation, a suite of simple
