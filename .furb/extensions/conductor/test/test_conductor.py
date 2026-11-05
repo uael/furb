@@ -2,45 +2,22 @@
 
 import asyncio
 import json
-import os
 import re
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass, field
-from functools import partial
 from pathlib import Path
 
 import pytest
 
-import conftest
-from conftest import Sand, life, paragraphs, said, settle, world_says
-from furb.engine import OPERATOR, Exit, Refused, Text, site
+from conftest import paragraphs, said, settle
+from extensions.conftest import Bench
+from furb.engine import OPERATOR, Refused, site
 
 HERE = Path(__file__).resolve().parent.parent
 IMPORT = re.compile(r"^from furb\.engine import \(.*?\)\n", re.S | re.M)
-WORD = "\n\n".join(IMPORT.sub("", (HERE / f).read_text(encoding="utf-8")) for f in ("../pr/pr.py", "conductor.py"))
 POSIX = pytest.mark.skipif(sys.platform == "win32", reason="the round runs its commands in sh")
 JQ = pytest.mark.skipif(not shutil.which("jq"), reason="the gh of the test applies --jq with jq")
-GH = """import json, os, re, subprocess, sys
-args = sys.argv[1:]
-at = args.index("--jq") if "--jq" in args else len(args)
-jq = args[at + 1] if at < len(args) else None
-said = " ".join(args[:at] + args[at + 2:])
-with open(os.environ["GH_LOG"], "a", encoding="utf-8") as f:
-  f.write(said + chr(10))
-with open(os.environ["GH_SAYS"], encoding="utf-8") as f:
-  says = json.load(f)
-for pattern, out, code in says:
-  if re.search(pattern, said):
-    break
-else:
-  sys.exit(0)
-if jq and out and not code:
-  out = subprocess.run(["jq", "-r", jq], input=out, capture_output=True, text=True, check=True).stdout
-sys.stdout.write(out)
-sys.exit(code)
-"""
 SONNET, OPUS, ASTRA = "claude-cli:sonnet/high", "claude-cli:opus/medium", "codex:gpt-6-astra/high"
 ROSTER = [
   [OPERATOR, [], 200000],
@@ -80,74 +57,11 @@ def stepped(step, *args):
 '''
 
 
-@dataclass
-class Shell(Sand):
-  """A World that runs each command in sh in the working directory of its chain, with the gh of the test first on
-  its PATH, and says its done later, from its loop, but holds the done of each command that hold matches until the test
-  releases it. It keeps each write of scratch:// in its files, and reads the clock at now, which a test moves."""
-
-  env: dict[str, str] = field(default_factory=dict)
-  now: float = 1000.0
-  hold: str = ""
-  held: list = field(default_factory=list)
-
-  def hear(self, a: tuple):
-    match a:
-      case ("bash", about, _, on, command, stdin, *_):
-        yield "started", about
-        here = conftest.engine.cwd(on=on) or None
-        got = subprocess.run(["sh", "-c", command], input=stdin or "", capture_output=True, text=True, env=self.env, cwd=here, check=False)
-        done = partial(world_says, "done", about, Exit(got.returncode, Text(f"{about}/stdout", got.stdout), Text(f"{about}/stderr", got.stderr)))
-        if self.hold and re.search(self.hold, command):
-          self.held.append(done)
-        else:
-          self.loop.call_soon(done)
-      case ("clock", qid, *_):
-        yield "done", qid, self.now
-      case ("write", qid, _, _, Text(path=path, content=content)) if path.startswith("scratch://"):
-        self.files[path] = content
-        yield "done", qid, Text(path, content)
-      case _:
-        yield from super().hear(a)
-
-  def release(self) -> None:
-    self.hold = ""
-    for done in self.held:
-      self.loop.call_soon(done)
-    self.held.clear()
-
-
-class Round:
-  """A life whose root stands in the folder of a test and plays pr and the conductor, on a World whose gh answers
-  each call from a table of patterns: the first that matches the call gives its output and its code."""
+class Round(Bench):
+  """The Bench of pr and the conductor, with the roster of the test."""
 
   def __init__(self, tmp: Path) -> None:
-    folder = tmp / "bin"
-    folder.mkdir()
-    (folder / "gh").write_text(f"#!{sys.executable}\n{GH}", encoding="utf-8")
-    (folder / "gh").chmod(0o755)
-    kept = {n: v for n, v in os.environ.items() if not n.startswith(("GIT_", "COVERAGE_PROCESS_"))}
-    env = {**kept, "PATH": f"{folder}{os.pathsep}{os.environ['PATH']}", "GH_LOG": str(tmp / "gh.log"), "GH_SAYS": str(tmp / "says.json")}
-    self.tmp, self.says, self.engine = tmp, [], conftest.engine
-    self.sand = Shell(files={}, env=env, stands=[ROSTER, str(tmp), OPUS])
-    self.say("^$", "")
-    self.says.clear()
-    self.log, self.root = life(self.sand)
-
-  async def load(self, *words: str) -> None:
-    await self.word("\n\n".join([f"cd({str(self.tmp)!r})", WORD, *words]))
-
-  @property
-  def ns(self) -> dict:
-    return self.engine.module(self.root)
-
-  async def word(self, text: str) -> None:
-    await self.engine.rung(text, on=self.root)
-    await settle()
-
-  async def value(self, expression: str) -> object:
-    await self.word(f"got = {expression}")
-    return self.ns["got"]
+    super().__init__(tmp, [HERE / "../pr/pr.py", HERE / "conductor.py"], ROSTER, OPUS)
 
   async def step(self, name: str, *args: object) -> object:
     return await self.value(f"await stepped({', '.join([name, *map(repr, args)])})")
@@ -159,19 +73,11 @@ class Round:
     self.engine.close(value, name)
     await settle()
 
-  def say(self, pattern: str, out: object, code: int = 0) -> None:
-    self.says.insert(0, (pattern, out if isinstance(out, str) else json.dumps(out), code))
-    (self.tmp / "says.json").write_text(json.dumps(self.says), encoding="utf-8")
-
   def github(self, *open_prs: dict, merged: tuple = (), main: str = "success", ruled: list | None = None) -> None:
     self.say(r"pr list --state open", list(open_prs))
     self.say(r"pr list --state merged", [{"number": n, "headRefName": f"w/merged{n}"} for n in merged])
     self.say(r"run list --branch main", [{"headSha": "m1", "conclusion": main}])
     self.say(r"rules/branches/main", RULED if ruled is None else ruled)
-
-  def gh(self) -> list[str]:
-    path = self.tmp / "gh.log"
-    return path.read_text(encoding="utf-8").splitlines() if path.exists() else []
 
   def notices(self) -> list[str]:
     return [str(x[5]) for x in said(self.log, "prompt") if x[3] == self.root and x[4] == "None"]

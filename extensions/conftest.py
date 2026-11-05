@@ -3,15 +3,20 @@ the suite of each extension only through a conftest above it, and the helpers th
 
 import ast
 import asyncio
+import json
+import os
 import re
+import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Generator, Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 
 import pytest
 
+import conftest
 from conftest import (  # noqa: F401
   STANDS,
   Sand,
@@ -27,7 +32,7 @@ from conftest import (  # noqa: F401
   world_says,
 )
 from furb import engine
-from furb.engine import Refused, Text
+from furb.engine import Exit, Refused, Text
 from furb_monty import _monty
 
 USE = (
@@ -333,3 +338,127 @@ def bindings(name: str) -> str:
 def quoted(name: str, text: str) -> str:
   """The quote that a paragraph binds a text of several lines in: its open mark, the text, and its close mark."""
   return "<" + f"s:{name}>\n{text}</" + f"s:{name}>"
+
+
+IMPORT = re.compile(r"^from furb\.engine import \(.*?\)\n", re.S | re.M)
+
+
+GH = """import json, os, re, subprocess, sys
+args = sys.argv[1:]
+at = args.index("--jq") if "--jq" in args else len(args)
+jq = args[at + 1] if at < len(args) else None
+said = " ".join(args[:at] + args[at + 2:])
+with open(os.environ["GH_LOG"], "a", encoding="utf-8") as f:
+  f.write(said + chr(10))
+with open(os.environ["GH_SAYS"], encoding="utf-8") as f:
+  says = json.load(f)
+for pattern, out, code in says:
+  if re.search(pattern, said):
+    break
+else:
+  sys.exit(0)
+if jq and out and not code:
+  out = subprocess.run(["jq", "-r", jq], input=out, capture_output=True, text=True, check=True).stdout
+sys.stdout.write(out)
+sys.exit(code)
+"""
+
+
+@dataclass
+class Shell(Sand):
+  """A World that runs each command in sh in the working directory of its chain, with the gh of the test first on
+  its PATH, and says its done later, from its loop, but holds the done of each command that hold matches until the test
+  releases it. It keeps each write of scratch:// in its files, and reads the clock at now, which a test moves."""
+
+  env: dict[str, str] = field(default_factory=dict)
+  now: float = 1000.0
+  hold: str = ""
+  held: list = field(default_factory=list)
+
+  def hear(self, a: tuple):
+    match a:
+      case ("bash", about, _, on, command, stdin, *_):
+        yield "started", about
+        here = conftest.engine.cwd(on=on) or None
+        args, merged = ["sh", "-c", command], conftest.engine.ask("merged", on, about)
+        err = subprocess.STDOUT if merged else subprocess.PIPE
+        got = subprocess.run(  # noqa: S603
+          args,
+          input=stdin or "",
+          stdout=subprocess.PIPE,
+          stderr=err,
+          encoding="utf-8",
+          env=self.env,
+          cwd=here,
+          check=False,
+        )
+        done = partial(
+          world_says,
+          "done",
+          about,
+          Exit(got.returncode, Text(f"{about}/stdout", got.stdout), Text(f"{about}/stderr", got.stderr or "")),
+        )
+        if self.hold and re.search(self.hold, command):
+          self.held.append(done)
+        else:
+          self.loop.call_soon(done)
+      case ("clock", qid, *_):
+        yield "done", qid, self.now
+      case ("write", qid, _, _, Text(path=path, content=content)) if path.startswith("scratch://"):
+        self.files[path] = content
+        yield "done", qid, Text(path, content)
+      case _:
+        yield from super().hear(a)
+
+  def release(self) -> None:
+    self.hold = ""
+    for done in self.held:
+      self.loop.call_soon(done)
+    self.held.clear()
+
+
+class Bench:
+  """A life whose root stands in the folder of a test and plays the words of files of extensions, on a World whose gh
+  answers each call from a table of patterns: the first that matches the call gives its output and its code."""
+
+  def __init__(self, tmp: Path, files: list[Path], roster: list, actor: str) -> None:
+    folder = tmp / "bin"
+    folder.mkdir()
+    (folder / "gh").write_text(f"#!{sys.executable}\n{GH}", encoding="utf-8")
+    (folder / "gh").chmod(0o755)
+    kept = {n: v for n, v in os.environ.items() if not n.startswith(("GIT_", "COVERAGE_PROCESS_"))}
+    env = {
+      **kept,
+      "PATH": f"{folder}{os.pathsep}{os.environ['PATH']}",
+      "GH_LOG": str(tmp / "gh.log"),
+      "GH_SAYS": str(tmp / "says.json"),
+    }
+    self.tmp, self.says, self.engine = tmp, [], conftest.engine
+    self.sand = Shell(files={}, env=env, stands=[roster, str(tmp), actor])
+    self.say("^$", "")
+    self.says.clear()
+    self.log, self.root = life(self.sand)
+    self.text = "\n\n".join(IMPORT.sub("", f.read_text(encoding="utf-8")) for f in files)
+
+  async def load(self, *words: str) -> None:
+    await self.word("\n\n".join([f"cd({str(self.tmp)!r})", self.text, *words]))
+
+  @property
+  def ns(self) -> dict:
+    return self.engine.module(self.root)
+
+  async def word(self, text: str) -> None:
+    await self.engine.rung(text, on=self.root)
+    await settle()
+
+  async def value(self, expression: str) -> object:
+    await self.word(f"got = {expression}")
+    return self.ns["got"]
+
+  def say(self, pattern: str, out: object, code: int = 0) -> None:
+    self.says.insert(0, (pattern, out if isinstance(out, str) else json.dumps(out), code))
+    (self.tmp / "says.json").write_text(json.dumps(self.says), encoding="utf-8")
+
+  def gh(self) -> list[str]:
+    path = self.tmp / "gh.log"
+    return path.read_text(encoding="utf-8").splitlines() if path.exists() else []

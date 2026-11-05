@@ -1,52 +1,42 @@
-"""prcheck refuses a sentence of more than 25 words and a title that breaks its rule, and a why or an outcome line that ends with no full stop, and says how far each one is."""
-
-import re
-from pathlib import Path
+"""prcheck checks a title with script/title.py and a body with the rules of the template, on the real engine."""
 
 import pytest
 
-HERE = Path(__file__).resolve().parent.parent
-IMPORT = re.compile(r"^from furb\.engine import \(.*?\)\n", re.S | re.M)
+from extensions.conftest import Bench
+from furb.engine import Refused
 
 
-class Refused(Exception):
-  pass
+async def test_prcheck_runs_title_py_of_the_worktree_at_where_on_the_title_and_refuses_a_title_that_it_refuses(pulling: Bench) -> None:
+  """prcheck(title, why, outcome) runs script/title.py of the worktree at where on the title, and refuses a title that it refuses, with its words."""
+  assert await pulling.value('await prcheck("chore(pr): Fill the template", "It was copied.", ["One home."])') == 5
+  with pytest.raises(Refused, match="The title is wrong: 'docs: No area'"):
+    await pulling.value('await prcheck("docs: No area", "It was copied.", ["One home."])')
 
 
-ns: dict = {"Refused": Refused, "span": None, "HIDDEN": None}
-exec(compile(IMPORT.sub("", (HERE / "pr.py").read_text(encoding="utf-8")), "pr.py", "exec"), ns)  # noqa: S102
-prcheck = ns["prcheck"]
-TITLE = "fix(pr): Check a sentence"
-LONG = " ".join(["word"] * 26)
+async def test_prcheck_counts_why_and_outcome_alone(pulling: Bench) -> None:
+  """It counts the words of why and outcome, which hold 300 at most, and gives that count."""
+  long = " ".join(["Twelve words fill this sentence of the outcome, and it ends here."] * 25)
+  short = " ".join(["Twelve words fill this sentence of the outcome, and it ends here."] * 24)
+  assert await pulling.value(f'await prcheck("chore(pr)!: Break", "Why.", [{short!r}], breaking=[{long!r}])') == 289
+  with pytest.raises(Refused, match="the body holds 301 words, over 300"):
+    await pulling.value(f'await prcheck("chore(pr): Grow", "Why.", [{long!r}])')
 
 
-def test_a_sentence_of_25_words_passes_and_the_count_of_words_is_given() -> None:
-  assert prcheck(TITLE, " ".join(["word"] * 25) + ".", ["X."]) == 26
+async def test_prcheck_refuses_a_long_sentence(pulling: Bench) -> None:
+  """It refuses a sentence of more than 25 words, with its length and its start."""
+  ok, long = " ".join(["word"] * 24) + " end.", " ".join(["word"] * 25) + " end."
+  assert await pulling.value(f'await prcheck("chore(pr): Count", {ok!r}, ["One."])') == 26
+  with pytest.raises(Refused, match="1 sentences over 25 words, split each one:\n26 words: word word"):
+    await pulling.value(f'await prcheck("chore(pr): Count", "Why.", ["One.", {long!r}])')
 
 
-def test_a_sentence_of_26_words_in_the_why_is_refused_with_its_length_and_start() -> None:
-  with pytest.raises(Refused, match=r"1 sentences over 25 words.*\n26 words: word word word word word word word word \.\.\."):
-    prcheck(TITLE, LONG + ". Short one.", ["X."])
+async def test_prcheck_refuses_a_line_that_is_a_command(pulling: Bench) -> None:
+  """It refuses a line of why or outcome that ends with no full stop, as a command does."""
+  with pytest.raises(Refused, match="2 lines hold no sentence, as a command does: end each with a full stop: Run the build; a \\| b"):
+    await pulling.value('await prcheck("chore(pr): Count", "Run the build", ["a | b", "Fine."])')
 
 
-def test_a_long_sentence_in_an_outcome_or_a_breaking_change_is_refused_too() -> None:
-  for outcome, breaking in ((["X.", LONG], None), (["X."], [LONG])):
-    with pytest.raises(Refused, match="1 sentences over 25 words"):
-      prcheck(TITLE, "Why.", outcome, breaking)
-
-
-def test_two_short_sentences_that_hold_26_words_together_pass() -> None:
-  assert prcheck(TITLE, " ".join(["word"] * 13) + ". " + " ".join(["word"] * 13) + ".", ["X."]) == 27
-
-
-def test_a_refused_title_gives_its_length_and_the_types() -> None:
-  with pytest.raises(Refused, match=r"holds 12 characters.*feat, fix, perf or chore"):
-    prcheck("fix: no area", "Why.", ["X."])
-
-
-def test_a_why_that_is_a_command_and_an_outcome_line_with_a_pipe_are_refused() -> None:
-  old = "git status --short\nuv run pytest -q 2>&1 | grep -E passed | head"
-  with pytest.raises(Refused, match=r"1 lines hold no sentence.*git status --short"):
-    prcheck(TITLE, old, ["X."])
-  with pytest.raises(Refused, match=r"1 lines hold no sentence.*pytest -q 2>&1 \| grep"):
-    prcheck(TITLE, "Why.", ["uv run pytest -q 2>&1 | grep passed"])
+async def test_prcheck_refuses_a_break_with_no_bang(pulling: Bench) -> None:
+  """It refuses a breaking change when the title carries no ! after its area."""
+  with pytest.raises(Refused, match="carries a ! after the area of its title"):
+    await pulling.value('await prcheck("feat(pr): Break", "Why.", ["One."], breaking=["The door moves."])')
