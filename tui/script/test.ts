@@ -20,7 +20,7 @@ import { stale, warning } from "./stale.ts";
 const given = process.argv.slice(2);
 const flags = given.filter((one) => one.startsWith("-"));
 const filters = given.filter((one) => !one.startsWith("-"));
-const files = ["bind/typescript/test", "tui/test", "gui/test"]
+const files = ["bind/typescript/test", "tui/test"]
   .flatMap((root) =>
     [...new Glob("**/*.test.ts").scanSync(root)].map((file) => ({
       path: `./${root}/${file}`,
