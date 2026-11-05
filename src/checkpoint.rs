@@ -20,17 +20,15 @@
 //! A life ends with its checkpoint, which the ear of its store keeps, since a life born from a
 //! checkpoint makes acts of its own at its birth; [`keep`] writes one on a record that no life
 //! holds. A later life boots on the last checkpoint of its record, whatever engine wrote it, as
-//! [`booted`] says, so it replays the checkpoint and the entries after it alone. When a build of
-//! another engine made those entries, the life first keeps the checkpoint that `crossed` gives,
-//! which carries them as data, so it replays none of them. A host carries so the tail of a life
-//! that a fault stopped, with [`carry`], whatever build made it.
+//! [`booted`] says, so it replays the checkpoint and the entries after it alone, word by word,
+//! whatever build of the major made them: a resume returns to the exact state at the tip. A tail
+//! that a build cannot replay with no drift is a defect, and the record then opens to read only.
 //!
 //! The checkpoint of the build before the schema holds `entries` in the place of the data: facts
 //! that the journal of any engine replays, and `("reserve", kind, "store", n)`, which stands for
 //! each name of that kind up to n that no entry carries. A later life boots on them as they stand,
 //! so a life that a build of that form handed over goes on.
 
-#![expect(clippy::match_bool, reason = "debt: a match on a bool")]
 #![expect(
   clippy::needless_pass_by_value,
   reason = "debt: an argument taken by value and only borrowed"
@@ -228,7 +226,3 @@ fn carried(checkpoint: &Object) -> Vec<Object> {
   }
   out
 }
-
-mod tail;
-pub use tail::carry;
-pub(crate) use tail::crossed;

@@ -15,7 +15,7 @@ use crate::{
   Act, Ear, Engine, Fact, Object, Text,
   ear::{ear, hear, say},
   extension::enabled,
-  value::{ObjectRef, entry},
+  value::entry,
   verbs, world,
 };
 
@@ -1284,26 +1284,20 @@ fn a_record_of_another_version_opens_on_this_build_from_its_last_checkpoint() {
 }
 
 #[test]
-fn a_record_that_another_engine_went_on_with_after_a_checkpoint_opens_with_each_chain_its_turns_and_its_open_prompts()
+fn a_record_that_another_engine_went_on_with_after_a_checkpoint_replays_its_tail_to_the_exact_state_at_its_tip()
  {
   let at = place("crossed");
   let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0)\nclose(f'round {rounds}')";
   let mut first = scripted(&at, &[ran]).boot::<String>([]).unwrap().0;
   let word = "work = chain('work')\nqueue = [1]\nSIZE = 6\ndef f():\n  return SIZE\n\
               waiting = prompt(str, 'Wait.', on=work)\nawait wait(0.3, __name__)\nclose(str(waiting))";
-  let waiting = closed(&mut first, word).as_ref().as_str().unwrap().to_owned();
+  closed(&mut first, word);
   first.checkpoint().unwrap();
   let mut tail =
     scripted(&at, &["await wait(3600, __name__)\nclose('late')"]).boot::<String>([]).unwrap().0;
   let word = "after = f() + 1\nqueue.append(after)\nmore = chain('more')\nasked = prompt(str, 'Ask.', on=more)\n\
               shell = bash('echo tail')\nawait shell\nawait wait(0.3, __name__)\nclose(str(asked))";
   let asked = closed(&mut tail, word).as_ref().as_str().unwrap().to_owned();
-  let turns = "close([len(turns('chain1')), len(turns('chain3'))])";
-  let counted = |life: &mut Engine| -> Vec<i64> {
-    let got = closed(life, turns);
-    got.as_ref().items().unwrap().iter().filter_map(ObjectRef::as_int).collect()
-  };
-  let told = counted(&mut tail);
   drop(tail);
   // The facts after the checkpoint name another engine, as a build of another engine names them.
   let path = at.join("record.jsonl");
@@ -1314,67 +1308,26 @@ fn a_record_that_another_engine_went_on_with_after_a_checkpoint_opens_with_each_
     .and_then(|at| text[at..].find('\n').map(|end| at + end))
     .unwrap();
   let theirs = text[cut..].replacen(&made(&world::engine()), &made(&"0".repeat(64)), 1);
-  let text = format!("{}{theirs}", &text[..cut]);
-  fs::write(&path, &text).unwrap();
-  drop(Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap());
-  assert_eq!(
-    fs::read_to_string(&path).unwrap(),
-    text,
-    "a life that inspects the record writes nothing"
-  );
+  fs::write(&path, format!("{}{theirs}", &text[..cut])).unwrap();
   let (mut later, booted) = scripted(&at, &["close('three')"]).boot::<String>([]).unwrap();
-  assert_eq!(
-    booted.len(),
-    1,
-    "the life boots on a checkpoint that carries the tail, and replays no fact of it"
-  );
-  let now = counted(&mut later);
-  assert!(
-    now.iter().zip(&told).all(|(now, told)| now >= told),
-    "each chain keeps its turns: {now:?} {told:?}"
-  );
+  assert!(booted.len() > 1, "the life replays the tail, word by word");
   let word = format!(
-    "wake('chain3')\nclose([f(), 'after' in globals(), 'queue' in globals(), get('{waiting}')[:2], \
-     over('{waiting}'), peek(bash1), await Act('{asked}'), str(chain('last'))])"
+    "close([f(), after, queue, more, shell, peek(shell).stdout.content, get('{asked}')[:2], str(chain('last'))])"
   );
   assert_eq!(
     closed(&mut later, &word).as_ref().py_repr(),
-    format!(
-      "[6, False, False, ('prompt', '{waiting}'), False, Exit(code=0, stdout=Text(path='bash1/stdout', \
-       content='tail\\n'), stderr=Text(path='bash1/stderr', content='')), 'three', 'chain4']"
-    ),
-    "each definition of the checkpoint, each open prompt and each act that a tell names goes on, a name that the tail \
-     changed is lost, and a new act takes the next name"
+    format!("[6, 7, [1, 7], 'chain3', 'bash1', 'tail\\n', ('prompt', '{asked}'), 'chain4']"),
+    "each name that the tail bound holds its value, each act that the tail made goes on, and a new act takes the next \
+     name"
   );
-  let word = "close([x[3][0] for x in transcript('chain1') if x[0] == 'tell' and x[3][0].startswith('#') and 'It lost' in x[3][0]][-1])";
-  let lost = closed(&mut later, word).as_ref().as_str().unwrap().to_owned();
-  eprintln!("LOST {}", lost.replace('\n', " | "));
-  for name in ["after", "queue", "more", "asked", "shell"] {
-    assert!(lost.contains(&format!("'{name}'")), "the chain is told that it lost {name}: {lost}");
-  }
   drop(later);
-  let kept = world::kept(&path).unwrap();
-  let named: Vec<Option<String>> = crate::checkpoint::segment(&kept)
-    .iter()
-    .filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of))
-    .filter(|a| a.kind() == world::MADE)
-    .map(|a| a.word(0).and_then(|one| one.as_str().map(str::to_owned)))
-    .collect();
-  assert_eq!(named, [Some(world::engine())], "the life after the carry names this engine once");
-  let mut again = scripted(&at, &[]).boot::<String>([]).unwrap().0;
-  assert_eq!(closed(&mut again, "close(f())").as_ref().as_int(), Some(6));
-  drop(again);
   let kept = world::kept(&path).unwrap();
   let checkpoints = kept.iter().filter(|one| {
     entry(&one.as_ref(), 0)
       .and_then(Fact::of)
       .is_some_and(|a| a.kind() == crate::checkpoint::CHECKPOINT)
   });
-  assert_eq!(
-    checkpoints.count(),
-    2,
-    "a later life of this engine replays the tail that it made, and carries nothing"
-  );
+  assert_eq!(checkpoints.count(), 1, "the life writes no checkpoint that carries the tail");
 }
 
 #[test]
