@@ -41,8 +41,9 @@ import { clock } from "./clock.ts";
 import { expandHome, fileReferences, fromDirectory, projectFiles, shortenHome } from "./files.ts";
 import { count, dollars } from "./format.ts";
 import { append, modeOf, seed, sentIn, workspaceRoot } from "./history.ts";
-import { recordName, renameWord } from "./names.ts";
+import { renameWord } from "./names.ts";
 import { Preferences } from "./preferences.ts";
+import { inspectRecords } from "./records.ts";
 import { type Hunk, type Reviewed, revertWord, reviewed, type Scope, scopes } from "./review.ts";
 import { shareHtml, shareMarkdown } from "./share.ts";
 import { isThemeChoice, palettes, type ThemeChoice, type ThemeName, themeOf } from "./theme.ts";
@@ -478,6 +479,10 @@ export class Session extends EventEmitter {
   /** The last name that the operator gave the session in its record, by a plain scan of the record when the life
    * opens, which every build reads, also when the life drifts or another host holds the record. */
   private keptName?: string;
+  /** Whether the scan of the record in the worker came back, which the move of an old name into the record waits for. */
+  private scanned = false;
+  /** Ends the scan of the record in the worker when the session goes. */
+  private readonly scanning = new AbortController();
   private carrying = false;
   /** The scope, the writes and the count of changes that `changes` was read at. */
   private changesRead = "";
@@ -505,7 +510,7 @@ export class Session extends EventEmitter {
     if (path) {
       const { view, name, damage } = savedView(path);
       this.legacyName = name;
-      this.keptName = recordName(path);
+      this.scanName(path);
       Object.assign(this, Object.fromEntries(kept.flatMap((key) => (key in view ? [[key, view[key]]] : []))));
       this.savedCost = view.cost ?? 0;
       // A saved queue waits for the choice of the operator before it sends.
@@ -638,11 +643,28 @@ export class Session extends EventEmitter {
       return false;
     }
   }
+  /** The name that the operator said is in the record, which only a scan of its bytes finds. The worker that lists the
+   * records makes that scan, so the thread that draws reads no byte of the record, and the session shows the name when
+   * it comes. */
+  private scanName(path: string): void {
+    inspectRecords([path], this.scanning.signal, []).then(
+      (states) => this.scannedName(states[path]?.said),
+      () => this.scannedName(undefined),
+    );
+  }
+  private scannedName(said: string | undefined): void {
+    if (this.closed) return;
+    this.scanned = true;
+    this.keptName = said;
+    this.named();
+    this.carryName();
+    this.emit("change");
+  }
   /** A name that an older release kept in `<record>.ui.json` moves into the record once the record is read: when the
    * record holds no rename_session, the name is said as one, and the save that follows writes the view without it. */
   private carryName(): void {
     const name = this.legacyName;
-    if (name === undefined || this.carrying) return;
+    if (name === undefined || this.carrying || !this.scanned) return;
     // A record that this life cannot write keeps the name in the old home, which the next life carries.
     if (this.closed || this.host.role === "read" || this.host.recorded || this.host.reading) return;
     const said =
@@ -2276,6 +2298,7 @@ export class Session extends EventEmitter {
     clearTimeout(this.noticeTimer);
     this.leave();
     this.closed = true;
+    this.scanning.abort();
     this.host.off("change", this.changed);
     this.host.off("fault", this.fail);
     this.host.off("facts", this.factsChanged);
