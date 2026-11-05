@@ -3,9 +3,9 @@
 use std::{
   ffi::CStr,
   fs::{self, DirBuilder},
-  io,
+  io::{self, Write},
   mem::MaybeUninit,
-  os::unix::fs::{DirBuilderExt, MetadataExt},
+  os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt},
   path::{Path, PathBuf},
   ptr,
 };
@@ -70,7 +70,7 @@ pub(crate) fn own() -> Result<String, TransportError> {
 
 /// The folder of the socket made, of mode 0700, and refused when another user owns it or may
 /// enter it.
-fn guarded(folder: &Path) -> Result<(), TransportError> {
+pub(crate) fn guarded(folder: &Path) -> Result<(), TransportError> {
   let made = |source| TransportError::Folder { folder: folder.to_owned(), source };
   DirBuilder::new().recursive(true).mode(0o700).create(folder).map_err(made)?;
   let held = fs::metadata(folder).map_err(made)?;
@@ -78,6 +78,18 @@ fn guarded(folder: &Path) -> Result<(), TransportError> {
     return Err(TransportError::Exposed { folder: folder.to_owned() });
   }
   Ok(())
+}
+
+/// A new file that only the user reads, of mode 0600, written whole, in the place of any that stood
+/// there: a file that stood keeps its own mode through a truncation, so it goes first.
+pub(crate) fn private(file: &Path, bytes: &[u8]) -> io::Result<()> {
+  match fs::remove_file(file) {
+    Err(no) if no.kind() != io::ErrorKind::NotFound => return Err(no),
+    _ => {}
+  }
+  let mut out = fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(file)?;
+  out.write_all(bytes)?;
+  out.sync_all()
 }
 
 fn user() -> u32 {

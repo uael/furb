@@ -24,6 +24,8 @@ daemon.
 
 - The daemon writes the address of the door, with its token, in `window.json` beside its socket, which only the user
   reads: `{"url": "ws://127.0.0.1:52011/?token=..."}`. Each start and each upgrade draws a new port and a new token.
+- The daemon makes the folder of that file on a new cache. On Unix the file is of mode 0600 in a folder of mode 0700; on
+  Windows the file and the folder that the daemon makes hold an access list that lets in their owner alone.
 - A peer that gives no token in the query of its upgrade, or another one, gets the HTTP status 403 and no socket.
 - The identity of a peer of the door is the login of the user, and it has the role to write.
 - A window dials the socket first: `window.json` stays after a daemon that a kill ended, and only a daemon that
