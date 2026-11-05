@@ -28,6 +28,12 @@ pub(crate) enum CliError {
   /// The store cannot read the record that `facts` reads, by what it says.
   #[error("{}", .0.message())]
   Unread(Fault),
+  /// The reader of stdout closed the pipe, which ends the command with no word.
+  #[error("the reader of stdout closed the pipe")]
+  Closed,
+  /// Stdout cannot be written.
+  #[error("stdout cannot be written: {0}")]
+  Printed(#[source] io::Error),
   /// The engine refused, with what it raised.
   #[error(transparent)]
   Refused(#[from] Fault),

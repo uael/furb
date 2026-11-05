@@ -168,6 +168,17 @@ pub fn opened(kind: &str, by: &str, on: Option<&str>) -> bool {
   kind == "stand" && by == OPERATOR && on == Some(ROOT)
 }
 
+/// Whether a record holds a stand of the root that was answered.
+pub fn stood(record: &[Object]) -> bool {
+  let mut stands = HashSet::new();
+  record.iter().filter_map(fact).any(|a| {
+    if a.kind() == "stand" && a.question() && a.on() == ROOT {
+      stands.insert(a.about().to_owned());
+    }
+    a.kind() == "done" && stands.contains(a.about())
+  })
+}
+
 /// The entries that the build of the last life on a record made: those after its last checkpoint,
 /// or the whole record when it holds none.
 pub fn segment(record: &[Object]) -> &[Object] {

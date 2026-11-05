@@ -442,8 +442,9 @@ export interface Opening {
    */
   keeps?: boolean
   /**
-   * Whether the life only inspects its record; false when unsaid. Such a life keeps nothing, enables no new
-   * extension and asks no model, and the ears that do work, the files, the commands and time, are silent under
+   * Whether the life only inspects its record; false when unsaid. Such a life keeps nothing,
+   * enables no new extension, asks no model and says no new stand, so its standing is the one its
+   * record holds, and the ears that do work, the files, the commands and time, are silent under
    * their names, so it runs no command and touches no file.
    */
   inspecting?: boolean

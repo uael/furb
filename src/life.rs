@@ -80,8 +80,9 @@ pub struct Opening {
   /// record.
   #[cfg_attr(feature = "python", pyo3(default))]
   pub keeps: Option<bool>,
-  /// Whether the life only inspects its record; false when unsaid. Such a life keeps nothing, enables no new
-  /// extension and asks no model, and the ears that do work, the files, the commands and time, are silent under
+  /// Whether the life only inspects its record; false when unsaid. Such a life keeps nothing,
+  /// enables no new extension, asks no model and says no new stand, so its standing is the one its
+  /// record holds, and the ears that do work, the files, the commands and time, are silent under
   /// their names, so it runs no command and touches no file.
   #[cfg_attr(feature = "python", pyo3(default))]
   pub inspecting: Option<bool>,
@@ -215,7 +216,7 @@ impl Opening {
       .transpose()?;
     let gallery = self.gallery();
     let project = PathBuf::from(&self.directory);
-    let provider = provider.ear();
+    let provider = provider.held(!works && checkpoint::stood(&record)).ear();
     let working = |made: Option<Box<dyn Ear>>| made.unwrap_or_else(silent);
     let config = places.config.clone();
     // An ear that holds nothing that a fresh one lacks starts again after it raises.
@@ -340,7 +341,7 @@ impl Opening {
         Ok(candidate.into_settings())
       })
     }));
-    provider = provider.advertises(advertised).searching(works).config(user);
+    provider = provider.advertises(advertised).inspecting(!works).config(user);
     if let Some(gallery) = gallery {
       provider = provider.images(gallery);
     }

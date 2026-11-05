@@ -44,7 +44,8 @@ pub(super) struct Hearer {
   retries: Option<Retries>,
   refresh: Option<Refresh>,
   gone: Vec<String>,
-  searching: bool,
+  inspecting: bool,
+  held: bool,
   /// The system prompt of each request, as [`Provider::system`] sets it.
   system: Arc<str>,
   native: Search,
@@ -75,7 +76,8 @@ impl Hearer {
       retries,
       refresh,
       gone,
-      searching,
+      inspecting,
+      held,
       system,
     } = provider;
     let actor = actor.unwrap_or_else(|| {
@@ -99,7 +101,8 @@ impl Hearer {
       retries,
       refresh,
       gone,
-      searching,
+      inspecting,
+      held,
       system,
       native,
       replies: Replies::default(),
@@ -127,6 +130,10 @@ impl Hearer {
   /// asks no command line.
   fn stand(&mut self, co: &mut Co<Replied>, a: &Fact) {
     let about = a.about().to_owned();
+    if self.held {
+      say(co, Fact::says("started", &about, []));
+      return;
+    }
     let word = crate::fact::named(a.by(), "rung");
     let first = !std::mem::replace(&mut self.stood, true);
     if let Some(refresh) = self.refresh.as_ref().filter(|_| !first && !word) {
@@ -411,7 +418,7 @@ impl Hearer {
     let about = a.about().to_owned();
     let word = |at: usize| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
     let (query, actor) = (word(1).unwrap_or_default(), word(2).unwrap_or_default());
-    if !self.searching {
+    if self.inspecting {
       let no = "a life that inspects searches nothing";
       say(co, Fact::says("done", &about, [Fault::refused(no).object()]));
       return;

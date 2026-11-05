@@ -97,7 +97,8 @@ pub struct Provider {
   retries: Option<Retries>,
   refresh: Option<Refresh>,
   gone: Vec<String>,
-  searching: bool,
+  inspecting: bool,
+  held: bool,
   /// The system prompt of each request: the engine of the life, minified.
   system: Arc<str>,
 }
@@ -130,7 +131,8 @@ impl Provider {
       retries: None,
       refresh: None,
       gone: Vec::new(),
-      searching: true,
+      inspecting: false,
+      held: false,
       system: Arc::from(crate::SYSTEM),
     }
   }
@@ -151,10 +153,19 @@ impl Provider {
     self
   }
 
-  /// Whether the provider answers the question search. A life that inspects searches nothing.
+  /// Whether the life only inspects its record. Such a provider refuses the question search.
   #[must_use]
-  pub(crate) fn searching(mut self, on: bool) -> Provider {
-    self.searching = on;
+  pub(crate) fn inspecting(mut self, yes: bool) -> Provider {
+    self.inspecting = yes;
+    self
+  }
+
+  /// Whether the record of the life holds the standing of its root already, and the life only
+  /// inspects it. Such a provider answers no stand: the standing of the life stays the one that its
+  /// record holds, and no change of it reaches a chain.
+  #[must_use]
+  pub(crate) fn held(mut self, yes: bool) -> Provider {
+    self.held = yes;
     self
   }
 
