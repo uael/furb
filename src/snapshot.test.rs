@@ -1,11 +1,5 @@
 //! The keeper of a snapshot: whether a life said something new, and how it writes one.
 
-#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
-#![expect(
-  clippy::unchecked_time_subtraction,
-  reason = "debt: a subtraction of times that can underflow"
-)]
-
 use std::{fs, path::PathBuf, time::Instant};
 
 use super::{Keeper, aside, fits, path};
@@ -37,15 +31,15 @@ fn a_keeper_says_that_the_life_said_nothing_new_from_the_length_of_its_log_alone
 fn measure_each_step_of_an_open_from_the_snapshot_of_a_record() {
   let record = PathBuf::from(std::env::var("RECORD").unwrap());
   let t = Instant::now();
-  let bytes = fs::read(super::path(&record)).unwrap();
+  let bytes = fs::read(path(&record)).unwrap();
   let read = t.elapsed();
   let hashed = (super::record(&record).unwrap(), super::log(&record));
-  let hash = t.elapsed() - read;
+  let hash = t.elapsed().checked_sub(read).unwrap();
   let past = crate::world::logged(&record).unwrap().unwrap_or_default();
-  let logged = t.elapsed() - read - hash;
+  let logged = t.elapsed().checked_sub(read + hash).unwrap();
   let at = bytes.iter().position(|one| *one == b'\n').unwrap();
   let sand = crate::sand::Sand::loaded(&bytes[at + 1..]).unwrap();
-  let loaded = t.elapsed() - read - hash - logged;
+  let loaded = t.elapsed().checked_sub(read + hash + logged).unwrap();
   drop(sand);
   eprintln!(
     "snapshot {} bytes, {} entries, {} facts of the log: read {read:?}, record and log hashed {hash:?}, log read {logged:?}, session loaded {loaded:?}",

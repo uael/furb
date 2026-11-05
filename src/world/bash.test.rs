@@ -16,10 +16,7 @@ fn a_text_fed_to_a_command_that_reads_no_more_is_refused_and_its_close_is_not() 
 
 #[test]
 #[cfg(unix)]
-#[expect(
-  clippy::disallowed_methods,
-  reason = "debt: a call that blocks: block_on, where a test drives a future on the reactor"
-)]
+#[expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
 fn an_error_of_the_wait_on_the_shell_ends_the_watch_with_that_error_not_an_exit_with_no_code() {
   use super::{Cut, watch};
   use crate::ear::runtime;

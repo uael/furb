@@ -1,12 +1,6 @@
 //! The ear of the fetch: a page comes to its text, and in a life of the real engine a fetch reads a
 //! page of a server of this machine.
 
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-
 use std::{
   io::{Read, Write},
   net::TcpListener,
@@ -76,7 +70,7 @@ fn served() -> String {
         let head =
           "HTTP/1.1 200 OK\r\ncontent-type: text/plain\r\ntransfer-encoding: chunked\r\n\r\n";
         let chunk = format!("100000\r\n{}\r\n", "a".repeat(1 << 20));
-        let _ = stream.write_all(head.as_bytes());
+        drop(stream.write_all(head.as_bytes()));
         while stream.write_all(chunk.as_bytes()).is_ok() {}
         continue;
       }
@@ -89,7 +83,7 @@ fn served() -> String {
         "HTTP/1.1 {status}\r\ncontent-type: {kind}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
         body.len()
       );
-      let _ = stream.write_all(format!("{head}{body}").as_bytes());
+      drop(stream.write_all(format!("{head}{body}").as_bytes()));
     }
   });
   at
