@@ -15,7 +15,7 @@ const size = { width: 152, height: 46 };
 const feedOf = (session: Session, row: string) => row.slice(0, size.width - session.preferences.sidebarWidth);
 
 /** The threads of the chain shown. */
-const listed = (session: Session) => session.threadsOn(session.selected);
+const listed = (session: Session) => session.threadsOf(session.selected).list;
 
 /** A session on the recorded life of a conductor, which shows its log and runs nothing. */
 async function recorded(): Promise<Session> {

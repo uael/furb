@@ -4,7 +4,7 @@ import { expect } from "bun:test";
 import { scenario, test, until, type Window } from "./harness.ts";
 
 /** The threads of the chain shown, as the sidebar lists them. */
-const listed = (window: Window) => window.session.threadsOn(window.session.selected);
+const listed = (window: Window) => window.session.threadsOf(window.session.selected).list;
 
 /** The part of each row of a frame that the sidebar shows. */
 const rail = (window: Window, frame: string) =>

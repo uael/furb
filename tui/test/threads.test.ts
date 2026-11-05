@@ -28,7 +28,7 @@ async function railClick({ session, screen, frame }: Composing, text: string): P
 }
 
 /** The threads of the chain shown, as the sidebar lists them. */
-const listed = (session: Composing["session"]) => session.threadsOn(session.selected);
+const listed = (session: Composing["session"]) => session.threadsOf(session.selected).list;
 
 test("the sidebar lists the workspaces and the threads of the session shown, and holds no tree of chains", () =>
   composing(
