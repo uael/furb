@@ -215,6 +215,21 @@ export class Daemon extends EventEmitter {
     });
   }
 
+  /** The records whose life a window holds in the daemon now, of those given: a window of any connection, this one
+   * too, and no pin. */
+  async holding(lives: readonly string[]): Promise<Set<string>> {
+    const listed = await this.ask({ verb: "list" });
+    if (listed.answer !== "lives") throw new Error(`The daemon gave ${listed.answer}, and no list of lives.`);
+    const open = listed.data.filter((one) => one.open && lives.includes(one.life));
+    const present = await Promise.all(
+      open.map(async ({ life }) => {
+        const peers = await this.ask({ verb: "presence", life }).catch(() => undefined);
+        return peers?.answer === "presence" && peers.data.length > 0 ? [life] : [];
+      }),
+    );
+    return new Set(present.flat());
+  }
+
   /** The life of a record gone from the daemon, which ends it once no window and no pin held it for its grace. It is
    * refused at once while a window holds the life, and when the life lives longer than a window waits, as under a
    * pin. A window waits for that end before it takes the record. */
@@ -223,13 +238,8 @@ export class Daemon extends EventEmitter {
       const listed = await this.ask({ verb: "list" });
       if (listed.answer !== "lives")
         throw new Error(`The daemon gave ${listed.answer}, and no list of lives.`);
-      const held = listed.data.find((one) => one.life === life);
-      if (!held) return;
-      const present = held.open
-        ? await this.ask({ verb: "presence", life }).catch(() => undefined)
-        : undefined;
-      if (present?.answer === "presence" && present.data.length > 0)
-        throw new Error(`Another window holds the life of ${life}.`);
+      if (!listed.data.some((one) => one.life === life)) return;
+      if ((await this.holding([life])).size > 0) throw new Error(`Another window holds the life of ${life}.`);
       if (Date.now() > until)
         throw new Error(`The life of ${life} did not end in ${patience / 1000} s: a pin holds it.`);
     }
