@@ -253,7 +253,10 @@ export const keys = [
     action: "Go to the next question that waits for you, in any workspace",
     bindings: [{ on: ["meta+a"], run: "nextAsk", chord: "⌥A" }],
   },
-  { chord: "↑↓←→ / Enter / Esc after ⌥G", action: "Move, fold or zoom / zoom in / zoom out or go back" },
+  {
+    chord: "↑↓←→ / Enter / Esc after ⌥G",
+    action: "Move or fold / back to the input / back to now, or to the input",
+  },
   { chord: "[ ] / { } after ⌥G", action: "Move the cursor in time by one / ten moments" },
   {
     chord: "Space / x / n / b after ⌥G",

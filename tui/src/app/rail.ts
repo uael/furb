@@ -148,6 +148,23 @@ export const rail = part({
     return ordered;
   },
 
+  /** The threads of the session shown as the sidebar shows them: each thread with the agents that its ladder made
+   * nested under it, the closed ones first and the open ones last, each by the time of its last message. The tree is
+   * made once for each list of the threads, and the sidebar and the stage both read it. */
+  railTree(): ThreadNode[] {
+    const list = this.railThreads();
+    const kept = this.railThreadCache;
+    const tree = kept?.tree ?? orderThreads(nestThreads(list, this.session.boardIndex.ids));
+    if (kept) kept.tree = tree;
+    return tree;
+  },
+
+  /** The title of a thread on its row of the sidebar: its message as the feed reads it, with each home folder short,
+   * or its id when it says nothing. */
+  railTitle(thread: ChainThread): string {
+    return shortenHomes(this.threadTitle(thread)) || thread.act.id;
+  },
+
   /** What the rows of the threads need to be drawn again, kept while the list of the threads and the minute stand: a
    * frame of a life with many threads then reads each thread once for each new act, and not once for each frame. The
    * key is a short count that changes when the text of a chain changes, since the text of every thread of a long life
@@ -401,8 +418,7 @@ export const rail = part({
       cursor,
     ]);
     if (!this.paneChanged(this.railSpaces, key)) return;
-    // The model orders the threads, the closed ones first and the open ones last, each by the time of its last message.
-    const tree = orderThreads(nestThreads(threads, w.boardIndex.ids));
+    const tree = this.railTree();
     this.clear(this.railHeading);
     this.clear(this.railSpaces);
     this.unhover();
@@ -467,7 +483,7 @@ export const rail = part({
         space: () => this.foldThread(thread.act.id),
         thread,
       });
-      const title = shortenHomes(this.threadTitle(thread)) || thread.act.id;
+      const title = this.railTitle(thread);
       const row = this.railSplit(
         [
           [glyph.mark, threadTone(thread.act.id)],

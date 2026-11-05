@@ -1,5 +1,4 @@
-import { busy, type Loom, momentsOf, owedAt, weave } from "furb/life";
-import { conversation } from "../conversation.ts";
+import { busy, type Loom, momentsOf, owedAt, type ThreadNode, weave } from "furb/life";
 import type { Stage } from "../graph.ts";
 import { actorOf, joined, type LifeView, LoomPane, lifeViews } from "../overview.ts";
 import { styled } from "../ui.ts";
@@ -84,16 +83,12 @@ export const stage = part({
     );
   },
 
-  /** The loom or the graph over the feed. The graph takes the whole height of the
-   * feed for one program and its words, and gives it back to the feed to show one act. */
+  /** The loom or the graph over the feed. */
   renderStage(): void {
     const w = this.session;
     const view = this.lifeView;
-    const shows =
-      view !== "main" && w.view === "feed" && !this.tree && !(view === "graph" && this.graph.level === "act");
-    const whole = shows && view === "graph" && ["program", "word"].includes(this.graph.level);
+    const shows = view !== "main" && w.view === "feed" && !this.tree;
     if (this.stage.visible !== shows) this.stage.visible = shows;
-    if (this.scroll.visible === whole) this.scroll.visible = !whole;
     this.steps();
     if (!shows) return;
     const width = this.feedWidth;
@@ -109,32 +104,19 @@ export const stage = part({
         steering: this.steering,
         actor: (id) => this.actorOf(id),
       });
-      this.stage.flexGrow = 0;
       this.stage.height = rows.length;
       this.stage.content = styled(joined(rows));
       return;
     }
     this.weaveStage(Math.max(8, width - 60));
-    if (whole) {
-      this.stage.flexGrow = 1;
-      this.stage.flexShrink = 1;
-      this.stage.minHeight = 0;
-    } else {
-      this.stage.flexGrow = 0;
-      this.stage.flexShrink = 0;
-    }
-    const height = whole ? Math.max(6, this.renderer.height - 12) : Math.max(8, Math.floor(body * 0.55));
+    const height = Math.max(8, Math.floor(body * 0.55));
     this.stage.height = height;
     this.stage.content = styled(joined(this.graph.rows(width, height)));
   },
 
-  /** A click on a row of the stage: the loom selects its chain, or answers for the row of the operator, and the graph
-   * selects what the row shows, and zooms in on a second click. */
+  /** A click on a row of the loom selects its chain, or answers for the row of the operator. The map takes no click. */
   clickStage(row: number): void {
-    if (this.lifeView === "graph") {
-      if (this.graph.click(row)) this.render();
-      return;
-    }
+    if (this.lifeView !== "loom") return;
     const chain = this.loom.click(row);
     if (chain === "operator") this.question();
     else if (chain) void this.selectAt(chain).catch(this.report);
@@ -150,42 +132,44 @@ export const stage = part({
       get loom() {
         return app.stageLoom;
       },
-      get owed() {
-        return new Set(app.stageLoom.owed.map((prompt) => prompt.id));
-      },
       get frozen() {
         return app.cursor !== undefined;
       },
       get selected() {
         return app.session.selected;
       },
-      words: () => app.words(),
+      get thread() {
+        return app.stageThread();
+      },
       label: (chain) => app.session.labelOf(chain),
       actor: (chain) => app.actorOf(chain),
-      streams: () => (app.cursor === undefined ? app.session.host.streams : new Map()),
       select: (chain) => app.selectAt(chain),
-      // The lens of the graph is the card of the act in the feed, which shows it whole.
-      lens: (act) => {
-        if (!act) return app.render();
-        const w = app.session;
-        void (act.on === w.selected ? Promise.resolve() : w.select(act.on))
-          .then(() => app.go("feed", act.id))
-          .catch(app.report);
-      },
     };
   },
 
-  /** The words of the rungs of the life: what the caller of each wrote, what ran, and what its model wrote, the words
-   * that the gate refused among them. */
-  words(): Map<string, string> {
-    const w = this.session;
-    const words = new Map<string, string>();
-    for (const item of conversation(w.turns, (one) => w.actOf(one)))
-      if (item.type === "python" && item.rung) words.set(item.rung.id, item.code);
-    for (const [id, word] of Object.entries(w.program)) words.set(id, word);
-    for (const act of w.acts)
-      if (act.kind === "rung" && act.words[0]) words.set(act.id, String(act.words[0]));
-    return words;
+  /** The thread that the sidebar shows, as it stood at the time cursor: its title, and the chain of it and of each of
+   * its agents that had begun by then, as the sidebar nests them. A thread that began after the cursor is not there
+   * yet. */
+  stageThread(): { title: string; chains: Set<string> } | undefined {
+    const active = this.session.activeThread;
+    const then = this.cursor;
+    const stood = (node: ThreadNode) => then === undefined || node.thread.act.began <= then;
+    const find = (nodes: readonly ThreadNode[]): ThreadNode | undefined => {
+      for (const node of nodes) {
+        const found = node.thread === active ? node : find(node.agents);
+        if (found) return found;
+      }
+      return undefined;
+    };
+    const node = active && find(this.railTree());
+    if (!node || !stood(node)) return undefined;
+    const chains = new Set<string>();
+    const visit = (one: ThreadNode): void => {
+      chains.add(one.thread.act.on);
+      for (const agent of one.agents) if (stood(agent)) visit(agent);
+    };
+    visit(node);
+    return { title: this.railTitle(node.thread), chains };
   },
 
   /** The keys go to the loom or the graph, or back to the input. */
@@ -254,14 +238,11 @@ export const stage = part({
     this.action(`/${row?.state === "paused" ? "wake" : "pause"} ${w.selected}`);
   },
 
-  /** The work of the selected chain cancelled: the act that the graph selects, or what the chain waits on. */
+  /** The work of the selected chain cancelled: what the chain waits on. */
   cancelChain(): void {
     if (!this.present()) return;
     const w = this.session;
-    const target =
-      this.lifeView === "graph" && this.graph.level !== "threads" && this.graph.level !== "map"
-        ? this.graph.selection
-        : this.stageLoom.rows.find((one) => one.id === w.selected)?.waits;
+    const target = this.stageLoom.rows.find((one) => one.id === w.selected)?.waits;
     if (target) this.action(`/cancel ${target}`);
     else w.notice = `${w.label} waits on nothing to cancel.`;
   },
@@ -303,26 +284,16 @@ export const stage = part({
     void w.branchHere().catch(this.report);
   },
 
-  /** Escape on the stage: the graph zooms out, then the cursor returns to now, then the keys go back to the input. */
-  async leaveStage(): Promise<void> {
-    if (this.lifeView === "graph" && (await this.graph.key("escape"))) this.render();
-    else if (this.cursor !== undefined) this.travel(Number.MAX_SAFE_INTEGER);
+  /** Escape on the stage: the cursor returns to now, then the keys go back to the input. */
+  leaveStage(): void {
+    if (this.cursor !== undefined) this.travel(Number.MAX_SAFE_INTEGER);
     else this.steer(false);
   },
 
-  /** Enter on the stage: the graph zooms in, and the loom answers for the row of the operator or gives the keys to the
-   * input on the selected chain. */
-  async enterStage(): Promise<void> {
-    if (this.lifeView === "graph") {
-      await this.graph.key("return");
-      this.render();
-    } else this.steer(false);
-  },
-
   /** An arrow on the stage: the graph moves its selection, and the loom moves between chains or folds their workers. */
-  async arrowStage(name: string): Promise<void> {
+  arrowStage(name: string): void {
     if (this.lifeView === "graph") {
-      await this.graph.key(name);
+      this.graph.move(name);
       this.render();
     } else if (name === "up" || name === "down") this.moveLoom(name === "up" ? -1 : 1);
     else if (name === "pageup" || name === "pagedown") this.moveLoom(name === "pageup" ? -8 : 8);

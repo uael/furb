@@ -336,11 +336,10 @@ for the operator, red a failure, and a quiet green what is done. Paper and Day a
 Midnight, Forest and Dusk are dark. ⌃T opens the themes, each with a swatch of its
 colors.
 
-In Ink, the text is a soft gray and never white. Python has one color for each part, in the feed and in the graph:
-purple for a keyword, green for a string, orange for a number, `None`, `True`, `False` and a backslash sequence, teal
-for a name that the code calls or defines, gold for a type, and gray italic for a comment. An operator keeps the color
-of the text, so a keyword is the one purple on a line. None of these colors is pastel, and each one reads on every
-surface of the feed.
+In Ink, the text is a soft gray and never white. Python has one color for each part: purple for a keyword, green for a
+string, orange for a number, `None`, `True`, `False` and a backslash sequence, teal for a name that the code calls or
+defines, gold for a type, and gray italic for a comment. An operator keeps the color of the text, so a keyword is the
+one purple on a line. None of these colors is pastel, and each one reads on every surface of the feed.
 
 ![The theme of a light terminal](screenshots/78-terminal-light.png)
 
@@ -405,26 +404,16 @@ selected chain, `x` cancels its work, `n` lets it run one more rung, and Tab ans
 
 ![The cursor in time](screenshots/67-loom-time-cursor.png)
 
-The graph shows the life as programs that run: the tree of its threads, one for each prompt, beside the map of its
-programs, one for each chain at the place of its birth, with the lines of the tree of hires and a dot where a
-message flows. Under the name of each program stand what it waits on, its actor, its dollars, and its question.
+The graph shows the life as programs that run: the map of its programs, one for each chain at the place of its birth,
+with the lines of the tree of hires and a dot where a message flows. Under the name of each program stand what it
+waits on, its actor, its dollars, and its question. The map lights the chains of the thread that the sidebar shows:
+the chain of that thread and the chains of its agents.
 
 ![The graph](screenshots/68-graph.png)
 
-After ⌥G, Enter zooms in and Esc zooms out: from the threads to the map, to the source of one program, with what
-each act came to beside the line that made it, to one word, and to one act, whose card the feed shows whole.
-
-![The map](screenshots/69-graph-map.png)
-
-![A program](screenshots/70-graph-program.png)
-
-![A word](screenshots/71-graph-word.png)
-
-![An act](screenshots/72-graph-act.png)
-
-A command that runs shows as it runs at the level of one act, since its card in the feed streams what it prints.
-
-![A command at the level of one act](screenshots/73-graph-command.png)
+⌥G gives the keys to the map, and the keys of the loom act there too. The arrows move to the program nearest in their
+direction, and the feed under the map shows its chain. Enter gives the keys back to the input on that chain, and Esc
+returns to now, then gives the keys back.
 
 ## Keys, marks, and commands
 

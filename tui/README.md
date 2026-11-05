@@ -305,7 +305,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | Space / r / o / a after ⌥T | Collapse or expand / resolve / reply to the thread / go to the next question |
 | ⌥C | Collapse or expand the thread in the middle of the feed, as a click on the left edge of its lines does |
 | ⌥A | Go to the next question that waits for you, in any workspace |
-| ↑↓←→ / Enter / Esc after ⌥G | Move, fold or zoom / zoom in / zoom out or go back |
+| ↑↓←→ / Enter / Esc after ⌥G | Move or fold / back to the input / back to now, or to the input |
 | [ ] / { } after ⌥G | Move the cursor in time by one / ten moments |
 | Space / x / n / b after ⌥G | Pause or wake / cancel / step / branch at the cursor the chain |
 | ⌃PageUp / ⌃PageDown | Previous / next scope of file changes: this turn, this chain, the life, the branch |
