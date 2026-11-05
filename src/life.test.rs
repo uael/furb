@@ -399,6 +399,63 @@ fn a_record_of_another_engine_of_the_same_version_replays_and_goes_on() {
   );
 }
 
+#[test]
+fn a_record_of_an_engine_of_the_archive_replays_on_that_engine_and_goes_on_with_it() {
+  let at = place("archived");
+  let old =
+    crate::engines::archive().iter().find(|one| one.digest.starts_with("5fe06c38")).unwrap();
+  let (record, _) = made_elsewhere(&at, &made_of(old.digest, world::VERSION));
+  let open = || Opening { extensions: Some(false), ..opening(&at, true) };
+  let mut later = open().boot::<String>([]).unwrap().0;
+  assert_eq!(later.build().digest, old.digest, "the life runs the engine that made its record");
+  assert_eq!(closed(&mut later, "close(x + 1)").as_ref().as_int(), Some(2));
+  // That engine takes a wait with no act, which this engine refuses since #1218.
+  let waits = "close(type(wait(0)).__name__)";
+  assert_eq!(
+    closed(&mut later, waits).as_ref().as_str(),
+    Some("Act"),
+    "the life goes on with that engine"
+  );
+  drop(later);
+  assert_eq!(
+    builds(&record),
+    [(old.digest.to_owned(), Some(world::VERSION))],
+    "the record names it alone"
+  );
+  let mut again = open().boot::<String>([]).unwrap().0;
+  assert_eq!(again.build().digest, old.digest);
+  assert_eq!(
+    closed(&mut again, "close(x + 2)").as_ref().as_int(),
+    Some(3),
+    "it replays the tail of that engine"
+  );
+}
+
+#[test]
+fn each_engine_of_the_archive_replays_a_record_that_names_it_and_goes_on() {
+  let mut broken = Vec::new();
+  for old in crate::engines::archive() {
+    let at = place(&format!("archive-{}", &old.digest[..16]));
+    made_elsewhere(&at, &made_of(old.digest, world::VERSION));
+    let open = || Opening { extensions: Some(false), ..opening(&at, true) };
+    let goes = open().boot::<String>([]).and_then(|(mut later, _)| {
+      let rung = verbs::Rung {
+        word: Some("close(x + 1)".to_owned()),
+        on: Some("chain1".to_owned()),
+        ..Default::default()
+      };
+      let rung = later.rung(rung)?;
+      futures::executor::block_on(rung)
+    });
+    match goes {
+      Ok(got) if got.as_ref().as_int() == Some(2) => {}
+      Ok(got) => broken.push(format!("{}: {}", &old.digest[..16], got.py_repr())),
+      Err(why) => broken.push(format!("{}: {why}", &old.digest[..16])),
+    }
+  }
+  assert_eq!(broken, Vec::<String>::new(), "each engine of the archive runs on this build");
+}
+
 /// The records that each build of this version replays word by word: the records in `tests/replay`,
 /// which `tests/replay/README.md` says. The records of the promise of a release are in
 /// `tests/corpus`, which `tests/promise.rs` opens.

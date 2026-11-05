@@ -927,6 +927,7 @@ def boot(record=(), **outside):
   first, owned, taken = {e[1]: e for (e,) in record[::-1] if e[0] in ("started", "done")}, set(), {}
   due = [e for (e,) in record[::-1] if first.get(e[1]) is not e]
   saved, again = {e[1]: e for (e,) in record if question(e)}, {}
+  stalled = []
 
   def drift(name):
     return Drift(
@@ -971,6 +972,7 @@ def boot(record=(), **outside):
       while True:
         while owed() and (
           not (log or left)
+          or (stalled and stalled.pop())
           or (due[-1][0] == "joined" and not question(due[-2]) and due.pop() and due)
           or (a and a[::2] == ("wake", "journal") and due[-1][1] in taken)
         ):
@@ -1068,12 +1070,17 @@ def boot(record=(), **outside):
 
   def dispatch():
     while not busy:
-      if left:
-        hear(*left.pop(0))
-      elif log:
+      if left and not stalled:
+        try:
+          hear(*left.pop(0))
+        except Exception as fault:
+          if isinstance(fault, Drift) or not owed():
+            raise
+          stalled.append(fault)
+      elif log and not stalled:
         a, heard = log.pop(0)
         left.extend((*x, a) for x in ears(a) if x[0] not in heard)
-      elif ((g := alive.get("journal")) and hear("journal", g, None)) or not log:
+      elif ((g := alive.get("journal")) and hear("journal", g, None)) or not (log or (stalled and stalled.pop())):
         return
 
   def hear(name, g, a):

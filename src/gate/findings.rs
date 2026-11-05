@@ -5,7 +5,7 @@ use std::{
   cell::RefCell,
   collections::{HashMap, HashSet},
   fmt,
-  sync::OnceLock,
+  sync::{Arc, Mutex, OnceLock, PoisonError},
 };
 
 use monty_types::NamedValues;
@@ -18,10 +18,7 @@ use ruff_python_parser::parse_module;
 use ruff_text_size::{Ranged, TextRange};
 
 use super::{ACTS, MODULE, Parsed, WORDS, binds, deleted, named, strings, worded};
-use crate::{
-  ENGINE,
-  sand::{Nobody, Sand},
-};
+use crate::sand::{Nobody, Sand};
 
 /// The rule that a finding of the gate breaks: a rule that the gate checks itself, or any other
 /// that the checker names.
@@ -240,11 +237,18 @@ const SIGNED: usize = 300;
 /// Each finding that names a function, as the checker writes it, "function `name`", with the
 /// signature of that function: its name, its parameters and what it gives, as the last def of that
 /// name in the sources reads, which stand from the nearest to the word to the farthest, and then in
-/// the engine, whose defs the gate reads once. A model that called a function wrongly then reads in
-/// the same finding how to call it.
-pub(super) fn signed(found: Vec<Finding>, sources: &[&str]) -> Vec<Finding> {
-  static ENGINE_SIGNED: OnceLock<HashMap<String, String>> = OnceLock::new();
-  let engine = ENGINE_SIGNED.get_or_init(|| signatures(ENGINE));
+/// the engine of the life, whose defs the gate reads once for each engine. A model that called a
+/// function wrongly then reads in the same finding how to call it.
+pub(super) fn signed(found: Vec<Finding>, sources: &[&str], engine: &'static str) -> Vec<Finding> {
+  static ENGINE_SIGNED: OnceLock<Mutex<HashMap<usize, Signatures>>> = OnceLock::new();
+  let held = ENGINE_SIGNED.get_or_init(Mutex::default);
+  let engine = Arc::clone(
+    held
+      .lock()
+      .unwrap_or_else(PoisonError::into_inner)
+      .entry(engine.as_ptr() as usize)
+      .or_insert_with(|| Arc::new(signatures(engine))),
+  );
   found
     .into_iter()
     .map(|one| {
@@ -264,6 +268,9 @@ pub(super) fn signed(found: Vec<Finding>, sources: &[&str]) -> Vec<Finding> {
     })
     .collect()
 }
+
+/// The signatures of the defs of an engine, by name, which each life of that engine shares.
+type Signatures = Arc<HashMap<String, String>>;
 
 /// The signature of the last def of each name in a source, on one line and cut to `SIGNED`
 /// characters.

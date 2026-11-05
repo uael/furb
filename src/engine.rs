@@ -53,10 +53,10 @@ pub(crate) use self::{
   record::{left, looping},
 };
 use crate::{
-  ENGINE, KERNEL, SHEET,
   ear::{Call, Ear},
+  engines::{self, Build},
   fact::Fact,
-  gate::checked,
+  gate::checked_on,
   sand::{Answer, Host, Nobody, Sand, id, object},
   value::{Exit, Fault, Given, Object, Text, entry},
 };
@@ -157,6 +157,8 @@ struct Outside {
   opened: Opened,
   /// How many ids the host gave, which names the next.
   given: u128,
+  /// The engine that the sandbox runs, and this build's own when nothing names another.
+  build: Option<&'static Build>,
   /// Whether a config turned the gate off for this life, which the record does not keep: each
   /// life reads it again.
   ungated: bool,
@@ -173,7 +175,10 @@ impl Host for Outside {
   ) -> Answer {
     let got = match on {
       // A gate that cannot read a word raises where the gate was called, so the ear of the gate answers that word.
-      None if name == GATE => return gated(args.first()).map_or_else(Answer::Fault, Answer::Value),
+      None if name == GATE => {
+        let engine = self.build.unwrap_or_else(engines::this).engine;
+        return gated(engine, args.first()).map_or_else(Answer::Fault, Answer::Value);
+      }
       None if name == GATED => Ok(Object::bool(!self.ungated)),
       None if name == AGAIN => Ok(Object::bool(self.reborn(args.first()))),
       None if name == TURN => {
@@ -188,10 +193,10 @@ impl Host for Outside {
   }
 }
 
-/// What the gate found in a sheet, each finding by its line.
-fn gated(sheet: Option<&Object>) -> Result<Object, Fault> {
+/// What the gate found in a sheet that stands on an engine, each finding by its line.
+fn gated(engine: &'static str, sheet: Option<&Object>) -> Result<Object, Fault> {
   let sheet = sheet.and_then(|one| one.as_ref().as_str().map(str::to_owned)).unwrap_or_default();
-  let found = checked(&sheet)?;
+  let found = checked_on(engine, &sheet)?;
   Ok(Object::list(found.into_iter().map(|one| {
     let line = i64::try_from(one.line).unwrap_or_default();
     Object::tuple([Object::int(line), Object::string(one.to_string())])
@@ -215,6 +220,7 @@ impl Outside {
       crossing: Crossing { kept, ..Crossing::default() },
       opened,
       given: 0,
+      build: None,
       ungated: false,
     })
   }
@@ -508,15 +514,27 @@ impl Engine {
     ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
     gated: bool,
   ) -> Result<Engine, Fault> {
+    Engine::built(record, ears, gated, engines::this())
+  }
+
+  /// An engine, opened as [`Engine::gated`] opens it, on an engine of the archive or on this
+  /// build's own: the sandbox runs its engine, its Kernel and its sheet, and the gate reads each
+  /// word on that engine, so a record replays on the engine that made it.
+  pub fn built<N: Into<String>>(
+    record: impl IntoIterator<Item = Object>,
+    ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
+    gated: bool,
+    build: &'static Build,
+  ) -> Result<Engine, Fault> {
     let (given, names) = Handed::of(ears)?;
     let mut sand = Sand::new();
     // The opening, the seed and the replay are the engine's own work: unbounded, but for each word
     // they run again.
     sand.bound(false);
     let mut inputs = NamedValues::new();
-    inputs.push("__source", Object::string(ENGINE));
-    inputs.push("__sheet_source", Object::string(SHEET));
-    inputs.push("__kernel_source", Object::string(KERNEL));
+    inputs.push("__source", Object::string(build.engine));
+    inputs.push("__sheet_source", Object::string(crate::SHEET));
+    inputs.push("__kernel_source", Object::string(build.kernel));
     inputs.push("__gate", Object::function(GATE, None));
     inputs.push("__gated", Object::function(GATED, None));
     inputs.push("__again", Object::function(AGAIN, None));
@@ -524,6 +542,7 @@ impl Engine {
     let opened = sand.run(OPENING, inputs, &mut Nobody("the opening"))?;
     let mut outside = Outside::new(given, &opened)?;
     outside.ungated = !gated;
+    outside.build = Some(build);
     let Opened { kernel, gate, lasting, parking, park, .. } = outside.opened.clone();
     let record = seeded(&mut sand, &mut outside, record.into_iter().collect())?;
     let mut engine = Engine::new(sand, outside, &record, String::new());
@@ -591,6 +610,11 @@ impl Engine {
   /// Whether an ear of the host hears under a name.
   pub(crate) fn hears(&self, name: &str) -> bool {
     self.outside.hosted.handed.ears.contains_key(name)
+  }
+
+  /// The engine that the sandbox of the life runs.
+  pub fn build(&self) -> &'static Build {
+    self.outside.build.unwrap_or_else(engines::this)
   }
 
   /// The root chain of the life, which is the first act of any record.

@@ -52,7 +52,7 @@ pub use reader::{READER, Retold, retold};
 pub use scratch::{SCRATCH, Scratch};
 pub use store::{
   CHECKPOINT_SCHEMA, Lines, MADE, RECORD_SCHEMA, Schema, SchemaError, Sqlite, Store, VERSION,
-  engine, heads, keeping, kept, made, readable, release, store, version,
+  engine, heads, keeping, keeping_of, kept, made, readable, release, store, store_of, version,
 };
 pub(crate) use store::{Format, each};
 pub use time::time;

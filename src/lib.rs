@@ -12,6 +12,7 @@
 pub mod checkpoint;
 pub mod ear;
 pub mod engine;
+pub mod engines;
 pub mod extension;
 pub mod fact;
 pub mod gate;

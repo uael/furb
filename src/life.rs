@@ -24,6 +24,7 @@ use std::{
 use crate::{
   Ear, Engine, Fault, Object, checkpoint,
   ear::{hear, hearing, lasting},
+  engines::{self, Build},
   extension::{self, Places, skills::skills},
   world::{self, Catalog, Retries, Scratch, Writes, mcp::mcp},
 };
@@ -41,6 +42,22 @@ struct Prepared {
   crossed: Option<Object>,
   /// Whether the gate reads each word, as [`crate::gate::configured`] says.
   gated: bool,
+  /// The engine that the life runs, as [`recorded`] gives it.
+  build: &'static Build,
+}
+
+/// The engine of a life on a record, from the facts made of its record: the engine that the last
+/// one names at the version of this build, which a record keeps for its whole life, so each segment
+/// replays on the engine that made it; this build's own for a new record, for a record of a build
+/// before the fact made, and for a record whose engine or version this build does not keep, whose
+/// tail [`checkpoint::crossed`] carries.
+fn recorded(made: &[Object]) -> &'static Build {
+  let last = made.last().map(std::slice::from_ref).unwrap_or_default();
+  let ours = world::version(last) == Some(world::VERSION);
+  world::made(last)
+    .filter(|_| ours)
+    .and_then(|one| engines::named(&one))
+    .unwrap_or_else(engines::this)
 }
 
 /// A function of the host that answers each request in place of the models: it is given the request and a function
@@ -188,9 +205,11 @@ impl Opening {
   fn parted(self, prepared: Prepared) -> Result<(Vec<Object>, Ears), Fault> {
     let works = self.works();
     let keeps = self.keeps != Some(false) && works;
-    let Prepared { places, extensions, provider, crossed, .. } = prepared;
+    let Prepared { places, extensions, provider, crossed, build, .. } = prepared;
     let (mut record, store) = match (&self.record, keeps) {
-      (Some(path), true) => world::store(path).map(|(held, store)| (held, Some(store)))?,
+      (Some(path), true) => {
+        world::store_of(path, build.digest).map(|(held, store)| (held, Some(store)))?
+      }
       (Some(path), false) => (world::kept(path)?, None),
       (None, _) => (Vec::new(), None),
     };
@@ -268,8 +287,11 @@ impl Opening {
     let keeps = self.keeps != Some(false) && works;
     // A record of another major of its schema is refused before any build reads it whole or writes
     // on it.
+    let mut build = engines::this();
     if let Some(path) = self.record.as_deref().filter(|one| Path::new(one).exists()) {
-      world::readable(&world::heads(path, &[world::MADE])?)?;
+      let made = world::heads(path, &[world::MADE])?;
+      world::readable(&made)?;
+      build = recorded(&made);
     }
     // The tail that another build made after the last checkpoint is carried at the tip of the
     // record, before the life takes its lease, so the life goes on from it and replays no fact of
@@ -295,9 +317,9 @@ impl Opening {
         (one.name.clone(), file, one.life.clone(), one.root)
       })
       .collect();
-    let provider = self.provider(advertised)?;
+    let provider = self.provider(advertised)?.system(build.system);
     let gated = crate::gate::configured(&places.config, Path::new(&self.directory));
-    Ok(Prepared { places, extensions, provider, crossed, gated })
+    Ok(Prepared { places, extensions, provider, crossed, gated, build })
   }
 
   /// The provider: the models of the roster that the catalog makes, which the function of the host answers when it
@@ -400,10 +422,10 @@ impl Opening {
     prepared: Prepared,
   ) -> Result<(Engine, Vec<Object>), Fault> {
     let works = self.works();
-    let gated = prepared.gated;
+    let (gated, build) = (prepared.gated, prepared.build);
     let (record, ears) = self.parted(prepared)?;
     let host = host.into_iter().map(|(name, ear)| (name.into(), ear));
-    let mut engine = Engine::gated(record.clone(), host.chain(ears), gated)?;
+    let mut engine = Engine::built(record.clone(), host.chain(ears), gated, build)?;
     if let Some(no) = engine.raised() {
       return Err(no.clone());
     }

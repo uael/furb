@@ -24,6 +24,8 @@ macro_rules! out {
   }};
 }
 
+#[path = "build/archive.rs"]
+mod archive;
 #[path = "build/minify.rs"]
 mod minify;
 #[path = "build/verbs.rs"]
@@ -34,6 +36,8 @@ fn main() {
   napi_build::setup();
   println!("cargo::rerun-if-changed=src/furb/engine.pyi");
   println!("cargo::rerun-if-changed=src/furb/engine.py");
+  println!("cargo::rerun-if-changed=src/furb/engines");
+  println!("cargo::rerun-if-changed=build");
   let source =
     fs::read_to_string("src/furb/engine.pyi").expect("the contract is beside the engine");
   let all = verbs::verbs(&source);
@@ -48,4 +52,6 @@ fn main() {
   written("py.rs", verbs::pythonic(&all));
   let engine = fs::read_to_string("src/furb/engine.py").expect("the engine is beside the contract");
   written("system.py", minify::minified(&engine));
+  let root = env::var("CARGO_MANIFEST_DIR").expect("cargo gives the build its manifest");
+  written("archive.rs", archive::archived(Path::new(&root), Path::new(&out)));
 }

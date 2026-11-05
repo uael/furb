@@ -27,8 +27,11 @@ API of its own:
   the World of the one that has one, `skills.rs`. `docs/extensions.md` says how an extension works.
 - `src/life.rs` opens a life as every host opens one, from one `Opening`: the record, the ears of the crate after the
   ears of the host, the default actor, the roster that the host names or every model of the catalog, and the extensions.
-  A host adds only its own ears, as the console of its operator. A life on a record that another engine or version
-  made after its last checkpoint replays none of that tail: it carries it as data, as `src/checkpoint.rs` says. `tests/replay` holds the records that each build of the version must
+  A host adds only its own ears, as the console of its operator. A life runs the engine that its record names:
+  this build's own, or one that the archive `src/furb/engines` keeps by its digest, as `src/engines.rs` says, so it
+  replays its record word by word on that engine and goes on with it. A life on a record whose engine this build does
+  not keep, or that another version of this engine made, after its last checkpoint, replays none of that tail: it
+  carries it as data, as `src/checkpoint.rs` says. `tests/replay` holds the records that each build of the version must
   replay with no drift. `tests/corpus` holds the records of each release, which each later build must open, as
   `tests/corpus/README.md` says. Each door gives it as
   `opened` and as `Engine.open`.
@@ -37,11 +40,17 @@ API of its own:
   boot, while `gathered` and `seed` of `engine.py` write and read its data. A life ends with one through
   `Engine::checkpoint`, which its store keeps as it keeps each fact, as the TUI does at a handover, and
   `furb checkpoint` writes one on a record that no life holds. A life boots on the last checkpoint of its record,
-  whatever engine wrote it, and replays the entries after it alone when its own engine made them. When a build of
-  another engine or of another version made them, the life first writes at the tip a checkpoint that carries them as
+  whatever engine wrote it, and replays the entries after it alone when its own engine, or an engine of the archive,
+  made them. When a build of an engine that this build does not keep or of another version made them, the life first writes at the tip a checkpoint that carries them as
   data, as `src/checkpoint/tail.rs` says: each chain keeps its turns and its open prompts, and is told each name of its
   module that a word of that tail changed, which it lost. `checkpoint::carry` gives that checkpoint for a tail of any
   build, which a host keeps after a fault stopped the life of that tail.
+- `src/engines.rs` holds the engines that a build runs: its own, and each engine of its major that main shipped,
+  which `src/furb/engines/<digest>/` keeps as it shipped, its `engine.py` and its `kernel.py`, and which
+  `script/engines.py` fills from git. The build embeds each one and makes its system prompt, after the adapters of
+  `build/archive.rs`, each a fix of a drift of the replay of the old engines that it names. The sheet of the gate and
+  the rest of the outside are the build's own for every engine. `tests/tip.rs` writes the state of a life at the tip
+  of a record, to compare two builds on a copy of a real record.
 - `src/engine.rs` opens a life in the sandbox, with each of its concerns in a file of `src/engine/`: it loads the
   engine, the sheet and the Kernel, each in a namespace of its own, and carries each value between the sandbox and a
   host, whose ears the engine steps as generators. An ear that raises refuses the act that it heard, and starts again

@@ -15,7 +15,6 @@ use super::{
   search::Searches, thinking::Thought,
 };
 use crate::{
-  SYSTEM,
   engine::{OPERATOR, WINDOW},
   value::{Object, ObjectRef},
 };
@@ -401,18 +400,27 @@ pub(super) fn standing(
   )
 }
 
+/// What a reply asks: the system prompt, which is the engine of the life minified, the actor, the
+/// chain and its turns, and the conversation.
+#[derive(Clone, Copy)]
+pub(super) struct Ask<'a> {
+  pub(super) system: &'static str,
+  pub(super) actor: &'a str,
+  pub(super) chain: &'a str,
+  pub(super) turns: ObjectRef<'a>,
+  pub(super) conversation: &'a str,
+}
+
 /// The model an actor names, and what a reply asks it: the engine as the system prompt, the turns
 /// of the chain, the settings of the effort, the conversation where the model takes one, and whom
 /// it tells what it writes.
 pub(super) fn requested(
   models: &[Model],
-  actor: &str,
-  chain: &str,
-  turns: ObjectRef<'_>,
-  conversation: &str,
+  ask: Ask<'_>,
   images: &mut Images,
   told: Told,
 ) -> Result<(Model, Asked), CompletionError> {
+  let Ask { system, actor, chain, turns, conversation } = ask;
   let found =
     models.iter().find_map(|model| model.settings(actor).map(|settings| (model, settings)));
   let Some((model, mut settings)) = found else {
@@ -423,7 +431,7 @@ pub(super) fn requested(
   }
   let request = CompletionRequest {
     model: None,
-    preamble: Some(SYSTEM.to_owned()),
+    preamble: Some(system.to_owned()),
     chat_history: messages(turns, model, images)?,
     documents: Vec::new(),
     tools: Vec::new(),

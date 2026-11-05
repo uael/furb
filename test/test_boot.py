@@ -921,3 +921,23 @@ async def test_an_act_that_the_life_makes_under_no_site_is_no_fact_of_the_world_
   assert made, said(log, "reply")
   again, _ = await relived(Sand(), list(first.record))
   assert [a[1:4] for a in said(again, "reply") if a[2] == ""] == made
+
+
+async def test_a_raise_of_an_ear_while_the_journal_says_a_fact_of_the_record_again_ends_no_replay() -> None:
+  """A raise of an ear while the journal says a fact of the record again ends no replay, since the first life heard that fact from the outside, which took the raise and went on: the journal says the next fact of the record, and only then do the facts that the bus held at the raise reach their ears, as they did in the first life, but a drift, which ends the replay."""
+  sand, _, root = born()
+  word = (
+    "b = bash('echo hi')\n"
+    "def noisy(id):\n  yield 'started', id\n  while True:\n    a = yield {b}\n"
+    "    if a[0] == 'done':\n      raise TypeError('noisy')\n"
+    "n = act('noisy', '', noisy)\nawait wait(0.05, b)\nwent = peek(b).code\nlast = bash('echo ' + str(went))\nawait last"
+  )
+  await engine.rung(word, on=root)
+  await settle()
+  live = viewed(root)
+  assert live["modules"][root]["went"] == "0"
+  _, over = await relived(Sand(), list(sand.record))
+  later = viewed(over)
+  assert {k: v[: len(live["facts"][k])] for k, v in later["facts"].items() if k in live["facts"]} == live["facts"]
+  assert live["modules"] == later["modules"]
+  assert {k: later["outcomes"].get(k) for k in live["outcomes"]} == live["outcomes"]

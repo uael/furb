@@ -1,6 +1,7 @@
-//! The tail of another engine: the facts that a build of another engine or of another version said
-//! after the last checkpoint of a record. This build does not replay them, since its engine can
-//! make other acts from the same facts. It carries them as data, in a checkpoint that it writes at
+//! The tail of another engine: the facts that a build of an engine that this build does not keep,
+//! as its own or in its archive, or of another version, said after the last checkpoint of a
+//! record. This build does not replay them, since its engine can make other acts from the same
+//! facts. It carries them as data, in a checkpoint that it writes at
 //! the tip of the record from the last checkpoint and the facts of the tail as the reader tells
 //! them with no life, as the life of the tail would have written it at its tip: each chain keeps
 //! its turns, each open prompt stays open, and each act that a value names keeps its value.
@@ -66,7 +67,9 @@ fn folded(path: &Path, any: bool) -> Result<Option<Object>, Fault> {
   let heads = world::heads(path, &[world::MADE, CHECKPOINT])?;
   let Some(at) = last(&heads) else { return Ok(None) };
   let tail = &heads[at + 1..];
-  let theirs = world::made(tail).is_some_and(|one| one != world::engine())
+  // An engine of the archive replays its own tail, so only a tail that names an engine that this
+  // build does not keep, or another version, is theirs.
+  let theirs = world::made(tail).is_some_and(|one| crate::engines::named(&one).is_none())
     || world::version(tail).is_some_and(|one| one != VERSION);
   let data = fact(&heads[at]).and_then(|a| a.word(0).map(world::plain));
   let ours = |one: &Object| {

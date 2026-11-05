@@ -77,8 +77,17 @@ fn room(path: &Path) -> Option<(&Path, u64)> {
 /// The record at a path, read under its lease, and the ear that keeps on it what the journal says to keep: a
 /// database of SQLite when the name of the path ends in `.sqlite`, `.sqlite3` or `.db`, and else a file of lines.
 pub fn store(path: impl AsRef<Path>) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
+  store_of(path, &engine())
+}
+
+/// The record at a path and the ear that keeps on it, as [`store`] gives them, for a life that runs
+/// the engine of a digest, which a new segment of the record names in its fact made.
+pub fn store_of(
+  path: impl AsRef<Path>,
+  engine: &str,
+) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
   let path = path.as_ref();
-  keeping(Format::of(path).open(path)?)
+  keeping_of(Format::of(path).open(path)?, engine)
 }
 
 /// What the store kept at a path, read with no lease and changed in nothing on the disk, as a later life would open
@@ -121,9 +130,9 @@ pub const MADE: &str = "made";
 /// The version of the replay of this build, which a record names. A record replays on each build of
 /// the version that made it. It is no version of a schema: the record and the checkpoint each have
 /// a schema of their own, in [`schema`], which a later build of the major reads. A tail of the
-/// record replays only on a build of the engine and of the version that made it: one of another
-/// engine or version is carried as data after a checkpoint, and refused when the record holds no
-/// checkpoint.
+/// record replays only on the engine that made it, which a build runs when it is its own at this
+/// version or one of its archive, as [`crate::engines`] says: one of another engine or version is
+/// carried as data after a checkpoint.
 ///
 /// The gate of the replays holds the versions few: each record in `tests/replay` replays with no
 /// drift on each build of its version. A change that makes one of them drift adds one to the
@@ -209,11 +218,11 @@ fn streamed(entry: Object) -> Object {
   Object::list([Object::list(said)])
 }
 
-/// The fact made of this build: its engine, its version of the replay, the schema of its record and
-/// its release.
-fn named() -> Fact {
+/// The fact made of this build on the engine of a digest: that engine, the version of the replay
+/// of this build, the schema of its record and its release.
+fn named(engine: &str) -> Fact {
   let build = [
-    Object::string(engine()),
+    Object::string(engine),
     Object::int(VERSION),
     RECORD_SCHEMA.object(),
     Object::string(env!("CARGO_PKG_VERSION")),
@@ -254,6 +263,16 @@ enum Told {
 /// the fault, and once when it grows again. A message that did not go is said again at the next
 /// pass.
 pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
+  keeping_of(store, &engine())
+}
+
+/// The record that a store holds and the ear that keeps in it, as [`keeping`] gives them, for a
+/// life that runs the engine of a digest, which a new segment names.
+pub fn keeping_of(
+  store: impl Store + 'static,
+  engine: &str,
+) -> Result<(Vec<Object>, Box<dyn Ear>), Fault> {
+  let ours = named(engine);
   let mut store = Held { store, waiting: VecDeque::new(), fault: None };
   let entries: Vec<Object> = store.store.entries()?.into_iter().map(streamed).collect();
   let store = Rc::new(RefCell::new(store));
@@ -272,7 +291,7 @@ pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>
             held.borrow_mut().waiting.push_back(entry.to_owned());
           }
           "chain" if new && a.about() == ROOT => {
-            say(&mut co, named());
+            say(&mut co, ours.clone());
             continue;
           }
           _ => continue,

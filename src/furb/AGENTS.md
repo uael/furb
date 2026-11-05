@@ -219,9 +219,11 @@ meanings. The entry of such a name here gives only its form in the engine.
   Kernel and the version of the build, `VERSION` in `src/world/store.rs`, which the store says as it hears the root of
   a new record at its birth. A build keeps the version while each record of `tests/replay` replays on it with no
   drift. After a checkpoint, only the fact made of the segment after it counts,
-  and the store says it again at the root of the first life that goes on from the checkpoint. When it names another
-  engine or another version, a life replays none of that segment: it writes at the tip a checkpoint that carries the
-  segment as data, and goes on from it.
+  and the store says it again at the root of the first life that goes on from the checkpoint. A life runs the engine
+  that the last fact made names, when this build or its archive keeps that engine, so it replays each segment word by
+  word on the engine that made it and goes on with that engine, and the store names it again after a checkpoint. When
+  it names an engine that the build does not keep, or another version of the engine of the build, a life replays none
+  of that segment: it writes at the tip a checkpoint that carries the segment as data, and goes on from it.
 - checkpoint: the fact by which a record carries the state of its life to a later life of any build of its major, at
   its tip: plain data with a version of its own shape, `schema`, apart from the version of the record. It holds each
   chain that lives with its label, its source, its turns, the text of its definitions, its plain values and whether

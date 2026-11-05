@@ -64,6 +64,8 @@ target-version = "py314"
 src = ["src", "test", "bind/python"]
 # A path given on the command line, as a hook or a worker gives it, keeps the exclude.
 force-exclude = true
+# Each engine of the archive stays byte for byte as it shipped, since a record names it by its digest.
+extend-exclude = ["src/furb/engines"]
 # A word of the project reads the names that a word before it in .furb/config.json defines: pr, PR_TITLE, PR_BOXES and
 # shq of pr, and the conductor, tree_of and TARGETS of converge. A test holds each of them to a definition.
 builtins = ["pr", "shq", "conductor", "tree_of", "TARGETS"]
@@ -134,6 +136,8 @@ skip-magic-trailing-comma = true
 # The words of the project, and no test of theirs: a test drives the engine through a double, which the checker
 # cannot follow.
 include = ["src", "test", "script", "bind/python", "extensions", ".furb/extensions/*/*.py"]
+# Each engine of the archive stays as it shipped, and the crate alone runs it.
+exclude = ["src/furb/engines"]
 
 # The suite of an extension imports the harness of the engine as conftest, as pytest does from its pythonpath, and
 # its own helpers from extensions.conftest. The package furb_monty is read from its source and the stub of its

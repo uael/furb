@@ -15,7 +15,7 @@ use super::{
   Advertised, Provider, Refresh, Retries, Search, Settings, Told, Writes,
   answer::{Answering, answered, cut},
   images::Images,
-  model::{Model, requested, standing},
+  model::{Ask, Model, requested, standing},
   retry::{Backoff, Retry, failure, recoverable},
   search::free,
   thinking::{Thinking, thinks},
@@ -46,6 +46,8 @@ pub(super) struct Hearer {
   refresh: Option<Refresh>,
   gone: Vec<String>,
   searching: bool,
+  /// The system prompt of each request, as [`Provider::system`] sets it.
+  system: &'static str,
   native: Search,
   replies: Replies,
   /// The stops of the searches that work, which end a search that a control ended first.
@@ -77,6 +79,7 @@ impl Hearer {
       refresh,
       gone,
       searching,
+      system,
     } = provider;
     let actor = actor.unwrap_or_else(|| {
       models
@@ -100,6 +103,7 @@ impl Hearer {
       refresh,
       gone,
       searching,
+      system,
       native,
       replies: Replies::default(),
       searches: HashMap::new(),
@@ -231,8 +235,9 @@ impl Hearer {
     let key = format!("{}/{chain}", self.life);
     let asked = {
       let held = self.models.read().unwrap_or_else(PoisonError::into_inner);
-      requested(&held, actor, chain, turns.as_ref(), &key, &mut self.images, wrote)
-        .map(|one| thinks(one, self.thinking))
+      let asked =
+        Ask { system: self.system, actor, chain, turns: turns.as_ref(), conversation: &key };
+      requested(&held, asked, &mut self.images, wrote).map(|one| thinks(one, self.thinking))
     };
     let streams = asked.as_ref().is_ok_and(|(model, _)| model.streams_its_word());
     let paused = co.call("paused", vec![Object::string(about)], vec![]).await;
