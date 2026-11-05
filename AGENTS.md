@@ -173,6 +173,9 @@ Read the whole of `src/furb/engine.py` and list each incoherence: a truth with t
 part held by the wrong owner. Probe each, build its reshape, and measure its size and the suite. Keep what adds
 coherence, then read it again.
 
+Before you design or write, run `skill("ponytail")` and `skill("expert")`. Before you review a design note or a diff,
+run `skill("ponytail-review")` and `skill("expert")`.
+
 Before you write or change a Rust file, read the skill rust.
 
 ## Questions of the owner
