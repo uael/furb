@@ -394,23 +394,7 @@ export class HostView extends EventEmitter {
       ["reset", reset],
     ];
     for (const [name, listener] of heard) life.on(name, listener);
-    // The daemon writes the journal after it tells the write, so a change can land after the last fact that tells of
-    // it, and no fact comes after it to read it: the journal is read at the pace of a recorded life, and a change that
-    // it added is heard as the facts that told it.
-    const journal = this.journal;
-    const following =
-      journal &&
-      setInterval(() => {
-        try {
-          journal.readable(0, 0);
-        } catch {
-          // A journal that cannot be read says so in its view of the changes, and its count stays.
-          return;
-        }
-        if (journal.length !== this.changes) this.heard();
-      }, FOLLOW).unref();
     this.unheard = () => {
-      clearInterval(following);
       for (const [name, listener] of heard) life.off(name, listener);
     };
     this.forget();

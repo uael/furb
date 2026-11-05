@@ -40,7 +40,9 @@ pub(crate) struct Journal {
 /// What the task of a journal takes, in order: a change to append, or a flush, which hears what
 /// the disk lost since the last flush once each change before it is done.
 enum Line {
-  Change(String),
+  /// A change, and the chain whose write made it, which hears that it changed once the change is
+  /// on the disk.
+  Change { chain: String, change: String },
   Flush(oneshot::Sender<Result<(), JournalError>>),
 }
 
@@ -71,22 +73,23 @@ impl Journal {
   pub(crate) fn ear(&self) -> Box<dyn Ear> {
     let (folder, lines) = (self.folder.clone(), self.lines.clone());
     ear(move |mut co| async move {
-      let mut before: HashMap<String, Value> = HashMap::new();
+      let mut before: HashMap<String, (String, Value)> = HashMap::new();
       loop {
         let a = hear(&mut co).await;
         let fact = json_of(&a);
         if a.question() && a.kind() == "write" {
           if let Some(change) = replaced(&mut co, &folder, &fact).await? {
-            before.insert(a.about().to_owned(), change);
+            let chain = fact[3].as_str().unwrap_or_default().to_owned();
+            before.insert(a.about().to_owned(), (chain, change));
           }
         } else if a.kind() == "done"
-          && let Some(mut change) = before.remove(a.about())
+          && let Some((chain, mut change)) = before.remove(a.about())
           && fact[3]["is"] == "Text"
           && let Some(after) = fact[3]["content"].as_str()
         {
           change["after"] = json!(after);
           change["act"] = json!(a.about());
-          if lines.send(Line::Change(change.to_string())).is_err() {
+          if lines.send(Line::Change { chain, change: change.to_string() }).is_err() {
             return Ok(());
           }
         }
@@ -105,8 +108,8 @@ async fn written(
 ) {
   let mut lost: Option<JournalError> = None;
   while let Some(line) = heard.recv().await {
-    let change = match line {
-      Line::Change(change) => change,
+    let (chain, change) = match line {
+      Line::Change { chain, change } => (chain, change),
       Line::Flush(done) => {
         // A flush whose life no longer waits for it hears nothing, and what was lost stays told.
         done.send(lost.take().map_or(Ok(()), Err)).ok();
@@ -115,7 +118,14 @@ async fn written(
     };
     let (path, append) = (at.clone(), Arc::clone(&append));
     let fault = match tokio::task::spawn_blocking(move || append(&path, &change)).await {
-      Ok(Ok(())) => continue,
+      // The chain of the write hears that its changes changed only now: a window that read the
+      // journal at the fact of the write could find it without the change, and hear nothing after.
+      Ok(Ok(())) => {
+        if !chain.is_empty() {
+          told.send(Event::Changed(chain)).ok();
+        }
+        continue;
+      }
       Ok(Err(no)) => no,
       Err(no) => io::Error::other(no),
     };
