@@ -15,8 +15,12 @@ PY = Path(engine.__file__)
 PYI = PY.with_suffix(".pyi")
 TESTS = PYI.parents[2] / "test"
 EXTENSIONS = TESTS.parent / "extensions"
-# The contract of the engine and the contract of each extension, each with the folder of its suite.
-CONTRACTS = {PYI: TESTS, **{one: one.parent / "test" for one in sorted(EXTENSIONS.glob("*/*.pyi"))}}
+# The contract of the engine and the contract of each extension, official or of the project, each with the folder of its suite.
+PROJECT = TESTS.parent / ".furb" / "extensions"
+CONTRACTS = {
+  PYI: TESTS,
+  **{one: one.parent / "test" for one in sorted([*EXTENSIONS.glob("*/*.pyi"), *PROJECT.glob("*/*.pyi")])},
+}
 DEFS = (ast.FunctionDef, ast.AsyncFunctionDef)
 SCOPE = (ast.Module, ast.ClassDef, ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp, *DEFS)
 
