@@ -1,29 +1,18 @@
 //! The suite that each store of a record passes, run on each store of the crate. A store of a host passes the same
 //! laws: the macro `conformance` holds them, on the function that opens the store and on the name of its record.
 
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-
-use std::{
-  fs,
-  path::{Path, PathBuf},
-};
+use std::{fs, path::Path};
 
 use super::{Lines, Sqlite, Store, keeping, kept, store};
+use crate::testing::Yard;
 use crate::{
   value::{Fault, Object},
   wire::parsed,
 };
 
 /// A record of its own for one test, which does not stand yet.
-fn place(name: &str, file: &str) -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-store-{name}-{}", std::process::id()));
-  let _ = fs::remove_dir_all(&at);
-  fs::create_dir_all(&at).unwrap();
-  at.join(file)
+fn place(name: &str, file: &str) -> Yard {
+  Yard::new(format!("furb-store-{name}-{}", std::process::id())).within(file)
 }
 
 /// The entries that the suite keeps: facts that hold text on many lines and past ASCII, numbers, nothing, and lists
@@ -63,7 +52,7 @@ macro_rules! conformance {
         $open(path).map(|one| Box::new(one) as Box<dyn Store>)
       }
 
-      fn at(test: &str) -> PathBuf {
+      fn at(test: &str) -> Yard {
         place(&format!("{}-{test}", stringify!($name)), $file)
       }
 
@@ -284,7 +273,7 @@ impl Store for Disk {
 }
 
 /// The record at a path of its own on a disk with room, the ear that keeps it, born, and the disk.
-fn disk(name: &str) -> (PathBuf, Box<dyn Ear>, Rc<Space>) {
+fn disk(name: &str) -> (Yard, Box<dyn Ear>, Rc<Space>) {
   let path = place(name, "record.jsonl");
   let space = Rc::new(Space { full: Cell::new(false), free: Cell::new(u64::MAX) });
   let store = Disk { lines: Lines::open(&path).unwrap(), space: Rc::clone(&space) };

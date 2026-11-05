@@ -41,6 +41,7 @@ import { clock } from "./clock.ts";
 import { expandHome, fileReferences, fromDirectory, projectFiles, shortenHome } from "./files.ts";
 import { count, dollars } from "./format.ts";
 import { append, modeOf, seed, sentIn, workspaceRoot } from "./history.ts";
+import { recordName, renameWord } from "./names.ts";
 import { Preferences } from "./preferences.ts";
 import { type Hunk, type Reviewed, revertWord, reviewed, type Scope, scopes } from "./review.ts";
 import { shareHtml, shareMarkdown } from "./share.ts";
@@ -274,7 +275,10 @@ const kept = [
   "models",
 ] as const;
 /** What `<record>.ui.json` holds: the kept fields of a session, and what the session had cost. */
-export type SavedView = Partial<Pick<Session, (typeof kept)[number]>> & { cost?: number };
+export type SavedView = Partial<Pick<Session, (typeof kept)[number]>> & {
+  cost?: number;
+  sessionName?: string;
+};
 
 /** The form of each field that `<record>.ui.json` keeps, which a field must have to be read: a text, a flag, a
  * number, a map, a list of texts, or a list of maps. */
@@ -471,6 +475,10 @@ export class Session extends EventEmitter {
   private closed = false;
   /** The name that `<record>.ui.json` held, which moves into the record at the first read of the life. */
   private legacyName?: string;
+  /** The last name that the operator gave the session in its record, by a plain scan of the record when the life
+   * opens, which every build reads, also when the life drifts or another host holds the record. */
+  private keptName?: string;
+  private carrying = false;
   /** The scope, the writes and the count of changes that `changes` was read at. */
   private changesRead = "";
   /** Whether the dialog of a record open to read was shown, so it shows once for each life of the session. */
@@ -497,6 +505,7 @@ export class Session extends EventEmitter {
     if (path) {
       const { view, name, damage } = savedView(path);
       this.legacyName = name;
+      this.keptName = recordName(path);
       Object.assign(this, Object.fromEntries(kept.flatMap((key) => (key in view ? [[key, view[key]]] : []))));
       this.savedCost = view.cost ?? 0;
       // A saved queue waits for the choice of the operator before it sends.
@@ -587,12 +596,13 @@ export class Session extends EventEmitter {
   private factsChanged = () => {
     void this.refresh().catch(this.fail);
   };
-  /** The name that the record gives the session, which no file of the window keeps: the name that the operator said
-   * with rename_session, else the name that the extension naming gave with name_session. An empty name from the
-   * operator gives the name of the directory again. */
+  /** The name that the record gives the session: the name that the operator said with rename_session, as the life
+   * tells it or else as the scan of the record found it, else a name that an older release kept in `<record>.ui.json`
+   * and the record does not hold yet, else the name that the extension naming gave with name_session. An empty name
+   * from the operator gives the name of the directory again. */
   get recordName(): string | undefined {
     const names = this.indexed().named.get(this.engine.root);
-    const said = names?.said?.value ?? names?.given?.value;
+    const said = names?.said?.value ?? this.keptName ?? this.legacyName ?? names?.given?.value;
     const name = said === undefined ? undefined : String(said);
     return name === undefined ? undefined : name || basename(this.host.directory);
   }
@@ -617,7 +627,7 @@ export class Session extends EventEmitter {
     const before = this.sessionName;
     this.sessionName = said || basename(this.host.directory);
     this.emit("change");
-    const word = `act("rename_session", "", lambda id: (yield "done", id, ${JSON.stringify(said)}))`;
+    const word = renameWord(said);
     try {
       await this.engine.result(await this.engine.rung({ word, on: this.engine.root }));
       return true;
@@ -632,14 +642,18 @@ export class Session extends EventEmitter {
    * record holds no rename_session, the name is said as one, and the save that follows writes the view without it. */
   private carryName(): void {
     const name = this.legacyName;
-    if (name === undefined) return;
-    this.legacyName = undefined;
+    if (name === undefined || this.carrying) return;
+    // A record that this life cannot write keeps the name in the old home, which the next life carries.
     if (this.closed || this.host.role === "read" || this.host.recorded || this.host.reading) return;
-    const said = (this.activityByChain.get(this.engine.root) ?? []).some(
-      (one) => one.kind === "rename_session",
-    );
+    const said =
+      this.keptName !== undefined ||
+      (this.activityByChain.get(this.engine.root) ?? []).some((one) => one.kind === "rename_session");
+    this.carrying = true;
     void (said ? Promise.resolve(true) : this.rename(name)).then((kept) => {
-      if (kept) this.save();
+      this.carrying = false;
+      if (!kept) return;
+      this.legacyName = undefined;
+      this.save();
     });
   }
   fail = (error: unknown) => {
@@ -1637,10 +1651,11 @@ export class Session extends EventEmitter {
   }
   /** The files given back as a rewind found them, by a rung of the operator on a chain, so that the record holds each
    * write and the chain reads it. A write puts back the text of a file, and a command removes a file that a write
-   * made. */
+   * made. A file whose text before the write could not be read stays as it stands. */
   async restoreFiles({ files }: Restore, on = this.selected): Promise<void> {
-    if (!files.length) return;
-    const word = files
+    const kept = files.filter((change) => !change.unread);
+    if (!kept.length) return;
+    const word = kept
       .map((change) =>
         change.made
           ? `await bash(${JSON.stringify(`rm -f -- ${quoted(change.path)}`)})`
@@ -1660,15 +1675,20 @@ export class Session extends EventEmitter {
   }
   /** What a restore of the files did, in words, with the changes that it could not undo. */
   restored({ files, commands }: Restore): string {
+    const back = files.filter((change) => !change.unread).length;
+    const unread = files.length - back;
     const count = !files.length
       ? "No file changed after that point."
-      : files.length === 1
+      : back === 1
         ? "1 file is back as it was."
-        : `${files.length} files are back as they were.`;
+        : `${back} files are back as they were.`;
+    const kept = unread
+      ? ` ${unread} ${unread === 1 ? "file stays" : "files stay"} as ${unread === 1 ? "it stands" : "they stand"}: the text before the write could not be read.`
+      : "";
     const stays = commands
       ? ` ${commands} ${commands === 1 ? "command" : "commands"} ran after that point, and a change that a command made is not restored.`
       : "";
-    return `${count}${stays}`;
+    return `${count}${kept}${stays}`;
   }
   /** The files of the selected chain given back as they stood at an act, with no branch. */
   async restoreAt(id: string, files?: Restore): Promise<void> {
@@ -2233,6 +2253,8 @@ export class Session extends EventEmitter {
     const view: SavedView = {
       ...Object.fromEntries(kept.map((key) => [key, this[key]])),
       cost: this.savedCost,
+      // A name of an older release stays in its home until the record holds it, so no save loses it.
+      ...(this.legacyName === undefined ? {} : { sessionName: this.legacyName }),
     };
     saveFile(path, JSON.stringify(view));
   }

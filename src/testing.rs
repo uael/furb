@@ -42,3 +42,7 @@ pub(crate) fn block_on<T>(fut: impl Future<Output = T>) -> T {
     thread::park_timeout(Duration::from_millis(20));
   }
 }
+
+#[path = "../tests/common/yard.rs"]
+mod yard;
+pub(crate) use yard::Yard;

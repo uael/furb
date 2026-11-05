@@ -689,6 +689,7 @@ def bash(
   A command without a timeout has the timeout TIMEOUT that the file names.
   A command accepts the codes that its ok names, as ok=(0, 1), and every code when its ok is True.
   A command with no ok is judged by accepts, the policy of its chain, and by the default policy while accepts is None.
+  What an ok or an accepts raises as it judges the code of a command, the word that awaits the command raises at its await, and every other word goes on.
   The default policy accepts the code 0, and the code 1 of a check that ends the command, since sh gives the code of the last command of a pipeline: a search, as grep, egrep, fgrep, rg, test, [ or a git command with --quiet or --is-ancestor, when the command wrote nothing or only a count of 0, since a search that finds nothing writes nothing, and a difference, as diff, cmp or a git command with --exit-code, which writes the difference.
   The default policy accepts no other code, so a timeout, a signal, and the code 1 of a search that wrote an error, as a cd that failed in front of it, fail.
   The World that takes a command answers it: it says it done with its Exit, the code and the streams it kept, since the owner of an act is the one that answers it.
@@ -1178,6 +1179,7 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   An act whose maker is neither an act nor an ear that boot was given is said again through its verb, with the words the record holds and the chain it names, so its ear is the verb's, a host finds it made when boot returns and makes it not again, and a show or a filter it was given is not said again, since the record holds none.
   A later life says an act whose maker is neither an act nor an ear that boot was given again only through a verb in the globals of its chain, and an act whose kind no verb binds is a drift.
   The journal says again a done that is the first answer of an act when the act is made again, and every later fact of it at the place where the record holds it, the started of each act that a wake began again among them.
+  An act that the life makes under no site, as the chain makes the reply of an advance whose rung ended, is no fact of the World, so a later life makes it again with no drift.
   A first answer that the record holds with no maker is a refusal of the life, that nothing took the act, so the journal says it again under no site, as the life said it, and neither keeps it again nor reads it as a drift.
   What the record shows started and not done when boot returns is pending: the journal holds it from the outside until a wake that this life says.
   An act whose maker is the journal, as seed gives one, stands known in the transcript of its chain with no verb and runs nothing, and the journal says its later facts at their place.

@@ -13,7 +13,7 @@
 
 use std::{
   fs,
-  path::{Path, PathBuf},
+  path::Path,
   process::{Command, Stdio},
   sync::{
     Arc,
@@ -24,13 +24,11 @@ use std::{
 };
 
 use super::{bash::whole, kept, resolved, store};
+use crate::testing::Yard;
 
 /// A directory of its own for one test, and empty.
-fn place(name: &str) -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-world-{name}-{}", std::process::id()));
-  let _ = fs::remove_dir_all(&at);
-  fs::create_dir_all(&at).unwrap();
-  at
+fn place(name: &str) -> Yard {
+  Yard::new(format!("furb-world-{name}-{}", std::process::id()))
 }
 
 #[test]
@@ -135,7 +133,7 @@ fn two_holders_never_own_the_record_at_once_while_programs_start_and_the_record_
   // they let it go, each to a name of its own, as the delete of a session does, which leaves the lock file.
   let holders: Vec<_> = (0..8)
     .map(|n| {
-      let (path, at) = (path.clone(), at.clone());
+      let (path, at) = (path.clone(), at.to_path_buf());
       thread::spawn(move || {
         let deadline = Instant::now() + Duration::from_secs(20);
         let mut taken = 0;

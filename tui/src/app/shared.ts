@@ -1,7 +1,7 @@
 import type { BoxRenderable, CliRenderer, KeyEvent, Renderable, RGBA, TextOptions } from "@opentui/core";
 import type { Keymap } from "@opentui/keymap";
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
-import { busy, type ChainThread, type Chip } from "furb/life";
+import { busy, type ChainAside, type ChainThread, type Chip } from "furb/life";
 import { ago, clip, dollars, kibibytes } from "../format.ts";
 import type { ActRow, Status, View } from "../session.ts";
 import { statusLabels } from "../session.ts";
@@ -61,6 +61,9 @@ export type ThreadList = {
   of: Map<string, ChainThread>;
   /** The thread of each question and each notice that a thread made, by the id of the prompt. */
   asked: Map<string, ChainThread>;
+  /** The prompts of the chain that are no conversation, each by its id, and the aside of each prompt on one. */
+  asides: Map<string, ChainAside>;
+  aside: Map<string, ChainAside>;
 };
 
 /** The threads of one chain, as they stood when the chain had that stamp, which counts the prompts placed on it. */

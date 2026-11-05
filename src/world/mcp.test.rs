@@ -6,11 +6,6 @@
   clippy::disallowed_methods,
   reason = "debt: a call that blocks: sleep, block_on or try_wait"
 )]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
 #![expect(clippy::map_unwrap_or, reason = "debt: map then unwrap_or, where map_or serves")]
 #![expect(
   clippy::needless_pass_by_value,
@@ -21,7 +16,7 @@
 use std::{
   collections::HashMap,
   fs,
-  path::{Path, PathBuf},
+  path::Path,
   sync::Arc,
   thread,
   time::{Duration, Instant},
@@ -55,9 +50,8 @@ fn the_test_program_is_the_server_of_the_tests_over_stdio_when_it_is_asked_to_be
 }
 
 /// A directory of its own for one test, and empty.
-fn place(name: &str) -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-mcp-{name}-{}", std::process::id()));
-  let _ = fs::remove_dir_all(&at);
+fn place(name: &str) -> crate::testing::Yard {
+  let at = crate::testing::Yard::new(format!("furb-mcp-{name}-{}", std::process::id()));
   fs::create_dir_all(at.join("project")).unwrap();
   at
 }

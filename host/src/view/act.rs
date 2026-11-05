@@ -1,18 +1,96 @@
 //! An act with its meaning, and what its models cost.
 
+use std::fmt;
+
+use furb::engine::OPERATOR;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::state::State;
 
-/// The kinds of act that are work which ends later.
-pub const WORK: [&str; 4] = ["prompt", "rung", "bash", "wait"];
+/// The kind of an act, read once from its fact: each kind that the view reads by name, and any
+/// other as its text. It serializes to that text, so a window reads the string of the fact.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(from = "String", into = "String")]
+pub enum Kind {
+  Chain,
+  Rung,
+  Prompt,
+  Reply,
+  Run,
+  Bash,
+  Wait,
+  Other(String),
+}
+
+impl Kind {
+  /// The kind as the fact writes it.
+  pub fn as_str(&self) -> &str {
+    match self {
+      Kind::Chain => "chain",
+      Kind::Rung => "rung",
+      Kind::Prompt => "prompt",
+      Kind::Reply => "reply",
+      Kind::Run => "run",
+      Kind::Bash => "bash",
+      Kind::Wait => "wait",
+      Kind::Other(kind) => kind,
+    }
+  }
+
+  /// Whether an act of the kind is work which ends later.
+  pub fn work(&self) -> bool {
+    matches!(self, Kind::Prompt | Kind::Rung | Kind::Bash | Kind::Wait)
+  }
+}
+
+impl From<&str> for Kind {
+  fn from(kind: &str) -> Kind {
+    match kind {
+      "chain" => Kind::Chain,
+      "rung" => Kind::Rung,
+      "prompt" => Kind::Prompt,
+      "reply" => Kind::Reply,
+      "run" => Kind::Run,
+      "bash" => Kind::Bash,
+      "wait" => Kind::Wait,
+      other => Kind::Other(other.to_owned()),
+    }
+  }
+}
+
+impl From<String> for Kind {
+  fn from(kind: String) -> Kind {
+    Kind::from(kind.as_str())
+  }
+}
+
+impl From<Kind> for String {
+  fn from(kind: Kind) -> String {
+    match kind {
+      Kind::Other(kind) => kind,
+      known => known.as_str().to_owned(),
+    }
+  }
+}
+
+impl fmt::Display for Kind {
+  fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
+    out.write_str(self.as_str())
+  }
+}
+
+/// Whether a name is the operator: [`OPERATOR`] itself, or one of his sessions under it.
+pub fn operator(name: &str) -> bool {
+  name.strip_prefix(OPERATOR).is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+}
 
 /// One act of a life with its meaning, as it stands after the last fact about it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Act {
-  pub kind: String,
+  #[schemars(with = "String")]
+  pub kind: Kind,
   pub id: String,
   pub by: String,
   /// What the act is on: a chain, or the prompt of a thread for a prompt on a thread.
@@ -134,12 +212,12 @@ impl Act {
 
   /// The thread that a prompt on a thread is on: the prompt that it is on.
   pub fn thread(&self) -> Option<&str> {
-    (self.kind == "prompt" && self.on != self.chain).then_some(self.on.as_str())
+    (self.kind == Kind::Prompt && self.on != self.chain).then_some(self.on.as_str())
   }
 
   /// Whether the act asks the operator: a prompt to him.
   pub fn asks_operator(&self) -> bool {
-    self.kind == "prompt" && self.words.get(2).is_some_and(|to| to == "operator")
+    self.kind == Kind::Prompt && self.words.get(2).and_then(Value::as_str).is_some_and(operator)
   }
 
   /// Whether the operator owes the act an answer: a prompt that his console took, and that is not

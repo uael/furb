@@ -891,9 +891,6 @@
             "entry": {
               "type": "string"
             },
-            "hash": {
-              "type": "string"
-            },
             "shape": {
               "type": "string"
             },
@@ -915,11 +912,54 @@
             "verb",
             "life",
             "entry",
-            "hash",
             "shape",
             "message"
           ],
-          "description": "A message that the operator queued, sent once as a prompt on a chain. The record keeps the\nentry and the hash of its words, so a second send of the entry, from any window, gives the\nact of the first."
+          "description": "A follow-up that the operator queued on a chain, under an entry that the window chose. The\nlife sends it as a prompt of its shape and its message once the chain rests, and a second\nqueue of the same entry, from any window, changes nothing."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "entry": {
+              "type": "string"
+            },
+            "verb": {
+              "type": "string",
+              "const": "unqueue"
+            }
+          },
+          "required": [
+            "verb",
+            "life",
+            "entry"
+          ],
+          "description": "A follow-up taken out of its queue before the life sent it."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "verb": {
+              "type": "string",
+              "const": "queued"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "The follow-ups that wait on a chain, in order."
         },
         {
           "type": "object",
@@ -2394,6 +2434,29 @@
             "life": {
               "type": "string"
             },
+            "ask": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "error": {
+              "type": "string",
+              "const": "foreign"
+            }
+          },
+          "required": [
+            "error",
+            "life",
+            "ask"
+          ],
+          "description": "A turn or a write for a request of a model that another peer answers: only the peer that\nopened the life with `answers` speaks for its requests."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
             "error": {
               "type": "string",
               "const": "answerless"
@@ -2566,6 +2629,38 @@
             "data"
           ],
           "description": "What a model added to its text and to its thought, as it writes the reply of a rung on a\nchain. It is no fact, and the turn of the reply holds all of it."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "event": {
+              "type": "string",
+              "const": "queued"
+            },
+            "data": {
+              "type": "object",
+              "properties": {
+                "chain": {
+                  "type": "string"
+                },
+                "waiting": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/FollowUp"
+                  }
+                }
+              },
+              "required": [
+                "chain",
+                "waiting"
+              ]
+            }
+          },
+          "required": [
+            "event",
+            "data"
+          ],
+          "description": "The follow-ups that wait on a chain, in order, each time that a fact of the operator or a send\nof the life changed them."
         },
         {
           "type": "object",
@@ -2928,6 +3023,36 @@
         "idle"
       ],
       "description": "The state of work: it asks the operator, it ended while the operator looked away, it failed, a\npause holds it, its model thinks or writes its word, a word or a command of it runs, its word\nawaits a prompt on another chain, it ended well, a cancel ended it, or it rests. The order is\nthe order of the roll-up. Only a window says unread, since only it knows what its operator saw."
+    },
+    "FollowUp": {
+      "type": "object",
+      "properties": {
+        "entry": {
+          "type": "string"
+        },
+        "chain": {
+          "type": "string"
+        },
+        "shape": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "failed": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "entry",
+        "chain",
+        "shape",
+        "message"
+      ],
+      "description": "One follow-up that waits on a chain: its entry, which the window that queued it chose, the shape\nthat its prompt wants, its message, and why its send failed, when it did. A follow-up that\nfailed holds the queue of its chain until the operator takes it out."
     }
   },
   "x-protocol": 1

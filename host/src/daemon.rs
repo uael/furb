@@ -424,9 +424,11 @@ fn routed(verb: Verb) -> Routed {
     Verb::Gate { life, word, on } => (life, Command::Gate { word, on }),
     Verb::Stand { life } => (life, Command::Stand),
     Verb::Seen { life, about } => (life, Command::Seen { about }),
-    Verb::Queue { life, entry, hash, shape, message, on } => {
-      (life, Command::Queue { entry, hash, shape, message, on })
+    Verb::Queue { life, entry, shape, message, on } => {
+      (life, Command::Queue { entry, shape, message, on })
     }
+    Verb::Unqueue { life, entry } => (life, Command::Unqueue { entry }),
+    Verb::Queued { life, on } => (life, Command::Queued { on }),
     other => return Routed::Daemon(other),
   };
   Routed::Life(life, command)
@@ -568,10 +570,11 @@ impl Lives {
           Some(turn) => parsed(&turn.to_string()).map_err(|fault| fault.to_string()),
           None => Err(why.unwrap_or_else(|| "the window gave no turn".to_owned())),
         };
-        one.answered(ask, turn).map(|()| Answer::Done)
+        one.answered(outbox, ask, turn).map(|()| Answer::Done)
       }),
       Verb::Wrote { life, ask, text, thinking } => {
-        self.answerer(&life).and_then(|one| one.wrote(ask, &text, &thinking).map(|()| Answer::Done))
+        let wrote = |one: &Answerer| one.wrote(outbox, ask, &text, &thinking);
+        self.answerer(&life).and_then(wrote).map(|()| Answer::Done)
       }
       Verb::ViewMount(mount) => self.mount(mount, &peer, outbox),
       Verb::ViewEvent(event) => self.views.event(event, outbox).map(|()| Answer::Done),

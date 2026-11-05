@@ -590,9 +590,15 @@ pub(crate) fn scripted(verbs: &[Verb]) -> String {
       verb.name,
       given.join(", ")
     );
+    // A field whose value is a word of the same name takes the short form, as clippy asks.
+    let field = |name: &str, value: &str| {
+      if name == value { name.to_owned() } else { format!("{name}: {value}") }
+    };
+    let (rest, options) = (field("rest", &rest), field("options", options));
     out!(
       out,
-      "    self.{called}(env, {:?}, vec![{}], &[{}], {rest}, {options}, &[{}])\n  }}\n",
+      "    self.{called}(*env, {:?}, Words {{ given: vec![{}], placed: &[{}], {rest}, {options}, \
+       keys: &[{}] }})\n  }}\n",
       verb.name,
       words.join(", "),
       placed.join(", "),
@@ -647,7 +653,7 @@ pub(crate) fn pythonic(verbs: &[Verb]) -> String {
       })
       .collect();
     let (answer, made) = match verb.answer {
-      Answer::Act(_) => ("PyAct", "PyAct::of(slf, got)?"),
+      Answer::Act(_) => ("PyAct", "PyAct::of(slf, &got)?"),
       _ => ("Value", "Value(got)"),
     };
     out!(out, "  /// {}", verb.doc);

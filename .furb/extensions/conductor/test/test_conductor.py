@@ -35,7 +35,7 @@ if jq and out and not code:
 sys.stdout.write(out)
 sys.exit(code)
 """
-SONNET, OPUS = "claude-cli:sonnet/high", "claude-cli:opus/medium"
+SONNET, OPUS, ASTRA = "claude-cli:sonnet/high", "claude-cli:opus/medium", "codex:gpt-6-astra/high"
 RULED = [{"type": "required_status_checks", "parameters": {"required_status_checks": [{"context": "the gates"}]}}]
 
 
@@ -121,7 +121,7 @@ class Round:
     exec(compile(IMPORT.sub("", PULL.read_text(encoding="utf-8")), str(PULL), "exec"), ns)  # noqa: S102
     exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), ns)  # noqa: S102
     self.real_hire = ns["hire"]
-    ns.update(quietly=self.quietly, hire=self.hire, PROBE="echo 64")
+    ns.update(quietly=self.quietly, hire=self.hire, PROBE="echo 64", KEEP=0)
     self.ns = ns
 
   def __getattr__(self, name: str) -> object:
@@ -272,8 +272,11 @@ def test_a_load_with_no_limits_binds_the_room_of_the_owner_and_caps_at_ten(tmp_p
   got = Round(tmp_path)
   del got.ns["limits"]
   exec(compile(IMPORT.sub("", SOURCE), str(HERE / "conductor.py"), "exec"), got.ns)  # noqa: S102
-  assert got.limits["room"] == {"opus/high": 2, "opus/medium": 2, "sonnet/high": 3, "sonnet/medium": 3}
+  assert got.limits["room"] == {"opus/high": 3, "opus/medium": 3, "sonnet/high": 3, "sonnet/medium": 3, "gpt-6-astra/high": 1}
+  assert got.limits["models"]["astra"] == ASTRA
+  assert got.ALIGN_EVERY == 4
   assert got.cap() == 10
+  assert got.family(ASTRA) == "gpt-6-astra/high"
   assert got.GATE == "the gates"
   assert got.family("claude-cli:opus/high") == "opus/high"
 
@@ -573,24 +576,30 @@ def test_the_words_of_the_owner_hold_his_messages_and_his_answers_in_order(condu
   )
 
 
-def test_an_audit_of_alignment_starts_at_eight_merges_with_the_next_free_key(conductor: Round) -> None:
+def test_an_audit_of_alignment_starts_at_four_merges_on_astra_and_the_model_of_audit_in_turn(conductor: Round) -> None:
+  conductor.limits["models"]["astra"] = ASTRA
   conductor.align()
   assert conductor.align_state == {"base": "0"}
-  conductor.merged.update(range(7))
+  conductor.merged.update(range(3))
   conductor.align()
   assert conductor.queue == []
-  conductor.merged.add(7)
+  conductor.merged.add(3)
   conductor.ends.update({f"align{n}": [("p", 0)] for n in range(1, 8)})
   conductor.lead["main"] = "abc"
   conductor.align()
   key, brief, thread = conductor.queue[0]
-  assert (key, thread, conductor.kinds[key]) == ("align8", "align", "audit")
+  assert (key, thread, conductor.kinds[key], conductor.model_of(key)) == ("align8", "align", "audit", OPUS)
   assert "scratch://owner/words.md, scratch://owner/picks.md" in brief and "scratch://owner/asks.json" in brief
   assert "git log --oneline -40 origin/main" in brief and "align7" in brief
-  assert conductor.align_state == {"base": "8", "n": "8", "sha": "abc"}
-  conductor.merged.update(range(8, 20))
+  assert conductor.align_state == {"base": "4", "n": "8", "sha": "abc"}
+  conductor.merged.update(range(4, 20))
   conductor.align()
   assert len(conductor.queue) == 1
+  conductor.queue.clear()
+  conductor.ends["align8"] = [("p", 0)]
+  conductor.align()
+  assert [q[0] for q in conductor.queue] == ["align9"]
+  assert conductor.model_of("align9") == ASTRA
 
 
 @POSIX
@@ -631,18 +640,49 @@ async def test_a_pr_of_the_round_that_merged_is_named_in_the_next_notice(conduct
 
 @POSIX
 @JQ
-async def test_a_red_pr_gets_one_order_to_its_live_maker_then_a_fixer_after_owned(conductor: Round) -> None:
+async def test_a_pr_of_a_live_maker_that_turns_conflicting_tells_the_maker_once_for_each_head_and_sends_no_fixer(conductor: Round) -> None:
   conductor.busy("prompt1", "a")
-  conductor.github(raw(1, "a", checks=(("the gates", "FAILURE"),), labels=("thread:t",)))
+  conductor.facts_of["chain-a"] = [("bash", "bash7", "prompt1", "chain-a")]
+  conductor.github(raw(1, "a", labels=("thread:t",)))
+  await conductor.sweep()
+  assert conductor.prompts == []
+  conductor.github(raw(1, "a", mergeable="CONFLICTING", checks=(), labels=("thread:t",)))
   await conductor.sweep()
   await conductor.sweep()
   assert [on for _, on in conductor.prompts] == ["chain-a"]
+  assert conductor.prompts[0][0].startswith("Your open PR #1 conflicts with its base at sha1. Fix it before any other step:")
+  assert conductor.hired == []
+  assert conductor.guard_faults() == []
+  conductor.now += conductor.UNMOVED - 1
+  await conductor.sweep()
+  assert conductor.notices() == []
+  conductor.now += 1
+  await conductor.sweep()
+  await conductor.sweep()
+  assert conductor.notices() == ["#1 conflicts with its base at sha1, and prompt1, whom the round told of it, has not moved its head in 30 minutes. Its last act: bash bash7."]
+  assert conductor.hired == []
+  conductor.github(raw(1, "a", mergeable="CONFLICTING", checks=(), headRefOid="sha9", labels=("thread:t",)))
+  await conductor.sweep()
+  await conductor.sweep()
+  assert [m[:36] for m, on in conductor.prompts if on == "chain-a"] == ["Your open PR #1 conflicts with its b"] * 2
+  assert "at sha9." in conductor.prompts[-1][0]
+  assert conductor.hired == []
+
+
+@POSIX
+@JQ
+async def test_a_red_pr_whose_told_maker_ends_is_flagged_by_the_guard_and_goes_to_a_fixer_at_the_next_sweep(conductor: Round) -> None:
+  conductor.busy("prompt1", "a")
+  conductor.github(raw(1, "a", checks=(("the gates", "FAILURE"),), labels=("thread:t",)))
+  await conductor.sweep()
   assert conductor.prompts[0][0].startswith("Your open PR #1 has a failed check at sha1.")
-  conductor.now += conductor.OWNED
+  conductor.end("prompt1", (1, "pushed"))
+  assert conductor.guard_faults() == ["#1 has a failed check at sha1, and no worker that knows of it acts"]
   await conductor.sweep()
   assert [h[0] for h in conductor.hired] == ["fix1"]
   assert conductor.hired[0][2] == "t"
   assert conductor.assigned[1]["fixer"] and conductor.assigned[1]["tries"] == 1
+  assert conductor.guard_faults() == []
 
 
 @POSIX
@@ -902,3 +942,71 @@ async def test_hire_writes_the_chain_of_the_worker_in_its_workspace_before_its_p
   conductor.ns["prompt"] = prompt
   await conductor.real_hire("cap", "x")
   assert seen == ["chain-w/cap\n"]
+
+
+def test_a_worker_whose_chain_says_no_fact_for_quiet_seconds_is_no_live_worker_and_one_notice(conductor: Round) -> None:
+  conductor.busy("prompt1", "a")
+  conductor.facts_of["chain-a"] = [("bash", "bash7", "prompt1", "chain-a")]
+  conductor.tend()
+  assert conductor.running() == ["prompt1"]
+  conductor.now += conductor.QUIET
+  conductor.tend()
+  conductor.tend()
+  assert conductor.running() == [] and conductor.living() == ["prompt1"]
+  assert conductor.notices() == ["The worker a (prompt1) said no fact on its chain for 30 minutes, so the round counts it as no live worker. Its open acts: bash7."]
+  conductor.facts_of["chain-a"].append(("wait", "wait2", "prompt1", "chain-a"))
+  conductor.tend()
+  assert conductor.running() == ["prompt1"]
+  conductor.end("prompt1", (1, "r"))
+  conductor.tend()
+  assert conductor.progress == {}
+
+
+@POSIX
+async def test_a_hire_takes_no_workspace_whose_holder_chain_has_a_live_worker(conductor: Round) -> None:
+  conductor.busy("prompt7", "tui")
+  space = Path(f"{conductor.tmp}-w1")
+  subprocess.run(["git", "init", "-q", str(space)], check=True)
+  (space / ".git" / "furb-holder").write_text("chain-tui\n", encoding="utf-8")
+  await conductor.real_hire("names", "x")
+  assert conductor.slots["chain-w/names"] == "w2"
+  assert (space / ".git" / "furb-holder").read_text(encoding="utf-8") == "chain-tui\n"
+
+
+async def test_an_item_of_a_full_opus_medium_waits_for_its_family_and_never_moves_up_to_opus_high(conductor: Round) -> None:
+  high = "claude-cli:opus/high"
+  conductor.limits["room"] = {"opus/medium": 1, "opus/high": 3}
+  conductor.limits["models"].update(audit=high, lead=OPUS)
+  conductor.efforts.update(two=OPUS, core=high)
+  conductor.busy("prompt1", "one", OPUS)
+  conductor.queue.extend([("two", "b", "t"), ("core", "b", "t")])
+  await conductor.staff()
+  assert [h[0] for h in conductor.hired] == ["core"]
+  assert conductor.efforts["two"] == OPUS
+  assert conductor.heard == ["two waits: opus/medium has no room."]
+
+
+@POSIX
+async def test_the_disk_frees_the_target_of_the_workspace_that_ended_first_and_tells_once_when_it_stays_short(conductor: Round) -> None:
+  for slot in ("w1", "w2", "w3"):
+    (Path(f"{conductor.tmp}-{slot}") / "target").mkdir(parents=True)
+  for n in (1, 2, 3):
+    conductor.busy(f"prompt{n}", f"k{n}")
+    conductor.slots[f"prompt{n}"] = f"w{n}"
+  conductor.end("prompt3", (1, "r"))
+  conductor.tend()
+  conductor.now += 100
+  conductor.end("prompt2", (2, "r"))
+  conductor.tend()
+  await conductor.keep_disk()
+  assert all((Path(f"{conductor.tmp}-w{n}") / "target").exists() for n in (1, 2, 3))
+  conductor.ns["KEEP"] = 10**9
+  await conductor.keep_disk()
+  assert (Path(f"{conductor.tmp}-w3") / "target").exists()
+  conductor.now += conductor.DISK_EVERY
+  await conductor.keep_disk()
+  conductor.now += conductor.DISK_EVERY
+  await conductor.keep_disk()
+  assert [(Path(f"{conductor.tmp}-w{n}") / "target").exists() for n in (1, 2, 3)] == [True, False, False]
+  [told] = conductor.notices()
+  assert told.startswith("The disk holds ") and f"after the round deleted the target of each ended workspace: {conductor.tmp}-w3, {conductor.tmp}-w2.\n" in told

@@ -5,9 +5,9 @@
 use std::collections::HashMap;
 
 use furb_host::view::{
-  Act, Answer, Attention, ChainThread, Concern, Origin, Pause, Phase, Rows, RunState, Spend, State,
-  ThreadNode, Tick, as_of, attention, chain_threads, choices, concerns, desk, hint, moments_of,
-  nest_threads, restate, takes_nothing, ticks, wants, working,
+  Act, Answer, Attention, ChainThread, Concern, Kind, Origin, Pause, Phase, Rows, RunState, Spend,
+  State, ThreadNode, Tick, as_of, attention, chain_threads, choices, concerns, desk, hint,
+  moments_of, nest_threads, operator, restate, takes_nothing, ticks, wants, working,
 };
 use serde_json::{Value, json};
 
@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 /// gives it.
 fn act(id: &str, kind: &str, on: &str, by: &str, began: u64, ended: Option<u64>) -> Act {
   let mut made = Act {
-    kind: kind.to_owned(),
+    kind: Kind::from(kind),
     id: id.to_owned(),
     by: by.to_owned(),
     on: if kind == "chain" { id } else { on }.to_owned(),
@@ -74,6 +74,32 @@ fn state_of(acts: &[Act], chain: &str) -> State {
     Some(one) => one.state,
     None => panic!("{chain} is no act"),
   }
+}
+
+#[test]
+fn a_kind_reads_once_and_writes_the_text_of_its_fact() {
+  for text in ["chain", "rung", "prompt", "reply", "run", "bash", "wait", "grant", "cd"] {
+    let kind = Kind::from(text);
+    assert_eq!(kind.as_str(), text);
+    assert_eq!(serde_json::to_value(&kind).unwrap(), json!(text));
+    assert_eq!(serde_json::from_value::<Kind>(json!(text)).unwrap(), kind);
+  }
+  assert_eq!(Kind::from("rung"), Kind::Rung);
+  assert_eq!(Kind::from("grant"), Kind::Other("grant".to_owned()));
+  let work: Vec<&str> = ["chain", "rung", "prompt", "reply", "bash", "wait", "grant"]
+    .into_iter()
+    .filter(|one| Kind::from(*one).work())
+    .collect();
+  assert_eq!(work, ["rung", "prompt", "bash", "wait"]);
+}
+
+#[test]
+fn the_operator_is_his_name_or_a_session_under_it() {
+  assert!(operator("operator"));
+  assert!(operator("operator/uael"));
+  assert!(!operator("operators"));
+  assert!(!operator("rung3"));
+  assert!(!operator(""));
 }
 
 #[test]
@@ -217,8 +243,9 @@ fn a_bool_gives_yes_and_no_a_literal_each_of_its_values_and_any_other_shape_none
     choices(r#"Literal["a, b", 'it\'s', 3, True, None]"#),
     ["a, b", "it's", "3", "True", "None"]
   );
-  assert_eq!(choices("typing.Literal['one']"), ["one"]);
-  for shape in ["str", "int", "float", "list", "dict", "None", "list[str]"] {
+  // The console refuses a shape that names its module, so the desk offers it no choice.
+  for shape in ["str", "int", "float", "list", "dict", "None", "list[str]", "typing.Literal['one']"]
+  {
     assert_eq!(choices(shape), Vec::<String>::new(), "{shape}");
   }
 }

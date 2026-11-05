@@ -1,23 +1,15 @@
 //! The log of a life, proved where no life reaches it: what a reader takes of it.
 
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-
-use std::{fs, path::PathBuf};
+use std::fs;
 
 use serde_json::json;
 
 use super::{Line, Log, logged};
+use crate::testing::Yard;
 
 /// A record of its own for one test, which does not stand yet.
-fn place(name: &str) -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-log-{name}-{}", std::process::id()));
-  let _ = fs::remove_dir_all(&at);
-  fs::create_dir_all(&at).unwrap();
-  at.join("record.jsonl")
+fn place(name: &str) -> Yard {
+  Yard::new(format!("furb-log-{name}-{}", std::process::id())).within("record.jsonl")
 }
 
 #[test]

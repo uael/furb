@@ -7,9 +7,11 @@
 )]
 #![expect(clippy::expect_used, reason = "a test with no harness fails by a panic")]
 
+#[path = "../../tests/common/yard.rs"]
+mod yard;
+
 use std::{
-  fs,
-  path::{Path, PathBuf},
+  path::Path,
   sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -37,11 +39,8 @@ fn main() {
 }
 
 /// A directory of the test, empty.
-fn place() -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-host-rebirth-{}", std::process::id()));
-  fs::remove_dir_all(&at).ok();
-  fs::create_dir_all(&at).expect("the test has a directory");
-  at
+fn place() -> yard::Yard {
+  yard::Yard::new(format!("furb-host-rebirth-{}", std::process::id()))
 }
 
 /// A life that keeps its record, with no extension, whose model closes each request with None.

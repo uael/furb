@@ -5,17 +5,6 @@
 //! [`JsAct`], a name that JavaScript awaits. The ears of an engine are generators of JavaScript and the ears the
 //! crate writes, each a [`NativeEar`], in the order the engine offers them a question.
 
-#![expect(clippy::items_after_statements, reason = "debt: an item declared after a statement")]
-#![expect(
-  clippy::needless_pass_by_value,
-  reason = "debt: an argument taken by value and only borrowed"
-)]
-#![expect(clippy::redundant_clone, reason = "debt: a clone of a value that is not used again")]
-#![expect(
-  clippy::trivially_copy_pass_by_ref,
-  reason = "debt: a small Copy value taken by reference"
-)]
-
 mod host;
 
 use indexmap::IndexMap;
@@ -101,7 +90,7 @@ impl FromNapiValue for Given {
     let object = unsafe { Unknown::from_raw_unchecked(env.raw(), value) }.coerce_to_object()?;
     match native(&env, &object)? {
       Some(ear) => Ok(Given(ear)),
-      None => Ok(Given(host::ear(&env, &object)?)),
+      None => Ok(Given(host::ear(env, &object)?)),
     }
   }
 }
@@ -206,9 +195,8 @@ impl FromNapiValue for Answer {
       let called = Arc::clone(&called);
       let writing = Writing(told);
       Box::pin(async move {
-        let promise =
-          called.call_async_catch((request, writing)).await.map_err(|no| no.reason.clone())?;
-        let turn = promise.await.map_err(|no| no.reason.clone())?;
+        let promise = called.call_async_catch((request, writing)).await.map_err(|no| no.reason)?;
+        let turn = promise.await.map_err(|no| no.reason)?;
         wire::inward(&turn).map_err(|fault| fault.message())
       })
     })))
@@ -283,14 +271,15 @@ impl JsAct {
     fulfilled: Option<Unknown<'env>>,
     rejected: Option<Unknown<'env>>,
   ) -> napi::Result<Unknown<'env>> {
-    let promise = self.held.result(env, &self.id)?;
     type Handlers<'scope> = FnArgs<(Option<Unknown<'scope>>, Option<Unknown<'scope>>)>;
+    let promise = self.held.result(env, &self.id)?;
     let then: Function<Handlers<'env>, Unknown<'env>> = promise.get_named_property("then")?;
     then.apply(promise, (fulfilled, rejected).into())
   }
 }
 
 #[napi]
+#[expect(clippy::needless_pass_by_value, reason = "N-API gives each argument of a method owned")]
 impl JsEngine {
   /// An engine, opened from the record, on these ears, each a generator of JavaScript or an ear of the crate under
   /// the name the engine hears it by, in the order the engine offers them a question.
@@ -301,7 +290,7 @@ impl JsEngine {
   pub fn boot(env: Env, record: Vec<Value>, ears: Vec<(String, Given)>) -> napi::Result<Self> {
     let ears = ears.into_iter().map(|(name, ear)| (name, ear.0));
     let engine = Engine::boot(record.into_iter().map(|one| one.0), ears)?;
-    JsEngine::held(&env, engine, Vec::new())
+    JsEngine::held(env, engine, Vec::new())
   }
 
   /// A life opened as every host of the crate opens one: on its record, on these ears of the host, each a generator
@@ -313,7 +302,7 @@ impl JsEngine {
   )]
   pub fn open(env: Env, ears: Vec<(String, Given)>, opening: Opening) -> napi::Result<Self> {
     let (engine, record) = opening.boot(ears.into_iter().map(|(name, ear)| (name, ear.0)))?;
-    JsEngine::held(&env, engine, record)
+    JsEngine::held(env, engine, record)
   }
 
   /// The record the life opened on, which the journal said again whole before boot returned.
@@ -479,7 +468,7 @@ impl JsEngine {
 
 impl JsEngine {
   /// The engine, held on the thread of JavaScript.
-  fn held(env: &Env, engine: Engine, record: Vec<Object>) -> napi::Result<Self> {
+  fn held(env: Env, engine: Engine, record: Vec<Object>) -> napi::Result<Self> {
     let (root, raised) = (engine.root().to_owned(), engine.raised().cloned());
     Ok(JsEngine { held: Held::new(env, engine)?, root, raised, record })
   }
@@ -495,25 +484,16 @@ impl JsEngine {
   }
 
   /// One verb of the contract with the words JavaScript gave, each as the contract says its type, and what it gave.
-  #[expect(clippy::too_many_arguments, reason = "debt: more than 4 parameters is a struct")]
-  fn worded<'env>(
-    &self,
-    env: &'env Env,
-    name: &str,
-    given: Vec<(Unknown<'env>, Word)>,
-    placed: &[(&str, Word, Object)],
-    rest: Option<Vec<Unknown<'env>>>,
-    options: Option<JsObject<'env>>,
-    keys: &[(&str, Word)],
-  ) -> napi::Result<Object> {
+  fn worded(&self, env: Env, name: &str, words: Words<'_, '_>) -> napi::Result<Object> {
+    let Words { given, placed, rest, options, keys } = words;
     let mut args = Vec::new();
     for (one, word) in given {
-      args.push(host::inward(env, one, word, 0)?);
+      args.push(host::inward(&env, one, word, 0)?);
     }
-    let words: Vec<(&str, Word)> =
+    let known: Vec<(&str, Word)> =
       placed.iter().map(|(key, word, _)| (*key, *word)).chain(keys.iter().copied()).collect();
     let mut kwargs = match options {
-      Some(options) => host::named(env, options, &words)?,
+      Some(options) => host::named(env, options, &known)?,
       None => Vec::new(),
     };
     // A word with a default that stands before the star goes by its place, so the words of the star follow it.
@@ -522,43 +502,34 @@ impl JsEngine {
       args.push(at.map_or_else(|| default.clone(), |at| kwargs.remove(at).1));
     }
     for one in rest.unwrap_or_default() {
-      args.push(host::inward(env, one, Word::Plain, 0)?);
+      args.push(host::inward(&env, one, Word::Plain, 0)?);
     }
     let kwargs = kwargs.iter().map(|(key, one)| (key.as_str(), one.clone())).collect();
     self.said(name, args, kwargs)
   }
 
   /// One verb of the contract that gives a value, as JavaScript reads it.
-  #[expect(clippy::too_many_arguments, reason = "debt: more than 4 parameters is a struct")]
-  fn plain<'env>(
-    &self,
-    env: &'env Env,
-    name: &str,
-    given: Vec<(Unknown<'env>, Word)>,
-    placed: &[(&str, Word, Object)],
-    rest: Option<Vec<Unknown<'env>>>,
-    options: Option<JsObject<'env>>,
-    keys: &[(&str, Word)],
-  ) -> napi::Result<Value> {
-    self.worded(env, name, given, placed, rest, options, keys).map(Value)
+  fn plain(&self, env: Env, name: &str, words: Words<'_, '_>) -> napi::Result<Value> {
+    self.worded(env, name, words).map(Value)
   }
 
   /// One verb of the contract that makes an act, and the act.
-  #[expect(clippy::too_many_arguments, reason = "debt: more than 4 parameters is a struct")]
-  fn acted<'env>(
-    &self,
-    env: &'env Env,
-    name: &str,
-    given: Vec<(Unknown<'env>, Word)>,
-    placed: &[(&str, Word, Object)],
-    rest: Option<Vec<Unknown<'env>>>,
-    options: Option<JsObject<'env>>,
-    keys: &[(&str, Word)],
-  ) -> napi::Result<JsAct> {
-    let got = self.worded(env, name, given, placed, rest, options, keys)?;
+  fn acted(&self, env: Env, name: &str, words: Words<'_, '_>) -> napi::Result<JsAct> {
+    let got = self.worded(env, name, words)?;
     let id = got.as_ref().as_str().ok_or_else(|| napi::Error::from_reason("a verb gave no act"))?;
     Ok(JsAct { held: Rc::clone(&self.held), id: id.to_owned() })
   }
+}
+
+/// The words of one verb of the contract as JavaScript gave them: those it needs, each with how it
+/// goes in; those with a default that stand before the star, with that default; those of the star;
+/// and the options, by the keys of the verb.
+struct Words<'env, 'verb> {
+  given: Vec<(Unknown<'env>, Word)>,
+  placed: &'verb [(&'verb str, Word, Object)],
+  rest: Option<Vec<Unknown<'env>>>,
+  options: Option<JsObject<'env>>,
+  keys: &'verb [(&'verb str, Word)],
 }
 
 // The verbs of the contract, one method each, which the build makes from the contract.

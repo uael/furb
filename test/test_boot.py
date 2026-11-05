@@ -887,3 +887,37 @@ async def test_an_act_whose_maker_is_the_journal_as_seed_gives_one_stands_known_
   assert [x[1] for x in engine.transcript("chain1", "bash")] == ["bash4"]
   assert engine.peek("bash4") == "kept"
   assert not [x for x in sand.calls if x[0] == "bash"]
+
+
+def ender(id: str) -> Generator[tuple | set[str] | None, tuple]:
+  """An ear that hears each rung before the chain of the rung does, and cancels the prompt of the rung, as a word on
+  another chain that closes that prompt, so the rung ends after the chain advanced it and before the chain asks its
+  reply."""
+  yield "started", id
+  while True:
+    a = yield {"rung"}
+    if a[0] == "rung" and a[1] == engine.get(a[1])[1] and engine.prompted(a[2]):
+      engine.cancel(a[2])
+
+
+def ending(on: str = "") -> str:
+  """The verb of the ear that cancels the prompt of each rung, which a later life says again."""
+  return engine.act("ending", on, ender)
+
+
+async def test_an_act_that_the_life_makes_under_no_site_is_no_fact_of_the_world_in_a_replay(
+  monkeypatch: pytest.MonkeyPatch,
+) -> None:
+  """An act that the life makes under no site, as the chain makes the reply of an advance whose rung ended, is no fact of the World, so a later life makes it again with no drift."""
+  monkeypatch.setattr(engine, "ending", ending, raising=False)
+  first = Sand()
+  log, root = life(first)
+  ending(on=root)
+  other = engine.chain("other", on=root)
+  await settle()
+  engine.prompt(int, "count", on=other)
+  await settle()
+  made = [a[1:4] for a in said(log, "reply") if a[2] == ""]
+  assert made, said(log, "reply")
+  again, _ = await relived(Sand(), list(first.record))
+  assert [a[1:4] for a in said(again, "reply") if a[2] == ""] == made
