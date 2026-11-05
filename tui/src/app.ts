@@ -343,12 +343,15 @@ export class App {
       closed: boolean;
       /** The act that the card shows. */
       act?: string;
+      /** The thread whose box the card stands in. */
+      thread?: string;
       /** What the card of a done act is made of, which a later render compares to make it again only on a change. */
       same?: readonly unknown[];
     }
   >();
-  /** Where the view scrolls to, or the card it brings into view, once the scroll box has laid out its cards. */
-  scrollTarget?: Scroll | { card: string };
+  /** Where the view scrolls to, the card it brings into view, or the thread whose end it brings to the bottom of the
+   * view, once the scroll box has laid out its cards. */
+  scrollTarget?: Scroll | { card: string } | { end: string };
   overlay?: BoxRenderable;
   /** The veil behind the dialog that the overlay holds. */
   backdrop?: BoxRenderable;
@@ -1202,7 +1205,7 @@ export class App {
   }
   /** Scroll to a place, or bring a card into view, once the scroll box has laid out the cards that it holds now,
    * since it clamps an offset to the layout it has and places a card by the layout it has. */
-  scrollAfterLayout(target?: Scroll | { card: string }): void {
+  scrollAfterLayout(target?: Scroll | { card: string } | { end: string }): void {
     if (target === undefined) return;
     if (this.scrollTarget === undefined) this.renderer.once("frame", this.laidOut);
     this.scrollTarget = target;
@@ -1210,8 +1213,16 @@ export class App {
   laidOut = (): void => {
     const target = this.scrollTarget;
     if (this.closed || target === undefined) return;
+    if (typeof target === "object" && "end" in target) {
+      // The end of a thread is the bottom of its last card, which stands at the bottom of the view.
+      const end = this.threadEnd(target.end);
+      const { viewport } = this.scroll;
+      if (end)
+        this.scroll.scrollTo(this.scroll.scrollTop + end.y + end.height - (viewport.y + viewport.height));
+      else this.scroll.scrollChildIntoView(target.end);
+    }
     // A card that shows an act is found by the act, since the feed keys the card by the turn that tells it.
-    if (typeof target === "object")
+    else if (typeof target === "object")
       this.scroll.scrollChildIntoView(
         this.cards.has(target.card)
           ? target.card

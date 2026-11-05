@@ -599,13 +599,21 @@ export const feed = part({
               section.id,
               `${section.key}\n${join}\n${gap}\n${Boolean(section.bar)}`,
               section.label ?? [],
+              // The edge at the left of each line of the box of a thread folds the thread, so it folds from any line.
               (box) =>
                 section.body(
-                  this.barred(box, section.bar, gap, { top: at > 0, bottom: at < sections.length - 1 }),
+                  this.barred(
+                    box,
+                    section.bar,
+                    gap,
+                    { top: at > 0, bottom: at < sections.length - 1 },
+                    thread ? () => this.foldHere(act.id) : undefined,
+                  ),
                 ),
               {
                 indent,
                 join,
+                ...(thread ? { thread: act.id } : {}),
                 ...(section.bar ? { edge: section.bar } : {}),
                 heading: false,
                 separate: at === 0,
