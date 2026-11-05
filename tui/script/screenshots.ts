@@ -110,7 +110,7 @@ let written = 0;
 async function capture(name: string): Promise<void> {
   waits(`the screen ${name}`);
   if (!notices.test(name)) session.notice = "";
-  if (!/^(6[6-9]|7[0-3])-/.test(name)) app().session.preferences.view = view;
+  if (!/^6[6-8]-/.test(name)) app().session.preferences.view = view;
   // A read that a change starts while the last one ends leaves the view loading, so the capture waits for none.
   if (name !== "25-loading" && name !== "27-view-error")
     do await session.refresh();
@@ -853,24 +853,6 @@ try {
   await until(session, () => session.acts.some((act) => act.id === message && act.done));
   await rest();
   await capture("59-take-back");
-  // The graph at the level of one act shows the card of the act in the feed, which says that the command runs.
-  if (view === "main") {
-    const guide = await session.engine.bash(
-      "printf 'Building the page capture\\n'; sleep 30; printf 'The guide has one page\\n'",
-      { on: session.selected },
-    );
-    await until(session, () =>
-      Boolean((session.acts.find((act) => act.id === guide)?.value as Exit | undefined)?.stdout?.content),
-    );
-    app().switchView("graph");
-    app().graph.level = "act";
-    app().render();
-    await capture("73-graph-command");
-    app().graph.level = "threads";
-    app().switchView("main");
-    await session.command(`/cancel ${guide}`);
-    await session.engine.result(guide).catch(() => {});
-  }
   // The last row of a thread while its model works: a loader left of the number of the line that comes, and
   // `# thinking` while the model shows no thought, then the last line of what it thinks.
   const thinks = await session.engine.prompt("str", {
@@ -990,7 +972,7 @@ try {
   await capture("17-narrow");
   test.resize(152, 46);
   // The views of the life side by side, on the same life: the loom of its chains in time over the feed, with the
-  // cursor in time, then the graph of its programs at each level of its zoom.
+  // cursor in time, then the map of its programs.
   await session.select(session.engine.root);
   app().switchView("loom");
   await capture("66-loom");
@@ -1003,18 +985,6 @@ try {
   await session.select(session.engine.root);
   app().switchView("graph");
   await capture("68-graph");
-  app().steer(true);
-  await app().graph.key("return");
-  await capture("69-graph-map");
-  await app().graph.key("return");
-  await capture("70-graph-program");
-  // The word of the last rung of the conductor that made an act, then that act, whose card the feed shows whole.
-  for (let step = 0; step < 4; step++) await app().graph.key("up");
-  await app().graph.key("return");
-  await capture("71-graph-word");
-  await app().graph.key("return");
-  await capture("72-graph-act");
-  app().steer(false);
   app().switchView("main");
 
   // The panel of the chains on the life of a conductor, whose chains hire chains under them.

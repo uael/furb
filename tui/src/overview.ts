@@ -14,7 +14,7 @@ export const lifeViewLabels: Record<LifeView, string> = { main: "Main", loom: "L
 export const lifeViewDetails: Record<LifeView, string> = {
   main: "The feed of the selected chain beside the threads",
   loom: "Each chain as a thread in time over the feed, with a cursor in time",
-  graph: "The threads and the map of the programs, with a zoom into a program, a word and an act",
+  graph: "Each chain as a program on a map over the feed, with the messages that flow between them",
 };
 /** Whether a text names a view of the life. */
 export const isLifeView = (text: unknown): text is LifeView => lifeViews.includes(text as LifeView);

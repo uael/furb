@@ -294,10 +294,8 @@ Each variant reads the same views, which the Session gives and which make nothin
 - The acts, each with its place in time, `began` and `ended`, and its state.
 - The loom, in `loom.ts`: the chains in the order of the tree, with the cells of their moments.
 - The ladder, in `ladder.ts`: the prompts of a chain, the rungs of each, and the acts of each rung.
-- The threads, in `threads.ts`: the tree of the prompts of the life, as the next part says.
+- The threads, in `threads.ts`: the threads of each chain, and the agents of each thread nested under it.
 - The map, in `map.ts`: the place of each chain on a plane, and the messages between the chains.
-- The source, in `source.ts`: the words of the ladders of a chain as one program, with each act on the line that
-  made it.
 
 The time cursor is one for every variant: a variant shows the acts as they stood at the cursor.
 
@@ -424,8 +422,12 @@ gave a first draft that the brief changed; and opentui, which this repository ho
 ### As built: the graph
 
 - The variants are `loom` and `graph`, behind `--variant` and the key `v`. The loom keeps its screens. The graph is
-  `tui/src/graph.ts` over `threads.ts`, `map.ts` and `source.ts`, in the App of the loom, which holds the header, the
-  composer, the lens, the lives and the help for both.
+  `tui/src/graph.ts` over `map.ts`, in the App of the loom, which holds the header, the composer, the lens, the lives
+  and the help for both.
+- The graph keeps the map alone, as the owner chose: the sidebar lists the threads, and the feed shows the words of
+  each chain and each act whole. So the levels of the threads, the program, the word and the act are not there, nor
+  what only they showed: the progress of a thread, its count of questions, its anchor and its pull requests, and the
+  stack of awaits of a chain. The map lights the chains of the thread that the sidebar shows.
 - `n` steps a chain: it wakes the chain when a pause holds it, and pauses it again once one more of its rungs ends.
 - The demo is a life of many threads at once: a release that a conductor hires four workers for, a worker that hires
   two writers, a review that hangs on a change and asks the operator, a worker that asks the operator first, a grant
@@ -435,8 +437,7 @@ gave a first draft that the brief changed; and opentui, which this repository ho
   loom takes about 21 ms, a frame of the threads and the map about 20 ms, a frame of the map alone about 52 ms, and a
   key of the map about 8 ms, as `tui/script/measure.ts` of the branch of #255 measured on a laptop that runs other work.
   A place of the map never moves, so the graph finds the line of each edge and the way of each message once.
-- Left for later work: a breakpoint on a kind of act, which the engine does not take; the anchor of a prompt by its
-  `on`, which the engine does not take either, so the anchor comes from the message; a click on a program of the map;
+- Left for later work: a breakpoint on a kind of act, which the engine does not take; a click on a program of the map;
   and a third variant.
 
 ## The feed
@@ -452,10 +453,10 @@ to its end. Three directions differ at the root:
 3. The source: the words of the ladders as one program, with the outcome of each act beside the line that made it,
    the line that runs, and the change of each write under the word that made it.
 
-We choose the source, which is the level "program" of the graph. The program is the conversation: the words are what
-the model said, the margin is what the life answered, and the controls of the debugger act on each line. The page
-lives in the level "threads", where each thread shows its first line and its answer. The transcript stays a lens for
-later work, to read when a model went wrong.
+We choose the source, which the feed shows as the program of each thread. The program is the conversation: the words
+are what the model said, the margin is what the life answered, and the controls of the debugger act on each line. The
+page lives in the threads of the sidebar, each of which shows its first line. The transcript stays a lens for later
+work, to read when a model went wrong.
 
 ## The three views side by side
 
@@ -470,14 +471,12 @@ three now, in one App, so that no view deletes a screen of main.
   view, so each screen of main is reached the same way in each one.
 - A view of the life stands where the board of main stands, over the feed, while the feed shows. Main shows the
   board. The loom shows its rows, with the operator over the chains, and the feed under it shows the selected chain.
-  The graph shows its threads beside its map over the feed. Its level of a program and of a word takes the whole
-  height of the feed, and its level of one act shows the card of that act in the feed, which shows the act whole, a
-  command that runs as it runs. The transcript, the changes and the rewind tree take the place of all of it, as in
-  main.
+  The graph shows its map over the feed in the same way. The transcript, the changes and the rewind tree take the
+  place of all of it, as in main.
 - The composer keeps the keys, so the verbs of the loom and the graph are not single keys at all times. ⌥G gives the
-  keys to the view of the life, and Esc gives them back: the arrows move, fold and zoom, Enter zooms in, `[` `]` and
-  `{` `}` move the cursor in time, Space pauses or wakes the chain, `x` cancels its work, `n` steps it, `b` branches
-  it at the cursor, and Tab answers the oldest question.
+  keys to the view of the life, and Enter or Esc gives them back: the arrows move between the chains, and on the loom
+  fold their workers, Esc returns to now first, `[` `]` and `{` `}` move the cursor in time, Space pauses or wakes the
+  chain, `x` cancels its work, `n` steps it, `b` branches it at the cursor, and Tab answers the oldest question.
 - Each row of a chain shows its state, its actor, its cost and the question that it waits on: the board of main shows
   the actor beside the cost where the feed is wide enough, the loom shows each in a column, and the map of the graph
   shows each under the name of the program. The actor of a chain is the actor of its last answer, else the actor that

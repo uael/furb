@@ -54,6 +54,21 @@ test("a question and a notice that a thread made for the operator stand in that 
   expect(thread?.asks).toEqual(["prompt2"]);
 });
 
+test("an acknowledgment that a chain makes is a message of the thread of the act that it names, and no thread", () => {
+  const acts = [
+    act("chain1", "chain", "", "operator", 1),
+    prompt("prompt1", 2),
+    act("rung1", "rung", "chain1", "prompt1", 3),
+    prompt("prompt2", 4, { by: "rung1", done: true, ended: 5 }),
+    prompt("prompt3", 6, { by: "chain1", words: ["None", "prompt2 done", ""] }),
+  ];
+  const threads = chainThreads(acts, new Map(acts.map((one) => [one.id, one])), new Set());
+  expect(threads.map((one) => [one.act.id, one.messages.map((message) => message.id)])).toEqual([
+    ["prompt1", ["prompt3"]],
+    ["prompt2", []],
+  ]);
+});
+
 test("the order in which the acts land changes no verdict: each read with what a host kept gives what a fresh read gives", () => {
   const all = [
     act("chain1", "chain", "", "", 0),

@@ -16,7 +16,7 @@ import {
 } from "@opentui/core";
 import type { Keymap } from "@opentui/keymap";
 import { safeText, type Turn } from "furb";
-import { type ChainThread, type Loom, type ProgramLine, wants } from "furb/life";
+import { type ChainThread, type Loom, type ProgramLine, type ThreadNode, wants } from "furb/life";
 import type { Tree, ViewEvent } from "furb/protocol";
 import { type ActionsPart, actions, actionsBound } from "./app/actions.ts";
 import { type BlocksPart, blocks } from "./app/blocks.ts";
@@ -209,13 +209,15 @@ export class App {
   railWatched?: string;
   /** The next question that the key for the next question goes to. */
   railNext = 0;
-  /** The threads of the session shown on every chain, read again only when its prompts or its questions change. */
+  /** The threads of the session shown on every chain, read again only when its prompts or its questions change, and
+   * the tree of them that the sidebar shows, nested once for each list. */
   railThreadCache?: {
     session: unknown;
     version: number;
     owed: string;
     list: ChainThread[];
     chains: Map<string, ChainRead>;
+    tree?: ThreadNode[];
   };
   /** The key of the rows of the threads of the sidebar, by the list that it came from and the minute. */
   railThreadKey?: { list: ChainThread[]; minute: number; parts: string[]; count: number; text: string };
@@ -273,7 +275,7 @@ export class App {
   welcoming = false;
   /** The view of the life that shows over the feed: the loom or the graph, drawn as rows of text. */
   readonly stage: TextRenderable;
-  /** The loom and the graph, each with its own selection, folds and level, which a switch of the view keeps. */
+  /** The loom with its selection and its folds, and the graph with its selection, which a switch of the view keeps. */
   readonly loom = new LoomPane();
   readonly graph: Graph;
   /** Whether the keys move on the loom or the graph, in place of the input. */

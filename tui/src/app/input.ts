@@ -182,8 +182,8 @@ export const input = part({
         hint: ["Esc", "now"],
       },
     ]);
-    // While the keys move on the loom or the graph, the arrows, Enter and Escape move there, and a letter acts on the
-    // selected chain.
+    // While the keys move on the loom or the graph, the arrows move there, Enter gives the keys back to the input,
+    // Escape returns to now and then gives them back, and a letter acts on the selected chain.
     const stageKey = (on: string | string[], run: () => unknown, hint?: Hint): KeyCommand => ({
       on,
       run: () => void Promise.resolve(run()).catch(this.report),
@@ -192,14 +192,8 @@ export const input = part({
     layer(() => bare() && this.steering && this.lifeView !== "main", "stage", [
       stageKey("up", () => this.arrowStage("up"), ["↑↓←→", "move"]),
       ...["down", "left", "right", "pageup", "pagedown"].map((on) => stageKey(on, () => this.arrowStage(on))),
-      stageKey(["return", "enter"], () => this.enterStage(), [
-        "Enter",
-        () => (this.lifeView === "graph" ? "zoom in" : "input"),
-      ]),
-      stageKey("escape", () => this.leaveStage(), [
-        "Esc",
-        () => (this.lifeView === "graph" && this.graph.level !== "threads" ? "zoom out" : "back"),
-      ]),
+      stageKey(["return", "enter"], () => this.steer(false), ["Enter", "input"]),
+      stageKey("escape", () => this.leaveStage(), ["Esc", "back"]),
       stageKey("[", () => this.travel(-1), ["[ ]", "time"]),
       stageKey("]", () => this.travel(1)),
       stageKey("{", () => this.travel(-10)),
