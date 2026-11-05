@@ -624,10 +624,12 @@ export class Workspaces extends EventEmitter {
     this.save({ directory: group.directory, add: entry.path, archive: entry.path });
     this.emit("change");
   }
-  /** Show a workspace on a session of it, its newest when none is named, or on a new session when it holds none. A
-   * session that does not open keeps its error on its row, and a new session of the workspace opens in its place with
-   * the refusal as its notice, so a workspace whose record cannot open still opens. */
-  async enter(group: Workspace, entry = group.sessions.find((one) => !one.archived)): Promise<SessionEntry> {
+  /** Show a workspace on a session of it: the one named, else its newest session that this window holds or that no
+   * other window holds, else a new session. A window never lands on the session of another window unless the
+   * operator names it. A session that does not open keeps its error on its row, and a new session of the workspace
+   * opens in its place with the refusal as its notice, so a workspace whose record cannot open still opens. */
+  async enter(group: Workspace, named?: SessionEntry): Promise<SessionEntry> {
+    const entry = named ?? (await this.free(group));
     if (!entry) return this.create(group);
     try {
       await this.select(entry);
@@ -639,6 +641,16 @@ export class Workspaces extends EventEmitter {
         made.session.notice = `“${entry.name}” did not open, so this is a new session. ${why}`;
       return made;
     }
+  }
+  /** The newest session of a workspace that this window holds, or that no window holds. A daemon that does not
+   * answer holds nothing that this window knows of. */
+  private async free(group: Workspace): Promise<SessionEntry | undefined> {
+    const kept = group.sessions.filter((one) => !one.archived);
+    const others = kept.filter((one) => !one.session).map((one) => one.path);
+    const held = await daemon()
+      .holding(others)
+      .catch(() => new Set<string>());
+    return kept.find((one) => one.session || !held.has(one.path));
   }
   /** When a session is the current one, the current session moves to the first other session of its workspace that
    * opens, and to a new one when none does. A session that does not open keeps its error on its row. */

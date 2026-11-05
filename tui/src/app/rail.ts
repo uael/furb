@@ -307,13 +307,14 @@ export const rail = part({
     })().catch(this.report);
   },
 
-  /** A workspace takes the focus: the session of it that needs the operator, else one that lives, else its newest. */
+  /** A workspace takes the focus: the session of it that this window holds and that needs the operator, else one
+   * that this window holds, else the one that the workspaces choose, which no other window holds. */
   async focusWorkspace(group: Workspace): Promise<void> {
     const lib = this.options.workspaces;
     if (group === lib.groupOf()) return;
     const kept = group.sessions.filter((entry) => !entry.archived);
     const asks = (entry: SessionEntry) => Boolean(entry.session?.desk.asks.some((ask) => !ask.notice));
-    const pick = kept.find(asks) ?? kept.find((entry) => entry.session) ?? kept[0];
+    const pick = kept.find(asks) ?? kept.find((entry) => entry.session);
     await lib.enter(group, pick);
   },
 
