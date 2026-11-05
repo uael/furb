@@ -49,9 +49,8 @@ export const statusMark = (status: Status): Part => {
   return [`${mark} `, color, attributes];
 };
 
-/** The threads of one chain, as they stood when the chain had that stamp, which counts the prompts placed on it. */
+/** The threads of one chain, with what the keys of the sidebar read of them while the list stands. */
 export type ChainRead = {
-  stamp: number;
   list: ChainThread[];
   key?: { minute: number; text: string };
   /** Whether each thread of the list holds work that the operator did not read, at a count of the reads. */

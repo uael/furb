@@ -813,3 +813,22 @@ test("a done thread of the operator that no fact seen covers shows ●, and a se
     size,
     true,
   ));
+
+test("after a switch to another chain, the sidebar lights its open thread and shows its controls", () =>
+  composing(
+    async ({ session, frame }) => {
+      await idle(session);
+      const root = session.engine.root;
+      await session.engine.pause(root);
+      const other = await session.engine.chain({ label: "other" });
+      await session.engine.pause(other);
+      const there = await session.engine.prompt("str", { message: "A thread of the other chain", on: other });
+      await session.refresh();
+      await frame();
+      await session.select(other);
+      expect(session.activeThread?.act.id).toBe(there);
+      expect(rail(session, await frame()).join("\n")).toMatch(/Resolve(?!d)/);
+    },
+    size,
+    true,
+  ));

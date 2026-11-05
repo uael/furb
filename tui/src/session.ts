@@ -1062,29 +1062,22 @@ export class Session extends EventEmitter {
     // A notice to the operator on the chain itself, out of any thread, is unread until a fact seen of the chain covers it.
     const read = this.read(id);
     if (on.some((act) => notice(act) && !act.thread && act.began > read)) return true;
-    return this.threadsOn(id).some(
+    return this.threadsOf(id).list.some(
       (thread) => thread.resolved && thread.yours && this.unreadThread(thread.act.id, threadWork(thread)),
     );
   }
   /** What the threads of the chains keep of each prompt that they read. */
   private readonly threadsKnown = new WeakMap<LiveAct, { message: string | undefined; title: string }>();
-  /** The threads of a chain, in the order they began. */
-  threadsOn(chain: string): ChainThread[] {
-    return this.sorted(chain).threads;
-  }
-  /** The threads and the asides of a chain, in the order they began. */
-  private sorted(chain: string): ReturnType<typeof chainSorted> {
-    const on = this.activityByChain.get(chain) ?? [];
-    return chainSorted(on, this.indexed().ids, new Set(this.host.prompts.keys()), this.threadsKnown);
-  }
-  /** The threads of the chain shown, read again only when a prompt on it or a question that waits changes. */
-  get threads(): ThreadList {
-    const chain = this.selected;
+  /** The threads of a chain, in the order they began, each by its id, with the thread of each message and of each
+   * question, and its asides, read again only when a prompt on the chain or a question that waits changes. */
+  threadsOf(chain: string): ThreadList {
     const stamp = this.threadStamp(chain);
     const owed = [...this.host.prompts.keys()].join(" ");
-    const kept = this.threadsRead;
-    if (kept?.chain === chain && kept.stamp === stamp && kept.owed === owed) return kept.threads;
-    const { threads: list, asides } = this.sorted(chain);
+    const kept = this.threadsRead.get(chain);
+    if (kept?.stamp === stamp && kept.owed === owed) return kept.threads;
+    const on = this.activityByChain.get(chain) ?? [];
+    const owes = new Set(this.host.prompts.keys());
+    const { threads: list, asides } = chainSorted(on, this.indexed().ids, owes, this.threadsKnown);
     const threads: ThreadList = {
       list,
       by: new Map(list.map((one) => [one.act.id, one])),
@@ -1097,10 +1090,14 @@ export class Session extends EventEmitter {
         asides.flatMap((one) => one.messages.map((message): [string, ChainAside] => [message.id, one])),
       ),
     };
-    this.threadsRead = { chain, stamp, owed, threads };
+    this.threadsRead.set(chain, { stamp, owed, threads });
     return threads;
   }
-  private threadsRead?: { chain: string; stamp: number; owed: string; threads: ThreadList };
+  private readonly threadsRead = new Map<string, { stamp: number; owed: string; threads: ThreadList }>();
+  /** The threads of the chain shown. */
+  get threads(): ThreadList {
+    return this.threadsOf(this.selected);
+  }
   /** The place of the last change of some acts: the latest place at which one of them began or ended. */
   placeOf(acts: readonly ActRow[]): number {
     let place = 0;

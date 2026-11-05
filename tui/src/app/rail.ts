@@ -162,12 +162,10 @@ export const rail = part({
     const chains = new Map<string, ChainRead>();
     for (const [chain, acts] of w.activityByChain) {
       if (!acts.length || w.naming(chain)) continue;
-      const stamp = w.threadStamp(chain);
+      const threads = w.threadsOf(chain).list;
       const read = reads.get(chain);
-      // The chain shown has its threads read already, for the feed, at this version.
-      const threads =
-        read && read.stamp === stamp ? read.list : chain === w.selected ? w.threads.list : w.threadsOn(chain);
-      chains.set(chain, read && read.stamp === stamp ? read : { stamp, list: threads });
+      // A chain whose list of threads stands keeps what the keys of the sidebar read of it.
+      chains.set(chain, read?.list === threads ? read : { list: threads });
       list.push(...threads);
     }
     const ordered = list
@@ -187,7 +185,7 @@ export const rail = part({
     const kept = this.railThreadKey;
     if (kept && kept.list === threads && kept.minute === minute) return kept.text;
     // Each chain keeps its part of the key while no act lands on it, so a new act reads the threads of one chain.
-    const reads = this.railThreadCache?.chains.values() ?? [{ stamp: 0, list: threads } as ChainRead];
+    const reads = this.railThreadCache?.chains.values() ?? [{ list: threads } as ChainRead];
     const texts = [...reads].map((part) => {
       if (part.key?.minute !== minute)
         part.key = {
@@ -218,7 +216,7 @@ export const rail = part({
     const reads = this.session.readsVersion;
     const kept = this.railUnreadKey;
     if (kept && kept.list === threads && kept.reads === reads) return kept.text;
-    const parts = this.railThreadCache?.chains.values() ?? [{ stamp: 0, list: threads } as ChainRead];
+    const parts = this.railThreadCache?.chains.values() ?? [{ list: threads } as ChainRead];
     const texts = [...parts].map((part) => {
       if (part.unread?.reads !== reads)
         part.unread = { reads, text: part.list.map((one) => (this.unreadThread(one) ? "1" : "0")).join("") };
