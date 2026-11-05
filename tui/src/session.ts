@@ -1561,7 +1561,8 @@ export class Session extends EventEmitter {
   /** The writes of the scope of the review on the chain shown: those since the last message of the operator for this
    * turn, and those of the chain for this chain. */
   private writes(): string[] {
-    const writes = this.activity.filter((act) => act.kind === "write");
+    // A write counts once its change stands in the journal, which the daemon writes after it tells the write.
+    const writes = this.activity.filter((act) => act.kind === "write" && act.lines);
     const message =
       this.scope === "turn" ? this.activity.findLast((act) => this.isUserPrompt(act)) : undefined;
     return writes.filter((act) => !message || act.began > message.began).map((act) => act.id);
