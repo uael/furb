@@ -1010,7 +1010,8 @@ test("Add a workspace in the sidebar works while the session shown is open to re
     const made = await library.create(await library.add(directory), "Made elsewhere");
     await library.dispose();
     const text = await readFile(made.path, "utf8");
-    const found = /\["made","chain1","store","([0-9a-f]{64})",(\d+)(?:,[^\]]*)?\]/.exec(text);
+    const found =
+      /\["made","chain1","store","([0-9a-f]{64})",(\d+)(?:,(?:"(?:[^"\\]|\\.)*"|[^\]",]+))*\]/.exec(text);
     if (!found?.[2]) throw new Error("no build");
     await writeFile(
       made.path,

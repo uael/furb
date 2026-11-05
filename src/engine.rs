@@ -53,10 +53,10 @@ pub(crate) use self::{
   record::{left, looping},
 };
 use crate::{
-  ENGINE, KERNEL, SHEET,
+  SHEET,
   ear::{Call, Ear},
   fact::Fact,
-  gate::checked,
+  gate::checked_on,
   sand::{Answer, Host, Nobody, Sand, id, object},
   value::{Exit, Fault, Given, Object, Text, entry},
 };
@@ -157,6 +157,8 @@ struct Outside {
   opened: Opened,
   /// How many ids the host gave, which names the next.
   given: u128,
+  /// The text of the engine that the sandbox runs, on which the gate reads each word.
+  source: String,
   /// Whether a config turned the gate off for this life, which the record does not keep: each
   /// life reads it again.
   ungated: bool,
@@ -173,7 +175,9 @@ impl Host for Outside {
   ) -> Answer {
     let got = match on {
       // A gate that cannot read a word raises where the gate was called, so the ear of the gate answers that word.
-      None if name == GATE => return gated(args.first()).map_or_else(Answer::Fault, Answer::Value),
+      None if name == GATE => {
+        return gated(&self.source, args.first()).map_or_else(Answer::Fault, Answer::Value);
+      }
       None if name == GATED => Ok(Object::bool(!self.ungated)),
       None if name == AGAIN => Ok(Object::bool(self.reborn(args.first()))),
       None if name == TURN => {
@@ -188,10 +192,24 @@ impl Host for Outside {
   }
 }
 
+/// The inputs of the opening of a sandbox: the texts of an engine, of the sheet and of a Kernel,
+/// and the functions of the host that the opening binds.
+fn inputs(source: &str, kernel: &str) -> NamedValues {
+  let mut inputs = NamedValues::new();
+  inputs.push("__source", Object::string(source));
+  inputs.push("__sheet_source", Object::string(SHEET));
+  inputs.push("__kernel_source", Object::string(kernel));
+  inputs.push("__gate", Object::function(GATE, None));
+  inputs.push("__gated", Object::function(GATED, None));
+  inputs.push("__again", Object::function(AGAIN, None));
+  inputs.push("__turn", Object::function(TURN, None));
+  inputs
+}
+
 /// What the gate found in a sheet, each finding by its line.
-fn gated(sheet: Option<&Object>) -> Result<Object, Fault> {
+fn gated(engine: &str, sheet: Option<&Object>) -> Result<Object, Fault> {
   let sheet = sheet.and_then(|one| one.as_ref().as_str().map(str::to_owned)).unwrap_or_default();
-  let found = checked(&sheet)?;
+  let found = checked_on(engine, &sheet)?;
   Ok(Object::list(found.into_iter().map(|one| {
     let line = i64::try_from(one.line).unwrap_or_default();
     Object::tuple([Object::int(line), Object::string(one.to_string())])
@@ -215,6 +233,7 @@ impl Outside {
       crossing: Crossing { kept, ..Crossing::default() },
       opened,
       given: 0,
+      source: String::new(),
       ungated: false,
     })
   }
@@ -509,23 +528,19 @@ impl Engine {
     gated: bool,
   ) -> Result<Engine, Fault> {
     let (given, names) = Handed::of(ears)?;
+    let record: Vec<Object> = record.into_iter().collect();
+    // A record replays on the engine that the fact made of its last segment holds.
+    let (source, kernel) = crate::world::texts(crate::checkpoint::segment(&record))?;
     let mut sand = Sand::new();
     // The opening, the seed and the replay are the engine's own work: unbounded, but for each word
     // they run again.
     sand.bound(false);
-    let mut inputs = NamedValues::new();
-    inputs.push("__source", Object::string(ENGINE));
-    inputs.push("__sheet_source", Object::string(SHEET));
-    inputs.push("__kernel_source", Object::string(KERNEL));
-    inputs.push("__gate", Object::function(GATE, None));
-    inputs.push("__gated", Object::function(GATED, None));
-    inputs.push("__again", Object::function(AGAIN, None));
-    inputs.push("__turn", Object::function(TURN, None));
-    let opened = sand.run(OPENING, inputs, &mut Nobody("the opening"))?;
+    let opened = sand.run(OPENING, inputs(&source, &kernel), &mut Nobody("the opening"))?;
     let mut outside = Outside::new(given, &opened)?;
     outside.ungated = !gated;
+    outside.source = source;
     let Opened { kernel, gate, lasting, parking, park, .. } = outside.opened.clone();
-    let record = seeded(&mut sand, &mut outside, record.into_iter().collect())?;
+    let record = seeded(&mut sand, &mut outside, record)?;
     let mut engine = Engine::new(sand, outside, &record, String::new());
     let names_parked = Object::list(engine.parked.iter().map(|(id, _)| Object::string(id)));
     let parks = !engine.parked.is_empty();

@@ -261,9 +261,16 @@ impl Opening {
   fn prepared(&self) -> Result<Prepared, Fault> {
     let works = self.works();
     // A record of another major of its schema is refused before any build reads it whole or writes
-    // on it.
+    // on it, and the models of a life on a record that holds another engine read that engine.
+    let mut system = None;
     if let Some(path) = self.record.as_deref().filter(|one| Path::new(one).exists()) {
-      world::readable(&world::heads(path, &[world::MADE])?)?;
+      let heads = world::heads(path, &[world::MADE, checkpoint::CHECKPOINT])?;
+      world::readable(&heads)?;
+      let (source, _) = world::texts(checkpoint::segment(&heads))?;
+      if source != crate::ENGINE {
+        let unread = || Fault::refused("this build cannot minify the engine that the record holds");
+        system = Some(crate::minify::minified(&source).ok_or_else(unread)?);
+      }
     }
     let here = Places::here();
     let places = Places { config: self.config.clone().map_or(here.config, PathBuf::from), ..here };
@@ -280,7 +287,10 @@ impl Opening {
         (one.name.clone(), file, one.life.clone(), one.root)
       })
       .collect();
-    let provider = self.provider(advertised)?;
+    let provider = match system {
+      Some(one) => self.provider(advertised)?.system(one.into()),
+      None => self.provider(advertised)?,
+    };
     let gated = crate::gate::configured(&places.config, Path::new(&self.directory));
     Ok(Prepared { places, extensions, provider, gated })
   }

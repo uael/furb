@@ -28,8 +28,10 @@ API of its own:
 - `src/life.rs` opens a life as every host opens one, from one `Opening`: the record, the ears of the crate after the
   ears of the host, the default actor, the roster that the host names or every model of the catalog, and the extensions.
   A host adds only its own ears, as the console of its operator. A life on a record replays the tail after its last
-  checkpoint word by word, whatever build of the major made it, so it opens at the exact state of its tip, as
-  `src/checkpoint.rs` says. `tests/replay` holds the records that each build of the version must
+  checkpoint word by word on the engine and the Kernel that its fact made holds, and goes on with them, so it opens
+  at the exact state of its tip whatever build of the major runs it, as `src/checkpoint.rs` says. Its models read that
+  engine, and the gate reads each word on it. `script/engines.py` gives a copy of a record of a build before the texts
+  the texts of its engine from git. `tests/replay` holds the records that each build of the version must
   replay with no drift. `tests/corpus` holds the records of each release, which each later build must open, as
   `tests/corpus/README.md` says. Each door gives it as
   `opened` and as `Engine.open`.
@@ -38,8 +40,8 @@ API of its own:
   boot, while `gathered` and `seed` of `engine.py` write and read its data. A life ends with one through
   `Engine::checkpoint`, which its store keeps as it keeps each fact, as the TUI does at a handover, and
   `furb checkpoint` writes one on a record that no life holds. A life boots on the last checkpoint of its record,
-  whatever engine wrote it, and replays the entries after it word by word, whatever build of the major made them, so
-  it opens at the exact state of its tip. A tail that a build cannot replay with no drift is a defect, which #988
+  whatever engine wrote it, and replays the entries after it word by word on the engine that their fact made holds,
+  so it opens at the exact state of its tip. A tail that a build cannot replay with no drift is a defect, which #988
   tracks: the record then opens to read only, and nothing forks it into a new life.
 - `src/engine.rs` opens a life in the sandbox, with each of its concerns in a file of `src/engine/`: it loads the
   engine, the sheet and the Kernel, each in a namespace of its own, and carries each value between the sandbox and a
@@ -231,7 +233,7 @@ is the folder `test` beside it.
 2. Every test carries a sentence of the contract.
 3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
 4. The module docstring of each contract is empty.
-5. `engine.py`, minified with its program kept as it is, costs fewer than 9852 tokens of `o200k_base`, the
+5. `engine.py`, minified with its program kept as it is, costs fewer than 9854 tokens of `o200k_base`, the
    tokenizer of OpenAI, and the doctrine of furb, `DOCTRINE.md`, costs at most 1000. The test counts with `o200k_base`
    because it is local and the same on each machine: the tokenizer of Claude is not public, and only the network
    counts with it. The wall is a proxy for the cost to Claude, which reads about 1.5 tokens for each token of

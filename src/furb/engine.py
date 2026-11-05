@@ -614,7 +614,7 @@ def gathered(define, floor):
     saved = [
       x
       for x in transcript(c)
-      if x[0] not in ("module", "carried")
+      if x[0] not in ("module", "carried", "made")
       and literal(x, set())
       and (not question(x) or x[0] == "reply" or x[1] in borne)
     ]

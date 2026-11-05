@@ -24,7 +24,7 @@ macro_rules! out {
   }};
 }
 
-#[path = "build/minify.rs"]
+#[path = "src/minify.rs"]
 mod minify;
 #[path = "build/verbs.rs"]
 mod verbs;
@@ -47,5 +47,8 @@ fn main() {
   written("ts.rs", verbs::scripted(&all));
   written("py.rs", verbs::pythonic(&all));
   let engine = fs::read_to_string("src/furb/engine.py").expect("the engine is beside the contract");
-  written("system.py", minify::minified(&engine));
+  written(
+    "system.py",
+    minify::minified(&engine).expect("the minified engine is the program on disk"),
+  );
 }

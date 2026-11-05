@@ -3,7 +3,7 @@
 
 use std::{fs, path::Path};
 
-use super::{Lines, Sqlite, Store, keeping, kept, store};
+use super::{Lines, Sqlite, Store, digest, keeping, kept, store, texts};
 use crate::testing::Yard;
 use crate::{
   value::{Fault, Object},
@@ -343,4 +343,28 @@ fn a_record_on_a_disk_that_is_almost_full_tells_the_operator_once_with_its_folde
     4,
     "the disk was never full, so each entry landed at once"
   );
+}
+
+#[test]
+fn the_texts_of_a_segment_are_those_of_its_last_fact_made_and_must_be_the_engine_that_it_names() {
+  let made = |engine: &str, held: &[&str]| {
+    let mut fact = serde_json::json!(["made", "chain1", "store", engine, 9, "1.0", "0.4.2"]);
+    fact.as_array_mut().unwrap().extend(held.iter().map(|one| serde_json::json!(one)));
+    parsed(&serde_json::json!([fact]).to_string()).unwrap()
+  };
+  let (source, kernel) = ("x = 1\n", "y = 2\n");
+  let (named, other) = (digest(source, kernel), "0".repeat(64));
+  let ours = (crate::ENGINE.to_owned(), crate::KERNEL.to_owned());
+  assert_eq!(
+    texts(&[made(&other, &[])]).unwrap(),
+    ours,
+    "a fact made with no texts runs this build"
+  );
+  let segment = [made(&other, &[]), made(&named, &[source, kernel])];
+  assert_eq!(
+    texts(&segment).unwrap(),
+    (source.to_owned(), kernel.to_owned()),
+    "the last one counts"
+  );
+  assert!(texts(&[made(&other, &[source, kernel])]).is_err(), "texts of another engine refuse it");
 }
