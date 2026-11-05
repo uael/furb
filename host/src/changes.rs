@@ -42,7 +42,10 @@ pub(crate) struct Journal {
 enum Line {
   /// A change, and the chain whose write made it, which hears that it changed once the change is
   /// on the disk.
-  Change { chain: String, change: String },
+  Change {
+    chain: String,
+    change: String,
+  },
   Flush(oneshot::Sender<Result<(), JournalError>>),
 }
 
