@@ -1,17 +1,8 @@
-#![expect(
-  clippy::disallowed_methods,
-  reason = "debt: a call that blocks: sleep, block_on or try_wait"
-)]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
 
 use std::{
   io::{Read, Write},
   net::{TcpListener, TcpStream},
-  path::PathBuf,
   sync::mpsc,
   thread,
   time::Duration,
@@ -26,12 +17,12 @@ use super::{
 };
 use crate::{ear::reactor, world::Catalog};
 
-struct Scope(PathBuf);
+struct Scope(crate::testing::Yard);
 
 impl Scope {
   fn profile(account: &str, cached: &str) -> Scope {
     let root =
-      Scope(std::env::temp_dir().join(format!("furb-auth-{}", random().expect("random bytes"))));
+      Scope(crate::testing::Yard::unmade(format!("furb-auth-{}", random().expect("random bytes"))));
     let path = directory(Some(&root.0));
     save(
       &path.join("codex.json"),
@@ -71,12 +62,6 @@ impl Scope {
     Catalog::of(&IndexMap::new(), None, None, |_| None)
       .configured(&self.0, Some(&self.0))
       .expect("configured catalog")
-  }
-}
-
-impl Drop for Scope {
-  fn drop(&mut self) {
-    let _ = std::fs::remove_dir_all(&self.0);
   }
 }
 

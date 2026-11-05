@@ -64,6 +64,10 @@ use crate::{
 
 /// The name of the function of the host that the gate calls with a sheet, which answers each finding by its line.
 const GATE: &str = "gate";
+/// The function of the host that says whether the gate reads each word, as the key `gate` of the
+/// configs says it when the life opens: when it says no, the ear of the gate answers each word with
+/// no finding.
+const GATED: &str = "gated";
 /// The function of the host that starts an ear of the host again after it raised, by its name.
 const AGAIN: &str = "again";
 /// The function of the host by which the Kernel bounds the turn while a word of a rung steps, and
@@ -132,6 +136,19 @@ fn templated(pairs: &[(&str, Object)]) -> Object {
   )
 }
 
+/// The entries of a record as boot is given them, each fact alone in an entry, made in the sandbox
+/// as the record of an earlier life comes in.
+fn recorded(sand: &mut Sand, outside: &mut Outside, record: &[Object]) -> Result<Object, Fault> {
+  let mut entries = Vec::new();
+  for one in record {
+    let one = outside.inward(sand, one)?;
+    let fact = entry(&one.as_ref(), 0).and_then(|fact| fact.items());
+    let fact = fact.ok_or_else(|| Fault::refused("a record holds each fact alone in an entry"))?;
+    entries.push(Object::tuple([Object::tuple(fact.into_iter().map(|one| one.to_owned()))]));
+  }
+  Ok(Object::list(entries))
+}
+
 /// The side of the host in one life: its ears and its functions, which the sandbox calls, and what
 /// the host holds of the sandbox, by which each value crosses. Its default is the side of the host
 /// of a life of nothing, which stands in for one that is lent to code of a host.
@@ -142,6 +159,9 @@ struct Outside {
   opened: Opened,
   /// How many ids the host gave, which names the next.
   given: u128,
+  /// Whether a config turned the gate off for this life, which no snapshot keeps: each life reads
+  /// it again.
+  ungated: bool,
 }
 
 impl Host for Outside {
@@ -156,6 +176,7 @@ impl Host for Outside {
     let got = match on {
       // A gate that cannot read a word raises where the gate was called, so the ear of the gate answers that word.
       None if name == GATE => return gated(args.first()).map_or_else(Answer::Fault, Answer::Value),
+      None if name == GATED => Ok(Object::bool(!self.ungated)),
       None if name == AGAIN => Ok(Object::bool(self.reborn(args.first()))),
       None if name == TURN => {
         let bounded = args.first().is_some_and(|one| one.as_ref().as_bool().unwrap_or(false));
@@ -196,6 +217,7 @@ impl Outside {
       crossing: Crossing { kept, ..Crossing::default() },
       opened,
       given: 0,
+      ungated: false,
     })
   }
 
@@ -334,6 +356,7 @@ impl Outside {
       crossing: Crossing { kept, ..Crossing::default() },
       opened: table.opened.clone(),
       given,
+      ungated: false,
     })
   }
 
@@ -521,6 +544,18 @@ impl Engine {
     record: impl IntoIterator<Item = Object>,
     ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
   ) -> Result<Engine, Fault> {
+    Engine::gated(record, ears, true)
+  }
+
+  /// An engine, opened as [`Engine::boot`] opens it, whose gate reads each word when gated says
+  /// so, and else answers each word with no finding, as the key `gate` of a config set to false
+  /// asks. The record keeps each answer, so a replay gives the answer that the record holds,
+  /// whatever gated says then.
+  pub fn gated<N: Into<String>>(
+    record: impl IntoIterator<Item = Object>,
+    ears: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
+    gated: bool,
+  ) -> Result<Engine, Fault> {
     let (given, names) = Handed::of(ears)?;
     let mut sand = Sand::new();
     // The opening, the seed and the replay are the engine's own work: unbounded, but for each word
@@ -531,10 +566,12 @@ impl Engine {
     inputs.push("__sheet_source", Object::string(SHEET));
     inputs.push("__kernel_source", Object::string(KERNEL));
     inputs.push("__gate", Object::function(GATE, None));
+    inputs.push("__gated", Object::function(GATED, None));
     inputs.push("__again", Object::function(AGAIN, None));
     inputs.push("__turn", Object::function(TURN, None));
     let opened = sand.run(OPENING, inputs, &mut Nobody("the opening"))?;
     let mut outside = Outside::new(given, &opened)?;
+    outside.ungated = !gated;
     let Opened { kernel, gate, lasting, parking, park, .. } = outside.opened.clone();
     let record = seeded(&mut sand, &mut outside, record.into_iter().collect())?;
     let mut engine = Engine::new(sand, outside, &record, String::new(), false);
@@ -542,14 +579,10 @@ impl Engine {
     let parks = !engine.parked.is_empty();
     let (root, raised) = engine.run(|sand, outside| {
       outside.bound(sand)?;
-      let mut entries = Vec::new();
-      for one in &record {
-        let one = outside.inward(sand, one)?;
-        let fact = entry(&one.as_ref(), 0).and_then(|fact| fact.items());
-        let fact =
-          fact.ok_or_else(|| Fault::refused("a record holds each fact alone in an entry"))?;
-        entries.push(Object::tuple([Object::tuple(fact.into_iter().map(|one| one.to_owned()))]));
-      }
+      outside.crossing.recorded = true;
+      let entries = recorded(sand, outside, &record);
+      outside.crossing.recorded = false;
+      let entries = sand.call(outside, &outside.opened.recorded.clone(), vec![entries?], vec![])?;
       let mut given = vec![("kernel".to_owned(), kernel), ("gate".to_owned(), gate)];
       for name in names {
         let on = outside.fresh();
@@ -568,7 +601,7 @@ impl Engine {
         }
       }
       let given = given.iter().map(|(name, one)| (name.as_str(), one.clone())).collect();
-      let got = outside.named_call(sand, "boot", vec![Object::list(entries)], given);
+      let got = outside.named_call(sand, "boot", vec![entries], given);
       // What boot raised comes out of the entry the operator went in by, and the life goes on: a drift breaks the
       // journal and keeps nothing more, so the root stands when the record held it.
       let opened = match got {
@@ -599,9 +632,11 @@ impl Engine {
     table: &Table,
     sand: Sand,
     past: &[Object],
+    gated: bool,
   ) -> Result<Engine, Fault> {
     let (given, _) = Handed::of(ears)?;
-    let outside = Outside::restored(given, table)?;
+    let mut outside = Outside::restored(given, table)?;
+    outside.ungated = !gated;
     let mut engine = Engine::new(sand, outside, record, table.root.clone(), true);
     engine.run(|sand, outside| {
       outside.bound(sand)?;
@@ -770,6 +805,13 @@ impl Engine {
       }
     }
     Ok(pending)
+  }
+
+  /// The state of the record as a list of records shows it while no life holds it: `runs` when
+  /// it holds the work of [`Engine::pending`], which the open of the next life on it resumes at
+  /// once, so that work runs and no pause holds it, and `saved` when it holds none.
+  pub fn saved(&mut self) -> Result<&'static str, Fault> {
+    Ok(if self.pending()?.is_empty() { "saved" } else { "runs" })
   }
 
   /// The work that an earlier life left, put to the outside again with no wake from a host: a

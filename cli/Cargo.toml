@@ -26,6 +26,8 @@ tokio = { version = "1", features = ["io-std", "io-util", "macros", "rt-multi-th
 # The work of the console, which it streams to its ear, and the stop of a read.
 futures = "0.3"
 unsync = "0.2"
+# The errors of the command line, each with the words that the operator reads.
+thiserror = "2"
 # The protocol: one command or one event per line, as JSON, whose value is read before anything rounds it.
 serde_json = { version = "1", features = ["raw_value"] }
 

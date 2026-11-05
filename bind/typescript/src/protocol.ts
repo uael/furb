@@ -206,11 +206,40 @@ export type Request1 =
   | {
       life: string;
       entry: string;
-      hash: string;
       shape: string;
       message: string;
       on?: string | null;
       verb: "queue";
+    }
+  | {
+      life: string;
+      entry: string;
+      verb: "unqueue";
+    }
+  | {
+      life: string;
+      on?: string | null;
+      verb: "queued";
+    }
+  | {
+      life: string;
+      notices?: string[];
+      verb: "desk";
+    }
+  | {
+      life: string;
+      on?: string | null;
+      at?: number | null;
+      verb: "threads";
+    }
+  | {
+      life: string;
+      at: number;
+      verb: "as_of";
+    }
+  | {
+      life: string;
+      verb: "moments";
     }
   | {
       life: string;
@@ -547,6 +576,11 @@ export type ProtocolError =
     }
   | {
       life: string;
+      ask: number;
+      error: "foreign";
+    }
+  | {
+      life: string;
       error: "answerless";
     }
   | {
@@ -589,6 +623,13 @@ export type Event =
         chain: string;
         text: string;
         thinking: string;
+      };
+    }
+  | {
+      event: "queued";
+      data: {
+        chain: string;
+        waiting: FollowUp[];
       };
     }
   | {
@@ -816,6 +857,18 @@ export interface Spend {
   dollars: number;
   answers: number;
   actor?: string | null;
+}
+/**
+ * One follow-up that waits on a chain: its entry, which the window that queued it chose, the shape
+ * that its prompt wants, its message, and why its send failed, when it did. A follow-up that
+ * failed holds the queue of its chain until the operator takes it out.
+ */
+export interface FollowUp {
+  entry: string;
+  chain: string;
+  shape: string;
+  message: string;
+  failed?: string | null;
 }
 
 export const PROTOCOL = 1;

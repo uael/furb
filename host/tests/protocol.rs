@@ -6,8 +6,13 @@
   reason = "the tests block on the runtime that tokio starts for them"
 )]
 
+#[path = "../../tests/common/yard.rs"]
+mod yard;
+
 #[cfg(test)]
 mod protocol {
+  use super::yard::Yard;
+
   use std::{
     path::PathBuf,
     sync::atomic::{AtomicU32, Ordering},
@@ -125,11 +130,16 @@ mod protocol {
       Verb::Queue {
         life: life(),
         entry: "q1".to_owned(),
-        hash: "h1".to_owned(),
         shape: "None".to_owned(),
         message: "hi".to_owned(),
         on: on(),
       },
+      Verb::Unqueue { life: life(), entry: "q1".to_owned() },
+      Verb::Queued { life: life(), on: on() },
+      Verb::Desk { life: life(), notices: vec![id()] },
+      Verb::Threads { life: life(), on: on(), at: Some(3) },
+      Verb::AsOf { life: life(), at: 3 },
+      Verb::Moments { life: life() },
       Verb::Answered {
         life: life(),
         ask: 1,
@@ -337,6 +347,7 @@ mod protocol {
       "config",
       "seen",
       "queue",
+      "unqueue",
       "answered",
       "wrote",
       "view.event",
@@ -416,15 +427,16 @@ mod protocol {
   }
 
   /// A folder of its own for the transport of one test, short enough for the path of a socket.
-  fn folder() -> PathBuf {
+  fn folder() -> Yard {
     static NEXT: AtomicU32 = AtomicU32::new(0);
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
-    std::env::temp_dir().join(format!("fh{}-{n}", std::process::id()))
+    Yard::unmade(format!("fh{}-{n}", std::process::id()))
   }
 
   #[tokio::test]
   async fn each_verb_makes_a_round_trip_on_the_local_transport() {
-    let local = Local::new(folder());
+    let place = folder();
+    let local = Local::new(place.to_path_buf());
     let mut listener = local.listen().await.unwrap();
     let door = local.clone();
     tokio::spawn(async move {
@@ -446,7 +458,8 @@ mod protocol {
 
   #[tokio::test]
   async fn a_second_daemon_cannot_listen_where_one_listens() {
-    let local = Local::new(folder());
+    let place = folder();
+    let local = Local::new(place.to_path_buf());
     let _first = local.listen().await.unwrap();
     assert!(matches!(local.listen().await, Err(furb_host::TransportError::Taken { .. })));
   }

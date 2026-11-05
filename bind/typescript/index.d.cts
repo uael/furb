@@ -67,6 +67,11 @@ export declare class Engine {
    * kind, as the engine of the crate finds it.
    */
   pending(): Array<[string, string]>
+  /**
+   * The state of the record as a list of records shows it while no life holds it, `runs` or
+   * `saved`, as the engine of the crate decides it.
+   */
+  saved(): string
   /** The work that a crash loop parked, each act by its name and its kind, as the engine of the crate finds it. */
   parked(): Array<[string, string]>
   /** A parked act, run again, as the engine of the crate runs it. */

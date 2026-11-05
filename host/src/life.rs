@@ -38,11 +38,13 @@ use tokio::{
 };
 
 use crate::{
-  changes::journal,
+  changes::{Journal, journal},
   ears::{ears, json_of},
   error::LifeError,
   event::{Event, Seq},
+  queue::{FollowUp, QUEUE, Queue},
   rebirth::{self, Watch},
+  view::Held,
 };
 
 /// How many events a reader may stand behind the life before it reads them again from the log of
@@ -116,10 +118,23 @@ pub enum Command {
   Configure(Change),
   /// The fact that the operator read a chain or a thread up to now.
   Seen { about: String },
-  /// A message that the operator queued, sent as a prompt on a chain once: the act of the prompt.
-  /// The record keeps the entry and the hash of its words, so a second send of the entry gives the
-  /// act of the first.
-  Queue { entry: String, hash: String, shape: String, message: String, on: Option<String> },
+  /// A follow-up that the operator queued on a chain, under an entry that a second queue finds,
+  /// which the life sends as a prompt of its shape and its message once the chain rests.
+  Queue { entry: String, shape: String, message: String, on: Option<String> },
+  /// A follow-up taken out of its queue before the life sent it.
+  Unqueue { entry: String },
+  /// The follow-ups that wait on a chain, in order.
+  Queued { on: Option<String> },
+  /// What waits for the operator, as a [`crate::view::Desk`], with each notice that the window
+  /// still shows.
+  Desk { notices: Vec<String> },
+  /// The threads of a chain, as [`crate::view::Threads`], now or as they stood just after a
+  /// moment.
+  Threads { on: Option<String>, at: Option<u64> },
+  /// The acts as they stood just after a moment, each with its meaning then.
+  AsOf { at: u64 },
+  /// Each moment at which an act began or ended, in order.
+  Moments,
   /// The end of the life, which replies and then ends the life.
   End,
 }
@@ -142,9 +157,12 @@ pub enum Reply {
 /// One event under its place in the log.
 type Logged = (Seq, Arc<Event>);
 
+/// Where the thread of a life replies to a command.
+type Replier = oneshot::Sender<Result<Reply, LifeError>>;
+
 /// What a handle says to the thread of its life.
 enum Message {
-  Command(Command, oneshot::Sender<Result<Reply, LifeError>>),
+  Command(Command, Replier),
   /// The events of the log from a place, for a reader that stands behind the life.
   Since(Seq, oneshot::Sender<Vec<Logged>>),
 }
@@ -159,6 +177,8 @@ pub struct Life {
   facts: HashSet<u64>,
   watch: Watch,
   configs: Layers,
+  queue: Queue,
+  held: Held,
 }
 
 /// The handle of a life, which any thread holds: it says a command to the life and reads its
@@ -185,15 +205,21 @@ impl Life {
     Ok(LifeHandle { inbox, readers })
   }
 
-  /// One event put in the log, and sent to each reader.
+  /// One event put in the log, and sent to each reader, then the follow-ups of a chain when the
+  /// event changed them.
   fn put(&mut self, event: Event) {
     if let Event::Fact(fact) = &event {
       self.facts.insert(digest(fact));
     }
     self.watch.heard(&event);
+    let queued = self.queue.heard(&event);
+    self.held.heard(&event);
     let (seq, event) = (self.log.len() as Seq, Arc::new(event));
     self.log.push(Arc::clone(&event));
     self.readers.send((seq, event)).ok();
+    if let Some(queued) = queued {
+      self.put(queued);
+    }
   }
 
   /// An event, and each event told after it that the log lacks, put in the log in turn, with each
@@ -300,8 +326,16 @@ async fn run(
 ) {
   let (told, heard) = mpsc::unbounded_channel();
   let configs = Layers::new(&opening.directory, opening.config.as_ref().map(PathBuf::from));
-  let (log, facts, watch) = (Vec::new(), HashSet::new(), Watch::default());
-  let mut life = Life { log, readers, heard, facts, watch, configs };
+  let mut life = Life {
+    log: Vec::new(),
+    readers,
+    heard,
+    facts: HashSet::new(),
+    watch: Watch::default(),
+    configs,
+    queue: Queue::default(),
+    held: Held::default(),
+  };
   let writes = told.clone();
   opening.stream = Some(Stream(Arc::new(move |rung, chain, text, thinking| {
     let (rung, chain) = (rung.to_owned(), chain.to_owned());
@@ -312,9 +346,16 @@ async fn run(
   opening.log = Some(Log(Arc::new(move |line| {
     reports.send(Event::Notice(line.to_owned())).ok();
   })));
-  let ended = lives(opening, &mut life, &mut received, &told).await;
+  let record = opening.record.clone().filter(|_| opening.keeps());
+  let folder = PathBuf::from(&opening.directory);
+  let journal = record.map(|one| Journal::spawn(folder, journal(&one), told.clone()));
+  let end = lives(opening, &mut life, &mut received, &told, journal.as_ref()).await;
+  let fault = flushed(end.fault, journal.as_ref()).await;
+  if let Some(asked) = end.asked {
+    asked.send(fault.clone().map_or(Ok(Reply::Done), |one| Err(LifeError::Refused(one)))).ok();
+  }
   life.told(None);
-  life.put(Event::Ended(ended));
+  life.put(Event::Ended(fault));
   while let Some(message) = received.recv().await {
     match message {
       Message::Since(from, reply) => reply.send(life.since(from)).ok(),
@@ -323,36 +364,54 @@ async fn run(
   }
 }
 
+/// The fault that ended a life, with what its journal lost, once each change of its files is on the
+/// disk: the end of a life waits for it, so a client that hears the end finds the journal whole.
+async fn flushed(fault: Option<String>, journal: Option<&Journal>) -> Option<String> {
+  let Some(journal) = journal else { return fault };
+  match (fault, journal.flushed().await) {
+    (fault, Ok(())) => fault,
+    (None, Err(lost)) => Some(lost.to_string()),
+    (Some(fault), Err(lost)) => Some(format!("{fault}, and {lost}")),
+  }
+}
+
+/// How a life ended: the fault that ended it, when one did, and the client that ended it, which
+/// hears the reply once the life is over.
+struct End {
+  fault: Option<String>,
+  asked: Option<Replier>,
+}
+
 /// The life opened, driven, and opened again from its checkpoint at each rebirth, until it ends,
-/// and the fault that ended it, when one did.
+/// each birth on the one journal of its changes, and how it ended.
 async fn lives(
   opening: Opening,
   life: &mut Life,
   received: &mut UnboundedReceiver<Message>,
   told: &UnboundedSender<Event>,
-) -> Option<String> {
+  journal: Option<&Journal>,
+) -> End {
   let record = opening.record.clone().filter(|_| opening.keeps());
-  let journal = || record.as_deref().map(|one| (PathBuf::from(&opening.directory), journal(one)));
   if let Some(one) = record.as_deref() {
     life.recalled(one);
   }
   loop {
-    let engine = match opening.clone().open(ears(told.clone(), journal())).await {
+    let engine = match opening.clone().open(ears(told.clone(), journal)).await {
       Ok((engine, _)) => engine,
-      Err(fault) => return Some(fault.to_string()),
+      Err(fault) => return End { fault: Some(fault.to_string()), asked: None },
     };
     life.opened();
     match driven(engine, life, received, record.as_deref()).await {
-      Drove::Ended(fault) => return fault.map(|one| one.to_string()),
+      Drove::Ended(fault, asked) => return End { fault: fault.map(|one| one.to_string()), asked },
       Drove::Reborn(fault) => life.reborn(fault.map(|one| one.to_string())),
     }
   }
 }
 
-/// How the engine of a life went: the life ended, or it is born again, each with the fault that
-/// stopped it, when one did.
+/// How the engine of a life went: the life ended, with the client that ended it, or it is born
+/// again, each with the fault that stopped it, when one did.
 enum Drove {
-  Ended(Option<Fault>),
+  Ended(Option<Fault>, Option<Replier>),
   Reborn(Option<Fault>),
 }
 
@@ -385,23 +444,27 @@ async fn driven(
         drop(engine);
         return stopped(fault, record).await;
       }
-      Woke::Said(None) => return Drove::Ended(rebirth::ended(engine, record.is_some())),
+      Woke::Said(None) => return Drove::Ended(rebirth::ended(engine, record.is_some()), None),
       Woke::Said(Some(Message::Since(from, reply))) => {
         life.told(None);
         reply.send(life.since(from)).ok();
       }
       Woke::Said(Some(Message::Command(Command::End, reply))) => {
-        let ended = rebirth::ended(engine, record.is_some());
-        reply.send(ended.clone().map_or(Ok(Reply::Done), |fault| Err(fault.into()))).ok();
-        return Drove::Ended(ended);
+        return Drove::Ended(rebirth::ended(engine, record.is_some()), Some(reply));
       }
       Woke::Said(Some(Message::Command(command, reply))) => {
-        reply.send(configured(&mut engine, &life.configs, command).await).ok();
+        let replied = commanded(&mut engine, &life.configs, &life.queue, &life.held, command);
+        reply.send(replied.await).ok();
         if let Some(fault) = engine.stopped().cloned() {
           drop(engine);
           return stopped(fault, record).await;
         }
       }
+    }
+    drained(&mut engine, life);
+    if let Some(fault) = engine.stopped().cloned() {
+      drop(engine);
+      return stopped(fault, record).await;
     }
     if record.is_some() && life.watch.due() {
       return match engine.checkpoint() {
@@ -416,11 +479,11 @@ async fn driven(
 /// rebirth from the tail carried as data, when the life keeps a record that holds a checkpoint,
 /// and else the end of the life.
 async fn stopped(fault: Fault, record: Option<&str>) -> Drove {
-  let Some(record) = record else { return Drove::Ended(Some(fault)) };
+  let Some(record) = record else { return Drove::Ended(Some(fault), None) };
   match rebirth::carried(record.to_owned()).await {
     Ok(true) => Drove::Reborn(Some(fault)),
-    Ok(false) => Drove::Ended(Some(fault)),
-    Err(no) => Drove::Ended(Some(Fault::refused(format!("{fault}, and then {no}")))),
+    Ok(false) => Drove::Ended(Some(fault), None),
+    Err(no) => Drove::Ended(Some(Fault::refused(format!("{fault}, and then {no}"))), None),
   }
 }
 
@@ -433,14 +496,46 @@ async fn pumped(engine: &mut Engine) -> Fault {
   .await
 }
 
-/// What a command comes to on the engine, and on the configs of the life for a command of its
-/// configs.
-async fn configured(
+/// What a command comes to: on the configs of the life for a command of its configs, on the queue
+/// of the life for a command of the queue, on the acts that the life told for a query of their
+/// meaning, and else on the engine.
+async fn commanded(
   engine: &mut Engine,
   configs: &Layers,
+  queue: &Queue,
+  held: &Held,
   command: Command,
 ) -> Result<Reply, LifeError> {
+  let root = engine.root().to_owned();
+  let chain = |on: Option<String>| on.unwrap_or_else(|| root.clone());
   match command {
+    Command::Queue { entry, shape, message, on } => {
+      let chain = chain(on);
+      if !queue.holds(&entry) {
+        let words = ["add", &entry, &shape, &message].map(Object::string);
+        engine.say(QUEUE, &chain, words.into())?;
+      }
+      Ok(Reply::Done)
+    }
+    Command::Unqueue { entry } => {
+      let follow = queue.takes(&entry);
+      let follow =
+        follow.ok_or_else(|| LifeError::Refused(format!("No follow-up {entry} waits.")))?;
+      engine.say(QUEUE, &follow.chain, ["drop", &entry].map(Object::string).into())?;
+      Ok(Reply::Done)
+    }
+    Command::Queued { on } => {
+      let waiting = queue.waiting(&chain(on));
+      let waiting = waiting.iter().map(serde_json::to_value).collect::<Result<_, _>>();
+      Ok(Reply::Values(waiting.map_err(|no| LifeError::Refused(no.to_string()))?))
+    }
+    Command::Desk { notices } => valued(&held.desk(&notices)),
+    Command::Threads { on, at } => valued(&held.threads(&chain(on), at)),
+    Command::AsOf { at } => {
+      let acts = held.as_of(at).iter().map(serde_json::to_value).collect::<Result<_, _>>();
+      Ok(Reply::Values(acts.map_err(|no| LifeError::Refused(no.to_string()))?))
+    }
+    Command::Moments => Ok(Reply::Values(held.moments().into_iter().map(Value::from).collect())),
     Command::Settings => {
       let settings = configs.get()?.into_iter().map(|one| json!(one));
       Ok(Reply::Values(settings.collect()))
@@ -449,7 +544,30 @@ async fn configured(
       configs.set(change).await?;
       answered_by(engine, Command::Stand)
     }
-    command => answered_by(engine, command),
+    other => answered_by(engine, other),
+  }
+}
+
+/// A meaning as the value of a reply.
+fn valued(meaning: &impl serde::Serialize) -> Result<Reply, LifeError> {
+  serde_json::to_value(meaning).map(Reply::Value).map_err(|no| LifeError::Refused(no.to_string()))
+}
+
+/// Each follow-up that is due sent as a prompt on its chain, or why its send failed, which holds
+/// the queue of its chain and stands in the record.
+fn drained(engine: &mut Engine, life: &mut Life) {
+  for follow in life.queue.due() {
+    let made = sent(engine, &follow).map_err(|no| no.to_string());
+    if let Err(why) = &made {
+      let words = ["failed", &follow.entry, why].map(Object::string);
+      if let Err(no) = engine.say(QUEUE, &follow.chain, words.into()) {
+        life.put(Event::Notice(format!(
+          "The failure of the follow-up {} is not kept: {no}",
+          follow.entry
+        )));
+      }
+    }
+    life.queue.sent(&follow.entry, made);
   }
 }
 
@@ -486,10 +604,6 @@ fn answered_by(engine: &mut Engine, command: Command) -> Result<Reply, LifeError
     Command::Seen { about } => {
       engine.say("seen", &about, vec![])?;
       Reply::Done
-    }
-    Command::Queue { entry, hash, shape, message, on: chain } => {
-      let chain = chain.unwrap_or_else(|| root.clone());
-      Reply::Act(sent(engine, &chain, entry, hash, (shape, message))?)
     }
     Command::Rung { word, on: chain } => {
       let with = verbs::Rung { word: Some(word), on: on(chain), ..verbs::Rung::default() };
@@ -577,29 +691,15 @@ fn queried(engine: &mut Engine, query: Command, root: &str) -> Result<Reply, Lif
   })
 }
 
-/// The act of the prompt that a queued entry was sent as on a chain: the act of its first send,
-/// or a prompt of its shape and its message, between the facts that begin and end its send.
-fn sent(
-  engine: &mut Engine,
-  chain: &str,
-  entry: String,
-  hash: String,
-  (shape, message): (String, String),
-) -> Result<String, LifeError> {
-  let of = verbs::Transcript { on: Some(chain.to_owned()), of: Some("queue".to_owned()) };
-  let facts = engine.transcript(of)?;
-  let held = facts.iter().map(|one| outward(one.0.as_ref())).find(|fact| {
-    fact[2] == "operator" && fact[3] == "sent" && fact[4] == entry.as_str() && fact[5].is_string()
-  });
-  if let Some(made) = held.and_then(|fact| fact[5].as_str().map(str::to_owned)) {
-    return Ok(made);
-  }
-  let begin = [Object::string("begin"), Object::string(entry.clone()), Object::string(hash)];
-  engine.say("queue", chain, begin.into())?;
-  let with = verbs::Prompt { message: Some(message), to: None, on: Some(chain.to_owned()) };
-  let made = engine.prompt(Shape::object(&shape), with)?.id().to_owned();
-  let sent = [Object::string("sent"), Object::string(entry), Object::string(made.clone())];
-  engine.say("queue", chain, sent.into())?;
+/// The act of the prompt that a follow-up went as on its chain, between the facts that begin and
+/// end its send.
+fn sent(engine: &mut Engine, follow: &FollowUp) -> Result<String, LifeError> {
+  let chain = follow.chain.as_str();
+  engine.say(QUEUE, chain, ["begin", &follow.entry].map(Object::string).into())?;
+  let with =
+    verbs::Prompt { message: Some(follow.message.clone()), to: None, on: Some(chain.to_owned()) };
+  let made = engine.prompt(Shape::object(&follow.shape), with)?.id().to_owned();
+  engine.say(QUEUE, chain, ["sent", &follow.entry, &made].map(Object::string).into())?;
   Ok(made)
 }
 

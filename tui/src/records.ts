@@ -1,9 +1,26 @@
-/** A separate TUI worker keeps saved-session inspection away from input and rendering. An abort ends the worker and
- * the replays it has not made. */
+/** What the worker tells of a record: the name that a plain scan of the record found, and what its replay told when it
+ * replayed it. */
+export interface RecordState {
+  /** The state that the engine of the crate gives the record: runs when it holds work that the next open resumes, and
+   * saved when it holds none or was only scanned. */
+  state: "runs" | "saved";
+  error?: string;
+  reading?: boolean;
+  /** The name that the replay found. */
+  name?: string;
+  /** The last name that the operator gave the session, which a plain scan of the record found. */
+  said?: string;
+  /** Whether the record was replayed, or only scanned. */
+  replayed: boolean;
+}
+
+/** A separate TUI worker keeps saved-session inspection away from input and rendering: it scans each record for its
+ * name and replays the records of replay. An abort ends the worker and the reads it has not made. */
 export function inspectRecords(
   paths: string[],
   signal: AbortSignal,
-): Promise<Record<string, { pending: number; error?: string; reading?: boolean; name?: string }>> {
+  replay: string[] = paths,
+): Promise<Record<string, RecordState>> {
   if (!paths.length) return Promise.resolve({});
   if (signal.aborted) return Promise.reject(signal.reason);
   return new Promise((resolve, reject) => {
@@ -22,6 +39,6 @@ export function inspectRecords(
       worker.terminate();
       reject(new Error(event.message));
     };
-    worker.postMessage(paths);
+    worker.postMessage({ paths, replay });
   });
 }

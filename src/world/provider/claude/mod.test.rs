@@ -1,13 +1,8 @@
 //! The claude command line as a model of rig, driven against a command line that answers from a script, which
 //! `fake-claude.sh` says.
 
-#![expect(unreachable_pub, reason = "debt: pub where the crate alone uses it")]
-#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
-#![expect(
-  clippy::disallowed_methods,
-  reason = "debt: a call that blocks: sleep, block_on or try_wait"
-)]
-#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
+#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
+#![expect(clippy::expect_used, reason = "a test blocks on its runtime and fails by a panic")]
 #![expect(
   clippy::let_underscore_must_use,
   reason = "debt: a let _ drops a value that must be used"
@@ -17,9 +12,12 @@
 use std::{
   fs,
   os::unix::fs::PermissionsExt,
-  path::{Path, PathBuf},
+  path::PathBuf,
   process::{Command, Stdio},
-  sync::OnceLock,
+  sync::{
+    Arc, Mutex, PoisonError, Weak,
+    atomic::{AtomicUsize, Ordering},
+  },
   time::{Duration, SystemTime},
 };
 
@@ -38,65 +36,66 @@ use super::{
   Account, Claude, Completion, Source, Switch,
   conversation::{cached, lasting},
 };
-use crate::ear::reactor;
+use crate::{ear::reactor, testing};
 
 /// The fake command line, which the tests of the command line of furb run too.
 const FAKE: &str = include_str!("fake-claude.sh");
 
 /// A yard of the test that holds the fake command line and what it wrote.
 pub(crate) struct Yard {
-  pub at: PathBuf,
+  pub at: testing::Yard,
+  /// The folder of the fake that the yard links to, which goes with the last yard that holds it.
+  _fake: Arc<Fake>,
 }
 
 impl Yard {
-  pub fn new(name: &str) -> Yard {
+  pub(crate) fn new(name: &str) -> Yard {
     // The name holds the id of the process, as every yard of the tests of the crate does: two runs of the suite at
     // once, as a hook and a check in two checkouts, would otherwise remove the files of each other.
-    let at = std::env::temp_dir().join(format!("furb-claude-{name}-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&at);
-    fs::create_dir_all(&at).expect("a yard of the test");
-    fs::hard_link(ran(), at.join("claude")).expect("the fake is linked");
-    Yard { at }
+    let at = testing::Yard::new(format!("furb-claude-{name}-{}", std::process::id()));
+    let fake = ran();
+    fs::hard_link(&fake.bin, at.join("claude")).expect("the fake is linked");
+    Yard { at, _fake: fake }
   }
 
   /// The fake as the command line, with a stall of these milliseconds.
-  pub fn claude(&self, stall: u64) -> Claude {
+  pub(crate) fn claude(&self, stall: u64) -> Claude {
     Claude::with(Some(self.at.join("claude")), Some(Duration::from_millis(stall)))
   }
 
   /// The fake as the command line that runs as these accounts.
-  pub fn claude_as(&self, accounts: Vec<Account>, switch: Switch) -> Claude {
+  pub(crate) fn claude_as(&self, accounts: Vec<Account>, switch: Switch) -> Claude {
     let stall = Some(Duration::from_millis(10_000));
     Claude::with_accounts(Some(self.at.join("claude")), Vec::new(), accounts, switch, stall)
   }
 
   /// The token each process the fake was started with, in the order they started.
-  pub fn tokens(&self) -> Vec<String> {
+  pub(crate) fn tokens(&self) -> Vec<String> {
     let token = |pid: &String| fs::read_to_string(self.at.join(format!("token.{pid}")));
     self.pids().iter().map(|pid| token(pid).unwrap_or_default()).collect()
   }
 
   /// The id of each process the fake was, in the order they started.
-  pub fn pids(&self) -> Vec<String> {
+  pub(crate) fn pids(&self) -> Vec<String> {
     let pids = fs::read_to_string(self.at.join("pids")).unwrap_or_default();
     pids.lines().map(str::to_owned).collect()
   }
 
   /// The words a process was started with.
-  pub fn args(&self, pid: &str) -> Vec<String> {
+  pub(crate) fn args(&self, pid: &str) -> Vec<String> {
     let args = fs::read_to_string(self.at.join(format!("args.{pid}"))).unwrap_or_default();
     args.split_terminator('\0').map(str::to_owned).collect()
   }
 
   /// Each line of input the fake read.
-  pub fn heard(&self) -> Vec<String> {
+  pub(crate) fn heard(&self) -> Vec<String> {
     let heard = fs::read_to_string(self.at.join("in")).unwrap_or_default();
     heard.lines().map(str::to_owned).collect()
   }
 
   /// A command that starts the fake beside it, as `cswap` starts claude, and that fails and says that it found no
   /// claude while the fake is away, as `cswap` says while an update replaces claude.
-  pub fn prefix(&self) -> PathBuf {
+  pub(crate) fn prefix(&self) -> PathBuf {
     let prefix = self.at.join("prefix");
     let script = "#!/bin/sh\nhere=$(dirname \"$0\")\n[ -x \"$here/claude\" ] || \
       { echo \"Error: 'claude' was not found on PATH.\" >&2; exit 1; }\nexec \"$here/claude\" \"$@\"\n";
@@ -106,26 +105,39 @@ impl Yard {
   }
 
   /// The fake taken away, as an update of claude takes its program away for a moment.
-  pub fn away(&self) {
+  pub(crate) fn away(&self) {
     fs::rename(self.at.join("claude"), self.at.join("away")).expect("the fake goes away");
   }
 
   /// The fake back where it was.
-  pub fn back(&self) {
+  pub(crate) fn back(&self) {
     fs::rename(self.at.join("away"), self.at.join("claude")).expect("the fake comes back");
   }
 }
 
-/// The fake, written once for all the tests of this process, after it ran once. The system examines a new program
-/// the first time it runs it. On macOS this takes more than a tenth of a second when the machine is idle, and much
-/// more when many tests start new programs at the same time. The result holds for the file, so each yard links to
-/// this file, and no clock of a test includes that examination.
-fn ran() -> &'static Path {
-  static RAN: OnceLock<PathBuf> = OnceLock::new();
-  RAN.get_or_init(|| {
-    let at = std::env::temp_dir().join(format!("furb-claude-fake-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&at);
-    fs::create_dir_all(&at).expect("the folder of the fake");
+/// The folder of the fake and the fake in it, which the yards that stand at once share.
+struct Fake {
+  _at: testing::Yard,
+  bin: PathBuf,
+}
+
+/// The fake, written once for the yards that stand at once, after it ran once, in a folder that the
+/// last of them removes. The system examines a new program the first time it runs it. On macOS
+/// this takes more than a tenth of a second when the machine is idle, and much more when many tests
+/// start new programs at the same time. The result holds for the file, so each yard links to this
+/// file, and no clock of a test includes that examination.
+fn ran() -> Arc<Fake> {
+  static RAN: Mutex<Weak<Fake>> = Mutex::new(Weak::new());
+  static MADE: AtomicUsize = AtomicUsize::new(0);
+  let mut held = RAN.lock().unwrap_or_else(PoisonError::into_inner);
+  if let Some(fake) = held.upgrade() {
+    return fake;
+  }
+  // Each folder has a name of its own, so the removal of an earlier one, which its last yard runs,
+  // meets none later.
+  let n = MADE.fetch_add(1, Ordering::Relaxed);
+  let fake = {
+    let at = testing::Yard::new(format!("furb-claude-fake-{}-{n}", std::process::id()));
     let bin = at.join("claude");
     fs::write(&bin, FAKE).expect("the fake is written");
     fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).expect("the fake runs");
@@ -140,8 +152,10 @@ fn ran() -> &'static Path {
       std::thread::sleep(Duration::from_millis(10));
     };
     assert!(status.expect("the fake starts").success(), "the fake ran once");
-    bin
-  })
+    Arc::new(Fake { _at: at, bin })
+  };
+  *held = Arc::downgrade(&fake);
+  fake
 }
 
 /// The word after a flag among the words of a process.
@@ -176,7 +190,7 @@ fn asked(
   model: &Completion,
   messages: &[Message],
   settings: Value,
-) -> Result<rig_core::completion::CompletionResponse, rig_core::completion::CompletionError> {
+) -> Result<rig_core::completion::CompletionResponse, CompletionError> {
   reactor().block_on(model.completion(request("ENGINE ONLY", messages, settings)))
 }
 
@@ -645,7 +659,7 @@ fn a_thought_streams_as_it_comes_and_settles_once_at_its_place() {
           texts.push(text.text);
         }
       }
-      Ok::<_, rig_core::completion::CompletionError>((texts, stream.choice))
+      Ok::<_, CompletionError>((texts, stream.choice))
     })
     .unwrap();
   assert_eq!(texts, ["close(", "\"reply 1\")"]);
@@ -720,7 +734,7 @@ fn a_turn_that_makes_no_progress_fails_at_its_stall_with_the_last_odd_line_and_e
 }
 
 /// One turn of a model that answers no request, bounded by ten seconds.
-fn ended(model: &Completion, text: &str) -> Result<rig_core::completion::CompletionError, String> {
+fn ended(model: &Completion, text: &str) -> Result<CompletionError, String> {
   let turn = model.completion(request("ENGINE ONLY", &[user(text)], json!({})));
   let got = reactor().block_on(async { tokio::time::timeout(Duration::from_secs(10), turn).await });
   match got {
@@ -1073,7 +1087,7 @@ fn no_request_of_the_command_line_puts_a_mark_of_an_hour_after_one_of_minutes() 
   let blocks = vec![UserContent::text("#read1"), UserContent::text("#chain2\nchain2: Act[object]")];
   let turn = Message::User { content: blocks };
   asked(&model, &[turn], json!({"session": "chain"})).unwrap();
-  let line: serde_json::Value = serde_json::from_str(&yard.heard()[0]).unwrap();
+  let line: Value = serde_json::from_str(&yard.heard()[0]).unwrap();
   let ours: Vec<String> = line["message"]["content"]
     .as_array()
     .unwrap()
@@ -1109,7 +1123,7 @@ fn a_turn_is_written_as_composed_by_the_client_and_its_process_loads_no_claude_m
   let yard = Yard::new("composed");
   let model = yard.claude(10_000).completion_model("sonnet");
   asked(&model, &[user("first @file /compact")], json!({"session": "chain"})).unwrap();
-  let line: serde_json::Value = serde_json::from_str(&yard.heard()[0]).unwrap();
+  let line: Value = serde_json::from_str(&yard.heard()[0]).unwrap();
   assert_eq!(line["client_composed"], json!(true));
   let mds = fs::read_to_string(yard.at.join(format!("mds.{}", yard.pids()[0]))).unwrap();
   assert_eq!(mds, "1");

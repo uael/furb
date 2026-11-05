@@ -2,13 +2,6 @@
 //! configs of the user and of the project. Then the ear of the extensions, in lives of the real engine on the
 //! record that the store keeps.
 
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
-#![expect(clippy::redundant_clone, reason = "debt: a clone of a value that is not used again")]
-
 use std::{
   fs,
   path::{Path, PathBuf},
@@ -18,6 +11,7 @@ use super::{
   Extension, Part, Places, configs, configured, definitions, enabled, extensions, frontmatter,
   load, parts, projected, reloads, skills::process, word,
 };
+use crate::testing::Yard;
 use crate::{
   Ear, Engine, Fact, Object,
   ear::{ear, hear, say},
@@ -25,11 +19,8 @@ use crate::{
 };
 
 /// A directory of its own for one test, and empty.
-fn place(name: &str) -> PathBuf {
-  let at = std::env::temp_dir().join(format!("furb-extension-{name}-{}", std::process::id()));
-  let _ = fs::remove_dir_all(&at);
-  fs::create_dir_all(&at).unwrap();
-  at
+fn place(name: &str) -> Yard {
+  Yard::new(format!("furb-extension-{name}-{}", std::process::id()))
 }
 
 /// A folder of an extension: its manifest and the file of its word.
@@ -204,7 +195,7 @@ fn the_configs_turn_on_each_extension_they_give_a_folder_the_project_after_the_u
 #[test]
 fn a_config_that_is_not_of_the_form_is_refused_with_its_path() {
   let at = place("refusals");
-  let places = Places { config: at.clone(), home: None };
+  let places = Places { config: at.to_path_buf(), home: None };
   let file = at.join("config.json");
   let read = |text: &str| {
     config(&file, text);
@@ -564,7 +555,7 @@ fn an_extension_of_the_root_alone_plays_on_the_root_and_on_a_chain_whose_source_
   let newer = "def note(on=\"\"):\n  return read(\"other.txt\", on=on)";
   let mut engine = lived(&at, vec![rooted(newer)]);
   let expected = [
-    ("chain1".to_owned(), full.clone()),
+    ("chain1".to_owned(), full),
     ("chain1".to_owned(), newer.to_owned()),
     ("chain3".to_owned(), "note()".to_owned()),
     ("chain3".to_owned(), newer.to_owned()),
@@ -794,7 +785,7 @@ fn a_later_life_given_a_new_word_reloads_it_and_each_chain_plays_its_definitions
   let expected = [
     ("chain1".to_owned(), full.clone()),
     ("chain1".to_owned(), defined.to_owned()),
-    ("chain2".to_owned(), full.clone()),
+    ("chain2".to_owned(), full),
     ("chain2".to_owned(), defined.to_owned()),
   ];
   {
@@ -847,7 +838,7 @@ fn a_reload_plays_a_new_function_and_a_new_name_of_state_and_keeps_the_state_tha
   let expected = [
     ("chain1".to_owned(), full.clone()),
     ("chain1".to_owned(), defined.to_owned()),
-    ("chain2".to_owned(), full.clone()),
+    ("chain2".to_owned(), full),
     ("chain2".to_owned(), defined.to_owned()),
   ];
   let mut engine = lived(&at, vec![note(newer)]);

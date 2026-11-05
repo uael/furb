@@ -1,8 +1,6 @@
 //! The accounts of the claude command line: which one serves a turn, when one is parked, and what an account gives to
 //! a process.
 
-#![expect(clippy::redundant_clone, reason = "debt: a clone of a value that is not used again")]
-
 use std::{
   fs,
   process::Command,
@@ -64,7 +62,7 @@ fn no_account_listed_is_the_login_of_the_environment_and_is_never_moved() {
 
 #[test]
 fn an_account_gives_its_token_or_its_config_dir_and_takes_away_each_other_credential() {
-  let folder = std::env::temp_dir().join(format!("furb-accounts-{}", std::process::id()));
+  let folder = crate::testing::Yard::unmade(format!("furb-accounts-{}", std::process::id()));
   fs::create_dir_all(&folder).unwrap();
   let file = folder.join("token");
   fs::write(&file, "  tok-file \n").unwrap();
@@ -74,7 +72,7 @@ fn an_account_gives_its_token_or_its_config_dir_and_takes_away_each_other_creden
   let accounts = |source| Accounts::new(vec![account(source)], Switch::Failover);
 
   let mut command = Command::new("claude");
-  accounts(Source::TokenFile(file.clone())).apply(0, &mut command).unwrap();
+  accounts(Source::TokenFile(file)).apply(0, &mut command).unwrap();
   let got = envs(&command);
   assert!(got.contains(&(TOKEN.to_owned(), Some("tok-file".to_owned()))), "{got:?}");
   assert!(got.contains(&("ANTHROPIC_API_KEY".to_owned(), None)), "{got:?}");
@@ -85,7 +83,7 @@ fn an_account_gives_its_token_or_its_config_dir_and_takes_away_each_other_creden
   assert!(envs(&command).contains(&(TOKEN.to_owned(), Some(path.trim().to_owned()))));
 
   let mut command = Command::new("claude");
-  accounts(Source::ConfigDir(folder.clone())).apply(0, &mut command).unwrap();
+  accounts(Source::ConfigDir(folder.to_path_buf())).apply(0, &mut command).unwrap();
   let got = envs(&command);
   assert!(got.contains(&(CONFIG.to_owned(), Some(folder.display().to_string()))), "{got:?}");
   assert!(got.contains(&(TOKEN.to_owned(), None)), "a token of the environment would win: {got:?}");
@@ -99,5 +97,4 @@ fn an_account_gives_its_token_or_its_config_dir_and_takes_away_each_other_creden
     assert!(no.starts_with("The account a has no token: "), "{no}");
     assert!(no.contains(said), "{no}");
   }
-  fs::remove_dir_all(folder).unwrap();
 }

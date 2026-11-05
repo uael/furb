@@ -36,7 +36,7 @@ fn a_stale_or_absent_copy_updates_once_for_each_backoff() {
   let updater = Updater::new(|| {
     RAN.fetch_add(1, Ordering::SeqCst);
   });
-  let dir = std::env::temp_dir().join(format!("furb-update-{}", std::process::id()));
+  let dir = crate::testing::Yard::unmade(format!("furb-update-{}", std::process::id()));
   fs::create_dir_all(&dir).unwrap();
   let fresh = dir.join("models.json");
   fs::write(&fresh, "{}").unwrap();
@@ -46,7 +46,6 @@ fn a_stale_or_absent_copy_updates_once_for_each_backoff() {
   updater.background(&absent);
   updater.background(&absent);
   assert_eq!(RAN.load(Ordering::SeqCst), 1);
-  fs::remove_dir_all(&dir).unwrap();
 }
 
 #[test]

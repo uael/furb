@@ -6,6 +6,8 @@ import {
   chainThreads,
   concerns,
   nestThreads,
+  orderThreads,
+  threadOpen,
 } from "../../src/life/threads.ts";
 import { act } from "./acts.ts";
 
@@ -213,4 +215,48 @@ test("a question waits for the operator in any thread, and a failure or a pause 
     false,
     false,
   ]);
+});
+
+test("the closed threads stand first and the open ones last, each group by the time of its last message, and the agents of a thread the same", () => {
+  const thread = (one: LiveAct, more: Partial<ChainThread> = {}): ChainThread => ({
+    act: one,
+    title: one.id,
+    messages: [],
+    asked: [],
+    asks: [],
+    state: "runs",
+    resolved: false,
+    origin: "rung",
+    yours: false,
+    ...more,
+  });
+  const closed = (one: LiveAct, messages: LiveAct[] = []) =>
+    thread(one, { messages, resolved: true, state: "done" });
+  const at = (id: string, began: number) => prompt(id, began);
+  const agents = [
+    act("prompt7", "prompt", "chain1", "rung1", 8),
+    act("prompt8", "prompt", "chain1", "rung1", 9),
+  ];
+  const leads = [at("prompt1", 1), at("prompt2", 2), at("prompt3", 3), at("prompt4", 4), at("prompt6", 6)];
+  const rows = new Map(
+    [...leads, act("rung1", "rung", "chain1", "prompt6", 7), ...agents].map((one) => [one.id, one]),
+  );
+  const [one, two, three, four, six] = leads as [LiveAct, LiveAct, LiveAct, LiveAct, LiveAct];
+  const list = [
+    closed(one, [at("prompt5", 50)]),
+    closed(two),
+    thread(three, { messages: [at("prompt9", 40)] }),
+    thread(four),
+    closed(six),
+    thread(agents[0] as LiveAct, { asks: ["prompt10"], state: "asks" }),
+    closed(agents[1] as LiveAct),
+  ];
+  const ids = (nodes: { thread: ChainThread }[]) => nodes.map((node) => node.thread.act.id);
+  // Before, main showed the threads in the order they began.
+  expect(ids(nestThreads(list, rows))).toEqual(["prompt1", "prompt2", "prompt3", "prompt4", "prompt6"]);
+  const tree = orderThreads(nestThreads(list, rows));
+  // prompt6 is resolved, and it stands open since a question waits in its agent prompt7.
+  expect(ids(tree)).toEqual(["prompt2", "prompt1", "prompt4", "prompt6", "prompt3"]);
+  expect(tree.map(threadOpen)).toEqual([false, false, true, true, true]);
+  expect(ids(tree[3]?.agents ?? [])).toEqual(["prompt8", "prompt7"]);
 });

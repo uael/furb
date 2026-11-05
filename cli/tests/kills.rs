@@ -14,6 +14,9 @@
   reason = "the tests block on the runtime that tokio starts for them"
 )]
 
+#[path = "../../tests/common/yard.rs"]
+mod yard;
+
 #[cfg(test)]
 mod kills {
   use std::{
@@ -65,21 +68,15 @@ mod kills {
   /// claude and its FIFO, the config of the user and the cache of furb, where the daemon listens.
   struct Yard {
     root: PathBuf,
-  }
-
-  impl Drop for Yard {
-    fn drop(&mut self) {
-      fs::remove_dir_all(&self.root).ok();
-    }
+    /// The folder of the yard, which goes with it.
+    _base: super::yard::Yard,
   }
 
   impl Yard {
     fn new() -> Yard {
       static NEXT: AtomicU32 = AtomicU32::new(0);
       let n = NEXT.fetch_add(1, Ordering::Relaxed);
-      let base = std::env::temp_dir().join(format!("fk{}-{n}", std::process::id()));
-      fs::remove_dir_all(&base).ok();
-      fs::create_dir_all(&base).unwrap();
+      let base = super::yard::Yard::new(format!("fk{}-{n}", std::process::id()));
       let root = fs::canonicalize(&base).unwrap();
       for folder in ["work", "fake", "config"] {
         fs::create_dir_all(root.join(folder)).unwrap();
@@ -88,7 +85,7 @@ mod kills {
       let claude = root.join("fake/claude");
       fs::write(&claude, FAKE).unwrap();
       fs::set_permissions(&claude, fs::Permissions::from_mode(0o755)).unwrap();
-      Yard { root }
+      Yard { root, _base: base }
     }
 
     fn life(&self) -> String {
@@ -381,15 +378,22 @@ mod kills {
     let facts = yard.facts();
     let since = facts.iter().rev().take_while(|fact| fact[0][0] != "checkpoint").count();
     assert!(since <= TAIL, "the open replays {since} facts after the last checkpoint");
-    let replies = facts
+    let reply = |fact: &&Value| fact[0][1].as_str().is_some_and(|id| id.starts_with("reply"));
+    let ended: Vec<&Value> =
+      facts.iter().filter(reply).filter(|fact| fact[0][0] == "done").collect();
+    let replies = ended.iter().filter(|fact| fact[0][3]["is"] == "tuple").count();
+    // A reply that the open asks again may be answered by the model before its end is in the
+    // record, so the record holds each turn once, but for the replies that are still open.
+    let open = facts
       .iter()
-      .filter(|fact| {
-        fact[0][0] == "done"
-          && fact[0][1].as_str().is_some_and(|id| id.starts_with("reply"))
-          && fact[0][3]["is"] == "tuple"
-      })
+      .filter(reply)
+      .filter(|fact| fact[0][0] == "reply" && !ended.iter().any(|done| done[0][1] == fact[0][1]))
       .count();
-    assert_eq!(yard.answered(), replies, "each turn that the model answered is in the record once");
+    let answered = yard.answered();
+    assert!(
+      replies <= answered && answered <= replies + open,
+      "each turn that the model answered is in the record once: {answered} answered, {replies} in the record, {open} open"
+    );
     let ran = yard.lines("out.txt");
     for line in &ran {
       let times = ran.iter().filter(|one| *one == line).count();

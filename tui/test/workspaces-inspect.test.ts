@@ -6,12 +6,17 @@ import { Preferences } from "../src/preferences.ts";
 import { Workspaces } from "../src/workspaces.ts";
 
 // The replays that the list asks for, with the answer that each gives: a record with a name that holds "work" has
-// unfinished work.
+// unfinished work. Each record that changed is scanned for its name, and only those of replay are replayed.
 const asked: string[][] = [];
 mock.module("../src/records.ts", () => ({
-  inspectRecords: async (paths: string[]) => {
-    asked.push(paths);
-    return Object.fromEntries(paths.map((path) => [path, { pending: path.includes("work") ? 1 : 0 }]));
+  inspectRecords: async (paths: string[], _signal: AbortSignal, replay: string[] = paths) => {
+    asked.push(replay);
+    return Object.fromEntries(
+      paths.map((path) => {
+        const replayed = replay.includes(path);
+        return [path, { state: replayed && path.includes("work") ? "runs" : "saved", replayed }];
+      }),
+    );
   },
 }));
 

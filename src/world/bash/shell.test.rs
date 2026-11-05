@@ -2,16 +2,8 @@
 
 #![cfg_attr(
   unix,
-  expect(
-    clippy::disallowed_methods,
-    reason = "debt: a call that blocks: block_on, where a test drives a future on the reactor"
-  )
+  expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")
 )]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
 
 use std::fs;
 #[cfg(unix)]
@@ -35,8 +27,7 @@ fn made(at: &std::path::Path) {
 #[test]
 fn the_sh_of_git_is_the_sh_on_path_else_the_one_beside_the_git_on_path_else_the_one_of_the_programs()
  {
-  let at = std::env::temp_dir().join(format!("furb-git-sh-{}", std::process::id()));
-  let _ = fs::remove_dir_all(&at);
+  let at = crate::testing::Yard::unmade(format!("furb-git-sh-{}", std::process::id()));
   let (cmd, programs) = (at.join("Git").join("cmd"), at.join("Programs"));
   assert_eq!(git_sh(std::slice::from_ref(&cmd), Some(programs.clone())), None);
   made(&programs.join("Git").join("bin").join("sh"));
@@ -57,7 +48,6 @@ fn the_sh_of_git_is_the_sh_on_path_else_the_one_beside_the_git_on_path_else_the_
   );
   made(&cmd.join("sh"));
   assert_eq!(git_sh(std::slice::from_ref(&cmd), Some(programs)), Some(cmd.join("sh")));
-  fs::remove_dir_all(&at).unwrap();
 }
 
 #[test]
@@ -71,11 +61,10 @@ fn a_signal_that_ends_the_sh_of_git_gives_128_and_the_number_of_the_signal() {
 }
 
 #[cfg(unix)]
-fn fake_shell(name: &str, body: &str) -> std::path::PathBuf {
+fn fake_shell(name: &str, body: &str) -> crate::testing::Yard {
   use std::os::unix::fs::PermissionsExt;
-  let dir = std::env::temp_dir().join(format!("furb-login-{}-{name}", std::process::id()));
-  fs::create_dir_all(&dir).unwrap();
-  let path = dir.join("sh");
+  let path =
+    crate::testing::Yard::new(format!("furb-login-{}-{name}", std::process::id())).within("sh");
   fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
   fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
   path
@@ -101,8 +90,8 @@ fn the_path_of_the_login_shell_is_read_between_its_marks() {
 #[cfg(unix)]
 fn the_path_of_a_login_shell_whose_profile_leaves_a_process_on_its_output_is_read_when_the_shell_ends()
  {
-  let release = std::env::temp_dir().join(format!("furb-login-{}-release", std::process::id()));
-  drop(fs::remove_file(&release));
+  let held = crate::testing::Yard::new(format!("furb-login-{}-release", std::process::id()));
+  let release = held.join("release");
   let held = format!(
     "(n=0; while [ ! -e '{}' ] && [ $n -lt 300 ]; do sleep 0.1; n=$((n+1)); done) & printf '<furb-path>/a:/b</furb-path>'",
     release.display()

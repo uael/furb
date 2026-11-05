@@ -48,13 +48,17 @@ API of its own:
   engine, the sheet and the Kernel, each in a namespace of its own, and carries each value between the sandbox and a
   host, whose ears the engine steps as generators. An ear that raises refuses the act that it heard, and starts again
   from a fresh ear when it can, as the Kernel, the gate and each ear that `lasting` in `src/ear.rs` made do; the life
-  tells the operator once which ear raised and why. A fault that no code of the sandbox catches, as a second excess
+  tells the operator once which ear raised and why. A Kernel that raises lost the word of each run it held, so each
+  run that is not over then ends refused, with its open wants, and a rung that awaited through a wants is closed, so
+  no chain holds a rung as running for ever. A fault that no code of the sandbox catches, as a second excess
   of the bound of a turn in `src/sand.rs`, cuts the run with no `finally`, so the life stops: it keeps no snapshot,
   refuses each later entry with that fault, and gives it to a host as `stopped`.
 - The Kernel is `src/furb/kernel.py`, one module that the sandbox loads and the python package imports, each on the
   names of its engine. The gate, `src/gate.rs`, is the type checker of monty. It reads a word on the sheet of the
   engine, `src/furb/sheet.py`, against the typeshed of the sandbox, and it runs each import of the word in a sandbox
-  of its own, which alone says which module runs. The gate of the python package reads through it too.
+  of its own, which alone says which module runs. The gate of the python package reads through it too. The key `gate`
+  of a config set to false turns it off for a life, whose ear then answers each word with no finding, as
+  `docs/config.md` says.
 - `src/binding.rs` holds the host API that both doors give, each function once: the ears of the crate, the store, the
   opening of a life, the catalog, the extensions, the images and the gate. A door holds only how a value of its
   language crosses, its `Engine` and its `Act`, and the loop that drives them. The `Engine` of each door has the same

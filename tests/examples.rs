@@ -1,19 +1,13 @@
 //! The examples of Rust in docs/examples/rust, each run as a user runs it, on a claude command line that answers from
 //! a script, so no test asks a model. `cargo test` builds the examples before it runs this test.
 #![cfg(unix)]
-#![expect(
-  clippy::disallowed_methods,
-  reason = "debt: a call that blocks: sleep, block_on or try_wait"
-)]
-#![expect(clippy::expect_used, reason = "debt: an expect where a type can hold the invariant")]
-#![expect(
-  clippy::let_underscore_must_use,
-  reason = "debt: a let _ drops a value that must be used"
-)]
-#![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
+#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
+#![expect(clippy::expect_used, reason = "a test blocks on its runtime and fails by a panic")]
 
 #[path = "common/pipes.rs"]
 mod pipes;
+#[path = "common/yard.rs"]
+mod yard;
 
 use std::{
   fs,
@@ -35,13 +29,13 @@ const FAKE: &str = include_str!("../src/world/provider/claude/fake-claude.sh");
 struct Yard {
   at: PathBuf,
   fake: PathBuf,
+  /// The folder of the yard, which goes with it.
+  _base: yard::Yard,
 }
 
 impl Yard {
   fn new(name: &str, words: &[&str]) -> Yard {
-    let base = std::env::temp_dir().join(format!("furb-example-{name}-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&base);
-    fs::create_dir_all(&base).expect("the root of the yard");
+    let base = yard::Yard::new(format!("furb-example-{name}-{}", std::process::id()));
     let root = fs::canonicalize(&base).expect("the root of the yard, with no link");
     let (at, fake) = (root.join("work"), root.join("fake"));
     fs::create_dir_all(&at).expect("the yard");
@@ -54,7 +48,7 @@ impl Yard {
     fs::write(fake.join("claude"), FAKE).expect("the fake");
     fs::set_permissions(fake.join("claude"), fs::Permissions::from_mode(0o755))
       .expect("the fake runs");
-    let yard = Yard { at, fake };
+    let yard = Yard { at, fake, _base: base };
     yard.words(words);
     yard
   }

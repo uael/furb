@@ -111,7 +111,13 @@ it is not given. The daemon answers requests in any order.
 | `stand` | `life` | write |
 | `config` | `life`, `config`: `{"action": "get"}`, `{"action": "set", "key", "value", "layer"}` or `{"action": "reload"}` | read for get, else write |
 | `seen` | `life`, `about` | write |
-| `queue` | `life`, `entry`, `hash`, `shape`, `message`, `on` | write |
+| `queue` | `life`, `entry`, `shape`, `message`, `on` | write |
+| `unqueue` | `life`, `entry` | write |
+| `queued` | `life`, `on` | read |
+| `desk` | `life`, `notices` | read |
+| `threads` | `life`, `on`, `at` | read |
+| `as_of` | `life`, `at` | read |
+| `moments` | `life` | read |
 | `answered` | `life`, `ask`, `turn`, `why` | write |
 | `wrote` | `life`, `ask`, `text`, `thinking` | write |
 | `handover` | | write |
@@ -138,14 +144,27 @@ it is not given. The daemon answers requests in any order.
 - An `open` with `answers` makes its peer answer the models of the life in their place, as a demo or a test does. The
   daemon pushes each request of a model to that peer as a frame `ask`, with the `life`, the number `ask` and the
   `request`: its `actor`, `chain`, `messages` and `settings`. The peer tells what it writes with `wrote`, and gives the
-  turn, written as the record writes a value, or `why` it gives none, with `answered`. A request fails once its peer
-  is gone.
+  turn, written as the record writes a value, or `why` it gives none, with `answered`. That peer alone speaks for each
+  request of the life, by its connection, for the whole life: the daemon refuses a `wrote` or an `answered` of any
+  other peer with `foreign`, and the request still waits for its peer. A later `open` with `answers` moves nothing. A
+  request ends at its turn, when the life drops it, or when the connection of its peer ends, and fails in the last
+  case. A `wrote` or an `answered` after its end is refused with `unasked`.
 - An `open` with `attach` attaches its peer in the same step, from that place in the log, as `attach` does. The life
   then has a holder before its grace can pass, even a grace of none.
-- `queue` sends a message that a window queued once: the record keeps its `entry` and the `hash` of its words, so a
-  second `queue` of the same entry, from any window, gives the act of the first.
+- `queue` puts a follow-up of the operator in the queue of a chain, under an `entry` that the window chooses, and a
+  second `queue` of the same entry, from any window, changes nothing. The life sends the first follow-up of a chain as
+  a prompt of its `shape` and its `message` once the chain rests: no pause holds it, it asks the operator nothing, no
+  work of it lives, and the prompt of its last follow-up is done. `unqueue` takes out a follow-up that waits, and
+  `queued` gives the follow-ups that wait on a chain, in order. A send that fails holds the queue of its chain, with
+  its cause in `failed`, until the operator takes the follow-up out. The record keeps each step as a fact `queue` of
+  the operator, so a reopen finds the queue as it stood.
+- `desk`, `threads`, `as_of` and `moments` give the meaning of the acts that the life told as events, which each
+  window draws the same way: `desk` each question that the operator owes and each of the `notices` that the window
+  still shows, the oldest first, with the lines that answer each; `threads` the tree of the threads of a chain, its
+  asides, what the tree says to the operator and the state of the chain, now or just after the moment `at`; `as_of`
+  the acts as they stood just after a moment; `moments` each moment at which an act began or ended.
 - After `attach`, the daemon pushes each event of the life as a frame `event`, with the `life`, the `seq` of the event
-  in the log of the life and the `event`: `fact`, `act`, `text`, `notice`, `changed`, `reborn` or `ended`. After
+  in the log of the life and the `event`: `fact`, `act`, `text`, `queued`, `notice`, `changed`, `reborn` or `ended`. After
   `reborn`, the life goes on from its checkpoint, and its acts come again as they stand.
 - The log of a life that opens on a record with a checkpoint starts with each fact that the record told before that
   checkpoint, as the log after a rebirth holds them. So a window of a life that a later open, a handover or an end
@@ -162,8 +181,11 @@ once it listens. A second daemon refuses to start there.
   not given. Each life opens on a thread of its own, so the daemon answers each verb while a life opens, and a fault
   of one life ends that life alone. Each verb of a life refuses with `closed` when no life lives on its record.
 - Each life keeps the journal of the changes of its files beside its record, as `<record>.changes.jsonl`: one line
-  for each write of a file, with its `path`, the text `before` and `after` it, its `act`, and `made` when the write
-  made the file. A window reads it to show and to undo what each write changed.
+  for each write of a file, with its `path`, the text `before` and `after` it, its `act`, `made` when the write
+  made the file, and `unread` with why when the file could not be read as text, whose `before` is then empty and
+  no undo puts back. A window reads it to show and to undo what each write changed. One journal serves each birth
+  of the life, in the order of the writes, and the life ends, and replies to its end, only once the disk holds each
+  change; a fault of the disk is told at once as a notice, and the end of the life says what the journal lost.
 - A holder keeps a life: each window that attached it, and each pin, by the name of its holder. Work that runs holds
   nothing. A life with no holder for the grace of the daemon, 30 seconds unless `furb host --grace <seconds>` says
   otherwise, writes its checkpoint and ends, and `list` gives it as not `open` from then on. An `open` of a life

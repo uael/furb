@@ -50,11 +50,19 @@ const INSPECT_LIMIT = 16 * 2 ** 20;
 interface InspectedState {
   path: string;
   key: string;
-  pending: number;
+  /** The state that the engine of the crate gives the record: an entry of a release that kept only the count of its
+   * pending work is read again. */
+  state?: "runs" | "saved";
   error?: string;
   reading?: boolean;
-  /** The name that the record gives its session, when it gives one. */
+  /** The name that the replay of the record found, when it found one. */
   name?: string;
+  /** The last name that the operator gave the session, which a plain scan of the record found. */
+  said?: string;
+  /** Whether the record was replayed, or only scanned for its name. */
+  replayed?: boolean;
+  /** Whether the record was scanned for its name: an entry of a release that only replayed is read again. */
+  scanned?: boolean;
 }
 function readInspected(path: string): Map<string, InspectedState> {
   try {
@@ -140,6 +148,8 @@ export class Workspaces extends EventEmitter {
   private readonly inspected = new Map<string, string>();
   /** What the replays of saved records told, by record, which a file beside the list keeps from one run to the next. */
   private remembered?: Map<string, InspectedState>;
+  /** The name that an older release kept beside each saved record, in `<record>.ui.json`. */
+  private readonly legacy = new Map<string, string>();
   private get inspectedPath(): string {
     return join(dirname(this.path), "inspected.json");
   }
@@ -289,40 +299,56 @@ export class Workspaces extends EventEmitter {
         const info = await stat(entry.path);
         entry.modified = info.mtimeMs;
         entry.size = info.size;
-        const { view } = savedView(entry.path);
+        const { view, name } = savedView(entry.path);
         entry.cost = typeof view.cost === "number" ? view.cost : 0;
+        // A name that an older release kept beside the record shows until the record holds one.
+        if (name === undefined) this.legacy.delete(entry.path);
+        else this.legacy.set(entry.path, name);
       }),
     );
     const changed: string[] = [];
+    const replay: string[] = [];
     for (const entry of group.sessions.filter(saved)) {
       const key = `${entry.modified}:${entry.size}`;
       if (this.inspected.get(entry.path) === key) continue;
       this.inspected.set(entry.path, key);
-      // A record that no replay read since it last changed, and that is small enough, is replayed. A record that a
-      // replay read keeps what that replay told, and a long or archived one stays as saved until the operator opens it.
-      const told = this.told(entry.path, key);
+      // Each record that changed since it was last read is scanned for its name, and replayed when it is small enough.
+      // A record that a read told keeps what it told, and a long or archived one stays as saved until the operator
+      // opens it, with the name that its scan found.
+      const replays = !entry.archived && (entry.size ?? 0) <= INSPECT_LIMIT;
+      const told = this.told(entry.path, key, replays);
       if (told) this.apply(entry, told);
-      else if (!entry.archived && (entry.size ?? 0) <= INSPECT_LIMIT) changed.push(entry.path);
+      else {
+        const old = this.legacy.get(entry.path);
+        if (old) entry.name = old;
+        changed.push(entry.path);
+        if (replays) replay.push(entry.path);
+      }
     }
-    if (changed.length) this.inspect(changed);
+    if (changed.length) this.inspect(changed, replay);
   }
-  /** What the replay of a record told when the record stood as the key says, from this run or from an earlier one. */
-  private told(path: string, key: string): InspectedState | undefined {
+  /** What the read of a record told when the record stood as the key says, from this run or from an earlier one: its
+   * scan, and its replay when it replays. */
+  private told(path: string, key: string, replays: boolean): InspectedState | undefined {
     this.remembered ??= readInspected(this.inspectedPath);
     const found = this.remembered.get(path);
-    return found?.key === key ? found : undefined;
+    return found?.key === key && found.scanned && found.state && (found.replayed !== false || !replays)
+      ? found
+      : undefined;
   }
-  /** The state of a saved row that a replay told, unless the session of the row runs. */
+  /** The state of a saved row that a read told, unless the session of the row runs. Its name is the name that the
+   * operator gave, which the scan of the record found, else the name that an older release kept beside the record,
+   * else the name that the replay found. */
   private apply(
     entry: SessionEntry,
-    state: Pick<InspectedState, "pending" | "error" | "reading" | "name">,
+    state: Pick<InspectedState, "state" | "error" | "reading" | "name" | "said">,
   ): void {
     if (entry.session) return;
-    if (state.name) entry.name = state.name;
+    const name = state.said ?? this.legacy.get(entry.path) ?? state.name;
+    if (name) entry.name = name;
     // A record that a build of another version made drifts, and opens to read: that is no error.
     entry.error = state.reading ? undefined : state.error;
-    // Work that the record holds resumes as the record opens, so it shows as work that runs, not as paused.
-    entry.status = state.reading ? "reading" : state.error ? "failed" : state.pending ? "runs" : "saved";
+    entry.status = state.reading ? "reading" : state.error ? "failed" : (state.state ?? "saved");
   }
   /** Keep what the replays told in a file beside the list, so that the next run replays only the records that changed
    * since. */
@@ -338,17 +364,19 @@ export class Workspaces extends EventEmitter {
   }
   /** Find the unfinished work of saved records by their replay, which takes a time that grows with each record, so
    * the rows show their state when it comes and nothing waits for it. */
-  private inspect(paths: string[]): void {
+  private inspect(paths: string[], replay: string[]): void {
     // A replay tells a record as it was when the replay began, so a row whose record changed or opened since then keeps
     // what that change or that open told it.
     const keys = new Map(paths.map((path) => [path, this.inspected.get(path)]));
-    inspectRecords(paths, this.stop.signal).then(
+    inspectRecords(paths, this.stop.signal, replay).then(
       (states) => {
         this.remember(
           paths.flatMap((path) => {
             const key = keys.get(path);
             const state = states[path];
-            return key && state && this.inspected.get(path) === key ? [{ path, key, ...state }] : [];
+            return key && state && this.inspected.get(path) === key
+              ? [{ path, key, ...state, scanned: true }]
+              : [];
           }),
         );
         for (const group of this.groups)

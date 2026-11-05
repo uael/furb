@@ -1,6 +1,6 @@
 import type { BoxOptions, BoxRenderable, Renderable, TextRenderable } from "@opentui/core";
 import { unmarked } from "furb";
-import { type ChainThread, chainThreads } from "furb/life";
+import { type ChainAside, type ChainThread, chainSorted } from "furb/life";
 import { count, dollars } from "../format.ts";
 import type { ActRow } from "../session.ts";
 import { theme as c, glyph, spacing as space } from "../theme.ts";
@@ -122,6 +122,8 @@ export const sidebar = part({
         by: new Map(),
         of: new Map(),
         asked: new Map(),
+        asides: new Map(),
+        aside: new Map(),
       };
     const owed = [...w.host.prompts.keys()].join(" ");
     // A list read from another session or another chain is no list of this one, even when its version is the same.
@@ -133,7 +135,12 @@ export const sidebar = part({
       kept.owed !== owed
     ) {
       const index = w.ladderIndex;
-      const list = chainThreads(index.on, index.ids, new Set(w.host.prompts.keys()), this.promptsRead);
+      const { threads: list, asides } = chainSorted(
+        index.on,
+        index.ids,
+        new Set(w.host.prompts.keys()),
+        this.promptsRead,
+      );
       this.threadList = {
         session: w,
         chain,
@@ -145,6 +152,10 @@ export const sidebar = part({
           list.flatMap((one) => one.messages.map((message): [string, ChainThread] => [message.id, one])),
         ),
         asked: new Map(list.flatMap((one) => one.asked.map((ask): [string, ChainThread] => [ask.id, one]))),
+        asides: new Map(asides.map((one) => [one.act.id, one])),
+        aside: new Map(
+          asides.flatMap((one) => one.messages.map((message): [string, ChainAside] => [message.id, one])),
+        ),
       };
     }
     return this.threadList;
@@ -171,6 +182,41 @@ export const sidebar = part({
     w.save();
     this.renderContent();
     this.render();
+  },
+
+  /** A thread folds or unfolds from any line of its box, and the feed then shows its header. */
+  foldHere(id: string): void {
+    this.foldThread(id);
+    this.scrollAfterLayout({ card: id });
+  },
+
+  /** The cards of the feed in its order, each with the thread whose box it stands in, as the last layout placed them. */
+  threadCards(): { node: Renderable; thread: string }[] {
+    const by = new Map([...this.cards.values()].map((card) => [card.node as Renderable, card.thread]));
+    return this.scroll.getChildren().flatMap((node) => {
+      const thread = by.get(node);
+      return thread ? [{ node, thread }] : [];
+    });
+  },
+
+  /** The last card of the box of a thread in the feed, which ends the thread. */
+  threadEnd(id: string): Renderable | undefined {
+    return this.threadCards().findLast((one) => one.thread === id)?.node;
+  },
+
+  /** The thread whose box holds the middle row of the feed in view, or else the box of a thread in view nearest it. */
+  threadInView(): string | undefined {
+    const { viewport } = this.scroll;
+    const middle = viewport.y + Math.floor(viewport.height / 2);
+    let best: { thread: string; distance: number } | undefined;
+    for (const { node, thread } of this.threadCards()) {
+      const top = node.y;
+      const bottom = node.y + node.height;
+      if (bottom <= viewport.y || top >= viewport.y + viewport.height) continue;
+      const distance = middle < top ? top - middle : middle >= bottom ? middle - bottom + 1 : 0;
+      if (!best || distance < best.distance) best = { thread, distance };
+    }
+    return best?.thread;
   },
 
   /** A thread resolves: its open prompt closes, and the model that works for it stops. */
