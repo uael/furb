@@ -173,10 +173,10 @@ def test_the_records_of_a_capture_keep_the_pinned_record_at_its_pinned_size(tmp_
   (out / "records").mkdir(parents=True)
   source.mkdir()
   old, new = source / "old.jsonl", source / "new.jsonl"
-  old.write_text("one\ntwo\nthree\n", encoding="utf-8")
-  new.write_text("four\n", encoding="utf-8")
+  old.write_bytes(b"one\ntwo\nthree\n")
+  new.write_bytes(b"four\n")
   os.utime(old, (1, 1))
   (out / "pins.json").write_text(json.dumps({"old.jsonl": 8}), encoding="utf-8")
   subprocess.run([sys.executable, "-I", str(SKILL / "records.py"), str(source), str(out), "1", "1000"], check=True)
   assert json.loads((out / "records.json").read_text(encoding="utf-8")) == {"old.jsonl": 8}
-  assert (out / "records" / "old.jsonl").read_text(encoding="utf-8") == "one\ntwo\n"
+  assert (out / "records" / "old.jsonl").read_bytes() == b"one\ntwo\n"
