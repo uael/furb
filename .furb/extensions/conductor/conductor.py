@@ -158,7 +158,7 @@ TRUTH = "The source of truth for this item is the words of the owner, scratch://
 
 ALIGN = """The audit of alignment {key}: {count} PRs merged since the last one. Its window of commits is git log --oneline {window}. Read that window and the diff of each PR in it, and check main against the words of the owner, which are the one source of truth: {words}, scratch://owner/picks.md, and the ledger of his asks, {asks} ($TMPDIR/owner/asks.json). Check each ask of the ledger against origin/main as a claim: set its state to done, open, partly or missing, with its evidence and its gap, and write the ledger back in the same shape. The round holds the items below, so a row of your register queues none of them again: {held}."""
 
-TUI = """The audit of the TUI {key}: {count} PRs merged since the last one. Its window of commits is git log --oneline {window}. Read the skill converge-tui with skill("converge-tui"), and audit the TUI of origin/main as it says, against the last whole capture of the TUI, in $TMPDIR/audit/tui. The round holds the items below, so a row of your register queues none of them again: {held}. {workspace}"""
+TUI = """The audit of the TUI {key}: {count} PRs merged since the last one. Its window of commits is git log --oneline {window}. {workspace} Check out origin/main there, detached, before anything else, then read the skill converge-tui with skill("converge-tui"), and audit the TUI of origin/main as it says, against the last whole capture of the TUI, in $TMPDIR/audit/tui. The round holds the items below, so a row of your register queues none of them again: {held}."""
 AUDITS = {"align": ALIGN, "tui": TUI}
 
 SETTLE = """here=$1 mine=$2

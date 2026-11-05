@@ -575,7 +575,7 @@ async def test_an_audit_of_each_target_starts_at_four_merges_on_astra_and_the_mo
   assert "git log --oneline -40 origin/main" in brief and "align7" in brief
   assert conductor.ns["align_state"]["align"] == {"base": "4", "n": "8", "sha": "abc"}
   assert (tui, other, conductor.ns["kinds"][tui], await conductor.value(f"model_of({tui!r})")) == ("tui1", "tui", "audit", ASTRA)
-  assert 'skill("converge-tui")' in told and "in $TMPDIR/audit/tui." in told and told.endswith("{workspace}")
+  assert 'skill("converge-tui")' in told and "in $TMPDIR/audit/tui." in told and "{workspace} Check out origin/main there" in told
   await conductor.word("merged.update(range(4, 20))\nalign()")
   assert len(conductor.ns["queue"]) == 2
   await conductor.word('queue.clear()\nends.update(align8=[("p", 0)], tui1=[("p", 0)])\nalign()')
