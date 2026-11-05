@@ -403,6 +403,12 @@ fix what your change broke, and report what was broken before.
   root reads every folder.
   A script of bun in `$TMPDIR` cannot import the package `furb`, so write a quick check in the worktree, where
   `node_modules` stands.
+- `bun run test scenarios`: the scenarios of `tui/scenarios`, the path of the owner end to end. A scripted claude
+  command line, `bind/typescript/test/programs/scenario.ts`, answers a real host, and a headless window of the TUI on
+  a test terminal drives it with keys and the mouse, never a window on the terminal of the machine. Each scenario
+  guards a defect that a life of the owner met, and fails on the commit before its fix. `bun run test` runs them with
+  the other tests, on macOS and Linux, so they are a required check of each pull request. Each fix of a path of the
+  operator adds a scenario that fails on the code before the fix.
 - `bun run demo` and `bun run tui`: the TUI on the demo session, which asks no model, or on a real life.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
   `tui/src/commands.ts`.
