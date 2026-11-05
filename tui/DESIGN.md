@@ -323,58 +323,14 @@ the taste matters as much as the layout: the accent colors, the motion and the s
 
 ### The graph: the debugger of a living program
 
-The graph shows a life as programs that run, and the messages between them. Zoom is semantic. Each level shows less
-of the life and more of one thing, and Enter goes one level in, and Esc one level out:
+The graph shows a life as programs that run, and the messages between them, on a map. Each chain is a program: its
+mark and its name, and under them, faint, the act that it waits on, its model and its dollars. No box holds a
+program: the space between the programs and the lines of the tree of hires give the structure. The map lights the
+chains of the thread that the sidebar shows, its own chain and the chains of its agents, and the rest fade. A prompt
+from one chain to another flows along the lines as a dot while it is open, and its answer flows back for a moment
+when it closes. A question to the operator flows up to you, in the color of what waits for you.
 
-1. The threads. The tree of the prompts of the life, as the outline of the life: each thread with its state, its
-   first line, its progress as the count of its sub-threads that closed, and what waits for the operator in it. On a
-   wide terminal the threads stand in a sidebar, and the map of the selected thread stands beside it. On a narrow
-   one the threads take the whole stage, with the anchor of each where it hangs, its chain and its pull requests.
-2. The map. Each chain is a program: its mark and its name, and under them, faint, the act that it waits on, its
-   model and its dollars. No box holds a program: the space between the programs and the lines of the tree of hires
-   give the structure. The programs that the selected thread holds stand bright, and the rest fade. A prompt from one
-   chain to another flows along the lines as a dot while it is open, and its answer flows back for a moment when it
-   closes. A question to the operator flows up to you, in the color of what waits for you.
-
-   ```
-    Threads                                Ship the release 0.4: the search, the docs and the animation.   8 of 14
-
-    ✓ Explore this project, run its ch…     ◆ you
-    ⠏ Ship the release 0.4: the…  ◆2 2/9    │ 2 owed
-      ✓ Make the search ignore …  ◆1 0/2    │
-        ⠏ Review the change of …  ◆1 0/1    ├─ ⠏ Main ────••──•─•─────────┬─ ✓ w search ────•──────•────── ◆ review search
-          ◆ Must the search match acce…     │    prompt7  sonnet  $0.0096  │    sonnet  $0.0024               asks you
-      ⠏ Write the docs of the rele…  1/2    │                              │
-        ⠏ Write the guide of the searc…     ├─ ○ Search shortcut           ├• ⠏ w docs ───────•─•────────┬─ ⠏ docs/guide
-        ✓ Write the changelog of the r…     │                              │    prompt11  sonnet  $0.0048 │    bash6  sonnet
-      ⠏ Ask me first, then tidy…  ◆1 0/1    │                              │                              │
-        ◆ Which effort should the next…     ├─ ○ Review notes              ├─ ◆ w ui                      └─ ✓ docs/changelog
-      ◌ Record the animation of the re…     │                              │    asks you  sonnet  $0.0024
-    ⠏ Reach parity with Pi: sessio…  2/3    │                              │
-      ✓ Close the gap of sessions with…     └─ ⠏ Pi parity ──────────•─•──•─ ◌ w gif
-   ```
-
-3. The program. One chain as its source: the words of its ladders, one under the other, each prompt as a line that
-   heads its rungs. The line that runs is marked, and the margin holds what each act came to, beside the line that
-   made it. At the side stand the stack and the watch: the chain of awaits from the operator to the act that the
-   chain waits on now, and the acts of the selected line with their values.
-
-   ```
-    w search  chain3  prompt2  Add the search shortcut, with a test
-     1  # Read the code of search                          │ stack
-     2  search = read("src/search.ts")         read2 ✓ 5 l │   prompt1  Main
-     3  t = search.replace("includes", "has")             │   rung5    conduct
-     4  write(t)                               write4 ✓ +1−1│   prompt2  w search
-     5  r = await bash("bun test")             bash7 ✓ 0  │ ▶ bash9    gh pr create
-     6▶ pr = await bash("gh pr create ...")    bash9 ⠦ 4s │ watch
-                                                          │   bash9  Creating the PR
-   ```
-
-4. The word. One rung, whole: each line of its word, with what each act came to in full, and what the rung told.
-5. The act. One act, whole: a command and its streams, live while it runs, a read and its text, a write and its
-   change, line by line, a prompt and its messages.
-
-The controls of a debugger act on what the level selects:
+The controls of a debugger act on the selected chain:
 
 | Key | What it does |
 | --- | --- |
@@ -387,15 +343,14 @@ The controls of a debugger act on what the level selects:
 | i | Ask the model of the selected chain |
 | [ and ] | Move the time cursor. The graph shows the life as it stood then |
 | b | Branch the selected chain at the selection, or at the time cursor |
-| arrows | Move to the next thing in that direction: a node of the map by its place, a line of the source |
+| arrows | Move to the next program of the map in that direction, by its place |
 
 The layout of the map is stable. A chain takes its place when it is born and keeps it: its column is its depth in
 the tree of hires, and its row is the first free row of that column at or under the row of the chain that hired it.
 A new chain never moves another one. The place follows from the order of the record alone, so a later life draws
 the same map.
 
-The keyboard reaches all of it. A click on a thread or on a line of the source selects it, and a second click zooms
-in. A click on a program of the map is left for later work.
+The keyboard reaches all of it. A click on a program of the map is left for later work.
 
 ### The finish
 

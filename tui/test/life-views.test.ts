@@ -184,6 +184,13 @@ test("the map lights the chain of the thread that the sidebar shows and the chai
         "chain22",
         "chain23",
       ]);
+      // In the past the map lights only the agents that had begun: the rival on chain23 begins at the moment 4554.
+      app.cursor = 4553;
+      const before = app.stageOf().thread?.chains;
+      expect([before?.has("chain14"), before?.has("chain23")]).toEqual([true, false]);
+      app.cursor = 4554;
+      expect(app.stageOf().thread?.chains.has("chain23")).toBe(true);
+      app.cursor = undefined;
     },
     { width: 152, height: 46 },
     await recorded(),
