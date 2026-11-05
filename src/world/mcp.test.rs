@@ -525,9 +525,9 @@ fn a_call_that_a_crash_cut_ends_as_interrupted_at_the_wake_and_runs_no_more() {
     ..Opening::default()
   };
   let (mut first, _) = opening().boot::<String>([]).unwrap();
-  // A word awaits the call, whose ear a close ends, as each verb of the extension gives it.
-  let word =
-    "await act('mcp_call', '', controlled(idle, True), 'fixture', 'slow', {'seconds': 30})";
+  // A word makes the call and ends with no await, and the call has an ear that a close ends, as
+  // each verb of the extension gives it.
+  let word = "act('mcp_call', '', controlled(idle, True), 'fixture', 'slow', {'seconds': 30})";
   let root = first.root().to_owned();
   let rung = verbs::Rung { word: Some(word.to_owned()), on: Some(root), ..Default::default() };
   drop(first.rung(rung).unwrap());

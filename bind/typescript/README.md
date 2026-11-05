@@ -54,9 +54,8 @@ either way. The package also gives the ears of the files, the commands, time and
 `files(scratch)`, `bash(scratch)`, `time()` and `store(path)`, for a host that boots an engine by hand. The
 files read and write a path against the directory where its chain stands, and a path of `scratch://` in the scratch
 directory that the host names. The commands stream what a command writes, feed its stdin, and end it at its timeout, and
-each runs with `TMPDIR` set to that scratch directory. They are given the record that the life opens on, and at a wake
-they close each command that the record shows started and not done with a refusal that says it was interrupted, and run
-it no more. Only the opening of a life makes the files of a record again in its scratch directory, and gives a life with
+each runs with `TMPDIR` set to that scratch directory. At a wake they close each command that an earlier life started
+and did not end with a refusal that says it was interrupted, and run it no more. Only the opening of a life makes the files of a record again in its scratch directory, and gives a life with
 no record a directory that goes with it. A session has the scratch directory of its record, in the cache of furb, which
 `scratch(record)` gives, so a host removes it when it deletes the record. Time gives the clock and a chance, and ends a
 wait. The provider asks the models of the catalog of the crate, which `models(claude?, directory?, config?)` lists,

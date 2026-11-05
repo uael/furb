@@ -681,6 +681,10 @@ impl Engine {
           at = by;
         }
       }
+      // An act that no work above it waits for is the work that the earlier life left.
+      if made.is_empty() {
+        made.extend(self.get(&id)?.map(|act| (id.clone(), act.kind().to_owned())));
+      }
       for one in made.into_iter().rev() {
         if !pending.contains(&one) {
           pending.push(one);

@@ -1962,3 +1962,41 @@ fn the_work_of_an_act_ends_at_a_later_take_of_it_and_at_its_first_done_whoever_s
   engine.pump(Waker::noop()).unwrap();
   assert_eq!(ends.get(), 2, "the done that the cancel said ended the second work");
 }
+
+/// An ear with no work that takes each wait, and ends it at once when `ends`.
+fn holder(ends: bool) -> Box<dyn Ear> {
+  ear(move |mut co| async move {
+    loop {
+      let a = hear(&mut co).await;
+      if a.kind() == "wait" && a.question() {
+        say(&mut co, Fact::says("started", a.about(), []));
+        if ends {
+          say(&mut co, done(a.about(), Object::none()));
+        }
+      }
+    }
+  })
+}
+
+#[test]
+fn an_ear_that_hears_with_no_work_takes_again_an_act_that_an_earlier_life_took() {
+  let at = Yard::new(format!("furb-engine-held-{}", std::process::id()));
+  let life = |ends: bool| {
+    let (record, store) = world::store(at.join("record.jsonl")).unwrap();
+    let ears = [
+      ("provider", provider(at.to_path_buf(), Rc::default(), Rc::default())),
+      ("holder", holder(ends)),
+      ("store", store),
+    ];
+    Engine::boot(record, ears).unwrap()
+  };
+  let root = {
+    let mut first = life(false);
+    let root = first.root().to_owned();
+    first.wait(&[root.as_str()], verbs::Wait { seconds: Some(9.0), on: on(&root) }).unwrap();
+    root
+  };
+  let mut second = life(true);
+  second.wake(&root).unwrap();
+  assert!(block_on(Act::<Object>::of(&mut second, "wait1")).is_ok(), "the ear took the wait again");
+}
