@@ -802,7 +802,8 @@ async def conduct(every: float = 300) -> dict[str, object]:
         ended(here, "it holds no item and no open PR that it tends")
         return results
       at = "wait"
-      await wait(every, *living())
+      # With no live worker no act of the life marks the next beat, so the round waits on its own chain, an act that never settles.
+      await wait(every, *(living() or [scope(acting())]))
   except CancelledError:
     ended(here, f"it was cancelled in its step {at}")
     raise
