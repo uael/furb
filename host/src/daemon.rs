@@ -649,6 +649,7 @@ impl Lives {
       answer: answer.or_else(|| base.answer.clone()),
       ..base.clone()
     };
+    let places = processes::places(&opening);
     let handle = Life::spawn(opening)?;
     self.born += 1;
     let watch = Watch {
@@ -665,7 +666,7 @@ impl Lives {
         life: life.clone(),
         cwd: PathBuf::from(&cwd),
         host: host.clone(),
-        places: processes::places(&self.settings.opening),
+        places,
         log: self.settings.opening.log.clone(),
       };
       tokio::spawn(played.run());

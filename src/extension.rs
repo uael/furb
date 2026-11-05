@@ -249,6 +249,19 @@ impl Extension {
   /// whether it plays on the root alone, the file of its word, and the sha256 of its word in hex.
   /// An enable of a build before the file holds no file, and one before the digest holds none.
   pub(crate) fn enable(&self) -> Fact {
+    self.said(None)
+  }
+
+  /// The saying that enables the extension of a skill, as [`Extension::enable`] says it, with the
+  /// program of the process of the folder that the life played it from last, empty when that
+  /// folder names none. An enable of a build before the program holds no program, and one that
+  /// the ear of the extensions says for a config holds none either.
+  pub(crate) fn played(&self, program: &str) -> Fact {
+    self.said(Some(program))
+  }
+
+  /// The saying that enables the extension, with the program of its process when it gives one.
+  fn said(&self, program: Option<&str>) -> Fact {
     let rooted = if self.root { ROOTED } else { "" };
     let digest = format!("{:x}", Sha256::digest(self.word.as_bytes()));
     let words = [
@@ -259,7 +272,7 @@ impl Extension {
       self.file.as_str(),
       digest.as_str(),
     ];
-    Fact::says(ENABLE, ROOT, words.map(Object::string))
+    Fact::says(ENABLE, ROOT, words.into_iter().chain(program).map(Object::string))
   }
 }
 
