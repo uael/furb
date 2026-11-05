@@ -654,7 +654,7 @@ def grant(usd: float | None = None, share: float | None = None, on="") -> Act[No
         case ("done", about, _, (_, _, (*_, cost), _)) if question(("reply", about)):
           spent += cost
           yield told(id, "ledger", spent=spent)
-          if (usd and spent >= usd) or (share and filled(about) >= share):
+          if (usd and spent >= usd) or (share and (filled(about) or 0) >= share):
             pause(here, "ceiling")
 
   return act("grant", on, controlled(ear), usd, share)

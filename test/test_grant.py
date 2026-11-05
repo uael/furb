@@ -2,7 +2,21 @@
 
 from asyncio import CancelledError
 
-from conftest import COST, Sand, born, chained, fresh, heads, paragraphs, prompted, ran, said, settle
+from conftest import (
+  COST,
+  Sand,
+  born,
+  chained,
+  fresh,
+  heads,
+  paragraphs,
+  prompted,
+  ran,
+  said,
+  settle,
+  waiting,
+  world_says,
+)
 from furb import engine
 from furb.engine import OPERATOR, Act, Refused
 
@@ -194,6 +208,20 @@ async def test_a_cancel_of_it_lifts_the_ceiling_since_it_is_an_act_like_any_othe
   sand.script[root] = ["a = 1", "close(2)"]
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
+  assert said(log, "pause") == []
+
+
+async def test_a_reply_that_a_cancel_ended_fills_no_share_of_the_window() -> None:
+  """A reply that a cancel ended fills no share of the window, so an answer that its model gives after the cancel counts its dollars alone."""
+  _, log, root, _, _, reply = await waiting(cost=COST)
+  ceiling = engine.grant(usd=2.0, share=0.5, on=root)
+  await settle()
+  engine.cancel(reply)
+  await settle()
+  world_says("done", reply, ("assistant", "close(1)", COST, []))
+  await settle()
+  assert isinstance(engine.peek(reply), CancelledError) and engine.peek(ceiling, ...) is ...
+  assert [a[3] for a in said(log, "tell") if a[1] == ceiling][-1][0] == "#grant1 ledger\ngrant1_spent = 1.5"
   assert said(log, "pause") == []
 
 
