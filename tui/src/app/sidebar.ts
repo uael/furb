@@ -2,9 +2,8 @@ import type { BoxOptions, BoxRenderable, Renderable, TextRenderable } from "@ope
 import { unmarked } from "furb";
 import type { ChainThread } from "furb/life";
 import { count, dollars } from "../format.ts";
-import type { ActRow } from "../session.ts";
 import { theme as c, glyph, spacing as space, threadTone } from "../theme.ts";
-import { bold, type Part } from "../ui.ts";
+import { bold, type Part, plain } from "../ui.ts";
 import { part } from "./part.ts";
 import type { TextShape } from "./shared.ts";
 
@@ -205,55 +204,69 @@ export const sidebar = part({
 
   /** The thread whose box holds the top row of the feed while its header stands above the feed. */
   pinnedThread(): string | undefined {
-    const order = this.scroll.getChildren();
+    const cards = this.threadCards();
     const top = this.scroll.viewport.y;
-    // The cards stand in one column, so the last one that starts on the top row or above it is found by halves.
-    let [low, high] = [0, order.length];
-    while (low < high) {
-      const mid = (low + high) >> 1;
-      if ((order[mid]?.y ?? 0) <= top) low = mid + 1;
-      else high = mid;
-    }
-    const at = order[low - 1];
-    const thread = at && this.cards.get(at.id)?.thread;
-    const head = thread && this.cards.get(thread)?.node;
-    if (!thread || !head || head.y >= top) return undefined;
-    const next = order[low];
-    const holds =
-      at.y + at.height > top || (next !== undefined && this.cards.get(next.id)?.thread === thread);
-    return holds ? thread : undefined;
+    const at = cards.findLastIndex((one) => one.node.y <= top);
+    const card = cards[at];
+    const head = card && this.cards.get(card.thread)?.node;
+    if (!card || !head || head.y >= top) return undefined;
+    // The top row stands in the card, or in the gap between two cards of the same box.
+    const holds = card.node.y + card.node.height > top || cards[at + 1]?.thread === card.thread;
+    return holds ? card.thread : undefined;
   },
 
   /** The header of the thread whose box holds the top row of the feed, pinned at the top of the feed while the header
-   * itself stands above it: the title of the thread on one row and its toggle, in the colors and the inset of the
-   * header, so that it reads as the header and its toggle stays in view. It reads the layout of the frame that was
-   * drawn, and draws again only when what it shows changed. */
+   * itself stands above it: on one row, who sent the message, the title of the thread in bold, its state and its
+   * toggle, with the line and the inset of the header, on the raised surface that parts it from the body under it. It
+   * reads the layout of the frame that was drawn, and draws again only when what it shows changed. */
   renderPin(): void {
+    const w = this.session;
     const id = this.pinnedThread();
-    const thread = id ? this.session.threads.by.get(id) : undefined;
+    const thread = id ? w.threads.by.get(id) : undefined;
     const card = id ? this.cards.get(id) : undefined;
+    const act = id ? w.actOf(id) : undefined;
     const folded = Boolean(id && this.threadFolded(id));
+    const head = act && this.threadHead(act, folded);
+    const user = Boolean(act && w.isUserPrompt(act));
     const key =
-      id && thread && card
-        ? `${id}\n${thread.title}\n${folded}\n${card.indent}\n${this.feedWidth}\n${this.theme}`
+      id && thread && card && head
+        ? `${id}\n${thread.title}\n${head.sent}\n${plain(head.state)}\n${user}\n${folded}\n${card.indent}\n${this.feedWidth}\n${this.theme}`
         : "";
     if (key === this.pinKey) return;
+    // A press on the toggle of the pin holds no more once the pin shows another thread: the toggle that the release
+    // finds at the same place, with the same text, is a control that the operator never pressed.
+    if (key.split("\n", 1)[0] !== this.pinKey.split("\n", 1)[0]) {
+      let node = this.pressed;
+      while (node && node !== this.pin) node = node.parent;
+      if (node) this.pressed = null;
+    }
     this.pinKey = key;
     this.clear(this.pin);
     this.pin.visible = Boolean(key);
     this.renderer.requestRender();
-    if (!id || !thread || !card) return;
+    if (!id || !thread || !card || !head) return;
     const row = this.box({ backgroundColor: c.background, paddingLeft: card.indent });
-    const surface = this.box({ paddingRight: space.between, backgroundColor: c.panel });
+    const surface = this.box({ paddingRight: space.between, backgroundColor: c.raised });
     row.add(surface);
     this.pin.add(row);
-    const user = this.session.isUserPrompt(thread.act as ActRow);
-    const header = this.row();
-    header.add(this.text(thread.title, c.text, { truncate: true, flexGrow: 1, flexShrink: 1 }));
-    header.add(this.threadToggle(id));
-    this.barred(surface, user || folded ? threadTone(id) : undefined, 0, { top: false, bottom: false }).add(
-      header,
+    const line = this.row();
+    line.add(
+      this.text(
+        [
+          ...(user
+            ? [["You  ", threadTone(id)] as Part]
+            : head.sent
+              ? [[`${head.sent}  `, c.faint] as Part]
+              : []),
+          [thread.title, c.text, bold],
+        ],
+        c.text,
+        { truncate: true, flexGrow: 1, flexShrink: 1 },
+      ),
     );
+    line.add(this.text(head.state, c.faint, { marginLeft: space.between }));
+    line.add(this.threadToggle(id));
+    this.barred(surface, head.bar, 0, { top: false, bottom: false }).add(line);
   },
 
   /** A row of the sidebar, whose click runs, which spans the sidebar so that the pointer and the selection show from

@@ -164,8 +164,9 @@ Collapse on the header
 of a thread, or ⌥D, which lists the threads, folds the thread to its box on one line, which says its state, the
 first line of its message and the count of its steps, and Expand opens it again. This toggle is the one control of a
 thread in the feed: a click in the body of a thread never folds it and never resolves it. When the header of a thread
-taller than the feed scrolls above the feed, the header stands pinned at the top of the feed, with the title of the
-thread on one row and the same toggle, until the box of the thread leaves the top. A fold from the toggle scrolls the
+taller than the feed scrolls above the feed, the header stands pinned at the top of the feed on one row, on a raised
+surface: who sent the message, the title of the thread in bold, its state and the same toggle, until the box of the
+thread leaves the top. A fold from the toggle scrolls the
 feed so that the header of the thread shows. A dot
 before a folded thread says that work came to it since you folded it, and the mark of a question says that it asks
 you. A resolved thread that is

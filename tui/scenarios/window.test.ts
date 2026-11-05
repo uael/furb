@@ -74,44 +74,50 @@ test("the toggle of a thread taller than the screen stays in view and folds it, 
     const { engine, app, session } = window;
     const root = window.root;
     await engine.pause(root);
-    const message = Array.from({ length: 60 }, (_, n) => `Row ${n + 1} of a long message.`).join("\n\n");
-    const id = await engine.prompt("str", { message, on: root });
-    await until(() => listed(window).some((one) => one.act.id === id), "the thread");
-    await window.shows((frame) => frame.includes("more lines"), "the fold of the long message");
+    const long = (word: string) => Array.from({ length: 60 }, (_, n) => `${word} ${n + 1}.`).join("\n\n");
+    const id = await engine.prompt("str", { message: long("Row"), on: root });
+    const other = await engine.prompt("str", { message: long("Line"), on: root });
+    await until(() => listed(window).some((one) => one.act.id === other), "the threads");
+    await window.shows((frame) => frame.includes("more lines"), "the fold of the long messages");
+    await window.click("more lines");
     await window.click("more lines");
     const feed = (frame: string) =>
       frame.split("\n").map((line) => line.slice(0, window.width - session.preferences.sidebarWidth));
     const { viewport } = app.scroll;
-    const head = () => app.cards.get(id)?.node;
+    const headOf = (thread: string) => () => app.cards.get(thread)?.node;
+    const head = headOf(id);
     await until(async () => {
       await window.frame();
-      return (head()?.height ?? 0) > 2 * viewport.height;
-    }, "the whole message");
-    const scrollTo = async (row: number) => {
-      const node = head();
-      if (!node) throw new Error("no header of the thread");
-      app.scroll.scrollTo(app.scroll.scrollTop + node.y + row - viewport.y);
+      return [id, other].every((one) => (headOf(one)()?.height ?? 0) > 2 * viewport.height);
+    }, "the whole messages");
+    // Two frames: the first lays the feed out, and the pin reads that layout and shows in the second.
+    const settle = async () => {
       await window.frame();
       return window.frame();
+    };
+    const scrollTo = async (row: number, of = head) => {
+      const node = of();
+      if (!node) throw new Error("no header of the thread");
+      app.scroll.scrollTo(app.scroll.scrollTop + node.y + row - viewport.y);
+      return settle();
     };
     // The middle of the thread stands at the top of the feed, and its header far above it.
     const middle = feed(await scrollTo(40));
     expect(head()?.y ?? 0).toBeLessThan(viewport.y);
     const top = middle[viewport.y] ?? "";
-    expect(top).toContain("Row 1 of a long message.");
+    expect(top).toContain("Row 1.");
     expect(top).toContain("▾ Collapse");
     expect(middle.filter((line) => line.includes("Collapse"))).toHaveLength(1);
     const toggle = top.indexOf("Collapse");
     // A click on the line at the left of the body and a click on its text fold nothing and resolve nothing.
-    const y = middle.findIndex((line, at) => at > viewport.y + 5 && /Row \d+ of a long message\./.test(line));
+    const y = middle.findIndex((line, at) => at > viewport.y + 5 && /Row \d+\./.test(line));
     const body = middle[y] ?? "";
     expect(y).toBeGreaterThan(0);
     for (const x of [body.indexOf("┃"), body.search(/Row/) + 2, toggle]) {
       expect(x).toBeGreaterThanOrEqual(0);
       await window.screen.mockMouse.click(x, y);
-      await window.frame();
+      await settle();
     }
-    await Bun.sleep(300);
     expect(session.folds[`thread:${id}`]).not.toBe(true);
     expect(listed(window).find((one) => one.act.id === id)?.resolved).toBe(false);
     expect(await engine.peek(id)).toBeNull();
@@ -126,9 +132,20 @@ test("the toggle of a thread taller than the screen stays in view and folds it, 
     const pinned = feed(await scrollTo(20));
     expect(pinned[viewport.y]?.slice(toggle, toggle + "Collapse".length)).toBe("Collapse");
     await window.screen.mockMouse.release(toggle, viewport.y);
-    await window.frame();
-    await Bun.sleep(300);
+    await settle();
     expect(session.folds[`thread:${id}`]).not.toBe(true);
+    // A press on the pinned toggle of one thread, a scroll that pins the next thread under the still pointer, and the
+    // release fold neither thread: the toggle under the pointer at the release is another control.
+    expect(feed(await scrollTo(40))[viewport.y]).toContain("Row 1.");
+    await window.screen.mockMouse.pressDown(toggle, viewport.y);
+    const next = feed(await scrollTo(20, headOf(other)))[viewport.y] ?? "";
+    expect(next).toContain("Line 1.");
+    expect(next.slice(toggle, toggle + "Collapse".length)).toBe("Collapse");
+    await window.screen.mockMouse.release(toggle, viewport.y);
+    await settle();
+    expect(session.folds[`thread:${id}`]).not.toBe(true);
+    expect(session.folds[`thread:${other}`]).not.toBe(true);
+    await scrollTo(40);
     // The toggle folds the thread, and the feed then shows its header.
     await window.screen.mockMouse.click(toggle, viewport.y);
     const folded = feed(await window.shows((frame) => frame.includes("▸ Expand"), "the folded thread"));

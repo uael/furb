@@ -590,13 +590,7 @@ export const feed = part({
         // A message to the thread shows as its sender wrote it, with each image that it attached named by a mark.
         const said = (text: string) =>
           imageReferences(text).length ? this.message(text) : this.markdown(text);
-        const sent = user
-          ? ""
-          : aside?.aside.aside === "question"
-            ? `${named(aside.aside.from)} asks`
-            : this.sender(act);
-        // A message that asks no answer, as a message that a rung adds to a thread, names no type.
-        const state = this.promptState(act).filter(([text]) => text !== "None");
+        const { sent, state, bar } = this.threadHead(act, folded);
         // A long message shows its first rows until a click opens it, so that a brief of a page leaves the feed
         // readable at a glance. A folded thread shows its first rows even when the operator opened its message.
         const [shortened, rest] =
@@ -610,7 +604,7 @@ export const feed = part({
           id: act.id,
           label: user ? [["You", tone]] : [[sent, c.faint]],
           key: `${message}\n${sent}\n${plain(state)}\n${rest}\n${thread?.resolved}\n${meta}\n${news}\n${folded}\n${this.feedWidth}\n${this.theme}`,
-          ...(user || folded ? { bar: tone } : {}),
+          ...(bar ? { bar } : {}),
           act,
           shown: message,
           body: (box) => {

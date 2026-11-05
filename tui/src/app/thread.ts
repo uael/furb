@@ -1,6 +1,8 @@
 import type { BoxRenderable, RGBA } from "@opentui/core";
 import type { ProgramLine } from "furb/life";
-import { theme as c, glyph, spacing as space } from "../theme.ts";
+import type { ActRow } from "../session.ts";
+import { theme as c, glyph, spacing as space, threadTone } from "../theme.ts";
+import type { Part } from "../ui.ts";
 import { part } from "./part.ts";
 import { noBorder } from "./shared.ts";
 
@@ -57,6 +59,23 @@ export const thread = part({
     else w.folds[`window:${key}`] = false;
     w.save();
     this.renderContent();
+  },
+
+  /** What the header of a thread says beside its message, which the box of the thread and its pin both show: who sent
+   * the message, unless the operator did, its state, and the color of the line at its left, which a message of the
+   * operator and a folded thread have. */
+  threadHead(act: ActRow, folded: boolean): { sent: string; state: Part[]; bar?: RGBA } {
+    const w = this.session;
+    const user = w.isUserPrompt(act);
+    const aside = w.threads.asides.get(act.id);
+    const sent = user
+      ? ""
+      : aside?.aside.aside === "question"
+        ? `${w.labelOf(aside.aside.from)} asks`
+        : this.sender(act);
+    // A message that asks no answer, as a message that a rung adds to a thread, names no type.
+    const state = this.promptState(act).filter(([text]) => text !== "None");
+    return { sent, state, ...(user || folded ? { bar: threadTone(act.id) } : {}) };
   },
 
   /** A part of the box of a thread. A message of the operator has a line of the color of the thread at its left, which
