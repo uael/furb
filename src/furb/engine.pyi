@@ -234,6 +234,15 @@ def module(on: str = "") -> dict:
 def program(on: str = "") -> dict[str, str]:
   """program gives the program of a chain: the word of every rung that runs on it since its last module, as python, each under the name of the rung that the word first ran in, which is the rung itself, the rung that a rung which retells retells, or a told rung, in order, as the runs of its transcript say."""
 
+def dump(*names: str, on: str = "") -> str:
+  """dump gives names of the module of a chain as python, which a word of another life runs to bind them again, so no verb loads them.
+  A name whose value a checkpoint carries gives its name, =, and the literal of its value.
+  A name of a function or of a class gives the last word of the program of the chain that defines it at the start of a line, whole, and a word that defines two of the names comes once.
+  A name of an Act, or of a value that holds one, raises Refused, which names it, since an act is of its life alone, so dump never writes a live Act.
+  A name of a value that literal cannot write, a name of a function or a class that no word of the program defines, and a name that the module does not hold raise Refused, which names it, so no name is lost in silence.
+  dump reads the module and the program of the chain and asks nothing, so no act is made and the journal keeps nothing.
+  """
+
 def standing() -> Standing:
   """standing gives what the chains stand on: the answer of the last stand that the transcript of the root holds, and an empty standing before the first.
   It reads the transcript of the root as it stands where the call is made, so a grant reads the window of an actor off the standing where the answer of its reply lands, and a later life reads at each place of the record the standing that the record held there.
@@ -1010,6 +1019,13 @@ type Grant = tuple[Literal["grant"], str, str, str, float | None, float | None]
 """A grant carries the ceiling in dollars and the ceiling in share of the window."""
 type Bash = tuple[Literal["bash"], str, str, str, str, str | None, float, tuple[int | None, ...] | bool | None]
 """A bash carries the command, the stdin and the timeout, and no show and no working directory."""
+
+def literal(v: object, into: set[str] | None = None) -> str | bool:
+  """literal gives the python that makes a value again when the value is one that a checkpoint carries: None, a bool, an int, a float, a str, a Text, an Exit or an exception as python shows it, and a list, a tuple, a set or a dict of those as python writes it.
+  literal gives a value that is false for any other value, and for a list, a tuple, a set or a dict that holds one, so a caller learns that the value is lost.
+  literal adds to into each str of the value that names an act of the life, an Act among them, and writes an Act as Act('bash1').
+  literal with no into writes no Act, so it gives a value that is false for an Act and for a value that holds one.
+  """
 
 def under(name: str, of: str) -> bool:
   """Whether one act is another or was made by it, which the life says, since every question says who made it.
