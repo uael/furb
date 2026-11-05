@@ -258,7 +258,7 @@ async def main() -> None:
   release = life.prompt(str, "Release version 2 in one hour.")
   await release.step()
   print(release.plan)
-  release.edit(release.plan.replace("await wait(3600)\n", ""))
+  release.edit(release.plan.replace("await wait(3600, __name__)\n", ""))
   print(await release)
 
 
@@ -272,7 +272,7 @@ await using life = await open("door.jsonl");
 const release = life.prompt("str", "Release version 2 in one hour.");
 await release.step();
 console.log(release.plan);
-release.edit(release.plan.replace("await wait(3600)\n", ""));
+release.edit(release.plan.replace("await wait(3600, __name__)\n", ""));
 console.log(await release);
 ```
 
@@ -288,7 +288,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
   life.step(&release).await?;
   let plan = life.plan(&release)?;
   println!("{plan}");
-  life.edit(&release, &plan.replace("await wait(3600)\n", ""))?;
+  life.edit(&release, &plan.replace("await wait(3600, __name__)\n", ""))?;
   println!("{}", life.wait(release).await?);
   Ok(())
 }

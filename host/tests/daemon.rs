@@ -922,7 +922,7 @@ mod daemon {
     let mut window = Window::dialed(&local).await;
     let life = opened(&mut window, &at, "a.jsonl").await;
     window.attach(&life).await;
-    let flows = "for _ in range(60):\n  await wait(0.05)";
+    let flows = "for _ in range(60):\n  await wait(0.05, __name__)";
     let verb = Verb::Run { life: life.clone(), word: flows.to_owned(), on: None };
     let Ok(Answer::Act(rung)) = window.ask(verb).await else { panic!("no rung") };
     let heard = window.heard_until(done(&rung)).await;

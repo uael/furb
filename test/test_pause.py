@@ -125,7 +125,7 @@ async def test_a_control_is_on_the_scope_of_what_it_is_over() -> None:
   assert (held[0], held[1], held[2]) == ("pause", act, engine.OPERATOR) and engine.scope(act) == two
   assert heads(engine.turns(on=two))[-2:] == [f"#{act}", f"#{act} paused by operator"]
   assert heads(engine.turns(on=root)) == [f"#{root}"]
-  controller = engine.rung(f"pause({two!r})\nawait wait(0)\nwake({two!r})\nclose(7)", on=root)
+  controller = engine.rung(f"pause({two!r})\nawait wait(0, __name__)\nwake({two!r})\nclose(7)", on=root)
   await settle()
   assert engine.peek(controller, ...) == 7 and not engine.paused(two)
 
@@ -154,7 +154,7 @@ async def test_a_pause_carries_its_cause() -> None:
 @pytest.mark.parametrize("target", ["acting()", "scope(acting())", "get(acting())[2]"])
 async def test_a_word_cannot_pause_its_own_rung(target: str) -> None:
   """A word that pauses its own rung, or an act whose pause covers that rung, raises Refused before the pause is entered, so the model can read the error and continue."""
-  sand, log, root = born(f"pause({target})\nawait wait(0)", "close(2)")
+  sand, log, root = born(f"pause({target})\nawait wait(0, __name__)", "close(2)")
   task = engine.prompt(int, "finish", on=root)
   await settle()
   assert engine.peek(task, ...) == 2

@@ -135,7 +135,7 @@ test("a thread shows each prompt with the rungs of its ladder, the acts of each 
     act("read2", "read", "chain1", "rung1", 5, 5),
     act("read3", "read", "chain1", "rung1", 6, 6),
     act("bash1", "bash", "chain1", "rung1", 7, 9),
-    act("rung2", "rung", "chain1", "operator", 13, undefined, { words: ["await wait(60)"] }),
+    act("rung2", "rung", "chain1", "operator", 13, undefined, { words: ["await wait(60, __name__)"] }),
     act("bash2", "bash", "chain1", "rung2", 14, undefined, {
       words: ["make"],
       value: { stdout: { content: "one\ntwo\nthree\nfour\n" }, stderr: { content: "" } },
@@ -143,7 +143,7 @@ test("a thread shows each prompt with the rungs of its ladder, the acts of each 
   ];
   const words: Record<string, string> = {
     rung1: 'notes = read("README.md")\nclose("Done.")',
-    rung2: "await wait(60)",
+    rung2: "await wait(60, __name__)",
   };
   const lines = ladder("chain1", acts, (rung) => words[rung.id] ?? "", new Map(), new Set());
   expect(
@@ -160,7 +160,7 @@ test("a thread shows each prompt with the rungs of its ladder, the acts of each 
     ["prompt", "prompt1", 0, "", ""],
     ["rung", "rung1", 1, 'notes = read("README.md") +1 read1…3 bash1', ""],
     ["value", "prompt1", 1, "", "Done."],
-    ["rung", "rung2", 0, "await wait(60) +0 bash2", ""],
+    ["rung", "rung2", 0, "await wait(60, __name__) +0 bash2", ""],
     ["tail", "bash2", 1, "", "two\nthree\nfour"],
   ]);
 });

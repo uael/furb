@@ -214,6 +214,8 @@ async def test_a_word_that_awaits_an_act_already_over_is_carried_on_where_it_sta
   """An act that is over when the word comes to await it hands its value straight in, so the run is never suspended
   for a done that already stands; a cancelled one raises where the word waited."""
   root = booted(worlds(STANDS))
-  assert await engine.rung("a = wait(0)\nawait wait(0.02)\nawait a\nclose('both')", on=root) == "both"
-  word = "a = wait(30)\ncancel(a)\nawait wait(0.02)\ntry:\n  await a\nexcept BaseException:\n  close('cut')"
+  assert (
+    await engine.rung("a = wait(0, __name__)\nawait wait(0.02, __name__)\nawait a\nclose('both')", on=root) == "both"
+  )
+  word = "a = wait(30, __name__)\ncancel(a)\nawait wait(0.02, __name__)\ntry:\n  await a\nexcept BaseException:\n  close('cut')"
   assert await engine.rung(word, on=root) == "cut"

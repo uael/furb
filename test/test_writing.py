@@ -69,7 +69,7 @@ async def test_a_part_that_waits_for_an_act_while_its_model_writes_makes_no_want
 async def test_once_the_run_of_its_rung_begins_a_part_that_waits_for_an_act_waits_with_a_wants_as_that_run() -> None:
   """Once the run of its rung begins, a part that waits for an act waits with a wants as that run, as a run does, so the chain asks its next prompt while the word waits."""
   sand, log, root, act, rung, reply = await waiting(auto=False)
-  loop = "for i in range(3):\n  await wait(0)\n  await bash(f'step {i}')\n"
+  loop = "for i in range(3):\n  await wait(0, __name__)\n  await bash(f'step {i}')\n"
   wrote(rung, loop, 0)
   await settle()
   answered(reply, loop + "close(3)")

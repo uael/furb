@@ -8,7 +8,7 @@ async def main() -> None:
   release = life.prompt(str, "Release version 2 in one hour.")
   await release.step()
   print(release.plan)
-  release.edit(release.plan.replace("await wait(3600)\n", ""))
+  release.edit(release.plan.replace("await wait(3600, __name__)\n", ""))
   print(await release)
 
 

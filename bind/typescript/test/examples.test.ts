@@ -130,9 +130,12 @@ test("a grant pauses the chain at its ceiling and a larger grant lets it go on",
 });
 
 test("an edit of the door of a thread changes the plan of the model", async () => {
-  const { root, run } = await yard('await wait(3600)\nclose("released")', "await wait(3600)");
+  const { root, run } = await yard(
+    'await wait(3600, __name__)\nclose("released")',
+    "await wait(3600, __name__)",
+  );
   try {
-    expect(await run("door")).toBe('await wait(3600)\nclose("released")\nreleased\n');
+    expect(await run("door")).toBe('await wait(3600, __name__)\nclose("released")\nreleased\n');
   } finally {
     await remove(root);
   }
