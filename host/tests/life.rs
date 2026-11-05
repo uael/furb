@@ -429,39 +429,44 @@ async fn a_reopen_of_the_record_finds_the_queue_and_sends_it_once_the_chain_rest
   until(&mut events, done(&sent)).await;
 }
 #[tokio::test]
-async fn each_write_keeps_its_change_in_the_journal_beside_the_record() {
+async fn each_write_keeps_its_change_in_the_journal_beside_the_record_once_the_life_ends() {
   let at = place("journal");
   fs::write(at.join("a.txt"), "old\n").unwrap();
+  fs::write(at.join("c.bin"), [0xff, 0xfe, 0x00]).unwrap();
   let record = at.join("a.jsonl").display().to_string();
-  let opening = Opening { record: Some(record.clone()), ..scripted(&at, &[]) };
-  let life = Life::spawn(opening).unwrap();
+  let opening = || Opening { record: Some(record.clone()), ..scripted(&at, &[]) };
+  let life = Life::spawn(opening()).unwrap();
   let mut events = Box::pin(life.events(0));
-  let word = "write(Text('a.txt', 'new\\n'))\nwrite(Text('b.txt', 'made\\n'))\nwrite(Text('scratch://n', 'x'))";
+  let word = "write(Text('a.txt', 'new\\n'))\nwrite(Text('b.txt', 'made\\n'))\n\
+    write(Text('scratch://n', 'x'))\nwrite(Text('c.bin', 'text\\n'))";
   let id = made(&life, rung(word)).await;
   until(&mut events, done(&id)).await;
+  // The end replies once the disk holds each change, so the test reads the journal at once.
+  assert_eq!(life.send(Command::End).await.unwrap(), Reply::Done);
   let journal = PathBuf::from(format!("{record}.changes.jsonl"));
-  let lines = tokio::time::timeout(Duration::from_secs(60), async {
-    loop {
-      let held = fs::read_to_string(&journal).unwrap_or_default();
-      if held.lines().count() >= 2 {
-        return held;
-      }
-      tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-  })
-  .await
-  .unwrap();
+  let lines = fs::read_to_string(&journal).unwrap();
   let changes: Vec<serde_json::Value> =
     lines.lines().map(|line| serde_json::from_str(line).unwrap()).collect();
   let file = |name: &str| at.join(name).display().to_string();
-  assert_eq!(changes.len(), 2, "{lines}");
+  assert_eq!(changes.len(), 3, "{lines}");
   assert_eq!(changes[0]["path"], json!(file("a.txt")));
   assert_eq!((&changes[0]["before"], &changes[0]["after"]), (&json!("old\n"), &json!("new\n")));
   assert!(changes[0]["act"].as_str().is_some_and(|act| act.starts_with("write")));
   assert_eq!(changes[0].get("made"), None);
   assert_eq!(changes[1]["path"], json!(file("b.txt")));
   assert_eq!((&changes[1]["before"], &changes[1]["made"]), (&json!(""), &json!(true)));
-  life.send(Command::End).await.unwrap();
+  // A file that cannot be read as text gives no empty text that an undo would put back.
+  assert_eq!(changes[2]["path"], json!(file("c.bin")));
+  assert_eq!((changes[2].get("made"), &changes[2]["after"]), (None, &json!("text\n")));
+  assert!(changes[2]["unread"].as_str().is_some_and(|why| !why.is_empty()), "{lines}");
+  drop(events);
+  // A later life on the record makes no change again: it writes no file.
+  let again = Life::spawn(opening()).unwrap();
+  let mut events = Box::pin(again.events(0));
+  let id = made(&again, rung("x = 1")).await;
+  until(&mut events, done(&id)).await;
+  assert_eq!(again.send(Command::End).await.unwrap(), Reply::Done);
+  assert_eq!(fs::read_to_string(&journal).unwrap(), lines);
 }
 #[tokio::test]
 async fn a_verb_of_the_operator_gives_the_words_of_its_act() {

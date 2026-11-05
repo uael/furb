@@ -1,7 +1,7 @@
 //! The ears that the host gives each life, before the ears of the crate: one list, so each life of
 //! a machine opens the same way, and the record of one host opens in another.
 
-use std::{collections::HashSet, path::PathBuf};
+use std::collections::HashSet;
 
 use furb::{
   Ear, Fact, Fault, Object,
@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
-  changes::changes,
+  changes::Journal,
   event::Event,
   view::{Fold, Pause, followed},
 };
@@ -22,15 +22,15 @@ use crate::{
 pub(crate) const CONSOLE: &str = "console";
 
 /// The ears of the host, each under its name, in the order of boot: the console of the operator,
-/// the ear that tells each fact as events, and the journal of the changes of files of a life that
-/// keeps a record, which stands on a folder.
+/// the ear that tells each fact as events, and the ear of the journal of the changes of files of a
+/// life that keeps a record.
 pub(crate) fn ears(
   told: UnboundedSender<Event>,
-  journal: Option<(PathBuf, PathBuf)>,
+  journal: Option<&Journal>,
 ) -> Vec<(&'static str, Box<dyn Ear>)> {
-  let mut ears = vec![(CONSOLE, console()), ("events", events(told.clone()))];
-  if let Some((folder, at)) = journal {
-    ears.push(("changes", changes(folder, at, told)));
+  let mut ears = vec![(CONSOLE, console()), ("events", events(told))];
+  if let Some(journal) = journal {
+    ears.push(("changes", journal.ear()));
   }
   ears
 }

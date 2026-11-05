@@ -35,7 +35,7 @@ use tokio::{
 };
 
 use crate::{
-  changes::journal,
+  changes::{Journal, journal},
   ears::{ears, json_of},
   error::LifeError,
   event::{Event, Seq},
@@ -137,9 +137,12 @@ pub enum Reply {
 /// One event under its place in the log.
 type Logged = (Seq, Arc<Event>);
 
+/// Where the thread of a life replies to a command.
+type Replier = oneshot::Sender<Result<Reply, LifeError>>;
+
 /// What a handle says to the thread of its life.
 enum Message {
-  Command(Command, oneshot::Sender<Result<Reply, LifeError>>),
+  Command(Command, Replier),
   /// The events of the log from a place, for a reader that stands behind the life.
   Since(Seq, oneshot::Sender<Vec<Logged>>),
 }
@@ -317,9 +320,16 @@ async fn run(
   opening.log = Some(Log(Arc::new(move |line| {
     reports.send(Event::Notice(line.to_owned())).ok();
   })));
-  let ended = lives(opening, &mut life, &mut received, &told).await;
+  let record = opening.record.clone().filter(|_| opening.keeps());
+  let folder = PathBuf::from(&opening.directory);
+  let journal = record.map(|one| Journal::spawn(folder, journal(&one), told.clone()));
+  let end = lives(opening, &mut life, &mut received, &told, journal.as_ref()).await;
+  let fault = flushed(end.fault, journal.as_ref()).await;
+  if let Some(asked) = end.asked {
+    asked.send(fault.clone().map_or(Ok(Reply::Done), |one| Err(LifeError::Refused(one)))).ok();
+  }
   life.told(None);
-  life.put(Event::Ended(ended));
+  life.put(Event::Ended(fault));
   while let Some(message) = received.recv().await {
     match message {
       Message::Since(from, reply) => reply.send(life.since(from)).ok(),
@@ -328,36 +338,54 @@ async fn run(
   }
 }
 
+/// The fault that ended a life, with what its journal lost, once each change of its files is on the
+/// disk: the end of a life waits for it, so a client that hears the end finds the journal whole.
+async fn flushed(fault: Option<String>, journal: Option<&Journal>) -> Option<String> {
+  let Some(journal) = journal else { return fault };
+  match (fault, journal.flushed().await) {
+    (fault, Ok(())) => fault,
+    (None, Err(lost)) => Some(lost.to_string()),
+    (Some(fault), Err(lost)) => Some(format!("{fault}, and {lost}")),
+  }
+}
+
+/// How a life ended: the fault that ended it, when one did, and the client that ended it, which
+/// hears the reply once the life is over.
+struct End {
+  fault: Option<String>,
+  asked: Option<Replier>,
+}
+
 /// The life opened, driven, and opened again from its checkpoint at each rebirth, until it ends,
-/// and the fault that ended it, when one did.
+/// each birth on the one journal of its changes, and how it ended.
 async fn lives(
   opening: Opening,
   life: &mut Life,
   received: &mut UnboundedReceiver<Message>,
   told: &UnboundedSender<Event>,
-) -> Option<String> {
+  journal: Option<&Journal>,
+) -> End {
   let record = opening.record.clone().filter(|_| opening.keeps());
-  let journal = || record.as_deref().map(|one| (PathBuf::from(&opening.directory), journal(one)));
   if let Some(one) = record.as_deref() {
     life.recalled(one);
   }
   loop {
-    let engine = match opening.clone().open(ears(told.clone(), journal())).await {
+    let engine = match opening.clone().open(ears(told.clone(), journal)).await {
       Ok((engine, _)) => engine,
-      Err(fault) => return Some(fault.to_string()),
+      Err(fault) => return End { fault: Some(fault.to_string()), asked: None },
     };
     life.opened();
     match driven(engine, life, received, record.as_deref()).await {
-      Drove::Ended(fault) => return fault.map(|one| one.to_string()),
+      Drove::Ended(fault, asked) => return End { fault: fault.map(|one| one.to_string()), asked },
       Drove::Reborn(fault) => life.reborn(fault.map(|one| one.to_string())),
     }
   }
 }
 
-/// How the engine of a life went: the life ended, or it is born again, each with the fault that
-/// stopped it, when one did.
+/// How the engine of a life went: the life ended, with the client that ended it, or it is born
+/// again, each with the fault that stopped it, when one did.
 enum Drove {
-  Ended(Option<Fault>),
+  Ended(Option<Fault>, Option<Replier>),
   Reborn(Option<Fault>),
 }
 
@@ -390,15 +418,13 @@ async fn driven(
         drop(engine);
         return stopped(fault, record).await;
       }
-      Woke::Said(None) => return Drove::Ended(rebirth::ended(engine, record.is_some())),
+      Woke::Said(None) => return Drove::Ended(rebirth::ended(engine, record.is_some()), None),
       Woke::Said(Some(Message::Since(from, reply))) => {
         life.told(None);
         reply.send(life.since(from)).ok();
       }
       Woke::Said(Some(Message::Command(Command::End, reply))) => {
-        let ended = rebirth::ended(engine, record.is_some());
-        reply.send(ended.clone().map_or(Ok(Reply::Done), |fault| Err(fault.into()))).ok();
-        return Drove::Ended(ended);
+        return Drove::Ended(rebirth::ended(engine, record.is_some()), Some(reply));
       }
       Woke::Said(Some(Message::Command(command, reply))) => {
         reply.send(commanded(&mut engine, &life.queue, command)).ok();
@@ -422,11 +448,11 @@ async fn driven(
 /// rebirth from the tail carried as data, when the life keeps a record that holds a checkpoint,
 /// and else the end of the life.
 async fn stopped(fault: Fault, record: Option<&str>) -> Drove {
-  let Some(record) = record else { return Drove::Ended(Some(fault)) };
+  let Some(record) = record else { return Drove::Ended(Some(fault), None) };
   match rebirth::carried(record.to_owned()).await {
     Ok(true) => Drove::Reborn(Some(fault)),
-    Ok(false) => Drove::Ended(Some(fault)),
-    Err(no) => Drove::Ended(Some(Fault::refused(format!("{fault}, and then {no}")))),
+    Ok(false) => Drove::Ended(Some(fault), None),
+    Err(no) => Drove::Ended(Some(Fault::refused(format!("{fault}, and then {no}"))), None),
   }
 }
 
