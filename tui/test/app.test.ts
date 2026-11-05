@@ -853,9 +853,7 @@ test("a tick writes only the time of a line that runs, and the text of its progr
 test("a name inside a transcript tag opens the same live inspector as Python code", () =>
   composing(
     async ({ session, app, screen, frame }) => {
-      await session.engine.result(
-        await session.engine.rung({ word: "total = 17", on: session.engine.root }),
-      );
+      await session.engine.result(await session.engine.rung({ word: "total = 17", on: session.engine.root }));
       await session.refresh();
       session.show("transcript");
       await frame();
