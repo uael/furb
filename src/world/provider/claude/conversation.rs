@@ -22,10 +22,9 @@ use super::{
   protocol::{Event, Finished, Reply, unexplained},
   refused, worded,
 };
-use crate::world::provider::{
-  ENV_THINKING,
-  atomic::{self, Access},
-  uuid,
+use crate::world::{
+  disk::{self, Access},
+  provider::{ENV_THINKING, uuid},
 };
 
 /// The flag by which the command line records its system prompt once for a conversation.
@@ -48,7 +47,7 @@ fn prompt_file(system: &str) -> Result<PathBuf, CompletionError> {
   let folder = env::temp_dir().join("furb-claude");
   let file = folder.join(format!("{:x}.md", Sha256::digest(system.as_bytes())));
   if !file.is_file() {
-    atomic::write(&file, system.as_bytes(), Access::Shared).map_err(|no| failed(no.to_string()))?;
+    disk::write(&file, system.as_bytes(), Access::Shared).map_err(|no| failed(no.to_string()))?;
   }
   Ok(file)
 }
@@ -178,7 +177,7 @@ impl Conversation {
     }
     let folder = store.join("projects").join(name);
     let file = folder.join(format!("{}.jsonl", self.id));
-    atomic::write(&file, lines.as_bytes(), Access::Shared).map_err(|no| failed(no.to_string()))?;
+    disk::write(&file, lines.as_bytes(), Access::Shared).map_err(|no| failed(no.to_string()))?;
     self.resumed = true;
     Ok(true)
   }

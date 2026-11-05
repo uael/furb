@@ -24,7 +24,7 @@ use tokio::{
 use super::{EFFORTS, Program};
 use crate::world::{
   child,
-  provider::atomic::{self, Access},
+  disk::{self, Access},
 };
 
 /// One model of the command line as it said itself: the alias, the window of the model that it resolves to, and the
@@ -111,7 +111,7 @@ fn store(stamp: &str, found: &[Found]) {
     map.shift_remove(&oldest);
   }
   // A cache that cannot be written costs the next life one probe more, so the failure ends here.
-  drop(atomic::write(&file, Value::Object(map).to_string().as_bytes(), Access::Shared));
+  drop(disk::write(&file, Value::Object(map).to_string().as_bytes(), Access::Shared));
 }
 
 /// The models that the program says, from memory, from the cache, or from the program itself;

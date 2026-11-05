@@ -30,6 +30,7 @@ use tokio::{
 };
 
 use super::config::Login;
+use crate::world::disk;
 
 /// How long a login waits for the browser to hand back its code.
 pub(super) const LOGIN: Duration = Duration::from_secs(300);
@@ -614,20 +615,9 @@ impl Filed {
 
   /// The secrets, written whole in place of the file, which only the user reads.
   fn wrote(&self, held: &HashMap<String, String>) -> Result<(), VaultError> {
-    let failed = |source: io::Error| VaultError::File { path: self.path.clone(), source };
-    if let Some(parent) = self.path.parent() {
-      fs::create_dir_all(parent).map_err(failed)?;
-    }
-    let next = self.path.with_extension("json.new");
-    let mut options = fs::OpenOptions::new();
-    options.write(true).create(true).truncate(true);
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-    let mut file = options.open(&next).map_err(failed)?;
     let text = serde_json::to_string_pretty(held)?;
-    io::Write::write_all(&mut file, text.as_bytes()).map_err(failed)?;
-    drop(file);
-    fs::rename(&next, &self.path).map_err(failed)
+    disk::write(&self.path, text.as_bytes(), disk::Access::Owner)
+      .map_err(|no| VaultError::File { path: no.path, source: no.source })
   }
 }
 
