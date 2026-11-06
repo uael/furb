@@ -10,11 +10,9 @@ use std::{collections::HashSet, time::Duration};
 use serde_json::Value;
 use tokio::time::Instant;
 
-use crate::{
-  event::Event,
-  protocol::Open,
-  view::{Act, Kind, Phase, operator},
-};
+use furb::view::{Act, Kind, Phase, operator};
+
+use crate::{event::Event, protocol::Open};
 
 /// How long a life that holds an open act says no fact before the daemon tells that it stalled,
 /// unless the settings of the daemon say otherwise.

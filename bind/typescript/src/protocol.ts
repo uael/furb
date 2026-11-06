@@ -279,6 +279,10 @@ export type Request1 =
  */
 export type Kind = "window" | "skill" | "daemon";
 /**
+ * What a peer may do: read a life, or read and write it. Write holds each right of read.
+ */
+export type Role = "read" | "write";
+/**
  * What a peer asks of the configs of a life, which the World writes, so no window writes a disk.
  */
 export type Config =
@@ -520,10 +524,6 @@ export type Answer =
       data: Handed[];
     };
 /**
- * What a peer may do: read a life, or read and write it. Write holds each right of read.
- */
-export type Role = "read" | "write";
-/**
  * Why the daemon refuses a frame of a peer. It crosses the protocol as data, beside its text.
  */
 export type ProtocolError =
@@ -717,12 +717,16 @@ export interface Protocol {
   frame: Frame;
 }
 /**
- * The first frame of a peer: the protocol that it speaks, its kind, and the name of a skill.
+ * The first frame of a peer: the protocol that it speaks, its kind, the name of a skill, and the
+ * role that it asks. The daemon gives the peer the lesser of that role and the role that its
+ * transport proved, so a peer asks `read` to be a reader on any transport. With no role, the peer
+ * has the role that its transport proved.
  */
 export interface Hello {
   protocol: number;
   kind: Kind;
   name?: string | null;
+  role?: Role | null;
 }
 /**
  * A view that a window mounts in a slot of a life, which the process of a skill serves.

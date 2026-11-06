@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use furb::engine::OPERATOR;
+use crate::engine::OPERATOR;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -183,7 +183,7 @@ impl Spend {
 
 impl Pause {
   /// The pause that a fact of a pause says, and none for any other fact.
-  pub(crate) fn of(fact: &Value) -> Option<Pause> {
+  pub fn of(fact: &Value) -> Option<Pause> {
     (fact[0] == "pause").then(|| Pause {
       by: fact[2].as_str().unwrap_or_default().to_owned(),
       why: Some(fact[3].clone()).filter(|why| !why.is_null()),
