@@ -34,13 +34,13 @@ WIDTH = {"engine": 2, "host": 2, "tui": 3, "skills": 1, "rust": 2, "ci": 2, "tid
 AGG, QA, REVIEW = "converge", "qa", "review"
 FIX_MODEL, AGG_MODEL, QA_MODEL = CLASSES["sonnet/high"], CLASSES["opus/medium"], CLASSES["opus/medium"]
 ASTRA = "codex:gpt-6-astra/high"
-EVERY, FLOOR, QA_EVERY, REVIEW_EVERY, REGROUND = 300.0, 900.0, 900.0, 3600.0, 0.5
+EVERY, FLOOR, REVIEW_EVERY, REGROUND = 300.0, 900.0, 3600.0, 0.5
 REPO = "~/src/github.com/uael/furb"
-QA_TREE, QA_BRANCH = "~/src/github.com/uael/furb-qa", "q/converge"
 PAGE, WORDS = "scratch://converge/desk.md", "scratch://converge/words-life.md"
 PAGED = ["conduct", "beat", "next_item", "seats", "fix", "ground_step", "queue_rows", "queue_reviews", "news", "words"]
 CLAIM = ' Judge the row against main first: it is a claim of an audit.'
 QA_BRIEF = 'A QA run of the tip of w/converge, by the charter of this chain. If origin/w/converge stands at the sha of the last run in scratch://converge/qa.md, close at once with: same head <sha>. Else run it, and append to scratch://converge/qa.md ($TMPDIR/converge/qa.md) the sha, the minutes that the run took, the result of the scenarios, and each finding with its capture. Close with the rows of the new findings, or with clean, the sha and the minutes.'
+QA_WRAP = 'The conductor: a cycle of the aggregator starts now, and its merges and its build change the worktree that you read. Run no new command: close at once with the rows of what you found, and name what you did not reach.'
 WORDS_BRIEF = 'The audit of the words of the owner, top 10 and the bar, read only. Read whole: scratch://converge/words-life.md (each message of the owner in this life and each of his answers, in order), ~/Library/Caches/furb/handoff/converge/plan.md, the picks (~/Library/Caches/furb/handoff/converge/decisions/picks.md, with its rulings N, N2, N3, A, O and W), and scratch://converge/desk.md (the code and the values that run the converge now: the desk, its queues, the method of the topics, the head of a fix and the brief of the aggregator). In the ledger ~/Library/Caches/furb/handoff/converge/asks.json, read the asks that these words name or change. For each ask in these words (an order, a rule, a number, a choice, or a question that wants a change), find what serves it: a line of the code or a value of desk.md, a queued or ended item, a commit on origin (git log origin/w/converge and origin/c/*), or a file of scratch://converge/. A later word of the owner rules over an earlier one. Write scratch://converge/words-audit.md ($TMPDIR/converge/words-audit.md): the missing and partly served asks first, then a table of each ask with its source id and its state (served, with where; queued, with the item; partly, with what lacks; missing; or overruled, with the later word). State each ask in plain English and quote no words. Close with the missing and partly served asks, one line each: the source id, the ask in one sentence, and the change that serves it (an item of a topic with its class of model and its paths, or a change of the desk for the lead).'
 ALIGN_BRIEF = 'The audit of alignment, top 10 and the bar, read only. Read the ledger of the asks (~/Library/Caches/furb/handoff/converge/asks.json), the top 10 (~/Library/Caches/furb/handoff/converge/top10.md) and the picks (~/Library/Caches/furb/handoff/converge/decisions/picks.md). Then run git fetch origin and read the commits of w/converge since the last audit: git log --no-merges --stat <base>..origin/w/converge, where <base> is the sha that the last entry of scratch://converge/align.md names, else origin/main, and git show for each commit that serves an ask of the top 3. Judge whether each change goes the way of its ask or drifts from it. Name each change that serves no ask or goes against one, and name the asks of the top 3 of the top 10 that no change serves yet. Append to scratch://converge/align.md ($TMPDIR/converge/align.md) the sha that you read and these lists. Close with the rows of the drifts and of the gaps, by the charter of this chain.'
 PERF_BRIEF = 'The census of speed, again, read only: by the charter of this chain, compare with the last entries of scratch://converge/perf.md and scratch://converge/ci-time.md. Read the times of the jobs and steps of the latest runs of the gates on w/converge (gh run list, then gh api repos/uael/furb/actions/runs/<id>/jobs), the numbers of bun run bench in the log of the job of the speed of the TUI, the slowest tests that the logs now print (pytest --durations and the times of the cargo binaries), and the token walls of engine.py and DOCTRINE.md. Append to scratch://converge/perf.md the sha, each measure against the last entry, each regression past a fifth and each gain. Close with a row for each regression and each new lever.'
@@ -59,7 +59,7 @@ ground: dict[str, str] = globals().setdefault("ground", {})
 stuck: dict[str, str] = globals().setdefault("stuck", {})
 notes: list[str] = globals().setdefault("notes", [])
 state: dict[str, Any] = globals().setdefault(
-  "state", {"id": "", "cycle": "", "due": "", "print": "", "head": "", "qa_head": "", "last": 0.0, "cycle_at": 0.0, "qa_at": 0.0, "review_at": 0.0, "qa": 0, "reviews": 0}
+  "state", {"id": "", "cycle": "", "due": "", "print": "", "head": "", "qa_head": "", "last": 0.0, "cycle_at": 0.0, "cycle_end": 0.0, "qa_at": 0.0, "wrapped": [], "review_at": 0.0, "qa": 0, "reviews": 0}
 )
 
 
@@ -104,17 +104,9 @@ def item_text(t: str, item: dict) -> str:
   return f"Item {item['key']} of the topic {t}. The charter of this chain, scratch://converge/{t}.md, holds its rules, its paths and the asks of the owner that it carries.\n\n{item['brief']}"
 
 
-def qa_tree(head: str) -> str:
-  """The worktree of a QA run: its own, at the head that a cycle published, so a cycle merges and builds while it runs."""
-  make = f"git -C {REPO} worktree remove --force {QA_TREE} 2>/dev/null; git -C {REPO} branch -D {QA_BRANCH} 2>/dev/null; sh {REPO}/script/worktree.sh {QA_TREE} {QA_BRANCH} {head}"
-  return f"Make your worktree first, a copy on write of the warm build of the aggregator: {make}. Then run each test in {QA_TREE} alone, never in the worktree of the aggregator, which the next cycle moves."
-
-
 def next_item(t: str, now: float) -> dict | None:
-  head = state.get("head", "")
-  if t == QA and not queue(QA) and not live.get(QA) and not state["cycle"] and head and head != state.get("qa_head") and now - state["qa_at"] >= QA_EVERY:
-    state.update(qa=state["qa"] + 1, qa_head=head, qa_at=now)
-    queue(QA).append({"key": f"qa-run-{state['qa']}", "model": QA_MODEL, "brief": f"{QA_BRIEF} The head to test: {head}. {qa_tree(head)}"})
+  if t == QA and (state["cycle"] or live.get(QA)):
+    return None
   done, used = {k for _, k, _ in ended}, seats()
   held = ({kind(FIX_MODEL)} if fixwait else set()) | ({kind(AGG_MODEL)} if state["due"] else set())
   for n, item in enumerate(queue(t)):
@@ -209,6 +201,10 @@ def beat() -> Generator[set[str], object, None]:
       notes.append(said)
   if (cycle := state["cycle"]) and over(cycle):
     got, state["cycle"] = peek(cycle), ""
+    state.update(cycle_end=now, wrapped=[])
+    if not queue(QA):
+      state.update(qa=state["qa"] + 1, qa_at=now)
+      queue(QA).append({"key": f"qa-run-{state['qa']}", "model": QA_MODEL, "brief": f"{QA_BRIEF} The head to test: the head that the cycle {cycle} pushed, as origin/w/converge stands now."})
     if isinstance(got, tuple) and len(got) == 2 and isinstance(got[0], dict):
       sent, kept = [], []
       for t, why in got[0].items():
@@ -230,9 +226,12 @@ def beat() -> Generator[set[str], object, None]:
     seen = out.stdout.content if isinstance(out, Exit) else ""
     state["last"] = now
     state["head"] = next((x[5:] for x in seen.splitlines() if x.startswith("head ")), state.get("head", ""))
-    if seen != state["print"] and not ("pending" in seen and now - state["cycle_at"] < FLOOR):
+    if seen != state["print"] and now - state["cycle_end"] >= FLOOR and not ("pending" in seen and now - state["cycle_at"] < FLOOR):
       if seat(AGG_MODEL):
         state.update(print=seen, due="", cycle_at=now)
+        for qp in [p for p in live.get(QA, {}) if not over(p) and p not in state["wrapped"]]:
+          prompt(None, QA_WRAP, on=qp)
+          state["wrapped"].append(qp)
         state["cycle"] = str(prompt(tuple[dict[str, str], str], CYCLE, to=AGG_MODEL, on=chain_of(AGG)))
       else:
         state["due"] = "1"

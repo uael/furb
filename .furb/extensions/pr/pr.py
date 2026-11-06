@@ -12,6 +12,7 @@ from furb.engine import (
 
 PULLING = """The rules of a pull request live in one home, the template .github/pull_request_template.md of its worktree, and pr.pyi says what pr, prcheck and checked do.
 Await prcheck(title, why, outcome, breaking, where=...) before you commit, await pr(title, why, outcome, checks, where=...) to open or update the PR, and await checked(number) for its checks, never a loop of your own.
+Commit with await commit(title, paths, body, qa=[...]): one QA entry for each thing that the operator or the QA can see in the change, so the QA reads it in the trailers.
 Rerun a check only when checked gives it [machine] or [cancelled], once for each head, with gh run rerun <run> --failed, and then await checked(number) again."""
 
 PR_SENTENCE = 25
@@ -164,6 +165,24 @@ async def checked(number: int, where: str = "", bound: float = 3600.0, every: fl
     lines.append(f"{name} [{kind}] run {hit[1]} job {hit[2]}")
     lines += [f"  {x}" for x in said]
   return ("fail" if failed else "pass"), lines
+
+
+async def commit(title: str, paths: list[str], body: str = "", qa: tuple[str, ...] | list[str] = (), where: str = "") -> tuple[str, list[str]]:
+  if not paths:
+    raise Refused("a commit needs at least one path")
+  note = "".join(f" --trailer {shq('QA: ' + one)}" for one in qa)
+  more = f" -m {shq(body)}" if body.strip() else ""
+  named = " ".join(shq(one) for one in paths)
+  run = (
+    f"{entered(where)}git add -- {named} || exit 1\n"
+    f"sh script/build-slot.sh git commit -q -m {shq(title)}{more}{note} -- {named} || exit 1\n"
+    "git rev-parse --short HEAD\n"
+    "git log -1 --format='%(trailers:key=QA,valueonly)'\n"
+  )
+  got = await bash(run, show=HIDDEN, timeout=2400)
+  sha, *rest = got.stdout.content.splitlines() or [""]
+  return sha, [x for x in rest if x.strip()]
+
 
 def shq(s: str) -> str:
   home = "~" if s == "~" else "~/" if s.startswith("~/") else ""
