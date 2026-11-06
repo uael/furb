@@ -287,8 +287,8 @@ jobs:
       - if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/measures"
-          printf '{"fixture_bytes":%s,"fixture_lines":%s,"facts":%s}\n' "$(wc -c < tui/fixtures/conductor.jsonl)" \
-            "$(wc -l < tui/fixtures/conductor.jsonl)" "${FURB_BENCH_FACTS:-160000}" > "$RUNNER_TEMP/measures/fixture.json"
+          printf '{"fixture_bytes":%s,"fixture_lines":%s}\n' "$(wc -c < tui/fixtures/conductor.jsonl)" \
+            "$(wc -l < tui/fixtures/conductor.jsonl)" > "$RUNNER_TEMP/measures/fixture.json"
       - if: always()
         uses: ./.github/actions/measures
         with:
