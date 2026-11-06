@@ -27,3 +27,21 @@ def hooks() -> dict[str, dict]:
 )
 def test_the_hooks_of_the_suite_run_only_on_the_files_that_it_reads(hook: str, path: str, *, runs: bool) -> None:
   assert bool(re.search(hooks()[hook]["files"], path)) is runs
+
+
+@pytest.mark.parametrize(
+  ("path", "runs"),
+  [
+    ("src/engine.rs", True),
+    ("src/world/files.rs", True),
+    ("build/verbs.rs", True),
+    ("Cargo.toml", True),
+    ("rust-toolchain.toml", True),
+    ("cli/src/main.rs", False),
+    ("host/src/daemon.rs", False),
+  ],
+)
+def test_the_hook_of_the_suite_runs_on_the_rust_that_the_crate_builds_for_it(path: str, *, runs: bool) -> None:
+  hook = hooks()["pytest"]
+  assert bool(re.search(hook["files"], path)) is runs
+  assert ("rust" in hook["types_or"]) is True

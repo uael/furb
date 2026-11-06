@@ -47,8 +47,9 @@ repos:
         name: pytest
         entry: uv run pytest -q
         language: system
-        types_or: [python, pyi, toml, json]
-        files: ^(src/furb/|test/|extensions/|\.furb/|bind/python/|script/|tests/|docs/examples/python/)|^pyproject\.toml$
+        # The suite drives the engine through furb-monty, which builds the crate, so a change of the Rust is read too.
+        types_or: [python, pyi, toml, json, rust]
+        files: ^(src/|build/|test/|extensions/|\.furb/|bind/python/|script/|tests/|docs/examples/python/)|^(pyproject|Cargo|rust-toolchain)\.toml$
         pass_filenames: false
       - id: fmt
         name: fmt
