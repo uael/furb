@@ -28,14 +28,14 @@ gave the gate and ran, from those answers alone.
 
 ## Run it
 
-The build that audits the record must be of the version of the build that made it. The record names that build in its
-fact `made`: the engine, as a digest of `src/furb/engine.py` and `src/furb/kernel.py`, the version of the replay, the
-schema of the record, and the release of furb that made it, as `0.4.2`. The version of the replay is shared by many
-releases. A build refuses before any replay only a record of another major of the schema, and the audit says so. A
-record with no checkpoint that a build of another engine or version made replays, and the replay stops at the first act
-that does not agree with the record. After a checkpoint, a build replays what came after it the same way. So install the release that the fact `made` names, in a
-clean virtual environment. A record from a build before the release was in the fact names no release: then install a
-release whose build has the version of the record, the latest one first:
+The record names the build that made it in its fact `made`: the engine, as a digest of `src/furb/engine.py` and
+`src/furb/kernel.py`, the schema of the record, the release of furb that made it, as `0.4.2`, and the texts of that
+engine and of its Kernel. A build replays each segment of the record on the texts that its fact `made` holds. A build
+refuses before any replay only a record of another major of the schema, and the audit says so. A record of a build
+before the texts holds no texts. It replays on the engine of the build that audits it, and the replay stops at the
+first act that does not agree with the record. So install the release that the fact `made` names, in a clean virtual
+environment. A record from a build before the release was in the fact names no release: then install the latest
+release first, and an older one when the replay stops:
 
 ```sh
 python3.14 -m venv clean
