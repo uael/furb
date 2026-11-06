@@ -245,7 +245,7 @@ async def test_a_failure_of_a_topic_whose_fix_runs_waits_for_the_next_fix_of_tha
   assert conductor.ns["fixwait"] == {}
 
 
-async def test_qa_tests_the_head_that_a_cycle_published_and_no_cycle_starts_while_it_runs(conductor: Round) -> None:
+async def test_qa_runs_in_its_own_tree_at_the_published_head_and_a_cycle_merges_beside_it(conductor: Round) -> None:
   conductor.say(r"pr list --head w/converge", [{"number": 7}])
   conductor.say(r"pr checks 7", [{"bucket": "pending"}])
   conductor.say(r"pr view 7", {"headRefOid": "h2"})
@@ -258,8 +258,25 @@ async def test_qa_tests_the_head_that_a_cycle_published_and_no_cycle_starts_whil
   assert conductor.ns["state"]["head"] == "h2"
   await conductor.beat()
   (qa,) = [x for x in conductor.asked() if x[1] == "qa"]
-  assert qa[3].endswith("The head to test: h2.")
+  assert "The head to test: h2." in qa[3]
+  assert "script/worktree.sh ~/src/github.com/uael/furb-qa q/converge h2" in qa[3]
   conductor.say(r"pr checks 7", [{"bucket": "fail"}])
   conductor.sand.now += 1000
   await conductor.beat()
-  assert len(conductor.asked("tuple[dict[str, str], str]")) == 1
+  cycles = conductor.asked("tuple[dict[str, str], str]")
+  assert len(cycles) == 2
+  conductor.say(r"pr view 7", {"headRefOid": "h3"})
+  await conductor.end(cycles[-1][0], ({}, "pushed h3"))
+  conductor.sand.now += 1000
+  await conductor.beat()
+  assert conductor.ns["state"]["head"] == "h3"
+  await conductor.end(qa[0], "clean h2")
+  if conductor.ns["state"]["cycle"]:
+    await conductor.end(conductor.ns["state"]["cycle"], ({}, "pushed h3"))
+  conductor.sand.now += 1000
+  await conductor.beat()
+  await conductor.beat()
+  runs = [x for x in conductor.asked() if x[1] == "qa"]
+  assert len(runs) == 2
+  assert "The head to test: h3." in runs[-1][3]
+  assert "q/converge h3" in runs[-1][3]
