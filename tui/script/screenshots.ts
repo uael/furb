@@ -560,10 +560,13 @@ try {
   await session.submit("/read missing-file.txt");
   await until(session, () => session.acts.some((act) => act.run?.status === "failed"));
   await capture("26-error");
+  const kept = session.host.changes;
   await session.engine.write(
     { path: "preview.txt", content: "A change to inspect.\n" },
     { on: session.engine.root },
   );
+  // The journal is written off the thread of the life, so it stands once the window hears the change.
+  await until(session.host, () => session.host.changes > kept);
   const journal = `${session.host.record}.changes.jsonl`;
   const savedJournal = await readFile(journal);
   await writeFile(journal, "{ damaged journal }");
