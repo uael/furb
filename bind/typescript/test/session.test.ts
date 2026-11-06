@@ -261,7 +261,10 @@ test("what a model writes streams into the session under its rung until its repl
             // The turn of the rung that the word made holds the code of the file alone, which that rung ran.
             turn("user", expect.stringMatching(/^(?!#)[\s\S]*\ndef \w+\(/)),
           ]),
-          turn("assistant", "catchup()\nawait recall()\nawait listed()\ncompacted(); fitted()\nawait mcp_index()"),
+          turn(
+            "assistant",
+            "catchup()\nawait recall()\nawait listed()\ncompacted(); fitted()\nawait mcp_index()",
+          ),
           turn(
             "user",
             expect.stringMatching(
@@ -1103,7 +1106,9 @@ test("a session enables the extensions of the configs, and a later session on it
     // The stand and the cd come after the life words, and the extension naming, which plays on the root alone, comes
     // after the others with its life word, so the turn of the life words is the eighth from the end.
     const turns = (first.engine?.turns({ on: "chain1" }) ?? []).map((turn) => String(turn[1]));
-    expect(turns.at(-8)).toBe("catchup()\nawait recall()\nawait listed()\ncompacted(); fitted()\nawait mcp_index()");
+    expect(turns.at(-8)).toBe(
+      "catchup()\nawait recall()\nawait listed()\ncompacted(); fitted()\nawait mcp_index()",
+    );
     expect(turns.at(-2)).toMatch(/^stand\(\)\ncd\('.*'\)$/);
     // The turn writes the path with the separators of the platform, and the transcript keeps its last one as `/`.
     expect(turns.at(-7)?.replaceAll("\\\\", "/")).toContain(
