@@ -31,7 +31,7 @@ mod daemon {
     view::Phase,
   };
   use furb_host::{
-    DaemonError, END, Event, GRACE, ProtocolError, STALL, Settings, TransportError,
+    DaemonError, Event, GRACE, ProtocolError, STALL, Settings, TransportError,
     protocol::{
       Answer, Axis, Dispose, Effect, Frame, Gesture, Hello, Kind, Listed, Mount, Node, PROTOCOL,
       Request, Role, Shape, Slot, Tree, Verb, ViewEffect, ViewEvent,
@@ -156,8 +156,7 @@ mod daemon {
   ) -> (Local, JoinHandle<Result<(), DaemonError>>) {
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
-    let settings =
-      Settings { opening, grace, end: END, stall: STALL, tailnet: None, door: None, host: None };
+    let settings = Settings { opening, grace, stall: STALL, tailnet: None, door: None, host: None };
     let served = local.clone();
     (local, tokio::spawn(async move { run(&served, listener, settings).await }))
   }
@@ -188,7 +187,6 @@ mod daemon {
     let settings = Settings {
       opening: opening(at),
       grace: GRACE,
-      end: END,
       stall: STALL,
       tailnet: None,
       door: None,
@@ -561,7 +559,6 @@ mod daemon {
     let settings = Settings {
       opening: opening(&at),
       grace: SHORT,
-      end: END,
       stall: STALL,
       tailnet: None,
       door: None,
@@ -603,17 +600,15 @@ mod daemon {
   }
 
   #[tokio::test]
-  async fn a_handover_gives_up_a_life_that_does_not_end_within_its_bound() {
+  async fn a_handover_waits_for_each_life_to_end_and_the_life_goes_on() {
     let at = place();
     let log = Arc::new(Mutex::new(Vec::new()));
     let (blocked, hold, entered) = blocking(&at, Arc::clone(&log));
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
-    let bound = SHORT;
     let settings = Settings {
       opening: blocked,
       grace: GRACE,
-      end: bound,
       stall: STALL,
       tailnet: None,
       door: None,
@@ -624,35 +619,39 @@ mod daemon {
     let mut window = Window::dialed(&local).await;
     let life = opened(&mut window, &at, "a.jsonl").await;
     window.attach(&life).await;
-    let verb = Verb::Run { life: life.clone(), word: "prompt(None, 'go')".to_owned(), on: None };
+    window.ran(&life, "x = 41 + 1").await;
+    let word = "prompt(None, 'go', on=chain('side'))".to_owned();
+    let verb = Verb::Run { life: life.clone(), word, on: None };
     assert!(matches!(window.ask(verb).await, Ok(Answer::Act(_))));
     let began = tokio::task::spawn_blocking(move || entered.recv_timeout(PATIENCE));
     assert!(began.await.unwrap().is_ok(), "the model of the life blocks its thread");
     let settings = Settings {
       opening: opening(&at),
       grace: GRACE,
-      end: END,
       stall: STALL,
       tailnet: None,
       door: None,
       host: None,
     };
     let next = local.clone();
-    let asked = Instant::now();
     let new = tokio::spawn(async move { upgrade(&next, settings).await });
-    let gone =
-      timeout(PATIENCE, old).await.expect("a life that blocks holds the upgrade past its bound");
-    assert!(matches!(gone, Ok(Ok(()))));
-    assert!(asked.elapsed() >= bound, "the handover waits for the bound of each life");
+    tokio::time::sleep(PAST).await;
+    assert!(!old.is_finished(), "the handover waits for a life that has not ended");
     let seen = log.lock().unwrap().join("\n");
     assert!(
-      seen.contains(&life) && seen.contains("did not end"),
-      "the log tells which life did not end: {seen}"
+      seen.contains("the handover waits for each life to end") && seen.contains(&life),
+      "the log says which lives the handover waits for: {seen}"
     );
-    let mut window = Window::dialed(&local).await;
-    assert!(window.lives(&life).await, "the new daemon opens the life that was given up");
-    assert!(!new.is_finished());
     drop(hold);
+    let gone = timeout(PATIENCE, old).await.expect("the handover ends once each life ended");
+    assert!(matches!(gone, Ok(Ok(()))));
+    let mut window = Window::dialed(&local).await;
+    window.attach(&life).await;
+    window.ran(&life, "y = x").await;
+    let inspect = Verb::Inspect { life: life.clone(), name: "y".to_owned(), on: None };
+    let Ok(Answer::Inspected { value, .. }) = window.ask(inspect).await else { panic!() };
+    assert_eq!(value, json!(42), "the new daemon holds the life whole, and a word runs on it");
+    assert!(!new.is_finished());
   }
 
   /// The view of a skill that a window mounts in the footer of a life.
@@ -1000,7 +999,6 @@ mod daemon {
     let settings = Settings {
       opening: opening(&at),
       grace: SHORT,
-      end: END,
       stall: STALL,
       tailnet: None,
       door: None,
@@ -1081,7 +1079,6 @@ mod daemon {
     let settings = Settings {
       opening: opening(&at),
       grace: GRACE,
-      end: END,
       stall: QUIET,
       tailnet: None,
       door: None,
@@ -1097,7 +1094,7 @@ mod daemon {
     let Ok(Answer::Act(rung)) = window.ask(verb).await else { panic!("no rung") };
     let heard = window.heard_until(done(&rung)).await;
     assert!(!heard.iter().any(stall), "a run whose facts flow for twice the bound never stalls");
-    let asked = r#"await prompt(str, "never answered", to="operator")"#;
+    let asked = r#"await bash("sleep 20", timeout=60)"#;
     let verb = Verb::Run { life: life.clone(), word: asked.to_owned(), on: None };
     let began = tokio::time::Instant::now();
     let Ok(Answer::Act(_)) = window.ask(verb).await else { panic!("no rung") };
@@ -1131,7 +1128,6 @@ mod daemon {
     let settings = Settings {
       opening: opening(&at),
       grace: GRACE,
-      end: END,
       stall: QUIET,
       tailnet: None,
       door: None,
@@ -1142,7 +1138,8 @@ mod daemon {
     let mut window = Window::dialed(&local).await;
     let life = opened(&mut window, &at, "a.jsonl").await;
     window.attach(&life).await;
-    let waits = "never = prompt(str, \"never answered\", to=\"operator\")\nrung(\"x = 1\", never)";
+    let waits = "side = chain(\"side\")\nlong = bash(\"for i in $(seq 100); do echo $i; sleep 0.1; done\", \
+                 on=side)\nrung(\"x = 1\", long)";
     let verb = Verb::Run { life: life.clone(), word: waits.to_owned(), on: None };
     let began = tokio::time::Instant::now();
     let Ok(Answer::Act(_)) = window.ask(verb).await else { panic!("no rung") };
@@ -1164,7 +1161,6 @@ mod daemon {
     let settings = Settings {
       opening: opening(&at),
       grace: GRACE,
-      end: END,
       stall: QUIET,
       tailnet: None,
       door: None,
@@ -1175,8 +1171,8 @@ mod daemon {
     let mut window = Window::dialed(&local).await;
     let life = opened(&mut window, &at, "a.jsonl").await;
     window.attach(&life).await;
-    let word = "never = prompt(str, \"never answered\", to=\"operator\")\nside = chain(\"side\")\n\
-                rung(\"x = 1\", never, on=side)\nfor _ in range(80):\n  await wait(0.05, __name__)";
+    let word = "long = bash(\"for i in $(seq 100); do echo $i; sleep 0.1; done\")\nside = chain(\"side\")\n\
+                rung(\"x = 1\", long, on=side)\nfor _ in range(80):\n  await wait(0.05, __name__)";
     let verb = Verb::Run { life: life.clone(), word: word.to_owned(), on: None };
     let Ok(Answer::Act(rung)) = window.ask(verb).await else { panic!("no rung") };
     let heard = window.heard_until(stall).await;
@@ -1218,7 +1214,6 @@ mod daemon {
     let settings = Settings {
       opening: opening(at),
       grace: SHORT,
-      end: END,
       stall: STALL,
       tailnet: None,
       door: None,

@@ -44,7 +44,7 @@ Put each item in queue as a dict, in the order of the work, the hard work first:
 6. While the newest run of the gates on main failed, the round sends no order and no fixer for a red PR, and tells you once. A red PR whose failed checks all fail on main too gets no fixer either, and the round says so in one line.
 7. A green PR merges by the auto-merge of GitHub, which the round turns on for each PR of the round, else by a plain merge, else by gh stack merge for a layer of a stack, behind a ruleset of main that requires the check GATE. With no such ruleset, the round turns on no auto-merge and tells you once. A draft, an open box of its checklist, or the label hold, hold:owner-review or owner-merge keeps a PR from the merge, and the label paused takes it out of the round.
 8. At ALIGN_EVERY merged PRs since the last audit of each target of AUDITS, the round queues the next free audit of that target, alignN or tuiN, of kind audit, on limits["models"]["astra"] when N is odd, else on the model of audit. alignN checks main against the words of the owner, and tuiN judges the TUI of main in a workspace of its own, as the skill converge-tui says. Each row of its register becomes an item, queued in the order of the register after the items of queue, unless the coordinator asks for the rows before the items that no worker holds yet.
-9. Each message of the owner that no ask of owner_asks names is one line, and so is each ask that is not done or a decision while no item in queue, at work or on an open PR of the round carries it. asked() gives the new lines in one notice, and no new notice while its last one stands open: no word of the owner drops between his message and main. A worker that ends with a line Left: <ids> queues one follow-up for each ask that no other item carries, and a follow-up that leaves it again is a decision.
+9. Each message of the owner that no ask of owner_asks names is one line, and so is each ask that is not done or a decision while no item in queue, at work or on an open PR of the round carries it. asked() writes the words of the owner, verbatim, when a message of his came, and gives the new lines in one notice, and no new notice while its last one stands open: no word of the owner drops between his message and main. A worker that ends with a line Left: <ids> queues one follow-up for each ask that no other item carries, and a follow-up that leaves it again is a decision.
 10. Each new comment of the owner on a PR of the round goes to the worker on it, else to a fixer on a fork of the chain of its maker, and the label hold comes on the PR until its worker pushes the fix and takes hold off.
 11. A fix of the round does not become its own item or PR: it waits in scratch://round/frozen.md, while the live module carries it, and the waiting fixes land together in one change.
 A step that fails is one notice, and the round goes on at the next round. The whole state lives in the module of your chain, so a word that a checkpoint cuts loses nothing: await conduct() again in a turn that shows.
@@ -612,6 +612,7 @@ def review() -> Generator[set[str], object, None]:
 
 
 def asked() -> None:
+  owner_words()
   if not owner_asks:
     return
   named = {p for a in owner_asks.values() for p in re.findall(r"prompt\d+", str(a.get("prompt", "")))}
@@ -643,6 +644,9 @@ def owner_words() -> None:
       rows.append(f"## {x[1]}, his message\n\n{x[5]}\n\n")
     elif x[6] and operated(str(x[6])) and x[4] != "None" and isinstance(said := peek(x[1]), str) and said.strip():
       rows.append(f"## {x[1]}, his answer to my question\n\n{said}\n\n")
+  if lead.get("words") == str(len(rows)):
+    return
+  lead["words"] = str(len(rows))
   write(Text(WORDS, "# The words of the owner in this session, verbatim, in order\n\n" + "".join(rows)))
 
 
@@ -659,7 +663,6 @@ def align() -> None:
     while f"{name}{n}" in held:
       n += 1
     key, since, head = f"{name}{n}", state.get("sha", ""), lead.get("main", "")
-    owner_words()
     window = f"{since}..{head}" if since and head else "-40 origin/main"
     for old, new in (("{key}", key), ("{count}", str(count)), ("{window}", window), ("{words}", WORDS), ("{asks}", ASKS), ("{held}", ", ".join(sorted(held_keys())) or "none")):
       brief = brief.replace(old, new)

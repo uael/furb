@@ -422,6 +422,19 @@ async def test_the_words_of_the_owner_hold_his_messages_and_his_answers_in_order
   )
 
 
+async def test_asked_writes_the_words_of_the_owner_at_each_new_message_and_only_then(conductor: Round) -> None:
+  told = conductor.engine.prompt(str, "Do it.", on=conductor.root)
+  await conductor.word("asked()")
+  path = "scratch://owner/words.md"
+  assert f"## {told}, his message\n\nDo it.\n\n" in conductor.sand.files[path]
+  conductor.sand.files[path] = "kept"
+  await conductor.word("asked()")
+  assert conductor.sand.files[path] == "kept"
+  later = conductor.engine.prompt(str, "Next.", on=conductor.root)
+  await conductor.word("asked()")
+  assert conductor.sand.files[path].endswith(f"## {later}, his message\n\nNext.\n\n")
+
+
 async def test_an_audit_of_each_target_starts_at_four_merges_on_astra_and_the_model_of_audit_in_turn(conductor: Round) -> None:
   await conductor.word(f'limits["models"]["astra"] = {ASTRA!r}\nalign()')
   assert conductor.ns["align_state"] == {"align": {"base": "0"}, "tui": {"base": "0"}}

@@ -425,16 +425,24 @@ pub fn logged(path: String) -> Result<Option<Value>, Fault> {
 /// facts, one on each line, in order. The facts are those of the log when it agrees with the
 /// record, and else those that the record kept, with the chains, the rungs, the runs and the dones
 /// that they name. A line of the file that does not start with `[`, and a line `["keep", "", n]`,
-/// holds no fact.
+/// holds no fact. The name of the session is the one that the operator said last on the root,
+/// which wins, else the one that the extension naming gave, and `said` is the one that the
+/// operator said alone; an empty name takes the default name again.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(
   feature = "typescript",
-  napi(ts_return_type = "{ made: string | null; engine: string; logged: boolean; file: string }")
+  napi(
+    ts_return_type = "{ made: string | null; engine: string; logged: boolean; file: string; name: string | null; said: string | null }"
+  )
 )]
 pub fn retold(path: String) -> Result<Value, Fault> {
-  let world::Retold { made, logged, file, .. } = world::retold(&path)?;
+  let told = world::retold(&path)?;
+  let name = told.name().map_or_else(Object::none, Object::string);
+  let world::Retold { made, logged, file, said, .. } = told;
   Ok(Value(Object::dict([
     (Object::string("made"), made.map_or_else(Object::none, Object::string)),
+    (Object::string("name"), name),
+    (Object::string("said"), said.map_or_else(Object::none, Object::string)),
     (Object::string("engine"), Object::string(world::engine())),
     (Object::string("logged"), Object::bool(logged)),
     (Object::string("file"), Object::string(file.display().to_string())),

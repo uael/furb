@@ -1,6 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
+import { isDone } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { demoSession, removeDemoDirectories, seedDemoFiles } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
@@ -61,7 +62,7 @@ async function working(delay = 8): Promise<void> {
   for (let moment = 0; moment < 120; moment++) {
     await new Promise((done) => setTimeout(done, delay * 10));
     await still(delay);
-    if (!session.activity.some((act) => !act.done && ["prompt", "rung", "bash"].includes(act.kind))) break;
+    if (!session.activity.some((act) => !isDone(act) && ["prompt", "rung", "bash"].includes(act.kind))) break;
   }
   await idle(session);
   await session.refresh();

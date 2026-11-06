@@ -13,7 +13,7 @@ use super::{
   state::State,
   threads::{
     Attention, ChainAside, NoteRun, Rows, ThreadNode, attention, chain_asides, chain_notes,
-    chain_threads, nest_threads,
+    chain_tree,
   },
   time::{as_of, moments_of},
 };
@@ -64,13 +64,15 @@ impl Held {
     desk(&self.then(None), &notices)
   }
 
-  /// The threads of a chain, now or as they stood just after a moment. `read` is the place up to
-  /// which the window read the chain, from which its runs of notes count the notes not yet read.
+  /// The threads of a chain, with the workers of its rounds nested under the thread that started
+  /// each, now or as they stood just after a moment. `read` is the place up to which the window
+  /// read the chain, from which its runs of notes count the notes not yet read.
   pub fn threads(&self, chain: &str, at: Option<u64>, read: u64) -> Threads {
     let acts = self.then(at);
     let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
+    let all: Vec<&Act> = acts.iter().collect();
     let on: Vec<&Act> = acts.iter().filter(|act| act.chain == chain && act.id != chain).collect();
-    let threads = nest_threads(chain_threads(&on, &rows), &rows);
+    let threads = chain_tree(chain, &all, &rows);
     let state =
       rows.get(chain).filter(|act| act.kind == Kind::Chain).map_or(State::Idle, |act| act.state);
     let (asides, notes) = (chain_asides(&on, &rows), chain_notes(&on, &rows, read));

@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { exitOf, isDone } from "furb/life";
 import { alive, printPid, remove } from "../../bind/typescript/test/processes.ts";
 import { until } from "../../bind/typescript/test/until.ts";
 import type { Engine } from "../src/bridge.ts";
@@ -24,7 +25,7 @@ test("an @word that names no file is text of the message, and a word that names 
     const reads = session.acts.filter(
       (act) => act.kind === "rung" && act.by === "operator" && String(act.words[0]).startsWith("read("),
     );
-    expect(reads.map((act) => [act.words[0], act.run?.status])).toEqual([['read("README.md")', "done"]]);
+    expect(reads.map((act) => [act.words[0], act.run?.run])).toEqual([['read("README.md")', "done"]]);
     expect(session.acts.filter((act) => session.isUserPrompt(act)).map((act) => act.words[1])).toEqual([
       message,
     ]);
@@ -81,11 +82,7 @@ test("a session that cannot save its view still lets its life go, which ends in 
   const session = await demoSession({ record });
   try {
     const command = await session.engine.bash(`${printPid}; sleep 30`, { on: session.engine.root });
-    const pid = () =>
-      Number(
-        (session.acts.find((act) => act.id === command)?.value as { stdout?: { content: string } })?.stdout
-          ?.content,
-      );
+    const pid = () => Number(exitOf(session.acts.find((act) => act.id === command))?.stdout?.content);
     await until(session, () => pid() > 0);
     // A directory where the save writes its file makes the save fail on every system.
     await mkdir(`${record}.ui.json.tmp`);
@@ -161,7 +158,7 @@ async function heldWhileEffortChanges(
   await session.submit("/effort low");
   await until(session, () =>
     session.acts.some(
-      (act) => act.by === "operator" && act.words[0] === 'actor = "claude-cli:sonnet/low"' && act.done,
+      (act) => act.by === "operator" && act.words[0] === 'actor = "claude-cli:sonnet/low"' && isDone(act),
     ),
   );
   await session.submit("Take the low effort.");
@@ -221,7 +218,9 @@ test("a follow-up that the operator removes while an earlier one is sent is not 
     expect(read?.word).toMatch(/^read\('.*DOCTRINE\.md'\)$/);
     expect(stood?.word).toMatch(/^stand\(\)\ncd\('.*'\)$/);
     expect(
-      session.acts.filter((act) => act.on === other && act.kind === "rung").map((act) => [act.by, act.words]),
+      session.acts
+        .filter((act) => act.chain === other && act.kind === "rung")
+        .map((act) => [act.by, act.words]),
     ).toEqual([
       [other, [first?.word, first?.id, ""]],
       [other, ["#rung1 debugged\nrung1_debug = 'standing()[4]=[]'", `${read?.id}_told`, ""]],
@@ -280,10 +279,9 @@ test("each /feed sends one line, and a /feed with no text closes the input", () 
     await session.submit(`/feed ${command} yes`);
     await session.submit(`/feed ${command} two  words`);
     await until(session, () =>
-      String(
-        (session.acts.find((act) => act.id === command)?.value as { stdout?: { content: string } })?.stdout
-          ?.content,
-      ).includes("a=[yes] b=[two  words]\n"),
+      String(exitOf(session.acts.find((act) => act.id === command))?.stdout?.content).includes(
+        "a=[yes] b=[two  words]\n",
+      ),
     );
     expect((await session.engine.outcome(command)).done).toBe(false);
     await session.submit(`/feed ${command}`);
@@ -375,11 +373,12 @@ test("a message of a member of the operator is a message of the operator", () =>
       kind: "prompt",
       by: "operator/a",
       on: session.selected,
+      chain: session.selected,
       words: ["str", "Hello", ""],
-      done: false,
-      value: null,
-      paused: false,
+      phase: { phase: "asked" as const },
+      operator: false,
       began: 1,
+      state: "runs" as const,
     };
     expect(session.isUserPrompt(message)).toBe(true);
   }));

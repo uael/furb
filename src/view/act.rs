@@ -108,6 +108,10 @@ pub struct Act {
   pub run: Option<RunState>,
   /// The word of a rung, once its chain took it to run or to refuse.
   pub word: Option<String>,
+  /// Whether a reply of a rung runs, while its model writes its word. A rung with no word and no
+  /// reply that runs waits for its turn.
+  #[serde(default)]
+  pub asking: bool,
   /// How many facts the life had said when the act was made, which is its place in time.
   pub began: u64,
   /// How many facts the life had said when the act was done.

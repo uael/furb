@@ -354,7 +354,7 @@ fn stopped(fault: &Fault) -> String {
   format!(
     "The record of this life cannot be written: {}. The life goes on, and holds in memory each fact \
      that the record does not hold yet. It tries again until the record takes them, in order, and tells \
-     you then. Until then, an end of the life loses them: give the disk room, and keep the life open.",
+     you then. Give the disk room.",
     fault.message()
   )
 }
@@ -386,8 +386,7 @@ impl<S: Store> Held<S> {
     (free < LOW && *said == Told::Room).then(|| {
       format!(
         "The disk of the record of this life is almost full: {} has {} MB left. When it is full, the \
-         life holds each fact in memory until the record takes them again, and an end of the life then \
-         loses them: give the disk room.",
+         life holds each fact in memory until the record takes them again: give the disk room.",
         folder.display(),
         free / 1_000_000
       )

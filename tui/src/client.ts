@@ -4,7 +4,8 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync } fr
 import { createConnection, type Socket } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { Activity, type Call, type Fact, type Standing, type Turn } from "furb";
+import type { Fact, Standing, Turn } from "furb";
+import { type Compaction, followed, isDone, operated, type Spend, WORK } from "furb/life";
 import type { Act, Answer, Config, Event, Frame, Listed, Peer, Role, Request1 as Verb } from "furb/protocol";
 import { PROTOCOL } from "furb/protocol";
 import type { Setting } from "./configs.ts";
@@ -361,17 +362,35 @@ function valued(answer: Answer): unknown {
 }
 
 /** One life of the daemon, as a window holds it: the named verbs that the window says to it, and each event of it as
- * the window hears it. Each fact feeds the activity of the window, which reads the pause of each act from the acts
- * that the daemon tells with the fact. It tells `facts` after the facts of a change, `change` after a text, `log` at a
+ * the window hears it. The window holds each act as the daemon told it last, with its meaning, and reads nothing of the
+ * meaning of an act from the facts. It tells `facts` after the facts of a change, `change` after a text, `log` at a
  * notice, and `ended` with why when the life ends; after a handover it attaches again, and tells `reset`, since the
  * life that the new daemon opened tells each fact again. */
 export class RemoteLife extends EventEmitter {
   readonly root = "chain1";
   disposed = false;
   readonly facts: Fact[] = [];
-  activity = new Activity();
   /** Each act as the daemon told it last. */
   readonly acts = new Map<string, Act>();
+  /** The place up to which the operator read each chain or thread, by its name: the place of the last fact seen that
+   * he said of it, which covers each change that the record holds before it. */
+  readonly seenAt = new Map<string, number>();
+  /** Each compaction of a chain, in the order of the record. */
+  readonly compactions: Compaction[] = [];
+  /** What each command that is not done printed on each stream so far, by the command. */
+  readonly outputs = new Map<string, { stdout: string; stderr: string }>();
+  /** How many acts of work are done, which grows as the daemon tells each end. */
+  completed = 0;
+  /** What the answers of the models cost each chain, by the chain, and all chains together, in dollars. */
+  readonly spends = new Map<string, Spend>();
+  cost = 0;
+  /** How many changes of an act the window heard, and the count at the last change of each act that a person
+   * follows, so that a reader takes only the acts that changed since it last read. */
+  private changes = 0;
+  private readonly changed = new Map<string, number>();
+  /** Each change of an act in order, as the count of the change and the name of the act. An act that changed again
+   * leaves its earlier entries, which the log drops once it holds twice as many entries as acts. */
+  private log: { count: number[]; name: string[] } = { count: [], name: [] };
   /** What each rung that asked a model streams while the model writes, by that rung. */
   readonly streams = new Map<string, { chain: string; text: string; thinking: string }>();
   /** Why the life is not open in this window, and nothing while it is. */
@@ -431,9 +450,16 @@ export class RemoteLife extends EventEmitter {
     // the grace of the daemon passes, and the window lets go of what it held of an earlier birth.
     this.facts.length = 0;
     this.acts.clear();
+    this.seenAt.clear();
+    this.compactions.length = 0;
+    this.outputs.clear();
+    this.completed = 0;
+    this.spends.clear();
+    this.cost = 0;
+    this.changed.clear();
+    this.log = { count: [], name: [] };
     this.streams.clear();
     this.batch = undefined;
-    this.activity = new Activity();
     this.lost = "";
     const answers = Boolean(models);
     const life = this.record;
@@ -528,33 +554,95 @@ export class RemoteLife extends EventEmitter {
     }
   }
 
-  /** The fact that waits for its acts, heard by the activity, which asks whether a pause or a wake covers an act: the
-   * daemon told the act in that state with the fact. */
+  /** The fact that waits for its acts, with the acts that the daemon told with it, each in the state that the fact
+   * left it. A fact says alone what the window keeps of it: a fact seen, a compaction, and the lines that a command
+   * prints. */
   private flush(): void {
     const batch = this.batch;
     if (!batch) return;
     this.batch = undefined;
-    const told = new Map(batch.acts.map((act) => [act.id, act]));
-    const ear = this.activity.hear(batch.fact);
-    for (let step = ear.next(); !step.done; ) {
-      const asked = step.value as Call;
-      let answer: unknown = null;
-      if (asked.call === "covers") {
-        const [control, id] = asked.args as [Fact, string];
-        const act = told.get(String(id));
-        answer = Boolean(act) && (control[0] === "pause") === Boolean(act?.pause);
-      }
-      step = ear.next(answer);
+    const fact = batch.fact;
+    this.facts.push(fact);
+    const [kind, id, by] = fact;
+    const at = this.facts.length;
+    // A later life says each fact of its record again as the journal, which names no speaker, and only the operator
+    // says seen. A chain says its own prefix at its birth, as a chain with a source does, and that prefix cuts nothing.
+    if (kind === "seen" && (operated(by) || by === "journal")) this.seenAt.set(id, at);
+    else if (kind === "prefix" && by !== id) this.compactions.push({ chain: id, by, at });
+    else if (kind === "started" && this.outputs.has(id)) this.outputs.set(id, { stdout: "", stderr: "" });
+    else if (kind === "out" && this.acts.get(id)?.kind === "bash" && !isDone(this.acts.get(id) as Act)) {
+      const output = this.outputs.get(id) ?? { stdout: "", stderr: "" };
+      if (fact[4] === "stderr") output.stderr += String(fact[3]);
+      else output.stdout += String(fact[3]);
+      this.outputs.set(id, output);
+      this.mark(id);
     }
-    this.facts.push(batch.fact);
     this.told(batch.acts);
   }
 
-  /** The acts that the daemon told with a fact, once the activity heard that fact: a verb that waits for an act, or
-   * for its end, reads the activity as it stands after them. */
+  /** The acts that changed after a count of changes, each that a person follows, in the order they began, and the
+   * count now. */
+  since(count: number): { count: number; acts: Act[] } {
+    const { log } = this;
+    let low = 0;
+    for (let high = log.count.length; low < high; ) {
+      const middle = (low + high) >> 1;
+      if ((log.count[middle] ?? 0) <= count) low = middle + 1;
+      else high = middle;
+    }
+    const acts: Act[] = [];
+    for (let at = low; at < log.count.length; at++) {
+      const name = log.name[at] ?? "";
+      const act = this.acts.get(name);
+      if (act && this.changed.get(name) === log.count[at]) acts.push(act);
+    }
+    acts.sort((one, other) => one.began - other.began);
+    return { count: this.changes, acts };
+  }
+  /** One more change of an act that a person follows. */
+  private mark(id: string): void {
+    this.changed.set(id, ++this.changes);
+    this.log.count.push(this.changes);
+    this.log.name.push(id);
+    if (this.log.count.length <= 2 * this.changed.size + 64) return;
+    const kept: { count: number[]; name: string[] } = { count: [], name: [] };
+    for (const [at, name] of this.log.name.entries())
+      if (this.changed.get(name) === this.log.count[at]) {
+        kept.count.push(this.log.count[at] ?? 0);
+        kept.name.push(name);
+      }
+    this.log = kept;
+  }
+  /** An act as the daemon told it last. */
+  act(id: string): Act | undefined {
+    return this.acts.get(id);
+  }
+  /** What a command that is not done printed so far on each stream. */
+  output(id: string): { stdout: string; stderr: string } | undefined {
+    return this.outputs.get(id);
+  }
+  /** The chain that an act stands in, and nothing for a name of no act. */
+  scope(id: string): string {
+    return this.acts.get(id)?.chain ?? "";
+  }
+
+  /** The acts that the daemon told with a fact: a verb that waits for an act, or for its end, reads the acts as they
+   * stand after them. */
   private told(acts: Act[]): void {
     for (const act of acts) {
+      const was = this.acts.get(act.id);
       this.acts.set(act.id, act);
+      if (followed(act.kind)) this.mark(act.id);
+      if (act.kind === "bash" && !isDone(act) && !this.outputs.has(act.id))
+        this.outputs.set(act.id, { stdout: "", stderr: "" });
+      if (act.kind === "chain" && act.spend && act.spend !== was?.spend) {
+        this.cost += act.spend.dollars - (this.spends.get(act.id)?.dollars ?? 0);
+        this.spends.set(act.id, act.spend);
+      }
+      if (isDone(act) && !(was && isDone(was))) {
+        this.outputs.delete(act.id);
+        if (WORK.includes(act.kind)) this.completed++;
+      }
       for (const heard of this.known.get(act.id) ?? []) heard();
       this.known.delete(act.id);
       if (act.phase.phase !== "done") continue;
@@ -565,13 +653,13 @@ export class RemoteLife extends EventEmitter {
 
   /** The verbs that wait for the first fact of the act that they made, by the act. */
   private readonly known = new Map<string, (() => void)[]>();
-  /** The act that a verb made, once the activity of the window holds it: the daemon replies to the verb before it
+  /** The act that a verb made, once the window holds it: the daemon replies to the verb before it
    * tells the facts that the verb said, and the window reads its own acts. */
   private async made(answer: Answer): Promise<string> {
     const id = named(answer);
     // The daemon may tell the facts of the act before its reply to the verb comes, and the acts that it told stand in
-    // the acts of the window, as the activity holds no act of some kinds, as a stand: the wait is for an act unheard.
-    if (this.acts.has(id) || this.activity.acts.has(id) || this.lost) return id;
+    // the acts of the window: the wait is for an act unheard.
+    if (this.acts.has(id) || this.lost) return id;
     await new Promise<void>((resolve) => {
       const heard = this.known.get(id) ?? [];
       heard.push(resolve);
@@ -688,7 +776,7 @@ export class RemoteLife extends EventEmitter {
   async get(id: string): Promise<unknown> {
     return valued(await this.verb({ verb: "get", life: this.record, act: id }));
   }
-  /** A control of an act, once the activity of the window heard its fact: the daemon may reply to the verb before it
+  /** A control of an act, once the window heard its fact: the daemon may reply to the verb before it
    * tells that fact, and the window reads the act after the verb as the control left it. */
   private async control(
     verb: Verb & { verb: "pause" | "wake" | "cancel" | "close"; act: string },

@@ -275,12 +275,15 @@ fn loaded(co: &mut Co, seen: &Seen, name: &str) -> Result<Text, Fault> {
 /// The answer of a write of `skills://` and a name: the word of a skill with code written in the
 /// folder of the skill in `.furb/extensions` of the project, after a copy of its folder there when
 /// it stands elsewhere, with the imports of furb that the top of its file holds. The fact enable
-/// with the new word reloads the skill when the life runs it.
+/// with the new word reloads the skill when the life runs it. A word that the skill refuses, as one
+/// that binds a name of the engine at its top, changes no file, and no copy of the folder stands.
 fn written(co: &mut Co, seen: &Seen, name: &str, content: &str) -> Result<Text, Fault> {
   let one = seen.named(name)?;
   let Some(file) = one.word.as_deref() else {
     return Err(Fault::refused(format!("The skill {name} has no code to write.")));
   };
+  let given = content.trim_matches('\n');
+  manifested(&one.manifest, |_| Ok(given)).map_err(Fault::refused)?;
   let target = seen.project.join(".furb").join("extensions").join(name);
   let stays = matches!(&one.place, Place::Folder(folder) if *folder == target);
   if !stays {
@@ -293,7 +296,6 @@ fn written(co: &mut Co, seen: &Seen, name: &str, content: &str) -> Result<Text, 
     .take_while(|line| line.is_empty() || imports_furb(line) || line.starts_with([' ', ')']))
     .collect();
   let imports = imports.join("\n").trim_end().to_owned();
-  let given = content.trim_matches('\n');
   let whole =
     if imports.is_empty() { format!("{given}\n") } else { format!("{imports}\n\n\n{given}\n") };
   fs::write(&at, whole).map_err(|no| Fault::refused(format!("{no}: {}", at.display())))?;

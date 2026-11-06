@@ -1,4 +1,4 @@
-import type { LiveAct } from "./acts.js";
+import { type Act, isDone } from "./acts.js";
 import { readable } from "./loom.js";
 
 /** What the console holds of a prompt to the operator: a question that waits for an answer, or a notice that the
@@ -306,9 +306,9 @@ export function desk({
   notices,
   label,
 }: {
-  acts: readonly LiveAct[];
+  acts: readonly Act[];
   /** The acts by their name, which a host that holds them gives in place of a pass over every act. */
-  ids?: ReadonlyMap<string, LiveAct>;
+  ids?: ReadonlyMap<string, Act>;
   prompts: Iterable<Held>;
   notices: Iterable<Held>;
   label(chain: string): string;
@@ -316,13 +316,13 @@ export function desk({
   const byId = ids ?? new Map(acts.map((act) => [act.id, act]));
   const made = (held: Held, notice: boolean): Ask[] => {
     const act = byId.get(held.id);
-    if (!act || (!notice && act.done)) return [];
+    if (!act || (!notice && isDone(act))) return [];
     const shape = notice ? "None" : (held.shape ?? String(act.words[0] ?? ""));
     return [
       {
         id: held.id,
-        chain: act.on,
-        label: label(act.on),
+        chain: act.chain,
+        label: label(act.chain),
         by: act.by,
         shape,
         message: held.message,
