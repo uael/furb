@@ -568,7 +568,9 @@ def seed(data):
   asking = {a["on"] for a in data["acts"] if "value" not in a}
   for c in data["chains"]:
     put("chain", c["id"], OPERATOR, c["on"], c["label"], "")
-    entries.append((("carried", c["id"], "journal", c["turns"]),))
+    entries.append(
+      (("carried", c["id"], "journal", c["turns"], {k: t for k, t in c["values"].items() if t[LARGEST // 16 :]}),)
+    )
     (c["paused"] or c["id"] in asking) and entries.append((("pause", c["id"], OPERATOR),))
   for x in data["acts"]:
     "value" in x or (
@@ -589,7 +591,10 @@ def seed(data):
         HEARD,
         f'debug(t"The life goes on from a checkpoint. It lost {c["lost"] or "no name"}, and it cut {cut or "no act"}.")',
         c["definitions"],
-        *(f"{named} = {text}" for named, text in c["values"].items()),
+        *(
+          f"{named} = " + (f"eval(transcript(of='carried')[-1][4][{named!r}])" if text[LARGEST // 16 :] else text)
+          for named, text in c["values"].items()
+        ),
       ]
     ).strip()
     put("rung", f"rung{numbers['rung'] + 1}", OPERATOR, i, word, "", "")
@@ -619,7 +624,7 @@ def gathered(define, floor):
           text = literal(value, found)
         except RecursionError:
           text = ""
-        if text and len(text.encode()) <= LARGEST:
+        if text:
           values[c][key] = text
           named |= found
         else:
@@ -727,7 +732,7 @@ def bash(
     stdin,
     timeout,
     ok,
-    *[show, show_err] * ((show, show_err) != (TAIL, None)),
+    *[None if callable(one) else one for one in (show, show_err)] * ((show, show_err) != (TAIL, None)),
   )
 
 
