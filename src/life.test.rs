@@ -295,6 +295,46 @@ fn a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_t
 }
 
 #[test]
+fn a_word_that_polls_the_clock_ends_at_the_bound_of_a_turn_and_two_readings_in_a_row_still_run() {
+  crate::sand::BOUND.set(std::time::Duration::from_secs(2));
+  let at = place("clock-spin");
+  let poll = "t0 = clock()\nwhile clock() - t0 < 60:\n  pass\nclose('polled')";
+  let twice = "a = clock()\nb = clock()\nclose(b >= a)";
+  let mut life = Opening { extensions: Some(false), ..scripted(&at, &[poll, twice]) }
+    .boot::<String>([])
+    .unwrap()
+    .0;
+  let asked = verbs::Prompt {
+    message: Some("go".to_owned()),
+    on: Some("chain1".to_owned()),
+    ..Default::default()
+  };
+  let started = std::time::Instant::now();
+  let prompt = life.prompt(Object::string("object"), asked).unwrap().id().to_owned();
+  let got = futures::executor::block_on(Act::<Object>::of(&mut life, &prompt)).unwrap();
+  let took = started.elapsed();
+  assert!(life.stopped().is_none(), "the cut of the poll leaves the life whole");
+  assert_eq!(got.as_ref().as_bool(), Some(true), "two readings in a row run");
+  let raised = life
+    .word("repr([x[3] for x in transcript('chain1', 'tell') if 'raised' in x[3][0]][:1])", vec![])
+    .unwrap();
+  let raised = raised.as_ref().as_str().unwrap_or_default().to_owned();
+  assert!(
+    raised.contains("past the bound of a turn"),
+    "the poll ends at the bound of a turn: {raised}"
+  );
+  let clocks = life.word("len(transcript('chain1', 'clock'))", vec![]).unwrap();
+  eprintln!("the poll made {:?} acts of clock in {took:?}", clocks.as_ref().as_int());
+  assert!(
+    took < std::time::Duration::from_secs(20),
+    "the poll was cut near 2 s, not at 60: {took:?}"
+  );
+  drop(life);
+  let again = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  assert!(again.raised().is_none(), "a later life replays the poll and its refusal with no drift");
+}
+
+#[test]
 fn a_life_that_a_fault_of_the_sandbox_stopped_opens_again_and_goes_on() {
   crate::sand::BOUND.set(std::time::Duration::from_millis(100));
   let at = place("faulted");
