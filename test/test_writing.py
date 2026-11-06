@@ -55,7 +55,7 @@ async def test_the_kernel_runs_the_writings_of_one_rung_in_the_order_it_heard_th
 async def test_a_part_that_waits_for_an_act_while_its_model_writes_makes_no_wants() -> None:
   """A part that waits for an act while its model writes makes no wants, so its rung hears the turn of its model while the part waits."""
   sand, log, _, act, rung, reply = await waiting(auto=False)
-  first = "x = await bash('slow')\n"
+  first = "s = await stand()\nx = await bash('slow')\n"
   wrote(rung, first, 0)
   await settle()
   assert said(log, "wants") == [] and said(log, "ran") == []

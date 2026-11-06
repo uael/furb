@@ -204,11 +204,14 @@ class Running:
           return self.ended(run, None)
         except BaseException as raised:
           return self.ended(run, raised)
+        # A word goes on at the done of a wants even for an act that is over, so it never holds the bus: each ear
+        # hears between two of its steps, and the journal keeps each fact in its order.
+        if self.wants(run, got):
+          return None
         if peek(got, ...) is ...:
-          if not self.wants(run, got):
-            # The rung of a part waits for the turn of its model, which a wants would keep it from hearing, so the
-            # part waits for its act with no wants, and goes on at the done of that act.
-            self.awaits.setdefault(got, []).append(run)
+          # The rung of a part waits for the turn of its model, which a wants would keep it from hearing, so the
+          # part waits for its act with no wants, and goes on at the done of that act.
+          self.awaits.setdefault(got, []).append(run)
           return None
         given = self.given(got, peek(got))
 

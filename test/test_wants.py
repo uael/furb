@@ -5,7 +5,7 @@ from furb import engine
 
 
 async def test_a_wants_is_the_act_that_a_run_makes_when_its_word_waits() -> None:
-  """A wants is the act that a run makes when its word waits for an act that is not done: the rung takes it, and answers it with what that act came to when the rung hears its done, so a pause over the rung holds the word."""
+  """A wants is the act that a run makes when its word waits for an act: the rung takes it, and answers it with what that act came to when the rung hears its done, so a pause over the rung holds the word."""
   sand, log, root = born(auto=False)
   act = engine.rung("out = await bash('slow')\nclose(out.code)", on=root)
   await settle()
@@ -21,3 +21,21 @@ async def test_a_wants_is_the_act_that_a_run_makes_when_its_word_waits() -> None
   engine.wake(act)
   await settle()
   assert [(a[2], a[3]) for a in dones(log, "wants")] == [(act, engine.peek(command))] and (await act) == 0
+
+
+async def test_a_word_that_awaits_an_act_that_is_over_goes_on_at_a_later_turn_of_the_bus() -> None:
+  """A word that awaits an act that is over goes on at a later turn of the bus, through a wants, as when it awaits one that is not over, so it never holds the bus and the journal keeps each fact in its order."""
+  sand, log, root = born(auto=False)
+  one = engine.bash("slow", on=root)
+  other = engine.chain("watch", on=root)
+  word = f"n = 0\nwhile n < 5 and over({one!r}):\n  await wait(120, {one!r})\n  t = clock()\n  n += 1\n"
+  sand.exits(one, 0)
+  await settle()
+  before = len(log)
+  engine.rung(word, on=other)
+  await settle()
+  facts = log[before:]
+  waits = [i for i, a in enumerate(facts) if a[0] == "wait"]
+  kept = [i for i, a in enumerate(facts) if a[0] == "keep" and a[3][0][0] == "wait"]
+  assert engine.module(other)["n"] == 5 and len(waits) == 5
+  assert kept[0] < waits[1]
