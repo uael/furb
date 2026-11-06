@@ -1,4 +1,4 @@
-import { pickedFiles, shapes } from "furb";
+import { FilePicker, shapes } from "furb";
 import { isDone, takesNothing, unfinished, WORK } from "furb/life";
 import { canonical, slashes } from "../commands.ts";
 import { emojiNamed, emojis } from "../emoji.ts";
@@ -259,11 +259,37 @@ export const composer = part({
       );
   },
 
-  /** The paths of the project, which the suggestions read, as a pick of them gives them: none until the read of the
-   * session ends, which draws the suggestions again. An `@` that starts a word reads them afresh. */
-  paths(pick = (paths: string[]) => paths, fresh = false): Value[] {
-    void this.session.projectFiles(fresh);
+  /** The paths of the project, which the suggestions of a command read, as a pick of them gives them: none until the
+   * read of the session ends, which draws the suggestions again. */
+  paths(pick = (paths: string[]) => paths): Value[] {
+    void this.session.projectFiles();
     return pick(this.session.files?.paths ?? []).map((path) => ({ value: path, detail: "" }));
+  },
+
+  /** The first files that the crate picks for a query after @, best first, as they stand now. An @ that starts a word
+   * opens the picker of the window again, which walks its folder once in the background and stops the walk of the last
+   * open, and a key gives it the query alone. While the walk or the match runs, the suggestions are drawn again, so no
+   * key waits for a result. */
+  pickedFiles(query: string, started: boolean): string[] {
+    const directory = this.session.workingDirectory;
+    let held = this.filePicker;
+    if (!held) {
+      held = { picker: new FilePicker(directory), directory, running: true };
+      this.filePicker = held;
+    } else if (started || held.directory !== directory) {
+      held.picker.open(directory);
+      held.directory = directory;
+      held.query = undefined;
+    }
+    const found = held.query === query ? held.picker.rows(50) : held.picker.find(query, 50);
+    held.query = query;
+    held.running = found.running;
+    if (found.running)
+      this.pickerTimer ??= setTimeout(() => {
+        this.pickerTimer = undefined;
+        if (!this.closed) this.suggest();
+      }, 30);
+    return found.paths;
   },
 
   valuesTable(): Partial<Record<string, () => Value[]>> {
@@ -496,19 +522,17 @@ export const composer = part({
         .map(({ label, detail, text }) => ({ label, detail: detail ?? "", text }));
     } else {
       // The completions of the parts after @ come before the files that the crate picks for the query, best first:
-      // from the files of the project, or from the folder that a query starting with /, ~ or ../ names.
+      // from the files of the folder of the session, or from the folder that a query starting with /, ~ or ../ names.
       const given = this.parts.completions("@", token.text, this.seen());
       this.suggestionError = given.errors.join(" ");
       const theirs = given.items.map(({ label, detail, text }) => ({ label, detail: detail ?? "", text }));
       this.suggestions = theirs
         .concat(
-          this.paths((paths) => pickedFiles(this.session.workingDirectory, token.text, paths), started)
-            .slice(0, 50)
-            .map(({ value: path }) => ({
-              label: `@${path}`,
-              detail: "",
-              text: `@${/\s/.test(path) ? JSON.stringify(path) : path} `,
-            })),
+          this.pickedFiles(token.text, started).map((path) => ({
+            label: `@${path}`,
+            detail: "",
+            text: `@${/\s/.test(path) ? JSON.stringify(path) : path} `,
+          })),
         )
         .slice(0, 50);
     }
@@ -527,9 +551,10 @@ export const composer = part({
         ? ""
         : failed
           ? failed
-          : (token.kind === "@" || pathCommands.has(token.command ?? "")) && files?.error
+          : pathCommands.has(token.command ?? "") && files?.error
             ? files.error
-            : (token.kind === "@" || pathCommands.has(token.command ?? "")) && !files?.paths
+            : (pathCommands.has(token.command ?? "") && !files?.paths) ||
+                (token.kind === "@" && !shown.length && this.filePicker?.running)
               ? "Finding project files…"
               : shown.length
                 ? ""

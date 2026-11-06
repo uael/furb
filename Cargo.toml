@@ -152,10 +152,10 @@ futures = "0.3"
 unsync = "0.2"
 # The zones in which the usage limit of the claude command line names the moment it ends.
 jiff = "0.2"
-# The walker of ripgrep, which reads .gitignore, and the matcher of helix, which rank the files that the picker of a
-# window offers.
+# The walker of ripgrep, which reads .gitignore, and the matcher of helix, which matches the files that the picker of
+# a window offers on threads of its own as the walk gives them.
 ignore = "0.4"
-nucleo-matcher = "0.3"
+nucleo = "0.5"
 # A page of the web, which the extension web reads, as Markdown.
 htmd = "0.5"
 pyo3 = { version = "0.29.2", features = ["generate-import-lib", "indexmap", "multiple-pymethods"], optional = true }
