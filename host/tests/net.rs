@@ -282,6 +282,10 @@ mod net {
     );
   }
   /// The login of the user of this test, from the same call of the system as the daemon makes.
+  #[cfg_attr(
+    windows,
+    expect(unsafe_code, reason = "the login is a call of Windows, as the daemon makes it")
+  )]
   fn me() -> String {
     #[cfg(unix)]
     {

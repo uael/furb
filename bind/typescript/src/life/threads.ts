@@ -169,6 +169,53 @@ export function chainAsides(
   return chainSorted(on, rows, owed, known).asides;
 }
 
+/** A run of notes: the asides of a chain that are no question and follow one another in its feed with no card of
+ * another kind between them, which a window draws as one block. The view model of the host says the same in
+ * `chain_notes` of `src/view/threads.rs`. */
+export interface NoteRun {
+  prompts: LiveAct[];
+  count: number;
+}
+
+/** The runs of notes of one chain, from its acts in the order they began, and its threads and asides as chainSorted
+ * gives them. Only a step of the top of the chain draws a card: an act that a rung of the chain made stands in the
+ * program of that rung, a message stands in its thread or its note, and a grant, a chain and a rung that the chain
+ * wrote to retell its source draw none. Each other act ends the run that it follows, as a thread, a question, a command
+ * and a word of the operator do. */
+export function chainNotes(
+  on: readonly LiveAct[],
+  rows: Rows,
+  sorted: { threads: readonly ChainThread[]; asides: readonly ChainAside[] },
+): NoteRun[] {
+  const notes = new Set(
+    sorted.asides.filter((one) => one.aside.aside !== "question").map((one) => one.act.id),
+  );
+  const inside = new Set(
+    [
+      ...sorted.threads.flatMap((thread) => [...thread.messages, ...thread.asked]),
+      ...sorted.asides.flatMap((one) => one.messages),
+    ].map((act) => act.id),
+  );
+  const runs: NoteRun[] = [];
+  let open = false;
+  for (const act of on) {
+    const maker = rows.get(act.by);
+    const below = maker !== undefined && maker.on === act.on && maker.kind !== "chain";
+    const retold = act.kind === "rung" && maker?.kind === "chain";
+    if (below || retold || act.kind === "chain" || act.kind === "grant" || inside.has(act.id)) continue;
+    if (!notes.has(act.id)) {
+      open = false;
+      continue;
+    }
+    if (!open) runs.push({ prompts: [], count: 0 });
+    open = true;
+    const run = runs[runs.length - 1] as NoteRun;
+    run.prompts.push(act);
+    run.count++;
+  }
+  return runs;
+}
+
 /** The threads and the asides of one chain, in the order they began. */
 export function chainSorted(
   on: readonly LiveAct[],

@@ -268,6 +268,8 @@ test("a string too long for its line folds to its start and an underlined …, w
       expect(y).toBeGreaterThanOrEqual(0);
       expect(rows[y]).toContain('…"');
       expect(folded).not.toContain("ENDMARK");
+      // The string has the one fold row of the feed under its line, which its Details entry names too.
+      expect(rows[y + 1]).toMatch(/▸ \d+ more characters\s*$/);
       const x = (rows[y] ?? "").indexOf('…"');
       await screen.mockMouse.moveTo(x, y);
       await until(screen.renderer, () => screen.captureCharFrame().includes("ENDMARK"), "frame");
@@ -534,7 +536,8 @@ test("a string of three marks over many lines shows as one string with its escap
       expect(rows[y]).toContain('…"');
       expect(folded).not.toContain("ENDMARK");
       expect(folded).not.toContain('"""');
-      expect(rows[y + 1]).toContain("print(len(note))");
+      expect(rows[y + 1]).toContain("▸");
+      expect(rows[y + 2]).toContain("print(len(note))");
       const fg = (x: number, row: number) => cellAt(screen.captureSpans(), x, row).fg;
       const string = RGBA.fromHex(palettes.ink.syntaxString);
       // The closing mark of the string, after its underlined ..., is a string of the statement, as it is whole.
@@ -574,7 +577,8 @@ test("a quote of a word shows as the string that it binds: its name, an equal si
       expect(rows[y]).toContain("\\n");
       expect(rows[y]).toContain("…'");
       expect(shown).not.toContain("<s:brief>");
-      expect(rows[y + 1]).toContain("print(brief)");
+      expect(rows[y + 1]).toContain("▸");
+      expect(rows[y + 2]).toContain("print(brief)");
       const fg = (x: number, row: number) => cellAt(screen.captureSpans(), x, row).fg;
       const x = (rows[y] ?? "").indexOf("Fix");
       await until(

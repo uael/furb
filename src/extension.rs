@@ -86,8 +86,14 @@ const VIEW: &str = "furb-view";
 /// bun runs, or a program.
 pub(crate) const PROCESS: &str = "furb-process";
 
+/// The field of the manifest that names the file of the keys that the extension adds to the
+/// configs, a JSON object whose `properties` give each key by its name, as the `configuration` of
+/// an extension of VS Code gives its settings. The configs hold each key under the name of the
+/// extension, as `{"notes": {"folder": "notes"}}`, which `world::config` reads.
+pub(crate) const CONFIG: &str = "furb-config";
+
 /// Each field of furb that a manifest can give.
-const FIELDS: [&str; 7] = [WORD, LIFE, INTERFACE, DEFAULT, PLAYS, VIEW, PROCESS];
+const FIELDS: [&str; 8] = [WORD, LIFE, INTERFACE, DEFAULT, PLAYS, VIEW, PROCESS, CONFIG];
 
 /// The marks that open a block of lines as the value of a key of a frontmatter.
 const BLOCKS: [&str; 6] = ["|", "|-", "|+", ">", ">-", ">+"];
@@ -560,6 +566,24 @@ pub fn parts(places: &Places, project: &Path) -> Result<Vec<Part>, Fault> {
       .map_err(|no| Fault::refused(format!("{no}: {}", file.display())))?;
     if let Some(view) = frontmatter(&text).meta(VIEW) {
       out.push(Part { name, file: root.join(view).display().to_string(), text: None });
+    }
+  }
+  Ok(out)
+}
+
+/// The name and the text of the file of the keys of each extension that the configs turn on and
+/// whose manifest names one, in the order a life runs them. An official extension names none, and
+/// a folder whose manifest cannot be read gives none, since its extension does not play.
+pub(crate) fn contributed(places: &Places, project: &Path) -> Result<Vec<(String, String)>, Fault> {
+  let mut out = Vec::new();
+  for (name, root) in turned_on(places, project)? {
+    let Some(root) = root else { continue };
+    let Ok(text) = fs::read_to_string(root.join(MANIFEST)) else { continue };
+    if let Some(keys) = frontmatter(&text).meta(CONFIG) {
+      let file = root.join(keys);
+      let text = fs::read_to_string(&file)
+        .map_err(|no| Fault::refused(format!("{no}: {}", file.display())))?;
+      out.push((name, text));
     }
   }
   Ok(out)

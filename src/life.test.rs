@@ -1021,6 +1021,11 @@ fn a_record_whose_tail_holds_a_kind_of_fact_that_this_build_does_not_know_opens_
  {
   let at = place("record-kind");
   let waiting = checkpointed(&at);
+  reopened(
+    &at,
+    &waiting,
+    "the first life after the checkpoint goes on from it and asks the open prompt again",
+  );
   let later = format!(
     "[[\"made\",\"chain1\",\"store\",\"{}\",null,\"{}.9\",\"9.9.9\"]]",
     "0".repeat(64),

@@ -23,9 +23,10 @@ def name_session(on: str = "") -> Act:
   def ear(id):
     yield "started", id
     here = scope(id)
-    first = next((x for x in transcript(here, "prompt") if operated(x[2])), ("",))
-    while not (first[0] == "prompt" and operated(first[2])):
-      first = yield {id, "prompt"}
+    first = next((x for x in transcript(here, "prompt") if operated(x[2])), None)
+    while first is None:
+      said = yield {id, "prompt"}
+      first = said if said[0] == "prompt" and operated(said[2]) else None
     message = str(first[5])
     actor_of = automatic()
     given = None

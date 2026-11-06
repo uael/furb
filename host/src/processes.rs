@@ -35,6 +35,8 @@ use furb::{
   life::{Log, Opening},
 };
 use futures::{StreamExt, future};
+#[cfg(unix)]
+use rustix::process::{Pid, Signal, kill_process_group};
 use serde_json::Value;
 use tokio::{
   io::{AsyncBufReadExt, BufReader},
@@ -245,9 +247,9 @@ impl Group {
   fn kill(&mut self) {
     let pid = self.0.take();
     #[cfg(unix)]
-    if let Some(pid) = pid.and_then(|one| i32::try_from(one).ok()) {
-      // SAFETY: killpg reads no memory. A group that is gone gives ESRCH, and nothing stays to end.
-      unsafe { libc::killpg(pid, libc::SIGKILL) };
+    if let Some(pid) = pid.and_then(|one| i32::try_from(one).ok()).and_then(Pid::from_raw) {
+      // A group that is gone gives ESRCH, and nothing stays to end.
+      kill_process_group(pid, Signal::KILL).unwrap_or_default();
     }
     #[cfg(not(unix))]
     let _: Option<u32> = pid;

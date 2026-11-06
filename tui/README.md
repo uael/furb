@@ -274,6 +274,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/model [model]` | Choose the model that answers on this chain |
 | `/providers` | Add or remove a provider for this project |
 | `/provider <add\|remove> <name> [URL model window key_env protocol]` | Save a provider in the project settings and use it now |
+| `/config [key] [value]` | Show each key of the configs and change it, or set a key; a key with no value leaves the config that gives it |
 | `/reload` | Read provider settings again and update the standing of this life |
 | `/skills or /reload-skills` | Read the skills of the disk again; each shows in the list of / commands, and its command reads its SKILL.md |
 | `/retry` | Ask again at once each model that waits to retry, as at a usage limit, on the provider settings of now |

@@ -6,6 +6,7 @@ import { busy, type Exit } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
+import { daemon } from "../src/client.ts";
 import { clock } from "../src/clock.ts";
 import { seedLife } from "../src/demo/life.ts";
 import { seedWorkspaces } from "../src/demo/workspaces.ts";
@@ -16,6 +17,7 @@ import { Preferences } from "../src/preferences.ts";
 import { Session } from "../src/session.ts";
 import { colorless, paletteOf } from "../src/theme.ts";
 import { Workspaces } from "../src/workspaces.ts";
+import { ownDaemon } from "./daemon.ts";
 import { cells, rasterize } from "./raster.ts";
 import { click, end, find, highlighting, home, mount, watch } from "./stage.ts";
 
@@ -38,6 +40,11 @@ const bare = {
 // captures: no spinner turns and no time shows. A run that sets FURB_STILL_CLOCK itself keeps its own time.
 const still = process.env.FURB_STILL_CLOCK || "1767225600000";
 const projects = await home("furb-gallery", { FURB_DEMO_PACE: "200", FURB_STILL_CLOCK: still, ...bare });
+// The lives of the gallery live in a daemon of its own, in a cache of its own, so that no daemon of the machine
+// holds them. It keeps a life for 5 s after its last window, so that a scene that reopens a record at once finds
+// the life it left, as the scene of the paused resume does.
+process.env.XDG_CACHE_HOME = join(projects, ".cache");
+const endDaemon = await ownDaemon(process.env, 5);
 /** What the script waits for: a screen whose state never comes ends the script with an error that names the screen. */
 const waits = watch();
 /** A project of the gallery in its home, new, with the files of the demo. */
@@ -58,7 +65,13 @@ await mkdir(output, { recursive: true });
 const grid = process.env.FURB_GALLERY_CELLS;
 if (grid) await mkdir(grid, { recursive: true });
 /** A new session in the project that the conversation of the gallery is about. */
-const gallerySession = async () => demoSession({ cwd: await project("fieldnotes") });
+const gallerySession = async () => {
+  // The life of an earlier session of the project lives on for the grace of the daemon, and a new session on the same
+  // record would join it with its chains and its acts, so a scene that waits for the work of its own life would wait for
+  // ever. The new session starts once that life has ended.
+  await daemon().ended(join(projects, "fieldnotes", "demo.jsonl"));
+  return demoSession({ cwd: await project("fieldnotes") });
+};
 let session = await gallerySession();
 const test = await createTestRenderer({ width: 152, height: 46 });
 let app!: () => App;
@@ -108,6 +121,7 @@ async function rest(): Promise<void> {
 /** The captures that this run wrote. */
 let written = 0;
 async function capture(name: string): Promise<void> {
+  console.log(`capture ${name}`);
   waits(`the screen ${name}`);
   if (!notices.test(name)) session.notice = "";
   if (!/^6[6-8]-/.test(name)) app().session.preferences.view = view;
@@ -547,10 +561,13 @@ try {
   await session.submit("/read missing-file.txt");
   await until(session, () => session.acts.some((act) => act.run?.status === "failed"));
   await capture("26-error");
+  const changes = session.host.changes;
   await session.engine.write(
     { path: "preview.txt", content: "A change to inspect.\n" },
     { on: session.engine.root },
   );
+  // The journal is written off the thread of the life, so it stands once the window hears the change.
+  await until(session.host, () => session.host.changes > changes);
   const journal = `${session.host.record}.changes.jsonl`;
   const savedJournal = await readFile(journal);
   await writeFile(journal, "{ damaged journal }");
@@ -815,8 +832,11 @@ try {
   const older = await demoSession({ cwd: await project("fieldnotes-old") });
   await seedDemo(older);
   const drifts = older.host.record ?? "";
-  await older.dispose();
+  // The record as the life wrote it before its end, since a life that ends writes its checkpoint, and an edit before
+  // that checkpoint is not replayed, so the record would not drift.
   const kept = await readFile(drifts, "utf8");
+  await older.dispose();
+  await daemon().ended(drifts);
   await writeFile(drifts, kept.replace(/("bash","bash\d+","rung\d+","chain\d+","[^"]*"),""/, "$1,false"));
   // Keep the log with the record, since it holds the close that completed its prompt.
   await library.import(drifts, await library.add(older.host.directory));
@@ -1301,7 +1321,7 @@ try {
   await capture("78-terminal-light");
   test.renderer.emit("theme_mode", "dark");
 } catch (error) {
-  console.error(error);
+  console.error(error instanceof Error ? (error.stack ?? error) : error);
   failed = true;
 }
 waits("the end of the script");
@@ -1315,4 +1335,5 @@ await end(
   () => test.renderer.destroy(),
   () => library.dispose(),
   removeDemoDirectories,
+  endDaemon,
 );

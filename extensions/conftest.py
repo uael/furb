@@ -38,7 +38,8 @@ from furb_monty import _monty
 USE = (
   "skill(name) loads a skill: a skill with code plays its word and tells its interface, and any other tells its"
   ' SKILL.md. skill() plays each default skill. read("skills://<name>") gives the word of a skill with code, and'
-  ' read("skills://<name>/<file>") a file of its folder.'
+  ' read("skills://<name>/<file>") a file of its folder. read("config://<name>") gives the keys of a skill in the'
+  " configs, as JSON."
 )
 """USE is the first line of the list of the skills, which says how a chain loads and reads a skill."""
 

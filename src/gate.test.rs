@@ -172,6 +172,19 @@ fn a_call_of_an_async_function_that_nothing_awaits_is_a_finding_of_its_line() {
 }
 
 #[test]
+fn a_call_of_an_async_function_in_an_argument_a_container_or_a_return_is_a_finding() {
+  let hire = "async def hire():\n  return 1";
+  let found =
+    |word: &str| said(&[hire], word).into_iter().map(|(line, _)| line).collect::<Vec<_>>();
+  assert_eq!(found("close(hire())"), vec![1]);
+  assert_eq!(found("x = [hire(), 2]"), vec![1]);
+  assert_eq!(found("x = {'a': hire()}"), vec![1]);
+  assert_eq!(found("async def go():\n  return hire()\nawait go()"), vec![2]);
+  assert_eq!(found("close(await hire())\ny = (hire() or 1)"), vec![2]);
+  assert_eq!(found("close(await hire())\ng = hire()\nh = (k := hire())"), Vec::<usize>::new());
+}
+
+#[test]
 fn a_call_that_is_awaited_or_bound_or_of_another_function_is_no_finding() {
   let hire = "async def hire():\n  return 1";
   assert_eq!(said(&[hire], "await hire()\ngot = hire()\nclose(await got)"), vec![]);
@@ -313,6 +326,30 @@ fn a_global_of_a_def_or_a_class_binds_a_name_of_the_engine_in_the_module() {
       (10, 14, "turns".to_owned()),
     ]
   );
+}
+
+#[test]
+fn a_walrus_in_a_default_or_a_decorator_of_a_def_binds_a_name_of_the_engine() {
+  let word = "def f(a=(wait := 1), b=(chance := 2)):\n  (turns := 4)\n@(span := 5)\ndef g():\n  pass\nclose(1)";
+  assert_eq!(
+    engine_names(word),
+    vec![(1, 12, "wait".to_owned()), (1, 27, "chance".to_owned()), (3, 5, "span".to_owned())]
+  );
+}
+
+#[test]
+fn a_walrus_in_a_base_a_keyword_or_a_decorator_of_a_class_binds_a_name_of_the_engine() {
+  let word = "@(turns := 0)\nclass C((span := 5), k=(wait := 6)):\n  (cd := 7)\nclose(1)";
+  assert_eq!(
+    engine_names(word),
+    vec![(1, 5, "turns".to_owned()), (2, 12, "span".to_owned()), (2, 27, "wait".to_owned())]
+  );
+}
+
+#[test]
+fn a_walrus_in_the_body_of_a_def_or_a_class_or_in_a_lambda_of_a_default_binds_nothing() {
+  let word = "def f(a=lambda: (wait := 1)):\n  (chance := 2)\nclass C:\n  (cd := 3)\nclose(1)";
+  assert_eq!(engine_names(word), vec![]);
 }
 
 /// The line and the column of the word and the name of each finding of the engine-name rule.

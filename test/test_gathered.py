@@ -59,7 +59,7 @@ async def test_chains_holds_the_root_the_chain_of_each_open_prompt_and_each_chai
   root, _ = await gather()
   world_says("made", root, "an engine", 9, "1.0", "0.4.2", "its text", "the text of its Kernel")
   [one] = engine.gathered(lambda word: word, {"wait": 9})["chains"]
-  assert (one["id"], one["on"], one["label"], one["source"], one["paused"]) == (root, "", "root", "", True)
+  assert (one["id"], one["on"], one["label"], one["source"], one["paused"]) == (root, "", "root", "", False)
   assert WORD in one["definitions"]
   assert one["values"]["k"] == "[1, 'x', {2: (3,)}]"
   assert one["values"]["shell"] == f"Act({value(root, 'shell')!r})"
@@ -90,3 +90,14 @@ async def test_gathered_is_a_view_it_makes_nothing_and_says_nothing() -> None:
   before = engine.transcript(root)
   engine.gathered(lambda word: word, {})
   assert engine.transcript(root) == before
+
+
+async def test_paused_says_whether_a_pause_stands_over_the_chain_at_the_tip_and_no_prompt_of_it_pauses_it_so_a_later_life_goes_on_as_the_tip_left_it() -> (
+  None
+):
+  """paused says whether a pause stands over the chain at the tip, and no prompt of it pauses it, so a later life goes on as the tip left it."""
+  root, data = await gather()
+  assert [x["paused"] for x in data["chains"]] == [False]
+  engine.pause(root)
+  [one] = engine.gathered(lambda word: word, {})["chains"]
+  assert one["paused"]
