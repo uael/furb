@@ -563,13 +563,16 @@ def seed(data):
     numbers[sort] = max(numbers[sort], last - 1) + bool(words)
     words and entries.append(((sort, called, *words),))
 
+  asking = {a["on"] for a in data["acts"] if "value" not in a}
   for c in data["chains"]:
     put("chain", c["id"], OPERATOR, c["on"], c["label"], "")
     entries.append((("carried", c["id"], "journal", c["turns"]),))
-    c["paused"] and entries.append((("pause", c["id"], OPERATOR),))
+    (c["paused"] or c["id"] in asking) and entries.append((("pause", c["id"], OPERATOR),))
   for x in data["acts"]:
-    "value" in x or put("prompt", x["id"], OPERATOR, x["on"], x["shape"], x["message"], x["to"])
-    "value" in x or (x["held"] and entries.append((("started", x["id"], x["held"]),)))
+    "value" in x or (
+      put("prompt", x["id"], OPERATOR, x["on"], x["shape"], x["message"], x["to"]),
+      x["held"] and entries.append((("started", x["id"], x["held"]),)),
+    )
   for kind, most in data["taken"].items():
     put(kind, f"{kind}{most + 1}")
   for x in data["acts"]:
@@ -590,7 +593,7 @@ def seed(data):
     put("rung", f"rung{numbers['rung'] + 1}", OPERATOR, i, word, "", "")
     put("gate", gated := f"gate{numbers['gate'] + 1}", i, i, word)
     entries.append((("done", gated, "gate", []),))
-  return entries
+  return entries + [(("wake", y["id"], OPERATOR),) for y in data["chains"] if y["id"] in asking and not y["paused"]]
 
 
 def gathered(define, floor):
@@ -601,10 +604,9 @@ def gathered(define, floor):
   while get(f"chain{len(chains) + 1}"):
     chains.append(f"chain{len(chains) + 1}")
   asked = [get(h) for h in chains] + [x for h in chains for x in transcript(h) if question(x) and x[0] != "chain"]
-  asks = [x[1] for x in asked if x[0] == "prompt" and not over(x[1])]
   cut = sorted((x[1] for x in asked if x[0] == "run" and not over(x[1]) and get(x[4])), key=number)
   gone = {x[4] for x in asked if x[0] == "wants" and x[2] in cut and prompted(x[4]) and not over(x[1])}
-  asks = [x for x in asks if x not in gone]
+  asks = [x[1] for x in asked if x[0] == "prompt" and not over(x[1]) and x[1] not in gone]
   live, values, lost, named = {ROOT, *map(scope, asks)}, {}, {}, set(asks)
   while live - values.keys():
     for c in sorted(live - values.keys(), key=number):
@@ -631,7 +633,7 @@ def gathered(define, floor):
   borne = sorted((x for x in named | done if get(x)[0] in verbs), key=lambda r: (get(r)[0], number(r)))
   stands = [x[1] for x in transcript(ROOT, "stand") if question(x) and over(x[1])][-1:]
   ticks = [x[1] for x in transcript(ROOT, "clock") if question(x) and isinstance(peek(x[1]), float)][-1:]
-  acts, asking = [], {scope(x) for x in borne if prompted(x)}
+  acts = []
   for one in [*stands, *ticks, *borne]:
     a = get(one)
     d = {"kind": a[0], "id": one, "on": a[3]}
@@ -660,7 +662,7 @@ def gathered(define, floor):
         "on": a[3] if a[3] in live else "",
         "label": a[4],
         "source": a[5],
-        "paused": c in asking or paused(c),
+        "paused": paused(c),
         "turns": [x for x in saved if x[0] not in ("started", "done") or x[1] in held],
         "definitions": "\n\n".join(
           filter(None, [define(w) for r, w in program(c).items() if (get(r) or [0] * 3)[2] != "extensions"])

@@ -228,8 +228,9 @@ meanings. The entry of such a name here gives only its form in the engine.
   and no word of a verb by its place. `gathered`, a function of the engine, holds its shape and gives it. `seed` makes
   from that data the entries that a later life boots on, before the record after the checkpoint, so the engine that
   opens it, and not the one that wrote it, says how its own journal makes each chain again. Each name of the past
-  stays taken, an act that a value names stands known with its answer and runs nothing, each chain with an open
-  prompt opens paused, and its prompt asks its model again at a wake. A name of the module whose value the record
+  stays taken, an act that a value names stands known with its answer and runs nothing, and each chain with an open
+  prompt opens paused while its seed binds it, then wakes unless a pause stood over it at the tip, so an open prompt asks its model again
+  at once. A name of the module whose value the record
   cannot hold is lost, and the chain is told.
 - life word: the python of an extension that its rung runs after its word, and that the World plays alone on a chain
   whose origin had the extension, since that chain made the rung of its origin again. In a setup, the life words of

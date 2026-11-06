@@ -106,3 +106,21 @@ async def test_a_rung_of_the_operator_on_each_chain_binds_its_definitions_and_it
   await settle()
   assert "late" not in engine.module("chain3")
   assert [x for x in engine.transcript("chain3", "rung") if x[2] == "prompt1"]
+
+
+async def test_each_chain_with_an_open_prompt_opens_paused_while_the_seed_binds_it_and_wakes_after_it_unless_the_data_says_it_was_paused_so_an_open_prompt_asks_its_model_again_at_once() -> (
+  None
+):
+  """Each chain with an open prompt opens paused while the seed binds it, and wakes after it unless the data says it was paused, so an open prompt asks its model again at once."""
+  life(sown())
+  data = {**DATA, "chains": [{**c, "paused": False} for c in DATA["chains"]]}
+  entries = engine.seed(data)
+  kinds = [x[0][:3] for x in entries if x[0][0] in ("pause", "wake")]
+  assert kinds == [("pause", "chain3", OPERATOR), ("wake", "chain3", OPERATOR)]
+  assert [x[0][0] for x in entries][-1] == "wake"
+  log, _ = life(sown(), entries)
+  await settle()
+  assert not engine.paused("chain3")
+  assert not engine.paused("chain1")
+  rungs = [x for x in log if x[0] == "rung"]
+  assert [x[2] for x in rungs][-1:] == ["prompt1"] and OPERATOR in [x[2] for x in rungs]
