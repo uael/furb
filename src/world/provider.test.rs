@@ -859,10 +859,12 @@ fn a_turn_hands_its_images_to_a_model_that_takes_them_and_a_model_that_takes_non
   let [Message::User { content }] = &model.requests()[0].chat_history[..] else {
     panic!("one user turn")
   };
-  assert!(matches!(
-    content.iter().collect::<Vec<_>>()[..],
-    [UserContent::Text(_), UserContent::Text(_), UserContent::Image(_)]
-  ));
+  let named = images::reference("a.png", &kept.uri);
+  let parts: Vec<_> = content.iter().collect();
+  let place = parts.iter().position(|one| matches!(one, UserContent::Image(_)));
+  let place = place.expect("the image goes to the model");
+  assert!(matches!(parts[place - 1], UserContent::Text(text) if text.text.ends_with(&named)));
+  assert!(matches!(parts.get(place + 1), Some(UserContent::Text(_))), "the text after it follows");
   let blind = streaming(&[]);
   let provider =
     Provider::new(at.display().to_string(), vec![scripted(&blind)]).images(at.join("images"));
@@ -902,6 +904,16 @@ fn the_claude_command_line_sees_each_image_that_a_prompt_names_and_each_image_th
   let heard = fake.heard();
   let image = |bytes: &[u8]| format!(r#""data":"{}""#, STANDARD.encode(bytes));
   assert_eq!(heard.len(), 2, "{heard:?}");
+  // The image stands after the text that names it and before the text that follows, not at the end
+  // of the turn.
+  let place = |text: &str| heard[0].find(text);
+  let (name, data) = (place("![named.png]"), place(&image(named)));
+  let after = heard[0].rfind("prompt1: Act[");
+  assert!(
+    matches!((name, data, after), (Some(a), Some(b), Some(c)) if a < b && b < c),
+    "the image after its name and before the text that follows it: {}",
+    heard[0]
+  );
   assert!(heard[0].contains(&image(named)), "the image of the prompt: {}", heard[0]);
   assert!(heard[1].contains(&image(read)), "the image that the word read: {}", heard[1]);
   assert!(!heard[1].contains(&image(named)), "the command line hears an image once: {}", heard[1]);
@@ -2355,7 +2367,6 @@ fn each_image_comes_once_in_a_request_after_the_text_that_names_it_as_a_fork_giv
         content
           .iter()
           .map(|part| match part {
-            UserContent::Text(text) if text.text == named => "name",
             UserContent::Text(_) => "text",
             UserContent::Image(_) => "image",
             _ => "other",
@@ -2365,7 +2376,33 @@ fn each_image_comes_once_in_a_request_after_the_text_that_names_it_as_a_fork_giv
       _ => None,
     })
     .collect();
-  assert_eq!(users, [vec!["text", "name", "image"], vec!["text"]]);
+  assert_eq!(users, [vec!["text", "image", "text"], vec!["text"]]);
+}
+
+#[test]
+fn a_message_with_an_image_in_the_middle_goes_as_text_image_text_in_the_order_of_the_message() {
+  let at = yard("images-middle");
+  fs::write(at.join("a.png"), b"\x89PNG\r\n\x1a\nimage").expect("the image is written");
+  let kept = images::attach(&at.join("images"), &at.join("a.png")).expect("the image is attached");
+  let named = images::reference("a.png", &kept.uri);
+  let open = format!("#prompt1 before {named} after\nprompt1: Act[str] = Act('prompt1')");
+  let turns = Object::list([Object::tuple([
+    Object::string("user"),
+    Object::string(open),
+    Object::none(),
+    Object::none(),
+  ])]);
+  let model = scripted(&MockCompletionModel::new([])).images();
+  let mut held = images::Images::new(Some(at.join("images")));
+  let got = messages(turns.as_ref(), &model, &mut held).expect("the messages of the turns");
+  let [Message::User { content }] = &got[..] else { panic!("one user turn") };
+  let parts: Vec<_> = content.iter().collect();
+  let [UserContent::Text(before), UserContent::Image(_), UserContent::Text(after)] = &parts[..]
+  else {
+    panic!("text, image, text: {parts:?}")
+  };
+  assert_eq!(before.text, format!("#prompt1 before {named}"));
+  assert_eq!(after.text, " after\nprompt1: Act[str] = Act('prompt1')");
 }
 
 #[test]
