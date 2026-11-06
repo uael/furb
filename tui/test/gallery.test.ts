@@ -6,8 +6,9 @@ import { remove } from "../../bind/typescript/test/processes.ts";
 /** The whole gallery runs on CI, to its last capture, so that a scene that hangs or fails stops a pull request and not
  * the audit that draws the gallery later. It draws in a home of its own, with a daemon of its own, and writes its
  * pictures to a folder of the test. The gallery draws about 125 shots in about 3 minutes, and a loaded runner takes
- * about twice that. */
-test.skipIf(process.platform === "win32")(
+ * about twice that. The render does not depend on the system, so it runs on Linux alone, and spares the runners of
+ * macOS. */
+test.skipIf(process.platform !== "linux")(
   "the gallery runs through to its last capture",
   async () => {
     // The home holds the socket of its daemon, which needs a short path, since a socket has a bound on it.

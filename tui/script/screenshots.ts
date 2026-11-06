@@ -121,6 +121,7 @@ async function rest(): Promise<void> {
 /** The captures that this run wrote. */
 let written = 0;
 async function capture(name: string): Promise<void> {
+  console.log(`capture ${name}`);
   waits(`the screen ${name}`);
   if (!notices.test(name)) session.notice = "";
   if (!/^6[6-8]-/.test(name)) app().session.preferences.view = view;
@@ -560,10 +561,13 @@ try {
   await session.submit("/read missing-file.txt");
   await until(session, () => session.acts.some((act) => act.run?.status === "failed"));
   await capture("26-error");
+  const changes = session.host.changes;
   await session.engine.write(
     { path: "preview.txt", content: "A change to inspect.\n" },
     { on: session.engine.root },
   );
+  // The journal is written off the thread of the life, so it stands once the window hears the change.
+  await until(session.host, () => session.host.changes > changes);
   const journal = `${session.host.record}.changes.jsonl`;
   const savedJournal = await readFile(journal);
   await writeFile(journal, "{ damaged journal }");
@@ -1317,7 +1321,7 @@ try {
   await capture("78-terminal-light");
   test.renderer.emit("theme_mode", "dark");
 } catch (error) {
-  console.error(error);
+  console.error(error instanceof Error ? (error.stack ?? error) : error);
   failed = true;
 }
 waits("the end of the script");
