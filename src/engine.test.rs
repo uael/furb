@@ -1439,8 +1439,11 @@ fn probed(yard: &str, ears: Vec<(&str, Box<dyn Ear>)>) -> (Yard, Engine, String)
 
 /// One probe on the root, and what it came to.
 fn probe(engine: &mut Engine, root: &str) -> Result<Object, Fault> {
+  // The ear makes the act, since a later life makes again what an ear made through the ear.
+  let operator = engine.site(Some("probe")).unwrap();
   let made =
     engine.verb("act", vec![Object::string("probe"), Object::string(root), Object::none()], vec![]);
+  engine.site(Some(&operator)).unwrap();
   let name = made.unwrap().as_ref().as_str().unwrap_or_default().to_owned();
   block_on(Act::<Object>::of(engine, &name))
 }

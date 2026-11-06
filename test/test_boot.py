@@ -32,6 +32,7 @@ from conftest import (
   settle,
   sown,
   tip,
+  verbs,
   world_says,
 )
 from furb import engine
@@ -70,6 +71,7 @@ def watching(root: str) -> Generator[tuple | None, tuple]:
 async def test_a_life_everything_that_is_said_in_it_is_said_here() -> None:
   """A life: everything that is said in it is said here, so the log of what was said, the generators that listen by their names and the tables of the life are its own, and it binds the names that reach them: say, which says a fact, act, which makes an act, drive, which brings a generator to life, and get, peek and transcript, which read the tables."""
   _, _, root = await lived()
+  await verbs(root, "note")
   heard: list[tuple] = []
   its: list[tuple] = []
   engine.drive(keeping(heard), "keeper")
@@ -577,10 +579,28 @@ async def raises_again() -> None:
   record = [((*e, "x", "y") if e[0] == "read" and e[2] == OPERATOR else e,) for (e,) in sand.record]
   with pytest.raises(TypeError):
     await relived(Sand(), record)
+  tip, _, top = born()
+  word = (
+    "b = bash('echo hi')\n"
+    "def noisy(id):\n  yield 'started', id\n  while True:\n    a = yield {b}\n"
+    "    if a[0] == 'done':\n      raise TypeError('noisy')\n"
+    "n = act('noisy', '', noisy)\nawait wait(0.05, b)\nlast = bash('echo after')\nawait last"
+  )
+  await engine.rung(word, on=top)
+  await settle()
+  b = engine.module(top)["b"]
+  cut = next(n for n, (e,) in enumerate(tip.record) if e[:2] == ("done", b))
+  first, second = list(tip.record)[: cut + 1], Sand()
+  _, again = await relived(second, first)
+  live = viewed(again)
+  _, over = await relived(Sand(), [*first, *second.record])
+  later = viewed(over)
+  assert {k: v[: len(live["facts"][k])] for k, v in later["facts"].items() if k in live["facts"]} == live["facts"]
+  assert engine.module(over)["last"] == engine.module(again)["last"]
 
 
 async def test_given_at_its_birth_what_the_world_kept_of_an_earlier_life() -> None:
-  """Given at its birth what the World kept of an earlier life, it says those entries again in the order it was given them, each once every fact said before it has been heard, or once a raise that is no drift stopped the bus with some of them unheard: an act whose maker is neither an act nor an ear that boot was given it makes again through its verb under the site of its maker, once the chain it is on has been made again, since that maker makes nothing again of what the record holds; an act whose maker is an act it makes not, since the word of that act makes it again; an act whose maker is an ear that boot was given it makes through act under the site of that ear, with no ear of its own, when that ear did not make it again by then, so a view of a later life holds it where the first life held it; and any other fact it says once the act it is about has been made again, so that its controls and its dones land where they landed."""
+  """Given at its birth what the World kept of an earlier life, it says those entries again in the order it was given them, each once every fact said before it has been heard, or once a raise that is no drift stopped the bus with some of them unheard, but for an act that an act of the record makes, which comes of a fact still unheard: an act whose maker is neither an act nor an ear that boot was given it makes again through its verb under the site of its maker, once the chain it is on has been made again, since that maker makes nothing again of what the record holds; an act whose maker is an act it makes not, since the word of that act makes it again; an act whose maker is an ear that boot was given it makes through act under the site of that ear, with no ear of its own, when that ear did not make it again by then, so a view of a later life holds it where the first life held it; and any other fact it says once the act it is about has been made again, so that its controls and its dones land where they landed."""
   sand, log, root = born()
   step = engine.rung("await wait(100.0, __name__)\nclose(7)", on=root)
   await settle()
@@ -624,7 +644,7 @@ async def test_given_at_its_birth_what_the_world_kept_of_an_earlier_life() -> No
 
 
 async def test_an_entry_whose_act_this_life_has_not_made_again_the_journal_steps_over() -> None:
-  """An entry whose act this life has not made again when every fact said before it has been heard, as an act that an act made and that the outside never answered, or an act on a chain that this life has not made, the journal steps over, since this life will not make that act at that place, and it keeps the name of that act taken, so the entries after it go on and their acts keep their names."""
+  """An entry whose act this life has not made again when every fact said before it has been heard, as an act that an act made and that the outside never answered, or an act on a chain that this life has not made, which for an act whose maker is neither an act nor an ear that boot was given is the chain it is on, the journal steps over, since this life will not make that act at that place, and it keeps the name of that act taken, so the entries after it go on and their acts keep their names."""
   first, _, root = born()
   sub = engine.rung("sub = chain('sub')", on=root)
   await sub
@@ -730,12 +750,14 @@ async def test_while_the_journal_says_the_record_again_it_holds_what_it_keeps() 
   """While the journal says the record again it holds what it keeps, and keeps it in its order once the record is said whole, so a life whose replay drifts keeps nothing of what it made before the drift."""
   record, _ = await granted()
   later = Sand()
-  changed = [((*e[:4], "echo y", *e[5:]),) if e[:2] == ("bash", "bash1") else (e,) for (e,) in record if e[1] != "grant1"]
+  changed = [
+    ((*e[:4], "echo y", *e[5:]),) if e[:2] == ("bash", "bash1") else (e,) for (e,) in record if e[1] != "grant1"
+  ]
   with pytest.raises(Drift, match=r"^bash1 drifts: "):
     life(later, changed)
   assert engine.get("grant3") is not None and later.record == []
   kept = Sand()
-  _, root = await relived(kept, [(e,) for (e,) in record if e[1] != "grant1"])
+  await relived(kept, [(e,) for (e,) in record if e[1] != "grant1"])
   assert [e[0][:2] for e in kept.record if e[0][1] == "grant3"][:1] == [("grant", "grant3")]
 
 
@@ -767,7 +789,9 @@ async def test_a_record_whose_last_fact_made_names_a_schema_before_1_1_holds_no_
   await settle()
   made = [(e[0], e[1]) for e in log if engine.question(e)]
   kept = [
-    (e,) for (e,) in plain(sand.record) if not (e[0] in ("rung", "run") and engine.question(e) and engine.get(e[2]))
+    (e,)
+    for (e,) in plain(sand.record)
+    if not (e[0] in ("rung", "run") and engine.question(e) and engine.get(e[2]))  # ty: ignore[redundant-condition]
   ]
   again, _ = await relived(Sand(), [(("made", "chain1", "store", "e", None, "1.0", "0.4.2"),), *kept])
   assert {(e[0], e[1]) for e in again if engine.question(e) and e[0] != "stand"} <= set(made)

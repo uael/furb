@@ -4,7 +4,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use furb::{
+use crate::{
   value::Object,
   wire::outward,
   world::{Shape, named},

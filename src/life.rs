@@ -13,7 +13,6 @@
   reason = "debt: a clone of an Arc or an Rc that hides its kind"
 )]
 #![expect(clippy::match_bool, reason = "debt: a match on a bool")]
-#![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
 
 use std::{
   path::{Path, PathBuf},
@@ -36,6 +35,8 @@ pub type Ears = Vec<(String, Box<dyn Ear>)>;
 struct Prepared {
   places: Places,
   extensions: Vec<extension::Extension>,
+  /// The line that tells why each extension that the configs turn on does not play.
+  refused: Vec<String>,
   provider: world::Provider,
   /// Whether the gate reads each word, as [`crate::gate::configured`] says.
   gated: bool,
@@ -87,10 +88,14 @@ pub struct Opening {
   /// their names, so it runs no command and touches no file.
   #[cfg_attr(feature = "python", pyo3(default))]
   pub inspecting: Option<bool>,
-  /// Whether the life opens from the first entry of its record, born again at each checkpoint as each life of the
-  /// record was, and not from its last checkpoint alone; false when unsaid. Each checkpoint then has to end the life
-  /// that wrote it and to hold what a life born on the entries before it gathers, or the open is refused, as
-  /// [`checkpoint::reborn`] says. Both opens reach one state at the tip, so the tests and the gates open this way to
+  /// Whether the life opens from the first entry of its record, born again at each checkpoint as
+  /// each life of the
+  /// record was, and not from its last checkpoint alone; false when unsaid. Each checkpoint then
+  /// has to end the life
+  /// that wrote it and to hold what a life born on the entries before it gathers, or the open is
+  /// refused, as
+  /// [`checkpoint::reborn`] says. Both opens reach one state at the tip, so the tests and the
+  /// gates open this way to
   /// prove each checkpoint of a record.
   #[cfg_attr(feature = "python", pyo3(default))]
   pub whole: Option<bool>,
@@ -211,12 +216,13 @@ impl Opening {
     Ok((record, ears))
   }
 
-  /// The ears of the crate but the store and the log, as [`Opening::parts`] gives them, for a life that boots on a
+  /// The ears of the crate but the store and the log, as [`Opening::parts`] gives them, for a life
+  /// that boots on a
   /// record.
   fn eared(&self, prepared: Prepared, record: &[Object]) -> Result<Ears, Fault> {
     let works = self.works();
     let keeps = self.keeps != Some(false) && works;
-    let Prepared { places, extensions, provider, .. } = prepared;
+    let Prepared { places, extensions, refused, provider, .. } = prepared;
     let log = self.log.as_ref().map(|log| log.0.clone());
     let told = |line: &str| match &log {
       Some(log) => log(line),
@@ -246,7 +252,7 @@ impl Opening {
     let servers = world::mcp::Settings::of(project, config.clone(), gallery.clone());
     let ears = vec![
       ("provider", provider),
-      ("extensions", extension::extensions(extensions, places)),
+      ("extensions", extension::telling(extensions, refused, places)),
       ("skills", lasting(skills(config.clone()), move || skills(config.clone()))),
       (
         "mcp",
@@ -295,9 +301,9 @@ impl Opening {
     }
     let here = Places::here();
     let places = Places { config: self.config.clone().map_or(here.config, PathBuf::from), ..here };
-    let extensions = match self.extensions != Some(false) && works {
+    let (extensions, refused) = match self.extensions != Some(false) && works {
       true => extension::configured(&places, self.directory.as_ref())?,
-      false => Vec::new(),
+      false => (Vec::new(), Vec::new()),
     };
     // The standing gives each extension whose word or life word plays, with the file of a word that is not blank.
     let advertised = extensions
@@ -322,7 +328,7 @@ impl Opening {
       None => self.provider(advertised, actor, roster)?,
     };
     let gated = crate::gate::configured(&places.config, Path::new(&self.directory));
-    Ok(Prepared { places, extensions, provider, gated })
+    Ok(Prepared { places, extensions, refused, provider, gated })
   }
 
   /// The provider: the models of the roster that the catalog makes, which the function of the host answers when it
@@ -447,7 +453,8 @@ impl Opening {
     Ok((engine, record))
   }
 
-  /// Proves each checkpoint of the record: a life that inspects the entries before it, born on them as the life that
+  /// Proves each checkpoint of the record: a life that inspects the entries before it, born on
+  /// them as the life that
   /// wrote it was, gathers it again, as [`checkpoint::reborn`] says.
   fn reborn(&self) -> Result<(), Fault> {
     let Some(path) = self.record.as_deref().filter(|one| Path::new(one).exists()) else {

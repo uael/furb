@@ -3,10 +3,14 @@
 //! hears the facts of a life.
 //!
 //! While the log beside the record agrees with it, the reader gives every fact of the log, as [`logged`] reads it.
-//! Else it gives the facts that the record kept, each value as the engine gives it. A segment of the minor 1 of the
-//! schema of the record, or of a later minor, keeps the question of each act that the life made. A segment of the minor
-//! 0 keeps only what the outside said: the World, the models and the operator. So the reader says, after the facts
-//! that name them, the facts that the engine said and the record does not keep, as far as the kept facts show them,
+//! Else it gives the facts that the record kept, each value as the engine gives it. A segment of
+//! the minor 1 of the
+//! schema of the record, or of a later minor, keeps the question of each act that the life made. A
+//! segment of the minor
+//! 0 keeps only what the outside said: the World, the models and the operator. So the reader says,
+//! after the facts
+//! that name them, the facts that the engine said and the record does not keep, as far as the kept
+//! facts show them,
 //! and in a segment that keeps each question, only the dones and the findings:
 //!
 //! - each chain that a kept act stands on, made by the rung that makes the first prompt on it, or by the operator,
@@ -433,7 +437,8 @@ struct Reader<'a> {
   /// The run of each rung, and each rung whose word the gate read.
   runs: HashMap<String, String>,
   gated: HashSet<String>,
-  /// Whether the segment that the reader reads keeps the question of each act that the life made, as its fact made
+  /// Whether the segment that the reader reads keeps the question of each act that the life made,
+  /// as its fact made
   /// says by the minor of its schema.
   whole: bool,
 }

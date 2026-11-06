@@ -213,7 +213,8 @@ fn inspected(at: &Path) -> Result<Engine, furb::Fault> {
   Ok(Opening { inspecting: Some(true), ..scripted(at, true, &SCRIPT) }.boot::<String>([])?.0)
 }
 
-/// A life that only inspects the record of a directory from its first entry, born again at each of its checkpoints,
+/// A life that only inspects the record of a directory from its first entry, born again at each of
+/// its checkpoints,
 /// or why it refused.
 fn inspected_whole(at: &Path) -> Result<Engine, furb::Fault> {
   let opening =
@@ -221,7 +222,8 @@ fn inspected_whole(at: &Path) -> Result<Engine, furb::Fault> {
   Ok(opening.boot::<String>([])?.0)
 }
 
-/// What each chain of a life holds, as python shows it: each fact that it heard, but its module, which [`MODULES`]
+/// What each chain of a life holds, as python shows it: each fact that it heard, but its module,
+/// which [`MODULES`]
 /// shows with no address of the heap, and the outcome of each act among them.
 const STATE: &str = "[(c, [x for x in transcript(c) if x[0] != 'module'], [(x[1], peek(x[1], ...)) for x in transcript(c) if question(x)]) \
                      for c in [f'chain{n}' for n in range(1, 99) if get(f'chain{n}')]]";
@@ -386,7 +388,8 @@ fn a_record_whose_checkpoint_holds_a_field_that_no_reader_knows_still_opens() {
   holds("field-more", &more, &fs::read_to_string(next.join("work.modules")).unwrap());
 }
 
-/// A life born again three times in a directory of its own, each life on the checkpoint of the one before it, and
+/// A life born again three times in a directory of its own, each life on the checkpoint of the one
+/// before it, and
 /// its record.
 fn thrice(name: &str) -> (yard::Yard, String) {
   let at = place(name);

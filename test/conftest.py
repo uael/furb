@@ -844,3 +844,10 @@ def pytest_collectstart(collector: pytest.Collector) -> None:  # noqa: ARG001
 QUOTES = json.loads((Path(__file__).parent / "quotes.json").read_text(encoding="utf-8"))
 """QUOTES is the table of the quotes, which the engine, the gate and the watch of the provider read alike: each word,
 the python that unquoted makes of it, whether a quote stands open at its end, and what the gate finds in it."""
+
+
+async def verbs(root: str, *kinds: str) -> None:
+  """Give the module of a chain a verb for each kind, so that a later life could make again an act of that kind that a test makes with an ear of its own."""
+  await engine.rung(
+    "".join(f"def {k}(*words, on=''):\n  return act({k!r}, on, None, *words)\n\n" for k in kinds), on=root
+  )
