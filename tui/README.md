@@ -52,6 +52,12 @@ linker, the C tools of your system are missing. When `bun: command not found` sh
 come first. It gives the TUI `--demo`, `--record`, `--cwd`, the model and the effort of its `--model` as `--model`
 and `--effort`, each `--roster`, and the words after `--`, as [the command line](../cli/README.md) says.
 
+`--read` opens a window that reads the life and changes nothing, on any transport: its hello asks the daemon for the role
+to read, and the daemon gives the lesser of that role and the one that the transport proved, so each send of the window
+is refused with the reason. A request that the daemon leaves when it goes, as at a handover, is sent again once the life
+is open again when a second time changes nothing, as a read or a pause; a request that makes an act fails with the
+request, since the act may have been made. The window shows a stall that the daemon tells as a notice.
+
 The welcome of an empty chain offers "Watch a life" first: a short life that plays by itself and asks no model, so
 it costs nothing. `/watch` plays it too, and `bun run demo` opens on it.
 [A tour of the TUI](../docs/tui.md#watch-a-life) shows it and its keys.

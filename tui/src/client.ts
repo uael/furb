@@ -154,6 +154,8 @@ export class Daemon extends EventEmitter {
   constructor(
     readonly folder = daemonFolder(),
     readonly place = daemonPlace(folder),
+    /** The role that the hello of the window asks, none to hold the role that its transport proved. */
+    readonly role?: Role,
   ) {
     super();
   }
@@ -183,7 +185,7 @@ export class Daemon extends EventEmitter {
     socket.on("error", () => {});
     socket.on("close", () => this.gone(socket));
     if (this.held === 0) socket.unref();
-    const welcome = await this.ask({ verb: "hello", protocol: PROTOCOL, kind: "window", role: requested });
+    const welcome = await this.ask({ verb: "hello", protocol: PROTOCOL, kind: "window", role: this.role });
     if (welcome.answer !== "welcome") throw new Error("The daemon gave no welcome.");
     this.peer = welcome.data.peer;
   }
@@ -202,6 +204,7 @@ export class Daemon extends EventEmitter {
       }
     } else if (frame.frame === "event") this.emit("event", frame.life, frame.seq, frame.event);
     else if (frame.frame === "presence") this.emit("presence", frame.life, frame.peers);
+    else if (frame.frame === "stalled") this.emit("stalled", frame.life, frame.notice);
     else if (frame.frame === "ask") this.emit("ask", frame.life, frame.ask, frame.request);
   }
 
@@ -306,23 +309,16 @@ type Request = { id: number } & Verb;
 /** What hears an event of an emitter. */
 export type Listener = Parameters<EventEmitter["on"]>[1];
 
-/** The role that this window asks in its hello, none to hold the role that its transport proved. */
-let requested: Role | undefined;
-
-/** Makes this window a reader on any transport: its hello asks the role to read, and the daemon gives the lesser of
- * that role and the one that the transport proved. */
-export function askRole(role: Role | undefined): void {
-  requested = role;
-}
-
 /** The one connection of this window to the daemon of its machine, made at its first use. A cache of furb named
  * again, as a scenario of the tests names one of its own, takes a connection to the daemon of that cache. */
 let shared: Daemon | undefined;
-export function daemon(): Daemon {
+/** A role given makes this window a reader on any transport: its hello asks that role, and the daemon gives the
+ * lesser of it and the role that the transport proved. */
+export function daemon(role?: Role): Daemon {
   const folder = daemonFolder();
-  if (shared?.folder !== folder) {
+  if (shared?.folder !== folder || (role && shared.role !== role)) {
     shared?.close();
-    shared = new Daemon(folder);
+    shared = new Daemon(folder, daemonPlace(folder), role ?? shared?.role);
   }
   return shared;
 }
@@ -349,6 +345,27 @@ export interface Choices {
   /** The models of the life, which the window answers in their place, as the demo does. */
   models?: Models;
 }
+
+/** The verbs that a window sends again when the daemon went before it answered: each reads, or says what a second time
+ * says again. */
+const AGAIN = new Set<Verb["verb"]>([
+  "peek",
+  "get",
+  "transcript",
+  "turns",
+  "program",
+  "cwd",
+  "standing",
+  "filled",
+  "names",
+  "inspect",
+  "pending",
+  "queued",
+  "seen",
+  "queue",
+  "pause",
+  "wake",
+]);
 
 /** The value of an act done with a fault, as an error with the name of its class. */
 function faulted(value: unknown): Error | undefined {
@@ -429,9 +446,11 @@ export class RemoteLife extends EventEmitter {
       );
     };
     const lost = (why: string) => this.lose(new Error(why));
+    const stalled = (life: string, notice: string) => life === this.record && this.emit("log", notice);
     this.listening = [
       ["event", event],
       ["ask", ask],
+      ["stalled", stalled],
       ["reconnected", again],
       ["lost", lost],
     ];
@@ -723,7 +742,15 @@ export class RemoteLife extends EventEmitter {
     await this.open();
     // A life that ended takes no verb, until the window opens it again.
     if (this.lost) throw new Error(this.lost);
-    return await this.daemon.ask(verb);
+    try {
+      return await this.daemon.ask(verb);
+    } catch (error) {
+      // A verb that the daemon left when it went goes again once the life is open again, if a second time changes
+      // nothing: a verb that makes an act may have made it before the daemon went, and fails with the request.
+      if (!(error instanceof Closed) || !AGAIN.has(verb.verb)) throw error;
+      await this.reopened(error);
+      return await this.daemon.ask(verb);
+    }
   }
 
   async prompt(
