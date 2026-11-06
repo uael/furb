@@ -275,7 +275,9 @@ mod daemon {
     }
 
     async fn listed(&mut self) -> Vec<Listed> {
-      let Ok(Answer::Lives(lives)) = self.ask(Verb::List).await else { panic!("no list") };
+      let Ok(Answer::Lives(lives)) = self.ask(Verb::List { config: None }).await else {
+        panic!("no list")
+      };
       lives
     }
 
@@ -367,6 +369,44 @@ mod daemon {
     assert!(!window.lives(&life).await);
     let refused = window.ask(pin()).await;
     assert!(matches!(refused, Err(ProtocolError::Closed { .. })), "{refused:?}");
+  }
+
+  #[tokio::test]
+  async fn the_list_gives_each_record_of_the_sessions_of_each_workspace_and_whether_a_life_holds_it()
+   {
+    let at = place();
+    let main = at.join("main");
+    let sessions = main.join(".furb").join("sessions");
+    let tree = at.join("tree");
+    let marks = main.join(".git").join("worktrees").join("tree");
+    for folder in [&sessions, &tree.join(".furb").join("sessions"), &marks] {
+      fs::create_dir_all(folder).unwrap();
+    }
+    fs::write(marks.join("gitdir"), format!("{}\n", tree.join(".git").display())).unwrap();
+    fs::write(tree.join(".git"), "gitdir: elsewhere\n").unwrap();
+    let tree = fs::canonicalize(&tree).unwrap().join(".furb").join("sessions");
+    fs::write(tree.join("two.jsonl"), "").unwrap();
+    fs::write(tree.join("two.changes.jsonl"), "").unwrap();
+    let list = json!({ "workspaces": [{ "directory": main.display().to_string() }] });
+    fs::create_dir_all(at.join("config")).unwrap();
+    fs::write(at.join("config").join("workspaces.json"), list.to_string()).unwrap();
+    let (local, _daemon) = started(&at, GRACE).await;
+    let mut window = Window::dialed(&local).await;
+    let one = opened(&mut window, &sessions, "one.jsonl").await;
+    let alone = opened(&mut window, &at, "a.jsonl").await;
+    let workspace = Some(main.display().to_string());
+    let mut wanted = vec![
+      Listed { life: one, workspace: workspace.clone(), held: true, open: true },
+      Listed { life: alone, workspace: None, held: true, open: true },
+      Listed {
+        life: tree.join("two.jsonl").display().to_string(),
+        workspace,
+        held: false,
+        open: false,
+      },
+    ];
+    wanted.sort_by(|a, b| a.life.cmp(&b.life));
+    assert_eq!(window.listed().await, wanted);
   }
 
   #[tokio::test]

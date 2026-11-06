@@ -49,6 +49,13 @@
         {
           "type": "object",
           "properties": {
+            "config": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "default": null
+            },
             "verb": {
               "type": "string",
               "const": "list"
@@ -57,7 +64,7 @@
           "required": [
             "verb"
           ],
-          "description": "The lives and the records of the machine."
+          "description": "The records of the machine: each record of the sessions of each workspace that\n`workspaces.json` in the folder `config` names, the config folder of the daemon when the peer\nnames none, as a window keeps its list there, and each record that a life of the daemon holds."
         },
         {
           "type": "object",
@@ -2379,15 +2386,25 @@
         "life": {
           "type": "string"
         },
+        "workspace": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "held": {
+          "type": "boolean"
+        },
         "open": {
           "type": "boolean"
         }
       },
       "required": [
         "life",
+        "held",
         "open"
       ],
-      "description": "A record of the machine, and whether a life of the daemon holds it now."
+      "description": "A record of the machine: the main checkout of the workspace whose sessions hold it, when the\nlist names one, whether a life of the daemon holds it now, and whether that life lives and does\nnot end."
     },
     "Handed": {
       "type": "object",

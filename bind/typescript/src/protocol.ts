@@ -13,6 +13,7 @@ export type Request1 =
       verb: "hello";
     })
   | {
+      config?: string | null;
       verb: "list";
     }
   | {
@@ -782,10 +783,14 @@ export interface Peer {
   name?: string | null;
 }
 /**
- * A record of the machine, and whether a life of the daemon holds it now.
+ * A record of the machine: the main checkout of the workspace whose sessions hold it, when the
+ * list names one, whether a life of the daemon holds it now, and whether that life lives and does
+ * not end.
  */
 export interface Listed {
   life: string;
+  workspace?: string | null;
+  held: boolean;
   open: boolean;
 }
 /**

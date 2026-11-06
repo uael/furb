@@ -30,6 +30,7 @@ pub mod processes;
 pub mod protocol;
 mod queue;
 mod rebirth;
+mod records;
 mod serve;
 mod stall;
 pub mod transport;

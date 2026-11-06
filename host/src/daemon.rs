@@ -55,6 +55,7 @@ use crate::{
     Answer, BOUND, Config, Frame, Handed, Hello, Kind, Listed, Mount, Open, PROTOCOL, Peer,
     Request, Verb,
   },
+  records,
   serve::{Host, Outbox, serve},
   stall::Quiet,
   transport::{
@@ -580,7 +581,7 @@ impl Lives {
         let birth = Birth { cwd, actor, roster, extensions, config, claude, answerer, holder };
         return self.open(life, birth, reply);
       }
-      Verb::List => Ok(Answer::Lives(self.listed())),
+      Verb::List { config } => Ok(Answer::Lives(self.listed(config))),
       Verb::Attach { life, from } => self.attach(&life, from, peer, outbox),
       Verb::Detach { life } => self.detach(&life, outbox),
       Verb::Pin { life, holder } => living(&mut self.held, &life).map(|(_, holders)| {
@@ -760,16 +761,32 @@ impl Lives {
     self.views.mount(mount, peer, outbox).map(|()| Answer::Done)
   }
 
-  /// Each life of the daemon, by the path of its record, and whether it lives or ends.
-  fn listed(&self) -> Vec<Listed> {
-    let mut listed: Vec<Listed> = self
-      .held
-      .iter()
-      .map(|(life, held)| Listed {
-        life: life.clone(),
-        open: matches!(held.stage, Stage::Living(_)),
-      })
-      .collect();
+  /// Each record of the workspaces of the list in a config folder, the config folder of the
+  /// daemon when none is given, and each life of the daemon, by the path of its record, with
+  /// whether a life holds it and whether that life lives or ends.
+  fn listed(&self, config: Option<String>) -> Vec<Listed> {
+    let config = config.or_else(|| self.settings.opening.config.clone());
+    let folder = processes::places(&Opening { config, ..Opening::default() }).config;
+    let found = records::recorded(&folder);
+    let mut listed: Vec<Listed> = Vec::new();
+    for one in &found {
+      for life in &one.records {
+        let workspace = Some(one.workspace.clone());
+        listed.push(Listed { life: life.clone(), workspace, held: false, open: false });
+      }
+    }
+    for (life, held) in &self.held {
+      let open = matches!(held.stage, Stage::Living(_));
+      if let Some(one) = listed.iter_mut().find(|one| &one.life == life) {
+        (one.held, one.open) = (true, open);
+        continue;
+      }
+      // A record that a life opens stands in the list before the disk holds it.
+      let at = Path::new(life).parent();
+      let workspace = found.iter().find(|one| Some(one.folder.as_path()) == at);
+      let workspace = workspace.map(|one| one.workspace.clone());
+      listed.push(Listed { life: life.clone(), workspace, held: true, open });
+    }
     listed.sort_by(|one, other| one.life.cmp(&other.life));
     listed
   }
