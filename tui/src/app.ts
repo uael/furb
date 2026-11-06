@@ -516,7 +516,7 @@ export class App {
       flexShrink: 0,
       visible: false,
       marginTop: space.section,
-      onMouseUp: (event) => this.clickStage(event.y - this.stage.y),
+      onMouseUp: (event) => this.clickStage(event.x - this.stage.x, event.y - this.stage.y),
     });
     center.add(this.stage);
     this.graph = new Graph(this.stageOf());

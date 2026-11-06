@@ -415,7 +415,7 @@ the chain of that thread and the chains of its agents.
 
 ![The graph](screenshots/68-graph.png)
 
-⌥G gives the keys to the map, and the keys of the loom act there too. The arrows move to the program nearest in their
+A click on a program selects its chain, and the feed under the map shows it. ⌥G gives the keys to the map, and the keys of the loom act there too. The arrows move to the program nearest in their
 direction, and the feed under the map shows its chain. Enter gives the keys back to the input on that chain, and Esc
 returns to now, then gives the keys back.
 
