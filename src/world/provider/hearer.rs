@@ -15,7 +15,7 @@ use super::{
   answer::{Answering, answered, cut},
   images::Images,
   model::{Ask, Model, requested, standing},
-  retry::{Backoff, Retry, failure, recoverable},
+  retry::{Backoff, OVERFLOW, Retry, failure, overflows, recoverable},
   search::free,
   thinking::{Thinking, thinks},
   watch::{self, Watch},
@@ -364,7 +364,10 @@ impl Hearer {
       told(co, &reply.chain, &format!("#{} {dropped}", reply.rung));
     }
     let recoverable = got.as_ref().is_err_and(recoverable);
-    let got = got.map_err(|no| format!("{} answered nothing: {}", reply.actor, failure(&no)));
+    let got = got.map_err(|no| {
+      let over = if overflows(&no) { format!("{OVERFLOW}: ") } else { String::new() };
+      format!("{} answered nothing: {over}{}", reply.actor, failure(&no))
+    });
     if let (Err(why), true) = (&got, reply.again)
       && !recoverable
     {

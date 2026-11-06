@@ -23,9 +23,9 @@ import { hunkPatch, type Scope } from "../review.ts";
 import type { ActRow, View } from "../session.ts";
 import { theme as c, glyph, markOf, spacing as space, spin, threadTone } from "../theme.ts";
 import { bold, italic, type Part, plain } from "../ui.ts";
-import { branchMessages, branchStart, branchTaken, branchTakes, earlierSteps } from "../watching.ts";
+import { branchMessages, branchStart, branchTaken, branchTakes } from "../watching.ts";
 import { part } from "./part.ts";
-import { type BlockOptions, MESSAGE_ROWS, PROGRAM_STEPS, spell, viewLabels } from "./shared.ts";
+import { type BlockOptions, hidden, MESSAGE_ROWS, PROGRAM_STEPS, spell, viewLabels } from "./shared.ts";
 import { SCROLL } from "./thread.ts";
 
 export const feed = part({
@@ -427,20 +427,7 @@ export const feed = part({
             (outer) => {
               const box = framed ? this.panel(outer, tone) : this.box({ paddingLeft: space.between });
               if (!framed) outer.add(box);
-              if (hide && !at)
-                box.add(
-                  this.link(
-                    [
-                      [`${glyph.closed} `, c.faint],
-                      [`# ${hide} earlier ${hide === 1 ? "step" : "steps"}`, c.syntaxComment],
-                    ],
-                    () => {
-                      w.folds[`steps:${id}`] = false;
-                      w.save();
-                      this.renderContent();
-                    },
-                  ),
-                );
+              if (hide && !at) box.add(this.foldLine(`steps:${id}`, hide, "step", "earlier"));
               box.add(this.programView(segment, room, took, since, heads, digits));
             },
             {
@@ -594,12 +581,10 @@ export const feed = part({
         // A long message shows its first rows until a click opens it, so that a brief of a page leaves the feed
         // readable at a glance. A folded thread shows its first rows even when the operator opened its message.
         const [shortened, rest] =
-          w.folds[`message:${act.id}`] === false && !folded
+          (user || w.folds[`message:${act.id}`] === false) && !folded
             ? [message, 0]
             : this.firstRows(message, folded ? 2 : MESSAGE_ROWS);
-        const foldedNote = folded
-          ? [meta, rest ? `${rest} more ${rest === 1 ? "line" : "lines"}` : ""].filter(Boolean).join("  ")
-          : "";
+        const foldedNote = folded ? [meta, rest ? hidden(rest, "line") : ""].filter(Boolean).join("  ") : "";
         sections.push({
           id: act.id,
           label: user ? [["You", tone]] : [[sent, c.faint]],
@@ -637,20 +622,7 @@ export const feed = part({
               shortened,
             );
             box.add(row);
-            if (rest && !folded)
-              box.add(
-                this.link(
-                  [
-                    [`${glyph.closed} `, c.faint],
-                    [`${rest} more ${rest === 1 ? "line" : "lines"}`, c.muted],
-                  ],
-                  () => {
-                    w.folds[`message:${act.id}`] = false;
-                    w.save();
-                    this.renderContent();
-                  },
-                ),
-              );
+            if (rest && !folded) box.add(this.foldLine(`message:${act.id}`, rest, "line"));
           },
         });
         if (folded) return emit();
@@ -667,14 +639,14 @@ export const feed = part({
           const model = String(target.words[2] || act.words[2] || "");
           return {
             id,
-            key: `${value}\n${model}\n${this.feedWidth}\n${this.theme}`,
+            key: `${value}\n${model}\n${w.folds[`reply:${id}`]}\n${this.feedWidth}\n${this.theme}`,
             apart: true,
             body: (box) => {
               const { name, effort } = this.model(model);
               const row = this.box({ flexDirection: "row" });
               // A column, and not a row, holds the answer, so that its paragraphs wrap at the width of the feed.
               const answer = this.box({ flexGrow: 1, flexShrink: 1 });
-              answer.add(this.markdown(value));
+              this.bounded(answer, value, `reply:${id}`);
               row.add(answer);
               row.add(
                 this.text(
@@ -749,20 +721,7 @@ export const feed = part({
                 ),
               );
               box.add(this.markdown(shortened));
-              if (rest)
-                box.add(
-                  this.link(
-                    [
-                      [`${glyph.closed} `, c.faint],
-                      [`${rest} more ${rest === 1 ? "line" : "lines"}`, c.muted],
-                    ],
-                    () => {
-                      w.folds[`message:${ask.id}`] = false;
-                      w.save();
-                      this.renderContent();
-                    },
-                  ),
-                );
+              if (rest) box.add(this.foldLine(`message:${ask.id}`, rest, "line"));
               // The question that the input answers says so, and a click on another one points the input at it.
               if (pending)
                 box.add(
@@ -1140,7 +1099,13 @@ export const feed = part({
             });
           } else if (maker?.kind === "rung" && this.folded(maker.id, maker))
             // A command that runs shows its last lines under the folded rung that made it.
-            add(`tail-${act.id}`, line.text, [], (box) => this.excerpt(box, line.text, true), { indent });
+            add(
+              `tail-${act.id}`,
+              `${line.text}\n${w.folds[`tail:${act.id}`]}`,
+              [],
+              (box) => this.excerpt(box, line.text, `tail:${act.id}`),
+              { indent },
+            );
         } else if (line.type === "value") {
           // A notice closes with nothing, which its panel says already.
           if (act.words[0] === "None") continue;
@@ -1152,7 +1117,7 @@ export const feed = part({
           const tone = threadTone(threadsOwn.of.get(act.id)?.act.id ?? act.id);
           add(
             `value-${act.id}`,
-            `${value}\n${short}\n${answered}\n${this.feedWidth}\n${this.theme}`,
+            `${value}\n${short}\n${answered}\n${w.folds[`reply:${act.id}`]}\n${this.feedWidth}\n${this.theme}`,
             answered
               ? [
                   [`${glyph.done} `, c.success],
@@ -1172,7 +1137,7 @@ export const feed = part({
               const row = this.box({ flexDirection: "row" });
               // A column, and not a row, holds the answer, so that its paragraphs wrap at the width of the feed.
               const answer = this.box({ flexGrow: 1, flexShrink: 1 });
-              answer.add(this.markdown(value));
+              this.bounded(answer, value, `reply:${act.id}`);
               row.add(answer);
               row.add(
                 this.text(
@@ -1229,35 +1194,18 @@ export const feed = part({
           // The line names what it holds: messages, words, or steps of both.
           const noun =
             heads.length === 1 && heads[0] === "rung"
-              ? count === 1
-                ? "rung"
-                : "rungs"
+              ? "rung"
               : heads.length === 1 && heads[0] === "prompt"
-                ? count === 1
-                  ? "message"
-                  : "messages"
-                : count === 1
-                  ? "step"
-                  : "steps";
+                ? "message"
+                : "step";
           add(
             `more-${key}`,
             `${key}:${count}:${this.theme}`,
             [],
-            (box) =>
-              box.add(
-                this.link(
-                  [
-                    [`${glyph.closed} `, c.faint],
-                    [w.watching ? earlierSteps(count) : `${count} earlier ${noun}`, c.muted],
-                  ],
-                  () => {
-                    w.folds[key] = false;
-                    w.save();
-                    this.renderContent();
-                  },
-                ),
-              ),
-            { indent },
+            (box) => box.add(this.foldLine(key, count, noun, "earlier")),
+            {
+              indent,
+            },
           );
         } else if (line.type === "act") {
           // The ceiling of a grant stands in the sidebar, so the feed shows no grant. An act that no word made stands as

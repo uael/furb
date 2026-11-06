@@ -157,6 +157,18 @@ pub(super) fn recoverable(no: &CompletionError) -> bool {
     .any(|phrase| text.contains(phrase))
 }
 
+/// What the refusal of a reply says first when its prompt passes the window of its model, which the
+/// extension compaction reads to cut the chain before its next reply.
+pub(super) const OVERFLOW: &str = "the prompt passes the window of the model";
+
+/// Whether a failed call refused a prompt that passes the context of the model.
+pub(super) fn overflows(no: &CompletionError) -> bool {
+  let text = failure(no).to_lowercase().replace('_', " ");
+  ["prompt is too long", "context window", "context length", "maximum context", "too many tokens"]
+    .iter()
+    .any(|phrase| text.contains(phrase))
+}
+
 /// The wait before the claude command line is asked again when its message gives no moment for the
 /// end of a limit.
 pub(super) const LIMIT_POLL: Duration = Duration::from_secs(300);

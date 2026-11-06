@@ -108,3 +108,17 @@ async def test_the_journal_keeps_the_prompt_and_its_answer(tmp_path: Path) -> No
   await settle(300)
   assert names(again) == ["Fix the login form"]
   assert [a for a in later.calls if a[0] == "reply"] == []
+
+
+async def test_a_prompt_made_before_the_act_counts_as_the_first(tmp_path: Path) -> None:
+  """A prompt that the operator made before the act started counts as the first prompt of the operator."""
+  sand, root = naming(tmp_path, lives=False)
+  sand.script.update({root: ["close(1)"], "chain2": ["close('Fix the login form')"]})
+  assert await engine.prompt(int, "the login form fails", on=root) == 1
+  await settle(300)
+  assert names(root) == []
+  engine.rung("name_session()", on=root)
+  await settle(300)
+  (asked,) = [a for a in engine.transcript("chain2") if a[0] == "prompt" and a[3] == "chain2"]
+  assert asked[5] == f"{BRIEF}the login form fails"
+  assert names(root) == ["Fix the login form"]
