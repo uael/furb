@@ -19,6 +19,10 @@ use crate::{
 /// as a line of JSON, and a union, as `int | None`.
 pub const SHAPES: [&str; 7] = ["str", "None", "bool", "int", "float", "list", "dict"];
 
+/// The name of the ear of a host that is the console of the operator: its start of a prompt makes
+/// that prompt a question to him.
+pub const CONSOLE: &str = "console";
+
 /// A prompt put to the operator: its act, the chain it is on, which is the chain of its thread for
 /// a prompt on a thread, its shape and its message.
 #[derive(Debug, Clone, PartialEq, Eq)]

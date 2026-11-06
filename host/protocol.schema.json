@@ -1255,6 +1255,14 @@
       ],
       "description": "What a peer is: a window of an operator, the process of a skill, or the daemon of a new build,\nwhich asks the handover."
     },
+    "Role": {
+      "type": "string",
+      "enum": [
+        "read",
+        "write"
+      ],
+      "description": "What a peer may do: read a life, or read and write it. Write holds each right of read."
+    },
     "Hello": {
       "type": "object",
       "properties": {
@@ -1271,13 +1279,24 @@
             "string",
             "null"
           ]
+        },
+        "role": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Role"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
         "protocol",
         "kind"
       ],
-      "description": "The first frame of a peer: the protocol that it speaks, its kind, and the name of a skill."
+      "description": "The first frame of a peer: the protocol that it speaks, its kind, the name of a skill, and the\nrole that it asks. The daemon gives the peer the lesser of that role and the role that its\ntransport proved, so a peer asks `read` to be a reader on any transport. With no role, the peer\nhas the role that its transport proved."
     },
     "Config": {
       "oneOf": [
@@ -2371,14 +2390,6 @@
         "kind"
       ],
       "description": "A peer as the daemon knows it after its hello: the login that its transport proved, its role,\nits kind, and the name of a skill."
-    },
-    "Role": {
-      "type": "string",
-      "enum": [
-        "read",
-        "write"
-      ],
-      "description": "What a peer may do: read a life, or read and write it. Write holds each right of read."
     },
     "Listed": {
       "type": "object",

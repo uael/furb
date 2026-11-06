@@ -388,7 +388,7 @@ mod tests {
   /// record of the owner holds and it lacks, scrubbed: a wake of the round, and a word of the
   /// operator that tells the chain, with the acknowledgment of his rung.
   fn conductor() -> Vec<Act> {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../tui/fixtures/conductor.jsonl");
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tui/fixtures/conductor.jsonl");
     let Ok(record) = std::fs::read_to_string(path) else { panic!("no record at {path}") };
     let wake = "The ask A27 of the owner is missing, and no item carries it now.";
     let more = [

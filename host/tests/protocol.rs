@@ -287,7 +287,7 @@ mod protocol {
 
     async fn hello_as(&mut self, protocol: u32, kind: Kind, name: Option<&str>) -> Frame {
       let name = name.map(str::to_owned);
-      self.ask(0, Verb::Hello(Hello { protocol, kind, name })).await
+      self.ask(0, Verb::Hello(Hello { protocol, kind, name, role: None })).await
     }
   }
 
@@ -297,6 +297,11 @@ mod protocol {
     let who = Who { login: "uael".to_owned(), role };
     tokio::spawn(async move { serve(&Echo, theirs, who).await });
     Client { lines: BufReader::new(ours) }
+  }
+
+  async fn hello_asking(client: &mut Client<tokio::io::DuplexStream>, role: Role) -> Frame {
+    let hello = Hello { protocol: PROTOCOL, kind: Kind::Window, name: None, role: Some(role) };
+    client.ask(0, Verb::Hello(hello)).await
   }
 
   fn welcomed(role: Role) -> Frame {
@@ -318,6 +323,28 @@ mod protocol {
         other => panic!("{verb:?} gave {other:?}"),
       }
     }
+  }
+
+  #[tokio::test]
+  async fn a_peer_that_asked_read_is_refused_each_verb_that_writes_on_a_transport_to_write() {
+    let mut client = served(Role::Write);
+    assert_eq!(hello_asking(&mut client, Role::Read).await, welcomed(Role::Read));
+    let verb = verbs().into_iter().find(|verb| verb.needs() == Role::Write).unwrap();
+    match client.ask(1, verb).await {
+      Frame::Refused { id, error, .. } => {
+        assert_eq!(
+          (id, error),
+          (Some(1), ProtocolError::Role { needs: Role::Write, has: Role::Read })
+        );
+      }
+      other => panic!("a write verb of a reader gave {other:?}"),
+    }
+  }
+
+  #[tokio::test]
+  async fn a_peer_never_has_more_than_the_role_that_its_transport_proved() {
+    let mut client = served(Role::Read);
+    assert_eq!(hello_asking(&mut client, Role::Write).await, welcomed(Role::Read));
   }
 
   #[test]

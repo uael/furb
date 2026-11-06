@@ -22,12 +22,10 @@ use std::{
 use furb::{
   Object,
   life::{Answer, Opening},
+  view::{Kind, Phase, RunState, State},
   world::config::{Change, Layer},
 };
-use furb_host::{
-  Command, Event, Life, LifeError, LifeHandle, Reply, Seq,
-  view::{Kind, Phase, RunState, State},
-};
+use furb_host::{Command, Event, Life, LifeError, LifeHandle, Reply, Seq};
 use futures::{Stream, StreamExt};
 use serde_json::json;
 

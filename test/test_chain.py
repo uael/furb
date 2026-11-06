@@ -1326,7 +1326,7 @@ async def test_the_advance_binds_each_act_that_a_word_of_the_chain_awaits() -> N
 
 
 async def test_the_chain_advances_no_rung_after_a_word_that_told_nothing_while_an_act_of_a_word_is_open() -> None:
-  """When no word of the chain runs, the chain advances no rung of the maker of a word that awaited no act that was not over, while a prompt, or an act that the outside started, that the word of a rung that is no crafted rung made is not over, until a fact comes after that word ended, a tell or the end of such an act, and it advances at once when no such act is open, so a word with no close waits for what it made."""
+  """When no word of the chain runs, the chain advances no rung of the maker of a word that awaited no act that was not over and told no paragraph of its own, as a debug or a read does, while a prompt, or an act that the outside started, that the word of a rung that is no crafted rung made is not over, until a fact comes after that word ended, a tell or the end of such an act, and it advances at once when no such act is open, so a word with no close waits for what it made."""
   _, log, root = born("x = bash('slow')\nawait x", "y = 1", "y = 2", "close(2)", auto=False)
   engine.prompt(int, "count", on=root)
   await settle()
@@ -1345,6 +1345,14 @@ async def test_the_chain_advances_no_rung_after_a_word_that_told_nothing_while_a
   world_says("done", said(log, "bash")[0][1], engine.Exit(0, engine.Text("o"), engine.Text("e")))
   assert await one == 1
   assert len(said(log, "reply")) == 2
+  _, log, root = born("p = prompt(int, 'count', on=chain('two'))\ndebug(t'{1}')", "close(1)", auto=False)
+  one = engine.prompt(int, "count", on=root)
+  await settle()
+  for grace in said(log, "wait"):
+    world_says("done", grace[1], None)
+  assert await one == 1
+  (other,) = [a[1] for a in said(log, "prompt") if a[3] != root]
+  assert (len([a for a in said(log, "reply") if a[3] == root]), engine.over(other)) == (2, False)
 
 
 async def test_a_word_that_awaited_an_act_is_asked_again_at_once() -> None:
@@ -1601,3 +1609,16 @@ async def test_a_statement_that_the_model_of_a_rung_writes_runs_after_the_told_r
   world_says("writing", rung, f"k = {root}_label\n", 0)
   await settle()
   assert engine.module(root)["k"] == "root"
+
+
+async def test_the_chain_advances_no_rung_after_a_word_that_repeats_the_word_it_told_as_told_nothing() -> None:
+  """When that word is the word that the chain told as told nothing last, and nothing but the chain told on the chain since, the chain advances no rung until a fact comes, so a model that answers the same word to nothing new is asked no more."""
+  _, log, root = born("x = 1", "pass", "pass", "pass", "close(1)", auto=False)
+  one = engine.prompt(int, "count", on=root)
+  await settle()
+  await settle()
+  assert (len(said(log, "reply")), engine.peek(one, ...)) == (3, ...)
+  engine.prompt(None, "go on", on=one)
+  await settle()
+  await settle()
+  assert len(said(log, "reply")) == 5 and engine.peek(one) == 1

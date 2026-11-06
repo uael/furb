@@ -65,11 +65,14 @@ folder of furb (`~/.config/furb` by default), turns it on. WireGuard encrypts ea
 The first frame of a peer is its hello:
 
 ```json
-{"id": 0, "verb": "hello", "protocol": 1, "kind": "window", "name": null}
+{"id": 0, "verb": "hello", "protocol": 1, "kind": "window", "name": null, "role": null}
 ```
 
 - `kind` is `window`, `skill`, or `daemon` for the daemon of a new build that asks the handover, and a skill gives
   its `name`, which it must.
+- `role` is optional. The daemon gives the peer the lesser of the role that it asks and the role that its transport
+  proved, so a peer that asks `read` is a reader on any transport, and a peer never has more than its transport
+  proved. With no `role`, the peer has the role that its transport proved.
 - The daemon answers with its protocol and the peer as it knows it: its login, its role, its kind and its name.
 
   ```json

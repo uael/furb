@@ -608,6 +608,13 @@ impl Engine {
     self.outside.hosted.handed.ears.contains_key(name)
   }
 
+  /// How many entries the ears of the host hold that the record did not take yet, as on a full
+  /// disk: the ear that keeps the record writes them in order once its store takes them again, and
+  /// an end of the life before that loses them.
+  pub fn unkept(&self) -> usize {
+    self.outside.hosted.handed.ears.values().map(|ear| ear.unkept()).sum()
+  }
+
   /// The root chain of the life, which is the first act of any record.
   pub fn root(&self) -> &str {
     &self.root

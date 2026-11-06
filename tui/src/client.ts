@@ -5,7 +5,7 @@ import { createConnection, type Socket } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { Activity, type Call, type Fact, type Standing, type Turn } from "furb";
-import type { Act, Answer, Config, Event, Frame, Listed, Peer, Request1 as Verb } from "furb/protocol";
+import type { Act, Answer, Config, Event, Frame, Listed, Peer, Role, Request1 as Verb } from "furb/protocol";
 import { PROTOCOL } from "furb/protocol";
 
 export type { Verb };
@@ -164,7 +164,7 @@ export class Daemon extends EventEmitter {
     socket.on("error", () => {});
     socket.on("close", () => this.gone(socket));
     if (this.held === 0) socket.unref();
-    const welcome = await this.ask({ verb: "hello", protocol: PROTOCOL, kind: "window" });
+    const welcome = await this.ask({ verb: "hello", protocol: PROTOCOL, kind: "window", role: requested });
     if (welcome.answer !== "welcome") throw new Error("The daemon gave no welcome.");
     this.peer = welcome.data.peer;
   }
@@ -277,6 +277,15 @@ type Request = { id: number } & Verb;
 
 /** What hears an event of an emitter. */
 export type Listener = Parameters<EventEmitter["on"]>[1];
+
+/** The role that this window asks in its hello, none to hold the role that its transport proved. */
+let requested: Role | undefined;
+
+/** Makes this window a reader on any transport: its hello asks the role to read, and the daemon gives the lesser of
+ * that role and the one that the transport proved. */
+export function askRole(role: Role | undefined): void {
+  requested = role;
+}
 
 /** The one connection of this window to the daemon of its machine, made at its first use. A cache of furb named
  * again, as a scenario of the tests names one of its own, takes a connection to the daemon of that cache. */

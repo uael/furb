@@ -36,12 +36,17 @@ pub enum Kind {
   Daemon,
 }
 
-/// The first frame of a peer: the protocol that it speaks, its kind, and the name of a skill.
+/// The first frame of a peer: the protocol that it speaks, its kind, the name of a skill, and the
+/// role that it asks. The daemon gives the peer the lesser of that role and the role that its
+/// transport proved, so a peer asks `read` to be a reader on any transport. With no role, the peer
+/// has the role that its transport proved.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Hello {
   pub protocol: u32,
   pub kind: Kind,
   pub name: Option<String>,
+  #[serde(default)]
+  pub role: Option<Role>,
 }
 
 /// A peer as the daemon knows it after its hello: the login that its transport proved, its role,
