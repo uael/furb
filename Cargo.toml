@@ -199,3 +199,12 @@ ruff_text_size = "0.0.9"
 opt-level = 3
 debug-assertions = false
 overflow-checks = false
+
+# The crates of the workspace keep the lines of their code for a backtrace and drop the rest of the debug
+# information, which the compile and the link of the extension module wrote at each sync: a sync that follows a change
+# of the crate took 31 s with the full information and 23 s with the lines alone, and the suite ran as long.
+[profile.dev.package.furb]
+debug = "line-tables-only"
+
+[profile.dev.package.furb-cli]
+debug = "line-tables-only"
