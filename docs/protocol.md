@@ -65,7 +65,7 @@ folder of furb (`~/.config/furb` by default), turns it on. WireGuard encrypts ea
 The first frame of a peer is its hello:
 
 ```json
-{"id": 0, "verb": "hello", "protocol": 1, "kind": "window", "name": null, "role": null}
+{"id": 0, "verb": "hello", "protocol": 2, "kind": "window", "name": null, "role": null}
 ```
 
 - `kind` is `window`, `skill`, or `daemon` for the daemon of a new build that asks the handover, and a skill gives
@@ -76,11 +76,17 @@ The first frame of a peer is its hello:
 - The daemon answers with its protocol and the peer as it knows it: its login, its role, its kind and its name.
 
   ```json
-  {"frame": "reply", "id": 0, "answer": "welcome", "data": {"protocol": 1, "peer": {"login": "uael", "role": "write", "kind": "window", "name": null}}}
+  {"frame": "reply", "id": 0, "answer": "welcome", "data": {"protocol": 2, "peer": {"login": "uael", "role": "write", "kind": "window", "name": null}}}
   ```
 
 - A hello of another protocol gets a refusal that names both versions, and the daemon closes the peer. A first frame
   that is no hello gets the refusal `first`, and the daemon closes the peer. A second hello gets the refusal `again`.
+- The version rises with each change of the schema, `host/protocol.schema.json`: a test of the crate keeps the digest
+  of the schema of each version. A window that meets a daemon of another version does not wait and asks no handover,
+  so it ends no life of another window: it says that the daemon of this machine is of another build. That daemon ends
+  once its last window quits and its grace passes, and the next window starts one of its own build.
+- A request that the daemon cannot read, as a verb of a later version, gets the refusal `unread` under its `id`, with
+  why it names the verb, so no request waits for an answer that never comes.
 
 ## Requests and answers
 
