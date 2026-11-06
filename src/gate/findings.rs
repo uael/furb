@@ -883,7 +883,10 @@ impl<'a> Visitor<'a> for Bound<'a> {
 /// The names that a statement binds in the module by a way that `binds` does not read: the target
 /// of a walrus (also inside a comprehension, which binds it in the scope around it), each capture
 /// of a pattern of a match, and each name that a def or a class declares `global`, at any depth. A
-/// lambda binds its walrus apart, so nothing inside it counts.
+/// lambda binds its walrus apart, so nothing inside it counts. A def or a class runs its
+/// decorators, the defaults of its parameters, and its bases and keywords in the module, so a
+/// walrus there binds too, but a walrus in its body binds apart. Python refuses a walrus in an
+/// annotation.
 struct Reached<'a>(Vec<(usize, &'a str)>);
 
 impl<'a> Visitor<'a> for Reached<'a> {
@@ -892,6 +895,17 @@ impl<'a> Visitor<'a> for Reached<'a> {
       let mut globals = Globals(vec![]);
       StatementVisitor::visit_stmt(&mut globals, stmt);
       self.0.extend(globals.0);
+      match stmt {
+        Stmt::FunctionDef(one) => {
+          one.decorator_list.iter().for_each(|one| self.visit_decorator(one));
+          self.visit_parameters(&one.parameters);
+        }
+        Stmt::ClassDef(one) => {
+          one.decorator_list.iter().for_each(|one| self.visit_decorator(one));
+          one.arguments.iter().for_each(|one| self.visit_arguments(one));
+        }
+        _ => {}
+      }
     } else {
       visitor::walk_stmt(self, stmt);
     }
