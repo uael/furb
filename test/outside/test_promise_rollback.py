@@ -22,8 +22,9 @@ def chosen(version: str, folders: list[str]) -> str | None:
 
   The promise binds only within a major, so a release of another major is no build to open `next` on.
   """
-  same = [name for name in folders if name.split(".")[0] == version.split(".", maxsplit=1)[0]]
-  return max(same, key=lambda name: tuple(map(int, name.split("."))), default=None)
+  major = version.split(".", maxsplit=1)[0]
+  same = [name for name in folders if name.split(".", maxsplit=1)[0] == major]
+  return max(same, key=lambda name: tuple(map(int, name.split(".")))) if same else None
 
 
 def refusals(version: str, folder: Path, tmp: Path) -> dict[str, str]:
