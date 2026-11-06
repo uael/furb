@@ -531,8 +531,15 @@ test("the usage counts each token once, and the context share shows from the fir
     // Each answer of the demo reads a prompt of 3240 tokens, 2800 of them from the cache, and writes 184.
     await session.submit("Explore this project.");
     // The setup of the root holds assistant turns that furb wrote, which no model answered and which hold no usage, so
-    // the answer of the model is the assistant turn that holds its usage.
-    await until(session, () => session.turns.some((turn) => turn[0] === "assistant" && turn[2] !== null));
+    // the answer of the model is the assistant turn that holds its usage. The turns are read from the life, and the
+    // answers that the usage sums from the facts that the bridge heard, which can come a moment after: so the test
+    // waits for both.
+    await until(
+      session,
+      () =>
+        session.turns.some((turn) => turn[0] === "assistant" && turn[2] !== null) &&
+        session.answers.length > 0,
+    );
     await session.refresh();
     // The read of the doctrine is an assistant turn that the World wrote, and no model answered it, so it holds no usage.
     const answers = session.turns.filter((turn) => turn[0] === "assistant" && turn[2] !== null).length;

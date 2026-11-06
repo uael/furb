@@ -690,6 +690,29 @@ test("a welcome that is taller than the screen starts at its top, with the logo,
     false,
   ));
 
+test("a feed that leaves its welcome before the screen draws it again follows its end, and not the top of the welcome", () =>
+  composing(
+    async ({ session, app, frame }) => {
+      await idle(session);
+      await session.command('/run chain("aside")');
+      await until(session, () => session.acts.filter((act) => act.kind === "chain").length > 1);
+      const aside = session.acts.filter((act) => act.kind === "chain").at(-1)?.id ?? "";
+      expect(aside).not.toBe(session.engine.root);
+      await session.select(aside);
+      // The App draws the welcome of the new chain, and the screen has not drawn a frame since.
+      app.render();
+      const word = Array.from({ length: 60 }, (_, n) => `line_${n} = ${n}`).join("\n");
+      await session.command(`/run ${word}`);
+      await idle(session);
+      await session.refresh();
+      const shown = await frame();
+      expect(shown).not.toContain("▀▀██▀▀");
+      expect(shown).toContain("line_59 = 59");
+    },
+    { width: 100, height: 30 },
+    false,
+  ));
+
 test("a line that failed says its reason once, under it, and not again beside it", () =>
   composing(
     async ({ session, frame }) => {
