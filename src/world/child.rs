@@ -154,7 +154,6 @@ impl Group {
   }
 
   /// Every process of the group, ended, or why a signal did not reach them.
-  #[cfg_attr(windows, expect(clippy::unnecessary_wraps, reason = "only a signal of Unix can fail"))]
   pub fn slay(&mut self) -> std_io::Result<()> {
     #[cfg(unix)]
     if let Some(leader) = self.leader {

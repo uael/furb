@@ -23,7 +23,7 @@ use sha2::{Digest, Sha256};
 
 use monty_types::unstable::{MontyGraph, MontyNode};
 
-use self::error::StoreError;
+use self::{error::StoreError, lines::Head};
 use super::{beside, free};
 use crate::{
   ENGINE, KERNEL,
@@ -105,7 +105,7 @@ pub fn heads(path: impl AsRef<Path>, kinds: &[&str]) -> Result<Vec<Object>, Faul
   let path = path.as_ref();
   let format = Format::of(path);
   if format == Format::Lines {
-    let starts: Vec<String> = kinds.iter().map(|kind| format!("[[\"{kind}\",")).collect();
+    let starts = Head::starts(kinds.iter().map(|&kind| Head::Kind(kind)));
     return Ok(lines::heads(path, &starts)?);
   }
   let of = |entry: &Object| {
@@ -122,7 +122,8 @@ pub fn standing(path: impl AsRef<Path>) -> Result<Option<Object>, Fault> {
   let path = path.as_ref();
   let format = Format::of(path);
   if format == Format::Lines {
-    return Ok(lines::last(path, &[r#"[["done","stand"#.to_owned()], |entry| stood(&entry))?);
+    let starts = Head::starts([Head::Done("stand")]);
+    return Ok(lines::last(path, &starts, |entry| stood(&entry))?);
   }
   Ok(format.kept(path)?.iter().rev().find_map(stood))
 }

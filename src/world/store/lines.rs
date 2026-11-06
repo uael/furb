@@ -195,6 +195,28 @@ fn backwards<T>(
   Ok(None)
 }
 
+/// The head of a line of a record that a read looks for, which this file alone writes as the start
+/// of a line of JSON.
+pub(super) enum Head<'a> {
+  /// A fact of this kind.
+  Kind(&'a str),
+  /// The done of an act whose name starts with this.
+  Done(&'a str),
+}
+
+impl Head<'_> {
+  /// The starts of the lines of some heads.
+  pub(super) fn starts<'a>(heads: impl IntoIterator<Item = Head<'a>>) -> Vec<String> {
+    heads
+      .into_iter()
+      .map(|head| match head {
+        Head::Kind(kind) => format!("[[\"{kind}\","),
+        Head::Done(act) => format!("[[\"done\",\"{act}"),
+      })
+      .collect()
+  }
+}
+
 /// The entry of a line that starts with one of some heads, and nothing for a line with another
 /// head or one that does not parse.
 fn headed(line: &[u8], starts: &[String]) -> Option<Object> {
