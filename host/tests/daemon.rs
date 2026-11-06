@@ -404,13 +404,14 @@ mod daemon {
     let alone = opened(&mut window, &at, "a.jsonl").await;
     let workspace = Some(main.display().to_string());
     let mut wanted = vec![
-      Listed { life: one, workspace: workspace.clone(), held: true, open: true },
-      Listed { life: alone, workspace: None, held: true, open: true },
+      Listed { life: one, workspace: workspace.clone(), held: true, open: true, name: None },
+      Listed { life: alone, workspace: None, held: true, open: true, name: None },
       Listed {
         life: tree.join("two.jsonl").display().to_string(),
         workspace,
         held: false,
         open: false,
+        name: None,
       },
     ];
     wanted.sort_by(|a, b| a.life.cmp(&b.life));
