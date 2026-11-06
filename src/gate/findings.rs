@@ -17,7 +17,7 @@ use ruff_python_ast::{
 use ruff_python_parser::parse_module;
 use ruff_text_size::{Ranged, TextRange};
 
-use super::{ACTS, MODULE, Parsed, WORDS, binds, deleted, named, strings, worded};
+use super::{ACTS, MODULE, Parsed, WORDS, binds, deleted, layout::builtin, named, strings, worded};
 use crate::sand::{Nobody, Sand};
 
 /// The rule that a finding of the gate breaks: a rule that the gate checks itself, or any other
@@ -36,6 +36,8 @@ pub enum Rule {
   Told,
   /// A name of the engine that a word binds.
   Engine,
+  /// A builtin that a word binds and that a def of the program reads.
+  Builtin,
   /// A value that is not of the type that its name is declared with.
   Assign,
   /// Any other rule of the checker, by its name.
@@ -61,6 +63,7 @@ impl Rule {
       Rule::Coroutine => "unawaited-coroutine",
       Rule::Told => "transcript-name",
       Rule::Engine => "engine-name",
+      Rule::Builtin => "builtin-name",
       Rule::Assign => "invalid-assignment",
       Rule::Checker(name) => name,
     }
@@ -618,7 +621,7 @@ const OWN: [&str; 3] = ["actor", "raised", "accepts"];
 /// refuses it. A def or a class of such a name overrides the verb on purpose, and a name that a
 /// def, a class, a lambda or a comprehension binds inside itself stays its own. A walrus, a capture
 /// of a match and a `global` of a def or a class bind in the module too, so `reached` finds them.
-pub(super) fn contracted(sheet: &Parsed<'_>, engine: &str) -> Vec<Finding> {
+pub(super) fn contracted(sheet: &Parsed<'_>, engine: &str, whole: &str) -> Vec<Finding> {
   let Some(body) = sheet.bodied() else { return vec![] };
   let imports = imported(engine);
   let names: Vec<&str> = body
@@ -644,20 +647,85 @@ pub(super) fn contracted(sheet: &Parsed<'_>, engine: &str) -> Vec<Finding> {
   }
   found.extend(reached.0.into_iter().map(|(at, name)| (at, name, false)));
   found.sort_by_key(|(at, ..)| *at);
+  let deletes: HashSet<usize> = word_of(body)
+    .iter()
+    .filter(|stmt| matches!(stmt, Stmt::Delete(_)))
+    .map(|stmt| stmt.start().to_usize())
+    .collect();
+  let shadows = |(at, name, import): &(usize, &str, bool)| {
+    !names.contains(name) && !*import && !deletes.contains(at) && builtin(name)
+  };
+  let read = if found.iter().any(shadows) { builtins_read(whole) } else { HashSet::new() };
   found
     .into_iter()
-    .filter(|(_, name, import)| {
-      names.contains(name) && !(*import && imports.iter().any(|one| one == name))
-    })
-    .map(|(at, name, _)| Finding {
-      line: sheet.line(at),
-      column: sheet.column(at),
-      rule: Rule::Engine,
-      why: format!(
-        "`{name}` is a name of the engine, which each later word reads: give the value a name of its own"
-      ),
+    .filter_map(|(at, name, import)| {
+      let rule = if names.contains(&name) && !(import && imports.iter().any(|one| one == name)) {
+        Rule::Engine
+      } else if shadows(&(at, name, import)) && read.contains(name) {
+        Rule::Builtin
+      } else {
+        return None;
+      };
+      let why = if rule == Rule::Engine {
+        format!("`{name}` is a name of the engine, which each later word reads: give the value a name of its own")
+      } else {
+        format!(
+          "`{name}` is a builtin that a def of this chain reads, an extension's among them, and would read the \
+           value in its place: give the value a name of its own"
+        )
+      };
+      Some(Finding { line: sheet.line(at), column: sheet.column(at), rule, why })
     })
     .collect()
+}
+
+/// Each builtin that a def, a class or a lambda of the program of a sheet reads by its name.
+///
+/// The words of a chain share the module of the chain with the word of each extension, and a def
+/// reads a builtin through that module: a word that binds `list = 'ls'` at its top makes the
+/// `isinstance(got, list)` of each def raise, the defs of mcp among them, and a raise in an ear
+/// ended the life. So the gate refuses a binding of a builtin that a def reads, and lets a word
+/// bind any other, as `sum = bash('ls')`, which no def reads.
+fn builtins_read(whole: &str) -> HashSet<String> {
+  let parsed = Parsed::new(whole);
+  let Some(body) = parsed.bodied() else { return HashSet::new() };
+  let program = &body[..body.len() - word_of(body).len()];
+  let mut read = Read { depth: 0, names: HashSet::new() };
+  for stmt in program {
+    read.visit_stmt(stmt);
+  }
+  read.names
+}
+
+/// The builtins that the defs, the classes and the lambdas beneath a statement read.
+struct Read {
+  depth: usize,
+  names: HashSet<String>,
+}
+
+impl<'a> Visitor<'a> for Read {
+  fn visit_stmt(&mut self, stmt: &'a Stmt) {
+    let inner = usize::from(matches!(stmt, Stmt::FunctionDef(_) | Stmt::ClassDef(_)));
+    self.depth += inner;
+    visitor::walk_stmt(self, stmt);
+    self.depth -= inner;
+  }
+
+  fn visit_expr(&mut self, expr: &'a Expr) {
+    match expr {
+      Expr::Lambda(_) => {
+        self.depth += 1;
+        visitor::walk_expr(self, expr);
+        self.depth -= 1;
+      }
+      Expr::Name(one)
+        if self.depth > 0 && one.ctx == ExprContext::Load && builtin(one.id.as_str()) =>
+      {
+        self.names.insert(one.id.to_string());
+      }
+      _ => visitor::walk_expr(self, expr),
+    }
+  }
 }
 
 /// Each name that a statement at the top of a body binds or deletes, by where it starts, and
