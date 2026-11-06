@@ -71,8 +71,9 @@ def peak_of(tmp: Path, slots: int, **more: str) -> int:
     release.touch()
     for f in files:
       f.close()
-  for one in runs:
-    one.communicate(timeout=60)
+    # A build that no one waited for is a warning at its collection, which fails a later test of the process.
+    for one in runs:
+      one.communicate(timeout=60)
   assert [one.returncode for one in runs] == [0] * count
   held = peak = 0
   for line in log.read_text(encoding="utf-8").split():

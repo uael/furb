@@ -706,8 +706,8 @@ pub(super) fn contracted(sheet: &Parsed<'_>, engine: &str, whole: &str) -> Vec<F
 
 /// Each name that a statement at the top of a body binds or deletes, by where it starts, and
 /// whether an import with no alias binds it: what [`topped`] finds and what [`Reached`] finds, in
-/// the order of the body. The rule of a name of the engine that [`contracted`] holds reads them, for
-/// a word and for the word of an extension alike.
+/// the order of the body. The rule of a name of the engine that [`contracted`] holds reads them,
+/// for a word and for the word of an extension alike.
 pub(crate) fn bound(body: &[Stmt]) -> Vec<(usize, &str, bool)> {
   let mut found = vec![];
   topped(body, &mut found);

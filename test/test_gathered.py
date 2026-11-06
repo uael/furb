@@ -1,6 +1,6 @@
 """gathered, the data of a checkpoint of a life."""
 
-from conftest import born, life, paragraphs, settle, sown, world_says
+from conftest import born, definitions, life, paragraphs, settle, sown, world_says
 from furb import engine
 from furb.engine import LARGEST, OPERATOR, Refused
 
@@ -55,7 +55,7 @@ async def test_taken_gives_the_highest_number_of_each_kind_that_an_act_of_a_chai
 async def test_chains_holds_each_chain_of_the_life_a_chain_at_rest_among_them_each_with_its_parent_its_label_its_source_whether_it_is_paused_its_turns_but_the_facts_made_what_define_gives_of_each_word_that_ran_on_it_the_text_that_binds_each_plain_value_of_its_module_again_the_names_of_the_other_values_and_the_acts_that_it_cut_each_word_that_ran_on_it_among_them() -> (
   None
 ):
-  """chains holds each chain of the life, a chain at rest among them, each with its parent, its label, its source, whether it is paused, its turns but the facts made, what define gives of each word that ran on it, the text that binds each plain value of its module again, the names of the other values, and the acts that it cut, each word that ran on it among them."""
+  """chains holds each chain of the life, a chain at rest among them, each with its parent, its label, its source, whether it is paused, its turns but the facts made, what define gives of each word that ran on it, the text that binds each plain value of its module again, the names of the other values, the acts that it cut, each word that ran on it among them, and each life word of the standing whose act was open on it at the tip, as lives."""
   root, _ = await gather()
   world_says("made", root, "an engine", 9, "1.0", "0.4.2", "its text", "the text of its Kernel")
   [one] = engine.gathered(lambda word: word, {"wait": 9})["chains"]
@@ -122,12 +122,16 @@ async def test_chains_holds_each_plain_value_of_a_chain_whatever_its_size_and_se
   await engine.rung("big = 'x' * LARGEST\nran = Exit(0, Text('o', 'y' * LARGEST), Text('e', ''))\nsmall = 1", on=rest)
   await settle()
   big, ran = engine.module(rest)["big"], engine.module(rest)["ran"]
-  data = engine.gathered(lambda word: word, {})
-  [one] = [x for x in data["chains"] if x["id"] == rest]
-  assert (one["values"]["small"], {"big", "ran"} <= one["values"].keys(), one["lost"]) == ("1", True, [])
-  entries = engine.seed(data)
-  assert all(len(str(word).encode()) < LARGEST // 8 for x in entries if x[0][0] == "rung" for word in x[0][4:5])
-  log, _ = life(sown(), entries)
-  await settle()
-  assert (engine.module(rest)["big"], engine.module(rest)["ran"], engine.module(rest)["small"]) == (big, ran, 1)
-  assert all(len(str(x).encode()) < LARGEST // 8 for x in log if x[0] == "tell")
+  for _ in (1, 2):
+    data = engine.gathered(definitions, {})
+    [one] = [x for x in data["chains"] if x["id"] == rest]
+    assert (one["values"]["small"], {"big", "ran"} <= one["values"].keys(), one["lost"]) == ("1", True, [])
+    assert "LARGEST" not in one["definitions"]
+    entries = engine.seed(data)
+    assert all(len(str(word).encode()) < LARGEST // 8 for x in entries if x[0][0] == "rung" for word in x[0][4:5])
+    log, _ = life(sown(), entries)
+    await settle()
+    here = engine.module(rest)
+    assert (here["big"], here["ran"], here["small"], here["raised"]) == (big, ran, 1, None)
+    assert all(len(str(x).encode()) < LARGEST // 8 for x in log if x[0] == "tell")
+    assert not [x for x in log if x[0] == "tell" and " raised" in x[3][0].split("\n")[0]]

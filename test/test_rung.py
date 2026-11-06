@@ -4,7 +4,9 @@ from asyncio import CancelledError
 
 import pytest
 
+import furb.kernel
 from conftest import (
+  ENGINE,
   STANDS,
   WORLD,
   Py,
@@ -665,3 +667,22 @@ async def test_a_later_life_makes_that_reply_again_in_the_ear_of_the_rung() -> N
   again, root = await relived(Sand(stands=STANDS), plain(sand.record))
   assert engine.turns(on=root) == before
   assert [a[1:4] for a in again if a[0] == "reply"] == [a[1:4] for a in log if a[0] == "reply"]
+
+
+async def test_a_kernel_born_into_a_life_ends_each_run_that_an_earlier_kernel_took_and_the_rung_of_a_run_that_awaited() -> (
+  None
+):
+  """A Kernel born into a life that holds a run that is not over ends that run, each wants of it that is not over, and the rung of a run that awaited, each with a refusal that says the word was lost, since it holds no frame of that run."""
+  _, _, root = born()
+  engine.rung("got = await prompt(str, 'q', to=OPERATOR)", on=root)
+  await settle()
+  runs = [x[1] for x in engine.transcript(root, "run") if not engine.over(x[1])]
+  wants = [x[1] for x in engine.transcript(root, "wants") if not engine.over(x[1])]
+  rungs = [engine.get(run)[4] for run in runs]
+  assert runs and wants and not any(engine.over(rung) for rung in rungs)
+  with engine.site.set("kernel2"):
+    engine.lives(furb.kernel.kernel(ENGINE), None)
+  await settle()
+  lost = [engine.peek(x) for x in [*wants, *runs]]
+  assert all(isinstance(x, engine.Refused) and "the word was lost" in str(x) for x in lost), lost
+  assert all(engine.over(rung) for rung in rungs)

@@ -1041,6 +1041,27 @@ fn a_checkpoint_of_a_later_life_of_a_record_opens_with_no_drift_and_seeds_the_ro
   }
 }
 
+#[test]
+fn a_large_value_and_an_exit_come_back_from_the_checkpoint_at_each_later_open_and_no_rung_of_the_seed_raises()
+ {
+  let at = place("checkpoint-large");
+  let open = || scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  let mut first = open();
+  let word = "big = 'x' * LARGEST\nran = Exit(0, Text('o', 'y' * LARGEST), Text('e', ''))\nsmall = 1\nclose(small)";
+  assert_eq!(closed(&mut first, word).as_ref().as_int(), Some(1));
+  first.checkpoint().unwrap();
+  for _ in 0..2 {
+    let mut later = open();
+    let read = "close([len(big), len(ran.stdout.content), small, repr(raised)])";
+    assert_eq!(
+      closed(&mut later, read).as_ref().py_repr(),
+      "[524288, 524288, 1, 'None']",
+      "the definitions make no value again, so each comes back from the checkpoint"
+    );
+    later.checkpoint().unwrap();
+  }
+}
+
 /// The word of the first life of a record whose module, chain and open prompt a later life holds.
 const WAITED: &str = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0, __name__)\nclose('late')";
 

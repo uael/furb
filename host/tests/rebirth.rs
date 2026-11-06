@@ -40,6 +40,7 @@ fn main() {
     a_life_goes_on_through_each_rebirth().await;
     a_rebirth_waits_for_each_word_that_runs().await;
     a_rebirth_waits_for_each_act_with_an_ear_and_cuts_nothing().await;
+    a_life_with_the_default_skills_is_born_again_at_its_tail().await;
   });
   the_check_of_a_held_rebirth_fails_on_an_early_rebirth_and_passes_a_later_one();
 }
@@ -300,5 +301,19 @@ async fn a_rebirth_waits_for_each_act_with_an_ear_and_cuts_nothing() {
     !log.iter().any(|one| message(&one.1).is_some_and(|said| said.contains("born again"))),
     "a rebirth cuts nothing, so it tells the root nothing"
   );
+  assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
+}
+
+/// A life with the default skills, whose life words hold acts that live until the life ends, is
+/// born again at its tail: the seed makes each of those acts again, so none holds the rebirth.
+async fn a_life_with_the_default_skills_is_born_again_at_its_tail() {
+  let at = place("skills");
+  let life =
+    Life::spawn(Opening { extensions: None, ..opening(&at) }).expect("the life has a thread");
+  let mut events = Box::pin(life.events(0));
+  ran(&life, "n = 1").await;
+  ran(&life, "for i in range(2600):\n  chance()").await;
+  until(&mut events, reborn(false)).await;
+  assert_eq!(named(&life, "n").await, Ok("1".to_owned()), "the life goes on past its tail");
   assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
 }
