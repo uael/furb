@@ -357,13 +357,10 @@ impl Life {
   /// fact is told, though it equals one before it, as a second pause of a chain. A record that the
   /// store cannot read tells nothing here, and its open says why.
   fn recalled(&mut self, record: &str) {
-    // A record with no checkpoint tells nothing here, so only the head of each line is read to know that.
-    match world::heads(record, &[checkpoint::CHECKPOINT]) {
-      Ok(marked) if !marked.is_empty() => {}
-      _ => return,
-    }
-    let Ok(entries) = world::kept(record) else { return };
-    let marks: Vec<usize> = checkpoint::all(&entries).into_iter().map(|at| at + 1).collect();
+    // One pass over the heads of the lines gives the place of each checkpoint, and a record with none tells nothing
+    // here.
+    let Ok(world::Marks { checkpoints, .. }) = world::marks(record) else { return };
+    let marks: Vec<usize> = checkpoints.into_iter().map(|at| at + 1).collect();
     let Some(&last) = marks.last() else { return };
     let Ok(told) = world::retold(record) else { return };
     let mut facts = Vec::new();

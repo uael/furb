@@ -2,7 +2,7 @@
 
 use std::{
   fs::{File, OpenOptions},
-  io::{BufRead, BufReader, ErrorKind, Read, Seek, SeekFrom, Write},
+  io::{BufRead, BufReader, ErrorKind, Seek, SeekFrom, Write},
   path::{Path, PathBuf},
 };
 
@@ -18,7 +18,6 @@ use super::{
   error::{At, StoreError},
   leased, now,
 };
-use std::fs;
 use std::str;
 
 /// The record at a path as a file of lines, under its lease.
@@ -119,84 +118,42 @@ pub(super) fn each(path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), Stor
   read(path, take).map(drop)
 }
 
-/// The entries of the file of lines at a path whose line starts with one of some heads, as
-/// [`kept`] reads them: a line with another head is not parsed, and a line that does not parse
-/// is passed over.
-pub(super) fn heads(path: &Path, starts: &[String]) -> Result<Vec<Object>, StoreError> {
-  let data = match fs::read(path) {
-    Ok(data) => data,
-    Err(no) if no.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
-    Err(no) => return Err(StoreError::io(path)(no)),
-  };
-  let mut entries = Vec::new();
-  let mut start = 0;
-  while start < data.len() {
-    let end = memchr::memchr(b'\n', &data[start..]).map_or(data.len(), |at| start + at);
-    entries.extend(headed(&data[start..end], starts));
-    start = end + 1;
-  }
-  Ok(entries)
-}
-
-/// How much of a record [`last`] reads at a time, so it holds no more of a large record than one
-/// chunk and the part of a line that crosses its start.
-const CHUNK: usize = 1 << 20;
-
-/// The last entry of the file of lines at a path that `pick` takes, among the lines that start
-/// with one of some heads and that [`heads`] would read, found from the end of the file a chunk at
-/// a time. It stops at the entry that it takes, so it reads only the tail of a record that holds
-/// one near its end, and nothing when the file is absent.
-pub(super) fn last<T>(
+/// The entries of the file of lines at a path whose line starts with one of some heads, each with
+/// its place among the entries of the record, counted from 0, in order and read one line at a
+/// time, so a reader holds no more of a large record than one line. A line with another head is
+/// not parsed, a line that does not parse is passed over, and a blank line is no entry.
+pub(super) fn heads(
   path: &Path,
-  starts: &[String],
-  pick: impl FnMut(Object) -> Option<T>,
-) -> Result<Option<T>, StoreError> {
-  backwards(path, starts, CHUNK, pick)
-}
-
-/// [`last`] with the size of a chunk, which a test makes small to cross a chunk in the middle of a
-/// line.
-fn backwards<T>(
-  path: &Path,
-  starts: &[String],
-  chunk: usize,
-  mut pick: impl FnMut(Object) -> Option<T>,
-) -> Result<Option<T>, StoreError> {
-  let mut file = match File::open(path) {
+  heads: &[Head<'_>],
+  take: &mut dyn FnMut(usize, Object),
+) -> Result<(), StoreError> {
+  let file = match File::open(path) {
     Ok(file) => file,
-    Err(no) if no.kind() == ErrorKind::NotFound => return Ok(None),
+    Err(no) if no.kind() == ErrorKind::NotFound => return Ok(()),
     Err(no) => return Err(StoreError::io(path)(no)),
   };
-  let mut at = file.metadata().map_err(StoreError::io(path))?.len();
-  // The start of the line that crosses the start of the chunk last read, whose end the chunks
-  // after it hold.
-  let mut carry: Vec<u8> = Vec::new();
-  while at > 0 {
-    // A line longer than a chunk grows the step, so the carry is copied a few times and not once
-    // for each chunk.
-    let step = chunk.max(carry.len()).min(usize::try_from(at).unwrap_or(usize::MAX));
-    at -= step as u64;
-    file.seek(SeekFrom::Start(at)).map_err(StoreError::io(path))?;
-    let mut data = vec![0; step];
-    file.read_exact(&mut data).map_err(StoreError::io(path))?;
-    data.extend_from_slice(&carry);
-    let mut end = data.len();
-    while let Some(newline) = memchr::memrchr(b'\n', &data[..end]) {
-      if let Some(found) = headed(&data[newline + 1..end], starts).and_then(&mut pick) {
-        return Ok(Some(found));
-      }
-      end = newline;
+  let starts = Head::starts(heads.iter().copied());
+  let mut lines = BufReader::with_capacity(1 << 20, file);
+  let (mut line, mut place) = (Vec::new(), 0);
+  loop {
+    line.clear();
+    if lines.read_until(b'\n', &mut line).map_err(StoreError::io(path))? == 0 {
+      return Ok(());
     }
-    if at == 0 {
-      return Ok(headed(&data[..end], starts).and_then(pick));
+    let text = line.strip_suffix(b"\n").unwrap_or(&line);
+    if text.iter().all(u8::is_ascii_whitespace) {
+      continue;
     }
-    carry = data[..end].to_vec();
+    if let Some(found) = headed(text, &starts) {
+      take(place, found);
+    }
+    place += 1;
   }
-  Ok(None)
 }
 
 /// The head of a line of a record that a read looks for, which this file alone writes as the start
 /// of a line of JSON.
+#[derive(Clone, Copy)]
 pub(super) enum Head<'a> {
   /// A fact of this kind.
   Kind(&'a str),
