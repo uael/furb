@@ -201,6 +201,10 @@ export type Request1 =
     }
   | {
       life: string;
+      verb: "cancel_sign_in";
+    }
+  | {
+      life: string;
       about: string;
       verb: "seen";
     }

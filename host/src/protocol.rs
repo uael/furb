@@ -269,6 +269,11 @@ pub enum Verb {
     life: String,
     config: Config,
   },
+  /// A cancel of the sign-in of codex that the daemon runs for the life, which refuses the config
+  /// that asked it. It writes no config.
+  CancelSignIn {
+    life: String,
+  },
   /// The fact that the operator read a chain or a thread up to now, which each window and each
   /// later life reads in the record.
   Seen {

@@ -38,7 +38,6 @@ mod daemon {
     Object,
     life::{Answer as Answered, Log, Opening},
     view::Phase,
-    world::codex,
   };
   use furb_host::{
     DaemonError, Event, GRACE, ProtocolError, STALL, Settings, Tailnet, TransportError,
@@ -1682,6 +1681,15 @@ mod daemon {
   /// One test at a time holds the port of the browser callback of a sign-in.
   static PORT: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
+  /// A folder of configs whose credential of codex ended, so that no account of this machine serves
+  /// and no request goes out.
+  fn signed_out(at: &Path) {
+    let folder = at.join("config").join("auth");
+    fs::create_dir_all(&folder).unwrap();
+    let ended = r#"{"access":"","refresh":null,"expires":0,"account":"none"}"#;
+    fs::write(folder.join("codex.json"), ended).unwrap();
+  }
+
   /// The request that turns codex on, said with no wait for its answer, and its id.
   async fn signing(window: &mut Window) -> u64 {
     let id = window.next;
@@ -1701,6 +1709,7 @@ mod daemon {
   async fn a_sign_in_of_codex_that_fails_is_pushed_to_the_window_and_refuses_its_config() {
     let _port = PORT.lock().await;
     let at = place();
+    signed_out(&at);
     let (local, _daemon) = started(&at, GRACE).await;
     let mut window = Window::dialed(&local).await;
     window.life = opened(&mut window, &at, "a.jsonl").await;
@@ -1723,6 +1732,7 @@ mod daemon {
   async fn a_sign_in_of_codex_that_the_operator_cancels_is_pushed_and_refuses_its_config() {
     let _port = PORT.lock().await;
     let at = place();
+    signed_out(&at);
     let (local, _daemon) = started(&at, GRACE).await;
     let mut window = Window::dialed(&local).await;
     window.life = opened(&mut window, &at, "a.jsonl").await;
@@ -1733,8 +1743,9 @@ mod daemon {
       unreachable!()
     };
     assert!(url.is_some_and(|one| one.starts_with("https://")), "the frame holds the address");
-    codex::cancel(Some(&at.join("config")));
-    window.keeping(signed_in("canceled")).await;
+    let cancel = Verb::CancelSignIn { life: window.life.clone() };
+    assert_eq!(window.ask(cancel).await, Ok(Answer::Done));
+    window.until(signed_in("canceled")).await;
     let answer =
       window.until(|frame| matches!(frame, Frame::Refused { id: Some(got), .. } if *got == id));
     assert!(matches!(answer.await, Frame::Refused { error: ProtocolError::Refused { .. }, .. }));

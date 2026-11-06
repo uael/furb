@@ -895,6 +895,23 @@
             "life": {
               "type": "string"
             },
+            "verb": {
+              "type": "string",
+              "const": "cancel_sign_in"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "A cancel of the sign-in of codex that the daemon runs for the life, which refuses the config\nthat asked it. It writes no config."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
             "about": {
               "type": "string"
             },

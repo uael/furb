@@ -571,17 +571,15 @@ async fn signing(config: Option<&Path>, outbox: &Outbox) -> Result<(), ProtocolE
     outbox.send(frame).ok();
   };
   let mut states = codex::subscribe(config);
-  let begun = codex::refresh(config).and_then(|state| match state {
-    SignIn::Disconnected | SignIn::NeedsLogin(_) | SignIn::Failed(_) | SignIn::Canceled => {
-      codex::begin(config)
-    }
-    running => Ok(running),
-  });
-  if let Err(no) = begun {
-    let why = no.to_string();
-    told(&SignIn::Failed(why.clone()));
-    return Err(refused(&why));
-  }
+  // A start that fails publishes its failure in the watch, which the loop below reads.
+  codex::refresh(config)
+    .and_then(|state| match state {
+      SignIn::Disconnected | SignIn::NeedsLogin(_) | SignIn::Failed(_) | SignIn::Canceled => {
+        codex::begin(config)
+      }
+      running => Ok(running),
+    })
+    .ok();
   loop {
     let state = states.borrow_and_update().clone();
     told(&state);
@@ -714,6 +712,13 @@ impl Lives {
         let wrote = |one: &Answerer| one.wrote(outbox, ask, &text, &thinking);
         self.answerer(&life).and_then(wrote).map(|()| Answer::Done)
       }
+      Verb::CancelSignIn { life } => match self.held.get(&life) {
+        Some(held) => {
+          codex::cancel(held.config.as_deref().map(Path::new));
+          Ok(Answer::Done)
+        }
+        None => Err(ProtocolError::Closed { life }),
+      },
       Verb::ViewMount(mount) => self.mount(mount, &peer, outbox),
       Verb::ViewEvent(event) => self.views.event(event, outbox).map(|()| Answer::Done),
       Verb::ViewDispose(dispose) => self.views.dispose(&dispose, outbox).map(|()| Answer::Done),
