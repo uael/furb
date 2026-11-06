@@ -104,3 +104,63 @@ test("an open that the daemon leaves fails as closed when the window closed its 
   const life = new RemoteLife(daemon, join(folder, "life.jsonl"));
   expect(await life.open().catch((error: unknown) => error)).toBeInstanceOf(Closed);
 });
+
+test("a request in flight when the daemon goes is sent again once the life is open again, and a verb that makes an act is not", async () => {
+  const seen: [number, string][] = [];
+  const { folder, place, server } = served((asked, socket, connection) => {
+    seen.push([connection, asked.verb]);
+    if (asked.verb === "open") {
+      reply(socket, asked, { answer: "done" });
+      socket.write(
+        `${JSON.stringify({ frame: "event", life: asked.life, seq: 0, event: { event: "changed" } })}\n`,
+      );
+    } else if (asked.verb === "pending") reply(socket, asked, { answer: "values", data: [] });
+    // The first daemon goes with a peek unanswered, and the second with a run, as a kill of each does.
+    else if ((connection === 0 && asked.verb === "peek") || (connection === 1 && asked.verb === "run"))
+      socket.destroy();
+    else if (asked.verb === "peek") reply(socket, asked, { answer: "value", data: 7 });
+    else if (asked.verb === "detach") reply(socket, asked, { answer: "done" });
+  });
+  const daemon = new Daemon(folder, place);
+  made.push({ folder, server, daemon });
+  const life = new RemoteLife(daemon, join(folder, "life.jsonl"));
+  await life.open();
+  expect(await life.peek("bash1")).toBe(7);
+  expect(seen.filter(([, verb]) => verb === "peek")).toEqual([
+    [0, "peek"],
+    [1, "peek"],
+  ]);
+  const ran = await life.rung({ word: "x = 1" }).catch((error: unknown) => error);
+  expect(ran).toBeInstanceOf(Closed);
+  expect(seen.filter(([, verb]) => verb === "run")).toHaveLength(1);
+  await life.detach();
+});
+
+test("a window that reads asks its role in its hello, and the frame stalled shows as a notice of its life", async () => {
+  const hellos: unknown[] = [];
+  const folder = mkdtempSync(join(tmpdir(), "furb-reconnect-"));
+  const place = join(folder, "host.sock");
+  const server = createServer((socket) => {
+    socket.setEncoding("utf8");
+    socket.on("error", () => {});
+    socket.on("data", (chunk: string) => {
+      const asked = JSON.parse(chunk.split("\n")[0] ?? "{}") as Asked & { role?: string };
+      hellos.push(asked.role);
+      reply(socket, asked, {
+        answer: "welcome",
+        data: { peer: { login: "test", role: "read", kind: "window" } },
+      });
+      socket.write(
+        `${JSON.stringify({ frame: "stalled", life: "life.jsonl", acts: [], notice: "The life stalled." })}\n`,
+      );
+    });
+  });
+  server.listen(place);
+  const daemon = new Daemon(folder, place, "read");
+  made.push({ folder, server, daemon });
+  const life = new RemoteLife(daemon, "life.jsonl");
+  const told = new Promise<string>((resolve) => life.once("log", resolve));
+  await daemon.connect();
+  expect(hellos).toEqual(["read"]);
+  expect(await told).toBe("The life stalled.");
+});
