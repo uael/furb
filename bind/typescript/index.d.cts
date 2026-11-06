@@ -508,6 +508,12 @@ export interface Opening {
    */
   config?: string
   /**
+   * The logins of the members who answer as the operator, as the access list of a host and its
+   * local login give them, each of which a prompt can ask with `to="operator/<login>"`; none when
+   * unsaid.
+   */
+  members?: Array<string>
+  /**
    * The actor a prompt goes to when it names none, as the catalog names a model, and an effort after a slash, at its
    * level as [`world::Model::at`] moves it. When unsaid, the default actor of the last stand
    * that the record answered, so a life opened again goes on with the actor it had, and on a
