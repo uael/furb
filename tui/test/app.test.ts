@@ -14,7 +14,7 @@ import type { Session } from "../src/session.ts";
 import { glyph, palettes, spin, theme } from "../src/theme.ts";
 import { mix } from "../src/ui.ts";
 import { type SessionEntry, Workspaces } from "../src/workspaces.ts";
-import { cellAt, composing, drawn, withDemo } from "./composing.ts";
+import { cellAt, composing, drawn, framed, withDemo } from "./composing.ts";
 import { ended } from "./ended.ts";
 import { idle } from "./idle.ts";
 import { transcriptOf } from "./transcript.ts";
@@ -357,11 +357,9 @@ test("the block of a word whose model works holds the loader in the column of th
     await session.refresh();
     const step = session.activity.find((act) => act.kind === "rung" && !isDone(act))?.id ?? "";
     // The feed draws the block of the step at a later tick than the refresh, later on a slow runner.
-    let rows = (await frame()).split("\n");
-    for (let tries = 0; tries < 40 && !rows.some((row) => row.includes(" · thinking")); tries++) {
-      await new Promise((done) => setTimeout(done, 50));
-      rows = (await frame()).split("\n");
-    }
+    const rows = (
+      await framed(frame, (shown) => shown.includes(" · thinking"), "the step that thinks")
+    ).split("\n");
     const label = rows.find((row) => row.includes(" · thinking")) ?? "";
     expect(label).toMatch(/[\u2800-\u28ff] +\S+ · thinking/);
     expect(label).not.toContain("word · ");
@@ -374,11 +372,7 @@ test("the block of a word whose model works holds the loader in the column of th
       session.host,
       () => session.host.streams.get(step)?.thinking === "First I read.\nThen I wait.",
     );
-    let thought = await frame();
-    for (let tries = 0; tries < 40 && !thought.includes("26 chars"); tries++) {
-      await new Promise((done) => setTimeout(done, 50));
-      thought = await frame();
-    }
+    const thought = await framed(frame, (shown) => shown.includes("26 chars"), "the size of the thought");
     expect(thought).toContain(" · thinking");
     expect(thought).toContain("26 chars");
     expect(thought).toContain("Then I wait.");

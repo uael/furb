@@ -4,6 +4,7 @@ import { scripts } from "../src/demo/index.ts";
 import { seedLife } from "../src/demo/life.ts";
 import { scripted } from "../src/demo/script.ts";
 import { demoSession, removeDemoDirectories } from "../src/demo.ts";
+import { open } from "./composing.ts";
 
 const turn = (prompt: string, message: string, advances: number) => [
   {
@@ -62,11 +63,7 @@ test("the life of the demo is as dense as a real one: chains in a tree, threads,
     expect(session.acts.some((act) => act.kind === "grant")).toBe(true);
     expect(session.acts.some((act) => act.kind === "bash" && !isDone(act))).toBe(true);
     expect(standing.size).toBeGreaterThan(0);
-    for (const id of standing)
-      expect(
-        session.acts.find((act) => act.id === id) !== undefined &&
-          isDone(session.acts.find((act) => act.id === id)),
-      ).toBe(false);
+    for (const id of standing) expect(open(session, id), `${id} stays open`).toBe(true);
   } finally {
     await session.dispose();
     await removeDemoDirectories();

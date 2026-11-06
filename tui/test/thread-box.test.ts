@@ -114,7 +114,7 @@ test("a click on Reply makes the thread the target of the input, whose line and 
     async ({ session, app, screen, click, frame }) => {
       await idle(session);
       const id = listed(session)[0]?.act.id ?? "";
-      expect(listed(session)[0]?.resolved).toBe(true);
+      expect(listed(session)[0]?.over).toBe(true);
       // A thread that is over is no target until a click asks for it.
       expect(session.target).toBeUndefined();
       await click("Reply to open it again");
@@ -131,7 +131,7 @@ test("a click on Reply makes the thread the target of the input, whose line and 
       await session.command(`/pause ${id}`);
       screen.mockInput.pressEnter();
       await until(session, () => (listed(session)[0]?.messages.length ?? 0) === 1);
-      expect(listed(session)[0]?.resolved).toBe(false);
+      expect(listed(session)[0]?.over).toBe(false);
       await session.command(`/wake ${id}`);
       expect(session.target).toBe(id);
       await click("+ New thread");

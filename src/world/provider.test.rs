@@ -61,7 +61,9 @@ use super::{
 };
 use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, Text, verbs, world};
 
-use crate::testing::{Yard, block_on, on_reactor, park, pause, waker};
+#[cfg(unix)]
+use crate::testing::on_reactor;
+use crate::testing::{Yard, block_on, park, pause, waker};
 use crate::wire;
 use futures::future;
 use futures::stream;

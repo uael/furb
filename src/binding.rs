@@ -13,14 +13,10 @@
 
 // This tree pays these lints already, so they hold here ahead of the workspace.
 #![deny(clippy::absolute_paths, clippy::use_self)]
-#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
-#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
-#![expect(clippy::map_unwrap_or, reason = "debt: map then unwrap_or, where map_or serves")]
 #![expect(
   clippy::needless_pass_by_value,
-  reason = "debt: an argument taken by value and only borrowed"
+  reason = "a function of the API serves both doors, and N-API gives each argument owned"
 )]
-#![expect(clippy::ref_option, reason = "debt: &Option<T> where Option<&T> serves")]
 
 #[cfg(feature = "python")]
 pub mod py;
@@ -43,11 +39,14 @@ use napi_derive::napi;
 #[cfg(feature = "python")]
 use pyo3::pyfunction;
 
+use serde::Serialize;
+
 use crate::gate::checked;
 use crate::{
   Ear, Fact, Fault, Heard, Life, Object, Spoken, Step,
   extension::{self, Extension, Part},
   life::Opening,
+  view::{Fold, Held, Pause},
   wire,
   world::{self, images},
 };
@@ -262,7 +261,7 @@ impl NativeEar {
     if let Some(shared) = hearing.lent.take().and_then(|one| one.upgrade()) {
       let ear = shared
         .try_borrow_mut()
-        .map_err(|_| Fault::refused("the ear hears, and cannot be let go now"))?
+        .map_err(|no| Fault::refused(format!("the ear hears, and cannot be let go now: {no}")))?
         .take();
       drop(ear);
     }
@@ -583,7 +582,7 @@ fn configured_catalog(
   config: Option<String>,
 ) -> Result<world::Catalog, Fault> {
   let directory =
-    directory.map(path::PathBuf::from).unwrap_or_else(|| env::current_dir().unwrap_or_default());
+    directory.map_or_else(|| env::current_dir().unwrap_or_default(), path::PathBuf::from);
   let config = config.map(path::PathBuf::from);
   world::Catalog::load()
     .claude(claude.map(Into::into), None)
@@ -670,7 +669,8 @@ pub fn model(
   Ok(configured_catalog(None, directory, config)?.find(&name).as_ref().map(ModelInfo::of))
 }
 
-/// A ChatGPT sign-in state, with its browser address while it waits and a message when it fails. It holds no token.
+/// A `ChatGPT` sign-in state, with its browser address while it waits and a message when it
+/// fails. It holds no token.
 #[cfg_attr(feature = "typescript", napi(object, object_from_js = false))]
 #[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
 pub struct CodexAuthInfo {
@@ -679,8 +679,9 @@ pub struct CodexAuthInfo {
   pub message: Option<String>,
 }
 
-/// Read, start, refresh or cancel ChatGPT sign-in for codex. The default action reads its state.
-/// The config directory is the user config directory when unsaid. A start returns before the browser completes.
+/// Read, start, refresh or cancel `ChatGPT` sign-in for codex. The default action reads its state.
+/// The config directory is the user config directory when unsaid. A start returns before the
+/// browser completes.
 #[cfg_attr(feature = "python", pyfunction, pyo3(signature = (action = None, config = None)))]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn codex_auth(action: Option<String>, config: Option<String>) -> Result<CodexAuthInfo, Fault> {
@@ -776,10 +777,107 @@ pub fn image_type(data: &[u8]) -> Result<ImageType, Fault> {
 /// The words of a call that a host gave, by position and by name, as the engine takes them.
 fn words(
   args: Option<Vec<Value>>,
-  kwargs: &Option<IndexMap<String, Value>>,
+  kwargs: Option<&IndexMap<String, Value>>,
 ) -> (Vec<Object>, Vec<(&str, Object)>) {
   let args = args.unwrap_or_default().into_iter().map(|one| one.0).collect();
-  (args, kwargs.iter().flatten().map(|(key, one)| (key.as_str(), one.0.clone())).collect())
+  (args, kwargs.into_iter().flatten().map(|(key, one)| (key.as_str(), one.0.clone())).collect())
+}
+
+/// The meaning of a life that each window draws, folded in the crate from the facts of the life in
+/// the order of its log, as a daemon folds it: the acts, the desk, the threads of a chain, the acts
+/// as they stood at a moment, and the moments. A window that reads a record with no daemon folds it
+/// here, so it draws the meaning that a daemon serves.
+#[cfg_attr(feature = "typescript", napi)]
+#[derive(Default)]
+pub struct Meaning {
+  fold: Fold,
+  held: Held,
+}
+
+#[cfg_attr(feature = "typescript", napi)]
+impl Meaning {
+  /// A meaning that heard no fact yet.
+  #[cfg_attr(feature = "typescript", napi(constructor))]
+  pub fn new() -> Self {
+    Self::default()
+  }
+
+  /// The acts that a fact changes, each as it stands after the fact. `covered` names each act of
+  /// `open` that a pause or a wake covers, and `born` the last pause or wake that covers a new act,
+  /// as the engine finds them. A reader with no engine gives neither.
+  #[cfg_attr(
+    feature = "typescript",
+    napi(
+      ts_args_type = "fact: unknown[], covered?: string[], born?: unknown[] | null",
+      ts_return_type = "Array<import(\"./dist/protocol.js\").Act>"
+    )
+  )]
+  pub fn hear(
+    &mut self,
+    fact: Value,
+    covered: Option<Vec<String>>,
+    born: Option<Value>,
+  ) -> Result<Value, Fault> {
+    let fact = wire::outward(fact.0.as_ref());
+    let born = born.and_then(|one| Pause::of(&wire::outward(one.0.as_ref())));
+    let acts = self.fold.hear(&fact, &covered.unwrap_or_default(), born);
+    for act in &acts {
+      self.held.heard(act);
+    }
+    meant(&acts)
+  }
+
+  /// The live acts whose pause a pause would change, or a wake: each that no pause holds, or each
+  /// that one holds.
+  #[cfg_attr(feature = "typescript", napi)]
+  pub fn open(&self, pausing: bool) -> Vec<String> {
+    self.fold.open(pausing)
+  }
+
+  /// What waits for the operator, with each notice that the window still shows.
+  #[cfg_attr(feature = "typescript", napi(ts_return_type = "import(\"./dist/protocol.js\").Desk"))]
+  pub fn desk(&self, notices: Option<Vec<String>>) -> Result<Value, Fault> {
+    meant(&self.held.desk(&notices.unwrap_or_default()))
+  }
+
+  /// The threads of a chain, now or as they stood just after a moment. `read` is the place up to
+  /// which the window read the chain, from which its runs of notes count the notes not yet read.
+  #[cfg_attr(
+    feature = "typescript",
+    napi(ts_return_type = "import(\"./dist/protocol.js\").Threads")
+  )]
+  pub fn threads(&self, chain: String, at: Option<i64>, read: Option<i64>) -> Result<Value, Fault> {
+    let at = at.map(moment).transpose()?;
+    let read = read.map(moment).transpose()?.unwrap_or_default();
+    meant(&self.held.threads(&chain, at, read))
+  }
+
+  /// The acts as they stood just after a moment.
+  #[cfg_attr(
+    feature = "typescript",
+    napi(ts_return_type = "Array<import(\"./dist/protocol.js\").Act>")
+  )]
+  pub fn as_of(&self, at: i64) -> Result<Value, Fault> {
+    meant(&self.held.as_of(moment(at)?))
+  }
+
+  /// Each moment at which an act began or ended, in order.
+  #[cfg_attr(feature = "typescript", napi(ts_return_type = "number[]"))]
+  pub fn moments(&self) -> Result<Value, Fault> {
+    meant(&self.held.moments())
+  }
+}
+
+/// A meaning as a value of the engine, which crosses each door as JSON would.
+fn meant(meaning: &impl Serialize) -> Result<Value, Fault> {
+  let json = serde_json::to_value(meaning)
+    .map_err(|no| Fault::refused(format!("the meaning is no JSON: {no}")))?;
+  wire::inward(&json).map(Value)
+}
+
+/// A moment of a life, which counts the facts that the meaning heard before it.
+fn moment(at: i64) -> Result<u64, Fault> {
+  u64::try_from(at).map_err(|no| Fault::refused(format!("{at} is no moment: {no}")))
 }
 
 /// Call back when the console of Windows ends this process: at Ctrl+Break, at the close of the console, at a logoff
@@ -804,16 +902,7 @@ pub fn on_console_end(callback: Told) -> Result<(), Fault> {
 
 #[cfg(windows)]
 mod console {
-  #![expect(
-    clippy::let_underscore_must_use,
-    reason = "debt: a let _ drops a value that must be used"
-  )]
-  #![expect(
-    clippy::let_underscore_untyped,
-    reason = "debt: a let _ hides the type of what it drops"
-  )]
-
-  use std::sync::OnceLock;
+  use std::{io, sync::OnceLock, thread};
 
   use windows_sys::{
     Win32::System::Console::{
@@ -846,7 +935,8 @@ mod console {
           match one {
             Ending::Callback(one) => callback = Some(one),
             Ending::Event(name, answer) => {
-              let _ = answer.send(callback.as_ref().is_some_and(|one| (one.0)(name)));
+              // A handler that stopped waiting has returned already, so its answer is lost.
+              answer.send(callback.as_ref().is_some_and(|one| (one.0)(name))).unwrap_or_default();
             }
           }
         }
@@ -864,14 +954,14 @@ mod console {
     static ADDED: OnceLock<bool> = OnceLock::new();
     ending()
       .send(Ending::Callback(callback))
-      .map_err(|_| Fault::refused("the keeper of the console callback is gone"))?;
+      .map_err(|no| Fault::refused(format!("the keeper of the console callback is gone: {no}")))?;
     // The system calls the handlers from the last added to the first, so this one comes before
     // those of the runtime, which end the process at once. SAFETY: `heard` is a handler routine
     // with the signature that the system calls, and it stays valid as long as the process.
     if *ADDED.get_or_init(|| unsafe { SetConsoleCtrlHandler(Some(heard), 1) } != 0) {
       Ok(())
     } else {
-      let why = std::io::Error::last_os_error();
+      let why = io::Error::last_os_error();
       Err(Fault::refused(format!("The console handler was not added: {why}")))
     }
   }
@@ -892,7 +982,7 @@ mod console {
       return 0;
     }
     loop {
-      std::thread::park();
+      thread::park();
     }
   }
 }

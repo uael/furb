@@ -181,6 +181,8 @@ win32job = "2"
 rig-core = { version = "=0.42.0", default-features = false, features = ["test-utils"] }
 # The validator of JSON Schema, which checks that a call of a binding of MCP sends what the tool asks.
 jsonschema = { version = "0.33", default-features = false }
+# The codec of a record of tests/replay that is too large to keep plain, which Cargo.lock holds already.
+zstd = { version = "0.11", default-features = false }
 
 [build-dependencies]
 napi-build = { version = "2", optional = true }

@@ -182,6 +182,10 @@ fn a_call_of_an_async_function_in_an_argument_a_container_or_a_return_is_a_findi
   assert_eq!(found("async def go():\n  return hire()\nawait go()"), vec![2]);
   assert_eq!(found("close(await hire())\ny = (hire() or 1)"), vec![2]);
   assert_eq!(found("close(await hire())\ng = hire()\nh = (k := hire())"), Vec::<usize>::new());
+  assert_eq!(
+    found("async def g():\n  yield 1\nasync for x in g():\n  close([y async for y in g()])"),
+    Vec::<usize>::new()
+  );
 }
 
 #[test]
@@ -593,4 +597,15 @@ fn a_word_binds_no_builtin_that_a_def_of_the_program_reads() {
   assert!(found[0].1.contains("`list` is a builtin that a def of this chain reads"), "{found:?}");
   assert_eq!(said(&program, "sum = 'ls'"), vec![], "no def reads sum");
   assert_eq!(said(&[], "list = 'ls'"), vec![], "no def reads list");
+}
+
+#[test]
+fn a_word_of_an_extension_that_binds_a_name_of_the_engine_in_a_block_a_walrus_a_capture_or_a_global_binds_it()
+ {
+  let bound = |word: &str| super::engine_bound(word, ENGINE);
+  assert_eq!(bound("if True:\n  over = 1"), vec!["over"]);
+  assert_eq!(bound("(question := 1)"), vec!["question"]);
+  assert_eq!(bound("match 1:\n  case scope:\n    pass"), vec!["scope"]);
+  assert_eq!(bound("def f():\n  global under\n  under = 1"), vec!["under"]);
+  assert_eq!(bound("accepts = None\nactor = 'x'\nimport re"), Vec::<String>::new());
 }

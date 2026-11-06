@@ -111,7 +111,7 @@ export const sidebar = part({
     if (set !== undefined) return set;
     const own = w.threads;
     const thread = own.by.get(id);
-    return Boolean(w.preferences.foldThreads && thread?.resolved && own.list.at(-1) !== thread);
+    return Boolean(w.preferences.foldThreads && thread?.over && own.list.at(-1) !== thread);
   },
 
   /** A thread folds in the feed to its header line alone, or unfolds. */

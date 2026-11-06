@@ -491,6 +491,27 @@ mod kills {
     lifeline.ended().await;
   }
 
+  /// The manifest of a skill whose process holds the lifeline until it ends.
+  const PROBE: &str = "---\nname: probe\ndescription: Holds the lifeline.\nmetadata:\n  furb-word: probe.py\n  furb-process: probe.sh\n---\nA probe.\n";
+
+  #[tokio::test]
+  async fn a_daemon_killed_leaves_no_process_that_a_skill_started() {
+    let (yard, mut lifeline, daemon, mut window) = begun().await;
+    let skill = yard.root.join("work/.furb/skills/probe");
+    fs::create_dir_all(&skill).unwrap();
+    fs::write(skill.join("SKILL.md"), PROBE).unwrap();
+    fs::write(skill.join("probe.py"), "PROBED = 1\n").unwrap();
+    let fifo = lifeline.path();
+    let script = format!("#!/bin/sh\necho up >> {fifo}\nexec sleep 600 >> {fifo}\n");
+    let program = skill.join("probe.sh");
+    fs::write(&program, script).unwrap();
+    fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
+    window.ran("skill('probe')").await;
+    lifeline.heard("up").await;
+    daemon.killed(libc::SIGKILL).await;
+    lifeline.ended().await;
+  }
+
   #[tokio::test]
   async fn a_daemon_killed_while_a_reply_streams_answers_it_once_after() {
     for signal in SIGNALS {

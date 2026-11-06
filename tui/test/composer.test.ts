@@ -331,12 +331,13 @@ test("Up and Down walk the history from the edges of the input, and Up on an emp
       screen.mockInput.pressArrow("down");
       expect(app.composer.plainText).toBe("from");
       app.composer.setText("");
-      session.queueHeld = true;
-      session.enqueue("a queued message");
-      expect(session.queued).toHaveLength(1);
+      // A pause holds the chain, so the life keeps the follow-up in its queue.
+      await session.engine.pause(session.selected);
+      await session.enqueue("a queued message");
+      await until(session, () => session.queued.length === 1);
       screen.mockInput.pressArrow("up");
-      expect(app.composer.plainText).toBe("a queued message");
-      expect(session.queued).toEqual([]);
+      await until(session, () => app.composer.plainText === "a queued message");
+      await until(session, () => session.queued.length === 0);
     },
     { width: 120, height: 44, kittyKeyboard: true },
   ));
@@ -604,7 +605,18 @@ test("a branch that a word made with a filter shows the messages that it took, w
     const shown = await drawn(frame, screen.renderer.root);
     expect(shown).toContain("It takes the message before it, with its answer.");
     expect(shown).toContain("Read the notes again.");
-    expect(shown).not.toContain("Explore this project.");
+    // The sidebar lists the threads of the whole life, so the message that the branch left out is looked for in the feed.
+    const side =
+      shown
+        .split("\n")
+        .find((line) => line.includes("Workspaces"))
+        ?.indexOf("Workspaces") ?? 0;
+    expect(
+      shown
+        .split("\n")
+        .map((line) => line.slice(0, side))
+        .join("\n"),
+    ).not.toContain("Explore this project.");
     expect(shown).not.toContain("Watch a life");
   }));
 

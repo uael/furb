@@ -6,7 +6,18 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Fact, Standing, Turn } from "furb";
 import { type Compaction, followed, isDone, operated, type Spend, WORK } from "furb/life";
-import type { Act, Answer, Config, Event, Frame, Listed, Peer, Role, Request1 as Verb } from "furb/protocol";
+import type {
+  Act,
+  Answer,
+  Config,
+  Event,
+  FollowUp,
+  Frame,
+  Listed,
+  Peer,
+  Role,
+  Request1 as Verb,
+} from "furb/protocol";
 import { PROTOCOL } from "furb/protocol";
 import type { Setting } from "./configs.ts";
 
@@ -384,6 +395,8 @@ export class RemoteLife extends EventEmitter {
   /** What the answers of the models cost each chain, by the chain, and all chains together, in dollars. */
   readonly spends = new Map<string, Spend>();
   cost = 0;
+  /** How many times a spend changed, which tells a view when to read the spends again. */
+  spendChanges = 0;
   /** How many changes of an act the window heard, and the count at the last change of each act that a person
    * follows, so that a reader takes only the acts that changed since it last read. */
   private changes = 0;
@@ -391,6 +404,8 @@ export class RemoteLife extends EventEmitter {
   /** Each change of an act in order, as the count of the change and the name of the act. An act that changed again
    * leaves its earlier entries, which the log drops once it holds twice as many entries as acts. */
   private log: { count: number[]; name: string[] } = { count: [], name: [] };
+  /** The follow-ups that wait on each chain, in order, as the life told them last. */
+  readonly queues = new Map<string, FollowUp[]>();
   /** What each rung that asked a model streams while the model writes, by that rung. */
   readonly streams = new Map<string, { chain: string; text: string; thinking: string }>();
   /** Why the life is not open in this window, and nothing while it is. */
@@ -455,10 +470,12 @@ export class RemoteLife extends EventEmitter {
     this.outputs.clear();
     this.completed = 0;
     this.spends.clear();
+    this.spendChanges++;
     this.cost = 0;
     this.changed.clear();
     this.log = { count: [], name: [] };
     this.streams.clear();
+    this.queues.clear();
     this.batch = undefined;
     this.lost = "";
     const answers = Boolean(models);
@@ -535,6 +552,10 @@ export class RemoteLife extends EventEmitter {
         this.emit("change");
         return;
       }
+      case "queued":
+        this.queues.set(told.data.chain, told.data.waiting);
+        this.emit("change");
+        return;
       case "notice":
         this.emit("log", told.data);
         return;
@@ -638,6 +659,7 @@ export class RemoteLife extends EventEmitter {
       if (act.kind === "chain" && act.spend && act.spend !== was?.spend) {
         this.cost += act.spend.dollars - (this.spends.get(act.id)?.dollars ?? 0);
         this.spends.set(act.id, act.spend);
+        this.spendChanges++;
       }
       if (isDone(act) && !(was && isDone(was))) {
         this.outputs.delete(act.id);
@@ -864,6 +886,10 @@ export class RemoteLife extends EventEmitter {
   /** A follow-up put in the queue of a chain, which the life sends once the chain rests. */
   async queue(entry: string, shape: string, message: string, on: string): Promise<void> {
     await this.verb({ verb: "queue", life: this.record, entry, shape, message, on });
+  }
+  /** A follow-up taken out of the queue of its chain before the life sent it. */
+  async unqueue(entry: string): Promise<void> {
+    await this.verb({ verb: "unqueue", life: this.record, entry });
   }
   async pin(holder: string): Promise<void> {
     await this.verb({ verb: "pin", life: this.record, holder });

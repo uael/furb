@@ -65,7 +65,7 @@ The Kernel holds the run of the word of a turn of a model, once that word is ove
 type Show = tuple | Callable[[list[str]], list[int]]
 """A show says which lines of a text to tell, and picked gives their numbers from the lines of the text.
 A show of the file is plain data, which span, grep and differs make, so it is a word of each act that it is given to and a record holds it.
-A show is any callable that is given the lines of a text and gives the numbers of the lines to tell, so a word adds a show by writing one, which the word makes again when it runs again.
+A show is any callable that is given the lines of a text and gives the numbers of the lines to tell, so a word adds a show by writing one, which the word makes again when it runs again; no later life makes it again as it was, so it is no word of an act, which holds None in its place, and a later life tells by the default show.
 """
 type Filter = Callable[[list[Question]], list[Question]]
 """A filter is given the acts of the transcript up to the source of a chain that has one.
@@ -263,6 +263,7 @@ def stand(on: str = "") -> Act[Standing]:
 def clock(on: str = "") -> float:
   """clock gives one reading of the wall clock of the World.
   clock asks the World for a reading of the wall clock, and the journal keeps what it answered.
+  clock refuses a reading to a word when the last fact of its chain is of a reading, since a word that reads the clock again with nothing between polls it, and each reading is a fact of the record.
   """
 
 def chance(on: str = "") -> float:
@@ -648,15 +649,17 @@ def seed(data: object) -> list[Entry]:
   """seed gives the entries that a life boots on from the data of a checkpoint, which the open of an engine hands it in the place of the checkpoint, before the entries that follow it, so an engine opens a checkpoint that an earlier engine of its major wrote.
   Each chain of the data is made again under its name, on its parent and with its label, as the operator makes it, and each name of a kind up to the highest that the data takes, which no entry carries, stays taken.
   Each open prompt of the data is made again through prompt under its name, and each chain that the data says paused is paused.
-  Each chain opens paused while the seed binds it, and wakes after it unless the data says it was paused, so an open prompt asks its model again at once.
+  Each chain with an open prompt opens paused while the seed binds it, and wakes after it unless the data says it was paused, so an open prompt asks its model again at once.
   Each act of the data with a value stands known on its chain with that value and runs nothing.
   A rung of the operator on each chain binds its definitions and its values, says its turns as its prefix, and tells what the checkpoint lost and cut, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows.
+  The rung binds the definitions and the values of the chain after it says the prefix and tells what the checkpoint lost and cut, so a value that raises as it is bound leaves the turns of the chain whole.
   """
 
 def gathered(define: Callable[[str], str], floor: dict[str, int]) -> dict:
   """gathered gives the data of a checkpoint of the life at its tip, which seed reads, as plain data that each build of the major reads: taken, chains and acts.
   taken gives the highest number of each kind that an act of a chain took, and at least the number that floor gives, since a later life makes no act again that an ear of the outside made.
-  chains holds the root, the chain of each open prompt and each chain that a plain value of a chain in chains names, each with its parent, its label, its source, whether it is paused, its turns but the facts made, what define gives of each word that ran on it, the text that binds each plain value of its module again, the names of the other values, and the acts that it cut, each word that ran on it among them.
+  chains holds each chain of the life, a chain at rest among them, each with its parent, its label, its source, whether it is paused, its turns but the facts made, what define gives of each word that ran on it, the text that binds each plain value of its module again, the names of the other values, and the acts that it cut, each word that ran on it among them.
+  chains holds each plain value of a chain whatever its size, and seed binds a large one from the carried fact of its chain, so a later life holds it exactly and no turn tells it.
   acts holds the last stand, the last clock, and each act of a verb that a value names or that is a command of a chain in chains: an act that is over with its value, an open prompt with its shape, its message, its actor and the ear that started it, and another act as cut, with a refusal that says why.
   paused says whether a pause stands over the chain at the tip, and no prompt of it pauses it, so a later life goes on as the tip left it.
   gathered is a view: it makes nothing and says nothing.
@@ -709,7 +712,8 @@ def bash(
   A command without a timeout has the timeout TIMEOUT that the file names.
   A command accepts the codes that its ok names, as ok=(0, 1), and every code when its ok is True.
   A command with no ok is judged by accepts, the policy of its chain, and by the default policy while accepts is None.
-  What an ok or an accepts raises as it judges the code of a command, the word that awaits the command raises at its await, and every other word goes on.
+  bash refuses an ok that is a callable, since no later life makes it again as it was.
+  What an accepts raises as it judges the code of a command, the word that awaits the command raises at its await, and every other word goes on.
   The default policy accepts the code 0, and the code 1 of a check that ends the command, since sh gives the code of the last command of a pipeline: a search, as grep, egrep, fgrep, rg, test, [ or a git command with --quiet or --is-ancestor, when the command wrote nothing or only a count of 0, since a search that finds nothing writes nothing, and a difference, as diff, cmp or a git command with --exit-code, which writes the difference.
   The default policy accepts no other code, so a timeout, a signal, and the code 1 of a search that wrote an error, as a cd that failed in front of it, fail.
   The World that takes a command answers it: it says it done with its Exit, the code and the streams it kept, since the owner of an act is the one that answers it.
@@ -1034,6 +1038,7 @@ type Bash = tuple[Literal["bash"], str, str, str, str, str | None, float, tuple[
 def literal(v: object, into: set[str] | None = None) -> str | bool:
   """literal gives the python that makes a value again when the value is one that a checkpoint carries: None, a bool, an int, a float, a str, a Text, an Exit or an exception as python shows it, and a list, a tuple, a set or a dict of those as python writes it.
   literal gives a value that is false for any other value, and for a list, a tuple, a set or a dict that holds one, so a caller learns that the value is lost.
+  literal gives a value that is false for a float that is not finite and for an exception whose arguments it cannot write, so a caller learns that the value is lost.
   literal adds to into each str of the value that names an act of the life, an Act among them, and writes an Act as Act('bash1').
   literal with no into writes no Act, so it gives a value that is false for an Act and for a value that holds one.
   """

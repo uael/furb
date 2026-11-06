@@ -10,7 +10,8 @@ use std::{
 
 use monty_types::NamedValues;
 use ruff_python_ast::{
-  ExceptHandler, Expr, ExprContext, Parameter, Pattern, Stmt,
+  ExceptHandler, Expr, ExprContext, ExprDictComp, ExprGenerator, ExprListComp, ExprSetComp,
+  Parameter, Pattern, Stmt,
   statement_visitor::{StatementVisitor, walk_stmt},
   visitor::{self, Visitor},
 };
@@ -453,6 +454,7 @@ impl<'a> Visitor<'a> for Coroutines {
         }
       }
       Stmt::AugAssign(one) => self.take(&one.value),
+      Stmt::For(one) if one.is_async => self.take(&one.iter),
       _ => {}
     }
     let scoped = matches!(stmt, Stmt::FunctionDef(_) | Stmt::ClassDef(_));
@@ -468,6 +470,14 @@ impl<'a> Visitor<'a> for Coroutines {
       }
       Expr::Await(one) => self.take(&one.value),
       Expr::Named(one) => self.take(&one.value),
+      Expr::ListComp(ExprListComp { generators, .. })
+      | Expr::SetComp(ExprSetComp { generators, .. })
+      | Expr::DictComp(ExprDictComp { generators, .. })
+      | Expr::Generator(ExprGenerator { generators, .. }) => {
+        for one in generators.iter().filter(|one| one.is_async) {
+          self.take(&one.iter);
+        }
+      }
       Expr::Call(call) => {
         if let Expr::Name(name) = &*call.func
           && self.names.contains(name.id.as_str())
@@ -632,7 +642,7 @@ pub(super) fn told(sheet: &Parsed<'_>) -> Vec<Finding> {
 
 /// The names that a chain binds of its own, though the engine binds each first: the actor, the last
 /// raise and the policy of the codes of a command, which a word binds like any name.
-const OWN: [&str; 3] = ["actor", "raised", "accepts"];
+pub(crate) const OWN: [&str; 3] = ["actor", "raised", "accepts"];
 
 /// Each name of the engine that a statement at the top of the word binds or deletes, by the line it
 /// stands on.
@@ -661,14 +671,7 @@ pub(super) fn contracted(sheet: &Parsed<'_>, engine: &str, whole: &str) -> Vec<F
     })
     .filter(|name| !OWN.contains(name))
     .collect();
-  let mut found = vec![];
-  topped(word_of(body), &mut found);
-  let mut reached = Reached(vec![]);
-  for stmt in word_of(body) {
-    reached.visit_stmt(stmt);
-  }
-  found.extend(reached.0.into_iter().map(|(at, name)| (at, name, false)));
-  found.sort_by_key(|(at, ..)| *at);
+  let found = bound(word_of(body));
   let deletes: HashSet<usize> = word_of(body)
     .iter()
     .filter(|stmt| matches!(stmt, Stmt::Delete(_)))
@@ -699,6 +702,22 @@ pub(super) fn contracted(sheet: &Parsed<'_>, engine: &str, whole: &str) -> Vec<F
       Some(Finding { line: sheet.line(at), column: sheet.column(at), rule, why })
     })
     .collect()
+}
+
+/// Each name that a statement at the top of a body binds or deletes, by where it starts, and
+/// whether an import with no alias binds it: what [`topped`] finds and what [`Reached`] finds, in
+/// the order of the body. The rule of a name of the engine that [`contracted`] holds reads them, for
+/// a word and for the word of an extension alike.
+pub(crate) fn bound(body: &[Stmt]) -> Vec<(usize, &str, bool)> {
+  let mut found = vec![];
+  topped(body, &mut found);
+  let mut reached = Reached(vec![]);
+  for stmt in body {
+    reached.visit_stmt(stmt);
+  }
+  found.extend(reached.0.into_iter().map(|(at, name)| (at, name, false)));
+  found.sort_by_key(|(at, ..)| *at);
+  found
 }
 
 /// Each builtin that a def, a class or a lambda of the program of a sheet reads by its name.
@@ -818,7 +837,7 @@ fn topped<'a>(body: &'a [Stmt], found: &mut Vec<(usize, &'a str, bool)>) {
 /// The names that an engine imports, which a word may import too under the same name, since each
 /// is no name of the contract. The imports of an engine stand at its head, before its first other
 /// statement, and one may hold more than one line.
-fn imported(engine: &str) -> Vec<String> {
+pub(crate) fn imported(engine: &str) -> Vec<String> {
   let head: String = engine
     .split_inclusive('\n')
     .take_while(|line| {
@@ -883,9 +902,10 @@ impl<'a> Visitor<'a> for Bound<'a> {
 /// The names that a statement binds in the module by a way that `binds` does not read: the target
 /// of a walrus (also inside a comprehension, which binds it in the scope around it), each capture
 /// of a pattern of a match, and each name that a def or a class declares `global`, at any depth. A
-/// lambda binds its walrus apart, so nothing inside it counts. A def or a class runs its decorators,
-/// the defaults of its parameters, and its bases and keywords in the module, so a walrus there binds
-/// too, but a walrus in its body binds apart. Python refuses a walrus in an annotation.
+/// lambda binds its walrus apart, so nothing inside it counts. A def or a class runs its
+/// decorators, the defaults of its parameters, and its bases and keywords in the module, so a
+/// walrus there binds too, but a walrus in its body binds apart. Python refuses a walrus in an
+/// annotation.
 struct Reached<'a>(Vec<(usize, &'a str)>);
 
 impl<'a> Visitor<'a> for Reached<'a> {

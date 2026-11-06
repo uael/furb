@@ -108,8 +108,8 @@ export type PromptRead = { message: string | undefined; title: string; aside?: A
 
 /** One thread of a chain, as the list of the threads of that chain shows it: its prompt, the first line of its message,
  * its messages, the questions and the notices that it made for the operator, the questions that wait in it, and its
- * state. A thread is resolved when its prompt is over. A message of None on an open thread is over at once, so it
- * holds nothing open, and a prompt of str on a resolved thread opens it again until its model closes that prompt. */
+ * state. A thread is over when its prompt is over. A message of None on an open thread is over at once, so it
+ * holds nothing open, and a prompt of str on a thread that is over opens it again until its model closes that prompt. */
 export interface ChainThread {
   act: Act;
   title: string;
@@ -119,7 +119,7 @@ export interface ChainThread {
   /** The ids of the questions that wait for the operator. */
   asks: string[];
   state: State;
-  resolved: boolean;
+  over: boolean;
   /** Who made its prompt: the operator, a rung of a word, or an ear. */
   origin: "operator" | "rung" | "ear";
   /** Whether the operator started it, directly or by a word of their own. */
@@ -257,7 +257,7 @@ export function chainSorted(
       asked: [],
       asks: [],
       state: "done",
-      resolved: true,
+      over: true,
       origin,
       yours: by || (origin === "rung" && maker !== undefined && operated(maker.by)),
     });
@@ -272,7 +272,7 @@ export function chainSorted(
   for (const [id, ask] of waits) out.get(id)?.asks.push(ask);
   for (const thread of out.values()) {
     const open = [thread.act, ...thread.messages].findLast((act) => !isDone(act));
-    thread.resolved = !open;
+    thread.over = !open;
     thread.state = thread.asks.length ? "asks" : (open ?? thread.act).state;
   }
   return {
@@ -324,12 +324,10 @@ export function orderThreads(nodes: readonly ThreadNode[]): ThreadNode[] {
     .sort((one, other) => Number(threadOpen(one)) - Number(threadOpen(other)) || last(one) - last(other));
 }
 
-/** Whether a thread stands open in the list of the threads: it is not resolved, or a question waits in it or in an
+/** Whether a thread stands open in the list of the threads: it is not over, or a question waits in it or in an
  * agent under it. */
-export function threadOpen(
-  node: Pick<ThreadNode, "state"> & { thread: Pick<ChainThread, "resolved"> },
-): boolean {
-  return !node.thread.resolved || node.state === "asks";
+export function threadOpen(node: Pick<ThreadNode, "state"> & { thread: Pick<ChainThread, "over"> }): boolean {
+  return !node.thread.over || node.state === "asks";
 }
 
 /** What a tree of threads says to the operator, counted by thread: a question counts once, in the thread where it

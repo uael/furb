@@ -454,14 +454,13 @@ fn routed(verb: Verb) -> Routed {
   Routed::Life(life, command)
 }
 
-/// The command of a life that a verb on its configs comes to: a reload is a stand.
+/// The command of a life that a verb on its configs comes to.
 fn configured(config: Config) -> Command {
   match config {
     Config::Get => Command::Settings,
     Config::Set { key, value, layer } => {
-      Command::Configure(Change { key, value, layer: layer.map(Into::into).unwrap_or_default() })
+      Command::Configure(Change { key, value, layer: layer.unwrap_or_default() })
     }
-    Config::Reload => Command::Stand,
   }
 }
 
@@ -473,6 +472,10 @@ impl From<Reply> for Answer {
       Reply::Value(value) => Answer::Value(value),
       Reply::Values(values) => Answer::Values(values),
       Reply::Inspected { kind, repr, value } => Answer::Inspected { kind, repr, value },
+      Reply::Desk(desk) => Answer::Desk(desk),
+      Reply::Threads(threads) => Answer::Threads(threads),
+      Reply::Acts(acts) => Answer::Acts(acts),
+      Reply::Moments(moments) => Answer::Moments(moments),
     }
   }
 }
@@ -639,11 +642,22 @@ impl Lives {
     }
     let holder = birth.holder.clone();
     let opened = match self.held.get_mut(&life).map(|held| &mut held.stage) {
-      Some(Stage::Living(_)) => Ok(()),
+      Some(Stage::Living(_)) => self.answers(&life, birth.answerer.as_ref()),
       Some(Stage::Ending(waiting)) => return waiting.push((birth, reply)),
       None => self.opened(life.clone(), birth),
     };
     reply.send(opened.and_then(|()| self.held_by(&life, holder))).ok();
+  }
+
+  /// A later open with `answers` of a life that lives: its peer answers the models of the life in
+  /// the place of a peer that is gone, and is refused while that one lives. The models of a life
+  /// that no peer answers stay its models.
+  fn answers(&self, life: &str, asked: Option<&Answerer>) -> Result<(), ProtocolError> {
+    let held = self.held.get(life).and_then(|held| held.answerer.as_ref());
+    match (asked, held) {
+      (Some(asked), Some(held)) => held.taken_by(&asked.outbox()),
+      _ => Ok(()),
+    }
   }
 
   /// The life attached by the peer that opened it, when that peer asked to, before any end of

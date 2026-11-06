@@ -12,6 +12,7 @@
 //! The host names the models it offers, and gives the rest, its console, which reads what the
 //! operator answers by the rules of [`answered`]. Beside the ears, [`config`] is the one writer of
 //! the configs that the provider and the extensions read, for each host and each window.
+//! [`spawn`] starts the child of a host in a group that ends with it.
 //!
 //! Each is an ear like any other, so an ear that comes before one of them in the order of boot takes a question in
 //! its place, and an ear that takes a question and asks it again wraps it.
@@ -40,6 +41,7 @@ use std::{
 };
 
 pub use bash::{bash, program, shell};
+pub use child::{Group, Unborn, spawn};
 pub use fetch::fetch;
 pub use files::{CONFIG, files};
 pub use log::{log, logged};
@@ -109,9 +111,13 @@ pub(crate) async fn here<W: 'static>(co: &mut Co<W>, on: &str) -> Result<PathBuf
 /// run: the model reads that end, and asks again if it wants.
 pub(crate) async fn interrupted<W: 'static>(co: &mut Co<W>, a: &Fact) -> Result<(), Fault> {
   say(co, Fact::says("started", a.about(), []));
-  let why = format!("{} was interrupted: the life that ran it ended before it did", a.about());
   let id = vec![("id", Object::string(a.about()))];
-  co.call("close", vec![Fault::refused(why).object()], id).await.map(drop)
+  co.call("close", vec![Fault::refused(interruption(a.about())).object()], id).await.map(drop)
+}
+
+/// The refusal of an act that a life ended before the act did.
+pub(crate) fn interruption(id: &str) -> String {
+  format!("{id} was interrupted: the life that ran it ended before it did")
 }
 
 /// A path resolved against a directory, as a path of the machine: the directory with the path after it, or the path

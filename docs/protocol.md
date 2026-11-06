@@ -116,7 +116,7 @@ it is not given. The daemon answers requests in any order.
 | `names` | `life`, `on` | read |
 | `gate` | `life`, `word`, `on` | read |
 | `stand` | `life` | write |
-| `config` | `life`, `config`: `{"action": "get"}`, `{"action": "set", "key", "value", "layer"}` or `{"action": "reload"}` | read for get, else write |
+| `config` | `life`, `config`: `{"action": "get"}`, `{"action": "set", "key", "value", "layer"}` | read for get, else write |
 | `seen` | `life`, `about` | write |
 | `queue` | `life`, `entry`, `shape`, `message`, `on` | write |
 | `unqueue` | `life`, `entry` | write |
@@ -140,8 +140,7 @@ it is not given. The daemon answers requests in any order.
   the values that win and no layer, then with a value for each of its names. A set refuses a value that the property
   of its key does not take, and writes nothing. A set writes the key in its layer, `project` when none is named, or
   takes it out when no value is given, and then the life stands, so the answer is the act of the stand. A change that
-  the catalog cannot read puts its config back as it was, and the life does not stand. A reload is a stand on the
-  configs as the disk holds them, which asks again each model that waits to retry.
+  the catalog cannot read puts its config back as it was, and the life does not stand.
 - `list` gives each record of the machine as `lives`: each record of the sessions of each workspace that
   `workspaces.json` in the folder `config` names, the config folder of the daemon when the peer names none, in the
   `.furb/sessions` of its main checkout and of each worktree of it, with that main checkout as `workspace`, and each
@@ -163,7 +162,7 @@ it is not given. The daemon answers requests in any order.
   `request`: its `actor`, `chain`, `messages` and `settings`. The peer tells what it writes with `wrote`, and gives the
   turn, written as the record writes a value, or `why` it gives none, with `answered`. That peer alone speaks for each
   request of the life, by its connection, for the whole life: the daemon refuses a `wrote` or an `answered` of any
-  other peer with `foreign`, and the request still waits for its peer. A later `open` with `answers` moves nothing. A
+  other peer with `foreign`, and the request still waits for its peer. Once that peer is gone, a later `open` with `answers` of the life makes its peer answer each later request; while it lives, such an `open` is refused with `answering`. A
   request ends at its turn, when the life drops it, or when the connection of its peer ends, and fails in the last
   case. A `wrote` or an `answered` after its end is refused with `unasked`.
 - An `open` with `attach` attaches its peer in the same step, from that place in the log, as `attach` does. The life

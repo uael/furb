@@ -374,7 +374,7 @@ impl JsEngine {
     args: Option<Vec<Value>>,
     kwargs: Option<IndexMap<String, Value>>,
   ) -> napi::Result<Value> {
-    let (args, kwargs) = words(args, &kwargs);
+    let (args, kwargs) = words(args, kwargs.as_ref());
     self.said(&name, args, kwargs).map(Value)
   }
 
@@ -389,7 +389,7 @@ impl JsEngine {
     args: Option<Vec<Value>>,
     kwargs: Option<IndexMap<String, Value>>,
   ) -> napi::Result<Value> {
-    let (args, kwargs) = words(args, &kwargs);
+    let (args, kwargs) = words(args, kwargs.as_ref());
     self.held.call(|engine| engine.made(n, args, kwargs)).map(Value)
   }
 
@@ -451,7 +451,7 @@ impl JsEngine {
     args: Option<Vec<Value>>,
     kwargs: Option<IndexMap<String, Value>>,
   ) -> napi::Result<JsAct> {
-    let (args, kwargs) = words(args, &kwargs);
+    let (args, kwargs) = words(args, kwargs.as_ref());
     let id = self.held.call(|engine| engine.keyed(&key, &kind, args, kwargs))?;
     Ok(JsAct { held: Rc::clone(&self.held), id })
   }

@@ -294,6 +294,52 @@ fn a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_t
   assert_eq!(running, "[]", "no act stays running with no process");
 }
 
+#[test]
+fn a_life_that_a_fault_of_the_sandbox_stopped_opens_again_and_goes_on() {
+  crate::sand::BOUND.set(std::time::Duration::from_millis(100));
+  let at = place("faulted");
+  let cutter = "try:\n  while True:\n    pass\nfinally:\n  while True:\n    pass";
+  let mut first =
+    Opening { extensions: Some(false), ..scripted(&at, &[cutter]) }.boot::<String>([]).unwrap().0;
+  let on = Some("chain1".to_owned());
+  let message = Some("go".to_owned());
+  let asked = verbs::Prompt { message, on: on.clone(), ..Default::default() };
+  let prompt = first.prompt(Object::string("str"), asked).unwrap().id().to_owned();
+  drop(futures::executor::block_on(Act::<Object>::of(&mut first, &prompt)));
+  assert!(first.stopped().is_some(), "the second excess of the turn stops the life");
+  drop(first);
+  let mut later =
+    Opening { extensions: Some(false), ..scripted(&at, &["close('again')", "close('on')"]) }
+      .boot::<String>([])
+      .expect("a life that a fault stopped opens again")
+      .0;
+  assert!(later.stopped().is_none(), "the open does not run the word into the same stop");
+  let message = Some("go on".to_owned());
+  let asked = verbs::Prompt { message, on, ..Default::default() };
+  let next = later.prompt(Object::string("str"), asked).unwrap().id().to_owned();
+  let got = futures::executor::block_on(Act::<Object>::of(&mut later, &next)).unwrap();
+  assert_eq!(got.as_ref().as_str(), Some("on"), "the life goes on");
+  let state = format!(
+    "repr([peek('{prompt}'), peek([x[1] for x in transcript('chain1', 'rung') if x[2] == '{prompt}'][0])])"
+  );
+  let ended = later.word(&state, vec![]).unwrap();
+  let ended = ended.as_ref().as_str().unwrap_or_default().to_owned();
+  assert!(
+    ended.starts_with("['again', Refused(") && ended.contains("was interrupted"),
+    "the rung that stopped the life ends as interrupted, and its prompt asks its model again: {ended}"
+  );
+  drop(later);
+  let mut again =
+    Opening { extensions: Some(false), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+  assert!(again.stopped().is_none(), "a second open replays the end of the rung");
+  let replayed = again.word(&state, vec![]).unwrap();
+  assert_eq!(
+    replayed.as_ref().as_str().unwrap_or_default(),
+    ended,
+    "the replay holds the same state"
+  );
+}
+
 /// The engine that each fact made of a record names, in its order.
 fn builds(record: &Path) -> Vec<String> {
   let kept = world::kept(record).unwrap();
@@ -675,14 +721,14 @@ fn each_record_of_the_replays_replays_on_its_own_engine_with_no_drift() {
   let mut records: Vec<PathBuf> = fs::read_dir(replays())
     .unwrap()
     .map(|one| one.unwrap().path())
-    .filter(|one| one.extension().is_some_and(|named| named == "jsonl"))
+    .filter(|one| one.extension().is_some_and(|named| named == "jsonl" || named == "zst"))
     .collect();
   records.sort();
   assert!(!records.is_empty(), "tests/replay holds no record");
   for one in records {
-    let name = one.file_stem().unwrap().to_string_lossy().into_owned();
+    let name = one.file_stem().unwrap().to_string_lossy().trim_end_matches(".jsonl").to_owned();
     let at = place(&format!("replay-{name}"));
-    fs::copy(&one, at.join("record.jsonl")).unwrap();
+    laid(&one, &at.join("record.jsonl"));
     let kept = world::kept(at.join("record.jsonl")).unwrap();
     let made = kept
       .iter()
@@ -693,10 +739,41 @@ fn each_record_of_the_replays_replays_on_its_own_engine_with_no_drift() {
       "{name} holds no texts of its engine: give them with script/engines.py, as tests/replay/README.md says"
     );
     let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
-    if let Err(drift) = inspects.boot::<String>([]) {
+    if let Err(drift) = inspects.clone().boot::<String>([]) {
       panic!("{name} drifts on its own engine, a defect of this build: {drift}");
     }
+    if crate::checkpoint::last(&kept).is_some()
+      && let Err(drift) = (Opening { whole: Some(true), ..inspects }).boot::<String>([])
+    {
+      panic!("{name} drifts from its first entry, born again at each checkpoint: {drift}");
+    }
   }
+}
+
+#[test]
+fn a_record_of_an_engine_that_an_adapter_names_drifts_on_that_engine_without_the_adapter() {
+  use sha2::{Digest, Sha256};
+  let at = place("unadapted");
+  laid(&replays().join("ranks.jsonl.zst"), &at.join("record.jsonl"));
+  let mut lines: Vec<String> =
+    fs::read_to_string(at.join("record.jsonl")).unwrap().lines().map(str::to_owned).collect();
+  let made = lines.iter().position(|one| one.starts_with(r#"[["made""#)).unwrap();
+  let mut entry: serde_json::Value = serde_json::from_str(&lines[made]).unwrap();
+  let fact = entry[0].as_array_mut().unwrap();
+  // The same engine with one more line at its end, which no adapter names.
+  let engine = format!("{}\n", fact[7].as_str().unwrap());
+  let mut hash = Sha256::new();
+  for one in [engine.as_str(), fact[8].as_str().unwrap()] {
+    hash.update(one.as_bytes());
+    hash.update([0]);
+  }
+  fact[3] = format!("{:x}", hash.finalize()).into();
+  fact[7] = engine.into();
+  lines[made] = entry.to_string();
+  fs::write(at.join("record.jsonl"), lines.join("\n") + "\n").unwrap();
+  let drift =
+    Opening { inspecting: Some(true), ..opening(&at, false) }.boot::<String>([]).unwrap_err();
+  assert!(format!("{drift:?}").contains("rung3230 drifts"), "{drift:?}");
 }
 
 /// Each run of each chain whose word no turn of that chain shows, as a python expression in the names of the engine.
@@ -711,13 +788,25 @@ const UNSEEDED: &str = "[e[3] for e in transcript('chain1', 'enable') if e[4].st
                         ('user', e[4]) for n, t in enumerate(turns(on='chain1'))) or not all(m in \
                         module('chain1') for m in re.findall(r'^(?:def|class) (\\w+)', e[4], re.M)))]";
 
+/// A record of the replays, written whole at `to`: one that is too large to keep plain is kept
+/// by zstd with a long window, and read through it.
+fn laid(from: &Path, to: &Path) {
+  if from.extension().is_some_and(|named| named == "zst") {
+    let mut plain = zstd::Decoder::new(fs::File::open(from).unwrap()).unwrap();
+    plain.window_log_max(27).unwrap();
+    std::io::copy(&mut plain, &mut fs::File::create(to).unwrap()).unwrap();
+  } else {
+    fs::copy(from, to).unwrap();
+  }
+}
+
 /// Each record of `tests/replay`, and the record of the life of `WORK`, replayed in a life that
 /// only inspects it, by its name.
 fn replayed(by: &str) -> Vec<(String, Engine)> {
   let mut records: Vec<PathBuf> = fs::read_dir(replays())
     .unwrap()
     .map(|one| one.unwrap().path())
-    .filter(|one| one.extension().is_some_and(|named| named == "jsonl"))
+    .filter(|one| one.extension().is_some_and(|named| named == "jsonl" || named == "zst"))
     .collect();
   records.sort();
   let made = worked(&format!("shown-{by}-made"));
@@ -725,9 +814,9 @@ fn replayed(by: &str) -> Vec<(String, Engine)> {
   fs::rename(work.with_file_name("record.jsonl"), &work).unwrap();
   records.push(work);
   let open = |one: PathBuf| {
-    let name = one.file_stem().unwrap().to_string_lossy().into_owned();
+    let name = one.file_stem().unwrap().to_string_lossy().trim_end_matches(".jsonl").to_owned();
     let at = place(&format!("shown-{by}-{name}"));
-    fs::copy(&one, at.join("record.jsonl")).unwrap();
+    laid(&one, &at.join("record.jsonl"));
     let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
     (name, inspects.boot::<String>([]).unwrap().0)
   };
@@ -1473,7 +1562,10 @@ fn the_gate_is_on_unless_the_last_config_that_names_it_says_false() {
   fs::write(user.join("config.json"), r#"{"gate": false}"#).unwrap();
   assert!(!gated(), "the config of the user turns it off");
   fs::write(furb.join("config.json"), r#"{"gate": "no"}"#).unwrap();
-  assert!(!gated(), "a value that is no bool is as unsaid");
+  assert!(
+    gated(),
+    "configs that do not read, as with a value of the key that is no bool, leave it on"
+  );
   fs::write(furb.join("config.local.json"), r#"{"gate": true}"#).unwrap();
   assert!(gated(), "the local config of the project wins");
 }

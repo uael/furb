@@ -15,19 +15,21 @@ use std::{
 
 use super::{bash::whole, kept, resolved, store};
 use crate::testing::Yard;
+use std::env;
+use std::process;
 
 /// A directory of its own for one test, and empty.
 fn place(name: &str) -> Yard {
-  Yard::new(format!("furb-world-{name}-{}", std::process::id()))
+  Yard::new(format!("furb-world-{name}-{}", process::id()))
 }
 
 #[test]
 fn a_path_resolves_against_its_directory_with_every_dot_read_and_an_absolute_path_stands_as_it_is()
 {
-  let base = std::env::temp_dir().join("furb").join("w");
+  let base = env::temp_dir().join("furb").join("w");
   assert_eq!(resolved(&base, "a/../b/./c"), base.join("b").join("c"));
-  assert_eq!(resolved(&base, "../x"), std::env::temp_dir().join("furb").join("x"));
-  let elsewhere = std::env::temp_dir().join("elsewhere");
+  assert_eq!(resolved(&base, "../x"), env::temp_dir().join("furb").join("x"));
+  let elsewhere = env::temp_dir().join("elsewhere");
   assert_eq!(resolved(&base, &elsewhere.display().to_string()), elsewhere);
   assert_eq!(resolved(Path::new(&base), ""), base);
 }
@@ -108,7 +110,7 @@ fn two_holders_never_own_the_record_at_once_while_programs_start_and_the_record_
     .map(|_| {
       let over = Arc::clone(&over);
       thread::spawn(move || {
-        let program = std::env::current_exe().unwrap();
+        let program = env::current_exe().unwrap();
         while !over.load(Ordering::Relaxed) {
           drop(
             Command::new(&program)
