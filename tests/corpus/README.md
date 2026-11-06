@@ -42,12 +42,13 @@ as an operator does.
 - A change that makes a record of a release folder fail breaks the promise of its major version.
 - A later build of a major version can write a record that an earlier build of that major opens. Each reader skips each
   field that it does not know. The test `a_record_whose_checkpoint_holds_a_field_that_no_reader_knows_still_opens`
-  proves it on this build. The test `test_each_record_of_next_opens_on_the_last_release_once_that_release_holds_a_corpus`
+  proves it on this build. The test `test_each_record_of_next_opens_on_the_last_release_of_its_major_once_that_release_holds_a_corpus`
   in `test/outside/test_promise_rollback.py` proves it on the build before: in the suite of the gates, it installs the
-  program furb of the last release, as `.release-please-manifest.json` names it, and opens each record of `next` there
-  with no refusal and no drift. A release that holds no folder of its version came before the corpus, so its build reads
-  no record of the form of `next`, and the test skips it: 0.4.2 refuses each record of `next` as made by a later
-  version of the record. The first release that holds its folder is the first that the test opens `next` on.
+  program furb of the last release of the major of the build that holds a folder, and opens each record of `next` there
+  with no refusal and no drift. A major with no release that holds a folder came before the corpus, so no build of it reads
+  a record of the form of `next`, and the test skips it: 0.4.2 refuses each record of `next` as made by a later
+  version of the record. The first release that holds its folder is the first that the test opens `next` on. A release
+  of another major is never the build: the promise binds only within a major.
 - Before 1.0.0, no promise covers a release. A change with `!` in its title may make `next` again and delete the
   folders of 0.x. Make `next` with an empty home and an empty temporary folder. Then no file of your machine goes into
   a record:
