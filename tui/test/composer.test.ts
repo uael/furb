@@ -7,7 +7,7 @@ import { removeDemoDirectories } from "../src/demo.ts";
 import { emojis } from "../src/emoji.ts";
 import { count } from "../src/format.ts";
 import { palettes } from "../src/theme.ts";
-import { cellAt, composing, drawn } from "./composing.ts";
+import { cellAt, composing, drawn, framed } from "./composing.ts";
 import { idle } from "./idle.ts";
 
 // Each test opens a demo session, with its worker and its record, as the tests of the App do, and so has their time:
@@ -232,12 +232,11 @@ test("a sent text leaves its draft at once, and a program under edit opens from 
   ));
 
 test("the completion of a token reads the text before the cursor, whatever the width of the characters before it", () =>
-  composing(async ({ session, app, screen, frame }) => {
-    await session.projectFiles();
+  composing(async ({ app, screen, frame }) => {
     // A combining mark is inserted with the letter it marks, as a paste or an input method gives it.
     app.composer.insertText("Compare cafe\u0301 with ");
     await screen.mockInput.typeText("@READ");
-    await frame();
+    await framed(frame, (shown) => shown.includes("@README.md"), "the file README.md");
     screen.mockInput.pressTab();
     expect(app.composer.plainText).toBe("Compare cafe\u0301 with @README.md ");
     app.composer.setText("");
@@ -250,8 +249,7 @@ test("the completion of a token reads the text before the cursor, whatever the w
 
 test("a click on a suggestion completes the token as it stands when it is clicked", () =>
   composing(
-    async ({ session, app, screen, frame, click }) => {
-      await session.projectFiles();
+    async ({ app, screen, frame, click }) => {
       for (const [typed, more, completed] of [
         ["/rewi", "n", "/rewind "],
         ["Read @READ", "M", "Read @README.md "],
@@ -260,7 +258,9 @@ test("a click on a suggestion completes the token as it stands when it is clicke
         await screen.mockInput.typeText(typed);
         await frame();
         await screen.mockInput.typeText(more);
-        await click(completed.trim().split(" ").at(-1) ?? "");
+        const suggested = completed.trim().split(" ").at(-1) ?? "";
+        await framed(frame, (shown) => shown.includes(suggested), suggested);
+        await click(suggested);
         expect(app.composer.plainText).toBe(completed);
       }
     },

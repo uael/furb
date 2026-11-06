@@ -1547,7 +1547,7 @@ dependencies = [
  "napi",
  "napi-build",
  "napi-derive",
- "nucleo-matcher",
+ "nucleo",
  "num-bigint",
  "pyo3",
  "reqwest",
@@ -3207,6 +3207,17 @@ checksum = "d273983c5a657a70a3e8f2a01329822f3b8c8172b73826411a55751e404a0a4a"
 dependencies = [
  "memchr",
  "minimal-lexical",
+]
+
+[[package]]
+name = "nucleo"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5262af4c94921c2646c5ac6ff7900c2af9cbb08dc26a797e18130a7019c039d4"
+dependencies = [
+ "nucleo-matcher",
+ "parking_lot",
+ "rayon",
 ]
 
 [[package]]
