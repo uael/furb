@@ -6,12 +6,13 @@ import { join } from "node:path";
  * The environment of the tests, which the runner and the preload of `bun test` both give. The tests find no claude
  * command line, as on a machine that has none: a roster of the demo names a model that the aliases of a real program
  * may lack. A FURB_CLAUDE_BIN that is set and empty hides it, and the PATH stays whole, since a folder with claude may
- * hold node too. The paths are absolute, so that a run from any folder writes the configs and the cache under the
- * .furb of the root, which git ignores. It holds no variable of git: a commit through the hook of a worktree hands
- * GIT_DIR and GIT_INDEX_FILE to each process that it starts, and a git init of a test under them set core.bare = true
- * in the config of the clone, which each worktree shares. The cache holds the socket of the daemon of the tests, which
- * a Unix socket limits to 103 bytes on macOS, and a worktree, or the temporary directory of a life, can stand at a long
- * path. So the cache stands in /tmp, under a short name that holds a hash of the root, which keeps two worktrees apart.
+ * hold node too. The paths are absolute, so that a run from any folder writes the configs under the .furb of the root,
+ * which git ignores, and the cache in /tmp, as the last lines say. It holds no variable of git: a commit through the
+ * hook of a worktree hands GIT_DIR and GIT_INDEX_FILE to each process that it starts, and a git init of a test under
+ * them set core.bare = true in the config of the clone, which each worktree shares. The cache holds the socket of the
+ * daemon of the tests, which a Unix socket limits to 103 bytes on macOS, and a worktree, or the temporary directory of
+ * a life, can stand at a long path. So the cache stands in /tmp, under a short name that holds a hash of the root,
+ * which keeps two worktrees apart.
  */
 export function environment(
   base: Record<string, string | undefined> = process.env,
