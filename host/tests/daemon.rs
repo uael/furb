@@ -13,8 +13,6 @@ mod yard;
 mod daemon {
   use super::yard::Yard;
 
-  use std::process::Command;
-  use std::process::Stdio;
   use std::sync::mpsc::Receiver;
   use std::sync::mpsc::Sender;
   use std::sync::mpsc::channel;
@@ -1305,6 +1303,7 @@ mod daemon {
   /// Whether the process of a pid ends.
   #[cfg(unix)]
   async fn gone(pid: &str) -> bool {
+    use std::process::{Command, Stdio};
     let lives = || {
       Command::new("kill")
         .args(["-0", pid])
