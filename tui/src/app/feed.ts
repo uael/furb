@@ -287,13 +287,17 @@ export const feed = part({
         const acts = madeBy(rung.id);
         let done = 0;
         let printed = 0;
+        // The lines that a write added and removed come after the write, with the journal of its change, and its hint
+        // says them in place of its count of lines.
+        let counted = "";
         for (const one of acts) {
           if (one.done) done++;
           printed += one.output ?? 0;
+          if (one.lines) counted += `${one.lines.added}/${one.lines.removed},`;
         }
         // The word of a step that runs can still come, and the word of a step that ended stays as it is.
         const said = rung.done ? "" : (w.program[rung.id]?.length ?? 0);
-        return `${rung.id}:${rung.done}:${rung.run?.status ?? ""}:${said}:${acts.length}:${done}:${printed}`;
+        return `${rung.id}:${rung.done}:${rung.run?.status ?? ""}:${said}:${acts.length}:${done}:${printed}:${counted}`;
       };
       const liveOf = (ids: readonly string[]) =>
         ids

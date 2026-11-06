@@ -1022,6 +1022,9 @@ test("each line of a word says what its acts did as a quiet hint: a read its lin
       await session.engine.result(id);
       await session.refresh();
       session.folds[id] = false;
+      // The daemon writes the journal after it tells a write, so the lines that a write added and removed reach the
+      // view by a snapshot of their own, which may come after the refresh above: draw once each write carries them.
+      await until(session, () => session.acts.filter((act) => act.kind === "write" && act.lines).length === 2);
       const shown = await drawn(frame, screen.renderer.root);
       expect(shown).toMatch(/ 1 {2}write\(Text\("notes\.md".* +\+2 -0/);
       expect(shown).toMatch(/ 2 {2}write\(read\("notes\.md"\).* +2 lines {2}\+2 -1/);
