@@ -37,3 +37,11 @@ def test_the_action_of_the_measures_names_the_head_and_the_run_beside_the_folder
   assert "github.event.pull_request.head.sha" in meta["env"]["HEAD"]
   assert all(word in meta["run"] for word in ("GITHUB_RUN_ID", "GITHUB_RUN_ATTEMPT", "meta.json"))
   assert upload["with"]["path"] == "${{ runner.temp }}/measures"
+
+
+def test_the_bench_keeps_no_count_of_facts_that_its_log_does_not_hold_as_the_producer_made_it() -> None:
+  text = (ROOT / ".github" / "workflows" / "gates.yml").read_text(encoding="utf-8")
+  step = next(one for one in steps("bench") if "fixture.json" in one.get("run", ""))
+  assert "facts" not in step["run"] and "FURB_BENCH_FACTS" not in step["run"]
+  assert "tee" in next(one for one in steps("bench") if "bun run bench" in one.get("run", ""))["run"]
+  assert text.count("fixture.json") == 1
