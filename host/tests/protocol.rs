@@ -54,7 +54,7 @@ mod protocol {
     let id = || "prompt1".to_owned();
     let on = || Some("chain1".to_owned());
     vec![
-      Verb::List,
+      Verb::List { config: None },
       Verb::Open {
         life: life(),
         cwd: None,
@@ -437,7 +437,10 @@ mod protocol {
   #[tokio::test]
   async fn a_first_frame_that_is_no_hello_is_refused() {
     let mut client = served(Role::Write);
-    assert_eq!(client.ask(4, Verb::List).await, Frame::refused(Some(4), ProtocolError::First));
+    assert_eq!(
+      client.ask(4, Verb::List { config: None }).await,
+      Frame::refused(Some(4), ProtocolError::First)
+    );
     assert_eq!(client.heard().await, None);
   }
 
@@ -450,7 +453,7 @@ mod protocol {
       client.heard().await,
       Some(Frame::Refused { id: None, error: ProtocolError::Unread { .. }, .. })
     ));
-    assert!(matches!(client.ask(2, Verb::List).await, Frame::Reply { id: 2, .. }));
+    assert!(matches!(client.ask(2, Verb::List { config: None }).await, Frame::Reply { id: 2, .. }));
   }
 
   /// A folder of its own for the transport of one test, short enough for the path of a socket.

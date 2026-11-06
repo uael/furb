@@ -74,8 +74,13 @@ pub struct Request {
 #[serde(tag = "verb", rename_all = "snake_case")]
 pub enum Verb {
   Hello(Hello),
-  /// The lives and the records of the machine.
-  List,
+  /// The records of the machine: each record of the sessions of each workspace that
+  /// `workspaces.json` in the folder `config` names, the config folder of the daemon when the peer
+  /// names none, as a window keeps its list there, and each record that a life of the daemon holds.
+  List {
+    #[serde(default)]
+    config: Option<String>,
+  },
   /// The life of a record opened, in a folder or in the folder of its record. A life that this
   /// open makes stands on the actor, the roster and the extensions that the peer names, reads the
   /// settings of the user in the folder `config` and runs the claude command line `claude` when
@@ -347,7 +352,7 @@ impl Verb {
     let reads = matches!(
       self,
       Self::Hello(_)
-        | Self::List
+        | Self::List { .. }
         | Self::Attach { .. }
         | Self::Detach { .. }
         | Self::Presence { .. }
@@ -506,10 +511,14 @@ pub struct Handed {
   pub pins: Vec<String>,
 }
 
-/// A record of the machine, and whether a life of the daemon holds it now.
+/// A record of the machine: the main checkout of the workspace whose sessions hold it, when the
+/// list names one, whether a life of the daemon holds it now, and whether that life lives and does
+/// not end.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Listed {
   pub life: String,
+  pub workspace: Option<String>,
+  pub held: bool,
   pub open: bool,
 }
 
