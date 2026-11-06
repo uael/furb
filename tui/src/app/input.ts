@@ -238,12 +238,6 @@ export const input = part({
       },
       { on: "a", run: () => void this.nextAttention().catch(this.report), hint: ["a", "question"] },
       {
-        on: "r",
-        run: onThread((thread) => this.resolveThread(thread)),
-        when: () => this.railThread()?.resolved === false,
-        hint: ["r", "resolve"],
-      },
-      {
         on: "o",
         run: onThread((thread) => this.replyTo(thread.act.id)),
         when: () => Boolean(this.railThread()),

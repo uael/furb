@@ -77,7 +77,7 @@ async def test_a_skill_whose_metadata_names_a_word_has_code(tmp_path: Path) -> N
   assert [x for x in got if x.startswith(("note ", "skills ", "memory "))] == [
     "memory (code, default): Tells a chain the AGENTS.md or CLAUDE.md files of the project that apply to the files that it reads.",
     "note (code, default): A note.",
-    "skills (code, on): Lists the skills of the project and of the user, and loads one.",
+    "skills (code, on, default): Lists the skills of the project and of the user, and loads one.",
   ]
 
 
@@ -199,3 +199,25 @@ async def test_a_write_of_a_skill_that_the_life_runs_reloads_it(tmp_path: Path) 
     "def note() -> int:\n  return 2",
   ]
   assert await engine.rung("close(note())", on=root) == 2
+
+
+async def test_a_refused_write_of_a_skill_changes_no_file_and_a_good_one_replaces_it(tmp_path: Path) -> None:
+  """A write of skills:// and the name of a skill whose word binds a name of the engine at its top is refused with that finding and changes no file, and no copy of the folder of the skill stands."""
+  head = "name: {0}\ndescription: A note.\nmetadata:\n  furb-word: {0}.py"
+  original = "from furb.engine import read\n\n\ndef note():\n  return read('n')\n"
+  folder = skilled(tmp_path / "config" / "skills", "note", head.format("note")).parent
+  (folder / "note.py").write_text(original, encoding="utf-8")
+  mine = skilled(tmp_path / "work" / ".furb" / "extensions", "mine", head.format("mine")).parent
+  (mine / "mine.py").write_text(original, encoding="utf-8")
+  _, root = extended("skills", tmp_path, _monty.skills)
+  refused = r"The word (note|mine)\.py binds filled of the engine at its top"
+  for name in ("note", "mine"):
+    with pytest.raises(Refused, match=refused):
+      await engine.rung(f'close(write(Text("skills://{name}", "def filled():\\n  return 2")))', on=root)
+  assert not (tmp_path / "work" / ".furb" / "extensions" / "note").exists()
+  assert (folder / "note.py").read_text(encoding="utf-8") == original
+  assert (mine / "mine.py").read_text(encoding="utf-8") == original
+  await engine.rung('write(Text("skills://mine", "def noted():\\n  return 2"))', on=root)
+  assert (mine / "mine.py").read_text(
+    encoding="utf-8"
+  ) == "from furb.engine import read\n\n\ndef noted():\n  return 2\n"

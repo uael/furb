@@ -58,7 +58,7 @@ export type ChainRead = {
 };
 
 /** The mark of a thread in the list of the threads of a chain: it asks the operator, a pause holds it, it failed, a
- * cancel ended it, it is resolved with work that the operator did not read, it is resolved and seen, or it runs. Work
+ * cancel ended it, it is over with work that the operator did not read, it is over and seen, or it runs. Work
  * that the operator did not read concerns him only on a thread that he started. */
 export const threadMarks = (
   thread: ChainThread,

@@ -32,6 +32,10 @@ use super::{
   wire::{Failure, Heard},
 };
 use crate::ear::runtime;
+use std::mem;
+use std::path;
+use std::sync;
+use tokio::time;
 
 /// How many times in a row a server whose connection ended may fail to connect again.
 const RETRIES: u32 = 5;
@@ -64,35 +68,35 @@ enum Link {
 impl Link {
   /// The link of a server that the configs define, before any connect: failed when its definition
   /// is broken.
-  fn defined(server: &Server) -> Link {
+  fn defined(server: &Server) -> Self {
     match &server.run {
-      Err(why) => Link::Failed(why.to_string()),
-      Ok(_) if server.disabled => Link::Disabled,
-      Ok(_) if !server.approved => Link::Unapproved,
-      Ok(_) => Link::Pending,
+      Err(why) => Self::Failed(why.to_string()),
+      Ok(_) if server.disabled => Self::Disabled,
+      Ok(_) if !server.approved => Self::Unapproved,
+      Ok(_) => Self::Pending,
     }
   }
 
   /// The name of the state, as a server dict gives it.
   fn name(&self) -> &'static str {
     match self {
-      Link::Pending => "pending",
-      Link::Connected { .. } => "connected",
-      Link::Failed(_) => "failed",
-      Link::NeedsAuth { .. } => "needs-auth",
-      Link::Disabled => "disabled",
-      Link::Unapproved => "unapproved",
+      Self::Pending => "pending",
+      Self::Connected { .. } => "connected",
+      Self::Failed(_) => "failed",
+      Self::NeedsAuth { .. } => "needs-auth",
+      Self::Disabled => "disabled",
+      Self::Unapproved => "unapproved",
     }
   }
 
   /// Why the server of this name is in the state, as a server dict gives it, or none.
   fn why(&self, name: &str) -> Option<String> {
     match self {
-      Link::Failed(why) => Some(why.clone()),
-      Link::NeedsAuth { .. } => {
+      Self::Failed(why) => Some(why.clone()),
+      Self::NeedsAuth { .. } => {
         Some(format!("the server asks for a login: mcp_control('login', {name:?})"))
       }
-      Link::Pending | Link::Connected { .. } | Link::Disabled | Link::Unapproved => None,
+      Self::Pending | Self::Connected { .. } | Self::Disabled | Self::Unapproved => None,
     }
   }
 }
@@ -110,14 +114,14 @@ enum Action {
 
 impl Action {
   /// The action of this name, or why there is none.
-  fn of(name: &str) -> Result<Action, Error> {
+  fn of(name: &str) -> Result<Self, Error> {
     match name {
-      "reconnect" => Ok(Action::Reconnect),
-      "enable" => Ok(Action::Enable),
-      "disable" => Ok(Action::Disable),
-      "approve" => Ok(Action::Approve),
-      "login" => Ok(Action::Login),
-      "logout" => Ok(Action::Logout),
+      "reconnect" => Ok(Self::Reconnect),
+      "enable" => Ok(Self::Enable),
+      "disable" => Ok(Self::Disable),
+      "approve" => Ok(Self::Approve),
+      "login" => Ok(Self::Login),
+      "logout" => Ok(Self::Logout),
       other => Err(Error::Action(other.to_owned())),
     }
   }
@@ -156,8 +160,8 @@ pub(super) struct Hub {
 
 impl Hub {
   /// The servers of a life, none loaded yet, which tell each change that no question asked for to `told`.
-  pub(super) fn new(settings: Settings, told: mpsc::UnboundedSender<String>) -> Arc<Hub> {
-    Arc::new(Hub {
+  pub(super) fn new(settings: Settings, told: mpsc::UnboundedSender<String>) -> Arc<Self> {
+    Arc::new(Self {
       settings,
       entries: Mutex::new(Vec::new()),
       loaded: Mutex::new(false),
@@ -168,17 +172,17 @@ impl Hub {
   }
 
   fn entries(&self) -> MutexGuard<'_, Vec<Entry>> {
-    self.entries.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    self.entries.lock().unwrap_or_else(sync::PoisonError::into_inner)
   }
 
   /// The servers that the configs define, read again: a server whose definition did not change keeps its connection,
   /// a new or changed one connects when it may run, and one that the configs no longer define ends.
   pub(super) fn reload(self: &Arc<Self>) {
-    *self.loaded.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = true;
+    *self.loaded.lock().unwrap_or_else(sync::PoisonError::into_inner) = true;
     let variables = Arc::clone(&self.settings.variables);
     let servers = config::servers(&self.settings.places, &|name| variables(name));
     let mut entries = self.entries();
-    let mut held: Vec<Entry> = std::mem::take(&mut *entries);
+    let mut held: Vec<Entry> = mem::take(&mut *entries);
     for server in servers {
       let kept = held.iter().position(|one| one.server == server).map(|at| held.remove(at));
       let entry = kept.unwrap_or_else(|| {
@@ -206,7 +210,7 @@ impl Hub {
 
   /// The servers, loaded once: a question that comes before any list of the servers loads them.
   fn loaded(self: &Arc<Self>) {
-    if !*self.loaded.lock().unwrap_or_else(std::sync::PoisonError::into_inner) {
+    if !*self.loaded.lock().unwrap_or_else(sync::PoisonError::into_inner) {
       self.reload();
     }
   }
@@ -253,7 +257,7 @@ impl Hub {
         matches!(one.link, Link::Pending)
           && (names.is_empty() || names.contains(&one.server.name.as_str()))
       });
-      if !pending || tokio::time::timeout_at(deadline, moved).await.is_err() {
+      if !pending || time::timeout_at(deadline, moved).await.is_err() {
         return;
       }
     }
@@ -439,13 +443,13 @@ impl Hub {
   }
 
   /// The directory of the images of the life.
-  pub(super) fn gallery(&self) -> Option<&std::path::Path> {
+  pub(super) fn gallery(&self) -> Option<&path::Path> {
     self.settings.gallery.as_deref()
   }
 
   /// Every server ended: each connection closed, and each process of a server ended with every process it started.
   pub(super) fn end(&self) {
-    let held = std::mem::take(&mut *self.entries());
+    let held = mem::take(&mut *self.entries());
     drop(held);
   }
 }
@@ -638,7 +642,7 @@ async fn keep(hub: Arc<Hub>, name: String, generation: u64) {
         None => return,
       },
     };
-    tokio::time::sleep(wait).await;
+    time::sleep(wait).await;
   }
 }
 

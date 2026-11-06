@@ -21,10 +21,14 @@ use super::{
   thinking::merged,
   watch,
 };
+use crate::value;
 use crate::{
   value::{Object, ObjectRef, entry},
   wire,
 };
+use std::future;
+use std::mem;
+use tokio::time;
 
 /// One response of a model of rig, streamed: what it writes is told as it comes, and the response
 /// holds it whole, with the raw record of its end, where a model says what the turn cost. A model
@@ -218,7 +222,7 @@ pub(super) fn answered(call: Answering) -> impl Stream<Item = Replied> {
   // The reply comes through the channel alone, so it comes after all that its model wrote before
   // it.
   let told = stream::poll_fn(move |cx| told.poll_recv(cx));
-  let came = stream::once(came).filter_map(std::future::ready);
+  let came = stream::once(came).filter_map(future::ready);
   stream::select(told, came)
 }
 
@@ -271,7 +275,7 @@ impl Waits {
       let wait = retry.wait;
       let retried = Retried { id: self.id.clone(), retry, limit };
       self.tells.send(Replied::Retried(retried)).map_err(reply_gone)?;
-      tokio::time::sleep(wait).await;
+      time::sleep(wait).await;
       released(&mut self.hold).await?;
     }
   }
@@ -296,12 +300,12 @@ impl Waits {
         reset.map_or(String::new(), |at| at.strftime(" until %Y-%m-%d %H:%M (%Q)").to_string());
       let why = format!("usage limit{until}");
       let retry = Retry { attempt: self.attempt + 1, most, wait, why };
-      return Ok((retry, !std::mem::replace(&mut self.limited, true)));
+      return Ok((retry, !mem::replace(&mut self.limited, true)));
     }
     if let Some(claude::Error::SignedOut(_)) = claude::error(&no) {
       let why = "signed out, sign in again".to_owned();
       let retry = Retry { attempt: self.attempt + 1, most, wait: SIGN_POLL, why };
-      return Ok((retry, !std::mem::replace(&mut self.signed, true)));
+      return Ok((retry, !mem::replace(&mut self.signed, true)));
     }
     let Some(why) = passing(&no).filter(|_| self.attempt < most) else { return Err(no) };
     self.attempt += 1;
@@ -523,7 +527,7 @@ pub(super) fn uuid_from(
   })?;
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  let digits = crate::value::hex(&bytes);
+  let digits = value::hex(&bytes);
   Ok(format!(
     "{}-{}-{}-{}-{}",
     &digits[..8],

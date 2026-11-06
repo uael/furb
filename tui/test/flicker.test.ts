@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createTestRenderer, type RecordedFrame, TestRecorder } from "@opentui/core/testing";
+import { isDone } from "furb/life";
 import { mount } from "../script/stage.ts";
 import { demoSession, removeDemoDirectories, seedDemoFiles } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
@@ -24,7 +25,7 @@ async function streamed(): Promise<RecordedFrame[]> {
   const { library, app } = await mount(session, screen.renderer);
   const recorder = new TestRecorder(screen.renderer, { recordBuffers: { fg: true } });
   const busy = () =>
-    session.activity.some((act) => !act.done && ["prompt", "rung", "bash"].includes(act.kind));
+    session.activity.some((act) => !isDone(act) && ["prompt", "rung", "bash"].includes(act.kind));
   const pause = (milliseconds: number) => new Promise((done) => setTimeout(done, milliseconds));
   try {
     await loadParsers();

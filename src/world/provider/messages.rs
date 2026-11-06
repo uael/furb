@@ -8,10 +8,12 @@ use rig_core::{
 };
 
 use super::{images::Images, model::Model, watch};
+use crate::fact;
 use crate::{
   value::{ObjectRef, entry},
   wire,
 };
+use std::mem;
 
 /// The id of a thought that the provider cut at the most of its turn, or that ended with no word,
 /// and gave back to its model to write its word with no more thought.
@@ -116,7 +118,7 @@ pub(super) fn messages(
         model.name
       )));
     }
-    spoken(&mut messages, python, seen, std::mem::take(&mut joins));
+    spoken(&mut messages, python, seen, mem::take(&mut joins));
   }
   Ok(messages)
 }
@@ -167,7 +169,7 @@ pub(super) fn refusal(python: &str) -> Option<usize> {
     let at = from + python[from..].find(" refused\n")?;
     let start = python[..at].rfind('\n').map_or(0, |one| one + 1);
     let name = python[start..at].strip_prefix('#').unwrap_or_default();
-    if crate::fact::named(name, "rung") && (start == 0 || python[..start].ends_with("\n\n")) {
+    if fact::named(name, "rung") && (start == 0 || python[..start].ends_with("\n\n")) {
       break (name, at + " refused\n".len());
     }
     from = at + 1;

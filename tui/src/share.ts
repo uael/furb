@@ -2,6 +2,7 @@ import { copyFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { display, imageContent, imageReferences } from "furb";
+import { outcomeOf } from "furb/life";
 import { Marked } from "marked";
 import { conversation } from "./conversation.ts";
 import { escaped } from "./format.ts";
@@ -48,7 +49,7 @@ export function shareHtml(session: Session): string {
         `<section class="prompt"><h2>${session.isUserPrompt(item.act) ? "You" : "Observation"}</h2>${prose(text)}${images}</section>`,
       );
     } else if (item.type === "result")
-      sections.push(`<section><h2>Result</h2>${prose(display(item.act.value))}</section>`);
+      sections.push(`<section><h2>Result</h2>${prose(display(outcomeOf(item.act)))}</section>`);
     else if (item.type === "note")
       sections.push(
         `<details><summary>${escaped(item.label)} ${escaped(item.act?.id ?? item.detail)}</summary><pre>${escaped([item.detail, item.body].filter(Boolean).join("\n"))}</pre></details>`,
@@ -79,7 +80,7 @@ export function shareMarkdown(session: Session): string {
         ),
         "",
       );
-    } else if (item.type === "result") lines.push("## Result", "", display(item.act.value), "");
+    } else if (item.type === "result") lines.push("## Result", "", display(outcomeOf(item.act)), "");
     else if (item.type === "note")
       lines.push(
         `### ${item.label}`,

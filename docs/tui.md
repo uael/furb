@@ -67,15 +67,14 @@ A click on a workspace gives it the focus: its session that asks, else one that 
 feed. A click on the arrow of a workspace that has not the focus shows its sessions without a change of focus. A click
 on a thread shows it in the feed, on its chain, scrolled to its end with its last message in view, and the input then sends each message to it, as `prompt(None, message,
 on=thread)` while the thread is open: its model reads it at its next step, and it is over at once, so no close answers it.
-A message to a resolved thread is a `prompt(str, message, on=thread)`, which opens it again. Under
-the thread lit, Collapse folds it in the feed to its box on one line, Resolve closes it, as `close(None, thread)` does,
-and Reply makes it the target of the input, as Reply at the end of its box does. ⌥C folds the thread in the middle
-of the feed too. The resolved threads stand
-at the top, folded under one row, Resolved, which a click opens, and the open threads stand last, nearest the input,
-each group in the order of its last message. The threads that the ladder of a thread made, its agents, fold under it to one row
+A thread is over only when its model closes its prompt: no click and no key of the window closes it. A message to a
+thread that is over is a `prompt(str, message, on=thread)`, which opens it again. Under the thread lit, Collapse folds
+it in the feed to its box on one line, and Reply makes it the target of the input, as Reply at the end of its box does.
+⌥C folds the thread in the middle of the feed too, as the toggle of its header does. The threads that are over stand
+first, and the open threads stand last, nearest the input, each group in the order of its last message. The threads that the ladder of a thread made, its agents, fold under it to one row
 with their count, Agents, which a click opens, each agent one step deeper, and a question in an agent shows on the row
 of the thread over it. After ⌥T the arrows move in the sidebar, Enter opens the workspace, the session or
-the thread under them, → peeks at a workspace, Space folds, r resolves, o replies, and Esc gives the keys back to the
+the thread under them, → peeks at a workspace, Space folds, o replies, and Esc gives the keys back to the
 input. Under the sidebar, in the corner beside the input, Context says how full the window of the chain shown is and where a
 grant pauses it, its tokens, and what it spent. It says No answer yet before the first answer. The list ends as far above
 it as the last thread of the feed ends above the input, and the context ends on the row where the input ends. The keys of
@@ -163,13 +162,13 @@ blocks no word: the word that awaits it goes on at once, and no row of the feed 
 Collapse on the header
 of a thread, or ⌥D, which lists the threads, folds the thread to its box on one line, which says its state, the
 first line of its message and the count of its steps, and Expand opens it again. This toggle is the one control of a
-thread in the feed: a click in the body of a thread never folds it and never resolves it. When the header of a thread
+thread in the feed: a click in the body of a thread never folds it and never closes it. When the header of a thread
 taller than the feed scrolls above the feed, the header stands pinned at the top of the feed on one row, with a rule
 under it: who sent the message, the title of the thread in bold, its state and the same toggle, until the box of the
 thread leaves the top. A fold from the toggle scrolls the
 feed so that the header of the thread shows. A dot
 before a folded thread says that work came to it since you folded it, and the mark of a question says that it asks
-you. A resolved thread that is
+you. A thread that is over and is
 not the last of its chain starts folded, and `/autocollapse` turns that fold off, and on again. A right click on a
 name inspects it.
 

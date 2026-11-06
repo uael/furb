@@ -8,6 +8,10 @@ use std::{
 };
 
 use super::{Account, Accounts, CONFIG, Source, Switch, TOKEN};
+use crate::testing;
+use std::env;
+use std::ffi;
+use std::process;
 
 fn listed(names: &[&str]) -> Vec<Account> {
   let source = Source::TokenEnv("PATH".to_owned());
@@ -19,7 +23,7 @@ fn at(seconds: u64) -> SystemTime {
 }
 
 fn envs(command: &Command) -> Vec<(String, Option<String>)> {
-  let text = |one: &std::ffi::OsStr| one.to_string_lossy().into_owned();
+  let text = |one: &ffi::OsStr| one.to_string_lossy().into_owned();
   command.get_envs().map(|(key, value)| (text(key), value.map(text))).collect()
 }
 
@@ -62,7 +66,7 @@ fn no_account_listed_is_the_login_of_the_environment_and_is_never_moved() {
 
 #[test]
 fn an_account_gives_its_token_or_its_config_dir_and_takes_away_each_other_credential() {
-  let folder = crate::testing::Yard::unmade(format!("furb-accounts-{}", std::process::id()));
+  let folder = testing::Yard::unmade(format!("furb-accounts-{}", process::id()));
   fs::create_dir_all(&folder).unwrap();
   let file = folder.join("token");
   fs::write(&file, "  tok-file \n").unwrap();
@@ -79,7 +83,7 @@ fn an_account_gives_its_token_or_its_config_dir_and_takes_away_each_other_creden
 
   let mut command = Command::new("claude");
   accounts(Source::TokenEnv("PATH".to_owned())).apply(0, &mut command).unwrap();
-  let path = std::env::var("PATH").unwrap();
+  let path = env::var("PATH").unwrap();
   assert!(envs(&command).contains(&(TOKEN.to_owned(), Some(path.trim().to_owned()))));
 
   let mut command = Command::new("claude");

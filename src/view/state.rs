@@ -55,8 +55,9 @@ impl State {
     matches!(self, State::Thinks | State::Runs | State::Delegates)
   }
 
-  /// The state of one act. A rung whose word has not come yet is its model that thinks, and an act
-  /// that is no work and lives, as a chain or a grant, is work that waits on another chain.
+  /// The state of one act. A rung whose word has not come yet is its model that thinks while a
+  /// reply of it runs, and rests while it waits for its turn, and an act that is no work and lives,
+  /// as a chain or a grant, is work that waits on another chain.
   pub fn of(act: &Act) -> State {
     let done = act.done();
     if act.owed() {
@@ -72,7 +73,7 @@ impl State {
     } else if done && (act.kind != Kind::Rung || act.run != Some(RunState::Running)) {
       State::Done
     } else if act.kind == Kind::Rung && !done && act.word.is_none() {
-      State::Thinks
+      if act.asking { State::Thinks } else { State::Idle }
     } else {
       State::Runs
     }
@@ -80,16 +81,21 @@ impl State {
 }
 
 /// What the work of a chain that is not done does, from its own acts and the prompts that its words
-/// made on other chains: a model that writes a word of it thinks, a command or a wait of it runs,
-/// and a word of it that awaits only another chain delegates.
+/// made on other chains: a model that writes a word of it thinks, a command or a wait of it runs, a
+/// word of it that awaits only another chain delegates, and a chain whose open rungs only wait for
+/// their turn rests.
 pub fn working(local: &[&Act], remote: &[&Act]) -> State {
-  let mut open = local.iter().filter(|act| !act.done());
-  if open.clone().any(|act| act.kind == Kind::Rung && act.word.is_none()) {
+  let open: Vec<&Act> = local.iter().copied().filter(|act| !act.done()).collect();
+  let turn = |act: &Act| act.kind == Kind::Rung && act.word.is_none();
+  let rungs = || open.iter().filter(|act| act.kind == Kind::Rung);
+  if open.iter().any(|act| turn(act) && act.asking) {
     State::Thinks
-  } else if open.any(|act| matches!(act.kind, Kind::Bash | Kind::Wait)) {
+  } else if open.iter().any(|act| matches!(act.kind, Kind::Bash | Kind::Wait)) {
     State::Runs
   } else if remote.iter().any(|act| !act.done()) {
     State::Delegates
+  } else if rungs().any(|act| turn(act)) && rungs().all(|act| turn(act)) {
+    State::Idle
   } else {
     State::Runs
   }

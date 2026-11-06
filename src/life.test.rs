@@ -57,17 +57,14 @@ fn kinds(record: &[Object]) -> Vec<String> {
 fn a_life_enables_what_the_configs_turn_on_and_a_later_life_runs_what_its_record_enables() {
   let at = place("configs");
   let (mut first, _) = opening(&at, true).boot::<String>([]).unwrap();
-  assert_eq!(
-    names(&mut first),
-    ["catchup", "memory", "skills", "compaction", "naming", "ouroboros", "web", "mcp"]
-  );
+  assert_eq!(names(&mut first), ["catchup", "memory", "skills", "compaction", "naming"]);
   drop(first);
   fs::create_dir_all(at.join("config")).unwrap();
   fs::write(at.join("config").join("config.json"), r#"{"extensions": {"skills": false}}"#).unwrap();
   let (mut later, record) = opening(&at, true).boot::<String>([]).unwrap();
   assert_eq!(
     names(&mut later),
-    ["catchup", "memory", "skills", "compaction", "naming", "ouroboros", "web", "mcp"],
+    ["catchup", "memory", "skills", "compaction", "naming"],
     "the record wins over the configs"
   );
   drop(later);
@@ -77,7 +74,7 @@ fn a_life_enables_what_the_configs_turn_on_and_a_later_life_runs_what_its_record
   let (mut fresh, _) = Opening { record: fresh, ..opening(&at, true) }.boot::<String>([]).unwrap();
   assert_eq!(
     names(&mut fresh),
-    ["catchup", "memory", "compaction", "naming", "ouroboros", "web", "mcp"],
+    ["catchup", "memory", "compaction", "naming"],
     "a life on a new record enables what the configs turn on"
   );
 }
@@ -761,8 +758,8 @@ fn a_replay_of_work_shows_each_file_of_an_extension_as_the_rung_of_its_read_then
   let enables = engine.word("len(transcript('chain1', 'enable'))", vec![]).unwrap();
   assert_eq!(
     enables.as_ref().as_int(),
-    Some(8),
-    "each official extension runs on the life of work"
+    Some(5),
+    "each official extension that plays by default runs on the life of work"
   );
   let unseeded = engine.word(UNSEEDED, vec![]).unwrap();
   assert_eq!(unseeded.as_ref().items().unwrap().len(), 0, "{}", unseeded.as_ref().py_repr());

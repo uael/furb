@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
-import type { FileChange, ImageAttachment, LiveAct, SetupInfo, Turn } from "furb";
+import type { FileChange, ImageAttachment, SetupInfo, Turn } from "furb";
 import {
   actorParts,
   decodeRecord,
@@ -18,15 +18,13 @@ import {
   unmarked,
   WORK,
 } from "furb";
-import type { PauseCause } from "furb/life";
+import type { Act, Exit, PauseCause } from "furb/life";
 import {
   type ActIndex,
   type Ask,
-  actState,
   aimed,
   asOf,
   beside,
-  busy,
   type ChainAside,
   type ChainThread,
   cancelled,
@@ -35,13 +33,17 @@ import {
   type Desk,
   desk,
   failed,
+  isDone,
+  isPaused,
   momentsOf,
   type NoteRun,
+  onThread,
   operated,
+  outcomeOf,
+  reasonOf,
   rollUp,
   type State,
   threadWork,
-  working as workOf,
 } from "furb/life";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { clock } from "./clock.ts";
@@ -60,10 +62,13 @@ import { branchNotice } from "./watching.ts";
 /** The views of a chain: the feed of what it did, the transcript that the model reads, and the files it changed. */
 export const views = ["feed", "transcript", "changes"] as const;
 export type View = (typeof views)[number];
-/** An act as the views read it. A command that printed more than a row carries holds the tail of each stream, and
- * the length of all it printed; the view reads the whole act when it shows the output. */
-export type ActRow = LiveAct & {
+/** An act as the views read it: an act of the daemon, with its meaning. A command that printed more than a row
+ * carries holds the tail of each stream, and the length of all it printed; the view reads the whole act when it shows
+ * the output. */
+export type ActRow = Act & {
   output?: number;
+  /** What a command that is not done printed so far, as the tail of each stream. */
+  printed?: Exit;
   /** The lines of the text that a read gave or that a write wrote, whose text the row leaves out. */
   count?: number;
   /** The lines that the change of a write added and removed. */
@@ -130,17 +135,14 @@ export const statusLabels: Record<Status, string> = {
   opening: "Opening",
   saved: "Saved",
 };
-/** Whether an act is at work: it lives, no pause holds it, and its kind is one whose work takes time. */
 /** Whether an act is a notice to the operator: a prompt of None to him, which tells and asks nothing. */
 export const notice = (act: ActRow): boolean =>
   act.kind === "prompt" && act.words[0] === "None" && act.words[2] === "operator";
-export const working = (act: ActRow): boolean =>
-  !act.done && !act.paused && !act.unfinished && WORK.includes(act.kind);
 /** The phase of an act that a view of the whole life reads: whether it is done or held, when it began and ended, and
  * how its rung ran. The output that a command streams is no part of it. */
 function phaseOf(act?: ActRow): string {
   return act
-    ? `${act.done}|${act.paused}|${act.asking}|${act.began}|${act.ended}|${act.run?.status}|${act.run?.reason}`
+    ? `${isDone(act)}|${isPaused(act)}|${act.asking}|${act.state}|${act.began}|${act.ended}|${act.run?.run}|${reasonOf(act.run)}`
     : "";
 }
 
@@ -208,46 +210,46 @@ function placed(index: Index, act: ActRow): void {
     lists.set(key, list);
     return list;
   };
-  const written = Boolean(at?.written) || (act.kind === "write" && act.done);
+  const written = Boolean(at?.written) || (act.kind === "write" && isDone(act));
   if (written && !at?.written) index.written.push(act);
   index.places.set(act.id, {
-    on: into(listed(index.on, act.on), at?.on),
+    on: into(listed(index.on, act.chain), at?.on),
     made: into(listed(index.made, act.by), at?.made),
     ...(act.kind === "chain"
       ? { chain: into(index.chains, at?.chain) }
-      : { work: into(listed(index.work, act.on), at?.work) }),
+      : { work: into(listed(index.work, act.chain), at?.work) }),
     written,
   });
-  if (!act.done || act.run?.status === "running") index.live.set(act.id, act);
+  if (!isDone(act) || act.run?.run === "running") index.live.set(act.id, act);
   else index.live.delete(act.id);
   index.stamps.set(act.by, (index.stamps.get(act.by) ?? 0) + 1);
-  index.chained.set(act.on, (index.chained.get(act.on) ?? 0) + 1);
-  if (act.kind === "prompt") index.threaded.set(act.on, ++index.prompts);
-  index.touched.push(act.on);
-  const latest = index.latest.get(act.on);
+  index.chained.set(act.chain, (index.chained.get(act.chain) ?? 0) + 1);
+  if (act.kind === "prompt") index.threaded.set(act.chain, ++index.prompts);
+  index.touched.push(act.chain);
+  const latest = index.latest.get(act.chain);
   if (
     act.kind !== "chain" &&
     act.kind !== "grant" &&
     (!latest || (index.at.get(latest.id) ?? 0) <= (index.at.get(act.id) ?? 0))
   ) {
-    index.latest.set(act.on, act);
-    if (failed(act)) index.failing.add(act.on);
-    else index.failing.delete(act.on);
+    index.latest.set(act.chain, act);
+    if (failed(act)) index.failing.add(act.chain);
+    else index.failing.delete(act.chain);
   }
   const naming = act.kind === "rename_session" ? "said" : act.kind === "name_session" ? "given" : undefined;
-  if (naming && act.done && typeof act.value === "string" && (naming === "said" || act.value)) {
-    const names = index.named.get(act.on) ?? {};
-    index.named.set(act.on, names);
+  if (naming && isDone(act) && typeof outcomeOf(act) === "string" && (naming === "said" || outcomeOf(act))) {
+    const names = index.named.get(act.chain) ?? {};
+    index.named.set(act.chain, names);
     const past = names[naming];
     if (!past || (index.at.get(past.id) ?? 0) <= (index.at.get(act.id) ?? 0)) names[naming] = act;
   }
-  if (act.kind === "read" && act.done && act.words[0] === "skills://") {
+  if (act.kind === "read" && isDone(act) && act.words[0] === "skills://") {
     const past = index.skills;
     if (!past || (index.at.get(past.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.skills = act;
   }
   if (act.kind !== "rung" || !operated(act.by)) return;
-  const word = index.words.get(act.on);
-  if (!word || (index.at.get(word.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.words.set(act.on, act);
+  const word = index.words.get(act.chain);
+  if (!word || (index.at.get(word.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.words.set(act.chain, act);
 }
 
 /** The index of a list of acts, each placed in its order, which goes on from the count of prompts of the index
@@ -455,10 +457,10 @@ export class Session extends EventEmitter {
   cause: PauseCause | null = null;
   editing?: string;
   /** The thread that the operator chose in the sidebar, to which the input sends each message as prompt(None, message,
-   * on=thread): its model reads it at its next step, and a message to a resolved thread opens it again. */
+   * on=thread): its model reads it at its next step, and a message to a thread that is over opens it again. */
   thread?: string;
   /** The open thread of the chain shown, to which the input sends a message by default, as long as the operator chose
-   * no thread and did not ask for a new one: its last thread that is not resolved. */
+   * no thread and did not ask for a new one: its last thread that is not over. */
   get openThread(): ChainThread | undefined {
     return this.threads.list.findLast((one) => !one.resolved);
   }
@@ -486,7 +488,7 @@ export class Session extends EventEmitter {
    * again, as the engine reads a prompt on a thread. */
   lineShape(thread: string): "None" | "str" {
     const prompt = this.acts.find((act) => act.id === thread);
-    return prompt?.kind === "prompt" && !prompt.done && prompt.words[2] !== "operator" ? "None" : "str";
+    return prompt?.kind === "prompt" && !isDone(prompt) && prompt.words[2] !== "operator" ? "None" : "str";
   }
   /** The input sends its next message to the thread named, or starts a new thread when none is named. */
   aim(thread?: string): void {
@@ -692,7 +694,11 @@ export class Session extends EventEmitter {
    * from the operator gives the name of the directory again. */
   get recordName(): string | undefined {
     const names = this.indexed().named.get(this.engine.root);
-    const said = names?.said?.value ?? this.keptName ?? this.legacyName ?? names?.given?.value;
+    const said =
+      (names?.said ? outcomeOf(names?.said) : undefined) ??
+      this.keptName ??
+      this.legacyName ??
+      (names?.given ? outcomeOf(names?.given) : undefined);
     const name = said === undefined ? undefined : String(said);
     return name === undefined ? undefined : name || basename(this.host.directory);
   }
@@ -880,13 +886,13 @@ export class Session extends EventEmitter {
             index.ids.set(act.id, act);
             this.revise(act.id);
             placed(index, act);
-            if (!act.done) this.started[act.id] ??= clock();
+            if (!isDone(act)) this.started[act.id] ??= clock();
             // Only the prompts tell when a thread changed, so the table stays as small as the threads: a step stamps the
             // prompt that it works for, and a message stamps the head of its thread.
             if (phased && this.counted !== 0 && (act.kind === "prompt" || act.kind === "rung")) {
               const now = clock();
               const maker = act.kind === "rung" ? act.by : act.id;
-              const head = index.ids.get(maker)?.thread;
+              const head = index.ids.get(maker) !== undefined && onThread(index.ids.get(maker));
               for (const id of [act.id, maker, head]) if (id) this.changedAt[id] = now;
             }
             if (act.took !== undefined) this.took[act.id] = act.took;
@@ -898,7 +904,8 @@ export class Session extends EventEmitter {
         this.carryName();
         // The acts and the actor of one snapshot are of one moment: the choice holds until its rung is done there.
         const choice = this.choices.get(selected);
-        if (choice?.rung && this.actOf(choice.rung)?.done) this.choices.delete(selected);
+        if (choice?.rung && this.actOf(choice.rung) !== undefined && isDone(this.actOf(choice.rung)))
+          this.choices.delete(selected);
         else if (choice) this.actor = choice.actor;
         const dispatched = new Set(this.dispatched);
         const queued = this.queued.filter((entry) => !dispatched.has(entry.id));
@@ -930,7 +937,7 @@ export class Session extends EventEmitter {
         }
         // The findings of the gate that refused the last word of the operator on the chain shown.
         const lastWord = this.indexed().words.get(this.selected);
-        this.findings = lastWord?.run?.refused ? lastWord.run.reason.split("\n") : [];
+        this.findings = lastWord?.run?.run === "refused" ? reasonOf(lastWord.run).split("\n") : [];
         this.rejectedWord = this.findings.length ? String(lastWord?.words[0] ?? "") : "";
         this.emit("change");
       } while (this.dirty && !this.closed);
@@ -1040,9 +1047,9 @@ export class Session extends EventEmitter {
     if (this.liveRead.version === this.version) return this.liveRead.on;
     const on = new Map<string, ActRow[]>();
     for (const act of this.indexed().live.values()) {
-      const list = on.get(act.on);
+      const list = on.get(act.chain);
       if (list) list.push(act);
-      else on.set(act.on, [act]);
+      else on.set(act.chain, [act]);
     }
     this.liveRead = { version: this.version, on };
     return on;
@@ -1051,65 +1058,30 @@ export class Session extends EventEmitter {
    * reads the acts of the chain that are not done, and not each act of the life. */
   writing(chain: string): boolean {
     return (this.liveOn().get(chain) ?? []).some(
-      (act) => act.kind === "rung" && !act.done && !this.program[act.id],
+      (act) => act.kind === "rung" && !isDone(act) && !this.program[act.id],
     );
   }
   /** The state of the acts of each chain, or of every chain, as actStatus read it at a version of the acts. */
   private states = { version: -1, of: new Map<string, Status>() };
   private statusOf(chain?: string): Status {
     const index = this.indexed();
-    const mine = (act?: ActRow): act is ActRow =>
-      act !== undefined && act.kind !== "chain" && act.kind !== "grant" && (!chain || act.on === chain);
-    const asked = (ids: Iterable<string>) => [...ids].some((id) => mine(index.ids.get(id)));
-    if (asked(this.host.prompts.keys())) return "asks";
-    // Only an act that is not done works or waits under a pause, and the index holds each such act.
-    const live = (chain ? (this.liveOn().get(chain) ?? []) : [...index.live.values()]).filter(
-      (act) => mine(act) && !act.unfinished,
-    );
-    // A model that writes a word thinks, a command or a wait runs, and a word that awaits only another chain delegates.
-    if (live.some(working)) {
-      const remote = chain
-        ? [...index.live.values()].filter(
-            (act) => act.kind === "prompt" && act.on !== chain && index.ids.get(act.by)?.on === chain,
-          )
-        : [];
-      return workOf(live.filter(working), remote);
-    }
-    if (live.some((act) => act.paused && !act.done)) return "paused";
-    const latest = chain ? index.latest.get(chain) : this.acts.findLast(mine);
-    return latest && failed(latest) ? "failed" : "idle";
+    if (chain) return index.ids.get(chain)?.state ?? "idle";
+    // The work of the session is the work of its chains, as the life gives the state of each.
+    return rollUp(index.chains.map((one) => one.state));
   }
-  /** The state of an act, a thread, a chain or the session, by its id, from the one set of states, and the session for
-   * no id. A thread rolls up the state of its prompt with the work of its ladder that is not done: a model that writes
-   * its word thinks, a command or a wait of it runs, and a word that awaits only a prompt on another chain delegates. */
+  /** The state of an act, a chain or the session, by its id, as the life gives it, and the session for no id. */
   stateOf(id = ""): Status {
     if (!id) return this.status();
-    const index = this.indexed();
-    const act = index.ids.get(id);
+    const act = this.indexed().ids.get(id);
     if (!act) return "idle";
-    if (act.kind === "chain") return this.chainStatus(id);
-    const owed = new Set(this.host.prompts.keys());
-    const own = actState(act, owed);
-    if (act.kind !== "prompt" || !busy(own)) return own;
-    const open = [...index.live.values()];
-    const rungs = open.filter((one) => one.kind === "rung" && one.by === id);
-    const made = new Set(rungs.map((one) => one.id));
-    const local = [
-      ...rungs,
-      ...open.filter((one) => made.has(one.by) && one.on === act.on && one.kind !== "prompt"),
-    ];
-    const remote = open.filter((one) => made.has(one.by) && one.kind === "prompt");
-    return rollUp([
-      own === "runs" ? "idle" : own,
-      ...(rungs.length ? [workOf(local, remote)] : ["runs" as const]),
-    ]);
+    return act.kind === "chain" ? this.chainStatus(id) : act.state;
   }
   /** The state of a chain. A chain that the operator started, directly or by a word of their own, that rests and that
    * holds a thread of his that is over with work past the place up to which he read it is unread, until a fact seen
    * covers that work. A checkpoint carries no thread that is over, so a life on it holds no such work from before. */
   chainStatus(id: string): Status {
     const status = this.actStatus(id);
-    return status === "idle" && this.unreadChain(id) ? "unread" : status;
+    return (status === "idle" || status === "done") && this.unreadChain(id) ? "unread" : status;
   }
   /** Whether a chain that the operator started holds work past the place up to which he read it. The chain shown is
    * read as it shows. */
@@ -1122,13 +1094,13 @@ export class Session extends EventEmitter {
     const on = this.activityByChain.get(id) ?? [];
     // A notice to the operator on the chain itself, out of any thread, is unread until a fact seen of the chain covers it.
     const read = this.read(id);
-    if (on.some((act) => notice(act) && !act.thread && act.began > read)) return true;
+    if (on.some((act) => notice(act) && !onThread(act) && act.began > read)) return true;
     return this.threadsOf(id).list.some(
       (thread) => thread.resolved && thread.yours && this.unreadThread(thread.act.id, threadWork(thread)),
     );
   }
   /** What the threads of the chains keep of each prompt that they read. */
-  private readonly threadsKnown = new WeakMap<LiveAct, { message: string | undefined; title: string }>();
+  private readonly threadsKnown = new WeakMap<Act, { message: string | undefined; title: string }>();
   /** The threads of a chain, in the order they began, each by its id, with the thread of each message and of each
    * question, and its asides, read again only when a prompt on the chain or a question that waits changes. */
   threadsOf(chain: string): ThreadList {
@@ -1175,7 +1147,7 @@ export class Session extends EventEmitter {
   /** Whether a thread holds work past the place up to which the operator read it, as a fact seen says. A thread that
    * the feed shows open counts as read until the operator leaves it. */
   unreadThread(id: string, acts: readonly ActRow[]): boolean {
-    const chain = this.indexed().ids.get(id)?.on ?? "";
+    const chain = this.indexed().ids.get(id)?.chain ?? "";
     // A chain that the operator left covers each thread that it showed him. The chain shown covers none yet, so a
     // folded thread of it shows new work.
     const left = Math.max(this.host.seen.get(chain) ?? 0, this.told.get(chain) ?? 0);
@@ -1237,7 +1209,7 @@ export class Session extends EventEmitter {
       ...this.liveOn().keys(),
       ...index.failing,
       ...index.chains.flatMap((chain) => (this.unreadChain(chain.id) ? [chain.id] : [])),
-      ...[...this.host.prompts.keys()].flatMap((id) => index.ids.get(id)?.on ?? []),
+      ...[...this.host.prompts.keys()].flatMap((id) => index.ids.get(id)?.chain ?? []),
     ]);
     const active = [...restless]
       .flatMap((id) => {
@@ -1345,7 +1317,7 @@ export class Session extends EventEmitter {
   /** The acts of the chain shown that are not done, but its chains, in the order of the acts: what a frame reads of
    * the work that runs, with no pass over every act of the chain. */
   get open(): ActRow[] {
-    return (this.liveOn().get(this.selected) ?? []).filter((act) => !act.done && act.kind !== "chain");
+    return (this.liveOn().get(this.selected) ?? []).filter((act) => !isDone(act) && act.kind !== "chain");
   }
   /** What the answers of the chain itself cost, each token counted once: a chain with a source does not count the
    * answers of its origin again. The first number of the usage of an answer is the whole prompt of that call, which
@@ -1383,11 +1355,11 @@ export class Session extends EventEmitter {
       share === undefined ? "" : `pauses at ${Number((share * 100).toFixed(1))}% of the window`,
     ].filter(Boolean);
     const listed = this.acts.findLast(
-      (act) => act.kind === "mcp_servers" && act.done && Array.isArray(act.value),
+      (act) => act.kind === "mcp_servers" && isDone(act) && Array.isArray(outcomeOf(act)),
     );
-    const servers = ((listed?.value ?? []) as { name: string; state: string }[]).map(
-      ({ name, state }) => `${name} ${state}`,
-    );
+    const servers = (
+      ((listed ? outcomeOf(listed) : undefined) ?? []) as { name: string; state: string }[]
+    ).map(({ name, state }) => `${name} ${state}`);
     return [
       ["Actor", this.actor],
       [
@@ -1472,22 +1444,6 @@ export class Session extends EventEmitter {
   async decline(ask: Ask, words: string): Promise<void> {
     await this.host.decline(ask.id, words);
     this.landed(ask, `Your words went to ${ask.id} on ${ask.label}.`);
-  }
-  /** The operator resolves a thread: its open prompt closes as the engine closes a prompt, with None where its shape
-   * takes None, with the word resolved where it takes a str, and else as Refused of the words resolved by the operator,
-   * which the await of the word that asked raises. The rungs that work for the thread end with it. */
-  async resolve(id: string): Promise<void> {
-    const act = this.indexed().ids.get(id);
-    if (!act || act.kind !== "prompt" || act.done) return;
-    const shape = String(act.words[0] ?? "");
-    const value = /\bNone\b|^object$/.test(shape)
-      ? null
-      : shape === "str"
-        ? "resolved"
-        : { is: "Refused", args: ["resolved by the operator"] };
-    await this.engine.close(JSON.stringify(value), { id });
-    this.notice = `You resolved ${act.thread ?? id}. A message to it opens it again.`;
-    await this.refresh();
   }
   /** What the operator did to an ask, and what waits after it, in the notice. The pointer goes on to what waits next
    * on the chain shown. */
@@ -1676,9 +1632,9 @@ export class Session extends EventEmitter {
         : this.queued.find(
             (entry) =>
               !passed.has(entry.id) &&
-              !this.actOf(entry.chain)?.paused &&
+              !(this.actOf(entry.chain) !== undefined && isPaused(this.actOf(entry.chain))) &&
               !(this.liveOn().get(entry.chain) ?? []).some(
-                (act) => !act.done && ["prompt", "rung"].includes(act.kind),
+                (act) => !isDone(act) && ["prompt", "rung"].includes(act.kind),
               ),
           );
     try {
@@ -1750,7 +1706,7 @@ export class Session extends EventEmitter {
    * module and the files keep the state they have. */
   async rewind(id: string, label?: string, files?: Restore): Promise<string> {
     if (this.paused) throw new Error("Wake this chain before rewinding.");
-    const chain = this.acts.find((act) => act.id === id)?.on;
+    const chain = this.acts.find((act) => act.id === id)?.chain;
     if (!chain) throw new Error(`There is no act ${id} to rewind to.`);
     if (chain !== this.selected) await this.select(chain);
     const at = this.activity.findIndex((act) => act.id === id);
@@ -1817,7 +1773,8 @@ export class Session extends EventEmitter {
     await this.engine.result(rung);
     await this.refresh();
     const run = this.acts.find((act) => act.id === rung)?.run;
-    if (run?.status === "failed") throw new Error(`The files were not restored: ${run.reason}`);
+    if (run?.run === "failed" || run?.run === "refused")
+      throw new Error(`The files were not restored: ${reasonOf(run)}`);
   }
   /** A path as a word names it: from the directory of the chain shown when it stands under it, and whole else. */
   private near(path: string): string {
@@ -1891,7 +1848,7 @@ export class Session extends EventEmitter {
   /** The last act that the operator made on the chain shown and that is not over: the message, the word or the
    * command of his that the feed shows last. A cancel that names no act ends it. */
   get lastOwn(): ActRow | undefined {
-    return this.activity.findLast((act) => operated(act.by) && !act.done && WORK.includes(act.kind));
+    return this.activity.findLast((act) => operated(act.by) && !isDone(act) && WORK.includes(act.kind));
   }
   /** The running work that a cancel of an act ends besides the act: each act under it that is not over and whose work
    * takes time, on any chain, with the chains that they stand on. The rungs of a prompt are its own answer, and no
@@ -1901,21 +1858,21 @@ export class Session extends EventEmitter {
     const byId = new Map(this.acts.map((act) => [act.id, act]));
     const steps = byId.get(id)?.kind === "prompt";
     const under = (act: ActRow): boolean => {
-      if (act.on === id) return true;
+      if (act.chain === id) return true;
       for (let up: ActRow | undefined = act; up; up = byId.get(up.by))
-        for (let at: ActRow | undefined = up; at; at = at.thread ? byId.get(at.thread) : undefined)
+        for (let at: ActRow | undefined = up; at; at = byId.get(onThread(at) ?? ""))
           if (at.id === id) return true;
       return false;
     };
     const acts = this.acts.filter(
       (act) =>
         act.id !== id &&
-        !act.done &&
+        !isDone(act) &&
         WORK.includes(act.kind) &&
         !(steps && act.kind === "rung" && act.by === id) &&
         under(act),
     );
-    return { acts, chains: [...new Set(acts.map((act) => act.on))] };
+    return { acts, chains: [...new Set(acts.map((act) => act.chain))] };
   }
   /** A cancel of the act that the operator names, or of his last act on the chain shown when he names none, and of
    * that act alone with what stands under it: never the thread or the chain that it stands on. A cancel that names
@@ -1929,7 +1886,7 @@ export class Session extends EventEmitter {
       await this.refresh();
       act = this.acts.find((one) => one.id === id);
     }
-    if (!act || act.done) {
+    if (!act || isDone(act)) {
       this.notice = id
         ? `${id} is no act that runs.`
         : "Nothing that you sent runs on this chain. /cancel <id> ends another act.";
@@ -1968,7 +1925,7 @@ export class Session extends EventEmitter {
       .join(", ");
   }
   async undo(): Promise<void> {
-    if (this.paused || this.activity.some((act) => !act.done && ["prompt", "rung"].includes(act.kind)))
+    if (this.paused || this.activity.some((act) => !isDone(act) && ["prompt", "rung"].includes(act.kind)))
       throw new Error("Let the current prompt finish, or cancel and wake it before undo.");
     const prompt = this.activity.findLast((act) => this.isUserPrompt(act));
     if (!prompt) throw new Error("There is no user message to undo.");
@@ -1999,11 +1956,11 @@ export class Session extends EventEmitter {
   lastMessage(thread: string): ActRow | undefined {
     return this.acts.findLast(
       (act) =>
-        act.thread === thread &&
+        onThread(act) === thread &&
         act.kind === "prompt" &&
         this.isUserPrompt(act) &&
         !this.retaken.has(act.id) &&
-        (!act.done || cancelled(act)),
+        (!isDone(act) || cancelled(act)),
     );
   }
   /** The messages that the operator took back from the box of a thread, which the box does not offer again. */
@@ -2014,7 +1971,7 @@ export class Session extends EventEmitter {
     const last = this.lastMessage(thread);
     if (!last) return;
     this.retaken.add(last.id);
-    if (!last.done) {
+    if (!isDone(last)) {
       this.cancels.add(last.id);
       await this.engine.cancel(last.id);
     }
@@ -2175,7 +2132,7 @@ export class Session extends EventEmitter {
           : [
               ...new Set([
                 this.selected,
-                ...this.chains.filter((chain) => chain.paused && !chain.done).map((chain) => chain.id),
+                ...this.chains.filter((chain) => isPaused(chain) && !isDone(chain)).map((chain) => chain.id),
               ]),
             ];
         for (const id of stopped) await this.engine.wake(id);
