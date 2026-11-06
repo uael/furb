@@ -3,6 +3,8 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 from conftest import STANDS, Dead, life, settle
 from extensions.conftest import extended, memorized, noted, recalled, tilded
 from furb import engine
@@ -154,3 +156,21 @@ async def test_a_path_of_a_scheme_adds_no_folder_of_its_own(tmp_path: Path) -> N
     noted(tmp_path / "work" / "skills:", "s\n")
   _, root = extended("memory", tmp_path)
   assert await paths(root, tmp_path, "skills://brew") == [tilded(top)]
+
+
+async def test_the_memory_files_above_the_home_of_the_user_load_from_the_root_down(
+  tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+  """When the working directory stands under the home of the user, memory reads the memory files above the home as ~ and .. give them, from the root down, by name and never by a listing."""
+  home = tmp_path / "h" / "u"
+  home.mkdir(parents=True)
+  home = home.resolve()
+  monkeypatch.setenv("HOME", str(home))
+  above = noted(home.parent, "a\n")
+  noted(home, "h\n")
+  noted(home / "work", "t\n")
+  _, root = extended("memory", home)
+  got = await engine.rung("close([one.path for one in memory()])", on=root)
+  assert got == [str(above), "~/AGENTS.md", "~/work/AGENTS.md"]
+  listed = [str(a[4]) for a in engine.transcript(root) if a[0] == "read" and str(a[4]).endswith("/")]
+  assert listed == ["./", "config://"]
