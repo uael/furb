@@ -218,13 +218,18 @@ once it listens. A second daemon refuses to start there.
   nothing. A life with no holder for the grace of the daemon, 30 seconds unless `furb host --grace <seconds>` says
   otherwise, writes its checkpoint and ends, and `list` gives it as not `open` from then on. An `open` of a life
   that ends waits for its end, then opens it again from its checkpoint.
+- A life whose record does not hold each fact that it said yet, as on a full disk, does not end: its end, after the
+  grace, at a handover or at the end of the daemon, waits until the record holds them, and the life tells why in a
+  notice.
 - `detach` lets go of the window that says it alone, as `/end` does, and a window whose peer leaves is detached.
 - `furb host upgrade` serves the daemon of a new build in the place of the daemon that runs, which has no takeover.
   The new daemon says `handover`. The daemon that runs writes the checkpoint of each life, ends it, stops to listen
   and answers `handed` with each life, its folder and its pins. The new daemon listens and opens each life again with
   its pins, then the old one closes each window and ends. Each window dials again and attaches, and the life goes on
-  from its checkpoint. A life that does not end within 60 seconds is given up with no checkpoint, the log of the
-  daemon names it, and the new daemon opens it from its record.
+  from its checkpoint. The handover waits for each life to end, however long it takes, and the log of the daemon
+  names each life that it waits for: a life given up before its end would still hold its record and the facts that
+  its record does not hold yet. A life that ends already ends there and goes to no daemon, and the next `open` opens
+  it from its record.
 - A skill attaches a life as a window does, under its name, and hears its events from the place that it asks. Each verb of
   a skill that says an act or a fact, as `run`, `prompt`, `bash` or `close`, speaks in the life under `skill/<name>`, and
   the verbs of a window speak under `operator`. It holds no

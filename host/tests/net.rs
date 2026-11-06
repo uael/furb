@@ -22,7 +22,7 @@ mod net {
 
   use furb::life::Opening;
   use furb_host::{
-    AccessError, END, Host, Outbox, ProtocolError, STALL, Settings, Tailnet, TransportError,
+    AccessError, Host, Outbox, ProtocolError, STALL, Settings, Tailnet, TransportError,
     access::{Access, Config, Ports},
     protocol::{Answer, Frame, Hello, Kind, PROTOCOL, Peer, Request, Role, Verb},
     run, serve,
@@ -251,7 +251,6 @@ mod net {
     let settings = Settings {
       opening,
       grace: Duration::from_secs(1),
-      end: END,
       stall: STALL,
       tailnet: Some(Tailnet { identity, ports }),
       door: None,
@@ -305,7 +304,6 @@ mod net {
     let settings = Settings {
       opening,
       grace: Duration::from_secs(1),
-      end: END,
       stall: STALL,
       tailnet: None,
       door: Some(file.to_owned()),
