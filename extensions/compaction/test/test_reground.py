@@ -39,3 +39,27 @@ async def test_reground_shows_a_file_whole_again_when_its_kept_read_is_one_of_a_
     await settle()
   shown = [one for one in of(engine.turns(on=root), "read") if "one\ntwo" in one or "'one'" in one]
   assert len(shown) == 1
+
+
+async def test_a_summary_that_holds_an_apostrophe_changes_nothing_of_what_a_cut_keeps(tmp_path: Path) -> None:
+  """reground() tells the reads that an earlier reground made by a mark that it owns, never by the text of a word, so a summary with an apostrophe leaves each kept file as whole as a plain one."""
+  sand, root, _ = compacting(tmp_path)
+  sand.script[root] = ["read('a.txt')\nclose(1)"]
+  assert await engine.prompt(int, "read", on=root) == 1
+  for n, summary in enumerate(["it's the gist", "plain"]):
+    sand.script[root].append(f"close(compact(summary={summary!r}))")
+    assert await engine.prompt(str, f"compact {n}", on=root) == root
+    await settle()
+  shown = [one for one in of(engine.turns(on=root), "read") if "one\ntwo" in one or "'one'" in one]
+  assert len(shown) == 1
+
+
+async def test_a_word_that_calls_reground_with_a_chain_and_goes_on_keeps_each_file_whole(tmp_path: Path) -> None:
+  """A word that calls reground(on=...) and then another statement still keeps the whole text of each held file."""
+  sand, root, _ = compacting(tmp_path)
+  sand.script[root] = ["read('a.txt')\nclose(1)"]
+  assert await engine.prompt(int, "read", on=root) == 1
+  await engine.rung(f"reground(on={root!r})\nx = 1", on=root)
+  await engine.rung(f"reground(on={root!r})\nx = 2", on=root)
+  last = of(engine.turns(on=root), "read")[-1]
+  assert "one\ntwo" in last
