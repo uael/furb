@@ -58,7 +58,10 @@ await mkdir(output, { recursive: true });
 const grid = process.env.FURB_GALLERY_CELLS;
 if (grid) await mkdir(grid, { recursive: true });
 /** A new session in the project that the conversation of the gallery is about. */
-const gallerySession = async () => demoSession({ cwd: await project("fieldnotes") });
+// The daemon keeps a life while work runs in it and gives it again to a session on the same record, so each session of
+// the gallery stands in a folder of its own, which keeps the name fieldnotes: no session shows the work of another.
+let lives = 0;
+const gallerySession = async () => demoSession({ cwd: await project(join(`life${++lives}`, "fieldnotes")) });
 let session = await gallerySession();
 const test = await createTestRenderer({ width: 152, height: 46 });
 let app!: () => App;
@@ -108,6 +111,7 @@ async function rest(): Promise<void> {
 /** The captures that this run wrote. */
 let written = 0;
 async function capture(name: string): Promise<void> {
+  console.log(`capture ${name}`);
   waits(`the screen ${name}`);
   if (!notices.test(name)) session.notice = "";
   if (!/^6[6-8]-/.test(name)) app().session.preferences.view = view;
@@ -830,15 +834,32 @@ try {
   app().dispose();
   await library.dispose();
   await show(await gallerySession());
-  // A thread of the owner whose model hires two workers, each on a chain of its own, and a later message of his.
+  // A thread of the owner whose model hires two workers, each on a chain of its own, and a later message of his. The
+  // daemon holds the work of the earlier shots, some of which thinks until a cancel, so the wait follows the work that
+  // this message starts: the rungs of the prompts that its own rung hires. The session is read again until they stand,
+  // since the demo writes each turn slowly.
+  const newest = () => session.activity.findLast((act) => session.isUserPrompt(act))?.id ?? "";
+  const earlier = newest();
   await session.submit("Hire two workers.");
-  await until(
-    session,
-    () =>
-      session.acts.filter((act) => act.kind === "rung" && act.on !== session.engine.root && !act.done)
-        .length === 2,
-  );
-  const thread = session.activity.find((act) => session.isUserPrompt(act))?.id ?? "";
+  const act = (id: string) => session.acts.find((one) => one.id === id);
+  const hired = () =>
+    session.acts.filter(
+      (one) => one.kind === "rung" && !one.done && act(act(one.by)?.by ?? "")?.by === newest(),
+    );
+  const hiring = Date.now() + 90000;
+  while (newest() === earlier || hired().length !== 2) {
+    if (Date.now() > hiring) {
+      const acts = session.acts.map(
+        (one) => `${one.id} ${one.kind} on=${one.on} by=${one.by} done=${one.done}`,
+      );
+      throw new Error(
+        `Waited 90 seconds for two hired workers.\nThe acts of the session:\n${acts.join("\n")}`,
+      );
+    }
+    await session.refresh();
+    await new Promise((done) => setTimeout(done, 100));
+  }
+  const thread = newest();
   if (session.target !== thread)
     throw new Error(`The input aims at ${session.target}, not at the thread ${thread}.`);
   // A line on the open thread is a message of None, over at once, so the later message that runs is a prompt of str on
@@ -1301,7 +1322,7 @@ try {
   await capture("78-terminal-light");
   test.renderer.emit("theme_mode", "dark");
 } catch (error) {
-  console.error(error);
+  console.error(error instanceof Error ? (error.stack ?? error) : error);
   failed = true;
 }
 waits("the end of the script");
