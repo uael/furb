@@ -49,8 +49,9 @@ use crate::{
 /// The kind of the fact that enables an extension in a life, which [`extensions`] says and reads.
 pub const ENABLE: &str = "enable";
 
-/// The place of the program of a process among the words of a fact enable, which come after the name, the word, the
-/// life word, the mark of the root, the file and the digest: [`Extension::said`] writes it and [`enabled_by`] reads it.
+/// The place of the program of a process among the words of a fact enable, which come after the
+/// name, the word, the life word, the mark of the root, the file and the digest:
+/// [`Extension::said`] writes it and [`enabled_by`] reads it.
 const PROGRAM: usize = 6;
 
 /// The journal, which says the record again in a later life, so a done it says answers no stand of this life.
@@ -367,7 +368,8 @@ pub(crate) fn shipped(name: &str) -> Option<Vec<(String, &'static str)>> {
   })
 }
 
-/// The name of each official extension, in the order a life runs them, and whether it plays by default.
+/// The name of each official extension, in the order a life runs them, and whether it plays by
+/// default.
 fn names() -> Vec<(String, bool)> {
   let named = OFFICIAL.iter().map(|one| frontmatter(one.0)).filter_map(|front| {
     let on = front.meta(DEFAULT) == Some("true");
@@ -742,17 +744,17 @@ pub fn enabled(root: &[Fact]) -> Vec<Extension> {
   out
 }
 
-/// What a fact enable says of the process of its skill: the name of the skill, and the program that the fact names,
-/// empty when the folder of the skill names none, and none for a fact that names no program, as the fact of a config
-/// and the fact of a build before the program.
+/// What a fact enable says of the process of its skill: the name of the skill, and the program that
+/// the fact names, empty when the folder of the skill names none, and none for a fact that names no
+/// program, as the fact of a config and the fact of a build before the program.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Enabled {
   pub name: String,
   pub program: Option<String>,
 }
 
-/// What a fact enable says of the process of its skill, or none for any other fact. It reads the words that
-/// [`Extension::said`] writes, so the layout of the fact has one home.
+/// What a fact enable says of the process of its skill, or none for any other fact. It reads the
+/// words that [`Extension::said`] writes, so the layout of the fact has one home.
 pub fn enabled_by(a: &Fact) -> Option<Enabled> {
   if a.kind() != ENABLE {
     return None;

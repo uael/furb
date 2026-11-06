@@ -239,8 +239,9 @@ struct Entry {
   enabled: bool,
 }
 
-/// The settings of a provider that a true or a false is given over: an object keeps its fields and takes the flag as
-/// its field `enabled`, so a provider that is off keeps its settings, which each writer of the configs keeps.
+/// The settings of a provider that a true or a false is given over: an object keeps its fields
+/// and takes the flag as its field `enabled`, so a provider that is off keeps its settings, which
+/// each writer of the configs keeps.
 pub(crate) fn switched(settings: &mut Map<String, Value>, on: bool) {
   settings.insert("enabled".to_owned(), Value::Bool(on));
 }
