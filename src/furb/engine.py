@@ -442,9 +442,13 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           yield "tell", maker, [headed(p, "paused", why=why)]
           running[maker] or (news := (p + " paused", maker, 0))
         case (kind, about, by, *_) if (
-          ((kind == "started" and not get(by)) or kind == "prompt") and r[2] in running and not get(r[2])[4]
+          ((kind == "started" and not get(by)) or kind == "prompt")
+          and r[2] in running
+          and not (r[0] == "reply" or get(r[2])[4])
         ):
           seen.add(about)
+      if a[1] in seen and a[0] == "done":
+        mute = dull = 0
       if scope(a[1]) != id:
         continue
       if a[0] in ("ready", "done"):
@@ -505,7 +509,6 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         )
       elif r[0] == "wants":
         running[get(r[2])[4]] = a[0] != "started"
-      a[0] == "done" and a[1] in seen and (mute := "")
       if any(running.values()):
         continue
       waits = [c for *_, c in transcript(id, "wants") if not over(c)]

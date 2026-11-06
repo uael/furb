@@ -57,7 +57,7 @@ A later life on a record finds its scratch directory again, and when the directo
 The facts that the World says of its own are for the acts that complete later.
 An ear speaks by yielding a saying, and the work it began speaks later by say, under the site of the ear that began it.
 The chain has the gate read every rung but the ones it wrote itself, and the Kernel begin every rung, by the acts gate and run.
-The Kernel takes a run as that run, begins its word in the module of the chain when it hears that it took it, makes a wants as the run when the word waits for an act that is not done, carries the word on at the done of that wants, and says the run done with what the word gave.
+The Kernel takes a run as that run, begins its word in the module of the chain when it hears that it took it, makes a wants as the run when the word waits for an act, carries the word on at the done of that wants, and says the run done with what the word gave.
 The Kernel sets the site to the rung whose word it steps, for as long as it steps it, so what the word says is said by that rung.
 The Kernel holds the run of the word of a turn of a model, once that word is over, while a command that the word started and did not await is open, for 30 seconds at the most, by a wait that the run makes, so the chain tells what the command gave before it asks the next reply.
 """
@@ -967,7 +967,9 @@ The ran of a writing whose part follows another word than the word that ran hold
 The ran of a writing of a rung that is done holds CancelledError, since its part never begins.
 """
 type Wants = tuple[Literal["wants"], str, str, str, str]
-"""A wants is the act that a run makes when its word waits for an act that is not done: the rung takes it, and answers it with what that act came to when the rung hears its done, so a pause over the rung holds the word."""
+"""A wants is the act that a run makes when its word waits for an act: the rung takes it, and answers it with what that act came to when the rung hears its done, so a pause over the rung holds the word.
+A word that awaits an act that is over goes on at a later turn of the bus, through a wants, as when it awaits one that is not over, so it never holds the bus and the journal keeps each fact in its order.
+"""
 type Out = tuple[Literal["out"], str, str, str, str]
 """The streams of a command come as out facts while the command runs, which the journal keeps.
 A later life reads the parts that a command told before the death of the process.

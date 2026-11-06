@@ -1622,3 +1622,14 @@ async def test_the_chain_advances_no_rung_after_a_word_that_repeats_the_word_it_
   await settle()
   await settle()
   assert len(said(log, "reply")) == 5 and engine.peek(one) == 1
+  word = "x = await prompt(int, 'q', on=chain('two'))"
+  _, log, root = born(word, word, "close(x)", auto=False)
+  one = engine.prompt(int, "count", on=root)
+  for n in (3, 4):
+    await settle()
+    await settle()
+    (sub,) = [a[1] for a in said(log, "prompt") if a[3] != root and not engine.over(a[1])]
+    engine.close(n, sub)
+    await settle()
+    await settle()
+  assert (len([a for a in said(log, "reply") if a[3] == root]), engine.peek(one)) == (3, 4)
