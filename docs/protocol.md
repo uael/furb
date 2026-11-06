@@ -213,14 +213,20 @@ once it listens. A second daemon refuses to start there.
   its pins, then the old one closes each window and ends. Each window dials again and attaches, and the life goes on
   from its checkpoint. A life that does not end within 60 seconds is given up with no checkpoint, the log of the
   daemon names it, and the new daemon opens it from its record.
-- A skill attaches a life as a window does, under its name, and hears its events from the place that it asks. It holds no
+- A skill attaches a life as a window does, under its name, and hears its events from the place that it asks. Each verb of
+  a skill that says an act or a fact, as `run`, `prompt`, `bash` or `close`, speaks in the life under `skill/<name>`, and
+  the verbs of a window speak under `operator`. It holds no
   life, so a life with no window and no pin ends while a skill is attached. A skill that attaches again under its name takes
   the place of the first, and its views end. A skill that detaches, or whose peer leaves, ends its views.
 - The daemon starts the process that the manifest of a skill names under `furb-process` when a life plays the skill: at
   the end of the replay for each skill that the record enabled, then at each new fact `enable`. It ends the process
-  when the life ends, and when a new fact `enable` of the skill reloads it, which starts the process again. The
-  variables `FURB_HOST`, `FURB_LIFE` and `FURB_SKILL` of the process give the folder of the local transport, the
-  record of the life and the name of the skill. `docs/extensions.md` says the field.
+  when the life ends, and when a new fact `enable` of the skill reloads it, which starts the process again. On Unix the
+  process leads a group of its own, and that end kills the whole group, so no process that it started outlives the
+  life. A process that ends before its life tells the operator once, as a prompt of `None` to `operator` under
+  `skill/<name>`, with its exit and the last 20 lines of its stderr, and starts again at the next fact `enable` of its
+  skill. The variables `FURB_HOST`, `FURB_LIFE` and `FURB_SKILL` of the process give the folder of the local
+  transport, the record of the life and the name of the skill. `@uael/furb/skill` gives its client, and
+  `docs/extensions.md` says the field.
 
 ## Views
 

@@ -108,7 +108,8 @@ The TypeScript side is a bun workspace at the root, whose packages are the three
   act that is answered later can be awaited. It includes a `Session`: an engine on the ears of the crate, the
   provider among them, and on a console of the operator. `bind/typescript/README.md` says how to use it. Its
   model of a life, `furb/life` in `src/life`, gives the views of a life that every host draws, with no native
-  code. The TUI imports its build in `bind/typescript/dist`, which `bun run build` makes again.
+  code. `furb/skill`, in `src/skill.ts`, is the client of the process of a skill, which dials the daemon of the
+  machine as the protocol says. The TUI imports its build in `bind/typescript/dist`, which `bun run build` makes again.
 - `tui` is the OpenTUI application on that package. `tui/README.md` says what the TUI does, and `docs/tui.md` shows
   each screen. A life of the TUI runs in the daemon of the machine, `furb host`, whose protocol `docs/protocol.md`
   says, so the life outlives each window: `tui/src/client.ts` dials the daemon, or starts it when none listens, and

@@ -1886,6 +1886,31 @@ fn lived_once(yard: &str, word: &str) -> (Option<Yard>, String, String) {
 }
 
 #[test]
+fn a_life_whose_acts_a_skill_said_under_its_name_replays_with_no_drift() {
+  let (root, facts, _yard) = {
+    let mut first = Lived::new("spoken", &[], true).unwrap();
+    let root = first.root();
+    let before = first.engine.site(Some("skill/k")).unwrap();
+    let to = Some("operator".to_owned());
+    let with = verbs::Prompt { message: Some("from k".to_owned()), to, on: on(&root) };
+    first.engine.prompt(Object::string("None"), with).unwrap();
+    let with = verbs::Rung { word: Some("x = 1".to_owned()), on: on(&root), ..Default::default() };
+    block_on(first.engine.rung(with).unwrap()).unwrap();
+    assert_eq!(first.engine.site(Some(&before)).unwrap(), "skill/k");
+    let facts = first.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
+    let spoken = facts.iter().filter(|one| one.question() && one.by() == "skill/k").count();
+    assert_eq!(spoken, 2, "the prompt and the rung are of the skill");
+    (root, facts.iter().filter_map(said).collect::<Vec<_>>(), first.end())
+  };
+  let mut second = Lived::new("spoken", &[], false).expect("the replay opens the life");
+  assert!(second.engine.raised().is_none(), "{:?}", second.engine.raised());
+  assert!(second.engine.stopped().is_none(), "{:?}", second.engine.stopped());
+  let again = second.engine.transcript(verbs::Transcript { on: on(&root), of: None }).unwrap();
+  let again = again.iter().filter_map(said).collect::<Vec<_>>();
+  assert_eq!(again[..facts.len().min(again.len())], facts[..]);
+}
+
+#[test]
 fn a_life_whose_act_holds_a_callable_in_its_words_replays_with_no_drift() {
   let (_yard, root, record) =
     lived_once("callable", "a = act('bash', '', None, 'true', '', 30.0, lambda: 0)\nclose(8)");

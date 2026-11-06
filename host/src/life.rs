@@ -139,6 +139,33 @@ pub enum Command {
   /// each fact that it said yet, as on a full disk, keeps the end, tells why in a notice, and ends
   /// once the record holds them: the reply comes then.
   End,
+  /// A command of the engine said by a speaker of the life other than the operator, as the process
+  /// of a skill under its name: each act and each fact that the command says is of that speaker.
+  By { speaker: String, command: Box<Command> },
+}
+
+impl Command {
+  /// The command said by a speaker, when it says acts or facts on the engine. A query, and a
+  /// command of the configs, of the queue or of the meaning of the acts, stays as it is.
+  #[must_use]
+  pub fn by(self, speaker: String) -> Self {
+    match self {
+      Self::Prompt { .. }
+      | Self::Rung { .. }
+      | Self::Answer { .. }
+      | Self::Pause { .. }
+      | Self::Wake { .. }
+      | Self::Cancel { .. }
+      | Self::Chain { .. }
+      | Self::Close { .. }
+      | Self::Grant { .. }
+      | Self::Bash { .. }
+      | Self::Read { .. }
+      | Self::Write { .. }
+      | Self::Stand => Self::By { speaker, command: Box::new(self) },
+      other => other,
+    }
+  }
 }
 
 /// What a life replies to a command.
@@ -557,6 +584,7 @@ async fn commanded(
   let root = engine.root().to_owned();
   let chain = |on: Option<String>| on.unwrap_or_else(|| root.clone());
   match command {
+    Command::By { speaker, command } => spoken(engine, &speaker, *command),
     Command::Queue { entry, shape, message, on } => {
       let chain = chain(on);
       if !queue.holds(&entry) {
@@ -617,6 +645,15 @@ fn drained(engine: &mut Engine, life: &mut Life) {
     }
     life.queue.sent(&follow.entry, made);
   }
+}
+
+/// What a command of the engine comes to, said by a speaker: the life speaks as that speaker for
+/// the command alone, then as before, whatever the command came to.
+fn spoken(engine: &mut Engine, speaker: &str, command: Command) -> Result<Reply, LifeError> {
+  let before = engine.site(Some(speaker))?;
+  let reply = answered_by(engine, command);
+  engine.site(Some(&before))?;
+  reply
 }
 
 /// What a command comes to on the engine.

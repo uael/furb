@@ -392,6 +392,10 @@ impl Host for Daemon {
   ) -> Result<Answer, ProtocolError> {
     match routed(verb) {
       Routed::Life(life, command) => {
+        let command = match (peer.kind, &peer.name) {
+          (Kind::Skill, Some(name)) => command.by(processes::speaker(name)),
+          _ => command,
+        };
         let handle = self.asked(|reply| Asked::Life { life, reply }).await??;
         Ok(handle.send(command).await?.into())
       }
