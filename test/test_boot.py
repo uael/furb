@@ -434,12 +434,14 @@ async def test_the_record_a_life_was_opened_from_from_which_the_journal_answers(
 
 
 async def test_the_journal_an_ear_of_the_engine_which_hears_everything() -> None:
-  """The journal: an ear of the engine, which hears everything and keeps every act that no act of the life made and every fact that no act of the life said, the act it is about before it, and nothing that a generator an act brought to life made or said, nor anything it says itself, since a later life makes again everything that an act made or said and brings that generator to life again, and what the journal says the record holds already."""
+  """The journal: an ear of the engine, which hears everything and keeps every act that the life makes, as it is made, and every fact that no act of the life said, the act it is about before it, and nothing else that a generator an act brought to life said, nor anything it says itself, since a later life makes again everything that an act made or said and brings that generator to life again, and what the journal says the record holds already, so the record holds the maker, the kind, the chain and the words of each act that a reader shows with no life."""
   sand, log, _ = await lived()
   assert {e[0][0] for e in sand.record} == {
     "chain",
     "stand",
     "prompt",
+    "rung",
+    "run",
     "reply",
     "started",
     "gate",
@@ -472,13 +474,17 @@ async def test_the_journal_an_ear_of_the_engine_which_hears_everything() -> None
     ("done", "stand1"),
     ("chain", child),
     ("rung", step),
+    ("run", "run1"),
     ("gate", "gate1"),
     ("done", "gate1"),
+    ("run", "run2"),
     ("bash", command),
     ("started", command),
     ("joined", ""),
     ("merged", "merged1"),
     ("prompt", asked),
+    ("rung", "rung2"),
+    ("run", "run3"),
     ("reply", reply),
     ("started", reply),
   ]
@@ -618,7 +624,7 @@ async def test_given_at_its_birth_what_the_world_kept_of_an_earlier_life() -> No
 
 
 async def test_an_entry_whose_act_this_life_has_not_made_again_the_journal_steps_over() -> None:
-  """An entry whose act this life has not made again when every fact said before it has been heard, which for an act whose maker is neither an act nor an ear that boot was given is the chain it is on, the journal steps over, since this life will not make that act at that place, and it keeps the name of that act taken, so the entries after it go on and their acts keep their names."""
+  """An entry whose act this life has not made again when every fact said before it has been heard, as an act that an act made and that the outside never answered, or an act on a chain that this life has not made, the journal steps over, since this life will not make that act at that place, and it keeps the name of that act taken, so the entries after it go on and their acts keep their names."""
   first, _, root = born()
   sub = engine.rung("sub = chain('sub')", on=root)
   await sub

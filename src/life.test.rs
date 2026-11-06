@@ -172,7 +172,8 @@ fn a_life_that_keeps_a_record_writes_the_log_of_every_fact_beside_it_and_a_later
     "the log holds the rung and its run"
   );
   assert!(
-    !world::kept(&record).unwrap().iter().any(|one| one.as_ref().py_repr().contains("'run1'"))
+    world::kept(&record).unwrap().iter().any(|one| one.as_ref().py_repr().contains("'run1'")),
+    "the record keeps the question of the run that the chain made"
   );
   drop(open());
   let again = shown(world::logged(&record).unwrap().expect("a later life writes the log again"));
@@ -1362,6 +1363,21 @@ fn a_record_that_another_engine_went_on_with_after_a_checkpoint_replays_its_tail
       .is_some_and(|a| a.kind() == crate::checkpoint::CHECKPOINT)
   });
   assert_eq!(checkpoints.count(), 1, "the life writes no checkpoint that carries the tail");
+  fs::remove_file(format!("{}.log", path.display())).unwrap();
+  let told = world::retold(&path).unwrap();
+  assert!(!told.logged, "the reader reads the record alone");
+  let facts: Vec<String> = told.facts().unwrap().iter().map(|one| one.as_ref().py_repr()).collect();
+  let heads = |kind: &str, of: &str| -> Vec<&String> {
+    facts.iter().filter(|one| one.starts_with(&format!("['{kind}', '{of}', "))).collect()
+  };
+  assert!(
+    heads("chain", "chain3").iter().any(|one| one.contains("'more'")),
+    "the reader shows the chain that a word of the tail made, with its label: {facts:?}"
+  );
+  assert!(
+    heads("prompt", &asked).len() == 1 && heads("done", &asked).is_empty(),
+    "the reader shows the prompt that the word made on it, open: {facts:?}"
+  );
 }
 
 #[test]

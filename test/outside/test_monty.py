@@ -355,7 +355,7 @@ async def test_the_ear_of_the_log_writes_the_log_of_a_life_on_the_engine_of_this
   heads = [fact[:2] for fact in logged]
   assert heads[0] == ["chain", "chain1"]
   assert ["rung", "rung1"] in heads and ["run", "run1"] in heads
-  assert ["run", "run1"] not in [fact[:2] for (fact,) in _monty.kept(path)]
+  assert ["run", "run1"] in [fact[:2] for (fact,) in _monty.kept(path)]
   retold = _monty.retold(path)
   assert retold["logged"] and retold["file"] == f"{path}.log"
   Path(f"{path}.log").unlink()

@@ -136,8 +136,10 @@ async def test_debug_enters_nothing_in_the_record() -> None:
     ("stand", "stand1"),
     ("done", "stand1"),
     ("rung", step),
+    ("run", "run1"),
     ("gate", "gate1"),
     ("done", "gate1"),
+    ("run", "run2"),
   ]
 
 

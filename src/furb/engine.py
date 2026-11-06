@@ -996,6 +996,7 @@ def boot(record=(), **outside):
       case (kind, name, by, on, *words) if question((kind, name)):
         if (
           by in saved
+          or (name not in first and re.fullmatch(r"\w+?\d+", by))
           or (on and not get(on))
           or (by == "journal" and not holds(scope(on), [known.setdefault(name, (kind, name, by, on))]))
         ):
@@ -1049,6 +1050,8 @@ def boot(record=(), **outside):
                 glue and (yield glue)
                 yield "keep", "", (a,)
               last = a
+            elif a is q and about not in saved:
+              yield "keep", "", (saved.setdefault(about, q),)
             if kind == "wake" and not owed():
               for name in [x for x in taken if taken[x] and covers(a, x) and not over(x)]:
                 del taken[name]

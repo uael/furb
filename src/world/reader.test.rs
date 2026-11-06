@@ -257,3 +257,35 @@ fn a_record_that_keeps_a_tuple_and_a_whole_float_tells_them_as_the_engine_gives_
   let line = text.lines().find(|one| one.starts_with(r#"["done","reply1""#)).unwrap();
   assert_eq!(line, r#"["done","reply1","provider",["assistant","x = 1",[1,2,3,4,2.0],null]]"#);
 }
+
+#[test]
+fn a_segment_that_keeps_each_question_gets_no_chain_rung_or_run_of_the_reader_but_the_dones_of_the_engine()
+ {
+  let done = answered("x = 1");
+  let kept = facts(&[
+    r#"["made", "chain1", "store", "e", null, "1.1", "0.0.0", "", ""]"#,
+    OPENS[0],
+    OPENS[1],
+    r#"["rung", "rung1", "prompt1", "chain1", "", "", ""]"#,
+    OPENS[2],
+    &done,
+    r#"["gate", "gate1", "chain1", "chain1", "x = 1"]"#,
+    r#"["done", "gate1", "gate", []]"#,
+    r#"["run", "run1", "chain1", "chain1", "rung1", "x = 1", ""]"#,
+    r#"["chain", "chain2", "rung1", "chain1", "more", ""]"#,
+    r#"["prompt", "prompt2", "rung1", "chain2", "str", "Help.", ""]"#,
+    r#"["close", "prompt1", "operator", 1]"#,
+  ]);
+  let told = shown(&told(&kept));
+  let plain: Vec<Object> = kept.iter().map(|one| super::plain(one.as_ref())).collect();
+  assert_eq!(told[..kept.len()], shown(&plain), "the reader says no question of its own");
+  assert_eq!(
+    told[kept.len()..],
+    [
+      "['done', 'prompt1', 'reader', 1]",
+      "['done', 'run1', 'reader', None]",
+      "['done', 'rung1', 'reader', None]"
+    ]
+    .map(str::to_owned)
+  );
+}
