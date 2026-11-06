@@ -466,7 +466,9 @@ test("the words that one model wrote one after another stand in one block under 
       const setup = rows.findIndex((row) => row.includes("# setup"));
       const steps = rows.slice(setup + 1, setup + 8);
       expect(steps[0]).toMatch(/^ +\S+\/\S+ +/);
-      expect(steps.slice(1, 5).map((row) => row.match(/^ +(\d+) /)?.[1])).toEqual(["1", "2", "3", "4"]);
+      // A line that folds a string has the fold row of that string under it, which holds no number.
+      const numbers = steps.slice(1).flatMap((row) => row.match(/^ +(\d+) /)?.[1] ?? []);
+      expect(numbers.slice(0, 4)).toEqual(["1", "2", "3", "4"]);
       expect(steps.slice(1).filter((row) => /^ +\S+\/high +/.test(row))).toEqual([]);
     },
     { width: 120, height: 40 },
