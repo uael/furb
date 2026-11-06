@@ -103,9 +103,9 @@ pub(crate) fn each(path: impl AsRef<Path>, take: &mut dyn FnMut(Object)) -> Resu
   Ok(Format::of(path).each(path, take)?)
 }
 
-/// What the heads of the lines of a record tell, which one pass over the record reads: the entries of its facts made
-/// and of its checkpoints, in order, the place of each checkpoint among the entries, counted from 0, and the standing
-/// that its last answered stand gave.
+/// What the heads of the lines of a record tell, which one pass over the record reads: the entries
+/// of its facts made and of its checkpoints, in order, the place of each checkpoint among the
+/// entries, counted from 0, and the standing that its last answered stand gave.
 #[derive(Default)]
 pub struct Marks {
   pub heads: Vec<Object>,
@@ -131,8 +131,9 @@ impl Marks {
   }
 }
 
-/// The marks of the record at a path, read with no lease and changed in nothing. A file of lines is read from the
-/// head of each line in one pass, and parses only the lines of a fact made, of a checkpoint and of the done of a stand.
+/// The marks of the record at a path, read with no lease and changed in nothing. A file of lines is
+/// read from the head of each line in one pass, and parses only the lines of a fact made, of a
+/// checkpoint and of the done of a stand.
 pub fn marks(path: impl AsRef<Path>) -> Result<Marks, Fault> {
   let path = path.as_ref();
   let format = Format::of(path);
@@ -148,8 +149,8 @@ pub fn marks(path: impl AsRef<Path>) -> Result<Marks, Fault> {
   Ok(marks)
 }
 
-/// The standing that an entry gives, when it is the done of a stand of the root: the value of that done, when it is a
-/// list. This is the one place that finds the answer of a stand.
+/// The standing that an entry gives, when it is the done of a stand of the root: the value of that
+/// done, when it is a list. This is the one place that finds the answer of a stand.
 pub fn stood(entry: &Object) -> Option<Object> {
   let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
   let value = fact.word(0)?;

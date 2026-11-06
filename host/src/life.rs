@@ -357,8 +357,8 @@ impl Life {
   /// fact is told, though it equals one before it, as a second pause of a chain. A record that the
   /// store cannot read tells nothing here, and its open says why.
   fn recalled(&mut self, record: &str) {
-    // One pass over the heads of the lines gives the place of each checkpoint, and a record with none tells nothing
-    // here.
+    // One pass over the heads of the lines gives the place of each checkpoint, and a record with
+    // none tells nothing here.
     let Ok(world::Marks { checkpoints, .. }) = world::marks(record) else { return };
     let marks: Vec<usize> = checkpoints.into_iter().map(|at| at + 1).collect();
     let Some(&last) = marks.last() else { return };

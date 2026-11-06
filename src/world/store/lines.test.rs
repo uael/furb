@@ -5,8 +5,8 @@ use std::{fs, io::Write};
 use serde_json::json;
 
 use super::{Head, Lines, heads, stamped};
-use crate::world::{kept, store::Store};
 use crate::testing::Yard;
+use crate::world::{kept, store::Store};
 use std::process;
 
 /// A record of its own for one test, which does not stand yet.
@@ -87,7 +87,11 @@ fn the_place_of_a_head_counts_each_entry_before_it_and_no_blank_line_or_other_he
   heads(&at, &[Head::Done("stand")], &mut |place, one| read.push((place, one.as_ref().py_repr())))
     .unwrap();
   let places: Vec<usize> = read.iter().map(|one| one.0).collect();
-  assert_eq!(places, [0, 2, 4], "a blank line is no entry, and a line that does not parse still is");
+  assert_eq!(
+    places,
+    [0, 2, 4],
+    "a blank line is no entry, and a line that does not parse still is"
+  );
   assert_eq!(read[2].1, "[['done', 'stand4', 'operator', ['wanted-4']]]");
   let mut none = 0;
   heads(&place("gone"), &[Head::Done("stand")], &mut |_, _| none += 1).unwrap();
