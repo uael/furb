@@ -1,11 +1,10 @@
 import { shapes } from "furb";
-import { takesNothing } from "furb/life";
+import { isDone, takesNothing, unfinished, WORK } from "furb/life";
 import { canonical, slashes } from "../commands.ts";
 import { emojiNamed, emojis } from "../emoji.ts";
 import { shortenHome } from "../files.ts";
 import { clip, count, dollars, graphemes, modelName, share } from "../format.ts";
 import { modeOf } from "../history.ts";
-import { working } from "../session.ts";
 import { theme as c, glyph, palettes, spacing as space, type ThemeChoice, themeLabels } from "../theme.ts";
 import { bold, type Part } from "../ui.ts";
 import { part } from "./part.ts";
@@ -338,7 +337,8 @@ export const composer = part({
       wake: () => this.chainValues(),
       cancel: () =>
         this.session.open
-          .filter((act) => working(act))
+          // Work that lives and that no pause holds is what a cancel ends.
+          .filter((act) => WORK.includes(act.kind) && !isDone(act) && !act.pause && !unfinished(act))
           .map((act) => ({
             value: act.id,
             detail: `${act.kind}  ${clip(String(act.words[act.kind === "prompt" ? 1 : 0] ?? ""), 40)}`,

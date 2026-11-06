@@ -23,7 +23,7 @@ async function recorded(): Promise<Session> {
 
 /** The threads of a chain of the session, and its asides with what each is, as the feed and the sidebar read them. */
 const sorted = (session: Session, chain: string) => {
-  const on = session.acts.filter((act) => act.on === chain);
+  const on = session.acts.filter((act) => act.chain === chain);
   const rows = new Map(session.acts.map((act) => [act.id, act]));
   const { threads, asides } = chainSorted(on, rows, new Set(session.host.prompts.keys()));
   return {

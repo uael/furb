@@ -59,10 +59,10 @@ test("a branch says where it starts, with the files as they were, and the messag
     "It takes the 2 messages before it, with their answers.",
   ]);
   const acts = [
-    { id: "prompt1", on: "chain1", began: 1 },
-    { id: "prompt2", on: "chain1", began: 2 },
-    { id: "prompt3", on: "chain1", began: 5 },
-    { id: "prompt4", on: "chain2", began: 3 },
+    { id: "prompt1", chain: "chain1", began: 1 },
+    { id: "prompt2", chain: "chain1", began: 2 },
+    { id: "prompt3", chain: "chain1", began: 5 },
+    { id: "prompt4", chain: "chain2", began: 3 },
   ];
   // The word that made the branch names prompt2, which the branch leaves out, and prompt3 came after it.
   const word = 'chain("Another way", "chain1", take("prompt2", inside=False))';

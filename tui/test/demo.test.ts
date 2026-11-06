@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
-import { momentsOf } from "furb/life";
+import { isDone, momentsOf, outcomeOf } from "furb/life";
 import { demoSession, removeDemoDirectories, tour } from "../src/demo.ts";
 
 test("the temporary directory of a demo goes when the process that made it removes its demo directories", async () => {
@@ -26,7 +26,7 @@ test("the life that the operator watches asks three models in one word, branches
       "claude-cli:fable",
       "",
     ]);
-    expect(prompts.slice(1, 4).map((act) => act.value)).toEqual([
+    expect(prompts.slice(1, 4).map((act) => outcomeOf(act))).toEqual([
       "Add a test for a search that finds nothing.",
       "Save the notes to a file, so they stay after a restart.",
       "Give search a shortcut, Ctrl+K, so it is one key away.",
@@ -55,7 +55,7 @@ test("the moment that the feed shows steps back through the chain, the stage ste
     expect(moment).toBeGreaterThan(0);
     const then = session.at(session.activity);
     expect(then.every((act) => act.began <= moment)).toBe(true);
-    expect(then.some((act) => !act.done)).toBe(true);
+    expect(then.some((act) => !isDone(act))).toBe(true);
     session.travel(1);
     expect(session.moment).toBeUndefined();
     expect(session.at(session.activity)).toEqual(now);

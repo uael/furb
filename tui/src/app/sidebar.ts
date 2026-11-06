@@ -1,6 +1,7 @@
 import type { BoxOptions, BoxRenderable, Renderable, TextRenderable } from "@opentui/core";
 import { unmarked } from "furb";
 import type { ChainThread } from "furb/life";
+import { isDone } from "furb/life";
 import { clip, count, dollars } from "../format.ts";
 import { theme as c, glyph, spacing as space, threadTone } from "../theme.ts";
 import { bold, type Part, plain } from "../ui.ts";
@@ -164,7 +165,7 @@ export const sidebar = part({
 
   /** A thread resolves: its open prompt closes, and the model that works for it stops. */
   resolveThread(thread: ChainThread): void {
-    const open = [thread.act, ...thread.messages].findLast((act) => !act.done);
+    const open = [thread.act, ...thread.messages].findLast((act) => !isDone(act));
     if (open) void this.session.resolve(open.id).catch(this.report);
   },
 

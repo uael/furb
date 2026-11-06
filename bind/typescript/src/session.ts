@@ -432,7 +432,7 @@ function toldName(record: string, root: string): string | undefined {
   } finally {
     closeSync(handle);
   }
-  return sessionNamed(activity.acts.values(), root);
+  return sessionNamed(activity.hosted([...activity.acts.values()]), root);
 }
 
 /** A session, opened. */

@@ -50,7 +50,7 @@ export function branchStart(source: string): string {
 
 /** How many messages of the operator a branch takes from its source: each one that came before the word that made
  * the branch and that this word does not name, since the word names each act that the branch leaves out. */
-export function branchMessages<T extends { id: string; on: string; began: number }>(
+export function branchMessages<T extends { id: string; chain: string; began: number }>(
   acts: readonly T[],
   source: string,
   maker: { began: number },
@@ -61,7 +61,7 @@ export function branchMessages<T extends { id: string; on: string; began: number
 }
 
 /** The messages of the operator that a branch takes from its source, in their order, as branchMessages counts them. */
-export function branchTaken<T extends { id: string; on: string; began: number }>(
+export function branchTaken<T extends { id: string; chain: string; began: number }>(
   acts: readonly T[],
   source: string,
   maker: { began: number },
@@ -70,7 +70,7 @@ export function branchTaken<T extends { id: string; on: string; began: number }>
 ): T[] {
   const left = new Set([...word.matchAll(/"([a-z_]+\d+)"/g)].map((found) => found[1]));
   return acts.filter(
-    (act) => act.on === source && act.began < maker.began && !left.has(act.id) && message(act),
+    (act) => act.chain === source && act.began < maker.began && !left.has(act.id) && message(act),
   );
 }
 

@@ -838,6 +838,11 @@ export interface Act {
    */
   word?: string | null;
   /**
+   * Whether a reply of a rung runs, while its model writes its word. A rung with no word and no
+   * reply that runs waits for its turn.
+   */
+  asking?: boolean;
+  /**
    * How many facts the life had said when the act was made, which is its place in time.
    */
   began: number;

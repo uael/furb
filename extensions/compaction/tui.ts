@@ -13,7 +13,7 @@ function regrounding(seen: Seen, chain: string, at: number): string | undefined 
     else low = middle + 1;
   }
   for (const act of acts.slice(low)) {
-    if (act.kind !== "rung" || act.on !== chain) continue;
+    if (act.kind !== "rung" || act.chain !== chain) continue;
     const word = String(act.words[0] ?? "");
     if (word.trimEnd().endsWith("reground()")) return word;
   }
