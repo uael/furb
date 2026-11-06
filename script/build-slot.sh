@@ -56,6 +56,7 @@ take() {
 start=$(date +%s)
 said=$start
 take
+[ -n "$got" ] || echo "build-slot: waiting for a slot of $slots, held by pids $(cat "$dir"/slot*/pid 2>/dev/null | tr '\n' ' ')" >&2
 while [ -z "$got" ]; do
   now=$(date +%s)
   if [ $((now - start)) -ge "$limit" ]; then

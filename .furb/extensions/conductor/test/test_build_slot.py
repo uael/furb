@@ -3,6 +3,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import IO
 
 import pytest
 
@@ -15,9 +16,9 @@ def env(tmp: Path, **more: str) -> dict[str, str]:
   return {**kept, "FURB_BUILD_DIR": str(tmp / "slots"), "FURB_BUILD_POLL": "0.05", **more}
 
 
-def start(tmp: Path, *command: str, **more: str) -> subprocess.Popen[str]:
+def start(tmp: Path, *command: str, err: IO[str] | int = subprocess.PIPE, **more: str) -> subprocess.Popen[str]:
   pipe = subprocess.PIPE
-  return subprocess.Popen(["sh", str(SCRIPT), *command], env=env(tmp, **more), text=True, stdout=pipe, stderr=pipe)
+  return subprocess.Popen(["sh", str(SCRIPT), *command], env=env(tmp, **more), text=True, stdout=pipe, stderr=err)
 
 
 def run(tmp: Path, *command: str, **more: str) -> subprocess.CompletedProcess[str]:
@@ -46,20 +47,28 @@ def entered(log: Path) -> int:
   return log.read_text(encoding="utf-8").split().count("in") if log.exists() else 0
 
 
+def waiting(errs: list[Path]) -> int:
+  return sum("waiting for a slot" in e.read_text(encoding="utf-8") for e in errs if e.exists())
+
+
 def peak_of(tmp: Path, slots: int, **more: str) -> int:
   # Each command holds until the test releases it, so the peak does not depend on how fast the machine starts them: the
-  # test waits for the slots to fill, gives the extra builds time to wrongly enter, and then lets everything end.
+  # test waits for the slots to fill and for each extra build to log that the script holds it, then lets all end.
   log, release = tmp / "log", tmp / "release"
   body = f"echo in >> {log}; while [ ! -e {release} ]; do sleep 0.05; done; echo out >> {log}"
   count = slots + 3
-  runs = [start(tmp, "sh", "-c", body, **more) for _ in range(count)]
+  errs = [tmp / f"err{n}" for n in range(count)]
+  files = [e.open("w", encoding="utf-8") for e in errs]
+  runs = [start(tmp, "sh", "-c", body, err=f, **more) for f in files]
   try:
     deadline = time.monotonic() + 30
-    while entered(log) < slots and time.monotonic() < deadline:
+    while (entered(log) < slots or waiting(errs) < count - slots) and time.monotonic() < deadline:
       time.sleep(0.05)
-    time.sleep(0.5)
+    assert entered(log) == slots and waiting(errs) == count - slots
   finally:
     release.touch()
+    for f in files:
+      f.close()
   for one in runs:
     one.communicate(timeout=60)
   assert [one.returncode for one in runs] == [0] * count
