@@ -40,10 +40,11 @@ compaction = """Compaction cuts this chain to the work that it still needs, and 
 - clear() cuts this chain to nothing, with no summary: its model reads from zero, and the chain keeps its name, its
   module, its prompts and its threads. The command /clear of the TUI runs it on the chain on screen.
 - compacted() wraps a chain: after an answer that reads more than SHARE of the window, it asks choice(), and at the
-  next reply once that came, it compacts the chain to what the model chose. It moves, stops and pauses nothing. No
-  chain is wrapped unless a word wraps it.
-- fitted() watches each chain: when its model refuses a reply because the prompt passes its window, it cuts the
-  chain at once to its open prompts, so the next reply reads less and the chain goes on with no pause.
+  next reply once that came, it compacts the chain to what the model chose. It moves, stops and pauses nothing.
+- fitted() watches a chain: when its model refuses a reply because the prompt passes its window, it cuts the chain at
+  once to its open prompts, so the next reply reads less and the chain goes on with no pause.
+- The life word wraps each chain with compacted() and fitted(), so a chain compacts with a summary of the model
+  before it passes its window, and the cut of fitted() is the last resort.
 - A project changes the defaults in an extension of its own, whose word rebinds SHARE, FILTERS, CHOOSER, LISTED or
   BRIEF."""
 SHARE = 0.6

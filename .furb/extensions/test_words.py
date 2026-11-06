@@ -93,6 +93,12 @@ def test_word_binds_no_name_of_an_official_extension(name: str) -> None:
   assert bound(word(name)) & official == set()
 
 
+@pytest.mark.parametrize("name", NAMES)
+def test_word_binds_no_name_of_the_engine(name: str) -> None:
+  """A word of the project that binds a name of the engine changes it for each word on its chains, as a filled of pr broke the compaction of each chain."""
+  assert bound(word(name)) & set(ENGINE) == set()
+
+
 def binders(text: str) -> list[tuple[str, bool]]:
   """Each name that a word binds at its top, with whether its binding reads that name, as a word that extends a list does."""
   found: list[tuple[str, bool]] = []
