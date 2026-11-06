@@ -1,716 +1,305 @@
-import json
-import re
 from collections.abc import Generator
 from typing import Any
 
 from furb.engine import (
   HIDDEN,
+  OPERATOR,
   ROOT,
   Act,
   Exit,
-  Refused,
   Text,
   act,
-  acting,
   bash,
-  cd,
   chain,
   clock,
-  close,
   controlled,
-  cwd,
-  get,
+  dump,
+  filled,
   operated,
   over,
-  paused,
   peek,
   prompt,
-  read,
-  rung,
   scope,
   transcript,
+  under,
   wait,
   write,
 )
 
-CONDUCTING = """The round conducts the workers of the repository in one loop. It is a way for the work, not the work: a rule that a worker, a tool or GitHub can hold does not live here.
-The round is autonomous: the word of the owner comes when he can give it, so the round queues no item that waits for him, asks him nothing and waits for nothing of his. His labels on a PR, his comments and his rulings change what the round does from then on.
-Put each item in queue as a dict, in the order of the work, the hard work first: its key, brief and thread, and when it needs them its after (the keys whose PRs merge first), areas (its files), model, and kind (edit, audit or fix, edit by default). Then await conduct(). Each round runs tend(), sweep(), review(), keep_disk(), staff(), asked() and align(), then waits every seconds or until a worker ends. working maps the prompt of each worker to its item, which keeps its slot and, once the worker ends, the PR of its report in pr, or 0.
-1. staff() hires the first item of queue whose after all merged, whose model has room, and whose files that must change ALONE no live worker and no open PR of the round holds, while fewer than cap() - 1 workers live, so one slot stays for a fixer: a worker lives while its chain said a fact in the last QUIET seconds, and one that said none is one notice with its open acts; cap() is at most MOST, and limits["room"][family] for each model family.
-2. The files of an item are its areas, which you write, and a test file holds no item. An item with no areas holds no file. A conflict on a file that need not change alone gets a fixer, by E3 of #1084. Each item that waits on a PR or a file is one line of the next notice, with its cause, once.
-3. A worker runs on a chain thread/key, at model_of(item), and an edit or a fix in a workspace {repo}-wN of its own, never one whose furb-holder names the chain of a live worker, and never one that holds work off a branch: a dirty tree, or a commit that no remote holds while its branch is the head of no merged PR. The round skips such a workspace and tells you once. Each round keep_disk() keeps KEEP GB of the disk free: it deletes the target of the idle workspace whose last worker was hired first, never of one that a live worker holds, and tells you once when it cannot. Its brief starts with the asks of the owner that its item carries. Its brief sends each build of the worker through script/build-slot.sh, which holds the slots of builds that all the workers of the machine share and caps the jobs of cargo: the tool holds that rule, and the round only briefs it.
-4. A worker that ends gives its report whole in the next notice. A worker that ends with no PR is a decision, and its notice wakes you.
-5. A PR of the round is an open PR whose label w:key names an item that the round holds. A red or conflicting one counts as handled only while a worker that knows of its head acts: its live maker, which the round tells at once, once for each head and problem, to fix it before any other step, else a fixer that the round sent for that head, at most 2 for a head, then a notice. A fixer runs at the model of the fixer on a fork of the chain of the worker that made the PR, when the round holds that worker, so it starts with what that worker read and did. A head that such a worker has not moved in UNMOVED seconds is one notice, with the worker and its last act. handler() holds that rule for the sweep.
-6. While the newest run of the gates on main failed, the round sends no order and no fixer for a red PR, and tells you once. A red PR whose failed checks all fail on main too gets no fixer either, and the round says so in one line.
-7. A green PR merges by the auto-merge of GitHub, which the round turns on for each PR of the round, else by a plain merge, else by gh stack merge for a layer of a stack, behind a ruleset of main that requires the check GATE. With no such ruleset, the round turns on no auto-merge and tells you once. A draft, an open box of its checklist, or the label hold, hold:owner-review or owner-merge keeps a PR from the merge, and the label paused takes it out of the round.
-8. At ALIGN_EVERY merged PRs since the last audit of each target of AUDITS, the round queues the next free audit of that target, alignN or tuiN, of kind audit, on limits["models"]["astra"] when N is odd, else on the model of audit. alignN checks main against the words of the owner, and tuiN judges the TUI of main in a workspace of its own, as the skill converge-tui says. Each row of its register becomes an item, queued in the order of the register after the items of queue, unless the coordinator asks for the rows before the items that no worker holds yet.
-9. Each message of the owner that no ask of owner_asks names is one line, and so is each ask that is not done or a decision while no item in queue, at work or on an open PR of the round carries it. asked() writes the words of the owner, verbatim, when a message of his came, and gives the new lines in one notice, and no new notice while its last one stands open: no word of the owner drops between his message and main. A worker that ends with a line Left: <ids> queues one follow-up for each ask that no other item carries, and a follow-up that leaves it again is a decision.
-10. Each new comment of the owner on a PR of the round goes to the worker on it, else to a fixer on a fork of the chain of its maker, and the label hold comes on the PR until its worker pushes the fix and takes hold off.
-11. A fix of the round does not become its own item or PR: it waits in scratch://round/frozen.md, while the live module carries it, and the waiting fixes land together in one change.
-A step that fails is one notice, and the round goes on at the next round. The whole state lives in the module of your chain, so a word that a checkpoint cuts loses nothing: await conduct() again in a turn that shows.
-The round is an act on a chain of its own, so the end of each of its acts wakes nobody: you hear only its notices, and its done when it holds nothing. lead["round"] names it. close(None, lead["round"]) stops it, and each worker goes on, where a pause of it pauses each worker and a cancel ends them. await conduct() starts it again from any turn: the new round ends the beat of the round before it, which ends at its next step, and starts once that round is over, or after every seconds.
-A change of the round loads as the whole file, run again as a rung: each name of the state binds with setdefault and keeps its value."""
+ROOM = {"opus/high": 3, "opus/medium": 3, "sonnet/high": 3, "sonnet/medium": 3, "gpt-6-astra/high": 2}
+CLASSES = {one: f"claude-cli:{one}" for one in ("opus/high", "opus/medium", "sonnet/high", "sonnet/medium")}
+WIDTH = {"engine": 2, "host": 2, "tui": 3, "skills": 1, "rust": 2, "ci": 2, "tidy": 1, "review": 2, "qa": 1}
+AGG, QA, REVIEW = "converge", "qa", "review"
+FIX_MODEL, AGG_MODEL, QA_MODEL = CLASSES["sonnet/high"], CLASSES["opus/medium"], CLASSES["opus/medium"]
+ASTRA = "codex:gpt-6-astra/high"
+EVERY, FLOOR, QA_EVERY, REVIEW_EVERY, REGROUND = 300.0, 900.0, 900.0, 3600.0, 0.5
+REPO = "~/src/github.com/uael/furb"
+PAGE, WORDS = "scratch://converge/desk.md", "scratch://converge/words-life.md"
+PAGED = ["conduct", "beat", "next_item", "seats", "fix", "ground_step", "queue_rows", "queue_reviews", "news", "words"]
+CLAIM = ' Judge the row against main first: it is a claim of an audit.'
+QA_BRIEF = 'A QA run of the tip of w/converge, by the charter of this chain. If origin/w/converge stands at the sha of the last run in scratch://converge/qa.md, close at once with: same head <sha>. Else run it, and append to scratch://converge/qa.md ($TMPDIR/converge/qa.md) the sha, the minutes that the run took, the result of the scenarios, and each finding with its capture. Close with the rows of the new findings, or with clean, the sha and the minutes.'
+WORDS_BRIEF = 'The audit of the words of the owner, top 10 and the bar, read only. Read whole: scratch://converge/words-life.md (each message of the owner in this life and each of his answers, in order), ~/Library/Caches/furb/handoff/converge/plan.md, the picks (~/Library/Caches/furb/handoff/converge/decisions/picks.md, with its rulings N, N2, N3, A, O and W), and scratch://converge/desk.md (the code and the values that run the converge now: the desk, its queues, the method of the topics, the head of a fix and the brief of the aggregator). In the ledger ~/Library/Caches/furb/handoff/converge/asks.json, read the asks that these words name or change. For each ask in these words (an order, a rule, a number, a choice, or a question that wants a change), find what serves it: a line of the code or a value of desk.md, a queued or ended item, a commit on origin (git log origin/w/converge and origin/c/*), or a file of scratch://converge/. A later word of the owner rules over an earlier one. Write scratch://converge/words-audit.md ($TMPDIR/converge/words-audit.md): the missing and partly served asks first, then a table of each ask with its source id and its state (served, with where; queued, with the item; partly, with what lacks; missing; or overruled, with the later word). State each ask in plain English and quote no words. Close with the missing and partly served asks, one line each: the source id, the ask in one sentence, and the change that serves it (an item of a topic with its class of model and its paths, or a change of the desk for the lead).'
+ALIGN_BRIEF = 'The audit of alignment, top 10 and the bar, read only. Read the ledger of the asks (~/Library/Caches/furb/handoff/converge/asks.json), the top 10 (~/Library/Caches/furb/handoff/converge/top10.md) and the picks (~/Library/Caches/furb/handoff/converge/decisions/picks.md). Then run git fetch origin and read the commits of w/converge since the last audit: git log --no-merges --stat <base>..origin/w/converge, where <base> is the sha that the last entry of scratch://converge/align.md names, else origin/main, and git show for each commit that serves an ask of the top 3. Judge whether each change goes the way of its ask or drifts from it. Name each change that serves no ask or goes against one, and name the asks of the top 3 of the top 10 that no change serves yet. Append to scratch://converge/align.md ($TMPDIR/converge/align.md) the sha that you read and these lists. Close with the rows of the drifts and of the gaps, by the charter of this chain.'
+PERF_BRIEF = 'The census of speed, again, read only: by the charter of this chain, compare with the last entries of scratch://converge/perf.md and scratch://converge/ci-time.md. Read the times of the jobs and steps of the latest runs of the gates on w/converge (gh run list, then gh api repos/uael/furb/actions/runs/<id>/jobs), the numbers of bun run bench in the log of the job of the speed of the TUI, the slowest tests that the logs now print (pytest --durations and the times of the cargo binaries), and the token walls of engine.py and DOCTRINE.md. Append to scratch://converge/perf.md the sha, each measure against the last entry, each regression past a fifth and each gain. Close with a row for each regression and each new lever.'
+REVIEW_BRIEF = 'The review of the paths of the topic {t}, top 3 and the bar, read only. Run git fetch origin. Read each change that the converge made in the paths that scratch://converge/{t}.md gives to {t}, whichever topic made it: git log --no-merges -p <base>..origin/w/converge -- <paths>, where <base> is the sha of origin/w/converge that the last entry of scratch://converge/review-{t}.md names (an entry that names only a sha of c/{t} counts as none, so take origin/main),, the resolutions of the merges in those paths (git log -p --cc --merges <base>..origin/w/converge -- <paths>), and then the commits of the topic that w/converge does not hold yet: git log --no-merges -p origin/w/converge..origin/c/{t}. Review each change as an expert reviewer, by the charter of this chain. Append to scratch://converge/review-{t}.md ($TMPDIR/converge/review-{t}.md) the sha of origin/w/converge and of origin/c/{t} that you read, a verdict (clean, or the count of findings), and each finding with its commit, its path and lines, the rule that it breaks and its fix. Close with the rows of the findings, or with clean and the two shas.'
+FIX_HEAD = "A failure of the CI of w/converge in a path that this topic owns. It goes before your other items: fix it at its cause in your worktree, as one commit, with the checks of what you touched, then push your branch. Close with the sha and a report. The live items of this topic may hold uncommitted edits in the tree: commit only the paths of your fix (git add <path>), and leave their edits as they stand. A test in a path of another topic that your topic's change made wrong is yours to fix in your commit, by the carry rule: name its path in the body, and never leave it as a Needs line. Commit with the paths named (git commit <path>... -m <title>), since the index may hold the edits of another item. The brief of the aggregator:\n\n"
+CYCLE = 'One cycle of the aggregator. The charter of this chain, scratch://converge/converge.md, holds your rules and the paths of each topic.\n1. In your worktree: git fetch origin, then merge each topic branch that holds commits that w/converge lacks, in the order engine, host, tui, skills, rust, ci, with git merge --no-ff --no-edit c/<topic> (the local branches of this clone, which the topics also push to origin). Resolve a conflict by the meaning of both sides. A conflict that needs the knowledge of a topic goes to that topic as a failure: abort that merge and route it.\n2. When a merge changes the source of a generated file, make the file again (bun run protocol, bun run build, bun run docs) and commit it. Run the quick checks of what the merges touched, through sh script/build-slot.sh, never the whole suite.\nThen apply each line of scratch://converge/converge-needs.md that is not marked done, as one commit of the paths that you own, and mark it done there with its sha.\n3. Push w/converge. While no PR stands for it, open one ready, never a draft, with the label hold so that it never merges by itself: await pr(title, why, outcome, checks, where=<your worktree>, labels="hold") of the skill pr, whose rules the template gives. Its body says that the branch converges the work of the owner since 11-03, topic by topic, and lists the PRs that it carries. Update the body when a cycle adds a topic or a fold, with one line "Fixes #N." for each issue that scratch://converge/issues.md says that w/converge carries, once the commits that fix it stand on the branch.\n4. Read the checks of the PR once, with no wait: gh pr checks <n> --json name,bucket,link. For each failed check of the newest head that ran, read the log of its failed job (gh api repos/uael/furb/actions/jobs/<id>/logs | grep and tail) and find the failing test or file, then the topic that owns that path. A check that main fails too goes to the topic of its path as well, marked as a failure that main shares, since w/converge must be green to merge.\n5. Close with a tuple: a dict that maps each topic to the brief of its failures (the check, the link of the job, the head, the failing test or file, and the lines of the log that show the cause), with each failure routed once, and a summary in 150 words at most: the commits merged from each topic, the head pushed, and the state of the checks. Route nothing to a topic twice for the same failure at the same head: say in the summary that it is still red.\n\n\nBefore each push of w/converge, run on the merged head, through sh script/build-slot.sh: cargo clippy --workspace --all-targets -- -D warnings, bun run lint, bun run check and python3 script/rustwidth.py origin/main. Route each finding at once to the topic that owns its path, as a failure of CI, before the push, so the topic fixes it while the CI runs, and the CI finds only what needs the three systems.'
 
-MOST = 10
-UNMOVED = 1800.0
-ALIGN_EVERY = 4
-OWNER = "uael"
-GATE = "the gates"
-FAILS = ("FAILURE", "ERROR", "TIMED_OUT", "STARTUP_FAILURE", "ACTION_REQUIRED", "CANCELLED")
-GREEN = ("SUCCESS", "SKIPPED", "NEUTRAL")
-HOLDS = ("hold", "hold:owner-review", "owner-merge", "paused")
-ASKS = "scratch://owner/asks.json"
-WORDS = "scratch://owner/words.md"
-ASK_LEFT = re.compile(r"Left: ([^\n]*)")
-ALONE = re.compile(r"^(src/furb/engine\.pyi?|DOCTRINE\.md|\.github/budgets\.json|\.furb/extensions/conductor/conductor\.py)$")
-QUIET = 1800.0
-KEEP = 60
-TESTS = re.compile(r"(^|/)(tests?|__tests__)/|\.test\.[a-z]+$|_test\.[a-z]+$|(^|/)test_[^/]+\.py$|(^|/)conftest\.py$")
-
-# The module of a chain may hold these names already, with values: a name binds its default only when it is not there.
-limits: dict[str, Any] = globals().setdefault(
-  "limits",
-  {
-    "room": {"opus/high": 3, "opus/medium": 3, "sonnet/high": 3, "sonnet/medium": 3, "gpt-6-astra/high": 1},
-    "fixer": "claude-cli:sonnet/medium",
-    "models": {"editor": "claude-cli:sonnet/high", "audit": "claude-cli:opus/high", "lead": "claude-cli:opus/medium", "astra": "codex:gpt-6-astra/high"},
-  },
+width: dict[str, int] = globals().setdefault("width", dict(WIDTH))
+chains: dict[str, str] = globals().setdefault("chains", {})
+queues: dict[str, list[dict]] = globals().setdefault("queues", {})
+live: dict[str, dict[str, dict]] = globals().setdefault("live", {})
+ended: list[tuple[str, str, str]] = globals().setdefault("ended", [])
+fixing: dict[str, str] = globals().setdefault("fixing", {})
+fixwait: dict[str, str] = globals().setdefault("fixwait", {})
+ground: dict[str, str] = globals().setdefault("ground", {})
+stuck: dict[str, str] = globals().setdefault("stuck", {})
+notes: list[str] = globals().setdefault("notes", [])
+state: dict[str, Any] = globals().setdefault(
+  "state", {"id": "", "cycle": "", "due": "", "print": "", "qa_print": "", "last": 0.0, "cycle_at": 0.0, "qa_at": 0.0, "review_at": 0.0, "qa": 0, "reviews": 0}
 )
-queue: list[dict] = globals().setdefault("queue", [])
-working: dict[str, dict] = globals().setdefault("working", {})
-prs: dict[int, dict] = globals().setdefault("prs", {})
-merges: dict[int, str] = globals().setdefault("merges", {})
-assigned: dict[int, dict] = globals().setdefault("assigned", {})
-lead: dict[str, str] = globals().setdefault("lead", {})
-noticed: set[str] = globals().setdefault("noticed", set())
-heard: list[str] = globals().setdefault("heard", [])
-landed: list[int] = globals().setdefault("landed", [])
-align_state: dict[str, dict] = globals().setdefault("align_state", {})
-comments: set[str] = globals().setdefault("comments", set())
-progress: dict[str, tuple[int, float]] = globals().setdefault("progress", {})
 
 
-def asks_kept() -> dict[str, dict]:
-  try:
-    got = json.loads(read(ASKS, HIDDEN).content)
-  except (Refused, ValueError):
-    return {}
-  return {str(x["id"]): x for x in got if isinstance(x, dict) and "id" in x} if isinstance(got, list) else {}
+def chain_of(t: str) -> str:
+  if t not in chains:
+    chains[t] = str(chain(t))
+  return chains[t]
 
 
-owner_asks: dict[str, dict] = globals().setdefault("owner_asks", asks_kept())
+def queue(t: str) -> list[dict]:
+  return queues.setdefault(t, [])
 
-RULES = """Write no word of the owner in a PR, a commit, a comment, an issue or a file, as a quote, a translation or an attribution: say in your own words what the change does. Run no real life of a model. Never open a window on this machine, not even for a test: the owner works on it, and each window takes his mouse and his keyboard. Run a check of the app only on the runners of CI. Start each comment, review, issue and PR body that you write on GitHub with 🤖, since you write from the owner's account and his own words carry no mark; a title keeps its own rule. Never take off the label owner-merge: only the owner takes it off, and that is his approval to merge. The owner sleeps or is away: ask him nothing and wait for nothing of his. Take each decision yourself from the brief and the rulings, say it in your PR body, and go on. A cause that a brief names is a hypothesis: check it in the log before you build on it. Ask the one who gave you this work on its chain only when it alone can decide: await prompt(str, question, on="{home}"). Set each timeout and each wait to about twice the time that the step should take, never a round bound in case, and make a long step print its progress, so that a hang shows at once. Never wait on CI in a bash for more than 10 minutes: not gh pr checks --watch, not gh run watch, not a loop of sleep around gh. To wait for the checks of your PR, await checked(number) and never write a loop of your own. Rerun a check only when its line says [machine] or [cancelled], once for each head, with gh run rerun <run> --failed, and then await checked(number) again; a [defect] is yours to fix. Once your push is done, read the checks once and close with the PR and its checks as they stand, since the round tends them. A build with no cap took this machine down out of memory, so each build goes through sh script/build-slot.sh <command>, from the root of your workspace: cargo, bun run build, uv sync, uv run, pytest, git commit, whose hooks run cargo and the suite, and sh script/hooks/pre-commit. It holds one of the slots of builds that all the workers of the machine share, waits for a free one, and caps the jobs of cargo at 4. Give its bash a timeout of 2400 seconds: when it exits 75, no slot freed in 1200 seconds, so run it again. Run one build at a time, give cargo no -j and no CARGO_BUILD_JOBS above 4, and start no build in the background."""
 
-WORKER = """You are a worker on the repository {repo}. Do one item, and open its PR yourself.
-1. Your branch is w/{key}. {workspace} Build on origin/main, and stack your branch on an open PR only when your change needs its code, and say why in the body. Make a stack with gh stack, and run skill("gh-stack") in a word of your own before you make or touch one.
-2. Change it as the AGENTS.md files of the repository say, and run only the tests that your change touches.
-3. Commit with the title of the PR as its message, and push the branch. Then open the PR, or update it when it stands, with pr(), which fills the template of the owner from what you give it and checks each of its rules: await pr(title, why, outcome, checks, breaking=[], fixes=0, where=<your workspace>, labels="{labels}"). Write the title and the body as .github/pull_request_template.md of your workspace says, and read it whole: why is the problem and why it matters now, from your own work, outcome lists what is true now with the evidence of what you ran and each gap that you leave, breaking lists each change that forces a caller to change code, and checks gives one line for each box of its checklist in its order, the evidence of how you verified that box, or not: and the work that it still needs. Await prcheck(title, why, outcome, breaking, where=<your workspace>) before the commit. Never write the body of a PR by hand, and open it ready, never as a draft.
-4. Open your first PR within about an hour of work, as soon as one coherent part serves the item: a large item lands as a gh stack of PRs, each layer one change, and you close with the number of the last one.
-5. When the item asks for no change, answer it in a comment that starts with 🤖 on its issue or PR. Close with a tuple: the number of your PR, or 0 when the item asked for no change, and your report in 200 words at most: what you measured, what you decided, and what is left.
-""" + RULES + """
+def kind(model: str) -> str:
+  return model.split(":")[-1]
 
-The item, {key}:
-{what}"""
 
-WORKSPACE = """Work in the workspace {path}, which the round gives to you alone, and to a later item once you end, so that each build starts warm. If it does not stand, make it: sh {repo}/script/build-slot.sh {repo}/script/worktree.sh {path} <your branch>, then give cd({path!r}) in a word of your own and write your chain in it: echo {chain} > "$(git -C {path} rev-parse --absolute-git-dir)/furb-holder". If it stands, the round wrote your chain in it: git fetch origin, then git switch -C <your branch> onto origin/<your branch> when that branch is on origin, else onto origin/main. Before your first command of each prompt there, read the file furb-holder in its git dir: when it names another chain than {chain}, the round gave the workspace to another worker, so run nothing in it. Leave the workspace clean when you close, each change committed and pushed."""
+def seats() -> dict[str, int]:
+  models = [str(item["model"]) for held in live.values() for p, item in held.items() if not over(p)]
+  models += [FIX_MODEL for one in fixing.values() if not over(one)]
+  models += [AGG_MODEL] if state["cycle"] and not over(state["cycle"]) else []
+  used: dict[str, int] = {}
+  for one in models:
+    used[kind(one)] = used.get(kind(one), 0) + 1
+  return used
 
-AUDIT = """You are an auditor on the repository {repo}. Do one item: read the code, the records and the logs that it names, find each fact that it asks for, and write each in a register, scratch://audit/{key}.md ($TMPDIR/audit/{key}.md), with its evidence: the file and the line, or the command and the lines that it printed. Check each claim of the item in the code, since it is a claim. Change no file of the repository, make no worktree but the workspace that your item names, push nothing and open no PR. When your work yields items for workers, write them in that register as a table with one row for each item, in order of rank, the hard work first: a row that reshapes a module, a contract or a protocol ranks before a row of polish or a simple row: | Dn | key | model | area | after | brief |, where Dn is its rank, key a short name in letters and dashes, model one of {models}, area the folder or the file that the item changes, after the Dn of each row that it waits for, or nothing, and brief what the worker does, as a task. The round queues each row as an item when you end. Close with a tuple: 0, and your report in 200 words at most: the path of the register, what you found, and what is left.
-""" + RULES + """
 
-The item, {key}:
-{what}"""
+def seat(model: str) -> bool:
+  return seats().get(kind(model), 0) < ROOM.get(kind(model), 0)
 
-FIX = """You fix the open PR #{n} of the repository {repo}: it {problem} at {sha}. Read it with gh pr view {n} and await checked({n}). If the head of the PR is not {sha} any more, or the PR no longer {problem}, change nothing and close with its number and a report that says so. Else work at the head of its branch {head}. {workspace} Resolve a conflict with the meaning of both sides, run the checks that the change touches, and push with --force-with-lease. Close with a tuple: the number of the PR, and your report in 200 words at most.
-""" + RULES
 
-FIXOWN = """Your open PR #{n} {problem} at {sha}. Fix it before any other step: fetch origin, fix it on your branch, resolve each conflict with the meaning of both sides, run the checks that the change touches, push with --force-with-lease, and read its checks once. When its head has not moved in {minutes} minutes, the round tells the coordinator."""
-
-ANSWER = """The owner commented on the open PR #{n} of the repository {repo}, at the head of its branch {head}, and no worker is on it. Do what the comment asks, answer it on GitHub with a reply that starts with 🤖, push the fix with --force-with-lease, and take the label hold off the PR. {workspace} The comment:
-{line}
-Close with a tuple: the number of the PR, and your report in 200 words at most.
-""" + RULES
-
-TRUTH = "The source of truth for this item is the words of the owner, scratch://owner/words.md, and the options that he picked, scratch://owner/picks.md: where a line of this brief bends them, his words and his picks rule.\n\n"
-
-ALIGN = """The audit of alignment {key}: {count} PRs merged since the last one. Its window of commits is git log --oneline {window}. Read that window and the diff of each PR in it, and check main against the words of the owner, which are the one source of truth: {words}, scratch://owner/picks.md, and the ledger of his asks, {asks} ($TMPDIR/owner/asks.json). Check each ask of the ledger against origin/main as a claim: set its state to done, open, partly or missing, with its evidence and its gap, and write the ledger back in the same shape. The round holds the items below, so a row of your register queues none of them again: {held}."""
-
-TUI = """The audit of the TUI {key}: {count} PRs merged since the last one. Its window of commits is git log --oneline {window}. {workspace} Check out origin/main there, detached, before anything else, then read the skill converge-tui with skill("converge-tui"), and audit the TUI of origin/main as it says, against the last whole capture of the TUI, in $TMPDIR/audit/tui. The round holds the items below, so a row of your register queues none of them again: {held}."""
-AUDITS = {"align": ALIGN, "tui": TUI}
-
-SETTLE = """here=$1 mine=$2 heads=" $3 "
-shift 3
-cd "$here" 2>/dev/null || exit 0
-holder=$(cat "$(git rev-parse --absolute-git-dir)/furb-holder" 2>/dev/null)
-for live in "$@"; do [ "$holder" != "$live" ] || exit 3; done
-if [ "$holder" != "$mine" ]; then
-  [ -z "$(git status --porcelain)" ] || exit 5
-  b=$(git branch --show-current)
-  case "$heads" in *" ${b:-?} "*) ;; *) [ -z "$(git rev-list HEAD --not --remotes | head -1)" ] || exit 5 ;; esac
-fi
-echo "$mine" > "$(git rev-parse --absolute-git-dir)/furb-holder"
-"""
-
-DISK = """need=$1 live=" $2 "
-shift 2
-left() { df -Pk "$HOME" | awk 'NR == 2 {print int($4 / 1048576)}'; }
-for p in "$@"; do
-  [ "$(left)" -lt "$need" ] || exit 0
-  h=$(cat "$(git -C "$p" rev-parse --absolute-git-dir 2>/dev/null)/furb-holder" 2>/dev/null)
-  case "$live" in *" $h "*) [ -z "$h" ] || continue ;; esac
-  [ ! -d "$p/target" ] || { rm -rf "$p/target"; echo "$p"; }
-done
-[ "$(left)" -ge "$need" ] || { left; exit 4; }
-"""
-
-LABELS = "gh label create hold -c FBCA04 -d 'It waits for the fix of a review before a merge' 2>/dev/null; gh label create hold:owner-review -c FBCA04 -d 'The owner iterates with its worker: no merge until he takes it off' 2>/dev/null; gh label create owner-merge -c 5319E7 -d 'The owner merges it or not' 2>/dev/null; gh label create paused -c BFBFBF -d 'The owner paused it: no fix and no merge' 2>/dev/null; true"
-
-PRS = """gh pr list --state open --limit 200 --json number,isDraft,labels,mergeable,baseRefName,headRefName,headRefOid,statusCheckRollup,body,files,autoMergeRequest --jq '[.[] | ([.statusCheckRollup[]?] | group_by(.name // .context // "") | map(max_by(if (.status // "COMPLETED") == "COMPLETED" then (.startedAt // .completedAt // "") else "~" end))) as $c | {n: .number, draft: .isDraft, labels: [.labels[].name], mergeable, base: .baseRefName, head: .headRefName, sha: .headRefOid, checks: [$c[] | (.conclusion // .state // "")], names: [$c[] | (.name // .context // "")], open: [(.body // "") | splits("\\n") | select(startswith("- [ ] "))], files: [.files[]?.path], auto: (.autoMergeRequest != null)}]'
-c=$?; echo; echo "--- $c"
-gh pr list --state merged --limit 200 --json number,headRefName --jq '[.[] | [.number, .headRefName]]'
-c=$?; echo; echo "--- $c"
-gh run list --branch main --workflow gates.yml --limit 20 --json headSha,conclusion --jq '.[0].headSha as $s | {sha: ($s // ""), runs: [.[] | select(.headSha == $s) | .conclusion]}'
-c=$?; echo; echo "--- $c"
-gh api 'repos/{owner}/{repo}/rules/branches/main' --jq '[.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context]'
-c=$?; echo; echo "--- $c"
-gh api 'repos/{owner}/{repo}/commits/main/check-runs?per_page=100' --jq '[.check_runs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | .name]'
-c=$?; echo; echo "--- $c"
-"""
-
-REVIEWS = r"""for n in {prs}; do
-gh api "repos/{owner}/{repo}/pulls/$n/comments" --jq '.[] | "\(.pull_request_url | split("/") | last)\tc\(.id)\t\(.user.login)\t\(.path):\(.line // .original_line)\t\(.body | gsub("[\r\n\t]"; " "))"' || exit 1
-gh api "repos/{owner}/{repo}/pulls/$n/reviews" --jq '.[] | select(.body != "") | "\(.pull_request_url | split("/") | last)\tr\(.id)\t\(.user.login)\t-\t\(.body | gsub("[\r\n\t]"; " "))"' || exit 1
-gh api "repos/{owner}/{repo}/issues/$n/comments" --jq '.[] | "\(.issue_url | split("/") | last)\ti\(.id)\t\(.user.login)\t-\t\(.body | gsub("[\r\n\t]"; " "))"' || exit 1
-done"""
-
-
-def shell(command: str, **words) -> Generator[set[str], object, Exit]:
-  ran = bash(command, show=HIDDEN, ok=True, **words)
-  while not over(ran):
-    yield {ran}
-  if isinstance(got := peek(ran), Exit):
-    return got
-  raise Refused(f"{ran} came to {got!r}")
-
-
-def merged_since() -> str:
-  lines = [*heard, *(["Merged: " + " ".join(f"#{n}" for n in landed) + "."] if landed else [])]
-  heard.clear()
-  landed.clear()
-  return ("\n\nSince the last notice:\n" + "\n".join(f"- {x}" for x in lines)) if lines else ""
-
-
-def notice(key: str, message: str) -> None:
-  if key not in noticed:
-    noticed.add(key)
-    prompt(None, message + merged_since(), on=home())
-
-
-def once(key: str, line: str) -> None:
-  if key not in noticed:
-    noticed.add(key)
-    heard.append(line)
-
-
-def cap() -> int:
-  return min(MOST, sum(limits["room"].values()))
-
-
-def model_of(item: dict) -> str:
-  kind = item.get("kind", "edit")
-  return item.get("model") or (limits["fixer"] if kind == "fix" else limits["models"].get("audit" if kind == "audit" else "editor", limits["fixer"]))
-
-
-def runs() -> list[str]:
-  return list(dict.fromkeys([*limits["models"].values(), limits["fixer"]]))
-
-
-def family(model: str) -> str:
-  name = model.split(":")[-1]
-  return name if name in limits["room"] else name.split("/")[0]
-
-
-def living() -> list[str]:
-  return [n for n in working if not over(n)]
-
-
-def unheard(name: str) -> bool:
-  return clock() - progress.get(name, (0, clock()))[1] >= QUIET
-
-
-def running() -> list[str]:
-  return [n for n in living() if not paused(n) and not unheard(n)]
-
-
-def room(model: str) -> bool:
-  mine = family(model)
-  return len(running()) < cap() and len([n for n in running() if family(working[n]["model"]) == mine]) < limits["room"].get(mine, 0)
-
-
-def held_keys() -> set[str]:
-  return {q["key"] for q in [*queue, *working.values()]}
-
-
-def ended(key: str) -> list[dict]:
-  return [x for x in working.values() if x["key"] == key and "pr" in x]
-
-
-def taken(key: str) -> str:
-  return next((w for w in living() if working[w]["key"] == key), "") or ("queued" if any(q["key"] == key for q in queue) else "")
-
-
-def maker_key(pr: dict) -> str:
-  return next((m[2:] for m in pr["labels"] if m.startswith("w:")), "")
-
-
-def ours(pr: dict) -> bool:
-  return maker_key(pr) in held_keys()
-
-
-def maker_of(pr: dict) -> str:
-  return next((w for w in living() if working[w]["key"] == maker_key(pr)), "")
-
-
-def owner_of(pr: dict) -> str:
-  held = assigned.get(pr["n"]) or {}
-  fixer = held.get("who", "") if held.get("fixer") and not over(held.get("who", "")) else ""
-  return fixer or maker_of(pr)
-
-
-def working_at(name: str) -> str:
-  return str(get(name)[3])
-
-
-def maker_chain(pr: dict) -> str:
-  made = [w for w in working if working[w]["key"] == maker_key(pr)][-1:]
-  return working_at(made[0]) if made else ""
-
-
-def home() -> str:
-  return scope(get(acting())[2])
-
-
-def slug(text: str) -> str:
-  return "-".join(re.findall(r"[a-z0-9]+", text.lower()))[:34].strip("-")
-
-
-def files(item: dict) -> set[str]:
-  return {x for a in item.get("areas", []) if (x := a.strip("/ `")) and not TESTS.search(x)}
-
-
-def overlap(mine: set[str], theirs: set[str]) -> list[str]:
-  pairs = [(x, y) for x in mine for y in theirs if x == y or x.startswith(y + "/") or y.startswith(x + "/")]
-  return sorted({p for x, y in pairs if ALONE.search(p := y if y.startswith(x + "/") else x)})
-
-
-def seated() -> set[str]:
-  return {working[n].get("slot", "") for n in living()} - {""}
-
-
-def placed(where: str) -> Generator[set[str], object, tuple[str, str]]:
-  held = seated()
-  live = " ".join(shq(working_at(n)) for n in living() if working_at(n) != where)
-  heads = shq(" ".join(merges.values()))
-  for slot in (f"w{i}" for i in range(1, 2 * MOST + 3)):
-    path = f"{cwd()}-{slot}"
-    code = 3 if slot in held else (yield from shell(f"sh -c {shq(SETTLE)} sh {shq(path)} {shq(where)} {heads} {live}", timeout=120)).code
-    if code == 5:
-      once(f"kept {path}", f"The workspace {path} holds work that no branch holds, so the round gives it to no worker until it is pushed or dropped.")
-    elif code != 3:
-      break
-  else:
-    raise Refused("each workspace holds a live worker")
-  rung(f"try:\n  cd({path!r})\nexcept Refused:\n  pass", on=where)
-  return WORKSPACE.replace("{path!r}", repr(path)).replace("{path}", path), slot
-
-
-def carried(key: str) -> str:
-  held = [(aid, a) for aid, a in owner_asks.items() if key in [str(i) for i in a.get("items") or []]]
-  if not held:
+def fix(t: str, why: str) -> str:
+  if not seat(FIX_MODEL):
+    fixwait[t] = why
     return ""
-  lines = "\n".join(f'- {aid}: "{a.get("quote", "")}" ({a.get("prompt", "")})' for aid, a in held)
-  ids = ", ".join(aid for aid, _ in held)
-  return f'This item carries the asks {ids} of the owner, in his words:\n{lines}\nServe each of them whole. End your report with the line "Served: <ids>" and, for each part that stays undone, "Left: <id> (why)".\n\n'
+  fixwait.pop(t, None)
+  fixing[t] = str(prompt(str, FIX_HEAD + why, to=FIX_MODEL, on=chain_of(t)))
+  return fixing[t]
 
 
-def hire(item: dict) -> Generator[set[str], object, str]:
-  key, kind, thread = item["key"], item.get("kind", "edit"), item.get("thread", "")
-  model = item["model"] = model_of(item)
-  marks = f" --label w:{key}" + (f" --label thread:{thread}" if thread else "")
-  where = str(chain(f"{thread or 'w'}/{key}", source=item.pop("source", "")))
-  rung(f"actor = {model!r}", on=where)
-  text = {"audit": AUDIT, "edit": WORKER, "fix": "{what}"}[kind].replace("{what}", item["brief"])
-  if "{workspace}" in text:
-    space, item["slot"] = yield from placed(where)
-    text = text.replace("{workspace}", space)
-  for old, new in (("{labels}", marks), ("{repo}", cwd()), ("{key}", key), ("{home}", home()), ("{models}", ", ".join(runs())), ("{chain}", where)):
-    text = text.replace(old, new)
-  name = str(prompt(tuple[int, str], carried(key) + text, to=model, on=where))
-  del item["brief"]
-  working[name] = item
-  return name
+def item_text(t: str, item: dict) -> str:
+  return f"Item {item['key']} of the topic {t}. The charter of this chain, scratch://converge/{t}.md, holds its rules, its paths and the asks of the owner that it carries.\n\n{item['brief']}"
 
 
-def waiting(item: dict) -> str:
-  key, model = item["key"], model_of(item)
-  if model not in runs():
-    return f"it asks {model}, and a worker runs only {', '.join(runs())}"
-  for dep in item.get("after", []):
-    if not (done := ended(dep)) or dep in {q["key"] for q in queue} | {working[w]["key"] for w in living()}:
-      return f"{dep} has not ended" + ("" if dep in held_keys() else ", and no item holds it")
-    if shut := [x["pr"] for x in done if x["pr"] and x["pr"] not in merges]:
-      return f"#{shut[0]} of {dep} has not merged"
-  if not room(model):
-    return f"{family(model)} has no room"
-  mine = files(item)
-  for w in living():
-    if working[w]["key"] != key and (hit := overlap(mine, files(working[w]))):
-      return f"the worker of {working[w]['key']} holds {hit[0]}"
-  for n, pr in prs.items():
-    if ours(pr) and f"w:{key}" not in pr["labels"] and (hit := overlap(mine, set(pr["files"]))):
-      return f"#{n} changes {hit[0]}"
-  return ""
+def next_item(t: str) -> dict | None:
+  if t == QA and not queue(QA) and not live.get(QA) and state["print"] != state["qa_print"] and clock() - state["qa_at"] >= QA_EVERY:
+    state.update(qa=state["qa"] + 1, qa_print=state["print"], qa_at=clock())
+    queue(QA).append({"key": f"qa-run-{state['qa']}", "model": QA_MODEL, "brief": QA_BRIEF})
+  done, used = {k for _, k, _ in ended}, seats()
+  held = ({kind(FIX_MODEL)} if fixwait else set()) | ({kind(AGG_MODEL)} if state["due"] else set())
+  for n, item in enumerate(queue(t)):
+    k = kind(str(item["model"]))
+    if k not in held and all(one in done for one in item.get("after", [])) and used.get(k, 0) < ROOM.get(k, 0):
+      return queue(t).pop(n)
+  return None
 
 
-def staff() -> Generator[set[str], object, None]:
-  for item in list(queue):
-    if len(running()) >= cap() - 1:
-      return
-    if cause := waiting(item):
-      if not cause.endswith("has not ended"):
-        once(f"waits {item['key']} {cause}", f"{item['key']} waits: {cause}.")
-      continue
-    queue.remove(item)
-    yield from hire(item)
+def watch(t: str) -> None:
+  why = ""
+  if queue(t) and not live.get(t) and not fixing.get(t):
+    why = f"{t} holds {len(queue(t))} queued items and runs none: " + (f"its fix waits for a seat of {kind(FIX_MODEL)}" if t in fixwait else "no item has its after done and a seat of its class free")
+  if why and stuck.get(t) != why:
+    notes.append(why)
+  stuck[t] = why
 
 
-def register(key: str) -> None:
-  try:
-    rows = read(f"scratch://audit/{key}.md", HIDDEN).lines
-  except Refused:
-    return
-  made, ranks, waits = [], {}, {}
-  wide = int(any(re.fullmatch(r"\|\s*Dn\s*\|.*\|\s*after\s*\|.*", x.strip()) for x in rows))
-  for line in rows:
-    cells = [x.strip() for x in line.strip().strip("|").split("|")]
-    rank, name = cells[0], f"{key}-{slug(cells[1])}" if len(cells) > 4 + wide else ""
-    if not name or not re.fullmatch(r"D\d+", rank) or name == key + "-" or name in [x["key"] for x in made]:
-      continue
-    ranks[rank], waits[name] = name, re.findall(r"D\d+", cells[4]) if wide else []
-    if name in held_keys():
-      heard.append(f"The row {rank} of the register of {key} is {name}, which the round holds already, so it queued nothing for it.")
-      continue
-    model, area, brief = cells[2], cells[3], "|".join(cells[4 + wide :]).strip()
-    item = {"key": name, "brief": f"{TRUTH}{brief}\n\nThis item is row {rank} of the register scratch://audit/{key}.md.", "thread": name}
-    if (full := model if ":" in model else f"claude-cli:{model}") in runs():
-      item["model"] = full
-    if "/" in area:
-      item["areas"] = [area.strip("`/ ")]
-    queue.append(item)
-    made.append(item)
-  for item in made:
-    if deps := [ranks[d] for d in waits[item["key"]] if d in ranks]:
-      item["after"] = deps
-  if made:
-    heard.append(f"The register of {key} queued {', '.join(x['key'] for x in made)}.")
+def grounding(acts: list[tuple]) -> list[tuple]:
+  asked = [a[1] for a in acts if a[0] == "prompt"]
+  open_ = [a[1] for a in acts if a[0] == "prompt" and not over(a[1])]
+  return [a for a in acts if (a[0] == "read" and not any(under(a[1], p) for p in asked)) or any(under(a[1], p) for p in open_)]
 
 
-def kept_asks() -> None:
-  write(Text(ASKS, json.dumps([{"id": i, **a} for i, a in owner_asks.items()], indent=1) + "\n"))
+def kept_reads(ids: set[str]):  # noqa: ANN201
+  def keep(acts: list[tuple]) -> list[tuple]:
+    open_ = [a[1] for a in acts if a[0] == "prompt" and not over(a[1])]
+    return [a for a in grounding(acts) if (a[0] == "read" and a[1] in ids) or any(under(a[1], p) for p in open_)]
+
+  return keep
 
 
-def left(item: dict, report: str) -> None:
-  key = item["key"]
-  ids = sorted({m for hit in ASK_LEFT.finditer(report) for m in re.findall(r"A\d+", hit[1])} & set(owner_asks))
-  others = ({q["key"] for q in queue} | {working[w]["key"] for w in living()}) - {key}
-  for aid in ids:
-    a = owner_asks[aid]
-    if a.get("state") == "decision" or others & {str(i) for i in a.get("items") or []}:
-      continue
-    if key.startswith("ask-"):
-      a.update(state="decision", gap=report[:600])
-      notice(f"left twice {aid} {key}", f"The follow-up {key} of the ask {aid} of the owner left it again, so it needs your decision and no new item. Its report:\n\n{report}")
-      continue
-    n = 1
-    while f"ask-{aid.lower()}-{n}" in held_keys():
-      n += 1
-    name = f"ask-{aid.lower()}-{n}"
-    a.update(state="partly", gap=f"{key} left it: {report[:400]}", items=[*(a.get("items") or []), name])
-    brief = f"{TRUTH}The ask {aid} of the owner, in his words (from {a.get('prompt')}):\n\n> {a.get('quote')}\n\nThe worker of {key} left it, in its words:\n\n{report}\n\nDo what it left, and only that."
-    queue.append({"key": name, "brief": brief, "thread": name, "model": model_of(item), "areas": list(item.get("areas", []))})
-    heard.append(f"The worker of {key} left the ask {aid} of the owner, so the round queued {name}.")
-  if ids:
-    kept_asks()
+def ground_note(t: str) -> str:
+  return f"This chain is the topic {t} of the converge. It was regrounded past {REGROUND:.0%} of its window: it keeps the reads that grounded it, read again to show what changed, and its open items. The work of each ended item stands in the commits of its branch. Its charter, scratch://converge/{t}.md, holds its rules, its paths and the asks of the owner that it carries."
 
 
-def tend() -> None:
-  for name, item in working.items():
-    if "pr" in item or not over(name):
-      continue
-    got, key = peek(name), item["key"]
-    n = item["pr"] = got[0] if isinstance(got, tuple) and got and isinstance(got[0], int) else 0
-    report = got[1] if isinstance(got, tuple) and len(got) == 2 and isinstance(got[1], str) else repr(got)[:2000]
-    if item.get("kind") == "audit":
-      heard.append(f"The auditor {key} ({name}) ended: {report}")
-      register(key)
-    elif n > 0:
-      heard.append(f"The worker {key} ({name}) ended with #{n}: {report}")
+def ground_step(t: str) -> str:
+  c = chains[t]
+  replies = [str(x[1]) for x in transcript(c, "reply") if over(x[1])]
+  last = replies[-1] if replies else ""
+  share = (filled(last) or 0.0) if last else 0.0
+  mark = ground.get(t, "")
+  if mark.startswith("c:"):
+    if not over(pick := mark[2:]):
+      return ""
+    got = peek(pick)
+    ground[t] = "g:" + last
+    if isinstance(got, tuple) and len(got) == 2 and isinstance(got[0], list):
+      ids = {str(i) for i in got[0]}
+      compact([kept_reads(ids), latest()], summary=ground_note(t) + "\n" + str(got[1]).strip(), on=c)
+      return f"{t} ({c}) still read {share:.0%} of its window after its reground, so a cheap model chose the acts to keep ({len(ids)})."
+    return f"{t} ({c}): the cheap choice of its reads gave {str(got)[:300]}, so the chain stays as it is."
+  if not last or share <= REGROUND:
+    if mark.startswith("g:") and mark != "g:" + last:
+      ground[t] = ""
+    return ""
+  if mark == "g:" + last:
+    return ""
+  if mark.startswith("g:"):
+    ground[t] = "c:" + str(choice(on=c))
+    return ""
+  compact([grounding, latest()], summary=ground_note(t), on=c)
+  ground[t] = "g:" + last
+  return f"{t} ({c}) read {share:.0%} of its window, so it was regrounded on its reads."
+
+
+def finger() -> str:
+  heads = "\n".join(f'echo "c/{t} $(git -C {REPO} rev-parse --short c/{t} 2>/dev/null)"' for t in width)
+  checks = "gh pr checks \"$n\" --json bucket --jq '[.[] | .bucket] | group_by(.) | map(\"\\(.[0]) \\(length)\") | join(\", \")'"
+  return f"{heads}\nn=$(gh pr list --head w/{AGG} --state open --json number --jq '.[0].number // empty')\necho \"pr ${{n:-none}}\"\n[ -n \"$n\" ] && {checks}\ntrue\n"
+
+
+def beat() -> Generator[set[str], object, None]:
+  for t in width:
+    held = live.setdefault(t, {})
+    if (one := fixing.get(t, "")) and over(one):
+      notes.append(f"{t} ended the fix {one} of CI: {str(peek(one))[:2000]}")
+      fixing.pop(t)
+    if t in fixwait and not fixing.get(t) and seat(FIX_MODEL):
+      fix(t, fixwait[t])
+    for p in [p for p in held if over(p)]:
+      item = held.pop(p)
+      ended.append((t, str(item["key"]), p))
+      notes.append(f"{t}: the item {item['key']} ({p}, {item['model']}) ended: {str(peek(p))[:3000]}")
+    while not fixing.get(t) and t not in fixwait and len(held) < width[t] and (item := next_item(t)):
+      held[str(prompt(str, item_text(t, item), to=item["model"], on=chain_of(t)))] = item
+    watch(t)
+  for t in [t for t in [*width, AGG] if t in chains]:
+    if said := ground_step(t):
+      notes.append(said)
+  if (cycle := state["cycle"]) and over(cycle):
+    got, state["cycle"] = peek(cycle), ""
+    if isinstance(got, tuple) and len(got) == 2 and isinstance(got[0], dict):
+      for t, why in got[0].items():
+        if t in width and why and not fixing.get(t) and t not in fixwait:
+          fix(t, str(why))
+      notes.append(f"cycle {cycle}: {got[1]}" + (f" Sent to {', '.join(got[0])}." if got[0] else ""))
     else:
-      notice(f"end {name}", f"The worker {key} ({name}) ended with no PR, which needs your decision:\n\n{report}")
-    left(item, report)
-  for name in living():
-    facts = transcript(working_at(name))
-    if progress.get(name, (-1, 0.0))[0] != len(facts):
-      progress[name] = (len(facts), clock())
-    elif unheard(name):
-      acts = [str(x[1]) for x in facts if re.fullmatch(re.escape(str(x[0])) + r"\d+", str(x[1])) and not over(x[1])]
-      notice(f"quiet {name} {len(facts)}", f"The worker {working[name]['key']} ({name}) said no fact on its chain for {int(QUIET // 60)} minutes, so the round counts it as no live worker. Its open acts: {', '.join(acts[-10:]) or 'none'}.")
-  for gone in [n for n in progress if n not in living()]:
-    progress.pop(gone)
+      notes.append(f"cycle {cycle} ended with {str(got)[:1500]}")
+  if not state["cycle"] and clock() - state["last"] >= EVERY:
+    ran = bash(finger(), show=HIDDEN, ok=True, timeout=120)
+    while not over(ran):
+      yield {ran}
+    out = peek(ran)
+    now = out.stdout.content if isinstance(out, Exit) else ""
+    state["last"] = clock()
+    if now != state["print"] and not ("pending" in now and clock() - state["cycle_at"] < FLOOR):
+      if seat(AGG_MODEL):
+        state.update(print=now, due="", cycle_at=clock())
+        state["cycle"] = str(prompt(tuple[dict[str, str], str], CYCLE, to=AGG_MODEL, on=chain_of(AGG)))
+      else:
+        state["due"] = "1"
+  if clock() - state["review_at"] >= REVIEW_EVERY:
+    state["review_at"] = clock()
+    queue_reviews()
+  if notes:
+    prompt(None, "Conductor:\n" + "\n\n".join(notes), on=ROOT)
+    notes.clear()
 
 
-def keep_disk() -> Generator[set[str], object, None]:
-  last = {x["slot"]: i for i, x in enumerate(working.values()) if x.get("slot")}
-  idle = sorted(set(last) - seated(), key=lambda s: last[s])
-  live = " ".join(working_at(n) for n in living())
-  got = yield from shell(f"sh -c {shq(DISK)} sh {KEEP} {shq(live)} " + " ".join(shq(f"{cwd()}-{s}") for s in idle), timeout=600)
-  if got.code == 4:
-    notice("disk short", f"The disk holds {got.stdout.lines[-1]} GB free, under {KEEP} GB, after the round deleted the target of each idle workspace: {', '.join(got.stdout.lines[:-1]) or 'none'}.")
-  elif got.code == 0:
-    noticed.discard("disk short")
-  else:
-    raise Refused(f"the keep of the disk exited {got.code}: {got.stderr.content.strip()[-200:]}")
-
-
-def state(pr: dict) -> str:
-  checks = pr["checks"]
-  if pr["mergeable"] == "CONFLICTING":
-    return "conflicting"
-  if pr["open"] or (any(c in FAILS for c in checks) and all(c in (*FAILS, *GREEN) for c in checks)):
-    return "red"
-  return "green" if GATE in pr["names"] and all(c in GREEN for c in checks) else "running"
-
-
-def trouble(pr: dict) -> str:
-  now = state(pr)
-  if now == "conflicting":
-    return "conflicts with its base"
-  if now != "red":
-    return ""
-  return "has an open box of its checklist: " + "; ".join(x[6:] for x in pr["open"]) if pr["open"] else "has a failed check"
-
-
-def handler(pr: dict) -> str:
-  held = assigned.get(pr["n"]) or {}
-  who = str(held.get("who", ""))
-  return who if who and not over(who) and held.get("sha") == pr["sha"] and (held.get("fixer") or held.get("problem") == trouble(pr)) else ""
-
-
-def last_act(who: str) -> str:
-  facts = transcript(working_at(who))
-  return f"{facts[-1][0]} {facts[-1][1]}" if facts else "none"
-
-
-def mend(pr: dict, problem: str) -> Generator[set[str], object, None]:
-  n, sha = pr["n"], pr["sha"]
-  held = assigned.get(n) or {}
-  if who := handler(pr):
-    if clock() - held["at"] >= UNMOVED:
-      how = "sent to fix it" if held["fixer"] else "told of it"
-      notice(f"stall {n} {sha} {who}", f"#{n} {problem} at {sha[:7]}, and {who}, whom the round {how}, has not moved its head in {int(UNMOVED // 60)} minutes. Its last act: {last_act(who)}.")
-    return
-  tries = held.get("tries", 0) if held.get("sha") == sha else 0
-  if maker := maker_of(pr):
-    order = FIXOWN.replace("{n}", str(n)).replace("{problem}", problem).replace("{sha}", sha[:7]).replace("{minutes}", str(int(UNMOVED // 60)))
-    prompt(None, order, on=working_at(maker))
-    assigned[n] = {"sha": sha, "problem": problem, "who": maker, "at": clock(), "fixer": False, "tries": tries}
-    return
-  if taken(f"fix{n}"):
-    return
-  if tries >= 2:
-    notice(f"spent {n} {sha}", f"#{n} {problem} at {sha[:7]}, and 2 fixers ended at this head and did not move it, so the round sends no third one.")
-    return
-  if not room(limits["fixer"]):
-    once(f"fixer {n} {sha}", f"#{n} {problem} at {sha[:7]}, and waits for a fixer on {limits['fixer']}, which has no room.")
-    return
-  brief = FIX.replace("{n}", str(n)).replace("{problem}", problem).replace("{sha}", sha).replace("{head}", pr["head"])
-  thread = next((m[7:] for m in pr["labels"] if m.startswith("thread:")), "")
-  who = yield from hire({"key": f"fix{n}", "brief": brief, "thread": thread, "kind": "fix", "source": maker_chain(pr)})
-  assigned[n] = {"sha": sha, "problem": problem, "who": who, "at": clock(), "fixer": True, "tries": tries + 1}
-
-
-def sweep() -> Generator[set[str], object, None]:
-  got = yield from shell(PRS, timeout=300)
-  bits = re.split(r"\n--- (\d+)\n", "\n" + got.stdout.content)
-  if len(bits) != 11 or any(code != "0" for code in bits[1:8:2]):
-    raise Refused(f"gh listed no PRs: {got.stderr.content.strip()[-300:] or 'it said nothing'}")
-  mine = {n for n, pr in prs.items() if ours(pr)}
-  prs.clear()
-  prs.update({pr["n"]: pr for pr in json.loads(bits[0])})
-  fresh = {n: head for n, head in json.loads(bits[2]) if n not in merges}
-  merges.update(fresh)
-  landed.extend(sorted(fresh.keys() & mine))
-  main = json.loads(bits[4])
-  red = "failure" in main["runs"]
-  lead["main"] = str(main["sha"])
-  gated = GATE in json.loads(bits[6])
-  try:
-    broke = set(json.loads(bits[8]))
-  except ValueError:
-    broke = set()
-  if red:
-    notice(f"red {main['sha']}", f"main is red at {str(main['sha'])[:7]}: find its cause first. The round sends no order and no fixer for a red PR until the gates of main pass.")
-  if not gated:
-    notice("ruleset", f"main has no ruleset that requires the check {GATE}, so the round turns on no auto-merge and merges no PR.")
-  for gone in [k for k in assigned if k not in prs]:
-    assigned.pop(gone)
-  flips = []
-  for n in sorted(prs):
-    pr = prs[n]
-    if not ours(pr) or "paused" in pr["labels"]:
-      continue
-    now = pr["state"] = state(pr)
-    failing = {name for name, end in zip(pr["names"], pr["checks"]) if end in FAILS}
-    labelled = bool(set(HOLDS) & set(pr["labels"]))
-    want = gated and not (labelled or pr["draft"] or pr["open"]) and now != "conflicting"
-    if want != pr["auto"]:
-      flips.append(f"gh pr merge {n} --auto --squash || gh pr merge {n} --squash || gh stack merge {n} --yes --squash" if want else f"gh pr merge {n} --disable-auto")
-    if now == "red" and red:
-      once(f"main waits {n} {pr['sha']}", f"#{n} is red at {pr['sha'][:7]} while main is red, so it waits for main.")
-    elif now == "red" and failing and not pr["open"] and not failing - broke:
-      once(f"main fails {n} {pr['sha']}", f"#{n} is red at {pr['sha'][:7]} only on {', '.join(sorted(failing))}, which main fails too, so the round hires no fixer for it.")
-    elif (problem := trouble(pr)) and not labelled:
-      yield from mend(pr, problem)
-  if flips:
-    yield from shell("".join(f"{{ {x}; }} >/dev/null 2>&1; " for x in flips), timeout=300)
-
-
-def review() -> Generator[set[str], object, None]:
-  mine = sorted(n for n, pr in prs.items() if ours(pr))
-  if not mine:
-    return
-  got = yield from shell(REVIEWS.replace("{prs}", " ".join(map(str, mine))), timeout=300)
-  if got.code != 0:
-    raise Refused(f"gh read no comments: {got.stderr.content.strip()[-300:]}")
-  rows = [p for p in (x.split("\t", 4) for x in got.stdout.lines) if len(p) == 5 and p[1] not in comments]
-  seed = not comments
-  comments.update(p[1] for p in rows)
-  held: set[int] = set()
-  for p in [] if seed else [p for p in rows if p[2] == OWNER and not p[4].startswith("🤖") and p[0].isdigit() and int(p[0]) in prs]:
-    pr = prs[int(p[0])]
-    line = f"#{p[0]} {p[1]} {p[3]}: {p[4][:1500]}"
-    own = owner_of(pr)
-    if own:
-      prompt(None, f"A new comment of the owner on your PR #{p[0]}. Do what it asks, answer it on GitHub with a reply that starts with 🤖, push the fix, and take the label hold off.\n{line}", on=working_at(own))
-    elif not taken(f"fix{p[0]}"):
-      answer = ANSWER.replace("{n}", p[0]).replace("{head}", pr["head"]).replace("{line}", line)
-      queue.insert(0, {"key": f"fix{p[0]}", "brief": answer, "thread": next((m[7:] for m in pr["labels"] if m.startswith("thread:")), ""), "kind": "fix", "source": maker_chain(pr)})
-    if "hold:owner-review" not in pr["labels"]:
-      held.add(pr["n"])
-  if held:
-    yield from shell("".join(f"gh pr edit {n} --add-label hold >/dev/null 2>&1; " for n in sorted(held)), timeout=300)
-
-
-def asked() -> None:
-  owner_words()
-  if not owner_asks:
-    return
-  named = {p for a in owner_asks.values() for p in re.findall(r"prompt\d+", str(a.get("prompt", "")))}
-  lines: dict[str, str] = {}
-  for x in transcript(home(), "prompt"):
-    if operated(str(x[2])) and x[4] == "str" and str(x[1]) not in named:
-      lines[f"unasked {x[1]}"] = f"The message {x[1]} of the owner holds no ask in owner_asks."
-  carrying = {q["key"] for q in queue} | {working[w]["key"] for w in living()} | {maker_key(pr) for pr in prs.values()}
-  for aid, a in owner_asks.items():
-    items = [str(i) for i in a.get("items") or []]
-    if a.get("state") in ("done", "decision") or carrying & set(items):
-      continue
-    why = f"no item carries it now: its items {', '.join(items)} ended" if items else "no item names it"
-    lines[f"uncarried {aid} {' '.join(items)}"] = f"The ask {aid} of the owner ({a.get('prompt')}) is {a.get('state') or 'open'}, and {why}."
-  fresh = [k for k in lines if k not in noticed]
-  last = lead.get("asked", "")
-  if not fresh or last and not over(last):
-    return
-  noticed.update(fresh)
-  head = "The words of the owner need the round before anything else:\n"
-  tail = "\nSplit each message that holds no ask into its asks, each with his quote and the items that carry it. Queue an item for each ask that no item carries, or mark it done with the evidence of main."
-  lead["asked"] = str(prompt(None, head + "\n".join(f"- {lines[k]}" for k in fresh) + tail + merged_since(), on=home()))
-
-
-def owner_words() -> None:
-  rows = []
-  for x in transcript(ROOT, "prompt"):
-    if operated(str(x[2])) and str(x[5]).strip():
-      rows.append(f"## {x[1]}, his message\n\n{x[5]}\n\n")
-    elif x[6] and operated(str(x[6])) and x[4] != "None" and isinstance(said := peek(x[1]), str) and said.strip():
-      rows.append(f"## {x[1]}, his answer to my question\n\n{said}\n\n")
-  if lead.get("words") == str(len(rows)):
-    return
-  write(Text(WORDS, "# The words of the owner in this session, verbatim, in order\n\n" + "".join(rows)))
-  lead["words"] = str(len(rows))
-
-
-def align() -> None:
-  for name, brief in AUDITS.items():
-    state = align_state.setdefault(name, {})
-    if "base" not in state:
-      state["base"] = str(len(merges))
-      continue
-    count = len(merges) - int(state["base"])
-    if count < ALIGN_EVERY or any(re.fullmatch(rf"{name}\d+", k) for k in [*(q["key"] for q in queue), *(working[w]["key"] for w in living())]):
-      continue
-    n, held = 1, held_keys()
-    while f"{name}{n}" in held:
-      n += 1
-    key, since, head = f"{name}{n}", state.get("sha", ""), lead.get("main", "")
-    window = f"{since}..{head}" if since and head else "-40 origin/main"
-    for old, new in (("{key}", key), ("{count}", str(count)), ("{window}", window), ("{words}", WORDS), ("{asks}", ASKS), ("{held}", ", ".join(sorted(held_keys())) or "none")):
-      brief = brief.replace(old, new)
-    item = {"key": key, "brief": brief, "thread": name, "kind": "audit"}
-    if n % 2 and (astra := limits["models"].get("astra")):
-      item["model"] = astra
-    queue.append(item)
-    state.update(base=str(len(merges)), n=str(n), sha=head or since)
-    heard.append(f"{count} PRs merged since the last audit of {name}, so the round queued {key}.")
-
-
-def conduct(every: float = 300) -> Act:
-  where = chain("round")
-  cd(cwd(), on=where)
-
-  def ear(id):
+def conduct(on: str = "") -> Act:
+  def ear(id: str):
     yield "started", id
-    old, lead["round"] = lead.get("round", ""), id
-    if get(old) and not over(old):
-      for x in transcript(old, "wait"):
-        if old in x[5:] and not over(x[1]):
-          close(None, x[1])
-      gone = wait(every, old)
-      while not over(gone):
-        yield {gone}
-    bash(LABELS, show=HIDDEN, ok=True, timeout=120)
-    while True:
-      alive: list[str] = []
-      for at in ("tend", "sweep", "review", "disk", "staff", "asked", "align"):
-        if lead.get("round") != id:
-          yield "done", id, None
-          return
-        try:
-          if at in ("sweep", "review", "disk", "staff"):
-            yield from {"sweep": sweep, "review": review, "disk": keep_disk, "staff": staff}[at]()
-          else:
-            {"tend": tend, "asked": asked, "align": align}[at]()
-          for done in [k for k in noticed if k.startswith(f"fault {at} ")]:
-            noticed.discard(done)
-        except Exception as fault:
-          notice(f"fault {at} {type(fault).__name__}", f"The round {id} met a fault in its step {at}: {type(fault).__name__}: {str(fault)[:1000]}. It goes on at the next round, and tells this fault again only after a round of this step with no fault.")
-        if at == "tend":
-          alive = living()
-      if not (queue or living() or any(ours(pr) and "paused" not in pr["labels"] for pr in prs.values())):
-        yield "done", id, "The round holds no item and no open PR that it tends." + merged_since()
-        return
-      beat = wait(every, id, *dict.fromkeys([*alive, *living()]))
-      while not over(beat):
-        yield {beat}
+    state["id"] = id
+    while state["id"] == id:
+      yield from beat()
+      watched = [*(p for held in live.values() for p in held), *fixing.values(), *([state["cycle"]] if state["cycle"] else [])]
+      bound = wait(EVERY, id, *watched)
+      while not over(bound):
+        yield {bound}
+    yield "done", id, None
 
-  return act("conduct", where, controlled(ear))
+  return act("conduct", on, controlled(ear), EVERY, FLOOR)
+
+
+def review_rows(n: int) -> list[dict[str, str]]:
+  rows = [{"key": f"{name}-{n}", "model": ASTRA, "brief": brief} for name, brief in (("words-audit", WORDS_BRIEF), ("align-audit", ALIGN_BRIEF), ("perf", PERF_BRIEF))]
+  return rows + [{"key": f"review-{t}-{n}", "model": ASTRA, "brief": REVIEW_BRIEF.replace("{t}", t)} for t in width if t not in (REVIEW, QA, "tidy")]
+
+
+def queue_reviews() -> list[str]:
+  state["reviews"] += 1
+  words()
+  pending = {str(x["key"]).rsplit("-", 1)[0] for x in [*queue(REVIEW), *live.get(REVIEW, {}).values()]}
+  rows = [x for x in review_rows(state["reviews"]) if x["key"].rsplit("-", 1)[0] not in pending]
+  queue(REVIEW).extend(rows)
+  return [x["key"] for x in rows]
+
+
+def queue_rows(text: str, source: str, before: str = "") -> list[str]:
+  taken = {str(x["key"]) for q in queues.values() for x in q} | {str(i["key"]) for held in live.values() for i in held.values()} | {k for _, k, _ in ended}
+  put = []
+  for line in text.splitlines():
+    parts = [p.strip() for p in line.split("|")]
+    if len(parts) < 5:
+      continue
+    key, t, model = parts[0].removeprefix("- ").strip(), parts[1], CLASSES.get(parts[2].split(":")[-1])
+    if t in width and t not in (REVIEW, QA) and model and key not in taken:
+      row = {"key": key, "model": model, "brief": f"A finding of {source}: {' | '.join(parts[4:])} Paths: {parts[3]}. Judge it against w/converge first, then fix it at its cause as one commit, with a test or a scenario that fails before the fix." + CLAIM}
+      q = queue(t)
+      at = next((i for i, x in enumerate(q) if str(x["key"]).startswith(before)), len(q)) if before else 0
+      q.insert(at, row)
+      taken.add(key)
+      put.append(f"{t}:{key}")
+  return put
+
+
+def news(seconds: float = 1800.0, on: str = "") -> Act:
+  def ear(id: str):
+    yield "started", id
+    bound = wait(seconds, id)
+    while True:
+      heard = yield {id, "prompt", bound}
+      if heard[0] == "prompt" and scope(heard[1]) == ROOT:
+        yield "done", id, str(heard[1])
+        return
+      if heard[0] == "done" and heard[1] == bound:
+        yield "done", id, None
+        return
+
+  return act("news", on, controlled(ear), seconds)
+
+
+def words() -> str:
+  said = []
+  for x in transcript(ROOT, "prompt"):
+    if operated(str(x[2])):
+      said.append(f"## {x[1]}, a message of the owner\n{x[5]}")
+    elif str(x[6]) == OPERATOR and str(x[4]) != "None" and over(x[1]) and not isinstance(peek(x[1]), BaseException):
+      said.append(f"## {x[1]}, his answer to a question of the lead: {str(x[5])[:400]}\n{peek(x[1])}")
+    elif str(x[6]) == OPERATOR and str(x[4]) == "None":
+      said.append(f"## {x[1]}, a message of the lead to the owner, made by {x[2]}\n{str(x[5])[:1500]}")
+  write(Text(WORDS, "# The words of the owner in this life, and the messages of the lead to him, in order\n\n" + "\n\n".join(said) + "\n"))
+  rows = "\n".join(f"- {t}: width {width[t]}; live {[str(i['key']) for i in live.get(t, {}).values()]}; queued {[str(x['key']) for x in queue(t)]}" for t in width)
+  values = f"ROOM = {ROOM!r}\nchains = {chains!r}\nfixing = {fixing!r}\nfixwait = {fixwait!r}\nground = {ground!r}\nseats() = {seats()!r}\nstate = {state!r}"
+  page = f"# The converge as it runs\n\nTopics, widths and queues:\n{rows}\n\nEnded items: {', '.join(k for _, k, _ in ended)}\n\n## Values bound now\n{values}\n\n## The conductor as it runs\n{dump(*PAGED)}\n"
+  write(Text(PAGE, page))
+  return f"{len(said)} entries, {len(page)} chars"
