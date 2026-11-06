@@ -7,8 +7,7 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 
-use super::act::Act;
-use crate::engine::OPERATOR;
+use super::{act::Act, operator};
 
 /// The root chain of a life, which the session names.
 const ROOT: &str = "chain1";
@@ -88,7 +87,7 @@ impl Named {
         self.asked.insert(about.to_owned(), (kind == RENAME, self.heard));
         false
       }
-      "rung" if words && text(2) == OPERATOR && text(3) == ROOT => match said(text(4)) {
+      "rung" if words && operator(text(2)) && text(3) == ROOT => match said(text(4)) {
         Some(value) => self.take(true, self.heard, &value),
         None => false,
       },

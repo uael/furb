@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { link, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, extname, join } from "node:path";
-import { isDone, isPaused } from "furb/life";
+import { isDone, isPaused, operated } from "furb/life";
 import { executable, programs } from "../../bind/typescript/test/executable.ts";
 import { remove } from "../../bind/typescript/test/processes.ts";
 import { until } from "../../bind/typescript/test/until.ts";
@@ -382,7 +382,7 @@ test("the setup of the root stands as code: a comment that names the setup, then
         expect(stood()).toBe(true);
         await session.command("/run x = 1");
         await until(session, () =>
-          session.activity.some((act) => act.kind === "rung" && act.by === "operator" && isDone(act)),
+          session.activity.some((act) => act.kind === "rung" && operated(act.by) && isDone(act)),
         );
         await session.refresh();
         // The root writes its setup on itself, each rung to the one default actor and with no rung whose word it

@@ -187,7 +187,8 @@ export declare class Meaning {
   /**
    * The acts that a fact changes, each as it stands after the fact. `covered` names each act of
    * `open` that a pause or a wake covers, and `born` the last pause or wake that covers a new act,
-   * as the engine finds them. A reader with no engine gives neither.
+   * as the engine finds them. A reader with no engine gives neither, and the fold finds both
+   * itself, as the engine does, so a record folds as its life did.
    */
   hear(fact: unknown[], covered?: string[], born?: unknown[] | null): Array<import("./dist/protocol.js").Act>
   /**
@@ -506,6 +507,12 @@ export interface Opening {
    * when unsaid.
    */
   config?: string
+  /**
+   * The logins of the members who answer as the operator, as the access list of a host and its
+   * local login give them, each of which a prompt can ask with `to="operator/<login>"`; none when
+   * unsaid.
+   */
+  members?: Array<string>
   /**
    * The actor a prompt goes to when it names none, as the catalog names a model, and an effort after a slash, at its
    * level as [`world::Model::at`] moves it. When unsaid, the default actor of the last stand

@@ -1,12 +1,14 @@
 // What streams between the model, the life and the window: a quote that the model writes in small chunks, and a
 // command that tells more than a model reads.
+
 import { expect } from "bun:test";
+import { operated } from "furb/life";
 import { scenario, test, until, type Window } from "./harness.ts";
 
 /** The value of the first prompt of the operator on the root. */
 async function answered(window: Window): Promise<unknown> {
   const facts = await window.engine.transcript({ on: window.root, of: "prompt" });
-  const first = facts.find((fact) => fact[2] === "operator");
+  const first = facts.find((fact) => operated(String(fact[2])));
   return first && window.engine.peek(first[1]);
 }
 

@@ -7,6 +7,7 @@ use std::{
 };
 
 use futures::{FutureExt, stream};
+use monty::ReplContinuationMode;
 use rig_core::completion::CompletionError;
 use tokio::sync::{mpsc, watch as holding};
 
@@ -49,6 +50,7 @@ pub(super) struct Hearer {
   retries: Option<Retries>,
   refresh: Option<Refresh>,
   gone: Vec<String>,
+  members: Vec<String>,
   mode: Mode,
   /// The system prompt of each request, as [`Provider::system`] sets it.
   system: Arc<str>,
@@ -80,6 +82,7 @@ impl Hearer {
       retries,
       refresh,
       gone,
+      members,
       mode,
       system,
     } = provider;
@@ -104,6 +107,7 @@ impl Hearer {
       retries,
       refresh,
       gone,
+      members,
       mode,
       system,
       native,
@@ -193,6 +197,7 @@ impl Hearer {
       &self.directory,
       &self.actor,
       self.extensions.as_deref(),
+      &self.members,
       &self.config.clone().unwrap_or_else(|| extension::Places::here().config),
     );
     say(co, Fact::says("done", &about, [given]));
@@ -282,8 +287,9 @@ impl Hearer {
       Found::Unsettled => return,
       Found::Nothing => {
         // The word holds no fault so far, so its new statements run now, as the turn holds them:
-        // from its first line that is not blank. A statement whose clause starts at the end, as
-        // an `else`, waits.
+        // from its first line that is not blank, once monty calls them complete. A statement whose
+        // clause starts at the end, as an `else`, waits, and so does a word that monty calls
+        // incomplete or invalid, which the gate of a config turned off finds nothing against.
         let (word, end) = match watch.clause(end).then(|| watch::last(&word)).flatten() {
           Some(line) => {
             let held: String = word.split_inclusive('\n').take(line - 1).collect();
@@ -292,6 +298,9 @@ impl Hearer {
           None if watch.clause(end) => return,
           None => (word, end),
         };
+        if watch::complete(&word) != ReplContinuationMode::Complete {
+          return;
+        }
         let given = word.trim_start();
         let Some((part, before)) = watch.part(given) else { return };
         if writing(co, &rung, part, before).await {

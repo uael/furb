@@ -91,6 +91,15 @@ fn the_word_of_a_rung_of_the_operator_on_the_root_names_the_session_only_when_wo
 }
 
 #[test]
+fn the_word_of_a_member_of_the_operator_on_the_root_names_the_session() {
+  let facts = [
+    json!(["rung", "rung1", "operator/uael", "chain1", word("by a member"), "", ""]),
+    json!(["rung", "rung2", "operators", "chain1", word("by a stranger"), "", ""]),
+  ];
+  assert_eq!(folded(&facts, true).said(), Some("by a member"));
+}
+
+#[test]
 fn the_word_that_names_a_session_says_its_name_and_no_other_word_does() {
   assert_eq!(said(&word("a \"b\" \u{e9}")).as_deref(), Some("a \"b\" \u{e9}"));
   assert_eq!(said(r#"act("rename_session", "", lambda id: (yield "done", id, "x")) + 1"#), None);

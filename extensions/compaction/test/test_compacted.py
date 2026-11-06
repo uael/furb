@@ -106,3 +106,12 @@ async def test_it_never_completes(tmp_path: Path) -> None:
   watcher = engine.module(root)["w"]
   assert made(root, watcher) == ["<s:summary>\ngist</s:summary>\nreground()"]
   assert engine.peek(watcher, "open") == "open"
+
+
+async def test_when_the_choice_ends_refused_it_keeps_the_chain_as_it_is(tmp_path: Path) -> None:
+  """When the choice ends refused, it keeps the chain as it is, tells why, and asks no choice again."""
+  root, act = await wrapped(tmp_path, chooser="x = 1")
+  assert engine.peek(act) == 3
+  assert made(root) == []
+  assert [a for a in engine.transcript(root) if a[0] == "tell" and "kept the chain as it is" in str(a[3])] != []
+  assert engine.get("chain3") is None

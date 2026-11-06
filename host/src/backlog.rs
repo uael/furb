@@ -3,7 +3,8 @@
 //! record lacks some of its facts does not end. Past the bound, the life pauses each chain that
 //! lives, and each chain that opens while it holds, and tells the operator once, with the folder of
 //! the record and the space left on its disk. Once the record holds each fact, the life wakes each
-//! chain that it paused, and a pause that the operator set stays.
+//! chain that it paused and that no later pause or wake of the operator holds, and a pause that the
+//! operator set, before or after its own, stays.
 
 use std::path::Path;
 
@@ -42,7 +43,9 @@ impl Backlog {
     let count = engine.unkept();
     if self.holding && count == 0 {
       for chain in std::mem::take(&mut self.paused) {
-        engine.wake(&chain)?;
+        if last_ours(engine, &chain)? {
+          engine.wake(&chain)?;
+        }
       }
       self.holding = false;
       return Ok(Some(
@@ -90,6 +93,15 @@ impl Backlog {
     }
     Ok(())
   }
+}
+
+/// Whether the last pause or wake of a chain is the pause of the life for its record, so a pause or
+/// a wake that the operator said after it stays.
+fn last_ours(engine: &mut Engine, chain: &str) -> Result<bool, Fault> {
+  let of = verbs::Transcript { on: Some(chain.to_owned()), of: Some("pause".to_owned()) };
+  let facts = engine.transcript(of)?;
+  let last = facts.iter().map(|one| outward(one.0.as_ref())).rfind(|fact| fact[1] == chain);
+  Ok(last.is_some_and(|fact| fact[0] == "pause" && fact[3] == WHY))
 }
 
 /// Why a life does not end yet while its record does not hold a number of the facts that it said.

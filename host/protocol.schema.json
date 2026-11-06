@@ -2481,6 +2481,11 @@
         "open": {
           "type": "boolean"
         },
+        "watched": {
+          "type": "boolean",
+          "description": "Whether a window of any connection holds the life now: a pin holds it with no window.",
+          "default": false
+        },
         "name": {
           "type": [
             "string",
@@ -2493,7 +2498,7 @@
         "held",
         "open"
       ],
-      "description": "A record of the machine: the main checkout of the workspace whose sessions hold it, when the\nlist names one, whether a life of the daemon holds it now, whether that life lives and does not\nend, and the name of its session while a life holds it: the one that the operator said last on\nthe root, which wins, else the one that the extension naming gave. An empty name takes the\ndefault name again."
+      "description": "A record of the machine: the main checkout of the workspace whose sessions hold it, when the\nlist names one, whether a life of the daemon holds it now, whether that life lives and does not\nend, whether a window holds that life, and the name of its session while a life holds it: the\none that the operator said last on the root, which wins, else the one that the extension naming\ngave. An empty name takes the default name again."
     },
     "Handed": {
       "type": "object",

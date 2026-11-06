@@ -101,6 +101,7 @@ pub struct Provider {
   retries: Option<Retries>,
   refresh: Option<Refresh>,
   gone: Vec<String>,
+  members: Vec<String>,
   mode: Mode,
   /// The system prompt of each request: the engine of the life, minified.
   system: Arc<str>,
@@ -156,6 +157,7 @@ impl Provider {
       retries: None,
       refresh: None,
       gone: Vec::new(),
+      members: Vec::new(),
       mode: Mode::Live,
       system: Arc::from(crate::SYSTEM),
     }
@@ -209,6 +211,14 @@ impl Provider {
   pub(crate) fn into_settings(self) -> (Vec<Model>, Option<String>, Thinking) {
     let models = self.models.read().unwrap_or_else(PoisonError::into_inner).clone();
     (models, self.actor, self.thinking)
+  }
+
+  /// The logins of the members who answer as the operator, which the operator entry of the roster
+  /// lists in place of its efforts, so a prompt asks one person with `to="operator/<login>"`.
+  #[must_use]
+  pub fn members(mut self, logins: Vec<String>) -> Self {
+    self.members = logins;
+    self
   }
 
   /// The actor a prompt goes to when it names none, which is the first model at the level of an

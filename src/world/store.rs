@@ -212,22 +212,27 @@ pub fn texts(record: &[Object]) -> Result<(String, String), Fault> {
       "the record names the engine {named}, and the texts that it holds are another engine"
     )));
   }
-  Ok((adapted(&named, source)?, kernel))
+  adapted(&named, source, &kernel)
 }
 
 /// The adapters of the engines of this major, by the digest of an engine, as `src/furb/adapters.py`
 /// says.
 const ADAPTERS: &str = include_str!("../furb/adapters.py");
 
-/// The text of the engine that a digest names, with each change of its adapter made, or as it is
-/// when no adapter names it. A change whose text the engine does not hold is refused, since the
-/// adapter is then of another engine.
-fn adapted(named: &str, mut source: String) -> Result<String, Fault> {
+/// The texts of the engine that a digest names and of its Kernel: the engine with each change of
+/// its adapter made, or as it is when no adapter names it, and the Kernel as `kernel` of the
+/// adapters gives it. A change whose text the engine does not hold is refused, since the adapter
+/// is then of another engine.
+fn adapted(named: &str, mut source: String, kernel: &str) -> Result<(String, String), Fault> {
   let mut inputs = NamedValues::new();
   inputs.push("__named", Object::string(named));
-  let word = format!("{ADAPTERS}\nADAPTERS.get(__named, [])");
-  let changes = Sand::new().run(&word, inputs, &mut Nobody("the adapters"))?;
-  for change in changes.as_ref().items().unwrap_or_default() {
+  inputs.push("__kernel", Object::string(kernel));
+  inputs.push("__ours", Object::string(KERNEL));
+  let word = format!("{ADAPTERS}\n(ADAPTERS.get(__named, []), kernel(__kernel, __ours))");
+  let got = Sand::new().run(&word, inputs, &mut Nobody("the adapters"))?;
+  let got = got.as_ref();
+  let kernel = entry(&got, 1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
+  for change in entry(&got, 0).and_then(|one| one.items()).unwrap_or_default() {
     let text = |at| entry(&change, at).and_then(|one| one.as_str().map(str::to_owned));
     let (Some(old), Some(new)) = (text(0), text(1)) else { continue };
     if !source.contains(&old) {
@@ -235,7 +240,7 @@ fn adapted(named: &str, mut source: String) -> Result<String, Fault> {
     }
     source = source.replacen(&old, &new, 1);
   }
-  Ok(source)
+  Ok((source, kernel))
 }
 
 /// The release of furb that a record names, as `0.4.2`, and nothing when it names none, as a record
