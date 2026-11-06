@@ -227,7 +227,7 @@ Why the Loom:
 ### What the Session must give
 
 The TUI reads the life through the Session of `bind/typescript` alone. The Loom needs one view that the Session
-does not give: the place of each act in time. Each `LiveAct` gets `began` and `ended`, the count of facts of the life
+does not give: the place of each act in time. Each act gets `began` and `ended`, the count of facts of the life
 when the act was made and when it was done. This is a logical clock: it is the order of the record, so a later life
 gives the same values, and the loom of a replayed life is the same loom.
 
@@ -264,7 +264,7 @@ The first version of the Loom follows this document, with these changes that the
   The verbs are single keys only while the word line is not focused, and Esc leaves it.
 - The list of lives, ⌃O, takes the place of the sidebar of workspaces.
 - The Session of `bind/typescript` gives two new views: the place of each act in time, as `began` and `ended` on each
-  act, and the answers of the models on each chain, as `Activity.answers`, from which the TUI reads the dollars and
+  act, and the answers of the models on each chain, as the spend of each chain, from which the TUI reads the dollars and
   the share of the window of each thread. It also follows reads, writes and changes of directory as acts, so a thread
   names them.
 

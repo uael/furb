@@ -42,16 +42,15 @@ test("a late change of any field of an act draws its step again, and a snapshot 
       { count: 7 },
       { lines: { added: 9, removed: 4 } },
       { output: 5 },
-      { value: "late" },
-      { paused: true },
+      { phase: { phase: "done", value: "late" } },
       { pause: { by: "operator" } },
-      { cost: 0.5 },
+      { spend: { dollars: 0.5, answers: 1 } },
       { took: 12 },
       { words: ["late"] },
-      { unfinished: true },
+      { state: "failed" },
       { asking: true },
       { ended: 99 },
-      { done: false },
+      { phase: { phase: "started" } },
     ];
     for (const one of changes) {
       change = one;

@@ -7,7 +7,6 @@ import {
   nestThreads,
   orderThreads,
   type ThreadNode,
-  threadOpen,
   threadWork,
 } from "furb/life";
 import { checkoutOf } from "../checkout.ts";
@@ -228,7 +227,7 @@ export const rail = part({
     if (state === "paused") return ["paused", c.warning];
     if (state === "failed") return ["failed", c.danger];
     if (state === "cancelled") return ["cancelled", c.faint];
-    if (thread.resolved) return ["resolved", c.faint];
+    if (thread.resolved) return ["done", c.faint];
     return [statusLabels[busy(state) ? state : "runs"].toLowerCase(), c.accent];
   },
 
@@ -295,7 +294,7 @@ export const rail = part({
     const id = thread.act.id;
     this.railAt = `th:${id}`;
     void (async () => {
-      if (thread.act.on !== w.selected) await w.select(thread.act.on);
+      if (thread.act.chain !== w.selected) await w.select(thread.act.chain);
       w.aim(id);
       if (this.threadFolded(id)) {
         w.folds[`thread:${id}`] = false;
@@ -413,6 +412,8 @@ export const rail = part({
       this.threadsKey(threads),
       this.unreadKey(threads),
       active?.act.id,
+      // The controls under the thread lit say Collapse or Expand, as the feed folds it.
+      active && this.threadFolded(active.act.id),
       [...this.unfolded],
       this.renaming && this.itemKey(this.renaming.item),
       this.menuItem && this.itemKey(this.menuItem),
@@ -467,7 +468,6 @@ export const rail = part({
       const folded = this.threadFolded(id);
       link(folded ? glyph.closed : glyph.open, folded ? "Expand" : "Collapse", () => this.foldThread(id));
       link(glyph.reply, "Reply", () => this.replyTo(id));
-      if (!thread.resolved) link(glyph.done, "Resolve", () => this.resolveThread(thread));
       const ask = thread.asks[0];
       if (ask) link(glyph.asks, "Answer", () => void w.point(ask).catch(this.report), c.warning);
       this.railSpaces.add(row);
@@ -595,25 +595,15 @@ export const rail = part({
       step(1);
       if (this.unfolded.has(fold)) for (const one of node.agents) nodeRow(one, indent + 2);
     };
-    const shows = (node: ThreadNode): boolean => node.thread === active || node.agents.some(shows);
-    const unresolved = tree.filter((one) => threadOpen(one) || shows(one));
-    const resolvedNodes = tree.filter((one) => !unresolved.includes(one));
-
-    // The threads that a session holds: the resolved ones folded under a row of their own at the top, then those that
-    // live, nearest the input, each with its agents nested under it.
-    const threadBlock = (entry: SessionEntry) => {
+    // The threads that a session holds, in the order of the crate: those that are over first, then those that live,
+    // nearest the input, each with its agents nested under it.
+    const threadBlock = () => {
       if (!threads.length) {
         plainRow([["     No thread yet", c.faint]], () => this.composer.focus());
         step(1);
         return;
       }
-      if (resolvedNodes.length) {
-        const fold = `resolved:${entry.path}`;
-        this.railSpaces.add(this.foldRow(fold, "      Resolved", resolvedNodes.length, padding));
-        step(1);
-        if (this.unfolded.has(fold)) for (const one of resolvedNodes) nodeRow(one, LEFT + 4);
-      }
-      for (const one of unresolved) nodeRow(one, LEFT + 4);
+      for (const one of tree) nodeRow(one, LEFT + 4);
     };
 
     for (const [index, group] of lib.groups.entries()) {
@@ -661,7 +651,7 @@ export const rail = part({
       const { shown, earlier } = sessionsOf(group);
       for (const entry of shown) {
         sessionRow(group, entry);
-        if (entry === lib.current) threadBlock(entry);
+        if (entry === lib.current) threadBlock();
       }
       folds(group, earlier);
     }

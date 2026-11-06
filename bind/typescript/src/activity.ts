@@ -1,5 +1,15 @@
 import { type Call, call, isFault } from "./ears.js";
-import { type Compaction, type LiveAct, operated, type PauseCause, WORK } from "./life/acts.js";
+import {
+  type Act,
+  type Compaction,
+  followed,
+  operated,
+  type PauseCause,
+  type Spend,
+  WORK,
+} from "./life/acts.js";
+import type { State } from "./life/states.js";
+import { working } from "./life/states.js";
 import { bound, display, type Fact, isQuestion, usageOf } from "./types.js";
 
 /** One answer of a model on a chain: its place in time, the actor whose reply it answered, and its usage, which is
@@ -9,28 +19,94 @@ export interface Answered {
   actor: string;
   usage: [number, number, number, number, number];
 }
+/** How the word of a rung ran: it runs, it ran, or it failed, with what a person reads. */
+export interface LiveRun {
+  status: "running" | "failed" | "done";
+  reason: string;
+  /** Whether the gate refused the word, so that the reason holds its findings, one for each line. */
+  refused?: boolean;
+}
+/** An act as the activity follows it. A host with a daemon reads the acts of the daemon instead, and a host with none
+ * reads them as the daemon gives them through [`Activity.hosted`]. */
+export interface LiveAct {
+  id: string;
+  kind: string;
+  by: string;
+  /** The chain that the act stands on, which is the chain of its thread for a prompt on a thread. */
+  on: string;
+  /** The thread that a prompt on a thread is on: the prompt that its on names. */
+  thread?: string;
+  words: unknown[];
+  /** The word of a rung, which its caller or its model wrote, once its chain took it to run or to refuse. */
+  word?: string;
+  done: boolean;
+  value: unknown;
+  /** Whether a pause stands over the act while it lives. */
+  paused: boolean;
+  /** The cause of the pause that stands over the act, while one does. */
+  pause?: PauseCause;
+  /** Whether the act had no end when the record ended, in a record open to read, where nothing runs to end it. */
+  unfinished?: boolean;
+  run?: LiveRun;
+  /** Whether a reply of the rung runs, while its model thinks or writes its word. */
+  asking?: boolean;
+  /** The place of the act in time: how many facts the life had said when the act was made, and when it was done. It
+   * is the order of the record, so a later life gives the same places. */
+  began: number;
+  ended?: number;
+  /** The dollars of the answers of the models that wrote the word of a rung, once one is done. */
+  cost?: number;
+}
+/** Whether an act failed: a rung that the gate refused or whose run raised, or an act done with an exception other
+ * than a cancel. */
+function failed(act: LiveAct): boolean {
+  if (act.run) return act.run.status === "failed" && !cancelled(act);
+  return isFault(act.value) && act.value.is !== "CancelledError";
+}
+/** Whether a cancel ended an act. A cancel is what the operator asked for, so it is no failure. */
+function cancelled(act: LiveAct): boolean {
+  if (act.run) return act.run.status === "failed" && /^CancelledError\b/.test(act.run.reason ?? "");
+  return isFault(act.value) && act.value.is === "CancelledError";
+}
+/** The state of an act, with the prompts that the operator owes, as the daemon gives it. A rung whose word has not
+ * come yet is its model that thinks while a reply of it runs, and it rests while it waits for its turn, and an act
+ * that is no work and lives, as a chain or a grant, is work that waits on another chain. An act that had no end when
+ * the record ended stays held, since nothing runs to end it. */
+function stateOf(act: LiveAct, owed: ReadonlySet<string>): State {
+  if (owed.has(act.id)) return "asks";
+  if ((act.paused || act.unfinished) && !act.done) return "paused";
+  if (cancelled(act)) return "cancelled";
+  if (failed(act)) return "failed";
+  if (!act.done && !WORK.includes(act.kind)) return "delegates";
+  if (act.done && (act.kind !== "rung" || act.run?.status !== "running")) return "done";
+  if (act.kind === "rung" && !act.done && act.word === undefined) return act.asking ? "thinks" : "idle";
+  return "runs";
+}
+/** The state of a chain, as the daemon gives it, from the acts that stand in it in the order they began and the
+ * prompts that its words made on other chains. It asks while the operator owes a prompt of it, a pause holds it while
+ * it holds a live act of work, it works while one lives, and else its last act of work says whether a cancel or a
+ * fault ended it. A chain whose prompts all closed is done, and one with no prompt rests. An act that had no end when
+ * the record ended is no work. */
+function chainState(
+  on: readonly Act[],
+  remote: readonly Act[],
+  owed: ReadonlySet<string>,
+  unfinished: ReadonlySet<string>,
+): State {
+  if (on.some((act) => owed.has(act.id))) return "asks";
+  const live = on.filter((act) => WORK.includes(act.kind) && !unfinished.has(act.id));
+  const open = (act: Act) => act.phase.phase !== "done";
+  if (live.some((act) => act.pause && open(act))) return "paused";
+  if (live.some(open)) return working(live, remote);
+  const last = live.at(-1);
+  if (last?.state === "cancelled") return "cancelled";
+  if (last?.state === "failed") return "failed";
+  return live.some((act) => act.kind === "prompt") ? "done" : "idle";
+}
 /** Whether a pause or a wake covers an act, which the engine answers the ear that yields the question. */
 function* covers(control: Fact, id: string): Generator<Call, boolean, unknown> {
   return Boolean(yield call("covers", [control, id]));
 }
-/** The questions the engine asks on the way to what an act does, which are no acts a person follows: each is
- * answered for the act that asked it, which shows what it came to. A read and a write are acts that a person follows,
- * since each says which file it read or changed. An older record holds each writing of a model as such a question,
- * where a newer one holds it as a fact. The act setup, which the World makes on the root at the end of the setup that
- * every chain shares, marks a place and does nothing that a person follows. */
-const STEPS = new Set([
-  "setup",
-  "stand",
-  "clock",
-  "chance",
-  "gate",
-  "cd",
-  "merged",
-  "run",
-  "writing",
-  "wants",
-  "reply",
-]);
 
 /** The observable state of the acts a person follows, updated once as facts enter the life. It asks the engine
  * what a fact alone cannot say: covers, for a pause or a wake and each live act whose state it would change, and
@@ -84,6 +160,72 @@ export class Activity {
   }
 
   /** The rows that changed after a count of changes, and the count now. */
+  /** What the answers of the models cost each chain and each rung whose word they wrote: their dollars, how many they
+   * are, and the actor of the last. */
+  readonly spends = new Map<string, Spend>();
+
+  /** Acts as the daemon gives them, each with its meaning: its phase, its pause, its spend and its state, and each
+   * chain that they stand in, in the state that the acts of the chain give it. A host with no daemon reads them, as a
+   * record open to read, whose console owes the prompts that `owed` names. */
+  hosted(acts: readonly LiveAct[], owed: ReadonlySet<string> = new Set()): Act[] {
+    const out = new Map(acts.map((act) => [act.id, this.shape(act, owed)]));
+    const chains = new Set(acts.map((act) => act.on));
+    const on = new Map<string, Act[]>();
+    const remote = new Map<string, Act[]>();
+    const unfinished = new Set<string>();
+    const put = (lists: Map<string, Act[]>, chain: string, act: LiveAct) => {
+      const made = out.get(act.id) ?? this.shape(act, owed);
+      const list = lists.get(chain);
+      if (list) list.push(made);
+      else lists.set(chain, [made]);
+    };
+    for (const act of this.acts.values()) {
+      if (act.unfinished) unfinished.add(act.id);
+      if (act.kind !== "chain" && chains.has(act.on)) put(on, act.on, act);
+      const maker = act.kind === "prompt" ? this.acts.get(act.by) : undefined;
+      if (maker?.kind === "rung" && maker.on !== act.on && chains.has(maker.on)) put(remote, maker.on, act);
+    }
+    for (const chain of chains) {
+      const act = this.acts.get(chain);
+      if (act?.kind !== "chain") continue;
+      const made = out.get(chain) ?? this.shape(act, owed);
+      made.state = chainState(on.get(chain) ?? [], remote.get(chain) ?? [], owed, unfinished);
+      out.set(chain, made);
+    }
+    return [...out.values()];
+  }
+  /** One act as the daemon gives it, in the state that it holds alone. */
+  private shape(act: LiveAct, owed: ReadonlySet<string>): Act {
+    const run = act.run;
+    const reason = run?.reason ?? "";
+    return {
+      kind: act.kind,
+      id: act.id,
+      by: act.by,
+      on: act.thread ?? act.on,
+      chain: act.on,
+      words: act.words,
+      phase: act.done ? { phase: "done", value: act.value } : { phase: "asked" },
+      operator: owed.has(act.id),
+      pause: act.paused ? (act.pause ?? { by: "" }) : null,
+      run: !run
+        ? null
+        : run.status !== "failed"
+          ? { run: run.status }
+          : run.refused
+            ? { run: "refused", reason }
+            : /^CancelledError\b/.test(reason)
+              ? { run: "cancelled", reason }
+              : { run: "failed", reason },
+      word: act.word ?? null,
+      asking: Boolean(act.asking),
+      began: act.began,
+      ended: act.ended ?? null,
+      spend: this.spends.get(act.id) ?? null,
+      state: stateOf(act, owed),
+    };
+  }
+
   since(count: number): { count: number; acts: LiveAct[] } {
     const { log } = this;
     let low = 0;
@@ -134,7 +276,7 @@ export class Activity {
         this.mark(rung);
       }
     }
-    if (question && !STEPS.has(kind)) {
+    if (question && followed(kind)) {
       const act: LiveAct = {
         id,
         kind,
@@ -208,6 +350,10 @@ export class Activity {
         if (wrote?.kind === "rung") {
           wrote.cost = (wrote.cost ?? 0) + usage[4];
           this.mark(wrote);
+        }
+        for (const one of [chain, ...(wrote?.kind === "rung" ? [maker] : [])]) {
+          const spend = this.spends.get(one) ?? { dollars: 0, answers: 0 };
+          this.spends.set(one, { dollars: spend.dollars + usage[4], answers: spend.answers + 1, actor });
         }
       }
       const rung = this.runs.get(id);

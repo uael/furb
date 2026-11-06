@@ -770,7 +770,7 @@ impl Lives {
 
   /// Each record of the workspaces of the list in a config folder, the config folder of the
   /// daemon when none is given, and each life of the daemon, by the path of its record, with
-  /// whether a life holds it and whether that life lives or ends.
+  /// whether a life holds it, whether that life lives or ends, and the name of its session.
   fn listed(&self, config: Option<String>) -> Vec<Listed> {
     let config = config.or_else(|| self.settings.opening.config.clone());
     let folder = processes::places(&Opening { config, ..Opening::default() }).config;
@@ -779,20 +779,20 @@ impl Lives {
     for one in &found {
       for life in &one.records {
         let workspace = Some(one.workspace.clone());
-        listed.push(Listed { life: life.clone(), workspace, held: false, open: false });
+        listed.push(Listed { life: life.clone(), workspace, held: false, open: false, name: None });
       }
     }
     for (life, held) in &self.held {
-      let open = matches!(held.stage, Stage::Living(_));
+      let (open, name) = (matches!(held.stage, Stage::Living(_)), held.handle.name());
       if let Some(one) = listed.iter_mut().find(|one| &one.life == life) {
-        (one.held, one.open) = (true, open);
+        (one.held, one.open, one.name) = (true, open, name);
         continue;
       }
       // A record that a life opens stands in the list before the disk holds it.
       let at = Path::new(life).parent();
       let workspace = found.iter().find(|one| Some(one.folder.as_path()) == at);
       let workspace = workspace.map(|one| one.workspace.clone());
-      listed.push(Listed { life: life.clone(), workspace, held: true, open });
+      listed.push(Listed { life: life.clone(), workspace, held: true, open, name });
     }
     listed.sort_by(|one, other| one.life.cmp(&other.life));
     listed

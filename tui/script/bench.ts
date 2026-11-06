@@ -48,6 +48,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
+import { type Exit, isDone, outcomeOf } from "furb/life";
 import { App } from "../src/app.ts";
 import { demoLibrary, demoSession } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
@@ -239,8 +240,10 @@ async function facts({ record, session, app, screen }: Opened, top: Map<string, 
     const framed = screen.renderer.getStats().frameTimes.slice(frames);
     return read + drawn + framed.reduce((sum, time) => sum + time, 0);
   };
-  const output = () =>
-    (session.actOf(bash)?.value as { stdout?: { content?: string } } | undefined)?.stdout?.content;
+  const output = () => {
+    const act = session.actOf(bash);
+    return (isDone(act) ? (outcomeOf(act) as Exit | null) : act?.printed)?.stdout?.content;
+  };
   const { host } = session;
   /** A stream of a model, as the daemon tells its text to the window. */
   const stream = (said: string) => {
@@ -265,7 +268,7 @@ async function facts({ record, session, app, screen }: Opened, top: Map<string, 
             ["read", read, rung, "chain1", "README.md"],
             ["done", read, "files", { is: "Text", path: "README.md", content: "x\n" }],
           ),
-        () => Boolean(session.actOf(read)?.done),
+        () => isDone(session.actOf(read)),
       );
     },
     tell: (at: number) => {

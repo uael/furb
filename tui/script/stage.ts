@@ -33,7 +33,8 @@ function cacheOf(real: string, environment: Record<string, string>): string {
 
 async function shorten(real: string, environment: Record<string, string>): Promise<string | undefined> {
   if (process.platform === "win32") return undefined;
-  if (Buffer.byteLength(join(cacheOf(real, environment), "furb", "host", "host.sock")) <= SOCKET) return undefined;
+  if (Buffer.byteLength(join(cacheOf(real, environment), "furb", "host", "host.sock")) <= SOCKET)
+    return undefined;
   return mkdtemp("/tmp/furb-sock-");
 }
 

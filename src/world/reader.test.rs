@@ -289,3 +289,55 @@ fn a_segment_that_keeps_each_question_gets_no_chain_rung_or_run_of_the_reader_bu
     .map(str::to_owned)
   );
 }
+
+/// A rung of the operator on the root, whose word names the session, as a record keeps it.
+fn renamed(rung: &str, name: &str) -> String {
+  let word = serde_json::Value::String(crate::view::word(name));
+  format!(r#"[["rung", "{rung}", "operator", "chain1", {word}, "", ""]]"#)
+}
+
+#[test]
+fn a_record_with_no_log_names_its_session_by_the_last_word_of_the_operator_that_names_it() {
+  let at = place("said");
+  let lines = [OPENS[0].to_owned()].map(|one| format!("[{one}]"));
+  let kept = [&lines[0], &renamed("rung7", "First"), &renamed("rung8", r#"say "it" \ twice"#)];
+  fs::write(&at, kept.map(|one| format!("{one}\n")).concat()).unwrap();
+  let read = retold(&at).unwrap();
+  assert!(!read.logged);
+  assert_eq!((read.said.as_deref(), read.given.as_deref()), (Some(r#"say "it" \ twice"#), None));
+  assert_eq!(read.name(), Some(r#"say "it" \ twice"#));
+  let again = retold(&at).unwrap();
+  assert_eq!(again.said, read.said);
+  assert!(!fs::read_to_string(&again.file).unwrap().is_empty());
+  assert!(!PathBuf::from(format!("{}.told.body", at.display())).exists());
+}
+
+#[test]
+fn a_record_whose_log_agrees_names_its_session_by_the_dones_on_its_root_where_the_rename_wins() {
+  let at = place("named");
+  fs::write(
+    &at,
+    "[[\"made\",\"chain1\",\"store\",\"abc\"]]\n[[\"stand\",\"stand1\",\"operator\",\"chain1\"]]\n",
+  )
+  .unwrap();
+  let log = [
+    r#"{"entries":2}"#,
+    r#"["stand","stand1","operator","chain1"]"#,
+    r#"["name_session","name_session1","run1","chain1"]"#,
+    r#"["done","name_session1","run1","Given"]"#,
+    r#"["rename_session","rename_session1","run2","chain2"]"#,
+    r#"["done","rename_session1","run2","Off the root"]"#,
+  ];
+  fs::write(format!("{}.log", at.display()), log.map(|one| format!("{one}\n")).concat()).unwrap();
+  let read = retold(&at).unwrap();
+  assert!(read.logged);
+  assert_eq!((read.name(), read.said.as_deref()), (Some("Given"), None));
+  let more = [
+    r#"["rename_session","rename_session2","run3","chain1"]"#,
+    r#"["done","rename_session2","run3","Mine"]"#,
+  ];
+  let text: String = log.iter().chain(&more).flat_map(|one| [*one, "\n"]).collect();
+  fs::write(format!("{}.log", at.display()), text).unwrap();
+  let read = retold(&at).unwrap();
+  assert_eq!((read.name(), read.given.as_deref()), (Some("Mine"), Some("Given")));
+}

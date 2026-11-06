@@ -1,4 +1,4 @@
-import { busy, type Loom, momentsOf, owedAt, type ThreadNode, weave } from "furb/life";
+import { busy, isDone, type Loom, momentsOf, owedAt, type ThreadNode, weave } from "furb/life";
 import type { Stage } from "../graph.ts";
 import { actorOf, joined, type LifeView, LoomPane, lifeViews } from "../overview.ts";
 import { styled } from "../ui.ts";
@@ -165,7 +165,7 @@ export const stage = part({
     if (!node || !stood(node)) return undefined;
     const chains = new Set<string>();
     const visit = (one: ThreadNode): void => {
-      chains.add(one.thread.act.on);
+      chains.add(one.thread.act.chain);
       for (const agent of one.agents) if (stood(agent)) visit(agent);
     };
     visit(node);
@@ -260,7 +260,8 @@ export const stage = part({
   },
 
   rungsDone(chain: string): number {
-    return this.session.acts.filter((act) => act.on === chain && act.kind === "rung" && act.done).length;
+    return this.session.acts.filter((act) => act.chain === chain && act.kind === "rung" && isDone(act))
+      .length;
   },
 
   /** Each chain that a step let run pauses again once a rung of it that the step let run ends. */

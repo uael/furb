@@ -516,14 +516,18 @@ pub struct Handed {
 }
 
 /// A record of the machine: the main checkout of the workspace whose sessions hold it, when the
-/// list names one, whether a life of the daemon holds it now, and whether that life lives and does
-/// not end.
+/// list names one, whether a life of the daemon holds it now, whether that life lives and does not
+/// end, and the name of its session while a life holds it: the one that the operator said last on
+/// the root, which wins, else the one that the extension naming gave. An empty name takes the
+/// default name again.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Listed {
   pub life: String,
   pub workspace: Option<String>,
   pub held: bool,
   pub open: bool,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub name: Option<String>,
 }
 
 /// A view that a window mounts in a slot of a life, which the process of a skill serves.

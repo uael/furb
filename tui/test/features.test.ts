@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { link, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, extname, join } from "node:path";
+import { isDone, isPaused } from "furb/life";
 import { executable, programs } from "../../bind/typescript/test/executable.ts";
 import { remove } from "../../bind/typescript/test/processes.ts";
 import { until } from "../../bind/typescript/test/until.ts";
@@ -55,7 +56,7 @@ test("a word of the operator stands as his messages stand, as its program in a p
           (act) => act.kind === "rung" && act.words[0] === "this is invalid python !!!",
         );
       // The daemon gates the word after the submit made its rung, and the window hears the refusal then.
-      await until(session, () => refused()?.run?.status === "failed" && session.findings.length > 0);
+      await until(session, () => refused()?.run?.run === "refused" && session.findings.length > 0);
       expect(session.error).toBe("");
       expect(session.findings.join("\n")).toContain("line 1");
       await session.refresh();
@@ -97,7 +98,9 @@ test("queued follow-ups wait for current work, attach files, and message undo an
         session.queued.length === 0 &&
         session.acts.some(
           (act) =>
-            session.isUserPrompt(act) && act.words[1] === "Explain @README.md after this answer." && act.done,
+            session.isUserPrompt(act) &&
+            act.words[1] === "Explain @README.md after this answer." &&
+            isDone(act),
         ),
     );
     await idle(session);
@@ -137,7 +140,7 @@ test("queued follow-ups wait for current work, attach files, and message undo an
     await until(session, () =>
       session.acts.some(
         (act) =>
-          session.isUserPrompt(act) && act.words[1] === "Keep this follow-up through exit." && act.done,
+          session.isUserPrompt(act) && act.words[1] === "Keep this follow-up through exit." && isDone(act),
       ),
     );
     await idle(session);
@@ -358,10 +361,10 @@ test("/extensions lists what a life runs, and a cancel of a word of the operator
         );
         await session.command("/run await wait(60, __name__)");
         // The wait runs under the word, so the cancel asks first.
-        await until(session, () => session.activity.some((act) => act.kind === "wait" && !act.done));
+        await until(session, () => session.activity.some((act) => act.kind === "wait" && !isDone(act)));
         await session.command("/cancel");
         await click("Cancel it");
-        await until(session, () => session.activity.every((act) => act.kind !== "wait" || act.done));
+        await until(session, () => session.activity.every((act) => act.kind !== "wait" || isDone(act)));
         await session.refresh();
         // The watcher lives on, and shows no work in the feed.
         expect((await session.engine.outcome("remember1")).done).toBe(false);
@@ -385,8 +388,8 @@ test("the setup of the root stands as code: a comment that names the setup, then
         // The setup of the root ends with its last rung, the stand and the cd. A word of the operator that comes
         // sooner ends it, and that rung then stands after the word, as it does where the roster is slow to come.
         const stood = () =>
-          session.activity.filter((act) => act.kind === "rung" && act.by === act.on && act.done).length ===
-          13;
+          session.activity.filter((act) => act.kind === "rung" && act.by === act.chain && isDone(act))
+            .length === 13;
         for (let step = 0; step < 200 && !stood(); step++) {
           await Bun.sleep(25);
           await session.refresh();
@@ -394,14 +397,14 @@ test("the setup of the root stands as code: a comment that names the setup, then
         expect(stood()).toBe(true);
         await session.command("/run x = 1");
         await until(session, () =>
-          session.activity.some((act) => act.kind === "rung" && act.by === "operator" && act.done),
+          session.activity.some((act) => act.kind === "rung" && act.by === "operator" && isDone(act)),
         );
         await session.refresh();
         // The root writes its setup on itself, each rung to the one default actor and with no rung whose word it
         // retells: the debug of the extensions, the read of the doctrine, the word rung(read('<file>', HIDDEN).content) of each extension in the
         // order of the life, the life words in one word, then the stand and the cd.
-        const setup = session.activity.filter((act) => act.kind === "rung" && act.by === act.on);
-        expect(setup.map((act) => act.on)).toEqual(Array(13).fill(session.engine.root));
+        const setup = session.activity.filter((act) => act.kind === "rung" && act.by === act.chain);
+        expect(setup.map((act) => act.chain)).toEqual(Array(13).fill(session.engine.root));
         expect(setup.map((act) => act.words.slice(1))).toEqual(Array(13).fill(["", setup[0]?.words[2]]));
         expect(setup.map((act) => act.word)).toEqual([
           'debug(t"{standing()[4]=}")',
@@ -488,7 +491,7 @@ test("an act that ended and told nothing shows nothing in the feed, as a read of
         await session.command('/run read("a.txt")');
         await until(session, () =>
           session.activity.some(
-            (act) => act.kind === "read" && String(act.words[0]).endsWith("/") && act.done,
+            (act) => act.kind === "read" && String(act.words[0]).endsWith("/") && isDone(act),
           ),
         );
         await session.refresh();
@@ -552,7 +555,7 @@ test("/wake with no chain wakes every paused chain of the life, and /wake with a
     const second = session.selected;
     await session.submit("/pause");
     const stopped = () =>
-      session.chains.filter((chain) => [first, second].includes(chain.id) && chain.paused);
+      session.chains.filter((chain) => [first, second].includes(chain.id) && isPaused(chain));
     await until(session, () => stopped().length === 2);
     await session.submit(`/wake ${first}`);
     await until(session, () => stopped().length === 1);

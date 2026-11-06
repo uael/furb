@@ -3,6 +3,7 @@ import { appendFileSync, copyFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { isDone } from "furb/life";
 import { demoSession } from "../src/demo.ts";
 import { Preferences } from "../src/preferences.ts";
 import { composing } from "./composing.ts";
@@ -38,10 +39,10 @@ test("the footer finds a model that writes on a chain from the acts that are not
   const { session, add } = await life();
   const every = (chain: string) =>
     session.acts.some(
-      (act) => act.kind === "rung" && !act.done && act.on === chain && !session.program[act.id],
+      (act) => act.kind === "rung" && !isDone(act) && act.chain === chain && !session.program[act.id],
     );
   const same = () => {
-    const chains = [...new Set(session.acts.map((act) => act.on))];
+    const chains = [...new Set(session.acts.map((act) => act.chain))];
     expect(chains.map((chain) => session.writing(chain))).toEqual(chains.map(every));
   };
   same();
@@ -49,7 +50,9 @@ test("the footer finds a model that writes on a chain from the acts that are not
   await add(["started", "rung9001", "chain1"], () => Boolean(session.actOf("rung9001")?.began));
   expect(session.writing("chain1")).toBe(true);
   same();
-  await add(["done", "rung9001", "chain1", null], () => Boolean(session.actOf("rung9001")?.done));
+  await add(["done", "rung9001", "chain1", null], () =>
+    Boolean(session.actOf("rung9001") !== undefined && isDone(session.actOf("rung9001"))),
+  );
   same();
 });
 

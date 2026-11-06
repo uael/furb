@@ -1,5 +1,5 @@
 import type { RGBA } from "@opentui/core";
-import { type Loom, messages, type Place, places, route, type State, you } from "furb/life";
+import { isDone, type Loom, messages, type Place, places, route, type State, you } from "furb/life";
 import { clock } from "./clock.ts";
 import { clip, dollars } from "./format.ts";
 import { questionOf, shortActor } from "./overview.ts";
@@ -175,12 +175,12 @@ export class Graph {
     const { acts, loom } = this.stage;
     const now = clock();
     for (const act of acts)
-      if (act.kind === "prompt" && act.done && !this.seen.has(act.id)) this.seen.set(act.id, now);
+      if (act.kind === "prompt" && isDone(act) && !this.seen.has(act.id)) this.seen.set(act.id, now);
     const chains = acts.filter((act) => act.kind === "chain");
     const rows = new Map(acts.map((act) => [act.id, act]));
     const parent = (chain: ActRow) => {
       const maker = rows.get(chain.by);
-      return maker && maker.on !== chain.id ? maker.on : undefined;
+      return maker && maker.chain !== chain.id ? maker.chain : undefined;
     };
     this.parents = new Map();
     for (const chain of chains) {

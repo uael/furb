@@ -137,7 +137,7 @@ export const tree = part({
       const made = order.get(chain.id) ?? 0;
       const point = w.acts.findLast(
         (act) =>
-          act.on === from &&
+          act.chain === from &&
           this.isPoint(act) &&
           (order.get(act.id) ?? 0) < made &&
           !omitted.has(act.id) &&
@@ -155,11 +155,11 @@ export const tree = part({
         ...(node.chain
           ? w.acts.filter(
               (one) =>
-                one.on === act.id &&
+                one.chain === act.id &&
                 this.isPoint(one) &&
-                !w.acts.some((maker) => maker.id === one.by && maker.on === act.id && this.isPoint(maker)),
+                !w.acts.some((maker) => maker.id === one.by && maker.chain === act.id && this.isPoint(maker)),
             )
-          : w.acts.filter((one) => one.by === act.id && one.on === act.on && this.isPoint(one))
+          : w.acts.filter((one) => one.by === act.id && one.chain === act.chain && this.isPoint(one))
         ).map((one) => ({ act: one, chain: false })),
         ...(branches.get(act.id) ?? []).map((one) => ({ act: one, chain: true })),
       ];

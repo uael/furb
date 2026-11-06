@@ -117,6 +117,10 @@ impl Fold {
       }
       Kind::Reply => {
         let reply = Reply { chain: on.clone(), actor: text(1), maker: by.to_owned() };
+        if let Some(maker) = self.acts.get_mut(by).filter(|act| act.kind == Kind::Rung) {
+          maker.asking = true;
+          self.moved.push(by.to_owned());
+        }
         self.replies.insert(id.to_owned(), reply);
       }
       _ => {}
@@ -134,6 +138,7 @@ impl Fold {
       pause: born.filter(|_| followed),
       run,
       word: None,
+      asking: false,
       began: self.clock,
       ended: None,
       spend: None,
@@ -217,6 +222,10 @@ impl Fold {
   /// the run of a word ends its rung, and the act ends with its value.
   fn done(&mut self, about: &str, value: Value) {
     if let Some(reply) = self.replies.remove(about) {
+      if let Some(maker) = self.acts.get_mut(&reply.maker).filter(|act| act.asking) {
+        maker.asking = false;
+        self.moved.push(reply.maker.clone());
+      }
       let usage = value.get(2).and_then(Value::as_array);
       if let Some(usage) = usage {
         let part = |at: usize| usage.get(at).and_then(Value::as_f64).unwrap_or_default();

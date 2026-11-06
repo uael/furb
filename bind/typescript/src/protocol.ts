@@ -789,14 +789,17 @@ export interface Peer {
 }
 /**
  * A record of the machine: the main checkout of the workspace whose sessions hold it, when the
- * list names one, whether a life of the daemon holds it now, and whether that life lives and does
- * not end.
+ * list names one, whether a life of the daemon holds it now, whether that life lives and does not
+ * end, and the name of its session while a life holds it: the one that the operator said last on
+ * the root, which wins, else the one that the extension naming gave. An empty name takes the
+ * default name again.
  */
 export interface Listed {
   life: string;
   workspace?: string | null;
   held: boolean;
   open: boolean;
+  name?: string | null;
 }
 /**
  * A life that a daemon gave at its handover: its record, its folder, and the holder of each pin.
@@ -842,6 +845,11 @@ export interface Act {
    * The word of a rung, once its chain took it to run or to refuse.
    */
   word?: string | null;
+  /**
+   * Whether a reply of a rung runs, while its model writes its word. A rung with no word and no
+   * reply that runs waits for its turn.
+   */
+  asking?: boolean;
   /**
    * How many facts the life had said when the act was made, which is its place in time.
    */

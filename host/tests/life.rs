@@ -22,7 +22,7 @@ use std::{
 use furb::{
   Object,
   life::{Answer, Opening},
-  view::{Kind, Phase, RunState, State},
+  view::{Act, Kind, Phase, RunState, State},
   world::config::{Change, Layer},
 };
 use furb_host::{Command, Event, Life, LifeError, LifeHandle, Reply, Seq};
@@ -192,6 +192,25 @@ async fn a_query_is_a_command_that_the_life_answers() {
   assert!(
     matches!(wrong, Err(LifeError::Refused(why)) if why == format!("No prompt is named {id}."))
   );
+}
+
+#[tokio::test]
+async fn the_name_of_the_session_is_the_last_that_the_operator_said_on_the_root_as_the_life_folds_it()
+ {
+  let at = place("named");
+  let life = Life::spawn(scripted(&at, &[])).unwrap();
+  let mut events = Box::pin(life.events(0));
+  assert_eq!(life.name(), None);
+  for name in ["First", "Mine"] {
+    let id = made(&life, rung(&furb::view::word(name))).await;
+    until(&mut events, done(&id)).await;
+  }
+  assert_eq!(life.name().as_deref(), Some("Mine"));
+  let id =
+    made(&life, rung("act('rename_session', 'chain2', lambda id: (yield 'done', id, 'Off'))"))
+      .await;
+  until(&mut events, done(&id)).await;
+  assert_eq!(life.name().as_deref(), Some("Mine"));
 }
 
 #[tokio::test]
@@ -677,4 +696,38 @@ async fn a_life_on_its_checkpoints_tells_each_repeated_fact_of_its_history_in_or
   assert_eq!(pauses(&third), 5, "{:?}", controls(&third));
   let (later, earlier) = (controls(&third), controls(&second));
   assert_eq!(later[..earlier.len()], earlier[..], "the pauses and wakes keep their order");
+}
+
+#[tokio::test]
+async fn a_life_on_its_checkpoint_tells_the_acts_of_its_history_each_at_the_place_of_its_fact() {
+  let at = place("history");
+  birth(&at, "x = 1", vec![]).await;
+  let Ok(life) = Life::spawn(kept(&at)) else { panic!("the life has no thread") };
+  let mut events = Box::pin(life.events(0));
+  let id = made(&life, rung("y = 2")).await;
+  let mut log = until(&mut events, done(&id)).await;
+  assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
+  log.extend(until(&mut events, |event| matches!(event, Event::Ended(_))).await);
+  // The place of an act is the count of the facts that the log told up to its question, as a
+  // window that hears the log counts them.
+  let (mut facts, mut acts) = (Vec::new(), Vec::new());
+  for one in &log {
+    match &*one.1 {
+      Event::Fact(fact) => facts.push(fact.clone()),
+      Event::Act(act) => acts.push((**act).clone()),
+      _ => {}
+    }
+  }
+  let misplaced: Vec<String> = acts
+    .iter()
+    .filter(|act| {
+      let at = usize::try_from(act.began).ok().and_then(|one| one.checked_sub(1));
+      at.and_then(|one| facts.get(one)).is_none_or(|fact| fact[1] != act.id.as_str())
+    })
+    .map(|act| format!("{} at {}", act.id, act.began))
+    .collect();
+  assert!(misplaced.is_empty(), "these acts stand at no fact of theirs: {misplaced:?}");
+  let earlier = acts.iter().rev().find(|act| act.words.first() == Some(&json!("x = 1")));
+  let done = earlier.is_some_and(|act| act.kind == Kind::Rung && Act::done(act));
+  assert!(done, "the rung of the first birth is told done at last: {earlier:?}");
 }
