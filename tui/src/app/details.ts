@@ -29,7 +29,7 @@ import {
 import { clock } from "../clock.ts";
 import { conversation } from "../conversation.ts";
 import { shortenHomes } from "../files.ts";
-import { clip, dollars, modelLabel, modelName, share } from "../format.ts";
+import { clip, count, dollars, modelLabel, modelName, share } from "../format.ts";
 import type { ActRow } from "../session.ts";
 import { theme as c, glyph, markOf, pulse, spacing as space, spin } from "../theme.ts";
 import { bold, type Part, styled, underline } from "../ui.ts";
@@ -323,7 +323,7 @@ export const details = part({
     step: string,
     display: number,
     room: number,
-  ): { number: number; label: Part[]; tail?: Part[]; waits: boolean } {
+  ): { number: number; label: Part[]; tail?: Part[]; waits: boolean; musing: boolean } {
     const w = this.session;
     const stream = w.host.streams.get(step);
     // A rung thinks only while a reply of it runs, and else waits for its turn behind the reply of another rung.
@@ -334,6 +334,10 @@ export const details = part({
     const { tail, count: done } = writing(stream);
     const began = w.started[step];
     const ms = began ? clock() - began : 0;
+    // A model that has written no line shows what it thinks: the size of its thought, which grows with each token, and
+    // the last line of it, so that a long thought shows its progress.
+    const thought = stream?.thinking.length ?? 0;
+    const musing = !done && !stream?.text.trim() && !!stream?.thinking.trim();
     const label: Part[] = done
       ? []
       : [
@@ -341,25 +345,26 @@ export const details = part({
           [
             waits
               ? " · waits for its turn"
-              : ` · thinking${ms >= 1000 ? ` ${spell(Math.floor(ms / 1000) * 1000)}` : ""}`,
+              : ` · thinking${ms >= 1000 ? ` ${spell(Math.floor(ms / 1000) * 1000)}` : ""}${thought ? ` · ${count(thought)} chars` : ""}`,
             c.faint,
           ],
         ];
-    const text = stream?.text.trim() ? clip(tail, room - STATE) : "";
+    const text = stream?.text.trim() || musing ? clip(tail, room - STATE) : "";
     return {
       number: display + done,
       label,
       waits,
-      ...(text || done ? { tail: [[text, c.muted] as Part] } : {}),
+      musing,
+      ...(text || done ? { tail: [[text, musing ? c.faint : c.muted] as Part] } : {}),
     };
   },
 
   /** The rows of a step while its model works on it: the label of the word until a line is written, then the line
    * that comes, with the loader in the column of the states, which the tick draws again. */
   thinkingRow(step: string, display: number, digits: number, room: number): Gutter {
-    const { number, label, tail, waits } = this.thinkingParts(step, display, room);
+    const { number, label, tail, waits, musing } = this.thinkingParts(step, display, room);
     const rows = (label.length ? 1 : 0) + (tail ? 1 : 0);
-    const numbered = tail?.[0]?.[0] ? new Map([[rows - 1, number]]) : new Map<number, number>();
+    const numbered = tail?.[0]?.[0] && !musing ? new Map([[rows - 1, number]]) : new Map<number, number>();
     const all = Array.from({ length: rows }, (_, at) => at);
     const text = this.text(thinkingText(label, tail), c.muted, { wrapMode: "none" });
     const view = new Gutter(this.renderer, {
@@ -418,9 +423,9 @@ export const details = part({
     const row = this.thinkingRows.get(step);
     if (!row || row.view.isDestroyed) return;
     if (wrote !== undefined) row.wrote = wrote;
-    const { number, label, tail, waits } = this.thinkingParts(step, row.display, row.room);
+    const { number, label, tail, waits, musing } = this.thinkingParts(step, row.display, row.room);
     const rows = (label.length ? 1 : 0) + (tail ? 1 : 0);
-    const numbered = tail?.[0]?.[0] ? 1 : 0;
+    const numbered = tail?.[0]?.[0] && !musing ? 1 : 0;
     // A row that comes or goes, or a rung that begins to think, changes the numbers, the colors and the loader of the
     // rows, which a new card draws.
     if (number - row.display !== row.wrote || `${rows}:${label.length}:${numbered}:${waits}` !== row.shape) {

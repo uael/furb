@@ -348,7 +348,7 @@ test("a question of a choice offers its values as a list in place of the input, 
     { width: 120, height: 40 },
   ));
 
-test("the block of a word whose model works holds the loader in the column of the states, and its label says that the model thinks, with no line of thinking", () =>
+test("the block of a word whose model works holds the loader in the column of the states, and its label says that the model thinks, then the size and the last line of its thought as they come", () =>
   composing(async ({ session, app, frame }) => {
     app.composer.setText("Think until I cancel.");
     await app.submit();
@@ -368,10 +368,15 @@ test("the block of a word whose model works holds the loader in the column of th
       session.host,
       () => session.host.streams.get(step)?.thinking === "First I read.\nThen I wait.",
     );
-    await new Promise((done) => setTimeout(done, 250));
-    const thought = await frame();
+    let thought = await frame();
+    for (let tries = 0; tries < 40 && !thought.includes("26 chars"); tries++) {
+      await new Promise((done) => setTimeout(done, 50));
+      thought = await frame();
+    }
     expect(thought).toContain(" · thinking");
-    expect(thought).not.toContain("Then I wait.");
+    expect(thought).toContain("26 chars");
+    expect(thought).toContain("Then I wait.");
+    expect(thought).not.toContain("First I read.");
     await session.submit("/cancel");
   }));
 
