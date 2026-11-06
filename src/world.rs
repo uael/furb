@@ -109,9 +109,13 @@ pub(crate) async fn here<W: 'static>(co: &mut Co<W>, on: &str) -> Result<PathBuf
 /// run: the model reads that end, and asks again if it wants.
 pub(crate) async fn interrupted<W: 'static>(co: &mut Co<W>, a: &Fact) -> Result<(), Fault> {
   say(co, Fact::says("started", a.about(), []));
-  let why = format!("{} was interrupted: the life that ran it ended before it did", a.about());
   let id = vec![("id", Object::string(a.about()))];
-  co.call("close", vec![Fault::refused(why).object()], id).await.map(drop)
+  co.call("close", vec![Fault::refused(interruption(a.about())).object()], id).await.map(drop)
+}
+
+/// The refusal of an act that a life ended before the act did.
+pub(crate) fn interruption(id: &str) -> String {
+  format!("{id} was interrupted: the life that ran it ended before it did")
 }
 
 /// A path resolved against a directory, as a path of the machine: the directory with the path after it, or the path
