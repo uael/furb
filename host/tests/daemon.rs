@@ -953,6 +953,38 @@ mod daemon {
     assert_eq!(messages, 2, "a new fact and a new stall send a new message: {prompts:?}");
   }
 
+  #[tokio::test]
+  async fn a_rung_that_waits_with_no_reply_is_told_to_the_root_after_the_bound() {
+    let at = place();
+    let local = Local::new(at.join("sock"));
+    let listener = local.listen().await.unwrap();
+    let settings = Settings {
+      opening: opening(&at),
+      grace: GRACE,
+      stall: QUIET,
+      tailnet: None,
+      door: None,
+      host: None,
+    };
+    let served = local.clone();
+    tokio::spawn(async move { run(&served, listener, settings).await });
+    let mut window = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    window.attach(&life).await;
+    let waits = "never = prompt(str, \"never answered\", to=\"operator\")\nrung(\"x = 1\", never)";
+    let verb = Verb::Run { life: life.clone(), word: waits.to_owned(), on: None };
+    let began = tokio::time::Instant::now();
+    let Ok(Answer::Act(_)) = window.ask(verb).await else { panic!("no rung") };
+    let Frame::Stalled { acts, notice, .. } = window.until(stall).await else { unreachable!() };
+    assert!(began.elapsed() >= QUIET, "the daemon tells a stall after its bound alone");
+    assert!(acts.iter().any(|one| one.kind == "rung" && one.chain == "chain1"), "{acts:?}");
+    assert!(!acts.iter().any(|one| one.kind == "run"), "no run is open: {acts:?}");
+    let Frame::Event { event: Event::Fact(sent), .. } = window.until(message).await else {
+      unreachable!()
+    };
+    assert_eq!(sent[5], notice.as_str(), "the root takes the notice as its message");
+  }
+
   /// The skill probe in a folder of skills, whose process writes the file `started` of its folder,
   /// which this gives.
   #[cfg(unix)]
