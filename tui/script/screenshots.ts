@@ -1215,19 +1215,19 @@ try {
     "Add a component for this todo list: a panel with the items, and a line in the feed for each.",
   );
   await settle();
-  await shows("Ready");
+  await shows("Done");
   await shows("2 open of 3");
   await rest();
   await capture("74b-extend-live");
   await session.submit("Sort the Todo panel: the open items first.");
   await settle();
-  await shows("Ready");
+  await shows("Done");
   await shows("evaluating 'seen.todos");
   await rest();
   await capture("75b-extend-broken");
   await session.submit("The Todo panel shows an error. Fix it.");
   await settle();
-  await shows("Ready");
+  await shows("Done");
   await shows("evaluating 'seen.todos", false);
   await rest();
   await capture("75c-extend-fixed");

@@ -62,20 +62,23 @@ test.skipIf(process.platform === "win32")(
   "a real life on a home with no claude and no key shows the check of the setup over the steps of its extensions",
   async () => {
     const { frame, acts } = await firstRun();
-    // The root wrote its setup on itself, each rung of an extension wrote the code of that extension, and the life
-    // words started the watchers, and the welcome shows all the same. The extension naming plays on the root alone, so
-    // its word and its life word come after the others.
+    // The root wrote its setup on itself, the rungs of the skills with code wrote the code of each, and the life
+    // words of the default skills started the watchers, and the welcome shows all the same. The extension naming plays
+    // on the root alone, so its life word comes after the others.
     expect(acts.filter((line) => line.endsWith(" chain1"))).toEqual(
-      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 21].map((n) => `rung${n} chain1`),
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 15].map((n) => `rung${n} chain1`),
     );
     expect(acts.filter((line) => /^rung\d+ rung\d+$/.test(line))).toEqual([
-      ...[3, 4, 5, 6, 7, 8, 9].map((n) => `rung${n + 10} rung${n}`),
-      "rung20 rung11",
+      "rung10 rung3",
+      "rung11 rung4",
+      "rung12 rung5",
+      "rung13 rung6",
+      "rung14 rung8",
     ]);
     expect(
-      acts.filter((line) => line.endsWith(" rung10")).filter((line) => !/^(memory|read)\d+ /.test(line)),
-    ).toEqual(["catchup1 rung10", "remember1 rung10", "fitted1 rung10", "mcp_index1 rung10"]);
-    expect(acts).toContain("name_session1 rung12");
+      acts.filter((line) => line.endsWith(" rung7")).filter((line) => !/^(memory|read)\d+ /.test(line)),
+    ).toEqual(["catchup1 rung7", "remember1 rung7", "compacted1 rung7", "fitted1 rung7"]);
+    expect(acts).toContain("name_session1 rung9");
     expect(frame).toContain("No model answers yet");
     expect(frame).toContain("Claude command line  Not found.");
     expect(frame).toContain("Other providers  No model available.");
