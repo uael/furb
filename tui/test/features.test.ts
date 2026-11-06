@@ -354,7 +354,7 @@ test("/extensions lists what a life runs, and a cancel of a word of the operator
       async ({ session, frame, click }) => {
         await session.command("/extensions");
         expect(session.notice).toBe(
-          "This life runs catchup with catchup(), memory with await recall(), skills with await listed(), compaction with compacted(); fitted(), naming with name_session(), ouroboros, web, mcp with await mcp_index(). Run a word of one with /run.",
+          "This life runs catchup with catchup(), memory with await recall(), skills with await listed(), compaction with compacted(); fitted(), naming with name_session(). Run a word of one with /run.",
         );
         await session.command("/run await wait(60, __name__)");
         // The wait runs under the word, so the cancel asks first.
@@ -386,7 +386,7 @@ test("the setup of the root stands as code: a comment that names the setup, then
         // sooner ends it, and that rung then stands after the word, as it does where the roster is slow to come.
         const stood = () =>
           session.activity.filter((act) => act.kind === "rung" && act.by === act.on && act.done).length ===
-          13;
+          10;
         for (let step = 0; step < 200 && !stood(); step++) {
           await Bun.sleep(25);
           await session.refresh();
@@ -401,20 +401,20 @@ test("the setup of the root stands as code: a comment that names the setup, then
         // retells: the debug of the extensions, the read of the doctrine, the word rung(read('<file>', HIDDEN).content) of each extension in the
         // order of the life, the life words in one word, then the stand and the cd.
         const setup = session.activity.filter((act) => act.kind === "rung" && act.by === act.on);
-        expect(setup.map((act) => act.on)).toEqual(Array(13).fill(session.engine.root));
-        expect(setup.map((act) => act.words.slice(1))).toEqual(Array(13).fill(["", setup[0]?.words[2]]));
+        expect(setup.map((act) => act.on)).toEqual(Array(10).fill(session.engine.root));
+        expect(setup.map((act) => act.words.slice(1))).toEqual(Array(10).fill(["", setup[0]?.words[2]]));
         expect(setup.map((act) => act.word)).toEqual([
           'debug(t"{standing()[4]=}")',
           // A path of Windows stands with its separators doubled, as python shows a backslash.
           expect.stringMatching(/^read\('.*[/\\]DOCTRINE\.md'\)$/),
-          ...["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"].map((name) =>
+          ...["catchup", "memory", "skills", "compaction"].map((name) =>
             expect.stringMatching(
               new RegExp(
                 `^rung\\(read\\('.*[/\\\\]+words[/\\\\]+${name}[/\\\\]+${name}\\.py', HIDDEN\\)\\.content\\)$`,
               ),
             ),
           ),
-          "catchup()\nawait recall()\nawait listed()\ncompacted(); fitted()\nawait mcp_index()",
+          "catchup()\nawait recall()\nawait listed()\ncompacted(); fitted()",
           // An extension that plays on the root alone comes after the others, with its life word.
           expect.stringMatching(
             /^rung\(read\('.*[/\\]+words[/\\]+naming[/\\]+naming\.py', HIDDEN\)\.content\)$/,
@@ -452,22 +452,21 @@ test("the setup of the root stands as code: a comment that names the setup, then
         expect(shown[0]).toBe('1 debug(t"{standing()[4]=}")');
         expect(shown[1]).toMatch(/^2 read\('.*DOCTRINE\.md'\)$/);
         expect(
-          shown.slice(2, 9).map((row) => /^\d+ rung\(read\('.*', HIDDEN\)\.content\)$/.test(row)),
-        ).toEqual(Array(7).fill(true));
+          shown.slice(2, 6).map((row) => /^\d+ rung\(read\('.*', HIDDEN\)\.content\)$/.test(row)),
+        ).toEqual(Array(4).fill(true));
         // The life words stand as the calls that end their one word, each on its line, then the stand and the cd,
         // and the card ends there.
-        expect(shown.slice(9, 14)).toEqual([
-          "10 catchup()",
-          "11 await recall()",
-          "12 await listed()",
-          "13 compacted(); fitted()",
-          "14 await mcp_index()",
+        expect(shown.slice(6, 10)).toEqual([
+          "7 catchup()",
+          "8 await recall()",
+          "9 await listed()",
+          "10 compacted(); fitted()",
         ]);
         // The extension naming plays on the root alone, so its word and its life word come after the others.
-        expect(shown[14]).toMatch(/^15 rung\(read\('.*', HIDDEN\)\.content\)$/);
-        expect(shown.slice(15, 17)).toEqual(["16 name_session()", "17 stand()"]);
-        expect(shown[17]).toMatch(/^18 cd\('.*'\)$/);
-        expect(shown[18] ?? "").not.toMatch(/^19 /);
+        expect(shown[10]).toMatch(/^11 rung\(read\('.*', HIDDEN\)\.content\)$/);
+        expect(shown.slice(11, 13)).toEqual(["12 name_session()", "13 stand()"]);
+        expect(shown[13]).toMatch(/^14 cd\('.*'\)$/);
+        expect(shown[14] ?? "").not.toMatch(/^15 /);
         expect(rows.join("\n")).not.toMatch(/rung\d+…\d+|remember1|ouroboros1|catchup1/);
       },
       { width: 140, height: 90 },

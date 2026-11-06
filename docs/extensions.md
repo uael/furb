@@ -13,8 +13,22 @@ caches of the chain stays valid.
 
 ## The official extensions
 
-Eight extensions come with furb, and each life runs them unless a config turns them off. `catchup`, `memory`,
-`compaction` and `naming` play by default, as their manifests say.
+Eight extensions come with furb, each a skill with code. `catchup`, `memory`, `skills`, `compaction` and `naming` play
+by default, as their manifests say, and `ouroboros`, `web` and `mcp` play on need, as the rule below says.
+
+### Which skill plays on which chain
+
+One rule says it. A skill with code plays in one of three ways:
+
+- By default: an official skill whose manifest says `furb-default: "true"` plays from the setup of the root, unless a
+  config turns it off.
+- By a config: a config that turns a skill on, by `true` for an official one or by the path of its folder for any
+  other, plays it from the setup, or from the write of that config in the middle of a life.
+- On need: `await skill(name)` plays it from then on, as a word loads `web` or `mcp` when its work needs them.
+
+A skill that plays, plays on every chain of the life, and one whose manifest says `furb-plays: root` plays on the root
+alone and on a chain whose source had it. The index, `skills://`, marks `on` each skill that plays on the chain that
+reads it.
 
 - **`catchup`** keeps a chain up to date with the machine. At each stand, as when a later life opens on a record, it
   reads again each file that the chain read or wrote, and tells the chain in one paragraph headed caught up the lines
@@ -171,8 +185,9 @@ What the notes are for.
   It only defines: it holds no comment and binds no name of the engine. It can hold one quote of guidance for the
   model, which holds no law.
 - `furb-interface` is the file of the interface of the extension, its contract. It can be absent.
-- `furb-default` is `"true"` for an extension that plays by default, as `catchup`, `memory`, `compaction` and
-  `naming`. It can be absent, which is `"false"`.
+- `furb-default` is `"true"` for an extension that plays by default, as `catchup`, `memory`, `skills`, `compaction`
+  and `naming`. It can be absent, which is `"false"`: the extension then plays only when a config turns it on or a
+  word loads it with `skill(name)`.
 - `furb-life` is the life word, a line of Python that starts the work of the extension, such as `await recall()`. It
   awaits each act that it starts whose first answer comes later, as `await mcp_index()` does, so what that act tells
   stands in the turn of the life words of the setup. It can be absent.

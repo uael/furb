@@ -77,7 +77,7 @@ async def test_a_skill_whose_metadata_names_a_word_has_code(tmp_path: Path) -> N
   assert [x for x in got if x.startswith(("note ", "skills ", "memory "))] == [
     "memory (code, default): Tells a chain the AGENTS.md or CLAUDE.md files of the project that apply to the files that it reads.",
     "note (code, default): A note.",
-    "skills (code, on): Lists the skills of the project and of the user, and loads one.",
+    "skills (code, on, default): Lists the skills of the project and of the user, and loads one.",
   ]
 
 

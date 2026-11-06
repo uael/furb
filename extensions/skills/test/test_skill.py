@@ -84,7 +84,7 @@ async def test_skill_with_no_name_plays_each_default_skill(tmp_path: Path) -> No
   noted(tmp_path, default=True)
   _, root = extended("skills", tmp_path, _monty.skills)
   got = await engine.rung("close(await skill())", on=root)
-  lines = official_lines(on=["catchup", "memory", "compaction", "naming"])
+  lines = official_lines(on=["catchup", "memory", "skills", "compaction", "naming"])
   defaults = [x for x in lines if "default" in x.split(":")[0]]
   assert got == Text("skills://", "\n".join(sorted([*defaults, "note (code, on, default): A note."])))
   assert sorted(str(a[3]) for a in engine.transcript(on=root) if a[0] == "enable" and a[2] == "skills") == [
