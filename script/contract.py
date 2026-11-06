@@ -1,6 +1,7 @@
 """Compare the contract of a build with the contract of the last release, and name each change that breaks a caller.
 
-The contract is `src/furb/engine.pyi` and the interface of each official kit, `extensions/<name>/<name>.pyi`. The
+The contract is `src/furb/engine.pyi`, the interface of each official kit, `extensions/<name>/<name>.pyi`, and the
+closed set of the nodes of a view in `host/protocol.schema.json`, each node with its fields. The
 script reads each one at the last tag, with `git show <tag>:<path>`, and in the working tree. It reads a contract as the
 signatures of its top-level definitions, the fields and the methods of each class, its constants and its aliases, and
 the sentences of its docstrings. A change is a break, a wording or a minor.
@@ -12,6 +13,8 @@ the sentences of its docstrings. A change is a break, a wording or a minor.
   the pull request holds the label wording.
 - A minor: a name more, a keyword more with a default that no caller passes by position, a default that a keyword
   gains, a sentence more, and the value of a policy that changes.
+- Of the nodes of a view, which only grow within a major: a node or a field of a node that goes is a break, and a node
+  or a field more is a minor.
 
 The line of the policy is the sentence of the contract that starts `A minor may change the default of each policy:`.
 The names of the release rule when it holds the line, so one pull request cannot add a name and change its value;
@@ -29,6 +32,7 @@ Usage: python3 script/contract.py [--base TAG] [--since REF] [--title TITLE] [--
 import argparse
 import ast
 import inspect
+import json
 import re
 import shutil
 import subprocess
@@ -39,6 +43,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 ENGINE = "src/furb/engine.pyi"
+SCHEMA = "host/protocol.schema.json"
 KIT = re.compile(r"extensions/[^/]+/[^/]+\.pyi")
 POLICY = "A minor may change the default of each policy:"
 POSITIONAL = ("posonly", "pos")
@@ -318,6 +323,36 @@ def diff(where: str, old: str | None, new: str | None) -> list[Finding]:
   return compare(where, before, after, allowed)
 
 
+def nodes(text: str | None) -> dict[str, set[str]]:
+  """Each node of a view that the schema of the protocol gives, with its fields: those of every node and its own."""
+  if text is None:
+    return {}
+  defs = json.loads(text).get("definitions", {})
+  node = defs.get("Node", {})
+  shared = set(node.get("properties", {}))
+  found: dict[str, set[str]] = {}
+  for one in node.get("oneOf", []):
+    props = one.get("properties", {})
+    name = props.get("node", {}).get("const")
+    if isinstance(name, str):
+      found[name] = shared | (set(props) - {"node"})
+  return found
+
+
+def node_diff(where: str, old: str | None, new: str | None) -> list[Finding]:
+  before, after = nodes(old), nodes(new)
+  found = [Finding("break", where, f"the node {name} goes") for name in sorted(before.keys() - after.keys())]
+  found += [Finding("minor", where, f"the node {name} is more") for name in sorted(after.keys() - before.keys())]
+  for name in sorted(before.keys() & after.keys()):
+    found += [
+      Finding("break", where, f"the field {f} of the node {name} goes") for f in sorted(before[name] - after[name])
+    ]
+    found += [
+      Finding("minor", where, f"the field {f} of the node {name} is more") for f in sorted(after[name] - before[name])
+    ]
+  return found
+
+
 def git(root: Path, *args: str) -> tuple[int, str]:
   got = subprocess.run([shutil.which("git") or "git", *args], cwd=root, capture_output=True, text=True, check=False)  # noqa: S603
   return got.returncode, got.stdout
@@ -334,7 +369,7 @@ def paths(root: Path, *refs: str) -> list[str]:
   for ref in refs:
     _, out = git(root, "ls-tree", "-r", "--name-only", ref, "--", "extensions")
     there |= {x for x in out.split() if KIT.fullmatch(x)}
-  return [ENGINE, *sorted(here | there)]
+  return [ENGINE, *sorted(here | there), SCHEMA]
 
 
 def declared(title: str) -> bool:
@@ -351,7 +386,7 @@ def compared(root: Path, tag: str, files: list[str], ref: str = "") -> list[Find
     else:
       file = root / path
       new = file.read_text(encoding="utf-8") if file.exists() else None
-    found += diff(path, old if code == 0 else None, new)
+    found += (node_diff if path == SCHEMA else diff)(path, old if code == 0 else None, new)
   return found
 
 
