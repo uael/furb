@@ -187,7 +187,8 @@ export declare class Meaning {
   /**
    * The acts that a fact changes, each as it stands after the fact. `covered` names each act of
    * `open` that a pause or a wake covers, and `born` the last pause or wake that covers a new act,
-   * as the engine finds them. A reader with no engine gives neither.
+   * as the engine finds them. A reader with no engine gives neither, and the fold finds both
+   * itself, as the engine does, so a record folds as its life did.
    */
   hear(fact: unknown[], covered?: string[], born?: unknown[] | null): Array<import("./dist/protocol.js").Act>
   /**

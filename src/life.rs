@@ -104,6 +104,11 @@ pub struct Opening {
   /// when unsaid.
   #[cfg_attr(feature = "python", pyo3(default))]
   pub config: Option<String>,
+  /// The logins of the members who answer as the operator, as the access list of a host and its
+  /// local login give them, each of which a prompt can ask with `to="operator/<login>"`; none when
+  /// unsaid.
+  #[cfg_attr(feature = "python", pyo3(default))]
+  pub members: Option<Vec<String>>,
   /// The actor a prompt goes to when it names none, as the catalog names a model, and an effort after a slash, at its
   /// level as [`world::Model::at`] moves it. When unsaid, the default actor of the last stand
   /// that the record answered, so a life opened again goes on with the actor it had, and on a
@@ -374,7 +379,8 @@ impl Opening {
         Ok(candidate.into_settings())
       })
     }));
-    provider = provider.advertises(advertised).config(user);
+    let members = self.members.clone().unwrap_or_default();
+    provider = provider.advertises(advertised).config(user).members(members);
     if let Some(gallery) = gallery {
       provider = provider.images(gallery);
     }

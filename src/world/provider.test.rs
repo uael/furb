@@ -194,6 +194,22 @@ fn the_provider_answers_a_stand_with_its_roster_its_directory_its_default_actor_
 }
 
 #[test]
+fn the_operator_entry_lists_its_members_and_a_prompt_asks_one_of_them_as_operator_and_its_login() {
+  // A word reads the window that the roster offers to `operator/ana`, as a prompt with that `to`
+  // finds its actor, and -1 when the roster offers none.
+  let model = streaming(&[("close(offered(standing()[0], 'operator/ana') or -1)", Usage::new())]);
+  let at = yard("members");
+  let provider = Provider::new(at.display().to_string(), vec![scripted(&model)])
+    .members(vec!["ana".to_owned(), "bo".to_owned()]);
+  let mut engine = lived(provider);
+  let standing = engine.standing().expect("the life stands").py_repr();
+  assert!(standing.contains("['operator', ['ana', 'bo'], 200000, 'cheap']"), "{standing}");
+  let id = asked(&mut engine);
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(200_000), "operator/ana names the operator entry");
+}
+
+#[test]
 fn the_entry_of_each_model_ends_at_its_window_then_its_class() {
   let qwen = Model::new("local:qwen3", 1000, MockCompletionModel::new([]));
   let (mut engine, _) = life("doctrine", vec![qwen, scripted(&MockCompletionModel::new([]))]);
@@ -2679,7 +2695,7 @@ fn the_configs_of_the_user_and_of_the_project_give_the_classes_and_the_list_of_a
       .map(|name| catalog.find(name).expect("the catalog holds the claude command line"))
       .collect();
   let roster = |directory: &Path| {
-    let given = standing(&models, &directory.display().to_string(), "a", None, &user);
+    let given = standing(&models, &directory.display().to_string(), "a", None, &[], &user);
     let names = given.py_repr();
     names
       .split("], ['")

@@ -804,7 +804,8 @@ impl Meaning {
 
   /// The acts that a fact changes, each as it stands after the fact. `covered` names each act of
   /// `open` that a pause or a wake covers, and `born` the last pause or wake that covers a new act,
-  /// as the engine finds them. A reader with no engine gives neither.
+  /// as the engine finds them. A reader with no engine gives neither, and the fold finds both
+  /// itself, as the engine does, so a record folds as its life did.
   #[cfg_attr(
     feature = "typescript",
     napi(
@@ -819,8 +820,13 @@ impl Meaning {
     born: Option<Value>,
   ) -> Result<Value, Fault> {
     let fact = wire::outward(fact.0.as_ref());
-    let born = born.and_then(|one| Pause::of(&wire::outward(one.0.as_ref())));
-    let acts = self.fold.hear(&fact, &covered.unwrap_or_default(), born);
+    let acts = match (covered, born) {
+      (None, None) => self.fold.recorded(&fact),
+      (covered, born) => {
+        let born = born.and_then(|one| Pause::of(&wire::outward(one.0.as_ref())));
+        self.fold.hear(&fact, &covered.unwrap_or_default(), born)
+      }
+    };
     for act in &acts {
       self.held.heard(act);
     }
