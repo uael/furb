@@ -12,9 +12,11 @@ from furb.engine import (
   bash,
   chain,
   clock,
+  close,
   controlled,
   dump,
   filled,
+  get,
   operated,
   over,
   peek,
@@ -229,6 +231,8 @@ def beat() -> Generator[set[str], object, None]:
 def conduct(on: str = "") -> Act:
   def ear(id: str):
     yield "started", id
+    if (old := state["id"]) and get(old) and not over(old):
+      close(None, old)
     state["id"] = id
     while state["id"] == id:
       yield from beat()

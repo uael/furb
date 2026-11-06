@@ -211,3 +211,22 @@ async def test_conduct_beats_until_it_is_closed(conductor: Round) -> None:
   assert re.fullmatch(r"conduct\d+", conductor.ns["state"]["id"])
   await conductor.word("close(None, held)")
   assert conductor.engine.over(conductor.ns["held"])
+
+
+async def test_a_new_conduct_ends_the_old_one_so_one_beat_starts_a_cycle_and_the_workers_live_on(conductor: Round) -> None:
+  conductor.say(r"pr list --head w/converge", [{"number": 7}])
+  conductor.say(r"pr checks 7", [{"bucket": "pending"}])
+  conductor.sand.hold = r"pr list --head"
+  await conductor.word('queue("b").append(item("one"))\nfirst = conduct()')
+  ((worker, *_),) = conductor.asked()
+  conductor.say(r"pr checks 7", [{"bucket": "fail"}])
+  await conductor.word("second = conduct()")
+  conductor.sand.release()
+  await settle()
+  ((cycle, *_),) = conductor.asked("tuple[dict[str, str], str]")
+  first, second = conductor.ns["first"], conductor.ns["second"]
+  assert conductor.engine.over(first) and not conductor.engine.over(second)
+  assert conductor.ns["state"]["id"] == second
+  assert conductor.ns["state"]["cycle"] == cycle
+  assert "fail 1" in conductor.ns["state"]["print"]
+  assert not conductor.engine.over(worker)
