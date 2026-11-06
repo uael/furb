@@ -877,6 +877,74 @@ fn a_turn_hands_its_images_to_a_model_that_takes_them_and_a_model_that_takes_non
   assert_eq!(blind.request_count(), 0, "the model is asked nothing");
 }
 
+/// An image attached in the images of a yard, whose file is then lost, and its uri.
+fn lost(at: &Path) -> String {
+  fs::write(at.join("a.png"), b"\x89PNG\r\n\x1a\nimage").expect("the image is written");
+  let kept = images::attach(&at.join("images"), &at.join("a.png")).expect("the image is attached");
+  let file = kept.uri.strip_prefix("furb-image://").expect("the uri of an image");
+  fs::remove_file(at.join("images").join(file)).expect("the image is lost");
+  kept.uri
+}
+
+#[test]
+fn a_turn_that_names_an_image_whose_file_is_lost_gets_its_answer_and_the_life_tells_the_loss_once()
+{
+  for name in ["claude-cli:opus", "codex:gpt-6"] {
+    let at = yard("images-lost");
+    let uri = lost(&at);
+    let message = format!("look at {}", images::reference("a.png", &uri));
+    let model = streaming(&[("close(1)", Usage::new()), ("close(2)", Usage::new())]);
+    let held = Model::new(name, 1000, model.clone()).effort("high", json!({})).images();
+    let mut engine =
+      lived(Provider::new(at.display().to_string(), vec![held]).images(at.join("images")));
+    for want in ["1", "2"] {
+      let root = engine.root().to_owned();
+      let with =
+        verbs::Prompt { message: Some(message.clone()), on: on(&root), ..Default::default() };
+      let id =
+        engine.prompt(Object::string("int"), with).expect("a prompt is made").id().to_owned();
+      let told =
+        |engine: &mut Engine| said(engine).iter().any(|one| one.2.contains("lost an image"));
+      assert!(
+        want == "2" || until(&mut engine, told),
+        "{name} tells the loss: {:?}",
+        said(&mut engine)
+      );
+      let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("an answer");
+      assert_eq!(got.py_repr(), want, "{name}");
+    }
+    let first = &model.requests()[0].chat_history;
+    let [Message::User { content }] = &first[..] else { panic!("one user turn: {first:?}") };
+    assert!(content.iter().all(|one| matches!(one, UserContent::Text(_))), "no image: {name}");
+    assert!(format!("{content:?}").contains(&uri), "the text names the image: {name}");
+    let tells: Vec<_> = said(&mut engine).into_iter().filter(|one| one.0 == "tell").collect();
+    let lost = tells.iter().filter(|one| one.2.contains("lost an image") && one.2.contains(&uri));
+    assert_eq!(lost.count(), 1, "{name}: {tells:?}");
+  }
+}
+
+#[cfg(unix)]
+#[test]
+fn the_claude_command_line_hears_a_turn_that_names_a_lost_image_as_its_text_alone() {
+  use super::claude::test::Yard;
+  let fake = Yard::new("images-lost");
+  let at = yard("claude-images-lost");
+  let uri = lost(&at);
+  let provider = Provider::new(at.display().to_string(), on_reactor(fake.claude(10_000).models()))
+    .images(at.join("images"));
+  let mut engine = seeing(provider, Some(at.join("images")));
+  let root = engine.root().to_owned();
+  let message = format!("look at {}", images::reference("a.png", &uri));
+  let with = verbs::Prompt { message: Some(message), on: on(&root), ..Default::default() };
+  let act = engine.prompt(Object::string("str"), with).expect("a prompt is made");
+  block_on(act).expect("an answer");
+  let heard = fake.heard();
+  assert!(heard[0].contains("![a.png]"), "the text names the image: {}", heard[0]);
+  assert!(!heard[0].contains(r#""data":"#), "no image goes: {}", heard[0]);
+  let lost = said(&mut engine).into_iter().filter(|one| one.2.contains("lost an image")).count();
+  assert_eq!(lost, 1);
+}
+
 #[cfg(unix)]
 #[test]
 fn the_claude_command_line_sees_each_image_that_a_prompt_names_and_each_image_that_a_word_reads() {

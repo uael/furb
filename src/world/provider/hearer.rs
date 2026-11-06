@@ -252,6 +252,9 @@ impl Hearer {
         Ask { system: &self.system, actor, chain, turns: turns.as_ref(), conversation: &key };
       requested(&held, asked, &mut self.images, wrote).map(|one| thinks(one, self.thinking))
     };
+    for uri in self.images.lost() {
+      self::told(co, chain, &format!("#{about} lost an image\n{about}_image = '{uri}'"));
+    }
     let streams = asked.as_ref().is_ok_and(|(model, _)| model.streams_its_word());
     let paused = co.call("paused", vec![Object::string(about)], vec![]).await;
     let paused = paused.ok().and_then(|one| one.as_ref().as_bool()).unwrap_or(false);

@@ -5,7 +5,7 @@
 
 use std::{
   collections::{HashMap, HashSet},
-  fs, io,
+  fs, io, mem,
   path::{Path, PathBuf},
   time::SystemTime,
 };
@@ -202,6 +202,10 @@ fn digest(bytes: &[u8]) -> String {
 pub(super) struct Images {
   directory: Option<PathBuf>,
   held: HashMap<PathBuf, Held>,
+  /// The uri of each image whose file was lost, which a turn named, and those that were not told
+  /// yet.
+  lost: HashSet<String>,
+  fresh: Vec<String>,
 }
 
 /// The content of an image, with the size and the time of the change of the file it was read at.
@@ -213,7 +217,13 @@ struct Held {
 
 impl Images {
   pub(super) fn new(directory: Option<PathBuf>) -> Self {
-    Self { directory, held: HashMap::new() }
+    Self { directory, held: HashMap::new(), lost: HashSet::new(), fresh: Vec::new() }
+  }
+
+  /// The uri of each image that a turn names and whose file is lost, which came since the last
+  /// call: each image comes once in the life, so the life tells it once.
+  pub(super) fn lost(&mut self) -> Vec<String> {
+    mem::take(&mut self.fresh)
   }
 
   /// The images that the prompts a user turn opens name, and the images that its reads give, each
@@ -223,7 +233,8 @@ impl Images {
   /// text as that image alone, so an image that anything else names, as a text file that a read
   /// shows, is no image of the turn. An image comes once in a request: an image that an earlier
   /// turn of it gave, as the turns of the origin of a fork, is not given again, since the model
-  /// reads it there under its name.
+  /// reads it there under its name. An image whose file is lost is given to no model, and the text
+  /// of the turn still names it, so the turn goes with the rest of it; [`Images::lost`] tells it.
   pub(super) fn named(
     &mut self,
     python: &str,
@@ -251,7 +262,15 @@ impl Images {
     }
     let mut seen = Vec::new();
     for (end, one) in uris {
-      seen.push(Seen { end, content: self.image(&directory, &one.uri)? });
+      match self.image(&directory, &one.uri) {
+        Ok(content) => seen.push(Seen { end, content }),
+        Err(Error::Unloaded { source, .. }) if source.kind() == io::ErrorKind::NotFound => {
+          if self.lost.insert(one.uri.clone()) {
+            self.fresh.push(one.uri);
+          }
+        }
+        Err(no) => return Err(no),
+      }
     }
     Ok(seen)
   }
