@@ -431,6 +431,10 @@ pub enum Frame {
   /// of its windows by the watch of the daemon, which no word of the life runs: each open act, and
   /// the notice that a window shows as it stands.
   Stalled { life: String, acts: Vec<Open>, notice: String },
+  /// The state of the sign-in of codex that this peer asked with a config of its provider, pushed
+  /// at each change of the state, so no window asks it again: the word of the state, the browser
+  /// address while it waits, and what to tell the operator when it needs him or failed.
+  SignIn { state: String, url: Option<String>, message: Option<String> },
   /// A request of a model of a life that the peer answers: its number, and the request with the
   /// actor, the chain, the messages and the settings.
   Ask { life: String, ask: u64, request: Value },

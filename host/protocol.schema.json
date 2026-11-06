@@ -2066,6 +2066,35 @@
         {
           "type": "object",
           "properties": {
+            "state": {
+              "type": "string"
+            },
+            "url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "message": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "frame": {
+              "type": "string",
+              "const": "sign_in"
+            }
+          },
+          "required": [
+            "frame",
+            "state"
+          ],
+          "description": "The state of the sign-in of codex that this peer asked with a config of its provider, pushed\nat each change of the state, so no window asks it again: the word of the state, the browser\naddress while it waits, and what to tell the operator when it needs him or failed."
+        },
+        {
+          "type": "object",
+          "properties": {
             "life": {
               "type": "string"
             },

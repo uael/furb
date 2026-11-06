@@ -35,9 +35,13 @@ use furb::{
   engine::OPERATOR,
   life::{Answer as Answered, Log, Opening},
   wire::parsed,
-  world::config::Change,
+  world::{
+    codex::{self, SignIn},
+    config::Change,
+  },
 };
 use futures::{SinkExt, Stream, StreamExt, future};
+use serde_json::Value;
 use tokio::{
   net::{TcpListener, TcpStream},
   sync::{mpsc, oneshot, watch},
@@ -329,7 +333,7 @@ enum Asked {
   /// A verb of the daemon, from a peer.
   Verb { peer: Peer, verb: Box<Verb>, outbox: Outbox, reply: Replied },
   /// The handle of a life, for a verb of that life.
-  Life { life: String, reply: oneshot::Sender<Result<LifeHandle, ProtocolError>> },
+  Life { life: String, reply: oneshot::Sender<Result<(LifeHandle, Option<String>), ProtocolError>> },
   /// A window whose peer is gone.
   Left { life: String, outbox: Outbox },
   /// A life whose thread told its end, in one of its births.
@@ -394,7 +398,10 @@ impl Host for Daemon {
           (Kind::Window, _) => command.by(format!("{OPERATOR}/{}", peer.login)),
           _ => command,
         };
-        let handle = self.asked(|reply| Asked::Life { life, reply }).await??;
+        let (handle, config) = self.asked(|reply| Asked::Life { life, reply }).await??;
+        if let Command::Configure(change) = &command {
+          signed(change, config.as_deref().map(Path::new), outbox).await?;
+        }
         Ok(handle.send(command).await?.into())
       }
       Routed::Daemon(verb) => {
@@ -531,11 +538,71 @@ async fn changed(changes: Option<&mut watch::Receiver<Access>>) -> Option<()> {
   }
 }
 
-/// A life of the daemon: its handle, its folder, its birth, its stage, and the peer that answers
-/// its models, when one does.
+/// The sign-in of codex that a change of its provider asks, driven on this machine: a cancel when
+/// the change turns codex off, and, when it turns codex on, a sign-in that waits for the browser,
+/// whose state the window hears at each change. It ends with the sign-in, and is refused when the
+/// operator cancels the sign-in or it fails.
+async fn signed(
+  change: &Change,
+  config: Option<&Path>,
+  outbox: &Outbox,
+) -> Result<(), ProtocolError> {
+  if change.key != ["providers", "codex"] {
+    return Ok(());
+  }
+  match change.value {
+    Some(Value::Bool(false)) => codex::cancel(config),
+    Some(Value::Bool(true)) => return signing(config, outbox).await,
+    _ => {}
+  }
+  Ok(())
+}
+
+/// A sign-in of codex, started unless one runs or the account is connected, told to the window
+/// from the state that it shows now until the state ends it.
+async fn signing(config: Option<&Path>, outbox: &Outbox) -> Result<(), ProtocolError> {
+  let refused = |why: &str| ProtocolError::Refused { why: why.to_owned() };
+  let told = |state: &SignIn| {
+    let frame = Frame::SignIn {
+      state: state.state().to_owned(),
+      url: state.url().map(str::to_owned),
+      message: state.message().map(str::to_owned),
+    };
+    outbox.send(frame).ok();
+  };
+  let mut states = codex::subscribe(config);
+  let begun = codex::refresh(config).and_then(|state| match state {
+    SignIn::Disconnected | SignIn::NeedsLogin(_) | SignIn::Failed(_) | SignIn::Canceled => {
+      codex::begin(config)
+    }
+    running => Ok(running),
+  });
+  if let Err(no) = begun {
+    let why = no.to_string();
+    told(&SignIn::Failed(why.clone()));
+    return Err(refused(&why));
+  }
+  loop {
+    let state = states.borrow_and_update().clone();
+    told(&state);
+    match state {
+      SignIn::Connected => return Ok(()),
+      SignIn::Waiting { .. } | SignIn::Connecting => {
+        states.changed().await.or(Err(ProtocolError::Stopped))?;
+      }
+      SignIn::Canceled => return Err(refused("the sign-in of codex was canceled")),
+      SignIn::NeedsLogin(why) | SignIn::Failed(why) => return Err(refused(&why)),
+      SignIn::Disconnected => return Err(refused("the sign-in of codex ended with no account")),
+    }
+  }
+}
+
+/// A life of the daemon: its handle, its folder, the folder of its configs when it has one, its
+/// birth, its stage, and the peer that answers its models, when one does.
 struct Held {
   handle: LifeHandle,
   cwd: String,
+  config: Option<String>,
   born: u64,
   stage: Stage,
   answerer: Option<Answerer>,
@@ -589,7 +656,7 @@ impl Lives {
     match asked {
       Asked::Verb { peer, verb, outbox, reply } => self.verb(peer, *verb, &outbox, reply),
       Asked::Life { life, reply } => {
-        let found = self.held.get(&life).map(|held| held.handle.clone());
+        let found = self.held.get(&life).map(|held| (held.handle.clone(), held.config.clone()));
         reply.send(found.ok_or(ProtocolError::Closed { life })).ok();
       }
       Asked::Left { life, outbox } => {
@@ -715,6 +782,7 @@ impl Lives {
   fn opened(&mut self, life: String, birth: Birth) -> Result<(), ProtocolError> {
     let Birth { cwd, actor, roster, extensions, config, claude, answerer, holder: _ } = birth;
     let base = &self.settings.opening;
+    let config = config.or_else(|| base.config.clone());
     let answer = answerer.as_ref().map(|one| Answered(one.hosted()));
     let opening = Opening {
       record: Some(life.clone()),
@@ -722,7 +790,7 @@ impl Lives {
       actor: actor.or_else(|| base.actor.clone()),
       roster: roster.or_else(|| base.roster.clone()),
       extensions: extensions.or(base.extensions),
-      config: config.or_else(|| base.config.clone()),
+      config: config.clone(),
       claude: claude.or_else(|| base.claude.clone()),
       answer: answer.or_else(|| base.answer.clone()),
       members: Some(self.members()),
@@ -751,7 +819,7 @@ impl Lives {
       tokio::spawn(played.run());
     }
     let stage = Stage::Living(Holders::new(self.settings.grace));
-    self.held.insert(life, Held { handle, cwd, born: self.born, stage, answerer });
+    self.held.insert(life, Held { handle, cwd, config, born: self.born, stage, answerer });
     Ok(())
   }
 

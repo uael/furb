@@ -436,6 +436,7 @@ export class HostView extends EventEmitter {
     const facts = () => this.heard();
     const change = () => this.update();
     const log = (line: string) => this.emit("log", line);
+    const authentication = (status: unknown) => this.emit("authentication", status);
     const ended = (why: string) => {
       this.lost = why;
       this.emit("fault", new Error(why));
@@ -450,6 +451,7 @@ export class HostView extends EventEmitter {
       ["facts", facts],
       ["change", change],
       ["log", log],
+      ["authentication", authentication],
       ["ended", ended],
       ["reset", reset],
     ];
@@ -747,23 +749,9 @@ export class HostView extends EventEmitter {
   private get demo(): boolean {
     return Boolean(this.options.demo || this.options.watch);
   }
-  private async refreshCodex(): Promise<void> {
-    const { claude, config } = this.options;
-    if (
-      this.demo ||
-      !setup(claude, this.directory, config).providers.some((one) => one.provider === "codex" && one.enabled)
-    )
-      return;
-    let status = codexAuth("refresh", config);
-    while (status.state === "connecting") {
-      await Bun.sleep(200);
-      status = codexAuth("status", config);
-    }
-  }
   /** The models the catalog of the crate offers, each as its name, its efforts and its window. */
   async catalog(): Promise<Roster> {
     if (this.demo) return [];
-    await this.refreshCodex();
     return models(this.options.claude, this.directory, this.options.config).map(
       ({ name, efforts, window }) => [name, efforts, window],
     );
@@ -786,38 +774,14 @@ export class HostView extends EventEmitter {
       offered.push({ name: "local", enabled: true, models: found.local?.offered ?? 0 });
     return offered.sort((a, b) => a.name.localeCompare(b.name));
   }
-  /** The sign-in of codex that a change of its provider asks: a cancel when it turns codex off, and a sign-in, which
-   * waits for the browser, when it turns codex on. False when the operator canceled the sign-in. */
-  private async codexSigned(value: unknown): Promise<boolean> {
-    const { config } = this.options;
-    if (value === false) codexAuth("cancel", config);
-    if (value !== true) return true;
-    let status = codexAuth("refresh", config);
-    if (["disconnected", "needs-login", "failed", "canceled"].includes(status.state))
-      status = codexAuth("start", config);
-    this.emit("authentication", status);
-    while (["waiting", "connecting"].includes(status.state)) {
-      await Bun.sleep(200);
-      const next = codexAuth("status", config);
-      if (next.state !== status.state) this.emit("authentication", next);
-      status = next;
-    }
-    if (status.state === "canceled") return false;
-    if (status.state !== "connected") throw new Error(status.message || "OpenAI sign-in did not complete.");
-    return true;
-  }
   codexAuth = async (action = "status") => codexAuth(action, this.options.config);
   /** A change of a key of a layer of the configs, which the World writes in the daemon, or a reload of them, each then
-   * a stand of the life. False when the operator canceled the sign-in that the change asked. */
-  async config(config: Config): Promise<boolean> {
+   * a stand of the life. The daemon drives the sign-in that a change of codex asks, and refuses the change when the
+   * operator cancels it or it fails, as the frames of the sign-in tell the window. */
+  async config(config: Config): Promise<void> {
     if (this.demo) throw new Error("Provider settings are not available in the demo.");
     if (config.action === "get") throw new Error("A window reads the configs from the host.");
-    if (config.action === "set") {
-      const [group, name] = config.key;
-      if (group === "providers" && name === "codex" && !(await this.codexSigned(config.value))) return false;
-    }
     await this.life.result(await this.life.config(config));
-    return true;
   }
   /** Each key of the configs of the folder of the life, with the value that wins for it and the property that a schema
    * gives it, as the host reads them, and none in the demo. */
@@ -826,7 +790,6 @@ export class HostView extends EventEmitter {
   }
   /** A stand of the life on the configs as the disk holds them, which asks again each model that waits to retry. */
   async stand(): Promise<void> {
-    await this.refreshCodex();
     await this.life.result(await this.life.stand());
   }
   /** The name of the model that a name gives in the roster or in the catalog, and nothing when it gives none. */
