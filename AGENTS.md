@@ -318,6 +318,8 @@ fix what your change broke, and report what was broken before.
   worktrees of the machine share, with at most 4 jobs of cargo. A slot is a folder of `/tmp/furb-build-slots-<uid>`
   that holds the pid of its holder. A build in a slot keeps no incremental state of cargo, which no copy on write shares
   and which filled the disk, unless `CARGO_INCREMENTAL` asks for it: a warm build of the crate takes 14 s, against 4 s.
+  A build starts only while the disk of its worktree keeps `FURB_BUILD_MIN_FREE_GB` GB free (60): below that it waits as for
+  a slot and then exits 75, so no build starts on a disk that is nearly full. It bounds the start and not the growth of a build.
   The slot of a holder that ended, or whose pid went to another process, goes to
   the next build. `FURB_BUILD_SLOTS` sets the slots (one for each 9 GB of memory, at least 1; `FURB_BUILD_MEM_GB`
   replaces the memory the machine reports), `FURB_BUILD_JOBS` the cap of jobs (4), `FURB_BUILD_WAIT` the seconds to

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-CLEAN = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+CLEAN = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")} | {"FURB_BUILD_MIN_FREE_GB": "0"}
 SCRIPT = Path(__file__).resolve().parents[2] / "script" / "worktree.sh"
 
 
