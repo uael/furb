@@ -49,12 +49,13 @@ stale() {
 # The look at the slots runs under a guard that stands for milliseconds, so two waiters never free one stale slot twice.
 take() {
   got=
-  room || return 0
   until mkdir "$dir/guard" 2>/dev/null; do
     if old "$dir/guard"; then rmdir "$dir/guard" 2>/dev/null; fi
     sleep 0.2
   done
+  # The floor is read under the guard, so a build that waited for it starts only on the room that it sees now.
   n=1
+  room || n=$((slots + 1))
   while [ -z "$got" ] && [ "$n" -le "$slots" ]; do
     s=$dir/slot$n
     if mkdir "$s" 2>/dev/null; then got=$s

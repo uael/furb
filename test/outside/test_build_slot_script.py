@@ -66,6 +66,24 @@ def test_a_build_below_the_floor_of_free_disk_runs_nothing_and_exits_75(tmp_path
   assert run(tmp_path, "true", FURB_BUILD_MIN_FREE_GB="1").returncode == 0
 
 
+def test_the_floor_is_read_after_the_guard_of_the_slots_is_held(tmp_path: Path) -> None:
+  shim = tmp_path / "shim"
+  shim.mkdir()
+  reads = tmp_path / "reads"
+  df = shim / "df"
+  df.write_text(f'#!/bin/sh\necho read >> "{reads}"\nprintf "F 1 1 99999999 1%% /\\nx 1 1 99999999 1%% /\\n"\n')
+  df.chmod(0o755)
+  guard = tmp_path / "slots" / "guard"
+  guard.mkdir(parents=True)
+  path = f"{shim}{os.pathsep}{os.environ['PATH']}"
+  proc = start(tmp_path, "true", PATH=path, FURB_BUILD_MIN_FREE_GB="1")
+  time.sleep(0.5)
+  assert not reads.exists()
+  guard.rmdir()
+  proc.communicate(timeout=30)
+  assert proc.returncode == 0 and reads.exists()
+
+
 def test_each_slot_goes_back_when_its_command_ends(tmp_path: Path) -> None:
   assert run(tmp_path, "true").returncode == 0
   assert list((tmp_path / "slots").iterdir()) == []
