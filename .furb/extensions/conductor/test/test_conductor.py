@@ -191,7 +191,7 @@ async def test_a_paused_worker_gives_its_slot_to_the_room_but_stays_a_living_wor
 async def test_a_load_with_no_limits_binds_the_room_of_the_owner_and_caps_at_ten(conductor: Round) -> None:
   await conductor.word("del limits")
   await conductor.load()
-  assert conductor.ns["limits"]["room"] == {"opus/high": 2, "opus/medium": 2, "sonnet/high": 3, "sonnet/medium": 3, "gpt-6-astra/high": 1}
+  assert conductor.ns["limits"]["room"] == {"opus/high": 3, "opus/medium": 3, "sonnet/high": 3, "sonnet/medium": 3, "gpt-6-astra/high": 1}
   assert conductor.ns["limits"]["models"]["astra"] == ASTRA
   got = await conductor.value(f"(ALIGN_EVERY, cap(), family({ASTRA!r}), GATE, family('claude-cli:opus/high'))")
   assert got == (4, 10, "gpt-6-astra/high", "the gates", "opus/high")
