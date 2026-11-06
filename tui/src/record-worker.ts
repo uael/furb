@@ -2,13 +2,18 @@ import { inspectRecord, retold } from "furb";
 
 declare const self: Worker & { close(): void };
 
-/** The name that the operator said last for the session of a record, as the crate reads it with no life, and nothing
- * when the record names none or cannot be read. */
-function toldSaid(path: string): string | undefined {
+/** The names of the session of a record, as the fold of the crate reads them with no life: the one that the operator
+ * said last, and the one that wins, which is that one else the one that the extension naming gave. Nothing when the
+ * record names none or cannot be read. */
+function toldNames(path: string): { said?: string; name?: string } {
   try {
-    return retold(path).said ?? undefined;
+    const told = retold(path);
+    return {
+      ...(told.said == null ? {} : { said: told.said }),
+      ...(told.name == null ? {} : { name: told.name }),
+    };
   } catch {
-    return undefined;
+    return {};
   }
 }
 self.onmessage = async ({ data }: MessageEvent<{ paths: string[]; replay: string[] }>) => {
@@ -26,8 +31,7 @@ self.onmessage = async ({ data }: MessageEvent<{ paths: string[]; replay: string
   for (const path of data.paths) {
     // The name that the operator gave comes from the reader of the crate, which runs no word, so no drift and no other
     // build stops it.
-    const said = toldSaid(path);
-    const named = said === undefined ? {} : { said };
+    const named = toldNames(path);
     if (!data.replay.includes(path)) {
       states[path] = { state: "saved", ...named, replayed: false };
       continue;
