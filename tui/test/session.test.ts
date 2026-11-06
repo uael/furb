@@ -111,7 +111,10 @@ test("the setup of a demo life reads the doctrine of its own project, and no pat
     );
     const path = /^read\('(.*)'\)$/.exec(String(read?.word))?.[1] ?? "";
     // The engine writes a path under the home folder with a ~, so the project is known by its name and its folder.
-    expect(path.endsWith(join(basename(session.host.directory), ".furb", "DOCTRINE.md"))).toBe(true);
+    // The word is Python, which writes each backslash of a Windows path twice.
+    expect(
+      path.replaceAll("\\\\", "\\").endsWith(join(basename(session.host.directory), ".furb", "DOCTRINE.md")),
+    ).toBe(true);
   } finally {
     await session.dispose();
   }
