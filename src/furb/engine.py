@@ -104,8 +104,10 @@ def literal(v, into=None):
   match v:
     case Act():
       return f"Act({str(v)!r})" * (into is not None)
-    case None | bool() | int() | float() | str() | Text() | Exit() | BaseException():
-      return repr(v)
+    case BaseException():
+      return literal(v.args) and repr(v)
+    case None | bool() | int() | float() | str() | Text() | Exit():
+      return repr(v) * (not (isinstance(v, float) and v - v))
     case dict():
       s = [(literal(k, into), literal(y, into)) for k, y in v.items()]
       return all(p and o for p, o in s) and "{" + ", ".join(f"{p}: {o}" for p, o in s) + "}"
@@ -584,10 +586,10 @@ def seed(data):
     i, cut = c["id"], c["cut"] + [y["rung"] for y in c.get("again", ())]
     word = "\n".join(
       [
-        c["definitions"],
-        *(f"{named} = {text}" for named, text in c["values"].items()),
         HEARD,
         f'debug(t"The life goes on from a checkpoint. It lost {c["lost"] or "no name"}, and it cut {cut or "no act"}.")',
+        c["definitions"],
+        *(f"{named} = {text}" for named, text in c["values"].items()),
       ]
     ).strip()
     put("rung", f"rung{numbers['rung'] + 1}", OPERATOR, i, word, "", "")
@@ -607,30 +609,27 @@ def gathered(define, floor):
   cut = sorted((x[1] for x in asked if x[0] == "run" and not over(x[1]) and get(x[4])), key=number)
   gone = {x[4] for x in asked if x[0] == "wants" and x[2] in cut and prompted(x[4]) and not over(x[1])}
   asks = [x[1] for x in asked if x[0] == "prompt" and not over(x[1]) and x[1] not in gone]
-  live, values, lost, named = {ROOT, *map(scope, asks)}, {}, {}, set(asks)
-  while live - values.keys():
-    for c in sorted(live - values.keys(), key=number):
-      here, values[c], lost[c] = module(c), {}, []
-      for key, value in here.items():
-        if not (key.startswith("__") or callable(value) or globals().get(key, here) is value):
-          found = set()
-          try:
-            text = literal(value, found)
-          except RecursionError:
-            text = ""
-          if text:
-            values[c][key] = text
-            named |= found
-          else:
-            lost[c].append(key)
-    live |= {*map(scope, named)}
-  live = sorted(live, key=number)
+  values, lost, named = {}, {}, set(asks)
+  for c in chains:
+    here, values[c], lost[c] = module(c), {}, []
+    for key, value in here.items():
+      if not (key.startswith("__") or callable(value) or globals().get(key, here) is value):
+        found = set()
+        try:
+          text = literal(value, found)
+        except RecursionError:
+          text = ""
+        if text and len(text.encode()) <= LARGEST:
+          values[c][key] = text
+          named |= found
+        else:
+          lost[c].append(key)
   taken = dict(floor)
   for one in asked:
     taken[one[0]] = max(taken.get(one[0], 0), number(one[1]))
   verbs = ("prompt", "bash", "read", "write", "wait", "cd", "chance")
-  done = {x[1] for x in asked if x[0] == "bash" and scope(x[1]) in live}
-  borne = sorted((x for x in named | done if get(x)[0] in verbs), key=lambda r: (get(r)[0], number(r)))
+  done = {x[1] for x in asked if x[0] == "bash"}
+  borne = sorted((x for x in named - gone | done if get(x)[0] in verbs), key=lambda r: (get(r)[0], number(r)))
   stands = [x[1] for x in transcript(ROOT, "stand") if question(x) and over(x[1])][-1:]
   ticks = [x[1] for x in transcript(ROOT, "clock") if question(x) and isinstance(peek(x[1]), float)][-1:]
   acts = []
@@ -646,7 +645,7 @@ def gathered(define, floor):
       cut.append(one)
       acts.append({**d, "value": Refused(one + " was interrupted: the life that ran it ended before it did")})
   out = []
-  for c in live:
+  for c in chains:
     a = get(c)
     saved = [
       x
@@ -655,11 +654,11 @@ def gathered(define, floor):
       and literal(x, set())
       and (not question(x) or x[0] == "reply" or x[1] in borne)
     ]
-    held = {ROOT, *live, *borne, *(x[1] for x in saved if question(x))}
+    held = {*chains, *borne, *(x[1] for x in saved if question(x))}
     out.append(
       {
         "id": c,
-        "on": a[3] if a[3] in live else "",
+        "on": a[3] if a[3] in chains else "",
         "label": a[4],
         "source": a[5],
         "paused": paused(c),

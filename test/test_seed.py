@@ -124,3 +124,17 @@ async def test_each_chain_with_an_open_prompt_opens_paused_while_the_seed_binds_
   assert not engine.paused("chain1")
   rungs = [x for x in log if x[0] == "rung"]
   assert [x[2] for x in rungs][-1:] == ["prompt1"] and OPERATOR in [x[2] for x in rungs]
+
+
+async def test_the_rung_binds_the_definitions_and_the_values_of_the_chain_after_it_says_the_prefix_and_tells_what_the_checkpoint_lost_and_cut_so_a_value_that_raises_as_it_is_bound_leaves_the_turns_of_the_chain_whole() -> (
+  None
+):
+  """The rung binds the definitions and the values of the chain after it says the prefix and tells what the checkpoint lost and cut, so a value that raises as it is bound leaves the turns of the chain whole."""
+  life(sown())
+  data = {**DATA, "chains": [{**DATA["chains"][0], "values": {"bad": "nan", "SIZE": "6"}}, DATA["chains"][1]]}
+  log, _ = life(sown(), engine.seed(data))
+  await settle()
+  assert [x for x in said(log, "prefix") if x[1] == "chain1"]
+  told = [x[3][0] for x in said(log, "tell") if x[1].startswith("rung")]
+  assert any("It lost no name" in x for x in told) and any(" raised" in x.split("\\n")[0] for x in told), told
+  assert "SIZE" not in engine.module("chain1")
