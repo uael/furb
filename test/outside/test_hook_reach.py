@@ -45,6 +45,28 @@ def test_a_file_of_a_crate_reaches_that_crate_and_a_manifest_the_workspace() -> 
   assert reach.crates(["src/engine.rs", "Cargo.toml"]) is None
 
 
+def test_each_file_of_the_harness_is_a_file_that_git_holds_and_reaches_the_whole_suite() -> None:
+  for path in reach.HARNESS:
+    assert (ROOT / path).is_file()
+    assert reach.suite([path]) is None
+
+
 def test_every_file_of_the_tree_reaches_the_whole_set_as_the_gates_give_it() -> None:
   every = ["script/scope.py", "src/furb/engine.py", "Cargo.toml", "host/src/daemon.rs"]
   assert reach.suite(every) is None and reach.crates(every) is None
+
+
+def test_a_selection_of_tests_runs_with_no_coverage_and_the_whole_suite_keeps_it() -> None:
+  got = reach.command("pytest", ["script/build-slot.sh"])
+  assert got[:5] == ["uv", "run", "pytest", "-q", "--no-cov"]
+  assert "test/outside/test_build_slot_script.py" in got[5:]
+  assert reach.command("pytest", ["src/furb/engine.py"]) == ["uv", "run", "pytest", "-q"]
+  assert reach.command("pytest", ["tui/src/app.ts"]) is None
+
+
+def test_a_contract_test_an_official_extension_test_and_a_project_contract_reach_the_hygiene_laws() -> None:
+  laws = "test/test_hygiene.py"
+  assert laws in reach.suite(["test/test_peek.py"])
+  assert laws in reach.suite(["extensions/memory/test/test_memory.py"])
+  assert laws in reach.suite([".furb/extensions/pr/pr.py"])
+  assert laws not in reach.suite(["test/outside/test_scope.py"])

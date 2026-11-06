@@ -62,8 +62,9 @@ repos:
         name: no comment of rust goes past 100 characters
         entry: python3 script/rustwidth.py
         language: system
-        files: (\.rs|^script/rustwidth\.py)$
-        pass_filenames: false
+        # The files that the commit stages, as the hooks of the tests read them, so a long comment that the tree holds
+        # in a file of another topic fails no commit of this one.
+        files: \.rs$
       - id: clippy
         name: clippy
         # With the feature of the bindings of TypeScript, so the one run holds the code that the feature adds: the gates

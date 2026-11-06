@@ -21,11 +21,19 @@ ROOT = Path(__file__).resolve().parents[2]
 # What the whole suite reads: the engine and its door, the crate and its build, the harness of the suite and the
 # manifests. A change of one of them reaches every test.
 WHOLE = re.compile(
-  r"(src/|build/|build\.rs$|bind/python/|tests/|docs/examples/python/|test/(conftest|doubles)\.py$"
-  r"|test/outside/(conftest|doubles)\.py$|extensions/conftest\.py$|\.furb/extensions/conftest\.py$"
+  r"(src/|build/|build\.rs$|bind/python/|tests/|docs/examples/python/"
   r"|pyproject\.toml$|Cargo\.(toml|lock)$|rust-toolchain\.toml$|uv\.lock$|\.furb/config\.json$)"
 )
+# The harness of each suite, as files that git holds, so that script/paths.py checks each name.
+HARNESS = {
+  "test/conftest.py",
+  "test/outside/conftest.py",
+  "test/outside/doubles.py",
+  "extensions/conftest.py",
+  ".furb/extensions/conftest.py",
+}
 HOOK = {"script/hooks/pre-commit": "test/outside/test_hook_script.py"}
+CONTRACT = re.compile(r"(test/(?!outside/)|extensions/[^/]+/test/|\\.furb/extensions/[^/]+/test/)")
 TEST = re.compile(r"(test|extensions/[^/]+/test|\.furb/extensions(/[^/]+/test)?)/(.+/)?test_[^/]*\.py$")
 EXTENSION = re.compile(r"((?:\.furb/)?extensions/[^/]+)/")
 SCRIPT = re.compile(r"script/(?:hooks/)?([^/]+)\.(?:py|sh)$")
@@ -39,25 +47,32 @@ def naming(name: str, stem: str) -> list[str]:
     *ROOT.glob("script/hooks/test_*.py"),
     *ROOT.glob(".furb/extensions/**/test_*.py"),
   ]
-  return [str(one.relative_to(ROOT)) for one in tests if any(mark in one.read_text(encoding="utf-8") for mark in marks)]
+  return [
+    one.relative_to(ROOT).as_posix() for one in tests if any(mark in one.read_text(encoding="utf-8") for mark in marks)
+  ]
 
 
 def suite(files: list[str]) -> list[str] | None:
   """The test paths that the files reach, or None for the whole suite."""
   found: list[str] = []
   for path in files:
-    if WHOLE.match(path) or (path.startswith("test/") and not TEST.match(path)):
+    if WHOLE.match(path) or path in HARNESS or (path.startswith("test/") and not TEST.match(path)):
       return None
     if TEST.match(path):
       found.append(path)
+      # A test of a contract is held by the hygiene laws, which check each sentence of the contract against its test.
+      if CONTRACT.match(path):
+        found.append("test/test_hygiene.py")
     elif path in HOOK:
       found.append(HOOK[path])
     elif hit := EXTENSION.match(path):
       tests = ROOT / hit[1] / "test"
       # The words of the project have tests of their own beside them, and the contract of an official one has its laws.
-      found.append(".furb/extensions" if hit[1].startswith(".furb/") else "test/test_hygiene.py")
+      found.append("test/test_hygiene.py")
+      if hit[1].startswith(".furb/"):
+        found.append(".furb/extensions")
       if tests.is_dir():
-        found.append(str(tests.relative_to(ROOT)))
+        found.append(tests.relative_to(ROOT).as_posix())
     elif hit := SCRIPT.match(path):
       found += naming(Path(path).name, hit[1])
   return sorted({one for one in found if (ROOT / one).exists()})
@@ -77,20 +92,26 @@ def crates(files: list[str]) -> list[str] | None:
   return sorted(found)
 
 
-def main(args: list[str]) -> int:
-  kind, files = args[0], args[1:]
+def command(kind: str, files: list[str]) -> list[str] | None:
+  """The command that runs the tests that the files reach, or None when they reach none."""
   if kind == "pytest":
     reached = suite(files)
     if reached == []:
-      return 0
-    command = ["uv", "run", "pytest", "-q", *(reached or [])]
-  else:
-    packages = crates(files)
-    chosen = ["--workspace"] if packages is None else [x for one in packages for x in ("-p", one)]
-    command = ["cargo", "test", *chosen, "--features", "furb/typescript"]
-  sys.stdout.write(" ".join(command) + "\n")
+      return None
+    # The coverage of the whole suite is the wall of the gates: a part of the suite cannot reach it.
+    return ["uv", "run", "pytest", "-q", *(["--no-cov", *reached] if reached else [])]
+  packages = crates(files)
+  chosen = ["--workspace"] if packages is None else [x for one in packages for x in ("-p", one)]
+  return ["cargo", "test", *chosen, "--features", "furb/typescript"]
+
+
+def main(args: list[str]) -> int:
+  run = command(args[0], args[1:])
+  if run is None:
+    return 0
+  sys.stdout.write(" ".join(run) + "\n")
   sys.stdout.flush()
-  os.execvp(command[0], command)  # noqa: S606
+  os.execvp(run[0], run)  # noqa: S606
   return 1
 
 
