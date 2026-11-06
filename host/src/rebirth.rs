@@ -1,12 +1,14 @@
 //! The rebirth of a life: its actor writes its checkpoint, drops its engine and opens it again
 //! from that checkpoint on the same thread, for the same readers. A life is born again when it
 //! said [`TAIL`] facts since it opened while no command, no reply and no word runs, so an open
-//! after a crash replays a short tail, and the engine lets go of what its words left. A word that
-//! runs, as one that awaits a wait or a prompt, holds the rebirth until [`BOUND`] facts, and the
-//! rebirth then cuts it, which the new open ends as interrupted. The rebirth also cuts each act
-//! whose ear no checkpoint keeps. The new open tells the root each act that it cut, by name, in a
-//! prompt of None, so the one who runs the root starts again the work that it still needs, and
-//! each chain goes on as it stood.
+//! after a crash replays a short tail, and the engine lets go of what its words left. A life whose
+//! record does not hold each fact that it said, as on a full disk, holds its rebirth until the
+//! record takes them, since the drop of its engine would lose them. A word that runs, as one that
+//! awaits a wait or a prompt, holds the rebirth until [`BOUND`] facts, and the rebirth then cuts
+//! it, which the new open ends as interrupted. The rebirth also cuts each act whose ear no
+//! checkpoint keeps. The new open tells the root each act that it cut, by name, in a prompt of
+//! None, so the one who runs the root starts again the work that it still needs, and each chain
+//! goes on as it stood.
 //!
 //! A fault that stops the sandbox cuts the life with no checkpoint, and ends it: the record keeps
 //! each fact up to the fault, and a later open replays them.

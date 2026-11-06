@@ -163,6 +163,13 @@ pub trait Ear {
     Ok(())
   }
 
+  /// How many entries the ear holds that it could not keep yet: the ear that keeps the record
+  /// holds each entry that its store refused, as on a full disk, until the store takes it, and
+  /// any other ear holds none.
+  fn unkept(&self) -> usize {
+    0
+  }
+
   /// Whether the ear starts again after it raised: a fresh ear stands in its place and hears from its birth. An ear
   /// that [`lasting`] made does, and any other ear stays over.
   fn restart(&mut self) -> bool {
@@ -170,9 +177,10 @@ pub trait Ear {
   }
 }
 
-/// What an ear adds to the ear that [`With`] wraps: its end of a run and its restart,
-/// the two methods that a wrapper of an ear gives its own. Each is lent the ear that the wrapper
-/// holds, and by default does what that ear does, except `restart`, which leaves the ear over.
+/// What an ear adds to the ear that [`With`] wraps: its end of a run, its restart and what it
+/// holds unkept, the three methods that a wrapper of an ear gives its own. Each is lent the ear
+/// that the wrapper holds, and by default does what that ear does, except `restart`, which leaves
+/// the ear over.
 pub trait Hooks {
   /// What the wrapper does at the end of each run, as [`Ear::ran`] does.
   fn ran(&mut self, ear: &mut dyn Ear) -> Result<(), Fault> {
@@ -183,6 +191,11 @@ pub trait Hooks {
   /// fresh ear in the place of `ear`, which hears from its birth.
   fn restart(&mut self, _ear: &mut Box<dyn Ear>) -> bool {
     false
+  }
+
+  /// How many entries the wrapper holds unkept, as [`Ear::unkept`] says.
+  fn unkept(&self, ear: &dyn Ear) -> usize {
+    ear.unkept()
   }
 }
 
@@ -223,6 +236,10 @@ impl<H: Hooks> Ear for With<H> {
 
   fn restart(&mut self) -> bool {
     self.hooks.restart(&mut self.ear)
+  }
+
+  fn unkept(&self) -> usize {
+    self.hooks.unkept(&*self.ear)
   }
 }
 
