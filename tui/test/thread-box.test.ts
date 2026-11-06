@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { join } from "node:path";
 import type { KeyEvent } from "@opentui/core";
 import type { ProgramLine } from "furb/life";
-import { until } from "../../bind/typescript/test/until.ts";
+import { until } from "../../binding/typescript/test/until.ts";
 import { openEngine } from "../src/bridge.ts";
 import { Session } from "../src/session.ts";
 import { threadTone } from "../src/theme.ts";

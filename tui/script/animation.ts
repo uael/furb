@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
-import { until } from "../../bind/typescript/test/until.ts";
+import { until } from "../../binding/typescript/test/until.ts";
 import { demoSession, removeDemoDirectories, seedDemoFiles } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
 import { paletteOf } from "../src/theme.ts";

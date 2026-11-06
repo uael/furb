@@ -21,7 +21,7 @@ What the removed app taught:
 - Two hosts of a life are one too many. The app had `gui/host`, a program of bun that ran its own lives and imported
   the sources of `tui/src` (`Workspaces` and `Session`), so each change of the TUI could break the app, and a life that
   the app opened could not be read by a TUI. A client must dial the daemon and import no source of another client.
-- The model of a life, `furb/life` in `bind/typescript/src/life`, was the right seam: the tree of threads, the source
+- The model of a life, `furb/life` in `binding/typescript/src/life`, was the right seam: the tree of threads, the source
   of a chain with each act on its line, the desk of the questions, and a message as a person reads it came from it for
   both the TUI and the app, with no native code. A new client should read the model of the views that the daemon
   serves, and add a view to the model when it needs one.

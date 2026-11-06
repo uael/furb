@@ -290,7 +290,7 @@ export default function (furb) {
 
   A dialog that Escape closes, or that another dialog replaces, gives `undefined`, or `false` for a confirm. A key or a
   command whose run awaits a dialog keeps the TUI free while the dialog is open. `furb.life` is [the model of a
-  life](../bind/typescript/README.md#the-model-of-a-life), `furb/life`.
+  life](../binding/typescript/README.md#the-model-of-a-life), `furb/life`.
 
 A part imports types alone, so it loads in any project. `tui/src/parts.ts` gives the types, and `tui/fixtures/todo`
 is an extension with a part that uses each of them. The part of `mcp`, `extensions/mcp/tui.ts`, uses only this API.

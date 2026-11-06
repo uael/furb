@@ -16,7 +16,7 @@
         "upng-js": "2.1.0",
       },
     },
-    "bind/typescript": {
+    "binding/typescript": {
       "name": "@uael/furb",
       "version": "0.4.2",
       "optionalDependencies": {
@@ -300,7 +300,7 @@
 
     "@types/upng-js": ["@types/upng-js@2.1.5", "", {}, "sha512-CzXg1lcCcWzrmYmke9BLbBPzb2DpdC1bXuXf0BtK3Bygvsozslei8S1bheDI1QUfZzZpMeQI5fywfnMj4CxocQ=="],
 
-    "@uael/furb": ["@uael/furb@workspace:bind/typescript"],
+    "@uael/furb": ["@uael/furb@workspace:binding/typescript"],
 
     "ansi-regex": ["ansi-regex@6.3.0", "", {}, "sha512-WpDfL7NO6j7tH88IDBNVdUJxDh9nmCteAVW9dsep846XdwF4naCBK+/tGLX3KJgcpgMRXCFlTM2hKGoK9FsdrQ=="],
 
@@ -338,7 +338,7 @@
 
     "fdir": ["fdir@6.5.0", "", { "peerDependencies": { "picomatch": "^3 || ^4" }, "optionalPeers": ["picomatch"] }, "sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg=="],
 
-    "furb": ["@uael/furb@workspace:bind/typescript"],
+    "furb": ["@uael/furb@workspace:binding/typescript"],
 
     "furb-examples": ["furb-examples@workspace:docs/examples"],
 

@@ -1,4 +1,4 @@
-import { until } from "../../bind/typescript/test/until.ts";
+import { until } from "../../binding/typescript/test/until.ts";
 import type { Session } from "../src/session.ts";
 
 export const idle = (session: Session) =>

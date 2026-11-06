@@ -197,7 +197,7 @@ jobs:
         with:
           python: none
           key: ${{ runner.os == 'Windows' && 'package' || '' }}
-          hashed: bind/typescript/build.ts
+          hashed: binding/typescript/build.ts
       # napi builds for the triple of the machine, in a folder of its own: cargo builds for it too, so the tests and
       # the package share every dependency.
       - run: |
@@ -213,7 +213,7 @@ jobs:
       # the job of the speed of the TUI on Linux.
       - run: bun run build
       - run: bun run docs
-      - run: git diff --exit-code -- bind/typescript/index.d.cts tui/README.md
+      - run: git diff --exit-code -- binding/typescript/index.d.cts tui/README.md
       - run: bun run check
       - run: bun run lint
       - run: bun run test
@@ -245,7 +245,7 @@ jobs:
         with:
           python: none
           shared: typescript
-          hashed: bind/typescript/build.ts
+          hashed: binding/typescript/build.ts
       - run: |
           echo "CARGO_BUILD_TARGET=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0

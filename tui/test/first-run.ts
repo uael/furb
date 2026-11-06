@@ -3,7 +3,7 @@
 // prints the frame that the App draws once the check of the setup came, then the acts of the chain, one a line.
 import { join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
-import { until } from "../../bind/typescript/test/until.ts";
+import { until } from "../../binding/typescript/test/until.ts";
 import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { demoLibrary } from "../src/demo.ts";

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { until } from "../../bind/typescript/test/until.ts";
+import { until } from "../../binding/typescript/test/until.ts";
 import { composing } from "./composing.ts";
 
 /** A question to the operator, once the console holds it and the session shows it. */

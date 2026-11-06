@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { boot, type NativeEar, scratch, store } from "furb";
-import { until } from "../../bind/typescript/test/until.ts";
+import { until } from "../../binding/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { seedDemoFiles } from "../src/demo.ts";

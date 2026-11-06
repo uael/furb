@@ -43,7 +43,8 @@ impl Yard {
     fs::create_dir_all(cli.parent().expect("a folder")).expect("the folder of the TUI");
     fs::write(&cli, "").expect("the TUI is written");
     if built {
-      fs::create_dir_all(self.checkout.join("bind/typescript/dist")).expect("the build of the TUI");
+      fs::create_dir_all(self.checkout.join("binding/typescript/dist"))
+        .expect("the build of the TUI");
     }
     cli
   }

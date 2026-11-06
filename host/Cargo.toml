@@ -23,7 +23,7 @@ futures = "0.3"
 # A fact, an act and the reply of a query as JSON, as the record keeps a value.
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
-# The JSON Schema of the protocol, from which bind/typescript/src/protocol.ts is made.
+# The JSON Schema of the protocol, from which binding/typescript/src/protocol.ts is made.
 schemars = "1"
 thiserror = "2"
 # The WebSocket transport.

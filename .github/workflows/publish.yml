@@ -29,12 +29,12 @@ on:
       - .github/workflows/publish.yml
       - Cargo.toml
       - pyproject.toml
-      - bind/python/pyproject.toml
+      - binding/python/pyproject.toml
       - cli/Cargo.toml
       - cli/pyproject.toml
-      - bind/typescript/package.json
-      - bind/typescript/build.ts
-      - bind/typescript/npm/**
+      - binding/typescript/package.json
+      - binding/typescript/build.ts
+      - binding/typescript/npm/**
       - script/prove-crate.sh
       - script/prove-npm.sh
   pull_request:
@@ -43,12 +43,12 @@ on:
       - .github/workflows/publish.yml
       - Cargo.toml
       - pyproject.toml
-      - bind/python/pyproject.toml
+      - binding/python/pyproject.toml
       - cli/Cargo.toml
       - cli/pyproject.toml
-      - bind/typescript/package.json
-      - bind/typescript/build.ts
-      - bind/typescript/npm/**
+      - binding/typescript/package.json
+      - binding/typescript/build.ts
+      - binding/typescript/npm/**
       - script/prove-crate.sh
       - script/prove-npm.sh
   workflow_dispatch:
@@ -103,7 +103,7 @@ jobs:
         os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest","windows-latest"]' || '["ubuntu-latest","macos-latest","windows-latest"]') }}
         # The extension is built for one interpreter, and the program for none.
         crate:
-          - { name: furb-monty, path: bind/python, args: --interpreter python3.14 }
+          - { name: furb-monty, path: binding/python, args: --interpreter python3.14 }
           - { name: furb-cli, path: cli, args: "" }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -132,7 +132,7 @@ jobs:
       fail-fast: false
       matrix:
         crate:
-          - { name: furb-monty, path: bind/python }
+          - { name: furb-monty, path: binding/python }
           - { name: furb-cli, path: cli }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -233,13 +233,13 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
       - run: bun install --frozen-lockfile
       - run: bun run build --release
-      - run: test -f "bind/typescript/furb.${{ matrix.system }}.node"
+      - run: test -f "binding/typescript/furb.${{ matrix.system }}.node"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: engine-${{ matrix.system }}
           path: |
-            bind/typescript/furb.${{ matrix.system }}.node
-            bind/typescript/index.cjs
+            binding/typescript/furb.${{ matrix.system }}.node
+            binding/typescript/index.cjs
 
   npm:
     name: npm pack
@@ -258,7 +258,7 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - if: github.ref_type == 'tag'
         run: |
-          test "v$(node -p 'require("./bind/typescript/package.json").version')" = "$GITHUB_REF_NAME"
+          test "v$(node -p 'require("./binding/typescript/package.json").version')" = "$GITHUB_REF_NAME"
       - run: bun install --frozen-lockfile
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -267,19 +267,19 @@ jobs:
       # Each build wrote the same loader, so the loader of one serves the package. A pull request builds no engine for
       # macOS, and its pack leaves those two packages without their engine.
       - run: |
-          cp engines/engine-linux-x64-gnu/index.cjs bind/typescript/index.cjs
+          cp engines/engine-linux-x64-gnu/index.cjs binding/typescript/index.cjs
           for system in linux-x64-gnu linux-arm64-gnu darwin-arm64 darwin-x64 win32-x64-msvc; do
             if [ -d "engines/engine-$system" ]; then
-              cp "engines/engine-$system/furb.$system.node" "bind/typescript/npm/$system/"
+              cp "engines/engine-$system/furb.$system.node" "binding/typescript/npm/$system/"
             elif [ "$GITHUB_EVENT_NAME" != pull_request ]; then
               echo "No engine for $system." >&2
               exit 1
             fi
           done
-      - run: bun x --no-install tsc -p bind/typescript/tsconfig.json
+      - run: bun x --no-install tsc -p binding/typescript/tsconfig.json
       - run: |
           mkdir packs
-          for folder in bind/typescript bind/typescript/npm/*; do
+          for folder in binding/typescript binding/typescript/npm/*; do
             cp LICENSE "$folder/LICENSE"
             (cd "$folder" && npm pack --pack-destination "$GITHUB_WORKSPACE/packs")
           done

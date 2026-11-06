@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { LineNumberRenderable, type Renderable, RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
-import { until } from "../../bind/typescript/test/until.ts";
+import { until } from "../../binding/typescript/test/until.ts";
 import { Gutter } from "../src/app/gutter.ts";
 import { App, sessionDetail } from "../src/app.ts";
 import { think } from "../src/demo/answer.ts";

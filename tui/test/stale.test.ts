@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { stale, warning } from "../script/stale.ts";
 
-const built = ["bind/typescript/index.cjs", "bind/typescript/dist/index.js"];
+const built = ["binding/typescript/index.cjs", "binding/typescript/dist/index.js"];
 
 /** A checkout with its sources and its build, the build made after the sources. */
 function checkout(): string {
   const root = mkdtempSync(join(tmpdir(), "furb-stale-"));
-  for (const file of ["Cargo.toml", "src/lib.rs", "src/furb/engine.py", "bind/typescript/src/index.ts"])
+  for (const file of ["Cargo.toml", "src/lib.rs", "src/furb/engine.py", "binding/typescript/src/index.ts"])
     touch(root, file, 1000);
   for (const file of built) touch(root, file, 2000);
   return root;
@@ -30,13 +30,13 @@ test("a build made after its sources is current", () => {
 test("a source of the crate that changed after the build stales the native module", () => {
   const root = checkout();
   touch(root, "src/furb/engine.py", 3000);
-  expect(stale(root)).toEqual(["src/furb/engine.py changed after bind/typescript/index.cjs"]);
+  expect(stale(root)).toEqual(["src/furb/engine.py changed after binding/typescript/index.cjs"]);
 });
 
 test("a source of the TypeScript side that changed after the build stales the package", () => {
   const root = checkout();
-  touch(root, "bind/typescript/src/index.ts", 3000);
-  expect(stale(root)).toEqual(["bind/typescript/src/index.ts changed after bind/typescript/dist/index.js"]);
+  touch(root, "binding/typescript/src/index.ts", 3000);
+  expect(stale(root)).toEqual(["binding/typescript/src/index.ts changed after binding/typescript/dist/index.js"]);
 });
 
 test("a test, a note and a cache that the build does not read stale nothing", () => {
@@ -49,8 +49,8 @@ test("a test, a note and a cache that the build does not read stale nothing", ()
 
 test("a part of the build that is gone is missing", () => {
   const root = mkdtempSync(join(tmpdir(), "furb-stale-"));
-  touch(root, "bind/typescript/index.cjs", 2000);
-  expect(stale(root)).toEqual(["bind/typescript/dist/index.js is missing"]);
+  touch(root, "binding/typescript/index.cjs", 2000);
+  expect(stale(root)).toEqual(["binding/typescript/dist/index.js is missing"]);
 });
 
 test("the warning names each stale part and the command that builds again", () => {

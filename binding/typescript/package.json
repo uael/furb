@@ -7,9 +7,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/uael/furb.git",
-    "directory": "bind/typescript"
+    "directory": "binding/typescript"
   },
-  "homepage": "https://github.com/uael/furb/tree/main/bind/typescript#readme",
+  "homepage": "https://github.com/uael/furb/tree/main/binding/typescript#readme",
   "napi": {
     "binaryName": "furb",
     "packageName": "@uael/furb",

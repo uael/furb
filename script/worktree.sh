@@ -142,15 +142,15 @@ rm -f "$path/.worktree-probe"
 # The output of cargo, which maturin and napi share, the packages of bun, the build of the TypeScript package, and
 # the cache of the tests of the TUI. The environment of python is not copied: its scripts name the path of the main
 # checkout, and uv sync makes it again on the warm target.
-for dir in target node_modules bind/typescript/node_modules tui/node_modules bind/typescript/dist .furb/tests; do
+for dir in target node_modules binding/typescript/node_modules tui/node_modules binding/typescript/dist .furb/tests; do
   if [ -e "$src/$dir" ] && [ ! -e "$path/$dir" ]; then
     mkdir -p "$(dirname "$path/$dir")"
     clone "$src/$dir" "$path/$dir"
   fi
 done
-for node in "$src"/bind/typescript/*.node "$src"/bind/typescript/index.cjs; do
+for node in "$src"/binding/typescript/*.node "$src"/binding/typescript/index.cjs; do
   if [ -e "$node" ]; then
-    clone "$node" "$path/bind/typescript/"
+    clone "$node" "$path/binding/typescript/"
   fi
 done
 # Each member of the workspace builds again in a new path, so its incremental state is of no use.

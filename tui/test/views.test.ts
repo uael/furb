@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type Renderable, TextRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
-import { until } from "../../bind/typescript/test/until.ts";
+import { until } from "../../binding/typescript/test/until.ts";
 import { find } from "../script/stage.ts";
 import { App } from "../src/app.ts";
 import { demoLibrary, demoSession, removeDemoDirectories } from "../src/demo.ts";

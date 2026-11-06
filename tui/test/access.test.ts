@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
 import type { Turn } from "furb";
-import { until } from "../../bind/typescript/test/until.ts";
+import { until } from "../../binding/typescript/test/until.ts";
 import { follow } from "../src/app.ts";
 import { demoLibrary, demoSession } from "../src/demo.ts";
 import { Reader } from "../src/reading.ts";

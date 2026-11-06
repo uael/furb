@@ -10,7 +10,7 @@
     "LICENSE"
   ],
   "description": "The engine of furb, built for Linux on arm64 with glibc. npm installs it with the package furb on that system alone.",
-  "homepage": "https://github.com/uael/furb/tree/main/bind/typescript#readme",
+  "homepage": "https://github.com/uael/furb/tree/main/binding/typescript#readme",
   "license": "AGPL-3.0-only",
   "engines": {
     "bun": ">=1.4.2",
@@ -19,7 +19,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/uael/furb.git",
-    "directory": "bind/typescript"
+    "directory": "binding/typescript"
   },
   "publishConfig": {
     "access": "public",

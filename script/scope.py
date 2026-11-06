@@ -22,10 +22,10 @@ INERT = re.compile(
   r"|release-please-config\.json|\.release-please-manifest\.json)"
 )
 # A path that only the suite of python reads.
-PYTHON = re.compile(r"(test/.*|bind/python/.*|pyproject\.toml|uv\.lock|docs/examples/python/.*)")
+PYTHON = re.compile(r"(test/.*|binding/python/.*|pyproject\.toml|uv\.lock|docs/examples/python/.*)")
 # A path that only the bindings of TypeScript and the TUI read.
 TYPESCRIPT = re.compile(
-  r"((tui|bind/typescript)/.*|package\.json|bun\.lock|biome\.json|tsconfig.*\.json|docs/examples/typescript/.*)"
+  r"((tui|binding/typescript)/.*|package\.json|bun\.lock|biome\.json|tsconfig.*\.json|docs/examples/typescript/.*)"
 )
 # A path that the suite of python reads on Linux alone: the extensions of the project and the config that enables
 # them, whose suite in .furb/extensions gates each word as a chain plays it.

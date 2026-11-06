@@ -8,7 +8,7 @@ import { chmod, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
-import { executable, programs } from "../../bind/typescript/test/executable.ts";
+import { executable, programs } from "../../binding/typescript/test/executable.ts";
 import * as stage from "../script/stage.ts";
 import { App } from "../src/app.ts";
 import { type Engine, openEngine } from "../src/bridge.ts";

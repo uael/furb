@@ -21,7 +21,7 @@ import { stale, warning } from "./stale.ts";
 const given = process.argv.slice(2);
 const flags = given.filter((one) => one.startsWith("-"));
 const filters = given.filter((one) => !one.startsWith("-"));
-const files = ["bind/typescript/test", "tui/test", "tui/scenarios"]
+const files = ["binding/typescript/test", "tui/test", "tui/scenarios"]
   .flatMap((root) =>
     [...new Glob("**/*.test.ts").scanSync(root)].map((file) => ({
       path: `./${root}/${file}`,
@@ -76,7 +76,7 @@ async function deal<T, R>(works: T[], slots: number, work: (one: T) => Promise<R
   return results;
 }
 
-const programs = join(import.meta.dir, "../../bind/typescript/test/programs");
+const programs = join(import.meta.dir, "../../binding/typescript/test/programs");
 const compiling = Promise.all(
   [...new Glob("*.ts").scanSync(programs)].map(async (file) => {
     const run = Bun.spawn([process.execPath, join(programs, "../executable.ts"), join(programs, file)], {
