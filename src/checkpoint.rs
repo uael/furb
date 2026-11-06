@@ -23,6 +23,9 @@
 //! [`booted`] says, so it replays the checkpoint and the entries after it alone, word by word,
 //! whatever build of the major made them: a resume returns to the exact state at the tip. A tail
 //! that a build cannot replay with no drift is a defect, and the record then opens to read only.
+//! Each checkpoint is a birth: the life that writes it ends there, so the facts after it come from a
+//! life born on it. An open from the first entry is born again at each checkpoint in the same way,
+//! as [`reborn`] proves, and reaches the state of the open from the last one.
 //!
 //! The checkpoint of the build before the schema holds `entries` in the place of the data: facts
 //! that the journal of any engine replays, and `("reserve", kind, "store", n)`, which stands for
@@ -96,6 +99,58 @@ impl Engine {
     let entry = written(&mut self)?;
     self.word("say('keep', '', __entry)", vec![("__entry", entry)]).map(drop)
   }
+}
+
+/// Whether the checkpoint at a place of a record is a birth that a life gathers again: the life that wrote it ended
+/// there, so the entry after it is the fact made of the next life, and a life born on the entries before it, as the
+/// engine given gathers it, holds each field of the checkpoint as the checkpoint holds it. Only this build gathers
+/// as this build wrote, so a checkpoint that another engine wrote is held to the first rule alone, as a checkpoint of
+/// the form before [`CHECKPOINT_SCHEMA`] is. The refusal names the checkpoint and the first field that parts, with
+/// both of its values where they part.
+pub fn reborn(record: &[Object], at: usize, engine: &mut Engine) -> Result<(), Fault> {
+  let place = at + 1;
+  if record.get(at + 1).and_then(fact).is_some_and(|a| a.kind() != world::MADE) {
+    return Err(Fault::refused(format!(
+      "the checkpoint at entry {place} is no birth: its life went on after it, and only a life that ends writes one"
+    )));
+  }
+  let Some(held) = fields(&record[at]) else { return Ok(()) };
+  let engine_of = |one: &[(String, serde_json::Value)]| {
+    one.iter().find(|one| one.0 == "engine").map(|one| one.1.clone())
+  };
+  if engine_of(&held) != Some(serde_json::Value::from(world::engine())) {
+    return Ok(());
+  }
+  // The life that gathers makes its own stand at its birth, after the tip that the life which wrote the checkpoint
+  // ended on, so it took one name more, and the tail after the checkpoint holds the names that the checkpoint gave.
+  for (key, value) in
+    fields(&written(engine)?).unwrap_or_default().into_iter().filter(|one| one.0 != "taken")
+  {
+    let kept = held.iter().find(|one| one.0 == key).map(|one| &one.1);
+    if kept.is_some_and(|kept| *kept != value) {
+      let (value, kept) = (value.to_string(), kept.map(ToString::to_string).unwrap_or_default());
+      let parts = value.chars().zip(kept.chars()).take_while(|(a, b)| a == b).count();
+      let short =
+        |one: &str| one.chars().skip(parts.saturating_sub(100)).take(300).collect::<String>();
+      let (value, kept) = (short(&value), short(&kept));
+      return Err(Fault::refused(format!(
+        "the checkpoint at entry {place} drifts in {key}: a life born on the entries before it gathers {value}, the record holds {kept}"
+      )));
+    }
+  }
+  Ok(())
+}
+
+/// Each field of the data of a checkpoint, as the record keeps it.
+fn fields(one: &Object) -> Option<Vec<(String, serde_json::Value)>> {
+  let a = fact(one)?;
+  let pairs = a.word(0)?.pairs()?;
+  Some(
+    pairs
+      .into_iter()
+      .filter_map(|(key, value)| Some((key.as_str()?.to_owned(), crate::wire::record(value))))
+      .collect(),
+  )
 }
 
 /// An entry kept after the last entry of the record at a path, as the store of a life keeps one,

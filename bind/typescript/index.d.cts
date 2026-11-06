@@ -449,6 +449,14 @@ export interface Opening {
    */
   inspecting?: boolean
   /**
+   * Whether the life opens from the first entry of its record, born again at each checkpoint as each life of the
+   * record was, and not from its last checkpoint alone; false when unsaid. Each checkpoint then has to end the life
+   * that wrote it and to hold what a life born on the entries before it gathers, or the open is refused, as
+   * [`checkpoint::reborn`] says. Both opens reach one state at the tip, so the tests and the gates open this way to
+   * prove each checkpoint of a record.
+   */
+  whole?: boolean
+  /**
    * Whether the life enables at its tip the extensions that the configs turn on; true when unsaid. A life runs what
    * its record enables either way.
    */
