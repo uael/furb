@@ -859,10 +859,12 @@ fn a_turn_hands_its_images_to_a_model_that_takes_them_and_a_model_that_takes_non
   let [Message::User { content }] = &model.requests()[0].chat_history[..] else {
     panic!("one user turn")
   };
-  assert!(matches!(
-    content.iter().collect::<Vec<_>>()[..],
-    [UserContent::Text(_), UserContent::Text(_), UserContent::Image(_)]
-  ));
+  let named = images::reference("a.png", &kept.uri);
+  let parts: Vec<_> = content.iter().collect();
+  let place = parts.iter().position(|one| matches!(one, UserContent::Image(_)));
+  let place = place.expect("the image goes to the model");
+  assert!(matches!(parts[place - 1], UserContent::Text(text) if text.text.ends_with(&named)));
+  assert!(matches!(parts.get(place + 1), Some(UserContent::Text(_))), "the text after it follows");
   let blind = streaming(&[]);
   let provider =
     Provider::new(at.display().to_string(), vec![scripted(&blind)]).images(at.join("images"));
@@ -902,6 +904,16 @@ fn the_claude_command_line_sees_each_image_that_a_prompt_names_and_each_image_th
   let heard = fake.heard();
   let image = |bytes: &[u8]| format!(r#""data":"{}""#, STANDARD.encode(bytes));
   assert_eq!(heard.len(), 2, "{heard:?}");
+  // The image stands after the text that names it and before the text that follows, not at the end
+  // of the turn.
+  let place = |text: &str| heard[0].find(text);
+  let (name, data) = (place("![named.png]"), place(&image(named)));
+  let after = heard[0].rfind("prompt1: Act[");
+  assert!(
+    matches!((name, data, after), (Some(a), Some(b), Some(c)) if a < b && b < c),
+    "the image after its name and before the text that follows it: {}",
+    heard[0]
+  );
   assert!(heard[0].contains(&image(named)), "the image of the prompt: {}", heard[0]);
   assert!(heard[1].contains(&image(read)), "the image that the word read: {}", heard[1]);
   assert!(!heard[1].contains(&image(named)), "the command line hears an image once: {}", heard[1]);
@@ -2105,6 +2117,47 @@ fn a_usage_limit_ends_at_the_day_its_message_names() {
 }
 
 #[test]
+fn a_usage_limit_reads_its_clock_and_its_month_as_jiff_reads_them() {
+  let said = |time: &str| format!("You've hit your limit \u{b7} resets {time} (Europe/Paris)");
+  let now = paris(10, 23, 16, 19);
+  // Noon and midnight, with the minutes or with none, in any case.
+  assert_eq!(resets(&said("12pm"), &now), Some(paris(10, 24, 12, 0)));
+  assert_eq!(resets(&said("12PM"), &paris(10, 23, 11, 0)), Some(paris(10, 23, 12, 0)));
+  assert_eq!(resets(&said("12:30am"), &now), Some(paris(10, 24, 0, 30)));
+  assert_eq!(resets(&said("3pm"), &now), Some(paris(10, 24, 15, 0)));
+  assert_eq!(resets(&said("3:45Pm"), &now), Some(paris(10, 24, 15, 45)));
+  // A month whole, or short, with a day of one digit or of two.
+  assert_eq!(resets(&said("October 28, 3pm"), &now), Some(paris(10, 28, 15, 0)));
+  assert_eq!(resets(&said("Nov 2 at 9am"), &now), Some(paris(11, 2, 9, 0)));
+  // A clock or a date that is none.
+  for none in
+    ["13pm", "0am", "5:61pm", "5:10", "Feb 30, 3pm", "Oct 32, 3pm", "Foo 3, 3pm", "Oct, 3pm"]
+  {
+    assert_eq!(resets(&said(none), &now), None, "{none}");
+  }
+}
+
+#[test]
+fn a_usage_limit_at_a_time_that_a_change_of_the_clock_skips_or_repeats_ends_at_the_day_that_it_names()
+ {
+  let said = "You've hit your limit \u{b7} resets 2:30am (Europe/Paris)";
+  let moment = |month, day, hour, minute| {
+    civil::date(2026, month, day).at(hour, minute, 0, 0).in_tz("Europe/Paris").expect("a moment")
+  };
+  // The clock of Paris goes from 2:00 to 3:00 on 29 March, so 2:30 stands at 3:30.
+  let spring = resets(said, &paris(3, 28, 23, 0)).expect("a moment after now");
+  assert_eq!(spring, moment(3, 29, 2, 30));
+  assert_eq!(spring.hour(), 3);
+  // It goes back from 3:00 to 2:00 on 25 October, so 2:30 stands twice, and the first one is taken.
+  let autumn = resets(said, &paris(10, 24, 23, 0)).expect("a moment after now");
+  assert_eq!(autumn, moment(10, 25, 2, 30));
+  assert_eq!(autumn.offset().seconds(), 2 * 3600);
+  // A time with no day, said after the change, is the next day's.
+  let five = "You've hit your limit \u{b7} resets 5pm (Europe/Paris)";
+  assert_eq!(resets(five, &paris(10, 25, 18, 0)), Some(paris(10, 26, 17, 0)));
+}
+
+#[test]
 fn a_usage_limit_whose_message_names_no_moment_has_none() {
   let now = paris(10, 23, 16, 19);
   assert_eq!(resets("You've hit your limit \u{b7} resets soon", &now), None);
@@ -2355,7 +2408,6 @@ fn each_image_comes_once_in_a_request_after_the_text_that_names_it_as_a_fork_giv
         content
           .iter()
           .map(|part| match part {
-            UserContent::Text(text) if text.text == named => "name",
             UserContent::Text(_) => "text",
             UserContent::Image(_) => "image",
             _ => "other",
@@ -2365,7 +2417,33 @@ fn each_image_comes_once_in_a_request_after_the_text_that_names_it_as_a_fork_giv
       _ => None,
     })
     .collect();
-  assert_eq!(users, [vec!["text", "name", "image"], vec!["text"]]);
+  assert_eq!(users, [vec!["text", "image", "text"], vec!["text"]]);
+}
+
+#[test]
+fn a_message_with_an_image_in_the_middle_goes_as_text_image_text_in_the_order_of_the_message() {
+  let at = yard("images-middle");
+  fs::write(at.join("a.png"), b"\x89PNG\r\n\x1a\nimage").expect("the image is written");
+  let kept = images::attach(&at.join("images"), &at.join("a.png")).expect("the image is attached");
+  let named = images::reference("a.png", &kept.uri);
+  let open = format!("#prompt1 before {named} after\nprompt1: Act[str] = Act('prompt1')");
+  let turns = Object::list([Object::tuple([
+    Object::string("user"),
+    Object::string(open),
+    Object::none(),
+    Object::none(),
+  ])]);
+  let model = scripted(&MockCompletionModel::new([])).images();
+  let mut held = images::Images::new(Some(at.join("images")));
+  let got = messages(turns.as_ref(), &model, &mut held).expect("the messages of the turns");
+  let [Message::User { content }] = &got[..] else { panic!("one user turn") };
+  let parts: Vec<_> = content.iter().collect();
+  let [UserContent::Text(before), UserContent::Image(_), UserContent::Text(after)] = &parts[..]
+  else {
+    panic!("text, image, text: {parts:?}")
+  };
+  assert_eq!(before.text, format!("#prompt1 before {named}"));
+  assert_eq!(after.text, " after\nprompt1: Act[str] = Act('prompt1')");
 }
 
 #[test]

@@ -11,7 +11,7 @@ use tokio::sync::watch;
 
 use super::{
   AuthError, Catalog as Account, Credential, Effort, Listing, SignIn, callback_code, directory,
-  now, random, save, status,
+  now, publish, random, save, status, subscribe,
 };
 use crate::testing;
 use crate::{ear::reactor, world::Catalog};
@@ -166,4 +166,34 @@ fn a_refusal_asks_for_a_new_sign_in_only_when_the_account_is_at_fault() {
   assert_eq!(down.to_string(), "OpenAI sign-in failed (HTTP 503). Try again.");
   assert!(AuthError::ListRefused { status: 403 }.login());
   assert!(!AuthError::ListRefused { status: 500 }.login());
+}
+
+#[test]
+fn a_subscriber_sees_each_change_of_a_sign_in_in_order_and_a_late_one_sees_the_current_state() {
+  let scope = Scope::profile("account", "another");
+  let path = directory(Some(&scope.0));
+  let mut seen = subscribe(Some(&scope.0));
+  assert_eq!(*seen.borrow_and_update(), SignIn::Disconnected, "the state at once");
+  let waiting = SignIn::Waiting { url: "https://auth.example/login".to_owned() };
+  publish(&path, waiting.clone());
+  assert!(seen.has_changed().expect("the sign-in stands"));
+  assert_eq!(*seen.borrow_and_update(), waiting);
+  publish(&path, SignIn::Connecting);
+  assert_eq!(*seen.borrow_and_update(), SignIn::Connecting);
+  super::cancel(Some(&scope.0));
+  assert!(seen.has_changed().expect("the sign-in stands"));
+  assert_eq!(*seen.borrow_and_update(), SignIn::Canceled);
+  publish(&path, SignIn::Failed("no network".to_owned()));
+  assert_eq!(*seen.borrow_and_update(), SignIn::Failed("no network".to_owned()));
+  super::needs_login(&path);
+  let again = SignIn::NeedsLogin(super::AGAIN.to_owned());
+  assert_eq!(*seen.borrow_and_update(), again);
+  assert!(!seen.has_changed().expect("the sign-in stands"), "no change is left unseen");
+  let late = subscribe(Some(&scope.0));
+  assert_eq!(*late.borrow(), again, "a late subscriber sees the current state at once");
+  assert_eq!(
+    status(Some(&scope.0)),
+    again,
+    "the state that status reads is the one that the watch holds"
+  );
 }
