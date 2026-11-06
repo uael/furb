@@ -670,7 +670,8 @@ export declare const TIMEOUT: number
 
 /**
  * The files under a folder that the picker of a window offers, by their path from it with `/`
- * between its parts, in order: each dot file too, but `.git` and each file that `.gitignore` hides.
+ * between its parts, in order: each dot file too, but `.git` and each file that `.gitignore`
+ * hides.
  */
 export declare function walkedFiles(root: string): Array<string>
 
