@@ -29,7 +29,9 @@ pub struct Schema {
 }
 
 /// The schema of the record that this build writes and reads.
-pub const RECORD_SCHEMA: Schema = Schema { major: 1, minor: 0 };
+/// The minor 1 keeps the question of each act that the life makes, so a reader rebuilds each chain
+/// and each prompt that a word made; a reader of the minor 0 tells them as the other questions.
+pub const RECORD_SCHEMA: Schema = Schema { major: 1, minor: 1 };
 
 /// The schema of the data of the checkpoint that this build writes and reads. The data of the major
 /// 1 also holds `again`, each word that ran on a chain, which `seed` names as cut, so a build reads

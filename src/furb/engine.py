@@ -1008,6 +1008,7 @@ def boot(record=(), **outside):
       case (kind, name, by, on, *words) if question((kind, name)):
         if (
           by in saved
+          or (name not in first and re.fullmatch(r"\w+?\d+", by))
           or (on and not get(on))
           or (by == "journal" and not holds(scope(on), [known.setdefault(name, (kind, name, by, on))]))
         ):
@@ -1061,6 +1062,8 @@ def boot(record=(), **outside):
                 glue and (yield glue)
                 yield "keep", "", (a,)
               last = a
+            elif a is q and about not in saved:
+              yield "keep", "", (saved.setdefault(about, q),)
             if kind == "wake" and not owed():
               for name in [x for x in taken if taken[x] and covers(a, x) and not over(x)]:
                 del taken[name]
@@ -1087,7 +1090,7 @@ def boot(record=(), **outside):
     on = on or scope(speaker)
     if not on and kind != "chain":
       raise Refused("no chain for " + kind)
-    if not (get(by) or by in outside or callable((module(on) or globals()).get(kind))):
+    if by and not (get(by) or by in outside or callable((module(on) or globals()).get(kind))):
       raise Refused(f"no verb {kind} on {on}, so a later life cannot make the act again")
     names = born.setdefault(kind, {})
     a = (kind, name := names.setdefault((by, made[speaker, kind]), kind + str(len(names) + 1)), by, on, *words)

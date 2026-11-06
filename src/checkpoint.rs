@@ -23,7 +23,8 @@
 //! [`booted`] says, so it replays the checkpoint and the entries after it alone, word by word,
 //! whatever build of the major made them: a resume returns to the exact state at the tip. A tail
 //! that a build cannot replay with no drift is a defect, and the record then opens to read only.
-//! Each checkpoint is a birth: the life that writes it ends there, so the facts after it come from a
+//! Each checkpoint is a birth: the life that writes it ends there, so the facts after it come from
+//! a
 //! life born on it. An open from the first entry is born again at each checkpoint in the same way,
 //! as [`reborn`] proves, and reaches the state of the open from the last one.
 //!
@@ -101,11 +102,16 @@ impl Engine {
   }
 }
 
-/// Whether the checkpoint at a place of a record is a birth that a life gathers again: the life that wrote it ended
-/// there, so the entry after it is the fact made of the next life, and a life born on the entries before it, as the
-/// engine given gathers it, holds each field of the checkpoint as the checkpoint holds it. Only this build gathers
-/// as this build wrote, so a checkpoint that another engine wrote is held to the first rule alone, as a checkpoint of
-/// the form before [`CHECKPOINT_SCHEMA`] is. The refusal names the checkpoint and the first field that parts, with
+/// Whether the checkpoint at a place of a record is a birth that a life gathers again: the life
+/// that wrote it ended
+/// there, so the entry after it is the fact made of the next life, and a life born on the entries
+/// before it, as the
+/// engine given gathers it, holds each field of the checkpoint as the checkpoint holds it. Only
+/// this build gathers
+/// as this build wrote, so a checkpoint that another engine wrote is held to the first rule alone,
+/// as a checkpoint of
+/// the form before [`CHECKPOINT_SCHEMA`] is. The refusal names the checkpoint and the first field
+/// that parts, with
 /// both of its values where they part.
 pub fn reborn(record: &[Object], at: usize, engine: &mut Engine) -> Result<(), Fault> {
   let place = at + 1;
@@ -121,8 +127,10 @@ pub fn reborn(record: &[Object], at: usize, engine: &mut Engine) -> Result<(), F
   if engine_of(&held) != Some(serde_json::Value::from(world::engine())) {
     return Ok(());
   }
-  // The life that gathers makes its own stand at its birth, after the tip that the life which wrote the checkpoint
-  // ended on, so it took one name more, and the tail after the checkpoint holds the names that the checkpoint gave.
+  // The life that gathers makes its own stand at its birth, after the tip that the life which
+  // wrote the checkpoint
+  // ended on, so it took one name more, and the tail after the checkpoint holds the names that the
+  // checkpoint gave.
   for (key, value) in
     fields(&written(engine)?).unwrap_or_default().into_iter().filter(|one| one.0 != "taken")
   {
