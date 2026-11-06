@@ -89,14 +89,11 @@ pub struct Opening {
   #[cfg_attr(feature = "python", pyo3(default))]
   pub inspecting: Option<bool>,
   /// Whether the life opens from the first entry of its record, born again at each checkpoint as
-  /// each life of the
-  /// record was, and not from its last checkpoint alone; false when unsaid. Each checkpoint then
-  /// has to end the life
-  /// that wrote it and to hold what a life born on the entries before it gathers, or the open is
-  /// refused, as
-  /// [`checkpoint::reborn`] says. Both opens reach one state at the tip, so the tests and the
-  /// gates open this way to
-  /// prove each checkpoint of a record.
+  /// each life of the record was, and not from its last checkpoint alone; false when unsaid. Each
+  /// checkpoint then has to end the life that wrote it and to hold what a life born on the entries
+  /// before it gathers, or the open is refused, as [`checkpoint::reborn`] says. Both opens reach
+  /// one state at the tip, so the tests and the gates open this way to prove each checkpoint of a
+  /// record.
   #[cfg_attr(feature = "python", pyo3(default))]
   pub whole: Option<bool>,
   /// Whether the life enables at its tip the extensions that the configs turn on; true when unsaid. A life runs what
@@ -453,9 +450,8 @@ impl Opening {
     Ok((engine, record))
   }
 
-  /// Proves each checkpoint of the record: a life that inspects the entries before it, born on
-  /// them as the life that
-  /// wrote it was, gathers it again, as [`checkpoint::reborn`] says.
+  /// Proves each checkpoint of the record: a life that inspects the entries before it, born on them
+  /// as the life that wrote it was, gathers it again, as [`checkpoint::reborn`] says.
   fn reborn(&self) -> Result<(), Fault> {
     let Some(path) = self.record.as_deref().filter(|one| Path::new(one).exists()) else {
       return Ok(());
