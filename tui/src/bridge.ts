@@ -823,7 +823,7 @@ export class HostView extends EventEmitter {
     if (config.action === "set") {
       const [group, name] = config.key;
       if (group === "providers" && name === "codex" && !(await this.codexSigned(config.value))) return false;
-    } else await this.refreshCodex();
+    }
     await this.life.result(await this.life.config(config));
     return true;
   }
@@ -832,7 +832,9 @@ export class HostView extends EventEmitter {
   async settings(): Promise<Setting[]> {
     return this.demo ? [] : await this.life.settings();
   }
-  private async stand(): Promise<void> {
+  /** A stand of the life on the configs as the disk holds them, which asks again each model that waits to retry. */
+  async stand(): Promise<void> {
+    await this.refreshCodex();
     await this.life.result(await this.life.stand());
   }
   /** The name of the model that a name gives in the roster or in the catalog, and nothing when it gives none. */
