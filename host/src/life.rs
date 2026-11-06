@@ -10,7 +10,7 @@ use std::{
   future::poll_fn,
   hash::{DefaultHasher, Hash, Hasher},
   path::PathBuf,
-  sync::Arc,
+  sync::{Arc, Mutex},
   task::Poll,
   thread,
 };
@@ -19,7 +19,7 @@ use furb::{
   Engine, Fact, Fault, Object, Text, checkpoint,
   life::{Log, Opening, Stream},
   verbs,
-  view::{Act, Fold, Held},
+  view::{Act, Fold, Held, Named},
   wire::{outward, parsed},
   world::{
     self, Shape, answered,
@@ -212,6 +212,9 @@ pub struct Life {
   configs: Layers,
   queue: Queue,
   held: Held,
+  /// The name of the session, folded from each fact of the life, and where the handle reads it.
+  named: Named,
+  name: Arc<Mutex<Option<String>>>,
 }
 
 /// The handle of a life, which any thread holds: it says a command to the life and reads its
@@ -220,6 +223,7 @@ pub struct Life {
 pub struct LifeHandle {
   inbox: UnboundedSender<Message>,
   readers: broadcast::Sender<Logged>,
+  name: Arc<Mutex<Option<String>>>,
 }
 
 impl Life {
@@ -231,11 +235,13 @@ impl Life {
     let (inbox, received) = mpsc::unbounded_channel();
     let (readers, _) = broadcast::channel(BEHIND);
     let told = readers.clone();
+    let name = Arc::new(Mutex::new(None));
+    let named = Arc::clone(&name);
     thread::Builder::new()
       .name("furb-life".to_owned())
-      .spawn(move || lived(opening, received, told))
+      .spawn(move || lived(opening, received, told, named))
       .map_err(LifeError::Thread)?;
-    Ok(LifeHandle { inbox, readers })
+    Ok(LifeHandle { inbox, readers, name })
   }
 
   /// One event put in the log, and sent to each reader, then the follow-ups of a chain when the
@@ -244,6 +250,11 @@ impl Life {
     if let Event::Fact(fact) = &event {
       self.said += 1;
       self.facts.entry(digest(fact)).or_insert(self.said);
+      if self.named.hear(fact, false)
+        && let Ok(mut name) = self.name.lock()
+      {
+        *name = self.named.name().map(str::to_owned);
+      }
     }
     self.watch.heard(&event);
     let queued = self.queue.heard(&event);
@@ -399,9 +410,10 @@ fn lived(
   opening: Opening,
   received: UnboundedReceiver<Message>,
   readers: broadcast::Sender<Logged>,
+  name: Arc<Mutex<Option<String>>>,
 ) {
   match runtime::Builder::new_current_thread().enable_all().build() {
-    Ok(runtime) => LocalSet::new().block_on(&runtime, run(opening, received, readers)),
+    Ok(runtime) => LocalSet::new().block_on(&runtime, run(opening, received, readers, name)),
     Err(no) => {
       let ended = Event::Ended(Some(format!("the life has no runtime: {no}")));
       readers.send((0, Arc::new(ended))).ok();
@@ -414,6 +426,7 @@ async fn run(
   mut opening: Opening,
   mut received: UnboundedReceiver<Message>,
   readers: broadcast::Sender<Logged>,
+  name: Arc<Mutex<Option<String>>>,
 ) {
   let (told, heard) = mpsc::unbounded_channel();
   let configs = Layers::new(&opening.directory, opening.config.as_ref().map(PathBuf::from));
@@ -428,6 +441,8 @@ async fn run(
     configs,
     queue: Queue::default(),
     held: Held::default(),
+    named: Named::default(),
+    name,
   };
   let writes = told.clone();
   opening.stream = Some(Stream(Arc::new(move |rung, chain, text, thinking| {
@@ -832,6 +847,13 @@ fn sent(engine: &mut Engine, follow: &FollowUp) -> Result<String, LifeError> {
 }
 
 impl LifeHandle {
+  /// The name of the session of the life, as its facts fold it: the one that the operator said last
+  /// on the root, which wins, else the one that the extension naming gave, and nothing while it
+  /// holds neither.
+  pub fn name(&self) -> Option<String> {
+    self.name.lock().ok().and_then(|name| name.clone())
+  }
+
   /// The reply of the life to a command, once the life ran it, in the order that the life heard
   /// each command.
   pub async fn send(&self, command: Command) -> Result<Reply, LifeError> {

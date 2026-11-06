@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { closeSync, existsSync, openSync, readFileSync, readSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   attachImage,
@@ -14,7 +14,7 @@ import { Activity } from "./activity.js";
 import { FileChanges } from "./changes.js";
 import { Console, type ConsoleOptions } from "./console.js";
 import { call, type Ear } from "./ears.js";
-import { type PauseCause, sessionNamed, WORK } from "./life/acts.js";
+import { type PauseCause, WORK } from "./life/acts.js";
 import { furbDirectory, saveFile } from "./project.js";
 import { actorParts, type Entry, type Fact, isQuestion, standingOf } from "./types.js";
 
@@ -401,38 +401,11 @@ export async function inspectRecord(
     return {
       pending: [...session.pending],
       state: session.engine?.saved() === "runs" ? "runs" : "saved",
-      name: root ? toldName(record, root) : undefined,
+      name: root ? (retold(record).name ?? undefined) : undefined,
     };
   } finally {
     await session.dispose();
   }
-}
-
-/** The name of a session as each fact that its record tells gives it, read a part of the file at a time. */
-function toldName(record: string, root: string): string | undefined {
-  const { file } = retold(record) as { file: string };
-  const activity = new Activity();
-  const hear = (line: string) => {
-    if (!line.startsWith("[")) return;
-    const fact = JSON.parse(line) as Fact;
-    if (fact[0] === "keep" && fact[1] === "") return;
-    const ear = activity.hear(fact);
-    for (let step = ear.next(); !step.done; step = ear.next(false));
-  };
-  const handle = openSync(file, "r");
-  try {
-    const part = Buffer.alloc(1 << 20);
-    let held = "";
-    for (let got = readSync(handle, part); got > 0; got = readSync(handle, part)) {
-      const lines = (held + part.toString("utf8", 0, got)).split("\n");
-      held = lines.pop() ?? "";
-      for (const line of lines) hear(line);
-    }
-    hear(held);
-  } finally {
-    closeSync(handle);
-  }
-  return sessionNamed(activity.hosted([...activity.acts.values()]), root);
 }
 
 /** A session, opened. */

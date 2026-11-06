@@ -126,21 +126,3 @@ export function cancelled(act: Pick<Act, "run" | "phase">): boolean {
   const value = outcomeOf(act);
   return Boolean(value && typeof value === "object" && "is" in value && value.is === "CancelledError");
 }
-
-/** The name that a record gives its session, from the acts of its root in the order of the record: the value of the
- * last rename_session that is done, which the operator said and which may be empty to take the default name again,
- * else the value of name_session, which the extension naming gave. */
-export function sessionNamed(
-  acts: Iterable<Pick<Act, "kind" | "chain" | "phase">>,
-  root: string,
-): string | undefined {
-  let given: string | undefined;
-  let said: string | undefined;
-  for (const act of acts) {
-    const value = outcomeOf(act);
-    if (act.chain !== root || typeof value !== "string") continue;
-    if (act.kind === "rename_session") said = value;
-    else if (act.kind === "name_session" && value) given = value;
-  }
-  return said ?? given;
-}

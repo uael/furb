@@ -195,6 +195,25 @@ async fn a_query_is_a_command_that_the_life_answers() {
 }
 
 #[tokio::test]
+async fn the_name_of_the_session_is_the_last_that_the_operator_said_on_the_root_as_the_life_folds_it()
+ {
+  let at = place("named");
+  let life = Life::spawn(scripted(&at, &[])).unwrap();
+  let mut events = Box::pin(life.events(0));
+  assert_eq!(life.name(), None);
+  for name in ["First", "Mine"] {
+    let id = made(&life, rung(&furb::view::word(name))).await;
+    until(&mut events, done(&id)).await;
+  }
+  assert_eq!(life.name().as_deref(), Some("Mine"));
+  let id =
+    made(&life, rung("act('rename_session', 'chain2', lambda id: (yield 'done', id, 'Off'))"))
+      .await;
+  until(&mut events, done(&id)).await;
+  assert_eq!(life.name().as_deref(), Some("Mine"));
+}
+
+#[tokio::test]
 async fn the_configs_of_a_life_are_read_and_changed_through_its_commands_and_a_change_stands_it() {
   let at = place("configs");
   let life = Life::spawn(scripted(&at, &[])).unwrap();

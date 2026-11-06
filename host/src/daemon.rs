@@ -774,7 +774,8 @@ impl Lives {
     self.views.mount(mount, peer, outbox).map(|()| Answer::Done)
   }
 
-  /// Each life of the daemon, by the path of its record, and whether it lives or ends.
+  /// Each life of the daemon, by the path of its record, whether it lives or ends, and the name of
+  /// its session.
   fn listed(&self) -> Vec<Listed> {
     let mut listed: Vec<Listed> = self
       .held
@@ -782,6 +783,7 @@ impl Lives {
       .map(|(life, held)| Listed {
         life: life.clone(),
         open: matches!(held.stage, Stage::Living(_)),
+        name: held.handle.name(),
       })
       .collect();
     listed.sort_by(|one, other| one.life.cmp(&other.life));

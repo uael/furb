@@ -787,11 +787,14 @@ export interface Peer {
   name?: string | null;
 }
 /**
- * A record of the machine, and whether a life of the daemon holds it now.
+ * A record of the machine, whether a life of the daemon holds it now, and the name of its session:
+ * the one that the operator said last on the root, which wins, else the one that the extension
+ * naming gave, and nothing while it holds neither. An empty name takes the default name again.
  */
 export interface Listed {
   life: string;
   open: boolean;
+  name?: string | null;
 }
 /**
  * A life that a daemon gave at its handover: its record, its folder, and the holder of each pin.

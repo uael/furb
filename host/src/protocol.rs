@@ -510,11 +510,15 @@ pub struct Handed {
   pub pins: Vec<String>,
 }
 
-/// A record of the machine, and whether a life of the daemon holds it now.
+/// A record of the machine, whether a life of the daemon holds it now, and the name of its session:
+/// the one that the operator said last on the root, which wins, else the one that the extension
+/// naming gave, and nothing while it holds neither. An empty name takes the default name again.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Listed {
   pub life: String,
   pub open: bool,
+  #[serde(default, skip_serializing_if = "Option::is_none")]
+  pub name: Option<String>,
 }
 
 /// A view that a window mounts in a slot of a life, which the process of a skill serves.
