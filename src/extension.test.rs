@@ -573,6 +573,35 @@ fn an_extension_of_a_config_that_does_not_load_does_not_play_and_the_others_do()
 }
 
 #[test]
+fn an_extension_of_the_config_of_the_user_goes_through_the_same_check_and_a_refused_word_leaves_no_copy()
+ {
+  let at = place("userword");
+  let places = places(&at);
+  let (user, project) = (at.join("user"), at.join("project"));
+  let manifest = skill("mine", &[("word", "note.py")]);
+  config(&user.join("config.json"), r#"{"extensions": {"mine": "mine"}}"#);
+  folder(&user.join("mine"), &manifest, "def filled(template: str) -> str:\n  return template\n");
+  let (on, refused) = configured(&places, &project).unwrap();
+  assert!(on.iter().all(|one| one.name != "mine"));
+  let file = user.join("mine").join("SKILL.md").display().to_string();
+  assert_eq!(
+    refused,
+    [format!(
+      "The extension mine does not play: The word note.py binds filled of the engine at its top, \
+       which each word of a chain reads: give each a name of its own: {file}"
+    )]
+  );
+  assert!(!user.join("words").join("mine").exists(), "a refused word leaves no copy");
+  folder(&user.join("mine"), &manifest, "def noted(template: str) -> str:\n  return template\n");
+  let (on, refused) = configured(&places, &project).unwrap();
+  assert!(refused.is_empty() && on.iter().any(|one| one.name == "mine"));
+  assert!(
+    user.join("words").join("mine").join("note.py").is_file(),
+    "a word that passes has its copy"
+  );
+}
+
+#[test]
 fn the_ear_tells_the_root_once_why_each_extension_that_does_not_play_does_not_play() {
   let yard = place("told");
   let at: &Path = &yard;

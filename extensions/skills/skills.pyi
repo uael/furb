@@ -22,6 +22,7 @@ def skill(name: str = "", show: Show = HEAD, on: str = "") -> Act[Text]:
   The first time that the life plays a word of a skill with code, the World says the fact enable with its name, its word, its life word and the digest of its word, so the skill plays as an extension that a config turns on.
   skill with no name plays each skill with code whose metadata says furb-default true and that the life does not run, and the World answers it with the line of each in the list of the skills.
   A skill of a name that no skill has raises Refused where it is awaited.
+  A skill with code whose word binds a name of the engine at its top raises Refused where it is awaited, and the life enables no word of it.
   """
 
 async def listed(on: str = "") -> None:
