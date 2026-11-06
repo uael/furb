@@ -166,7 +166,7 @@ def compared(was: list[Row], now: list[Row], labels: tuple[str, str]) -> str:
 
 def found(root: str) -> dict[str, tuple[Path, Path]]:
   shots = {}
-  for part in ("demo", "life"):
+  for part in ("demo", "life", "walk"):
     folder = Path(root, part)
     for one in sorted(folder.iterdir()) if root and folder.is_dir() else []:
       if one.suffix == ".png":
@@ -201,6 +201,11 @@ def listed(out: Path, images: Path, parts: tuple[str, str], labels: tuple[str, s
       first = next((one["name"] for one in seen["changed"] if one["text"] == text and not shown), "")
       told = {"kind": "same", "text": f"the same change as {first}"} if first else {"kind": "text", "text": text}
       seen["changed"].append({"name": name, **told, "images": shown})
+  for one in seen["changed"]:
+    # A capture of the walk names the action that led to it.
+    action = nows[one["name"]][0].with_suffix(".txt")
+    if action.exists():
+      one["action"] = action.read_text(encoding="utf-8")
   fails = out / "fails.txt"
   for line in fails.read_text(encoding="utf-8").splitlines() if fails.exists() else []:
     fields = line.split("\t")

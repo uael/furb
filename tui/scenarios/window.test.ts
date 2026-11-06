@@ -99,7 +99,14 @@ test("the toggle of a thread taller than the screen stays in view and folds it, 
       return settle();
     };
     // The middle of the thread stands at the top of the feed, and its header far above it.
-    const middle = feed(await scrollTo(40));
+    await scrollTo(40);
+    // A slow runner draws the body of the thread a frame after the pin, so wait for a row of it.
+    const middle = feed(
+      await window.shows(
+        (frame) => feed(frame).some((line, at) => at > viewport.y + 5 && /Row \d+\./.test(line)),
+        "the body under the pinned toggle",
+      ),
+    );
     expect(head()?.y ?? 0).toBeLessThan(viewport.y);
     const top = middle[viewport.y] ?? "";
     expect(top).toContain("Row 1.");

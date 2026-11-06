@@ -35,7 +35,7 @@ import { theme as c, glyph, markOf, pulse, spacing as space, spin } from "../the
 import { bold, type Part, styled, underline } from "../ui.ts";
 import { Gutter } from "./gutter.ts";
 import { part } from "./part.ts";
-import { STATE, saidOf, seconds, spell, stateOf } from "./shared.ts";
+import { hidden, STATE, saidOf, seconds, spell, stateOf } from "./shared.ts";
 
 /** A reason of the gate or of a raise as one line says it: without the line that the row already shows, and
  * without the place that the parser names, `(<string>, line 2), in 'x = = 1'`, which repeats the line. */
@@ -450,7 +450,7 @@ export const details = part({
     since: (act?: ActRow) => string,
     heads: ReadonlySet<ProgramLine>,
     digits = 1,
-    options: { more?: (line: ProgramLine) => void } = {},
+    options: { more?: (line: ProgramLine) => void; key?: string } = {},
   ): Renderable {
     // The column of the states takes its cells from the room of the code.
     const room = width - STATE;
@@ -475,6 +475,9 @@ export const details = part({
     // in the text of its line.
     const folded = new Map<number, { line: Extract<ProgramLine, { kind: "code" }>; folds: Fold[] }>();
     const whole = new Map<number, CodeRow["parts"]>();
+    // The rows that fold one string of a line, each with the string.
+    const registered: [key: string, row: { label: string; open?: () => void }][] = [];
+    const stringRows = new Map<number, { line: Extract<ProgramLine, { kind: "code" }>; literal: number }>();
     // The colors come from each statement whole, so a line cut to its room or a folded string changes no color: the
     // program as it ran, each part of a row with where it starts in that program, and the rows that only comment.
     let program = "";
@@ -563,6 +566,20 @@ export const details = part({
           for (const [from, to, source] of row.parts) pieces.push([at + k, from, to, base + source]);
           whole.set(at + k, row.parts);
         }
+        // Each string that the line folds has its own fold row under the line, in the one wording of every fold: its
+        // count and its noun, which a click opens in place, as its entry in the Details does.
+        for (const row of rows) {
+          for (const fold of row.folds) {
+            const before = row.text.slice(0, fold.at);
+            let kept = Math.min(fold.whole.length, before.length);
+            while (kept > 0 && !before.endsWith(fold.whole.slice(0, kept))) kept--;
+            const label = hidden(Math.max(1, fold.whole.length - kept), "character");
+            const stringRow = push(`${glyph.closed} ${label}`, undefined, line);
+            ellipses.push(stringRow);
+            stringRows.set(stringRow, { line, literal: fold.literal });
+            registered.push([`string:${line.step.id}:${line.number}:${fold.literal}`, { label }]);
+          }
+        }
         // The line that runs is lit, and so is the line that made the act that a running line awaits.
         if (line.runs || line.awaited !== undefined) colors.set(at, c.selected);
         for (let k = at; k < texts.length; k++) block(k);
@@ -587,7 +604,16 @@ export const details = part({
         states.set(row, markOf("thinks"));
       } else if (line.kind === "earlier") {
         writing = undefined;
-        ellipses.push(push(line.text, undefined, line));
+        const at = push(line.text, undefined, line);
+        ellipses.push(at);
+        if (options.key && line.text.startsWith(glyph.closed))
+          registered.push([
+            `${options.key}:${at}`,
+            {
+              label: line.text.slice(glyph.closed.length + 1),
+              open: options.more ? () => options.more?.(line) : undefined,
+            },
+          ]);
       } else {
         writing = undefined;
         comment(push(fit(line.text, room - 2)));
@@ -693,6 +719,8 @@ export const details = part({
       return [...out, ...marks, ...ellipsis()];
     };
     const target = this.code(texts.join("\n"), marks, hover, highlights);
+    // The Details of ⌥D list each fold row of the program, as they list each fold of the feed.
+    for (const [key, row] of registered) this.foldRows.set(key, { ...row, node: target });
     // Each row is cut to its room already, so none wraps: a row that is too long loses its end, and no mark falls under it.
     target.wrapMode = "none";
     const view = new Gutter(this.renderer, {
@@ -730,6 +758,9 @@ export const details = part({
     view.onMouseUp = (event) => {
       const row = event.y - view.y;
       const line = sources[row];
+      const stringRow = stringRows.get(row);
+      if (stringRow && !this.renderer.getSelection()?.getSelectedText())
+        return this.openString(stringRow.line, stringRow.literal);
       if (line?.kind === "earlier" && options.more && !this.renderer.getSelection()?.getSelectedText())
         return options.more(line);
       if (line?.kind !== "code" || this.renderer.getSelection()?.getSelectedText()) return;

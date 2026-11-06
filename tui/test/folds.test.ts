@@ -68,3 +68,62 @@ test("each fold of the feed opens from the Details of ⌥D, as a click on its ro
     for (let step = 0; step < 40 && session.folds["tail:keys"] !== false; step++) await frame();
     expect(session.folds["tail:keys"]).toBe(false);
   }));
+
+/** A line of code of a rung, as a program gives it. */
+const codeLine = (text: string) =>
+  ({
+    kind: "code",
+    step: { id: "rung1", kind: "rung" },
+    number: 1,
+    display: 1,
+    text,
+    acts: [],
+    hint: "",
+  }) as never;
+
+test("a long string in a folded word has the one fold row of the feed under its line, which a click and the Details open", () =>
+  composing(async ({ app, session }) => {
+    const long = `${"word ".repeat(48)}ENDMARK`;
+    const view = app.programView(
+      [codeLine(`brief = "${long}"`)],
+      100,
+      () => "",
+      () => "",
+      new Set(),
+      1,
+    );
+    const text = String(Reflect.get(Reflect.get(view, "target") as object, "content") ?? "");
+    const rows = text.split("\n");
+    expect(rows[0]).toContain('…"');
+    expect(rows[1]).toMatch(/^▸ \d+ more characters$/);
+    const row = app.foldRows.get("string:rung1:1:0");
+    expect(row?.label).toBe(rows[1]?.slice(2));
+    // The Details entry opens it in place, as a click on the row does.
+    app.openFold("string:rung1:1:0");
+    expect(session.folds["string:rung1:1:0"]).toBe(false);
+  }));
+
+test("the rolling window of a running word has the one fold row of the feed, with its count and plural, which the Details open", () =>
+  composing(async ({ app, session }) => {
+    const lines = Array.from(
+      { length: 12 },
+      (_, at) =>
+        ({ ...(codeLine(`x${at + 1} = ${at + 1}`) as object), number: at + 1, display: at + 1 }) as never,
+    );
+    const { lines: shown } = app.rolling(lines, "rung1:0", false);
+    const view = app.programView(
+      shown,
+      100,
+      () => "",
+      () => "",
+      new Set(),
+      2,
+      { key: "window:rung1:0", more: () => app.openWindow("rung1:0") },
+    );
+    const text = String(Reflect.get(Reflect.get(view, "target") as object, "content") ?? "");
+    expect(text.split("\n")[0]).toBe("▸ 6 earlier lines");
+    const [entry] = [...app.foldRows].filter(([key]) => key.startsWith("window:rung1:0"));
+    expect(entry?.[1].label).toBe("6 earlier lines");
+    entry?.[1].open?.();
+    expect(session.folds["window:rung1:0"]).toBe(false);
+  }));

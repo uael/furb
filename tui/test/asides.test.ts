@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { chainSorted } from "furb/life";
+import { chainNotes, chainSorted } from "furb/life";
 import { openEngine } from "../src/bridge.ts";
 import { Session } from "../src/session.ts";
 import { composing, ownPreferences } from "./composing.ts";
@@ -120,6 +120,32 @@ test("a note that no other note follows draws alone, with no header", async () =
       const shown = await frame();
       keep("notes-one-block-chain7", shown);
       expect(shown).not.toContain("› Notes");
+    },
+    size,
+    await recorded(),
+  ));
+
+/** The runs of notes of a chain of the session, each as the ids of its prompts, as the feed draws them. */
+const noted = (session: Session, chain: string) => {
+  const on = session.acts.filter((act) => act.on === chain);
+  const rows = new Map(session.acts.map((act) => [act.id, act]));
+  const found = chainSorted(on, rows, new Set(session.host.prompts.keys()));
+  return chainNotes(on, rows, found).map((run) => ({
+    prompts: run.prompts.map((one) => one.id),
+    count: run.count,
+  }));
+};
+
+// The runs come from the order of the acts and not from the order of the cards, as src/view/threads.rs proves on the
+// same record: the program of a thread stands between the two notices of chain2 and ends no run, the notices that the
+// ladder of a thread made on chain1 stand in that ladder, and a lone notice is a run of one.
+test("the notes of a chain that follow one another are one run, which the feed draws and does not find", async () =>
+  composing(
+    async ({ session }) => {
+      await session.refresh();
+      expect(noted(session, "chain2")).toEqual([{ prompts: ["prompt47", "prompt64"], count: 2 }]);
+      expect(noted(session, "chain7")).toEqual([{ prompts: ["prompt36"], count: 1 }]);
+      expect(noted(session, "chain1")).toEqual([]);
     },
     size,
     await recorded(),

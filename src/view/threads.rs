@@ -1,13 +1,14 @@
 //! The threads of a chain: each prompt to a model that is no message of another thread, with its
 //! messages and what it asks the operator, nested under the thread whose ladder made it.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use super::{
   act::{Act, Kind, operator},
+  fold::followed,
   state::State,
 };
 
@@ -211,6 +212,63 @@ pub fn chain_asides(on: &[&Act], rows: &Rows<'_>) -> Vec<ChainAside> {
   sorted(on, rows).1
 }
 
+/// A run of notes: the asides of a chain that are no question and follow one another in its feed
+/// with no card of another kind between them, which a window draws as one block. `unread` counts
+/// the notes that began or ended after the place up to which the operator read the chain.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct NoteRun {
+  pub prompts: Vec<String>,
+  pub count: usize,
+  pub unread: usize,
+}
+
+/// The runs of notes of one chain, from its acts in the order they began. Only a step of the top of
+/// the chain draws a card: an act that a rung of the chain made stands in the program of that rung,
+/// a message stands in its thread or its note, and a reply, a grant, a chain and a rung that the
+/// chain wrote to retell its source draw none. Each other act ends the run that it follows, as a
+/// thread, a question, a command and a word of the operator do. `read` is the place up to which
+/// the operator read the chain, which only a window knows.
+pub fn chain_notes(on: &[&Act], rows: &Rows<'_>, read: u64) -> Vec<NoteRun> {
+  let (threads, asides) = sorted(on, rows);
+  let notes: HashSet<&str> = asides
+    .iter()
+    .filter(|one| !matches!(one.aside, Aside::Question(_)))
+    .map(|one| one.prompt.as_str())
+    .collect();
+  let inside: HashSet<&str> = threads
+    .iter()
+    .flat_map(|one| one.messages.iter().chain(&one.asked))
+    .chain(asides.iter().flat_map(|one| &one.messages))
+    .map(String::as_str)
+    .collect();
+  let mut runs: Vec<NoteRun> = Vec::new();
+  let mut open = false;
+  for act in on {
+    let maker = rows.get(act.by.as_str());
+    let below = maker.is_some_and(|one| one.chain == act.chain && one.kind != Kind::Chain);
+    let retold = act.kind == Kind::Rung && maker.is_some_and(|one| one.kind == Kind::Chain);
+    let silent = act.kind == Kind::Chain
+      || !followed(act.kind.as_str())
+      || matches!(&act.kind, Kind::Other(kind) if kind == "grant");
+    if below || retold || silent || inside.contains(act.id.as_str()) {
+      continue;
+    }
+    if !notes.contains(act.id.as_str()) {
+      open = false;
+      continue;
+    }
+    if !open {
+      runs.push(NoteRun::default());
+      open = true;
+    }
+    let Some(run) = runs.last_mut() else { continue };
+    run.prompts.push(act.id.clone());
+    run.count += 1;
+    run.unread += usize::from(act.ended.unwrap_or(act.began) > read);
+  }
+  runs
+}
+
 /// The threads and the asides of one chain.
 fn sorted(on: &[&Act], rows: &Rows<'_>) -> (Vec<ChainThread>, Vec<ChainAside>) {
   let mut out: Vec<ChainThread> = Vec::new();
@@ -381,7 +439,7 @@ mod tests {
 
   use serde_json::{Value, json};
 
-  use super::{Aside, Rows, chain_asides, chain_threads};
+  use super::{Aside, NoteRun, Rows, chain_asides, chain_notes, chain_threads};
   use crate::view::{Act, Fold};
 
   /// The acts of the record of a conductor that the tests of the TUI read, with after it what a
@@ -456,5 +514,32 @@ mod tests {
     assert_eq!(threads, names(&["prompt3"]));
     let notices = [("prompt47", Aside::Notice), ("prompt64", Aside::Notice)];
     assert_eq!(asides, notices.map(|(id, aside)| (id.to_owned(), aside)).to_vec());
+  }
+
+  /// The runs of notes of a chain, each with its prompts and its unread count.
+  fn runs(acts: &[Act], chain: &str, read: u64) -> Vec<(Vec<String>, usize)> {
+    let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
+    let on: Vec<&Act> = acts.iter().filter(|act| act.chain == chain).collect();
+    let notes = chain_notes(&on, &rows, read);
+    assert!(notes.iter().all(|run| run.count == run.prompts.len()), "{notes:?}");
+    notes.into_iter().map(|NoteRun { prompts, unread, .. }| (prompts, unread)).collect()
+  }
+
+  #[test]
+  fn the_notes_that_follow_one_another_in_a_chain_stand_as_one_run_with_the_ones_not_yet_read() {
+    let acts = conductor();
+    // The two notices of chain2 follow one another, since the program of its thread stands between
+    // them; the one notice of chain7 stands alone.
+    let two = names(&["prompt47", "prompt64"]);
+    assert_eq!(runs(&acts, "chain2", 0), [(two.clone(), 2)]);
+    assert_eq!(runs(&acts, "chain7", 0), [(names(&["prompt36"]), 1)]);
+    // A note that began after the place that was read counts as unread, and none else does.
+    let began = |id: &str| acts.iter().find(|act| act.id == id).map(|act| act.began).unwrap();
+    assert_eq!(runs(&acts, "chain2", began("prompt47")), [(two.clone(), 1)]);
+    assert_eq!(runs(&acts, "chain2", u64::MAX), [(two, 0)]);
+    // On chain1 the word of the operator that runs between the wake and the acknowledgment of that
+    // word ends the first run, and the notices that its threads made stand in their programs.
+    let (wake, rung) = (names(&["prompt9001"]), names(&["prompt9003"]));
+    assert_eq!(runs(&acts, "chain1", 0), [(wake, 1), (rung, 1)]);
   }
 }
