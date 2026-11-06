@@ -189,7 +189,8 @@ impl Host for Outside {
           Some(job) => self.stepping.push(job),
           None => drop(self.stepping.pop()),
         }
-        // Each step of a word starts a stretch of the bound, and a round trip to the host starts none.
+        // Each step of a word starts a stretch of the bound, and a round trip to the host
+        // starts none.
         crate::sand::step(bounded && !self.stepping.is_empty());
         Ok(Object::bool(sand.bound(bounded)))
       }
