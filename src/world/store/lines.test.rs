@@ -4,9 +4,9 @@ use std::{fs, io::Write};
 
 use serde_json::json;
 
-use super::{Lines, heads, stamped};
-use crate::testing::Yard;
+use super::{Lines, backwards, heads, stamped};
 use crate::world::{kept, store::Store};
+use crate::{testing::Yard, value::Object};
 
 /// A record of its own for one test, which does not stand yet.
 fn place(name: &str) -> Yard {
@@ -63,6 +63,60 @@ fn the_heads_of_a_record_are_its_entries_of_some_kinds_in_order_and_no_other_lin
       "[['made', 'chain1', 'store', 'abd', 1]]",
     ]
   );
+}
+
+/// A record whose lines cross every size of chunk: heads of several kinds, a line that does not
+/// parse, a line much longer than the chunks, a letter past ASCII, and a last line that no end of
+/// line follows.
+fn crossing(name: &str) -> (Yard, String) {
+  let at = place(name);
+  let long = "x".repeat(300);
+  let text = format!(
+    "[[\"done\",\"stand1\",\"operator\",[\"wanted-1\"]],1]\n\
+     [[\"tell\",\"rung2\",\"chain1\",[\"{long}\"]],2]\n\
+     [[\"done\",\"stand2\",\"operator\",[\"other \u{2665}\"]],3]\n\
+     [[\"done\",\"stand3\", not json\n\
+     \n\
+     [[\"done\",\"stand4\",\"operator\",[\"wanted-4\"]]]\n\
+     [[\"done\",\"stand5\",\"operator\",[\"wanted-\"",
+  );
+  fs::write(&at, &text).unwrap();
+  (at, text)
+}
+
+#[test]
+fn the_last_entry_taken_from_the_end_is_the_one_taken_from_the_head_at_every_size_of_chunk() {
+  let (at, _) = crossing("backwards");
+  let starts = [r#"[["done","stand"#.to_owned()];
+  let pick = |entry: Object| {
+    let shown = entry.as_ref().py_repr();
+    shown.contains("wanted").then_some(shown)
+  };
+  let head = heads(&at, &starts).unwrap().into_iter().rev().find_map(pick);
+  assert_eq!(head.as_deref(), Some("[['done', 'stand4', 'operator', ['wanted-4']]]"));
+  for chunk in (1..=64).chain([1 << 20]) {
+    assert_eq!(backwards(&at, &starts, chunk, pick).unwrap(), head, "a chunk of {chunk}");
+  }
+  let never = |_: Object| None::<()>;
+  assert_eq!(backwards(&at, &starts, 8, never).unwrap(), None);
+  let first = |entry: Object| entry.as_ref().py_repr().contains("wanted-1").then_some(());
+  assert_eq!(backwards(&at, &starts, 8, first).unwrap(), Some(()));
+}
+
+#[test]
+fn a_read_from_the_end_stops_at_the_entry_it_takes_and_a_record_that_stands_not_holds_none() {
+  let (at, _) = crossing("stops");
+  let starts = [r#"[["done","stand"#.to_owned()];
+  let mut seen = 0;
+  let found = backwards(&at, &starts, 8, |entry: Object| {
+    seen += 1;
+    Some(entry.as_ref().py_repr())
+  })
+  .unwrap();
+  assert_eq!(found.as_deref(), Some("[['done', 'stand4', 'operator', ['wanted-4']]]"));
+  assert_eq!(seen, 1);
+  let gone = place("gone");
+  assert_eq!(backwards(&gone, &starts, 8, |_: Object| Some(())).unwrap(), None);
 }
 
 #[test]

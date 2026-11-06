@@ -1,7 +1,6 @@
 //! The catalog of models, read from a snapshot of the tests and from the snapshot the crate carries, with the
 //! credentials a test gives, so no test reads the environment or the network.
 
-#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
 #![expect(
   clippy::let_underscore_must_use,
   reason = "debt: a let _ drops a value that must be used"
@@ -9,6 +8,7 @@
 #![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
 #![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
 
+use crate::testing::on_reactor;
 use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 
 use rig_core::{completion::CompletionRequest, message::Message};
@@ -27,7 +27,6 @@ use super::{
   Catalog, DOCTRINE, SNAPSHOT, clamp, doctrine_in, listed, parsed,
   update::{MODELS, PI},
 };
-use crate::ear::reactor;
 
 /// A snapshot of the tests: a provider of each dialect, and models that think in each way.
 const LISTED: &str = r#"{
@@ -318,7 +317,7 @@ fn a_model_whose_credential_stands_nowhere_is_refused_when_it_is_asked() {
     told,
     thought: None,
   };
-  let Err(no) = reactor().block_on((model.answers)(asked)) else {
+  let Err(no) = on_reactor((model.answers)(asked)) else {
     panic!("a model with no credential answers nothing")
   };
   assert!(no.to_string().contains("set GOOGLE_API_KEY or GEMINI_API_KEY"), "{no}");
@@ -690,7 +689,7 @@ fn a_configured_claude_prefix_reaches_completions_and_search_and_project_setting
   assert!(models.find("openai:gpt-5").is_some(), "other providers stay");
   let model = models.find("claude-cli:sonnet").unwrap();
   let asked = asked_of("claude-cli:sonnet");
-  let answer = reactor().block_on((model.answers)(asked)).unwrap();
+  let answer = on_reactor((model.answers)(asked)).unwrap();
   let Answer::Response(answer) = answer else { panic!("a Claude response") };
   assert_eq!(answer.choice, [rig_core::message::AssistantContent::text("close(\"reply 1\")")]);
   let pids = yard.pids();
@@ -711,7 +710,7 @@ fn a_configured_claude_prefix_reaches_completions_and_search_and_project_setting
   let fresh = configured().unwrap();
   let model = fresh.find("claude-cli:sonnet").unwrap();
   let search = model.search.as_ref().unwrap();
-  let got = reactor().block_on(search("what is rust".to_owned())).unwrap();
+  let got = on_reactor(search("what is rust".to_owned())).unwrap();
   let (args, query) = got.split_once("---\n").unwrap();
   assert!(args.starts_with("[run]\n[3]\n[two words]\n[$HOME;literal]\n[-p]\n"), "{args}");
   assert_eq!(query, "what is rust");
@@ -817,7 +816,7 @@ fn first_turn(model: &Model) {
     told: Arc::new(|_, _| {}),
     thought: None,
   };
-  let Ok(Answer::Response(answer)) = reactor().block_on((model.answers)(asked)) else {
+  let Ok(Answer::Response(answer)) = on_reactor((model.answers)(asked)) else {
     panic!("a Claude response")
   };
   assert_eq!(answer.choice, [rig_core::message::AssistantContent::text("close(\"reply 1\")")]);
@@ -859,7 +858,7 @@ fn configured_claude_accounts_give_their_token_to_a_turn_and_to_a_search() {
   let fresh = configured().unwrap();
   let model = fresh.find("claude-cli:sonnet").unwrap();
   let search = model.search.as_ref().unwrap();
-  let got = reactor().block_on(search("q".to_owned())).unwrap();
+  let got = on_reactor(search("q".to_owned())).unwrap();
   assert_eq!(got, "token=tok-a\n---\nq");
 }
 

@@ -312,10 +312,10 @@ fix what your change broke, and report what was broken before.
 - `sh script/build-slot.sh <command> [argument...]`: run a command that builds, as `cargo`, `bun run build`, `uv sync`,
   `uv run pytest` or `git commit` (its hooks run cargo and the suite), in one of the slots of builds that all the
   worktrees of the machine share, with at most 4 jobs of cargo. A slot is a folder of `/tmp/furb-build-slots-<uid>`
-  that holds the pid of its holder, and the slot of a holder that ended goes to the next build. `FURB_BUILD_SLOTS` sets
-  the slots (one for each 12 GB of memory, at least 1; `FURB_BUILD_MEM_GB` replaces the memory the machine reports),
-  `FURB_BUILD_JOBS` the cap of jobs (4), `FURB_BUILD_WAIT` the seconds to wait for a slot (1200, then exit 75) and
-  `FURB_BUILD_DIR` the folder. The workers of the conductor build only through it: with no cap, 28 rustc processes took
+  that holds the pid of its holder, and the slot of a holder that ended, or whose pid went to another process, goes to
+  the next build. `FURB_BUILD_SLOTS` sets the slots (one for each 9 GB of memory, at least 1; `FURB_BUILD_MEM_GB`
+  replaces the memory the machine reports), `FURB_BUILD_JOBS` the cap of jobs (4), `FURB_BUILD_WAIT` the seconds to
+  wait for a slot (1200, then exit 75) and `FURB_BUILD_DIR` the folder. The workers of the conductor build only through it: with no cap, 28 rustc processes took
   13.8 GB, and the machine ran out of memory.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
   whole.
@@ -423,6 +423,9 @@ fix what your change broke, and report what was broken before.
   guards a defect that a life of the owner met, and fails on the commit before its fix. `bun run test` runs them with
   the other tests, on macOS and Linux, so they are a required check of each pull request. Each fix of a path of the
   operator adds a scenario that fails on the code before the fix.
+  `tui/scenarios/walk.ts` walks the TUI the same way for the audit of the skill converge-tui: each key of the table,
+  each shape of answer, the sizes, and the newest records of the project read-only, with probes that find a defect
+  in a frame with no judge. Its scenario holds only that the walk goes to its end.
 - `bun run demo` and `bun run tui`: the TUI on the demo session, which asks no model, or on a real life.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
   `tui/src/commands.ts`.

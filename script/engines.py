@@ -20,11 +20,12 @@ import tempfile
 from pathlib import Path
 
 WORDS = 7
-"""The words of a fact made that holds no texts: its kind, its chain, its speaker, the digest, the version, the schema and
-the release, each null that an older build did not write."""
+"""The words of a fact made that holds no texts: its kind, its chain, its speaker, the digest, the version, the schema
+and the release, each null that an older build did not write."""
 
 FIX = "656c26163"
-"""The commit by which a replay goes on past the raise of an ear (#1281), which each older engine takes where it applies."""
+"""The commit by which a replay goes on past the raise of an ear (#1281), which each older engine takes where it
+applies."""
 
 
 def git(*args: str, at: str | None = None, given: str | None = None) -> str:

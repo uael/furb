@@ -609,6 +609,7 @@ export const blocks = part({
   openFold(key: string): void {
     const w = this.session;
     w.folds[key] = false;
+    this.stringLines = undefined;
     w.save();
     this.renderContent();
   },

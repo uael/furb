@@ -86,6 +86,10 @@ pub(crate) fn login(_: &Accepted) -> Result<String, TransportError> {
 }
 
 /// The login of the user of the daemon.
+#[expect(
+  unsafe_code,
+  reason = "the login of the user is a call of Windows that no safe crate of the lock makes"
+)]
 pub(crate) fn own() -> Result<String, TransportError> {
   let mut name = [0u16; 257];
   let mut size: u32 = 257;
@@ -105,6 +109,10 @@ fn piped(folder: &Path) -> String {
 
 /// A security descriptor that gives all rights to the owner alone, the user of the daemon, and
 /// none to another, handed to `made` and freed once `made` returns.
+#[expect(
+  unsafe_code,
+  reason = "an access list of Windows is made and freed only through calls of Windows"
+)]
 fn owner_alone<T>(made: impl FnOnce(*mut SECURITY_ATTRIBUTES) -> T) -> io::Result<T> {
   let sddl: Vec<u16> = OWNER_ALONE.encode_utf16().chain([0]).collect();
   let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();
@@ -133,6 +141,10 @@ fn owner_alone<T>(made: impl FnOnce(*mut SECURITY_ATTRIBUTES) -> T) -> io::Resul
 
 /// One instance of the pipe, under the access list of the owner alone. The first instance is
 /// refused when another daemon holds the pipe.
+#[expect(
+  unsafe_code,
+  reason = "tokio makes a pipe under an access list only through an unsafe call"
+)]
 fn instance(place: &str, first: bool) -> Result<NamedPipeServer, TransportError> {
   let listening = |source| TransportError::Listen { place: place.to_owned(), source };
   let mut options = ServerOptions::new();
@@ -152,6 +164,10 @@ fn instance(place: &str, first: bool) -> Result<NamedPipeServer, TransportError>
 
 /// The folder of the files of the daemon made, under the access list of its owner alone when it
 /// is new, and refused when it is not a folder, as a link that points elsewhere.
+#[expect(
+  unsafe_code,
+  reason = "std makes no folder under an access list, which only a call of Windows does"
+)]
 pub(crate) fn guarded(folder: &Path) -> Result<(), TransportError> {
   let made = |source| TransportError::Folder { folder: folder.to_owned(), source };
   if let Some(parent) = folder.parent().filter(|parent| !parent.as_os_str().is_empty()) {
@@ -176,6 +192,10 @@ pub(crate) fn guarded(folder: &Path) -> Result<(), TransportError> {
 
 /// A new file that only its owner reaches, written whole, in the place of any that stood there:
 /// its access list is given at its creation, so no other user opens it, even for a moment.
+#[expect(
+  unsafe_code,
+  reason = "std makes no file under an access list, which only a call of Windows does"
+)]
 pub(crate) fn private(file: &Path, bytes: &[u8]) -> io::Result<()> {
   match std::fs::remove_file(file) {
     Err(no) if no.kind() != io::ErrorKind::NotFound => return Err(no),
@@ -226,6 +246,7 @@ mod tests {
   use super::{guarded, private, widened};
 
   /// The access list of a file or a folder, as SDDL.
+  #[expect(unsafe_code, reason = "the access list of a file is read only through calls of Windows")]
   fn listed(path: &Path) -> String {
     let wide = widened(path);
     let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();

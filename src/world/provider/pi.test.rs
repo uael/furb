@@ -1,7 +1,6 @@
 //! The stream of pi-ai, read from chunks that a test gives, so no test asks the network.
 
-#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
-
+use crate::testing::block_on;
 use std::collections::VecDeque;
 
 use bytes::Bytes;
@@ -20,7 +19,7 @@ fn a_letter_that_two_chunks_of_the_stream_split_is_read_whole() {
   let (buffer, parts) = (Vec::new(), VecDeque::new());
   let mut heard = Heard { body: Box::pin(body), buffer, parts, over: false };
   let mut said = Vec::new();
-  while let Some(part) = futures::executor::block_on(heard.next()) {
+  while let Some(part) = block_on(heard.next()) {
     if let Ok(RawStreamingChoice::Message(text)) = part {
       said.push(text);
     }
@@ -33,6 +32,6 @@ fn an_event_that_lacks_a_field_its_protocol_gives_fails_the_reply() {
   let body = futures::stream::iter([events.as_slice()].map(|one| Ok(Bytes::copy_from_slice(one))));
   let (buffer, parts) = (Vec::new(), VecDeque::new());
   let mut heard = Heard { body: Box::pin(body), buffer, parts, over: false };
-  assert!(matches!(futures::executor::block_on(heard.next()), Some(Err(_))));
-  assert!(futures::executor::block_on(heard.next()).is_none());
+  assert!(matches!(block_on(heard.next()), Some(Err(_))));
+  assert!(block_on(heard.next()).is_none());
 }

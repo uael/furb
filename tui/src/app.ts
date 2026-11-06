@@ -329,7 +329,7 @@ export class App {
    * that node again between the press and the release, and never when it drew another control in its place. */
   pressedAt?: { x: number; y: number; face: string };
   /** The rows of the folds of the feed by the key of each fold, with what each says, which the Details of ⌥D open. */
-  readonly foldRows = new Map<string, { label: string; node: Renderable }>();
+  readonly foldRows = new Map<string, { label: string; node: Renderable; open?: () => void }>();
   readonly cards = new Map<
     string,
     {

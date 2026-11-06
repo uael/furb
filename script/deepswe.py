@@ -841,7 +841,6 @@ async def worked(told: str, app: Path, run_dir: Path, args: argparse.Namespace, 
   record = run_dir / "record.jsonl"
   enable_compaction(app)
   world, root, held = lived(record, app, args.to or None, keeps=True)
-  await engine.rung("compacted()", on=root)
   # The actor that the life stands on is the one the archive names, the default actor of the crate when unsaid.
   args.to = args.to or str(engine.standing()[2])
   say(f"[deepswe] life on {app}, root {root}, {len(held)} facts kept")

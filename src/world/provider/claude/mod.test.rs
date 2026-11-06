@@ -1,7 +1,6 @@
 //! The claude command line as a model of rig, driven against a command line that answers from a script, which
 //! `fake-claude.sh` says.
 
-#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
 #![expect(clippy::expect_used, reason = "a test blocks on its runtime and fails by a panic")]
 #![expect(
   clippy::let_underscore_must_use,
@@ -9,6 +8,7 @@
 )]
 #![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
 
+use crate::testing::{on_reactor, pause};
 use std::{
   fs,
   os::unix::fs::PermissionsExt,
@@ -36,7 +36,7 @@ use super::{
   Account, Claude, Completion, Source, Switch,
   conversation::{cached, lasting},
 };
-use crate::{ear::reactor, testing};
+use crate::testing;
 
 /// The fake command line, which the tests of the command line of furb run too.
 const FAKE: &str = include_str!("fake-claude.sh");
@@ -149,7 +149,7 @@ fn ran() -> Arc<Fake> {
         Err(no) if no.kind() == std::io::ErrorKind::ExecutableFileBusy && tries < 50 => tries += 1,
         got => break got,
       }
-      std::thread::sleep(Duration::from_millis(10));
+      pause(Duration::from_millis(10));
     };
     assert!(status.expect("the fake starts").success(), "the fake ran once");
     Arc::new(Fake { _at: at, bin })
@@ -191,7 +191,7 @@ fn asked(
   messages: &[Message],
   settings: Value,
 ) -> Result<rig_core::completion::CompletionResponse, CompletionError> {
-  reactor().block_on(model.completion(request("ENGINE ONLY", messages, settings)))
+  on_reactor(model.completion(request("ENGINE ONLY", messages, settings)))
 }
 
 #[test]
@@ -264,7 +264,7 @@ fn a_turn_waits_for_a_program_that_an_update_took_away_and_then_names_the_progra
   yard.away();
   let back = std::thread::scope(|scope| {
     scope.spawn(|| {
-      std::thread::sleep(Duration::from_millis(300));
+      pause(Duration::from_millis(300));
       yard.back();
     });
     asked(&model, &[user("first")], settings.clone())
@@ -426,7 +426,7 @@ fn a_turn_dropped_after_the_command_line_heard_it_leaves_the_next_turn_to_send_o
       tokio::time::sleep(Duration::from_millis(10)).await;
     }
   };
-  let raced = reactor().block_on(async {
+  let raced = on_reactor(async {
     tokio::time::timeout(Duration::from_secs(10), select(Box::pin(turn), Box::pin(heard))).await
   });
   let Ok(Either::Right(((), turn))) = raced else {
@@ -681,18 +681,17 @@ fn a_conversation_that_grows_out_of_another_forks_it() {
 fn a_thought_streams_as_it_comes_and_settles_once_at_its_place() {
   let yard = Yard::new("thought");
   let model = yard.claude(10_000).completion_model("sonnet");
-  let (texts, choice) = reactor()
-    .block_on(async {
-      let mut stream = model.stream(request("ENGINE ONLY", &[user("THINK")], json!({}))).await?;
-      let mut texts = Vec::new();
-      while let Some(one) = stream.next().await {
-        if let StreamedAssistantContent::Text(text) = one? {
-          texts.push(text.text);
-        }
+  let (texts, choice) = on_reactor(async {
+    let mut stream = model.stream(request("ENGINE ONLY", &[user("THINK")], json!({}))).await?;
+    let mut texts = Vec::new();
+    while let Some(one) = stream.next().await {
+      if let StreamedAssistantContent::Text(text) = one? {
+        texts.push(text.text);
       }
-      Ok::<_, CompletionError>((texts, stream.choice))
-    })
-    .unwrap();
+    }
+    Ok::<_, CompletionError>((texts, stream.choice))
+  })
+  .unwrap();
   assert_eq!(texts, ["close(", "\"reply 1\")"]);
   let thought = Reasoning::new_with_signature("hmm", Some("sig".to_owned()));
   let expected =
@@ -718,7 +717,7 @@ fn a_program_that_appears_after_a_delay_starts_its_turn() {
     .completion_model("sonnet");
   let source = yard.at.join("claude");
   let placed = std::thread::spawn(move || {
-    std::thread::sleep(Duration::from_millis(300));
+    pause(Duration::from_millis(300));
     fs::rename(source, later).expect("the program appears");
   });
   let got = asked(&model, &[user("hi")], json!({}));
@@ -732,7 +731,7 @@ fn a_process_that_writes_more_on_its_stderr_than_its_pipe_holds_while_it_ends_fa
   let yard = Yard::new("loud-end");
   let model = yard.claude(10_000).completion_model("sonnet");
   let turn = model.completion(request("ENGINE ONLY", &[user("LOUD")], json!({})));
-  let no = reactor().block_on(async { tokio::time::timeout(Duration::from_secs(10), turn).await });
+  let no = on_reactor(async { tokio::time::timeout(Duration::from_secs(10), turn).await });
   let no = no.expect("the turn ends").unwrap_err();
   assert!(no.to_string().contains("Claude exited (3): eee"), "{no}");
 }
@@ -744,7 +743,7 @@ fn a_process_that_writes_more_on_its_stderr_than_its_pipe_holds_takes_a_long_inp
   let model = yard.claude(10_000).completion_model("sonnet");
   let long = "a".repeat(262_144);
   let turn = model.completion(request("ENGINE ONLY", &[user(&long)], json!({})));
-  let got = reactor().block_on(async { tokio::time::timeout(Duration::from_secs(10), turn).await });
+  let got = on_reactor(async { tokio::time::timeout(Duration::from_secs(10), turn).await });
   assert!(got.expect("the turn ends").is_ok(), "the turn is answered");
 }
 
@@ -767,7 +766,7 @@ fn a_turn_that_makes_no_progress_fails_at_its_stall_with_the_last_odd_line_and_e
 /// One turn of a model that answers no request, bounded by ten seconds.
 fn ended(model: &Completion, text: &str) -> Result<CompletionError, String> {
   let turn = model.completion(request("ENGINE ONLY", &[user(text)], json!({})));
-  let got = reactor().block_on(async { tokio::time::timeout(Duration::from_secs(10), turn).await });
+  let got = on_reactor(async { tokio::time::timeout(Duration::from_secs(10), turn).await });
   match got {
     Ok(Err(no)) => Ok(no),
     Ok(Ok(response)) => Err(format!("the turn was answered: {:?}", response.choice)),
@@ -820,7 +819,7 @@ fn a_turn_that_is_dropped_ends_its_process() {
       tokio::time::sleep(Duration::from_millis(10)).await;
     }
   };
-  let raced = reactor().block_on(async {
+  let raced = on_reactor(async {
     tokio::time::timeout(Duration::from_secs(10), select(Box::pin(turn), Box::pin(heard))).await
   });
   let Ok(Either::Right(((), turn))) = raced else {
@@ -843,7 +842,7 @@ fn a_turn_dropped_while_the_keeper_hands_it_the_conversation_leaves_the_conversa
       tokio::time::sleep(Duration::from_millis(10)).await;
     }
   };
-  let raced = reactor().block_on(async {
+  let raced = on_reactor(async {
     tokio::time::timeout(Duration::from_secs(10), select(Box::pin(first), Box::pin(heard))).await
   });
   let Ok(Either::Right(((), first))) = raced else {
@@ -851,17 +850,16 @@ fn a_turn_dropped_while_the_keeper_hands_it_the_conversation_leaves_the_conversa
   };
   let second = model.completion(request("ENGINE ONLY", &[user("second")], settings.clone()));
   let mut second = Box::pin(second);
-  let waited = reactor()
-    .block_on(async { tokio::time::timeout(Duration::from_millis(200), &mut second).await });
+  let waited =
+    on_reactor(async { tokio::time::timeout(Duration::from_millis(200), &mut second).await });
   assert!(waited.is_err(), "the second turn waits for the conversation that the first one holds");
   drop(first);
   // The keeper hands the conversation to the second turn, which is dropped before it takes it, as a
   // reply that is cancelled.
-  std::thread::sleep(Duration::from_millis(200));
+  pause(Duration::from_millis(200));
   drop(second);
   let third = model.completion(request("ENGINE ONLY", &[user("third")], settings));
-  let got =
-    reactor().block_on(async { tokio::time::timeout(Duration::from_secs(10), third).await });
+  let got = on_reactor(async { tokio::time::timeout(Duration::from_secs(10), third).await });
   let Ok(got) = got else { panic!("the third turn waited for a conversation that no turn holds") };
   got.unwrap();
 }
@@ -877,15 +875,14 @@ pub(crate) fn gone(pid: &str) -> bool {
     if !there || status.contains("State:\tZ") {
       return true;
     }
-    std::thread::sleep(Duration::from_millis(20));
+    pause(Duration::from_millis(20));
   }
   false
 }
 
 /// The models of a yard: what the scripted command line says of them, and how many times it was asked.
 fn said(claude: &Claude) -> Vec<(String, u64, Vec<String>)> {
-  reactor()
-    .block_on(claude.models())
+  on_reactor(claude.models())
     .iter()
     .map(|one| (one.name.clone(), one.window, one.efforts.iter().map(|e| e.0.clone()).collect()))
     .collect()
@@ -1090,8 +1087,8 @@ fn the_command_line_is_signed_in_when_any_of_its_accounts_is() {
     let accounts = listed(&yard, names);
     Claude::with_accounts(Some(script.clone()), Vec::new(), accounts, Switch::Failover, None)
   };
-  assert!(reactor().block_on(claude(&["a", "b"]).signed()));
-  assert!(!reactor().block_on(claude(&["a"]).signed()));
+  assert!(on_reactor(claude(&["a", "b"]).signed()));
+  assert!(!on_reactor(claude(&["a"]).signed()));
 }
 
 #[test]
