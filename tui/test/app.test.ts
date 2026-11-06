@@ -355,7 +355,12 @@ test("the block of a word whose model works holds the loader in the column of th
     await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
     await session.refresh();
     const step = session.activity.find((act) => act.kind === "rung" && !act.done)?.id ?? "";
-    const rows = (await frame()).split("\n");
+    // The feed draws the block of the step at a later tick than the refresh, later on a slow runner.
+    let rows = (await frame()).split("\n");
+    for (let tries = 0; tries < 40 && !rows.some((row) => row.includes(" · thinking")); tries++) {
+      await new Promise((done) => setTimeout(done, 50));
+      rows = (await frame()).split("\n");
+    }
     const label = rows.find((row) => row.includes(" · thinking")) ?? "";
     expect(label).toMatch(/[\u2800-\u28ff] +\S+ · thinking/);
     expect(label).not.toContain("word · ");
