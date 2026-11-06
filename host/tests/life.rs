@@ -208,7 +208,9 @@ async fn the_configs_of_a_life_are_read_and_changed_through_its_commands_and_a_c
   let Reply::Values(settings) = life.send(Command::Settings).await.unwrap() else {
     panic!("the settings are values")
   };
-  assert_eq!(settings, vec![json!({"key": ["max_thinking_tokens"], "value": 0, "layer": "local"})]);
+  let thinking = settings.iter().find(|one| one["key"] == json!(["max_thinking_tokens"])).unwrap();
+  assert_eq!((&thinking["value"], &thinking["layer"]), (&json!(0), &json!("local")));
+  assert_eq!(thinking["property"]["type"], json!("integer"), "the schema names the key");
   let wrong =
     Change { key: key(&["providers", "nothing"]), value: Some(json!(true)), layer: Layer::Project };
   let refused = life.send(Command::Configure(wrong)).await;
@@ -357,7 +359,7 @@ async fn the_life_gives_the_meaning_of_the_acts_that_it_told() {
   assert_eq!(desk["questions"], json!(1), "{desk}");
   assert_eq!(desk["asks"][0]["id"], json!(asked));
   assert_eq!(desk["asks"][0]["choices"], json!(["yes", "no"]));
-  let threads = Command::Threads { on: None, at: None };
+  let threads = Command::Threads { on: None, at: None, read: None };
   let Reply::Value(now) = life.send(threads).await.unwrap() else { panic!("a value") };
   assert_eq!(now["state"], json!("asks"), "{now}");
   let Reply::Values(moments) = life.send(Command::Moments).await.unwrap() else {

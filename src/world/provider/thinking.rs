@@ -10,7 +10,7 @@ pub(super) const ENV_THINKING: &str = "MAX_THINKING_TOKENS";
 
 /// The key of a config of the project that gives the most tokens of thought of a model in one turn,
 /// and the setting under which the provider tells it to the claude command line.
-pub(super) const KEY_THINKING: &str = "max_thinking_tokens";
+pub(crate) const KEY_THINKING: &str = "max_thinking_tokens";
 
 /// The most tokens of thought of a model in one turn when neither the environment nor the config
 /// gives one: a model that thinks more than this rarely writes a word in the turn. A model whose

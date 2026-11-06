@@ -92,10 +92,10 @@ pub(crate) const CHEAP: f64 = 1.0;
 
 /// The key of a config whose map gives a model the class that it names, over the one of the
 /// catalog.
-pub(super) const KEY_CLASSES: &str = "classes";
+pub(crate) const KEY_CLASSES: &str = "classes";
 
 /// The key of a config whose list names the models of automatic work, the first first.
-pub(super) const KEY_AUTOMATIC: &str = "automatic";
+pub(crate) const KEY_AUTOMATIC: &str = "automatic";
 
 /// What the configs say of the models: the class of each model that a config names, and the models
 /// of automatic work.

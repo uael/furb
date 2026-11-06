@@ -259,8 +259,8 @@ fn a_manifest_names_the_view_of_an_extension_for_a_tui_and_no_other_field_of_fur
   );
   folder(&at.join("bad"), &skill("note", &[("word", "note.py"), ("tui", "tui.ts")]), "x = 1\n");
   let manifest = at.join("bad").join("SKILL.md").display().to_string();
-  let fields =
-    "furb-word, furb-life, furb-interface, furb-default, furb-plays, furb-view, furb-process";
+  let fields = "furb-word, furb-life, furb-interface, furb-default, furb-plays, furb-view, furb-process, \
+     furb-config";
   assert_eq!(
     load("note", &at.join("bad"), &places(&at)).unwrap_err().message(),
     format!("The manifest gives furb-tui, and the fields of furb are {fields}: {manifest}")
@@ -569,6 +569,35 @@ fn an_extension_of_a_config_that_does_not_load_does_not_play_and_the_others_do()
       "The extension near does not play: The word note.py binds filled of the engine at its top, \
        which each word of a chain reads: give each a name of its own: {manifest}"
     )]
+  );
+}
+
+#[test]
+fn an_extension_of_the_config_of_the_user_goes_through_the_same_check_and_a_refused_word_leaves_no_copy()
+ {
+  let at = place("userword");
+  let places = places(&at);
+  let (user, project) = (at.join("user"), at.join("project"));
+  let manifest = skill("mine", &[("word", "note.py")]);
+  config(&user.join("config.json"), r#"{"extensions": {"mine": "mine"}}"#);
+  folder(&user.join("mine"), &manifest, "def filled(template: str) -> str:\n  return template\n");
+  let (on, refused) = configured(&places, &project).unwrap();
+  assert!(on.iter().all(|one| one.name != "mine"));
+  let file = user.join("mine").join("SKILL.md").display().to_string();
+  assert_eq!(
+    refused,
+    [format!(
+      "The extension mine does not play: The word note.py binds filled of the engine at its top, \
+       which each word of a chain reads: give each a name of its own: {file}"
+    )]
+  );
+  assert!(!user.join("words").join("mine").exists(), "a refused word leaves no copy");
+  folder(&user.join("mine"), &manifest, "def noted(template: str) -> str:\n  return template\n");
+  let (on, refused) = configured(&places, &project).unwrap();
+  assert!(refused.is_empty() && on.iter().any(|one| one.name == "mine"));
+  assert!(
+    user.join("words").join("mine").join("note.py").is_file(),
+    "a word that passes has its copy"
   );
 }
 

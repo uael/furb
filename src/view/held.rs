@@ -12,17 +12,19 @@ use super::{
   desk::{Desk, desk},
   state::State,
   threads::{
-    Attention, ChainAside, Rows, ThreadNode, attention, chain_asides, chain_threads, nest_threads,
+    Attention, ChainAside, NoteRun, Rows, ThreadNode, attention, chain_asides, chain_notes,
+    chain_threads, nest_threads,
   },
   time::{as_of, moments_of},
 };
 
-/// The threads of one chain as a window draws them: the tree of its threads, its asides, what the
-/// tree says to the operator, and the state of the chain.
+/// The threads of one chain as a window draws them: the tree of its threads, its asides, the runs
+/// of its notes, what the tree says to the operator, and the state of the chain.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Threads {
   pub threads: Vec<ThreadNode>,
   pub asides: Vec<ChainAside>,
+  pub notes: Vec<NoteRun>,
   pub attention: Attention,
   pub state: State,
 }
@@ -62,15 +64,17 @@ impl Held {
     desk(&self.then(None), &notices)
   }
 
-  /// The threads of a chain, now or as they stood just after a moment.
-  pub fn threads(&self, chain: &str, at: Option<u64>) -> Threads {
+  /// The threads of a chain, now or as they stood just after a moment. `read` is the place up to
+  /// which the window read the chain, from which its runs of notes count the notes not yet read.
+  pub fn threads(&self, chain: &str, at: Option<u64>, read: u64) -> Threads {
     let acts = self.then(at);
     let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
     let on: Vec<&Act> = acts.iter().filter(|act| act.chain == chain && act.id != chain).collect();
     let threads = nest_threads(chain_threads(&on, &rows), &rows);
     let state =
       rows.get(chain).filter(|act| act.kind == Kind::Chain).map_or(State::Idle, |act| act.state);
-    Threads { attention: attention(&threads), asides: chain_asides(&on, &rows), threads, state }
+    let (asides, notes) = (chain_asides(&on, &rows), chain_notes(&on, &rows, read));
+    Threads { attention: attention(&threads), asides, notes, threads, state }
   }
 
   /// The acts as they stood just after a moment.
