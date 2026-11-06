@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { mkdir, readdir, realpath, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { furbDirectory, saveFile, scratch, store } from "furb";
 import { openEngine, openingEngine } from "./bridge.ts";
-import { checkoutOf, checkouts, mainCheckout } from "./checkout.ts";
+import { checkoutOf, mainCheckout } from "./checkout.ts";
 import { daemon } from "./client.ts";
 import { expandHome } from "./files.ts";
 import { type EngineOptions, roster } from "./models.ts";
@@ -267,24 +267,16 @@ export class Workspaces extends EventEmitter {
       group = { directory: path, name: basename(path), collapsed: false, sessions: [] };
       this.groups.push(group);
     }
-    if (scan) await this.scan(group);
     this.save({ directory: group.directory });
+    if (scan) await this.scan(group);
     this.emit("change");
     return group;
   }
   async scan(group: Workspace): Promise<void> {
-    // The sessions of the main checkout and of each of its worktrees are the sessions of one workspace.
-    const found: { name: string; path: string }[] = [];
-    for (const checkout of checkouts(group.directory)) {
-      const directory = join(checkout, ".furb/sessions");
-      const names = await readdir(directory).catch((error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT") return [] as string[];
-        throw error;
-      });
-      for (const name of names)
-        if (name.endsWith(".jsonl") && !name.endsWith(".changes.jsonl"))
-          found.push({ name, path: join(directory, name) });
-    }
+    // The daemon lists the sessions of the main checkout and of each of its worktrees, from the list of this window.
+    const found = (await daemon().records(dirname(this.path)))
+      .filter((one) => one.workspace === group.directory)
+      .map((one) => ({ name: basename(one.life), path: one.life }));
     found.sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : 0));
     for (const { name, path } of found)
       if (!group.sessions.some((entry) => entry.path === path))
