@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { LiveAct } from "../../src/life/acts.ts";
+import type { Act } from "../../src/life/acts.ts";
 import {
   attentionOf,
   type ChainThread,
@@ -9,14 +9,14 @@ import {
   orderThreads,
   threadOpen,
 } from "../../src/life/threads.ts";
-import { act } from "./acts.ts";
+import { act, type More } from "./acts.ts";
 
-const prompt = (id: string, began: number, more: Partial<LiveAct> = {}) =>
+const prompt = (id: string, began: number, more: More = {}) =>
   act(id, "prompt", "chain1", "operator", began, undefined, { words: ["str", `${id} says`, ""], ...more });
 
 test("what a host keeps of a prompt belongs to that act, so a prompt of the same id in another session or another branch is read again and joins its thread", () => {
-  const known = new WeakMap<LiveAct, { message: string | undefined; title: string }>();
-  const list = (acts: LiveAct[]) =>
+  const known = new WeakMap<Act, { message: string | undefined; title: string }>();
+  const list = (acts: Act[]) =>
     chainThreads(acts, new Map(acts.map((one) => [one.id, one])), new Set(), known).map((thread) => [
       thread.act.id,
       thread.messages.map((one) => one.id),
@@ -79,23 +79,20 @@ test("the order in which the acts land changes no verdict: each read with what a
     act("bash5", "bash", "chain1", "rung1", 5),
     prompt("prompt9", 6, { by: "chain1", words: ["None", "bash5 done", ""] }),
   ];
-  const read = (
-    landed: LiveAct[],
-    known?: WeakMap<LiveAct, { message: string | undefined; title: string }>,
-  ) => {
+  const read = (landed: Act[], known?: WeakMap<Act, { message: string | undefined; title: string }>) => {
     const on = all.filter((one) => landed.includes(one));
     return chainThreads(on, new Map(landed.map((one) => [one.id, one])), new Set(), known).map((thread) => [
       thread.act.id,
       thread.messages.map((one) => one.id),
     ]);
   };
-  const orders = (rest: LiveAct[]): LiveAct[][] =>
+  const orders = (rest: Act[]): Act[][] =>
     rest.length
       ? rest.flatMap((one) => orders(rest.filter((x) => x !== one)).map((tail) => [one, ...tail]))
       : [[]];
   let checked = 0;
   for (const order of orders(all)) {
-    const known = new WeakMap<LiveAct, { message: string | undefined; title: string }>();
+    const known = new WeakMap<Act, { message: string | undefined; title: string }>();
     for (let n = 1; n <= order.length; n++) {
       const landed = order.slice(0, n);
       expect(read(landed, known)).toEqual(read(landed));
@@ -107,7 +104,7 @@ test("the order in which the acts land changes no verdict: each read with what a
 });
 
 test("the threads that the ladder of a thread made nest under it, and a question in an agent sets the state of each thread over it to asks", () => {
-  const thread = (one: LiveAct, asks: string[] = []): ChainThread => ({
+  const thread = (one: Act, asks: string[] = []): ChainThread => ({
     act: one,
     title: one.id,
     messages: [],
@@ -139,7 +136,7 @@ test("the threads that the ladder of a thread made nest under it, and a question
 });
 
 test("nesting changes no thread of its list, so a question that is answered leaves the parent in its own state on a cached list, and a failed thread of the operator whose agent asks keeps failed", () => {
-  const thread = (one: LiveAct, asks: string[] = [], more: Partial<ChainThread> = {}): ChainThread => ({
+  const thread = (one: Act, asks: string[] = [], more: Partial<ChainThread> = {}): ChainThread => ({
     act: one,
     title: one.id,
     messages: [],
@@ -172,14 +169,14 @@ test("nesting changes no thread of its list, so a question that is answered leav
 
 test("a question waits for the operator in any thread, and a failure or a pause concerns them only in a thread that they started", () => {
   const error = { is: "Refused", args: ["no"] };
-  const threads = (acts: LiveAct[], owed: string[] = []) =>
+  const threads = (acts: Act[], owed: string[] = []) =>
     chainThreads(acts, new Map(acts.map((one) => [one.id, one])), new Set(owed));
   const word = act("rung1", "rung", "chain1", "operator", 1);
   const agent = act("rung2", "rung", "chain1", "prompt1", 3);
-  const made = (id: string, by: string, began: number, more: Partial<LiveAct> = {}) =>
+  const made = (id: string, by: string, began: number, more: More = {}) =>
     act(id, "prompt", "chain1", by, began, undefined, { words: ["str", `${id} says`, ""], ...more });
   const base = [prompt("prompt1", 1), word, agent];
-  const read = (acts: LiveAct[], owed: string[] = []) =>
+  const read = (acts: Act[], owed: string[] = []) =>
     threads([...base, ...acts], owed).map((one) => [
       one.act.id,
       one.origin,
@@ -233,7 +230,7 @@ test("a question waits for the operator in any thread, and a failure or a pause 
 });
 
 test("the closed threads stand first and the open ones last, each group by the time of its last message, and the agents of a thread the same", () => {
-  const thread = (one: LiveAct, more: Partial<ChainThread> = {}): ChainThread => ({
+  const thread = (one: Act, more: Partial<ChainThread> = {}): ChainThread => ({
     act: one,
     title: one.id,
     messages: [],
@@ -245,8 +242,7 @@ test("the closed threads stand first and the open ones last, each group by the t
     yours: false,
     ...more,
   });
-  const closed = (one: LiveAct, messages: LiveAct[] = []) =>
-    thread(one, { messages, resolved: true, state: "done" });
+  const closed = (one: Act, messages: Act[] = []) => thread(one, { messages, resolved: true, state: "done" });
   const at = (id: string, began: number) => prompt(id, began);
   const agents = [
     act("prompt7", "prompt", "chain1", "rung1", 8),
@@ -256,15 +252,15 @@ test("the closed threads stand first and the open ones last, each group by the t
   const rows = new Map(
     [...leads, act("rung1", "rung", "chain1", "prompt6", 7), ...agents].map((one) => [one.id, one]),
   );
-  const [one, two, three, four, six] = leads as [LiveAct, LiveAct, LiveAct, LiveAct, LiveAct];
+  const [one, two, three, four, six] = leads as [Act, Act, Act, Act, Act];
   const list = [
     closed(one, [at("prompt5", 50)]),
     closed(two),
     thread(three, { messages: [at("prompt9", 40)] }),
     thread(four),
     closed(six),
-    thread(agents[0] as LiveAct, { asks: ["prompt10"], state: "asks" }),
-    closed(agents[1] as LiveAct),
+    thread(agents[0] as Act, { asks: ["prompt10"], state: "asks" }),
+    closed(agents[1] as Act),
   ];
   const ids = (nodes: { thread: ChainThread }[]) => nodes.map((node) => node.thread.act.id);
   // Before, main showed the threads in the order they began.

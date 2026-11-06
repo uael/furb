@@ -13,6 +13,8 @@ use super::{
   here, images, resolved,
   scratch::{Beneath, beneath},
 };
+use std::env;
+use std::path;
 
 /// The scheme of the paths of the config directory of the user.
 pub const CONFIG: &str = "config://";
@@ -75,7 +77,7 @@ async fn moved(co: &mut Co, a: &Fact) -> Result<String, Fault> {
     )));
   }
   let at = placed(&here(co, a.on()).await?, &path)?;
-  let shown = tilded(&at, std::env::home_dir().as_deref());
+  let shown = tilded(&at, env::home_dir().as_deref());
   if !at.is_dir() {
     return Err(Fault::refused(format!("There is no directory at {shown}.")));
   }
@@ -128,7 +130,7 @@ async fn served(
   if let Some(content) = content {
     filed(&at, content, at.display())?;
   }
-  text(&at, tilded(&at, std::env::home_dir().as_deref()), gallery)
+  text(&at, tilded(&at, env::home_dir().as_deref()), gallery)
 }
 
 /// The content of a write put at a path, with the folders above it made, in one write as
@@ -179,7 +181,7 @@ pub(super) fn native(path: &str, windows: bool) -> String {
 
 /// The text at a path: a file of utf-8 of any size, since the engine bounds what a read tells.
 pub(crate) fn read(at: &Path) -> Result<Text, Fault> {
-  text(at, tilded(at, std::env::home_dir().as_deref()), None)
+  text(at, tilded(at, env::home_dir().as_deref()), None)
 }
 
 /// The text at a path under a name, which the text and each refusal of it give. A file whose every line ends with
@@ -253,7 +255,7 @@ pub(crate) fn tilded(path: &Path, home: Option<&Path>) -> String {
   let home = home.filter(|home| home.parent().is_some());
   match home.and_then(|home| path.strip_prefix(home).ok()) {
     Some(rest) if rest.as_os_str().is_empty() => "~".to_owned(),
-    Some(rest) => format!("~{}{}", std::path::MAIN_SEPARATOR, rest.display()),
+    Some(rest) => format!("~{}{}", path::MAIN_SEPARATOR, rest.display()),
     None => path.display().to_string(),
   }
 }
@@ -261,7 +263,7 @@ pub(crate) fn tilded(path: &Path, home: Option<&Path>) -> String {
 /// The place of a path of the machine that a chain names: against the home of the user, as [`homed`] says, or else
 /// against the directory.
 pub(crate) fn placed(directory: &Path, path: &str) -> Result<PathBuf, Fault> {
-  homed(path, std::env::home_dir()).unwrap_or_else(|| Ok(resolved(directory, path)))
+  homed(path, env::home_dir()).unwrap_or_else(|| Ok(resolved(directory, path)))
 }
 
 /// What the machine refused at a path, under its name, in plain words, which the model and the operator both read.

@@ -20,6 +20,7 @@ use futures::{
   future::FusedFuture,
   stream,
 };
+use std::io;
 use tokio::{
   io::AsyncWriteExt,
   process::ChildStdin,
@@ -297,8 +298,8 @@ fn command(begun: Begun, fed: spsc::Receiver<Option<String>>) -> impl futures::S
 /// What ended the wait on a command before its exit.
 enum Cut {
   Unread(Unread),
-  Unslain(std::io::Error),
-  Unwaited(std::io::Error),
+  Unslain(io::Error),
+  Unwaited(io::Error),
 }
 
 /// How a command exited: the code of its shell, and whether its timeout ended it.
@@ -319,7 +320,7 @@ enum Phase {
 /// reach the group ends it with that fault, and the timeout of the command ends its processes at
 /// any time.
 async fn watch(
-  shell: JoinHandle<std::io::Result<Option<i32>>>,
+  shell: JoinHandle<io::Result<Option<i32>>>,
   streams: impl Future<Output = Result<(), Unread>>,
   expired: impl Future<Output = ()>,
   feeding: impl Future<Output = ()>,
@@ -333,7 +334,7 @@ async fn watch(
     tokio::select! {
       biased;
       got = &mut shell, if matches!(phase, Phase::Running) => {
-        let status = got.map_err(std::io::Error::other).and_then(|waited| waited).map_err(Cut::Unwaited)?;
+        let status = got.map_err(io::Error::other).and_then(|waited| waited).map_err(Cut::Unwaited)?;
         phase = Phase::Draining { status, until: Instant::now() + DRAIN };
       }
       read = &mut streams => read.map_err(Cut::Unread)?,

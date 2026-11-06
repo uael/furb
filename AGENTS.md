@@ -230,16 +230,17 @@ The suite drives the engine through its public API alone, end to end, from the m
 ## The hygiene laws
 
 `test/test_hygiene.py` holds each contract and its suite to these laws, and it must stay green. The contracts are
-`engine.pyi`, whose suite is `test/`, and the contract of each extension, `extensions/<name>/<name>.pyi`, whose suite
-is the folder `test` beside it.
+`engine.pyi`, whose suite is `test/`, the contract of each official extension, `extensions/<name>/<name>.pyi`, and
+the contract of each extension of the project, `.furb/extensions/<name>/<name>.pyi`, each with the folder `test`
+beside it as its suite.
 
 1. Every sentence of a definition has exactly one test, in the file of that definition, whose docstring is that
    sentence. A constructor and a property are no definitions of their own: their sentences are the class's.
 2. Every test carries a sentence of the contract.
 3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
 4. The module docstring of each contract is empty.
-5. `engine.py`, minified with its program kept as it is, costs fewer than 9854 tokens of `o200k_base`, the
-   tokenizer of OpenAI, and the doctrine of furb, `DOCTRINE.md`, costs at most 1000. The test counts with `o200k_base`
+5. `engine.py`, minified with its program kept as it is, costs fewer tokens of `o200k_base`, the tokenizer of OpenAI,
+   than `BUDGET` of `script/tokens.py`, and the doctrine of furb, `DOCTRINE.md`, costs at most 1000. The test counts with `o200k_base`
    because it is local and the same on each machine: the tokenizer of Claude is not public, and only the network
    counts with it. The wall is a proxy for the cost to Claude, which reads about 1.5 tokens for each token of
    `o200k_base` in the engine.

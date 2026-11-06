@@ -221,8 +221,8 @@ pub struct Layers {
 impl Layers {
   /// The configs of a project, under the config directory of the user of this process when none
   /// is given.
-  pub fn new(project: impl Into<PathBuf>, user: Option<PathBuf>) -> Layers {
-    Layers { project: project.into(), user: user.unwrap_or_else(|| Places::here().config) }
+  pub fn new(project: impl Into<PathBuf>, user: Option<PathBuf>) -> Self {
+    Self { project: project.into(), user: user.unwrap_or_else(|| Places::here().config) }
   }
 
   fn file(&self, layer: Layer) -> PathBuf {

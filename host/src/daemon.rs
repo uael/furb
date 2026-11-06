@@ -11,8 +11,9 @@
 //! of a new build takes the place of the one that runs only through [`upgrade`], never by a
 //! takeover: the daemon that runs writes the checkpoint of each life, stops to listen, and gives
 //! its lives and their pins, which the new one opens again. Each window then dials again and
-//! attaches, with no loss. A life that does not end within the bound `end` is given up with no
-//! checkpoint, and the new one opens it from its record.
+//! attaches, with no loss. The handover waits for each life to end, however long it takes: a life
+//! given up before its end would still hold the lease of its record and the facts that its record
+//! does not hold yet, and the new daemon would open a second life on that record.
 //!
 //! When the operator turns it on, the daemon also listens on the address of the machine on the
 //! tailnet, by TCP and by WebSocket, and lets in each peer whose login the access list names, with
@@ -40,7 +41,7 @@ use tokio::{
   net::{TcpListener, TcpStream},
   sync::{mpsc, oneshot},
   task::JoinSet,
-  time::{Instant, sleep_until, timeout},
+  time::{Instant, sleep_until},
 };
 use tokio_util::codec::{Framed, LinesCodec};
 
@@ -68,11 +69,6 @@ use crate::{
 /// How long a life with no holder lives, unless the settings of the daemon say otherwise.
 pub const GRACE: Duration = Duration::from_secs(30);
 
-/// How long a handover waits for a life to write its checkpoint and end, unless the settings of the
-/// daemon say otherwise: past it, the daemon gives that life up and the new daemon opens it from
-/// its record.
-pub const END: Duration = Duration::from_secs(60);
-
 /// What the daemon opens each life on.
 #[derive(Clone)]
 pub struct Settings {
@@ -81,9 +77,6 @@ pub struct Settings {
   pub opening: Opening,
   /// How long a life with no holder lives before it writes its checkpoint and ends.
   pub grace: Duration,
-  /// How long a handover waits for each life to write its checkpoint and end, before it gives that
-  /// life up with no checkpoint, so that the daemon of the new build opens it from its record.
-  pub end: Duration,
   /// How long a life that holds an open act says no fact before the daemon tells each of its
   /// windows and its root chain that it stalled.
   pub stall: Duration,
@@ -777,7 +770,7 @@ impl Lives {
 
   /// Each record of the workspaces of the list in a config folder, the config folder of the
   /// daemon when none is given, and each life of the daemon, by the path of its record, with
-  /// whether a life holds it and whether that life lives or ends.
+  /// whether a life holds it, whether that life lives or ends, and the name of its session.
   fn listed(&self, config: Option<String>) -> Vec<Listed> {
     let config = config.or_else(|| self.settings.opening.config.clone());
     let folder = processes::places(&Opening { config, ..Opening::default() }).config;
@@ -786,20 +779,20 @@ impl Lives {
     for one in &found {
       for life in &one.records {
         let workspace = Some(one.workspace.clone());
-        listed.push(Listed { life: life.clone(), workspace, held: false, open: false });
+        listed.push(Listed { life: life.clone(), workspace, held: false, open: false, name: None });
       }
     }
     for (life, held) in &self.held {
-      let open = matches!(held.stage, Stage::Living(_));
+      let (open, name) = (matches!(held.stage, Stage::Living(_)), held.handle.name());
       if let Some(one) = listed.iter_mut().find(|one| &one.life == life) {
-        (one.held, one.open) = (true, open);
+        (one.held, one.open, one.name) = (true, open, name);
         continue;
       }
       // A record that a life opens stands in the list before the disk holds it.
       let at = Path::new(life).parent();
       let workspace = found.iter().find(|one| Some(one.folder.as_path()) == at);
       let workspace = workspace.map(|one| one.workspace.clone());
-      listed.push(Listed { life: life.clone(), workspace, held: true, open });
+      listed.push(Listed { life: life.clone(), workspace, held: true, open, name });
     }
     listed.sort_by(|one, other| one.life.cmp(&other.life));
     listed
@@ -844,27 +837,26 @@ impl Lives {
   }
 
   /// The handover: each window detached, each life told to write its checkpoint and end, then each
-  /// life, with its pins, given to the peer that asked once the listener stopped. A life that ends
-  /// already goes too, with no pin, and a life whose checkpoint fails opens again from its record.
+  /// life that lives, with its pins, given to the peer that asked once the listener stopped. A life
+  /// that ends already ends here and goes to no one: the open that waited for it is refused, and
+  /// the next open opens it from its record.
   fn handover(self, asker: Outbox, reply: Replied) {
     let (mut handed, mut lives) = (Vec::new(), Vec::new());
     for (life, held) in self.held {
-      let record = life.clone();
       match held.stage {
         Stage::Living(holders) => {
-          handed.push(Handed { life, cwd: held.cwd, pins: holders.release() });
+          handed.push(Handed { life: life.clone(), cwd: held.cwd, pins: holders.release() });
         }
         Stage::Ending(waiting) => {
           for (_, one) in waiting {
             one.send(Err(ProtocolError::Stopped)).ok();
           }
-          handed.push(Handed { life, cwd: held.cwd, pins: Vec::new() });
         }
       }
-      lives.push((record, held.handle));
+      lives.push((life, held.handle));
     }
-    let (bound, log) = (self.settings.end, self.settings.opening.log.clone());
-    tokio::spawn(gave(lives, bound, log, self.leave, Leaving { handed, asker, reply }));
+    let log = self.settings.opening.log.clone();
+    tokio::spawn(gave(lives, log, self.leave, Leaving { handed, asker, reply }));
   }
 }
 
@@ -995,32 +987,20 @@ async fn told(
   }
 }
 
-/// A life told to end within a bound. Past it, the life is given up with no checkpoint, and the log
-/// tells which life did not end: the daemon of the new build opens it from its record.
-async fn ended_within(record: &str, life: &LifeHandle, bound: Duration, log: Option<&Log>) {
-  if timeout(bound, end(life)).await.is_err() {
-    report(
-      log,
-      &format_args!(
-        "{record} did not end within {bound:?}: given up with no checkpoint, to open from its record"
-      ),
-    );
-  }
-}
-
-/// The handover once each life wrote its checkpoint and ended, or was given up past the bound,
-/// given to the listener, or refused when the listener is gone.
+/// The handover once each life wrote its checkpoint and ended, however long that takes, given to
+/// the listener, or refused when the listener is gone. The log says which lives it waits for.
 async fn gave(
   lives: Vec<(String, LifeHandle)>,
-  bound: Duration,
   log: Option<Log>,
   leave: oneshot::Sender<Leaving>,
   leaving: Leaving,
 ) {
-  future::join_all(
-    lives.iter().map(|(record, life)| ended_within(record, life, bound, log.as_ref())),
-  )
-  .await;
+  if !lives.is_empty() {
+    let records: Vec<&str> = lives.iter().map(|(record, _)| record.as_str()).collect();
+    let waits = records.join(", ");
+    report(log.as_ref(), &format_args!("the handover waits for each life to end: {waits}"));
+  }
+  future::join_all(lives.iter().map(|(_, life)| end(life))).await;
   if let Err(Leaving { reply, .. }) = leave.send(leaving) {
     reply.send(Err(ProtocolError::Stopped)).ok();
   }

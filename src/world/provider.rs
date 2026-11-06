@@ -101,10 +101,31 @@ pub struct Provider {
   retries: Option<Retries>,
   refresh: Option<Refresh>,
   gone: Vec<String>,
-  inspecting: bool,
-  held: bool,
+  mode: Mode,
   /// The system prompt of each request: the engine of the life, minified.
   system: Arc<str>,
+}
+
+/// What a life does with its provider. A life that only inspects its record asks no model and
+/// refuses the question search. When the record holds the standing of its root already, the
+/// provider also answers no stand: the standing of the life stays the one that its record holds,
+/// and no change of it reaches a chain.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Mode {
+  Live,
+  Inspecting,
+  Held,
+}
+
+impl Mode {
+  /// The mode of a life that does work or not, whose record holds the standing of its root or not.
+  pub(crate) fn of(works: bool, stood: bool) -> Self {
+    match (works, stood) {
+      (true, _) => Self::Live,
+      (false, true) => Self::Held,
+      (false, false) => Self::Inspecting,
+    }
+  }
 }
 
 /// An extension as the standing gives it: its name, the file of its word, its life word, and
@@ -120,9 +141,9 @@ type Refresh = Arc<dyn Fn() -> BoxFuture<'static, Result<Settings, String>> + Se
 impl Provider {
   /// A provider of these models, on a directory, whose model thinks
   /// [`THINKING`](thinking::THINKING) tokens at most in one turn.
-  pub fn new(directory: impl Into<String>, models: Vec<Model>) -> Provider {
+  pub fn new(directory: impl Into<String>, models: Vec<Model>) -> Self {
     let directory = directory.into();
-    Provider {
+    Self {
       directory,
       config: None,
       extensions: None,
@@ -135,8 +156,7 @@ impl Provider {
       retries: None,
       refresh: None,
       gone: Vec::new(),
-      inspecting: false,
-      held: false,
+      mode: Mode::Live,
       system: Arc::from(crate::SYSTEM),
     }
   }
@@ -145,36 +165,27 @@ impl Provider {
   /// and the list of automatic work, else the one that [`crate::extension::Places::here`]
   /// names: a life that opens on a config directory of its own reads no file of the machine.
   #[must_use]
-  pub fn config(mut self, config: impl Into<PathBuf>) -> Provider {
+  pub fn config(mut self, config: impl Into<PathBuf>) -> Self {
     self.config = Some(config.into());
     self
   }
 
   /// The most tokens of thought of a model in one turn.
   #[must_use]
-  pub fn thinking(mut self, thinking: Thinking) -> Provider {
+  pub fn thinking(mut self, thinking: Thinking) -> Self {
     self.thinking = thinking;
     self
   }
 
-  /// Whether the life only inspects its record. Such a provider refuses the question search.
+  /// What the life does with the provider, as [`Mode`] says.
   #[must_use]
-  pub(crate) fn inspecting(mut self, yes: bool) -> Provider {
-    self.inspecting = yes;
-    self
-  }
-
-  /// Whether the record of the life holds the standing of its root already, and the life only
-  /// inspects it. Such a provider answers no stand: the standing of the life stays the one that its
-  /// record holds, and no change of it reaches a chain.
-  #[must_use]
-  pub(crate) fn held(mut self, yes: bool) -> Provider {
-    self.held = yes;
+  pub(crate) fn mode(mut self, mode: Mode) -> Self {
+    self.mode = mode;
     self
   }
 
   #[must_use]
-  pub(crate) fn refreshing(mut self, refresh: Refresh) -> Provider {
+  pub(crate) fn refreshing(mut self, refresh: Refresh) -> Self {
     self.refresh = Some(refresh);
     self
   }
@@ -182,7 +193,7 @@ impl Provider {
   /// The system prompt of each request: the engine that the life runs, minified, which is this
   /// build's own, [`crate::SYSTEM`], unless the record of the life holds another.
   #[must_use]
-  pub fn system(mut self, system: Arc<str>) -> Provider {
+  pub fn system(mut self, system: Arc<str>) -> Self {
     self.system = system;
     self
   }
@@ -190,7 +201,7 @@ impl Provider {
   /// The names of the roster and of the actor that the catalog lacked when the life opened. The ear
   /// tells each chain once, at its first stand, and the standing leaves them out.
   #[must_use]
-  pub fn gone(mut self, names: Vec<String>) -> Provider {
+  pub fn gone(mut self, names: Vec<String>) -> Self {
     self.gone = names;
     self
   }
@@ -203,42 +214,42 @@ impl Provider {
   /// The actor a prompt goes to when it names none, which is the first model at the level of an
   /// actor that names none when none is given, and the operator when there is no model.
   #[must_use]
-  pub fn actor(mut self, actor: Option<String>) -> Provider {
+  pub fn actor(mut self, actor: Option<String>) -> Self {
     self.actor = actor;
     self
   }
 
   /// The extensions that the standing gives, from which the engine seeds the root of a new record.
   #[must_use]
-  pub fn advertises(mut self, extensions: Vec<Advertised>) -> Provider {
+  pub fn advertises(mut self, extensions: Vec<Advertised>) -> Self {
     self.extensions = Some(extensions);
     self
   }
 
   /// The directory of the images that a turn names.
   #[must_use]
-  pub fn images(mut self, directory: impl Into<PathBuf>) -> Provider {
+  pub fn images(mut self, directory: impl Into<PathBuf>) -> Self {
     self.images = Some(directory.into());
     self
   }
 
   /// Whom the provider tells what a model writes, as it writes it.
   #[must_use]
-  pub fn writes(mut self, writes: Writes) -> Provider {
+  pub fn writes(mut self, writes: Writes) -> Self {
     self.writes = Some(writes);
     self
   }
 
   /// How the provider asks a model again after a failure that passes.
   #[must_use]
-  pub fn backoff(mut self, backoff: Backoff) -> Provider {
+  pub fn backoff(mut self, backoff: Backoff) -> Self {
     self.backoff = backoff;
     self
   }
 
   /// Whom the provider tells each retry of a call of a model, before its wait.
   #[must_use]
-  pub fn retries(mut self, retries: Retries) -> Provider {
+  pub fn retries(mut self, retries: Retries) -> Self {
     self.retries = Some(retries);
     self
   }

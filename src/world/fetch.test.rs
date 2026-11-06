@@ -13,6 +13,7 @@ use crate::{
   ear::{ear, hear, say},
   verbs,
 };
+use std::env;
 
 #[test]
 fn a_page_of_html_is_its_markdown_other_text_is_itself_and_a_page_of_no_text_is_refused() {
@@ -45,7 +46,7 @@ fn standing() -> Box<dyn Ear> {
       let a = hear(&mut co).await;
       if a.kind() == "stand" && a.question() {
         let operator = Object::list([Object::string("operator"), Object::list([]), Object::int(1)]);
-        let here = Object::string(std::env::temp_dir().display().to_string());
+        let here = Object::string(env::temp_dir().display().to_string());
         let standing = Object::list([Object::list([operator]), here, Object::string("operator")]);
         say(&mut co, Fact::says("done", a.about(), [standing]));
       }

@@ -3,6 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { LineNumberRenderable, type Renderable, RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
+import { isDone, outcomeOf } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { Gutter } from "../src/app/gutter.ts";
 import { App, sessionDetail } from "../src/app.ts";
@@ -227,7 +228,7 @@ test("refreshes keep content in place, act failures stay in the record, and hidd
         expect(await frame()).not.toContain("Refresh view");
         expect(
           session.activity.some(
-            (act) => act.done && act.kind === "rung" && JSON.stringify(act.value).includes("Refused"),
+            (act) => isDone(act) && act.kind === "rung" && JSON.stringify(outcomeOf(act)).includes("Refused"),
           ),
         ).toBe(true);
 
@@ -352,9 +353,9 @@ test("the block of a word whose model works holds the loader in the column of th
   composing(async ({ session, app, frame }) => {
     app.composer.setText("Think until I cancel.");
     await app.submit();
-    await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
+    await until(session, () => session.activity.some((act) => act.kind === "rung" && !isDone(act)));
     await session.refresh();
-    const step = session.activity.find((act) => act.kind === "rung" && !act.done)?.id ?? "";
+    const step = session.activity.find((act) => act.kind === "rung" && !isDone(act))?.id ?? "";
     // The feed draws the block of the step at a later tick than the refresh, later on a slow runner.
     let rows = (await frame()).split("\n");
     for (let tries = 0; tries < 40 && !rows.some((row) => row.includes(" · thinking")); tries++) {
@@ -392,13 +393,13 @@ test("the block of a rung whose model is not asked yet says that it waits for it
     async ({ session, app, frame }) => {
       app.composer.setText("Think until I cancel.");
       await app.submit();
-      await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
+      await until(session, () => session.activity.some((act) => act.kind === "rung" && !isDone(act)));
       await session.submit("/newthread");
       app.composer.setText("Think until I cancel, too.");
       await app.submit();
       await until(
         session,
-        () => session.activity.filter((act) => act.kind === "rung" && !act.done).length === 2,
+        () => session.activity.filter((act) => act.kind === "rung" && !isDone(act)).length === 2,
       );
       await session.refresh();
       const rows = (await frame()).split("\n");
@@ -424,7 +425,7 @@ test("each word stands in a block under its label, with the mark of the line tha
       expect(shown).toMatch(/┃ +operator +$/m);
       expect(shown).not.toMatch(/word · rung\d+/);
       void session.command('/run build = bash("sleep 3")\nsize = 1\nbuilt = await build').catch(() => {});
-      await until(session, () => session.activity.some((act) => act.kind === "bash" && !act.done));
+      await until(session, () => session.activity.some((act) => act.kind === "bash" && !isDone(act)));
       for (let tries = 0; tries < 50 && !shown.includes("waits on"); tries++) {
         await new Promise((done) => setTimeout(done, 50));
         shown = await frame();
@@ -465,7 +466,9 @@ test("the words that one model wrote one after another stand in one block under 
       const setup = rows.findIndex((row) => row.includes("# setup"));
       const steps = rows.slice(setup + 1, setup + 8);
       expect(steps[0]).toMatch(/^ +\S+\/\S+ +/);
-      expect(steps.slice(1, 5).map((row) => row.match(/^ +(\d+) /)?.[1])).toEqual(["1", "2", "3", "4"]);
+      // A line that folds a string has the fold row of that string under it, which holds no number.
+      const numbers = steps.slice(1).flatMap((row) => row.match(/^ +(\d+) /)?.[1] ?? []);
+      expect(numbers.slice(0, 4)).toEqual(["1", "2", "3", "4"]);
       expect(steps.slice(1).filter((row) => /^ +\S+\/high +/.test(row))).toEqual([]);
     },
     { width: 120, height: 40 },
@@ -508,7 +511,7 @@ test("a prompt of None to the operator is a notice that settles as a quiet line,
       });
       expect(await session.engine.result(id)).toBeNull();
       // The console closes the notice as it takes it, so it waits on no desk.
-      await until(session, () => session.acts.some((act) => act.id === id && act.done));
+      await until(session, () => session.acts.some((act) => act.id === id && isDone(act)));
       await session.refresh();
       expect(session.operatorPrompt).toBeUndefined();
       expect(session.desk.asks).toEqual([]);
@@ -528,16 +531,14 @@ test("a word that awaits a prompt of None to the operator goes on at once, since
         word: 'await prompt(None, "The build is green.", to="operator")\nafter = 1',
         on: session.engine.root,
       });
-      await until(session, () =>
-        session.activity.some((act) => act.id === rung && act.run?.status === "done"),
-      );
+      await until(session, () => session.activity.some((act) => act.id === rung && act.run?.run === "done"));
       await session.refresh();
       // The word ran to its end: no desk holds a question, no dialog waits, and no row of the feed still runs or asks.
       expect(session.operatorPrompt).toBeUndefined();
       expect(session.desk.asks).toEqual([]);
       const notices = session.activity.filter((act) => act.kind === "prompt" && act.by === rung);
       expect(notices.length).toBe(1);
-      expect(notices.every((act) => act.done)).toBe(true);
+      expect(notices.every((act) => isDone(act))).toBe(true);
       const shown = await frame();
       expect(shown).toContain("after = 1");
       expect(shown).not.toContain("◉");
@@ -626,7 +627,7 @@ test("the markdown of a message draws each element with no marks, and a code blo
         to: "operator",
         on: session.engine.root,
       });
-      await until(session, () => session.acts.some((act) => act.id === id && act.done));
+      await until(session, () => session.acts.some((act) => act.id === id && isDone(act)));
       // A notice settles folded, and opens to its message.
       session.folds[id] = false;
       await session.refresh();
@@ -1057,7 +1058,7 @@ test("one gutter of furb draws the cells of each block of code: the number, the 
           to: "operator",
           on: session.engine.root,
         });
-        await until(session, () => session.acts.some((act) => act.id === note && act.done));
+        await until(session, () => session.acts.some((act) => act.id === note && isDone(act)));
         session.folds[note] = false;
         await session.refresh();
         const nodes: Renderable[] = [];
@@ -1117,7 +1118,7 @@ test("the blocks of a word and of a code block of markdown stand alike in each p
         to: "operator",
         on: session.engine.root,
       });
-      await until(session, () => session.acts.some((act) => act.id === id && act.done));
+      await until(session, () => session.acts.some((act) => act.id === id && isDone(act)));
       session.folds[id] = false;
       for (const name of Object.keys(palettes) as (keyof typeof palettes)[]) {
         session.theme = name;
@@ -1160,7 +1161,7 @@ test("a word and a code block of markdown take one ground, one label, one gutter
         to: "operator",
         on: session.engine.root,
       });
-      await until(session, () => session.acts.some((act) => act.id === id && act.done));
+      await until(session, () => session.acts.some((act) => act.id === id && isDone(act)));
       session.folds[id] = false;
       for (const name of Object.keys(palettes) as (keyof typeof palettes)[]) {
         session.theme = name;
@@ -1213,7 +1214,7 @@ test("a notice to the operator shows ● until a fact seen of its chain covers i
         to: "operator",
         on: session.engine.root,
       });
-      await until(session, () => session.acts.some((act) => act.id === id && act.done));
+      await until(session, () => session.acts.some((act) => act.id === id && isDone(act)));
       const line = async () =>
         (await frame()).split("\n").find((row) => row.includes("The search shortcut")) ?? "";
       expect(await line()).toContain("●");

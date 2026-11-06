@@ -1,6 +1,8 @@
 //! A child of a life and its group.
 
 use super::signalled;
+#[cfg(unix)]
+use tokio::process;
 
 #[test]
 fn a_signal_that_ends_the_sh_of_git_gives_128_and_the_number_of_the_signal() {
@@ -15,7 +17,7 @@ fn a_signal_that_ends_the_sh_of_git_gives_128_and_the_number_of_the_signal() {
 #[test]
 #[cfg(unix)]
 fn a_slain_group_keeps_no_line_to_its_watch_so_that_free_writes_to_no_dead_reader() {
-  let mut command = tokio::process::Command::new("sh");
+  let mut command = process::Command::new("sh");
   command.arg("-c").arg("sleep 5");
   let (_child, mut group) = super::spawn(&mut command).unwrap();
   assert!(group.lifeline.is_some(), "a group holds the line to its watch until it ends");

@@ -4,10 +4,11 @@ import { join } from "node:path";
 
 const folder = join(import.meta.dir, "../../src/life");
 
-test("the model of a life imports nothing but its own files, so that a window of the web reads it as a terminal does", () => {
+test("the model of a life imports nothing but its own files and the protocol of the daemon, whose acts it reads, so that a window of the web reads it as a terminal does", () => {
   for (const name of readdirSync(folder)) {
     const text = readFileSync(join(folder, name), "utf8");
     const imported = [...text.matchAll(/^(?:import|export)[^;]*?from "([^"]+)"/gm)].map((match) => match[1]);
-    for (const path of imported) expect([name, path]).toEqual([name, expect.stringMatching(/^\.\/\w+\.js$/)]);
+    for (const path of imported)
+      expect([name, path]).toEqual([name, expect.stringMatching(/^(\.\/\w+|\.\.\/protocol)\.js$/)]);
   }
 });

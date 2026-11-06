@@ -31,7 +31,7 @@ export function actorOf(
   if (answered) return answered;
   for (let index = acts.length - 1; index >= 0; index--) {
     const act = acts[index];
-    if (!act || act.on !== chain) continue;
+    if (!act || act.chain !== chain) continue;
     const set = act.kind !== "rung" ? null : /^actor = ['"]([^'"]+)['"]\s*$/.exec(String(act.words[0] ?? ""));
     if (set?.[1]) return set[1];
     const asked = act.kind === "prompt" && !asksOperator(act) ? String(act.words[2] ?? "") : "";

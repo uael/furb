@@ -2417,6 +2417,12 @@
         },
         "open": {
           "type": "boolean"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -2424,7 +2430,7 @@
         "held",
         "open"
       ],
-      "description": "A record of the machine: the main checkout of the workspace whose sessions hold it, when the\nlist names one, whether a life of the daemon holds it now, and whether that life lives and does\nnot end."
+      "description": "A record of the machine: the main checkout of the workspace whose sessions hold it, when the\nlist names one, whether a life of the daemon holds it now, whether that life lives and does not\nend, and the name of its session while a life holds it: the one that the operator said last on\nthe root, which wins, else the one that the extension naming gave. An empty name takes the\ndefault name again."
     },
     "Handed": {
       "type": "object",
@@ -3051,6 +3057,11 @@
             "null"
           ],
           "description": "The word of a rung, once its chain took it to run or to refuse."
+        },
+        "asking": {
+          "type": "boolean",
+          "description": "Whether a reply of a rung runs, while its model writes its word. A rung with no word and no\nreply that runs waits for its turn.",
+          "default": false
         },
         "began": {
           "type": "integer",

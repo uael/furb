@@ -1,4 +1,4 @@
-import type { Command, Completion, Furb, Item, Line, Seen, Tone } from "../../tui/src/parts.ts";
+import type { Act, Command, Completion, Furb, Item, Line, Seen, Tone } from "../../tui/src/parts.ts";
 
 /** A tool of a server, as `mcp_servers` gives it. */
 interface Tool {
@@ -116,21 +116,18 @@ const raised = (value: unknown) =>
 /** The servers as the record holds them now: the list of the last `mcp_servers` that is done, with each later
  * `mcp_control` that is done in the place of its server. */
 export function servers(seen: Seen): Server[] {
-  const asked = seen.of("mcp_servers").filter((act) => act.done && Array.isArray(act.value));
+  const value = (act: Act) => (act.phase.phase === "done" ? act.phase.value : undefined);
+  const asked = seen.of("mcp_servers").filter((act) => Array.isArray(value(act)));
   const last = asked.at(-1);
   if (!last) return [];
-  const held = new Map((last.value as Server[]).map((one) => [one.name, one]));
-  for (const act of seen.of("mcp_control"))
-    if (
-      act.done &&
-      act.began > last.began &&
-      act.value &&
-      typeof act.value === "object" &&
-      !raised(act.value)
-    ) {
-      const one = act.value as Server;
+  const held = new Map((value(last) as Server[]).map((one) => [one.name, one]));
+  for (const act of seen.of("mcp_control")) {
+    const got = value(act);
+    if (act.began > last.began && got && typeof got === "object" && !raised(got)) {
+      const one = got as Server;
       if (typeof one.name === "string") held.set(one.name, one);
     }
+  }
   return [...held.values()];
 }
 
@@ -555,10 +552,13 @@ export default function mcp(furb: Furb): void {
         ["arguments ", "faint"],
         [JSON.stringify(args, null, 2), "muted"],
       ]);
-    if (!act.done) lines.push([["The call runs.", "faint"]]);
-    else if (raised(act.value)) lines.push(...cut(fault(act.value), 20, "danger"));
+    if (act.phase.phase !== "done") lines.push([["The call runs.", "faint"]]);
+    else if (raised(act.phase.value)) lines.push(...cut(fault(act.phase.value), 20, "danger"));
     else {
-      const value = act.value as { text?: unknown; content?: { type?: string; image?: string }[] } | null;
+      const value = act.phase.value as {
+        text?: unknown;
+        content?: { type?: string; image?: string }[];
+      } | null;
       lines.push(...cut(String(value?.text ?? ""), 40, "text"));
       for (const block of value?.content ?? [])
         if (block?.type === "image")

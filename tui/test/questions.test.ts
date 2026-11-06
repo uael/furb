@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { isDone } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { composing } from "./composing.ts";
 
@@ -116,7 +117,10 @@ test("a question of a shape that is more than text says what its line is, and ta
       app.composer.setText("a, b");
       await app.submit();
       expect(session.desk.asks.map((ask) => ask.id)).toEqual([names]);
-      expect(session.acts.find((act) => act.id === names)?.done).toBe(false);
+      expect(
+        session.acts.find((act) => act.id === names) !== undefined &&
+          isDone(session.acts.find((act) => act.id === names)),
+      ).toBe(false);
       // The refusal says why, in a dialog, and the line goes back to the input.
       expect(await frame()).toContain('Refused: "a, b" is no list[str]');
       expect(app.composer.plainText).toBe("a, b");

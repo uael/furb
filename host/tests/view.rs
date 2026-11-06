@@ -31,6 +31,7 @@ fn act(id: &str, kind: &str, on: &str, by: &str, began: u64, ended: Option<u64>)
       RunState::Running
     }),
     word: None,
+    asking: false,
     began,
     ended,
     spend: None,
@@ -119,7 +120,8 @@ fn each_act_takes_one_state_of_the_one_set() {
     (asked(act("prompt9", "prompt", "chain1", "operator", 1, None)), State::Asks),
     (stated(paused), State::Paused),
     (stated(failed), State::Failed),
-    (rung, State::Thinks),
+    (stated(Act { asking: true, ..rung.clone() }), State::Thinks),
+    (rung, State::Idle),
     (worded, State::Runs),
     (act("bash3", "bash", "chain1", "rung1", 1, None), State::Runs),
     (act("chain2", "chain", "chain1", "rung1", 1, None), State::Delegates),
@@ -156,7 +158,7 @@ fn a_whole_takes_the_first_state_of_its_parts_in_the_order_of_the_one_set() {
 
 #[test]
 fn the_work_of_a_chain_thinks_runs_or_delegates() {
-  let thinking = act("rung1", "rung", "chain1", "prompt1", 1, None);
+  let thinking = stated(Act { asking: true, ..act("rung1", "rung", "chain1", "prompt1", 1, None) });
   let running = Act {
     word: Some("await bash1".to_owned()),
     ..act("rung2", "rung", "chain1", "prompt1", 2, None)
@@ -170,6 +172,18 @@ fn the_work_of_a_chain_thinks_runs_or_delegates() {
 }
 
 #[test]
+fn a_rung_that_waits_for_its_turn_rests_and_the_work_of_its_chain_is_what_else_runs() {
+  let waiting = act("rung1", "rung", "chain1", "prompt1", 1, None);
+  let asking = stated(Act { asking: true, ..waiting.clone() });
+  let prompt = act("prompt1", "prompt", "chain1", "operator", 1, None);
+  let command = act("bash1", "bash", "chain1", "rung0", 2, None);
+  assert_eq!(waiting.state, State::Idle);
+  assert_eq!(working(&[&prompt, &waiting, &command], &[]), State::Runs);
+  assert_eq!(working(&[&prompt, &waiting], &[]), State::Idle);
+  assert_eq!(working(&[&prompt, &asking], &[]), State::Thinks);
+}
+
+#[test]
 fn a_chain_thinks_while_a_model_writes_runs_while_a_command_runs_and_is_done_once_its_prompts_end()
 {
   let acts = [
@@ -179,7 +193,7 @@ fn a_chain_thinks_while_a_model_writes_runs_while_a_command_runs_and_is_done_onc
     act("chain3", "chain", "", "rung1", 4, None),
     act("chain4", "chain", "", "rung1", 5, None),
     act("prompt1", "prompt", "chain2", "rung1", 6, None),
-    act("rung2", "rung", "chain2", "prompt1", 7, None),
+    stated(Act { asking: true, ..act("rung2", "rung", "chain2", "prompt1", 7, None) }),
     act("prompt2", "prompt", "chain3", "rung1", 8, None),
     stated(Act {
       word: Some("await bash(\"make\")".to_owned()),

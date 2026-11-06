@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type Renderable, TextRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
+import { outcomeOf } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { find } from "../script/stage.ts";
 import { App } from "../src/app.ts";
@@ -75,7 +76,7 @@ test("a command that printed more than a row holds sends the tail and its length
       await session.refresh();
       const row = session.acts.find((act) => act.id === command.id);
       const printed = Array.from({ length: 3000 }, (_, index) => `${index + 1}\n`).join("");
-      const stdout = (row?.value as { stdout: { content: string } }).stdout.content;
+      const stdout = ((row ? outcomeOf(row) : undefined) as { stdout: { content: string } }).stdout.content;
       expect(row?.output).toBe(printed.length);
       expect(stdout.length).toBeLessThanOrEqual(2000);
       expect(printed.endsWith(stdout)).toBe(true);

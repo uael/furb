@@ -7,10 +7,11 @@ use serde_json::json;
 use super::{Lines, backwards, heads, stamped};
 use crate::world::{kept, store::Store};
 use crate::{testing::Yard, value::Object};
+use std::process;
 
 /// A record of its own for one test, which does not stand yet.
 fn place(name: &str) -> Yard {
-  Yard::new(format!("furb-lines-{name}-{}", std::process::id())).within("record.jsonl")
+  Yard::new(format!("furb-lines-{name}-{}", process::id())).within("record.jsonl")
 }
 
 #[test]
