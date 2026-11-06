@@ -515,13 +515,24 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         continue
       waits = [c for *_, c in transcript(id, "wants") if not over(c)]
       if (
-        step not in waiting
+        (step not in waiting or paused(step))
         and ladder.get(ran * (ran == step)) != dull
         and (
-          step := next(
-            (x for x in waiting if not (paused(x) or over(x) or (mute == get(x)[2] and not all(map(over, seen))))), ""
+          got := next(
+            (
+              x
+              for x in waiting
+              if not (
+                paused(x)
+                or over(x)
+                or x in {y[2] for y in transcript(id, "reply") if not over(y[1])}
+                or (mute == get(x)[2] and not all(map(over, seen)))
+              )
+            ),
+            "",
           )
         )
+        and (step := got)
       ):
         maker, to = get(step)[2::4]
         if offered(last[0], to) is None:
