@@ -3,9 +3,11 @@
 //! hears the facts of a life.
 //!
 //! While the log beside the record agrees with it, the reader gives every fact of the log, as [`logged`] reads it.
-//! Else it gives the facts that the record kept, each value as the engine gives it. The record keeps only what the outside said: the World, the models
-//! and the operator. So the reader says, after the facts that name them, the facts that the engine said and the record
-//! does not keep, as far as the kept facts show them:
+//! Else it gives the facts that the record kept, each value as the engine gives it. A segment of the minor 1 of the
+//! schema of the record, or of a later minor, keeps the question of each act that the life made. A segment of the minor
+//! 0 keeps only what the outside said: the World, the models and the operator. So the reader says, after the facts
+//! that name them, the facts that the engine said and the record does not keep, as far as the kept facts show them,
+//! and in a segment that keeps each question, only the dones and the findings:
 //!
 //! - each chain that a kept act stands on, made by the rung that makes the first prompt on it, or by the operator,
 //!   named by the first line of that prompt, or by its own name when the record keeps no prompt on it, and standing
@@ -36,7 +38,7 @@ use super::{
   beside,
   log::{KEEP, Line, agrees, keep},
   made,
-  store::each,
+  store::{MADE, Schema, each},
 };
 
 /// Who says each fact that the reader adds to the facts that a record kept, but a question.
@@ -202,7 +204,7 @@ fn retell(
 }
 
 /// What the build that writes a file of what a record tells names in it: a reader of another build writes it again.
-const BUILD: &str = concat!(env!("CARGO_PKG_VERSION"), "/", env!("CARGO_PKG_NAME"), "/3");
+const BUILD: &str = concat!(env!("CARGO_PKG_VERSION"), "/", env!("CARGO_PKG_NAME"), "/4");
 
 /// The size and the time of change of a file, in nanoseconds, or nothing when no file stands there.
 fn stamped(path: &Path) -> Option<(u64, u128)> {
@@ -391,6 +393,7 @@ impl<'a> Reader<'a> {
       gates: HashMap::new(),
       runs: HashMap::new(),
       gated: HashSet::new(),
+      whole: false,
     }
   }
 }
@@ -430,6 +433,9 @@ struct Reader<'a> {
   /// The run of each rung, and each rung whose word the gate read.
   runs: HashMap<String, String>,
   gated: HashSet<String>,
+  /// Whether the segment that the reader reads keeps the question of each act that the life made, as its fact made
+  /// says by the minor of its schema.
+  whole: bool,
 }
 
 impl Reader<'_> {
@@ -442,9 +448,18 @@ impl Reader<'_> {
     // The fact stands after the facts that name it, and before those that it makes the reader say.
     self.flush();
     match kind {
-      "rung" if fact.question() && !text(fact, 1).is_empty() => {
+      "rung" if fact.question() && self.whole && named(by, "prompt") => {
+        if let Some(last) = self.rungs.insert(by.to_owned(), about.to_owned()) {
+          self.end(&last, Object::none());
+        }
+      }
+      "rung" if fact.question() && !self.whole && !text(fact, 1).is_empty() => {
         self.words.insert(about.to_owned(), text(fact, 1));
         self.rungs.insert(about.to_owned(), about.to_owned());
+      }
+      MADE => self.whole = fact.word(2).and_then(Schema::read).is_some_and(|one| one.minor >= 1),
+      "run" if fact.question() => {
+        self.runs.insert(text(fact, 1), about.to_owned());
       }
       "reply" if fact.question() => {
         self.replies.insert(about.to_owned(), by.to_owned());
@@ -496,7 +511,7 @@ impl Reader<'_> {
   /// A question: the chain and the rung that it names when the reader holds neither, then its own place.
   fn asked(&mut self, fact: &Fact) {
     let (kind, about, by, on) = (fact.kind(), fact.about(), fact.by(), fact.on());
-    if kind != "chain" && named(on, "chain") && !self.scopes.contains_key(on) {
+    if !self.whole && kind != "chain" && named(on, "chain") && !self.scopes.contains_key(on) {
       let maker = self.makers.get(on).cloned().unwrap_or_else(|| "operator".to_owned());
       let under =
         self.scopes.get(&maker).or_else(|| self.homes.get(&maker)).cloned().unwrap_or_default();
@@ -505,10 +520,10 @@ impl Reader<'_> {
       self.scopes.insert(on.to_owned(), on.to_owned());
     }
     let chain = self.scope(on);
-    if kind != "prompt" && named(by, "rung") && !self.scopes.contains_key(by) {
+    if !self.whole && kind != "prompt" && named(by, "rung") && !self.scopes.contains_key(by) {
       self.rung(by, &chain);
     }
-    if named(by, "rung") && kind != "reply" {
+    if !self.whole && named(by, "rung") && kind != "reply" {
       self.ran(by);
     }
     let scope = if kind == "chain" { about.to_owned() } else { chain.clone() };
@@ -578,7 +593,9 @@ impl Reader<'_> {
       .map(|one| one.as_str().map_or_else(|| one.py_repr(), str::to_owned))
       .collect();
     if found.is_empty() {
-      self.ran(&rung);
+      if !self.whole {
+        self.ran(&rung);
+      }
       return;
     }
     let findings = found.join("\n");
