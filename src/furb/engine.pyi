@@ -431,6 +431,7 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
   A word that raises a CancelledError tells cancelled and no raised header, since a cancel is no fault of the word.
   A rung that retells another rung names its acts under that one, so it makes the same acts and shares them.
   A cancel of a rung is the Kernel's to do, since the Kernel is the one running the word.
+  A Kernel born into a life that holds a run that is not over ends that run, each wants of it that is not over, and the rung of a run that awaited, each with a refusal that says the word was lost, since it holds no frame of that run.
   The word of a model is python code and nothing else.
   A step that raised keeps what it bound before the raise.
   A rung may await at its top level.

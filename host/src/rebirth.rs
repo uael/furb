@@ -5,9 +5,9 @@
 //! checkpoint keeps each chain, each rung and each open prompt, and the seed makes again each act
 //! of a life word of the standing, under a rung whose word is that life word; each other act that
 //! lives, as a command, a reply, a word that runs or an act with an ear of its own, holds the
-//! rebirth until it ends, however long that takes, so a rebirth never cuts work. A life whose record does not hold
-//! each fact that it said, as on a full disk, holds its rebirth until the record takes them, since
-//! the drop of its engine would lose them.
+//! rebirth until it ends, however long that takes, so a rebirth never cuts work. A life whose
+//! record does not hold each fact that it said, as on a full disk, holds its rebirth until the
+//! record takes them, since the drop of its engine would lose them.
 //!
 //! A fault that stops the sandbox cuts the life with no checkpoint, and ends it: the record keeps
 //! each fact up to the fault, and a later open replays them.

@@ -62,6 +62,7 @@ ENGINES = {"python": furb.python, "monty": furb_monty.engine}
 SURFACE = frozenset(furb_monty.engine.defined())
 """SURFACE is every name the engine defines, which is what a module of the suite may have bound of it."""
 MONTY_SKIPS = {
+  "test_a_kernel_born_into_a_life_ends_each_run_that_an_earlier_kernel_took_and_the_rung_of_a_run_that_awaited",
   "test_a_name_of_a_function_or_of_a_class_whose_own_name_is_another_raises_refused",
   "test_an_ear_is_any_generator_of_that_shape",
   "test_boot_gives_the_root_as_an_act_of_never_and_the_root_never_completes",

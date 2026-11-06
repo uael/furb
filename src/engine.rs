@@ -776,8 +776,8 @@ impl Engine {
   }
 
   /// The state of the record as a list of records shows it while no life holds it: [`Kept::Runs`]
-  /// when it holds the work of [`Engine::pending`], which the open of the next life on it resumes at
-  /// once, so that work runs and no pause holds it, and [`Kept::Saved`] when it holds none.
+  /// when it holds the work of [`Engine::pending`], which the open of the next life on it resumes
+  /// at once, so that work runs and no pause holds it, and [`Kept::Saved`] when it holds none.
   pub fn kept(&mut self) -> Result<Kept, Fault> {
     Ok(if self.pending()?.is_empty() { Kept::Saved } else { Kept::Runs })
   }
