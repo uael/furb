@@ -2011,8 +2011,8 @@ export class Session extends EventEmitter {
         const dot = name.indexOf(".");
         const key = dot < 0 ? [name] : [name.slice(0, dot), name.slice(dot + 1)];
         const text = words.join(" ").trim();
-        const value = text ? typed(text) : undefined;
         const held = (await this.host.settings()).find((one) => one.key.join(".") === key.join("."));
+        const value = text ? typed(text, held?.property) : undefined;
         await this.setConfig(key, value, held?.layer ?? "project");
         break;
       }
