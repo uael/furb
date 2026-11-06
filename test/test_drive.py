@@ -4,7 +4,7 @@ from collections.abc import Generator
 
 import pytest
 
-from conftest import born, keeping, said, settle
+from conftest import born, keeping, said, settle, verbs
 from furb import engine
 from furb.engine import Refused
 
@@ -46,6 +46,7 @@ async def test_one_that_returns_is_over_and_lives_no_more() -> None:
 async def test_one_that_raises_while_it_hears_is_dropped_at_once_and_the_one_that_spoke_goes_on() -> None:
   """One that raises while it hears is dropped at once, and the one that spoke goes on: the engine says the done of the act it is the ear of, with a refusal that names it and what it raised, or the fact dropped that names them when no open act is its own, so a replay that gives it the same facts says the same."""
   sand, log, root = born()
+  await verbs(root, "touchy", "shut")
   heard: list[tuple] = []
   engine.drive(keeping(heard), "before")
   engine.drive(breaks(), "broken")
