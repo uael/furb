@@ -208,3 +208,31 @@ test("the frame sign_in of the daemon shows as the event authentication of a lif
   await life.cancelSignIn();
   expect(verbs).toEqual(["hello", "cancel_sign_in"]);
 });
+
+test("a daemon that closes before its welcome, as one that ends at its grace, is dialed again", async () => {
+  let dials = 0;
+  const folder = mkdtempSync(join(tmpdir(), "furb-reconnect-"));
+  const place = join(folder, "host.sock");
+  const server = createServer((socket) => {
+    dials += 1;
+    socket.setEncoding("utf8");
+    socket.on("error", () => {});
+    socket.on("data", (chunk: string) => {
+      const asked = JSON.parse(chunk.split("\n")[0] ?? "{}") as Asked;
+      if (dials === 1) return socket.destroy();
+      reply(socket, asked, {
+        answer: "welcome",
+        data: { peer: { login: "test", role: "write", kind: "window" } },
+      });
+    });
+  });
+  server.listen(place);
+  const daemon = new Daemon(folder, place, "write");
+  made.push({ folder, server, daemon });
+  const lost: unknown[] = [];
+  daemon.on("lost", (why: unknown) => lost.push(why));
+  await daemon.connect();
+  expect(dials).toBe(2);
+  expect(daemon.peer?.login).toBe("test");
+  expect(lost).toEqual([]);
+});
