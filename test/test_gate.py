@@ -377,7 +377,7 @@ async def test_a_finding_on_a_str_that_a_word_asks_for_the_content_of_a_text_say
 
 
 async def test_a_word_that_binds_a_name_of_the_engine_at_its_top_finds_that_each_later_word_reads_it() -> None:
-  """A word that binds a name of the engine at its top, by an assignment, a for, a with, an import, an except or a del, also in a block of an if, a for, a while, a with, a try or a match, finds that each later word reads that name."""
+  """A word that binds a name of the engine at its top, by an assignment, a walrus, a for, a with, an import, an except, a del, a capture of a match or a global of a def, also in a block of an if, a for, a while, a with, a try or a match, finds that each later word reads that name."""
   _, _, root = born()
   bound = "error[engine-name] (column {}) `{}` is a name of the engine, which each later word reads: give the value a name of its own"
   assert engine.gate("wait = 5", on=root) == [f"line 1: {bound.format(1, 'wait')}, in 'wait = 5'"]
@@ -387,6 +387,13 @@ async def test_a_word_that_binds_a_name_of_the_engine_at_its_top_finds_that_each
   assert engine.gate("try:\n  pass\nexcept Refused as span:\n  pass", on=root) == [
     f"line 3: {bound.format(1, 'span')}, in 'except Refused as span:'"
   ]
+  for word, line, column, name in [
+    ("(wait := 5)", 1, 2, "wait"),
+    ("match 1:\n  case chance:\n    pass", 2, 8, "chance"),
+    ("def f():\n  global cd", 2, 10, "cd"),
+  ]:
+    (found,) = engine.gate(word, on=root)
+    assert found.startswith(f"line {line}: {bound.format(column, name)}, in "), found
 
 
 async def test_a_def_or_a_class_of_a_name_of_the_engine_overrides_it_and_a_word_may_import_a_name_that_the_engine_imports() -> (

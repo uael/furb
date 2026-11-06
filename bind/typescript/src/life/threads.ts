@@ -36,7 +36,7 @@ const ACT = /^\w+?\d+$/;
  * what a word of the operator told the chain, a prompt of None that a rung of his made or the acknowledgment of a rung
  * in no thread; a wake, a prompt of None that an ear or a verb of the round made; or a question of another chain to
  * this one, a worker that asks its coordinator, with the chain that asks. The view model of the host says the same in
- * `host/src/view/threads.rs`, which the TUI does not read yet. */
+ * `src/view/threads.rs`, which the TUI does not read yet. */
 export type Aside =
   | { aside: "notice" }
   | { aside: "rung" }
@@ -278,7 +278,7 @@ export function nestThreads(list: readonly ChainThread[], rows: Rows): ThreadNod
 /** The threads of a tree in the order that the list of the threads shows them: the closed ones first and the open ones
  * last, so that the open ones stand nearest the input, and in each group by the time of their last message, the oldest
  * first. The agents of each thread take the same order. The view model of the host says the same in
- * `host/src/view/threads.rs`, which the TUI does not read yet. */
+ * `src/view/threads.rs`, which the TUI does not read yet. */
 export function orderThreads(nodes: readonly ThreadNode[]): ThreadNode[] {
   const last = (node: ThreadNode) =>
     Math.max(node.thread.act.began, ...node.thread.messages.map((one) => one.began));

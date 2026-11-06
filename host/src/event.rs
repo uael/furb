@@ -5,7 +5,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{queue::FollowUp, view::Act};
+use furb::view::Act;
+
+use crate::queue::FollowUp;
 
 /// The place of an event in the log of its life, counted from 0 with no gap.
 pub type Seq = u64;

@@ -1,7 +1,7 @@
 import type { BoxRenderable, RGBA, TextRenderable } from "@opentui/core";
 import { busy, gist } from "furb/life";
 import { shortenHome, shortenHomes } from "../files.ts";
-import { clip, count, modelName, retryLine } from "../format.ts";
+import { clip, count, modelLabel, modelName, retryLine } from "../format.ts";
 import { readOnly } from "../reading.ts";
 import { statusLabels, views } from "../session.ts";
 import { theme as c, glyph, markOf, spacing as space, spin, threadTone } from "../theme.ts";
@@ -113,8 +113,8 @@ export const chrome = part({
     }
   },
 
-  /** Where the input goes, under it: its mode, its chain, and for a prompt the model, the effort, and the type of its
-   * answer. Each part is a button that changes it. */
+  /** Where the input goes, under it: its mode, its chain, and for a prompt the model with its effort, as opus/high,
+   * and the type of its answer. Each part is a button that changes it. */
   renderMeta(mode: string, modeColor: RGBA): void {
     const w = this.session;
     const pending = w.operatorPrompt;
@@ -122,7 +122,7 @@ export const chrome = part({
     const { provider, id } = modelName(model);
     // With no model that answers, the actor falls to the operator, which the line names as no model, with no effort.
     const none = id === "operator";
-    const name = none ? "no model" : id;
+    const name = none ? "no model" : modelLabel(id, effort);
     const stash = w.stashes[w.draftKey];
     const reading = Boolean(w.host.reading);
     const prompt = w.mode === "prompt" && !w.editing && !pending && !reading;
@@ -155,14 +155,13 @@ export const chrome = part({
     )
       return;
     this.clear(this.meta);
-    // A narrow input leaves out, in this order, the provider, the type of the answer, the effort, and the chord of the
+    // A narrow input leaves out, in this order, the provider, the type of the answer, and the chord of the
     // switch, and the stash shows less of what waits in it.
     const edited = Boolean(w.editing || pending || reading);
     const shown = {
       chord: !edited,
       provider: prompt && Boolean(provider) && !none,
       shape: prompt,
-      effort: prompt && !none,
     };
     const gaps = 3;
     const width = () =>
@@ -174,12 +173,10 @@ export const chrome = part({
       (pending ? 2 * gaps + Bun.stringWidth(`answers ${pending.id}returns ${pending.shape}`) : 0) +
       (prompt ? gaps + Bun.stringWidth(name) : 0) +
       (shown.provider ? provider.length + 1 : 0) +
-      (shown.effort ? gaps + Bun.stringWidth(`${effort} effort`) : 0) +
       (shown.shape ? gaps + Bun.stringWidth(`returns ${w.shape}`) : 0) +
       // The stash takes a gap, its word, its quotes and their space, and its key, and its preview takes the rest.
       (stash ? gaps + "stashed “”  ⌃S".length : 0);
-    for (const part of ["provider", "shape", "effort", "chord"] as const)
-      if (width() > room) shown[part] = false;
+    for (const part of ["provider", "shape", "chord"] as const) if (width() > room) shown[part] = false;
     // The title of the thread takes the room that the row leaves free, and is cut only where the row is full.
     if (target && width() < room) title = clip(whole, Bun.stringWidth(title) + room - width());
     const gap = () => this.meta.add(this.text("   ", c.faint));
@@ -240,16 +237,6 @@ export const chrome = part({
         ],
         () => this.models(),
       );
-      if (shown.effort) {
-        gap();
-        button(
-          [
-            [effort, c.muted],
-            [" effort", c.faint],
-          ],
-          () => this.effortPicker(),
-        );
-      }
       if (shown.shape) {
         gap();
         button(

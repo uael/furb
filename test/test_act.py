@@ -4,7 +4,7 @@ from collections.abc import Generator
 
 import pytest
 
-from conftest import Kernel, Sand, born, keeping, kernel, paragraphs, plain, relived, said, settle, watched
+from conftest import Kernel, Sand, born, keeping, kernel, paragraphs, plain, relived, said, settle, verbs, watched
 from furb import engine
 from furb.engine import HIDDEN, OPERATOR, TIMEOUT, Act, Exit, Refused, Text, take
 
@@ -37,6 +37,7 @@ def taking(kind: str) -> Generator[tuple | None, tuple]:
 async def test_the_way_to_make_a_question() -> None:
   """The way to make a question: it takes a name when it is made, it is put to the ears, its ear, when it has one, is brought to life under that name and given the name, and the name is given back, which is the act to whoever holds it."""
   _, log, root = born()
+  await verbs(root, "note")
   heard: list[object] = []
   one = engine.act("note", root, noting(heard), "one")
   assert isinstance(one, Act) and one == "note1"
@@ -51,6 +52,7 @@ async def test_the_way_to_make_a_question() -> None:
 async def test_an_act_is_put_to_every_ear_of_the_engine_the_acts_first() -> None:
   """An act is put to every ear of the engine that waits for it, the acts first, and a busy one hears it once it is done speaking, at its place among what was said."""
   _, _, root = born()
+  await verbs(root, "note")
   heard: list[tuple] = []
   made: list[str] = []
   first: list[str] = []
@@ -120,6 +122,7 @@ async def test_it_is_then_put_to_the_ears_of_the_outside_in_turn_until_one_takes
   log: list[tuple] = []
   after: list[tuple] = []
   root = engine.boot((), **kernel(), probe=watched(log), taker=taking("note"), after=keeping(after), world=sand.hears())
+  await verbs(root, "note", "seen")
   one = engine.act("note", root, noting([], takes=False))
   assert engine.peek(one, ...) is ... and [a for a in after if a[0] == "note"] == []
   two = engine.act("seen", root, None)
@@ -142,6 +145,7 @@ async def test_to_take_an_act_is_to_say_a_started_or_a_done_about_it() -> None:
 async def test_an_act_that_no_ear_takes_is_refused() -> None:
   """An act that no ear takes and that the record does not hold is refused: the life says it done with a refusal that names its kind."""
   _, log, root = born()
+  await verbs(root, "note", "nothing")
   one = engine.act("note", root, noting([], takes=False))
   got = engine.peek(one)
   assert isinstance(got, Refused) and str(got) == "nothing takes note"
@@ -205,6 +209,7 @@ async def test_the_chain_an_act_is_on_is_the_chain_named_to_the_call() -> None:
   """The chain an act is on is the chain named to the call, or the scope of the one that made it when the call names none."""
   sand, _, root = born()
   two = engine.chain("two")
+  await verbs(two, "note")
   heard: list[object] = []
   named = engine.act("note", two, noting(heard), "one")
   assert engine.get(named)[3] == two
@@ -216,6 +221,7 @@ async def test_the_chain_an_act_is_on_is_the_chain_named_to_the_call() -> None:
 async def test_the_ear_of_an_act_is_given_the_name_of_the_act_and_hears_every_fact_said_after_its_birth() -> None:
   """The ear of an act is given the name of the act and hears every fact said after its birth that it waits for, and it speaks by yielding a saying."""
   _, log, root = born()
+  await verbs(root, "note")
   heard: list[object] = []
   one = engine.act("note", root, noting(heard, "spoke"), "one")
   engine.bash("echo hi", on=root)
@@ -223,7 +229,7 @@ async def test_the_ear_of_an_act_is_given_the_name_of_the_act_and_hears_every_fa
   after = log[log.index(engine.get(one)) + 1 :]
   assert heard[0] == one and sorted(heard[1:], key=repr) == sorted(after, key=repr)
   assert engine.get(one) not in heard
-  assert paragraphs(engine.turns(on=root))[1:] == [
+  assert paragraphs(engine.turns(on=root))[2:] == [
     "#note1 spoke by yield",
     "#bash1\nbash1_command = 'echo hi'\nbash1: Act[Exit] = Act('bash1')",
     "#bash1 exited 0\nbash1_stdout = 'ran echo hi'",

@@ -32,6 +32,7 @@ from conftest import (
   settle,
   sown,
   tip,
+  verbs,
   world_says,
 )
 from furb import engine
@@ -70,6 +71,7 @@ def watching(root: str) -> Generator[tuple | None, tuple]:
 async def test_a_life_everything_that_is_said_in_it_is_said_here() -> None:
   """A life: everything that is said in it is said here, so the log of what was said, the generators that listen by their names and the tables of the life are its own, and it binds the names that reach them: say, which says a fact, act, which makes an act, drive, which brings a generator to life, and get, peek and transcript, which read the tables."""
   _, _, root = await lived()
+  await verbs(root, "note")
   heard: list[tuple] = []
   its: list[tuple] = []
   engine.drive(keeping(heard), "keeper")

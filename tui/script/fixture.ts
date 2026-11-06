@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { createReadStream, writeFileSync } from "node:fs";
+import { createInterface } from "node:readline";
 import { isQuestion } from "furb";
 
 /** The kinds of question that are steps of an act, which a view of a life shows not, as the activity says. The run, the
@@ -25,6 +26,29 @@ export function scrub(text: string): string {
     )
     .replace(/\b([A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD)[A-Z0-9_]*)=\S+/g, "$1=[key]")
     .replace(/(authorization:\s*(?:bearer|token)\s+)\S+/gi, "$1[key]");
+}
+
+/** A value of JSON with each string in it scrubbed, so that a fact stays valid JSON after the scrub: a scrub of the
+ * text of a fact could take a quote or a backslash of the JSON into what it replaces. */
+export function scrubbed(value: unknown): unknown {
+  if (typeof value === "string") return scrub(value);
+  if (Array.isArray(value)) return value.map(scrubbed);
+  if (value && typeof value === "object")
+    return Object.fromEntries(Object.entries(value).map(([key, one]) => [key, scrubbed(one)]));
+  return value;
+}
+
+/** The moment of a life that a fixture shows: the end of the log, the moment with the most work at once, or a count of
+ * the facts that the fixture keeps, which a later run on the same log, grown since, cuts at the same fact. */
+export type Moment = "end" | "busiest" | number;
+
+/** A moment as an argument of the command line gives it. */
+export function momentOf(given = "end"): Moment {
+  if (given === "end" || given === "busiest") return given;
+  const count = Number(given);
+  if (!Number.isInteger(count) || count < 1)
+    throw new Error(`${given} is no moment: give end, busiest or a count of facts.`);
+  return count;
 }
 
 /** A text cut to a count of lines and of characters on each, with a mark where it is cut. */
@@ -157,16 +181,26 @@ function value(kind: string, got: unknown): unknown {
   return JSON.parse(clip(JSON.stringify(got), 1, 2000).replace(/…$/, "") || "null");
 }
 
-/** The facts of a log of a life that the model of a life reads, with no secret in them, up to the moment of the life
- * that holds the most work at once and the most questions to the operator. */
-export function fixture(lines: string[]): { facts: Fact[]; header: Record<string, unknown> } {
+/** The facts of a log of a life that the model of a life reads, with no secret in them, up to a moment of the life. The
+ * lines come one at a time, so a log of gigabytes never stands whole in memory, and a line that does not parse, as the
+ * last line of a log that a life still writes, is skipped. */
+export async function fixture(
+  lines: Iterable<string> | AsyncIterable<string>,
+  moment: Moment = "end",
+): Promise<{ facts: Fact[]; header: Record<string, unknown> }> {
   const facts: Fact[] = [];
   const kinds = new Map<string, string>();
   /** The rungs that an ear wrote, whose maker is no act. */
   const ears = new Set<string>();
-  for (const line of lines) {
+  for await (const line of lines) {
+    if (typeof moment === "number" && facts.length >= moment) break;
     if (!line.startsWith("[")) continue;
-    const fact = JSON.parse(line) as Fact;
+    let fact: Fact;
+    try {
+      fact = JSON.parse(line) as Fact;
+    } catch {
+      continue;
+    }
     const [kind, id] = fact as [string, string];
     if (isQuestion(kind, id)) {
       kinds.set(id, kind);
@@ -204,12 +238,12 @@ export function fixture(lines: string[]): { facts: Fact[]; header: Record<string
     )
       facts.push([kind, id, fact[2], [clip(String((fact[3] as string[])[0]), 12)]]);
   }
-  // The moment to show is the one with the most chains at work, with a question to the operator as a chain at work.
+  // The busiest moment is the one with the most chains at work, with a question to the operator as a chain at work.
   const open = new Map<string, string>();
   const asks = new Set<string>();
-  let best = facts.length,
+  let best = Math.min(facts.length, typeof moment === "number" ? moment : facts.length),
     most = -1;
-  for (const [at, fact] of facts.entries()) {
+  for (const [at, fact] of moment === "busiest" ? facts.entries() : []) {
     const [kind, id] = fact as [string, string];
     if (isQuestion(kind, id) && ["rung", "bash", "wait"].includes(kind)) open.set(id, String(fact[3]));
     if (isQuestion(kind, id) && kind === "prompt" && fact[6] === "operator" && fact[4] !== "None")
@@ -228,23 +262,33 @@ export function fixture(lines: string[]): { facts: Fact[]; header: Record<string
   // command that still runs keeps the last lines that it printed.
   const kept = facts.slice(0, best);
   const ended = new Set(kept.filter((fact) => fact[0] === "done").map((fact) => fact[1]));
-  const shown = kept.filter((fact, at) => {
-    if (fact[0] !== "out") return true;
-    if (ended.has(fact[1])) return false;
-    const after = kept.slice(at + 1).filter((one) => one[0] === "out" && one[1] === fact[1]).length;
-    return after < PRINTED;
-  });
+  const after = new Map<unknown, number>();
+  const shown = [...kept]
+    .reverse()
+    .filter((fact) => {
+      if (fact[0] !== "out") return true;
+      if (ended.has(fact[1])) return false;
+      const later = after.get(fact[1]) ?? 0;
+      after.set(fact[1], later + 1);
+      return later < PRINTED;
+    })
+    .reverse();
   return { facts: shown, header: { recorded: true, cut: best, of: facts.length } };
 }
 
 if (import.meta.main) {
-  const [log, out = "tui/fixtures/conductor.jsonl"] = process.argv.slice(2);
+  const [log, out = "tui/fixtures/conductor.jsonl", given] = process.argv.slice(2);
   if (!log) throw new Error("Give the log of a life, as .furb/sessions/<record>.jsonl.log.");
-  const { facts, header } = fixture(readFileSync(log, "utf8").split("\n"));
+  const lines = createInterface({
+    input: createReadStream(log, "utf8"),
+    crlfDelay: Number.POSITIVE_INFINITY,
+  });
+  const { facts, header } = await fixture(lines, momentOf(given));
+  lines.close();
   // A last pass scrubs each fact whole, so that no value that the passes above keep as it is holds a secret.
   writeFileSync(
     out,
-    `${[JSON.stringify(header), ...facts.map((fact) => scrub(JSON.stringify(fact)))].join("\n")}\n`,
+    `${[JSON.stringify(header), ...facts.map((fact) => JSON.stringify(scrubbed(fact)))].join("\n")}\n`,
   );
   console.log(`${out}: ${facts.length} facts, cut at ${header.cut} of ${header.of}`);
 }
