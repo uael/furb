@@ -238,6 +238,13 @@ struct Begun {
   given: Option<String>,
 }
 
+/// The environment that makes a request for an editor or a terminal fail at once. No one answers
+/// a command at a terminal, so `git commit` with no message, or a prompt for a password, would
+/// wait for ever: with these set, git fails on the editor `false` and on a prompt, and a program
+/// that reads `VISUAL` or `EDITOR` runs `false`.
+const UNASKING: [(&str, &str); 4] =
+  [("GIT_EDITOR", "false"), ("VISUAL", "false"), ("EDITOR", "false"), ("GIT_TERMINAL_PROMPT", "0")];
+
 /// A command begun: its shell made ready in the directory of its chain, with the scratch directory
 /// as its `TMPDIR`.
 async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, Fault> {
@@ -268,6 +275,9 @@ async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, 
     .stderr(Stdio::piped());
   let tmp = scratch.made()?;
   command.env("TMPDIR", tmp);
+  for (name, value) in UNASKING {
+    command.env(name, value);
+  }
   if cfg!(windows) {
     command.env("TMP", tmp).env("TEMP", tmp);
   }
