@@ -51,3 +51,11 @@ writes the turns of a chain after the stand of the root. So the root seeded itse
 open drifted at `gate1`. The reader of that form puts the turns of each chain just after the chain. The test
 `a_checkpoint_of_the_form_before_its_schema_that_a_later_life_wrote_opens_and_seeds_no_root_again` in `src/life.test.rs`
 proves it.
+
+`ranks.jsonl.zst` is the tail of the life `5eb81f9c` of 11-05 after its last checkpoint, which the engine `5f66c73c`
+made. Its checkpoint is cut: it keeps each chain and each act, with no turns, no values and no long value of an act. It
+is kept by zstd with a long window, 10.1 MB plain and 0.19 MB kept, and the harness reads it through zstd. On its own
+engine it drifts at `rung3230`, since that engine says the first started or done of an act of the outside before the
+facts that the record holds before it. The adapter of that engine in `src/furb/adapters.py` carries the ranks of #1329,
+so the record replays with no drift. The test `a_record_of_an_engine_that_an_adapter_names_drifts_on_that_engine_without_the_adapter`
+in `src/life.test.rs` proves the drift without the adapter.

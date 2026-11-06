@@ -116,7 +116,7 @@ it is not given. The daemon answers requests in any order.
 | `names` | `life`, `on` | read |
 | `gate` | `life`, `word`, `on` | read |
 | `stand` | `life` | write |
-| `config` | `life`, `config`: `{"action": "get"}`, `{"action": "set", "key", "value", "layer"}` or `{"action": "reload"}` | read for get, else write |
+| `config` | `life`, `config`: `{"action": "get"}`, `{"action": "set", "key", "value", "layer"}` | read for get, else write |
 | `seen` | `life`, `about` | write |
 | `queue` | `life`, `entry`, `shape`, `message`, `on` | write |
 | `unqueue` | `life`, `entry` | write |
@@ -140,8 +140,7 @@ it is not given. The daemon answers requests in any order.
   the values that win and no layer, then with a value for each of its names. A set refuses a value that the property
   of its key does not take, and writes nothing. A set writes the key in its layer, `project` when none is named, or
   takes it out when no value is given, and then the life stands, so the answer is the act of the stand. A change that
-  the catalog cannot read puts its config back as it was, and the life does not stand. A reload is a stand on the
-  configs as the disk holds them, which asks again each model that waits to retry.
+  the catalog cannot read puts its config back as it was, and the life does not stand.
 - `list` gives each record of the machine as `lives`: each record of the sessions of each workspace that
   `workspaces.json` in the folder `config` names, the config folder of the daemon when the peer names none, in the
   `.furb/sessions` of its main checkout and of each worktree of it, with that main checkout as `workspace`, and each

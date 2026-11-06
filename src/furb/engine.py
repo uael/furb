@@ -163,6 +163,8 @@ def stand(on=""):
 
 
 def clock(on="") -> float:
+  if acting() and question(("clock", (transcript(on)[-1:] or [["", ""]])[0][1])):
+    raise Refused("a poll of the clock: await wait(seconds)")
   return ask("clock", on)
 
 
@@ -704,6 +706,9 @@ def grant(usd: float | None = None, share: float | None = None, on="") -> Act[No
 def bash(
   command: str, stdin: str | None = "", timeout=TIMEOUT, ok=None, show: Show = TAIL, show_err: Show | None = None, on=""
 ) -> Act[Exit]:
+  if callable(ok):
+    raise Refused("no callable ok")
+
   def ear(id):
     yield opened(id, "Exit", command="" if show == HIDDEN else command)
     while True:
@@ -716,7 +721,7 @@ def bash(
               yield told(
                 id,
                 f"timed out after {timeout}s" if code is None else f"exited {code}",
-                stdout=cut(shown(out, show)),
+                stdout=cut(shown(out, show or TAIL)),
                 stderr=show_err and cut(shown(err, show_err)),
               )
           return

@@ -1352,19 +1352,6 @@
             "key"
           ],
           "description": "A key of a layer, the project when none is named, set to a value, or taken out with no\nvalue, then a stand of the life on the configs. A change that the catalog refuses puts its\nconfig back as it was, and the life does not stand."
-        },
-        {
-          "type": "object",
-          "properties": {
-            "action": {
-              "type": "string",
-              "const": "reload"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "description": "A stand of the life on the configs as the disk holds them, which asks again each model that\nwaits to retry."
         }
       ],
       "description": "What a peer asks of the configs of a life, which the World writes, so no window writes a disk."
@@ -1376,7 +1363,7 @@
         "project",
         "local"
       ],
-      "description": "A layer of the configs, from the one that wins least to the one that wins most: the config of\nthe user, the config of the project, and its local config, which git ignores."
+      "description": "A layer of the configs, from the one that wins least to the one that wins most."
     },
     "Slot": {
       "oneOf": [
@@ -2748,7 +2735,7 @@
         "origin",
         "yours"
       ],
-      "description": "One thread of a chain: its prompt, its name, its messages, the prompts to the operator that it\nmade and the questions of them that wait, and its state. A thread is over once its prompt\nand each of its messages is done, and a message to a thread that is over opens it again until its\nmodel closes the message."
+      "description": "One thread of a chain: its prompt, its name, its messages, the prompts to the operator that it\nmade and the questions of them that wait, and its state. A thread is over once its prompt\nand each of its messages is done, and a message to a thread that is over opens it again until\nits model closes the message."
     },
     "State": {
       "type": "string",

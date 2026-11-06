@@ -2060,7 +2060,7 @@ export class Session extends EventEmitter {
     const argument = space < 0 ? "" : text.slice(space + 1).trim();
     switch (command) {
       case "reload":
-        await this.host.config({ action: "reload" });
+        await this.host.stand();
         this.emit("configured");
         await this.reloadCatalog();
         this.notice = "Provider settings reloaded. The life stands on the new settings.";
@@ -2082,7 +2082,7 @@ export class Session extends EventEmitter {
         break;
       }
       case "retry":
-        await this.host.config({ action: "reload" });
+        await this.host.stand();
         this.notice = "Each model that waited to retry is asked again now, on the provider settings of now.";
         break;
       case "provider": {
@@ -2362,7 +2362,7 @@ export class Session extends EventEmitter {
       this.host.role === "write" &&
       JSON.stringify(authenticated(this.roster)) !== JSON.stringify(authenticated(this.catalog))
     )
-      await this.host.config({ action: "reload" });
+      await this.host.stand();
     this.setup = await this.host.setup();
     await this.refresh();
   }

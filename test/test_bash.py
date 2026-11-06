@@ -27,6 +27,7 @@ from conftest import (
   relived,
   said,
   settle,
+  sown,
   world_says,
 )
 from furb import engine
@@ -576,13 +577,21 @@ async def test_a_command_accepts_the_codes_that_its_ok_names_and_every_code_when
   assert [a[7] for a in said(log, "bash")] == [(0, 1), True, (0,)]
 
 
-async def test_what_an_ok_or_an_accepts_raises_the_word_that_awaits_the_command_raises_and_every_other_word_goes_on() -> (
-  None
-):
-  """What an ok or an accepts raises as it judges the code of a command, the word that awaits the command raises at its await, and every other word goes on."""
+async def test_bash_refuses_an_ok_that_is_a_callable_since_no_later_life_makes_it_again_as_it_was() -> None:
+  """bash refuses an ok that is a callable, since no later life makes it again as it was."""
+  _, log, root = born("try:\n  bash('one', ok=lambda e: True)\nexcept Refused as no:\n  close(str(no))", auto=False)
+  assert await engine.prompt(str, "run it", on=root) == "no callable ok"
+  assert said(log, "bash") == []
+  [chain] = engine.gathered(lambda one: one, {})["chains"]
+  life(sown(), engine.seed(engine.gathered(lambda one: one, {})))
+  await settle()
+  assert chain["turns"] and engine.transcript(root, "bash") == []
+
+
+async def test_what_an_accepts_raises_the_word_that_awaits_the_command_raises_and_every_other_word_goes_on() -> None:
+  """What an accepts raises as it judges the code of a command, the word that awaits the command raises at its await, and every other word goes on."""
   sand, log, root = born(
-    "x = bash('one', ok=lambda e: True)\ntry:\n  await x\nexcept TypeError:\n  got = ['type']\n"
-    "accepts = lambda command, exit: 1 / 0\ny = bash('two')\ntry:\n  await y\nexcept ZeroDivisionError:\n  got.append('zero')\n"
+    "accepts = lambda command, exit: 1 / 0\ny = bash('two')\ntry:\n  await y\nexcept ZeroDivisionError:\n  got = ['zero']\n"
     "close(got)",
     "close(3)",
     auto=False,
@@ -590,9 +599,7 @@ async def test_what_an_ok_or_an_accepts_raises_the_word_that_awaits_the_command_
   asked = engine.prompt(list, "run them", on=root)
   await settle()
   sand.exits(said(log, "bash")[0][1], 0)
-  await settle()
-  sand.exits(said(log, "bash")[1][1], 0)
-  assert await asked == ["type", "zero"]
+  assert await asked == ["zero"]
   assert await engine.prompt(int, "then", on=root) == 3
 
 

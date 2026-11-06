@@ -125,7 +125,6 @@ mod protocol {
           layer: Some(Layer::Local),
         },
       },
-      Verb::Config { life: life(), config: Config::Reload },
       Verb::Seen { life: life(), about: "chain1".to_owned() },
       Verb::Queue {
         life: life(),
@@ -370,7 +369,6 @@ mod protocol {
       "read",
       "write",
       "stand",
-      "config",
       "config",
       "seen",
       "queue",

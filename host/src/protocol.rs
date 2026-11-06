@@ -409,30 +409,9 @@ pub enum Config {
   /// value, then a stand of the life on the configs. A change that the catalog refuses puts its
   /// config back as it was, and the life does not stand.
   Set { key: Vec<String>, value: Option<Value>, layer: Option<Layer> },
-  /// A stand of the life on the configs as the disk holds them, which asks again each model that
-  /// waits to retry.
-  Reload,
 }
 
-/// A layer of the configs, from the one that wins least to the one that wins most: the config of
-/// the user, the config of the project, and its local config, which git ignores.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum Layer {
-  User,
-  Project,
-  Local,
-}
-
-impl From<Layer> for furb::world::config::Layer {
-  fn from(layer: Layer) -> Self {
-    match layer {
-      Layer::User => Self::User,
-      Layer::Project => Self::Project,
-      Layer::Local => Self::Local,
-    }
-  }
-}
+pub use furb::world::config::Layer;
 
 /// What the daemon says to a peer.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]

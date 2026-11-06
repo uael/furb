@@ -176,6 +176,39 @@ export declare class Engine {
 export type JsEngine = Engine
 
 /**
+ * The meaning of a life that each window draws, folded in the crate from the facts of the life in
+ * the order of its log, as a daemon folds it: the acts, the desk, the threads of a chain, the acts
+ * as they stood at a moment, and the moments. A window that reads a record with no daemon folds it
+ * here, so it draws the meaning that a daemon serves.
+ */
+export declare class Meaning {
+  /** A meaning that heard no fact yet. */
+  constructor()
+  /**
+   * The acts that a fact changes, each as it stands after the fact. `covered` names each act of
+   * `open` that a pause or a wake covers, and `born` the last pause or wake that covers a new act,
+   * as the engine finds them. A reader with no engine gives neither.
+   */
+  hear(fact: unknown[], covered?: string[], born?: unknown[] | null): Array<import("./dist/protocol.js").Act>
+  /**
+   * The live acts whose pause a pause would change, or a wake: each that no pause holds, or each
+   * that one holds.
+   */
+  open(pausing: boolean): Array<string>
+  /** What waits for the operator, with each notice that the window still shows. */
+  desk(notices?: Array<string> | undefined | null): import("./dist/protocol.js").Desk
+  /**
+   * The threads of a chain, now or as they stood just after a moment. `read` is the place up to
+   * which the window read the chain, from which its runs of notes count the notes not yet read.
+   */
+  threads(chain: string, at?: number | undefined | null, read?: number | undefined | null): import("./dist/protocol.js").Threads
+  /** The acts as they stood just after a moment. */
+  asOf(at: number): Array<import("./dist/protocol.js").Act>
+  /** Each moment at which an act began or ended, in order. */
+  moments(): number[]
+}
+
+/**
  * An ear that the crate writes: given once, to the boot of an engine or to a verb that takes an ear. It is let go
  * when it is disposed, so what it holds goes: a command ends, a wait ends, and a store lets its record go. The
  * engine of python steps it as a generator of its own too.

@@ -721,14 +721,14 @@ fn each_record_of_the_replays_replays_on_its_own_engine_with_no_drift() {
   let mut records: Vec<PathBuf> = fs::read_dir(replays())
     .unwrap()
     .map(|one| one.unwrap().path())
-    .filter(|one| one.extension().is_some_and(|named| named == "jsonl"))
+    .filter(|one| one.extension().is_some_and(|named| named == "jsonl" || named == "zst"))
     .collect();
   records.sort();
   assert!(!records.is_empty(), "tests/replay holds no record");
   for one in records {
-    let name = one.file_stem().unwrap().to_string_lossy().into_owned();
+    let name = one.file_stem().unwrap().to_string_lossy().trim_end_matches(".jsonl").to_owned();
     let at = place(&format!("replay-{name}"));
-    fs::copy(&one, at.join("record.jsonl")).unwrap();
+    laid(&one, &at.join("record.jsonl"));
     let kept = world::kept(at.join("record.jsonl")).unwrap();
     let made = kept
       .iter()
@@ -750,6 +750,32 @@ fn each_record_of_the_replays_replays_on_its_own_engine_with_no_drift() {
   }
 }
 
+#[test]
+fn a_record_of_an_engine_that_an_adapter_names_drifts_on_that_engine_without_the_adapter() {
+  use sha2::{Digest, Sha256};
+  let at = place("unadapted");
+  laid(&replays().join("ranks.jsonl.zst"), &at.join("record.jsonl"));
+  let mut lines: Vec<String> =
+    fs::read_to_string(at.join("record.jsonl")).unwrap().lines().map(str::to_owned).collect();
+  let made = lines.iter().position(|one| one.starts_with(r#"[["made""#)).unwrap();
+  let mut entry: serde_json::Value = serde_json::from_str(&lines[made]).unwrap();
+  let fact = entry[0].as_array_mut().unwrap();
+  // The same engine with one more line at its end, which no adapter names.
+  let engine = format!("{}\n", fact[7].as_str().unwrap());
+  let mut hash = Sha256::new();
+  for one in [engine.as_str(), fact[8].as_str().unwrap()] {
+    hash.update(one.as_bytes());
+    hash.update([0]);
+  }
+  fact[3] = format!("{:x}", hash.finalize()).into();
+  fact[7] = engine.into();
+  lines[made] = entry.to_string();
+  fs::write(at.join("record.jsonl"), lines.join("\n") + "\n").unwrap();
+  let drift =
+    Opening { inspecting: Some(true), ..opening(&at, false) }.boot::<String>([]).unwrap_err();
+  assert!(format!("{drift:?}").contains("rung3230 drifts"), "{drift:?}");
+}
+
 /// Each run of each chain whose word no turn of that chain shows, as a python expression in the names of the engine.
 const UNSHOWN: &str = "[(c, x[1], x[4]) for c in [f'chain{n}' for n in range(1, 99) if get(f'chain{n}')] \
                        for x in transcript(c, 'run') if x[3] == c \
@@ -762,13 +788,25 @@ const UNSEEDED: &str = "[e[3] for e in transcript('chain1', 'enable') if e[4].st
                         ('user', e[4]) for n, t in enumerate(turns(on='chain1'))) or not all(m in \
                         module('chain1') for m in re.findall(r'^(?:def|class) (\\w+)', e[4], re.M)))]";
 
+/// A record of the replays, written whole at `to`: one that is too large to keep plain is kept
+/// by zstd with a long window, and read through it.
+fn laid(from: &Path, to: &Path) {
+  if from.extension().is_some_and(|named| named == "zst") {
+    let mut plain = zstd::Decoder::new(fs::File::open(from).unwrap()).unwrap();
+    plain.window_log_max(27).unwrap();
+    std::io::copy(&mut plain, &mut fs::File::create(to).unwrap()).unwrap();
+  } else {
+    fs::copy(from, to).unwrap();
+  }
+}
+
 /// Each record of `tests/replay`, and the record of the life of `WORK`, replayed in a life that
 /// only inspects it, by its name.
 fn replayed(by: &str) -> Vec<(String, Engine)> {
   let mut records: Vec<PathBuf> = fs::read_dir(replays())
     .unwrap()
     .map(|one| one.unwrap().path())
-    .filter(|one| one.extension().is_some_and(|named| named == "jsonl"))
+    .filter(|one| one.extension().is_some_and(|named| named == "jsonl" || named == "zst"))
     .collect();
   records.sort();
   let made = worked(&format!("shown-{by}-made"));
@@ -776,9 +814,9 @@ fn replayed(by: &str) -> Vec<(String, Engine)> {
   fs::rename(work.with_file_name("record.jsonl"), &work).unwrap();
   records.push(work);
   let open = |one: PathBuf| {
-    let name = one.file_stem().unwrap().to_string_lossy().into_owned();
+    let name = one.file_stem().unwrap().to_string_lossy().trim_end_matches(".jsonl").to_owned();
     let at = place(&format!("shown-{by}-{name}"));
-    fs::copy(&one, at.join("record.jsonl")).unwrap();
+    laid(&one, &at.join("record.jsonl"));
     let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
     (name, inspects.boot::<String>([]).unwrap().0)
   };

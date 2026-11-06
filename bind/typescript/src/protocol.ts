@@ -296,13 +296,9 @@ export type Config =
       value?: unknown;
       layer?: Layer | null;
       action: "set";
-    }
-  | {
-      action: "reload";
     };
 /**
- * A layer of the configs, from the one that wins least to the one that wins most: the config of
- * the user, the config of the project, and its local config, which git ignores.
+ * A layer of the configs, from the one that wins least to the one that wins most.
  */
 export type Layer = "user" | "project" | "local";
 /**
@@ -922,8 +918,8 @@ export interface ThreadNode {
 /**
  * One thread of a chain: its prompt, its name, its messages, the prompts to the operator that it
  * made and the questions of them that wait, and its state. A thread is over once its prompt
- * and each of its messages is done, and a message to a thread that is over opens it again until its
- * model closes the message.
+ * and each of its messages is done, and a message to a thread that is over opens it again until
+ * its model closes the message.
  */
 export interface ChainThread {
   prompt: string;
