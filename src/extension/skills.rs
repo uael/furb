@@ -2,7 +2,7 @@
 //! code or with none: the folders of skills on the disk, the extensions of the project and of the
 //! configs, and the official extensions that the crate carries. It answers the act `skill`, which
 //! loads a skill on a chain, and a write of `skills://` and a name, which writes the word of a
-//! skill, and a read of `config://`, which gives the keys of a skill in the configs, so its word
+//! skill, and a read of `settings://`, which gives the keys of a skill in the configs, so its word
 //! reads them. [`process`] gives the program of the process of a skill, which a daemon runs.
 
 use std::{
@@ -31,17 +31,17 @@ use crate::{
 /// The scheme of the paths that the ear serves.
 const SCHEME: &str = "skills://";
 
-/// The scheme of the values of the configs, which a word reads: `config://` gives each key with
-/// the value that wins for it, and `config://` and a name the value of that key, as the object of
+/// The scheme of the values of the configs, which a word reads: `settings://` gives each key with
+/// the value that wins for it, and `settings://` and a name the value of that key, as the object of
 /// the keys of a skill.
-const CONFIGS: &str = "config://";
+const CONFIGS: &str = "settings://";
 
 /// The first line of the index, which says how a chain loads and reads a skill.
 const USE: &str = "skill(name) loads a skill: a skill with code plays its word and tells its \
                    interface, and any other tells its SKILL.md. skill() plays each default skill. \
                    read(\"skills://<name>\") gives the word of a skill with code, and \
                    read(\"skills://<name>/<file>\") a file of its folder. \
-                   read(\"config://<name>\") gives the keys of a skill in the configs, as JSON.";
+                   read(\"settings://<name>\") gives the keys of a skill in the configs, as JSON.";
 
 /// Where the files of a skill stand: a folder on the disk, the files that the crate carries of an
 /// official extension.
@@ -133,7 +133,7 @@ impl Seen {
 /// that word, and with the SKILL.md file of a skill with none. The act with no name plays each
 /// default skill that the life does not run. A write of `skills://` and a name writes the word of a
 /// skill with code in `.furb/extensions` of the project, and says the fact enable again when the
-/// life runs it, which reloads it. A read of `config://` gives the values of the configs, as
+/// life runs it, which reloads it. A read of `settings://` gives the values of the configs, as
 /// [`configs`] says. It finds the skills in `.furb/skills`, `.agents/skills` and
 /// `.claude/skills` of the working directory of the chain and of each folder above it, nearest
 /// first, then in `skills` of the config directory of the user, then in the folders of the
@@ -201,7 +201,7 @@ fn answered(seen: &Seen, asked: &str) -> Result<Text, Fault> {
   }
 }
 
-/// The answer of a read of `config://` and what follows it: the value of each key of the
+/// The answer of a read of `settings://` and what follows it: the value of each key of the
 /// configs as one JSON object, or the value of the key of a name. The keys of a skill whose
 /// manifest names a file of keys under `furb-config` come with the default of each key that no
 /// config gives, whether the configs turn the skill on or a folder of skills holds it, and a skill
