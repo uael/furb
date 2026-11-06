@@ -236,3 +236,46 @@ test("a daemon that closes before its welcome, as one that ends at its grace, is
   expect(daemon.peer?.login).toBe("test");
   expect(lost).toEqual([]);
 });
+
+test("a window of a later protocol that meets an older daemon says so, and neither waits nor asks a handover", async () => {
+  const verbs: unknown[] = [];
+  const folder = mkdtempSync(join(tmpdir(), "furb-reconnect-"));
+  const place = join(folder, "host.sock");
+  // A daemon of the protocol 1 that refuses a hello of another version and drops a verb that it does not know.
+  const server = createServer((socket) => {
+    socket.setEncoding("utf8");
+    socket.on("error", () => {});
+    socket.on("data", (chunk: string) => {
+      for (const line of chunk.split("\n").filter(Boolean)) {
+        const asked = JSON.parse(line) as Asked & { verb?: string; protocol?: number };
+        verbs.push(asked.verb);
+        if (asked.verb !== "hello") continue;
+        if (asked.protocol === 1)
+          reply(socket, asked, {
+            answer: "welcome",
+            data: { peer: { login: "test", role: "write", kind: "window" } },
+          });
+        else {
+          const why = `the daemon speaks protocol 1, the peer ${asked.protocol}`;
+          socket.write(
+            `${JSON.stringify({ frame: "refused", id: asked.id, error: { error: "protocol", ours: 1, theirs: asked.protocol }, why })}\n`,
+          );
+          socket.end();
+        }
+      }
+    });
+  });
+  server.listen(place);
+  const daemon = new Daemon(folder, place, "write");
+  made.push({ folder, server, daemon });
+  const life = new RemoteLife(daemon, "life.jsonl");
+  const ended = await Promise.race([
+    life.cancelSignIn().then(
+      () => "answered",
+      (error: Error) => error.message,
+    ),
+    Bun.sleep(3000).then(() => "still waiting after 3 s"),
+  ]);
+  expect(ended).toContain("another build");
+  expect(verbs).not.toContain("handover");
+});

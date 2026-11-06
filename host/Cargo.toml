@@ -58,6 +58,8 @@ windows-sys = { version = "0.61", features = [
 ] }
 
 [dev-dependencies]
+# The digest of the schema of each version of the protocol.
+sha2 = "0.10"
 tokio = { version = "1", features = ["rt", "macros", "time"] }
 
 [[test]]

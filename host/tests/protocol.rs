@@ -24,7 +24,7 @@ mod protocol {
     Host, Outbox, ProtocolError,
     protocol::{
       Answer, Axis, BOUND, Config, Dispose, Effect, Frame, Gesture, Hello, Kind, Layer, Mount,
-      Node, PROTOCOL, Peer, Request, Role, Run, Shape, Slot, Tone, Tree, Verb, ViewEffect,
+      Node, PROTOCOL, Peer, Request, Role, Run, SCHEMAS, Shape, Slot, Tone, Tree, Verb, ViewEffect,
       ViewEvent, schema,
     },
     serve,
@@ -421,6 +421,21 @@ mod protocol {
     assert_eq!(client.heard().await, None);
   }
 
+  #[test]
+  fn each_change_of_the_schema_raises_the_protocol() {
+    use sha2::{Digest, Sha256};
+    let mut made = schema();
+    made.as_object_mut().unwrap().remove("x-protocol");
+    let digest = format!("{:x}", Sha256::digest(made.to_string()));
+    assert_eq!(
+      SCHEMAS.last().copied(),
+      Some(digest.as_str()),
+      "the schema of the protocol changed: raise PROTOCOL and end SCHEMAS with {digest}"
+    );
+    let distinct: std::collections::BTreeSet<_> = SCHEMAS.iter().collect();
+    assert_eq!(distinct.len(), SCHEMAS.len(), "each version has a schema of its own");
+  }
+
   #[tokio::test]
   async fn a_hello_of_another_version_is_refused_with_both_versions() {
     let mut client = served(Role::Write);
@@ -450,10 +465,12 @@ mod protocol {
     let mut client = served(Role::Write);
     client.hello(PROTOCOL).await;
     client.say("{\"id\": 1, \"verb\": \"fly\"}").await;
-    assert!(matches!(
-      client.heard().await,
-      Some(Frame::Refused { id: None, error: ProtocolError::Unread { .. }, .. })
-    ));
+    let heard = client.heard().await;
+    let Some(Frame::Refused { id, error: ProtocolError::Unread { .. }, why }) = heard else {
+      panic!("no refusal: {heard:?}")
+    };
+    assert_eq!(id, Some(1), "a verb that the daemon does not know is refused to its request");
+    assert!(why.contains("fly"), "the refusal names the verb: {why}");
     assert!(matches!(client.ask(2, Verb::List { config: None }).await, Frame::Reply { id: 2, .. }));
   }
 
