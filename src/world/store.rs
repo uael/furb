@@ -112,23 +112,24 @@ pub fn heads(path: impl AsRef<Path>, kinds: &[&str]) -> Result<Vec<Object>, Faul
 }
 
 /// The standing that the last answered stand of the record at a path gave, read as [`heads`]
-/// reads, or nothing when it holds none. A file of lines parses only the lines of the done of a
-/// stand.
+/// reads, or nothing when it holds none. A file of lines reads from its end, a chunk at a time,
+/// until the last done of a stand, and parses only the lines of the done of a stand.
 pub fn standing(path: impl AsRef<Path>) -> Result<Option<Object>, Fault> {
   let path = path.as_ref();
   let format = Format::of(path);
-  let entries = if format == Format::Lines {
-    lines::heads(path, &[r#"[["done","stand"#.to_owned()])?
-  } else {
-    format.kept(path)?
-  };
-  Ok(entries.iter().rev().find_map(|entry| {
-    let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
-    let value = fact.word(0)?;
-    let stood =
-      fact.kind() == "done" && crate::fact::named(fact.about(), "stand") && value.items().is_some();
-    stood.then(|| value.to_owned())
-  }))
+  if format == Format::Lines {
+    return Ok(lines::last(path, &[r#"[["done","stand"#.to_owned()], |entry| stood(&entry))?);
+  }
+  Ok(format.kept(path)?.iter().rev().find_map(stood))
+}
+
+/// The standing that an entry gives: the value of the done of a stand, when it is a list.
+fn stood(entry: &Object) -> Option<Object> {
+  let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
+  let value = fact.word(0)?;
+  let stood =
+    fact.kind() == "done" && crate::fact::named(fact.about(), "stand") && value.items().is_some();
+  stood.then(|| value.to_owned())
 }
 
 /// The kind of the fact by which a record names the build that made it: `("made", "chain1",
