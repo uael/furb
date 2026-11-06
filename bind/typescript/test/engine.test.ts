@@ -19,6 +19,17 @@ afterEach(() => {
   for (const engine of engines.splice(0)) engine.dispose();
 });
 
+/** Give the module of the root a verb for each kind, so that a later life could make again an act of that kind that a
+ * test makes with an ear of its own. */
+async function verbs(engine: Engine, ...kinds: string[]) {
+  await engine.rung({
+    word: kinds
+      .map((kind) => `def ${kind}(*words, on=''):\n  return act(${JSON.stringify(kind)}, on, None, *words)\n`)
+      .join("\n"),
+    on: engine.root,
+  });
+}
+
 /** An engine on one ear of the test, which serves every question of the World from memory: a wait of no seconds is
  * over at once, and any other is over when the test says so, never by the clock. */
 function open(record: unknown[] = []) {
@@ -229,11 +240,15 @@ test("a key of the client makes its act once in a life and in a later life", () 
   expect(second.engine.keyed("k1", "wait", [60, on], { on }).id).toBe(id);
 });
 
-test("a life whose replay drifts is kept, with what boot raised", () => {
+test("a life whose replay drifts is kept, with what boot raised", async () => {
   const first = open();
-  // No verb makes an act of this kind again, so a later life drifts at its entry.
-  first.engine.act("note", first.engine.root, null);
-  const second = open(first.entries);
+  await first.engine.rung({ word: "t = read('a')", on: first.engine.root });
+  // The record holds other words for the read than the life makes again, so a later life drifts at its entry.
+  const kept = first.entries.map((entry) => {
+    const [fact] = entry as unknown[][];
+    return fact?.[0] === "read" && fact[1] === "read1" ? [[...fact.slice(0, 4), "b"]] : entry;
+  });
+  const second = open(kept);
   expect(second.engine.raised).toMatchObject({ is: "Drift" });
   expect(String(second.engine.raised?.args[0])).toContain("drifts");
   expect(second.engine.root).toBe("chain1");
@@ -274,14 +289,16 @@ test("a function of JavaScript that makes an ear gives the ear that an act bring
       if (fact?.[0] === "close" && fact[1] === name) yield ["done", name, fact[3]];
     }
   }
+  await verbs(engine, "note");
   const note = engine.act("note", engine.root, (name: string) => noting(name), ["one"]);
   expect([String(note), heard]).toEqual(["note1", ["note1"]]);
   engine.close(7, { id: String(note) });
   expect(await note).toBe(7);
 });
 
-test("a function of JavaScript answers from its words alone, and a verb it calls while it runs is refused", () => {
+test("a function of JavaScript answers from its words alone, and a verb it calls while it runs is refused", async () => {
   const { engine } = open();
+  await verbs(engine, "note");
   let refused = "";
   function* silent(): Ear {
     for (;;) yield null;
