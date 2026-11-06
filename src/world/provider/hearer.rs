@@ -7,6 +7,7 @@ use std::{
 };
 
 use futures::{FutureExt, stream};
+use monty::ReplContinuationMode;
 use rig_core::completion::CompletionError;
 use tokio::sync::{mpsc, watch as holding};
 
@@ -282,8 +283,9 @@ impl Hearer {
       Found::Unsettled => return,
       Found::Nothing => {
         // The word holds no fault so far, so its new statements run now, as the turn holds them:
-        // from its first line that is not blank. A statement whose clause starts at the end, as
-        // an `else`, waits.
+        // from its first line that is not blank, once monty calls them complete. A statement whose
+        // clause starts at the end, as an `else`, waits, and so does a word that monty calls
+        // incomplete or invalid, which the gate of a config turned off finds nothing against.
         let (word, end) = match watch.clause(end).then(|| watch::last(&word)).flatten() {
           Some(line) => {
             let held: String = word.split_inclusive('\n').take(line - 1).collect();
@@ -292,6 +294,9 @@ impl Hearer {
           None if watch.clause(end) => return,
           None => (word, end),
         };
+        if watch::complete(&word) != ReplContinuationMode::Complete {
+          return;
+        }
         let given = word.trim_start();
         let Some((part, before)) = watch.part(given) else { return };
         if writing(co, &rung, part, before).await {

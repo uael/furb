@@ -91,6 +91,12 @@ fn lived(provider: Provider) -> Engine {
 /// A life of the real engine on a provider in a yard of its own, and the ears of the World, whose files keep each
 /// image that a read gives in a gallery.
 fn seeing(provider: Provider, gallery: Option<PathBuf>) -> Engine {
+  opened(provider, gallery, true)
+}
+
+/// A life as [`seeing`] opens it, whose gate reads each word when gated says so, and finds nothing
+/// against any word else, as when the key gate of a config is false.
+fn opened(provider: Provider, gallery: Option<PathBuf>, gated: bool) -> Engine {
   let scratch = world::Scratch::own();
   // The config directory of the user is a place that no one writes, never the one of the machine.
   let config = env::temp_dir().join(format!("furb-provider-user-{}", process::id()));
@@ -100,7 +106,7 @@ fn seeing(provider: Provider, gallery: Option<PathBuf>) -> Engine {
     ("bash", world::bash(scratch)),
     ("time", world::time()),
   ];
-  Engine::boot(Vec::<Object>::new(), ears).expect("the life opens")
+  Engine::gated(Vec::<Object>::new(), ears, gated).expect("the life opens")
 }
 
 /// A life of the real engine on the provider of these models and the ears of the World, in a yard of its own.
@@ -591,6 +597,38 @@ fn a_close_mark_inside_a_line_of_a_quote_does_not_end_the_reply_at_its_open_mark
   );
   let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
   assert_eq!(got.as_ref().as_int(), Some(33));
+}
+
+#[test]
+fn a_triple_quote_whose_paragraph_starts_at_the_left_edge_runs_once_its_word_is_whole() {
+  // A chunk ends at the blank line inside the triple quote, and the paragraph after it starts at
+  // the left edge: the string is not whole until its close, though no finding of the gate says
+  // so, as with the gate of a config turned off.
+  let first = "close(\"\"\"My take: a stronger control model, which costs less.\n\n";
+  let parts = [first, "What I like: the paragraph at the left edge.\n", "end\"\"\")"];
+  let usage = Usage { input_tokens: 10, output_tokens: 5, total_tokens: 15, ..Default::default() };
+  let events: Vec<_> = parts
+    .iter()
+    .map(|part| MockStreamEvent::text(*part))
+    .chain([MockStreamEvent::FinalResponse(StreamFinal::new("mock", usage))])
+    .collect();
+  let model = MockCompletionModel::from_stream_turns([events]);
+  let at = yard("triple");
+  let mut engine =
+    opened(Provider::new(at.display().to_string(), vec![scripted(&model)]), None, false);
+  let root = engine.root().to_owned();
+  let with = verbs::Prompt { message: Some("say".to_owned()), on: on(&root), ..Default::default() };
+  let id = engine.prompt(Object::string("str"), with).expect("a prompt is made").id().to_owned();
+  assert!(
+    until(&mut engine, |engine| ran(engine, "What I like")),
+    "the whole word ran, past the paragraph at the left edge inside the triple quote"
+  );
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  let whole = "My take: a stronger control model, which costs less.\n\nWhat I like: the paragraph at \
+               the left edge.\nend";
+  assert_eq!(got.as_ref().as_str(), Some(whole));
+  let parts = said(&mut engine).into_iter().filter(|one| one.0 == "writing").count();
+  assert_eq!(parts, 0, "no part of the word ran while the model wrote it");
 }
 
 #[test]
