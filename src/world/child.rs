@@ -42,9 +42,10 @@ pub enum Unborn {
 }
 
 /// A child of this command, started on the runtime of the World in a group of its own, and that
-/// group, or why it did not start or was not held. A child that started and that the group could
-/// not hold is ended, and reaped.
-pub(super) fn spawn(command: &mut Command) -> Result<(Child, Group), Unborn> {
+/// group, or why it did not start or was not held. A watch leads the group, so each process of it
+/// ends when the [`Group`] drops, and on Unix when this process dies by a signal and runs no drop,
+/// as by SIGKILL. A child that started and that the group could not hold is ended, and reaped.
+pub fn spawn(command: &mut Command) -> Result<(Child, Group), Unborn> {
   let _inside = runtime().enter();
   let lead =
     grouped(command.as_std_mut()).map_err(|source| Unborn::Held { source, ended: None })?;
@@ -109,9 +110,9 @@ fn watched() -> std_io::Result<(process::Pid, std_io::PipeWriter)> {
 /// shell of Git does not keep the tree of its processes, a job that holds the child and every
 /// process it starts.
 ///
-/// Every process of it ends when the group goes before it is let go: at a stop, or at the end of
-/// the part of the World that holds it.
-pub(super) struct Group {
+/// Every process of it ends when the group goes before it is let go: at a stop, at the drop of the
+/// group, or at the end of the part of the World that holds it.
+pub struct Group {
   #[cfg(unix)]
   leader: Option<process::Pid>,
   /// The end of the pipe that the watch of the group reads. It closes with no line when this
@@ -154,7 +155,7 @@ impl Group {
 
   /// Every process of the group, ended, or why a signal did not reach them.
   #[cfg_attr(windows, expect(clippy::unnecessary_wraps, reason = "only a signal of Unix can fail"))]
-  pub(super) fn slay(&mut self) -> std_io::Result<()> {
+  pub fn slay(&mut self) -> std_io::Result<()> {
     #[cfg(unix)]
     if let Some(leader) = self.leader {
       match process::kill_process_group(leader, process::Signal::KILL) {
