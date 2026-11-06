@@ -296,13 +296,9 @@ export type Config =
       value?: unknown;
       layer?: Layer | null;
       action: "set";
-    }
-  | {
-      action: "reload";
     };
 /**
- * A layer of the configs, from the one that wins least to the one that wins most: the config of
- * the user, the config of the project, and its local config, which git ignores.
+ * A layer of the configs, from the one that wins least to the one that wins most.
  */
 export type Layer = "user" | "project" | "local";
 /**
