@@ -22,8 +22,8 @@ use super::{
   watch::{self, Watch},
   word::{AFTER, Found, RAN, STOPPED, afterward, ending, judged, kept, unquoted, writing},
 };
-use crate::extension;
 use crate::fact;
+use crate::skill;
 use crate::value;
 use crate::{
   ear::{Co, say, spawned},
@@ -198,7 +198,7 @@ impl Hearer {
       &self.actor,
       self.extensions.as_deref(),
       &self.members,
-      &self.config.clone().unwrap_or_else(|| extension::Places::here().config),
+      &self.config.clone().unwrap_or_else(|| skill::Places::here().config),
     );
     say(co, Fact::says("done", &about, [given]));
     if word {

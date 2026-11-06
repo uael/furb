@@ -18,7 +18,7 @@ def hooks() -> dict[str, dict]:
   [
     ("src/furb/engine.py", True),
     ("test/test_peek.py", True),
-    (".furb/extensions/conductor/conductor.py", True),
+    (".furb/skills/conductor/conductor.py", True),
     ("pyproject.toml", True),
     ("tui/package.json", False),
     ("tui/src/session.ts", False),

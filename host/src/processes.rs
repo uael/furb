@@ -29,13 +29,14 @@ use std::{
 use furb::{
   Fact,
   engine::OPERATOR,
-  extension::{
-    ENABLE, Enabled, Places, enabled_by,
-    skills::{process, program as program_of},
-  },
   life::{Log, Opening},
+  skill::{ENABLE, Enabled, Places, enabled_by},
   wire::parsed,
-  world::{Group, Unborn, spawn},
+  world::{
+    Group, Unborn,
+    skills::{process, program as program_of},
+    spawn,
+  },
 };
 use futures::{StreamExt, future};
 use serde_json::Value;

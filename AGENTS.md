@@ -19,12 +19,12 @@ API of its own:
   through rig and streams what it writes. The doc comments of `src/world.rs` and of each module say what each does, the
   tables of [`CONTRIBUTING.md`](CONTRIBUTING.md#the-world-and-the-life) list its files, and `docs/models.md` tells a
   user how furb finds a model and how to choose one.
-- `src/extension.rs` says what an extension is and where a host finds the ones that a life runs. Its ear `extensions`
+- `src/skill.rs` says what an extension is and where a host finds the ones that a life runs. Its ear `extensions`
   enables each by a fact that the record keeps, plays its word as a rung on each chain where its manifest says, every
   chain or the root alone, and plays the setup of the root on a new record. `parts` gives the part of each extension for
-  the TUI, which `tui/src/parts.ts` loads. `extensions/` holds the official extensions, `catchup`, `memory`, `skills`,
+  the TUI, which `tui/src/parts.ts` loads. `.agents/skills/` holds the official extensions, `catchup`, `memory`, `skills`,
   `compaction`, `naming`, `ouroboros`, `web` and `mcp`, each a word, a contract and a suite, and `src/extension/` holds the ear of
-  the World of the one that has one, `skills.rs`. `docs/extensions.md` says how an extension works.
+  the World of the one that has one, `skills.rs`. `docs/skills.md` says how an extension works.
 - `src/life.rs` opens a life as every host opens one, from one `Opening`: the record, the ears of the crate after the
   ears of the host, the default actor, the roster that the host names or every model of the catalog, and the extensions.
   A host adds only its own ears, as the console of its operator. A life on a record replays the tail after its last
@@ -96,8 +96,8 @@ API of its own:
   protocol, and `bun run protocol` makes `bind/typescript/src/protocol.ts` again from `host/protocol.schema.json`.
 
 The suite runs on both engines, but for the tests that `MONTY_SKIPS` in `test/conftest.py` names: these boot on a Kernel
-of this interpreter, and the engine of monty holds its own. The suite of each extension, `extensions/<name>/test/`, runs
-on both engines too, and its conftest, `extensions/conftest.py`, hands it the hooks of the harness and the helpers that
+of this interpreter, and the engine of monty holds its own. The suite of each extension, `.agents/skills/<name>/test/`, runs
+on both engines too, and its conftest, `.agents/skills/conftest.py`, hands it the hooks of the harness and the helpers that
 only the suites of the extensions need. `test/outside/test_monty.py` proves what the door carries that no sentence of
 the contract says.
 
@@ -220,18 +220,18 @@ The suite drives the engine through its public API alone, end to end, from the m
   better counts the work that the code does, which no load changes. A bound in seconds fails on a machine under load.
   A test of a process that a timeout ends gives it a limit that a loaded machine cannot cross.
 - A helper that only one file needs lives in that file. A helper that several files need lives in
-  `test/conftest.py`, and one that only the suites of the extensions need lives in `extensions/conftest.py`.
-  A test folder of an extension takes no `conftest.py`: it shadows the module `conftest` that `extensions/conftest.py`
+  `test/conftest.py`, and one that only the suites of the extensions need lives in `.agents/skills/conftest.py`.
+  A test folder of an extension takes no `conftest.py`: it shadows the module `conftest` that `.agents/skills/conftest.py`
   imports by name, and breaks the main suite. `test_words.py` fails on it. Put its fixtures in
-  `.furb/extensions/conftest.py`.
+  `.furb/skills/conftest.py`.
 - `test/outside/` holds the tests of the World, the Kernel, the door, the switch of the package that
   `FURB_ENGINE` sets, and the harness. These tests stand outside the hygiene laws.
 
 ## The hygiene laws
 
 `test/test_hygiene.py` holds each contract and its suite to these laws, and it must stay green. The contracts are
-`engine.pyi`, whose suite is `test/`, the contract of each official extension, `extensions/<name>/<name>.pyi`, and
-the contract of each extension of the project, `.furb/extensions/<name>/<name>.pyi`, each with the folder `test`
+`engine.pyi`, whose suite is `test/`, the contract of each official extension, `.agents/skills/<name>/<name>.pyi`, and
+the contract of each extension of the project, `.furb/skills/<name>/<name>.pyi`, each with the folder `test`
 beside it as its suite.
 
 1. Every sentence of a definition has exactly one test, in the file of that definition, whose docstring is that
@@ -330,14 +330,14 @@ fix what your change broke, and report what was broken before.
   lints it for what breaks a word, which is a name that nothing binds, a bug of the family B and an error of the family
   PLE, and for no style. A word imports each name of the engine that it uses from `furb.engine`, which the crate leaves
   out of the word. A name of a word before it in `.furb/config.json` is in `builtins` of `[tool.ruff]`, which
-  `.furb/extensions/test_words.py` holds to a definition. Run the tests of an extension of the project alone with
+  `.furb/skills/test_words.py` holds to a definition. Run the tests of an extension of the project alone with
   `uv run --no-sync pytest -q <folder> -p no:cacheprovider --no-cov`, since the coverage of 100 applies to the whole
   suite only.
 - `python3 script/rustwidth.py [base]`: fail on a comment line of a `.rs` file that the change adds past 100
   characters, which rustfmt does not wrap. The lines that main holds are no debt of a change: wrap them when you change
   their file.
 - `uv run ty check --error-on-warning`: the type check. The tests are checked against `engine.pyi`, and the words of
-  `.furb/extensions` too, less their tests.
+  `.furb/skills` too, less their tests.
 - `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`:
   the gates of the crate and of the command line. The tests of a module stand beside it, `src/engine.test.rs` beside
   `src/engine.rs`, and those of the engine drive the real engine on ears in rust. `cli/tests/furb.rs` runs `furb` as

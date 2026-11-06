@@ -5,7 +5,7 @@ description: How an audit of the round judges the TUI of main against the ruling
 An audit of the TUI judges what main draws against the rulings of the issues 14 to 17 and 28 of the private repository
 of decisions, and against nothing else: no spec, no plan, no taste of your own. The walk of step 5 adds the defects
 that a person meets as he uses the TUI, which need no ruling. The local file
-`.furb/extensions/conductor/private.json` of the main checkout names that repository under the key `repo`: read each of
+`.furb/skills/conductor/private.json` of the main checkout names that repository under the key `repo`: read each of
 these issues whole, with its comments, as `gh issue view <n> --repo <repo> --comments`.
 
 1. In your workspace, run `sh <this folder>/capture.sh <main checkout> $TMPDIR/audit/<key>

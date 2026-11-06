@@ -18,7 +18,7 @@ node_modules/
 # Of .furb/, only the config and the extensions of the project are source.
 .furb/*
 !.furb/config.json
-!.furb/extensions/
+!.furb/skills/
 # The config of a project on this machine alone, as its local models and its local extensions.
 .furb/config.local.json
 # The memory of a folder on this machine alone, which the memory extension reads after its AGENTS.md.

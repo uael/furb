@@ -8,7 +8,7 @@ use std::{path::Path, time::Duration};
 
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher, recommended_watcher};
 
-use furb::{extension::Places, life::Opening, world};
+use furb::{life::Opening, skill::Places, world};
 use furb_host::{
   DaemonError, STALL, Settings, Tailnet,
   access::Config,

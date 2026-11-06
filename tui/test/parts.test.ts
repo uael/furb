@@ -30,7 +30,7 @@ const TODO = readFileSync(join(fixture, "todo.py"), "utf8").replace(/^from furb\
 
 /** The word of the extension compaction, less its import of furb, as a life plays it. */
 const COMPACTION = readFileSync(
-  resolve(import.meta.dir, "..", "..", "extensions", "compaction", "compaction.py"),
+  resolve(import.meta.dir, "..", "..", ".agents", "skills", "compaction", "compaction.py"),
   "utf8",
 ).replace(/^from furb\.engine import \([^)]*\)\n+/m, "");
 
@@ -57,11 +57,11 @@ function still(chain: string): Seen {
 function project(part = PART): { directory: string; file: string } {
   const directory = mkdtempSync(join(tmpdir(), "furb-parts-"));
   made.push(directory);
-  const folder = join(directory, ".furb", "extensions", "todo");
+  const folder = join(directory, ".furb", "skills", "todo");
   mkdirSync(folder, { recursive: true });
   cpSync(fixture, folder, { recursive: true });
   writeFileSync(join(folder, "tui.ts"), part);
-  writeFileSync(join(directory, ".furb", "config.json"), '{"extensions": {"todo": "extensions/todo"}}\n');
+  writeFileSync(join(directory, ".furb", "config.json"), '{"extensions": {"todo": "skills/todo"}}\n');
   return { directory, file: join(folder, "tui.ts") };
 }
 
@@ -97,7 +97,7 @@ test("a life gains the panel of a part of a project extension, which draws again
       writeFileSync(file, PART.replace('"Todo"', '"Todo list"'));
       await shows(frame, "Todo list");
       // A write that the life makes in the folder of the extension lands, and the part loads again.
-      const word = `write(Text(".furb/extensions/todo/tui.ts", ${JSON.stringify(PART.replace('"Todo"', '"Plan"'))}))`;
+      const word = `write(Text(".furb/skills/todo/tui.ts", ${JSON.stringify(PART.replace('"Todo"', '"Plan"'))}))`;
       await session.command(`/run ${word}`);
       await shows(frame, "Plan");
       // A broken module shows its error in its panel, in plain words, and the TUI goes on.
@@ -155,7 +155,7 @@ test("the parts load the part of each extension that the configs give, and a con
   const parts = new Parts(directory, () => changes++);
   await parts.load();
   expect(parts.loaded.map((one) => [one.name, one.file, one.error])).toEqual([
-    ["compaction", "extensions/compaction/tui.ts", undefined],
+    ["compaction", ".agents/skills/compaction/tui.ts", undefined],
     ["todo", file, undefined],
   ]);
   expect(parts.row("todo")).toBeDefined();
@@ -468,7 +468,7 @@ test("a word that writes an extension with extend() gives the TUI its part in a 
       app.composer.setText("");
       // The config turns it on again, and the part comes back.
       await session.command(
-        `/run write(Text(".furb/config.json", ${JSON.stringify('{"extensions": {"todo": "extensions/todo"}}\n')}))`,
+        `/run write(Text(".furb/config.json", ${JSON.stringify('{"extensions": {"todo": "skills/todo"}}\n')}))`,
       );
       await shows(frame, "○ write the part");
     },
@@ -679,9 +679,7 @@ test("a confirm that a part awaits gives true for yes, and false for no or a clo
       app.composer.setText("/docs");
       await app.submit();
       for (let tries = 0; tries < 200 && !opened.length; tries++) await Bun.sleep(10);
-      expect(opened).toEqual([
-        "https://github.com/uael/furb/blob/main/docs/extensions.md#a-part-for-the-tui",
-      ]);
+      expect(opened).toEqual(["https://github.com/uael/furb/blob/main/docs/skills.md#a-part-for-the-tui"]);
       await expect(app.seen().open("file:///etc/passwd")).rejects.toThrow(
         'A part opens only an address of http or https, and "file:///etc/passwd" is not one.',
       );

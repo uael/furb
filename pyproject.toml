@@ -84,11 +84,11 @@ ignore = ["S101"]
 [tool.ruff.lint.per-file-ignores]
 # The suite pins the contract's own literals, drives doubles that answer in one sentence where they stand, and
 # names its tests by the sentence they carry.
-"{test,extensions/*/test}/**" = ["PLR2004", "EM101", "TRY003", "FBT003", "PT018", "PLR0912", "A002", "E501"]
+"{test,.agents/skills/*/test}/**" = ["PLR2004", "EM101", "TRY003", "FBT003", "PT018", "PLR0912", "A002", "E501"]
 # The surface speaks the engine's own vocabulary: its parameters shadow builtins on purpose, its exceptions are
 # named as the contract names them, and each sentence of the contract stands on one line of its own.
 "src/furb/engine.pyi" = ["N818", "A002", "E501"]
-"extensions/*/*.pyi" = ["E501"]
+".agents/skills/*/*.pyi" = ["E501"]
 # An example of the framework starts itself again as a process of its own, to show a life that resumes after its
 # process ends.
 "docs/examples/**/*.py" = ["T201"]
@@ -97,7 +97,7 @@ ignore = ["S101"]
 "src/furb/__init__.py" = ["A004"]
 # A word speaks the vocabulary of the engine, which a model reads: the ear of an act takes its id, untyped, as the
 # ears of the engine do.
-"extensions/*/*.py" = ["A002", "ANN001"]
+".agents/skills/*/*.py" = ["A002", "ANN001"]
 # A word of the project is read for what breaks it: a name that nothing binds, a call that cannot run, a bug of the
 # B family. Its style stays its own, as the chain it runs in reads it, and the data of .furb are no python.
 ".furb/**" = [
@@ -112,7 +112,7 @@ max-line-length = 160
 
 [tool.ruff.lint.isort]
 split-on-trailing-comma = false
-known-first-party = ["furb", "furb_monty", "conftest", "extensions"]
+known-first-party = ["furb", "furb_monty", "conftest", "skills"]
 
 [tool.ruff.lint.flake8-tidy-imports]
 ban-relative-imports = "all"
@@ -135,13 +135,15 @@ skip-magic-trailing-comma = true
 [tool.ty.src]
 # The words of the project, and no test of theirs: a test drives the engine through a double, which the checker
 # cannot follow.
-include = ["src", "test", "script", "bind/python", "extensions", ".furb/extensions/*/*.py"]
+include = ["src", "test", "script", "bind/python", ".agents/skills", ".furb/skills/*/*.py"]
+# converge-tui is a skill of the repository for Claude Code alone, whose scripts run on Python 3.9.
+exclude = [".agents/skills/converge-tui"]
 
 # The suite of an extension imports the harness of the engine as conftest, as pytest does from its pythonpath, and
-# its own helpers from extensions.conftest. The package furb_monty is read from its source and the stub of its
+# its own helpers from skills.conftest. The package furb_monty is read from its source and the stub of its
 # extension, so the check needs no build of the crate.
 [tool.ty.environment]
-extra-paths = ["test", "bind/python"]
+extra-paths = ["test", "bind/python", ".agents"]
 
 # The engine holds the loop's state in the closure of boot, and ty does not narrow a captured name; what it reads
 # of an act, a task or a standing it reads after the check the sentence beside it makes. boot binds the names of its
@@ -167,20 +169,21 @@ unresolved-import = "ignore"
 # A word of the project reads the names of the words before it, which ty cannot follow from file to file, and get gives
 # nothing for a name of no act, which the contract types as an act (ruff reads these names through its builtins).
 [[tool.ty.overrides]]
-include = [".furb/extensions/conductor/conductor.py"]
+include = [".furb/skills/conductor/conductor.py"]
 
 [tool.ty.overrides.rules]
 unresolved-reference = "ignore"
 
 [[tool.ty.overrides]]
-include = [".furb/extensions/*/*.py"]
+include = [".furb/skills/*/*.py"]
 
 [tool.ty.overrides.rules]
 redundant-condition = "ignore"
 
 [tool.pytest.ini_options]
-testpaths = ["test", "extensions", ".furb/extensions"]
-pythonpath = [".", "test"]
+testpaths = ["test", ".agents/skills", ".furb/skills"]
+pythonpath = [".", ".agents", "test"]
+consider_namespace_packages = true
 # The suite runs on every core: a test opens a life of its own and leaves nothing behind, so the tests are independent.
 # A worker that is idle takes the tests that another worker has not started, so no core waits on a run of slow tests
 # at the end: on 3 cores this ran the suite in 88 s and 92 s, against 107 s and 102 s when each worker kept its share.
