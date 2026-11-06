@@ -6,6 +6,8 @@
 //! It holds no life: only a window and a pin do. A viewer is one view of the daemon, mounted by
 //! one window and served by one skill, and no other peer says a frame of it.
 
+use std::mem;
+
 use tokio::{sync::mpsc::error::SendError, task::AbortHandle};
 
 use crate::{
@@ -149,7 +151,7 @@ impl Views {
 
   /// Each view for which `ends` holds, removed, and told to its window and to its skill.
   fn end(&mut self, ends: impl Fn(&Mounted) -> bool) {
-    let (ended, kept) = std::mem::take(&mut self.mounted).into_iter().partition(|one| ends(one));
+    let (ended, kept) = mem::take(&mut self.mounted).into_iter().partition(|one| ends(one));
     self.mounted = kept;
     for viewed in ended {
       // A peer that is gone hears nothing, and its own end drops what it holds.

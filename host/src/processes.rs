@@ -247,7 +247,7 @@ struct Process {
 impl Process {
   fn of(mut child: Child, group: Group) -> Self {
     let stderr = tokio::spawn(tail(child.stderr.take()));
-    Process { child, group, stderr }
+    Self { child, group, stderr }
   }
 }
 
@@ -307,7 +307,7 @@ async fn watched(mut process: Process, ends: oneshot::Receiver<()>, teller: Tell
 impl Teller {
   /// The operator told, by a message under the name of the skill, that its process ended.
   async fn told(&self, status: &io::Result<ExitStatus>, lines: VecDeque<String>) {
-    let Teller { handle, skill, program, log } = self;
+    let Self { handle, skill, program, log } = self;
     let exit = match status {
       Ok(status) => status.to_string(),
       Err(no) => format!("no status that the daemon could read ({no})"),

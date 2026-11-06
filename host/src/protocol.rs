@@ -3,6 +3,7 @@
 
 use furb::view::{Act, Desk, Threads};
 use schemars::JsonSchema;
+use schemars::generate::SchemaSettings;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -448,7 +449,7 @@ pub enum Frame {
 impl Frame {
   /// The refusal of a request, or of a frame with no id.
   pub fn refused(id: Option<u64>, error: ProtocolError) -> Self {
-    Frame::Refused { id, why: error.to_string(), error }
+    Self::Refused { id, why: error.to_string(), error }
   }
 }
 
@@ -618,7 +619,7 @@ pub struct Node {
 impl Node {
   /// The node as a window that only reads gets it: each node that acts, inert.
   #[must_use]
-  pub fn inert(self) -> Node {
+  pub fn inert(self) -> Self {
     let shape = match self.shape {
       Shape::Input { value, hint, .. } => Shape::Input { value, hint, inert: true },
       Shape::Button { label, .. } => Shape::Button { label, inert: true },
@@ -635,7 +636,7 @@ impl Node {
       | Shape::Diff { .. }
       | Shape::Markdown { .. }) => shape,
     };
-    Node { shape, ..self }
+    Self { shape, ..self }
   }
 }
 
@@ -735,7 +736,7 @@ struct Wire {
 /// The JSON Schema of the protocol: a request and a frame, with the version of the protocol under
 /// the key `x-protocol`.
 pub fn schema() -> Value {
-  let generator = schemars::generate::SchemaSettings::draft07().into_generator();
+  let generator = SchemaSettings::draft07().into_generator();
   let mut schema = generator.into_root_schema_for::<Wire>();
   schema.insert("x-protocol".to_owned(), PROTOCOL.into());
   schema.to_value()

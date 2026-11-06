@@ -6,9 +6,10 @@
 //! chain that it paused and that no later pause or wake of the operator holds, and a pause that the
 //! operator set, before or after its own, stays.
 
+use std::mem;
 use std::path::Path;
 
-use furb::{Engine, Fault, Object, verbs, wire::outward};
+use furb::{Engine, Fault, Object, verbs, wire::outward, world};
 
 /// How many facts the record of a life may lack before the life pauses its work, which bounds the
 /// memory that holds them: twice the facts after which a life is born again, so a life that only
@@ -42,7 +43,7 @@ impl Backlog {
   ) -> Result<Option<String>, Fault> {
     let count = engine.unkept();
     if self.holding && count == 0 {
-      for chain in std::mem::take(&mut self.paused) {
+      for chain in mem::take(&mut self.paused) {
         if last_ours(engine, &chain)? {
           engine.wake(&chain)?;
         }
@@ -64,7 +65,7 @@ impl Backlog {
       return Ok(None);
     }
     let folder = Path::new(record).parent().unwrap_or(Path::new("."));
-    let left = furb::world::free(folder)
+    let left = world::free(folder)
       .map_or_else(|| "an unknown space".to_owned(), |free| format!("{} MB", free / 1_000_000));
     Ok(Some(format!(
       "The record of this life does not hold {count} facts, more than {UNKEPT}, so the life pauses \

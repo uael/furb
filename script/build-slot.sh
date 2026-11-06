@@ -29,6 +29,11 @@ slots=${FURB_BUILD_SLOTS:-$(($(memory) / 9))}
 [ "$slots" -ge 1 ] || slots=1
 limit=${FURB_BUILD_WAIT:-1200}
 poll=${FURB_BUILD_POLL:-2}
+# FURB_BUILD_MIN_FREE_GB: the GB that the disk of the build keeps free, 60. Below it a build waits as for a slot, and then
+# exits 75: a build writes up to 2 GB a minute, and a disk that fills stops each life and each build.
+min=${FURB_BUILD_MIN_FREE_GB:-60}
+free() { df -Pk . | awk 'NR == 2 { print int($4 / 1048576) }'; }
+room() { [ "$min" -le 0 ] || [ "$(free)" -ge "$min" ]; }
 dir=${FURB_BUILD_DIR:-/tmp/furb-build-slots-$(id -u)}
 mkdir -p "$dir" || exit 1
 
@@ -48,7 +53,9 @@ take() {
     if old "$dir/guard"; then rmdir "$dir/guard" 2>/dev/null; fi
     sleep 0.2
   done
+  # The floor is read under the guard, so a build that waited for it starts only on the room that it sees now.
   n=1
+  room || n=$((slots + 1))
   while [ -z "$got" ] && [ "$n" -le "$slots" ]; do
     s=$dir/slot$n
     if mkdir "$s" 2>/dev/null; then got=$s
@@ -67,7 +74,7 @@ take
 while [ -z "$got" ]; do
   now=$(date +%s)
   if [ $((now - start)) -ge "$limit" ]; then
-    echo "build-slot: no slot of $slots freed in ${limit}s: run it again" >&2
+    echo "build-slot: no slot of $slots freed in ${limit}s, with $(free) GB free of the floor of $min GB: run it again" >&2
     exit 75
   fi
   if [ $((now - said)) -ge 30 ]; then

@@ -66,7 +66,7 @@ pub struct Listener(local::Listener);
 
 impl Local {
   pub fn new(folder: impl Into<PathBuf>) -> Self {
-    Local { folder: folder.into() }
+    Self { folder: folder.into() }
   }
 
   /// The transport listening, or refused when a daemon listens there already. A socket that no

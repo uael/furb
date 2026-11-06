@@ -10,8 +10,10 @@
 mod yard;
 
 use std::{
+  collections::BTreeMap,
   fs,
   path::{Path, PathBuf},
+  process,
   sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -19,6 +21,7 @@ use std::{
   time::Duration,
 };
 
+use furb::view;
 use furb::{
   Object,
   life::{Answer, Opening},
@@ -28,13 +31,14 @@ use furb::{
 use furb_host::{Command, Event, Life, LifeError, LifeHandle, Reply, Seq};
 use futures::{Stream, StreamExt};
 use serde_json::json;
+use tokio::time;
 
 /// The events of a life, each under its place in the log.
 type Logged = (Seq, Arc<Event>);
 
 /// A directory of one test, empty.
 fn place(name: &str) -> yard::Yard {
-  yard::Yard::new(format!("furb-host-{name}-{}", std::process::id()))
+  yard::Yard::new(format!("furb-host-{name}-{}", process::id()))
 }
 
 /// A life with no record and no extension, whose model answers each request with the next word of a
@@ -71,7 +75,7 @@ async fn until(
 ) -> Vec<Logged> {
   let mut got = Vec::new();
   loop {
-    let next = tokio::time::timeout(Duration::from_secs(60), events.next()).await;
+    let next = time::timeout(Duration::from_secs(60), events.next()).await;
     let Ok(Some(logged)) = next else {
       let last: Vec<String> =
         got.iter().rev().take(20).map(|one| format!("{:.300}", format!("{one:?}"))).collect();
@@ -202,7 +206,7 @@ async fn the_name_of_the_session_is_the_last_that_the_operator_said_on_the_root_
   let mut events = Box::pin(life.events(0));
   assert_eq!(life.name(), None);
   for name in ["First", "Mine"] {
-    let id = made(&life, rung(&furb::view::word(name))).await;
+    let id = made(&life, rung(&view::word(name))).await;
     until(&mut events, done(&id)).await;
   }
   assert_eq!(life.name().as_deref(), Some("Mine"));
@@ -639,7 +643,7 @@ async fn birth(at: &Path, word: &str, commands: Vec<Command>) -> Vec<serde_json:
 /// that one holds more times than the other when they part.
 fn retells(later: &[serde_json::Value], earlier: &[serde_json::Value], what: &str) {
   let counted = |facts: &[serde_json::Value]| {
-    let mut counts = std::collections::BTreeMap::<String, i64>::new();
+    let mut counts = BTreeMap::<String, i64>::new();
     for one in facts {
       *counts.entry(one.to_string()).or_default() += 1;
     }

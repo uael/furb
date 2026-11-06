@@ -9,6 +9,7 @@ use std::{
   convert::Infallible,
   env,
   ffi::{OsStr, OsString},
+  io,
   path::{Path, PathBuf},
   process::Command,
 };
@@ -88,7 +89,7 @@ fn found(
 
 /// The TUI given the terminal: furb becomes it, so it holds the terminal and its signals alone.
 #[cfg(unix)]
-fn handed(mut command: Command) -> std::io::Result<Infallible> {
+fn handed(mut command: Command) -> io::Result<Infallible> {
   use std::os::unix::process::CommandExt;
   Err(command.exec())
 }
