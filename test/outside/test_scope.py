@@ -23,11 +23,22 @@ def test_a_change_to_the_tests_of_python_alone_runs_the_suite_on_each_system_and
   assert got == {"suite_os": EVERY, "ts_os": LINUX, "crate": False, "code": True, "hooks": True}
 
 
-def test_a_change_to_the_crate_or_to_the_engine_runs_every_job() -> None:
+def test_a_change_to_the_crate_runs_every_job() -> None:
   every = {"suite_os": EVERY, "ts_os": EVERY, "crate": True, "code": True, "hooks": True}
-  assert scope.scope(["src/furb/engine.py"]) == every
+  assert scope.scope(["src/furb/world.py"]) == every
   assert scope.scope(["extensions/web/web.py"]) == every
   assert scope.scope(["Cargo.lock"]) == every
+
+
+def test_a_change_to_the_engine_or_to_the_corpus_alone_runs_every_job_on_linux() -> None:
+  linux = {"suite_os": LINUX, "ts_os": LINUX, "crate": False, "code": True, "hooks": True}
+  assert scope.scope(["src/furb/engine.py", "src/furb/engine.pyi", "src/furb/sheet.py", "src/furb/kernel.py"]) == linux
+  assert scope.scope(["tests/corpus/next/work.jsonl"]) == linux
+
+
+def test_a_change_to_the_engine_with_the_world_runs_every_job() -> None:
+  got = scope.scope(["src/furb/engine.py", "src/world/mod.rs"])
+  assert got == {"suite_os": EVERY, "ts_os": EVERY, "crate": True, "code": True, "hooks": True}
 
 
 def test_a_change_to_an_extension_of_the_project_runs_the_suite_on_linux() -> None:

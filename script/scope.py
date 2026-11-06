@@ -3,8 +3,9 @@
 The jobs on Linux always run: they hold the whole proof of the logic. A job on macOS or on Windows proves the system
 alone, and a runner of macOS waits in a queue for minutes, so a change runs those jobs only when one of its paths can
 behave in another way there. The paths come one on each line from the standard input, and the answer is the lines
-`key=value` that a step of GitHub takes into its outputs. With `--all`, which each run but a pull request takes, every
-job runs. A change to the files of the gallery alone runs no hook, which the output hooks says.
+`key=value` that a step of GitHub takes into its outputs. A pull request and a push to main give their paths. With
+`--all`, which a run by hand and the run of each night take, every job runs. A change to the files of the gallery alone
+runs no hook, which the output hooks says.
 """
 
 import json
@@ -30,6 +31,11 @@ TYPESCRIPT = re.compile(
 # A path that the suite of python reads on Linux alone: the extensions of the project and the config that enables
 # them, whose suite in .furb/extensions gates each word as a chain plays it.
 PROJECT = re.compile(r"\.furb/(extensions/.*|config\.json)")
+# A path of pure logic that every job reads, but that behaves the same on each system: the engine and the code that
+# monty runs beside it, whose sandbox gives them no access to the machine, and the corpus of the records. The World
+# alone speaks to the machine. A change of these runs every job on Linux alone. In 36 hours of main, 19 of 125 commits
+# touched them, and 6 of them touched no other path that runs the jobs on macOS and on Windows.
+LOGIC = re.compile(r"src/furb/(engine\.pyi?|sheet\.py|kernel\.py)|tests/corpus/.*")
 # A path that the crate builds, which every job reads.
 RUST = re.compile(
   r"((src|cli|tests|extensions|\.cargo)/.*|Cargo\.(toml|lock)|build\.rs|rust-toolchain\.toml|docs/examples/rust/.*)"
@@ -44,11 +50,13 @@ def scope(paths: list[str]) -> dict[str, object]:
 
   The hooks run unless the change is a render of the gallery alone.
   """
-  kinds = {"python": False, "typescript": False, "rust": False, "other": False, "project": False}
+  kinds = {"python": False, "typescript": False, "rust": False, "other": False, "project": False, "logic": False}
   for path in paths:
     if INERT.fullmatch(path):
       continue
-    if PROJECT.fullmatch(path):
+    if LOGIC.fullmatch(path):
+      kinds["logic"] = True
+    elif PROJECT.fullmatch(path):
       kinds["project"] = True
     elif PYTHON.fullmatch(path):
       kinds["python"] = True

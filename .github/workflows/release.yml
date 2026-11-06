@@ -16,6 +16,10 @@ name: release
 # fix, a feat or a breaking change, so a day with no such change releases nothing. A merge that the token of a workflow
 # makes starts no workflow, so the job starts this workflow on main by hand, which tags the release, and the gates of
 # main.
+# The job daily starts the gates of the head of that pull request, and waits for them. release-please moves the head
+# at each push to main, about 90 times a day, and a run of every job of the gates at each head took 11 jobs of the 20
+# that run at once for the repository: the one head that the job merges is the one that it proves. While the job
+# waits, it holds the group of this workflow, so no run of release-please moves the head.
 on:
   push:
     branches: [main]
@@ -40,14 +44,14 @@ jobs:
     name: daily
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # The gates take 15 minutes in the median and 72 at the 90th percentile, with the wait in the queue.
+    timeout-minutes: 150
     permissions:
       contents: write
       pull-requests: write
       actions: write
     steps:
-      # A run of the gates at the head that is not done yet waits for the next day. A failed run, or a red main, fails
-      # this job, so the owner sees why no release came.
+      # A failed run of the gates at the head, or a red main, fails this job, so the owner sees why no release came.
       - env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -60,24 +64,30 @@ jobs:
           read -r sha branch <<EOF
           $(gh pr view "$n" --json headRefOid,headRefName --jq '"\(.headRefOid) \(.headRefName)"')
           EOF
-          gates=$(gh run list --workflow gates.yml --commit "$sha" --event workflow_dispatch --limit 1 \
-            --json status,conclusion --jq '.[0] // {} | "\(.status // "none") \(.conclusion // "")"')
-          case "$gates" in
-            "none "*)
-              echo "#$n has no run of the gates at $sha, so the job starts one, and the next day merges it."
-              gh workflow run gates.yml --ref "$branch"
-              exit 0
-              ;;
-            "completed success") ;;
-            completed*)
-              echo "::error::The gates of #$n failed at $sha ($gates), so no release comes today."
-              exit 1
-              ;;
-            *)
-              echo "The gates of #$n still run at $sha ($gates), so the next day merges it."
-              exit 0
-              ;;
-          esac
+          run() {
+            gh run list --workflow gates.yml --commit "$sha" --event workflow_dispatch --limit 1 --json databaseId \
+              --jq '.[0].databaseId // empty'
+          }
+          id=$(run)
+          if [ -z "$id" ]; then
+            echo "#$n has no run of the gates at $sha, so the job starts one and waits for it."
+            gh workflow run gates.yml --ref "$branch"
+            for _ in $(seq 30); do
+              sleep 10
+              id=$(run)
+              if [ -n "$id" ]; then break; fi
+            done
+          fi
+          if [ -z "$id" ]; then
+            echo "::error::The run of the gates at $sha of #$n did not show in 5 minutes, so no release comes today."
+            exit 1
+          fi
+          # A watch prints each job as it ends, so a run that hangs shows in the log.
+          if ! timeout 140m gh run watch "$id" --interval 60 --exit-status; then
+            gates=$(gh run view "$id" --json status,conclusion --jq '"\(.status) \(.conclusion)"')
+            echo "::error::The gates of #$n at $sha ended with $gates (run $id), so no release comes today."
+            exit 1
+          fi
           # A push to main cancels the run of main that waits for the run before it, so a cancelled run gives no verdict:
           # the job reads the last run of main that ran to its end.
           read -r main ran <<EOF
@@ -125,8 +135,8 @@ jobs:
           manifest-file: .release-please-manifest.json
       # The pull request of release-please changes the version in each manifest, and in Cargo.lock and uv.lock, and
       # bun.lock follows here, since it is no file that release-please reads. A pull request that the token of a
-      # workflow opens starts no gates, so the job starts them and the check of its title by hand on its branch, and
-      # their checks stand on its head. Each step after release-please runs only when release-please succeeded, and it
+      # workflow opens starts no workflow, so the job starts the check of its title by hand on its branch, and its
+      # check stands on its head. The job daily starts the gates of the head that it merges. Each step after release-please runs only when release-please succeeded, and it
       # reads the pull request through `|| '{}'`, since a failed or skipped step gives an empty output, which fromJSON
       # refuses, and the runner reads the template of a step even when its condition skips it.
       - if: steps.release.outcome == 'success' && steps.release.outputs.prs_created == 'true'
@@ -173,7 +183,6 @@ jobs:
             git commit -qm "Write the version of the release in bun.lock" -- bun.lock
             git push origin "HEAD:$BRANCH"
           fi
-          gh workflow run gates.yml --ref "$BRANCH"
           gh workflow run titles.yml --ref "$BRANCH"
       - if: steps.release.outcome == 'success' && steps.release.outputs.release_created == 'true'
         env:

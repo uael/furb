@@ -35,6 +35,11 @@
         },
         {
           "type": "toml",
+          "path": "host/Cargo.toml",
+          "jsonpath": "$.dependencies.furb.version"
+        },
+        {
+          "type": "toml",
           "path": "Cargo.lock",
           "jsonpath": "$.package[?(@.name.value==\"furb\" || @.name.value==\"furb-host\" || @.name.value==\"furb-cli\")].version"
         },
