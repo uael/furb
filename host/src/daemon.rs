@@ -341,6 +341,25 @@ struct Daemon {
 
 type Replied = oneshot::Sender<Result<Answer, ProtocolError>>;
 
+/// The door of a peer that lives in the process of the daemon, as a kit of a session does: it says
+/// its verbs as a peer of a transport does, with an outbox of its own, and holds the task that owns
+/// the lives no longer than the daemon does.
+#[derive(Clone)]
+pub(crate) struct Inside(mpsc::WeakUnboundedSender<Asked>);
+
+impl Inside {
+  /// The answer to a verb of the peer, or the refusal that the daemon stopped.
+  pub(crate) async fn answer(
+    &self,
+    peer: &Peer,
+    verb: Verb,
+    outbox: &Outbox,
+  ) -> Result<Answer, ProtocolError> {
+    let asks = self.0.upgrade().ok_or(ProtocolError::Stopped)?;
+    Daemon { asks }.answer(peer, verb, outbox).await
+  }
+}
+
 /// What the task that owns the lives hears.
 enum Asked {
   /// A verb of the daemon, from a peer.
@@ -842,6 +861,7 @@ impl Lives {
         life: life.clone(),
         cwd: PathBuf::from(&cwd),
         host: host.clone(),
+        inside: Inside(self.asks.clone()),
         places,
         log: self.settings.opening.log.clone(),
       };

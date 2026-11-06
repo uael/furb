@@ -797,33 +797,63 @@ mod daemon {
     }
   }
 
-  #[tokio::test]
-  async fn a_kit_of_a_session_gives_its_view_to_each_window_in_each_life_of_its_record() {
-    let at = place();
+  /// The text that the view of a kit shows.
+  fn said(text: &str) -> String {
+    format!(r#"view = {{"id": "todo", "node": "text", "runs": [{{"text": "{text}"}}]}}"#)
+  }
+
+  /// The view of the kit `todo` that a window mounts in the footer of a life.
+  fn viewing(life: &str, viewer: &str) -> Verb {
+    let (viewer, life, skill) = (viewer.to_owned(), life.to_owned(), "todo".to_owned());
+    Verb::ViewMount(Mount { viewer, life, slot: Slot::Footer, skill })
+  }
+
+  /// The identity of a test that counts the peers that dialed the daemon.
+  #[derive(Clone)]
+  struct Counted {
+    local: Local,
+    dialed: Arc<AtomicUsize>,
+  }
+
+  impl Identity for Counted {
+    type Stream = Accepted;
+
+    async fn identify(&self, stream: &Accepted) -> Result<Who, TransportError> {
+      self.dialed.fetch_add(1, Ordering::SeqCst);
+      self.local.identify(stream).await
+    }
+  }
+
+  /// A daemon on the identity that `identity` makes from its transport, and a window that holds a
+  /// life of `a.jsonl` whose record holds the kit `todo` of a session, which shows `first`.
+  async fn kitted<I>(at: &Path, identity: impl FnOnce(Local) -> I) -> (Local, Window, String)
+  where
+    I: Identity<Stream = Accepted> + Clone + Send + Sync + 'static,
+  {
     fs::create_dir_all(at.join(".furb")).unwrap();
     fs::write(at.join(".furb").join("config.json"), r#"{"extensions": {"ouroboros": true}}"#)
       .unwrap();
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
-    let opening = Opening { extensions: None, ..opening(&at) };
+    let opening = Opening { extensions: None, ..opening(at) };
     let host = Some(at.join("sock"));
     let settings =
       Settings { opening, grace: SHORT, stall: STALL, tailnet: None, door: None, host };
-    let served = local.clone();
+    let served = identity(local.clone());
     tokio::spawn(async move { run(&served, listener, settings).await });
     let mut window = Window::dialed(&local).await;
-    let life = opened(&mut window, &at, "a.jsonl").await;
+    let life = opened(&mut window, at, "a.jsonl").await;
     window.attach(&life).await;
-    let said = |text: &str| {
-      format!(r#"view = {{"id": "todo", "node": "text", "runs": [{{"text": "{text}"}}]}}"#)
-    };
     let word = window.ran(&life, &said("first")).await;
     window.ran(&life, &format!("extend('todo', '{word}', session=True, view='view')")).await;
-    let mount = |viewer: &str| {
-      let (viewer, life, skill) = (viewer.to_owned(), life.clone(), "todo".to_owned());
-      Verb::ViewMount(Mount { viewer, life, slot: Slot::Footer, skill })
-    };
-    mounted(&mut window, &mount("v1")).await;
+    (local, window, life)
+  }
+
+  #[tokio::test]
+  async fn a_kit_of_a_session_gives_its_view_to_each_window_in_each_life_of_its_record() {
+    let at = place();
+    let (local, mut window, life) = kitted(&at, |local| local).await;
+    mounted(&mut window, &viewing(&life, "v1")).await;
     window.until(shows("first")).await;
     window.ran(&life, &said("second")).await;
     window.until(shows("second")).await;
@@ -833,9 +863,20 @@ mod daemon {
     let mut later = Window::dialed(&local).await;
     opened(&mut later, &at, "a.jsonl").await;
     later.attach(&life).await;
-    mounted(&mut later, &mount("v2")).await;
+    mounted(&mut later, &viewing(&life, "v2")).await;
     later.until(shows("second")).await;
     assert!(!at.join(".furb").join("extensions").exists(), "the kit writes no file");
+  }
+
+  #[tokio::test]
+  async fn a_kit_of_a_session_opens_no_connection_to_the_socket_of_its_own_daemon() {
+    let at = place();
+    let dialed = Arc::new(AtomicUsize::new(0));
+    let counted = Arc::clone(&dialed);
+    let (_, mut window, life) = kitted(&at, |local| Counted { local, dialed: counted }).await;
+    mounted(&mut window, &viewing(&life, "v1")).await;
+    window.until(shows("first")).await;
+    assert_eq!(dialed.load(Ordering::SeqCst), 1, "only the window dialed the daemon");
   }
 
   /// The view of a skill that a window mounts in the footer of a life.

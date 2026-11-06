@@ -48,6 +48,7 @@ use tokio::{
 };
 
 use crate::{
+  daemon::Inside,
   event::Event,
   kits::Kit,
   life::{Command, LifeHandle, Reply},
@@ -82,12 +83,13 @@ pub(crate) fn speaker(skill: &str) -> String {
 }
 
 /// A life whose skills get their processes: its handle, its record, its folder, where the daemon
-/// listens, where the skills of the user stand, and the log of the daemon.
+/// listens, its door in process, where the skills of the user stand, and the log of the daemon.
 pub(crate) struct Played {
   pub(crate) handle: LifeHandle,
   pub(crate) life: String,
   pub(crate) cwd: PathBuf,
   pub(crate) host: PathBuf,
+  pub(crate) inside: Inside,
   pub(crate) places: Places,
   pub(crate) log: Option<Log>,
 }
@@ -151,7 +153,7 @@ impl Played {
         handle: self.handle.clone(),
         name: name.clone(),
         value,
-        host: self.host.clone(),
+        inside: self.inside.clone(),
       };
       let (end, ends) = oneshot::channel();
       running.insert(name, Running { end, watch: tokio::spawn(kit.served(ends)) });
