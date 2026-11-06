@@ -36,6 +36,7 @@ FIX_MODEL, AGG_MODEL, QA_MODEL = CLASSES["sonnet/high"], CLASSES["opus/medium"],
 ASTRA = "codex:gpt-6-astra/high"
 EVERY, FLOOR, QA_EVERY, REVIEW_EVERY, REGROUND = 300.0, 900.0, 900.0, 3600.0, 0.5
 REPO = "~/src/github.com/uael/furb"
+QA_TREE, QA_BRANCH = "~/src/github.com/uael/furb-qa", "q/converge"
 PAGE, WORDS = "scratch://converge/desk.md", "scratch://converge/words-life.md"
 PAGED = ["conduct", "beat", "next_item", "seats", "fix", "ground_step", "queue_rows", "queue_reviews", "news", "words"]
 CLAIM = ' Judge the row against main first: it is a claim of an audit.'
@@ -103,11 +104,17 @@ def item_text(t: str, item: dict) -> str:
   return f"Item {item['key']} of the topic {t}. The charter of this chain, scratch://converge/{t}.md, holds its rules, its paths and the asks of the owner that it carries.\n\n{item['brief']}"
 
 
+def qa_tree(head: str) -> str:
+  """The worktree of a QA run: its own, at the head that a cycle published, so a cycle merges and builds while it runs."""
+  make = f"git -C {REPO} worktree remove --force {QA_TREE} 2>/dev/null; git -C {REPO} branch -D {QA_BRANCH} 2>/dev/null; sh {REPO}/script/worktree.sh {QA_TREE} {QA_BRANCH} {head}"
+  return f"Make your worktree first, a copy on write of the warm build of the aggregator: {make}. Then run each test in {QA_TREE} alone, never in the worktree of the aggregator, which the next cycle moves."
+
+
 def next_item(t: str, now: float) -> dict | None:
   head = state.get("head", "")
   if t == QA and not queue(QA) and not live.get(QA) and not state["cycle"] and head and head != state.get("qa_head") and now - state["qa_at"] >= QA_EVERY:
     state.update(qa=state["qa"] + 1, qa_head=head, qa_at=now)
-    queue(QA).append({"key": f"qa-run-{state['qa']}", "model": QA_MODEL, "brief": f"{QA_BRIEF} The head to test: {head}."})
+    queue(QA).append({"key": f"qa-run-{state['qa']}", "model": QA_MODEL, "brief": f"{QA_BRIEF} The head to test: {head}. {qa_tree(head)}"})
   done, used = {k for _, k, _ in ended}, seats()
   held = ({kind(FIX_MODEL)} if fixwait else set()) | ({kind(AGG_MODEL)} if state["due"] else set())
   for n, item in enumerate(queue(t)):
@@ -223,8 +230,7 @@ def beat() -> Generator[set[str], object, None]:
     seen = out.stdout.content if isinstance(out, Exit) else ""
     state["last"] = now
     state["head"] = next((x[5:] for x in seen.splitlines() if x.startswith("head ")), state.get("head", ""))
-    testing = any(not over(p) for p in live.get(QA, {}))
-    if seen != state["print"] and not testing and not ("pending" in seen and now - state["cycle_at"] < FLOOR):
+    if seen != state["print"] and not ("pending" in seen and now - state["cycle_at"] < FLOOR):
       if seat(AGG_MODEL):
         state.update(print=seen, due="", cycle_at=now)
         state["cycle"] = str(prompt(tuple[dict[str, str], str], CYCLE, to=AGG_MODEL, on=chain_of(AGG)))
