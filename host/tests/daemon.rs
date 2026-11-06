@@ -19,7 +19,7 @@ mod daemon {
     fs::{self, File},
     path::{Path, PathBuf},
     sync::{
-      Arc,
+      Arc, Mutex,
       atomic::{AtomicU32, AtomicUsize, Ordering},
     },
     time::{Duration, Instant},
@@ -145,10 +145,19 @@ mod daemon {
 
   /// A daemon that listens in a folder, served on a task of the test.
   async fn started(at: &Path, grace: Duration) -> (Local, JoinHandle<Result<(), DaemonError>>) {
+    started_with(at, grace, opening(at)).await
+  }
+
+  /// A daemon that listens in a folder with an opening of the test, served on a task of the test.
+  async fn started_with(
+    at: &Path,
+    grace: Duration,
+    opening: Opening,
+  ) -> (Local, JoinHandle<Result<(), DaemonError>>) {
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
     let settings = Settings {
-      opening: opening(at),
+      opening,
       grace,
       end: END,
       stall: STALL,
@@ -486,6 +495,23 @@ mod daemon {
     window.ran(&good, "x = 1").await;
     assert!(window.lives(&good).await);
     assert!(!daemon.is_finished());
+  }
+
+  #[tokio::test]
+  async fn the_log_of_the_daemon_says_each_end_of_a_life_with_its_fault() {
+    let at = place();
+    let lines = Arc::new(Mutex::new(Vec::<String>::new()));
+    let kept = lines.clone();
+    let log = Log(Arc::new(move |line: &str| kept.lock().unwrap().push(line.to_owned())));
+    let (local, _daemon) = started_with(&at, SHORT, Opening { log: Some(log), ..opening(&at) }).await;
+    let mut window = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    let said = format!("furb host: the life of {life} ended: with no fault");
+    let start = Instant::now();
+    while !lines.lock().unwrap().contains(&said) {
+      assert!(start.elapsed() < PATIENCE, "{:?}", lines.lock().unwrap());
+      tokio::time::sleep(SHORT).await;
+    }
   }
 
   #[tokio::test]

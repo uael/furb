@@ -37,9 +37,11 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::{
+  ENGINE,
   ear::{Co, Ear, hear, hearing, say},
   engine::ROOT,
   fact::{Fact, named},
+  gate,
   value::{Fault, Object, Text, entry},
   world::files,
 };
@@ -400,6 +402,8 @@ pub fn load(name: &str, root: &Path, places: &Places) -> Result<Extension, Fault
 }
 
 /// An extension from the text of its manifest, with the text of its word as `read` gives it for the file named.
+/// A word that binds a name of the engine at its top is refused, since each word of a chain then
+/// reads its value in place of the one of the engine.
 pub(crate) fn manifested<T: AsRef<str>>(
   text: &str,
   read: impl FnOnce(&str) -> Result<T, String>,
@@ -432,6 +436,14 @@ pub(crate) fn manifested<T: AsRef<str>>(
     return Err(format!("The manifest gives {DEFAULT} {other:?}, and it is \"true\" or \"false\""));
   }
   let word = word(read(file)?.as_ref());
+  let bound = gate::engine_bound(&word, ENGINE);
+  if !bound.is_empty() {
+    let names = bound.join(", ");
+    return Err(format!(
+      "The word {file} binds {names} of the engine at its top, which each word of a chain reads: \
+       give each a name of its own"
+    ));
+  }
   Ok(Extension { name: name.to_owned(), word, life, root, file: file.to_owned() })
 }
 
@@ -439,21 +451,40 @@ pub(crate) fn manifested<T: AsRef<str>>(
 /// official one unless a config turns it off, then each other one in the order a config first names it. A config
 /// gives the folder of an extension that is not official by its path, which resolves against the folder of the
 /// config, `~` being the home, and `true` keeps the path that an earlier config gave.
-pub fn configured(places: &Places, project: &Path) -> Result<Vec<Extension>, Fault> {
+/// An extension that does not load does not play, and the second list says why, one line for each.
+pub fn configured(places: &Places, project: &Path) -> Result<(Vec<Extension>, Vec<String>), Fault> {
   let official = officials(places);
-  let on = turned_on(places, project)?.into_iter();
-  on.map(|(name, path)| match path {
-    Some(root) => load(&name, &root, places),
-    // A copy of an official extension in the folder of the extensions of the project prevails over the one that furb
-    // carries, for its word and for the file that a chain reads.
-    None if project.join(".furb").join("extensions").join(&name).join(MANIFEST).is_file() => {
-      load(&name, &project.join(".furb").join("extensions").join(&name), places)
-    }
-    None => {
-      Ok(official.iter().find(|one| one.name == name).cloned().expect("an official extension"))
-    }
-  })
-  .collect()
+  let mut out = (Vec::new(), Vec::new());
+  for (name, path) in turned_on(places, project)? {
+    // A copy of an official extension in the folder of the extensions of the project prevails over
+    // the one that furb carries, for its word and for the file that a chain reads.
+    let copied = project.join(".furb").join("extensions").join(&name);
+    let root = match path {
+      Some(root) => root,
+      None if copied.join(MANIFEST).is_file() => copied,
+      None => {
+        let one = official.iter().find(|one| one.name == name).cloned();
+        out.0.push(one.expect("an official extension"));
+        continue;
+      }
+    };
+    loaded(&name, &root, places, &mut out);
+  }
+  Ok(out)
+}
+
+/// The extension of a folder under a name, which goes in the first list, or the line that tells why
+/// it does not play, which goes in the second.
+fn loaded(
+  name: &str,
+  root: &Path,
+  places: &Places,
+  (on, refused): &mut (Vec<Extension>, Vec<String>),
+) {
+  match load(name, root, places) {
+    Ok(one) => on.push(one),
+    Err(no) => refused.push(format!("The extension {name} does not play: {}", no.message())),
+  }
 }
 
 /// The name of each extension that the configs turn on, in the order a life runs them, with the path of its folder,
@@ -560,17 +591,21 @@ fn beside(file: &Path, path: &str, places: &Places) -> PathBuf {
 }
 
 /// The extensions that a config of the project turns on by the path of their folder, which a write of that config
-/// gives in the middle of a life. A config that is not of the form of a config, and a folder that holds no
-/// extension, turn on nothing.
-fn turned(file: &Path, text: &str, places: &Places) -> Vec<Extension> {
+/// gives in the middle of a life. A config that is not of the form of a config turns on nothing.
+/// A folder whose extension does not load turns on nothing, and the second list says why.
+fn turned(file: &Path, text: &str, places: &Places) -> (Vec<Extension>, Vec<String>) {
+  let mut out = (Vec::new(), Vec::new());
   let Some(Value::Object(extensions)) =
     serde_json::from_str::<Value>(text).ok().and_then(|one| one.get("extensions").cloned())
   else {
-    return Vec::new();
+    return out;
   };
-  let folder = |form: &Value| form.as_str().map(|path| beside(file, path, places));
-  let found = extensions.iter().filter_map(|(name, form)| load(name, &folder(form)?, places).ok());
-  found.collect()
+  for (name, form) in &extensions {
+    if let Some(path) = form.as_str() {
+      loaded(name, &beside(file, path, places), places, &mut out);
+    }
+  }
+  out
 }
 
 /// The word of a file: the file with its line ends made LF, less each top level import of furb and the lines up to
@@ -687,8 +722,15 @@ pub fn enabled(root: &[Fact]) -> Vec<Extension> {
 /// state that it holds keeps its value, and its life word does not run again. The ear plays the rungs from the fact alone, so a later life plays the same rungs
 /// where the journal says the fact again.
 pub fn extensions(given: Vec<Extension>, places: Places) -> Box<dyn Ear> {
+  telling(given, Vec::new(), places)
+}
+
+/// The ear of [`extensions`], which tells the root once, at the first stand that this life answers,
+/// why each extension of `refused` does not play.
+pub(crate) fn telling(given: Vec<Extension>, refused: Vec<String>, places: Places) -> Box<dyn Ear> {
   hearing(&["chain", "stand", "rung", "write", ENABLE, TEACH], move |mut co| async move {
     // What the life enabled, in order, and each chain in the order of its birth, with the extensions it has.
+    let mut refused = refused;
     let (mut enabled, mut chains) = (Vec::<Extension>::new(), Vec::<(String, Vec<String>)>::new());
     // The setup of the root: the actor and the doctrine that the fact teach names with the enables still to hear
     // before it plays, and whether the root took it.
@@ -721,6 +763,8 @@ pub fn extensions(given: Vec<Extension>, places: Places) -> Box<dyn Ear> {
         // doctrine: the ear says the fact teach, with the count of the enables that follow it, then each enable, and
         // it plays the setup once it heard them, as the journal of a later life says them again.
         "done" if named(a.about(), "stand") && a.by() != JOURNAL => {
+          tell(&mut co, &refused);
+          refused.clear();
           let new: Vec<Extension> =
             given.iter().filter(|one| !enabled.contains(one)).cloned().collect();
           if !taught
@@ -785,13 +829,19 @@ pub fn extensions(given: Vec<Extension>, places: Places) -> Box<dyn Ear> {
             continue;
           };
           if projected(&project).contains(&file) {
-            turned(&file, &text.content, &places).into_iter().filter(|one| !runs(one)).collect()
+            let (found, refused) = turned(&file, &text.content, &places);
+            tell(&mut co, &refused);
+            found.into_iter().filter(|one| !runs(one)).collect()
           } else {
             let folders = turned_on(&places, &project).unwrap_or_default().into_iter();
             let mine =
               folders.filter(|(name, root)| root.as_deref() == file.parent() && runs_name(name));
-            let found = mine.filter_map(|(name, root)| load(&name, &root?, &places).ok());
-            found.filter(|one| !enabled.contains(one)).collect()
+            let mut found = (Vec::new(), Vec::new());
+            for (name, root) in mine.filter_map(|(name, root)| Some((name, root?))) {
+              loaded(&name, &root, &places, &mut found);
+            }
+            tell(&mut co, &found.1);
+            found.0.into_iter().filter(|one| !enabled.contains(one)).collect()
           }
         }
         ENABLE => Extension::of(&a).filter(|one| !enabled.contains(one)).into_iter().collect(),
@@ -834,6 +884,13 @@ pub fn extensions(given: Vec<Extension>, places: Places) -> Box<dyn Ear> {
       }
     }
   })
+}
+
+/// Tells the root why each extension of these lines does not play, in one note, when there is one.
+fn tell(co: &mut Co, refused: &[String]) {
+  if !refused.is_empty() {
+    say(co, Fact::says("tell", ROOT, [Object::list([Object::string(refused.join("\n"))])]));
+  }
 }
 
 /// One extension played on a chain as a rung: its word then its life word, or its life word alone on a chain that

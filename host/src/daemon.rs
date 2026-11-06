@@ -822,8 +822,9 @@ impl Lives {
     }
   }
 
-  /// The handover: each window detached, each life told to write its checkpoint and end, then the
-  /// lives that lived, with their pins, given to the peer that asked once the listener stopped.
+  /// The handover: each window detached, each life told to write its checkpoint and end, then each
+  /// life, with its pins, given to the peer that asked once the listener stopped. A life that ends
+  /// already goes too, with no pin, and a life whose checkpoint fails opens again from its record.
   fn handover(self, asker: Outbox, reply: Replied) {
     let (mut handed, mut lives) = (Vec::new(), Vec::new());
     for (life, held) in self.held {
@@ -836,6 +837,7 @@ impl Lives {
           for (_, one) in waiting {
             one.send(Err(ProtocolError::Stopped)).ok();
           }
+          handed.push(Handed { life, cwd: held.cwd, pins: Vec::new() });
         }
       }
       lives.push((record, held.handle));
@@ -887,11 +889,17 @@ impl Watch {
   async fn watched(self, asks: mpsc::WeakUnboundedSender<Asked>) {
     let mut events = pin!(self.life.events(0));
     let mut quiet = Quiet::new(self.stall);
+    let mut end = None;
     loop {
       tokio::select! {
         biased;
         next = events.next() => match next {
-          Some((_, event)) => quiet.heard(&event),
+          Some((_, event)) => {
+            if let Event::Ended(fault) = &*event {
+              end = Some(fault.clone());
+            }
+            quiet.heard(&event);
+          }
           None => break,
         },
         () = until(quiet.due()) => {
@@ -904,6 +912,12 @@ impl Watch {
         }
       }
     }
+    let why = match end {
+      Some(Some(fault)) => fault,
+      Some(None) => "with no fault".to_owned(),
+      None => "with no event of its end".to_owned(),
+    };
+    report(self.log.as_ref(), &format_args!("the life of {} ended: {why}", self.record));
     if let Some(asks) = asks.upgrade() {
       asks.send(Asked::Ended { life: self.record, born: self.born }).ok();
     }

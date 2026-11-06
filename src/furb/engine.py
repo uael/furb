@@ -581,7 +581,11 @@ def gathered(define, floor):
       for key, value in here.items():
         if not (key.startswith("__") or callable(value) or globals().get(key, here) is value):
           found = set()
-          if text := literal(value, found):
+          try:
+            text = literal(value, found)
+          except RecursionError:
+            text = ""
+          if text:
             values[c][key] = text
             named |= found
           else:
@@ -989,7 +993,7 @@ def boot(record=(), **outside):
     try:
       while True:
         while owed() and (
-          (stalled and stalled.pop())
+          (stalled and stalled.pop() and due[-1][2] not in saved)
           or not (log or left)
           or (due[-1][0] == "joined" and not question(due[-2]) and due.pop() and due)
           or (a and a[::2] == ("wake", "journal") and due[-1][1] in taken)
