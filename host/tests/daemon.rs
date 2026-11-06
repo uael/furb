@@ -156,15 +156,8 @@ mod daemon {
   ) -> (Local, JoinHandle<Result<(), DaemonError>>) {
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
-    let settings = Settings {
-      opening,
-      grace,
-      end: END,
-      stall: STALL,
-      tailnet: None,
-      door: None,
-      host: None,
-    };
+    let settings =
+      Settings { opening, grace, end: END, stall: STALL, tailnet: None, door: None, host: None };
     let served = local.clone();
     (local, tokio::spawn(async move { run(&served, listener, settings).await }))
   }
@@ -501,9 +494,10 @@ mod daemon {
   async fn the_log_of_the_daemon_says_each_end_of_a_life_with_its_fault() {
     let at = place();
     let lines = Arc::new(Mutex::new(Vec::<String>::new()));
-    let kept = lines.clone();
+    let kept = Arc::clone(&lines);
     let log = Log(Arc::new(move |line: &str| kept.lock().unwrap().push(line.to_owned())));
-    let (local, _daemon) = started_with(&at, SHORT, Opening { log: Some(log), ..opening(&at) }).await;
+    let (local, _daemon) =
+      started_with(&at, SHORT, Opening { log: Some(log), ..opening(&at) }).await;
     let mut window = Window::dialed(&local).await;
     let life = opened(&mut window, &at, "a.jsonl").await;
     let said = format!("furb host: the life of {life} ended: with no fault");
@@ -553,11 +547,11 @@ mod daemon {
   /// began, then waits until the test drops the sender of the gate.
   fn blocking(
     at: &Path,
-    log: Arc<std::sync::Mutex<Vec<String>>>,
+    log: Arc<Mutex<Vec<String>>>,
   ) -> (Opening, std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>) {
     let (hold, gate) = std::sync::mpsc::channel::<()>();
     let (began, entered) = std::sync::mpsc::channel::<()>();
-    let (gate, began) = (std::sync::Mutex::new(gate), std::sync::Mutex::new(began));
+    let (gate, began) = (Mutex::new(gate), Mutex::new(began));
     let inner = opening(at).answer.expect("the opening of a test has a model");
     let answer = Answered(Arc::new(move |kind, message| {
       began.lock().unwrap().send(()).ok();
@@ -571,7 +565,7 @@ mod daemon {
   #[tokio::test]
   async fn a_handover_gives_up_a_life_that_does_not_end_within_its_bound() {
     let at = place();
-    let log = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let log = Arc::new(Mutex::new(Vec::new()));
     let (blocked, hold, entered) = blocking(&at, Arc::clone(&log));
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
