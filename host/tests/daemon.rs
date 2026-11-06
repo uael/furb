@@ -404,13 +404,21 @@ mod daemon {
     let alone = opened(&mut window, &at, "a.jsonl").await;
     let workspace = Some(main.display().to_string());
     let mut wanted = vec![
-      Listed { life: one, workspace: workspace.clone(), held: true, open: true, name: None },
-      Listed { life: alone, workspace: None, held: true, open: true, name: None },
+      Listed {
+        life: one,
+        workspace: workspace.clone(),
+        held: true,
+        open: true,
+        watched: false,
+        name: None,
+      },
+      Listed { life: alone, workspace: None, held: true, open: true, watched: false, name: None },
       Listed {
         life: tree.join("two.jsonl").display().to_string(),
         workspace,
         held: false,
         open: false,
+        watched: false,
         name: None,
       },
     ];
@@ -419,6 +427,24 @@ mod daemon {
     assert_eq!(listed, wanted);
     let verbatim = |one: &Listed| one.life.starts_with(r"\\?\");
     assert!(!listed.iter().any(verbatim), "a worktree is listed under the path that made it");
+  }
+
+  #[tokio::test]
+  async fn the_list_says_whether_a_window_holds_each_life_and_a_pin_is_no_window() {
+    let at = place();
+    let (local, _daemon) = started(&at, GRACE).await;
+    let mut window = Window::dialed(&local).await;
+    let mut other = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    let watched = |listed: Vec<Listed>| listed.iter().any(|one| one.life == life && one.watched);
+    assert!(!watched(window.listed().await), "an open that attaches nothing is held by no window");
+    let pin = Verb::Pin { life: life.clone(), holder: "skill".to_owned() };
+    assert_eq!(window.ask(pin).await, Ok(Answer::Done));
+    assert!(!watched(window.listed().await), "a pin holds the life and no window holds it");
+    other.attach(&life).await;
+    assert!(watched(window.listed().await), "a window of another connection holds the life");
+    assert_eq!(other.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+    assert!(!watched(window.listed().await), "a window that detached holds nothing");
   }
 
   #[tokio::test]
@@ -567,15 +593,21 @@ mod daemon {
     assert!(!window.lives(&life).await);
     let held = drifted(&life);
     let mut later = Window::dialed(&local).await;
-    opened(&mut later, &at, "a.jsonl").await;
     let drift = |why: &str| why.starts_with("Drift: ") && why.contains(" drifts: ");
-    match later.ask(Verb::Attach { life: life.clone(), from: 0 }).await {
-      Ok(Answer::Done) => {
-        let ended = |frame: &Frame| matches!(frame, Frame::Event { life: one, event: Event::Ended(Some(why)), .. } if *one == life && drift(why));
-        later.until(ended).await;
-      }
-      refused => assert_eq!(refused, Err(ProtocolError::Closed { life: life.clone() })),
-    }
+    let verb = Verb::Open {
+      life: life.clone(),
+      cwd: Some(at.display().to_string()),
+      actor: None,
+      roster: None,
+      extensions: None,
+      config: None,
+      claude: None,
+      answers: false,
+      attach: Some(0),
+    };
+    assert_eq!(later.ask(verb).await, Ok(Answer::Done));
+    let ended = |frame: &Frame| matches!(frame, Frame::Event { life: one, event: Event::Ended(Some(why)), .. } if *one == life && drift(why));
+    later.until(ended).await;
     let said = format!("furb host: the life of {life} ended: ");
     let told = |line: &String| line.strip_prefix(&said).is_some_and(drift);
     let start = Instant::now();
@@ -816,7 +848,7 @@ mod daemon {
   }
 
   #[tokio::test]
-  async fn a_skill_says_each_act_under_its_name_and_a_window_under_the_operator() {
+  async fn a_skill_says_each_act_under_its_name_and_a_window_under_its_operator() {
     let at = place();
     let local = served(&at, None).await;
     let mut writer = Window::dialed(&local).await;
@@ -837,7 +869,13 @@ mod daemon {
       let Ok(Answer::Value(fact)) = writer.ask(get).await else { panic!("no act {id}") };
       speakers.push(fact[2].clone());
     }
-    assert_eq!(speakers, [json!("skill/k"), json!("skill/k"), json!("operator")]);
+    let Ok(Answer::Presence(peers)) = writer.ask(Verb::Presence { life: life.clone() }).await
+    else {
+      panic!("no presence")
+    };
+    let login = peers.iter().find(|one| one.kind == Kind::Window).map(|one| one.login.clone());
+    let member = json!(format!("operator/{}", login.expect("the window is present")));
+    assert_eq!(speakers, [json!("skill/k"), json!("skill/k"), member]);
     let y = Verb::Inspect { life: life.clone(), name: "x".to_owned(), on: None };
     assert!(matches!(skill.ask(y).await, Ok(Answer::Inspected { .. })), "the word of a skill ran");
   }

@@ -168,6 +168,9 @@ async def chosen(to: str = "", on: str = "") -> Filter:
 FILTERS: list[Filter] = [latest(), recent(8)]
 
 
+regrounded: set[str] = set()
+
+
 def reground(on: str = "") -> None:
   here = on or scope(acting())
   voiced = {x[1] for x in transcript(here) if x[0] == "tell"}
@@ -180,13 +183,14 @@ def reground(on: str = "") -> None:
       and "://" not in t.path
       and get(t.path.split("/")[0]) is None
     ):
-      made = get(a[2]) or ("",)
-      held[t.path] = (t, made[0] == "rung" and str(made[4:5]).endswith("reground()',)"))
+      held[t.path] = (t, a[1] in regrounded)
   for path, (text, again) in held.items():
+    seen = {x[1] for x in transcript(here) if x[0] == "read"}
     try:
       read(path, HEAD if again else differs(text.lines), on=on)
     except Refused:
       continue
+    regrounded.update(x[1] for x in transcript(here) if x[0] == "read" and x[1] not in seen)
 
 
 def headline(fact: tuple) -> str:

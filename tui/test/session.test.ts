@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { exitOf, isDone } from "furb/life";
+import { exitOf, isDone, operated } from "furb/life";
 import { alive, printPid, remove } from "../../bind/typescript/test/processes.ts";
 import { until } from "../../bind/typescript/test/until.ts";
 import { daemon } from "../src/client.ts";
@@ -22,7 +22,7 @@ test("an @word that names no file is text of the message, and a word that names 
     await idle(session);
     await session.refresh();
     const reads = session.acts.filter(
-      (act) => act.kind === "rung" && act.by === "operator" && String(act.words[0]).startsWith("read("),
+      (act) => act.kind === "rung" && operated(act.by) && String(act.words[0]).startsWith("read("),
     );
     expect(reads.map((act) => [act.words[0], act.run?.run])).toEqual([['read("README.md")', "done"]]);
     expect(session.acts.filter((act) => session.isUserPrompt(act)).map((act) => act.words[1])).toEqual([
@@ -306,7 +306,7 @@ async function heldWhileEffortChanges(
   await session.submit("/effort low");
   await until(session, () =>
     session.acts.some(
-      (act) => act.by === "operator" && act.words[0] === 'actor = "claude-cli:sonnet/low"' && isDone(act),
+      (act) => operated(act.by) && act.words[0] === 'actor = "claude-cli:sonnet/low"' && isDone(act),
     ),
   );
   await session.submit("Take the low effort.");
