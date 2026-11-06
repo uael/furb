@@ -294,11 +294,15 @@ pub enum Verb {
     #[serde(default)]
     notices: Vec<String>,
   },
-  /// The threads of a chain with their meaning, now or as they stood just after a moment.
+  /// The threads of a chain with their meaning, now or as they stood just after a moment. `read`
+  /// is the place up to which the window read the chain, from which the runs of notes count the
+  /// ones not yet read; none reads nothing.
   Threads {
     life: String,
     on: Option<String>,
     at: Option<u64>,
+    #[serde(default)]
+    read: Option<u64>,
   },
   /// The acts of a life as they stood just after a moment, each with its meaning then.
   AsOf {

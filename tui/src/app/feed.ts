@@ -6,6 +6,7 @@ import {
   cancelled,
   earProgram,
   gist,
+  type NoteRun,
   operated,
   type ProgramLine,
   pauseSaid,
@@ -33,7 +34,6 @@ interface Note {
   act: ActRow;
   indent: number;
   tone: ReturnType<typeof threadTone>;
-  unread: boolean;
   /** The text that a search reads. */
   shown: string;
   /** What its card is made of, which changes when the row changes. */
@@ -88,8 +88,8 @@ export const feed = part({
     let order = 0,
       items = 0,
       group = "";
-    // The notes that the host names, one after another with no other card between them, wait here until a card of
-    // another kind or the end of the feed closes the run, which then draws as one block under one header.
+    // The notes of a run that the view names wait here until the last of them comes, which then draws as one block under
+    // one header.
     const run: Note[] = [];
     // A card that shows an item of the view says the text that the filter reads, and counts as an item once it shows.
     // A card of a done act names in same what its card is made of, and it is made again only when one of these, or
@@ -102,7 +102,6 @@ export const feed = part({
       body: (box: BoxRenderable) => void,
       options: BlockOptions & { shown?: string; same?: readonly unknown[] } = {},
     ) => {
-      flushNotes();
       if (options.shown !== undefined) {
         if (!matches(options.shown)) return;
         items++;
@@ -146,11 +145,11 @@ export const feed = part({
     };
     // The notes of a run draw as one card: one header, which counts them and the ones not yet seen, and one panel that
     // holds their rows one under the other, with no empty band between them. A run of one draws as it always did.
-    const drawNotes = (all: Note[]) => {
+    const drawNotes = (all: Note[], of?: NoteRun) => {
       const notes = all.filter((one) => matches(one.shown));
       const [first] = notes;
       if (!first) return;
-      if (notes.length === 1) {
+      if (!of || of.count === 1) {
         add(first.act.id, first.key, [], (box) => this.panel(box, first.tone).add(first.row()), {
           group: "user",
           heading: false,
@@ -162,17 +161,17 @@ export const feed = part({
         });
         return;
       }
-      const unread = notes.filter((one) => one.unread).length;
+      const unread = w.unreadNotes(of);
       const [dot, ink] = markOf("unread");
       const label: Part[] = [
         [`${glyph.prompt} `, c.faint],
         ["Notes", c.text, bold],
-        [`  ${notes.length}`, c.faint],
+        [`  ${of.count}`, c.faint],
         ...(unread ? [[`  ${dot} ${unread} unread`, ink] as Part] : []),
       ];
       add(
         first.act.id,
-        `notes\n${notes.map((one) => one.key).join("\n--\n")}`,
+        `notes\n${of.count}\n${unread}\n${notes.map((one) => one.key).join("\n--\n")}`,
         label,
         (box) => {
           const inner = this.panel(box, first.tone);
@@ -189,8 +188,9 @@ export const feed = part({
         },
       );
     };
+    let held: NoteRun | undefined;
     const flushNotes = () => {
-      if (run.length) drawNotes(run.splice(0));
+      if (run.length) drawNotes(run.splice(0), held);
     };
     if (w.preferences.notice)
       add("preferences-notice", w.preferences.notice, [], (box) => {
@@ -1308,7 +1308,6 @@ export const feed = part({
             act,
             indent,
             tone,
-            unread,
             shown: message,
             key: `${message}\n${opened}\n${mark}\n${this.feedWidth}\n${this.theme}`,
             row: () => {
@@ -1324,12 +1323,18 @@ export const feed = part({
               return row;
             },
           };
-          // A prompt that the host names a note stands in the run of the notes around it. A prompt of None that no
-          // aside names stands alone, as the console closed it.
-          if (aside && aside !== "question") {
-            if (run[0] && run[0].indent !== indent) flushNotes();
+          // A prompt that the host names a note stands in the run that the view gives it, which draws once its last note
+          // came. A prompt of None that no aside names stands alone, as the console closed it.
+          const of = aside && aside !== "question" ? threadsOwn.runs.get(act.id) : undefined;
+          if (of) {
+            if (held !== of) flushNotes();
+            held = of;
             run.push(note);
-          } else drawNotes([note]);
+            if (of.prompts.at(-1)?.id === act.id) flushNotes();
+          } else {
+            flushNotes();
+            drawNotes([note]);
+          }
         } else if (asksOperator(act)) {
           const message = String(act.words[1] ?? "");
           const ask = w.desk.asks.find((one) => one.id === act.id);
