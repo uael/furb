@@ -2717,3 +2717,78 @@ fn a_version_is_compared_by_its_numbers() {
   assert_eq!(super::numbers("1.4.0"), vec![1, 4, 0]);
   assert_eq!(super::numbers("claude-2.1.119"), vec![2, 1, 119]);
 }
+
+#[cfg(unix)]
+#[test]
+fn a_signed_thought_of_a_reply_after_a_compaction_reaches_the_next_conversation_whole() {
+  use super::claude::{
+    Account, Source, Switch,
+    test::{Yard, after},
+  };
+  let yard = Yard::new("compacted");
+  let dir = yard.at.join("dir");
+  let accounts = vec![Account { name: "a".to_owned(), source: Source::ConfigDir(dir.clone()) }];
+  let claude = yard.claude_as(accounts, Switch::Failover);
+  let (mut engine, _) = life("claude-compacted", on_reactor(claude.models()));
+  let root = engine.root().to_owned();
+  let with =
+    verbs::Prompt { message: Some("THINK first".into()), on: on(&root), ..Default::default() };
+  let act = engine.prompt(Object::string("str"), with).expect("a prompt is made");
+  assert_eq!(block_on(act).expect("the first answer").py_repr(), "'reply 1'");
+  // A compaction cuts what the chain was told, and keeps the reply, so the next turn begins a new
+  // conversation.
+  let cut =
+    "here = scope(acting())\nsay('prefix', here, [x for x in transcript(here) if x[0] != 'tell'])";
+  let rung = verbs::Rung { word: Some(cut.to_owned()), on: on(&root), ..Default::default() };
+  block_on(engine.rung(rung).expect("a rung is made")).expect("the cut runs");
+  let with = verbs::Prompt { message: Some("second".into()), on: on(&root), ..Default::default() };
+  block_on(engine.prompt(Object::string("str"), with).expect("a prompt is made"))
+    .expect("the second answer");
+  let pids = yard.pids();
+  let id = after(&yard.args(pids.last().expect("a process")), "--resume")
+    .expect("the turn after the cut resumes a new conversation");
+  let projects: Vec<_> = fs::read_dir(dir.join("projects")).unwrap().flatten().collect();
+  let file = projects[0].path().join(format!("{id}.jsonl"));
+  let entries: Vec<Value> = fs::read_to_string(&file)
+    .unwrap()
+    .lines()
+    .map(|one| serde_json::from_str(one).unwrap())
+    .collect();
+  let said: Vec<&Value> = entries
+    .iter()
+    .filter(|one| one["type"] == "assistant")
+    .map(|one| &one["message"]["content"])
+    .collect();
+  let thought = json!({"type": "thinking", "thinking": "hmm", "signature": "sig"});
+  // The first turn of the model is the reply before the cut; the chain wrote the turns after it.
+  assert_eq!(said[0], &json!([thought, {"type": "text", "text": "close(\"reply 1\")"}]));
+}
+
+#[test]
+fn a_model_of_rig_reads_the_thought_of_each_earlier_turn_whole_and_one_that_forgets_reads_none() {
+  let thought = Reasoning::new_with_signature("a long thought", Some("sig".to_owned()));
+  let blocks = vec![AssistantContent::Reasoning(thought), AssistantContent::text("x = 1")];
+  let held = crate::wire::inward(&serde_json::to_value(&blocks).unwrap()).unwrap();
+  let usage = Object::tuple([1, 1, 0, 0].map(Object::int).into_iter().chain([Object::float(0.0)]));
+  let turns = Object::list([
+    Object::tuple([Object::string("user"), Object::string("ask"), Object::none(), Object::none()]),
+    Object::tuple([Object::string("assistant"), Object::string("x = 1"), usage, held]),
+    Object::tuple([
+      Object::string("user"),
+      Object::string("#run1"),
+      Object::none(),
+      Object::none(),
+    ]),
+  ]);
+  let said = |model: &Model| {
+    let got = messages(turns.as_ref(), model, &mut images::Images::new(None)).unwrap();
+    got.into_iter().find_map(|one| match one {
+      Message::Assistant { content, .. } => Some(content.into_iter().collect::<Vec<_>>()),
+      _ => None,
+    })
+  };
+  let mut model = scripted(&MockCompletionModel::new([]));
+  assert_eq!(said(&model), Some(blocks.clone()), "a model that keeps its thought reads it whole");
+  model.forgets = true;
+  assert_eq!(said(&model), Some(blocks[1..].to_vec()), "a model that forgets reads its word alone");
+}

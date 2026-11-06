@@ -702,6 +702,18 @@ fn a_thought_streams_as_it_comes_and_settles_once_at_its_place() {
 }
 
 #[test]
+fn a_thought_that_the_api_redacted_settles_as_its_data_in_the_turn() {
+  let yard = Yard::new("redacted");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let whole = asked(&model, &[user("REDACT")], json!({})).unwrap();
+  let expected = [
+    AssistantContent::Reasoning(Reasoning::redacted("opaque")),
+    AssistantContent::text("close(\"reply 1\")"),
+  ];
+  assert_eq!(whole.choice, expected);
+}
+
+#[test]
 fn a_process_that_exits_fails_its_turn_with_the_tail_of_its_stderr() {
   let yard = Yard::new("exits");
   let model = yard.claude(10_000).completion_model("sonnet");
