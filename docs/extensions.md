@@ -90,7 +90,9 @@ reads it.
   client is the same act, which the client makes with an ear of its own, so it lasts whatever extension plays.
 - **`ouroboros`** gives `extend(name, *rungs)`, which writes the words of those rungs as an extension of the project
   and turns it on, so every later chain runs it, and `extend(name, *rungs, tui=module)`, which also writes a [part for
-  the TUI](#a-part-for-the-tui). How to extend furb stands in one home, the text of its
+  the TUI](#a-part-for-the-tui). `extend(name, *rungs, session=True)` keeps the kit in the record alone: it writes no
+  file and says the fact `enable` with the word, so each chain of this session, and of each later life on its record,
+  plays it. How to extend furb stands in one home, the text of its
   [`SKILL.md`](../extensions/ouroboros/SKILL.md), which a model reads with `skill("ouroboros")`: the three ways to extend
   furb and when to take each, with an example for each. `enabled()` gives the extensions that the life runs. `bound_by()` gives each name that a word of the chain bound, with the rung of that word.
 - **`web`** searches the web and reads its pages. `web_search(query)` uses the search of the provider of the model of
