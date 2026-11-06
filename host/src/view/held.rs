@@ -11,9 +11,7 @@ use super::{
   act::{Act, Kind},
   desk::{Desk, desk},
   state::State,
-  threads::{
-    Attention, ChainAside, Rows, ThreadNode, attention, chain_asides, chain_threads, nest_threads,
-  },
+  threads::{Attention, ChainAside, Rows, ThreadNode, attention, chain_asides, chain_tree},
   time::{as_of, moments_of},
 };
 use crate::event::Event;
@@ -63,12 +61,14 @@ impl Held {
     desk(&self.then(None), &notices)
   }
 
-  /// The threads of a chain, now or as they stood just after a moment.
+  /// The threads of a chain, with the workers of its rounds nested under the thread that started
+  /// each, now or as they stood just after a moment.
   pub(crate) fn threads(&self, chain: &str, at: Option<u64>) -> Threads {
     let acts = self.then(at);
     let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
+    let all: Vec<&Act> = acts.iter().collect();
     let on: Vec<&Act> = acts.iter().filter(|act| act.chain == chain && act.id != chain).collect();
-    let threads = nest_threads(chain_threads(&on, &rows), &rows);
+    let threads = chain_tree(chain, &all, &rows);
     let state =
       rows.get(chain).filter(|act| act.kind == Kind::Chain).map_or(State::Idle, |act| act.state);
     Threads { attention: attention(&threads), asides: chain_asides(&on, &rows), threads, state }
