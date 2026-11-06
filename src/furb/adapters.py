@@ -22,5 +22,5 @@ ADAPTERS = {
       "              recount(due.pop())\n"
       "            repeat(*f)\n",
     ),
-  ],
+  ]
 }

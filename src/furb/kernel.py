@@ -245,8 +245,8 @@ class Running:
         ok = (held.get("accepts") or accepted)(str((*asked[4:], "")[0]), value)
       elif ok is not True:
         ok = code in ok
-    # An ok or an accepts of the word is the word's own code, so what it raises is what the word awaited, and the
-    # Kernel, which serves every chain, goes on: ok=lambda e: True raised in the Kernel on 11-04, and lost each word.
+    # An accepts of the word is the word's own code, so what it raises is what the word awaited, and the Kernel, which
+    # serves every chain, goes on.
     except Exception as raised:
       return raised
     if ok:
@@ -350,10 +350,45 @@ class Running:
         self.ended(one, self.cancelled())
 
 
+def lost(names: Names) -> Generator[tuple, object]:
+  """What a Kernel says at its birth of each run that an earlier Kernel took and that is not over, whose frame it holds
+  not: the end of each wants of that run that is not over and of the run, and the close of the rung of a run that
+  awaited, each with a refusal that says the word was lost."""
+  get, over, transcript, close = (
+    verb(names, "get"),
+    verb(names, "over"),
+    verb(names, "transcript"),
+    verb(names, "close"),
+  )
+  refused = names["Refused"]
+  assert isinstance(refused, type)
+  why = refused("the Kernel that ran the word of the rung of this run raised, so the word was lost and runs no more")
+  n = 1
+  while get(on := f"chain{n}"):
+    n += 1
+    facts = transcript(on)
+    assert isinstance(facts, list)
+    for run in [x[1] for x in facts if x[0] == "run" and get(x[1]) is x and not over(x[1])]:
+      wants = [x[1] for x in facts if x[0] == "wants" and get(x[1]) is x and x[2] == run and not over(x[1])]
+      for one in wants:
+        yield "done", one, why
+      yield "done", run, why
+      asked = get(run)
+      assert isinstance(asked, tuple)
+      if wants and not over(asked[4]):
+        close(why, asked[4])
+
+
 def kernel(names: Names) -> Ear:
   """The Kernel: it takes each run and begins its word when it hears that it took it, runs the part of each writing
-  of a rung that the life holds when it hears the writing, and carries the word at the done of each wants it made."""
+  of a rung that the life holds when it hears the writing, and carries the word at the done of each wants it made.
+
+  A Kernel holds the frame of each word that it runs, so a Kernel that starts again in the place of one that raised
+  holds none of the runs that the other took. At its birth it ends each run that is not over, each wants of that run
+  that is not over, and the rung of a run that awaited, with a refusal that says the word was lost, so each chain
+  takes its next act. A Kernel born with its life finds no run."""
   held, heard = Running(names), {"run", "writing", "wants", "cancel", "close"}
+  yield from lost(names)
   while True:
     match (yield heard | set(held.awaits) | set(held.lingers)):
       case ("run", run, *_):
