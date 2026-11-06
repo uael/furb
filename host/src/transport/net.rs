@@ -326,17 +326,27 @@ impl Tailscale {
 
   /// The access list in the place of the one that this identity holds, which each clone of it
   /// follows, and which those that [`Tailscale::changes`] gave hear.
+  /// The lives hear nothing when the list is the same.
   pub fn replace(&self, access: Access) {
-    self.access.send_replace(access);
+    self.access.send_if_modified(|held| {
+      let changed = *held != access;
+      *held = access;
+      changed
+    });
+  }
+
+  /// The access list as it stands now.
+  pub fn access(&self) -> Access {
+    self.access.borrow().clone()
   }
 
   /// Each login that the access list names now.
-  pub(crate) fn logins(&self) -> Vec<String> {
+  pub fn logins(&self) -> Vec<String> {
     self.access.borrow().logins()
   }
 
   /// The access list as it changes.
-  pub(crate) fn changes(&self) -> watch::Receiver<Access> {
+  pub fn changes(&self) -> watch::Receiver<Access> {
     self.access.subscribe()
   }
 
