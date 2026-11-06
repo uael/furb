@@ -55,7 +55,8 @@ take() {
 }
 
 start=$(date +%s)
-said=$start
+# The first wait logs at once, so a build that waits shows it before its first 30 seconds.
+said=$((start - 30))
 take
 while [ -z "$got" ]; do
   now=$(date +%s)
