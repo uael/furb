@@ -5,6 +5,7 @@ hear by, so no name of them stands in the globals of the engine. Every fact is a
 (kind, about, by, *words), and a question (kind, id, by, on, *words), deconstructed only by match.
 """
 
+import ast
 import asyncio
 import atexit
 import json
@@ -147,6 +148,28 @@ NUMS = (
   "act('nums', '', kept)\n"
 )
 """A word of a rung that opens a door of its own, which answers a read of nums:// with a list."""
+
+
+def definitions(word: str) -> str:
+  """The definitions of a word, as the crate gives them to gathered (definitions of src/extension.rs): each statement at
+  its top that defines a function, a class or a type, an import, and an assignment to names in capitals, in order. A
+  word that does not parse is its own definitions."""
+  try:
+    body = ast.parse(word).body
+  except SyntaxError:
+    return word
+  kept = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.TypeAlias, ast.Import, ast.ImportFrom)
+
+  def capital(target: ast.expr) -> bool:
+    return isinstance(target, ast.Name) and target.id.isupper()
+
+  return "\n".join(
+    ast.get_source_segment(word, one) or ""
+    for one in body
+    if isinstance(one, kept)
+    or (isinstance(one, ast.Assign) and all(map(capital, one.targets)))
+    or (isinstance(one, ast.AnnAssign) and one.value is not None and capital(one.target))
+  )
 
 
 def plain(record: Sequence[tuple]) -> list:

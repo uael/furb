@@ -552,7 +552,7 @@ def seeded(id, last, to):
 
 
 HEARD = (
-  "say('prefix', scope(acting()), __kept := [*transcript(of='module')[-1:], *transcript(of='carried')[-1][3], "
+  "say('prefix', scope(acting()), __kept := [*transcript(of='module')[-1:], *transcript(of='carried')[-1:], *transcript(of='carried')[-1][3], "
   "*transcript(of='stand')[-1:], *transcript(of='pause'), *[x for x in transcript() if acting() in x[1::3] and x[0] != 'tell']])"
 )
 KEPT = "say('prefix', scope(acting()), [*__kept, *[x for x in transcript()[len(__kept) :] if x[0] != 'tell']])"

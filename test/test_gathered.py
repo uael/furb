@@ -1,6 +1,6 @@
 """gathered, the data of a checkpoint of a life."""
 
-from conftest import born, life, paragraphs, settle, sown, world_says
+from conftest import born, definitions, life, paragraphs, settle, sown, world_says
 from furb import engine
 from furb.engine import LARGEST, OPERATOR, Refused
 
@@ -122,12 +122,16 @@ async def test_chains_holds_each_plain_value_of_a_chain_whatever_its_size_and_se
   await engine.rung("big = 'x' * LARGEST\nran = Exit(0, Text('o', 'y' * LARGEST), Text('e', ''))\nsmall = 1", on=rest)
   await settle()
   big, ran = engine.module(rest)["big"], engine.module(rest)["ran"]
-  data = engine.gathered(lambda word: word, {})
-  [one] = [x for x in data["chains"] if x["id"] == rest]
-  assert (one["values"]["small"], {"big", "ran"} <= one["values"].keys(), one["lost"]) == ("1", True, [])
-  entries = engine.seed(data)
-  assert all(len(str(word).encode()) < LARGEST // 8 for x in entries if x[0][0] == "rung" for word in x[0][4:5])
-  log, _ = life(sown(), entries)
-  await settle()
-  assert (engine.module(rest)["big"], engine.module(rest)["ran"], engine.module(rest)["small"]) == (big, ran, 1)
-  assert all(len(str(x).encode()) < LARGEST // 8 for x in log if x[0] == "tell")
+  for _ in (1, 2):
+    data = engine.gathered(definitions, {})
+    [one] = [x for x in data["chains"] if x["id"] == rest]
+    assert (one["values"]["small"], {"big", "ran"} <= one["values"].keys(), one["lost"]) == ("1", True, [])
+    assert "LARGEST" not in one["definitions"]
+    entries = engine.seed(data)
+    assert all(len(str(word).encode()) < LARGEST // 8 for x in entries if x[0][0] == "rung" for word in x[0][4:5])
+    log, _ = life(sown(), entries)
+    await settle()
+    here = engine.module(rest)
+    assert (here["big"], here["ran"], here["small"], here["raised"]) == (big, ran, 1, None)
+    assert all(len(str(x).encode()) < LARGEST // 8 for x in log if x[0] == "tell")
+    assert not [x for x in log if x[0] == "tell" and " raised" in x[3][0].split("\n")[0]]
