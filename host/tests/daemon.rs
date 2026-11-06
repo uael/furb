@@ -593,15 +593,21 @@ mod daemon {
     assert!(!window.lives(&life).await);
     let held = drifted(&life);
     let mut later = Window::dialed(&local).await;
-    opened(&mut later, &at, "a.jsonl").await;
     let drift = |why: &str| why.starts_with("Drift: ") && why.contains(" drifts: ");
-    match later.ask(Verb::Attach { life: life.clone(), from: 0 }).await {
-      Ok(Answer::Done) => {
-        let ended = |frame: &Frame| matches!(frame, Frame::Event { life: one, event: Event::Ended(Some(why)), .. } if *one == life && drift(why));
-        later.until(ended).await;
-      }
-      refused => assert_eq!(refused, Err(ProtocolError::Closed { life: life.clone() })),
-    }
+    let verb = Verb::Open {
+      life: life.clone(),
+      cwd: Some(at.display().to_string()),
+      actor: None,
+      roster: None,
+      extensions: None,
+      config: None,
+      claude: None,
+      answers: false,
+      attach: Some(0),
+    };
+    assert_eq!(later.ask(verb).await, Ok(Answer::Done));
+    let ended = |frame: &Frame| matches!(frame, Frame::Event { life: one, event: Event::Ended(Some(why)), .. } if *one == life && drift(why));
+    later.until(ended).await;
     let said = format!("furb host: the life of {life} ended: ");
     let told = |line: &String| line.strip_prefix(&said).is_some_and(drift);
     let start = Instant::now();
