@@ -67,6 +67,10 @@ const ACTS: &str = "__acts";
 /// `furb.sheet`.
 const WORDS: &str = "__words";
 
+/// The name the sheet binds to the shape of the prompt whose step the word answers, when that
+/// prompt wants a value, which is `VALUED` of `furb.sheet`.
+const VALUED: &str = "__valued";
+
 /// A text of python parsed once, with the place where each of its lines starts, which each finder
 /// of the gate reads in place of a parse and a count of lines of its own.
 struct Parsed<'a> {

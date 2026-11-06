@@ -1611,17 +1611,22 @@ async def test_a_statement_that_the_model_of_a_rung_writes_runs_after_the_told_r
   assert engine.module(root)["k"] == "root"
 
 
-async def test_the_chain_advances_no_rung_after_a_word_that_repeats_the_word_it_told_as_told_nothing() -> None:
-  """When that word is the word that the chain told as told nothing last, and nothing but the chain told on the chain since, the chain advances no rung until a fact comes, so a model that answers the same word to nothing new is asked no more."""
-  _, log, root = born("x = 1", "pass", "pass", "pass", "close(1)", auto=False)
+async def test_the_chain_asks_a_prompt_no_more_after_two_words_in_a_row_that_made_nothing_new_until_a_fact_comes_and_tells_its_maker_once() -> (
+  None
+):
+  """After a second word in a row that bound no new name and after which nothing but the chain or a reminder of a message that is not answered told on the chain, the chain advances no rung until a fact comes, a tell of another or the end of an act that a word made, and tells the maker of that prompt once, so a model that answers a bare expression, prose and pass in turn is asked twice."""
+  _, log, root = born("('a', 1)", "The answer stands.", "pass", "pass", "close(1)", auto=False)
   one = engine.prompt(int, "count", on=root)
-  await settle()
-  await settle()
-  assert (len(said(log, "reply")), engine.peek(one, ...)) == (3, ...)
-  engine.prompt(None, "go on", on=one)
-  await settle()
-  await settle()
-  assert len(said(log, "reply")) == 5 and engine.peek(one) == 1
+  for _ in range(4):
+    await settle()
+  told = [a for a in said(log, "tell") if "asked no more until a fact comes" in a[3][0]]
+  assert (len(said(log, "reply")), engine.peek(one, ...), len(told)) == (2, ..., 1)
+  for replies in (4, 5):
+    engine.prompt(None, "go on", on=one)
+    for _ in range(4):
+      await settle()
+    assert len(said(log, "reply")) == replies
+  assert engine.peek(one) == 1
   word = "x = await prompt(int, 'q', on=chain('two'))"
   _, log, root = born(word, word, "close(x)", auto=False)
   one = engine.prompt(int, "count", on=root)

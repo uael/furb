@@ -49,6 +49,7 @@ use tokio::{
 
 use crate::{
   event::Event,
+  kits::Kit,
   life::{Command, LifeHandle, Reply},
 };
 
@@ -136,11 +137,25 @@ impl Played {
 
   /// The process of a skill started, once its earlier process ended, when its fact enable names
   /// one: the program of the folder that the life played the skill from, or, for a fact of a build
-  /// before the program, the program that the folder of the life and its config find by name.
+  /// before the program, the program that the folder of the life and its config find by name. A kit
+  /// of a session whose fact names the value of its view gets the server of that view in its place,
+  /// as [`crate::kits`] says.
   async fn start(&self, one: Enabled, running: &mut HashMap<String, Running>) {
-    let Enabled { name, program } = one;
+    let Enabled { name, program, view } = one;
     if let Some(old) = running.remove(&name) {
       old.ended().await;
+    }
+    if let Some(value) = view {
+      let kit = Kit {
+        life: self.life.clone(),
+        handle: self.handle.clone(),
+        name: name.clone(),
+        value,
+        host: self.host.clone(),
+      };
+      let (end, ends) = oneshot::channel();
+      running.insert(name, Running { end, watch: tokio::spawn(kit.served(ends)) });
+      return;
     }
     let program = match program {
       Some(named) => program_of(&named),

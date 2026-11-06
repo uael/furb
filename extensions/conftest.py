@@ -351,12 +351,14 @@ args = sys.argv[1:]
 at = args.index("--jq") if "--jq" in args else len(args)
 jq = args[at + 1] if at < len(args) else None
 said = " ".join(args[:at] + args[at + 2:])
-with open(os.environ["GH_LOG"], "a", encoding="utf-8") as f:
+log = os.environ["GH_LOG"]
+before = open(log, encoding="utf-8").read().splitlines() if os.path.exists(log) else []
+with open(log, "a", encoding="utf-8") as f:
   f.write(said + chr(10))
 with open(os.environ["GH_SAYS"], encoding="utf-8") as f:
   says = json.load(f)
-for pattern, out, code in says:
-  if re.search(pattern, said):
+for pattern, out, code, *times in says:
+  if re.search(pattern, said) and not (times and sum(bool(re.search(pattern, x)) for x in before) >= times[0]):
     break
 else:
   sys.exit(0)
@@ -458,8 +460,10 @@ class Bench:
     await self.word(f"got = {expression}")
     return self.ns["got"]
 
-  def say(self, pattern: str, out: object, code: int = 0) -> None:
-    self.says.insert(0, (pattern, out if isinstance(out, str) else json.dumps(out), code))
+  def say(self, pattern: str, out: object, code: int = 0, times: int | None = None) -> None:
+    """Answer each call that matches pattern, or only its first `times` calls: the later ones go to the next pattern."""
+    entry = (pattern, out if isinstance(out, str) else json.dumps(out), code)
+    self.says.insert(0, entry if times is None else (*entry, times))
     (self.tmp / "says.json").write_text(json.dumps(self.says), encoding="utf-8")
 
   def gh(self) -> list[str]:

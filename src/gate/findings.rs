@@ -18,7 +18,9 @@ use ruff_python_ast::{
 use ruff_python_parser::parse_module;
 use ruff_text_size::{Ranged, TextRange};
 
-use super::{ACTS, MODULE, Parsed, WORDS, binds, deleted, layout::builtin, named, strings, worded};
+use super::{
+  ACTS, MODULE, Parsed, VALUED, WORDS, binds, deleted, layout::builtin, named, strings, worded,
+};
 use crate::sand::{Nobody, Sand};
 
 /// The rule that a finding of the gate breaks: a rule that the gate checks itself, or any other
@@ -35,6 +37,8 @@ pub enum Rule {
   Coroutine,
   /// A name that the transcript binds.
   Told,
+  /// A bare expression at the end of a word that answers a prompt that wants a value.
+  Bare,
   /// A name of the engine that a word binds.
   Engine,
   /// A builtin that a word binds and that a def of the program reads.
@@ -63,6 +67,7 @@ impl Rule {
       Rule::Asyncio => "asyncio-in-word",
       Rule::Coroutine => "unawaited-coroutine",
       Rule::Told => "transcript-name",
+      Rule::Bare => "bare-answer",
       Rule::Engine => "engine-name",
       Rule::Builtin => "builtin-name",
       Rule::Assign => "invalid-assignment",
@@ -638,6 +643,31 @@ pub(super) fn told(sheet: &Parsed<'_>) -> Vec<Finding> {
       why: format!("the transcript binds `{name}`: a word reads it and never binds it"),
     })
     .collect()
+}
+
+/// The last statement of the word, when the word answers a prompt that wants a value, which the
+/// sheet binds as `VALUED`, and that statement is a bare expression and no call or await.
+///
+/// A model that writes the value as the whole word, as a tuple of ids and a summary, writes a word
+/// that runs and closes nothing, and its prompt asks it again: the gate names the close that it
+/// means, and nothing of the word runs.
+pub(super) fn bare(sheet: &Parsed<'_>) -> Vec<Finding> {
+  let Some(body) = sheet.bodied() else { return vec![] };
+  let Some(Stmt::Expr(last)) = word_of(body).last() else { return vec![] };
+  if strings(body, VALUED).is_empty() || matches!(&*last.value, Expr::Call(_) | Expr::Await(_)) {
+    return vec![];
+  }
+  let at = last.start().to_usize();
+  let text = &sheet.text[last.range()];
+  let shown = if text.len() <= 60 && !text.contains('\n') { text } else { "..." };
+  vec![Finding {
+    line: sheet.line(at),
+    column: sheet.column(at),
+    rule: Rule::Bare,
+    why: format!(
+      "the word ends with a bare expression, which closes nothing: close the prompt with it, as close({shown})"
+    ),
+  }]
 }
 
 /// The names that a chain binds of its own, though the engine binds each first: the actor, the last

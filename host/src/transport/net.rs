@@ -28,6 +28,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use tokio::{
   io::{AsyncRead, AsyncWrite, ReadBuf},
   net::{TcpListener, TcpStream},
+  sync::watch,
 };
 use tokio_tungstenite::{
   WebSocketStream,
@@ -214,10 +215,10 @@ pub enum LocalApi {
 
 /// The identity of a peer of the tailnet: the login that the local API of Tailscale gives for its
 /// address, with the role that the access list gives that login.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Tailscale {
   api: LocalApi,
-  access: Access,
+  access: Arc<watch::Sender<Access>>,
 }
 
 #[derive(Deserialize)]
@@ -317,7 +318,23 @@ async fn fetched<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
 
 impl Tailscale {
   pub fn new(api: LocalApi, access: Access) -> Self {
-    Tailscale { api, access }
+    Tailscale { api, access: Arc::new(watch::channel(access).0) }
+  }
+
+  /// The access list in the place of the one that this identity holds, which each clone of it
+  /// follows, and which those that [`Tailscale::changes`] gave hear.
+  pub fn replace(&self, access: Access) {
+    self.access.send_replace(access);
+  }
+
+  /// Each login that the access list names now.
+  pub(crate) fn logins(&self) -> Vec<String> {
+    self.access.borrow().logins()
+  }
+
+  /// The access list as it changes.
+  pub(crate) fn changes(&self) -> watch::Receiver<Access> {
+    self.access.subscribe()
   }
 
   /// The addresses of this machine on the tailnet.
@@ -335,7 +352,7 @@ impl Identity for Tailscale {
     let addr = stream.peer_addr().map_err(TransportError::Accept)?;
     let addr: String = form_urlencoded::byte_serialize(addr.to_string().as_bytes()).collect();
     let whois: Whois = self.api.asked(&format!("/localapi/v0/whois?addr={addr}")).await?;
-    let role = self.access.role(&whois.profile.login)?;
+    let role = self.access.borrow().role(&whois.profile.login)?;
     Ok(Who { login: whois.profile.login, role })
   }
 }

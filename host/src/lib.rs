@@ -27,6 +27,7 @@ mod ears;
 mod error;
 mod event;
 mod holders;
+mod kits;
 mod life;
 pub mod processes;
 pub mod protocol;

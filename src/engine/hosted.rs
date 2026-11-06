@@ -6,6 +6,7 @@ use std::{
   collections::HashMap,
   sync::atomic::{AtomicI64, Ordering},
   task::{Context, Poll, Waker},
+  time::Duration,
 };
 
 use monty_types::MontyUuid;
@@ -288,6 +289,12 @@ impl Outside {
         Err(fault) => return Answer::Abort(fault),
       },
     };
+    if let Heard::Fact(fact) = &heard
+      && fact.question()
+      && let Some(bound) = crate::sand::past()
+    {
+      return self.refused(sand, on, fact, bound);
+    }
     let Some(mut ear) = self.hosted.handed.ears.remove(&name) else {
       return Answer::Abort(Fault::refused(format!("no ear of the host is named {name}")));
     };
@@ -306,6 +313,30 @@ impl Outside {
     self.hosted.handed.ears.insert(name.clone(), ear);
     self.hosted.standing.insert(on, (name, at));
     answer
+  }
+
+  /// The answer to a question that a step of a word asks past the bound of a turn, in the place of
+  /// its ear. monty counts a turn again from each round trip to the host, so a word that loops on
+  /// what the host answers at once never meets the bound of monty: the host refuses the question,
+  /// once for all the ears that hear it, and the refusal raises in the word. A word that asks again
+  /// past that refusal goes on in its loop, so its step ends there, as a second excess of the bound
+  /// of monty ends it.
+  fn refused(&mut self, sand: &mut Sand, on: MontyUuid, fact: &Fact, bound: Duration) -> Answer {
+    let asked = (fact.about().to_owned(), fact.by().to_owned());
+    match self.past.replace(asked.clone()) {
+      Some(one) if one.0 == asked.0 => {
+        Answer::Value(self.hosted.waits.get(&on).cloned().unwrap_or_else(Object::none))
+      }
+      Some(one) if one.1 == asked.1 => Answer::Abort(Fault::refused(format!(
+        "{} asked {} past the refusal of the bound of a turn of {bound:?}",
+        asked.1, asked.0
+      ))),
+      _ => {
+        let why = format!("the step of the word ran past the bound of a turn of {bound:?}");
+        let done = Fact::says("done", &asked.0, [Fault::refused(why).object()]);
+        self.inward(sand, &done.0).map_or_else(Answer::Abort, Answer::Value)
+      }
+    }
   }
 
   /// What the host does in `step`, with this life lent to it, which answers at once each verb that

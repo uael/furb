@@ -54,6 +54,10 @@ pub const ENABLE: &str = "enable";
 /// [`Extension::said`] writes it and [`enabled_by`] reads it.
 const PROGRAM: usize = 6;
 
+/// The place in a fact enable of the value of the root that holds the tree of the view of a kit of
+/// a session, after each word that an older fact holds, so an older reader reads none.
+const TREE: usize = PROGRAM + 1;
+
 /// The journal, which says the record again in a later life, so a done it says answers no stand of this life.
 const JOURNAL: &str = "journal";
 
@@ -756,6 +760,9 @@ pub fn enabled(root: &[Fact]) -> Vec<Extension> {
 pub struct Enabled {
   pub name: String,
   pub program: Option<String>,
+  /// The value of the root that holds the tree of the view of a kit of a session, when it names
+  /// one.
+  pub view: Option<String>,
 }
 
 /// What a fact enable says of the process of its skill, or none for any other fact. It reads the
@@ -765,14 +772,18 @@ pub fn enabled_by(a: &Fact) -> Option<Enabled> {
     return None;
   }
   let text = |at| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
-  Some(Enabled { name: text(0)?, program: text(PROGRAM) })
+  let view = text(TREE).filter(|one| !one.is_empty());
+  Some(Enabled { name: text(0)?, program: text(PROGRAM), view })
 }
 
 /// The ear of the extensions, which says and hears the fact enable. `src/furb/AGENTS.md` says what the fact means and
 /// when a life says it, under the names enable and life word and in its laws.
 ///
 /// The fact is `("enable", "chain1", "extensions", name, word, life)`, with `"root"` after the life word for an
-/// extension that plays on the root alone. No contract holds it, so this is the one home of its shape. The ear says it for each extension it is given that the life does not run as it is given, at each
+/// extension that plays on the root alone, then the file, the digest, the program and, for a kit
+/// of a session, the value of the root that holds the tree of its view.
+/// No contract holds it, so this is the one home of its shape. The ear says it for each extension
+/// it is given that the life does not run as it is given, at each
 /// stand that this life answers, the first of which is at the tip, and for an extension of a folder that a config
 /// turns on, when a write of the life in that folder lands. The fact of an extension that the life runs already
 /// reloads it: each chain plays the definitions of its new word and each name of state that it lacks, so each name of

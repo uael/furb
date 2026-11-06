@@ -316,7 +316,9 @@ fix what your change broke, and report what was broken before.
 - `sh script/build-slot.sh <command> [argument...]`: run a command that builds, as `cargo`, `bun run build`, `uv sync`,
   `uv run pytest` or `git commit` (its hooks run cargo and the suite), in one of the slots of builds that all the
   worktrees of the machine share, with at most 4 jobs of cargo. A slot is a folder of `/tmp/furb-build-slots-<uid>`
-  that holds the pid of its holder, and the slot of a holder that ended, or whose pid went to another process, goes to
+  that holds the pid of its holder. A build in a slot keeps no incremental state of cargo, which no copy on write shares
+  and which filled the disk, unless `CARGO_INCREMENTAL` asks for it: a warm build of the crate takes 14 s, against 4 s.
+  The slot of a holder that ended, or whose pid went to another process, goes to
   the next build. `FURB_BUILD_SLOTS` sets the slots (one for each 9 GB of memory, at least 1; `FURB_BUILD_MEM_GB`
   replaces the memory the machine reports), `FURB_BUILD_JOBS` the cap of jobs (4), `FURB_BUILD_WAIT` the seconds to
   wait for a slot (1200, then exit 75) and `FURB_BUILD_DIR` the folder. The workers of the conductor build only through it: with no cap, 28 rustc processes took

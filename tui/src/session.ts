@@ -183,9 +183,9 @@ interface Index {
   /** The last act on each chain that is no chain and no grant, and the chains whose last act failed. */
   latest: Map<string, ActRow>;
   failing: Set<string>;
-  /** The last rename_session that is done and the last name_session that gave a name, on each chain, from which the
-   * root gives the name of the session. */
-  named: Map<string, { said?: ActRow; given?: ActRow }>;
+  /** The acts that name the session and are done, whose count tells the session that its record holds a name that it
+   * has not read. */
+  names: Set<string>;
 }
 
 /** The place of an act in each list of an index that holds it, and whether it is among the writes that are done. */
@@ -236,13 +236,7 @@ function placed(index: Index, act: ActRow): void {
     if (failed(act)) index.failing.add(act.chain);
     else index.failing.delete(act.chain);
   }
-  const naming = act.kind === "rename_session" ? "said" : act.kind === "name_session" ? "given" : undefined;
-  if (naming && isDone(act) && typeof outcomeOf(act) === "string" && (naming === "said" || outcomeOf(act))) {
-    const names = index.named.get(act.chain) ?? {};
-    index.named.set(act.chain, names);
-    const past = names[naming];
-    if (!past || (index.at.get(past.id) ?? 0) <= (index.at.get(act.id) ?? 0)) names[naming] = act;
-  }
+  if ((act.kind === "rename_session" || act.kind === "name_session") && isDone(act)) index.names.add(act.id);
   if (act.kind === "read" && isDone(act) && act.words[0] === "skills://") {
     const past = index.skills;
     if (!past || (index.at.get(past.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.skills = act;
@@ -274,7 +268,7 @@ function indexOf(acts: readonly ActRow[], prompts = 0): Index {
     work: new Map(),
     latest: new Map(),
     failing: new Set(),
-    named: new Map(),
+    names: new Set(),
   };
   for (const [place, act] of acts.entries()) {
     index.ids.set(act.id, act);
@@ -563,23 +557,17 @@ export class Session extends EventEmitter {
   private held = 0;
   private dirty = false;
   private closed = false;
-  /** The name that `<record>.ui.json` held, which moves into the record at the first read of the life. */
-  private legacyName?: string;
   /** The follow-ups that `<record>.ui.json` held from an older release, which move into the queue of the life. */
   private legacyQueue: Kept[] = [];
   private carryingQueue = false;
-  /** The last name that the operator gave the session in its record, by a plain scan of the record when the life
-   * opens, which every build reads, also when the life drifts or another host holds the record. */
-  private keptName?: string;
-  /** Whether the scan of the record in the worker came back, which the move of an old name into the record waits for. */
-  private scanned = false;
-  /** Whether the operator named the session in this life, whose name the older scan of the record must not hide. */
-  private renamed = false;
-  /** The renames of the operator that the record has not taken yet, while which the facts hold an older name. */
-  private renaming = 0;
+  /** The name that the fold of the crate gives the record, as a read of the record in the worker brought it. */
+  private foldedName?: string;
+  /** How many acts that name the session the last read of the record saw, and how many reads were made, of which only
+   * the last one counts. */
+  private nameReads?: number;
+  private nameScans = 0;
   /** Ends the scan of the record in the worker when the session goes. */
   private readonly scanning = new AbortController();
-  private carrying = false;
   /** The scope, the writes and the count of changes that `changes` was read at. */
   private changesRead = "";
   /** Whether the dialog of a record open to read was shown, so it shows once for each life of the session. */
@@ -604,8 +592,7 @@ export class Session extends EventEmitter {
         demo && path && !host.recorded ? join(dirname(path), "ui-preferences.json") : undefined,
       );
     if (path) {
-      const { view, name, queued, damage } = savedView(path);
-      this.legacyName = name;
+      const { view, queued, damage } = savedView(path);
       this.legacyQueue = queued ?? [];
       this.scanName(path);
       Object.assign(this, Object.fromEntries(kept.flatMap((key) => (key in view ? [[key, view[key]]] : []))));
@@ -696,19 +683,11 @@ export class Session extends EventEmitter {
   private factsChanged = () => {
     void this.refresh().catch(this.fail);
   };
-  /** The name that the record gives the session: the name that the operator said with rename_session, as the life
-   * tells it or else as the scan of the record found it, else a name that an older release kept in `<record>.ui.json`
-   * and the record does not hold yet, else the name that the extension naming gave with name_session. An empty name
-   * from the operator gives the name of the directory again. */
+  /** The name that the record gives the session, as the fold of the crate tells it: the name that the operator said
+   * last with rename_session, else the name that the extension naming gave with name_session. An empty name from the
+   * operator gives the name of the directory again. It stands once the first read of the record came back. */
   get recordName(): string | undefined {
-    const names = this.indexed().named.get(this.engine.root);
-    const said =
-      (names?.said ? outcomeOf(names?.said) : undefined) ??
-      this.keptName ??
-      this.legacyName ??
-      (names?.given ? outcomeOf(names?.given) : undefined);
-    const name = said === undefined ? undefined : String(said);
-    return name === undefined ? undefined : name || basename(this.host.directory);
+    return this.foldedName === undefined ? undefined : this.foldedName || basename(this.host.directory);
   }
   /** Whether a chain is the one where the extension naming asks a model for the name of the session, which the
    * sidebar hides. */
@@ -716,13 +695,13 @@ export class Session extends EventEmitter {
     const ids = this.indexed().ids;
     return ids.get(ids.get(chain)?.by ?? "")?.kind === "name_session";
   }
-  /** The session takes the name that its record gives it. */
+  /** A read of the record when the acts that name the session are more than the last read saw. */
   private named(): void {
-    if (this.renaming) return;
-    const name = this.recordName;
-    if (name === undefined || name === this.sessionName) return;
-    this.sessionName = name;
-    this.emit("change");
+    const acts = this.indexed().names.size;
+    // The first read began when the session opened, and saw the record as these acts are.
+    if (this.nameReads === undefined) this.nameReads = acts;
+    else if (acts !== this.nameReads && this.host.record && !this.closed)
+      this.scanName(this.host.record, acts);
   }
   /** The operator names the session. The name stands at once, and the act rename_session says it in the record, where
    * each window reads it, whatever extension plays: its word makes the act with an ear of its own. It tells whether
@@ -730,67 +709,40 @@ export class Session extends EventEmitter {
   async rename(name: string): Promise<boolean> {
     const said = name.trim();
     const before = this.sessionName;
-    const held = [this.legacyName, this.keptName];
-    this.renamed = true;
-    if (said !== this.legacyName) this.legacyName = undefined;
-    this.keptName = said;
-    this.renaming++;
+    // A read of the record that began before this name is no longer the last one.
+    this.nameScans++;
     this.sessionName = said || basename(this.host.directory);
     this.emit("change");
     const word = renameWord(said);
     try {
       await this.engine.result(await this.engine.rung({ word, on: this.engine.root }));
-      // The facts of the session show the name before the guard lifts, so no stale name takes the row back.
       await this.refresh().catch(() => {});
       return true;
     } catch (error) {
-      this.renamed = false;
-      [this.legacyName, this.keptName] = held;
       this.sessionName = before;
       this.notice = `The name was not kept: ${error instanceof Error ? error.message : String(error)}`;
       this.emit("change");
       return false;
-    } finally {
-      this.renaming--;
     }
   }
-  /** The name that the operator said is in the record, which only a scan of its bytes finds. The worker that lists the
-   * records makes that scan, so the thread that draws reads no byte of the record, and the session shows the name when
-   * it comes. */
-  private scanName(path: string): void {
+  /** The name of the session that the fold of the crate gives for the record. The worker that lists the records reads
+   * it, so the thread that draws reads no byte of the record, and the session shows the name when it comes. */
+  private scanName(path: string, acts?: number): void {
+    const read = ++this.nameScans;
+    if (acts !== undefined) this.nameReads = acts;
     inspectRecords([path], this.scanning.signal, []).then(
-      (states) => this.scannedName(states[path]?.said),
-      () => this.scannedName(undefined),
+      (states) => this.scannedName(read, states[path]?.name),
+      () => this.scannedName(read, undefined),
     );
   }
-  private scannedName(said: string | undefined): void {
-    if (this.closed) return;
-    this.scanned = true;
-    if (!this.renamed) this.keptName = said;
-    this.named();
-    this.carryName();
+  private scannedName(read: number, name: string | undefined): void {
+    if (this.closed || read !== this.nameScans) return;
+    if (name !== undefined) {
+      this.foldedName = name;
+      this.sessionName = this.recordName ?? this.sessionName;
+    }
     this.carryQueue();
     this.emit("change");
-  }
-  /** A name that an older release kept in `<record>.ui.json` moves into the record once the record is read: when the
-   * record holds no rename_session, the name is said as one, and the save that follows writes the view without it. */
-  private carryName(): void {
-    const name = this.legacyName;
-    if (name === undefined || this.carrying || !this.scanned) return;
-    // A record that this life cannot write keeps the name in the old home, which the next life carries.
-    if (this.closed || this.host.role === "read" || this.host.recorded || this.host.reading) return;
-    const said =
-      this.keptName !== undefined ||
-      (this.activityByChain.get(this.engine.root) ?? []).some((one) => one.kind === "rename_session");
-    this.carrying = true;
-    void (said ? Promise.resolve(true) : this.rename(name)).then((kept) => {
-      this.carrying = false;
-      // A session that closed while the name was said may have ended its life before the record held the name, and
-      // its last save kept the name in the old home: a save after it would take the name from there too.
-      if (!kept || this.closed) return;
-      this.legacyName = undefined;
-      this.save();
-    });
   }
   /** The follow-ups that an older release kept in `<record>.ui.json` go to the queue of the life under their own
    * entries, which the life takes once, and the save that follows writes the view without them. A record that this
@@ -931,7 +883,6 @@ export class Session extends EventEmitter {
         }
         this.counted = count;
         this.named();
-        this.carryName();
         this.carryQueue();
         // The acts and the actor of one snapshot are of one moment: the choice holds until its rung is done there.
         const choice = this.choices.get(selected);
@@ -2060,8 +2011,8 @@ export class Session extends EventEmitter {
         const dot = name.indexOf(".");
         const key = dot < 0 ? [name] : [name.slice(0, dot), name.slice(dot + 1)];
         const text = words.join(" ").trim();
-        const value = text ? typed(text) : undefined;
         const held = (await this.host.settings()).find((one) => one.key.join(".") === key.join("."));
+        const value = text ? typed(text, held?.property) : undefined;
         await this.setConfig(key, value, held?.layer ?? "project");
         break;
       }
@@ -2375,8 +2326,6 @@ export class Session extends EventEmitter {
     const view: SavedView = {
       ...Object.fromEntries(kept.map((key) => [key, this[key]])),
       cost: this.savedCost,
-      // A name of an older release stays in its home until the record holds it, so no save loses it.
-      ...(this.legacyName === undefined ? {} : { sessionName: this.legacyName }),
       // The follow-ups of an older release stay in their home until the life holds them.
       ...(this.legacyQueue.length ? { queued: this.legacyQueue } : {}),
     };

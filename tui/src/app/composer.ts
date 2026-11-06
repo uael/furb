@@ -138,6 +138,12 @@ export const composer = part({
     this.composer.requestRender();
   },
 
+  /** A text that was not sent goes back to its draft, unless that draft holds new text by now. */
+  unsent(key: string, content: string): void {
+    if (this.draftKey === key && !this.composer.plainText) this.composer.setText(content);
+    else if (this.draftKey !== key && !this.session.drafts[key]) this.session.drafts[key] = content;
+  },
+
   async submit(): Promise<void> {
     if (this.submitting) return;
     if (this.session.host.reading) {
@@ -180,9 +186,7 @@ export const composer = part({
       this.historyIndex = -1;
       this.historyPrefix = "";
     } catch (error) {
-      // A text that was not sent goes back to its draft, unless that draft holds new text by now.
-      if (this.draftKey === key && !this.composer.plainText) this.composer.setText(content);
-      else if (this.draftKey !== key && !this.session.drafts[key]) this.session.drafts[key] = content;
+      this.unsent(key, content);
       this.report(error);
     } finally {
       this.submitting = false;
