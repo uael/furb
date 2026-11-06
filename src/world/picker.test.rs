@@ -3,7 +3,7 @@
 
 use std::{fs, path::Path, process};
 
-use super::{picked, ranked, walked};
+use super::{picked, placed, ranked, walked};
 use crate::testing::Yard;
 
 /// A project with a `.gitignore`, a dot file, a folder `.git`, and files at two depths.
@@ -79,4 +79,14 @@ fn a_query_that_leaves_the_directory_walks_from_the_folder_that_it_names() {
   let found = picked(&session, &format!("{absolute}readme"), &files);
   assert_eq!(found, [format!("{absolute}README.md")]);
   assert!(picked(&session, "../../.git/", &files).iter().all(|one| !one.contains(".git/")));
+}
+
+#[test]
+fn a_query_from_the_home_folder_names_a_folder_beneath_it_with_each_separator_of_the_platform() {
+  let home = Path::new("home");
+  let from = |folder| placed(Path::new("directory"), folder, Some(home.to_path_buf()));
+  assert_eq!(from("~/docs/"), Some(home.join("docs")));
+  #[cfg(windows)]
+  assert_eq!(from("~\\docs\\"), Some(home.join("docs")));
+  assert_eq!(placed(Path::new("directory"), "~/", None), None);
 }

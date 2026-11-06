@@ -6,7 +6,7 @@
 
 use std::{
   env,
-  path::{Component, Path, PathBuf},
+  path::{self, Component, Path, PathBuf},
 };
 
 use ignore::WalkBuilder;
@@ -66,34 +66,41 @@ pub fn ranked(query: &str, paths: &[String]) -> Vec<String> {
   scored.into_iter().map(|(_, _, path)| path.clone()).collect()
 }
 
-/// The files that a query after `@` picks, best first. A query that starts with `/`, `~` or `../`
-/// walks from the folder that it names up to its last `/`, and matches the rest, each path written
-/// from that folder as the query writes it; any other matches the files of the directory, which
-/// `project` holds as [`walked`] gives them.
+/// The files that a query after `@` picks, best first. A query that names an absolute path or
+/// starts with `/`, `~` or `../` walks from the folder that it names up to its last separator, and
+/// matches the rest, each path written from that folder as the query writes it; any other matches
+/// the files of the directory, which `project` holds as [`walked`] gives them.
 pub fn picked(directory: &Path, query: &str, project: &[String]) -> Vec<String> {
   let Some((folder, rest)) = outside(query) else { return ranked(query, project) };
-  let place = match folder.strip_prefix('~') {
-    Some(under) => match env::home_dir() {
-      Some(home) => home.join(under.trim_start_matches('/')),
-      None => return Vec::new(),
-    },
-    None => directory.join(&folder),
-  };
-  let root = normal(&place);
+  let Some(root) = placed(directory, &folder, env::home_dir()) else { return Vec::new() };
   ranked(rest, &walked(&root)).into_iter().map(|path| format!("{folder}{path}")).collect()
 }
 
-/// The folder that a query outside the directory names, ending with `/`, and the rest of it.
+/// The folder that a query outside the directory names, from the directory or from the home
+/// folder for a `~`; none when the home folder is not known.
+fn placed(directory: &Path, folder: &str, home: Option<PathBuf>) -> Option<PathBuf> {
+  let place = match folder.strip_prefix('~') {
+    Some(under) => home?.join(under.trim_start_matches(path::is_separator)),
+    None => directory.join(folder),
+  };
+  Some(normal(&place))
+}
+
+/// The folder that a query outside the directory names, with its separator, and the rest of it.
 fn outside(query: &str) -> Option<(String, &str)> {
-  let leaves = query.starts_with('/')
-    || query.starts_with("../")
-    || query == ".."
-    || query.starts_with("~/")
-    || query == "~";
-  if !leaves {
+  let names = |dots: &str| {
+    query
+      .strip_prefix(dots)
+      .is_some_and(|after| after.is_empty() || after.starts_with(path::is_separator))
+  };
+  if !(query.starts_with(path::is_separator)
+    || Path::new(query).is_absolute()
+    || names("..")
+    || names("~"))
+  {
     return None;
   }
-  Some(match query.rfind('/') {
+  Some(match query.rfind(path::is_separator) {
     Some(at) => (query[..=at].to_owned(), &query[at + 1..]),
     None => (format!("{query}/"), ""),
   })
