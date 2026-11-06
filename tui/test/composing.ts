@@ -19,6 +19,16 @@ export function open(session: Session, id: string): boolean {
   return act !== undefined && !isDone(act);
 }
 
+/** The first frame that passes a test, as the renderer draws it once the session changed, or an error that names what
+ * the test waits for once the renderer drew for 25 seconds with no such frame. */
+export async function framed(frame: () => Promise<string>, passes: (shown: string) => boolean, what: string) {
+  for (const until = Date.now() + 25_000; ; await Bun.sleep(20)) {
+    const shown = await frame();
+    if (passes(shown)) return shown;
+    if (Date.now() > until) throw new Error(`No frame showed ${what}: ${shown.slice(0, 2000)}`);
+  }
+}
+
 export function ownPreferences(): Preferences {
   return new Preferences(join(mkdtempSync(join(tmpdir(), "furb-config-")), "ui.json"));
 }

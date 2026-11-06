@@ -116,7 +116,7 @@ column at the right edge of the block holds what the acts of each line came to, 
 did not measure shows nothing. A message that you send to the thread, and each notice of
 the chain, stands as a comment among the steps. While the model of the thread works on a step, each line of its word
 that it finished stands above as Python in its colors, and the loader stands in the column of the states, on the line
-that the model still writes. While no line is written, the label says `opus/high · thinking 4s`. The footer turns no
+that the model still writes. While no line is written, the label says `opus/high · thinking 4s`, and once the model thinks aloud it adds the size of its thought, as `26 chars`, and the last line of it, faint, so a long thought shows that the model works. The footer turns no
 second loader for that step. The answer of the thread stands under its program, with the
 model that gave it and its effort at its right. A thread that you fold stands as one line, with the line of its color
 half a row above and under it. A word that you run stands as your messages stand, as its program in a panel of its own
