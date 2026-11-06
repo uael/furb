@@ -518,21 +518,23 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         (step not in waiting or paused(step))
         and ladder.get(ran * (ran == step)) != dull
         and (
-          got := next(
-            (
-              x
-              for x in waiting
-              if not (
-                paused(x)
-                or over(x)
-                or x in {y[2] for y in transcript(id, "reply") if not over(y[1])}
-                or (mute == get(x)[2] and not all(map(over, seen)))
-              )
-            ),
-            "",
-          )
-        )
-        and (step := got)
+          (
+            got := next(
+              (
+                x
+                for x in waiting
+                if not (
+                  paused(x)
+                  or over(x)
+                  or x in {y[2] for y in transcript(id, "reply") if not over(y[1])}
+                  or (mute == get(x)[2] and not all(map(over, seen)))
+                )
+              ),
+              "",
+            )
+          ),
+          step := got or step * (step in waiting),
+        )[0]
       ):
         maker, to = get(step)[2::4]
         if offered(last[0], to) is None:
@@ -563,10 +565,13 @@ def seeded(id, last, to):
 
 
 HEARD = (
-  "say('prefix', scope(acting()), __kept := [*transcript(of='module')[-1:], *transcript(of='carried')[-1:], *transcript(of='carried')[-1][3], "
-  "*transcript(of='stand')[-1:], *transcript(of='pause'), *[x for x in transcript() if acting() in x[1::3] and x[0] != 'tell']])"
+  "say('prefix', scope(acting()), [*transcript(of='module')[-1:], *transcript(of='carried')[-1:], "
+  "*transcript(of='carried')[-1][3], *transcript(of='stand')[-1:], *transcript(of='pause'), "
+  "*[x for x in transcript() if acting() in x[1::3] and x[0] != 'tell']])"
 )
-KEPT = "say('prefix', scope(acting()), [*__kept, *[x for x in transcript()[len(__kept) :] if x[0] != 'tell']])"
+KEPT = (
+  "say('prefix', scope(acting()), [x for x in transcript() if x[0] != 'tell' or x in transcript(of='carried')[-1][3]])"
+)
 
 
 def seed(data):
@@ -599,6 +604,10 @@ def seed(data):
     )
   for c in data["chains"]:
     i, cut = c["id"], c["cut"] + [y["rung"] for y in c.get("again", ())]
+    loud = bool(c["lost"] or cut)
+    note = [
+      f'debug(t"The life goes on from a checkpoint. It lost {c["lost"] or "no name"}, and it cut {cut or "no act"}.")'
+    ]
     word = "\n".join(
       [
         HEARD,
@@ -608,14 +617,16 @@ def seed(data):
           for named, text in c["values"].items()
         ),
         *(f"await rung({one!r})" for one in c.get("lives", ())),
+        *note[loud:],
         KEPT,
-        *[f'debug(t"The life goes on from a checkpoint. It lost {c["lost"]}, and it cut {cut}.")']
-        * bool(c["lost"] or cut),
+        *note[:loud],
       ]
     )
-    put("rung", f"rung{numbers['rung'] + 1}", OPERATOR, i, word, "", "")
-    put("gate", gated := f"gate{numbers['gate'] + 1}", i, i, word)
-    entries.append((("done", gated, "gate", []),))
+    seat = f"rung{numbers['rung'] + 1}"
+    for maker, said in [(OPERATOR, word), *((seat, one) for one in c.get("lives", ()))]:
+      put("rung", f"rung{numbers['rung'] + 1}", maker, i, said, "", "")
+      put("gate", gated := f"gate{numbers['gate'] + 1}", i, i, said)
+      entries.append((("done", gated, "gate", []),))
   return entries + [(("wake", y["id"], OPERATOR),) for y in data["chains"] if y["id"] in asking and not y["paused"]]
 
 
