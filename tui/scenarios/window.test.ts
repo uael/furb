@@ -79,7 +79,10 @@ test("the toggle of a thread taller than the screen stays in view and folds it, 
     const other = await engine.prompt("str", { message: long("Line"), on: root });
     await until(() => listed(window).some((one) => one.act.id === other), "the threads");
     await window.shows((frame) => frame.includes("more lines"), "the fold of the long messages");
+    // The setup above the feed grows with its extensions, so each fold is brought into view before its click.
+    app.scroll.scrollTo(0);
     await window.click("more lines");
+    app.scroll.scrollTo(app.scroll.scrollHeight);
     await window.click("more lines");
     const feed = (frame: string) =>
       frame.split("\n").map((line) => line.slice(0, window.width - session.preferences.sidebarWidth));
