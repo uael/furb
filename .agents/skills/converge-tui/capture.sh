@@ -1,6 +1,6 @@
 #!/bin/sh
 # Capture the TUI of origin/main in the tree that this script runs in: the gallery of the demo and the newest records of
-# the project, each a PNG with the cells of its frame, in <out>/head, after a build that takes a slot of the machine.
+# the project, each a PNG with the cells of its frame, in <out>/head, after a build.
 # Then walk it as a person does, with keys, clicks and sizes, on a life of a scripted model and on those records, which
 # needs the program furb: each step of the walk is a capture of <out>/head/walk, and walk.json holds what its probes found.
 # Usage: sh capture.sh <main checkout> <out> [<records.json of the last capture>]
