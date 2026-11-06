@@ -133,6 +133,8 @@ rig-bedrock = "=0.42.0"
 rig-vertexai = "=0.42.0"
 google-cloud-auth = "1"
 bytes = "1"
+# The JSON Schema of the meaning of a life in `view`, which the protocol of the host carries.
+schemars = "1"
 # The digest that names an image of a turn, and the form a request carries it in.
 sha2 = "0.10"
 base64 = "0.22"

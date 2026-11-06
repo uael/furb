@@ -418,6 +418,11 @@ impl<S: Store> Hooks for Rc<RefCell<Held<S>>> {
     self.borrow_mut().synced();
     Ok(())
   }
+
+  /// Each entry that waits for the store, which no keep took yet.
+  fn unkept(&self, _: &dyn Ear) -> usize {
+    self.borrow().waiting.len()
+  }
 }
 
 /// A store that a box holds is a store, so a record opens in the store that its format gives.

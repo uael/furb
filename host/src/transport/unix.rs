@@ -24,6 +24,7 @@ const SOCKET: &str = "host.sock";
 pub(crate) async fn listen(folder: &Path) -> Result<Listener, TransportError> {
   guarded(folder)?;
   let socket = folder.join(SOCKET);
+  bounded(&socket)?;
   match UnixListener::bind(&socket) {
     Err(no) if no.kind() == io::ErrorKind::AddrInUse => {
       if UnixStream::connect(&socket).await.is_ok() {
@@ -119,10 +120,46 @@ fn named(uid: u32) -> Result<String, TransportError> {
   Ok(name.to_string_lossy().into_owned())
 }
 
+/// The most bytes that a socket path holds: the size of `sun_path` less its closing NUL.
+const BOUND: usize =
+  size_of::<libc::sockaddr_un>() - std::mem::offset_of!(libc::sockaddr_un, sun_path) - 1;
+
+fn bounded(socket: &Path) -> Result<(), TransportError> {
+  let length = socket.as_os_str().len();
+  if length > BOUND {
+    return Err(TransportError::TooLong { place: shown(socket), length, bound: BOUND });
+  }
+  Ok(())
+}
+
 fn listening(socket: &Path, source: io::Error) -> TransportError {
   TransportError::Listen { place: shown(socket), source }
 }
 
 fn shown(socket: &Path) -> String {
   PathBuf::from(socket).display().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn refuses_a_path_over_the_bound_before_the_bind() {
+    let folder = PathBuf::from(format!("/tmp/{}", "x".repeat(BOUND)));
+    let error = bounded(&folder.join(SOCKET)).unwrap_err();
+    let message = error.to_string();
+    assert!(matches!(error, TransportError::TooLong { .. }));
+    assert!(message.contains(&format!("{}", folder.join(SOCKET).as_os_str().len())), "{message}");
+    assert!(message.contains(&format!("{BOUND} bytes")), "{message}");
+    assert!(bounded(Path::new("/tmp/furb/host.sock")).is_ok());
+  }
+
+  #[test]
+  fn names_the_cause_of_a_listen_error() {
+    let source = io::Error::from(io::ErrorKind::PermissionDenied);
+    let cause = source.to_string();
+    let message = listening(Path::new("/x/host.sock"), source).to_string();
+    assert!(message.contains("/x/host.sock") && message.contains(&cause), "{message}");
+  }
 }

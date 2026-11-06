@@ -6,6 +6,7 @@ import { parseArgs } from "node:util";
 import { createCliRenderer, RGBA } from "@opentui/core";
 import { efforts, furbDirectory, onConsoleEnd } from "furb";
 import { follow } from "./app.ts";
+import { askRole } from "./client.ts";
 import { demoDirectory, demoSession, removeDemoDirectories, tour } from "./demo.ts";
 import type { EngineOptions } from "./models.ts";
 import { opening } from "./opening.ts";
@@ -20,6 +21,7 @@ const { values } = parseArgs({
   options: {
     demo: { type: "boolean" },
     help: { type: "boolean", short: "h" },
+    read: { type: "boolean" },
     cwd: { type: "string" },
     model: { type: "string" },
     effort: { type: "string" },
@@ -34,7 +36,7 @@ const { values } = parseArgs({
 if (values.help) {
   console.log(`furb-tui [--demo] [--cwd path] [--model provider:model] [--effort ${efforts.join("|")}]
          [--record file.jsonl | --resume file.jsonl] [--roster provider:model ...]
-         [--view main|loom|graph] [--screen-reader] [--reduced-motion]
+         [--view main|loom|graph] [--read] [--screen-reader] [--reduced-motion]
 
 Enter sends a prompt. ⌃J (Control J) adds a line, and so does ⇧Enter (Shift Enter) in a terminal with the kitty
 keyboard protocol. ⌃P opens actions. F1 shows all keys that the terminal sends. ⌃ is Control, ⌥ is Option or Alt,
@@ -49,6 +51,7 @@ of /model joins the session when you choose it.
 switches the view at run time, and the setting keeps the last one.
 Each life lives in the daemon of this machine, furb host, which the window starts when none answers. A life ends
 once no window and no pin holds it for 30 seconds: /end lets it go from this window, and /pin keeps it open.
+--read asks the daemon for the role to read, so the window changes nothing, on any transport.
 --screen-reader shows one column of text, with no box, no spinner, and nothing that moves, and --reduced-motion
 stops each spinner and each part that moves with time. /access turns each on or off, and the setting keeps it.
 NO_COLOR, when it is set and not empty, turns every color off. The theme Terminal, the default, follows the terminal
@@ -59,6 +62,7 @@ bell.`);
 if (values.view && !isLifeView(values.view)) throw new Error(`Choose a view of ${lifeViews.join(", ")}.`);
 if (values.effort && !efforts.some((effort) => effort === values.effort)) throw new Error("Invalid effort.");
 if (values.resume && !existsSync(resolve(values.resume))) throw new Error(`No session at ${values.resume}.`);
+if (values.read) askRole("read");
 const preferences = new Preferences();
 if (isLifeView(values.view)) preferences.view = values.view;
 if (values["screen-reader"]) preferences.screenReader = true;

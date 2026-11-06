@@ -47,7 +47,12 @@ pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
       return closed(&mut out, Some(id), ProtocolError::Nameless).await;
     }
     Some(Ok(Request { id, verb: Verb::Hello(hello) })) if hello.protocol == PROTOCOL => {
-      let peer = Peer { login: who.login, role: who.role, kind: hello.kind, name: hello.name };
+      let peer = Peer {
+        login: who.login,
+        role: hello.role.map_or(who.role, |asked| asked.min(who.role)),
+        kind: hello.kind,
+        name: hello.name,
+      };
       let answer = Answer::Welcome { protocol: PROTOCOL, peer: peer.clone() };
       send(&mut out, &Frame::Reply { id, answer }).await?;
       peer
