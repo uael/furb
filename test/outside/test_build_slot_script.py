@@ -1,3 +1,4 @@
+# ruff: noqa: S603, S607
 import os
 import subprocess
 import sys
@@ -7,7 +8,7 @@ from typing import IO
 
 import pytest
 
-SCRIPT = Path(__file__).resolve().parents[4] / "script" / "build-slot.sh"
+SCRIPT = Path(__file__).resolve().parents[2] / "script" / "build-slot.sh"
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="the script runs in sh")
 
 
