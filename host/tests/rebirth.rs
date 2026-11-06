@@ -22,12 +22,10 @@ use std::{
 use furb::{
   Object, checkpoint,
   life::{Answer, Opening},
+  view::{Kind, Phase},
   world,
 };
-use furb_host::{
-  Command, Event, Life, LifeHandle, Reply, Seq,
-  view::{Kind, Phase},
-};
+use furb_host::{Command, Event, Life, LifeHandle, Reply, Seq};
 use futures::{Stream, StreamExt};
 
 /// The events of a life, each under its place in the log.

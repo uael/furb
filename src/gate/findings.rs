@@ -616,7 +616,8 @@ const OWN: [&str; 3] = ["actor", "raised", "accepts"];
 /// each later word and each extension of the chain reads it there: a word that binds one by
 /// accident, as `peek = await bash('ls')`, gives them a wrong value under that name, so the gate
 /// refuses it. A def or a class of such a name overrides the verb on purpose, and a name that a
-/// def, a class, a lambda or a comprehension binds inside itself stays its own.
+/// def, a class, a lambda or a comprehension binds inside itself stays its own. A walrus, a capture
+/// of a match and a `global` of a def or a class bind in the module too, so `reached` finds them.
 pub(super) fn contracted(sheet: &Parsed<'_>, engine: &str) -> Vec<Finding> {
   let Some(body) = sheet.bodied() else { return vec![] };
   let imports = imported(engine);
@@ -637,6 +638,12 @@ pub(super) fn contracted(sheet: &Parsed<'_>, engine: &str) -> Vec<Finding> {
     .collect();
   let mut found = vec![];
   topped(word_of(body), &mut found);
+  let mut reached = Reached(vec![]);
+  for stmt in word_of(body) {
+    reached.visit_stmt(stmt);
+  }
+  found.extend(reached.0.into_iter().map(|(at, name)| (at, name, false)));
+  found.sort_by_key(|(at, ..)| *at);
   found
     .into_iter()
     .filter(|(_, name, import)| {
@@ -780,6 +787,60 @@ impl<'a> Visitor<'a> for Bound<'a> {
     };
     self.0.extend(name.map(|name| (name.start().to_usize(), name.as_str())));
     visitor::walk_pattern(self, pattern);
+  }
+}
+
+/// The names that a statement binds in the module by a way that `binds` does not read: the target
+/// of a walrus (also inside a comprehension, which binds it in the scope around it), each capture
+/// of a pattern of a match, and each name that a def or a class declares `global`, at any depth. A
+/// lambda binds its walrus apart, so nothing inside it counts.
+struct Reached<'a>(Vec<(usize, &'a str)>);
+
+impl<'a> Visitor<'a> for Reached<'a> {
+  fn visit_stmt(&mut self, stmt: &'a Stmt) {
+    if matches!(stmt, Stmt::FunctionDef(_) | Stmt::ClassDef(_)) {
+      let mut globals = Globals(vec![]);
+      StatementVisitor::visit_stmt(&mut globals, stmt);
+      self.0.extend(globals.0);
+    } else {
+      visitor::walk_stmt(self, stmt);
+    }
+  }
+
+  fn visit_expr(&mut self, expr: &'a Expr) {
+    match expr {
+      Expr::Lambda(_) => {}
+      Expr::Named(one) => {
+        if let Expr::Name(target) = &*one.target {
+          self.0.push((target.start().to_usize(), target.id.as_str()));
+        }
+        visitor::walk_expr(self, expr);
+      }
+      _ => visitor::walk_expr(self, expr),
+    }
+  }
+
+  fn visit_pattern(&mut self, pattern: &'a Pattern) {
+    let name = match pattern {
+      Pattern::MatchAs(one) => one.name.as_ref(),
+      Pattern::MatchStar(one) => one.name.as_ref(),
+      Pattern::MatchMapping(one) => one.rest.as_ref(),
+      _ => None,
+    };
+    self.0.extend(name.map(|name| (name.start().to_usize(), name.as_str())));
+    visitor::walk_pattern(self, pattern);
+  }
+}
+
+/// Each name that a `global` statement declares, at any depth of a def or a class.
+struct Globals<'a>(Vec<(usize, &'a str)>);
+
+impl<'a> StatementVisitor<'a> for Globals<'a> {
+  fn visit_stmt(&mut self, stmt: &'a Stmt) {
+    if let Stmt::Global(one) = stmt {
+      self.0.extend(one.names.iter().map(|name| (name.start().to_usize(), name.as_str())));
+    }
+    walk_stmt(self, stmt);
   }
 }
 

@@ -180,3 +180,26 @@ def test_the_records_of_a_capture_keep_the_pinned_record_at_its_pinned_size(tmp_
   subprocess.run([sys.executable, "-I", str(SKILL / "records.py"), str(source), str(out), "1", "1000"], check=True)
   assert json.loads((out / "records.json").read_text(encoding="utf-8")) == {"old.jsonl": 8}
   assert (out / "records" / "old.jsonl").read_bytes() == b"one\ntwo\n"
+
+
+def test_the_slice_of_a_capture_is_the_newest_long_log_at_its_end_until_a_pin_names_its_moment(tmp_path: Path) -> None:
+  source, out = tmp_path / "sessions", tmp_path / "out"
+  (out / "records").mkdir(parents=True)
+  source.mkdir()
+  short, old, new = source / "short.jsonl.log", source / "old.jsonl.log", source / "new.jsonl.log"
+  short.write_bytes(b"[]\n")
+  for one in (old, new):
+    with one.open("wb") as made:
+      made.truncate(300_000_000)
+  os.utime(old, (1, 1))
+  words = [sys.executable, "-I", str(SKILL / "records.py"), str(source), str(out), "1", "1000"]
+  subprocess.run(words, check=True)
+  assert json.loads((out / "slice.json").read_text(encoding="utf-8")) == {"log": str(new), "moment": "end"}
+  fixture = out / "slice.jsonl"
+  fixture.write_text('{"recorded": true, "cut": 7, "of": 7}\n["chain"]\n', encoding="utf-8")
+  subprocess.run([sys.executable, "-I", str(SKILL / "records.py"), "pin", str(out), str(fixture)], check=True)
+  pins = json.loads((out / "records.json").read_text(encoding="utf-8"))
+  assert pins["slice"] == {"log": "new.jsonl.log", "moment": 7}
+  (out / "pins.json").write_text(json.dumps({"slice": {"log": "old.jsonl.log", "moment": 3}}), encoding="utf-8")
+  subprocess.run(words, check=True)
+  assert json.loads((out / "slice.json").read_text(encoding="utf-8")) == {"log": str(old), "moment": 3}

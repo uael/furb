@@ -28,6 +28,7 @@ mod daemon {
   use furb::{
     Object,
     life::{Answer as Answered, Log, Opening},
+    view::Phase,
   };
   use furb_host::{
     DaemonError, END, Event, GRACE, ProtocolError, STALL, Settings, TransportError,
@@ -38,7 +39,6 @@ mod daemon {
     run,
     transport::{Accepted, Dialer, Identity, Local, Who},
     upgrade,
-    view::Phase,
   };
   use futures::{SinkExt, StreamExt};
   use serde_json::Value;
@@ -1069,7 +1069,6 @@ mod daemon {
       tailnet: None,
       door: None,
       host: None,
-      end: END,
     };
     let served = local.clone();
     tokio::spawn(async move { run(&served, listener, settings).await });

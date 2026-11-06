@@ -1,12 +1,10 @@
 use std::time::Duration;
 
+use furb::view::{Act, Kind, Pause, Phase, State};
 use serde_json::{Value, json};
 
 use super::Quiet;
-use crate::{
-  event::Event,
-  view::{Act, Kind, Phase, State},
-};
+use crate::event::Event;
 
 fn act(kind: &str, id: &str, chain: &str, words: &[Value]) -> Act {
   Act {
@@ -68,7 +66,7 @@ fn a_rung_beside_an_open_run_reply_or_command_leaves_the_watch_unarmed_until_it_
 fn a_paused_rung_waits_on_purpose() {
   let mut quiet = quiet();
   let mut one = act("rung", "rung2", "chain1", &[json!(""), json!(""), json!("")]);
-  one.pause = Some(crate::view::Pause { by: "operator".to_owned(), why: None });
+  one.pause = Some(Pause { by: "operator".to_owned(), why: None });
   heard(&mut quiet, one);
   assert!(quiet.due().is_none());
 }

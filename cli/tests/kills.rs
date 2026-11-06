@@ -29,11 +29,11 @@ mod kills {
     time::Duration,
   };
 
+  use furb::view::Phase;
   use furb_host::{
     Event,
     protocol::{Answer, Frame, Hello, Kind, PROTOCOL, Request, Verb},
     transport::{Dialer, Local},
-    view::Phase,
   };
   use futures::{SinkExt, StreamExt};
   use serde_json::Value;
