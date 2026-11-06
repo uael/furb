@@ -11,10 +11,14 @@ use super::{
 };
 use crate::testing::{Yard, block_on};
 use crate::{ear::reactor, world::mcp::fixture};
+use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs as unix_fs;
+use std::process;
 
 /// A directory of its own for one test, and empty.
 fn place(name: &str) -> Yard {
-  Yard::unmade(format!("furb-mcp-oauth-{name}-{}", std::process::id()))
+  Yard::unmade(format!("furb-mcp-oauth-{name}-{}", process::id()))
 }
 
 /// What a work on the reactor came to.
@@ -62,8 +66,8 @@ fn a_file_of_tokens_keeps_each_by_its_key_and_only_the_user_reads_it() {
   assert_eq!(stored(&vault, "s"), Some(held));
   #[cfg(unix)]
   assert_eq!(
-    std::os::unix::fs::PermissionsExt::mode(
-      &std::fs::metadata(yard.join("mcp-tokens.json")).unwrap().permissions()
+    unix_fs::PermissionsExt::mode(
+      &fs::metadata(yard.join("mcp-tokens.json")).unwrap().permissions()
     ) & 0o777,
     0o600
   );

@@ -363,9 +363,12 @@ pub(crate) fn shipped(name: &str) -> Option<Vec<(String, &'static str)>> {
   })
 }
 
-/// The name of each official extension, in the order a life runs them.
-fn names() -> Vec<String> {
-  let named = OFFICIAL.iter().filter_map(|one| frontmatter(one.0).field("name").map(str::to_owned));
+/// The name of each official extension, in the order a life runs them, and whether it plays by default.
+fn names() -> Vec<(String, bool)> {
+  let named = OFFICIAL.iter().map(|one| frontmatter(one.0)).filter_map(|front| {
+    let on = front.meta(DEFAULT) == Some("true");
+    front.field("name").map(|name| (name.to_owned(), on))
+  });
   named.collect()
 }
 
@@ -501,7 +504,7 @@ pub(crate) fn turned_on(
 ) -> Result<Vec<(String, Option<PathBuf>)>, Fault> {
   let official = names();
   let mut named: Vec<(String, Option<PathBuf>, bool)> =
-    official.iter().map(|one| (one.clone(), None, true)).collect();
+    official.iter().map(|(name, on)| (name.clone(), None, *on)).collect();
   for file in configs(&places.config, project) {
     let refused = |why: String| Fault::refused(format!("{why}: {}", file.display()));
     let text = match fs::read_to_string(&file) {

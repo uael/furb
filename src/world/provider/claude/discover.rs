@@ -22,10 +22,13 @@ use tokio::{
 };
 
 use super::{EFFORTS, Program};
+use crate::world;
 use crate::world::{
   child,
   disk::{self, Access},
 };
+use std::path;
+use tokio::time;
 
 /// One model of the command line as it said itself: the alias, the window of the model that it resolves to, and the
 /// efforts that it takes, none when it takes no effort.
@@ -85,8 +88,8 @@ fn stamp(program: &Program) -> String {
   format!("{}\0{}\0{time}\0{size}", program.bin.display(), program.args.join("\u{1f}"))
 }
 
-fn cached() -> Option<std::path::PathBuf> {
-  crate::world::cache().map(|at| at.join(FILE))
+fn cached() -> Option<path::PathBuf> {
+  world::cache().map(|at| at.join(FILE))
 }
 
 fn stored(stamp: &str) -> Option<Vec<Found>> {
@@ -202,7 +205,7 @@ async fn probe(program: &Program) -> Option<Vec<Found>> {
   // The group ends the child as it drops, and the runtime reaps it.
   let (mut child, _group) = child::spawn(&mut command).ok()?;
   let (stdin, stdout) = child.stdin.take().zip(child.stdout.take())?;
-  let found = tokio::time::timeout(WITHIN, asked(stdin, BufReader::new(stdout).lines())).await;
+  let found = time::timeout(WITHIN, asked(stdin, BufReader::new(stdout).lines())).await;
   found.ok().flatten()
 }
 

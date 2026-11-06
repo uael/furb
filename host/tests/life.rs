@@ -385,6 +385,9 @@ async fn the_life_gives_the_meaning_of_the_acts_that_it_told() {
     panic!("the moments are values")
   };
   let first = moments.first().and_then(serde_json::Value::as_u64).expect("a moment");
+  let past = Command::Threads { on: None, at: Some(first), read: None };
+  let Reply::Value(back) = life.send(past).await.unwrap() else { panic!("a value") };
+  assert_ne!(back["state"], json!("asks"), "the chain asked nothing at its first moment: {back}");
   let Reply::Values(then) = life.send(Command::AsOf { at: first }).await.unwrap() else {
     panic!("the acts then are values")
   };

@@ -33,6 +33,12 @@ use crate::{
   ear::runtime,
   world::child::{self, Group},
 };
+use std::io;
+use std::mem;
+use std::sync;
+use tokio::process;
+use tokio::sync as tokio_sync;
+use tokio::time;
 
 /// The most lines of the stderr of a process that the reason of its end quotes.
 const TAIL: usize = 20;
@@ -54,10 +60,10 @@ impl Failure {
   /// Why, in words.
   pub(super) fn said(&self) -> String {
     match self {
-      Failure::Answered { code, message } => format!("{message} (error {code})"),
-      Failure::Unauthorized(_) => "the server asks for a login".to_owned(),
-      Failure::Late(bound) => format!("it took more than {} seconds", seconds(*bound)),
-      Failure::Broken(why) => why.clone(),
+      Self::Answered { code, message } => format!("{message} (error {code})"),
+      Self::Unauthorized(_) => "the server asks for a login".to_owned(),
+      Self::Late(bound) => format!("it took more than {} seconds", seconds(*bound)),
+      Self::Broken(why) => why.clone(),
     }
   }
 }
@@ -89,7 +95,7 @@ type Pending = Arc<Mutex<HashMap<i64, oneshot::Sender<Result<Value, Failure>>>>>
 
 /// A lock that a panic of another holder does not poison.
 fn locked<T>(held: &Mutex<T>) -> MutexGuard<'_, T> {
-  held.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+  held.lock().unwrap_or_else(sync::PoisonError::into_inner)
 }
 
 /// How a message goes to a server: the three ways that a server is reached.
@@ -103,15 +109,15 @@ impl Wire {
   /// The message, sent; a request whose answer the server gives at once hands that answer to the peer.
   async fn send(&self, message: Value) -> Result<(), Failure> {
     match self {
-      Wire::Process(wire) => wire.send(message).await,
-      Wire::Streamable(wire) => wire.send(message).await,
-      Wire::Legacy(wire) => wire.send(message).await,
+      Self::Process(wire) => wire.send(message).await,
+      Self::Streamable(wire) => wire.send(message).await,
+      Self::Legacy(wire) => wire.send(message).await,
     }
   }
 
   /// The version of the protocol that the server agreed to, after which the wire may open more.
   fn agreed(&self, version: &str) {
-    if let Wire::Streamable(wire) = self {
+    if let Self::Streamable(wire) = self {
       wire.agreed(version);
     }
   }
@@ -132,7 +138,7 @@ impl Peer {
     transport: &Transport,
     token: Option<String>,
     roots: Value,
-  ) -> Result<(Peer, mpsc::UnboundedReceiver<Heard>), Failure> {
+  ) -> Result<(Self, mpsc::UnboundedReceiver<Heard>), Failure> {
     let (inbox, inbound) = mpsc::unbounded_channel();
     let wire = Arc::new(match transport {
       Transport::Stdio { command, args, env, cwd } => {
@@ -152,7 +158,7 @@ impl Peer {
       dispatch(Arc::clone(&wire), Arc::clone(&pending), inbound, told, roots),
       &runtime(),
     );
-    Ok((Peer { wire, pending, next: AtomicI64::new(1), tasks: Mutex::new(tasks) }, heard))
+    Ok((Self { wire, pending, next: AtomicI64::new(1), tasks: Mutex::new(tasks) }, heard))
   }
 
   /// What the server answers a request with, within a bound. A request past its bound, or that its caller drops, is
@@ -169,7 +175,7 @@ impl Peer {
     let mut waiting =
       Waiting { wire: Arc::clone(&self.wire), pending: Arc::clone(&self.pending), id, done: false };
     let message = json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
-    let got = tokio::time::timeout(bound, async {
+    let got = time::timeout(bound, async {
       self.wire.send(message).await?;
       answered
         .await
@@ -305,7 +311,7 @@ async fn dispatch(
 
 /// A server that runs as a process of its own group, which ends with the wire, with every process that it started.
 struct Process {
-  stdin: tokio::sync::Mutex<ChildStdin>,
+  stdin: tokio_sync::Mutex<ChildStdin>,
   tasks: Mutex<JoinSet<()>>,
   /// The group of the server, which ends each process of it once the tasks that read it are gone.
   _group: Group,
@@ -321,8 +327,8 @@ impl Process {
     env: &[(String, String)],
     cwd: Option<&Path>,
     inbox: Inbox,
-  ) -> Result<Process, Failure> {
-    let mut made = tokio::process::Command::new(command);
+  ) -> Result<Self, Failure> {
+    let mut made = process::Command::new(command);
     made.args(args).envs(env.iter().map(|(name, value)| (name, value)));
     if let Some(cwd) = cwd {
       made.current_dir(cwd);
@@ -337,15 +343,14 @@ impl Process {
     };
     let mut tasks = JoinSet::new();
     tasks.spawn_on(ended(child, stdout, stderr, inbox), &runtime());
-    Ok(Process { stdin: tokio::sync::Mutex::new(stdin), tasks: Mutex::new(tasks), _group: group })
+    Ok(Self { stdin: tokio_sync::Mutex::new(stdin), tasks: Mutex::new(tasks), _group: group })
   }
 
   async fn send(&self, message: Value) -> Result<(), Failure> {
     let line = message.to_string() + "\n";
     let mut stdin = self.stdin.lock().await;
-    let broken = |no: std::io::Error| {
-      Failure::Broken(format!("the process of the server took no request: {no}"))
-    };
+    let broken =
+      |no: io::Error| Failure::Broken(format!("the process of the server took no request: {no}"));
     stdin.write_all(line.as_bytes()).await.map_err(broken)?;
     stdin.flush().await.map_err(broken)
   }
@@ -447,7 +452,7 @@ struct Streamable {
 
 impl Streamable {
   fn new(url: &str, headers: &[(String, String)], token: Option<String>, inbox: Inbox) -> Self {
-    Streamable {
+    Self {
       url: url.to_owned(),
       headers: headers.to_vec(),
       token,
@@ -541,7 +546,7 @@ impl Drop for Streamable {
       let request = self.request(self.client.delete(&self.url));
       runtime().spawn(async move {
         // A server that does not answer in time frees the session by itself.
-        tokio::time::timeout(Duration::from_secs(5), request.send()).await.ok();
+        time::timeout(Duration::from_secs(5), request.send()).await.ok();
       });
     }
   }
@@ -563,7 +568,7 @@ impl Legacy {
     headers: &[(String, String)],
     token: Option<String>,
     inbox: Inbox,
-  ) -> Result<Legacy, Failure> {
+  ) -> Result<Self, Failure> {
     let client = Client::new();
     let request =
       headed(client.get(url), headers, token.as_deref()).header("accept", "text/event-stream");
@@ -598,7 +603,7 @@ impl Legacy {
     let endpoint = url::Url::parse(url).and_then(|base| base.join(&named)).map_err(|no| {
       Failure::Broken(format!("{url} named the endpoint {named}, which is not valid: {no}"))
     })?;
-    Ok(Legacy {
+    Ok(Self {
       endpoint: endpoint.to_string(),
       headers: headers.to_vec(),
       token,
@@ -644,9 +649,9 @@ impl Events {
       let line = line.trim_end_matches(['\n', '\r']);
       if line.is_empty() {
         if !self.data.is_empty() {
-          let event = std::mem::take(&mut self.event);
+          let event = mem::take(&mut self.event);
           let event = if event.is_empty() { "message".to_owned() } else { event };
-          out.push((event, std::mem::take(&mut self.data).join("\n")));
+          out.push((event, mem::take(&mut self.data).join("\n")));
         }
         self.event.clear();
         continue;

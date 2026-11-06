@@ -18,6 +18,8 @@ use super::{
   error::{At, StoreError},
   leased, now,
 };
+use std::fs;
+use std::str;
 
 /// The record at a path as a file of lines, under its lease.
 ///
@@ -121,7 +123,7 @@ pub(super) fn each(path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), Stor
 /// [`kept`] reads them: a line with another head is not parsed, and a line that does not parse
 /// is passed over.
 pub(super) fn heads(path: &Path, starts: &[String]) -> Result<Vec<Object>, StoreError> {
-  let data = match std::fs::read(path) {
+  let data = match fs::read(path) {
     Ok(data) => data,
     Err(no) if no.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
     Err(no) => return Err(StoreError::io(path)(no)),
@@ -241,7 +243,7 @@ fn read(path: &Path, take: &mut dyn FnMut(Object)) -> Result<Tail, StoreError> {
     }
     let ended = line.last() == Some(&b'\n');
     let next = start + read;
-    let Ok(text) = std::str::from_utf8(&line[..read - usize::from(ended)]) else {
+    let Ok(text) = str::from_utf8(&line[..read - usize::from(ended)]) else {
       return Err(invalid(start));
     };
     if text.trim().is_empty() {

@@ -146,7 +146,7 @@ fn owner_alone<T>(made: impl FnOnce(*mut SECURITY_ATTRIBUTES) -> T) -> io::Resul
   reason = "tokio makes a pipe under an access list only through an unsafe call"
 )]
 fn instance(place: &str, first: bool) -> Result<NamedPipeServer, TransportError> {
-  let listening = |source| TransportError::Listen { place: place.to_owned(), source };
+  let listening = |cause| TransportError::Listen { place: place.to_owned(), cause };
   let mut options = ServerOptions::new();
   options.first_pipe_instance(first).reject_remote_clients(true);
   // SAFETY: the attributes, and the descriptor that they point at, live until the call returns.

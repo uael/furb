@@ -8,13 +8,14 @@ use std::collections::HashSet;
 
 use super::{Images, attach, kind, read, reference, references};
 use crate::testing::Yard;
+use std::process;
 
 /// The first bytes of a PNG, which is all the type of an image is read by.
 const PNG: &[u8] = b"\x89PNG\r\n\x1a\nthe rest";
 
 /// A yard of one test, empty.
 fn yard(name: &str) -> Yard {
-  Yard::new(format!("furb-images-{name}-{}", std::process::id()))
+  Yard::new(format!("furb-images-{name}-{}", process::id()))
 }
 
 #[test]

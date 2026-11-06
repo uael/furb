@@ -6,10 +6,17 @@ use std::{fs, path::PathBuf};
 use super::{SCRATCH, Scratch, WHOLE};
 use crate::testing::Yard;
 use crate::value::{Object, Text};
+use crate::world;
+use std::env;
+use std::ffi;
+#[cfg(unix)]
+use std::os::unix::fs as unix_fs;
+use std::process;
+use std::sync;
 
 /// A directory of its own for one test, which does not stand yet.
 fn place(name: &str) -> Yard {
-  Yard::unmade(format!("furb-scratch-{name}-{}", std::process::id()))
+  Yard::unmade(format!("furb-scratch-{name}-{}", process::id()))
 }
 
 /// A log of the host that keeps nothing, for a record whose files the machine takes.
@@ -32,7 +39,7 @@ fn a_record_has_one_scratch_directory_in_the_cache_of_furb_under_a_short_name_of
   let at = place("canonical");
   fs::create_dir_all(at.join("real")).unwrap();
   #[cfg(unix)]
-  std::os::unix::fs::symlink(at.join("real"), at.join("link")).unwrap();
+  unix_fs::symlink(at.join("real"), at.join("link")).unwrap();
   let of = |path: PathBuf| {
     Scratch::of(&path).unwrap().expect("the machine of the test has a cache of furb")
   };
@@ -45,11 +52,11 @@ fn a_record_has_one_scratch_directory_in_the_cache_of_furb_under_a_short_name_of
     "a link to the folder names the same record"
   );
   assert_ne!(of(at.join("real").join("b.jsonl")).path(), one.path());
-  let cache = crate::world::cache()
-    .map(|cache| Scratch::at(cache.join("scratch")).unwrap().path().to_path_buf());
+  let cache =
+    world::cache().map(|cache| Scratch::at(cache.join("scratch")).unwrap().path().to_path_buf());
   assert_eq!(one.path().parent(), cache.as_deref());
-  assert_eq!(one.path().file_name().map(std::ffi::OsStr::len), Some(16));
-  assert_eq!(Scratch::at("a/../b").unwrap().path(), std::env::current_dir().unwrap().join("b"));
+  assert_eq!(one.path().file_name().map(ffi::OsStr::len), Some(16));
+  assert_eq!(Scratch::at("a/../b").unwrap().path(), env::current_dir().unwrap().join("b"));
   fs::remove_dir_all(&at).unwrap();
 }
 
@@ -85,7 +92,7 @@ fn a_link_that_leads_out_of_the_directory_is_refused_and_a_listing_reads_no_link
   fs::write(away.join("secret.md"), "secret").unwrap();
   let scratch = Scratch::at(&at).unwrap();
   scratch.made().unwrap();
-  std::os::unix::fs::symlink(&away, at.join("away")).unwrap();
+  unix_fs::symlink(&away, at.join("away")).unwrap();
   let refused = |path: &str, content: Option<&str>| {
     scratch.served(path, content.map(str::to_owned), None).unwrap_err().message()
   };
@@ -135,7 +142,7 @@ fn a_missing_directory_takes_the_last_write_of_each_path_in_the_order_of_those_w
 #[test]
 fn a_file_that_the_machine_refuses_is_told_to_the_log_of_the_host() {
   let at = place("refused");
-  let told = std::sync::Mutex::new(Vec::new());
+  let told = sync::Mutex::new(Vec::new());
   Scratch::at(&at).unwrap().remade(
     &[wrote("write1", "../out.md", "out"), wrote("write2", "plan.md", "in")],
     &|line| {
@@ -182,7 +189,7 @@ fn a_scratch_directory_of_its_own_has_a_short_name_and_goes_with_the_last_ear_th
   let own = Scratch::own();
   let held = own.clone();
   let at = own.made().unwrap().to_path_buf();
-  assert!(at.starts_with(std::env::temp_dir()));
+  assert!(at.starts_with(env::temp_dir()));
   let socket = at.join("pymp-abcdefgh").join("listener-abcdefgh");
   assert!(socket.as_os_str().len() < 104, "a socket of python fits under {}", at.display());
   drop(own);

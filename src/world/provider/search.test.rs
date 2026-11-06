@@ -20,6 +20,8 @@ use crate::{
   testing::{Yard, on_reactor},
   world::provider::claude::Program,
 };
+#[cfg(unix)]
+use std::process;
 
 fn pair(title: &str, url: &str) -> (String, String) {
   (title.to_owned(), url.to_owned())
@@ -97,7 +99,7 @@ fn deepseek_answers_with_each_result_its_title_its_address_and_its_summary() {
 /// of its own.
 #[cfg(unix)]
 fn program(name: &str, args: &[&str], body: &str) -> (Yard, Program) {
-  let at = Yard::new(format!("furb-search-{name}-{}", std::process::id()));
+  let at = Yard::new(format!("furb-search-{name}-{}", process::id()));
   let bin = at.join("claude");
   fs::write(&bin, format!("#!/bin/sh\n{body}\n")).unwrap();
   use std::os::unix::fs::PermissionsExt;

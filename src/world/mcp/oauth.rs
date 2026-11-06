@@ -30,7 +30,11 @@ use tokio::{
 };
 
 use super::config::Login;
+use crate::value;
 use crate::world::disk;
+use std::sync;
+use tokio::task;
+use tokio::time;
 
 /// How long a login waits for the browser to hand back its code.
 pub(super) const LOGIN: Duration = Duration::from_secs(300);
@@ -215,7 +219,7 @@ pub(super) async fn token(vault: Arc<dyn Vault>, key: String) -> Option<Access> 
 pub(super) async fn blocking<T: Send + 'static>(
   work: impl FnOnce() -> T + Send + 'static,
 ) -> Result<T, JoinError> {
-  tokio::task::spawn_blocking(work).await
+  task::spawn_blocking(work).await
 }
 
 /// The seconds since the epoch of Unix.
@@ -267,7 +271,7 @@ pub(super) async fn login(
   }
   opener(address.as_str())
     .map_err(|source| Error::Browser { address: address.to_string(), source })?;
-  let Ok(code) = tokio::time::timeout(LOGIN, callback(&listener, &state)).await else {
+  let Ok(code) = time::timeout(LOGIN, callback(&listener, &state)).await else {
     return Err(Error::Waited { address: address.to_string() });
   };
   let code = code?;
@@ -555,7 +559,7 @@ impl Keychain {
 
 impl Vault for Keychain {
   fn get(&self, key: &str) -> Option<String> {
-    let account = Keychain::account(key);
+    let account = Self::account(key);
     let got = Command::new(KEYCHAIN)
       .args(["find-generic-password", "-s", SERVICE, "-a", &account, "-w"])
       .output();
@@ -564,9 +568,8 @@ impl Vault for Keychain {
   }
 
   fn put(&self, key: &str, value: &str) -> Result<(), VaultError> {
-    let hex = crate::value::hex(value.as_bytes());
-    let line =
-      format!("add-generic-password -U -s {SERVICE} -a {} -X {hex}\n", Keychain::account(key));
+    let hex = value::hex(value.as_bytes());
+    let line = format!("add-generic-password -U -s {SERVICE} -a {} -X {hex}\n", Self::account(key));
     let mut child = Command::new(KEYCHAIN)
       .arg("-i")
       .stdin(Stdio::piped())
@@ -586,7 +589,7 @@ impl Vault for Keychain {
   }
 
   fn forget(&self, key: &str) -> Result<(), VaultError> {
-    let account = Keychain::account(key);
+    let account = Self::account(key);
     let got = Command::new(KEYCHAIN)
       .args(["delete-generic-password", "-s", SERVICE, "-a", &account])
       .output();
@@ -602,7 +605,7 @@ pub struct Filed {
 
 impl Filed {
   pub fn new(path: PathBuf) -> Self {
-    Filed { path, lock: Mutex::new(()) }
+    Self { path, lock: Mutex::new(()) }
   }
 
   /// The secrets of the file.
@@ -623,19 +626,19 @@ impl Filed {
 
 impl Vault for Filed {
   fn get(&self, key: &str) -> Option<String> {
-    let _held = self.lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _held = self.lock.lock().unwrap_or_else(sync::PoisonError::into_inner);
     self.held().remove(key)
   }
 
   fn put(&self, key: &str, value: &str) -> Result<(), VaultError> {
-    let _held = self.lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _held = self.lock.lock().unwrap_or_else(sync::PoisonError::into_inner);
     let mut held = self.held();
     held.insert(key.to_owned(), value.to_owned());
     self.wrote(&held)
   }
 
   fn forget(&self, key: &str) -> Result<(), VaultError> {
-    let _held = self.lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let _held = self.lock.lock().unwrap_or_else(sync::PoisonError::into_inner);
     let mut held = self.held();
     match held.remove(key) {
       Some(_) => self.wrote(&held),

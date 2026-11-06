@@ -89,7 +89,7 @@ impl Watch {
 
   /// The word forgotten, as when the model is asked again and writes it from its start.
   pub(super) fn forget(&mut self) {
-    *self = Watch::default();
+    *self = Self::default();
   }
 
   /// The part of a word, as python, that is new since the parts given to the Kernel, and how many characters of the
