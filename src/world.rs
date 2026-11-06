@@ -53,7 +53,7 @@ pub use scratch::{SCRATCH, Scratch};
 pub(crate) use store::Format;
 pub use store::{
   CHECKPOINT_SCHEMA, Lines, MADE, RECORD_SCHEMA, Schema, SchemaError, Sqlite, Store, engine, heads,
-  keeping, kept, made, readable, release, store, texts,
+  keeping, kept, made, readable, release, standing, store, texts,
 };
 pub use time::time;
 

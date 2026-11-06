@@ -530,6 +530,32 @@ fn a_life_opens_when_its_actor_and_a_roster_name_left_the_catalog_and_tells_each
 }
 
 #[test]
+fn a_life_that_names_no_actor_and_no_roster_goes_on_with_the_ones_its_record_stood_on_last() {
+  let at = place("stood-again");
+  let both = "close((standing()[2], sorted(a[0] for a in standing()[0])))";
+  let given = Opening {
+    extensions: Some(false),
+    roster: Some(vec!["claude-cli:opus".to_owned(), "claude-cli:sonnet".to_owned()]),
+    actor: Some("claude-cli:sonnet/low".to_owned()),
+    ..scripted(&at, &[])
+  };
+  let (mut first, _) = given.boot::<String>([]).unwrap();
+  let had = closed(&mut first, both).py_repr();
+  assert_eq!(
+    had,
+    "('claude-cli:sonnet/low', ['claude-cli:opus', 'claude-cli:sonnet', 'operator'])"
+  );
+  drop(first);
+  let unsaid = Opening { extensions: Some(false), roster: None, actor: None, ..scripted(&at, &[]) };
+  let (mut later, _) = unsaid.boot::<String>([]).unwrap();
+  assert_eq!(
+    closed(&mut later, both).py_repr(),
+    had,
+    "the open named neither, so the record rules"
+  );
+}
+
+#[test]
 fn a_stand_reloads_provider_settings_and_a_refused_reload_keeps_the_life() {
   let at = place("provider-settings");
   fs::create_dir_all(at.join("config")).unwrap();

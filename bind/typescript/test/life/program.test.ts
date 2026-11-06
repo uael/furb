@@ -8,6 +8,8 @@ import {
   layout,
   literals,
   placed,
+  quoteBinding,
+  quoteParts,
   stepLines,
   threadProgram,
   wrap,
@@ -277,14 +279,66 @@ test("the literals of a line skip a name that ends in a prefix, keep their escap
 
 test("what a model writes splits into the lines of its word that it finished and the line that it still writes", () => {
   const thinking = "plans\nthe first step";
-  expect(writing(undefined)).toEqual({ lines: "", tail: "" });
-  expect(writing({ text: "", thinking })).toEqual({ lines: "", tail: "the first step" });
-  expect(writing({ text: "got = await", thinking })).toEqual({ lines: "", tail: "got = await" });
+  expect(writing(undefined)).toEqual({ lines: "", tail: "", numbers: [], count: 0 });
+  expect(writing({ text: "", thinking })).toEqual({
+    lines: "",
+    tail: "the first step",
+    numbers: [],
+    count: 0,
+  });
+  expect(writing({ text: "got = await", thinking })).toEqual({
+    lines: "",
+    tail: "got = await",
+    numbers: [],
+    count: 0,
+  });
   expect(writing({ text: "a = 1\nfor x in a:\n  b = await bash(", thinking })).toEqual({
     lines: "a = 1\nfor x in a:",
     tail: "b = await bash(",
+    numbers: [1, 2],
+    count: 2,
   });
-  expect(writing({ text: "a = 1\n\n", thinking })).toEqual({ lines: "a = 1", tail: "" });
+  expect(writing({ text: "a = 1\n\n", thinking })).toEqual({
+    lines: "a = 1",
+    tail: "",
+    numbers: [1],
+    count: 1,
+  });
+});
+
+test("a quote that a model still writes stands as its binding from its opening mark, and its text grows in the quotes of the string", () => {
+  const shown = (text: string) => writing({ text, thinking: "" });
+  expect(shown("x = 1\n<s:note>")).toEqual({
+    lines: "x = 1\nnote = ''",
+    tail: "",
+    numbers: [1, 2],
+    count: 2,
+  });
+  expect(shown("x = 1\n<s:note>\nHello\nwor")).toEqual({
+    lines: "x = 1\nnote = 'Hello\\nwor'",
+    tail: "",
+    numbers: [1, 2],
+    count: 4,
+  });
+  expect(shown("<s:note>\nHello\n</s:no").lines).toBe("note = 'Hello\\n'");
+  expect(shown("<s:note>\nHello\n</s:note>\nclose(")).toEqual({
+    lines: "note = 'Hello\\n'",
+    tail: "close(",
+    numbers: [1],
+    count: 3,
+  });
+  expect(shown("<s:no").lines).toBe("");
+});
+
+test("a text parts into its runs of python and each quote that closes, which binds as the engine binds it", () => {
+  const parts = quoteParts("#read1\n<s:read1_text>\nit's\n</s:read1_text>\nx = 1\n<s:open>\nno close");
+  expect(parts).toEqual([
+    { code: "#read1" },
+    { quote: { name: "read1_text", body: "it's\n", end: 3, closed: true } },
+    { code: "x = 1\n<s:open>\nno close" },
+  ]);
+  const quote = parts[1];
+  expect(quote && "quote" in quote ? quoteBinding(quote.quote) : "").toBe(`read1_text = "it's\\n"`);
 });
 
 test("a string of three marks that runs over many lines stands in its statement as one string with its escapes, on the line that starts the statement", () => {

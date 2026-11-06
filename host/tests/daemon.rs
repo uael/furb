@@ -27,10 +27,10 @@ mod daemon {
 
   use furb::{
     Object,
-    life::{Answer as Answered, Opening},
+    life::{Answer as Answered, Log, Opening},
   };
   use furb_host::{
-    DaemonError, Event, GRACE, ProtocolError, STALL, Settings, TransportError,
+    DaemonError, END, Event, GRACE, ProtocolError, STALL, Settings, TransportError,
     protocol::{
       Answer, Axis, Dispose, Effect, Frame, Gesture, Hello, Kind, Listed, Mount, Node, PROTOCOL,
       Request, Role, Shape, Slot, Tree, Verb, ViewEffect, ViewEvent,
@@ -147,8 +147,15 @@ mod daemon {
   async fn started(at: &Path, grace: Duration) -> (Local, JoinHandle<Result<(), DaemonError>>) {
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
-    let settings =
-      Settings { opening: opening(at), grace, stall: STALL, tailnet: None, door: None, host: None };
+    let settings = Settings {
+      opening: opening(at),
+      grace,
+      end: END,
+      stall: STALL,
+      tailnet: None,
+      door: None,
+      host: None,
+    };
     let served = local.clone();
     (local, tokio::spawn(async move { run(&served, listener, settings).await }))
   }
@@ -179,6 +186,7 @@ mod daemon {
     let settings = Settings {
       opening: opening(at),
       grace: GRACE,
+      end: END,
       stall: STALL,
       tailnet: None,
       door: None,
@@ -533,6 +541,7 @@ mod daemon {
     let settings = Settings {
       opening: opening(&at),
       grace: SHORT,
+      end: END,
       stall: STALL,
       tailnet: None,
       door: None,
@@ -552,6 +561,78 @@ mod daemon {
     tokio::time::sleep(PAST).await;
     assert!(window.lives(&life).await);
     assert!(!new.is_finished());
+  }
+
+  /// The opening of a test whose model blocks the thread of its life: it tells the test that it
+  /// began, then waits until the test drops the sender of the gate.
+  fn blocking(
+    at: &Path,
+    log: Arc<std::sync::Mutex<Vec<String>>>,
+  ) -> (Opening, std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>) {
+    let (hold, gate) = std::sync::mpsc::channel::<()>();
+    let (began, entered) = std::sync::mpsc::channel::<()>();
+    let (gate, began) = (std::sync::Mutex::new(gate), std::sync::Mutex::new(began));
+    let inner = opening(at).answer.expect("the opening of a test has a model");
+    let answer = Answered(Arc::new(move |kind, message| {
+      began.lock().unwrap().send(()).ok();
+      gate.lock().unwrap().recv().ok();
+      (inner.0)(kind, message)
+    }));
+    let tell = Log(Arc::new(move |line: &str| log.lock().unwrap().push(line.to_owned())));
+    (Opening { answer: Some(answer), log: Some(tell), ..opening(at) }, hold, entered)
+  }
+
+  #[tokio::test]
+  async fn a_handover_gives_up_a_life_that_does_not_end_within_its_bound() {
+    let at = place();
+    let log = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let (blocked, hold, entered) = blocking(&at, Arc::clone(&log));
+    let local = Local::new(at.join("sock"));
+    let listener = local.listen().await.unwrap();
+    let bound = SHORT;
+    let settings = Settings {
+      opening: blocked,
+      grace: GRACE,
+      end: bound,
+      stall: STALL,
+      tailnet: None,
+      door: None,
+      host: None,
+    };
+    let served = local.clone();
+    let old = tokio::spawn(async move { run(&served, listener, settings).await });
+    let mut window = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    window.attach(&life).await;
+    let verb = Verb::Run { life: life.clone(), word: "prompt(None, 'go')".to_owned(), on: None };
+    assert!(matches!(window.ask(verb).await, Ok(Answer::Act(_))));
+    let began = tokio::task::spawn_blocking(move || entered.recv_timeout(PATIENCE));
+    assert!(began.await.unwrap().is_ok(), "the model of the life blocks its thread");
+    let settings = Settings {
+      opening: opening(&at),
+      grace: GRACE,
+      end: END,
+      stall: STALL,
+      tailnet: None,
+      door: None,
+      host: None,
+    };
+    let next = local.clone();
+    let asked = Instant::now();
+    let new = tokio::spawn(async move { upgrade(&next, settings).await });
+    let gone =
+      timeout(PATIENCE, old).await.expect("a life that blocks holds the upgrade past its bound");
+    assert!(matches!(gone, Ok(Ok(()))));
+    assert!(asked.elapsed() >= bound, "the handover waits for the bound of each life");
+    let seen = log.lock().unwrap().join("\n");
+    assert!(
+      seen.contains(&life) && seen.contains("did not end"),
+      "the log tells which life did not end: {seen}"
+    );
+    let mut window = Window::dialed(&local).await;
+    assert!(window.lives(&life).await, "the new daemon opens the life that was given up");
+    assert!(!new.is_finished());
+    drop(hold);
   }
 
   /// The view of a skill that a window mounts in the footer of a life.
@@ -872,6 +953,7 @@ mod daemon {
     let settings = Settings {
       opening: opening(&at),
       grace: SHORT,
+      end: END,
       stall: STALL,
       tailnet: None,
       door: None,
@@ -952,6 +1034,7 @@ mod daemon {
     let settings = Settings {
       opening: opening(&at),
       grace: GRACE,
+      end: END,
       stall: QUIET,
       tailnet: None,
       door: None,
@@ -993,6 +1076,39 @@ mod daemon {
     assert_eq!(messages, 2, "a new fact and a new stall send a new message: {prompts:?}");
   }
 
+  #[tokio::test]
+  async fn a_rung_that_waits_with_no_reply_is_told_to_the_root_after_the_bound() {
+    let at = place();
+    let local = Local::new(at.join("sock"));
+    let listener = local.listen().await.unwrap();
+    let settings = Settings {
+      opening: opening(&at),
+      grace: GRACE,
+      end: END,
+      stall: QUIET,
+      tailnet: None,
+      door: None,
+      host: None,
+    };
+    let served = local.clone();
+    tokio::spawn(async move { run(&served, listener, settings).await });
+    let mut window = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    window.attach(&life).await;
+    let waits = "never = prompt(str, \"never answered\", to=\"operator\")\nrung(\"x = 1\", never)";
+    let verb = Verb::Run { life: life.clone(), word: waits.to_owned(), on: None };
+    let began = tokio::time::Instant::now();
+    let Ok(Answer::Act(_)) = window.ask(verb).await else { panic!("no rung") };
+    let Frame::Stalled { acts, notice, .. } = window.until(stall).await else { unreachable!() };
+    assert!(began.elapsed() >= QUIET, "the daemon tells a stall after its bound alone");
+    assert!(acts.iter().any(|one| one.kind == "rung" && one.chain == "chain1"), "{acts:?}");
+    assert!(!acts.iter().any(|one| one.kind == "run"), "no run is open: {acts:?}");
+    let Frame::Event { event: Event::Fact(sent), .. } = window.until(message).await else {
+      unreachable!()
+    };
+    assert_eq!(sent[5], notice.as_str(), "the root takes the notice as its message");
+  }
+
   /// The skill probe in a folder of skills, whose process writes the file `started` of its folder,
   /// which this gives.
   #[cfg(unix)]
@@ -1017,6 +1133,7 @@ mod daemon {
     let settings = Settings {
       opening: opening(at),
       grace: SHORT,
+      end: END,
       stall: STALL,
       tailnet: None,
       door: None,

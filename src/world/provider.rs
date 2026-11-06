@@ -262,6 +262,8 @@ impl Provider {
   /// provider gave. It is done with the turn of the model, or with a refusal; a recoverable refusal
   /// gives the model another turn with its cause, and never pauses the chain. A prompt too long for
   /// the context of the model is no recoverable refusal, so a second one in a row pauses the chain.
+  /// Its refusal says first that the prompt passes the window of the model, so the extension
+  /// compaction cuts the chain before its next reply.
   /// A turn whose word lost the marks of a fence or of a tool call around it, or the line of three
   /// backticks at its end, tells its chain so once, before its done. A done of a reply that the ear
   /// did not say ends the call of its model.

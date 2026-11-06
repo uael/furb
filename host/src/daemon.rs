@@ -11,7 +11,8 @@
 //! of a new build takes the place of the one that runs only through [`upgrade`], never by a
 //! takeover: the daemon that runs writes the checkpoint of each life, stops to listen, and gives
 //! its lives and their pins, which the new one opens again. Each window then dials again and
-//! attaches, with no loss.
+//! attaches, with no loss. A life that does not end within the bound `end` is given up with no
+//! checkpoint, and the new one opens it from its record.
 //!
 //! When the operator turns it on, the daemon also listens on the address of the machine on the
 //! tailnet, by TCP and by WebSocket, and lets in each peer whose login the access list names, with
@@ -39,7 +40,7 @@ use tokio::{
   net::{TcpListener, TcpStream},
   sync::{mpsc, oneshot},
   task::JoinSet,
-  time::{Instant, sleep_until},
+  time::{Instant, sleep_until, timeout},
 };
 use tokio_util::codec::{Framed, LinesCodec};
 
@@ -67,6 +68,11 @@ use crate::{
 /// How long a life with no holder lives, unless the settings of the daemon say otherwise.
 pub const GRACE: Duration = Duration::from_secs(30);
 
+/// How long a handover waits for a life to write its checkpoint and end, unless the settings of the
+/// daemon say otherwise: past it, the daemon gives that life up and the new daemon opens it from
+/// its record.
+pub const END: Duration = Duration::from_secs(60);
+
 /// What the daemon opens each life on.
 #[derive(Clone)]
 pub struct Settings {
@@ -75,6 +81,9 @@ pub struct Settings {
   pub opening: Opening,
   /// How long a life with no holder lives before it writes its checkpoint and ends.
   pub grace: Duration,
+  /// How long a handover waits for each life to write its checkpoint and end, before it gives that
+  /// life up with no checkpoint, so that the daemon of the new build opens it from its record.
+  pub end: Duration,
   /// How long a life that holds an open act says no fact before the daemon tells each of its
   /// windows and its root chain that it stalled.
   pub stall: Duration,
@@ -474,7 +483,8 @@ impl From<Reply> for Answer {
 /// What an open names of the life that it makes: its folder, the actor, the roster, the
 /// extensions, the folder of the settings of the user and the claude command line that its peer
 /// chose, and the peer that answers its models, when one does. A choice that is unsaid takes the
-/// one of the settings of the daemon.
+/// one of the settings of the daemon, and an actor or a roster that both leave unsaid takes the
+/// one that the record of the life stood on last, as [`Opening`] says.
 #[derive(Clone, Default)]
 struct Birth {
   cwd: String,
@@ -834,6 +844,7 @@ impl Lives {
   fn handover(self, asker: Outbox, reply: Replied) {
     let (mut handed, mut lives) = (Vec::new(), Vec::new());
     for (life, held) in self.held {
+      let record = life.clone();
       match held.stage {
         Stage::Living(holders) => {
           handed.push(Handed { life, cwd: held.cwd, pins: holders.release() });
@@ -844,9 +855,10 @@ impl Lives {
           }
         }
       }
-      lives.push(held.handle);
+      lives.push((record, held.handle));
     }
-    tokio::spawn(gave(lives, self.leave, Leaving { handed, asker, reply }));
+    let (bound, log) = (self.settings.end, self.settings.opening.log.clone());
+    tokio::spawn(gave(lives, bound, log, self.leave, Leaving { handed, asker, reply }));
   }
 }
 
@@ -952,10 +964,32 @@ async fn told(
   }
 }
 
-/// The handover once each life wrote its checkpoint and ended, given to the listener, or refused
-/// when the listener is gone.
-async fn gave(lives: Vec<LifeHandle>, leave: oneshot::Sender<Leaving>, leaving: Leaving) {
-  future::join_all(lives.iter().map(end)).await;
+/// A life told to end within a bound. Past it, the life is given up with no checkpoint, and the log
+/// tells which life did not end: the daemon of the new build opens it from its record.
+async fn ended_within(record: &str, life: &LifeHandle, bound: Duration, log: Option<&Log>) {
+  if timeout(bound, end(life)).await.is_err() {
+    report(
+      log,
+      &format_args!(
+        "{record} did not end within {bound:?}: given up with no checkpoint, to open from its record"
+      ),
+    );
+  }
+}
+
+/// The handover once each life wrote its checkpoint and ended, or was given up past the bound,
+/// given to the listener, or refused when the listener is gone.
+async fn gave(
+  lives: Vec<(String, LifeHandle)>,
+  bound: Duration,
+  log: Option<Log>,
+  leave: oneshot::Sender<Leaving>,
+  leaving: Leaving,
+) {
+  future::join_all(
+    lives.iter().map(|(record, life)| ended_within(record, life, bound, log.as_ref())),
+  )
+  .await;
   if let Err(Leaving { reply, .. }) = leave.send(leaving) {
     reply.send(Err(ProtocolError::Stopped)).ok();
   }

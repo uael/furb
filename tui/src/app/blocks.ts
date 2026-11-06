@@ -29,7 +29,10 @@ import {
   type BlockOptions,
   blockLabel,
   chipColors,
+  FOLD_ROWS,
+  foldOf,
   gutterWidth,
+  hidden,
   noBorder,
   STATE,
   type State,
@@ -571,22 +574,51 @@ export const blocks = part({
     return clip(text.replace(/\s+/g, " "), Math.max(8, this.feedWidth - reserve));
   },
 
-  /** The first or the last lines of a text under a heading, joined to it by a branch. */
-  excerpt(box: BoxRenderable, content: string, tail = false, color = c.muted): void {
+  /** The last lines of a text under a heading, joined to it by a branch: whole up to FOLD_ROWS lines, else the fold of
+   * the earlier lines above the last ones, which the fold of the key opens in place. */
+  excerpt(box: BoxRenderable, content: string, key: string): void {
     const lines = shortenHomes(content)
       .trimEnd()
       .split("\n")
       .filter((line) => line.trim());
-    const limit = 3;
-    const selected = tail ? lines.slice(-limit) : lines.slice(0, limit);
-    if (lines.length > limit) {
-      if (tail) selected[0] = `… ${selected[0]}`;
-      else selected[selected.length - 1] += " …";
-    }
-    const visible = selected
+    const hide = this.session.folds[key] === false ? 0 : foldOf(lines.length);
+    if (hide) box.add(this.foldLine(key, hide, "line", "earlier"));
+    const visible = lines
+      .slice(hide)
       .map((line) => clip(line, Math.max(8, this.feedWidth - space.between * 3)))
       .join("\n");
-    box.add(this.branched(visible, color));
+    box.add(this.branched(visible, c.muted));
+  },
+
+  /** The one row of every fold of the feed: its glyph, the count of what it hides with its noun, and a click that
+   * opens it in place, as its entry in the Details of ⌥D does. */
+  foldLine(key: string, count: number, noun: string, where: "more" | "earlier" = "more"): TextRenderable {
+    const label = hidden(count, noun, where);
+    const node = this.link(
+      [
+        [`${glyph.closed} `, c.faint],
+        [label, c.muted],
+      ],
+      () => this.openFold(key),
+    );
+    this.foldRows.set(key, { label, node });
+    return node;
+  },
+
+  /** A fold of the feed opens in place. */
+  openFold(key: string): void {
+    const w = this.session;
+    w.folds[key] = false;
+    w.save();
+    this.renderContent();
+  },
+
+  /** A text as markdown, whole up to FOLD_ROWS rows of the feed, else its first rows and the fold of the rest, which
+   * the fold of the key opens in place. */
+  bounded(box: BoxRenderable, text: string, key: string): void {
+    const [shown, rest] = this.session.folds[key] === false ? [text, 0] : this.firstRows(text, FOLD_ROWS);
+    box.add(this.markdown(shown));
+    if (rest) box.add(this.foldLine(key, rest, "line"));
   },
 
   /** A text joined by a branch to the heading above it. */

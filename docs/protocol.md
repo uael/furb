@@ -185,7 +185,9 @@ it is not given. The daemon answers requests in any order.
   When a life holds an open act, a run of a word, a reply of a model or a command, and says no fact for the bound of
   a stall, 20 minutes unless `stall` in `host.json` gives other seconds, the daemon pushes to each window of the life
   a frame `stalled` with the `life`, its open `acts`, each with its `act`, its `kind` and its `chain`, and the
-  `notice` that a window shows as it stands. It also sends the notice to the root chain of the life as a prompt of
+  `notice` that a window shows as it stands. A rung that no run, reply, command or wait lives beside on its chain is an
+  open act too, and so is a prompt to a model whose chain holds no rung and nothing else, but not a paused act or a
+  prompt to the operator. It also sends the notice to the root chain of the life as a prompt of
   `None`, so that its actor wakes. It tells nothing more until a fact of an act that its message did not make, and a
   new stall after that fact. A stall is no fact of the record.
 
@@ -212,7 +214,8 @@ once it listens. A second daemon refuses to start there.
   The new daemon says `handover`. The daemon that runs writes the checkpoint of each life, ends it, stops to listen
   and answers `handed` with each life, its folder and its pins. The new daemon listens and opens each life again with
   its pins, then the old one closes each window and ends. Each window dials again and attaches, and the life goes on
-  from its checkpoint.
+  from its checkpoint. A life that does not end within 60 seconds is given up with no checkpoint, the log of the
+  daemon names it, and the new daemon opens it from its record.
 - A skill attaches a life as a window does, under its name, and hears its events from the place that it asks. It holds no
   life, so a life with no window and no pin ends while a skill is attached. A skill that attaches again under its name takes
   the place of the first, and its views end. A skill that detaches, or whose peer leaves, ends its views.
