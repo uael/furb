@@ -38,6 +38,50 @@ fn acted(program: &[&str], acts: &[&str], word: &str) -> (String, usize) {
   (text, usize::try_from(above).expect("a count of lines is no negative number"))
 }
 
+/// What the gate finds below a word that answers the step of a prompt of these shapes, which is a
+/// prompt that wants a value when it is given one, each finding by its line in the word.
+fn answering(word: &str, valued: &[&str]) -> Vec<(usize, String)> {
+  let code = "__engine = {}\nexec(__source, __engine)\n__sheet = {}\nexec(__sheet_source, __sheet)\n__sheet['sheet'](__engine, {}, __word, [], __valued)";
+  let mut named = NamedValues::new();
+  named.push("__source", Object::string(ENGINE));
+  named.push("__sheet_source", Object::string(SOURCE));
+  named.push("__word", Object::string(word));
+  named.push("__valued", Object::list(valued.iter().map(|one| Object::string(*one))));
+  let got =
+    Sand::new().run(code, named, &mut Nobody("the sheet")).expect("furb.sheet writes the sheet");
+  let got = got.as_ref();
+  let text = entry(&got, 0).and_then(|one| one.as_str()).expect("a sheet is a text").to_owned();
+  let above = entry(&got, 1).and_then(|one| one.as_int()).expect("a sheet counts its lines");
+  let above = usize::try_from(above).expect("a count of lines is no negative number");
+  found(&text)
+    .into_iter()
+    .filter(|(line, _)| *line > above)
+    .map(|(line, why)| (line - above, why))
+    .collect()
+}
+
+#[test]
+fn a_word_that_answers_a_prompt_with_a_value_by_a_bare_expression_is_refused_with_its_close() {
+  let shape = ["tuple[list[str], str]"];
+  let found = answering("ids = ['chain1']\n(ids, 'kept')", &shape);
+  assert_eq!(found.len(), 1, "{found:?}");
+  assert_eq!(found[0].0, 2, "{found:?}");
+  assert!(
+    found[0].1.contains("[bare-answer]") && found[0].1.contains("close((ids, 'kept'))"),
+    "{found:?}"
+  );
+  // A word whose last line is a call, or an await, closes or waits as it says, and a prompt that
+  // wants no value takes a bare expression as any word.
+  for (word, valued) in [
+    ("ids = ['chain1']\nclose((ids, 'kept'))", &shape[..]),
+    ("got = bash('ls')\nawait got", &shape[..]),
+    ("ids = ['chain1']\n(ids, 'kept')", &[][..]),
+  ] {
+    let found = answering(word, valued);
+    assert!(!found.iter().any(|one| one.1.contains("bare-answer")), "{word}: {found:?}");
+  }
+}
+
 fn found(text: &str) -> Vec<(usize, String)> {
   let found = checked(text).expect("the gate reads the sheet");
   found.into_iter().map(|one| (one.line, one.to_string())).collect()
