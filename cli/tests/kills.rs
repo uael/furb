@@ -20,11 +20,10 @@ mod yard;
 #[cfg(test)]
 mod kills {
   use std::{
-    ffi::CString,
     fs,
-    os::unix::{ffi::OsStrExt, fs::PermissionsExt},
+    os::unix::fs::PermissionsExt,
     path::PathBuf,
-    process::Stdio,
+    process::{self, Stdio},
     sync::atomic::{AtomicU32, Ordering},
     time::Duration,
   };
@@ -76,7 +75,7 @@ mod kills {
     fn new() -> Yard {
       static NEXT: AtomicU32 = AtomicU32::new(0);
       let n = NEXT.fetch_add(1, Ordering::Relaxed);
-      let base = super::yard::Yard::new(format!("fk{}-{n}", std::process::id()));
+      let base = super::yard::Yard::new(format!("fk{}-{n}", process::id()));
       let root = fs::canonicalize(&base).unwrap();
       for folder in ["work", "fake", "config"] {
         fs::create_dir_all(root.join(folder)).unwrap();
@@ -156,9 +155,8 @@ mod kills {
     /// waits for, so that it ends with the processes of the life alone.
     fn new(yard: &Yard) -> Lifeline {
       let at = yard.fake("lifeline");
-      let path = CString::new(at.as_os_str().as_bytes()).unwrap();
-      // SAFETY: the path is a string of C that lives for the call.
-      assert_eq!(unsafe { libc::mkfifo(path.as_ptr(), 0o600) }, 0, "the FIFO is made");
+      let made = process::Command::new("mkfifo").args(["-m", "600"]).arg(&at).status().unwrap();
+      assert!(made.success(), "the FIFO is made");
       // The end of the test opens first, for reading and writing, which waits for no other end, so
       // the end for reading opens with no wait too.
       let own = Some(fs::OpenOptions::new().read(true).write(true).open(&at).unwrap());
@@ -225,9 +223,9 @@ mod kills {
 
     /// The daemon ended by a signal, once it is gone.
     async fn killed(mut self, signal: i32) {
-      let pid = i32::try_from(self.child.id().unwrap()).unwrap();
-      // SAFETY: the pid is of a child of the test that it has not waited for.
-      assert_eq!(unsafe { libc::kill(pid, signal) }, 0);
+      let pid = self.child.id().unwrap().to_string();
+      let sent = Command::new("kill").arg(format!("-{signal}")).arg(pid).status().await.unwrap();
+      assert!(sent.success(), "the signal {signal} is sent");
       timeout(PATIENCE, self.child.wait()).await.expect("the daemon ends").unwrap();
     }
   }
