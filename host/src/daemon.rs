@@ -62,7 +62,7 @@ use crate::{
   serve::{Host, Outbox, serve},
   stall::{Quiet, Stall},
   transport::{
-    Accepted, Dialer, Door, Identity, Listener, Local, Tailscale, Tcp, Ticket, upgraded,
+    Accepted, Dialer, Door, Identity, Listener, Local, Tailscale, Tcp, Ticket, own, upgraded,
   },
   views::{Skill, Views},
 };
@@ -671,6 +671,19 @@ impl Lives {
     }
   }
 
+  /// The logins of the members of each life, whom a model asks as `operator/<login>`: the user of
+  /// the daemon, then each login of the access list of the tailnet, each once.
+  fn members(&self) -> Vec<String> {
+    let mut all: Vec<String> = own().ok().into_iter().collect();
+    let listed = self.settings.tailnet.iter().flat_map(|one| one.identity.access().logins());
+    for login in listed {
+      if !all.iter().any(|one| one == login) {
+        all.push(login.to_owned());
+      }
+    }
+    all
+  }
+
   /// A life born on a thread of its own, with no holder yet, and watched for its end.
   fn opened(&mut self, life: String, birth: Birth) -> Result<(), ProtocolError> {
     let Birth { cwd, actor, roster, extensions, config, claude, answerer, holder: _ } = birth;
@@ -685,6 +698,7 @@ impl Lives {
       config: config.or_else(|| base.config.clone()),
       claude: claude.or_else(|| base.claude.clone()),
       answer: answer.or_else(|| base.answer.clone()),
+      members: Some(self.members()),
       ..base.clone()
     };
     let places = processes::places(&opening);

@@ -939,6 +939,34 @@ mod daemon {
   }
 
   #[tokio::test]
+  async fn the_roster_of_a_life_names_the_user_of_the_daemon_as_a_member_of_the_operator() {
+    let at = place();
+    let (local, _daemon) = started(&at, GRACE).await;
+    let mut window = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    window.attach(&life).await;
+    let Ok(Answer::Presence(peers)) = window.ask(Verb::Presence { life: life.clone() }).await
+    else {
+      panic!("no presence")
+    };
+    let login = peers.iter().find(|one| one.kind == Kind::Window).map(|one| one.login.clone());
+    let login = login.expect("the window is present");
+    let word = format!(
+      "members = [x[1] for x in standing()[0] if x[0] == OPERATOR][0]\nasks = offered(standing()[0], 'operator/{login}') is not None"
+    );
+    window.ran(&life, &word).await;
+    let read = |name: &str| Verb::Inspect { life: life.clone(), name: name.to_owned(), on: None };
+    let Ok(Answer::Inspected { value: members, .. }) = window.ask(read("members")).await else {
+      panic!("no members")
+    };
+    assert_eq!(members, json!([login]), "the operator of the roster lists the user");
+    let Ok(Answer::Inspected { value: asks, .. }) = window.ask(read("asks")).await else {
+      panic!("no asks")
+    };
+    assert_eq!(asks, json!(true), "a prompt can ask that member by name");
+  }
+
+  #[tokio::test]
   async fn a_second_daemon_of_the_machine_refuses_to_start() {
     let at = place();
     let (local, _daemon) = started(&at, GRACE).await;

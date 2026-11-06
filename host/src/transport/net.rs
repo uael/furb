@@ -320,6 +320,11 @@ impl Tailscale {
     Tailscale { api, access }
   }
 
+  /// The access list that gives each login of the tailnet its role.
+  pub(crate) fn access(&self) -> &Access {
+    &self.access
+  }
+
   /// The addresses of this machine on the tailnet.
   pub async fn addresses(&self) -> Result<Vec<IpAddr>, AccessError> {
     Ok(self.api.asked::<Status>("/localapi/v0/status?peers=false").await?.ips)

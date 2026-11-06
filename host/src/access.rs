@@ -56,6 +56,13 @@ impl Config {
 }
 
 impl Access {
+  /// Each login that the list names, in the order of their names.
+  pub fn logins(&self) -> Vec<&str> {
+    let mut all: Vec<&str> = self.0.keys().map(String::as_str).collect();
+    all.sort_unstable();
+    all
+  }
+
   /// The role of a login, or its refusal when the list does not name it.
   pub fn role(&self, login: &str) -> Result<Role, AccessError> {
     self.0.get(login).copied().ok_or_else(|| AccessError::Unlisted { login: login.to_owned() })
