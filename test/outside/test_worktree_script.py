@@ -92,3 +92,25 @@ def test_fetch_runs_again_when_another_fetch_holds_a_ref_lock(tmp_path: Path) ->
   assert got.returncode == 0
   assert "runs again in 1 s: error: cannot lock ref refs/remotes/origin/main" in got.stderr
   assert (tmp_path / "new").is_dir()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the sh of Git on Windows names a path in a form of its own")
+def test_the_python_of_a_worktree_imports_the_tree_of_that_worktree(tmp_path: Path) -> None:
+  main = clone_with_origin(tmp_path)
+  (main / "Cargo.toml").write_text("", encoding="utf-8")
+  venv = main / ".venv"
+  subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True, env=CLEAN)
+  (main / "src" / "furb").mkdir(parents=True)
+  (main / "src" / "furb" / "__init__.py").write_text('MARK = "main"\n', encoding="utf-8")
+  (next((venv / "lib").glob("python*/site-packages")) / "furb.pth").write_text(f"{main / 'src'}\n", encoding="utf-8")
+  got = run(main, tmp_path / "new", "fresh")
+  assert got.returncode == 0
+  if "no copy on write" in got.stdout:
+    pytest.skip("this file system has no copy on write")
+  (tmp_path / "new" / "src" / "furb").mkdir(parents=True)
+  (tmp_path / "new" / "src" / "furb" / "__init__.py").write_text('MARK = "new"\n', encoding="utf-8")
+  python = tmp_path / "new" / ".venv" / "bin" / "python"
+  seen = subprocess.run(
+    [str(python), "-c", "import furb; print(furb.MARK)"], capture_output=True, text=True, check=True
+  )
+  assert seen.stdout.strip() == "new"

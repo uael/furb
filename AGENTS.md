@@ -305,8 +305,9 @@ fix what your change broke, and report what was broken before.
   to the new commit, so cargo builds only the crates of the workspace again: the `target` of cargo, the `node_modules`
   of bun, the build of the TypeScript package and the cache of the tests of the TUI. Then it runs
   `bun install --offline` and `bun run build`. It sets `core.hooksPath` of the clone to `script/hooks` when no value
-  stands, so that the hooks of each worktree print only what fails. It does not copy `.venv`: run the `uv sync` that it prints, and before
-  that, probe with the `.venv/bin/python` of the main checkout. A first build takes about 6 minutes, against about 35 in
+  stands, so that the hooks of each worktree print only what fails. It copies on write the `.venv` of that checkout too, says again each path
+  of it for the new tree and syncs it with `uv sync` on the warm target, so the python of its hooks imports its own tree: a
+  new worktree takes about 250 s with it, against about 130 s without, on this machine. A first build takes about 6 minutes, against about 35 in
   a worktree of `git worktree add`. Copy on write needs APFS, Btrfs or XFS; on another file system, the script makes a
   plain worktree. Remove a worktree with `git worktree remove --force <path>`, then `git branch -D <branch>`. The
   checkout at the root can stand behind `origin/main`, so read and change code in a worktree.

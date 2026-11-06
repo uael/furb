@@ -90,6 +90,10 @@ step="copy the build"
 # What the python side needs, said at each end of the script.
 python_note() {
   echo "TypeScript work needs no .venv: bun run build there suffices."
+  if [ -x "$path/.venv/bin/python" ]; then
+    echo "$path holds its own .venv, a copy of the one of the build, synced on this tree."
+    return
+  fi
   echo "$path has no .venv. For python work, uv sync there makes it, builds the crate again and takes minutes, and"
   echo "uv run --no-sync before it falls back to the system python, which lacks the packages. Run: (cd $path && uv sync)"
   if [ -x "$main/.venv/bin/python" ]; then
@@ -140,8 +144,7 @@ fi
 rm -f "$path/.worktree-probe"
 
 # The output of cargo, which maturin and napi share, the packages of bun, the build of the TypeScript package, and
-# the cache of the tests of the TUI. The environment of python is not copied: its scripts name the path of the main
-# checkout, and uv sync makes it again on the warm target.
+# the cache of the tests of the TUI.
 for dir in target node_modules bind/typescript/node_modules tui/node_modules bind/typescript/dist .furb/tests; do
   if [ -e "$src/$dir" ] && [ ! -e "$path/$dir" ]; then
     mkdir -p "$(dirname "$path/$dir")"
@@ -156,6 +159,22 @@ done
 # Each member of the workspace builds again in a new path, so its incremental state is of no use.
 if [ -d "$path/target" ]; then
   find "$path/target" -type d -name incremental -prune -exec rm -rf {} +
+fi
+
+# The environment of python is a copy on write of the one of the source, with each path of the source in its text files
+# said again for this tree, so that its python, its scripts and the hooks import this tree and never the source. Its
+# sync then builds the crate of this tree on the warm target, in seconds and not in the minutes of a build from nothing.
+if [ -x "$src/.venv/bin/python" ] && [ ! -e "$path/.venv" ]; then
+  step="copy the environment of python"
+  clone "$src/.venv" "$path/.venv"
+  grep -rIlF -- "$src" "$path/.venv" 2>/dev/null | OLD=$src NEW=$path xargs perl -pi -e 's/\Q$ENV{OLD}\E/$ENV{NEW}/g'
+  if [ -f "$path/pyproject.toml" ] && command -v uv >/dev/null 2>&1; then
+    step="sync the environment of python"
+    if ! (cd "$path" && sh script/build-slot.sh uv sync --locked >/dev/null 2>&1); then
+      echo "uv sync did not end in $path: run it there before you trust a test of python."
+    fi
+  fi
+  step="copy the build"
 fi
 
 # The copied dist and native module are those of the source, whose commit may differ from the base. Link the
