@@ -10,7 +10,11 @@ these issues whole, with its comments, as `gh issue view <n> --repo <repo> --com
 1. In your workspace, run `sh <this folder>/capture.sh <main checkout> $TMPDIR/audit/<key>
    $TMPDIR/audit/tui/records.json`. It checks out origin/main and writes its commit in `sha`, builds through
    `script/build-slot.sh`, and captures the gallery of the demo and the records of the project that the last whole
-   capture pins, each a PNG with the cells of its frame. It writes each step that fails in `fails.txt`.
+   capture pins, each a PNG with the cells of its frame. It also cuts a slice of the newest long life of the project,
+   or the one that the last capture pins at its moment, into a recorded life, and plays on it the actions of an
+   operator at 222x58: the end of the feed, its top expanded, the sidebar on a worker, the agents open, a fold opened,
+   the palette, the refusal of a life open to read, and the feed at 82x32 and 60x24, each a capture named `slice-`.
+   No window opens and no model runs. It writes each step that fails in `fails.txt`.
 2. Keep the rulings that you read beside your capture, as `rulings.md`. When they differ from `$TMPDIR/audit/tui/rulings.md`, or no
    last capture stands, judge each capture: give `diff.py` no last capture.
 3. Run `python3 -I <this folder>/diff.py $TMPDIR/audit/<key> "" <main checkout> $TMPDIR/audit/<key>/head

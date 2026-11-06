@@ -33,7 +33,6 @@ mod rebirth;
 mod serve;
 mod stall;
 pub mod transport;
-pub mod view;
 mod views;
 
 pub use daemon::{END, GRACE, Settings, Tailnet, run, upgrade};

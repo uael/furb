@@ -19,7 +19,7 @@ mod daemon {
     fs::{self, File},
     path::{Path, PathBuf},
     sync::{
-      Arc,
+      Arc, Mutex,
       atomic::{AtomicU32, AtomicUsize, Ordering},
     },
     time::{Duration, Instant},
@@ -28,6 +28,7 @@ mod daemon {
   use furb::{
     Object,
     life::{Answer as Answered, Log, Opening},
+    view::Phase,
   };
   use furb_host::{
     DaemonError, END, Event, GRACE, ProtocolError, STALL, Settings, TransportError,
@@ -38,7 +39,6 @@ mod daemon {
     run,
     transport::{Accepted, Dialer, Identity, Local, Who},
     upgrade,
-    view::Phase,
   };
   use futures::{SinkExt, StreamExt};
   use serde_json::Value;
@@ -145,17 +145,19 @@ mod daemon {
 
   /// A daemon that listens in a folder, served on a task of the test.
   async fn started(at: &Path, grace: Duration) -> (Local, JoinHandle<Result<(), DaemonError>>) {
+    started_with(at, grace, opening(at)).await
+  }
+
+  /// A daemon that listens in a folder with an opening of the test, served on a task of the test.
+  async fn started_with(
+    at: &Path,
+    grace: Duration,
+    opening: Opening,
+  ) -> (Local, JoinHandle<Result<(), DaemonError>>) {
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
-    let settings = Settings {
-      opening: opening(at),
-      grace,
-      end: END,
-      stall: STALL,
-      tailnet: None,
-      door: None,
-      host: None,
-    };
+    let settings =
+      Settings { opening, grace, end: END, stall: STALL, tailnet: None, door: None, host: None };
     let served = local.clone();
     (local, tokio::spawn(async move { run(&served, listener, settings).await }))
   }
@@ -216,7 +218,7 @@ mod daemon {
       let lines = Framed::new(local.dial().await.unwrap(), LinesCodec::new());
       let mut window = Window { lines, next: 0, pushed: VecDeque::new() };
       let name = name.map(str::to_owned);
-      let hello = Verb::Hello(Hello { protocol: PROTOCOL, kind, name });
+      let hello = Verb::Hello(Hello { protocol: PROTOCOL, kind, name, role: None });
       let welcome = window.ask(hello).await;
       assert!(matches!(welcome, Ok(Answer::Welcome { .. })), "{welcome:?}");
       window
@@ -489,6 +491,24 @@ mod daemon {
   }
 
   #[tokio::test]
+  async fn the_log_of_the_daemon_says_each_end_of_a_life_with_its_fault() {
+    let at = place();
+    let lines = Arc::new(Mutex::new(Vec::<String>::new()));
+    let kept = Arc::clone(&lines);
+    let log = Log(Arc::new(move |line: &str| kept.lock().unwrap().push(line.to_owned())));
+    let (local, _daemon) =
+      started_with(&at, SHORT, Opening { log: Some(log), ..opening(&at) }).await;
+    let mut window = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    let said = format!("furb host: the life of {life} ended: with no fault");
+    let start = Instant::now();
+    while !lines.lock().unwrap().contains(&said) {
+      assert!(start.elapsed() < PATIENCE, "{:?}", lines.lock().unwrap());
+      tokio::time::sleep(SHORT).await;
+    }
+  }
+
+  #[tokio::test]
   async fn a_handover_keeps_each_life_its_pins_and_each_window() {
     let at = place();
     let (local, old) = started(&at, SHORT).await;
@@ -527,11 +547,11 @@ mod daemon {
   /// began, then waits until the test drops the sender of the gate.
   fn blocking(
     at: &Path,
-    log: Arc<std::sync::Mutex<Vec<String>>>,
+    log: Arc<Mutex<Vec<String>>>,
   ) -> (Opening, std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>) {
     let (hold, gate) = std::sync::mpsc::channel::<()>();
     let (began, entered) = std::sync::mpsc::channel::<()>();
-    let (gate, began) = (std::sync::Mutex::new(gate), std::sync::Mutex::new(began));
+    let (gate, began) = (Mutex::new(gate), Mutex::new(began));
     let inner = opening(at).answer.expect("the opening of a test has a model");
     let answer = Answered(Arc::new(move |kind, message| {
       began.lock().unwrap().send(()).ok();
@@ -545,7 +565,7 @@ mod daemon {
   #[tokio::test]
   async fn a_handover_gives_up_a_life_that_does_not_end_within_its_bound() {
     let at = place();
-    let log = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let log = Arc::new(Mutex::new(Vec::new()));
     let (blocked, hold, entered) = blocking(&at, Arc::clone(&log));
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
@@ -1049,7 +1069,6 @@ mod daemon {
       tailnet: None,
       door: None,
       host: None,
-      end: END,
     };
     let served = local.clone();
     tokio::spawn(async move { run(&served, listener, settings).await });

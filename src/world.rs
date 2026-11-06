@@ -40,7 +40,7 @@ pub use bash::{bash, program, shell};
 pub use fetch::fetch;
 pub use files::{CONFIG, files};
 pub use log::{log, logged};
-pub use operator::{Asked, SHAPES, Shape, answered, answers, named};
+pub use operator::{Asked, CONSOLE, SHAPES, Shape, answered, answers, named};
 pub(crate) use provider::search::timed;
 pub use provider::{
   Advertised, BACKOFF, Backoff, Hosted, Model, Provider, Retries, Retry, Search, Told, Writes,

@@ -29,11 +29,11 @@ mod kills {
     time::Duration,
   };
 
+  use furb::view::Phase;
   use furb_host::{
     Event,
     protocol::{Answer, Frame, Hello, Kind, PROTOCOL, Request, Verb},
     transport::{Dialer, Local},
-    view::Phase,
   };
   use futures::{SinkExt, StreamExt};
   use serde_json::Value;
@@ -274,7 +274,8 @@ mod kills {
     }
 
     async fn hello(&mut self) {
-      let hello = Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Window, name: None });
+      let hello =
+        Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Window, name: None, role: None });
       assert!(matches!(self.ask(hello).await, Answer::Welcome { .. }));
     }
 
@@ -455,7 +456,8 @@ mod kills {
     for signal in SIGNALS {
       let (yard, lifeline, daemon, _window) = begun().await;
       let mut second = Window::dialed(&yard).await;
-      let hello = Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Window, name: None });
+      let hello =
+        Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Window, name: None, role: None });
       second.said(hello).await;
       daemon.killed(signal).await;
       lifeline.ended().await;

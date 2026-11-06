@@ -36,6 +36,8 @@ pub type Ears = Vec<(String, Box<dyn Ear>)>;
 struct Prepared {
   places: Places,
   extensions: Vec<extension::Extension>,
+  /// The line that tells why each extension that the configs turn on does not play.
+  refused: Vec<String>,
   provider: world::Provider,
   /// Whether the gate reads each word, as [`crate::gate::configured`] says.
   gated: bool,
@@ -191,7 +193,7 @@ impl Opening {
   fn parted(self, prepared: Prepared) -> Result<(Vec<Object>, Ears), Fault> {
     let works = self.works();
     let keeps = self.keeps != Some(false) && works;
-    let Prepared { places, extensions, provider, .. } = prepared;
+    let Prepared { places, extensions, refused, provider, .. } = prepared;
     let (record, store) = match (&self.record, keeps) {
       (Some(path), true) => world::store(path).map(|(held, store)| (held, Some(store)))?,
       (Some(path), false) => (world::kept(path)?, None),
@@ -229,7 +231,7 @@ impl Opening {
     let servers = world::mcp::Settings::of(project, config.clone(), gallery.clone());
     let mut ears = vec![
       ("provider", provider),
-      ("extensions", extension::extensions(extensions, places)),
+      ("extensions", extension::telling(extensions, refused, places)),
       ("skills", lasting(skills(config.clone()), move || skills(config.clone()))),
       (
         "mcp",
@@ -280,9 +282,9 @@ impl Opening {
     }
     let here = Places::here();
     let places = Places { config: self.config.clone().map_or(here.config, PathBuf::from), ..here };
-    let extensions = match self.extensions != Some(false) && works {
+    let (extensions, refused) = match self.extensions != Some(false) && works {
       true => extension::configured(&places, self.directory.as_ref())?,
-      false => Vec::new(),
+      false => (Vec::new(), Vec::new()),
     };
     // The standing gives each extension whose word or life word plays, with the file of a word that is not blank.
     let advertised = extensions
@@ -307,7 +309,7 @@ impl Opening {
       None => self.provider(advertised, actor, roster)?,
     };
     let gated = crate::gate::configured(&places.config, Path::new(&self.directory));
-    Ok(Prepared { places, extensions, provider, gated })
+    Ok(Prepared { places, extensions, refused, provider, gated })
   }
 
   /// The provider: the models of the roster that the catalog makes, which the function of the host answers when it
