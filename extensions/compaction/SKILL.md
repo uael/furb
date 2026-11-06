@@ -3,6 +3,7 @@ name: compaction
 description: Cuts a chain in place to the work that it still needs, with compact(), condense() and compacted().
 metadata:
   furb-word: compaction.py
+  furb-life: fitted()
   furb-interface: compaction.pyi
   furb-default: "true"
   furb-view: tui.ts

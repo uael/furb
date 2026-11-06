@@ -1044,6 +1044,7 @@ mod daemon {
     let settings = Settings {
       opening: opening(&at),
       grace: GRACE,
+      end: END,
       stall: QUIET,
       tailnet: None,
       door: None,
