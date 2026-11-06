@@ -58,6 +58,7 @@ windows-sys = { version = "0.61", features = [
 ] }
 
 [dev-dependencies]
+furb = { path = "..", version = "0.4.2", features = ["test-support"] }
 tokio = { version = "1", features = ["rt", "macros", "time"] }
 
 [[test]]
