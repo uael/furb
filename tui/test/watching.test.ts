@@ -76,7 +76,7 @@ test("the watch keeps its bar over the feed at 80x24, and no act runs at an earl
       await tour(session, 0);
       await session.select(session.engine.root);
       const asks = () => session.at(session.activity).some((act) => act.kind === "prompt" && act.words[2]);
-      while (asks()) session.travel(-1);
+      while (asks()) await session.travel(-1);
       const shown = await frame();
       const rows = shown.split("\n");
       // The bar stands at the top, under the header, whatever the feed shows.

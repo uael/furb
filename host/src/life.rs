@@ -138,8 +138,9 @@ pub enum Command {
   Rail { hidden: Vec<String>, at: Option<u64> },
   /// The acts as they stood just after a moment, each with its meaning then.
   AsOf { at: u64 },
-  /// Each moment at which an act began or ended, in order.
-  Moments,
+  /// Each moment at which an act began or ended, in order, of the life or of the acts of one
+  /// chain.
+  Moments { on: Option<String> },
   /// The end of the life, which replies and then ends the life. A life whose record does not hold
   /// each fact that it said yet, as on a full disk, keeps the end, tells why in a notice, and ends
   /// once the record holds them: the reply comes then.
@@ -681,7 +682,7 @@ async fn commanded(
     }
     Command::Rail { hidden, at } => Ok(Reply::Rail(held.rail(&hidden, at))),
     Command::AsOf { at } => Ok(Reply::Acts(held.as_of(at))),
-    Command::Moments => Ok(Reply::Moments(held.moments())),
+    Command::Moments { on } => Ok(Reply::Moments(held.moments(on.as_deref()))),
     Command::Settings => {
       let settings = configs.get()?.into_iter().map(|one| json!(one));
       Ok(Reply::Values(settings.collect()))

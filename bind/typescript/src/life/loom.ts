@@ -543,26 +543,6 @@ function treeOf(listed: readonly Act[], ids: ReadonlyMap<string, Act>, folds: Re
   return out;
 }
 
-/** The acts of a life as they stood at a moment: each act that began by then, and an act that ended after it as one
- * that runs, with no value and no pause yet. */
-export function asOf(acts: readonly Act[], at: number): Act[] {
-  return acts
-    .filter((act) => act.began <= at)
-    .map((act): Act => {
-      if (act.ended == null || act.ended <= at) return act;
-      // The daemon gives each act as of a moment in the state that the acts then give it; until a window reads it
-      // there, an act that ran then is work that runs, and one that is no work waits on another chain.
-      return {
-        ...act,
-        phase: { phase: "started" },
-        ended: null,
-        pause: null,
-        ...(act.run ? { run: { run: "running" } } : {}),
-        state: WORK.includes(act.kind) ? "runs" : "delegates",
-      };
-    });
-}
-
 /** The prompts that the operator owed at a moment, from the acts as they stood then. */
 export function owedAt(acts: readonly Act[]): { id: string; shape: string; message: string }[] {
   return acts

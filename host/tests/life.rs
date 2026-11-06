@@ -382,7 +382,7 @@ async fn the_life_gives_the_meaning_of_the_acts_that_it_told() {
   let threads = Command::Threads { on: None, at: None, read: None };
   let Reply::Threads(now) = life.send(threads).await.unwrap() else { panic!("the threads") };
   assert_eq!(now.state, State::Asks, "{now:?}");
-  let Reply::Moments(moments) = life.send(Command::Moments).await.unwrap() else {
+  let Reply::Moments(moments) = life.send(Command::Moments { on: None }).await.unwrap() else {
     panic!("the moments")
   };
   let first = *moments.first().expect("a moment");

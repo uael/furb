@@ -893,10 +893,10 @@ impl Meaning {
     meant(&self.held.as_of(moment(at)?))
   }
 
-  /// Each moment at which an act began or ended, in order.
+  /// Each moment at which an act began or ended, in order, of the life or of the acts of one chain.
   #[cfg_attr(feature = "typescript", napi(ts_return_type = "number[]"))]
-  pub fn moments(&self) -> Result<Value, Fault> {
-    meant(&self.held.moments())
+  pub fn moments(&self, on: Option<String>) -> Result<Value, Fault> {
+    meant(&self.held.moments(on.as_deref()))
   }
 }
 

@@ -326,6 +326,9 @@ pub enum Verb {
   /// Each moment of a life at which an act began or ended, in order.
   Moments {
     life: String,
+    /// The chain whose acts give the moments; none gives those of the whole life.
+    #[serde(default)]
+    on: Option<String>,
   },
   /// The turn that the peer gave for a request of a model of a life that it answers, written as
   /// the record writes a value, or why it gives none.

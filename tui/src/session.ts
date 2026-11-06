@@ -22,7 +22,6 @@ import {
   type ActIndex,
   type Ask,
   aimed,
-  asOf,
   beside,
   type ChainAside,
   type ChainThread,
@@ -32,7 +31,6 @@ import {
   failed,
   isDone,
   isPaused,
-  momentsOf,
   type NoteRun,
   onThread,
   operated,
@@ -1352,7 +1350,9 @@ export class Session extends EventEmitter {
   ladderAt(chain: string, moment: number): ActIndex {
     const kept = this.frozen;
     if (kept?.chain === chain && kept.moment === moment && kept.of === this.acts) return kept.index;
-    const index = ladderOf(indexOf(asOf(this.acts, moment)), chain);
+    const then = this.actsThen(moment);
+    if (!then) return ladderOf(indexOf([]), chain);
+    const index = ladderOf(indexOf(then), chain);
     this.frozen = { chain, moment, of: this.acts, index };
     return index;
   }
@@ -1852,11 +1852,55 @@ export class Session extends EventEmitter {
   at(acts: ActRow[]): ActRow[] {
     const moment = this.moment;
     if (moment === undefined) return acts;
-    return asOf(acts, moment);
+    const then = this.actsThen(moment) ?? [];
+    if (acts === this.acts) return then;
+    const ids = new Set(acts.map((act) => act.id));
+    return then.filter((act) => ids.has(act.id));
   }
-  /** Move the moment that the feed shows a count of steps back or on, over the moments of the selected chain or over
-   * the moments given: a step is a moment when an act began or ended. A step on to the last moment returns to now. */
-  travel(by: number, moments = momentsOf(this.actsOn(this.selected))): void {
+  /** The acts of the session as the crate gave them just after a moment, each with what its row of now knows besides, or
+   * none until the crate answers. A read of acts that changed since is asked again, and shows until the new one comes. */
+  private actsThen(moment: number): ActRow[] | undefined {
+    const read = this.thenRead.get(moment);
+    if (read?.of !== this.acts) void this.readThen(moment).catch(this.threadFault);
+    return read?.acts;
+  }
+  /** The crate gives the acts of the life as they stood just after a moment, which the session holds while they stand. */
+  private readThen(moment: number): Promise<void> {
+    const asking = this.thenAsking.get(moment);
+    if (asking) return asking;
+    const of = this.acts;
+    const read = (async () => {
+      try {
+        const got = await this.host.asOf(moment);
+        const rows = this.indexed().ids;
+        if (this.thenRead.size > 8) this.thenRead.clear();
+        // The session holds no act that it does not show, as a run, so it takes of the crate only the acts that it holds.
+        const acts = got.flatMap((act): ActRow[] => {
+          const row = rows.get(act.id);
+          return row ? [{ ...row, ...act }] : [];
+        });
+        this.thenRead.set(moment, { of, acts });
+        this.emit("change");
+      } finally {
+        this.thenAsking.delete(moment);
+      }
+    })();
+    this.thenAsking.set(moment, read);
+    return read;
+  }
+  /** Show the acts as they stood just after a moment, once the crate gave them, or as they stand now. */
+  async showAt(moment: number | undefined): Promise<void> {
+    if (moment !== undefined) await this.readThen(moment);
+    this.moment = moment;
+    this.emit("change");
+  }
+  private readonly thenRead = new Map<number, { of: readonly ActRow[]; acts: ActRow[] }>();
+  private readonly thenAsking = new Map<number, Promise<void>>();
+  /** Move the moment that the feed shows a count of steps back or on, over the moments of the selected chain or of
+   * the whole life, as the crate gives them: a step is a moment when an act began or ended. A step on to the last
+   * moment returns to now. The moment shows once the crate gave the acts as they stood then. */
+  async travel(by: number, life = false): Promise<void> {
+    const moments = await this.host.moments(life ? undefined : this.selected);
     const last = moments.at(-1);
     if (last === undefined) return;
     const at = this.moment ?? last;
@@ -1864,7 +1908,9 @@ export class Session extends EventEmitter {
     const found = moments.findIndex((one) => one >= at);
     const place = found < 0 ? moments.length : found;
     const to = Math.max(0, (by > 0 && moments[place] !== at ? place - 1 : place) + by);
-    this.moment = to >= moments.length - 1 ? undefined : moments[to];
+    const moment = to >= moments.length - 1 ? undefined : moments[to];
+    if (moment !== undefined) await this.readThen(moment);
+    this.moment = moment;
     this.emit("change");
   }
   /** A new branch of the selected chain at the moment that the feed shows, which the session selects: it reads the

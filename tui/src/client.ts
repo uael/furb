@@ -920,6 +920,18 @@ export class RemoteLife extends EventEmitter {
     if (got.answer !== "rail") throw new Error(`The daemon gave ${got.answer}, and no threads.`);
     return got.data;
   }
+  /** The acts of the life as they stood just after a moment, as the crate folds them in the daemon. */
+  async asOf(at: number): Promise<Act[]> {
+    const got = await this.verb({ verb: "as_of", life: this.record, at });
+    if (got.answer !== "acts") throw new Error(`The daemon gave ${got.answer}, and no acts.`);
+    return got.data;
+  }
+  /** Each moment at which an act of the life, or of one chain, began or ended, in order. */
+  async moments(on?: string): Promise<number[]> {
+    const got = await this.verb({ verb: "moments", life: this.record, on: on ?? null });
+    if (got.answer !== "moments") throw new Error(`The daemon gave ${got.answer}, and no moments.`);
+    return got.data;
+  }
   async pending(): Promise<Map<string, string>> {
     const got = valued(await this.verb({ verb: "pending", life: this.record })) as [string, string][];
     return new Map(got);

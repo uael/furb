@@ -453,7 +453,7 @@ fn routed(verb: Verb) -> Routed {
     Verb::Threads { life, on, at, read } => (life, Command::Threads { on, at, read }),
     Verb::Rail { life, hidden, at } => (life, Command::Rail { hidden, at }),
     Verb::AsOf { life, at } => (life, Command::AsOf { at }),
-    Verb::Moments { life } => (life, Command::Moments),
+    Verb::Moments { life, on } => (life, Command::Moments { on }),
     other => return Routed::Daemon(other),
   };
   Routed::Life(life, command)

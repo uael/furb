@@ -138,7 +138,7 @@ mod protocol {
       Verb::Desk { life: life(), notices: vec![id()] },
       Verb::Threads { life: life(), on: on(), at: Some(3), read: Some(2) },
       Verb::AsOf { life: life(), at: 3 },
-      Verb::Moments { life: life() },
+      Verb::Moments { life: life(), on: None },
       Verb::Answered {
         life: life(),
         ask: 1,

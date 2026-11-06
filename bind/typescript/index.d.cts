@@ -210,8 +210,8 @@ export declare class Meaning {
   rail(hidden?: Array<string> | undefined | null, at?: number | undefined | null): Array<import("./dist/protocol.js").ThreadNode>
   /** The acts as they stood just after a moment. */
   asOf(at: number): Array<import("./dist/protocol.js").Act>
-  /** Each moment at which an act began or ended, in order. */
-  moments(): number[]
+  /** Each moment at which an act began or ended, in order, of the life or of the acts of one chain. */
+  moments(on?: string | undefined | null): number[]
 }
 
 /**

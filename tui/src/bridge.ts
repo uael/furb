@@ -172,6 +172,14 @@ class ReadLife extends EventEmitter {
   async threads(on: string, at?: number, read?: number): Promise<Threads> {
     return this.reader.meaning.threads(on, at, read);
   }
+  /** The acts of the record as they stood just after a moment, as the crate folds them. */
+  async asOf(at: number): Promise<Act[]> {
+    return this.reader.meaning.asOf(at);
+  }
+  /** Each moment at which an act of the record, or of one chain, began or ended, in order. */
+  async moments(on?: string): Promise<number[]> {
+    return this.reader.meaning.moments(on);
+  }
   /** The threads of every chain of the record but those that `hidden` names, as one tree, as the crate folds them. */
   async rail(hidden: string[], at?: number): Promise<ThreadNode[]> {
     return this.reader.meaning.rail(hidden, at);
@@ -914,6 +922,14 @@ export class HostView extends EventEmitter {
    * the threads, as the crate folds them, now or as they stood just after a moment. */
   async rail(hidden: string[], at?: number): Promise<ThreadNode[]> {
     return await this.life.rail(hidden, at);
+  }
+  /** The acts of the life as they stood just after a moment, as the crate folds them. */
+  async asOf(at: number): Promise<Act[]> {
+    return await this.life.asOf(at);
+  }
+  /** Each moment at which an act of the life, or of one chain, began or ended, in order. */
+  async moments(on?: string): Promise<number[]> {
+    return await this.life.moments(on);
   }
   async act(id: string): Promise<Act | undefined> {
     if (!(this.life instanceof ReadLife)) return this.life.acts.get(id);

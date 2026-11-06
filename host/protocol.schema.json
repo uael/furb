@@ -1114,6 +1114,14 @@
             "life": {
               "type": "string"
             },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "The chain whose acts give the moments; none gives those of the whole life.",
+              "default": null
+            },
             "verb": {
               "type": "string",
               "const": "moments"

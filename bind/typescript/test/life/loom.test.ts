@@ -3,7 +3,6 @@ import type { Act, Measure } from "../../src/life/acts.ts";
 import { isDone, outcomeOf } from "../../src/life/acts.ts";
 import { thread } from "../../src/life/ladder.ts";
 import {
-  asOf,
   commandDoing,
   doingOf,
   duration,
@@ -410,7 +409,7 @@ test("a board read from the chains that a host names as touched gives the rows a
   same();
 });
 
-test("the acts as they stood at a moment hold what began by then, and an act that ended later runs, with no value yet", () => {
+test("the moments of the acts are each start and end, in order, and a prompt that is not done is owed", () => {
   const acts = [
     act("chain1", "chain", "", "operator", 1),
     act("prompt1", "prompt", "chain1", "rung1", 2, 9, {
@@ -424,17 +423,11 @@ test("the acts as they stood at a moment hold what began by then, and an act tha
     act("read1", "read", "chain1", "rung2", 7, 7),
   ];
   expect(momentsOf(acts)).toEqual([1, 2, 3, 4, 5, 7, 8, 9]);
-  const then = asOf(acts, 5);
-  expect(then.map((one) => [one.id, isDone(one)])).toEqual([
-    ["chain1", false],
-    ["prompt1", false],
-    ["rung2", true],
-    ["bash1", false],
-  ]);
-  expect(outcomeOf(then.find((one) => one.id === "prompt1"))).toBeNull();
-  expect(outcomeOf(then.find((one) => one.id === "bash1"))).toBeNull();
-  expect(owedAt(then)).toEqual([{ id: "prompt1", shape: "str", message: "Which?" }]);
-  expect(owedAt(asOf(acts, 9))).toEqual([]);
+  expect(owedAt(acts)).toEqual([]);
+  const asking = act("prompt2", "prompt", "chain1", "rung1", 10, undefined, {
+    words: ["str", "Why?", "operator"],
+  });
+  expect(owedAt([...acts, asking])).toEqual([{ id: "prompt2", shape: "str", message: "Why?" }]);
 });
 
 test("a chain that asks the operator says its first question now, and counts the others", () => {

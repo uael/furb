@@ -247,6 +247,10 @@ export type Request1 =
     }
   | {
       life: string;
+      /**
+       * The chain whose acts give the moments; none gives those of the whole life.
+       */
+      on?: string | null;
       verb: "moments";
     }
   | {
