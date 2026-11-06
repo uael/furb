@@ -816,7 +816,7 @@ fn measure_how_long_a_life_opens_from_its_checkpoint_and_by_a_replay() {
 #[test]
 fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_prompt_of_each_chain() {
   let at = place("checkpoint");
-  let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0)\nclose(f'round {rounds}')";
+  let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0, __name__)\nclose(f'round {rounds}')";
   let mut first = scripted(&at, &[ran]).boot::<String>([]).unwrap().0;
   let word = "work = chain('work')\nran = await bash('echo one')\nqueue = [ran]\nSIZE = 6\ndef f():\n  return SIZE\n\
               waiting = prompt(str, 'Wait.', on=work)\nawait wait(0.3, __name__)\nclose(str(waiting))";
@@ -866,7 +866,7 @@ fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_promp
 #[test]
 fn a_checkpoint_holds_data_alone_and_a_later_engine_seeds_a_life_from_it_with_no_act_run_again() {
   let at = place("checkpoint-data");
-  let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0)\nclose('late')";
+  let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0, __name__)\nclose('late')";
   let mut first = scripted(&at, &[ran]).boot::<String>([]).unwrap().0;
   let word = "work = chain('work')\nshell = bash('echo one')\nawait shell\nqueue = [shell]\nSIZE = 6\n\
               def f():\n  return SIZE\nwaiting = prompt(str, 'Wait.', on=work)\nawait wait(0.3, __name__)\nclose(str(waiting))";
@@ -956,8 +956,7 @@ fn a_checkpoint_of_a_later_life_of_a_record_opens_with_no_drift_and_seeds_the_ro
 }
 
 /// The word of the first life of a record whose module, chain and open prompt a later life holds.
-const WAITED: &str =
-  "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0)\nclose('late')";
+const WAITED: &str = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0, __name__)\nclose('late')";
 
 /// A life on a record that holds a value, a definition, a chain and a prompt open on it, which ends
 /// with its checkpoint, and the name of that prompt.
@@ -1131,7 +1130,7 @@ fn a_checkpoint_of_the_form_before_its_schema_opens_on_this_build() {
 #[test]
 fn a_later_life_of_the_engine_that_wrote_a_checkpoint_boots_on_it_and_on_the_tail_alone() {
   let at = place("checkpoint-live");
-  let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0)\nclose(f'round {rounds}')";
+  let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0, __name__)\nclose(f'round {rounds}')";
   let mut first = scripted(&at, &[ran]).boot::<String>([]).unwrap().0;
   closed(&mut first, "await bash('echo kept')\nclose(None)");
   let word = "work = chain('work')\nSIZE = 6\ndef f():\n  return SIZE\nwaiting = prompt(str, 'Wait.', on=work)\n\
@@ -1323,7 +1322,7 @@ fn a_word_that_ran_at_a_checkpoint_is_cut_with_the_prompt_that_it_awaited() {
 fn a_record_that_another_engine_went_on_with_after_a_checkpoint_replays_its_tail_to_the_exact_state_at_its_tip()
  {
   let at = place("crossed");
-  let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0)\nclose(f'round {rounds}')";
+  let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0, __name__)\nclose(f'round {rounds}')";
   let mut first = scripted(&at, &[ran]).boot::<String>([]).unwrap().0;
   let word = "work = chain('work')\nqueue = [1]\nSIZE = 6\ndef f():\n  return SIZE\n\
               waiting = prompt(str, 'Wait.', on=work)\nawait wait(0.3, __name__)\nclose(str(waiting))";

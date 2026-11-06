@@ -397,7 +397,7 @@ impl<'a> Reader<'a> {
       gates: HashMap::new(),
       runs: HashMap::new(),
       gated: HashSet::new(),
-      whole: false,
+      asks_kept: false,
     }
   }
 }
@@ -440,7 +440,7 @@ struct Reader<'a> {
   /// Whether the segment that the reader reads keeps the question of each act that the life made,
   /// as its fact made
   /// says by the minor of its schema.
-  whole: bool,
+  asks_kept: bool,
 }
 
 impl Reader<'_> {
@@ -453,16 +453,18 @@ impl Reader<'_> {
     // The fact stands after the facts that name it, and before those that it makes the reader say.
     self.flush();
     match kind {
-      "rung" if fact.question() && self.whole && named(by, "prompt") => {
+      "rung" if fact.question() && self.asks_kept && named(by, "prompt") => {
         if let Some(last) = self.rungs.insert(by.to_owned(), about.to_owned()) {
           self.end(&last, Object::none());
         }
       }
-      "rung" if fact.question() && !self.whole && !text(fact, 1).is_empty() => {
+      "rung" if fact.question() && !self.asks_kept && !text(fact, 1).is_empty() => {
         self.words.insert(about.to_owned(), text(fact, 1));
         self.rungs.insert(about.to_owned(), about.to_owned());
       }
-      MADE => self.whole = fact.word(2).and_then(Schema::read).is_some_and(|one| one.minor >= 1),
+      MADE => {
+        self.asks_kept = fact.word(2).and_then(Schema::read).is_some_and(|one| one.minor >= 1);
+      }
       "run" if fact.question() => {
         self.runs.insert(text(fact, 1), about.to_owned());
       }
@@ -516,7 +518,7 @@ impl Reader<'_> {
   /// A question: the chain and the rung that it names when the reader holds neither, then its own place.
   fn asked(&mut self, fact: &Fact) {
     let (kind, about, by, on) = (fact.kind(), fact.about(), fact.by(), fact.on());
-    if !self.whole && kind != "chain" && named(on, "chain") && !self.scopes.contains_key(on) {
+    if !self.asks_kept && kind != "chain" && named(on, "chain") && !self.scopes.contains_key(on) {
       let maker = self.makers.get(on).cloned().unwrap_or_else(|| "operator".to_owned());
       let under =
         self.scopes.get(&maker).or_else(|| self.homes.get(&maker)).cloned().unwrap_or_default();
@@ -525,10 +527,10 @@ impl Reader<'_> {
       self.scopes.insert(on.to_owned(), on.to_owned());
     }
     let chain = self.scope(on);
-    if !self.whole && kind != "prompt" && named(by, "rung") && !self.scopes.contains_key(by) {
+    if !self.asks_kept && kind != "prompt" && named(by, "rung") && !self.scopes.contains_key(by) {
       self.rung(by, &chain);
     }
-    if !self.whole && named(by, "rung") && kind != "reply" {
+    if !self.asks_kept && named(by, "rung") && kind != "reply" {
       self.ran(by);
     }
     let scope = if kind == "chain" { about.to_owned() } else { chain.clone() };
@@ -598,7 +600,7 @@ impl Reader<'_> {
       .map(|one| one.as_str().map_or_else(|| one.py_repr(), str::to_owned))
       .collect();
     if found.is_empty() {
-      if !self.whole {
+      if !self.asks_kept {
         self.ran(&rung);
       }
       return;
