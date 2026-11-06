@@ -117,7 +117,9 @@ def test_a_fault_of_the_checker_raises_out_of_the_ear_of_the_gate() -> None:
   names: dict[str, object] = {
     "program": lambda _: {},
     "question": lambda _: True,
-    "transcript": lambda _: [],
+    "transcript": lambda *_: [],
+    "get": lambda _: None,
+    "prompted": lambda _: False,
     "Refused": Refused,
   }
   ear = sheet.gating(names, checked)

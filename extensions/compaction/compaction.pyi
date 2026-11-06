@@ -35,6 +35,7 @@ def choice(to: str = "", on: str = "") -> Act:
   It lists of a step only the last LISTED acts that it made, and says how many it left out.
   The prompt ends with the one call that answers, close(([<ids>], <summary>)), with ids taken from the heads that it lists.
   When the model of choice writes 4 words on its chain and closes none, the prompt ends refused, so no chooser loops.
+  When the words of the model of choice make nothing new, its chain asks it no more, and the prompt ends refused.
   """
 
 async def chosen(to: str = "", on: str = "") -> Filter:

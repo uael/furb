@@ -14,7 +14,9 @@ pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="the script runs
 
 
 def env(tmp: Path, **more: str) -> dict[str, str]:
-  kept = {n: v for n, v in os.environ.items() if not n.startswith(("FURB_BUILD_", "CARGO_BUILD_JOBS"))}
+  kept = {
+    n: v for n, v in os.environ.items() if not n.startswith(("FURB_BUILD_", "CARGO_BUILD_JOBS", "CARGO_INCREMENTAL"))
+  }
   return {**kept, "FURB_BUILD_DIR": str(tmp / "slots"), "FURB_BUILD_POLL": "0.05", **more}
 
 
@@ -38,6 +40,15 @@ def test_cargo_jobs_stay_at_four_or_the_lower_cap_of_the_caller(tmp_path: Path, 
   more = {} if given is None else {"CARGO_BUILD_JOBS": given}
   got = run(tmp_path, "sh", "-c", "echo $CARGO_BUILD_JOBS; exit 7", **more)
   assert (got.returncode, got.stdout) == (7, seen + "\n")
+
+
+@pytest.mark.parametrize(("given", "seen"), [(None, "0"), ("1", "1")])
+def test_a_build_keeps_no_incremental_state_unless_its_caller_asks(
+  tmp_path: Path, given: str | None, seen: str
+) -> None:
+  more = {} if given is None else {"CARGO_INCREMENTAL": given}
+  got = run(tmp_path, "sh", "-c", "echo $CARGO_INCREMENTAL", **more)
+  assert got.stdout == seen + "\n"
 
 
 def test_each_slot_goes_back_when_its_command_ends(tmp_path: Path) -> None:

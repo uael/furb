@@ -146,13 +146,16 @@ def choice(to: str = "", on: str = "") -> Act:
 
   def ear(id):
     yield "started", id
-    replies = 0
+    replies, maker = 0, get(asked)[2]
     while not over(asked):
-      match (yield {id, side, asked}):
+      match (yield {id, side, asked, maker}):
         case ("done", about, _, _) if question(("reply", about)) and scope(about) == side:
           replies += 1
           if replies >= bound and not over(asked):
             close(Refused(f"{asked}: the model of choice wrote {replies} words on {side} and closed none"), asked)
+        # The chain of choice asks the prompt no more after words that made nothing new, so it ends refused.
+        case ("tell", _, _, [head, *_]) if head.startswith(f"#{asked} asked no more") and not over(asked):
+          close(Refused(f"{asked}: the model of choice wrote {replies} words on {side} that made nothing new"), asked)
     yield "done", id, None
 
   act("bounded", side, controlled(ear))
