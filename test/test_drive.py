@@ -6,7 +6,7 @@ import pytest
 
 from conftest import born, keeping, said, settle
 from furb import engine
-from furb.engine import OPERATOR, Refused
+from furb.engine import Refused
 
 
 def ends(mark: list[tuple]) -> Generator[tuple | None, tuple | None]:
@@ -43,32 +43,42 @@ async def test_one_that_returns_is_over_and_lives_no_more() -> None:
   assert len(mark) == 1 and len(said(log, "bash")) == 2
 
 
-async def test_one_that_raises_while_it_hears_is_broken_the_same_way() -> None:
-  """One that raises while it hears is broken the same way: the next fact it is given finds it over, and what went wrong goes to the one that spoke."""
+async def test_one_that_raises_while_it_hears_is_dropped_at_once_and_the_one_that_spoke_goes_on() -> None:
+  """One that raises while it hears is dropped at once, and the one that spoke goes on: the engine says the done of the act it is the ear of, with a refusal that names it and what it raised, or the fact dropped that names them when no open act is its own, so a replay that gives it the same facts says the same."""
   sand, log, root = born()
   heard: list[tuple] = []
   engine.drive(keeping(heard), "before")
   engine.drive(breaks(), "broken")
-  with pytest.raises(ValueError, match="boom"):
-    engine.bash("echo hi", on=root)
-  with pytest.raises(Refused, match="broken hears"):
-    engine.drive(keeping([]), "broken")
-  engine.bash("echo again", on=root)
+  engine.bash("echo hi", on=root)
+  (drop,) = [a for a in log if a[0] == "dropped"]
+  assert drop[1:3] == ("broken", "broken") and str(drop[3]) == "broken raised ValueError('boom')"
   after: list[tuple] = []
   engine.drive(keeping(after), "broken")
   engine.bash("echo last", on=root)
-  assert len(said(log, "bash")) == 3
-  assert said(heard, "bash") == said(log, "bash") and said(after, "bash") == said(log, "bash")[2:]
-  assert [e[0] for e in sand.record if e[0][0] == "bash"] == said(log, "bash")
+  assert said(heard, "bash") == said(log, "bash") and said(after, "bash") == said(log, "bash")[1:]
+
+  def touchy(id: str) -> Generator[tuple | None, tuple | None]:
+    yield "started", id
+    yield
+    raise TypeError("touchy")
+
+  owned = engine.act("touchy", root, touchy)
   sand.files["/w/a.txt"] = "one\n"
-  engine.drive(breaks(), "reader")
-  with pytest.raises(ValueError, match="boom"):
-    engine.read("a.txt", on=root)
   assert engine.read("a.txt", on=root).content == "one\n"
-  assert [e[0][:3] for e in sand.record if e[0][0] == "read"] == [
-    ("read", "read1", OPERATOR),
-    ("read", "read2", OPERATOR),
-  ]
+  got = engine.peek(owned)
+  assert isinstance(got, Refused) and str(got) == f"{owned} raised TypeError('touchy')"
+  assert [a for a in log if a[0] == "dropped"] == [drop]
+
+  def shut(id: str) -> Generator[tuple | None, tuple | None]:
+    yield "started", id
+    yield
+    engine.close(7, id)
+
+  closed = engine.act("shut", root, shut)
+  engine.read("a.txt", on=root)
+  # monty knows no CancelledError, so there the close ends the act with the refusal of that fault.
+  assert engine.peek(closed) == 7 or "CancelledError is no class" in str(engine.peek(closed))
+  assert [a for a in log if a[0] == "dropped"] == [drop]
 
 
 async def test_a_generator_brought_to_life_under_a_name_and_nothing_more() -> None:
