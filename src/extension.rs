@@ -363,7 +363,8 @@ pub(crate) fn shipped(name: &str) -> Option<Vec<(String, &'static str)>> {
   })
 }
 
-/// The name of each official extension, in the order a life runs them, and whether it plays by default.
+/// The name of each official extension, in the order a life runs them, and whether it plays by
+/// default.
 fn names() -> Vec<(String, bool)> {
   let named = OFFICIAL.iter().map(|one| frontmatter(one.0)).filter_map(|front| {
     let on = front.meta(DEFAULT) == Some("true");
