@@ -41,6 +41,25 @@ fn main() {
     a_rebirth_waits_for_each_word_that_runs().await;
     a_rebirth_waits_for_each_act_with_an_ear_and_cuts_nothing().await;
   });
+  the_check_of_a_held_rebirth_fails_on_an_early_rebirth_and_passes_a_later_one();
+}
+
+/// How many rebirths the log tells from a place on: the interval where live work must hold the
+/// rebirth, which the test marks before the workload that it checks.
+fn rebirths_from(log: &[Logged], mark: usize) -> usize {
+  log[mark..].iter().filter(|one| matches!(*one.1, Event::Reborn(_))).count()
+}
+
+/// The check of the interval fails when a rebirth comes inside it, early or late, and passes when
+/// the only rebirth comes after it.
+fn the_check_of_a_held_rebirth_fails_on_an_early_rebirth_and_passes_a_later_one() {
+  let at = |seq: Seq, event: Event| -> Logged { (seq, Arc::new(event)) };
+  let told = || Event::Notice("a fact".to_owned());
+  let early = [at(0, told()), at(1, Event::Reborn(None)), at(2, told()), at(3, told())];
+  assert_eq!(rebirths_from(&early, 1), 1, "an early rebirth inside the interval is seen");
+  let late = [at(0, told()), at(1, told()), at(2, told()), at(3, Event::Reborn(None))];
+  assert_eq!(rebirths_from(&late, 1), 1, "a rebirth at the end of the interval is seen");
+  assert_eq!(rebirths_from(&late, 4), 0, "a rebirth after the interval is allowed");
 }
 
 /// A directory of the test, empty, under a name of its own.
@@ -256,16 +275,18 @@ async fn a_rebirth_waits_for_each_act_with_an_ear_and_cuts_nothing() {
   let life = Life::spawn(opening(&at)).expect("the life has a thread");
   let mut events = Box::pin(life.events(0));
   let mut log = Vec::new();
-  ran(&life, LASTING).await;
+  let lasting = ran(&life, LASTING).await;
+  log.extend(until(&mut events, ran_out(&lasting)).await);
   let held = bound(&life, "held_id").await;
   ran(&life, "late = prompt(str, 'Name a fruit.', to=OPERATOR)").await;
   let late = bound(&life, "late").await;
   let stuck = ran(&life, "kept = await wait(3600, late)").await;
+  let mark = log.len();
   let busy = ran(&life, "for i in range(6000):\n  chance()").await;
   log.extend(until(&mut events, ran_out(&busy)).await);
-  let since = log.iter().rposition(|one| matches!(*one.1, Event::Reborn(_))).unwrap_or(0);
-  assert!(
-    !log[since + 1..].iter().any(|one| matches!(*one.1, Event::Reborn(_))),
+  assert_eq!(
+    rebirths_from(&log, mark),
+    0,
     "a word that runs and an act with an ear hold the rebirth past twice the tail"
   );
   let answered = life.send(Command::Answer { id: late.clone(), line: "pear".to_owned() }).await;

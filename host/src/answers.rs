@@ -4,7 +4,9 @@
 //! The peer that opened the life with `answers` owns each request, by its connection: no other
 //! peer gives a turn or a write for it. Once that peer is gone, the next peer that opens the life
 //! with `answers` answers each later request in its place, and an open with `answers` is refused
-//! while it lives. A request leaves the broker when its turn comes, when
+//! while it lives. Each request of the peer that is gone fails at that change, so the new peer
+//! never speaks for a request that it was not asked. A request leaves the broker when its turn
+//! comes, when
 //! the life drops it, or when the connection of its peer ends; a turn or a write that comes after
 //! is refused, and the peer is not told that the life dropped the request.
 
@@ -48,13 +50,20 @@ impl Answerer {
   }
 
   /// The peer of an outbox as the one that answers, in the place of a peer that is gone, or the
-  /// refusal that the one that answers lives.
+  /// refusal that the one that answers lives. Each request of the peer that is gone fails in the
+  /// same step, so no later peer gives a turn or a write for it.
   pub(crate) fn taken_by(&self, outbox: &Outbox) -> Result<(), ProtocolError> {
     let mut waiting = self.lock();
-    if !waiting.outbox.same_channel(outbox) && !waiting.outbox.is_closed() {
+    if waiting.outbox.same_channel(outbox) {
+      return Ok(());
+    }
+    if !waiting.outbox.is_closed() {
       return Err(ProtocolError::Answering { life: self.life.clone() });
     }
     waiting.outbox = outbox.clone();
+    for (_, (reply, _)) in waiting.asks.drain() {
+      reply.send(Err(GONE.to_owned())).ok();
+    }
     Ok(())
   }
 
@@ -232,6 +241,23 @@ mod tests {
     assert_eq!(waiting.await, Err(GONE.to_owned()));
     assert!(answerer.lock().asks.is_empty());
     assert_eq!(answerer.hosted()(json!({}), counted().0).await, Err(GONE.to_owned()));
+    assert!(answerer.lock().asks.is_empty());
+  }
+
+  #[tokio::test]
+  async fn a_peer_that_takes_the_place_of_one_that_is_gone_cannot_speak_for_its_requests() {
+    let (gone, mut pushed) = mpsc::unbounded_channel();
+    let answerer = Answerer::new(LIFE.to_owned(), gone);
+    let (told, count) = counted();
+    let waiting = answerer.hosted()(json!({}), told);
+    let ask = asked(pushed.recv().await);
+    drop(pushed);
+    let (next, _heard) = mpsc::unbounded_channel();
+    assert_eq!(answerer.taken_by(&next), Ok(()));
+    assert_eq!(answerer.wrote(&next, ask, "taken", ""), unasked(ask));
+    assert_eq!(answerer.answered(&next, ask, Err("taken".to_owned())), unasked(ask));
+    assert_eq!(count.load(Ordering::SeqCst), 0);
+    assert_eq!(waiting.await, Err(GONE.to_owned()));
     assert!(answerer.lock().asks.is_empty());
   }
 
