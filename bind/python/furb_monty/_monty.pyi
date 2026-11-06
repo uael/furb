@@ -125,6 +125,7 @@ class Opening(TypedDict):
   record: NotRequired[str | None]
   keeps: NotRequired[bool | None]
   inspecting: NotRequired[bool | None]
+  whole: NotRequired[bool | None]
   extensions: NotRequired[bool | None]
   config: NotRequired[str | None]
   actor: NotRequired[str | None]
