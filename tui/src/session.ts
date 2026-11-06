@@ -1993,17 +1993,25 @@ export class Session extends EventEmitter {
       const pending = this.operatorPrompt;
       if (pending) await this.answer(pending, input);
       else {
-        await this.attachFiles(input);
-        this.redo = [];
+        // The message goes where the operator sent it, whatever chain he shows while the reads and the prompt answer.
+        const { selected: chain, shape } = this;
         const thread = this.target;
+        const images = [...(this.images[chain] ?? [])];
+        await this.attachFiles(input, chain);
+        this.redo = [];
         this.fresh = false;
         this.pinned = undefined;
         const id = thread
-          ? await this.engine.prompt(this.lineShape(thread), { message: this.withImages(input), on: thread })
-          : await this.engine.prompt(this.shape, { message: this.withImages(input), on: this.selected });
+          ? await this.engine.prompt(this.lineShape(thread), {
+              message: this.withImages(input, images),
+              on: thread,
+            })
+          : await this.engine.prompt(shape, { message: this.withImages(input, images), on: chain });
         if (thread) this.notice = `Your message went to the thread ${thread}.`;
         this.sentTo.set(id, thread);
-        delete this.images[this.selected];
+        const left = (this.images[chain] ?? []).filter((one) => !images.includes(one));
+        if (left.length) this.images[chain] = left;
+        else delete this.images[chain];
         this.save();
         this.track(id);
       }

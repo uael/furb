@@ -170,6 +170,60 @@ test("a follow-up goes to the chain that the operator sent it on, with its image
   }
 });
 
+test("a message goes to the chain that the operator sent it on, with its images, whatever chain he shows meanwhile", async () => {
+  const session = await demoSession();
+  const { engine } = session;
+  const prompt = engine.prompt;
+  try {
+    const a = session.selected;
+    const b = await engine.chain({ label: "Other" });
+    const image = (name: string) =>
+      ({ name, uri: `furb-image://${name}`, mime: "image/png", size: 1 }) as never;
+    const asked: { message?: string; on?: string }[] = [];
+    for (const at of ["read", "prompt"] as const) {
+      let open = () => {};
+      const gate = new Promise<void>((resolve) => {
+        open = resolve;
+      });
+      // The read of the directory and the prompt answer when the test lets them, after a change of chain.
+      Object.assign(session, {
+        engine: new Proxy(engine, {
+          get: (target, key) => {
+            if (key === "cwd" && at === "read")
+              return async (...args: Parameters<typeof engine.cwd>) => {
+                await gate;
+                return target.cwd(...args);
+              };
+            if (key === "prompt")
+              return async (...args: Parameters<typeof engine.prompt>) => {
+                asked.push(args[1] ?? {});
+                if (at === "prompt") await gate;
+                return "prompt0";
+              };
+            return Reflect.get(target, key);
+          },
+        }),
+      });
+      await session.select(a);
+      session.aim();
+      session.images = { [a]: [image(`a-${at}`)], [b]: [image(`b-${at}`)] };
+      const sent = session.submit(`Sent on the first chain, ${at}`);
+      await session.select(b);
+      open();
+      await sent;
+      expect(asked.at(-1)?.on).toBe(a);
+      expect(asked.at(-1)?.message).toContain(`a-${at}`);
+      expect(asked.at(-1)?.message).not.toContain(`b-${at}`);
+      expect(session.images[a]).toBeUndefined();
+      expect(session.images[b]?.map((one) => one.name)).toEqual([`b-${at}`]);
+    }
+  } finally {
+    Object.assign(session, { engine });
+    engine.prompt = prompt;
+    await session.dispose();
+  }
+});
+
 test("a session that cannot save its view still lets its life go, which ends in the daemon of the tests with its command", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-dispose-"));
   const record = join(directory, "life.jsonl");
