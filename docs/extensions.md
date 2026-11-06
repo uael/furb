@@ -92,7 +92,9 @@ reads it.
   and turns it on, so every later chain runs it, and `extend(name, *rungs, tui=module)`, which also writes a [part for
   the TUI](#a-part-for-the-tui). `extend(name, *rungs, session=True)` keeps the kit in the record alone: it writes no
   file and says the fact `enable` with the word, so each chain of this session, and of each later life on its record,
-  plays it. How to extend furb stands in one home, the text of its
+  plays it. `view="name"` names in that fact the value of the root that holds the tree of the view of the kit, a node
+  of the protocol as a dict: the daemon serves it to each window that mounts the view of the kit, and again each time
+  that the value changes. How to extend furb stands in one home, the text of its
   [`SKILL.md`](../extensions/ouroboros/SKILL.md), which a model reads with `skill("ouroboros")`: the three ways to extend
   furb and when to take each, with an example for each. `enabled()` gives the extensions that the life runs. `bound_by()` gives each name that a word of the chain bound, with the rung of that word.
 - **`web`** searches the web and reads its pages. `web_search(query)` uses the search of the provider of the model of

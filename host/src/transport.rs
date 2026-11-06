@@ -59,6 +59,8 @@ pub struct Local {
 /// A stream of a peer that the local transport accepted.
 pub type Accepted = local::Accepted;
 
+pub(crate) use local::own;
+
 /// The local transport as it listens, which accepts each peer in turn.
 pub struct Listener(local::Listener);
 
