@@ -90,8 +90,8 @@ pub(super) struct Conversation {
 }
 
 impl Conversation {
-  pub(super) fn new(name: &str, system: &str, id: String) -> Conversation {
-    Conversation {
+  pub(super) fn new(name: &str, system: &str, id: String) -> Self {
+    Self {
       name: name.to_owned(),
       system: system.to_owned(),
       id,
@@ -113,7 +113,7 @@ impl Conversation {
   fn renew(&mut self) -> Result<(), CompletionError> {
     let id = uuid()?;
     let (account, store) = (self.account, self.store.take());
-    *self = Conversation::new(&self.name, &self.system, id);
+    *self = Self::new(&self.name, &self.system, id);
     self.account = account;
     self.store = store;
     Ok(())

@@ -49,13 +49,13 @@ pub(crate) struct Yard {
 }
 
 impl Yard {
-  pub(crate) fn new(name: &str) -> Yard {
+  pub(crate) fn new(name: &str) -> Self {
     // The name holds the id of the process, as every yard of the tests of the crate does: two runs of the suite at
     // once, as a hook and a check in two checkouts, would otherwise remove the files of each other.
     let at = testing::Yard::new(format!("furb-claude-{name}-{}", std::process::id()));
     let fake = ran();
     fs::hard_link(&fake.bin, at.join("claude")).expect("the fake is linked");
-    Yard { at, _fake: fake }
+    Self { at, _fake: fake }
   }
 
   /// The fake as the command line, with a stall of these milliseconds.

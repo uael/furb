@@ -205,8 +205,8 @@ struct Held {
 }
 
 impl Images {
-  pub(super) fn new(directory: Option<PathBuf>) -> Images {
-    Images { directory, held: HashMap::new() }
+  pub(super) fn new(directory: Option<PathBuf>) -> Self {
+    Self { directory, held: HashMap::new() }
   }
 
   /// The images that the prompts a user turn opens name, and the images that its reads give, as images of rig, each

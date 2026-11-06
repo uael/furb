@@ -148,8 +148,8 @@ impl Made {
 
 impl From<Fault> for PyErr {
   /// What the engine raised, raised here as the exception it is.
-  fn from(fault: Fault) -> PyErr {
-    Python::attach(|py| exception(py, &fault).map_or_else(|no| no, PyErr::from_value))
+  fn from(fault: Fault) -> Self {
+    Python::attach(|py| exception(py, &fault).map_or_else(|no| no, Self::from_value))
   }
 }
 
@@ -187,7 +187,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Maybe {
   type Error = PyErr;
 
   fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
-    of_python(&value).map(|one| Maybe(Some(Value(one))))
+    of_python(&value).map(|one| Self(Some(Value(one))))
   }
 }
 
@@ -217,13 +217,13 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Given {
   /// An ear of the crate as itself, and a generator heard as an ear.
   fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
     if let Ok(held) = value.cast::<NativeEar>() {
-      return Ok(Given(held.borrow_mut().taken()?));
+      return Ok(Self(held.borrow_mut().taken()?));
     }
     if !generator(&value)? {
       let kind = value.get_type().name()?;
       return Err(PyTypeError::new_err(format!("{kind} is no ear: an ear is a generator")));
     }
-    Ok(Given(Box::new(PyEar { ear: Some(value.to_owned().unbind()) })))
+    Ok(Self(Box::new(PyEar { ear: Some(value.to_owned().unbind()) })))
   }
 }
 
@@ -231,7 +231,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Said {
   type Error = PyErr;
 
   fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
-    Ok(Said(value.extract::<Vec<String>>().ok()))
+    Ok(Self(value.extract::<Vec<String>>().ok()))
   }
 }
 
@@ -242,7 +242,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Told {
   /// to the hook of python for what no one can raise.
   fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
     let told = value.to_owned().unbind();
-    Ok(Told(Arc::new(move |event| {
+    Ok(Self(Arc::new(move |event| {
       Python::attach(|py| {
         if let Err(no) = told.call1(py, (event,)) {
           no.write_unraisable(py, None);
@@ -260,7 +260,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Stream {
   /// can raise.
   fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
     let stream = value.to_owned().unbind();
-    Ok(Stream(Arc::new(move |rung, chain, text, thinking| {
+    Ok(Self(Arc::new(move |rung, chain, text, thinking| {
       Python::attach(|py| {
         if let Err(no) = stream.call1(py, (rung, chain, text, thinking)) {
           no.write_unraisable(py, None);
@@ -278,7 +278,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Retrying {
   /// raise.
   fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
     let retry = value.to_owned().unbind();
-    Ok(Retrying(Arc::new(move |rung, chain, one| {
+    Ok(Self(Arc::new(move |rung, chain, one| {
       Python::attach(|py| {
         let said = (rung, chain, one.attempt, one.most, one.wait.as_secs_f64(), one.why.as_str());
         if let Err(no) = retry.call1(py, said) {
@@ -296,7 +296,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Log {
   /// what no one can raise.
   fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
     let log = value.to_owned().unbind();
-    Ok(Log(Arc::new(move |line| {
+    Ok(Self(Arc::new(move |line| {
       Python::attach(|py| {
         if let Err(no) = log.call1(py, (line,)) {
           no.write_unraisable(py, None);
@@ -314,7 +314,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Answer {
   /// answer, and what it raised the refusal.
   fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
     let answer = Arc::new(value.to_owned().unbind());
-    Ok(Answer(Arc::new(move |request, told| {
+    Ok(Self(Arc::new(move |request, told| {
       let answer = Arc::clone(&answer);
       Box::pin(async move {
         let called = tokio::task::spawn_blocking(move || {
@@ -380,8 +380,8 @@ struct Lent(Rc<RefCell<Life>>);
 
 impl Lent {
   /// The life gives itself to be lent.
-  fn new(life: Life) -> Lent {
-    Lent(Rc::new(RefCell::new(life)))
+  fn new(life: Life) -> Self {
+    Self(Rc::new(RefCell::new(life)))
   }
 
   /// The way that python reaches the life by while it is lent.
@@ -484,7 +484,7 @@ impl NativeEar {
   }
 
   fn __next__(slf: &Bound<'_, Self>) -> PyResult<Py<PyAny>> {
-    NativeEar::send(slf, &slf.py().None().into_bound(slf.py()))
+    Self::send(slf, &slf.py().None().into_bound(slf.py()))
   }
 
   /// The ear heard, as the engine of this interpreter steps a generator: nothing at its birth, which is given the
@@ -497,7 +497,7 @@ impl NativeEar {
     let heard = if born {
       let name: String = python.getattr("site")?.call_method0("get")?.extract()?;
       let weak = py.import("weakref")?.getattr("ref")?.call1((slf,))?.unbind();
-      let waker = waker(py, move |py| match weak.bind(py).call0()?.cast::<NativeEar>() {
+      let waker = waker(py, move |py| match weak.bind(py).call0()?.cast::<Self>() {
         Ok(ear) => pump(ear),
         Err(_) => Ok(()),
       })?;
@@ -698,15 +698,15 @@ struct Driven {
 
 impl PyEngine {
   /// The engine, held for python, driven once.
-  fn held(py: Python<'_>, engine: Engine, record: Vec<Object>) -> PyResult<Py<PyEngine>> {
+  fn held(py: Python<'_>, engine: Engine, record: Vec<Object>) -> PyResult<Py<Self>> {
     made(py)?.faults.bind(py).clear();
     let root = engine.root().to_owned();
     let raised = engine.raised().cloned();
     let home = Homed::new(Driven { engine: RefCell::new(Some(engine)), waker: OnceCell::new() });
-    let held = PyEngine { home, root, raised, record };
+    let held = Self { home, root, raised, record };
     let held = Py::new(py, held)?;
     let weak = py.import("weakref")?.getattr("ref")?.call1((&held,))?.unbind();
-    let waker = waker(py, move |py| match weak.bind(py).call0()?.cast::<PyEngine>() {
+    let waker = waker(py, move |py| match weak.bind(py).call0()?.cast::<Self>() {
       Ok(engine) => engine.borrow().pump().map_err(Into::into),
       Err(_) => Ok(()),
     })?;
@@ -764,14 +764,10 @@ impl PyEngine {
   /// An engine, opened from the record, on these ears, each a generator of python or an ear of the crate under the
   /// name the engine hears it by, in the order the engine offers them a question. It is booted in the running loop.
   #[staticmethod]
-  fn boot(
-    py: Python<'_>,
-    record: Vec<Value>,
-    ears: Vec<(String, Given)>,
-  ) -> PyResult<Py<PyEngine>> {
+  fn boot(py: Python<'_>, record: Vec<Value>, ears: Vec<(String, Given)>) -> PyResult<Py<Self>> {
     let ears = ears.into_iter().map(|(name, ear)| (name, ear.0));
     let engine = Engine::boot(record.into_iter().map(|one| one.0), ears)?;
-    PyEngine::held(py, engine, Vec::new())
+    Self::held(py, engine, Vec::new())
   }
 
   /// A life opened as every host of the crate opens one: on its record, on these ears of the host, and then on the
@@ -782,10 +778,10 @@ impl PyEngine {
     py: Python<'_>,
     ears: Vec<(String, Given)>,
     opening: Option<Opening>,
-  ) -> PyResult<Py<PyEngine>> {
+  ) -> PyResult<Py<Self>> {
     let opening = opening.ok_or_else(|| Fault::refused("a life opens on a directory"))?;
     let (engine, record) = opening.boot(ears.into_iter().map(|(name, ear)| (name, ear.0)))?;
-    PyEngine::held(py, engine, record)
+    Self::held(py, engine, record)
   }
 
   /// The root chain of the life, which is the first act of any record.
@@ -969,13 +965,13 @@ pub struct PyAct {
 
 impl PyAct {
   /// The act a verb of the engine made.
-  fn of(engine: &Bound<'_, PyEngine>, got: &Object) -> Result<PyAct, Fault> {
+  fn of(engine: &Bound<'_, PyEngine>, got: &Object) -> Result<Self, Fault> {
     let id = got
       .as_ref()
       .as_str()
       .map(str::to_owned)
       .ok_or_else(|| Fault::refused("a verb gave no act"))?;
-    Ok(PyAct { id, engine: engine.clone().unbind() })
+    Ok(Self { id, engine: engine.clone().unbind() })
   }
 }
 

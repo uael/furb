@@ -93,13 +93,13 @@ enum Kind {
 
 impl Kind {
   /// The act of a kind of [`KINDS`], or none.
-  fn of(kind: &str) -> Option<Kind> {
+  fn of(kind: &str) -> Option<Self> {
     match kind {
-      "mcp_servers" => Some(Kind::Servers),
-      "mcp_call" => Some(Kind::Call),
-      "mcp_read" => Some(Kind::Read),
-      "mcp_prompt" => Some(Kind::Prompt),
-      "mcp_control" => Some(Kind::Control),
+      "mcp_servers" => Some(Self::Servers),
+      "mcp_call" => Some(Self::Call),
+      "mcp_read" => Some(Self::Read),
+      "mcp_prompt" => Some(Self::Prompt),
+      "mcp_control" => Some(Self::Control),
       _ => None,
     }
   }
@@ -147,8 +147,8 @@ enum Error {
 }
 
 impl From<String> for Error {
-  fn from(said: String) -> Error {
-    Error::Said(said)
+  fn from(said: String) -> Self {
+    Self::Said(said)
   }
 }
 
@@ -156,8 +156,8 @@ impl Settings {
   /// The settings of a life on the directory of a project, the config directory of the user and the directory of
   /// the images of the life: the tokens in the store of this machine, the browser of the system, and the variables
   /// of this process.
-  pub fn of(project: PathBuf, config: PathBuf, gallery: Option<PathBuf>) -> Settings {
-    Settings {
+  pub fn of(project: PathBuf, config: PathBuf, gallery: Option<PathBuf>) -> Self {
+    Self {
       vault: oauth::vault(&config),
       places: Places { config, project },
       gallery,

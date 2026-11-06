@@ -198,7 +198,7 @@ impl Native {
     let api = |default: &str| reach.api.clone().unwrap_or_else(|| default.to_owned());
     let bearer = format!("Bearer {}", reach.key);
     let got = match self {
-      Native::Anthropic => {
+      Self::Anthropic => {
         let api = api("https://api.anthropic.com");
         let url = format!("{}/v1/messages", api.trim_end_matches('/').trim_end_matches("/v1"));
         let key: (&str, &str) =
@@ -212,7 +212,7 @@ impl Native {
         });
         posted(&url, &[key, ("anthropic-version", "2023-06-01")], &body).await?
       }
-      Native::Responses(default) => {
+      Self::Responses(default) => {
         let url = format!("{}/responses", api(default).trim_end_matches('/'));
         let body = json!({
           "model": reach.id,
@@ -222,7 +222,7 @@ impl Native {
         });
         posted(&url, &[("authorization", &bearer)], &body).await?
       }
-      Native::Gemini => {
+      Self::Gemini => {
         let url = format!(
           "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent",
           reach.id
@@ -234,7 +234,7 @@ impl Native {
         });
         posted(&url, &[("x-goog-api-key", &reach.key)], &body).await?
       }
-      Native::Deepseek => {
+      Self::Deepseek => {
         let api = api("https://api.deepseek.com");
         let root = api.trim_end_matches('/').trim_end_matches("/v1").trim_end_matches("/anthropic");
         let body = json!({"query": query, "count": 10, "need_content": false});
@@ -243,10 +243,10 @@ impl Native {
     };
     let got: Value = serde_json::from_str(&got).map_err(Error::NotJson)?;
     let answer = match self {
-      Native::Anthropic => anthropic(&got),
-      Native::Responses(_) => responses(&got),
-      Native::Gemini => gemini(&got),
-      Native::Deepseek => Some(deepseek(&got)),
+      Self::Anthropic => anthropic(&got),
+      Self::Responses(_) => responses(&got),
+      Self::Gemini => gemini(&got),
+      Self::Deepseek => Some(deepseek(&got)),
     };
     answer.ok_or(Error::NoText(got))
   }

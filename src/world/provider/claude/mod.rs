@@ -172,8 +172,8 @@ pub struct Claude {
 impl Claude {
   /// The command line of [`Claude::with`] and no program, when `FURB_CLAUDE_BIN` names one or this
   /// machine holds one.
-  pub fn found() -> Option<Claude> {
-    located().map(|bin| Claude::with(Some(bin), None))
+  pub fn found() -> Option<Self> {
+    located().map(|bin| Self::with(Some(bin), None))
   }
 
   /// The command line at this program, and how long a turn may go with no progress. With no
@@ -181,17 +181,17 @@ impl Claude {
   /// stall, `FURB_CLAUDE_STALL` gives it in seconds, or it is 900 seconds. A process waits for a
   /// program that is missing or does not run for the seconds that `FURB_CLAUDE_GONE` gives, or for
   /// 60 seconds.
-  pub fn with(bin: Option<PathBuf>, stall: Option<Duration>) -> Claude {
+  pub fn with(bin: Option<PathBuf>, stall: Option<Duration>) -> Self {
     let bin = bin.or_else(located).unwrap_or_else(|| PROGRAM.into());
-    Claude::with_command(bin, Vec::new(), stall)
+    Self::with_command(bin, Vec::new(), stall)
   }
 
   /// The command line that this program starts with these words before every flag that furb gives
   /// it, as `cswap run 3` holds the program `cswap` and the words `run` and `3`. No shell reads the
   /// words: each reaches the program as it stands, with its spaces, once, for a turn and for a
   /// search alike. The stall is the one of [`Claude::with`].
-  pub fn with_command(bin: PathBuf, args: Vec<String>, stall: Option<Duration>) -> Claude {
-    Claude::with_accounts(Some(bin), args, Vec::new(), Switch::default(), stall)
+  pub fn with_command(bin: PathBuf, args: Vec<String>, stall: Option<Duration>) -> Self {
+    Self::with_accounts(Some(bin), args, Vec::new(), Switch::default(), stall)
   }
 
   /// The command line that runs as these accounts, in the order of the list. The program and the
@@ -206,7 +206,7 @@ impl Claude {
     accounts: Vec<Account>,
     switch: Switch,
     stall: Option<Duration>,
-  ) -> Claude {
+  ) -> Self {
     let bin = bin.or_else(located).unwrap_or_else(|| PROGRAM.into());
     let stall = stall.unwrap_or_else(|| {
       let seconds = env::var("FURB_CLAUDE_STALL").ok().and_then(|one| one.parse::<f64>().ok());
@@ -215,7 +215,7 @@ impl Claude {
     let accounts = Arc::new(Accounts::new(accounts, switch));
     let (keeper, asked) = mpsc::unbounded_channel();
     runtime().spawn(keeper::kept(asked, Arc::clone(&accounts), keeper.downgrade()));
-    Claude { program: Program::with(bin, args, accounts), stall, gone: patience(), keeper }
+    Self { program: Program::with(bin, args, accounts), stall, gone: patience(), keeper }
   }
 
   /// Whether the command line is signed in, as `claude auth status` says. It counts as signed in
@@ -235,8 +235,8 @@ impl Claude {
   /// The same command line, whose process waits this long for a program that is missing or does not
   /// run.
   #[cfg(all(test, unix))]
-  pub(crate) fn waiting(self, gone: Duration) -> Claude {
-    Claude { gone, ..self }
+  pub(crate) fn waiting(self, gone: Duration) -> Self {
+    Self { gone, ..self }
   }
 
   /// One model of the command line, by its name, as a completion model of rig.
@@ -302,17 +302,17 @@ pub(super) struct Program {
 
 impl Program {
   #[cfg(all(test, unix))]
-  pub(super) fn new(bin: PathBuf, args: Vec<String>) -> Program {
-    Program::with(bin, args, Arc::new(Accounts::new(Vec::new(), Switch::default())))
+  pub(super) fn new(bin: PathBuf, args: Vec<String>) -> Self {
+    Self::with(bin, args, Arc::new(Accounts::new(Vec::new(), Switch::default())))
   }
 
-  fn with(bin: PathBuf, args: Vec<String>, accounts: Arc<Accounts>) -> Program {
-    Program { bin: bin.into(), args: args.into(), accounts, pin: None }
+  fn with(bin: PathBuf, args: Vec<String>, accounts: Arc<Accounts>) -> Self {
+    Self { bin: bin.into(), args: args.into(), accounts, pin: None }
   }
 
   /// The same program, whose commands all run as this account.
-  fn under(&self, at: usize) -> Program {
-    Program { pin: Some(at), ..self.clone() }
+  fn under(&self, at: usize) -> Self {
+    Self { pin: Some(at), ..self.clone() }
   }
 
   /// A command that holds the program and its words, and the credential of its account. It fails

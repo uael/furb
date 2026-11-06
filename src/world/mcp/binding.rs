@@ -72,31 +72,31 @@ pub enum Shape {
   /// None, which sends null.
   None,
   /// A list of values of one shape.
-  List(Box<Shape>),
+  List(Box<Self>),
   /// A dict of keys of str and values of one shape.
-  Dict(Box<Shape>),
+  Dict(Box<Self>),
   /// One of these values, each a str, an int or a bool.
   Literal(Vec<Value>),
   /// One of these shapes, each once, with no union and no `Any` among them, and None last.
-  Union(Vec<Shape>),
+  Union(Vec<Self>),
 }
 
 impl Shape {
   /// The shape as an annotation of Python.
   pub fn python(&self) -> String {
     match self {
-      Shape::Any => "Any".to_owned(),
-      Shape::Str => "str".to_owned(),
-      Shape::Int => "int".to_owned(),
-      Shape::Float => "float".to_owned(),
-      Shape::Bool => "bool".to_owned(),
-      Shape::None => "None".to_owned(),
-      Shape::List(item) => format!("list[{}]", item.python()),
-      Shape::Dict(value) => format!("dict[str, {}]", value.python()),
-      Shape::Literal(values) => {
+      Self::Any => "Any".to_owned(),
+      Self::Str => "str".to_owned(),
+      Self::Int => "int".to_owned(),
+      Self::Float => "float".to_owned(),
+      Self::Bool => "bool".to_owned(),
+      Self::None => "None".to_owned(),
+      Self::List(item) => format!("list[{}]", item.python()),
+      Self::Dict(value) => format!("dict[str, {}]", value.python()),
+      Self::Literal(values) => {
         format!("Literal[{}]", values.iter().map(literal).collect::<Vec<_>>().join(", "))
       }
-      Shape::Union(members) => members.iter().map(Shape::python).collect::<Vec<_>>().join(" | "),
+      Self::Union(members) => members.iter().map(Self::python).collect::<Vec<_>>().join(" | "),
     }
   }
 }

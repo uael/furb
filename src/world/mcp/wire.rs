@@ -54,10 +54,10 @@ impl Failure {
   /// Why, in words.
   pub(super) fn said(&self) -> String {
     match self {
-      Failure::Answered { code, message } => format!("{message} (error {code})"),
-      Failure::Unauthorized(_) => "the server asks for a login".to_owned(),
-      Failure::Late(bound) => format!("it took more than {} seconds", seconds(*bound)),
-      Failure::Broken(why) => why.clone(),
+      Self::Answered { code, message } => format!("{message} (error {code})"),
+      Self::Unauthorized(_) => "the server asks for a login".to_owned(),
+      Self::Late(bound) => format!("it took more than {} seconds", seconds(*bound)),
+      Self::Broken(why) => why.clone(),
     }
   }
 }
@@ -103,15 +103,15 @@ impl Wire {
   /// The message, sent; a request whose answer the server gives at once hands that answer to the peer.
   async fn send(&self, message: Value) -> Result<(), Failure> {
     match self {
-      Wire::Process(wire) => wire.send(message).await,
-      Wire::Streamable(wire) => wire.send(message).await,
-      Wire::Legacy(wire) => wire.send(message).await,
+      Self::Process(wire) => wire.send(message).await,
+      Self::Streamable(wire) => wire.send(message).await,
+      Self::Legacy(wire) => wire.send(message).await,
     }
   }
 
   /// The version of the protocol that the server agreed to, after which the wire may open more.
   fn agreed(&self, version: &str) {
-    if let Wire::Streamable(wire) = self {
+    if let Self::Streamable(wire) = self {
       wire.agreed(version);
     }
   }
@@ -132,7 +132,7 @@ impl Peer {
     transport: &Transport,
     token: Option<String>,
     roots: Value,
-  ) -> Result<(Peer, mpsc::UnboundedReceiver<Heard>), Failure> {
+  ) -> Result<(Self, mpsc::UnboundedReceiver<Heard>), Failure> {
     let (inbox, inbound) = mpsc::unbounded_channel();
     let wire = Arc::new(match transport {
       Transport::Stdio { command, args, env, cwd } => {
@@ -152,7 +152,7 @@ impl Peer {
       dispatch(Arc::clone(&wire), Arc::clone(&pending), inbound, told, roots),
       &runtime(),
     );
-    Ok((Peer { wire, pending, next: AtomicI64::new(1), tasks: Mutex::new(tasks) }, heard))
+    Ok((Self { wire, pending, next: AtomicI64::new(1), tasks: Mutex::new(tasks) }, heard))
   }
 
   /// What the server answers a request with, within a bound. A request past its bound, or that its caller drops, is
@@ -321,7 +321,7 @@ impl Process {
     env: &[(String, String)],
     cwd: Option<&Path>,
     inbox: Inbox,
-  ) -> Result<Process, Failure> {
+  ) -> Result<Self, Failure> {
     let mut made = tokio::process::Command::new(command);
     made.args(args).envs(env.iter().map(|(name, value)| (name, value)));
     if let Some(cwd) = cwd {
@@ -337,7 +337,7 @@ impl Process {
     };
     let mut tasks = JoinSet::new();
     tasks.spawn_on(ended(child, stdout, stderr, inbox), &runtime());
-    Ok(Process { stdin: tokio::sync::Mutex::new(stdin), tasks: Mutex::new(tasks), _group: group })
+    Ok(Self { stdin: tokio::sync::Mutex::new(stdin), tasks: Mutex::new(tasks), _group: group })
   }
 
   async fn send(&self, message: Value) -> Result<(), Failure> {
@@ -447,7 +447,7 @@ struct Streamable {
 
 impl Streamable {
   fn new(url: &str, headers: &[(String, String)], token: Option<String>, inbox: Inbox) -> Self {
-    Streamable {
+    Self {
       url: url.to_owned(),
       headers: headers.to_vec(),
       token,
@@ -563,7 +563,7 @@ impl Legacy {
     headers: &[(String, String)],
     token: Option<String>,
     inbox: Inbox,
-  ) -> Result<Legacy, Failure> {
+  ) -> Result<Self, Failure> {
     let client = Client::new();
     let request =
       headed(client.get(url), headers, token.as_deref()).header("accept", "text/event-stream");
@@ -598,7 +598,7 @@ impl Legacy {
     let endpoint = url::Url::parse(url).and_then(|base| base.join(&named)).map_err(|no| {
       Failure::Broken(format!("{url} named the endpoint {named}, which is not valid: {no}"))
     })?;
-    Ok(Legacy {
+    Ok(Self {
       endpoint: endpoint.to_string(),
       headers: headers.to_vec(),
       token,

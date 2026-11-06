@@ -555,7 +555,7 @@ impl Keychain {
 
 impl Vault for Keychain {
   fn get(&self, key: &str) -> Option<String> {
-    let account = Keychain::account(key);
+    let account = Self::account(key);
     let got = Command::new(KEYCHAIN)
       .args(["find-generic-password", "-s", SERVICE, "-a", &account, "-w"])
       .output();
@@ -565,8 +565,7 @@ impl Vault for Keychain {
 
   fn put(&self, key: &str, value: &str) -> Result<(), VaultError> {
     let hex = crate::value::hex(value.as_bytes());
-    let line =
-      format!("add-generic-password -U -s {SERVICE} -a {} -X {hex}\n", Keychain::account(key));
+    let line = format!("add-generic-password -U -s {SERVICE} -a {} -X {hex}\n", Self::account(key));
     let mut child = Command::new(KEYCHAIN)
       .arg("-i")
       .stdin(Stdio::piped())
@@ -586,7 +585,7 @@ impl Vault for Keychain {
   }
 
   fn forget(&self, key: &str) -> Result<(), VaultError> {
-    let account = Keychain::account(key);
+    let account = Self::account(key);
     let got = Command::new(KEYCHAIN)
       .args(["delete-generic-password", "-s", SERVICE, "-a", &account])
       .output();
@@ -602,7 +601,7 @@ pub struct Filed {
 
 impl Filed {
   pub fn new(path: PathBuf) -> Self {
-    Filed { path, lock: Mutex::new(()) }
+    Self { path, lock: Mutex::new(()) }
   }
 
   /// The secrets of the file.

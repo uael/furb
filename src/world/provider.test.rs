@@ -378,13 +378,13 @@ struct Halting {
 }
 
 impl Halting {
-  fn writes(parts: &[&'static str]) -> Halting {
-    Halting { parts: parts.to_vec(), dropped: Arc::default(), breaks: false }
+  fn writes(parts: &[&'static str]) -> Self {
+    Self { parts: parts.to_vec(), dropped: Arc::default(), breaks: false }
   }
 
   /// A model that writes these parts of its text, and whose stream then fails, in place of waiting.
-  fn breaks(parts: &[&'static str]) -> Halting {
-    Halting { breaks: true, ..Halting::writes(parts) }
+  fn breaks(parts: &[&'static str]) -> Self {
+    Self { breaks: true, ..Self::writes(parts) }
   }
 }
 

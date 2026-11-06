@@ -11,6 +11,8 @@
 //! as one the sandbox calls back. Each door hands the ears and the functions over to the life the value comes into,
 //! and a verb that a host says while a life hears it goes to that life.
 
+// This tree pays this lint already, so it holds here ahead of the workspace.
+#![deny(clippy::use_self)]
 #![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
 #![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
 #![expect(clippy::map_unwrap_or, reason = "debt: map then unwrap_or, where map_or serves")]
@@ -128,7 +130,7 @@ static ORPHANS: Mutex<Vec<Orphan>> = Mutex::new(Vec::new());
 impl<T: 'static> Homed<T> {
   /// A value of this thread, made after this thread drops each of its values that another thread dropped. They are
   /// dropped outside the lock, since a drop may make a homed value.
-  pub(crate) fn new(held: T) -> Homed<T> {
+  pub(crate) fn new(held: T) -> Self {
     let home = thread::current().id();
     let mine: Vec<Orphan> = {
       let mut orphans = ORPHANS.lock().unwrap_or_else(PoisonError::into_inner);
@@ -137,7 +139,7 @@ impl<T: 'static> Homed<T> {
       mine
     };
     drop(mine);
-    Homed { home, held: Some(held) }
+    Self { home, held: Some(held) }
   }
 
   fn home(&self) {
@@ -182,14 +184,14 @@ impl<T> Drop for Homed<T> {
 }
 
 impl NativeEar {
-  fn of(ear: Box<dyn Ear>) -> NativeEar {
+  fn of(ear: Box<dyn Ear>) -> Self {
     let hearing = Hearing {
       ear: Some(ear),
       lent: None,
       #[cfg(feature = "python")]
       stepped: None,
     };
-    NativeEar { hearing: Homed::new(hearing) }
+    Self { hearing: Homed::new(hearing) }
   }
 
   /// The ear, lent out, since an ear hears in one engine. The engine holds it, and this ear holds the way to it, so a
@@ -278,8 +280,8 @@ pub struct ModelInfo {
 }
 
 impl ModelInfo {
-  fn of(model: &world::Model) -> ModelInfo {
-    ModelInfo {
+  fn of(model: &world::Model) -> Self {
+    Self {
       name: model.name().to_owned(),
       efforts: model.efforts().into_iter().map(str::to_owned).collect(),
       window: i64::try_from(model.window()).unwrap_or(i64::MAX),

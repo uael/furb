@@ -79,10 +79,10 @@ pub(super) struct Accounts {
 }
 
 impl Accounts {
-  pub(super) fn new(list: Vec<Account>, switch: Switch) -> Accounts {
+  pub(super) fn new(list: Vec<Account>, switch: Switch) -> Self {
     let count = list.len().max(1);
     let state = State { parked: vec![Park::Free; count], given: vec![0; count], tick: 0 };
-    Accounts { list, switch, state: Mutex::new(state) }
+    Self { list, switch, state: Mutex::new(state) }
   }
 
   fn state(&self) -> MutexGuard<'_, State> {
@@ -122,11 +122,11 @@ impl Accounts {
 
   /// Whether an account is not parked at this time.
   pub(super) fn free(&self, at: usize, now: SystemTime) -> bool {
-    Accounts::free_in(&self.state(), at, now)
+    Self::free_in(&self.state(), at, now)
   }
 
   fn choose(&self, state: &State, now: SystemTime) -> Option<usize> {
-    let mut free = (0..self.count()).filter(|at| Accounts::free_in(state, *at, now));
+    let mut free = (0..self.count()).filter(|at| Self::free_in(state, *at, now));
     match self.switch {
       Switch::Failover => free.next(),
       Switch::Spread => free.min_by_key(|at| state.given[*at]),
@@ -151,7 +151,7 @@ impl Accounts {
   /// The account that a command of no conversation runs as: the first that is not parked.
   pub(super) fn first_free(&self, now: SystemTime) -> usize {
     let state = self.state();
-    (0..self.count()).find(|at| Accounts::free_in(&state, *at, now)).unwrap_or(0)
+    (0..self.count()).find(|at| Self::free_in(&state, *at, now)).unwrap_or(0)
   }
 
   /// Park an account until a time, or until a new command line stands when no time is given.

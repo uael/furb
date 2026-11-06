@@ -27,8 +27,8 @@ pub struct Thinking {
 }
 
 impl Default for Thinking {
-  fn default() -> Thinking {
-    Thinking { most: THINKING, inherited: false }
+  fn default() -> Self {
+    Self { most: THINKING, inherited: false }
   }
 }
 

@@ -51,11 +51,11 @@ pub(super) enum Changed {
 
 impl Changed {
   /// The list that a notification of a server says has changed.
-  pub(super) fn of(method: &str) -> Option<Changed> {
+  pub(super) fn of(method: &str) -> Option<Self> {
     match method {
-      "notifications/tools/list_changed" => Some(Changed::Tools),
-      "notifications/resources/list_changed" => Some(Changed::Resources),
-      "notifications/prompts/list_changed" => Some(Changed::Prompts),
+      "notifications/tools/list_changed" => Some(Self::Tools),
+      "notifications/resources/list_changed" => Some(Self::Resources),
+      "notifications/prompts/list_changed" => Some(Self::Prompts),
       _ => None,
     }
   }

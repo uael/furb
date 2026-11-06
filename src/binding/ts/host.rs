@@ -364,9 +364,9 @@ pub(crate) struct Held {
 }
 
 impl Held {
-  pub(crate) fn new(env: Env, engine: Engine) -> napi::Result<Rc<Held>> {
+  pub(crate) fn new(env: Env, engine: Engine) -> napi::Result<Rc<Self>> {
     // The function that drives the engine is made before what it drives, which it is given once that stands.
-    let slot: Rc<RefCell<Weak<Held>>> = Rc::default();
+    let slot: Rc<RefCell<Weak<Self>>> = Rc::default();
     let driven = Rc::clone(&slot);
     let drive = env.create_function_from_closure("drive", move |_| {
       let held = driven.borrow().upgrade();
@@ -377,7 +377,7 @@ impl Held {
     })?;
     let wakes =
       drive.build_threadsafe_function::<()>().callee_handled::<false>().weak::<true>().build()?;
-    let held = Rc::new(Held {
+    let held = Rc::new(Self {
       engine: RefCell::new(Some(engine)),
       env,
       pending: RefCell::default(),

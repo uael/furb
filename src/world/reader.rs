@@ -378,7 +378,7 @@ impl Makers {
 
 impl<'a> Reader<'a> {
   /// The reader that tells each fact to out, with what it knows of the chains that the record does not hold.
-  fn new(known: Known, out: &'a mut dyn FnMut(Object)) -> Reader<'a> {
+  fn new(known: Known, out: &'a mut dyn FnMut(Object)) -> Self {
     Reader {
       out,
       stage: Vec::new(),

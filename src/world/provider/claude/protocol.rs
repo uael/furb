@@ -33,9 +33,9 @@ pub(super) enum Event {
 impl Event {
   /// The event that a JSON value is. A value with no type is none of the events, and reads as
   /// `Other`.
-  pub(super) fn read(value: Value) -> Result<Event, serde_json::Error> {
+  pub(super) fn read(value: Value) -> Result<Self, serde_json::Error> {
     if value.get("type").is_none() {
-      return Ok(Event::Other);
+      return Ok(Self::Other);
     }
     serde_json::from_value(value)
   }
@@ -169,11 +169,11 @@ enum Block {
 impl Block {
   fn content(&self) -> AssistantContent {
     match self {
-      Block::Text(text) => AssistantContent::text(text.clone()),
-      Block::Thinking(text, signature) => {
+      Self::Text(text) => AssistantContent::text(text.clone()),
+      Self::Thinking(text, signature) => {
         AssistantContent::Reasoning(Reasoning::new_with_signature(text, signature.clone()))
       }
-      Block::Redacted(data) => AssistantContent::Reasoning(Reasoning::redacted(data.clone())),
+      Self::Redacted(data) => AssistantContent::Reasoning(Reasoning::redacted(data.clone())),
     }
   }
 }
@@ -197,7 +197,7 @@ pub(super) struct Reply<'a> {
 
 impl<'a> Reply<'a> {
   /// A reply with no block yet, whose parts go where the turn streams.
-  pub(super) fn new(deltas: Option<&'a Deltas>) -> Reply<'a> {
+  pub(super) fn new(deltas: Option<&'a Deltas>) -> Self {
     Reply { deltas, ..Reply::default() }
   }
 

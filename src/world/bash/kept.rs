@@ -18,8 +18,8 @@ pub(super) enum Stream {
 impl fmt::Display for Stream {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.write_str(match self {
-      Stream::Out => "stdout",
-      Stream::Err => "stderr",
+      Self::Out => "stdout",
+      Self::Err => "stderr",
     })
   }
 }
@@ -48,7 +48,7 @@ pub(super) struct Kept {
 
 impl Kept {
   pub(super) fn new(head: usize, tail: usize) -> Self {
-    Kept { head: String::new(), tail: String::new(), full: false, cut: 0, caps: (head, tail) }
+    Self { head: String::new(), tail: String::new(), full: false, cut: 0, caps: (head, tail) }
   }
 
   /// The text to say now: the part of a new text that the head takes, and, once the head is full, a

@@ -131,7 +131,7 @@ impl Group {
     #[cfg(unix)]
     {
       child.id().ok_or_else(gone)?;
-      Ok(Group { leader: Some(lead.watch), lifeline: Some(lead.lifeline) })
+      Ok(Self { leader: Some(lead.watch), lifeline: Some(lead.lifeline) })
     }
     #[cfg(windows)]
     {

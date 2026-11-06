@@ -106,54 +106,54 @@ impl Client {
     }
     let api = || reach.api.clone().ok_or(Error::NoAddress);
     Ok(match self {
-      Client::Anthropic if reach.bearer => bearer_streams(reach, &key, id)?,
-      Client::Anthropic => {
+      Self::Anthropic if reach.bearer => bearer_streams(reach, &key, id)?,
+      Self::Anthropic => {
         let mut built = anthropic::Client::builder().api_key(key);
         if let Some(api) = &reach.api {
           built = built.base_url(api);
         }
         streams(built.build()?.completion_model(id).with_automatic_caching())
       }
-      Client::Openai => {
+      Self::Openai => {
         let mut built = openai::Client::builder().api_key(key);
         if let Some(api) = &reach.api {
           built = built.base_url(api);
         }
         streams(built.build()?.completion_model(id))
       }
-      Client::Chat if key.is_empty() => {
+      Self::Chat if key.is_empty() => {
         let built = openai::CompletionsClient::builder().api_key(UNSENT).base_url(api()?);
         streams(built.http_client(Amended::new(Unsent)).build()?.completion_model(id))
       }
-      Client::Chat => {
+      Self::Chat => {
         let built = openai::CompletionsClient::builder().api_key(key).base_url(api()?);
         streams(built.build()?.completion_model(id))
       }
-      Client::Gateway => {
+      Self::Gateway => {
         let built = openai::CompletionsClient::builder().api_key(UNSENT).base_url(api()?);
         let built = built.http_headers(headed("cf-aig-authorization", &format!("Bearer {key}"))?);
         streams(built.http_client(Amended::new(Unsent)).build()?.completion_model(id))
       }
-      Client::Gemini => streams(asked!(gemini::Client)),
-      Client::Openrouter => streams(asked!(openrouter::Client)),
-      Client::Groq => streams(asked!(groq::Client)),
-      Client::Xai => streams(asked!(xai::Client)),
-      Client::Mistral => streams(asked!(mistral::Client)),
-      Client::Deepseek => streams(asked!(deepseek::Client)),
-      Client::Together => streams(asked!(together::Client)),
-      Client::Moonshot => streams(asked!(moonshot::Client)),
-      Client::Zai => streams(asked!(zai::Client)),
-      Client::Huggingface => streams(asked!(huggingface::Client)),
-      Client::Xiaomi => streams(asked!(xiaomimimo::Client)),
-      Client::Copilot => copilot_streams(key, id)?,
-      Client::Azure => azure_streams(reach, key, id)?,
-      Client::Bedrock => {
+      Self::Gemini => streams(asked!(gemini::Client)),
+      Self::Openrouter => streams(asked!(openrouter::Client)),
+      Self::Groq => streams(asked!(groq::Client)),
+      Self::Xai => streams(asked!(xai::Client)),
+      Self::Mistral => streams(asked!(mistral::Client)),
+      Self::Deepseek => streams(asked!(deepseek::Client)),
+      Self::Together => streams(asked!(together::Client)),
+      Self::Moonshot => streams(asked!(moonshot::Client)),
+      Self::Zai => streams(asked!(zai::Client)),
+      Self::Huggingface => streams(asked!(huggingface::Client)),
+      Self::Xiaomi => streams(asked!(xiaomimimo::Client)),
+      Self::Copilot => copilot_streams(key, id)?,
+      Self::Azure => azure_streams(reach, key, id)?,
+      Self::Bedrock => {
         let built =
           rig_bedrock::client::Client::from_env().map_err(|no| Error::Bedrock(no.to_string()))?;
         streams(built.completion_model(id))
       }
-      Client::Vertex => vertex_streams(reach, key, id)?,
-      Client::Pi => streams(Pi::new(api()?, key, id)),
+      Self::Vertex => vertex_streams(reach, key, id)?,
+      Self::Pi => streams(Pi::new(api()?, key, id)),
     })
   }
 }

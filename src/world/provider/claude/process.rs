@@ -81,7 +81,7 @@ impl Process {
     program: &Program,
     spend: Spend,
     gone: Duration,
-  ) -> Result<Process, CompletionError> {
+  ) -> Result<Self, CompletionError> {
     command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
     // A program that a process holds open to write it is busy, as a new program is for a moment
     // while a fork of another thread holds it, so it starts at a later try.
@@ -118,7 +118,7 @@ impl Process {
     };
     let out = Out { reader: BufReader::new(stdout), read: Vec::new() };
     let tail = Tail { stderr: Some(stderr), kept: String::new() };
-    Ok(Process { spend, child, _group: group, stdin, out, tail, paid: 0.0 })
+    Ok(Self { spend, child, _group: group, stdin, out, tail, paid: 0.0 })
   }
 
   /// Whether the process still stands: what an earlier turn left unread goes, and an end among it

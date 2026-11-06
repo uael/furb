@@ -18,9 +18,9 @@ use crate::{ear::reactor, world::Catalog};
 struct Scope(crate::testing::Yard);
 
 impl Scope {
-  fn profile(account: &str, cached: &str) -> Scope {
+  fn profile(account: &str, cached: &str) -> Self {
     let root =
-      Scope(crate::testing::Yard::unmade(format!("furb-auth-{}", random().expect("random bytes"))));
+      Self(crate::testing::Yard::unmade(format!("furb-auth-{}", random().expect("random bytes"))));
     let path = directory(Some(&root.0));
     save(
       &path.join("codex.json"),

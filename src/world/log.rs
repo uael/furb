@@ -77,7 +77,7 @@ pub(super) enum Line<'a> {
 impl<'a> Line<'a> {
   /// The line from its first two words, as `["bash","bash3",`. A line whose head holds an escape
   /// is parsed whole.
-  pub(super) fn of(text: &'a str) -> Line<'a> {
+  pub(super) fn of(text: &'a str) -> Self {
     let Some(rest) = text.strip_prefix("[\"") else {
       return if text.starts_with('{') { Line::Head } else { Line::Other };
     };
@@ -256,16 +256,16 @@ fn owed(held: &[Object]) -> Vec<(String, Value)> {
 impl Log {
   /// The log of the record at a path, which holds these entries, written again from its first line, or from the
   /// lines of the log before it that come before the checkpoint that the life boots on.
-  fn open(record: &Path, held: &[Object]) -> Log {
+  fn open(record: &Path, held: &[Object]) -> Self {
     let path = beside(record, ".log");
     let fresh = beside(record, ".log.new");
     let earlier = crate::checkpoint::last(held)
       .and_then(|at| earlier(&path, &held[..at]).map(|(text, seen)| (at, text, seen)));
     let file = OpenOptions::new().create(true).write(true).truncate(true).open(&fresh).ok();
     let entries = held.len();
-    let mut log = Log {
+    let mut log = Self {
       path,
-      sink: Log::sink(file),
+      sink: Self::sink(file),
       fresh: Some(fresh),
       entries,
       seen: HashSet::new(),

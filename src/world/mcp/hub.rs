@@ -64,35 +64,35 @@ enum Link {
 impl Link {
   /// The link of a server that the configs define, before any connect: failed when its definition
   /// is broken.
-  fn defined(server: &Server) -> Link {
+  fn defined(server: &Server) -> Self {
     match &server.run {
-      Err(why) => Link::Failed(why.to_string()),
-      Ok(_) if server.disabled => Link::Disabled,
-      Ok(_) if !server.approved => Link::Unapproved,
-      Ok(_) => Link::Pending,
+      Err(why) => Self::Failed(why.to_string()),
+      Ok(_) if server.disabled => Self::Disabled,
+      Ok(_) if !server.approved => Self::Unapproved,
+      Ok(_) => Self::Pending,
     }
   }
 
   /// The name of the state, as a server dict gives it.
   fn name(&self) -> &'static str {
     match self {
-      Link::Pending => "pending",
-      Link::Connected { .. } => "connected",
-      Link::Failed(_) => "failed",
-      Link::NeedsAuth { .. } => "needs-auth",
-      Link::Disabled => "disabled",
-      Link::Unapproved => "unapproved",
+      Self::Pending => "pending",
+      Self::Connected { .. } => "connected",
+      Self::Failed(_) => "failed",
+      Self::NeedsAuth { .. } => "needs-auth",
+      Self::Disabled => "disabled",
+      Self::Unapproved => "unapproved",
     }
   }
 
   /// Why the server of this name is in the state, as a server dict gives it, or none.
   fn why(&self, name: &str) -> Option<String> {
     match self {
-      Link::Failed(why) => Some(why.clone()),
-      Link::NeedsAuth { .. } => {
+      Self::Failed(why) => Some(why.clone()),
+      Self::NeedsAuth { .. } => {
         Some(format!("the server asks for a login: mcp_control('login', {name:?})"))
       }
-      Link::Pending | Link::Connected { .. } | Link::Disabled | Link::Unapproved => None,
+      Self::Pending | Self::Connected { .. } | Self::Disabled | Self::Unapproved => None,
     }
   }
 }
@@ -110,14 +110,14 @@ enum Action {
 
 impl Action {
   /// The action of this name, or why there is none.
-  fn of(name: &str) -> Result<Action, Error> {
+  fn of(name: &str) -> Result<Self, Error> {
     match name {
-      "reconnect" => Ok(Action::Reconnect),
-      "enable" => Ok(Action::Enable),
-      "disable" => Ok(Action::Disable),
-      "approve" => Ok(Action::Approve),
-      "login" => Ok(Action::Login),
-      "logout" => Ok(Action::Logout),
+      "reconnect" => Ok(Self::Reconnect),
+      "enable" => Ok(Self::Enable),
+      "disable" => Ok(Self::Disable),
+      "approve" => Ok(Self::Approve),
+      "login" => Ok(Self::Login),
+      "logout" => Ok(Self::Logout),
       other => Err(Error::Action(other.to_owned())),
     }
   }
@@ -156,8 +156,8 @@ pub(super) struct Hub {
 
 impl Hub {
   /// The servers of a life, none loaded yet, which tell each change that no question asked for to `told`.
-  pub(super) fn new(settings: Settings, told: mpsc::UnboundedSender<String>) -> Arc<Hub> {
-    Arc::new(Hub {
+  pub(super) fn new(settings: Settings, told: mpsc::UnboundedSender<String>) -> Arc<Self> {
+    Arc::new(Self {
       settings,
       entries: Mutex::new(Vec::new()),
       loaded: Mutex::new(false),

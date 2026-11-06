@@ -60,7 +60,7 @@ pub(super) struct Hearer {
 }
 
 impl Hearer {
-  pub(super) fn new(provider: Provider, life: String) -> Hearer {
+  pub(super) fn new(provider: Provider, life: String) -> Self {
     let native = provider.search();
     let Provider {
       directory,
@@ -85,7 +85,7 @@ impl Hearer {
         .first()
         .map_or_else(|| OPERATOR.to_owned(), |model| model.at(None))
     });
-    Hearer {
+    Self {
       life,
       directory,
       config,

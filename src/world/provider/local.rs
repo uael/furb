@@ -171,7 +171,7 @@ struct Asking {
 
 impl Server {
   /// The local server that the environment names, and none when the environment names no address.
-  pub(super) fn named(env: impl Fn(&str) -> Option<String>) -> Option<Server> {
+  pub(super) fn named(env: impl Fn(&str) -> Option<String>) -> Option<Self> {
     let env = |name: &str| env(name).filter(|one| !one.trim().is_empty());
     let address = env(ENV_URL)?;
     // A user and a password in the address would go into each error that names it, so the key goes in its own name.
@@ -190,7 +190,7 @@ impl Server {
     let path = url.path().trim_end_matches('/').trim_end_matches("/v1").trim_end_matches('/');
     let root = format!("{}://{}{path}", url.scheme(), url.authority());
     let count = |name: &str| env(name)?.trim().parse::<u64>().ok().filter(|one| *one > 0);
-    Some(Server {
+    Some(Self {
       root,
       key: env(ENV_KEY).unwrap_or_default(),
       window: count(ENV_WINDOW),
@@ -203,7 +203,7 @@ impl Server {
 
   /// The server, waiting this long for its list and this long before it asks again.
   #[cfg(test)]
-  pub(super) fn timed(mut self, deadline: Duration, again: Duration) -> Server {
+  pub(super) fn timed(mut self, deadline: Duration, again: Duration) -> Self {
     self.deadline = deadline;
     self.again = again;
     self

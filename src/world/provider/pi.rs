@@ -30,8 +30,8 @@ pub(super) struct Pi {
 }
 
 impl Pi {
-  pub(super) fn new(api: String, key: String, id: String) -> Pi {
-    Pi { client: ReqwestClient::default(), api, key, id }
+  pub(super) fn new(api: String, key: String, id: String) -> Self {
+    Self { client: ReqwestClient::default(), api, key, id }
   }
 
   /// The context of a turn in the words of pi-ai: the system prompt, and each message as pi-ai keeps it.
