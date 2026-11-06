@@ -13,14 +13,16 @@ use super::{
   AuthError, Catalog as Account, Credential, Effort, Listing, SignIn, callback_code, directory,
   now, random, save, status,
 };
+use crate::testing;
 use crate::{ear::reactor, world::Catalog};
+use std::fs;
 
-struct Scope(crate::testing::Yard);
+struct Scope(testing::Yard);
 
 impl Scope {
   fn profile(account: &str, cached: &str) -> Self {
     let root =
-      Self(crate::testing::Yard::unmade(format!("furb-auth-{}", random().expect("random bytes"))));
+      Self(testing::Yard::unmade(format!("furb-auth-{}", random().expect("random bytes"))));
     let path = directory(Some(&root.0));
     save(
       &path.join("codex.json"),
@@ -55,7 +57,7 @@ impl Scope {
   }
 
   fn catalog(&self, enabled: bool) -> Catalog {
-    std::fs::write(self.0.join("config.json"), format!(r#"{{"providers":{{"codex":{enabled}}}}}"#))
+    fs::write(self.0.join("config.json"), format!(r#"{{"providers":{{"codex":{enabled}}}}}"#))
       .expect("provider settings");
     Catalog::of(&IndexMap::new(), None, None, |_| None)
       .configured(&self.0, Some(&self.0))
@@ -72,7 +74,7 @@ fn enabling_subscription_models_uses_the_account_window_and_supported_efforts() 
   assert_eq!(model.window, 475_000);
   assert_eq!(model.efforts.iter().map(|one| one.0.as_str()).collect::<Vec<_>>(), ["low", "high"]);
   assert!(model.images);
-  std::fs::write(
+  fs::write(
     scope.0.join("config.json"),
     r#"{"providers":{"codex":{"model_context_window":1000000}}}"#,
   )
@@ -100,10 +102,10 @@ fn the_credential_and_its_directory_are_private() {
   let scope = Scope::profile("account", "account");
   let path = directory(Some(&scope.0));
   assert_eq!(
-    std::fs::metadata(path.join("codex.json")).expect("credential").permissions().mode() & 0o777,
+    fs::metadata(path.join("codex.json")).expect("credential").permissions().mode() & 0o777,
     0o600
   );
-  assert_eq!(std::fs::metadata(path).expect("directory").permissions().mode() & 0o777, 0o700);
+  assert_eq!(fs::metadata(path).expect("directory").permissions().mode() & 0o777, 0o700);
 }
 
 #[test]

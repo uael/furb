@@ -45,10 +45,13 @@ pub use accounts::{Account, Source, Switch};
 use conversation::{Conversation, Run};
 use discover::Found;
 pub use discover::refresh;
+use futures::stream;
 use keeper::Kept;
 use locate::PROGRAM;
 pub(super) use locate::located;
 use process::Spend;
+use std::path;
+use std::process as std_process;
 
 /// The name of the command line as a provider: each response of it says this name, and each of its
 /// models is named by it and the alias of its family.
@@ -344,9 +347,9 @@ impl Program {
     let Ok(mut command) = self.command() else { return false };
     command
       .args(["auth", "status"])
-      .stdin(std::process::Stdio::null())
-      .stdout(std::process::Stdio::piped())
-      .stderr(std::process::Stdio::piped());
+      .stdin(std_process::Stdio::null())
+      .stdout(std_process::Stdio::piped())
+      .stderr(std_process::Stdio::piped());
     let Some(out) = child::output(&mut command, Duration::from_secs(10)).await else {
       return true;
     };
@@ -358,7 +361,7 @@ impl Program {
   }
 
   /// The file of the program, as a failure to start it names it.
-  pub(super) fn name(&self) -> std::path::Display<'_> {
+  pub(super) fn name(&self) -> path::Display<'_> {
     self.bin.display()
   }
 }
@@ -405,9 +408,8 @@ impl CompletionModel for Completion {
     };
     // The turn goes with the stream: it runs as the stream is read, and a stream that is dropped
     // ends it.
-    let told = futures::stream::poll_fn(move |cx| heard.poll_recv(cx));
-    let stream =
-      futures::stream::select(told, futures::stream::once(turn).filter_map(async |one| one));
+    let told = stream::poll_fn(move |cx| heard.poll_recv(cx));
+    let stream = stream::select(told, stream::once(turn).filter_map(async |one| one));
     Ok(StreamingCompletionResponse::stream(CLAUDE, Box::pin(stream)))
   }
 }

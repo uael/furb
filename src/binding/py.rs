@@ -43,6 +43,9 @@ use pyo3::{
 };
 
 use super::{Given, Homed, NativeEar, Record, Said, Told, Value, words};
+use crate::engine;
+use crate::value;
+use crate::wire;
 use crate::{
   Ear, Engine, Fact, Fault, Heard, Object, ObjectRef, Step,
   ear::{Call, Spoken},
@@ -50,6 +53,7 @@ use crate::{
   life::{Answer, Log, Opening, Retrying, Stream},
   value::{IS, entry, field, marked, templated},
 };
+use tokio::task;
 
 /// What makes a value of the engine the python object it is: the engine of this interpreter, whose classes an
 /// instance is made from, and the one object each exception of the life is, by its name and what it was made
@@ -317,7 +321,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Answer {
     Ok(Self(Arc::new(move |request, told| {
       let answer = Arc::clone(&answer);
       Box::pin(async move {
-        let called = tokio::task::spawn_blocking(move || {
+        let called = task::spawn_blocking(move || {
           Python::attach(|py| {
             let json = py.import("json")?;
             let request = json.call_method1("loads", (request.to_string(),))?;
@@ -334,7 +338,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Answer {
           .map_err(|no| no.to_string())
         });
         let turn = called.await.map_err(|no| no.to_string())??;
-        crate::wire::parsed(&turn).map_err(|fault| fault.message())
+        wire::parsed(&turn).map_err(|fault| fault.message())
       })
     })))
   }
@@ -1142,7 +1146,7 @@ fn recorded<'py>(
 
 /// A value that is no plain data and no map: an exception, an instance with fields, or a class.
 fn other<'py>(py: Python<'py>, said: ObjectRef<'_>, made: &Made) -> PyResult<Bound<'py, PyAny>> {
-  if let Some(fault) = crate::value::Fault::of(said) {
+  if let Some(fault) = value::Fault::of(said) {
     let args = each(py, fault.args.iter().map(Object::as_ref).collect())?;
     return made.fault(py, &fault.name, args);
   }
@@ -1529,5 +1533,5 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   }
   module.add("ENGINE", crate::ENGINE)?;
   module.add("SYSTEM", crate::SYSTEM)?;
-  crate::engine::constants(module)
+  engine::constants(module)
 }

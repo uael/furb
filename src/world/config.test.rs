@@ -4,10 +4,13 @@ use serde_json::{Value, json};
 
 use super::{Change, Error, Kind, Layer, Layers, Property, Setting};
 use crate::world::catalog::blocking;
+use std::env;
+use std::path;
+use std::process;
 
 /// A project and a config directory of a user, each empty, in a folder of the test alone.
 fn place(name: &str) -> (PathBuf, Layers) {
-  let at = std::env::temp_dir().join(format!("furb-config-{name}-{}", std::process::id()));
+  let at = env::temp_dir().join(format!("furb-config-{name}-{}", process::id()));
   drop(fs::remove_dir_all(&at));
   fs::create_dir_all(at.join("project/.furb")).unwrap();
   fs::create_dir_all(at.join("user")).unwrap();
@@ -36,7 +39,7 @@ fn won(layers: &Layers) -> Vec<(String, Value, Option<Layer>)> {
 
 /// An extension in a folder of the project, which the project config turns on, and whose manifest
 /// names the file of its keys.
-fn extension(at: &std::path::Path, name: &str, keys: &Value) {
+fn extension(at: &path::Path, name: &str, keys: &Value) {
   let root = at.join("project/.furb").join(name);
   fs::create_dir_all(&root).unwrap();
   let manifest = format!(

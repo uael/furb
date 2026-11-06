@@ -17,6 +17,7 @@ use super::{
   clients::{Client, Reach},
 };
 use crate::{ear::spawned, world::child};
+use tokio::time;
 
 /// A search of the web: given a query, the answer in Markdown with its sources, or why it gives none.
 pub type Searches = Arc<dyn Fn(String) -> BoxFuture<'static, Result<String, Error>> + Send + Sync>;
@@ -79,7 +80,7 @@ const TOKENS: u64 = 4096;
 pub(crate) fn timed<T: Send + 'static, E: From<Cut> + Send + 'static>(
   work: impl Future<Output = Result<T, E>> + Send + 'static,
 ) -> BoxFuture<'static, Result<T, E>> {
-  spawned(async move { tokio::time::timeout(TIMEOUT, work).await })
+  spawned(async move { time::timeout(TIMEOUT, work).await })
     .map(|got| match got {
       Ok(Ok(got)) => got,
       Ok(Err(_)) => Err(Cut::Late.into()),

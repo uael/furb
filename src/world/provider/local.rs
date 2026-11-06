@@ -44,6 +44,8 @@ use super::{
   catalog::{LEVELS, reached},
   clients::{Client, Reach},
 };
+use tokio::task;
+use tokio::time;
 
 /// The provider of the models of a local server.
 pub(super) const LOCAL: &str = "local";
@@ -72,7 +74,7 @@ enum Error {
   #[error("it listed nothing in {0:?}")]
   Slow(Duration),
   #[error("{0}")]
-  Task(#[from] tokio::task::JoinError),
+  Task(#[from] task::JoinError),
 }
 
 /// Why a server listed no model.
@@ -311,12 +313,12 @@ impl Server {
     // models when they do not come in time.
     let listing = async move {
       let began = Instant::now();
-      let mut offers = match tokio::time::timeout(deadline, asking.offers()).await {
+      let mut offers = match time::timeout(deadline, asking.offers()).await {
         Ok(listed) => listed?,
         Err(_elapsed) => return Err(Error::Slow(deadline)),
       };
       let windows = asking.windowed(&mut offers);
-      drop(tokio::time::timeout(deadline.saturating_sub(began.elapsed()), windows).await);
+      drop(time::timeout(deadline.saturating_sub(began.elapsed()), windows).await);
       Ok::<_, Error>(offers)
     };
     listing.await

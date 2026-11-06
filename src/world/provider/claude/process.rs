@@ -16,6 +16,10 @@ use tokio::{
 
 use super::{Error, Program, failed, protocol::Event, refused};
 use crate::world::child::{self, Group, Unborn};
+use std::future;
+use std::io;
+use std::mem;
+use tokio::time;
 
 /// How long a turn reads what a process that ended still holds on its stdout and its stderr, since
 /// a process that it started may hold them open.
@@ -38,8 +42,8 @@ const FIRST: Duration = Duration::from_millis(100);
 const PAUSE: Duration = Duration::from_secs(5);
 
 /// Whether a program that did not start is missing, or is not one that this machine runs.
-fn unrunnable(no: &std::io::Error) -> bool {
-  matches!(no.kind(), std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied)
+fn unrunnable(no: &io::Error) -> bool {
+  matches!(no.kind(), io::ErrorKind::NotFound | io::ErrorKind::PermissionDenied)
 }
 
 /// What the stdout of a process says: an event of the stream, a line that is none, or its end, with
@@ -101,7 +105,7 @@ impl Process {
         }
         got => break got,
       };
-      tokio::time::sleep(wait).await;
+      time::sleep(wait).await;
     }
     .map_err(|no| {
       let said = format!("{} {no}", program.name());
@@ -152,7 +156,7 @@ impl Out {
           Line::Over(Some(format!("Claude wrote a line over {LINE} bytes.")))
         }
         Ok(_) => {
-          let read = std::mem::take(&mut self.read);
+          let read = mem::take(&mut self.read);
           match serde_json::from_slice::<Value>(read.trim_ascii()) {
             Ok(value) => match Event::read(value) {
               Ok(event) => Line::Event(Box::new(event)),
@@ -180,7 +184,7 @@ pub(super) struct Tail {
 impl Tail {
   /// What the stderr writes next, kept, until its end.
   async fn heard(&mut self) {
-    let Some(stderr) = self.stderr.as_mut() else { return std::future::pending().await };
+    let Some(stderr) = self.stderr.as_mut() else { return future::pending().await };
     let mut chunk = [0u8; 4096];
     match stderr.read(&mut chunk).await {
       Ok(n) if n > 0 => {
@@ -243,7 +247,7 @@ pub(super) async fn exited(
   program: &Program,
   spoke: bool,
 ) -> (CompletionError, bool) {
-  tokio::time::timeout(GRACE, tail.drained()).await.ok();
+  time::timeout(GRACE, tail.drained()).await.ok();
   let code = code.map_or_else(|| "a signal".to_owned(), |code| code.to_string());
   if !spoke && absent(&tail.kept) {
     let said = tail.said();

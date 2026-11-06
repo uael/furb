@@ -42,6 +42,7 @@ use std::{
 
 use serde_json::Value;
 
+use crate::checkpoint;
 use crate::{
   ear::{Co, Ear, Hooks, With, ear, hear},
   fact::{Fact, named},
@@ -49,6 +50,9 @@ use crate::{
   wire::{outward, parsed},
   world::{beside, kept},
 };
+use serde::de;
+use std::fs;
+use std::mem;
 
 /// The kind of the line that says the record kept an entry there, in the log and in what a
 /// record tells.
@@ -187,7 +191,7 @@ struct Log {
 /// head, and each name that they show: nothing when the log does not agree with those entries, as [`agreed`] reads it.
 /// A log of a life that went on from an earlier checkpoint holds a line of keep for this checkpoint, where they end.
 fn earlier(log: &Path, before: &[Object]) -> Option<(String, HashSet<String>)> {
-  let text = std::fs::read_to_string(log).ok()?;
+  let text = fs::read_to_string(log).ok()?;
   let mut lines = text.split_inclusive('\n');
   let head = lines.next()?;
   let mut entries =
@@ -259,7 +263,7 @@ impl Log {
   fn open(record: &Path, held: &[Object]) -> Self {
     let path = beside(record, ".log");
     let fresh = beside(record, ".log.new");
-    let earlier = crate::checkpoint::last(held)
+    let earlier = checkpoint::last(held)
       .and_then(|at| earlier(&path, &held[..at]).map(|(text, seen)| (at, text, seen)));
     let file = OpenOptions::new().create(true).write(true).truncate(true).open(&fresh).ok();
     let entries = held.len();
@@ -332,7 +336,7 @@ impl Log {
       .map(|(about, _)| about.clone())
       .filter(|one| !self.seen.contains(one))
       .collect();
-    for (about, line) in std::mem::take(&mut self.owed) {
+    for (about, line) in mem::take(&mut self.owed) {
       if missed.contains(&about) {
         self.seen.insert(about);
         self.line(&line);
@@ -340,11 +344,11 @@ impl Log {
     }
     if let Some(fresh) = self.fresh.take()
       && self.live()
-      && std::fs::rename(&fresh, &self.path).is_err()
+      && fs::rename(&fresh, &self.path).is_err()
     {
       self.sink.borrow_mut().out = None;
       // The next life truncates the file, so one that stays does no harm.
-      std::fs::remove_file(&fresh).unwrap_or_default();
+      fs::remove_file(&fresh).unwrap_or_default();
     }
     self.entries += 1;
     self.line(&keep(self.entries));
@@ -363,7 +367,7 @@ impl Drop for Log {
     if let Some(fresh) = self.fresh.take() {
       self.sink.borrow_mut().out = None;
       // The next life truncates the file, so one that stays does no harm.
-      std::fs::remove_file(fresh).unwrap_or_default();
+      fs::remove_file(fresh).unwrap_or_default();
     }
   }
 }
@@ -384,7 +388,7 @@ pub fn logged(path: impl AsRef<Path>) -> Result<Option<Vec<Object>>, Fault> {
   if !agrees(path, record.len(), &asked) {
     return Ok(None);
   }
-  let Ok(text) = std::fs::read_to_string(beside(path, ".log")) else {
+  let Ok(text) = fs::read_to_string(beside(path, ".log")) else {
     return Ok(None);
   };
   let facts = text
@@ -427,7 +431,7 @@ fn agreed(mut lines: impl BufRead, record: usize, mut asked: HashSet<String>) ->
     let ended = line.ends_with('\n');
     let text =
       line.strip_suffix('\n').map_or(line.as_str(), |one| one.strip_suffix('\r').unwrap_or(one));
-    if serde_json::from_str::<serde::de::IgnoredAny>(text).is_err() {
+    if serde_json::from_str::<de::IgnoredAny>(text).is_err() {
       if !ended {
         break;
       }

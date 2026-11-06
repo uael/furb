@@ -16,6 +16,7 @@ use std::{
 
 use serde_json::{Map, Value};
 
+use crate::world;
 use crate::world::disk::{self, Access};
 
 /// How long a call of a tool may take when its server names no `"timeout"`.
@@ -425,7 +426,7 @@ impl Fields<'_> {
     let command =
       self.text("command")?.filter(|command| !command.is_empty()).ok_or(Error::NoCommand)?;
     let args = self.args()?;
-    let cwd = self.text("cwd")?.map(|cwd| crate::world::resolved(project, &cwd));
+    let cwd = self.text("cwd")?.map(|cwd| world::resolved(project, &cwd));
     Ok(Transport::Stdio { command, args, env: self.pairs("env")?, cwd })
   }
 

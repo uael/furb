@@ -11,8 +11,8 @@
 //! as one the sandbox calls back. Each door hands the ears and the functions over to the life the value comes into,
 //! and a verb that a host says while a life hears it goes to that life.
 
-// This tree pays this lint already, so it holds here ahead of the workspace.
-#![deny(clippy::use_self)]
+// This tree pays these lints already, so they hold here ahead of the workspace.
+#![deny(clippy::absolute_paths, clippy::use_self)]
 #![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
 #![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
 #![expect(clippy::map_unwrap_or, reason = "debt: map then unwrap_or, where map_or serves")]
@@ -43,6 +43,7 @@ use napi_derive::napi;
 #[cfg(feature = "python")]
 use pyo3::pyfunction;
 
+use crate::gate::checked;
 use crate::{
   Ear, Fact, Fault, Heard, Life, Object, Spoken, Step,
   extension::{self, Extension, Part},
@@ -50,6 +51,8 @@ use crate::{
   wire,
   world::{self, images},
 };
+use std::env;
+use std::path;
 
 /// A value of the engine, as a host language holds it, both ways.
 pub struct Value(pub Object);
@@ -465,7 +468,7 @@ pub fn opened(opening: Option<Opening>) -> Result<(Record, Vec<(String, NativeEa
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn gate(sheet: String) -> Result<Vec<(i64, String)>, Fault> {
-  let found = crate::gate::checked(&sheet)?;
+  let found = checked(&sheet)?;
   Ok(
     found
       .into_iter()
@@ -504,7 +507,7 @@ pub fn extensions(given: Vec<Extension>) -> NativeEar {
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn parts(project: String) -> Result<Vec<Part>, Fault> {
-  extension::parts(&extension::Places::here(), std::path::Path::new(&project))
+  extension::parts(&extension::Places::here(), path::Path::new(&project))
 }
 
 /// The ear of the skills extension, which finds skills in the folders of a chain and in the config directory.
@@ -571,10 +574,9 @@ fn configured_catalog(
   directory: Option<String>,
   config: Option<String>,
 ) -> Result<world::Catalog, Fault> {
-  let directory = directory
-    .map(std::path::PathBuf::from)
-    .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
-  let config = config.map(std::path::PathBuf::from);
+  let directory =
+    directory.map(path::PathBuf::from).unwrap_or_else(|| env::current_dir().unwrap_or_default());
+  let config = config.map(path::PathBuf::from);
   world::Catalog::load()
     .claude(claude.map(Into::into), None)
     .configured(&directory, config.as_deref())
@@ -675,7 +677,7 @@ pub struct CodexAuthInfo {
 #[cfg_attr(feature = "typescript", napi)]
 pub fn codex_auth(action: Option<String>, config: Option<String>) -> Result<CodexAuthInfo, Fault> {
   use crate::world::codex as auth;
-  let path = config.map(std::path::PathBuf::from);
+  let path = config.map(path::PathBuf::from);
   let status = match action.as_deref().unwrap_or("status") {
     "status" => auth::status(path.as_deref()),
     "start" => auth::begin(path.as_deref()).map_err(|no| Fault::refused(no.to_string()))?,

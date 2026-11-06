@@ -16,8 +16,8 @@
 //! Each is an ear like any other, so an ear that comes before one of them in the order of boot takes a question in
 //! its place, and an ear that takes a question and asks it again wraps it.
 
-// This tree pays this lint already, so it holds here ahead of the workspace.
-#![deny(clippy::use_self)]
+// This tree pays these lints already, so they hold here ahead of the workspace.
+#![deny(clippy::absolute_paths, clippy::use_self)]
 
 mod bash;
 mod child;
@@ -65,6 +65,8 @@ use crate::{
   fact::Fact,
   value::{Fault, Object},
 };
+#[cfg(unix)]
+use rustix::fs;
 
 /// The file that a record keeps beside it, as `<record>.log`: the name of the record with the
 /// suffix after it, byte for byte, so a name that is no text reaches its file.
@@ -78,7 +80,7 @@ pub(crate) fn beside(record: &Path, suffix: &str) -> PathBuf {
 /// does not say.
 #[cfg(unix)]
 pub(crate) fn free(folder: &Path) -> Option<u64> {
-  let stat = rustix::fs::statvfs(folder).ok()?;
+  let stat = fs::statvfs(folder).ok()?;
   stat.f_bavail.checked_mul(stat.f_frsize)
 }
 

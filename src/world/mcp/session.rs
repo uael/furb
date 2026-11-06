@@ -10,6 +10,7 @@ use super::{
   config::Transport,
   wire::{Failure, Heard, Peer},
 };
+use tokio::time;
 
 /// The version of the protocol that furb asks for.
 pub(super) const VERSION: &str = "2025-06-18";
@@ -69,7 +70,7 @@ pub(super) async fn start(
   roots: Value,
   bound: Duration,
 ) -> Result<(Session, mpsc::UnboundedReceiver<Heard>), Failure> {
-  let Ok(opened) = tokio::time::timeout(bound, Peer::open(transport, token, roots)).await else {
+  let Ok(opened) = time::timeout(bound, Peer::open(transport, token, roots)).await else {
     return Err(Failure::Late(bound));
   };
   let (peer, heard) = opened?;

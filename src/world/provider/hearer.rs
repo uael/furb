@@ -21,12 +21,17 @@ use super::{
   watch::{self, Watch},
   word::{AFTER, Found, RAN, STOPPED, afterward, ending, judged, kept, unquoted, writing},
 };
+use crate::extension;
+use crate::fact;
+use crate::value;
 use crate::{
   ear::{Co, say, spawned},
   engine::OPERATOR,
   fact::Fact,
   value::{Fault, Object},
 };
+use std::fmt;
+use std::mem;
 
 /// The ear of the provider as it hears a life: what the provider stands on, which a refresh
 /// changes, the replies that it took, and the stands and the searches that it answers.
@@ -131,8 +136,8 @@ impl Hearer {
       say(co, Fact::says("started", &about, []));
       return;
     }
-    let word = crate::fact::named(a.by(), "rung");
-    let first = !std::mem::replace(&mut self.stood, true);
+    let word = fact::named(a.by(), "rung");
+    let first = !mem::replace(&mut self.stood, true);
     if let Some(refresh) = self.refresh.as_ref().filter(|_| !first && !word) {
       // Reading the settings asks each program of a model, which can take seconds, so the
       // stand awaits them as a task of the runtime of the ears, and every chain of the life
@@ -188,7 +193,7 @@ impl Hearer {
       &self.directory,
       &self.actor,
       self.extensions.as_deref(),
-      &self.config.clone().unwrap_or_else(|| crate::extension::Places::here().config),
+      &self.config.clone().unwrap_or_else(|| extension::Places::here().config),
     );
     say(co, Fact::says("done", &about, [given]));
     if word {
@@ -430,7 +435,7 @@ impl Hearer {
       let got = search(query.clone()).await;
       Replied::Searched {
         id,
-        got: got.map(|answer| crate::value::Text::new(query, answer)).map_err(|no| no.to_string()),
+        got: got.map(|answer| value::Text::new(query, answer)).map_err(|no| no.to_string()),
       }
     };
     co.take(&about, stream::once(asked));
@@ -515,7 +520,7 @@ pub(super) struct Call {
 }
 
 /// What a search came to: its text, or why it gives none.
-pub(super) fn searched(co: &mut Co<Replied>, id: &str, got: Result<crate::value::Text, String>) {
+pub(super) fn searched(co: &mut Co<Replied>, id: &str, got: Result<value::Text, String>) {
   let got = got.map_or_else(|no| Fault::refused(no).object(), |one| one.object());
   say(co, Fact::says("done", id, [got]));
 }
@@ -527,7 +532,7 @@ pub(super) async fn released(hold: &mut holding::Receiver<bool>) -> Result<(), C
 }
 
 /// The failure of a call of a model whose reply went: no one reads what it would give.
-pub(super) fn reply_gone(why: impl std::fmt::Display) -> CompletionError {
+pub(super) fn reply_gone(why: impl fmt::Display) -> CompletionError {
   CompletionError::ProviderError(format!(
     "the reply went before its call of the model ended: {why}"
   ))
@@ -543,7 +548,7 @@ pub(super) enum Replied {
   Retried(Retried),
   Came(Came),
   Refreshed { about: String, got: Result<Settings, String> },
-  Searched { id: String, got: Result<crate::value::Text, String> },
+  Searched { id: String, got: Result<value::Text, String> },
 }
 
 /// A part that the model of a reply wrote: the id of the reply, and what the part added to its

@@ -34,9 +34,13 @@ use crate::{
   wire::{built, whole},
 };
 
+use crate::checkpoint;
+use crate::fact;
 pub use lines::Lines;
 pub use schema::{CHECKPOINT_SCHEMA, RECORD_SCHEMA, Schema, SchemaError};
 pub use sqlite::Sqlite;
+use std::io;
+use tokio::time;
 
 /// The place that keeps the record of a life, which a host can write for a place of its own and give to `keeping`.
 ///
@@ -128,7 +132,7 @@ fn stood(entry: &Object) -> Option<Object> {
   let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
   let value = fact.word(0)?;
   let stood =
-    fact.kind() == "done" && crate::fact::named(fact.about(), "stand") && value.items().is_some();
+    fact.kind() == "done" && fact::named(fact.about(), "stand") && value.items().is_some();
   stood.then(|| value.to_owned())
 }
 
@@ -291,7 +295,7 @@ pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>
   let held = Rc::clone(&store);
   // A record whose last checkpoint has no fact made after it is new to the build that goes on from it.
   let new = entries.is_empty()
-    || crate::checkpoint::last(&entries).is_some_and(|at| made(&entries[at + 1..]).is_none());
+    || checkpoint::last(&entries).is_some_and(|at| made(&entries[at + 1..]).is_none());
   let kept = hearing(&["keep", "chain"], move |mut co: Co<()>| async move {
     // What the ear told the operator last, and whether a try waits for its time.
     let (mut said, mut again) = (Told::Room, false);
@@ -315,7 +319,7 @@ pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>
         Some(fault) => {
           if !again {
             again = true;
-            co.work(stream::once(tokio::time::sleep(AGAIN)));
+            co.work(stream::once(time::sleep(AGAIN)));
           }
           if said != Told::Stopped {
             // A message that cannot go leaves what the ear said, so the next pass says it again.
@@ -518,7 +522,7 @@ impl Drop for Lease {
     reason = "a drop cannot return the fault of an unlock, and the kernel ends the lock with the process"
   )]
   fn drop(&mut self) {
-    let _: std::io::Result<()> = self.0.unlock();
+    let _: io::Result<()> = self.0.unlock();
   }
 }
 

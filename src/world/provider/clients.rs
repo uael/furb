@@ -23,6 +23,10 @@ use rig_core::{
 
 use super::{Streams, ended, pi::Pi, streams};
 use crate::world::cache;
+use google_cloud_auth::credentials::api_key_credentials;
+use rig_bedrock::client;
+use std::fmt;
+use std::sync;
 
 /// The client of rig that asks a provider.
 #[derive(serde::Deserialize, Clone, Copy, PartialEq, Debug)]
@@ -148,8 +152,7 @@ impl Client {
       Self::Copilot => copilot_streams(key, id)?,
       Self::Azure => azure_streams(reach, key, id)?,
       Self::Bedrock => {
-        let built =
-          rig_bedrock::client::Client::from_env().map_err(|no| Error::Bedrock(no.to_string()))?;
+        let built = client::Client::from_env().map_err(|no| Error::Bedrock(no.to_string()))?;
         streams(built.completion_model(id))
       }
       Self::Vertex => vertex_streams(reach, key, id)?,
@@ -193,7 +196,7 @@ fn vertex_streams(reach: &Reach, key: String, id: String) -> Result<Streams, Err
   let (project, location) = reach.project.clone().unwrap_or_default();
   let mut built = rig_vertexai::Client::builder().with_project(&project).with_location(&location);
   if !key.is_empty() {
-    let credentials = google_cloud_auth::credentials::api_key_credentials::Builder::new(key);
+    let credentials = api_key_credentials::Builder::new(key);
     built = built.with_credentials(credentials.build());
   }
   Ok(whole(built.build().map_err(|no| Error::Vertex(no.to_string()))?.completion_model(id)))
@@ -208,9 +211,9 @@ fn headed(name: &'static str, value: &str) -> Result<HeaderMap, Error> {
 
 /// What streams the responses of a model of rig that answers each whole: the text of a response streams at once.
 fn whole<M: CompletionModel + 'static>(model: M) -> Streams {
-  let model = std::sync::Arc::new(model);
-  std::sync::Arc::new(move |request| {
-    let model = std::sync::Arc::clone(&model);
+  let model = sync::Arc::new(model);
+  sync::Arc::new(move |request| {
+    let model = sync::Arc::clone(&model);
     Box::pin(async move {
       let response = model.completion(request).await?;
       let texts = response.choice.iter().filter_map(|one| match one {
@@ -226,7 +229,7 @@ fn whole<M: CompletionModel + 'static>(model: M) -> Streams {
 
 /// What an [`Amended`] client changes on its way: the request before it goes, and the streamed
 /// reply before it is read. A method that a type leaves out changes nothing.
-pub(super) trait Amend: Clone + std::fmt::Debug + Send + Sync + 'static {
+pub(super) trait Amend: Clone + fmt::Debug + Send + Sync + 'static {
   fn request<T>(&self, request: Request<T>) -> Request<T> {
     request
   }

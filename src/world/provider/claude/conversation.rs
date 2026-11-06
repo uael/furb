@@ -24,10 +24,16 @@ use super::{
   protocol::{Event, Finished, Reply, unexplained},
   refused, worded,
 };
+use crate::world::provider;
 use crate::world::{
   disk::{self, Access},
   provider::{ENV_THINKING, uuid},
 };
+use std::fs;
+use std::mem;
+use std::slice;
+use tokio::process;
+use tokio::time;
 
 /// The flag by which the command line records its system prompt once for a conversation.
 const SNAPSHOT: &str = "--system-prompt-snapshot";
@@ -36,8 +42,8 @@ const SNAPSHOT: &str = "--system-prompt-snapshot";
 /// memory of no project, and keeps the conversations of furb under one name.
 fn home() -> Result<PathBuf, CompletionError> {
   let folder = env::temp_dir().join("furb-claude");
-  std::fs::create_dir_all(&folder)
-    .and_then(|()| std::fs::canonicalize(&folder))
+  fs::create_dir_all(&folder)
+    .and_then(|()| fs::canonicalize(&folder))
     .map_err(|no| failed(format!("{} was not made: {no}", folder.display())))
 }
 
@@ -220,7 +226,7 @@ impl Conversation {
     let again = grown.is_some() || start.is_some_and(|at| at > 0 && at == incoming.len());
     let anew = start.is_none() || again && self.again;
     let mut delta = match (start, &grown) {
-      (Some(_), Some(one)) if !anew => std::slice::from_ref(one),
+      (Some(_), Some(one)) if !anew => slice::from_ref(one),
       (Some(at), None) if !anew => &messages[if again { last } else { at }..],
       _ => {
         self.renew()?;
@@ -331,9 +337,9 @@ impl Conversation {
   fn heard(&mut self, outcome: &Outcome<'_>) -> Heard {
     self.requested = outcome.incoming.to_vec();
     Heard {
-      chain: std::mem::replace(&mut self.chain, outcome.incoming.to_vec()),
-      asked: std::mem::replace(&mut self.asked, outcome.asked.cloned()),
-      again: std::mem::replace(&mut self.again, outcome.again),
+      chain: mem::replace(&mut self.chain, outcome.incoming.to_vec()),
+      asked: mem::replace(&mut self.asked, outcome.asked.cloned()),
+      again: mem::replace(&mut self.again, outcome.again),
     }
   }
 
@@ -355,7 +361,7 @@ impl Conversation {
     // that furb writes.
     let delta = match delta.split_last() {
       Some((last, past)) if !self.resumed && self.parent.is_none() && self.seed(past)? => {
-        std::slice::from_ref(last)
+        slice::from_ref(last)
       }
       _ => delta,
     };
@@ -369,17 +375,17 @@ impl Conversation {
     };
     // The stall bounds each wait of the turn: for the process to take its input, to write a line,
     // and to end once its stdout closed.
-    let due = tokio::time::Instant::now() + run.stall;
+    let due = time::Instant::now() + run.stall;
     let Process { stdin, tail, .. } = &mut process;
     let wrote = async {
       stdin.write_all(line.as_bytes()).await?;
       stdin.flush().await
     };
-    match tokio::time::timeout_at(due, tail.beside(wrote)).await {
+    match time::timeout_at(due, tail.beside(wrote)).await {
       Ok(Ok(())) => {}
       Ok(Err(no)) => {
         // A process that took no input ended, and the failure says all that it wrote on its stderr.
-        tokio::time::timeout(GRACE, process.tail.drained()).await.ok();
+        time::timeout(GRACE, process.tail.drained()).await.ok();
         let said = process.tail.said();
         if absent(&process.tail.kept) {
           outcome.restored = Some(before);
@@ -399,12 +405,12 @@ impl Conversation {
   /// is due.
   async fn ended_by(
     process: &mut Process,
-    due: tokio::time::Instant,
+    due: time::Instant,
     stall: Duration,
     odd: &str,
   ) -> Result<Option<i32>, CompletionError> {
     let waited = process.tail.beside(process.child.wait());
-    match tokio::time::timeout_at(due, waited).await {
+    match time::timeout_at(due, waited).await {
       Ok(status) => Ok(status.ok().and_then(|one| one.code())),
       Err(_) => Err(stalled(stall, odd)),
     }
@@ -447,16 +453,16 @@ impl Conversation {
     // The code of a process that ended. A process that it started may hold its stdout open, so the
     // turn sees the end of the process itself, and then reads what its stdout holds for a grace.
     let mut ended = None;
-    let mut due = tokio::time::Instant::now() + stall;
+    let mut due = time::Instant::now() + stall;
     let code = loop {
       let heard = tokio::select! {
         line = process.tail.beside(process.out.line()) => line,
         status = process.child.wait(), if ended.is_none() => {
           ended = Some(status.ok().and_then(|one| one.code()));
-          due = tokio::time::Instant::now() + GRACE;
+          due = time::Instant::now() + GRACE;
           continue;
         }
-        () = tokio::time::sleep_until(due) => {
+        () = time::sleep_until(due) => {
           let Some(code) = ended else { return Err(stalled(stall, &odd)) };
           break code;
         }
@@ -479,7 +485,7 @@ impl Conversation {
       };
       spoke = true;
       if !matches!(event, Event::Other) {
-        due = tokio::time::Instant::now() + stall;
+        due = time::Instant::now() + stall;
       }
       match event {
         Event::Stream { event } => reply.streamed(&event),
@@ -607,7 +613,7 @@ pub(super) fn lasting() -> &'static str {
 /// for an hour the turns of a subscription within its limits alone, and for five minutes its
 /// compaction, its turns past the limits and every turn on a key of the API, so a mark of an hour
 /// in a message made its compaction fail.
-fn pinned(command: &mut tokio::process::Command) {
+fn pinned(command: &mut process::Command) {
   command.env("CLAUDE_CODE_PROMPT_CACHE_TTL", lasting());
   command.env("CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL", lasting());
   command.env_remove("CLAUDE_CODE_MESSAGES_PROMPT_CACHE_TTL");
@@ -620,9 +626,7 @@ fn pinned(command: &mut tokio::process::Command) {
 /// line takes four marks in all.
 pub(super) fn cached(blocks: &mut [Value], marked: &mut bool) {
   let opens = |one: &Value| {
-    one["text"]
-      .as_str()
-      .is_some_and(|text| crate::world::provider::banner(&format!("\n\n{text}")) == Some(2))
+    one["text"].as_str().is_some_and(|text| provider::banner(&format!("\n\n{text}")) == Some(2))
   };
   if let Some(at) = (1..blocks.len()).find(|&at| !*marked && opens(&blocks[at])) {
     blocks[at - 1]["cache_control"] = json!({"type": "ephemeral", "ttl": lasting()});

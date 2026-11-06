@@ -41,6 +41,11 @@ use super::{
   made,
   store::{MADE, Schema, each},
 };
+use crate::wire;
+use std::fs;
+use std::io;
+use std::slice;
+use std::time;
 
 /// Who says each fact that the reader adds to the facts that a record kept, but a question.
 pub const READER: &str = "reader";
@@ -99,9 +104,9 @@ impl Retold {
     take: &mut dyn FnMut(usize, Object),
   ) -> Result<(), Fault> {
     let failed =
-      |no: std::io::Error| Fault::refused(format!("{} cannot be read: {no}", self.file.display()));
-    let file = std::fs::File::open(&self.file).map_err(failed)?;
-    let mut lines = std::io::BufReader::with_capacity(1 << 20, file);
+      |no: io::Error| Fault::refused(format!("{} cannot be read: {no}", self.file.display()));
+    let file = fs::File::open(&self.file).map_err(failed)?;
+    let mut lines = io::BufReader::with_capacity(1 << 20, file);
     let (mut line, mut kept) = (String::new(), 0);
     loop {
       line.clear();
@@ -148,7 +153,7 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   let (mut maker, mut entries, mut last) = (None, 0, None);
   let (mut asked, mut makers) = (HashSet::new(), Makers::default());
   each(path, &mut |entry| {
-    let one = std::slice::from_ref(&entry);
+    let one = slice::from_ref(&entry);
     if maker.is_none() {
       maker = made(one);
     }
@@ -166,24 +171,20 @@ pub fn retold(path: impl AsRef<Path>) -> Result<Retold, Fault> {
   let head = serde_json::json!({ "stamp": stamp, "made": maker, "logged": logged, "entries": entries, "last": last });
   let fresh = beside(path, ".told.new");
   let failed =
-    |no: std::io::Error| Fault::refused(format!("{} cannot be written: {no}", fresh.display()));
-  let mut file = std::io::BufWriter::new(std::fs::File::create(&fresh).map_err(failed)?);
+    |no: io::Error| Fault::refused(format!("{} cannot be written: {no}", fresh.display()));
+  let mut file = io::BufWriter::new(fs::File::create(&fresh).map_err(failed)?);
   writeln!(file, "{head}").map_err(failed)?;
   if !logged && let Some(no) = retell(path, makers, &mut file)? {
     return Err(failed(no));
   }
   file.into_inner().map_err(|no| failed(no.into_error()))?.sync_data().map_err(failed)?;
-  std::fs::rename(&fresh, &cache).map_err(failed)?;
+  fs::rename(&fresh, &cache).map_err(failed)?;
   Ok(Retold { made: maker, logged, file: if logged { log } else { cache }, entries, last })
 }
 
 /// The facts that the reader says over the record at a path, each on a line of its own in a
 /// file, and the first fault of the file, which stops the lines but not the read.
-fn retell(
-  path: &Path,
-  makers: Makers,
-  file: &mut impl Write,
-) -> Result<Option<std::io::Error>, Fault> {
+fn retell(path: &Path, makers: Makers, file: &mut impl Write) -> Result<Option<io::Error>, Fault> {
   let mut broken = None;
   let mut out = |fact: Object| {
     if broken.is_none()
@@ -209,17 +210,17 @@ const BUILD: &str = concat!(env!("CARGO_PKG_VERSION"), "/", env!("CARGO_PKG_NAME
 
 /// The size and the time of change of a file, in nanoseconds, or nothing when no file stands there.
 fn stamped(path: &Path) -> Option<(u64, u128)> {
-  let meta = std::fs::metadata(path).ok()?;
-  let at = meta.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_nanos();
+  let meta = fs::metadata(path).ok()?;
+  let at = meta.modified().ok()?.duration_since(time::UNIX_EPOCH).ok()?.as_nanos();
   Some((meta.len(), at))
 }
 
 /// What the file of what a record tells holds, while its first line names the stamp that the record, its log and the
 /// build give now.
 fn cached(told: &Path, stamp: &serde_json::Value, log: &Path) -> Option<Retold> {
-  let file = std::fs::File::open(told).ok()?;
+  let file = fs::File::open(told).ok()?;
   let mut head = String::new();
-  BufRead::read_line(&mut std::io::BufReader::new(file), &mut head).ok()?;
+  BufRead::read_line(&mut io::BufReader::new(file), &mut head).ok()?;
   let head: serde_json::Value = serde_json::from_str(&head).ok()?;
   if head.get("stamp")? != stamp {
     return None;
@@ -241,7 +242,7 @@ fn kept(entry: &Object) -> Option<Fact> {
 
 /// The sha256 of an entry of a record, in the plain form that the record keeps.
 fn digest(entry: &Object) -> String {
-  format!("{:x}", Sha256::digest(crate::wire::record(entry.as_ref()).to_string()))
+  format!("{:x}", Sha256::digest(wire::record(entry.as_ref()).to_string()))
 }
 
 /// A fact that the reader says: its kind, what it is about, and its words.

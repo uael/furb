@@ -5,6 +5,7 @@
 use std::collections::VecDeque;
 
 use futures::StreamExt;
+use futures::stream;
 use rig_core::{
   completion::{
     CompletionError, CompletionModel, CompletionRequest, CompletionResponse, Usage,
@@ -15,6 +16,7 @@ use rig_core::{
 };
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
+use std::mem;
 
 /// The name that pi-ai gives the provider of each turn it keeps.
 const NAME: &str = "radius";
@@ -108,9 +110,11 @@ impl CompletionModel for Pi {
     let got = self.client.send_streaming(asked).await?;
     let heard =
       Heard { body: got.into_body(), buffer: Vec::new(), parts: VecDeque::new(), over: false };
-    let parts = futures::stream::unfold(heard, |mut heard| async move {
-      heard.next().await.map(|part| (part, heard))
-    });
+    let parts =
+      stream::unfold(
+        heard,
+        |mut heard| async move { heard.next().await.map(|part| (part, heard)) },
+      );
     Ok(StreamingCompletionResponse::stream(NAME, Box::pin(parts)))
   }
 }
@@ -149,7 +153,7 @@ impl Heard {
       self.buffer.retain(|one| *one != b'\r');
       let Some(at) = self.buffer.windows(2).rposition(|two| two == b"\n\n") else { continue };
       let rest = self.buffer.split_off(at + 2);
-      let whole = std::mem::replace(&mut self.buffer, rest);
+      let whole = mem::replace(&mut self.buffer, rest);
       for block in String::from_utf8_lossy(&whole[..at]).split("\n\n") {
         let data = block.lines().find_map(|line| line.strip_prefix("data:")).map(str::trim);
         let Some(data) = data.filter(|one| *one != "[DONE]") else { continue };

@@ -25,6 +25,7 @@ use serde_json::Value as Json;
 use host::{Held, Word};
 
 use super::{Given, Inspection, NativeEar, Outcome, Record, Said, Told, Value, words};
+use crate::world;
 use crate::{
   Engine, Fault, Object,
   life::{Answer, Log, Opening, Retrying, Stream},
@@ -180,7 +181,7 @@ impl FromNapiValue for Answer {
   /// that tells what it writes, and the turn its promise gives is the answer, or what it threw is the refusal.
   unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {
     /// What a call tells as it writes, as one type, which a future of the call carries to the thread of JavaScript.
-    struct Writing(crate::world::Told);
+    struct Writing(world::Told);
     // SAFETY: napi gives the value in its env, where it is read at once.
     let answer = unsafe { Function::<(), Promise<Json>>::from_napi_value(env, value) }?;
     let called = answer

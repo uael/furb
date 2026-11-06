@@ -21,6 +21,8 @@ use crate::{
   fact::named,
   value::{Fault, Object, Text, hex},
 };
+use std::env;
+use std::process;
 
 /// The scheme of the paths of the scratch directory.
 pub const SCRATCH: &str = "scratch://";
@@ -85,9 +87,9 @@ impl Scratch {
     if getrandom::fill(&mut drawn).is_err() {
       let now =
         SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |since| since.subsec_nanos());
-      drawn = (std::process::id() ^ now).to_le_bytes();
+      drawn = (process::id() ^ now).to_le_bytes();
     }
-    let at = std::env::temp_dir().join(format!("furb-{}", hex(&drawn)));
+    let at = env::temp_dir().join(format!("furb-{}", hex(&drawn)));
     Self(Arc::new(Held { at, owned: true }))
   }
 
@@ -292,7 +294,7 @@ fn absolute(path: &Path) -> Result<PathBuf, Fault> {
   let here = if path.is_absolute() {
     PathBuf::new()
   } else {
-    std::env::current_dir().map_err(|no| {
+    env::current_dir().map_err(|no| {
       Fault::refused(format!(
         "The working directory could not be read for {}: {no}",
         path.display()

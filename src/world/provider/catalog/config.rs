@@ -14,6 +14,7 @@ use super::{
   super::codex, Catalog, Client, Cost, Entry, Error, LOCAL, Limit, Listed, Listing, Modalities,
   Model, Offer, cache, claude, listed, update::MODELS,
 };
+use crate::extension;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -325,8 +326,8 @@ impl Catalog {
   /// The catalog with the provider settings of the configs, as [`Catalog::configured`] gives it,
   /// for a caller that awaits.
   pub async fn configure(mut self, directory: &Path, config: Option<&Path>) -> Result<Self, Error> {
-    let places = crate::extension::Places::here();
-    let files = crate::extension::configs(config.unwrap_or(&places.config), directory);
+    let places = extension::Places::here();
+    let files = extension::configs(config.unwrap_or(&places.config), directory);
     let entries = merged(files)?;
     let cached = cache().map(|at| at.join(MODELS));
     let defaults = listed(cached.as_ref());

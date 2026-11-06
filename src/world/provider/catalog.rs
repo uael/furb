@@ -57,6 +57,7 @@ use super::{
   local::{self, ENV_URL, Heard, LOCAL, Server},
   search,
 };
+use crate::ear;
 use crate::world::{
   cache,
   disk::{self, Access},
@@ -619,7 +620,7 @@ impl Catalog {
             awaits, until the design of the host (#983) makes those doors async"
 )]
 pub(crate) fn blocking<T>(work: impl Future<Output = T>) -> T {
-  crate::ear::runtime().block_on(work)
+  ear::runtime().block_on(work)
 }
 
 /// The roster and the actor that a catalog still holds of what a host named, and the names that

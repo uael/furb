@@ -5,14 +5,16 @@ use std::{fs, path::Path};
 
 use super::{Lines, Sqlite, Store, digest, keeping, kept, standing, store, texts};
 use crate::testing::Yard;
+use crate::value;
 use crate::{
   value::{Fault, Object},
   wire::parsed,
 };
+use std::process;
 
 /// A record of its own for one test, which does not stand yet.
 fn place(name: &str, file: &str) -> Yard {
-  Yard::new(format!("furb-store-{name}-{}", std::process::id())).within(file)
+  Yard::new(format!("furb-store-{name}-{}", process::id())).within(file)
 }
 
 /// The entries that the suite keeps: facts that hold text on many lines and past ASCII, numbers, nothing, and lists
@@ -214,7 +216,7 @@ impl Store for Refusing {
     Ok(Vec::new())
   }
 
-  fn keep(&mut self, _: crate::value::ObjectRef<'_>) -> Result<(), Fault> {
+  fn keep(&mut self, _: value::ObjectRef<'_>) -> Result<(), Fault> {
     Err(Fault::refused("No space left on device (os error 28): the record"))
   }
 
@@ -275,7 +277,7 @@ impl Store for Disk {
     self.lines.entries()
   }
 
-  fn keep(&mut self, entry: crate::value::ObjectRef<'_>) -> Result<(), Fault> {
+  fn keep(&mut self, entry: value::ObjectRef<'_>) -> Result<(), Fault> {
     if self.space.full.get() {
       return Err(Fault::refused("No space left on device (os error 28): the record"));
     }

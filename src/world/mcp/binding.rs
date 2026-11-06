@@ -21,6 +21,8 @@
 #![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
 
 use serde_json::{Map, Value};
+use std::mem;
+use std::slice;
 
 /// The most characters of the first sentence of a description that a docstring holds.
 const SENTENCE: usize = 200;
@@ -226,7 +228,7 @@ fn function(tool: &str, about: &Value, taken: &mut Vec<String>) -> Function {
   let input = about.get("inputSchema").or_else(|| about.get("input")).unwrap_or(&ANY);
   let mut mapper = Mapper { root: input, seen: Vec::new(), notes: Vec::new(), opaque: 0 };
   let (fields, rest) = mapper.fields();
-  let mut loose = std::mem::take(&mut mapper.notes);
+  let mut loose = mem::take(&mut mapper.notes);
   let mut said = loose.clone();
   let mut names = vec![CALL.to_owned()];
   let mut params = Vec::new();
@@ -235,7 +237,7 @@ fn function(tool: &str, about: &Value, taken: &mut Vec<String>) -> Function {
   for (key, schema, required) in fields {
     let objects = mapper.opaque;
     let shape = mapper.shape(&schema);
-    let reasons = std::mem::take(&mut mapper.notes);
+    let reasons = mem::take(&mut mapper.notes);
     let name = unique(safe(&key, "argument", false), &mut names);
     if !reasons.is_empty() {
       loose.push(format!("{key}: {}", reasons.join(", ")));
@@ -471,7 +473,7 @@ impl<'a> Mapper<'a> {
       return got;
     }
     if let Some(value) = one.get("const") {
-      return self.literal(std::slice::from_ref(value));
+      return self.literal(slice::from_ref(value));
     }
     if let Some(values) = one.get("enum") {
       return match values.as_array() {

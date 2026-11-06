@@ -14,10 +14,14 @@ use super::{
   Advertised, Hosted, Told, answer::streamed, catalog, images::Images, messages::messages,
   search::Searches, thinking::Thought,
 };
+use crate::extension;
+use crate::world::files;
 use crate::{
   engine::{OPERATOR, WINDOW},
   value::{Object, ObjectRef},
 };
+use std::env;
+use std::fs;
 
 /// What streams one response of a model of rig, whatever model it is.
 pub(super) type Streams = Arc<
@@ -111,8 +115,8 @@ pub(super) struct Configured {
 /// word that names no class, and a name of the list that is no string, give nothing.
 pub(super) fn configured(user: &Path, directory: &Path) -> Configured {
   let mut given = Configured::default();
-  for file in crate::extension::configs(user, directory) {
-    let Ok(text) = std::fs::read_to_string(file) else { continue };
+  for file in extension::configs(user, directory) {
+    let Ok(text) = fs::read_to_string(file) else { continue };
     let Ok(config) = serde_json::from_str::<Value>(&text) else { continue };
     for (name, class) in config.get(KEY_CLASSES).and_then(Value::as_object).into_iter().flatten() {
       if let Some(class) = class.as_str().and_then(Class::named) {
@@ -382,8 +386,8 @@ pub(super) fn standing(
     Object::string(Class::Cheap.name()),
   ]);
   let roster = Object::list(offered.chain([operator]));
-  let home = std::env::home_dir();
-  let shown = |one: &Path| Object::string(crate::world::files::tilded(one, home.as_deref()));
+  let home = env::home_dir();
+  let shown = |one: &Path| Object::string(files::tilded(one, home.as_deref()));
   let doctrine = catalog::doctrine(Path::new(directory)).map(|one| shown(&one));
   let given = |all: &[Advertised]| {
     Object::list(all.iter().map(|(name, file, life, root)| {

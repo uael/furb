@@ -7,6 +7,8 @@ use futures::channel::mpsc::UnboundedSender;
 use tokio::io::{AsyncRead, AsyncReadExt};
 
 use super::Said;
+use std::io;
+use std::str;
 
 /// A stream that a command writes.
 #[derive(Clone, Copy, Debug)]
@@ -108,7 +110,7 @@ impl Kept {
 #[error("its {stream} could not be read: {source}")]
 pub(super) struct Unread {
   stream: Stream,
-  source: std::io::Error,
+  source: io::Error,
 }
 
 /// One stream of a command: each text said as it comes, whole in utf-8, as far as its head holds,
@@ -147,7 +149,7 @@ pub(super) async fn read(
 pub(in crate::world) fn whole(held: &mut Vec<u8>, over: bool) -> String {
   let mut text = String::new();
   loop {
-    match std::str::from_utf8(held) {
+    match str::from_utf8(held) {
       Ok(all) => {
         text.push_str(all);
         held.clear();
@@ -155,7 +157,7 @@ pub(in crate::world) fn whole(held: &mut Vec<u8>, over: bool) -> String {
       }
       Err(no) => {
         let good = no.valid_up_to();
-        text.push_str(std::str::from_utf8(&held[..good]).unwrap_or_default());
+        text.push_str(str::from_utf8(&held[..good]).unwrap_or_default());
         match no.error_len() {
           Some(bad) => {
             text.push(char::REPLACEMENT_CHARACTER);
