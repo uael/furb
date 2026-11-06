@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type CapturedFrame, CodeRenderable, type Renderable, type RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
+import { isDone } from "furb/life";
 import * as stage from "../script/stage.ts";
 import { App } from "../src/app.ts";
 import { demoLibrary, demoSession } from "../src/demo.ts";
@@ -12,6 +13,12 @@ import type { Session } from "../src/session.ts";
 /** Preferences in a config directory of the test alone, which the yard of the tests removes. A session on a recorded
  * life that is given none reads the preferences of the user, and a library that holds it writes the list of the user
  * beside them. */
+/** Whether an act exists and is not done: an act that is missing is not open, so a check that it stays open fails. */
+export function open(session: Session, id: string): boolean {
+  const act = session.acts.find((one) => one.id === id);
+  return act !== undefined && !isDone(act);
+}
+
 export function ownPreferences(): Preferences {
   return new Preferences(join(mkdtempSync(join(tmpdir(), "furb-config-")), "ui.json"));
 }
