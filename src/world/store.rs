@@ -21,7 +21,10 @@ use futures::stream;
 use serde_json::value::RawValue;
 use sha2::{Digest, Sha256};
 
-use monty_types::unstable::{MontyGraph, MontyNode};
+use monty_types::{
+  NamedValues,
+  unstable::{MontyGraph, MontyNode},
+};
 
 use self::error::StoreError;
 use super::{beside, free};
@@ -30,7 +33,8 @@ use crate::{
   ear::{Co, Ear, Hooks, Next, With, hearing, say},
   engine::ROOT,
   fact::Fact,
-  value::{Fault, Object, ObjectRef},
+  sand::{Nobody, Sand},
+  value::{Fault, Object, ObjectRef, entry},
   wire::{built, whole},
 };
 
@@ -189,7 +193,30 @@ pub fn texts(record: &[Object]) -> Result<(String, String), Fault> {
       "the record names the engine {named}, and the texts that it holds are another engine"
     )));
   }
-  Ok((source, kernel))
+  Ok((adapted(&named, source)?, kernel))
+}
+
+/// The adapters of the engines of this major, by the digest of an engine, as `src/furb/adapters.py`
+/// says.
+const ADAPTERS: &str = include_str!("../furb/adapters.py");
+
+/// The text of the engine that a digest names, with each change of its adapter made, or as it is
+/// when no adapter names it. A change whose text the engine does not hold is refused, since the
+/// adapter is then of another engine.
+fn adapted(named: &str, mut source: String) -> Result<String, Fault> {
+  let mut inputs = NamedValues::new();
+  inputs.push("__named", Object::string(named));
+  let word = format!("{ADAPTERS}\nADAPTERS.get(__named, [])");
+  let changes = Sand::new().run(&word, inputs, &mut Nobody("the adapters"))?;
+  for change in changes.as_ref().items().unwrap_or_default() {
+    let text = |at| entry(&change, at).and_then(|one| one.as_str().map(str::to_owned));
+    let (Some(old), Some(new)) = (text(0), text(1)) else { continue };
+    if !source.contains(&old) {
+      return Err(Fault::refused(format!("the adapter of the engine {named} finds no {old:?}")));
+    }
+    source = source.replacen(&old, &new, 1);
+  }
+  Ok(source)
 }
 
 /// The release of furb that a record names, as `0.4.2`, and nothing when it names none, as a record
