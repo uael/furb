@@ -141,7 +141,7 @@ async def test_the_rung_binds_the_definitions_and_the_values_of_the_chain_after_
   await settle()
   assert [x for x in said(log, "prefix") if x[1] == "chain1"]
   told = [x[3][0] for x in said(log, "tell") if x[1].startswith("rung")]
-  assert not any("It lost" in x for x in told) and any(" raised" in x.split("\\n")[0] for x in told), told
+  assert any("It lost no name" in x for x in told) and any(" raised" in x.split("\\n")[0] for x in told), told
   assert "SIZE" not in engine.module("chain1")
 
 
@@ -180,4 +180,5 @@ async def test_a_birth_tells_no_turn_of_its_own_and_each_act_that_a_life_word_ma
     life(sown(stands=stands, files=HELD_FILES), engine.seed(engine.gathered(defined, {})))
     await settle()
     held = [a for a in engine.transcript("chain1") if a[0] == "held" and not engine.over(a[1])]
+    assert "__kept" not in engine.module("chain1")
     assert (engine.turns(on="chain1"), [engine.get(a[2])[4] for a in held]) == (before, ["held()"])

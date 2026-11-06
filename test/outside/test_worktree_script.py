@@ -92,3 +92,44 @@ def test_fetch_runs_again_when_another_fetch_holds_a_ref_lock(tmp_path: Path) ->
   assert got.returncode == 0
   assert "runs again in 1 s: error: cannot lock ref refs/remotes/origin/main" in got.stderr
   assert (tmp_path / "new").is_dir()
+
+
+def python_tree(root: Path) -> Path:
+  main = clone_with_origin(root)
+  shutil.copy(SCRIPT.parent / "build-slot.sh", main / "script" / "build-slot.sh")
+  (main / "pyproject.toml").write_text(
+    '[project]\nname = "furb"\nversion = "0"\nrequires-python = ">=3.9"\n\n'
+    '[build-system]\nrequires = ["uv_build>=0.9.26,<0.10.0"]\nbuild-backend = "uv_build"\n',
+    encoding="utf-8",
+  )
+  (main / "src" / "furb").mkdir(parents=True)
+  (main / "src" / "furb" / "__init__.py").write_text('MARK = "main"\n', encoding="utf-8")
+  subprocess.run(["uv", "lock", "-q"], cwd=main, check=True, env=CLEAN)
+  subprocess.run(["uv", "sync", "-q", "--locked"], cwd=main, check=True, env=CLEAN)
+  git(main, "add", ".")
+  git(main, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "python")
+  git(main, "push", "-q", "origin", "HEAD:refs/heads/main")
+  git(main, "fetch", "-q", "origin")
+  return main
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the sh of Git on Windows names a path in a form of its own")
+def test_the_python_of_a_worktree_imports_the_tree_of_that_worktree(tmp_path: Path) -> None:
+  main = python_tree(tmp_path)
+  assert run(main, tmp_path / "new", "fresh").returncode == 0
+  (tmp_path / "new" / "src" / "furb" / "__init__.py").write_text('MARK = "new"\n', encoding="utf-8")
+  python = tmp_path / "new" / ".venv" / "bin" / "python"
+  seen = subprocess.run(
+    [str(python), "-c", "import furb; print(furb.MARK)"], capture_output=True, text=True, check=True
+  )
+  assert seen.stdout.strip() == "new"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the sh of Git on Windows names a path in a form of its own")
+def test_the_venv_of_a_worktree_names_no_path_of_another_tree(tmp_path: Path) -> None:
+  main = python_tree(tmp_path)
+  assert run(main, tmp_path / "new", "fresh").returncode == 0
+  venv = tmp_path / "new" / ".venv"
+  assert venv.is_dir()
+  named = [one for one in venv.rglob("*") if one.is_file() and str(main).encode() in one.read_bytes()]
+  assert named == []
