@@ -107,6 +107,17 @@ async def recall(on: str = "") -> Act:
   return remember(on)
 
 
+def visited(id: str, before: set[str], about: str, got: object) -> str:
+  made = get(about)
+  if not made or made[0] not in ("read", "write", "cd") or scope(about) != scope(id) or about in before:
+    return ""
+  if not question(("rung", made[2])) or (made[0] == "read" and str(made[4]).endswith(("/", "\\"))):
+    return ""
+  text = made[4] if made[0] == "write" and isinstance(got, Text) else got
+  path = text if isinstance(text, str) else getattr(text, "path", "")
+  return "" if "://" in path or remembered(path) else path
+
+
 def remember(on: str = "") -> Act:
   def ear(id):
     yield "started", id
@@ -114,32 +125,7 @@ def remember(on: str = "") -> Act:
     memory(on=on)
     while True:
       match (yield {id, "read", "write", "cd", "stand"}):
-        case ("done", about, _, Text(path)) if (
-          question(("read", about))
-          and scope(about) == scope(id)
-          and "://" not in path
-          and about not in before
-          and question(("rung", (made := get(about))[2]))
-          and not str(made[4]).endswith(("/", "\\"))
-          and not remembered(path)
-        ):
-          memory(path, on)
-        case ("done", about, _, Text()) if (
-          question(("write", about))
-          and scope(about) == scope(id)
-          and "://" not in (path := str(getattr(get(about)[4], "path", "")))
-          and about not in before
-          and question(("rung", get(about)[2]))
-          and not remembered(path)
-        ):
-          memory(path, on)
-        case ("done", about, _, str() as path) if (
-          question(("cd", about))
-          and scope(about) == scope(id)
-          and "://" not in path
-          and about not in before
-          and question(("rung", get(about)[2]))
-        ):
+        case ("done", about, _, got) if path := visited(id, before, about, got):
           memory(path, on)
         case ("done", about, *_) if question(("stand", about)) and not question(("rung", get(about)[2])):
           memory(on=on)

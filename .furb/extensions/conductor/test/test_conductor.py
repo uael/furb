@@ -152,7 +152,7 @@ async def test_the_file_loads_over_a_module_that_holds_the_state_of_the_old_one(
     "noticed": {"k"},
     "heard": ["line"],
     "landed": [3],
-    "owner_asks": {"A1": {"prompt": "prompt483", "quote": "q", "items": ["a"], "state": "open"}},
+    "owner_asks": {"A1": {"prompt": "prompt8", "quote": "q", "items": ["a"], "state": "open"}},
     "align_state": {"base": 40, "running": "rung5"},
     "comments": {"c1"},
   }
@@ -247,12 +247,12 @@ async def test_an_item_whose_model_no_worker_runs_waits_with_its_cause(conductor
 
 
 async def test_hire_starts_a_worker_on_its_chain_with_the_asks_on_top_and_its_workspace(conductor: Round) -> None:
-  await conductor.word('owner_asks["A3"] = {"prompt": "prompt30", "quote": "limit to 5 max", "items": ["cap"], "state": "open"}')
+  await conductor.word('owner_asks["A3"] = {"prompt": "prompt3", "quote": "The cap holds at five workers.", "items": ["cap"], "state": "open"}')
   name = await conductor.step("hire", {"key": "cap", "brief": "Hold the cap.", "thread": "round"})
   [message] = conductor.briefs()
   where, path = conductor.engine.get(name)[3], f"{conductor.tmp}-w1"
   assert conductor.engine.get(where)[4] == "round/cap"
-  assert message.startswith('This item carries the asks A3 of the owner, in his words:\n- A3: "limit to 5 max" (prompt30)\n')
+  assert message.startswith('This item carries the asks A3 of the owner, in his words:\n- A3: "The cap holds at five workers." (prompt3)\n')
   assert f"Work in the workspace {path}," in message
   assert 'labels=" --label w:cap --label thread:round"' in message
   assert message.endswith("The item, cap:\nHold the cap.")
