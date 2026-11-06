@@ -8,10 +8,11 @@ standing, takes a wait, and takes nothing else.
 import pytest
 
 import furb
+import furb.kernel
 import furb_monty.engine
-from conftest import Py, kernel, swapped
+from conftest import Py, Sand, born, kernel, plain, relived, swapped
 from furb import engine, sheet
-from furb.engine import OPERATOR, WINDOW, Refused
+from furb.engine import OPERATOR, WINDOW, Drift, Refused
 from outside.doubles import booted, worlds
 
 STANDS = [[[OPERATOR, [], WINDOW], ["opus", ["low"], 1000]], "/w", "opus/low"]
@@ -219,3 +220,27 @@ async def test_a_word_that_awaits_an_act_already_over_is_carried_on_where_it_sta
   )
   word = "a = wait(30, __name__)\ncancel(a)\nawait wait(0.02, __name__)\ntry:\n  await a\nexcept BaseException:\n  close('cut')"
   assert await engine.rung(word, on=root) == "cut"
+
+
+async def test_a_record_whose_acts_hold_a_callable_or_an_address_replays_on_the_engine_of_this_interpreter() -> None:
+  """A record keeps a callable or an object of a word as a text that names an address of its life, which a later
+  life cannot make again, so a host of this engine gives boot what recorded makes of the record: each such text
+  stands for each value that shows the same with no address, and the act that the word makes again is the act of the
+  record."""
+  word = "x = bash('one', ok=lambda e: True)\nclass A:\n  pass\ny = bash(f'echo {A()}')\nclose(1)"
+  sand, _, root = born(word)
+  assert await engine.prompt(int, "go", on=root) == 1
+  record = plain(sand.record)
+  assert any(" at 0x" in str(e) for e in record)
+  with pytest.raises(Drift, match=r"^bash1 drifts"):
+    engine.boot(record, **kernel(), world=Sand().hears())
+  log, again = await relived(Sand(), record)
+  assert again == root and [a[4] for a in log if a[0] == "bash"][:1] == ["one"]
+  held = furb.kernel.Recorded("<f at 0x1>")
+  assert furb.kernel.Recorded() == len and held == "<f at 0x2>" and held != "<g at 0x1>"
+  assert (
+    held == furb.kernel.Recorded("<f at 0x1>") and repr(furb.kernel.Recorded()) == "<a callable of an earlier life>"
+  )
+  wrote = (("write", "write1", "rung1", "chain1", engine.Text("a", "<A at 0x1>"), ["<B at 0x1>"]),)
+  (stood,) = furb.kernel.recorded(vars(furb.python), [wrote])
+  assert stood[0][4:] == (engine.Text("a", "<A at 0x2>"), ["<B at 0x2>"])

@@ -940,6 +940,7 @@ def boot(record=(), **outside):
   made, known, done, held, log, alive, born, busy, left, heed = Counter(), {}, {}, {}, [], {}, {}, set(), [], {}
   first, owned, taken = {e[1]: e for (e,) in record[::-1] if e[0] in ("started", "done")}, set(), {}
   due = [e for (e,) in record[::-1] if first.get(e[1]) is not e]
+  ranks = {id(e): n for n, (e,) in enumerate(record)}
   saved, again, stalled = {e[1]: e for (e,) in record if question(e)}, {}, []
 
   def drift(name):
@@ -992,7 +993,7 @@ def boot(record=(), **outside):
           (stalled and stalled.pop())
           or not (log or left)
           or (due[-1][0] == "joined" and not question(due[-2]) and due.pop() and due)
-          or (a and a[::2] == ("wake", "journal") and due[-1][1] in taken)
+          or (a and a[::2] == ("wake", "journal") and due[-1][1] in taken and due[-1][2] in outside)
         ):
           if fault := recount(due.pop()):
             stalled.append(fault)
@@ -1057,6 +1058,8 @@ def boot(record=(), **outside):
         if saved.get(name, a) == a:
           if name not in taken and (f := first.get(name)):
             taken[name] = f[0] == "started"
+            while owed() and not question(due[-1]) and ranks[id(due[-1])] < ranks[id(f)]:
+              recount(due.pop())
             repeat(*f)
             while taken[name] and owed() and due[-1][0] == "joined" and due.pop() and due:
               recount(due.pop())
