@@ -40,14 +40,14 @@ use furb::{
 use futures::{SinkExt, Stream, StreamExt, future};
 use tokio::{
   net::{TcpListener, TcpStream},
-  sync::{mpsc, oneshot},
+  sync::{mpsc, oneshot, watch},
   task::JoinSet,
   time::{Instant, sleep_until},
 };
 use tokio_util::codec::{Framed, LinesCodec};
 
 use crate::{
-  access::Ports,
+  access::{Access, Ports},
   answers::Answerer,
   error::{DaemonError, ProtocolError, TransportError},
   event::{Event, Seq},
@@ -352,7 +352,9 @@ impl Daemon {
   fn spawn(settings: Settings, handed: Vec<Handed>) -> (Daemon, oneshot::Receiver<Leaving>) {
     let (asks, heard) = mpsc::unbounded_channel();
     let (leave, leaving) = oneshot::channel();
+    let changes = settings.tailnet.as_ref().map(|one| one.identity.changes());
     let mut lives = Lives {
+      changes,
       settings,
       held: HashMap::new(),
       asks: asks.downgrade(),
@@ -512,11 +514,21 @@ struct Holder {
 /// skills of the lives serve.
 struct Lives {
   settings: Settings,
+  /// The access list of the tailnet as it changes, when there is a tailnet.
+  changes: Option<watch::Receiver<Access>>,
   held: HashMap<String, Held>,
   asks: mpsc::WeakUnboundedSender<Asked>,
   born: u64,
   leave: oneshot::Sender<Leaving>,
   views: Views,
+}
+
+/// The next change of the access list, or never when there is no list.
+async fn changed(changes: Option<&mut watch::Receiver<Access>>) -> Option<()> {
+  match changes {
+    Some(changes) => changes.changed().await.ok(),
+    None => future::pending().await,
+  }
 }
 
 /// A life of the daemon: its handle, its folder, its birth, its stage, and the peer that answers
@@ -547,6 +559,10 @@ impl Lives {
           self.expire();
           continue;
         }
+        Some(()) = changed(self.changes.as_mut()) => {
+          self.restand();
+          continue;
+        }
       };
       match asked {
         None => return,
@@ -554,6 +570,17 @@ impl Lives {
           return self.handover(outbox, reply);
         }
         Some(asked) => self.heard(asked),
+      }
+    }
+  }
+
+  /// Each life that lives told to stand again, so that its roster names the members that the
+  /// access list names now.
+  fn restand(&self) {
+    for held in self.held.values() {
+      if matches!(held.stage, Stage::Living(_)) {
+        let handle = held.handle.clone();
+        tokio::spawn(async move { handle.send(Command::Stand).await.ok() });
       }
     }
   }
@@ -675,10 +702,10 @@ impl Lives {
   /// the daemon, then each login of the access list of the tailnet, each once.
   fn members(&self) -> Vec<String> {
     let mut all: Vec<String> = own().ok().into_iter().collect();
-    let listed = self.settings.tailnet.iter().flat_map(|one| one.identity.access().logins());
+    let listed = self.settings.tailnet.iter().flat_map(|one| one.identity.logins());
     for login in listed {
-      if !all.iter().any(|one| one == login) {
-        all.push(login.to_owned());
+      if !all.contains(&login) {
+        all.push(login);
       }
     }
     all

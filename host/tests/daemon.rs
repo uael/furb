@@ -31,13 +31,14 @@ mod daemon {
     view::Phase,
   };
   use furb_host::{
-    DaemonError, Event, GRACE, ProtocolError, STALL, Settings, TransportError,
+    DaemonError, Event, GRACE, ProtocolError, STALL, Settings, Tailnet, TransportError,
+    access::{Access, Ports},
     protocol::{
       Answer, Axis, Dispose, Effect, Frame, Gesture, Hello, Kind, Listed, Mount, Node, PROTOCOL,
       Request, Role, Shape, Slot, Tree, Verb, ViewEffect, ViewEvent,
     },
     run,
-    transport::{Accepted, Dialer, Identity, Local, Who},
+    transport::{Accepted, Dialer, Identity, Local, LocalApi, Tailscale, Who},
     upgrade,
   };
   use futures::{SinkExt, StreamExt};
@@ -964,6 +965,80 @@ mod daemon {
       panic!("no asks")
     };
     assert_eq!(asks, json!(true), "a prompt can ask that member by name");
+  }
+
+  /// The facts of the stands of a life, which grow with each stand that it asks or hears.
+  async fn stands(window: &mut Window, life: &str) -> usize {
+    let of = Some("stand".to_owned());
+    let verb = Verb::Transcript { life: life.to_owned(), on: None, of };
+    let Ok(Answer::Values(facts)) = window.ask(verb).await else { panic!("no stands") };
+    facts.len()
+  }
+
+  /// The members of the operator in the roster of a life, read again until they are `until`, or
+  /// as they stand when the patience of the test runs out.
+  async fn members(window: &mut Window, life: &str, until: &Value) -> Value {
+    let word = "members = [x[1] for x in standing()[0] if x[0] == OPERATOR][0]";
+    let read = Verb::Inspect { life: life.to_owned(), name: "members".to_owned(), on: None };
+    let mut found = Value::Null;
+    for _ in 0..100 {
+      window.ran(life, word).await;
+      let Ok(Answer::Inspected { value, .. }) = window.ask(read.clone()).await else {
+        panic!("no members")
+      };
+      found = value;
+      if found == *until {
+        break;
+      }
+      tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    found
+  }
+
+  #[tokio::test]
+  async fn the_roster_names_the_access_list_and_a_change_of_it_tells_each_life_to_stand() {
+    let at = place();
+    let list = |logins: &[&str]| -> Access {
+      logins.iter().map(|one| ((*one).to_owned(), Role::Write)).collect()
+    };
+    let api = LocalApi::Port { port: 1, token: "none".to_owned() };
+    let identity = Tailscale::new(api, list(&["ann", "bob"]));
+    let tailnet = Some(Tailnet { identity: identity.clone(), ports: Ports::default() });
+    let local = Local::new(at.join("sock"));
+    let listener = local.listen().await.unwrap();
+    let settings = Settings {
+      opening: opening(&at),
+      grace: GRACE,
+      stall: STALL,
+      tailnet,
+      door: None,
+      host: None,
+    };
+    let served = local.clone();
+    let _daemon = tokio::spawn(async move { run(&served, listener, settings).await });
+    let mut window = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    window.attach(&life).await;
+    let Ok(Answer::Presence(peers)) = window.ask(Verb::Presence { life: life.clone() }).await
+    else {
+      panic!("no presence")
+    };
+    let login = peers.iter().find(|one| one.kind == Kind::Window).map(|one| one.login.clone());
+    let login = login.expect("the window is present");
+    let before = json!([login, "ann", "bob"]);
+    assert_eq!(members(&mut window, &life, &before).await, before, "the list gives the members");
+    let stood = stands(&mut window, &life).await;
+    identity.replace(list(&["ann", "bob", "cat"]));
+    for _ in 0..100 {
+      if stands(&mut window, &life).await > stood {
+        break;
+      }
+      tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(
+      stands(&mut window, &life).await > stood,
+      "a change of the list tells the life to stand"
+    );
   }
 
   #[tokio::test]

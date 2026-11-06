@@ -57,8 +57,8 @@ impl Config {
 
 impl Access {
   /// Each login that the list names, in the order of their names.
-  pub fn logins(&self) -> Vec<&str> {
-    let mut all: Vec<&str> = self.0.keys().map(String::as_str).collect();
+  pub fn logins(&self) -> Vec<String> {
+    let mut all: Vec<String> = self.0.keys().cloned().collect();
     all.sort_unstable();
     all
   }
