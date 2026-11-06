@@ -15,9 +15,9 @@
 //!   under the chain that its maker ran on;
 //! - each rung that a kept act names as its maker, on the open prompt of its chain that is no question to the
 //!   operator, or on its chain, which ends the rung before it of the same maker;
-//! - the run of the word of each rung, which the rung holds or the reply that it asked for gives, once the gate lets it
-//!   run, and
-//!   the paragraph that tells the findings of the gate on a rung whose word it refused;
+//! - the run of the word of each rung, which the rung holds or the reply that it asked for gives,
+//!   once the gate lets it run, and the paragraph that tells the findings of the gate on a rung
+//!   whose word it refused;
 //! - the done of each act that the operator closed or cancelled.
 //!
 //! A question that the reader says names its maker, as the engine names it, and each other fact that it says is said
