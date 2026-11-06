@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
-import { busy, type Exit, isDone, outcomeOf } from "furb/life";
+import { busy, exitOf, isDone } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
@@ -453,14 +453,11 @@ try {
     word: `index = await bash("printf 'Building the search index...\\n'; sleep 4; printf '3 notes indexed.\\n'")\nprint(index.stdout.content)`,
     on: session.selected,
   });
-  // The command shows once it has printed its first line.
+  // The command shows once it has printed its first line, which the window holds beside the act while it runs.
   await until(session, () =>
     session.acts.some(
       (act) =>
-        act.kind === "bash" &&
-        act.by === command &&
-        !isDone(act) &&
-        Boolean((outcomeOf(act) as Exit | undefined)?.stdout?.content),
+        act.kind === "bash" && act.by === command && !isDone(act) && Boolean(exitOf(act)?.stdout?.content),
     ),
   );
   // After a second, the line says how long its command has run.
