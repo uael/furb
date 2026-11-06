@@ -230,6 +230,7 @@ export type Request1 =
       life: string;
       on?: string | null;
       at?: number | null;
+      read?: number | null;
       verb: "threads";
     }
   | {

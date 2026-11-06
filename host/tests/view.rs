@@ -5,10 +5,10 @@
 use std::collections::HashMap;
 
 use furb::view::{
-  Act, Answer, Attention, ChainThread, Concern, Kind, Origin, Pause, Phase, Rows, RunState, Spend,
-  State, ThreadNode, Tick, as_of, attention, chain_threads, choices, concerns, desk, hint,
-  moments_of, nest_threads, open, operator, order_threads, restate, takes_nothing, ticks, wants,
-  working,
+  Act, Answer, Attention, ChainThread, Concern, Kind, NoteRun, Origin, Pause, Phase, Rows,
+  RunState, Spend, State, ThreadNode, Tick, as_of, attention, chain_notes, chain_threads, choices,
+  concerns, desk, hint, moments_of, nest_threads, open, operator, order_threads, restate,
+  takes_nothing, ticks, wants, working,
 };
 use serde_json::{Value, json};
 
@@ -617,4 +617,61 @@ fn the_spend_counts_the_answers_sums_their_dollars_and_names_the_actor_of_the_la
   ];
   let want = Spend { dollars: 0.75, answers: 2, actor: Some("claude-cli:opus/high".to_owned()) };
   assert_eq!(Spend::of(&answers), want);
+}
+
+/// A wake of the round: a prompt of None that an ear made on the root.
+fn wake(id: &str, began: u64) -> Act {
+  worded(
+    act(id, "prompt", "chain1", "ear1", began, None),
+    json!(["None", format!("{id} wakes"), ""]),
+  )
+}
+
+/// A run of notes, from its prompts and its unread count.
+fn run(prompts: &[&str], unread: usize) -> NoteRun {
+  NoteRun {
+    prompts: prompts.iter().map(|id| (*id).to_owned()).collect(),
+    count: prompts.len(),
+    unread,
+  }
+}
+
+/// The runs of notes of the root, with the place that the operator read up to.
+fn runs(acts: &[Act], read: u64) -> Vec<NoteRun> {
+  let on: Vec<&Act> = acts.iter().collect();
+  chain_notes(&on, &rows(acts), read)
+}
+
+#[test]
+fn the_notes_that_follow_one_another_stand_as_one_run_which_a_card_of_another_kind_ends() {
+  let acts = [
+    act("chain1", "chain", "", "", 0, None),
+    wake("prompt1", 1),
+    wake("prompt2", 2),
+    prompt("prompt3", 3),
+    wake("prompt4", 4),
+    act("bash5", "bash", "chain1", "operator", 5, Some(6)),
+    wake("prompt6", 7),
+    act("run1", "run", "chain1", "chain1", 8, Some(8)),
+    on_thread(prompt("prompt7", 9), "prompt6"),
+    wake("prompt8", 10),
+    act("rung1", "rung", "chain1", "operator", 11, None),
+    worded(
+      act("prompt9", "prompt", "chain1", "rung1", 12, None),
+      json!(["None", "Look at it.", ""]),
+    ),
+  ];
+  // A thread and a command end a run. A step of the engine and a message of a note end none, and
+  // a notice that a rung made stands in the program of that rung, so it is in no run.
+  let all = |unread: [usize; 3]| {
+    vec![
+      run(&["prompt1", "prompt2"], unread[0]),
+      run(&["prompt4"], unread[1]),
+      run(&["prompt6", "prompt8"], unread[2]),
+    ]
+  };
+  assert_eq!(runs(&acts, 1), all([1, 1, 2]));
+  // Each note counts as unread past the place that was read, and none past the last place.
+  assert_eq!(runs(&acts, 0), all([2, 1, 2]));
+  assert_eq!(runs(&acts, 99), all([0, 0, 0]));
 }

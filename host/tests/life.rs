@@ -357,7 +357,7 @@ async fn the_life_gives_the_meaning_of_the_acts_that_it_told() {
   assert_eq!(desk["questions"], json!(1), "{desk}");
   assert_eq!(desk["asks"][0]["id"], json!(asked));
   assert_eq!(desk["asks"][0]["choices"], json!(["yes", "no"]));
-  let threads = Command::Threads { on: None, at: None };
+  let threads = Command::Threads { on: None, at: None, read: None };
   let Reply::Value(now) = life.send(threads).await.unwrap() else { panic!("a value") };
   assert_eq!(now["state"], json!("asks"), "{now}");
   let Reply::Values(moments) = life.send(Command::Moments).await.unwrap() else {

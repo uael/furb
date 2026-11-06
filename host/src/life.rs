@@ -129,8 +129,9 @@ pub enum Command {
   /// still shows.
   Desk { notices: Vec<String> },
   /// The threads of a chain, as [`furb::view::Threads`], now or as they stood just after a
-  /// moment.
-  Threads { on: Option<String>, at: Option<u64> },
+  /// moment. `read` is the place up to which the window read the chain, from which the runs of
+  /// notes count the ones not yet read; none reads nothing.
+  Threads { on: Option<String>, at: Option<u64>, read: Option<u64> },
   /// The acts as they stood just after a moment, each with its meaning then.
   AsOf { at: u64 },
   /// Each moment at which an act began or ended, in order.
@@ -580,7 +581,9 @@ async fn commanded(
       Ok(Reply::Values(waiting.map_err(|no| LifeError::Refused(no.to_string()))?))
     }
     Command::Desk { notices } => valued(&held.desk(&notices)),
-    Command::Threads { on, at } => valued(&held.threads(&chain(on), at)),
+    Command::Threads { on, at, read } => {
+      valued(&held.threads(&chain(on), at, read.unwrap_or_default()))
+    }
     Command::AsOf { at } => {
       let acts = held.as_of(at).iter().map(serde_json::to_value).collect::<Result<_, _>>();
       Ok(Reply::Values(acts.map_err(|no| LifeError::Refused(no.to_string()))?))

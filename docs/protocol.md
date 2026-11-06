@@ -122,7 +122,7 @@ it is not given. The daemon answers requests in any order.
 | `unqueue` | `life`, `entry` | write |
 | `queued` | `life`, `on` | read |
 | `desk` | `life`, `notices` | read |
-| `threads` | `life`, `on`, `at` | read |
+| `threads` | `life`, `on`, `at`, `read` | read |
 | `as_of` | `life`, `at` | read |
 | `moments` | `life` | read |
 | `answered` | `life`, `ask`, `turn`, `why` | write |
@@ -168,8 +168,11 @@ it is not given. The daemon answers requests in any order.
 - `desk`, `threads`, `as_of` and `moments` give the meaning of the acts that the life told as events, which each
   window draws the same way: `desk` each question that the operator owes and each of the `notices` that the window
   still shows, the oldest first, with the lines that answer each; `threads` the tree of the threads of a chain, its
-  asides, what the tree says to the operator and the state of the chain, now or just after the moment `at`; `as_of`
-  the acts as they stood just after a moment; `moments` each moment at which an act began or ended.
+  asides, its runs of notes, what the tree says to the operator and the state of the chain, now or just after the
+  moment `at`; `as_of` the acts as they stood just after a moment; `moments` each moment at which an act began or
+  ended. A run of notes is the asides that are no question and follow one another in the feed of the chain, with its
+  `count` and its `unread` count: the notes that began or ended after the place `read`, which the window says since
+  only it knows what the operator saw. A `threads` with no `read` reads nothing, so each note is unread.
 - After `attach`, the daemon pushes each event of the life as a frame `event`, with the `life`, the `seq` of the event
   in the log of the life and the `event`: `fact`, `act`, `text`, `queued`, `notice`, `changed`, `reborn` or `ended`. After
   `reborn`, the life goes on from its checkpoint, and its acts come again as they stand.

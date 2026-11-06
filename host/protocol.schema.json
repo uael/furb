@@ -1026,6 +1026,15 @@
               "format": "uint64",
               "minimum": 0
             },
+            "read": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0,
+              "default": null
+            },
             "verb": {
               "type": "string",
               "const": "threads"
@@ -1035,7 +1044,7 @@
             "verb",
             "life"
           ],
-          "description": "The threads of a chain with their meaning, now or as they stood just after a moment."
+          "description": "The threads of a chain with their meaning, now or as they stood just after a moment. `read`\nis the place up to which the window read the chain, from which the runs of notes count the\nones not yet read; none reads nothing."
         },
         {
           "type": "object",
