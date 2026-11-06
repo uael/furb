@@ -145,7 +145,7 @@ def extended(  # noqa: PLR0913
 
 
 def naming(
-  at: Path, roster: Sequence[Sequence[object]] = (), record: Sequence[tuple] = (), lives: bool = True
+  at: Path, roster: Sequence[Sequence[object]] = (), record: Sequence[tuple] = (), *, lives: bool = True
 ) -> tuple[Sand, str]:
   """A life of a new record that runs the extension naming with its life word, or with none when lives is false, and no compaction, on a
   roster whose model h has the first place in the list of automatic work, or on the roster that it is given, and on
