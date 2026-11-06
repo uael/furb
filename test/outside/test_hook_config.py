@@ -25,5 +25,5 @@ def hooks() -> dict[str, dict]:
     ("docs/models.md", False),
   ],
 )
-def test_the_hooks_of_the_suite_run_only_on_the_files_that_it_reads(hook: str, path: str, runs: bool) -> None:
+def test_the_hooks_of_the_suite_run_only_on_the_files_that_it_reads(hook: str, path: str, *, runs: bool) -> None:
   assert bool(re.search(hooks()[hook]["files"], path)) is runs
