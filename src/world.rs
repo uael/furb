@@ -41,13 +41,13 @@ pub use fetch::fetch;
 pub use files::{CONFIG, files};
 pub use log::{log, logged};
 pub use operator::{Asked, CONSOLE, SHAPES, Shape, answered, answers, named};
-pub(crate) use provider::search::timed;
 pub use provider::{
   Advertised, BACKOFF, Backoff, Hosted, Model, Provider, Retries, Retry, Search, Told, Writes,
   catalog::{self, Catalog},
   claude, codex, images,
   search::Searches,
 };
+pub(crate) use provider::{Mode, search::timed};
 pub use reader::{READER, Retold, retold};
 pub use scratch::{SCRATCH, Scratch};
 pub(crate) use store::Format;

@@ -97,10 +97,31 @@ pub struct Provider {
   retries: Option<Retries>,
   refresh: Option<Refresh>,
   gone: Vec<String>,
-  inspecting: bool,
-  held: bool,
+  mode: Mode,
   /// The system prompt of each request: the engine of the life, minified.
   system: Arc<str>,
+}
+
+/// What a life does with its provider. A life that only inspects its record asks no model and
+/// refuses the question search. When the record holds the standing of its root already, the
+/// provider also answers no stand: the standing of the life stays the one that its record holds,
+/// and no change of it reaches a chain.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Mode {
+  Live,
+  Inspecting,
+  Held,
+}
+
+impl Mode {
+  /// The mode of a life that does work or not, whose record holds the standing of its root or not.
+  pub(crate) fn of(works: bool, stood: bool) -> Mode {
+    match (works, stood) {
+      (true, _) => Mode::Live,
+      (false, true) => Mode::Held,
+      (false, false) => Mode::Inspecting,
+    }
+  }
 }
 
 /// An extension as the standing gives it: its name, the file of its word, its life word, and
@@ -131,8 +152,7 @@ impl Provider {
       retries: None,
       refresh: None,
       gone: Vec::new(),
-      inspecting: false,
-      held: false,
+      mode: Mode::Live,
       system: Arc::from(crate::SYSTEM),
     }
   }
@@ -153,19 +173,10 @@ impl Provider {
     self
   }
 
-  /// Whether the life only inspects its record. Such a provider refuses the question search.
+  /// What the life does with the provider, as [`Mode`] says.
   #[must_use]
-  pub(crate) fn inspecting(mut self, yes: bool) -> Provider {
-    self.inspecting = yes;
-    self
-  }
-
-  /// Whether the record of the life holds the standing of its root already, and the life only
-  /// inspects it. Such a provider answers no stand: the standing of the life stays the one that its
-  /// record holds, and no change of it reaches a chain.
-  #[must_use]
-  pub(crate) fn held(mut self, yes: bool) -> Provider {
-    self.held = yes;
+  pub(crate) fn mode(mut self, mode: Mode) -> Provider {
+    self.mode = mode;
     self
   }
 

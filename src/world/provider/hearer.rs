@@ -11,7 +11,7 @@ use rig_core::completion::CompletionError;
 use tokio::sync::{mpsc, watch as holding};
 
 use super::{
-  Advertised, Provider, Refresh, Retries, Search, Settings, Told, Writes,
+  Advertised, Mode, Provider, Refresh, Retries, Search, Settings, Told, Writes,
   answer::{Answering, answered, cut},
   images::Images,
   model::{Ask, Model, requested, standing},
@@ -44,8 +44,7 @@ pub(super) struct Hearer {
   retries: Option<Retries>,
   refresh: Option<Refresh>,
   gone: Vec<String>,
-  inspecting: bool,
-  held: bool,
+  mode: Mode,
   /// The system prompt of each request, as [`Provider::system`] sets it.
   system: Arc<str>,
   native: Search,
@@ -76,8 +75,7 @@ impl Hearer {
       retries,
       refresh,
       gone,
-      inspecting,
-      held,
+      mode,
       system,
     } = provider;
     let actor = actor.unwrap_or_else(|| {
@@ -101,8 +99,7 @@ impl Hearer {
       retries,
       refresh,
       gone,
-      inspecting,
-      held,
+      mode,
       system,
       native,
       replies: Replies::default(),
@@ -130,7 +127,7 @@ impl Hearer {
   /// asks no command line.
   fn stand(&mut self, co: &mut Co<Replied>, a: &Fact) {
     let about = a.about().to_owned();
-    if self.held {
+    if self.mode == Mode::Held {
       say(co, Fact::says("started", &about, []));
       return;
     }
@@ -421,7 +418,7 @@ impl Hearer {
     let about = a.about().to_owned();
     let word = |at: usize| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
     let (query, actor) = (word(1).unwrap_or_default(), word(2).unwrap_or_default());
-    if self.inspecting {
+    if self.mode != Mode::Live {
       let no = "a life that inspects searches nothing";
       say(co, Fact::says("done", &about, [Fault::refused(no).object()]));
       return;

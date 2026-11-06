@@ -48,7 +48,7 @@ use serde_json::{Value, json};
 use jiff::{Zoned, civil};
 
 use super::{
-  Hosted, Model, Provider, Retries, Writes,
+  Hosted, Mode, Model, Provider, Retries, Writes,
   answer::{unclosed, unfenced, uuid_from},
   catalog::Catalog,
   images,
@@ -2706,7 +2706,7 @@ fn a_provider_that_searches_no_more_refuses_a_search() {
   let model = streaming(&[]);
   let model = scripted(&model).searches(found_by_native());
   let provider = Provider::new(yard("inspected").display().to_string(), vec![model]);
-  let mut engine = lived(provider.inspecting(true));
+  let mut engine = lived(provider.mode(Mode::Inspecting));
   let no = closed(&mut engine, "close(await act('search', '', None, 'rust', 'm'))").unwrap_err();
   assert!(no.contains("a life that inspects searches nothing"), "{no}");
 }
