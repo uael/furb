@@ -1,5 +1,6 @@
 """skills, the skills of a chain."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -127,6 +128,32 @@ async def test_the_world_answers_the_name_of_a_skill_with_its_word_or_its_skill_
   )
   got = await engine.rung('close(read("skills://brew", HIDDEN))', on=root)
   assert got == Text(tilded(path), path.read_text(encoding="utf-8"))
+
+
+async def test_the_world_answers_settings_with_the_keys_of_a_skill_in_the_configs(tmp_path: Path) -> None:
+  """The World answers config:// and the name of a skill with the JSON object of its keys, each with the value that a config gives, else with the default of the file of keys that its manifest names under furb-config, so its word reads them; config:// alone gives each key of the configs, and a name that no config gives and no schema names is refused."""
+  folder = skilled(
+    tmp_path / "work" / ".furb" / "skills",
+    "note",
+    "name: note\ndescription: A note.\nmetadata:\n  furb-word: note.py\n  furb-config: keys.json",
+  ).parent
+  (folder / "note.py").write_text("def note() -> None:\n  pass\n", encoding="utf-8")
+  keys = {"folder": {"type": "string", "default": "notes"}, "depth": {"type": "integer", "default": 2}}
+  (folder / "keys.json").write_text(json.dumps({"properties": keys}), encoding="utf-8")
+  (tmp_path / "work" / ".furb" / "config.json").write_text(
+    json.dumps({"gate": False, "note": {"folder": "journal"}}), encoding="utf-8"
+  )
+  skilled(tmp_path / "work" / ".furb" / "skills", "brew", "name: brew\ndescription: Make tea.")
+  _, root = extended("skills", tmp_path, _monty.skills)
+  got = await engine.rung('import json\nclose(json.loads(read("config://note", HIDDEN).content))', on=root)
+  assert got == {"folder": "journal", "depth": 2}
+  assert await engine.rung('close(read("config://brew", HIDDEN).content)', on=root) == "{}"
+  got = await engine.rung('close(read("config://", HIDDEN))', on=root)
+  assert isinstance(got, Text)
+  assert got.path == "config://"
+  assert json.loads(got.content)["gate"] is False
+  with pytest.raises(Refused, match=r"No config gives config://none, and no schema names it\."):
+    await engine.rung('close(read("config://none", HIDDEN))', on=root)
 
 
 async def test_a_write_of_a_skill_writes_its_word_in_the_project(tmp_path: Path) -> None:
