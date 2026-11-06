@@ -19,6 +19,7 @@ from furb.engine import (
 
 NAMES = ("AGENTS.md", "CLAUDE.md")
 LOCAL = ("AGENTS.local.md", "CLAUDE.local.md")
+ABOVE_HOME = 3
 
 
 def lacking(known: set[str]) -> Show:
@@ -55,6 +56,8 @@ def folders(path: str = ".", on: str = "") -> list[tuple[str, set[str] | None]]:
   here = looked("./", on)
   if here is not None:
     parts = pieces(here.path)
+    if parts[0] == "~":
+      found += [("/".join(["~", *[".."] * up]), None) for up in range(ABOVE_HOME, 0, -1)]
     found += [("/".join(parts[:k]) or "/", None) for k in range(1, len(parts))]
     found.append((here.path, set(here.lines)))
     if "://" not in path:
