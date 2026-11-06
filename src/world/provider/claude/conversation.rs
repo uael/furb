@@ -91,8 +91,8 @@ pub(super) struct Conversation {
   pub(super) process: Option<Process>,
   pub(super) used: Instant,
   /// Whether a block of this conversation holds the mark of the cache that ends the setup of its
-  /// chain.
-  marked: bool,
+  /// chain, as a fork holds each block of the conversation it forks.
+  pub(super) marked: bool,
 }
 
 impl Conversation {
