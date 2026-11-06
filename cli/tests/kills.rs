@@ -274,7 +274,8 @@ mod kills {
     }
 
     async fn hello(&mut self) {
-      let hello = Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Window, name: None });
+      let hello =
+        Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Window, name: None, role: None });
       assert!(matches!(self.ask(hello).await, Answer::Welcome { .. }));
     }
 
@@ -455,7 +456,8 @@ mod kills {
     for signal in SIGNALS {
       let (yard, lifeline, daemon, _window) = begun().await;
       let mut second = Window::dialed(&yard).await;
-      let hello = Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Window, name: None });
+      let hello =
+        Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Window, name: None, role: None });
       second.said(hello).await;
       daemon.killed(signal).await;
       lifeline.ended().await;
