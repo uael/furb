@@ -163,7 +163,7 @@ it is not given. The daemon answers requests in any order.
   `request`: its `actor`, `chain`, `messages` and `settings`. The peer tells what it writes with `wrote`, and gives the
   turn, written as the record writes a value, or `why` it gives none, with `answered`. That peer alone speaks for each
   request of the life, by its connection, for the whole life: the daemon refuses a `wrote` or an `answered` of any
-  other peer with `foreign`, and the request still waits for its peer. A later `open` with `answers` moves nothing. A
+  other peer with `foreign`, and the request still waits for its peer. Once that peer is gone, a later `open` with `answers` of the life makes its peer answer each later request; while it lives, such an `open` is refused with `answering`. A
   request ends at its turn, when the life drops it, or when the connection of its peer ends, and fails in the last
   case. A `wrote` or an `answered` after its end is refused with `unasked`.
 - An `open` with `attach` attaches its peer in the same step, from that place in the log, as `attach` does. The life

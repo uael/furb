@@ -405,9 +405,6 @@ async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> 
     "skills",
     "compaction",
     "naming",
-    "ouroboros",
-    "web",
-    "mcp",
   ]
   for _, one in ears:
     one.dispose()

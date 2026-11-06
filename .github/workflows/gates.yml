@@ -136,7 +136,7 @@ jobs:
         env:
           UV_NO_SYNC: "1"
       # The run syncs nothing, so it does not build the program furb that the setup leaves out.
-      - run: uv run pytest -q
+      - run: uv run pytest -q --durations=25
         env:
           UV_NO_SYNC: "1"
           FURB_UNCOUNTED: ${{ runner.os == 'Windows' && '*/src/furb/life.py' || '' }}

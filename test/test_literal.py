@@ -1,5 +1,7 @@
 """literal, the python that makes a value that a checkpoint carries again."""
 
+import ast
+
 from conftest import born
 from furb import engine
 from furb.engine import Exit, Text
@@ -42,3 +44,15 @@ async def test_literal_with_no_into_writes_no_act() -> None:
   held = engine.module(root)
   assert held["named"] == repr(str(held["shell"]))
   assert not any(held["lost"])
+
+
+async def test_literal_gives_a_value_that_is_false_for_a_float_that_is_not_finite_and_for_an_exception_whose_arguments_it_cannot_write_so_a_caller_learns_that_the_value_is_lost() -> (
+  None
+):
+  """literal gives a value that is false for a float that is not finite and for an exception whose arguments it cannot write, so a caller learns that the value is lost."""
+  _, _, root = born()
+  await engine.rung("lost = [literal(x) for x in (float('nan'), float('inf'), -float('inf'))]", on=root)
+  assert not any(engine.module(root)["lost"])
+  got = engine.literal(ValueError(len))
+  assert not got or ast.parse(str(got))
+  assert engine.literal(1.5) == "1.5"

@@ -10,7 +10,7 @@ def skills(on: str = "") -> Text:
   A chain that finds no skill in a folder reads a list of the official extensions.
   The World answers skills:// and the name of a skill with code with the word that the life last enabled for it, else with the word of its file, and with the SKILL.md file of a skill with no code.
   The World answers skills:// with a name, a slash and a file with that file of the folder of the skill, and refuses a file that leaves the folder.
-  The World answers config:// and the name of a skill with the JSON object of its keys, each with the value that a config gives, else with the default of the file of keys that its manifest names under furb-config, so its word reads them; config:// alone gives each key of the configs, and a name that no config gives and no schema names is refused.
+  The World answers settings:// and the name of a skill with the JSON object of its keys, each with the value that a config gives, else with the default of the file of keys that its manifest names under furb-config, so its word reads them; settings:// alone gives each key of the configs, and a name that no config gives and no schema names is refused.
   A write of skills:// and the name of a skill with code writes the word in its folder in .furb/extensions of the project, after a copy of its folder there when it stands elsewhere, and keeps the imports of furb at the top of its file.
   A write of skills:// and the name of a skill whose word binds a name of the engine at its top is refused with that finding and changes no file, and no copy of the folder of the skill stands.
   When the life runs the skill that a write of skills:// writes, the World enables it again with the new word, and each chain plays the definitions of that word.
@@ -29,4 +29,9 @@ def skill(name: str = "", show: Show = HEAD, on: str = "") -> Act[Text]:
 async def listed(on: str = "") -> None:
   """The skills of a chain, read where its word runs: listed runs skills() on its chain, so the turn after the word that runs it shows the list of the skills of the chain as every read tells it.
   The life word of the extension is await listed(), so the setup of the root reads the skills in the turn of the life words of the extensions, and each chain with no source holds that read in its setup.
+  """
+
+def defined(*names: str) -> Show:
+  """defined(*names) is a Show: it selects the lines of each definition at the top of a text whose name is one of names, a definition being a def, an async def, a class, a type or an assignment, with its decorators and each line under it that is indented, blank or closes a bracket.
+  A read of skills:// and the name of a skill with defined(*names) tells only those definitions and gives the whole word, so a word that reads a skill with it edits the whole word.
   """

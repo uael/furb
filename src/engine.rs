@@ -70,7 +70,8 @@ const GATED: &str = "gated";
 /// The function of the host that starts an ear of the host again after it raised, by its name.
 const AGAIN: &str = "again";
 /// The function of the host by which the Kernel bounds the turn while a word of a rung steps, and
-/// says whether it was bounded before.
+/// says whether it was bounded before. It names the job that steps as the step begins, so a stop
+/// of the sandbox in the step of a run ends that run.
 const TURN: &str = "turn";
 
 /// The kinds of act that are work an operator waits for: a prompt, a rung, a command and a wait.
@@ -162,6 +163,8 @@ struct Outside {
   /// Whether a config turned the gate off for this life, which the record does not keep: each
   /// life reads it again.
   ungated: bool,
+  /// The jobs whose word the Kernel steps, the innermost last: a run, or the part of a writing.
+  stepping: Vec<String>,
 }
 
 impl Host for Outside {
@@ -182,6 +185,10 @@ impl Host for Outside {
       None if name == AGAIN => Ok(Object::bool(self.reborn(args.first()))),
       None if name == TURN => {
         let bounded = args.first().is_some_and(|one| one.as_ref().as_bool().unwrap_or(false));
+        match args.get(1).and_then(|one| one.as_ref().as_str().map(str::to_owned)) {
+          Some(job) => self.stepping.push(job),
+          None => drop(self.stepping.pop()),
+        }
         Ok(Object::bool(sand.bound(bounded)))
       }
       None => self.called(sand, name, &args),
@@ -235,7 +242,39 @@ impl Outside {
       given: 0,
       source: String::new(),
       ungated: false,
+      stepping: Vec::new(),
     })
+  }
+
+  /// The end of the run whose word a stop of the sandbox cut, kept as the refusal of an act that a
+  /// life ended before the act did: a later life that makes that run again finds it done in the
+  /// record, so the Kernel never runs its word into the same stop, and the prompt of its rung asks
+  /// its model again. The sandbox hears nothing after the stop, so each ear of the host hears the
+  /// keep from here.
+  fn cut(&mut self) {
+    let Some(run) = self.stepping.pop().filter(|job| crate::fact::named(job, "run")) else {
+      return;
+    };
+    let why = crate::world::interruption(&run);
+    let done = [
+      Object::string("done"),
+      Object::string(&run),
+      Object::string(""),
+      Fault::refused(why).object(),
+    ];
+    let keep = Object::tuple([
+      Object::string("keep"),
+      Object::string(""),
+      Object::string("journal"),
+      Object::tuple([Object::tuple(done)]),
+    ]);
+    let Some(fact) = Fact::of(keep.as_ref()) else { return };
+    let mut cx = std::task::Context::from_waker(&self.hosted.waker);
+    for ear in self.hosted.handed.ears.values_mut() {
+      drop(ear.resume(crate::ear::Heard::Fact(fact.clone()), &mut cx));
+      // A store that refuses the entry holds it, and Engine::unkept counts it for the host.
+      drop(ear.ran());
+    }
   }
 
   /// A new id of the host, for an object of the host or for an instance made again in the sandbox.
@@ -466,6 +505,7 @@ impl Engine {
       Err(cut) => {
         // No act that a watcher waits on comes to anything after the cut, so each watcher goes, unanswered.
         self.watchers.clear();
+        self.outside.cut();
         self.stopped = Some(cut.clone());
         return Err(cut);
       }

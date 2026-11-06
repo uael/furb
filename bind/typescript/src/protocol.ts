@@ -684,6 +684,10 @@ export type ProtocolError =
       error: "answerless";
     }
   | {
+      life: string;
+      error: "answering";
+    }
+  | {
       needs: Kind;
       has: Kind;
       error: "speaker";

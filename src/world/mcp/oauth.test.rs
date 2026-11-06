@@ -11,10 +11,9 @@ use super::{
 };
 use crate::testing::{Yard, block_on};
 use crate::{ear::reactor, world::mcp::fixture};
-use std::fs;
-#[cfg(unix)]
-use std::os::unix::fs as unix_fs;
 use std::process;
+#[cfg(unix)]
+use std::{fs, os::unix::fs as unix_fs};
 
 /// A directory of its own for one test, and empty.
 fn place(name: &str) -> Yard {

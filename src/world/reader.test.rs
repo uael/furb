@@ -4,7 +4,8 @@ use std::{fs, path::PathBuf};
 
 use super::{retold, told};
 use crate::testing::Yard;
-use crate::{value::Object, wire::parsed};
+use crate::{value::Object, view, wire::parsed};
+use serde_json::Value;
 use std::process;
 
 /// The facts of lines of JSON, as a record keeps them.
@@ -293,7 +294,7 @@ fn a_segment_that_keeps_each_question_gets_no_chain_rung_or_run_of_the_reader_bu
 
 /// A rung of the operator on the root, whose word names the session, as a record keeps it.
 fn renamed(rung: &str, name: &str) -> String {
-  let word = serde_json::Value::String(crate::view::word(name));
+  let word = Value::String(view::word(name));
   format!(r#"[["rung", "{rung}", "operator", "chain1", {word}, "", ""]]"#)
 }
 

@@ -3460,6 +3460,23 @@
         {
           "type": "object",
           "properties": {
+            "life": {
+              "type": "string"
+            },
+            "error": {
+              "type": "string",
+              "const": "answering"
+            }
+          },
+          "required": [
+            "error",
+            "life"
+          ],
+          "description": "An open with `answers` of a life whose models a peer that lives answers already."
+        },
+        {
+          "type": "object",
+          "properties": {
             "needs": {
               "$ref": "#/definitions/Kind"
             },

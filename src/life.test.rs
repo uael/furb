@@ -294,6 +294,52 @@ fn a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_t
   assert_eq!(running, "[]", "no act stays running with no process");
 }
 
+#[test]
+fn a_life_that_a_fault_of_the_sandbox_stopped_opens_again_and_goes_on() {
+  crate::sand::BOUND.set(std::time::Duration::from_millis(100));
+  let at = place("faulted");
+  let cutter = "try:\n  while True:\n    pass\nfinally:\n  while True:\n    pass";
+  let mut first =
+    Opening { extensions: Some(false), ..scripted(&at, &[cutter]) }.boot::<String>([]).unwrap().0;
+  let on = Some("chain1".to_owned());
+  let message = Some("go".to_owned());
+  let asked = verbs::Prompt { message, on: on.clone(), ..Default::default() };
+  let prompt = first.prompt(Object::string("str"), asked).unwrap().id().to_owned();
+  drop(futures::executor::block_on(Act::<Object>::of(&mut first, &prompt)));
+  assert!(first.stopped().is_some(), "the second excess of the turn stops the life");
+  drop(first);
+  let mut later =
+    Opening { extensions: Some(false), ..scripted(&at, &["close('again')", "close('on')"]) }
+      .boot::<String>([])
+      .expect("a life that a fault stopped opens again")
+      .0;
+  assert!(later.stopped().is_none(), "the open does not run the word into the same stop");
+  let message = Some("go on".to_owned());
+  let asked = verbs::Prompt { message, on, ..Default::default() };
+  let next = later.prompt(Object::string("str"), asked).unwrap().id().to_owned();
+  let got = futures::executor::block_on(Act::<Object>::of(&mut later, &next)).unwrap();
+  assert_eq!(got.as_ref().as_str(), Some("on"), "the life goes on");
+  let state = format!(
+    "repr([peek('{prompt}'), peek([x[1] for x in transcript('chain1', 'rung') if x[2] == '{prompt}'][0])])"
+  );
+  let ended = later.word(&state, vec![]).unwrap();
+  let ended = ended.as_ref().as_str().unwrap_or_default().to_owned();
+  assert!(
+    ended.starts_with("['again', Refused(") && ended.contains("was interrupted"),
+    "the rung that stopped the life ends as interrupted, and its prompt asks its model again: {ended}"
+  );
+  drop(later);
+  let mut again =
+    Opening { extensions: Some(false), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+  assert!(again.stopped().is_none(), "a second open replays the end of the rung");
+  let replayed = again.word(&state, vec![]).unwrap();
+  assert_eq!(
+    replayed.as_ref().as_str().unwrap_or_default(),
+    ended,
+    "the replay holds the same state"
+  );
+}
+
 /// The engine that each fact made of a record names, in its order.
 fn builds(record: &Path) -> Vec<String> {
   let kept = world::kept(record).unwrap();
@@ -693,8 +739,13 @@ fn each_record_of_the_replays_replays_on_its_own_engine_with_no_drift() {
       "{name} holds no texts of its engine: give them with script/engines.py, as tests/replay/README.md says"
     );
     let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
-    if let Err(drift) = inspects.boot::<String>([]) {
+    if let Err(drift) = inspects.clone().boot::<String>([]) {
       panic!("{name} drifts on its own engine, a defect of this build: {drift}");
+    }
+    if crate::checkpoint::last(&kept).is_some()
+      && let Err(drift) = (Opening { whole: Some(true), ..inspects }).boot::<String>([])
+    {
+      panic!("{name} drifts from its first entry, born again at each checkpoint: {drift}");
     }
   }
 }

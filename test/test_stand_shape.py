@@ -21,6 +21,7 @@ from conftest import (
 )
 from furb import engine
 from furb.engine import OPERATOR, Refused
+from test_chain import TAUGHT_FILES
 
 
 def restanding(*chains: str) -> World:
@@ -141,6 +142,15 @@ async def test_at_its_tip_boot_stands_the_life_again() -> None:
     assert engine.module(one)["actor"] == "o/low"
   twin = await chained("twin", root, 300)
   assert engine.module(twin)["actor"] == "o/low"
+  taught = [STANDS[0], "/w", STANDS[2], "/w/DOCTRINE.md", []]
+  first, _, base = born(stands=taught, files=TAUGHT_FILES)
+  chains = [base, engine.chain("two"), engine.chain("side", source=base)]
+  await settle(300)
+  second = Sand(stands=[taught[0], "/v", *taught[2:]], files=TAUGHT_FILES)
+  await relived(second, plain(first.record))
+  third = Sand(stands=[taught[0], "/u", *taught[2:]], files=TAUGHT_FILES)
+  await relived(third, [*plain(first.record), *plain(second.record)])
+  assert [engine.cwd(on=one) for one in chains] == ["/u"] * 3
 
 
 async def test_a_standing_binds_the_default_actor_of_the_chain_when_its_actor_differs() -> None:

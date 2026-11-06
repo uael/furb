@@ -214,8 +214,9 @@ A module that does not meet the lints yet says so at its top, one line for each 
     ```
 
 17. Each item is imported at the top of its file, never in a function, and is called through a path of 2 segments at
-    most. The review holds it, until `clippy::absolute_paths` with
-    `absolute-paths-max-segments = 2` is on, with a debt `expect` in each module that breaks it.
+    most. `clippy::absolute_paths`, with
+    `absolute-paths-max-segments = 2` in `clippy.toml`, denies a longer path in `src/world.rs`,
+    `src/binding.rs` and their modules. The review holds it in the other modules, until they pay it.
 
     ```rust
     // Not this:
@@ -225,7 +226,9 @@ A module that does not meet the lints yet says so at its top, one line for each 
     let name = Cow::Owned(text);
     ```
 
-18. Inside an `impl`, the type is `Self`. The review holds it, until `clippy::use_self` is on the same way.
+18. Inside an `impl`, the type is `Self`. `clippy::use_self` denies the name of the type in
+    `src/world.rs`, `src/binding.rs` and their modules. The review holds it in the other modules, until
+    they pay it.
 
     ```rust
     // Not this:
