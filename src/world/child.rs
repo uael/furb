@@ -149,7 +149,7 @@ impl Group {
       let job = win32job::Job::create_with_limit_info(&ends).map_err(std_io::Error::other)?;
       let process = child.raw_handle().ok_or_else(gone)?;
       job.assign_process(process as isize).map_err(std_io::Error::other)?;
-      Ok(Group { job: Some(job) })
+      Ok(Self { job: Some(job) })
     }
   }
 

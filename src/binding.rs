@@ -15,7 +15,7 @@
 #![deny(clippy::absolute_paths, clippy::use_self)]
 #![expect(
   clippy::needless_pass_by_value,
-  reason = "debt: an argument taken by value and only borrowed"
+  reason = "a function of the API serves both doors, and N-API gives each argument owned"
 )]
 
 #[cfg(feature = "python")]
@@ -802,15 +802,6 @@ pub fn on_console_end(callback: Told) -> Result<(), Fault> {
 
 #[cfg(windows)]
 mod console {
-  #![expect(
-    clippy::let_underscore_must_use,
-    reason = "debt: a let _ drops a value that must be used"
-  )]
-  #![expect(
-    clippy::let_underscore_untyped,
-    reason = "debt: a let _ hides the type of what it drops"
-  )]
-
   use std::{io, sync::OnceLock, thread};
 
   use windows_sys::{
@@ -844,7 +835,8 @@ mod console {
           match one {
             Ending::Callback(one) => callback = Some(one),
             Ending::Event(name, answer) => {
-              let _ = answer.send(callback.as_ref().is_some_and(|one| (one.0)(name)));
+              // A handler that stopped waiting has returned already, so its answer is lost.
+              drop(answer.send(callback.as_ref().is_some_and(|one| (one.0)(name))));
             }
           }
         }
