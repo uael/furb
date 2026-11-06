@@ -92,20 +92,6 @@ async def test_bash_is_given_a_command_its_stdin_a_timeout_the_codes_that_it_acc
   assert said(again, "bash") == [word]
 
 
-async def test_a_callable_show_is_no_word_of_the_act_of_a_command_so_a_later_life_and_a_checkpoint_hold_the_act_as_the_record_does() -> (
-  None
-):
-  """A callable show is no word of an act, which holds None in its place, so a later life makes the act again with no drift, and a checkpoint holds the act as the record does."""
-  sand, log, root = born(auto=False)
-  engine.bash("echo hi", show=lambda _: [1], show_err=grep("x"), on=root)
-  word = said(log, "bash")[0]
-  assert word[-2:] == (None, grep("x"))
-  again, _ = await relived(Sand(auto=False), plain(sand.record))
-  assert said(again, "bash") == [word]
-  [chain] = engine.gathered(lambda one: one, {})["chains"]
-  assert word in chain["turns"]
-
-
 async def test_bash_gives_the_command_which_is_awaited_for_its_exit_code_and_its_streams() -> None:
   """bash gives the command, which is awaited for its exit code and its streams."""
   _, _, root = born()

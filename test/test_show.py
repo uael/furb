@@ -1,6 +1,6 @@
 """Show, what says which lines of a text the engine tells."""
 
-from conftest import MANY, acts, born, paragraphs, plain, said, settle
+from conftest import MANY, Sand, acts, born, paragraphs, plain, relived, said, settle
 from furb import engine
 from furb.engine import HEAD, Text, differs, grep, picked, span
 
@@ -29,10 +29,18 @@ async def test_a_show_of_the_file_is_plain_data_so_it_is_a_word_of_each_act_that
 
 
 async def test_a_show_is_any_callable_that_is_given_the_lines_of_a_text() -> None:
-  """A show is any callable that is given the lines of a text and gives the numbers of the lines to tell, so a word adds a show by writing one, which the word makes again when it runs again."""
+  """A show is any callable that is given the lines of a text and gives the numbers of the lines to tell, so a word adds a show by writing one, which the word makes again when it runs again; no later life makes it again as it was, so it is no word of an act, which holds None in its place."""
   _, log, root = born(ODD)
   assert await engine.prompt(int, "show the odd lines", on=root) == 1
   assert engine.turns(on=root)[-1][1] == "#read1\nread1_path = 'a.txt'\nread1_text = 'one'"
   assert [a[4:] for a in acts(log).values() if a[0] == "read"] == [("a.txt",)]
   told = [one for one in paragraphs(engine.turns(on=root)) if one.startswith("#read1")]
   assert told == ["#read1\nread1_path = 'a.txt'\nread1_text = 'one'"]
+  sand, log, root = born(auto=False)
+  engine.bash("echo hi", show=lambda _: [1], show_err=grep("x"), on=root)
+  (word,) = said(log, "bash")
+  assert word[-2:] == (None, grep("x"))
+  again, _ = await relived(Sand(auto=False), plain(sand.record))
+  assert said(again, "bash") == [word]
+  [chain] = engine.gathered(lambda one: one, {})["chains"]
+  assert word in chain["turns"]
