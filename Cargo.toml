@@ -35,6 +35,7 @@ version = "0.4.2"
 
 # The bar of the Rust of furb, which the skill rust says. A module that breaks it holds an expect at its top.
 [workspace.lints.rust]
+unsafe_code = "deny"
 unsafe_op_in_unsafe_fn = "deny"
 unreachable_pub = "warn"
 unused_qualifications = "warn"
@@ -60,6 +61,7 @@ undocumented_unsafe_blocks = "deny"
 multiple_unsafe_ops_per_block = "warn"
 allow_attributes = "deny"
 allow_attributes_without_reason = "deny"
+dbg_macro = "deny"
 
 [lints]
 workspace = true

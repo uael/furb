@@ -60,6 +60,7 @@ impl TypeName for Value {
 
 impl ValidateNapiValue for Value {}
 
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
 impl FromNapiValue for Value {
   unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {
     // SAFETY: napi gives the value in its env, where it is read at once.
@@ -68,6 +69,7 @@ impl FromNapiValue for Value {
   }
 }
 
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
 impl ToNapiValue for Value {
   unsafe fn to_napi_value(env: sys::napi_env, value: Self) -> napi::Result<sys::napi_value> {
     // SAFETY: the env is the one napi gives the value to.
@@ -75,6 +77,7 @@ impl ToNapiValue for Value {
   }
 }
 
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
 impl ToNapiValue for Record {
   unsafe fn to_napi_value(env: sys::napi_env, value: Self) -> napi::Result<sys::napi_value> {
     // SAFETY: the env is the one napi gives the value to.
@@ -82,6 +85,7 @@ impl ToNapiValue for Record {
   }
 }
 
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
 impl FromNapiValue for Given {
   /// An ear of the crate as itself, and a generator of JavaScript heard as an ear.
   unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {
@@ -95,6 +99,7 @@ impl FromNapiValue for Given {
   }
 }
 
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
 impl FromNapiValue for Said {
   unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {
     // SAFETY: napi gives the value in its env, where it is read at once.
@@ -102,6 +107,7 @@ impl FromNapiValue for Said {
   }
 }
 
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
 impl FromNapiValue for Told {
   /// A function of JavaScript, told on its own thread, which keeps no host alive that has nothing else to do.
   unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {
@@ -114,6 +120,7 @@ impl FromNapiValue for Told {
   }
 }
 
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
 impl FromNapiValue for Stream {
   /// A function of JavaScript, told on its own thread, which keeps no host alive that has nothing else to do.
   unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {
@@ -130,6 +137,7 @@ impl FromNapiValue for Stream {
   }
 }
 
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
 impl FromNapiValue for Retrying {
   /// A function of JavaScript, told on its own thread, which keeps no host alive that has nothing else to do.
   unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {
@@ -153,6 +161,7 @@ impl FromNapiValue for Retrying {
   }
 }
 
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
 impl FromNapiValue for Log {
   /// A function of JavaScript, told on its own thread, which keeps no host alive that has nothing else to do.
   unsafe fn from_napi_value(env: sys::napi_env, value: sys::napi_value) -> napi::Result<Self> {
@@ -165,6 +174,7 @@ impl FromNapiValue for Log {
   }
 }
 
+#[expect(unsafe_code, reason = "napi declares this method unsafe: it reads a raw value of N-API")]
 impl FromNapiValue for Answer {
   /// A function of JavaScript as a model: it is called on the thread of JavaScript with the request and a function
   /// that tells what it writes, and the turn its promise gives is the answer, or what it threw is the refusal.
@@ -204,6 +214,7 @@ impl FromNapiValue for Answer {
 }
 
 /// The ear an object of JavaScript holds, when it is an ear of the crate, taken out of it.
+#[expect(unsafe_code, reason = "napi reads an instance of a class only through an unsafe call")]
 fn native(env: &Env, object: &JsObject<'_>) -> Result<Option<Box<dyn crate::Ear>>, Fault> {
   if !NativeEar::instance_of(env, object).map_err(refused)? {
     return Ok(None);
@@ -232,6 +243,7 @@ pub struct JsAct {
 
 impl JsAct {
   /// The name an object of JavaScript holds, when it is an act.
+  #[expect(unsafe_code, reason = "napi reads an instance of a class only through an unsafe call")]
   fn named(env: &Env, object: &JsObject<'_>) -> Result<Option<String>, Fault> {
     if !JsAct::instance_of(env, object).map_err(refused)? {
       return Ok(None);

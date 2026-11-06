@@ -50,6 +50,10 @@ const DEEPEST: usize = 64;
 
 /// A function of JavaScript called, as a method of `this` when it is one, with these arguments: what it gave, or
 /// the fault of what it threw.
+#[expect(
+  unsafe_code,
+  reason = "napi gives no safe call of a function with a this and a slice of raw values"
+)]
 fn call<'env>(
   env: &'env Env,
   f: Unknown<'env>,
@@ -121,6 +125,10 @@ fn marked(held: &Object) -> Option<Fault> {
 /// A value of JavaScript, as the engine takes it: a function as a function of the host, a generator as an ear, an
 /// ear of the crate as itself, each handed over to the life it comes into, an act as its name, and plain data as the
 /// wire reads it, each entry the same way.
+#[expect(
+  unsafe_code,
+  reason = "napi reads a raw value as JSON, its numbers kept, only through an unsafe call"
+)]
 pub(crate) fn inward(
   env: &Env,
   value: Unknown<'_>,
