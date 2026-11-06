@@ -4,7 +4,7 @@ import pytest
 
 from conftest import WORLD, Sand, born, chained, life, plain, relived, settle
 from furb import engine
-from furb.engine import Drift
+from furb.engine import Drift, Text
 
 
 async def test_what_a_life_fails_with_when_an_act_of_it_is_not_the_one_the_record_holds() -> None:
@@ -26,7 +26,7 @@ async def test_what_a_life_fails_with_when_an_act_of_it_is_not_the_one_the_recor
   engine.read("a.txt", on=root)
   later = Sand()
   with pytest.raises(Drift, match=r"^write1 drifts: "):
-    life(later, [e for e in wrote.record if e[0][1] != "write1"])
+    life(later, [((*e[0][:4], Text("made.txt", "y")),) if e[0][:2] == ("write", "write1") else e for e in wrote.record])
   assert "/w/made.txt" not in later.files and [a for a in later.calls if a[0] == "write"] == []
 
 
@@ -50,6 +50,7 @@ async def test_its_message_names_the_act_that_drifted_and_both_facts() -> None:
   kept = [(held,) if e[0][:2] == ("read", "read1") else e for e in plain(sand.record)]
   with pytest.raises(Drift) as raised:
     life(Sand(), kept)
+  made = (made[0], "read2", *made[2:])
   assert str(raised.value) == f"read1 drifts: the life made {made!r}, the record holds {held!r}"
   sand, _, root = born()
   await engine.rung("x = bash('echo ' + 'x' * 400)", on=root)
@@ -59,6 +60,7 @@ async def test_its_message_names_the_act_that_drifted_and_both_facts() -> None:
   kept = [(held,) if e[0][:2] == ("bash", "bash1") else e for e in plain(sand.record)]
   with pytest.raises(Drift) as raised:
     life(Sand(), kept)
+  made = (made[0], "bash2", *made[2:])
   assert str(raised.value) == f"bash1 drifts: the life made {repr(made)[:300]}, the record holds {repr(held)[:300]}"
   assert len(repr(made)) > 300
 
@@ -79,7 +81,7 @@ async def test_a_drift_breaks_the_journal_which_keeps_nothing_more() -> None:
   assert engine.clock(on=two) == 1001.0
   fresh = engine.bash("echo new", on=two)
   await settle()
-  assert fresh == "bash2" and [a[4] for a in later.calls if a[0] == "bash"] == ["echo new"]
+  assert fresh == "bash4" and [a[4] for a in later.calls if a[0] == "bash"] == ["echo new"]
   assert (await fresh).code == 0 and later.record == []
   sand, _, root = born("import random\nx = bash(f'echo {random.random()}')", "close(None)")
   await engine.prompt(None, "roll", on=root)

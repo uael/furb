@@ -2,7 +2,21 @@
 
 import pytest
 
-from conftest import born, chained, heads, hushed, paragraphs, plain, relived, said, settle, slow, stalled, world_says
+from conftest import (
+  born,
+  chained,
+  heads,
+  hushed,
+  paragraphs,
+  plain,
+  relived,
+  said,
+  settle,
+  slow,
+  stalled,
+  verbs,
+  world_says,
+)
 from furb import engine
 from furb.engine import OPERATOR, Refused
 
@@ -86,6 +100,7 @@ async def test_a_kind_a_pause_stops_it_starts_its_ear() -> None:
 async def test_an_act_made_in_that_time_it_hears_at_once() -> None:
   """An act made in that time it hears at once, since an act is put to the ears while it is made and to no ear after the one that takes it, a chain apart, so a paused rung takes the wants of its run."""
   sand, log, root, act = slow()
+  await verbs(root, "merged")
   await settle()
   engine.pause(act)
   assert engine.ask("merged", root, act) is True

@@ -67,14 +67,14 @@ pub fn checked_on(engine: &str, sheet: &str) -> Result<Vec<Finding>, Fault> {
     let parsed = Parsed::new(&sheet);
     let (text, stands) = rebound(&parsed);
     let found = declared(&parsed, typed(engine, &[], &text, &stands)?, None);
-    return Ok(signed(gated(&parsed, found, engine, &HashSet::new()), &[&sheet], engine));
+    return Ok(signed(gated(&parsed, found, engine, &HashSet::new(), &sheet), &[&sheet], engine));
   };
   let parsed = Parsed::new(&short);
   let found =
     declared(&parsed, typed(engine, &laid.modules, &laid.main, &laid.lines)?, Some(&laid.declares));
   let mut sources: Vec<&str> = vec![&laid.main];
   sources.extend(laid.modules.iter().rev().map(|(_, module)| &**module));
-  Ok(signed(gated(&parsed, found, engine, &laid.coroutines), &sources, engine))
+  Ok(signed(gated(&parsed, found, engine, &laid.coroutines, sheet), &sources, engine))
 }
 
 /// What the checker found with each finding of a rule that the gate checks itself, in the order of
@@ -84,13 +84,14 @@ fn gated(
   mut found: Vec<Finding>,
   engine: &str,
   coroutines: &HashSet<String>,
+  whole: &str,
 ) -> Vec<Finding> {
   found.extend(unrun(sheet));
   found.extend(unawaited(sheet));
   found.extend(dropped(sheet, coroutines));
   found.extend(unscheduled(sheet));
   found.extend(told(sheet));
-  found.extend(contracted(sheet, engine));
+  found.extend(contracted(sheet, engine, whole));
   found.sort_by_key(|one| one.line);
   found
 }

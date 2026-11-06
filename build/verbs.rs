@@ -61,7 +61,10 @@ impl Fielded {
       | "tuple[int | None, ...] | bool | None" => Fielded::Object,
       "Text" => Fielded::Text,
       "list[str]" => Fielded::Strs,
-      "Show | None" | "Filter | None" | "Callable[[str], Ear] | None" => Fielded::MaybeCallable,
+      "Show | None"
+      | "Filter | None"
+      | "Filter | list[str] | None"
+      | "Callable[[str], Ear] | None" => Fielded::MaybeCallable,
       _ => panic!("the build holds no kind of parameter for `{annotation}`"),
     }
   }
@@ -236,9 +239,8 @@ impl Answer {
       "list[Fact]" => Answer::Facts,
       "list[Turn]" => Answer::Turns,
       "Text" => Answer::Text,
-      "object" | "Show" | "Filter" | "dict" | "dict[str, str]" | "Standing" | "list[Entry]" => {
-        Answer::Object
-      }
+      "object" | "Show" | "Filter" | "dict" | "dict[str, str]" | "Standing" | "list[Entry]"
+      | "list[int]" => Answer::Object,
       "Act" | "Act[object]" | "Act[T]" | "Act[Never]" | "Act[Standing]" => {
         Answer::Act(Came::Object)
       }

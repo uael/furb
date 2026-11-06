@@ -57,11 +57,14 @@ async def test_a_later_life_runs_the_filter_again_and_keeps_the_same_acts() -> N
 
 
 async def test_a_filter_is_no_word_of_a_chain() -> None:
-  """A filter is no word of a chain: the verb keeps it for what the chain holds, so no record holds one."""
+  """A filter is no word of a chain: the chain keeps as a word the ids of the acts that its filter kept, so a record holds them, and a chain that is given those ids keeps the same acts."""
   sand, log, root = await lived()
   held: list[tuple] = []
   side = engine.chain("side", source=root, filter=seen(held))
   await settle()
   kept = [fact for fact, *_ in sand.record if fact[0] == "chain"]
-  assert [(one[1], one[4], one[5]) for one in kept] == [(root, "root", ""), (side, "side", root)]
-  assert [len(one) for one in said(log, "chain")] == [6, 6] and held
+  assert [one[1:2] + one[4:] for one in kept] == [(root, "root", ""), (side, "side", root, [x[1] for x in held])]
+  assert [len(one) for one in said(log, "chain")] == [6, 7] and held
+  turns = engine.turns(on=side)
+  _, again = await relived(Sand(), plain(sand.record))
+  assert again == root and engine.turns(on=side) == turns

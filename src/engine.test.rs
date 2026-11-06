@@ -1371,16 +1371,21 @@ fn a_word_that_never_yields_on_another_chain_raises_and_the_root_goes_on() {
 }
 
 #[test]
-fn the_bound_in_code_of_the_engine_and_no_word_is_a_fault_that_names_it() {
+fn an_ear_that_spins_past_the_bound_is_dropped_as_an_ear_that_raises_and_the_life_goes_on() {
   bounded();
   let word = "def spin():\n  yield\n  while True:\n    pass\ndrive(spin(), 'spin')";
-  let mut lived = Lived::new("ear", &[word], true).unwrap();
+  let again =
+    "def calm():\n  yield\ntry:\n  drive(calm(), 'spin')\n  close(8)\nexcept Refused:\n  close(0)";
+  let mut lived = Lived::new("ear", &[word, again], true).unwrap();
   let root = lived.root();
   let with = verbs::Prompt { on: on(&root), ..Default::default() };
-  let got = lived.engine.prompt(Object::string("int"), with).and_then(block_on);
-  let fault = got.expect_err("an ear that spins outside every word ends the life with a fault");
-  assert_eq!(fault.name, "TimeoutError");
-  assert_eq!(fault.message(), "turn time limit exceeded: 500ms");
+  let act = lived.engine.prompt(Object::string("int"), with).unwrap();
+  assert_eq!(
+    block_on(act).unwrap().as_ref().as_int(),
+    Some(8),
+    "the name of the dropped ear is free again"
+  );
+  assert!(lived.engine.stopped().is_none(), "{:?}", lived.engine.stopped());
 }
 
 #[test]
@@ -1439,8 +1444,11 @@ fn probed(yard: &str, ears: Vec<(&str, Box<dyn Ear>)>) -> (Yard, Engine, String)
 
 /// One probe on the root, and what it came to.
 fn probe(engine: &mut Engine, root: &str) -> Result<Object, Fault> {
+  // The ear makes the act, since a later life makes again what an ear made through the ear.
+  let operator = engine.site(Some("probe")).unwrap();
   let made =
     engine.verb("act", vec![Object::string("probe"), Object::string(root), Object::none()], vec![]);
+  engine.site(Some(&operator)).unwrap();
   let name = made.unwrap().as_ref().as_str().unwrap_or_default().to_owned();
   block_on(Act::<Object>::of(engine, &name))
 }

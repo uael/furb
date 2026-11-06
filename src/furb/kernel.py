@@ -371,3 +371,53 @@ def kernel(names: Names) -> Ear:
         held.carry(held.waits.pop(wants), held.given(str(asked[4]), value))
       case ("cancel" | "close", *_) as control:
         held.dropped(control)
+
+
+class Recorded:
+  """What stands, in the record that a later life is given, for a value that no later life makes again as it was.
+
+  A callable went out of the life that made it as a mark, or as its repr, which names an address of that life. An
+  address of an object is a function of the heap and not of the record, so a text that holds one stands for each
+  text, or each callable, that shows the same with no address, and a mark stands for each callable. The journal then
+  finds the act that a word makes again equal to the act of the record. A host of the engine of this interpreter
+  gives boot what recorded gives. The opening of the sandbox holds the same rule for the engine of monty, and not
+  this one, since a record replays there on the Kernel of the build that made it, which may hold no Recorded."""
+
+  def __init__(self, held: str | None = None) -> None:
+    self.held = held
+
+  def __eq__(self, other: object) -> bool:
+    if isinstance(other, Recorded):
+      return self.held == other.held
+    if self.held is None:
+      return callable(other)
+    unaddressed = lambda text: re.sub(r" at 0x[0-9a-fA-F]+", "", text)  # noqa: E731
+    shown = repr(other) if callable(other) else other
+    return isinstance(shown, str) and unaddressed(shown) == unaddressed(self.held)
+
+  def __repr__(self) -> str:
+    return "<a callable of an earlier life>" if self.held is None else repr(self.held)
+
+  # It equals each value that shows the same with no address, so no hash agrees with its equality.
+  __hash__ = None  # type: ignore[assignment]
+
+
+def recorded(names: Names, entries: list[tuple]) -> list[tuple]:
+  """The entries of a record as boot is given them: in the words of each act that a word made, each text that holds
+  an address stands as a Recorded of it."""
+  text, question = names["Text"], verb(names, "question")
+  assert isinstance(text, type)
+
+  def again(word: object) -> object:
+    if isinstance(word, str) and re.search(r" at 0x[0-9a-fA-F]+", word):
+      return Recorded(word)
+    if isinstance(word, text):
+      return text(getattr(word, "path"), again(getattr(word, "content")))  # noqa: B009
+    if isinstance(word, tuple | list):
+      return type(word)(map(again, word))
+    return word
+
+  return [
+    ((*x[:4], *map(again, x[4:])),) if question(x) and re.fullmatch(r"[a-z_]+\d+", str(x[2])) else (x,)
+    for (x,) in entries
+  ]

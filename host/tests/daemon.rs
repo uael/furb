@@ -1084,7 +1084,7 @@ mod daemon {
   }
 
   #[tokio::test]
-  async fn a_rung_that_waits_with_no_reply_is_told_to_the_root_after_the_bound() {
+  async fn a_rung_that_waits_with_no_reply_is_told_to_its_chain_after_the_bound() {
     let at = place();
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
@@ -1114,6 +1114,45 @@ mod daemon {
       unreachable!()
     };
     assert_eq!(sent[5], notice.as_str(), "the root takes the notice as its message");
+  }
+
+  #[tokio::test]
+  async fn a_chain_stuck_beside_a_chain_that_works_is_told_alone_and_takes_the_notice() {
+    let at = place();
+    let local = Local::new(at.join("sock"));
+    let listener = local.listen().await.unwrap();
+    let settings = Settings {
+      opening: opening(&at),
+      grace: GRACE,
+      end: END,
+      stall: QUIET,
+      tailnet: None,
+      door: None,
+      host: None,
+    };
+    let served = local.clone();
+    tokio::spawn(async move { run(&served, listener, settings).await });
+    let mut window = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    window.attach(&life).await;
+    let word = "never = prompt(str, \"never answered\", to=\"operator\")\nside = chain(\"side\")\n\
+                rung(\"x = 1\", never, on=side)\nfor _ in range(80):\n  await wait(0.05, __name__)";
+    let verb = Verb::Run { life: life.clone(), word: word.to_owned(), on: None };
+    let Ok(Answer::Act(rung)) = window.ask(verb).await else { panic!("no rung") };
+    let heard = window.heard_until(stall).await;
+    assert!(!heard.iter().any(done(&rung)), "the stall comes while the root works");
+    let Some(Frame::Stalled { acts, notice, .. }) = heard.last() else { unreachable!() };
+    let side = acts.first().map(|one| one.chain.clone()).expect("the stall names an act");
+    assert!(side != "chain1" && acts.iter().all(|one| one.chain == side), "{acts:?}");
+    assert!(acts.iter().any(|one| one.kind == "rung"), "{acts:?}");
+    let taken = |frame: &Frame| {
+      matches!(frame, Frame::Event { event: Event::Fact(fact), .. }
+        if fact[0] == "prompt" && fact[3] == side.as_str() && fact[4] == "None")
+    };
+    let Frame::Event { event: Event::Fact(sent), .. } = window.until(taken).await else {
+      unreachable!()
+    };
+    assert_eq!(sent[5], notice.as_str(), "the stuck chain takes the notice as its message");
   }
 
   /// The skill probe in a folder of skills, whose process writes the file `started` of its folder,

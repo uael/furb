@@ -57,7 +57,7 @@ use crate::{
     Request, Verb,
   },
   serve::{Host, Outbox, serve},
-  stall::Quiet,
+  stall::{Quiet, Stall},
   transport::{
     Accepted, Dialer, Door, Identity, Listener, Local, Tailscale, Tcp, Ticket, upgraded,
   },
@@ -891,7 +891,8 @@ struct Watch {
 
 impl Watch {
   /// The life watched until its end, which the daemon hears. Each stall goes to the daemon, which
-  /// tells each window, and to the root chain of the life as a message of None, so its actor wakes.
+  /// tells each window, and as a message of None to the chain that stalled, or to the root chain
+  /// for a stall of the life, so the actor of that chain wakes.
   /// A life whose thread hangs takes the message late or never, and the watch goes on.
   async fn watched(self, asks: mpsc::WeakUnboundedSender<Asked>) {
     let mut events = pin!(self.life.events(0));
@@ -910,12 +911,14 @@ impl Watch {
           None => break,
         },
         () = until(quiet.due()) => {
-          let (acts, notice) = quiet.stalled();
-          let (life, born) = (self.record.clone(), self.born);
-          if let Some(asks) = asks.upgrade() {
-            asks.send(Asked::Stalled { life, born, acts, notice: notice.clone() }).ok();
+          for Stall { acts, notice, chain } in quiet.stalled(Instant::now()) {
+            let (life, born) = (self.record.clone(), self.born);
+            if let Some(asks) = asks.upgrade() {
+              asks.send(Asked::Stalled { life, born, acts, notice: notice.clone() }).ok();
+            }
+            let (handle, record, log) = (self.life.clone(), self.record.clone(), self.log.clone());
+            tokio::spawn(woken(handle, record, notice, chain, log));
           }
-          tokio::spawn(woken(self.life.clone(), self.record.clone(), notice, self.log.clone()));
         }
       }
     }
@@ -931,12 +934,19 @@ impl Watch {
   }
 }
 
-/// The message of a stall sent to the root chain of a life as a prompt of None, or the report of
-/// why the life refused it.
-async fn woken(life: LifeHandle, record: String, notice: String, log: Option<Log>) {
-  let message = Command::Prompt { shape: "None".to_owned(), message: notice, to: None, on: None };
+/// The message of a stall sent to a chain of a life, or to its root with no chain, as a prompt of
+/// None, or the report of why the life refused it.
+async fn woken(
+  life: LifeHandle,
+  record: String,
+  notice: String,
+  on: Option<String>,
+  log: Option<Log>,
+) {
+  let to = on.clone().unwrap_or_else(|| "its root".to_owned());
+  let message = Command::Prompt { shape: "None".to_owned(), message: notice, to: None, on };
   if let Err(no) = life.send(message).await {
-    report(log.as_ref(), &format_args!("{record} stalled, and its root took no message: {no}"));
+    report(log.as_ref(), &format_args!("{record} stalled, and {to} took no message: {no}"));
   }
 }
 

@@ -24,7 +24,7 @@ ENGINE = ROOT / "src" / "furb" / "engine.py"
 # will not fit under it is a shape not found yet. The wall started at 8000, and each engine item raises
 # it by its measured cost, so BUDGET is that sum. The doctrine of furb, which every chain reads in a turn
 # of its setup, gets one thousand.
-BUDGET = 9_890
+BUDGET = 10_507
 DOCTRINE = 1_000
 QUOTE = (ROOT / "DOCTRINE.md").read_text(encoding="utf-8")
 

@@ -62,17 +62,17 @@ The Kernel sets the site to the rung whose word it steps, for as long as it step
 The Kernel holds the run of the word of a turn of a model, once that word is over, while a command that the word started and did not await is open, for 30 seconds at the most, by a wait that the run makes, so the chain tells what the command gave before it asks the next reply.
 """
 
-type Show = Callable[[list[str]], list[int]]
-"""A show is given the lines of a text and gives the numbers of the lines to tell.
-A show is any callable of that shape, so a word adds a show by writing one, and span, grep and differs make the shows of the file.
-A show is no word of a fact: the verb that was given it keeps it for what it tells, and the ear of the act closes over it, so no record holds one.
+type Show = tuple | Callable[[list[str]], list[int]]
+"""A show says which lines of a text to tell, and picked gives their numbers from the lines of the text.
+A show of the file is plain data, which span, grep and differs make, so it is a word of each act that it is given to and a record holds it.
+A show is any callable that is given the lines of a text and gives the numbers of the lines to tell, so a word adds a show by writing one, which the word makes again when it runs again.
 """
 type Filter = Callable[[list[Question]], list[Question]]
 """A filter is given the acts of the transcript up to the source of a chain that has one.
 A filter says which acts the turns of that chain keep, each with its entries.
 A filter is any callable of that shape, so a word adds a filter by writing one, and take makes the filter of the file.
 A later life runs the filter again and keeps the same acts, since the word that opened the chain opens it again with it.
-A filter is no word of a chain: the verb keeps it for what the chain holds, so no record holds one.
+A filter is no word of a chain: the chain keeps as a word the ids of the acts that its filter kept, so a record holds them, and a chain that is given those ids keeps the same acts.
 """
 
 def say(kind: str, about: str, *words: object) -> Fact:
@@ -103,13 +103,13 @@ def act(kind: str, on: str, ear: Callable[[str], Ear] | None, *words: object) ->
   The engine refuses an act said from outside a run that names no chain, a chain apart.
   The chain an act is on is the chain named to the call, or the scope of the one that made it when the call names none.
   The ear of an act is given the name of the act and hears every fact said after its birth that it waits for, and it speaks by yielding a saying.
-  An act carries the words of its kind, which are the plain arguments the verb was given, in the order of the verb, and a show or a filter is none of them.
+  An act carries the words of its kind, which are the arguments the verb was given, in the order of the verb, so a show is one of them, and a filter is none, since a chain carries the ids of the acts that its filter kept.
   """
 
 def drive(g: Ear, name: str) -> None:
   """The other way to speak: a generator is brought to life under a name, and from then it hears every fact that it waits for and says its own.
   One that returns is over and lives no more, which is how a thing that watches for one fact alone is dropped the moment it hears it.
-  One that raises while it hears is broken the same way: the next fact it is given finds it over, and what went wrong goes to the one that spoke.
+  One that raises while it hears is dropped at once, and the one that spoke goes on: the engine says the done of the act it is the ear of, with a refusal that names it and what it raised, or the fact dropped that names them when no open act is its own, so a replay that gives it the same facts says the same.
   A generator brought to life under a name and nothing more: it hears from the tip and runs to its first wait, and one born while a fact goes round hears from the next.
   It lives until it returns, and an act that hears nothing more returns at the first fact it hears after its own end.
   A generator that yields a saying is given the fact as the bus said it, one that yields a set of names waits for the next fact that names one of them, and one that yields nothing waits for the next fact said.
@@ -141,6 +141,9 @@ def grep(pattern: str) -> Show:
 
 def differs(old: list[str]) -> Show:
   """differs(lines) is the show of the lines that differ from the lines it holds, which is what a write shows of what came back."""
+
+def picked(show: Show, lines: list[str]) -> list[int]:
+  """picked gives the numbers of the lines that a show tells of a text, from the lines of the text: those that a show of the file names, or what a show that is a callable gives."""
 
 HEAD: Final[Show] = span(1, 2000)
 """HEAD is the span of the first 2000 lines, which a read without a show is told as."""
@@ -527,7 +530,7 @@ def prompt[T](shape: type[T], message: str = "", to: str = "", on: str = "") -> 
 def prompt(shape: str, message: str = "", to: str = "", on: str = "") -> Act: ...
 @overload
 def prompt(shape: object, message: str = "", to: str = "", on: str = "") -> Act: ...
-def chain(label: str = "", source: str = "", filter: Filter | None = None, on: str = "") -> Act[Never]:
+def chain(label: str = "", source: str = "", filter: Filter | list[str] | None = None, on: str = "") -> Act[Never]:
   """chain says what a chain does: how it is opened, what it tells, and what it answers for.
   boot gives the root, and chain gives the chain, which never settles.
   The open of a chain with a source binds its label and its source.
@@ -687,7 +690,7 @@ def bash(
   """A command: its streams as they come, its exit, the door of its streams and of its stdin, and what it came to.
   bash is given one show for each stream that bash tells.
   The commands of the World run at the same time.
-  bash is given a command, its stdin, a timeout, the codes that it accepts, and a show for each stream, the plain words first, so the journal makes it again.
+  bash is given a command, its stdin, a timeout, the codes that it accepts, and a show for each stream, each a word of its act in that order when either is not its default, so the journal makes it again.
   bash gives the command, which is awaited for its exit code and its streams.
   The World runs the command in the working directory of the chain, which it reads.
   The World runs the command in a POSIX sh: /bin/sh, and on Windows the sh of Git for Windows, which it finds on PATH, beside the git on PATH, or in the folder of the programs of the machine.
@@ -723,7 +726,7 @@ def bash(
   The stdout of a command without a show is told as TAIL, which is the span of its last 250 lines.
   The World refuses a write to the door bash1/stdout or bash1/stderr, and a write to bash1/stdin once the command ended or was cancelled, once its stdin is closed, as a stdin of text is from the start, or once a crash cut the command.
   The World asks a command whether its stderr flows into its stdout, and the command answers from what its verb was given.
-  The World hears the bash itself, with the command, the stdin and the timeout, and no working directory and no show.
+  The World hears the bash itself, with the command, the stdin, the timeout, the codes that it accepts and a show for each stream, and no working directory.
   """
 
 @dataclass
@@ -1022,7 +1025,7 @@ type Chain = tuple[Literal["chain"], str, str, str, str, str]
 type Grant = tuple[Literal["grant"], str, str, str, float | None, float | None]
 """A grant carries the ceiling in dollars and the ceiling in share of the window."""
 type Bash = tuple[Literal["bash"], str, str, str, str, str | None, float, tuple[int | None, ...] | bool | None]
-"""A bash carries the command, the stdin and the timeout, and no show and no working directory."""
+"""A bash carries the command, the stdin, the timeout, the codes that it accepts and a show for each stream, and no working directory."""
 
 def literal(v: object, into: set[str] | None = None) -> str | bool:
   """literal gives the python that makes a value again when the value is one that a checkpoint carries: None, a bool, an int, a float, a str, a Text, an Exit or an exception as python shows it, and a list, a tuple, a set or a dict of those as python writes it.
@@ -1187,20 +1190,25 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   It opens the root, the first act of any record, which every life opens under the one name, and which a record that holds it already gives back, and that root is what it gives back.
   What the record holds of an act made again keeps that act from the outside: a done that is its first answer the journal says at once, and an act that the outside started the journal says started at once and holds, since it cannot run it, so no ear of the outside hears that act, and a chain with a source which asks again what its origin asked is answered from the record too.
   The record a life was opened from, from which the journal answers what it holds of an act, so that an act the World did once is done no more.
-  The journal: an ear of the engine, which hears everything and keeps every act that no act of the life made and every fact that no act of the life said, the act it is about before it, and nothing that a generator an act brought to life made or said, nor anything it says itself, since a later life makes again everything that an act made or said and brings that generator to life again, and what the journal says the record holds already.
+  The journal: an ear of the engine, which hears everything and keeps every act that the life makes, as it is made, and every fact that no act of the life said, the act it is about before it, and nothing else that a generator an act brought to life said, nor anything it says itself, since a later life makes again everything that an act made or said and brings that generator to life again, and what the journal says the record holds already, so the record holds the maker, the kind, the chain and the words of each act that a reader shows with no life.
   A read the operator makes is kept like any other act of the operator, since what it reads may change, and a later life makes it again at its place.
   What it keeps it says, so that the World holds the record and the journal alone says what belongs in it; a World that is durable keeps what it is told, one that is not keeps nothing, and either way what the World holds is what the life after it is given.
-  Given at its birth what the World kept of an earlier life, it says those entries again in the order it was given them, each once every fact said before it has been heard, or once a raise that is no drift stopped the bus with some of them unheard, but for an act that an act of the record makes, which comes of a fact still unheard: an act whose maker is neither an act nor an ear that boot was given it makes again through its verb under the site of its maker, once the chain it is on has been made again, since that maker makes nothing again of what the record holds; an act whose maker is an act it makes not, since the word of that act makes it again; an act whose maker is an ear that boot was given it makes through act under the site of that ear, with no ear of its own, when that ear did not make it again by then, so a view of a later life holds it where the first life held it; and any other fact it says once the act it is about has been made again, so that its controls and its dones land where they landed.
-  An entry whose act this life has not made again when every fact said before it has been heard, which for an act whose maker is neither an act nor an ear that boot was given is the chain it is on, the journal steps over, since this life will not make that act at that place, and it keeps the name of that act taken, so the entries after it go on and their acts keep their names.
+  Given at its birth what the World kept of an earlier life, it says those entries again in the order it was given them, each once every fact said before it has been heard: an act whose maker is neither an act nor an ear that boot was given it makes again through its verb under the site of its maker, once the chain it is on has been made again, since that maker makes nothing again of what the record holds; an act whose maker is an act it makes not, since the word of that act makes it again; an act whose maker is an ear that boot was given it makes through act under the site of that ear, with no ear of its own, when that ear did not make it again by then, so a view of a later life holds it where the first life held it; and any other fact it says once the act it is about has been made again, so that its controls and its dones land where they landed.
+  An entry whose act this life has not made again when every fact said before it has been heard, as an act that an act made and that the outside never answered, or an act on a chain that this life has not made, which for an act whose maker is neither an act nor an ear that boot was given is the chain it is on, the journal steps over, since this life will not make that act at that place, and it keeps the name of that act taken, so the entries after it go on and their acts keep their names.
   The journal keeps a joined mark, ("joined", "", "journal", kind, act), which names the kind and the act of the fact that it joins, before a fact, or an act of the outside, that it keeps right after the fact it kept last, with no other fact heard between them, since one ear said or made both while it heard one fact, and a later life says that fact again, or makes that act again, at once after the one before it, even when the one before it is the started of an act that the outside took, which the journal says as that act is made again and keeps from the outside, so the ears hear that burst in one burst again, as the first life did.
   A fact that the journal keeps after a fact that it does not keep holds no mark, so a later life says it again only once every fact said before it has been heard, after the reaction that came between them, as the first life did.
   The journal says the whole record again before boot returns, so no entry waits for an act that a host makes after boot.
   One said again takes the name it had, since a later life makes its acts again in the order of the record, and the life counts each kind on from there, so that no later act takes a name that is taken.
+  In a later life an act takes the name of the first question of the record with its kind, its maker, its chain and its words that no act took yet, so an act more or less that an engine makes moves the name of no other act.
+  An act that no question of the record matches takes the number after the highest of its kind in the record; before the journal said the whole record again, the outside hears it only when no question of its kind and its maker that no act took waits in the record, and one that the outside is to answer while such a question waits stands in place of the first of them and is a drift of it, so a command whose words changed drifts under the name it had and the World does nothing for it.
+  While the journal says the record again it holds what it keeps, and keeps it in its order once the record is said whole, so a life whose replay drifts keeps nothing of what it made before the drift.
+  A question of the record that no act took, on a chain that the life made again, is a drift once the journal comes to a fact that an ear of the outside said of it, so a word that makes one command less drifts.
+  A record whose last fact made names a schema before 1.1 holds no question of an act that an act made, so a later life names each of its acts by how many acts of its kind it made, as the life that kept it did.
   A boot is a life; a second boot is a second life, and the first is gone.
   The names operator and journal are the life's own, and boot refuses a generator of the outside under either name.
   A life settles an await of its acts from outside a run in the loop it is opened in, so boot outside a running loop raises before it makes anything.
-  An act whose maker is neither an act nor an ear that boot was given is said again through its verb, with the words the record holds and the chain it names, so its ear is the verb's, a host finds it made when boot returns and makes it not again, and a show or a filter it was given is not said again, since the record holds none.
-  A later life says an act whose maker is neither an act nor an ear that boot was given again only through a verb in the globals of its chain, and an act whose kind no verb binds is a drift.
+  An act whose maker is neither an act nor an ear that boot was given is said again through its verb, with the words the record holds and the chain it names, so its ear is the verb's, a host finds it made when boot returns and makes it not again, and each show and the acts that each filter kept come again with its words, since the record holds them.
+  A later life says an act whose maker is neither an act nor an ear that boot was given again only through a verb in the globals of its chain, and an act whose kind no verb binds is refused when it is made, so no record holds one.
   The journal says again a done that is the first answer of an act when the act is made again, and every later fact of it at the place where the record holds it, the started of each act that a wake began again among them.
   An act that the life makes under no site, as the chain makes the reply of an advance whose rung ended, is no fact of the World, so a later life makes it again with no drift.
   A first answer that the record holds with no maker is a refusal of the life, that nothing took the act, so the journal says it again under no site, as the life said it, and neither keeps it again nor reads it as a drift.

@@ -545,3 +545,15 @@ fn a_warning_refuses_no_word() {
   // gate refuses.
   assert_eq!(said(&[], "if chance() > 0.5:\n  maybe = 1\nclose(maybe)"), vec![]);
 }
+
+#[test]
+fn a_word_binds_no_builtin_that_a_def_of_the_program_reads() {
+  let program =
+    ["def kind(got: object) -> str:\n  return 'many' if isinstance(got, list) else 'one'"];
+  let found = said(&program, "list = 'ls -la'");
+  assert_eq!(found.len(), 1, "{found:?}");
+  assert!(found[0].1.starts_with("error[builtin-name]"), "{found:?}");
+  assert!(found[0].1.contains("`list` is a builtin that a def of this chain reads"), "{found:?}");
+  assert_eq!(said(&program, "sum = 'ls'"), vec![], "no def reads sum");
+  assert_eq!(said(&[], "list = 'ls'"), vec![], "no def reads list");
+}

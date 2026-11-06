@@ -643,7 +643,7 @@ fn rebinding(names: &[&str], inner: &[&str], bound: impl Fn(&str) -> bool) -> Op
 const BUILTINS: &str = "__builtins_of_the_gate";
 
 /// Whether python gives a name that no module binds from its builtins, as `sum`.
-fn builtin(name: &str) -> bool {
+pub(super) fn builtin(name: &str) -> bool {
   ruff_python_stdlib::builtins::is_python_builtin(name, 14, false)
 }
 

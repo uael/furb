@@ -472,6 +472,12 @@ def kernel() -> dict[str, Kernel]:
   return {} if engine is not furb.python else {"kernel": Py().kernel(), "gate": Py().gating()}
 
 
+def given(record: Sequence[tuple]) -> Sequence[tuple]:
+  """A record as boot is given it, as a host gives it: the engine of monty takes it through the opening of its
+  sandbox, and a host of the engine of this interpreter gives what recorded of the Kernel makes of it."""
+  return furb.kernel.recorded(ENGINE, list(record)) if engine is furb.python else record
+
+
 def life(world: Sand, record: Sequence[tuple] = (), **ears: World) -> tuple[list[tuple], str]:
   """A life: the engine opened from a record, with the Kernel it takes, a World in memory, a generator that keeps
   every fact said in it, and the ears it is given after them; it gives what was said and the id of the root.
@@ -480,7 +486,7 @@ def life(world: Sand, record: Sequence[tuple] = (), **ears: World) -> tuple[list
   ended = {fact[1] for (fact,) in record if fact[0] == "done"}
   left = {fact[1] for (fact,) in record if fact[0] == "started" and fact[1] not in ended}
   world.cut = {fact[1]: tuple(fact) for (fact,) in record if fact[0] == "bash" and fact[1] in left}
-  return log, engine.boot(record, **kernel(), probe=watched(log), world=world.hears(), **ears)
+  return log, engine.boot(given(record), **kernel(), probe=watched(log), world=world.hears(), **ears)
 
 
 def machine(directory: Path, record: Path | None = None) -> tuple[Live, str]:
@@ -838,3 +844,10 @@ def pytest_collectstart(collector: pytest.Collector) -> None:  # noqa: ARG001
 QUOTES = json.loads((Path(__file__).parent / "quotes.json").read_text(encoding="utf-8"))
 """QUOTES is the table of the quotes, which the engine, the gate and the watch of the provider read alike: each word,
 the python that unquoted makes of it, whether a quote stands open at its end, and what the gate finds in it."""
+
+
+async def verbs(root: str, *kinds: str) -> None:
+  """Give the module of a chain a verb for each kind, so that a later life could make again an act of that kind that a test makes with an ear of its own."""
+  await engine.rung(
+    "".join(f"def {k}(*words, on=''):\n  return act({k!r}, on, None, *words)\n\n" for k in kinds), on=root
+  )
