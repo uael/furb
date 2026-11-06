@@ -200,3 +200,13 @@ async def test_a_wake_that_the_journal_says_again_says_at_once_the_answers_of_th
   assert isinstance(engine.peek(two), Refused) and len(clocked) == 1 and engine.peek(clocked[0], None) is not None
   again, _ = await relived(Sand(), plain([*sand.record, *later.record]))
   assert [a[1] for a in said(again, "clock") if a[2] != root] == clocked
+  sand, log, root = born()
+  held = engine.wait(9, root, on=root)
+  engine.pause(root)
+  engine.wake(root)
+  engine.cancel(held)
+  engine.close(None, root)
+  again, _ = await relived(Sand(), plain(sand.record))
+  order = [a[:2] for a in log if a[0] in ("cancel", "done", "close") and a[1] in (held, root)]
+  assert order == [("cancel", held), ("done", held), ("close", root)]
+  assert [a[:2] for a in again if a[0] in ("cancel", "done", "close") and a[1] in (held, root)] == order
