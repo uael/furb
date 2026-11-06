@@ -30,7 +30,7 @@ from conftest import (
   world_says,
 )
 from furb import engine
-from furb.engine import HEAD, HIDDEN, LARGEST, OPERATOR, TAIL, Act, Exit, Refused, Text, grep, span
+from furb.engine import HEAD, HIDDEN, LARGEST, OPERATOR, TAIL, Act, Exit, Refused, Text, grep, picked, span
 from furb_monty import _monty
 
 
@@ -82,11 +82,11 @@ async def test_the_commands_of_the_world_run_at_the_same_time() -> None:
 async def test_bash_is_given_a_command_its_stdin_a_timeout_the_codes_that_it_accepts_and_a_show_for_each_stream() -> (
   None
 ):
-  """bash is given a command, its stdin, a timeout, the codes that it accepts, and a show for each stream, the plain words first, so the journal makes it again."""
+  """bash is given a command, its stdin, a timeout, the codes that it accepts, and a show for each stream, each a word of its act in that order when either is not its default, so the journal makes it again."""
   sand, log, root = born(auto=False)
   engine.bash("echo hi", "go", 5.0, (0, 1), HEAD, TAIL, on=root)
   word = said(log, "bash")[0]
-  assert word == ("bash", word[1], OPERATOR, root, "echo hi", "go", 5.0, (0, 1))
+  assert word == ("bash", word[1], OPERATOR, root, "echo hi", "go", 5.0, (0, 1), HEAD, TAIL)
   assert [e[0] for e in sand.record if e[0][0] == "bash"] == [word]
   again, _ = await relived(Sand(auto=False), plain(sand.record))
   assert said(again, "bash") == [word]
@@ -410,8 +410,9 @@ async def test_a_pause_stops_no_command() -> None:
 
 async def test_the_stdout_of_a_command_without_a_show_is_told_as_tail() -> None:
   """The stdout of a command without a show is told as TAIL, which is the span of its last 250 lines."""
+  born()
   lines = MANY.splitlines()
-  assert engine.TAIL(lines) == span(-250, -1)(lines) == list(range(51, 301))
+  assert picked(engine.TAIL, lines) == picked(span(-250, -1), lines) == list(range(51, 301))
   sand, _, root = born(auto=False)
   one = engine.bash("run", on=root)
   world_says("out", one, MANY, "stdout")
@@ -513,12 +514,12 @@ async def test_the_world_asks_a_command_whether_its_stderr_flows_into_its_stdout
 
 
 async def test_the_world_hears_the_bash_itself() -> None:
-  """The World hears the bash itself, with the command, the stdin and the timeout, and no working directory and no show."""
+  """The World hears the bash itself, with the command, the stdin, the timeout, the codes that it accepts and a show for each stream, and no working directory."""
   _, log, root = born()
   engine.cd("/deep", on=root)
   one = engine.bash("echo hi", stdin=None, timeout=5.0, show=HIDDEN, show_err=TAIL, on=root)
   assert (await one).stdout.content == "ran echo hi\n"
-  assert said(log, "bash") == [("bash", one, OPERATOR, root, "echo hi", None, 5.0, None)]
+  assert said(log, "bash") == [("bash", one, OPERATOR, root, "echo hi", None, 5.0, None, HIDDEN, TAIL)]
 
 
 async def test_the_world_that_takes_a_command_answers_it() -> None:

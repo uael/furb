@@ -54,8 +54,8 @@ def test_a_finding_arrives_in_the_numbering_of_the_word_itself() -> None:
 
 def test_the_gate_reads_the_names_of_the_engine_as_a_chain_binds_them() -> None:
   """A name of the engine is a binding of the chain, so a word may read it, subclass it and override it with a def."""
-  assert said("got = span(1, 2)\nx: list[int] = got(['a', 'b'])") == []
-  assert said("x: str = span(1, 2)(['a'])")[0].startswith("line 1: error[invalid-assignment]")
+  assert said("got = span(1, 2)\nx: list[int] = picked(got, ['a', 'b'])") == []
+  assert said("x: str = picked(span(1, 2), ['a'])")[0].startswith("line 1: error[invalid-assignment]")
   assert said("old = HEAD\nx = TIMEOUT + 1") == []
   assert said("old = HEAD\nHEAD = old")[0].startswith("line 2: error[engine-name]")
   assert said("class Mine(Act): ...\nx: int = 1") == []
