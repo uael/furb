@@ -98,8 +98,13 @@ test("the toggle of a thread taller than the screen stays in view and folds it, 
       app.scroll.scrollTo(app.scroll.scrollTop + node.y + row - viewport.y);
       return settle();
     };
-    // The middle of the thread stands at the top of the feed, and its header far above it.
-    const middle = feed(await scrollTo(40));
+    // The middle of the thread stands at the top of the feed, and its header far above it. A frame can hold the
+    // pinned toggle before the rows of the body under it, so the test waits for a row of the body, and a failure
+    // shows its frame.
+    await scrollTo(40);
+    const below = (frame: string) =>
+      feed(frame).some((line, at) => at > viewport.y + 5 && /Row \d+\./.test(line));
+    const middle = feed(await window.shows(below, "a row of the thread under its pinned toggle", 10));
     expect(head()?.y ?? 0).toBeLessThan(viewport.y);
     const top = middle[viewport.y] ?? "";
     expect(top).toContain("Row 1.");
