@@ -63,7 +63,7 @@ test("the real native life drives the feed, the transcript, and responsive views
       await seedDemo(session);
       await frame();
       // The answer of a prompt stands under the name of the model that gave it, once its markdown is drawn.
-      expect(screen.captureCharFrame()).toMatch(/sonnet {2}high/);
+      expect(screen.captureCharFrame()).toMatch(/sonnet\/high/);
       for (
         let pass = 0;
         pass < 100 &&

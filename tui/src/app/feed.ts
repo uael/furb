@@ -17,7 +17,7 @@ import {
 } from "furb/life";
 import { clock } from "../clock.ts";
 import { fromDirectory, shortenHomes } from "../files.ts";
-import { clip, dollars, plainFailure } from "../format.ts";
+import { clip, dollars, modelLabel, plainFailure } from "../format.ts";
 import type { Mark as PartMark } from "../parts.ts";
 import { hunkPatch, type Scope } from "../review.ts";
 import type { ActRow, View } from "../session.ts";
@@ -719,14 +719,7 @@ export const feed = part({
               this.bounded(answer, value, `reply:${id}`);
               row.add(answer);
               row.add(
-                this.text(
-                  [
-                    [name, c.muted],
-                    [effort && effort !== "off" ? `  ${effort}` : "", c.faint],
-                  ],
-                  c.faint,
-                  { marginLeft: space.between },
-                ),
+                this.text([[modelLabel(name, effort), c.muted]], c.faint, { marginLeft: space.between }),
               );
               box.add(row);
             },
@@ -1210,14 +1203,7 @@ export const feed = part({
               this.bounded(answer, value, `reply:${act.id}`);
               row.add(answer);
               row.add(
-                this.text(
-                  [
-                    [name, c.muted],
-                    [effort && effort !== "off" ? `  ${effort}` : "", c.faint],
-                  ],
-                  c.faint,
-                  { marginLeft: space.between },
-                ),
+                this.text([[modelLabel(name, effort), c.muted]], c.faint, { marginLeft: space.between }),
               );
               this.panel(box, tone).add(row);
             },
