@@ -163,6 +163,8 @@ def stand(on=""):
 
 
 def clock(on="") -> float:
+  if acting() and question(("clock", (transcript(on)[-1:] or [["", ""]])[0][1])):
+    raise Refused("a poll of the clock: await wait(seconds)")
   return ask("clock", on)
 
 

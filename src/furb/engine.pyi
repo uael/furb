@@ -263,6 +263,7 @@ def stand(on: str = "") -> Act[Standing]:
 def clock(on: str = "") -> float:
   """clock gives one reading of the wall clock of the World.
   clock asks the World for a reading of the wall clock, and the journal keeps what it answered.
+  clock refuses a reading to a word when the last fact of its chain is of a reading, since a word that reads the clock again with nothing between polls it, and each reading is a fact of the record.
   """
 
 def chance(on: str = "") -> float:
