@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /**
@@ -7,19 +9,26 @@ import { join } from "node:path";
  * hold node too. The paths are absolute, so that a run from any folder writes the configs and the cache under the
  * .furb of the root, which git ignores. It holds no variable of git: a commit through the hook of a worktree hands
  * GIT_DIR and GIT_INDEX_FILE to each process that it starts, and a git init of a test under them set core.bare = true
- * in the config of the clone, which each worktree shares.
+ * in the config of the clone, which each worktree shares. The cache holds the socket of the daemon of the tests, which
+ * a Unix socket limits to 103 bytes on macOS, and a worktree, or the temporary directory of a life, can stand at a long
+ * path. So the cache stands in /tmp, under a short name that holds a hash of the root, which keeps two worktrees apart.
  */
 export function environment(
   base: Record<string, string | undefined> = process.env,
+  root = join(import.meta.dir, "../.."),
 ): Record<string, string | undefined> {
-  const tests = join(import.meta.dir, "../../.furb/tests");
+  const tests = join(root, ".furb/tests");
+  const cache = join(
+    process.platform === "win32" ? tmpdir() : "/tmp",
+    `furb-cache-${createHash("sha256").update(root).digest("hex").slice(0, 8)}`,
+  );
   const kept = Object.fromEntries(
     Object.entries(base).filter(([name]) => !name.toUpperCase().startsWith("GIT_")),
   );
   return {
     ...kept,
     FURB_CONFIG_DIR: tests,
-    XDG_CACHE_HOME: join(tests, "cache"),
+    XDG_CACHE_HOME: cache,
     FURB_CLAUDE_BIN: "",
     FURB_LOCAL_URL: "",
     MAX_THINKING_TOKENS: "",

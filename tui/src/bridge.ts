@@ -6,7 +6,6 @@ import { createTwoFilesPatch } from "diff";
 import {
   actorParts,
   attachImage,
-  codexAuth,
   ENGINE,
   type Fact,
   type FileChange,
@@ -212,6 +211,7 @@ class ReadLife extends EventEmitter {
   grant = this.refuse;
   stand = this.refuse;
   config = this.refuse;
+  cancelSignIn = this.refuse;
   settings = this.refuse;
   pause = this.refuse;
   wake = this.refuse;
@@ -774,7 +774,10 @@ export class HostView extends EventEmitter {
       offered.push({ name: "local", enabled: true, models: found.local?.offered ?? 0 });
     return offered.sort((a, b) => a.name.localeCompare(b.name));
   }
-  codexAuth = async (action = "status") => codexAuth(action, this.options.config);
+  /** A cancel of the sign-in of codex that the daemon runs, which refuses the config that asked it. */
+  async cancelSignIn(): Promise<void> {
+    await this.life.cancelSignIn();
+  }
   /** A change of a key of a layer of the configs, which the World writes in the daemon, or a reload of them, each then
    * a stand of the life. The daemon drives the sign-in that a change of codex asks, and refuses the change when the
    * operator cancels it or it fails, as the frames of the sign-in tell the window. */

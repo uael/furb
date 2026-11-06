@@ -9,7 +9,6 @@ use std::time::Instant;
 use std::{
   collections::VecDeque,
   env, fs, future, io,
-  os::unix::fs::PermissionsExt,
   path::{Path, PathBuf},
   process, slice,
   sync::{Arc, Mutex},
@@ -653,6 +652,7 @@ fn scripted(at: &Path, words: &[&str]) -> Opening {
 #[cfg(unix)]
 #[test]
 fn the_boot_of_a_life_asks_the_claude_command_line_its_models_once_and_a_later_stand_again() {
+  use std::os::unix::fs::PermissionsExt;
   let at = place("discovery");
   let bin = at.join("claude");
   let fake = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/world/provider/claude/fake-claude.sh");

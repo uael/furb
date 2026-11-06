@@ -101,7 +101,7 @@ fn handed(mut command: Command) -> io::Result<Infallible> {
   unsafe_code,
   reason = "the handler of the console is a call of Windows that no safe crate of the lock makes"
 )]
-fn handed(mut command: Command) -> std::io::Result<Infallible> {
+fn handed(mut command: Command) -> io::Result<Infallible> {
   unsafe extern "system" fn held(_: u32) -> windows_sys::core::BOOL {
     1
   }
