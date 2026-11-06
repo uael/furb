@@ -492,7 +492,7 @@ export class Session extends EventEmitter {
   get target(): string | undefined {
     if (this.mode !== "prompt" || this.editing || this.operatorPrompt) return undefined;
     if (this.pinned !== undefined) return this.pinned ?? undefined;
-    return this.thread ?? (this.fresh || this.shape !== "str" ? undefined : this.openThread?.act.id);
+    return this.thread ?? (this.fresh || this.shape !== "str" ? undefined : this.activeThread?.act.id);
   }
   /** The shape of a line sent on a thread: None, a message that its model reads at its next step and that is done at
    * once, while the prompt of the thread is open and a model answers it, else str, a prompt that opens a thread over
