@@ -448,14 +448,11 @@ async fn lives(
     life.recalled(one);
   }
   loop {
-    let mut engine = match opening.clone().open(ears(told.clone(), journal)).await {
+    let engine = match opening.clone().open(ears(told.clone(), journal)).await {
       Ok((engine, _)) => engine,
       Err(fault) => return End { fault: Some(fault.to_string()), asked: Vec::new() },
     };
     life.opened();
-    if let Err(no) = rebirth::told(&mut engine, &mut life.watch) {
-      life.put(Event::Notice(format!("The rebirth told the root no act that it cut: {no}")));
-    }
     match driven(engine, life, received, record.as_deref()).await {
       Drove::Ended(fault, asked) => return End { fault: fault.map(|one| one.to_string()), asked },
       Drove::Reborn(fault) => life.reborn(fault.map(|one| one.to_string())),
