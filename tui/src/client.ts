@@ -169,7 +169,18 @@ export class Daemon extends EventEmitter {
     return this.reaching;
   }
 
+  /** A daemon that closes before its welcome, as one that ends at its grace in the instant that this window dials it,
+   * is dialed again once, which starts a new daemon when none listens. */
   private async reach(): Promise<void> {
+    try {
+      await this.reached();
+    } catch (error) {
+      if (!(error instanceof Closed)) throw error;
+      await this.reached();
+    }
+  }
+
+  private async reached(): Promise<void> {
     const socket = (await dialed(this.place)) ?? (await started(this.folder, this.place));
     this.socket = socket;
     let held = "";
@@ -219,7 +230,8 @@ export class Daemon extends EventEmitter {
       waits.reject(closed);
     }
     this.waiting.clear();
-    if (this.closing) return;
+    // A socket that closes before its welcome fails the reach that dialed it, which dials again.
+    if (this.closing || this.reaching) return;
     this.connect().then(
       () => this.emit("reconnected"),
       (error: unknown) => this.emit("lost", error instanceof Error ? error.message : String(error)),

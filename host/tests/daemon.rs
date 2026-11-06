@@ -352,6 +352,19 @@ mod daemon {
   }
 
   #[tokio::test]
+  async fn a_daemon_whose_last_window_left_ends_once_its_grace_passed() {
+    let at = place();
+    let (local, daemon) = started(&at, SHORT).await;
+    let mut window = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    window.attach(&life).await;
+    drop(window);
+    let ended = timeout(Duration::from_secs(20), daemon).await;
+    assert!(matches!(ended, Ok(Ok(Ok(())))), "the daemon ends with no window: {ended:?}");
+    assert!(local.dial().await.is_err(), "no daemon listens after its grace");
+  }
+
+  #[tokio::test]
   async fn two_windows_on_one_life_both_stay_and_hear_it() {
     let at = place();
     let (local, _daemon) = started(&at, GRACE).await;
