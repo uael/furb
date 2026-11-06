@@ -166,11 +166,12 @@ async def test_the_memory_files_above_the_home_of_the_user_load_from_the_root_do
   home.mkdir(parents=True)
   home = home.resolve()
   monkeypatch.setenv("HOME", str(home))
+  monkeypatch.setenv("USERPROFILE", str(home))
   above = noted(home.parent, "a\n")
-  noted(home, "h\n")
-  noted(home / "work", "t\n")
+  top = noted(home, "h\n")
+  work = noted(home / "work", "t\n")
   _, root = extended("memory", home)
   got = await engine.rung("close([one.path for one in memory()])", on=root)
-  assert got == [str(above), "~/AGENTS.md", "~/work/AGENTS.md"]
+  assert got == [str(above), tilded(top), tilded(work)]
   listed = [str(a[4]) for a in engine.transcript(root) if a[0] == "read" and str(a[4]).endswith("/")]
   assert listed == ["./", "config://"]
