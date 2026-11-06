@@ -1097,7 +1097,7 @@ mod daemon {
     let Ok(Answer::Act(rung)) = window.ask(verb).await else { panic!("no rung") };
     let heard = window.heard_until(done(&rung)).await;
     assert!(!heard.iter().any(stall), "a run whose facts flow for twice the bound never stalls");
-    let asked = r#"await prompt(str, "never answered", to="operator")"#;
+    let asked = r#"await bash("sleep 20", timeout=60)"#;
     let verb = Verb::Run { life: life.clone(), word: asked.to_owned(), on: None };
     let began = tokio::time::Instant::now();
     let Ok(Answer::Act(_)) = window.ask(verb).await else { panic!("no rung") };
@@ -1142,7 +1142,8 @@ mod daemon {
     let mut window = Window::dialed(&local).await;
     let life = opened(&mut window, &at, "a.jsonl").await;
     window.attach(&life).await;
-    let waits = "never = prompt(str, \"never answered\", to=\"operator\")\nrung(\"x = 1\", never)";
+    let waits = "side = chain(\"side\")\nlong = bash(\"for i in $(seq 100); do echo $i; sleep 0.1; done\", \
+                 on=side)\nrung(\"x = 1\", long)";
     let verb = Verb::Run { life: life.clone(), word: waits.to_owned(), on: None };
     let began = tokio::time::Instant::now();
     let Ok(Answer::Act(_)) = window.ask(verb).await else { panic!("no rung") };
@@ -1175,8 +1176,8 @@ mod daemon {
     let mut window = Window::dialed(&local).await;
     let life = opened(&mut window, &at, "a.jsonl").await;
     window.attach(&life).await;
-    let word = "never = prompt(str, \"never answered\", to=\"operator\")\nside = chain(\"side\")\n\
-                rung(\"x = 1\", never, on=side)\nfor _ in range(80):\n  await wait(0.05, __name__)";
+    let word = "long = bash(\"for i in $(seq 100); do echo $i; sleep 0.1; done\")\nside = chain(\"side\")\n\
+                rung(\"x = 1\", long, on=side)\nfor _ in range(80):\n  await wait(0.05, __name__)";
     let verb = Verb::Run { life: life.clone(), word: word.to_owned(), on: None };
     let Ok(Answer::Act(rung)) = window.ask(verb).await else { panic!("no rung") };
     let heard = window.heard_until(stall).await;

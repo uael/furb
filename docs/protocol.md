@@ -185,15 +185,17 @@ it is not given. The daemon answers requests in any order.
 - After each `attach` and `detach`, the daemon pushes to each window of the life a frame `presence` with the `life`
   and its `peers`, each window that is attached now. Presence is no fact of the record.
 - The daemon watches each life that it holds, from outside the life: no word and no ear of the life runs the watch.
-  When a life holds an open act, a run of a word, a reply of a model or a command, and says no fact for the bound of
-  a stall, 20 minutes unless `stall` in `host.json` gives other seconds, the daemon pushes to each window of the life
-  a frame `stalled` with the `life`, its open `acts`, each with its `act`, its `kind` and its `chain`, and the
+  When a life holds an open act, a run of a word, a reply of a model or a command, and says no fact and no model
+  writes for the bound of a stall, 20 minutes unless `stall` in `host.json` gives other seconds, the daemon pushes
+  to each window of the life a frame `stalled` with the `life`, its open `acts`, each with its `act`, its `kind` and its `chain`, and the
   `notice` that a window shows as it stands. It also sends the notice to the root chain of the life as a prompt of
   `None`, so that its actor wakes.
 - The watch also holds the last change of each chain. A chain stalls when it holds a rung that no run, reply, command
   or wait lives beside on it, or a prompt to a model with no rung and nothing else on it, and no act of it changes for
-  60 seconds, or for the bound of a stall when that is shorter, even while other chains work. A paused act and a prompt
-  to the operator never stall a chain. The daemon pushes the frame `stalled` with the acts of that chain alone, and
+  60 seconds, or when a reply of a model on it writes nothing and no act of it changes for 5 minutes, each bound or
+  the bound of a stall when that is shorter, even while other chains work. Work that waits for the operator never
+  stalls a chain or the life: a paused act, a prompt to the operator, an act on a chain that asks him, and a rung or
+  a run whose word awaits such a prompt. The daemon pushes the frame `stalled` with the acts of that chain alone, and
   sends the notice as a prompt of `None` on that chain, so that its own actor wakes and no other.
 - The watch tells each stall once: nothing more until a fact of an act that its message did not make, on that chain
   for the stall of a chain, and a new stall after that fact. A stall is no fact of the record.
