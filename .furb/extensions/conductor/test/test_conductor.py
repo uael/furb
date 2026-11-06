@@ -132,6 +132,10 @@ async def test_staff_hires_queue_in_order_and_keeps_one_slot_for_a_fixer(conduct
   assert [q["key"] for q in conductor.ns["queue"]] == ["q5", "q6"]
 
 
+def idle(conductor: Round) -> list[str]:
+  return [c for n in conductor.notices() if n.startswith("The room of the round") for c in re.findall(r"(\S+ waits: .*?\.)(?= \S+ waits:| Queue the next)", n)]
+
+
 async def until(ready, tries: int = 200) -> None:
   for _ in range(tries):
     if ready():
@@ -191,7 +195,7 @@ async def test_a_paused_worker_gives_its_slot_to_the_room_but_stays_a_living_wor
 async def test_a_load_with_no_limits_binds_the_room_of_the_owner_and_caps_at_ten(conductor: Round) -> None:
   await conductor.word("del limits")
   await conductor.load()
-  assert conductor.ns["limits"]["room"] == {"opus/high": 3, "opus/medium": 3, "sonnet/high": 3, "sonnet/medium": 3, "gpt-6-astra/high": 1}
+  assert conductor.ns["limits"]["room"] == {"opus/high": 2, "opus/medium": 2, "sonnet/high": 3, "sonnet/medium": 3, "gpt-6-astra/high": 1}
   assert conductor.ns["limits"]["models"]["astra"] == ASTRA
   got = await conductor.value(f"(ALIGN_EVERY, cap(), family({ASTRA!r}), GATE, family('claude-cli:opus/high'))")
   assert got == (4, 10, "gpt-6-astra/high", "the gates", "opus/high")
@@ -202,10 +206,10 @@ async def test_an_item_waits_for_its_after_until_each_pr_of_it_merged_and_says_w
   await conductor.step("staff")
   await conductor.step("staff")
   assert conductor.hired() == []
-  assert conductor.ns["heard"] == ["late waits: first has not ended, and no item holds it."]
+  assert idle(conductor) == ["late waits: first has not ended, and no item holds it."]
   await conductor.word('held("first", pr=12)')
   await conductor.step("staff")
-  assert conductor.ns["heard"][-1] == "late waits: #12 of first has not merged."
+  assert idle(conductor) == ["late waits: first has not ended, and no item holds it.", "late waits: #12 of first has not merged."]
   await conductor.word('merges[12] = "w/first"')
   await conductor.step("staff")
   assert conductor.hired() == ["late"]
@@ -217,7 +221,7 @@ async def test_an_item_waits_while_a_live_worker_holds_a_file_that_changes_alone
   await conductor.word('queue.extend([{"key": "two", "brief": "b", "thread": "t", "areas": ["src/furb", "test/conftest.py"]}, {"key": "three", "brief": "b", "thread": "t", "areas": ["test/conftest.py"]}])')
   await conductor.step("staff")
   assert conductor.hired() == ["three"]
-  assert conductor.ns["heard"] == ["two waits: the worker of one holds src/furb/engine.py."]
+  assert idle(conductor) == ["two waits: the worker of one holds src/furb/engine.py."]
 
 
 async def test_an_item_waits_while_an_open_pr_of_the_round_changes_a_file_that_changes_alone_but_not_for_its_own_pr(conductor: Round) -> None:
@@ -227,7 +231,7 @@ async def test_an_item_waits_while_an_open_pr_of_the_round_changes_a_file_that_c
   )
   await conductor.step("staff")
   assert conductor.hired() == ["mine", "shared"]
-  assert conductor.ns["heard"] == ["other waits: #9 changes DOCTRINE.md."]
+  assert idle(conductor) == ["other waits: #9 changes DOCTRINE.md."]
 
 
 async def test_an_item_with_no_areas_holds_no_file_whatever_its_brief_names(conductor: Round) -> None:
@@ -243,7 +247,7 @@ async def test_an_item_whose_model_no_worker_runs_waits_with_its_cause(conductor
   await conductor.word('queue.append({"key": "big", "brief": "b", "thread": "t", "model": "claude-cli:opus/max"})')
   await conductor.step("staff")
   assert conductor.hired() == []
-  assert conductor.ns["heard"] == [f"big waits: it asks claude-cli:opus/max, and a worker runs only {SONNET}, {OPUS}."]
+  assert idle(conductor) == [f"big waits: it asks claude-cli:opus/max, and a worker runs only {SONNET}, {OPUS}."]
 
 
 async def test_hire_starts_a_worker_on_its_chain_with_the_asks_on_top_and_its_workspace(conductor: Round) -> None:
@@ -350,6 +354,7 @@ async def test_an_ask_that_a_worker_leaves_queues_one_follow_up_unless_another_i
   await conductor.word("tend()")
   asks = conductor.ns["owner_asks"]
   assert [q["key"] for q in conductor.ns["queue"]] == ["later", "ask-a1-1"]
+  assert conductor.ns["queue"][1]["on"] == conductor.engine.get(first)[3]
   assert (asks["A1"]["items"], asks["A1"]["state"], asks["A2"]["state"]) == (["k", "ask-a1-1"], "partly", "open")
   assert json.loads(conductor.sand.files["scratch://owner/asks.json"])[0]["id"] == "A1"
   await conductor.word("queue.remove(queue[1])")
@@ -422,27 +427,57 @@ async def test_the_words_of_the_owner_hold_his_messages_and_his_answers_in_order
   )
 
 
-async def test_an_audit_of_each_target_starts_at_four_merges_on_astra_and_the_model_of_audit_in_turn(conductor: Round) -> None:
+async def test_owner_reads_the_ledger_again_and_writes_his_words_once_for_each_new_message(conductor: Round) -> None:
+  conductor.sand.files["scratch://owner/asks.json"] = json.dumps([{"id": "A1", "state": "done", "items": ["k"]}])
+  await conductor.word('owner_asks.update(A1={"state": "open", "items": []}, A2={"state": "open"})\nowner()')
+  assert conductor.ns["owner_asks"] == {"A1": {"id": "A1", "state": "done", "items": ["k"]}, "A2": {"state": "open"}}
+  conductor.engine.prompt(str, "Do it.", on=conductor.root)
+  await conductor.word("owner()\nowner()")
+  kept = [x for x in said(conductor.log, "write") if getattr(x[4], "path", "") == "scratch://owner/words.md"]
+  assert len(kept) == 2
+  assert "\n\nDo it.\n\n" in conductor.sand.files["scratch://owner/words.md"]
+
+
+async def test_a_later_item_asks_on_the_idle_chain_of_its_thread_and_one_named_in_on_waits_behind_its_live_worker(conductor: Round) -> None:
+  first = await conductor.busy("a")
+  await conductor.word(f'working[{first!r}]["thread"] = "t"')
+  await conductor.end(first, (1, "r"))
+  live = await conductor.busy("c")
+  await conductor.word(
+    f'working[{live!r}]["slot"] = "w3"\n'
+    f'queue.extend([{{"key": "b", "brief": "b", "thread": "t", "kind": "audit", "model": {OPUS!r}}}, {{"key": "d", "brief": "b", "thread": "u", "on": working_at({live!r})}}])'
+  )
+  await conductor.step("staff")
+  b, d = [n for n, x in conductor.ns["working"].items() if x["key"] in ("b", "d")]
+  at = {n: conductor.engine.get(n)[3] for n in (first, live, b, d)}
+  assert (at[b], at[d]) == (at[first], at[live])
+  assert conductor.ns["working"][d]["slot"] == "w3" and f"Work in the workspace {conductor.tmp}-w3," in conductor.briefs()[-1]
+  assert await conductor.value("[working[n]['key'] for n in running()]") == ["c", "b"]
+  assert f"actor = {OPUS!r}" in conductor.words(at[first])
+  assert not [w for w in conductor.words(at[live]) if w.startswith("actor =")]
+
+
+async def test_an_audit_of_align_starts_at_four_merges_and_of_tui_at_each_merge_on_astra_and_the_model_of_audit_in_turn(conductor: Round) -> None:
   await conductor.word(f'limits["models"]["astra"] = {ASTRA!r}\nalign()')
   assert conductor.ns["align_state"] == {"align": {"base": "0"}, "tui": {"base": "0"}}
   await conductor.word('merges.update(dict.fromkeys(range(3), "w"))\nalign()')
-  assert conductor.ns["queue"] == []
+  assert [q["key"] for q in conductor.ns["queue"]] == ["tui1"]
   await conductor.word('merges[3] = "w"\nheld(*[f"align{n}" for n in range(1, 8)])')
   await conductor.word('lead["main"] = "abc"\nalign()')
-  one, two = conductor.ns["queue"]
+  two, one = conductor.ns["queue"]
   brief, told = one["brief"], two["brief"]
-  assert (one["key"], one["thread"], one["kind"], await conductor.value("model_of(queue[0])")) == ("align8", "align", "audit", OPUS)
+  assert (one["key"], one["thread"], one["kind"], await conductor.value("model_of(queue[1])")) == ("align8", "align", "audit", OPUS)
   assert "scratch://owner/words.md, scratch://owner/picks.md" in brief and "scratch://owner/asks.json" in brief
   assert "git log --oneline -40 origin/main" in brief and "align7" in brief
   assert conductor.ns["align_state"]["align"] == {"base": "4", "n": "8", "sha": "abc"}
-  assert (two["key"], two["thread"], two["kind"], await conductor.value("model_of(queue[1])")) == ("tui1", "tui", "audit", ASTRA)
+  assert (two["key"], two["thread"], two["kind"], await conductor.value("model_of(queue[0])")) == ("tui1", "tui", "audit", ASTRA)
   assert 'skill("converge-tui")' in told and "in $TMPDIR/audit/tui." in told and "{workspace} Check out origin/main there" in told
   await conductor.word('merges.update(dict.fromkeys(range(4, 20), "w"))\nalign()')
   assert len(conductor.ns["queue"]) == 2
   await conductor.word('queue.clear()\nheld("align8", "tui1")')
   await conductor.word("align()")
-  assert [q["key"] for q in conductor.ns["queue"]] == ["align9", "tui2"]
-  assert await conductor.value("[model_of(q) for q in queue]") == [ASTRA, OPUS]
+  assert sorted(q["key"] for q in conductor.ns["queue"]) == ["align9", "tui2"]
+  assert await conductor.value("sorted((q['key'], model_of(q)) for q in queue)") == [("align9", ASTRA), ("tui2", OPUS)]
 
 
 async def test_an_audit_whose_brief_names_a_workspace_takes_one(conductor: Round) -> None:
@@ -650,11 +685,16 @@ async def test_a_pr_that_refuses_auto_merge_merges_plainly_or_as_a_layer_of_its_
   assert [x for x in conductor.gh() if x.startswith(("pr merge", "stack merge"))] == ["pr merge 1 --auto --squash", "pr merge 1 --squash", "stack merge 1 --yes --squash"]
 
 
-async def test_a_wait_on_an_item_that_has_not_ended_is_no_line(conductor: Round) -> None:
-  await conductor.word('queue.extend([{"key": "dep", "brief": "b", "thread": "t", "model": "claude-cli:opus/max"}, {"key": "late", "brief": "b", "thread": "t", "after": ["dep"]}])')
+async def test_a_wait_on_an_item_that_has_not_ended_is_no_line_of_a_busy_room_but_a_cause_of_an_idle_one(conductor: Round) -> None:
+  await conductor.word('limits["room"] = {"sonnet": 1, "opus": 1}\nqueue.extend([{"key": "dep", "brief": "b", "thread": "t", "model": "claude-cli:opus/max"}, {"key": "late", "brief": "b", "thread": "t", "after": ["dep"]}, {"key": "x", "brief": "b", "thread": "t"}])')
   await conductor.step("staff")
-  assert conductor.hired() == []
+  assert (conductor.hired(), conductor.notices()) == (["x"], [])
   assert conductor.ns["heard"] == [f"dep waits: it asks claude-cli:opus/max, and a worker runs only {SONNET}, {OPUS}."]
+  await conductor.word('limits["room"]["sonnet"] = 2\nheard.clear()\nnoticed.clear()')
+  await conductor.step("staff")
+  assert idle(conductor) == [f"dep waits: it asks claude-cli:opus/max, and a worker runs only {SONNET}, {OPUS}.", "late waits: dep has not ended."]
+  assert conductor.notices()[0].startswith("The room of the round gives items 2 workers, 1 run, and no item of queue can start. dep waits:")
+  assert conductor.ns["heard"] == []
 
 
 async def test_a_register_with_a_column_after_sets_the_waits_of_each_row(conductor: Round) -> None:
@@ -767,7 +807,7 @@ async def test_an_item_of_a_full_family_waits_for_its_family(conductor: Round) -
   await conductor.word(f'queue.extend([{{"key": "two", "brief": "b", "thread": "t", "model": {OPUS!r}}}, {{"key": "core", "brief": "b", "thread": "t", "model": {high!r}}}])')
   await conductor.step("staff")
   assert conductor.hired() == ["core"]
-  assert conductor.ns["heard"] == ["two waits: opus/medium has no room."]
+  assert idle(conductor) == ["two waits: opus/medium has no room."]
 
 
 @POSIX
@@ -825,14 +865,15 @@ async def test_a_step_that_raises_is_one_notice_and_the_round_waits_on_itself_an
   await made.load(TEST, 'queue.append({"key": "one", "brief": "b", "thread": "t"})\nround = conduct(60)')
   await until(lambda: workers(made) and said(made.log, "wait"))
   round_, [worker] = conducted(made), workers(made)
-  [fault] = made.notices()
+  fault, alone = made.notices()
   assert fault.startswith(f"The round {round_} met a fault in its step sweep: Refused: gh listed no PRs")
+  assert alone.startswith("The room of the round gives items 4 workers, 1 run, and no item of queue can start. queue holds no item.")
   assert [x[4:] for x in said(made.log, "wait")] == [(60, round_, worker)]
   made.github()
   await made.end(worker, (3, "done"))
   await until(lambda: made.engine.over(round_))
   assert made.engine.peek(round_) == f"The round holds no item and no open PR that it tends.\n\nSince the last notice:\n- The worker one ({worker}) ended with #3: done"
-  assert len(made.notices()) == 1
+  assert len(made.notices()) == 2
 
 
 @POSIX

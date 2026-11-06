@@ -46,7 +46,7 @@ async def prcheck(title: str, why: str, outcome: list[str], breaking: list[str] 
   return sum(parts)
 
 
-def filled(template: str, why: str, outcome: list[str], breaking: list[str], checks: list[str], head: str) -> str:
+def templated(template: str, why: str, outcome: list[str], breaking: list[str], checks: list[str], head: str) -> str:
   text = re.sub(r"\n*<!--.*?-->", "", template, flags=re.S).strip()
   boxes = re.findall(r"(?m)^- \[ \] (.*)$", text)
   if len(checks) != len(boxes) or not all(c.strip() and c.strip().lower() != "not:" for c in checks):
@@ -77,7 +77,7 @@ async def pr(
 ) -> Exit:
   await prcheck(title, why, outcome, breaking, where)
   head = "🤖" + (f" Fixes #{fixes}." if fixes else "") + (f" Part of #{part_of}." if part_of else "")
-  body = filled(read(f"{where}/.github/pull_request_template.md" if where else ".github/pull_request_template.md", HIDDEN).content, why, outcome, breaking or [], checks, head)
+  body = templated(read(f"{where}/.github/pull_request_template.md" if where else ".github/pull_request_template.md", HIDDEN).content, why, outcome, breaking or [], checks, head)
   names = (list(labels) if isinstance(labels, list) else re.findall(r"--label '?([^'\s]+)'?", labels)) + ["breaking-change"] * bool(breaking)
   flags = "".join(f" --label {shq(x)}" for x in names)
   made = "".join(f"gh label create {shq(x)} --force >/dev/null 2>&1; " for x in names)
