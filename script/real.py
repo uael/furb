@@ -13,7 +13,7 @@ from pathlib import Path
 
 import furb_monty
 from furb import engine, python, sheet
-from furb.kernel import kernel
+from furb.kernel import kernel, recorded
 from furb.world import Live, answered, kept
 
 # The catalog of the crate stands in the module of the door that furb.world reads too, and furb_monty gives no other.
@@ -62,7 +62,9 @@ def lived(
   world = Live(str(cwd.absolute()), actor)
   held = world.opened(record, keeps=keeps, extensions=extensions)
   gate = sheet.gating(vars(python), furb_monty.gate)
-  root = engine.boot(held, world=world.hears(), kernel=kernel(vars(python)), gate=gate, **world.ears)
+  root = engine.boot(
+    recorded(vars(python), held), world=world.hears(), kernel=kernel(vars(python)), gate=gate, **world.ears
+  )
   return world, root, held
 
 

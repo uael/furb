@@ -112,6 +112,10 @@ async def test_a_reply_the_world_cannot_answer_is_the_worlds_to_refuse() -> None
   assert [type(a[3]).__name__ for a in said(log, "done") if a[1] == first] == ["Refused"]
   assert (await one) == 7
   assert [a[2] for a in said(log, "reply")] == [a[1] for a in said(log, "rung") if a[2] == one] == [first, "rung2"]
+  again, _ = await relived(Sand(), plain(sand.record))
+  paused = [a[:2] for a in again if a[0] in ("pause", "done") and a[1] in (root, "reply1")]
+  assert paused == [a[:2] for a in log if a[0] in ("pause", "done") and a[1] in (root, "reply1")]
+  assert paused == [("pause", root), ("done", "reply1")]
 
 
 async def test_the_life_refuses_a_reply_that_no_ear_owns() -> None:
