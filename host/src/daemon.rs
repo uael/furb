@@ -63,7 +63,7 @@ use crate::{
     Request, Verb,
   },
   records,
-  serve::{Host, Outbox, serve},
+  serve::{Host, Outbox, fixed, serve},
   stall::{Quiet, Stall},
   transport::{
     Accepted, Dialer, Door, Identity, Listener, Local, Tailscale, Tcp, Ticket, own, upgraded,
@@ -232,7 +232,8 @@ async fn peer<I: Identity<Stream = Accepted>>(
   stream: Accepted,
 ) -> Result<(), TransportError> {
   let who = identity.identify(&stream).await?;
-  serve(&daemon, stream, who).await
+  let granted = fixed(who.role);
+  serve(&daemon, stream, who, granted).await
 }
 
 /// One peer of the tailnet, identified by Tailscale, upgraded when it came by WebSocket, then
@@ -245,11 +246,13 @@ async fn remote(
   match arrival {
     Arrival::Tcp(stream) => {
       let who = identity.identify(&stream).await?;
-      serve(&daemon, stream, who).await
+      let granted = identity.follow(&who);
+      serve(&daemon, stream, who, granted).await
     }
     Arrival::WebSocket(stream) => {
       let who = identity.identify(&stream).await?;
-      serve(&daemon, upgraded(stream).await?, who).await
+      let granted = identity.follow(&who);
+      serve(&daemon, upgraded(stream).await?, who, granted).await
     }
   }
 }
@@ -266,7 +269,8 @@ async fn knock(door: Option<&Door>) -> Result<(TcpStream, Ticket), TransportErro
 /// leaves.
 async fn window(daemon: Daemon, ticket: Ticket, stream: TcpStream) -> Result<(), TransportError> {
   let (stream, who) = ticket.admitted(stream).await?;
-  serve(&daemon, stream, who).await
+  let granted = fixed(who.role);
+  serve(&daemon, stream, who, granted).await
 }
 
 /// The listeners of the daemon on the address of the machine on the tailnet, each where the

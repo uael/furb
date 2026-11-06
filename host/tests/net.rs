@@ -66,6 +66,11 @@ mod net {
       let line = serde_json::to_string(&Request { id, verb }).unwrap() + "\n";
       stream.write_all(line.as_bytes()).await.unwrap();
       stream.flush().await.unwrap();
+      self.heard().await
+    }
+
+    /// The next frame that the peer gets, none once the daemon closed it.
+    async fn heard(&mut self) -> Option<Frame> {
       let mut line = String::new();
       let read = self.lines.read_line(&mut line).await.unwrap();
       (read > 0).then(|| serde_json::from_str(&line).unwrap())
@@ -153,10 +158,11 @@ mod net {
     tokio::spawn(async move {
       let (stream, _) = listener.accept().await.unwrap();
       let who = identity.identify(&stream).await.unwrap();
+      let granted = identity.follow(&who);
       if websocket {
-        serve(&Echo, upgraded(stream).await.unwrap(), who).await
+        serve(&Echo, upgraded(stream).await.unwrap(), who, granted).await
       } else {
-        serve(&Echo, stream, who).await
+        serve(&Echo, stream, who, granted).await
       }
     });
     addr
@@ -246,11 +252,10 @@ mod net {
     TcpListener::bind(loopback()).await.unwrap().local_addr().unwrap().port()
   }
 
-  #[tokio::test]
-  async fn the_daemon_serves_the_tailnet_by_tcp_and_by_websocket() {
-    let (api, _) = tailscale("alice@github").await;
+  /// A daemon on the tailnet under an identity, with its ports, which a folder holds while the
+  /// test runs.
+  async fn tailed(identity: Tailscale) -> (Ports, Yard) {
     let ports = Ports { tcp: Some(free().await), websocket: Some(free().await) };
-    let identity = Tailscale::new(api, access("alice@github", Role::Read));
     let held = folder();
     let config = Some(held.join("config").display().to_string());
     let opening = Opening { extensions: Some(false), config, ..Opening::default() };
@@ -265,15 +270,31 @@ mod net {
     let local = Local::new(held.join("host"));
     let listener = local.listen().await.unwrap();
     tokio::spawn(async move { run(&local, listener, settings).await });
-    let at = |port: Option<u16>| SocketAddr::new([127, 0, 0, 1].into(), port.unwrap());
+    (ports, held)
+  }
+
+  /// The address of a port of the daemon on the tailnet.
+  fn at(port: Option<u16>) -> SocketAddr {
+    SocketAddr::new([127, 0, 0, 1].into(), port.unwrap())
+  }
+
+  /// A peer of TCP on the port of the daemon, once the daemon listens.
+  async fn dialed(ports: Ports) -> Client<TcpStream> {
     let mut tries = 0..250;
-    let mut tcp = loop {
+    loop {
       match Tcp::new(at(ports.tcp)).dial().await {
         Ok(stream) => break Client { lines: BufReader::new(stream) },
         Err(no) if tries.next().is_none() => panic!("the daemon never listened: {no}"),
         Err(_) => time::sleep(Duration::from_millis(20)).await,
       }
-    };
+    }
+  }
+
+  #[tokio::test]
+  async fn the_daemon_serves_the_tailnet_by_tcp_and_by_websocket() {
+    let (api, _) = tailscale("alice@github").await;
+    let (ports, _held) = tailed(Tailscale::new(api, access("alice@github", Role::Read))).await;
+    let mut tcp = dialed(ports).await;
     let ws = WebSocket::new(at(ports.websocket)).dial().await.unwrap();
     let mut ws = Client { lines: BufReader::new(ws) };
     assert_eq!(tcp.hello().await, Some(welcomed("alice@github", Role::Read)));
@@ -286,6 +307,54 @@ mod net {
       ws.ask(1, Verb::List { config: None }).await,
       Some(Frame::Reply { id: 1, answer: Answer::Lives(vec![]) })
     );
+  }
+
+  /// A write that a life that is not open refuses for its life, and that a reader is refused for
+  /// its role.
+  fn written() -> Verb {
+    Verb::Run { life: "/a.jsonl".to_owned(), word: "1".to_owned(), on: None }
+  }
+
+  #[tokio::test]
+  async fn a_peer_of_the_tailnet_holds_the_new_role_of_its_login_at_once() {
+    let (api, _) = tailscale("alice@github").await;
+    let identity = Tailscale::new(api, access("alice@github", Role::Write));
+    let (ports, _held) = tailed(identity.clone()).await;
+    let mut client = dialed(ports).await;
+    assert_eq!(client.hello().await, Some(welcomed("alice@github", Role::Write)));
+    let closed = ProtocolError::Closed { life: "/a.jsonl".to_owned() };
+    assert_eq!(
+      client.ask(1, written()).await,
+      Some(Frame::refused(Some(1), closed)),
+      "a writer reaches the life"
+    );
+    identity.replace(access("alice@github", Role::Read));
+    let error = || ProtocolError::Role { needs: Role::Write, has: Role::Read };
+    let mut tries = 0..250;
+    loop {
+      let answer = client.ask(2, written()).await;
+      if answer == Some(Frame::refused(Some(2), error())) {
+        break;
+      }
+      assert!(tries.next().is_some(), "the role of the peer never moved: {answer:?}");
+      time::sleep(Duration::from_millis(20)).await;
+    }
+  }
+
+  #[tokio::test]
+  async fn a_peer_of_the_tailnet_whose_login_the_list_drops_is_refused_and_closed_at_once() {
+    let (api, _) = tailscale("alice@github").await;
+    let identity = Tailscale::new(api, access("alice@github", Role::Write));
+    let (ports, _held) = tailed(identity.clone()).await;
+    let mut client = dialed(ports).await;
+    assert_eq!(client.hello().await, Some(welcomed("alice@github", Role::Write)));
+    identity.replace(access("bob@github", Role::Write));
+    let wait = Duration::from_secs(10);
+    let why = "the access list no longer names alice@github".to_owned();
+    let told = time::timeout(wait, client.heard()).await.expect("the peer was not told");
+    assert_eq!(told, Some(Frame::refused(None, ProtocolError::Refused { why })));
+    let ended = time::timeout(wait, client.heard()).await.expect("the peer was not closed");
+    assert_eq!(ended, None);
   }
   /// The login of the user of this test, from the same call of the system as the daemon makes.
   #[cfg_attr(
