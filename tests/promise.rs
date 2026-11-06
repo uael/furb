@@ -213,6 +213,33 @@ fn inspected(at: &Path) -> Result<Engine, furb::Fault> {
   Ok(Opening { inspecting: Some(true), ..scripted(at, true, &SCRIPT) }.boot::<String>([])?.0)
 }
 
+/// A life that only inspects the record of a directory from its first entry, born again at each of its checkpoints,
+/// or why it refused.
+fn inspected_whole(at: &Path) -> Result<Engine, furb::Fault> {
+  let opening =
+    Opening { inspecting: Some(true), whole: Some(true), ..scripted(at, true, &SCRIPT) };
+  Ok(opening.boot::<String>([])?.0)
+}
+
+/// What each chain of a life holds, as python shows it: each fact that it heard, but its module, which [`MODULES`]
+/// shows with no address of the heap, and the outcome of each act among them.
+const STATE: &str = "[(c, [x for x in transcript(c) if x[0] != 'module'], [(x[1], peek(x[1], ...)) for x in transcript(c) if question(x)]) \
+                     for c in [f'chain{n}' for n in range(1, 99) if get(f'chain{n}')]]";
+
+/// The state of a life at its tip: what each chain holds and each of its modules.
+fn state(engine: &mut Engine) -> String {
+  let held = engine.word(STATE, vec![]).unwrap().as_ref().py_repr();
+  format!("{held}\n{}", modules(engine))
+}
+
+/// Proves that a record opens from its last checkpoint and from its first entry to one state.
+fn whole(name: &str, at: &Path) {
+  let fast = state(&mut inspected(at).unwrap());
+  let born = inspected_whole(at)
+    .unwrap_or_else(|why| panic!("{name}: an open from the first entry is refused: {why}"));
+  assert!(state(&mut { born }) == fast, "{name}: both opens reach one state");
+}
+
 #[test]
 #[ignore = "it makes tests/corpus/next again, which a change with ! may do before 1.0.0, as tests/corpus/README.md says"]
 fn make_the_corpus() {
@@ -314,6 +341,7 @@ fn holds(name: &str, text: &str, shown: &str) {
     .filter_map(|one| one.as_str().map(str::to_owned))
     .collect();
   drop(engine);
+  whole(name, &at);
   assert_eq!(
     fs::read_to_string(&record).unwrap(),
     text,
@@ -356,6 +384,60 @@ fn a_record_whose_checkpoint_holds_a_field_that_no_reader_knows_still_opens() {
     text.replacen("\"schema\":", "\"later\":[1,\"a field of a later build\"],\"schema\":", 1);
   assert_ne!(more, text, "the record holds a checkpoint");
   holds("field-more", &more, &fs::read_to_string(next.join("work.modules")).unwrap());
+}
+
+/// A life born again three times in a directory of its own, each life on the checkpoint of the one before it, and
+/// its record.
+fn thrice(name: &str) -> (yard::Yard, String) {
+  let at = place(name);
+  for n in 0..4 {
+    let mut life = scripted(&at, false, &SCRIPT).boot::<String>([]).unwrap().0;
+    woke(&mut life);
+    let word = format!(
+      "kept = globals().get('kept', []) + [{n}]\nlater = chain('later{n}')\nclose(len(kept))"
+    );
+    assert_eq!(
+      closed(&mut life, &word).as_ref().as_int(),
+      Some(n + 1),
+      "life {n} goes on from the one before"
+    );
+    if n < 3 {
+      life.checkpoint().unwrap();
+    }
+  }
+  let text = fs::read_to_string(at.join("record.jsonl")).unwrap();
+  assert_eq!(text.matches("[[\"checkpoint\"").count(), 3, "the record holds three births");
+  (at, text)
+}
+
+#[test]
+fn a_life_born_again_three_times_opens_from_its_first_entry_to_the_state_of_its_last_checkpoint() {
+  let (at, _) = thrice("thrice");
+  whole("thrice", &at);
+}
+
+#[test]
+fn an_open_from_the_first_entry_refuses_a_checkpoint_that_no_life_gathers_or_that_a_life_went_on_after()
+ {
+  let (_, text) = thrice("thrice-made");
+  let cut = text.find("[[\"checkpoint\"").unwrap();
+  let end = cut + text[cut..].find('\n').unwrap() + 1;
+  let other = text[cut..end].replacen("\"kept\":\"[0]\"", "\"kept\":\"[9]\"", 1);
+  assert_ne!(other, text[cut..end], "the first checkpoint binds kept");
+  let went = text[..cut].lines().last().unwrap();
+  for (name, changed, why) in [
+    ("drifted", format!("{}{other}{}", &text[..cut], &text[end..]), "drifts in chains"),
+    ("went-on", format!("{}{went}\n{}", &text[..end], &text[end..]), "is no birth"),
+  ] {
+    let at = place(name);
+    fs::write(at.join("record.jsonl"), changed).unwrap();
+    inspected(&at).unwrap_or_else(|why| panic!("{name} opens from its last checkpoint: {why}"));
+    let refused = inspected_whole(&at).err().map(|no| no.to_string()).unwrap_or_default();
+    assert!(
+      refused.contains(why),
+      "{name}: the open from the first entry says {why}, and says {refused:?}"
+    );
+  }
 }
 
 #[test]
