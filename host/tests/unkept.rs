@@ -42,6 +42,7 @@ mod unix {
   };
   use furb_host::{Command, Event, Life, LifeError, LifeHandle, Reply, Seq, view::Phase};
   use futures::{Stream, StreamExt};
+  use rustix::process::{Resource, getrlimit, setrlimit};
 
   use super::yard;
 
@@ -114,15 +115,10 @@ mod unix {
 
   /// The largest size of a file that the process writes, as a limit of the system: a write past
   /// it fails, as on a full disk.
-  fn limited(bytes: libc::rlim_t) {
-    let mut now = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
-    // SAFETY: getrlimit writes the limit to a struct that the test owns.
-    let read = unsafe { libc::getrlimit(libc::RLIMIT_FSIZE, &raw mut now) };
-    assert_eq!(read, 0, "the limit of the size of a file reads");
-    now.rlim_cur = bytes.min(now.rlim_max);
-    // SAFETY: setrlimit reads a struct that the test owns.
-    let set = unsafe { libc::setrlimit(libc::RLIMIT_FSIZE, &raw const now) };
-    assert_eq!(set, 0, "the limit of the size of a file is set");
+  fn limited(bytes: u64) {
+    let mut now = getrlimit(Resource::Fsize);
+    now.current = Some(now.maximum.map_or(bytes, |most| bytes.min(most)));
+    setrlimit(Resource::Fsize, now).expect("the limit of the size of a file is set");
   }
 
   /// The lines of the record of the life, in order.
@@ -131,6 +127,7 @@ mod unix {
     text.lines().map(str::to_owned).collect()
   }
 
+  #[expect(unsafe_code, reason = "no crate of the lock sets a signal to be ignored with no unsafe")]
   pub(super) async fn a_life_whose_record_takes_no_fact_holds_its_rebirth_and_its_end() {
     let at = yard::Yard::new(format!("furb-host-unkept-{}", std::process::id()));
     let life = Life::spawn(opening(&at)).expect("the life has a thread");
