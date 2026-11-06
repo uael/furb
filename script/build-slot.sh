@@ -31,7 +31,8 @@ mkdir -p "$dir" || exit 1
 old() { [ -n "$(find "$1" -prune -mmin +1 2>/dev/null)" ]; }
 stale() {
   holder=$(cat "$1/pid" 2>/dev/null)
-  if [ -n "$holder" ]; then ! kill -0 "$holder" 2>/dev/null; else old "$1"; fi
+  # A pid that the system gave to another process since is no holder: only a build-slot.sh process holds a slot.
+  if [ -n "$holder" ]; then ! { kill -0 "$holder" 2>/dev/null && ps -o command= -p "$holder" 2>/dev/null | grep -q build-slot.sh; }; else old "$1"; fi
 }
 
 # The look at the slots runs under a guard that stands for milliseconds, so two waiters never free one stale slot twice.
