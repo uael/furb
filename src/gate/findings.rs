@@ -10,7 +10,8 @@ use std::{
 
 use monty_types::NamedValues;
 use ruff_python_ast::{
-  ExceptHandler, Expr, ExprContext, Parameter, Pattern, Stmt,
+  ExceptHandler, Expr, ExprContext, ExprDictComp, ExprGenerator, ExprListComp, ExprSetComp,
+  Parameter, Pattern, Stmt,
   statement_visitor::{StatementVisitor, walk_stmt},
   visitor::{self, Visitor},
 };
@@ -453,6 +454,7 @@ impl<'a> Visitor<'a> for Coroutines {
         }
       }
       Stmt::AugAssign(one) => self.take(&one.value),
+      Stmt::For(one) if one.is_async => self.take(&one.iter),
       _ => {}
     }
     let scoped = matches!(stmt, Stmt::FunctionDef(_) | Stmt::ClassDef(_));
@@ -468,6 +470,14 @@ impl<'a> Visitor<'a> for Coroutines {
       }
       Expr::Await(one) => self.take(&one.value),
       Expr::Named(one) => self.take(&one.value),
+      Expr::ListComp(ExprListComp { generators, .. })
+      | Expr::SetComp(ExprSetComp { generators, .. })
+      | Expr::DictComp(ExprDictComp { generators, .. })
+      | Expr::Generator(ExprGenerator { generators, .. }) => {
+        for one in generators.iter().filter(|one| one.is_async) {
+          self.take(&one.iter);
+        }
+      }
       Expr::Call(call) => {
         if let Expr::Name(name) = &*call.func
           && self.names.contains(name.id.as_str())
@@ -883,9 +893,10 @@ impl<'a> Visitor<'a> for Bound<'a> {
 /// The names that a statement binds in the module by a way that `binds` does not read: the target
 /// of a walrus (also inside a comprehension, which binds it in the scope around it), each capture
 /// of a pattern of a match, and each name that a def or a class declares `global`, at any depth. A
-/// lambda binds its walrus apart, so nothing inside it counts. A def or a class runs its decorators,
-/// the defaults of its parameters, and its bases and keywords in the module, so a walrus there binds
-/// too, but a walrus in its body binds apart. Python refuses a walrus in an annotation.
+/// lambda binds its walrus apart, so nothing inside it counts. A def or a class runs its
+/// decorators, the defaults of its parameters, and its bases and keywords in the module, so a
+/// walrus there binds too, but a walrus in its body binds apart. Python refuses a walrus in an
+/// annotation.
 struct Reached<'a>(Vec<(usize, &'a str)>);
 
 impl<'a> Visitor<'a> for Reached<'a> {
