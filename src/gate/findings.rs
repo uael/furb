@@ -10,7 +10,8 @@ use std::{
 
 use monty_types::NamedValues;
 use ruff_python_ast::{
-  ExceptHandler, Expr, ExprContext, Parameter, Pattern, Stmt,
+  ExceptHandler, Expr, ExprContext, ExprDictComp, ExprGenerator, ExprListComp, ExprSetComp,
+  Parameter, Pattern, Stmt,
   statement_visitor::{StatementVisitor, walk_stmt},
   visitor::{self, Visitor},
 };
@@ -453,6 +454,7 @@ impl<'a> Visitor<'a> for Coroutines {
         }
       }
       Stmt::AugAssign(one) => self.take(&one.value),
+      Stmt::For(one) if one.is_async => self.take(&one.iter),
       _ => {}
     }
     let scoped = matches!(stmt, Stmt::FunctionDef(_) | Stmt::ClassDef(_));
@@ -468,6 +470,14 @@ impl<'a> Visitor<'a> for Coroutines {
       }
       Expr::Await(one) => self.take(&one.value),
       Expr::Named(one) => self.take(&one.value),
+      Expr::ListComp(ExprListComp { generators, .. })
+      | Expr::SetComp(ExprSetComp { generators, .. })
+      | Expr::DictComp(ExprDictComp { generators, .. })
+      | Expr::Generator(ExprGenerator { generators, .. }) => {
+        for one in generators.iter().filter(|one| one.is_async) {
+          self.take(&one.iter);
+        }
+      }
       Expr::Call(call) => {
         if let Expr::Name(name) = &*call.func
           && self.names.contains(name.id.as_str())

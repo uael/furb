@@ -182,6 +182,10 @@ fn a_call_of_an_async_function_in_an_argument_a_container_or_a_return_is_a_findi
   assert_eq!(found("async def go():\n  return hire()\nawait go()"), vec![2]);
   assert_eq!(found("close(await hire())\ny = (hire() or 1)"), vec![2]);
   assert_eq!(found("close(await hire())\ng = hire()\nh = (k := hire())"), Vec::<usize>::new());
+  assert_eq!(
+    found("async def g():\n  yield 1\nasync for x in g():\n  close([y async for y in g()])"),
+    Vec::<usize>::new()
+  );
 }
 
 #[test]

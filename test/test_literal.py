@@ -54,5 +54,5 @@ async def test_literal_gives_a_value_that_is_false_for_a_float_that_is_not_finit
   await engine.rung("lost = [literal(x) for x in (float('nan'), float('inf'), -float('inf'))]", on=root)
   assert not any(engine.module(root)["lost"])
   got = engine.literal(ValueError(len))
-  assert not got or ast.parse(got)
+  assert not got or ast.parse(str(got))
   assert engine.literal(1.5) == "1.5"

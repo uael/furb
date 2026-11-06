@@ -124,4 +124,4 @@ async def test_chains_names_among_the_other_values_of_a_chain_each_plain_value_w
   data = engine.gathered(lambda word: word, {})
   [one] = [x for x in data["chains"] if x["id"] == rest]
   assert (one["values"].get("small"), "big" in one["values"], "big" in one["lost"]) == ("1", False, True)
-  assert all(len(word.encode()) < LARGEST for x in engine.seed(data) if x[0][0] == "rung" for word in x[0][4:5])
+  assert all(len(str(word).encode()) < LARGEST for x in engine.seed(data) if x[0][0] == "rung" for word in x[0][4:5])

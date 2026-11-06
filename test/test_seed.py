@@ -113,7 +113,7 @@ async def test_each_chain_with_an_open_prompt_opens_paused_while_the_seed_binds_
 ):
   """Each chain with an open prompt opens paused while the seed binds it, and wakes after it unless the data says it was paused, so an open prompt asks its model again at once."""
   life(sown())
-  data = {**DATA, "chains": [{**c, "paused": False} for c in DATA["chains"]]}
+  data = {**DATA, "chains": [chain("chain1", "", "root"), chain("chain3", "chain1", "work")]}
   entries = engine.seed(data)
   kinds = [x[0][:3] for x in entries if x[0][0] in ("pause", "wake")]
   assert kinds == [("pause", "chain3", OPERATOR), ("wake", "chain3", OPERATOR)]
@@ -131,7 +131,7 @@ async def test_the_rung_binds_the_definitions_and_the_values_of_the_chain_after_
 ):
   """The rung binds the definitions and the values of the chain after it says the prefix and tells what the checkpoint lost and cut, so a value that raises as it is bound leaves the turns of the chain whole."""
   life(sown())
-  data = {**DATA, "chains": [{**DATA["chains"][0], "values": {"bad": "nan", "SIZE": "6"}}, DATA["chains"][1]]}
+  data = {**DATA, "chains": [chain("chain1", "", "root", values={"bad": "nan", "SIZE": "6"}), chain("chain3", "chain1", "work")]}
   log, _ = life(sown(), engine.seed(data))
   await settle()
   assert [x for x in said(log, "prefix") if x[1] == "chain1"]
