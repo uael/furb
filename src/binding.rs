@@ -854,7 +854,7 @@ mod console {
     static ADDED: OnceLock<bool> = OnceLock::new();
     ending()
       .send(Ending::Callback(callback))
-      .map_err(|_| Fault::refused("the keeper of the console callback is gone"))?;
+      .map_err(|no| Fault::refused(format!("the keeper of the console callback is gone: {no}")))?;
     // The system calls the handlers from the last added to the first, so this one comes before
     // those of the runtime, which end the process at once. SAFETY: `heard` is a handler routine
     // with the signature that the system calls, and it stays valid as long as the process.
