@@ -940,7 +940,7 @@ def boot(record=(), **outside):
   made, known, done, held, log, alive, born, busy, left, heed = Counter(), {}, {}, {}, [], {}, {}, set(), [], {}
   first, owned, taken = {e[1]: e for (e,) in record[::-1] if e[0] in ("started", "done")}, set(), {}
   due = [e for (e,) in record[::-1] if first.get(e[1]) is not e]
-  saved, again, stalled = {e[1]: e for (e,) in record if question(e)}, {}, []
+  saved, again = {e[1]: e for (e,) in record if question(e)}, {}
 
   def drift(name):
     return Drift(
@@ -967,7 +967,7 @@ def boot(record=(), **outside):
           or (by == "journal" and not holds(scope(on), [known.setdefault(name, (kind, name, by, on))]))
         ):
           born.setdefault(kind, {})[name] = name
-          return None
+          return
         if by not in outside and (
           not callable(verb := (module(on) or globals()).get(kind)) or re.fullmatch(r"\w+?\d+", by)
         ):
@@ -977,25 +977,18 @@ def boot(record=(), **outside):
             act(kind, on, None, *words) if by in outside else verb(*words, on=on)
           except Refused:
             pass
-          except (Exception, CancelledError) as fault:
-            if not get(name) or isinstance(fault, Drift):
-              raise
-            return fault
       case (_, about, *_) if scope(about):
         repeat(*entry)
-    return None
 
   def journal(a=(), last=None):
     try:
       while True:
         while owed() and (
-          (stalled and stalled.pop())
-          or not (log or left)
+          not (log or left)
           or (due[-1][0] == "joined" and not question(due[-2]) and due.pop() and due)
           or (a and a[::2] == ("wake", "journal") and due[-1][1] in taken)
         ):
-          if fault := recount(due.pop()):
-            stalled.append(fault)
+          recount(due.pop())
         b = a
         match a := (yield):
           case (kind, about, by, *_) if (
@@ -1091,13 +1084,7 @@ def boot(record=(), **outside):
     while not busy:
       if left:
         name, g, a = left.pop(0)
-        try:
-          hear(name, g, a)
-        except (Exception, CancelledError) as fault:
-          if name == "journal" or isinstance(fault, Drift) or stalled is None:
-            raise
-          stalled.append(fault)
-          hear("journal", alive["journal"], None)
+        hear(name, g, a)
       elif log:
         a, heard = log.pop(0)
         left.extend((*x, a) for x in ears(a) if x[0] not in heard)
@@ -1113,6 +1100,15 @@ def boot(record=(), **outside):
             g, (*a[:2], "journal", *a[3:]) if again.get(id(a), 0) is a and a[2] and name not in known else a
           )
           w is False and alive.pop(name)
+        except (Exception, CancelledError) as fault:
+          if name == "journal" or isinstance(fault, Drift):
+            raise
+          alive.pop(name)
+          stop = isinstance(fault, CancelledError)
+          if not (stop and over(name)):
+            why = Refused(f"{name} raised {fault!r}")
+            shut = [x[3] for x in transcript(name, "close") if stop and x[1] == name]
+            say("done" if get(name) and not over(name) else "dropped", name, (*shut, why)[0])
         finally:
           busy.discard(name)
 
@@ -1135,7 +1131,6 @@ def boot(record=(), **outside):
 
   for who, listener in [(OPERATOR, idle(OPERATOR)), *outside.items(), ("journal", journal())]:
     drive(listener, who)
-  stalled = None
   root = Act(ROOT) if known else chain("root")
   stand(ROOT)
   return root

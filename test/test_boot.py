@@ -531,7 +531,7 @@ async def test_what_it_keeps_it_says() -> None:
 
 
 async def raises_again() -> None:
-  """A replay goes on past each raise of an ear that the first life took, in a delivery, in an act made again and at the last entry, and ends at a raise before the act that it makes again exists."""
+  """A replay of a life whose ears raised, in a delivery and in an act made again, says the same facts as that life, also at the last entry, and ends at a raise before the act that it makes again exists."""
   probe, _, top = born()
   word = (
     "b = bash('echo hi')\n"
@@ -542,7 +542,7 @@ async def raises_again() -> None:
   await engine.rung(word, on=top)
   await settle()
   live, b = viewed(top), engine.module(top)["b"]
-  assert live["modules"][top]["went"] == "0"
+  assert live["modules"][top]["went"] == "0" and isinstance(engine.peek(engine.module(top)["n"]), Refused)
   _, over = await relived(Sand(), list(probe.record))
   later = viewed(over)
   assert {k: v[: len(live["facts"][k])] for k, v in later["facts"].items() if k in live["facts"]} == live["facts"]
@@ -556,8 +556,9 @@ async def raises_again() -> None:
     on=top,
   )
   await settle()
-  with pytest.raises(TypeError, match="touchy"):
+  with pytest.raises(Refused, match="nothing takes read"):
     engine.read("a", on=top)
+  assert str(engine.peek(engine.module(top)["t"])).endswith("raised TypeError('touchy')")
   after = engine.bash("echo after", on=top)
   await settle()
   live = viewed(top)
@@ -574,7 +575,7 @@ async def raises_again() -> None:
 
 
 async def test_given_at_its_birth_what_the_world_kept_of_an_earlier_life() -> None:
-  """Given at its birth what the World kept of an earlier life, it says those entries again in the order it was given them, each once every fact said before it has been heard, or once a raise that is no drift stopped the bus with some of them unheard: an act whose maker is neither an act nor an ear that boot was given it makes again through its verb under the site of its maker, once the chain it is on has been made again, since that maker makes nothing again of what the record holds; an act whose maker is an act it makes not, since the word of that act makes it again; an act whose maker is an ear that boot was given it makes through act under the site of that ear, with no ear of its own, when that ear did not make it again by then, so a view of a later life holds it where the first life held it; and any other fact it says once the act it is about has been made again, so that its controls and its dones land where they landed."""
+  """Given at its birth what the World kept of an earlier life, it says those entries again in the order it was given them, each once every fact said before it has been heard: an act whose maker is neither an act nor an ear that boot was given it makes again through its verb under the site of its maker, once the chain it is on has been made again, since that maker makes nothing again of what the record holds; an act whose maker is an act it makes not, since the word of that act makes it again; an act whose maker is an ear that boot was given it makes through act under the site of that ear, with no ear of its own, when that ear did not make it again by then, so a view of a later life holds it where the first life held it; and any other fact it says once the act it is about has been made again, so that its controls and its dones land where they landed."""
   sand, log, root = born()
   step = engine.rung("await wait(100.0, __name__)\nclose(7)", on=root)
   await settle()
