@@ -90,7 +90,7 @@ pub(crate) const PROCESS: &str = "furb-process";
 /// configs, a JSON object whose `properties` give each key by its name, as the `configuration` of
 /// an extension of VS Code gives its settings. The configs hold each key under the name of the
 /// extension, as `{"notes": {"folder": "notes"}}`, which `world::config` reads.
-const CONFIG: &str = "furb-config";
+pub(crate) const CONFIG: &str = "furb-config";
 
 /// Each field of furb that a manifest can give.
 const FIELDS: [&str; 8] = [WORD, LIFE, INTERFACE, DEFAULT, PLAYS, VIEW, PROCESS, CONFIG];

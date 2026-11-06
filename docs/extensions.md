@@ -38,7 +38,10 @@ Eight extensions come with furb, and each life runs them unless a config turns t
   the `SKILL.md` of a skill with no code, and it tells the prose and the interface of a skill with code, or its word
   when it ships no interface, after the life enables it, once for each word, so it plays as an extension that a config
   turns on. `await skill()` plays each skill with code that says `furb-default: "true"`. `read("skills://<name>")`
-  gives the word of a skill with code, and `read("skills://<name>/<file>")` a file of its folder. A write of
+  gives the word of a skill with code, and `read("skills://<name>/<file>")` a file of its folder.
+  `read("settings://<name>")` gives the keys of a skill in the configs as a JSON object, each with the value that wins
+  for it or the default of its `furb-config`, and `read("settings://")` each key of the configs, as
+  [the schema](config.md#the-schema) says. A write of
   `skills://<name>` writes the word in `.furb/extensions/<name>` of the project, after a copy of the folder there
   when it stands elsewhere, and reloads the skill when the life runs it. Its life word, `await listed()`, reads
   `skills://`
@@ -183,7 +186,8 @@ What the notes are for.
   the life as a skill, as [the protocol](protocol.md) says. A folder that holds the extension starts nothing: only a
   life that plays it does. It can be absent.
 - `furb-config` is the JSON file of the keys that the extension adds to the configs, relative to the folder, as
-  [the schema](config.md#the-schema) says. `/config` shows them under the name of the extension. It can be absent.
+  [the schema](config.md#the-schema) says. `/config` shows them under the name of the extension, and its word reads
+  them as `json.loads(read("settings://<name>", HIDDEN).content)`. It can be absent.
 
 A field of furb that the manifest does not know is refused with its path, so a typo does not pass.
 

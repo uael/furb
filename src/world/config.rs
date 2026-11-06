@@ -304,6 +304,28 @@ impl Layers {
     Ok(named)
   }
 
+  /// The value of each key of the configs as one object, as a word reads it: each key of furb,
+  /// and each extension by its name with the object of its keys, each with the value that wins
+  /// for it, or the default of its property when no layer gives it.
+  pub fn values(&self) -> Result<Map<String, Value>, Error> {
+    let mut out = Map::new();
+    for Setting { key, value, .. } in self.get()? {
+      match key.as_slice() {
+        [one] => {
+          out.insert(one.clone(), value);
+        }
+        [one, two] => {
+          let within = out.entry(one.clone()).or_insert_with(|| Value::Object(Map::new()));
+          if let Value::Object(within) = within {
+            within.insert(two.clone(), value);
+          }
+        }
+        _ => {}
+      }
+    }
+    Ok(out)
+  }
+
   /// A change written to its layer, then the catalog of this machine configured on the layers, as
   /// a stand of a life configures it. A value that the property of its key does not take writes
   /// nothing. A change that the catalog refuses puts the file back as it was, and gives why.
@@ -329,6 +351,14 @@ impl Layers {
       Err(source) => Err(Error::Restore { refused, source }),
     }
   }
+}
+
+/// The default of each key that the file of keys of the extension `name` gives, which holds when
+/// no config gives the key.
+pub fn defaults(name: &str, text: &str) -> Result<Map<String, Value>, Error> {
+  let keys: Keys =
+    serde_json::from_str(text).map_err(|source| Error::Schema { name: name.to_owned(), source })?;
+  Ok(keys.properties.into_iter().map(|(one, property)| (one, property.default)).collect())
 }
 
 /// The settings of keys with no property of their own, each with the layer that gives its value.
