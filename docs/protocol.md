@@ -283,4 +283,5 @@ the other kind is refused with `speaker`, and a frame of a viewer that the peer 
 
 Each node has an `id`, and its `node` names one of a closed set: `box` (a row or a column, with a gap and a border),
 `text` (runs, each in a tone), `list`, `table`, `input`, `button`, `progress`, `code`, `diff` and `markdown`. A window
-that reads gets each tree with its `input` and `button` nodes `inert`: it draws them and takes no gesture.
+that reads gets each tree with its `input` and `button` nodes `inert`: it draws them and takes no gesture. The set and the fields of each node only grow within a major: script/contract.py reads them from
+host/protocol.schema.json, and a node or a field that goes is a break.
