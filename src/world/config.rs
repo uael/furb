@@ -138,6 +138,12 @@ const PROVIDERS: &str = "providers";
 const EXTENSIONS: &str = "extensions";
 
 /// The keys that furb reads.
+/// Whether a name is a key of furb at the top of the configs, which no extension takes as its name,
+/// since the configs hold the keys of an extension under its name.
+pub(crate) fn furb_key(name: &str) -> bool {
+  own().iter().any(|one| one.key[0] == name)
+}
+
 fn own() -> Vec<Named> {
   let one = |name: &str, kind, default, description: &str| Named {
     key: vec![name.to_owned()],
@@ -205,8 +211,6 @@ pub enum Error {
   Extensions(#[source] Fault),
   #[error("The keys of the extension {name} are no schema of keys: {source}")]
   Schema { name: String, source: serde_json::Error },
-  #[error("The extension {0} adds keys under a name that furb reads")]
-  Clash(String),
   #[error("The key {key} takes {wanted}, and {value} is not")]
   Value { key: String, wanted: String, value: Value },
 }
@@ -286,13 +290,14 @@ impl Layers {
   /// Each key that a schema names: the keys of furb, then the keys that each extension that the
   /// configs turn on adds under its name, in the order a life runs them. A file of keys that is no
   /// schema names no key, so the configs stay readable and a config can turn its extension off,
-  /// and the read of `settings://` and the name of that extension says why.
+  /// and the read of `settings://` and the name of that extension says why. An extension that
+  /// takes the name of a key of furb plays not, as [`extension::load`] says, and names no key.
   fn schema(&self) -> Result<Vec<Named>, Error> {
     let places = Places { config: self.user.clone(), home: Places::here().home };
     let mut named = own();
     for (name, text) in extension::contributed(&places, &self.project).map_err(Error::Extensions)? {
-      if named.iter().any(|one| one.key[0] == name) {
-        return Err(Error::Clash(name));
+      if furb_key(&name) {
+        continue;
       }
       let Ok(keys) = serde_json::from_str::<Keys>(&text) else { continue };
       named.extend(keys.properties.into_iter().map(|(one, property)| Named {
