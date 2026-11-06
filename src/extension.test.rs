@@ -1025,7 +1025,7 @@ fn a_fact_enable_gives_the_name_of_its_skill_and_the_program_that_it_names() {
     Fact(Object::tuple(told))
   };
   let has = |program: Option<&str>| {
-    Some(Enabled { name: "note".to_owned(), program: program.map(str::to_owned) })
+    Some(Enabled { name: "note".to_owned(), program: program.map(str::to_owned), view: None })
   };
   assert_eq!(enabled_by(&said(one.enable())), has(None));
   assert_eq!(enabled_by(&said(one.played("tui.ts"))), has(Some("tui.ts")));

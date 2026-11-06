@@ -133,6 +133,16 @@ async def test_extend_with_session_keeps_the_kit_in_the_record_alone(tmp_path: P
   assert engine.module(engine.module(root)["two"])["f"]() == 1
 
 
+async def test_extend_with_session_and_view_names_the_value_of_the_view_in_the_fact(tmp_path: Path) -> None:
+  """extend with session and view names in that fact the value of the root that holds the tree of the view of the kit, a node of the protocol as a dict, as {'id': 'todo', 'node': 'text', 'runs': [{'text': 'nothing to do'}]}: each window that mounts the view of the kit gets that tree from the daemon, and again each time that the value changes, at each later open too."""
+  _, root = extended("ouroboros", tmp_path, lives=True, sand=Disk())
+  f = engine.rung(F, on=root)
+  await f
+  await engine.rung(f"extend('todo', {f!r}, session=True, view='view')", on=root)
+  enabled = [x for x in engine.transcript(root) if x[0] == "enable" and x[3] == "todo"]
+  assert [x[10] for x in enabled] == ["view"]
+
+
 async def test_a_later_life_plays_the_session_kit_from_the_record(tmp_path: Path) -> None:
   """A later life on the record plays the kit on each chain from that fact, with no file in the project or the config."""
   sand, root = extended("ouroboros", tmp_path, lives=True, sand=Disk())
