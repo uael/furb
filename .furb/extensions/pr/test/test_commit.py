@@ -1,14 +1,11 @@
 """commit makes one commit of the named paths with a QA trailer for each thing to test, on the real engine."""
 
 import subprocess
-from pathlib import Path
 
 import pytest
 
 from extensions.conftest import Bench
 from furb.engine import Refused
-
-REPO = Path(__file__).resolve().parents[4]
 
 
 def git(made: Bench, *args: str) -> str:
