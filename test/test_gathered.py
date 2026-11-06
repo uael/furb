@@ -113,15 +113,21 @@ async def test_paused_says_whether_a_pause_stands_over_the_chain_at_the_tip_and_
   assert one["paused"]
 
 
-async def test_chains_names_among_the_other_values_of_a_chain_each_plain_value_whose_text_passes_largest_bytes_since_a_tell_keeps_no_more() -> (
+async def test_chains_holds_each_plain_value_of_a_chain_whatever_its_size_and_seed_binds_a_large_one_from_the_carried_fact_of_its_chain_so_a_later_life_holds_it_exactly_and_no_turn_tells_it() -> (
   None
 ):
-  """chains names among the other values of a chain each plain value whose text passes LARGEST bytes, since a tell keeps no more."""
+  """chains holds each plain value of a chain whatever its size, and seed binds a large one from the carried fact of its chain, so a later life holds it exactly and no turn tells it."""
   _, _, root = born()
   rest = engine.chain("rest", source=root)
-  await engine.rung("big = 'x' * LARGEST\nsmall = 1", on=rest)
+  await engine.rung("big = 'x' * LARGEST\nran = Exit(0, Text('o', 'y' * LARGEST), Text('e', ''))\nsmall = 1", on=rest)
   await settle()
+  big, ran = engine.module(rest)["big"], engine.module(rest)["ran"]
   data = engine.gathered(lambda word: word, {})
   [one] = [x for x in data["chains"] if x["id"] == rest]
-  assert (one["values"].get("small"), "big" in one["values"], "big" in one["lost"]) == ("1", False, True)
-  assert all(len(str(word).encode()) < LARGEST for x in engine.seed(data) if x[0][0] == "rung" for word in x[0][4:5])
+  assert (one["values"]["small"], {"big", "ran"} <= one["values"].keys(), one["lost"]) == ("1", True, [])
+  entries = engine.seed(data)
+  assert all(len(str(word).encode()) < LARGEST // 8 for x in entries if x[0][0] == "rung" for word in x[0][4:5])
+  log, _ = life(sown(), entries)
+  await settle()
+  assert (engine.module(rest)["big"], engine.module(rest)["ran"], engine.module(rest)["small"]) == (big, ran, 1)
+  assert all(len(str(x).encode()) < LARGEST // 8 for x in log if x[0] == "tell")
