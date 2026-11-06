@@ -6,6 +6,10 @@ SHARE: float
 """SHARE is the share of the window of its actor that an answer reads past, after which compacted asks choice what to keep of its chain, and it is 0.6 unless a word rebinds it."""
 CHOOSER: str
 """CHOOSER is the actor that choice asks when it is given none, and an empty CHOOSER is the actor that automatic() gives, else the default actor of the chain of the model that chooses."""
+OVERFLOW: str
+"""OVERFLOW is what the refusal of a reply says first when the prompt of the reply passes the window of its model."""
+OVERFLOWED: str
+"""OVERFLOWED is the summary that fitted gives compact, which says why the chain lost its acts."""
 LISTED: int
 """LISTED is the most acts of one step that choice lists, and it is 40 unless a word rebinds it."""
 BRIEF: str
@@ -64,4 +68,10 @@ def compacted(on: str = "") -> Act:
 async def condense(to: str = "", on: str = "") -> str:
   """condense() asks choice() of the chain of the caller, and at once compacts that chain to the acts that the model chose, each act said on the chain after it asked, of each path only the last read or write, and the summary of the model, and gives the chain.
   When the model gives no tuple of a list and a str, it compacts the chain with FILTERS and no summary of the model.
+  """
+
+def fitted(on: str = "") -> Act:
+  """fitted() watches a chain: when its model refuses a reply of the chain with OVERFLOW, it compacts the chain at once to its open prompts with the summary OVERFLOWED, so the next reply reads less and the chain goes on with no pause.
+  It compacts once in a row of refusals with OVERFLOW, and again only after a reply of the chain that the model answered.
+  It never completes.
   """

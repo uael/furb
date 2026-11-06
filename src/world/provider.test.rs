@@ -56,7 +56,7 @@ use super::{
   local::Server,
   messages::{messages, tail},
   model::{CHEAP, Class, standing},
-  retry::{Backoff, Retry, Transient, passing, recoverable, resets},
+  retry::{Backoff, OVERFLOW, Retry, Transient, overflows, passing, recoverable, resets},
   search::Searches,
   thinking::{Thinking, budgeted, thinking},
 };
@@ -1010,6 +1010,21 @@ fn cut_turns_and_transient_provider_errors_are_recoverable() {
 }
 
 #[test]
+fn a_refusal_of_a_prompt_past_the_window_of_its_model_overflows() {
+  for why in [
+    "prompt exceeds the model context window",
+    "400 prompt is too long",
+    "Prompt is too long · automatic compaction failed",
+    "400 context_length_exceeded: maximum context length is 8192 tokens",
+  ] {
+    assert!(overflows(&CompletionError::ProviderError(why.into())), "{why}");
+  }
+  for why in ["the model does not accept images", "503 Service Unavailable"] {
+    assert!(!overflows(&CompletionError::ProviderError(why.into())), "{why}");
+  }
+}
+
+#[test]
 fn an_exhausted_recoverable_provider_error_gives_the_model_another_turn_without_pausing() {
   for (label, why) in [
     ("transient", "connection reset"),
@@ -1051,6 +1066,13 @@ fn a_model_whose_prompt_is_always_too_long_pauses_the_chain_with_why_after_two_r
   assert!(until(&mut engine, |engine| paused(engine).is_some()), "{:?}", said(&mut engine));
   let (_, _, told) = paused(&mut engine).expect("the chain paused");
   assert!(told.contains(why), "the pause says why: {told}");
+  let first =
+    said(&mut engine).into_iter().find(|(kind, about, _)| kind == "done" && about == "reply1");
+  let (_, _, refused) = first.expect("the first reply is done");
+  assert!(
+    refused.contains(&format!("{OVERFLOW}: ")),
+    "the refusal says the cause first: {refused}"
+  );
   let more = within(&mut engine, Duration::from_millis(300), |_| calls.load(Ordering::SeqCst) > 2);
   assert!(!more, "the paused chain asks the model no more: {}", calls.load(Ordering::SeqCst));
 }
