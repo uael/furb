@@ -36,7 +36,7 @@ from conftest import (
   world_says,
 )
 from furb import engine
-from furb.engine import HIDDEN, OPERATOR, Exit, Refused, Text, idle, site, take
+from furb.engine import HIDDEN, OPERATOR, Drift, Exit, Refused, Text, idle, site, take
 
 
 def ours(log: list[tuple]) -> dict[str, tuple]:
@@ -693,6 +693,112 @@ async def test_one_said_again_takes_the_name_it_had() -> None:
   assert [a[1] for a in said(log, "prompt")] == ["prompt1"]
   assert await one == 9 and one == "prompt2"
   assert one not in ids(log)
+
+
+def renamed(record: list, names: dict[str, str]) -> list:
+  """A record with each name that names maps given its other name, wherever a fact holds it."""
+
+  def one(v: object) -> object:
+    if isinstance(v, str):
+      return names.get(v, v)
+    return type(v)(map(one, v)) if isinstance(v, (tuple, list)) else v
+
+  return [(one(e),) for (e,) in record]
+
+
+async def granted() -> tuple[list, str]:
+  """The record of a word that makes two grants and a command, as a later life is given it, and its rung."""
+  sand, _, root = born()
+  step = engine.rung("g = grant(1.0)\nh = grant(2.0)\nx = bash('echo x')", on=root)
+  assert await step is None
+  await settle()
+  return plain(sand.record), step
+
+
+def fewer(record: list) -> list:
+  """The record of a life whose word made one grant more, grant1, before the two it makes, so a later life of the word
+  makes one grant less."""
+  record = renamed(record, {"grant1": "grant2", "grant2": "grant3"})
+  at = next(n for n, (e,) in enumerate(record) if e[:2] == ("grant", "grant2"))
+  return [*record[:at], (("grant", "grant1", *record[at][0][2:4], 0.5, None),), *record[at:]]
+
+
+async def test_in_a_later_life_an_act_takes_the_name_of_the_first_question_of_the_record_with_its_kind() -> None:
+  """In a later life an act takes the name of the first question of the record with its kind, its maker, its chain and its words that no act took yet, so an act more or less that an engine makes moves the name of no other act."""
+  record, _ = await granted()
+  _, root = await relived(Sand(), fewer(record))
+  assert [engine.module(root)[k] for k in "gh"] == ["grant2", "grant3"]
+  assert engine.module(root)["x"] == "bash1" and isinstance(engine.peek("bash1"), Exit)
+
+
+async def test_an_act_that_no_question_of_the_record_matches_takes_the_number_after_the_highest_of_its_kind() -> None:
+  """An act that no question of the record matches takes the number after the highest of its kind in the record; before the journal said the whole record again, the outside hears it only when no question of its kind and its maker that no act took waits in the record, and one that the outside is to answer while such a question waits stands in place of the first of them and is a drift of it, so a command whose words changed drifts under the name it had and the World does nothing for it."""
+  record, step = await granted()
+  _, root = await relived(Sand(), [(e,) for (e,) in record if e[1] != "grant1"])
+  assert [engine.module(root)[k] for k in "ghx"] == ["grant3", "grant2", "bash1"]
+  made = next(e for (e,) in record if e[:2] == ("bash", "bash1"))
+  held = (*made[:4], "echo y", *made[5:])
+  later = Sand()
+  with pytest.raises(Drift) as raised:
+    life(later, [(held,) if e[:2] == ("bash", "bash1") else (e,) for (e,) in record])
+  assert (
+    str(raised.value) == f"bash1 drifts: the life made {(made[0], 'bash2', *made[2:])!r}, the record holds {held!r}"
+  )
+  assert [a for a in later.calls if a[0] == "bash"] == [] and step == "rung1"
+
+
+async def test_while_the_journal_says_the_record_again_it_holds_what_it_keeps() -> None:
+  """While the journal says the record again it holds what it keeps, and keeps it in its order once the record is said whole, so a life whose replay drifts keeps nothing of what it made before the drift."""
+  record, _ = await granted()
+  later = Sand()
+  changed = [
+    ((*e[:4], "echo y", *e[5:]),) if e[:2] == ("bash", "bash1") else (e,) for (e,) in record if e[1] != "grant1"
+  ]
+  with pytest.raises(Drift, match=r"^bash1 drifts: "):
+    life(later, changed)
+  assert engine.get("grant3") is not None and later.record == []
+  kept = Sand()
+  await relived(kept, [(e,) for (e,) in record if e[1] != "grant1"])
+  assert [e[0][:2] for e in kept.record if e[0][1] == "grant3"][:1] == [("grant", "grant3")]
+
+
+async def test_a_question_of_the_record_that_no_act_took_on_a_chain_that_the_life_made_again_is_a_drift() -> None:
+  """A question of the record that no act took, on a chain that the life made again, is a drift once the journal comes to a fact that an ear of the outside said of it, so a word that makes one command less drifts."""
+  record, _ = await granted()
+  record = renamed(record, {"bash1": "bash2"})
+  extra = [
+    (("bash", "bash1", *e[2:4], "echo z", *e[5:]) if e[0] == "bash" else (e[0], "bash1", *e[2:]),)
+    for (e,) in record
+    if e[1] == "bash2" and e[0] in ("bash", "started", "done")
+  ]
+  at = next(n for n, (e,) in enumerate(record) if e[:2] == ("bash", "bash2"))
+  with pytest.raises(
+    Drift,
+    match=r"^bash1 drifts: the life made no act that the record holds under it, the record holds \('bash', 'bash1', ",
+  ):
+    life(Sand(), [*record[:at], *extra, *record[at:]])
+
+
+async def test_a_record_whose_last_fact_made_names_a_schema_before_1_1_holds_no_question_of_an_act_that_an_act_made() -> (
+  None
+):
+  """A record whose last fact made names a schema before 1.1 holds no question of an act that an act made, so a later life names each of its acts by how many acts of its kind it made, as the life that kept it did."""
+  sand, log, root = born("close(1)")
+  assert await engine.rung("y = 1", on=root) is None
+  assert await engine.prompt(int, "one", on=root) == 1
+  assert await engine.rung("x = bash('echo x')", on=root) is None
+  await settle()
+  made = [(e[0], e[1]) for e in log if engine.question(e)]
+  kept = [
+    (e,)
+    for (e,) in plain(sand.record)
+    if not (e[0] in ("rung", "run") and engine.question(e) and engine.get(e[2]))  # ty: ignore[redundant-condition]
+  ]
+  again, _ = await relived(Sand(), [(("made", "chain1", "store", "e", None, "1.0", "0.4.2"),), *kept])
+  assert {(e[0], e[1]) for e in again if engine.question(e) and e[0] != "stand"} <= set(made)
+  assert [a[1] for a in said(again, "rung")] == [a[1] for a in said(log, "rung")] == ["rung1", "rung2", "rung3"]
+  with pytest.raises(Drift, match=r"^reply1 drifts: the life made no act that the record holds under it, "):
+    life(Sand(), [(("made", "chain1", "store", "e", None, "1.1", "0.4.2"),), *kept])
 
 
 async def test_a_boot_is_a_life_a_second_boot_is_a_second_life_and_the_first_is_gone() -> None:

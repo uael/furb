@@ -986,11 +986,27 @@ def boot(record=(), **outside):
   due = [e for (e,) in record[::-1] if first.get(e[1]) is not e]
   ranks = {id(e): n for n, (e,) in enumerate(record)}
   saved, again = {e[1]: e for (e,) in record if question(e)}, {}
+  schemas = [(*e[5:6], None)[0] for (e,) in record if e[0] == "made"]
+  stable = not schemas or tuple(map(int, str(schemas[-1] or "0.0").split("."))) >= (1, 1)
+  top, asked, strays, back = Counter(), {}, {}, []
+  for quest in saved.values():
+    top[quest[0]] = max(top[quest[0]], int(quest[1][len(quest[0]) :]))
+    asked.setdefault(quest[:3:2], []).append((quest[1], quest[3:]))
 
   def drift(name):
+    ours, name = repr(get(name)) if get(name) else "no act that the record holds under it", strays.get(name) or name
     return Drift(
-      f"{name} drifts: the life made {get(name)!r:.300}, the record holds {saved.get(name) or first.get(name)!r:.300}"
+      f"{name} drifts: the life made {ours:.300}, the record holds {saved.get(name) or first.get(name)!r:.300}"
     )
+
+  def matched(sort, maker, *said):
+    ahead = asked.get((sort, maker), [])
+    at = next((n for n, x in enumerate(ahead) if x[1] == said), None)
+    if at is None:
+      top[sort] += 1
+      strays[sort + str(top[sort])] = ahead[0][0] if ahead else None
+      return sort + str(top[sort])
+    return ahead.pop(at)[0]
 
   def owed():
     while due and question(due[-1]) and due[-1][1] in known:
@@ -1025,6 +1041,10 @@ def boot(record=(), **outside):
             pass
       case (_, about, *_) if scope(about):
         repeat(*entry)
+      case (_, about, by, *_) if (
+        stable and by in outside and about in saved and get(saved[about][3]) and not get(about)
+      ):
+        raise drift(about)
 
   def journal(a=(), last=None):
     try:
@@ -1035,6 +1055,8 @@ def boot(record=(), **outside):
           or (a and a[::2] == ("wake", "journal") and due[-1][1] in taken and due[-1][2] in outside)
         ):
           recount(due.pop())
+        while back and not owed():
+          yield back.pop(0)
         b = a
         match a := (yield):
           case (kind, about, by, *_) if (
@@ -1049,20 +1071,20 @@ def boot(record=(), **outside):
                 and ("keep", "", (("joined", "", "journal", kind, about),))
               )
               if about not in saved:
-                a is q and glue and (yield glue)
-                yield "keep", "", (saved.setdefault(about, q),)
+                a is q and glue and back.append(glue)
+                back.append(("keep", "", (saved.setdefault(about, q),)))
               if a is not q:
-                glue and (yield glue)
-                yield "keep", "", (a,)
+                glue and back.append(glue)
+                back.append(("keep", "", (a,)))
               last = a
             elif a is q and about not in saved:
-              yield "keep", "", (saved.setdefault(about, q),)
+              back.append(("keep", "", (saved.setdefault(about, q),)))
             if kind == "wake" and not owed():
               for name in [x for x in taken if taken[x] and covers(a, x) and not over(x)]:
                 del taken[name]
                 offers(known[name])
     finally:
-      for pile in log, left, due, first, saved:
+      for pile in log, left, due, first, saved, back:
         pile.clear()
 
   def say(kind, about, *words):
@@ -1085,8 +1107,10 @@ def boot(record=(), **outside):
       raise Refused("no chain for " + kind)
     if by and not (get(by) or by in outside or callable((module(on) or globals()).get(kind))):
       raise Refused(f"no verb {kind} on {on}, so a later life cannot make the act again")
-    names = born.setdefault(kind, {})
-    a = (kind, name := names.setdefault((by, made[speaker, kind]), kind + str(len(names) + 1)), by, on, *words)
+    names, key = born.setdefault(kind, {}), (by, made[speaker, kind])
+    if key not in names:
+      names[key] = matched(kind, by, on, *words) if stable else kind + str(len(names) + 1)
+    a = (kind, name := names[key], by, on, *words)
     if known.setdefault(name, a) is a:
       holds(scope(on), [a])
       log.append((a, heard := set(outside) - busy))
@@ -1105,7 +1129,7 @@ def boot(record=(), **outside):
             repeat(*f)
             while taken[name] and owed() and due[-1][0] == "joined" and due.pop() and due:
               recount(due.pop())
-          if kind in ("run", "chain") or not owed():
+          if kind in ("run", "chain") or not owed() or strays.get(name, name) is None:
             offers(a)
         if name not in taken and not busy & set(outside) & set(dict(ears(a))):
           with site.set(""):
