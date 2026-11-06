@@ -926,6 +926,7 @@ export const feed = part({
                   if (segment.length) {
                     const view = this.programView(segment, room, took, since, heads, digits, {
                       more: () => this.openWindow(where),
+                      key: `window:${where}`,
                     });
                     block.add(
                       window.opened
