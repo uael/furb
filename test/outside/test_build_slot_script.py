@@ -23,8 +23,8 @@ def start(tmp: Path, *command: str, err: IO[str] | int = subprocess.PIPE, **more
 
 
 def run(tmp: Path, *command: str, **more: str) -> subprocess.CompletedProcess[str]:
-  got = subprocess.run(["sh", str(SCRIPT), *command], env=env(tmp, **more), text=True, capture_output=True, timeout=60)
-  return got
+  args = ["sh", str(SCRIPT), *command]
+  return subprocess.run(args, env=env(tmp, **more), text=True, capture_output=True, timeout=60, check=False)
 
 
 def test_a_call_with_no_command_exits_2_and_says_its_use(tmp_path: Path) -> None:
