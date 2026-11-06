@@ -53,6 +53,8 @@ reads it.
   when it ships no interface, after the life enables it, once for each word, so it plays as an extension that a config
   turns on. `await skill()` plays each skill with code that says `furb-default: "true"`. `read("skills://<name>")`
   gives the word of a skill with code, and `read("skills://<name>/<file>")` a file of its folder.
+  `defined(*names)` is a `Show` that selects the definitions of those names in a text, so
+  `read("skills://<name>", defined("f"))` tells those definitions and gives the whole word to edit and write.
   `read("settings://<name>")` gives the keys of a skill in the configs as a JSON object, each with the value that wins
   for it or the default of its `furb-config`, and `read("settings://")` each key of the configs, as
   [the schema](config.md#the-schema) says. A write of

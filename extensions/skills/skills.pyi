@@ -30,3 +30,8 @@ async def listed(on: str = "") -> None:
   """The skills of a chain, read where its word runs: listed runs skills() on its chain, so the turn after the word that runs it shows the list of the skills of the chain as every read tells it.
   The life word of the extension is await listed(), so the setup of the root reads the skills in the turn of the life words of the extensions, and each chain with no source holds that read in its setup.
   """
+
+def defined(*names: str) -> Show:
+  """defined(*names) is a Show: it selects the lines of each definition at the top of a text whose name is one of names, a definition being a def, an async def, a class, a type or an assignment, with its decorators and each line under it that is indented, blank or closes a bracket.
+  A read of skills:// and the name of a skill with defined(*names) tells only those definitions and gives the whole word, so a word that reads a skill with it edits the whole word.
+  """
