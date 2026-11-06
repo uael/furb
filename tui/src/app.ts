@@ -328,6 +328,8 @@ export class App {
   /** Where the last press was, and the face of the node it reached, so that a click still counts when the view drew
    * that node again between the press and the release, and never when it drew another control in its place. */
   pressedAt?: { x: number; y: number; face: string };
+  /** The rows of the folds of the feed by the key of each fold, with what each says, which the Details of ⌥D open. */
+  readonly foldRows = new Map<string, { label: string; node: Renderable }>();
   readonly cards = new Map<
     string,
     {

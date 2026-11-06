@@ -111,6 +111,21 @@ export const spell = (ms: number) =>
 /** How many rows of the feed a long message takes until a click opens it. */
 export const MESSAGE_ROWS = 3;
 
+/** How many lines a reply, the tail of a command and a panel show whole before their fold. */
+export const FOLD_ROWS = 12;
+
+/** What a fold hides, in the one wording of every fold: its count and its noun, as "1 more line" or "6 earlier
+ * steps". */
+export function hidden(count: number, noun: string, where: "more" | "earlier" = "more"): string {
+  return `${count} ${where} ${count === 1 ? noun : `${noun}s`}`;
+}
+
+/** How many of a count of lines a fold hides: none while they are at most two over the bound, since a fold of so
+ * little hides nothing. */
+export function foldOf(count: number, bound = FOLD_ROWS): number {
+  return count > bound + 2 ? count - bound : 0;
+}
+
 /** The lines of a text cut at its words to a width, at most a count of them, the last one cut where the text goes
  * on. */
 export function wrapped(text: string, width: number, most: number): string[] {
