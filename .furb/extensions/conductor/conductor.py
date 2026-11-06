@@ -101,9 +101,9 @@ def item_text(t: str, item: dict) -> str:
   return f"Item {item['key']} of the topic {t}. The charter of this chain, scratch://converge/{t}.md, holds its rules, its paths and the asks of the owner that it carries.\n\n{item['brief']}"
 
 
-def next_item(t: str) -> dict | None:
-  if t == QA and not queue(QA) and not live.get(QA) and state["print"] != state["qa_print"] and clock() - state["qa_at"] >= QA_EVERY:
-    state.update(qa=state["qa"] + 1, qa_print=state["print"], qa_at=clock())
+def next_item(t: str, now: float) -> dict | None:
+  if t == QA and not queue(QA) and not live.get(QA) and state["print"] != state["qa_print"] and now - state["qa_at"] >= QA_EVERY:
+    state.update(qa=state["qa"] + 1, qa_print=state["print"], qa_at=now)
     queue(QA).append({"key": f"qa-run-{state['qa']}", "model": QA_MODEL, "brief": QA_BRIEF})
   done, used = {k for _, k, _ in ended}, seats()
   held = ({kind(FIX_MODEL)} if fixwait else set()) | ({kind(AGG_MODEL)} if state["due"] else set())
@@ -178,6 +178,7 @@ def finger() -> str:
 
 
 def beat() -> Generator[set[str], object, None]:
+  now = clock()
   for t in width:
     held = live.setdefault(t, {})
     if (one := fixing.get(t, "")) and over(one):
@@ -189,7 +190,7 @@ def beat() -> Generator[set[str], object, None]:
       item = held.pop(p)
       ended.append((t, str(item["key"]), p))
       notes.append(f"{t}: the item {item['key']} ({p}, {item['model']}) ended: {str(peek(p))[:3000]}")
-    while not fixing.get(t) and t not in fixwait and len(held) < width[t] and (item := next_item(t)):
+    while not fixing.get(t) and t not in fixwait and len(held) < width[t] and (item := next_item(t, now)):
       held[str(prompt(str, item_text(t, item), to=item["model"], on=chain_of(t)))] = item
     watch(t)
   for t in [t for t in [*width, AGG] if t in chains]:
@@ -204,21 +205,21 @@ def beat() -> Generator[set[str], object, None]:
       notes.append(f"cycle {cycle}: {got[1]}" + (f" Sent to {', '.join(got[0])}." if got[0] else ""))
     else:
       notes.append(f"cycle {cycle} ended with {str(got)[:1500]}")
-  if not state["cycle"] and clock() - state["last"] >= EVERY:
+  if not state["cycle"] and now - state["last"] >= EVERY:
     ran = bash(finger(), show=HIDDEN, ok=True, timeout=120)
     while not over(ran):
       yield {ran}
     out = peek(ran)
-    now = out.stdout.content if isinstance(out, Exit) else ""
-    state["last"] = clock()
-    if now != state["print"] and not ("pending" in now and clock() - state["cycle_at"] < FLOOR):
+    seen = out.stdout.content if isinstance(out, Exit) else ""
+    state["last"] = now
+    if seen != state["print"] and not ("pending" in seen and now - state["cycle_at"] < FLOOR):
       if seat(AGG_MODEL):
-        state.update(print=now, due="", cycle_at=clock())
+        state.update(print=seen, due="", cycle_at=now)
         state["cycle"] = str(prompt(tuple[dict[str, str], str], CYCLE, to=AGG_MODEL, on=chain_of(AGG)))
       else:
         state["due"] = "1"
-  if clock() - state["review_at"] >= REVIEW_EVERY:
-    state["review_at"] = clock()
+  if now - state["review_at"] >= REVIEW_EVERY:
+    state["review_at"] = now
     queue_reviews()
   if notes:
     prompt(None, "Conductor:\n" + "\n\n".join(notes), on=ROOT)

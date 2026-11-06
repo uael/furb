@@ -43,7 +43,7 @@ use crate::{
   fact::{Fact, named},
   gate,
   value::{Fault, Object, Text, entry},
-  world::files,
+  world::{config, files},
 };
 
 /// The kind of the fact that enables an extension in a life, which [`extensions`] says and reads.
@@ -429,6 +429,11 @@ pub(crate) fn manifested<T: AsRef<str>>(
       "A manifest gives a name, and the file of a word under metadata as {WORD}"
     ));
   };
+  if config::furb_key(name) {
+    return Err(format!(
+      "The name {name} is a key of furb in the configs: give the skill a name of its own"
+    ));
+  }
   let foreign =
     |key: &&(String, String)| key.0.starts_with("furb-") && !FIELDS.contains(&key.0.as_str());
   if let Some((key, _)) = manifest.metadata.iter().find(foreign) {
