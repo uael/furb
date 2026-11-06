@@ -1087,6 +1087,8 @@ def boot(record=(), **outside):
     on = on or scope(speaker)
     if not on and kind != "chain":
       raise Refused("no chain for " + kind)
+    if not (get(by) or by in outside or callable((module(on) or globals()).get(kind))):
+      raise Refused(f"no verb {kind} on {on}, so a later life cannot make the act again")
     names = born.setdefault(kind, {})
     a = (kind, name := names.setdefault((by, made[speaker, kind]), kind + str(len(names) + 1)), by, on, *words)
     if known.setdefault(name, a) is a:

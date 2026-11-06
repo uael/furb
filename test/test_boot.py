@@ -35,7 +35,7 @@ from conftest import (
   world_says,
 )
 from furb import engine
-from furb.engine import HIDDEN, OPERATOR, Drift, Exit, Refused, Text, idle, site, take
+from furb.engine import HIDDEN, OPERATOR, Exit, Refused, Text, idle, site, take
 
 
 def ours(log: list[tuple]) -> dict[str, tuple]:
@@ -751,7 +751,7 @@ async def test_an_act_whose_maker_is_neither_an_act_nor_an_ear_boot_was_given_is
 
 
 async def test_a_later_life_says_such_an_act_again_only_through_a_verb_in_the_globals_of_its_chain() -> None:
-  """A later life says an act whose maker is neither an act nor an ear that boot was given again only through a verb in the globals of its chain, and an act whose kind no verb binds is a drift."""
+  """A later life says an act whose maker is neither an act nor an ear that boot was given again only through a verb in the globals of its chain, and an act whose kind no verb binds is refused when it is made, so no record holds one."""
   sand, _, root = born()
   word = "def remind(text, on=''):\n  def ear(id):\n    yield 'started', id\n    yield from idle(id)\n\n"
   await engine.rung(word + "  return act('remind', on, ear, text)\n", on=root)
@@ -762,10 +762,8 @@ async def test_a_later_life_says_such_an_act_again_only_through_a_verb_in_the_gl
   second = Sand()
   again, over = await relived(second, list(sand.record))
   assert over == root and said(again, "remind") == [("remind", note, OPERATOR, root, "soon")]
-  bare = engine.act("note", root, idle, "one")
-  await settle()
-  with pytest.raises(Drift, match=f"{bare} drifts"):
-    life(Sand(), [*sand.record, *second.record])
+  with pytest.raises(Refused, match="no verb note on chain1"):
+    engine.act("note", root, idle, "one")
 
 
 async def test_the_journal_says_again_the_first_answer_of_an_act_when_the_act_is_made_again() -> None:
