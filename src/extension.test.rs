@@ -259,8 +259,8 @@ fn a_manifest_names_the_view_of_an_extension_for_a_tui_and_no_other_field_of_fur
   );
   folder(&at.join("bad"), &skill("note", &[("word", "note.py"), ("tui", "tui.ts")]), "x = 1\n");
   let manifest = at.join("bad").join("SKILL.md").display().to_string();
-  let fields =
-    "furb-word, furb-life, furb-interface, furb-default, furb-plays, furb-view, furb-process";
+  let fields = "furb-word, furb-life, furb-interface, furb-default, furb-plays, furb-view, furb-process, \
+     furb-config";
   assert_eq!(
     load("note", &at.join("bad"), &places(&at)).unwrap_err().message(),
     format!("The manifest gives furb-tui, and the fields of furb are {fields}: {manifest}")

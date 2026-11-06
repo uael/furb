@@ -31,11 +31,12 @@ import { type Compaction, type Measure, measureOf } from "furb/life";
 import type { Config } from "furb/protocol";
 import { type Choices, daemon, type Listener, Refused, RemoteLife } from "./client.ts";
 import { clock } from "./clock.ts";
+import type { Setting } from "./configs.ts";
 import { demoModels } from "./demo/answer.ts";
 import { expandHome } from "./files.ts";
 import { lineCounts } from "./format.ts";
 import { type EngineOptions, roster } from "./models.ts";
-import { type ProviderChoice } from "./providers.ts";
+import type { ProviderChoice } from "./providers.ts";
 import { dispatchesFrom } from "./queue.ts";
 import { isRecorded, Reader, type Reading, row } from "./reading.ts";
 import { branchChanges, net } from "./review.ts";
@@ -159,6 +160,7 @@ class ReadLife extends EventEmitter {
   grant = this.refuse;
   stand = this.refuse;
   config = this.refuse;
+  settings = this.refuse;
   pause = this.refuse;
   wake = this.refuse;
   cancel = this.refuse;
@@ -768,6 +770,11 @@ export class HostView extends EventEmitter {
     } else await this.refreshCodex();
     await this.life.result(await this.life.config(config));
     return true;
+  }
+  /** Each key of the configs of the folder of the life, with the value that wins for it and the property that a schema
+   * gives it, as the host reads them, and none in the demo. */
+  async settings(): Promise<Setting[]> {
+    return this.demo ? [] : await this.life.settings();
   }
   private async stand(): Promise<void> {
     await this.life.result(await this.life.stand());

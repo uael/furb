@@ -155,6 +155,7 @@ metadata:
   furb-plays: every
   furb-view: tui.ts
   furb-process: notes.ts
+  furb-config: config.json
 ---
 What the notes are for.
 ```
@@ -186,6 +187,8 @@ What the notes are for.
   the life as a skill, as [the protocol](protocol.md) says. A folder that holds the extension starts nothing: only a
   life that plays it does. A process that ends before its life tells the operator once, with its exit and the last
   lines of its stderr, and starts again at the next play of the extension. It can be absent.
+- `furb-config` is the JSON file of the keys that the extension adds to the configs, relative to the folder, as
+  [the schema](config.md#the-schema) says. `/config` shows them under the name of the extension. It can be absent.
 
 The client `@uael/furb/skill` gives a process of TypeScript what it needs: it attaches the life from those variables,
 hears the facts of the kinds that it asks, says verbs that the life takes under `skill/<name>`, and serves a tree to
