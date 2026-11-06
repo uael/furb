@@ -6,7 +6,6 @@ import { basename, join } from "node:path";
 import { exitOf, isDone } from "furb/life";
 import { alive, printPid, remove } from "../../bind/typescript/test/processes.ts";
 import { until } from "../../bind/typescript/test/until.ts";
-import type { Engine } from "../src/bridge.ts";
 import { daemon } from "../src/client.ts";
 import { demoSession, removeDemoDirectories } from "../src/demo.ts";
 import type { Session } from "../src/session.ts";
@@ -62,12 +61,12 @@ test("a view whose field has another form opens that field empty and names it, a
     session = await demoSession({ record });
     await session.dispose();
     const view = JSON.parse(await readFile(`${record}.ui.json`, "utf8"));
-    await writeFile(`${record}.ui.json`, JSON.stringify({ ...view, queued: "one", models: [1] }));
+    await writeFile(`${record}.ui.json`, JSON.stringify({ ...view, drafts: "one", models: [1] }));
     session = await demoSession({ record });
     expect(session.notice).toBe(
-      `${record}.ui.json holds queued, models in a form this release does not read: each opened empty.`,
+      `${record}.ui.json holds drafts, models in a form this release does not read: each opened empty.`,
     );
-    expect([session.queued, session.models]).toEqual([[], []]);
+    expect([session.drafts, session.models]).toEqual([{}, []]);
     await session.dispose();
     session = undefined;
   } finally {
@@ -186,22 +185,22 @@ test("a follow-up goes to the actor of its chain when it is sent", () =>
     expect(follow?.words).toEqual(["str", "Check keyboard navigation after this answer.", ""]);
   }));
 
-test("a follow-up that the operator removes while an earlier one is sent is not sent", async () => {
+test("a follow-up that the operator takes out of the queue is not sent", async () => {
   const session = await demoSession();
-  const send = session.host.sendQueued.bind(session.host);
   try {
+    const root = session.selected;
     const other = await session.engine.chain({ label: "Other" });
-    session.queueHeld = true;
-    session.enqueue("First follow-up on main");
+    // A pause of each chain holds its queue while the operator takes a follow-up out.
+    for (const chain of [root, other]) await session.engine.pause(chain);
+    await session.enqueue("First follow-up on main");
     await session.select(other);
-    session.enqueue("Second follow-up on the other chain, about @README.md");
-    session.host.sendQueued = async (entry) => {
-      const later = session.queued.find((item) => item.id !== entry.id);
-      if (later) session.removeQueued(later.id);
-      return send(entry);
-    };
-    session.queueHeld = false;
-    await session.drainQueue();
+    await session.enqueue("Second follow-up on the other chain");
+    await until(session, () => session.queued.length === 2);
+    const later = session.queued.find((one) => one.chain === other);
+    if (!later) throw new Error("No follow-up on the other chain.");
+    await session.removeQueued(later.entry);
+    for (const chain of [root, other]) await session.engine.wake(chain);
+    await until(session, () => session.queued.length === 0);
     await idle(session);
     await session.refresh();
     expect(session.queued).toEqual([]);
@@ -229,43 +228,6 @@ test("a follow-up that the operator removes while an earlier one is sent is not 
       [other, [stood?.word, "", "claude-cli:sonnet/high"]],
     ]);
   } finally {
-    session.host.sendQueued = send;
-    await session.dispose();
-  }
-});
-
-test("a follow-up that the operator removes while its files are read is not sent", async () => {
-  const session = await demoSession();
-  const engine = session.engine;
-  try {
-    session.queueHeld = true;
-    session.enqueue("Explain @README.md");
-    const [entry] = session.queued;
-    if (!entry) throw new Error("No follow-up.");
-    // The operator removes the follow-up as the read of its file starts.
-    const reading = new Proxy(engine, {
-      get(target, key) {
-        const value = Reflect.get(target, key);
-        if (key !== "rung") return value;
-        return (...args: Parameters<Engine["rung"]>) => {
-          if (session.queued.includes(entry)) session.removeQueued(entry.id);
-          return engine.rung(...args);
-        };
-      },
-    });
-    Object.assign(session, { engine: reading });
-    session.queueHeld = false;
-    await session.drainQueue();
-    Object.assign(session, { engine });
-    await idle(session);
-    await session.refresh();
-    expect(session.queued).toEqual([]);
-    expect(session.acts.some((act) => act.kind === "rung" && act.words[0] === 'read("README.md")')).toBe(
-      true,
-    );
-    expect(session.acts.filter((act) => session.isUserPrompt(act))).toEqual([]);
-  } finally {
-    Object.assign(session, { engine });
     await session.dispose();
   }
 });
