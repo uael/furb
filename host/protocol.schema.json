@@ -1059,6 +1059,38 @@
             "life": {
               "type": "string"
             },
+            "hidden": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "at": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "verb": {
+              "type": "string",
+              "const": "rail"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "The threads of every chain of a life but those it names, as one tree in the order of the\nlist of the threads, now or as they stood just after a moment."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
             "at": {
               "type": "integer",
               "format": "uint64",
@@ -2391,6 +2423,26 @@
             "data"
           ],
           "description": "The threads of a chain."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "rail"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ThreadNode"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "The threads of every chain of a life, as one tree."
         },
         {
           "type": "object",

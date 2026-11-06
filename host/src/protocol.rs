@@ -1,7 +1,7 @@
 //! The one protocol of the host: what a peer says to the daemon, and what the daemon says to a
 //! peer, each frame one line of JSON.
 
-use furb::view::{Act, Desk, Threads};
+use furb::view::{Act, Desk, ThreadNode, Threads};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -310,6 +310,14 @@ pub enum Verb {
     #[serde(default)]
     read: Option<u64>,
   },
+  /// The threads of every chain of a life but those it names, as one tree in the order of the
+  /// list of the threads, now or as they stood just after a moment.
+  Rail {
+    life: String,
+    #[serde(default)]
+    hidden: Vec<String>,
+    at: Option<u64>,
+  },
   /// The acts of a life as they stood just after a moment, each with its meaning then.
   AsOf {
     life: String,
@@ -374,6 +382,7 @@ impl Verb {
         | Self::Queued { .. }
         | Self::Desk { .. }
         | Self::Threads { .. }
+        | Self::Rail { .. }
         | Self::AsOf { .. }
         | Self::Moments { .. }
         | Self::Names { .. }
@@ -480,6 +489,8 @@ pub enum Answer {
   Desk(Desk),
   /// The threads of a chain.
   Threads(Threads),
+  /// The threads of every chain of a life, as one tree.
+  Rail(Vec<ThreadNode>),
   /// The acts as they stood at a moment.
   Acts(Vec<Act>),
   /// Each moment at which an act began or ended.

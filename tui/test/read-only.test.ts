@@ -257,6 +257,9 @@ test("a close in the record ends the work it closed without ending truncated wor
     expect(closed).toMatchObject({ done: true });
     expect(closed?.unfinished).toBeUndefined();
     expect(reader.activity.acts.get("rung2")).toMatchObject({ done: false, unfinished: true });
+    // The crate folds the end that the close gave too, so the thread that the close ended is over in the sidebar.
+    const [node] = reader.meaning.threads("chain1").threads;
+    expect([node?.thread.prompt, node?.thread.over, node?.state]).toEqual(["prompt1", true, "done"]);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

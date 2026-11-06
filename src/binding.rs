@@ -873,6 +873,17 @@ impl Meaning {
     meant(&self.held.threads(&chain, at, read))
   }
 
+  /// The threads of every chain of the life but those that `hidden` names, as one tree in the order
+  /// of the list of the threads, now or as they stood just after a moment.
+  #[cfg_attr(
+    feature = "typescript",
+    napi(ts_return_type = "Array<import(\"./dist/protocol.js\").ThreadNode>")
+  )]
+  pub fn rail(&self, hidden: Option<Vec<String>>, at: Option<i64>) -> Result<Value, Fault> {
+    let at = at.map(moment).transpose()?;
+    meant(&self.held.rail(&hidden.unwrap_or_default(), at))
+  }
+
   /// The acts as they stood just after a moment.
   #[cfg_attr(
     feature = "typescript",

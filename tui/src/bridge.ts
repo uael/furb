@@ -27,7 +27,7 @@ import {
   WINDOW,
 } from "furb";
 import { type Act, type Compaction, type Exit, isPaused, type Measure, type Spend } from "furb/life";
-import type { Config, FollowUp } from "furb/protocol";
+import type { Config, FollowUp, ThreadNode, Threads } from "furb/protocol";
 import { type Choices, daemon, type Listener, Refused, RemoteLife } from "./client.ts";
 import { clock } from "./clock.ts";
 import type { Setting } from "./configs.ts";
@@ -167,6 +167,14 @@ class ReadLife extends EventEmitter {
   }
   scope(id: string): string {
     return this.reader.activity.scope(id);
+  }
+  /** The threads of a chain as the crate folds them from the record, as the daemon folds them for a life that runs. */
+  async threads(on: string, at?: number, read?: number): Promise<Threads> {
+    return this.reader.meaning.threads(on, at, read);
+  }
+  /** The threads of every chain of the record but those that `hidden` names, as one tree, as the crate folds them. */
+  async rail(hidden: string[], at?: number): Promise<ThreadNode[]> {
+    return this.reader.meaning.rail(hidden, at);
   }
   get seenAt(): ReadonlyMap<string, number> {
     return this.reader.activity.seen;
@@ -897,6 +905,16 @@ export class HostView extends EventEmitter {
     }
   }
   /** An act whole, with all that a command printed, and nothing when the life holds no such act. */
+  /** The threads of a chain as the crate folds them, now or as they stood just after a moment, with the runs of its
+   * notes counted past the place up to which the window read it. */
+  async threads(chain: string, at?: number, read?: number): Promise<Threads> {
+    return await this.life.threads(chain, at, read);
+  }
+  /** The threads of every chain of the life but those that `hidden` names, as one tree in the order of the list of
+   * the threads, as the crate folds them, now or as they stood just after a moment. */
+  async rail(hidden: string[], at?: number): Promise<ThreadNode[]> {
+    return await this.life.rail(hidden, at);
+  }
   async act(id: string): Promise<Act | undefined> {
     if (!(this.life instanceof ReadLife)) return this.life.acts.get(id);
     const whole = this.life.reader.act(id);

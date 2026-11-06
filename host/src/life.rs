@@ -19,7 +19,7 @@ use furb::{
   Engine, Fact, Fault, Object, Text, checkpoint,
   life::{Log, Opening, Stream},
   verbs,
-  view::{Act, Desk, Fold, Held, Named, Threads},
+  view::{Act, Desk, Fold, Held, Named, ThreadNode, Threads},
   wire::{outward, parsed},
   world::{
     self, Shape, answered,
@@ -133,6 +133,9 @@ pub enum Command {
   /// moment. `read` is the place up to which the window read the chain, from which the runs of
   /// notes count the ones not yet read; none reads nothing.
   Threads { on: Option<String>, at: Option<u64>, read: Option<u64> },
+  /// The threads of every chain of the life but those it names, as one tree in the order of the
+  /// list of the threads, now or as they stood just after a moment.
+  Rail { hidden: Vec<String>, at: Option<u64> },
   /// The acts as they stood just after a moment, each with its meaning then.
   AsOf { at: u64 },
   /// Each moment at which an act began or ended, in order.
@@ -187,6 +190,8 @@ pub enum Reply {
   Desk(Desk),
   /// The threads of a chain.
   Threads(Threads),
+  /// The threads of every chain of the life, as one tree.
+  Rail(Vec<ThreadNode>),
   /// The acts as they stood at a moment.
   Acts(Vec<Act>),
   /// Each moment at which an act began or ended.
@@ -674,6 +679,7 @@ async fn commanded(
     Command::Threads { on, at, read } => {
       Ok(Reply::Threads(held.threads(&chain(on), at, read.unwrap_or_default())))
     }
+    Command::Rail { hidden, at } => Ok(Reply::Rail(held.rail(&hidden, at))),
     Command::AsOf { at } => Ok(Reply::Acts(held.as_of(at))),
     Command::Moments => Ok(Reply::Moments(held.moments())),
     Command::Settings => {

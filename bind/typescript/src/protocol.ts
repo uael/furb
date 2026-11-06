@@ -236,6 +236,12 @@ export type Request1 =
     }
   | {
       life: string;
+      hidden?: string[];
+      at?: number | null;
+      verb: "rail";
+    }
+  | {
+      life: string;
       at: number;
       verb: "as_of";
     }
@@ -528,6 +534,10 @@ export type Answer =
   | {
       answer: "threads";
       data: Threads;
+    }
+  | {
+      answer: "rail";
+      data: ThreadNode[];
     }
   | {
       answer: "acts";
