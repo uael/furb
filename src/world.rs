@@ -81,13 +81,13 @@ pub(crate) fn beside(record: &Path, suffix: &str) -> PathBuf {
 /// The bytes that a process may still write on the disk that holds a folder, none when the disk
 /// does not say.
 #[cfg(unix)]
-pub(crate) fn free(folder: &Path) -> Option<u64> {
+pub fn free(folder: &Path) -> Option<u64> {
   let stat = fs::statvfs(folder).ok()?;
   stat.f_bavail.checked_mul(stat.f_frsize)
 }
 
 #[cfg(not(unix))]
-pub(crate) fn free(_: &Path) -> Option<u64> {
+pub fn free(_: &Path) -> Option<u64> {
   None
 }
 
