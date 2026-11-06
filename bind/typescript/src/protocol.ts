@@ -1026,6 +1026,11 @@ export interface Act {
    */
   asking?: boolean;
   /**
+   * The messages of the operator that a chain with a source took from it, in their order: each
+   * prompt of the operator that the prefix of the chain carries, with the id it has on the source.
+   */
+  taken?: string[];
+  /**
    * How many facts the life had said when the act was made, which is its place in time.
    */
   began: number;

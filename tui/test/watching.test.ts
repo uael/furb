@@ -1,14 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
 import { demoSession, removeDemoDirectories, tour } from "../src/demo.ts";
-import {
-  asker,
-  branchMessages,
-  branchStart,
-  branchTakes,
-  plainActs,
-  stepName,
-  watchBar,
-} from "../src/watching.ts";
+import { asker, branchStart, branchTakes, plainActs, stepName, watchBar } from "../src/watching.ts";
 import { composing } from "./composing.ts";
 
 afterAll(removeDemoDirectories);
@@ -58,15 +50,6 @@ test("a branch says where it starts, with the files as they were, and the messag
     "It takes the message before it, with its answer.",
     "It takes the 2 messages before it, with their answers.",
   ]);
-  const acts = [
-    { id: "prompt1", chain: "chain1", began: 1 },
-    { id: "prompt2", chain: "chain1", began: 2 },
-    { id: "prompt3", chain: "chain1", began: 5 },
-    { id: "prompt4", chain: "chain2", began: 3 },
-  ];
-  // The word that made the branch names prompt2, which the branch leaves out, and prompt3 came after it.
-  const word = 'chain("Another way", "chain1", take("prompt2", inside=False))';
-  expect(branchMessages(acts, "chain1", { began: 4 }, word, () => true)).toBe(1);
 });
 
 test("the watch keeps its bar over the feed at 80x24, and no act runs at an earlier moment", async () => {

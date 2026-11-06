@@ -9,7 +9,7 @@ use crate::fact::named;
 use serde_json::Value;
 
 use super::{
-  act::{Act, Answer, Kind, Pause, Phase, RunState, Spend, fault},
+  act::{Act, Answer, Kind, Pause, Phase, RunState, Spend, fault, operator},
   state::{State, chain_state},
 };
 use crate::world::CONSOLE;
@@ -204,6 +204,7 @@ impl Fold {
       run,
       word: None,
       asking: false,
+      taken: Vec::new(),
       began: self.clock,
       ended: None,
       spend: None,
@@ -269,6 +270,22 @@ impl Fold {
           self.acts.get_mut(about).filter(|act| act.kind == Kind::Rung).zip(word)
         {
           act.word = Some(word.to_owned());
+          self.moved.push(about.to_owned());
+        }
+      }
+      "prefix" => {
+        let carried = fact.get(3).and_then(Value::as_array).map_or(&[][..], Vec::as_slice);
+        let mut taken: Vec<String> = Vec::new();
+        for entry in carried {
+          let text = |at: usize| entry.get(at).and_then(Value::as_str).unwrap_or_default();
+          let (kind, id) = (text(0), text(1));
+          let message = kind == "prompt" && named(id, kind) && operator(text(2));
+          if message && !taken.iter().any(|one| one == id) {
+            taken.push(id.to_owned());
+          }
+        }
+        if let Some(chain) = self.acts.get_mut(about).filter(|act| act.kind == Kind::Chain) {
+          chain.taken = taken;
           self.moved.push(about.to_owned());
         }
       }

@@ -15,6 +15,7 @@ fn act(kind: &str, id: &str, by: &str, words: &[Value], phase: Phase) -> Event {
     phase,
     operator: false,
     asking: false,
+    taken: Vec::new(),
     pause: None,
     run: None,
     word: None,
