@@ -98,6 +98,9 @@ pub enum ProtocolError {
   /// A turn for a life whose models no peer answers.
   #[error("no peer answers the models of the life on the record {life}")]
   Answerless { life: String },
+  /// An open with `answers` of a life whose models a peer that lives answers already.
+  #[error("a peer that lives answers the models of the life on the record {life}")]
+  Answering { life: String },
   /// A frame of a view that only a window says, or only a skill, and the peer is of another kind.
   #[error("the verb is said by a peer of the kind {needs:?}, and the peer is of the kind {has:?}")]
   Speaker { needs: Kind, has: Kind },

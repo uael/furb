@@ -1,9 +1,10 @@
 //! The models of a life that a peer answers in their place, as a demo or a test of a window does:
 //! each request of a model goes to that peer as a frame, and its turn comes back as a verb.
 //!
-//! The peer that opened the life with `answers` owns each request for the whole life, by its
-//! connection: no other peer gives a turn or a write for it, and no later open moves it, since an
-//! open of a life that lives changes nothing. A request leaves the broker when its turn comes, when
+//! The peer that opened the life with `answers` owns each request, by its connection: no other
+//! peer gives a turn or a write for it. Once that peer is gone, the next peer that opens the life
+//! with `answers` answers each later request in its place, and an open with `answers` is refused
+//! while it lives. A request leaves the broker when its turn comes, when
 //! the life drops it, or when the connection of its peer ends; a turn or a write that comes after
 //! is refused, and the peer is not told that the life dropped the request.
 
@@ -28,14 +29,13 @@ const GONE: &str = "the window that answers the models of this life is gone";
 #[derive(Clone)]
 pub(crate) struct Answerer {
   life: String,
-  outbox: Outbox,
   waiting: Arc<Mutex<Waiting>>,
 }
 
-/// The requests that wait for a turn, by their number, each with what it tells as the peer
-/// writes.
-#[derive(Default)]
+/// The peer that answers now, and the requests that wait for a turn, by their number, each with
+/// what it tells as the peer writes.
 struct Waiting {
+  outbox: Outbox,
   next: u64,
   asks: HashMap<u64, (oneshot::Sender<Result<Object, String>>, Told)>,
 }
@@ -43,7 +43,24 @@ struct Waiting {
 impl Answerer {
   /// The peer of an outbox, as the answerer of the models of a life.
   pub(crate) fn new(life: String, outbox: Outbox) -> Self {
-    Answerer { life, outbox, waiting: Arc::default() }
+    let waiting = Waiting { outbox, next: 0, asks: HashMap::new() };
+    Answerer { life, waiting: Arc::new(Mutex::new(waiting)) }
+  }
+
+  /// The peer of an outbox as the one that answers, in the place of a peer that is gone, or the
+  /// refusal that the one that answers lives.
+  pub(crate) fn taken_by(&self, outbox: &Outbox) -> Result<(), ProtocolError> {
+    let mut waiting = self.lock();
+    if !waiting.outbox.same_channel(outbox) && !waiting.outbox.is_closed() {
+      return Err(ProtocolError::Answering { life: self.life.clone() });
+    }
+    waiting.outbox = outbox.clone();
+    Ok(())
+  }
+
+  /// The outbox of the peer that answers now.
+  pub(crate) fn outbox(&self) -> Outbox {
+    self.lock().outbox.clone()
   }
 
   /// The function that stands in for the models of the life: it asks the peer, and waits for its
@@ -52,11 +69,13 @@ impl Answerer {
     let answerer = self.clone();
     Arc::new(move |request: Value, told: Told| {
       let (reply, replied) = oneshot::channel();
-      let pending =
-        Pending { ask: answerer.lock().put(reply, told), waiting: Arc::clone(&answerer.waiting) };
-      let frame = Frame::Ask { life: answerer.life.clone(), ask: pending.ask, request };
-      let sent = answerer.outbox.send(frame).is_ok();
-      let outbox = answerer.outbox.clone();
+      let (ask, outbox) = {
+        let mut waiting = answerer.lock();
+        (waiting.put(reply, told), waiting.outbox.clone())
+      };
+      let pending = Pending { ask, waiting: Arc::clone(&answerer.waiting) };
+      let frame = Frame::Ask { life: answerer.life.clone(), ask, request };
+      let sent = outbox.send(frame).is_ok();
       Box::pin(async move {
         let _pending = pending;
         if !sent {
@@ -100,7 +119,7 @@ impl Answerer {
 
   /// Whether the peer of an outbox is the one that answers, which alone speaks for a request.
   fn owns(&self, by: &Outbox, ask: u64) -> Result<(), ProtocolError> {
-    if self.outbox.same_channel(by) {
+    if self.lock().outbox.same_channel(by) {
       Ok(())
     } else {
       Err(ProtocolError::Foreign { life: self.life.clone(), ask })
