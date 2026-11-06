@@ -180,3 +180,12 @@ def test_the_records_of_a_capture_keep_the_pinned_record_at_its_pinned_size(tmp_
   subprocess.run([sys.executable, "-I", str(SKILL / "records.py"), str(source), str(out), "1", "1000"], check=True)
   assert json.loads((out / "records.json").read_text(encoding="utf-8")) == {"old.jsonl": 8}
   assert (out / "records" / "old.jsonl").read_bytes() == b"one\ntwo\n"
+
+
+def test_a_capture_of_the_walk_comes_with_the_action_that_led_to_it(tmp_path: Path) -> None:
+  now = {"walk/life-03": (b"one", grid("Main", "row")), "demo/01-welcome": (b"two", grid("Welcome"))}
+  (tmp_path / "out" / "head" / "walk").mkdir(parents=True)
+  (tmp_path / "out" / "head" / "walk" / "life-03.txt").write_text("press ⌃P (Search all actions)", encoding="utf-8")
+  changes = {one["name"]: one for one in shoot(tmp_path, {}, now)["changed"]}
+  assert changes["walk/life-03"]["action"] == "press ⌃P (Search all actions)"
+  assert "action" not in changes["demo/01-welcome"]

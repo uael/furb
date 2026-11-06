@@ -1,6 +1,8 @@
 #!/bin/sh
 # Capture the TUI of origin/main in the tree that this script runs in: the gallery of the demo and the newest records of
 # the project, each a PNG with the cells of its frame, in <out>/head, after a build that takes a slot of the machine.
+# Then walk it as a person does, with keys, clicks and sizes, on a life of a scripted model and on those records, which
+# needs the program furb: each step of the walk is a capture of <out>/head/walk, and walk.json holds what its probes found.
 # Usage: sh capture.sh <main checkout> <out> [<records.json of the last capture>]
 # That records.json pins the records and the size of each, so that a capture changes only with the code.
 repo=$1 out=$2 pins=${3:-} here=$(dirname "$0")
@@ -16,3 +18,5 @@ python3 -I "$here/records.py" "$repo/.furb/sessions" "$out" 3 160000000 >"$out/r
 export FURB_GALLERY_ROOT="$out/gallery" FURB_STILL_CLOCK=1767225600000
 FURB_GALLERY_OUT="$at/demo" FURB_GALLERY_CELLS="$at/demo" bun run screenshots >"$at/demo.log" 2>&1 || fail head demo "$at/demo.log"
 FURB_CONVERGE_OUT="$at/life" FURB_CONVERGE_RECORDS="$(ls "$out"/records/*.jsonl 2>/dev/null)" bun run tui/script/converge-capture.ts >"$at/life.log" 2>&1 || fail head life "$at/life.log"
+{ sh script/build-slot.sh cargo build -p furb-cli; } >"$at/furb.log" 2>&1 || { fail head furb "$at/furb.log"; exit 0; }
+FURB_WALK_OUT="$at/walk" FURB_CONVERGE_RECORDS="$(ls "$out"/records/*.jsonl 2>/dev/null)" bun run tui/script/converge-walk.ts >"$at/walk.log" 2>&1 || fail head walk "$at/walk.log"
