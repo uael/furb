@@ -103,6 +103,20 @@ test("a follow-up that an older ui.json holds goes to the queue of the life, onc
   }
 });
 
+test("the setup of a demo life reads the doctrine of its own project, and no path of a home", async () => {
+  const session = await demoSession();
+  try {
+    const read = session.acts.find(
+      (act) => act.kind === "rung" && act.by === session.engine.root && /^read\(/.test(String(act.word)),
+    );
+    const path = /^read\('(.*)'\)$/.exec(String(read?.word))?.[1] ?? "";
+    // The engine writes a path under the home folder with a ~, so the project is known by its name and its folder.
+    expect(path.endsWith(join(basename(session.host.directory), ".furb", "DOCTRINE.md"))).toBe(true);
+  } finally {
+    await session.dispose();
+  }
+});
+
 test("a session that cannot save its view still lets its life go, which ends in the daemon of the tests with its command", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-dispose-"));
   const record = join(directory, "life.jsonl");
