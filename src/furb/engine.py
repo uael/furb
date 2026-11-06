@@ -727,7 +727,7 @@ def bash(
     stdin,
     timeout,
     ok,
-    *[show, show_err] * ((show, show_err) != (TAIL, None)),
+    *[None if callable(one) else one for one in (show, show_err)] * ((show, show_err) != (TAIL, None)),
   )
 
 
