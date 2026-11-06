@@ -8,11 +8,11 @@ use std::{
 };
 
 use super::{
-  Extension, Part, Places, configs, configured, definitions, enabled, extensions, frontmatter,
-  load, parts, projected, reloads, skills::process, telling, word,
+  Enabled, Extension, Part, Places, configs, configured, definitions, enabled, enabled_by,
+  extensions, frontmatter, load, parts, projected, reloads, skills::process, telling, word,
 };
 use crate::testing::Yard;
-use crate::value::entry;
+use crate::value::{ObjectRef, entry};
 use crate::{
   Ear, Engine, Fact, Object,
   ear::{ear, hear, say},
@@ -1020,4 +1020,21 @@ fn a_write_of_the_local_config_of_the_project_turns_on_each_extension_that_it_gi
     .write(&crate::value::Text::new(file, text), verbs::Write { on: Some("chain1".to_owned()) })
     .unwrap();
   assert_eq!(enables(&at), [NOTE.to_owned()]);
+}
+#[test]
+fn a_fact_enable_gives_the_name_of_its_skill_and_the_program_that_it_names() {
+  let one = note("x = 1");
+  let said = |fact: Fact| {
+    let held = fact.0.as_ref().items().unwrap();
+    let mut told = vec![held[0].to_owned(), held[1].to_owned(), Object::string("extensions")];
+    told.extend(held[2..].iter().map(ObjectRef::to_owned));
+    Fact(Object::tuple(told))
+  };
+  let has = |program: Option<&str>| {
+    Some(Enabled { name: "note".to_owned(), program: program.map(str::to_owned) })
+  };
+  assert_eq!(enabled_by(&said(one.enable())), has(None));
+  assert_eq!(enabled_by(&said(one.played("tui.ts"))), has(Some("tui.ts")));
+  assert_eq!(enabled_by(&said(one.played(""))), has(Some("")));
+  assert_eq!(enabled_by(&said(Fact::says("tell", "chain1", [Object::string("note")]))), None);
 }
