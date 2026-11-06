@@ -25,7 +25,7 @@ use crate::{
   ear::{hear, hearing, lasting},
   engine::OPERATOR,
   extension::{self, Places, skills::skills},
-  world::{self, Catalog, Retries, Scratch, Writes, mcp::mcp},
+  world::{self, Catalog, Mode, Retries, Scratch, Writes, mcp::mcp},
 };
 
 /// The ears of a life, each under the name the engine hears it by, in the order of boot.
@@ -244,7 +244,7 @@ impl Opening {
       .transpose()?;
     let gallery = self.gallery();
     let project = PathBuf::from(&self.directory);
-    let provider = provider.held(!works && checkpoint::stood(record)).ear();
+    let provider = provider.mode(Mode::of(works, checkpoint::stood(record))).ear();
     let working = |made: Option<Box<dyn Ear>>| made.unwrap_or_else(silent);
     let config = places.config.clone();
     // An ear that holds nothing that a fresh one lacks starts again after it raises.
@@ -380,7 +380,7 @@ impl Opening {
         Ok(candidate.into_settings())
       })
     }));
-    provider = provider.advertises(advertised).inspecting(!works).config(user);
+    provider = provider.advertises(advertised).config(user);
     if let Some(gallery) = gallery {
       provider = provider.images(gallery);
     }

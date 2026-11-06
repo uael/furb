@@ -32,6 +32,8 @@ use crate::{
   value::{field, paired},
   wire,
 };
+use std::mem;
+use sys::Status;
 
 /// How a value of JavaScript goes in where the contract says its type: as it is; as it is with a null that goes in
 /// as None, where the type holds None beside a default of its own; as a text, which JavaScript writes as its path and
@@ -70,14 +72,14 @@ fn call<'env>(
   let status = unsafe {
     sys::napi_call_function(env.raw(), this, f.raw(), args.len(), args.as_ptr(), &raw mut got)
   };
-  if status == sys::Status::napi_pending_exception {
+  if status == Status::napi_pending_exception {
     let mut thrown = ptr::null_mut();
     // SAFETY: an exception is pending in this env, which this takes and clears.
     unsafe { sys::napi_get_and_clear_last_exception(env.raw(), &raw mut thrown) };
     // SAFETY: the thrown value is one of this env.
     return Err(fault(*env, unsafe { Unknown::from_raw_unchecked(env.raw(), thrown) }));
   }
-  if status != sys::Status::napi_ok {
+  if status != Status::napi_ok {
     return Err(Fault::refused(format!("a call of JavaScript failed: {status}")));
   }
   // SAFETY: the value the call gave is one of this env.
@@ -364,9 +366,9 @@ pub(crate) struct Held {
 }
 
 impl Held {
-  pub(crate) fn new(env: Env, engine: Engine) -> napi::Result<Rc<Held>> {
+  pub(crate) fn new(env: Env, engine: Engine) -> napi::Result<Rc<Self>> {
     // The function that drives the engine is made before what it drives, which it is given once that stands.
-    let slot: Rc<RefCell<Weak<Held>>> = Rc::default();
+    let slot: Rc<RefCell<Weak<Self>>> = Rc::default();
     let driven = Rc::clone(&slot);
     let drive = env.create_function_from_closure("drive", move |_| {
       let held = driven.borrow().upgrade();
@@ -377,7 +379,7 @@ impl Held {
     })?;
     let wakes =
       drive.build_threadsafe_function::<()>().callee_handled::<false>().weak::<true>().build()?;
-    let held = Rc::new(Held {
+    let held = Rc::new(Self {
       engine: RefCell::new(Some(engine)),
       env,
       pending: RefCell::default(),
@@ -402,7 +404,7 @@ impl Held {
   /// Each awaited result that came settles its promise, and JavaScript is kept alive while it awaits a result, and
   /// let go when it awaits none.
   fn kept(&self) {
-    let pending = std::mem::take(&mut *self.pending.borrow_mut());
+    let pending = mem::take(&mut *self.pending.borrow_mut());
     for mut one in pending {
       match (&mut one.came).now_or_never() {
         None => self.pending.borrow_mut().push(one),

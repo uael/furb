@@ -21,6 +21,8 @@ use crate::{
   fact::named,
   value::{Fault, Object, Text, hex},
 };
+use std::env;
+use std::process;
 
 /// The scheme of the paths of the scratch directory.
 pub const SCRATCH: &str = "scratch://";
@@ -53,20 +55,20 @@ impl Drop for Held {
 impl Scratch {
   /// The scratch directory at a path, resolved against the working directory of the process, which outlives the
   /// life. It is refused when the path is relative and the process has no working directory.
-  pub fn at(path: impl Into<PathBuf>) -> Result<Scratch, Fault> {
-    absolute(&path.into()).map(Scratch::kept)
+  pub fn at(path: impl Into<PathBuf>) -> Result<Self, Fault> {
+    absolute(&path.into()).map(Self::kept)
   }
 
   /// The scratch directory at an absolute path, which outlives the life.
-  fn kept(at: PathBuf) -> Scratch {
-    Scratch(Arc::new(Held { at, owned: false }))
+  fn kept(at: PathBuf) -> Self {
+    Self(Arc::new(Held { at, owned: false }))
   }
 
   /// The scratch directory of a record: in the cache of furb, under the digest of the canonical path of the record,
   /// so every later life on that record finds it again, however the path is spelled, and its path stays short enough
   /// for a socket that a command makes in it. Nothing when the machine has no cache of furb, and
   /// a refusal when the record is a relative path and the process has no working directory.
-  pub fn of(record: &Path) -> Result<Option<Scratch>, Fault> {
+  pub fn of(record: &Path) -> Result<Option<Self>, Fault> {
     let path = absolute(record)?;
     let path = match (path.parent(), path.file_name()) {
       (Some(folder), Some(name)) => {
@@ -75,20 +77,20 @@ impl Scratch {
       _ => path,
     };
     let digest = Sha256::digest(path.to_string_lossy().as_bytes());
-    Ok(cache().map(|cache| Scratch::kept(cache.join("scratch").join(hex(&digest[..8])))))
+    Ok(cache().map(|cache| Self::kept(cache.join("scratch").join(hex(&digest[..8])))))
   }
 
   /// A scratch directory of its own, in the temporary directory of the machine under a short name, which goes when
   /// the life does. The name is drawn, or made of the process and the time when the system draws nothing.
-  pub fn own() -> Scratch {
+  pub fn own() -> Self {
     let mut drawn = [0u8; 4];
     if getrandom::fill(&mut drawn).is_err() {
       let now =
         SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |since| since.subsec_nanos());
-      drawn = (std::process::id() ^ now).to_le_bytes();
+      drawn = (process::id() ^ now).to_le_bytes();
     }
-    let at = std::env::temp_dir().join(format!("furb-{}", hex(&drawn)));
-    Scratch(Arc::new(Held { at, owned: true }))
+    let at = env::temp_dir().join(format!("furb-{}", hex(&drawn)));
+    Self(Arc::new(Held { at, owned: true }))
   }
 
   /// The directory on the machine.
@@ -153,7 +155,7 @@ impl Scratch {
     files.sort();
     let mut name = at.file_name().unwrap_or_default().to_os_string();
     name.push(".new");
-    let beside = Scratch::kept(at.with_file_name(name));
+    let beside = Self::kept(at.with_file_name(name));
     gone(beside.path(), log);
     if let Err(no) = beside.made() {
       log(&format!("the scratch directory of the record was not made again: {}", no.message()));
@@ -292,7 +294,7 @@ fn absolute(path: &Path) -> Result<PathBuf, Fault> {
   let here = if path.is_absolute() {
     PathBuf::new()
   } else {
-    std::env::current_dir().map_err(|no| {
+    env::current_dir().map_err(|no| {
       Fault::refused(format!(
         "The working directory could not be read for {}: {no}",
         path.display()

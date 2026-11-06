@@ -14,10 +14,14 @@ use super::{
   Advertised, Hosted, Told, answer::streamed, catalog, images::Images, messages::messages,
   search::Searches, thinking::Thought,
 };
+use crate::extension;
+use crate::world::files;
 use crate::{
   engine::{OPERATOR, WINDOW},
   value::{Object, ObjectRef},
 };
+use std::env;
+use std::fs;
 
 /// What streams one response of a model of rig, whatever model it is.
 pub(super) type Streams = Arc<
@@ -72,16 +76,16 @@ impl Class {
   /// The name of the class, as the roster, the catalog and `.furb/config.json` say it.
   pub fn name(self) -> &'static str {
     match self {
-      Class::Cheap => "cheap",
-      Class::Dear => "dear",
+      Self::Cheap => "cheap",
+      Self::Dear => "dear",
     }
   }
 
   /// The class of a name, and nothing for another word.
-  pub fn named(name: &str) -> Option<Class> {
+  pub fn named(name: &str) -> Option<Self> {
     match name {
-      "cheap" => Some(Class::Cheap),
-      "dear" => Some(Class::Dear),
+      "cheap" => Some(Self::Cheap),
+      "dear" => Some(Self::Dear),
       _ => None,
     }
   }
@@ -111,8 +115,8 @@ pub(super) struct Configured {
 /// word that names no class, and a name of the list that is no string, give nothing.
 pub(super) fn configured(user: &Path, directory: &Path) -> Configured {
   let mut given = Configured::default();
-  for file in crate::extension::configs(user, directory) {
-    let Ok(text) = std::fs::read_to_string(file) else { continue };
+  for file in extension::configs(user, directory) {
+    let Ok(text) = fs::read_to_string(file) else { continue };
     let Ok(config) = serde_json::from_str::<Value>(&text) else { continue };
     for (name, class) in config.get(KEY_CLASSES).and_then(Value::as_object).into_iter().flatten() {
       if let Some(class) = class.as_str().and_then(Class::named) {
@@ -178,12 +182,12 @@ pub struct Model {
 
 impl Model {
   /// A model of rig under a name, with the window it reads, and no effort yet.
-  pub fn new<M>(name: impl Into<String>, window: u64, model: M) -> Model
+  pub fn new<M>(name: impl Into<String>, window: u64, model: M) -> Self
   where
     M: CompletionModel + 'static,
   {
     let streams = streams(model);
-    Model::lazy(name, window, move || Ok(Arc::clone(&streams)))
+    Self::lazy(name, window, move || Ok(Arc::clone(&streams)))
   }
 
   /// A model of rig that is made when it is first asked, or the reason it cannot be.
@@ -191,12 +195,12 @@ impl Model {
     name: impl Into<String>,
     window: u64,
     made: impl Fn() -> Result<Streams, CompletionError> + Send + Sync + 'static,
-  ) -> Model {
+  ) -> Self {
     let answers: Answers = Arc::new(move |asked| {
       let made = made();
       Box::pin(async move { Ok(Answer::Response(Box::new(streamed(made?, asked).await?))) })
     });
-    Model {
+    Self {
       name: name.into(),
       window,
       efforts: Vec::new(),
@@ -221,7 +225,7 @@ impl Model {
   /// additional parameters: a budget of thinking for one provider, an effort of reasoning for
   /// another.
   #[must_use]
-  pub fn effort(mut self, name: impl Into<String>, settings: Value) -> Model {
+  pub fn effort(mut self, name: impl Into<String>, settings: Value) -> Self {
     let settings = match settings {
       Value::Object(settings) => settings,
       _ => Map::new(),
@@ -233,7 +237,7 @@ impl Model {
   /// The setting that carries the conversation of a reply, the chain of this life, which a provider
   /// keeps a conversation or a cache by.
   #[must_use]
-  pub fn conversation(mut self, key: impl Into<String>) -> Model {
+  pub fn conversation(mut self, key: impl Into<String>) -> Self {
     self.conversation = Some(key.into());
     self
   }
@@ -241,28 +245,28 @@ impl Model {
   /// What the model costs, in dollars for a million tokens: read, written, read from the cache, and
   /// written to it.
   #[must_use]
-  pub fn price(mut self, input: f64, output: f64, read: f64, wrote: f64) -> Model {
+  pub fn price(mut self, input: f64, output: f64, read: f64, wrote: f64) -> Self {
     self.price = Some([input, output, read, wrote]);
     self
   }
 
   /// The model takes the images that a turn names.
   #[must_use]
-  pub fn images(mut self) -> Model {
+  pub fn images(mut self) -> Self {
     self.images = true;
     self
   }
 
   /// The model, whose provider searches the web with this search.
   #[must_use]
-  pub fn searches(mut self, search: Searches) -> Model {
+  pub fn searches(mut self, search: Searches) -> Self {
     self.search = Some(search);
     self
   }
 
   /// The same model, whose turns a function of the host answers in place of the model.
   #[must_use]
-  pub fn hosted(mut self, host: Hosted) -> Model {
+  pub fn hosted(mut self, host: Hosted) -> Self {
     self.hosted = true;
     self.answers = Arc::new(move |asked| {
       let Asked { actor, chain, request, told, .. } = asked;
@@ -323,7 +327,7 @@ impl Model {
 
   /// The model, of a class that the catalog gives, which its price no longer gives.
   #[must_use]
-  pub fn classed(mut self, class: Class) -> Model {
+  pub fn classed(mut self, class: Class) -> Self {
     self.class = Some(class);
     self
   }
@@ -382,8 +386,8 @@ pub(super) fn standing(
     Object::string(Class::Cheap.name()),
   ]);
   let roster = Object::list(offered.chain([operator]));
-  let home = std::env::home_dir();
-  let shown = |one: &Path| Object::string(crate::world::files::tilded(one, home.as_deref()));
+  let home = env::home_dir();
+  let shown = |one: &Path| Object::string(files::tilded(one, home.as_deref()));
   let doctrine = catalog::doctrine(Path::new(directory)).map(|one| shown(&one));
   let given = |all: &[Advertised]| {
     Object::list(all.iter().map(|(name, file, life, root)| {

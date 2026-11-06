@@ -5,6 +5,7 @@ use std::{fs, path::PathBuf};
 use super::{retold, told};
 use crate::testing::Yard;
 use crate::{value::Object, wire::parsed};
+use std::process;
 
 /// The facts of lines of JSON, as a record keeps them.
 fn facts(lines: &[&str]) -> Vec<Object> {
@@ -28,7 +29,7 @@ fn filed(read: &super::Retold) -> Vec<Object> {
 
 /// A record of its own for one test, which does not stand yet.
 fn place(name: &str) -> Yard {
-  Yard::new(format!("furb-reader-{name}-{}", std::process::id())).within("record.jsonl")
+  Yard::new(format!("furb-reader-{name}-{}", process::id())).within("record.jsonl")
 }
 
 /// The opening of a life: its root chain, a prompt of the operator on it, and the reply that rung1 asked for.

@@ -26,6 +26,12 @@ use crate::{
   extension::Places,
   world::disk::{self, Access},
 };
+use serde::de;
+use std::env;
+use std::io;
+use tokio::net;
+use tokio::task;
+use tokio::time;
 
 /// The provider of models paid for by a `ChatGPT` subscription.
 pub const NAME: &str = "codex";
@@ -100,7 +106,7 @@ pub enum AuthError {
   #[error("The credential has no directory")]
   NoDirectory,
   #[error("{0}")]
-  Io(#[from] std::io::Error),
+  Io(#[from] io::Error),
   #[error("{0}")]
   Json(#[from] serde_json::Error),
   #[error("{0}")]
@@ -108,7 +114,7 @@ pub enum AuthError {
   #[error("{0}")]
   Write(#[from] disk::Error),
   #[error("{0}")]
-  Task(#[from] tokio::task::JoinError),
+  Task(#[from] task::JoinError),
   #[error("{0}")]
   Url(#[from] url::ParseError),
   #[error("{0}")]
@@ -134,7 +140,7 @@ pub enum AuthError {
   #[error("This ChatGPT account offers no model to furb")]
   NoModels,
   #[error("Another OpenAI sign-in uses port 1455. Finish it, then try again.")]
-  PortBusy(#[source] std::io::Error),
+  PortBusy(#[source] io::Error),
   #[error("Sign-in canceled")]
   Canceled,
   #[error("OpenAI sign-in was canceled or timed out")]
@@ -229,7 +235,7 @@ fn flows() -> MutexGuard<'static, HashMap<PathBuf, Flow>> {
   FLOWS.get_or_init(Mutex::default).lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-fn read<T: serde::de::DeserializeOwned>(path: &Path) -> Option<T> {
+fn read<T: de::DeserializeOwned>(path: &Path) -> Option<T> {
   serde_json::from_slice(&fs::read(path).ok()?).ok()
 }
 
@@ -261,9 +267,9 @@ fn account(access: &str) -> Option<String> {
 }
 
 fn borrowed() -> Option<Credential> {
-  let home = std::env::var_os("CODEX_HOME").map(PathBuf::from).or_else(|| {
-    std::env::var_os("HOME")
-      .or_else(|| std::env::var_os("USERPROFILE"))
+  let home = env::var_os("CODEX_HOME").map(PathBuf::from).or_else(|| {
+    env::var_os("HOME")
+      .or_else(|| env::var_os("USERPROFILE"))
       .map(|one| PathBuf::from(one).join(".codex"))
   })?;
   let value: Value = read(&home.join("auth.json"))?;
@@ -371,7 +377,7 @@ pub(super) async fn credential(path: &Path) -> Result<Credential, AuthError> {
   }
   fs::create_dir_all(path)?;
   let path_of_lock = path.join("codex.lock");
-  let _lock = tokio::task::spawn_blocking(move || -> Result<File, AuthError> {
+  let _lock = task::spawn_blocking(move || -> Result<File, AuthError> {
     let file = File::options().create(true).truncate(false).write(true).open(path_of_lock)?;
     file.lock()?;
     Ok(file)
@@ -551,14 +557,14 @@ async fn callback_code(
   state: &str,
   mut canceled: watch::Receiver<bool>,
 ) -> Result<String, AuthError> {
-  let listener = tokio::net::TcpListener::from_std(listener)?;
+  let listener = net::TcpListener::from_std(listener)?;
   let heard = async {
     loop {
       let (mut stream, _) = listener.accept().await?;
       let mut bytes = [0; 8192];
       let mut count = 0;
       while count < bytes.len() && !bytes[..count].windows(4).any(|part| part == b"\r\n\r\n") {
-        let read = tokio::time::timeout(Duration::from_secs(2), stream.read(&mut bytes[count..]));
+        let read = time::timeout(Duration::from_secs(2), stream.read(&mut bytes[count..]));
         match read.await {
           Ok(Ok(0)) | Err(_) => break,
           Ok(Ok(read)) => count += read,
@@ -599,7 +605,7 @@ async fn callback_code(
     }
   };
   tokio::select! {
-    got = tokio::time::timeout(Duration::from_secs(600), heard) => got.unwrap_or(Err(AuthError::Ended)),
+    got = time::timeout(Duration::from_secs(600), heard) => got.unwrap_or(Err(AuthError::Ended)),
     _ = canceled.wait_for(|one| *one) => Err(AuthError::Ended),
   }
 }

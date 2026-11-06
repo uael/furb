@@ -57,6 +57,7 @@ use super::{
   local::{self, ENV_URL, Heard, LOCAL, Server},
   search,
 };
+use crate::ear;
 use crate::world::{
   cache,
   disk::{self, Access},
@@ -227,8 +228,8 @@ struct Offer {
 }
 
 impl Offer {
-  fn new(model: Model, offered: bool) -> Offer {
-    Offer { model, offered }
+  fn new(model: Model, offered: bool) -> Self {
+    Self { model, offered }
   }
 }
 
@@ -290,12 +291,12 @@ impl Catalog {
   /// line when it finds one, and the local server that the environment of the process names, one for the process, so
   /// what it listed holds for every catalog after. A cache a day old is refreshed in the background, for the next
   /// life, when the host has called [`keep_fresh`].
-  pub fn load() -> Catalog {
-    blocking(Catalog::loaded())
+  pub fn load() -> Self {
+    blocking(Self::loaded())
   }
 
   /// The catalog of this machine, as [`Catalog::load`] gives it, for a caller that awaits.
-  pub async fn loaded() -> Catalog {
+  pub async fn loaded() -> Self {
     static SERVER: OnceLock<Option<Arc<Server>>> = OnceLock::new();
     let env = |name: &str| env::var(name).ok();
     let server = SERVER.get_or_init(|| Server::named(env).map(Arc::new)).clone();
@@ -308,7 +309,7 @@ impl Catalog {
       }
       None => None,
     };
-    let mut catalog = Catalog::of(&listed, claude, server, env);
+    let mut catalog = Self::of(&listed, claude, server, env);
     catalog.providers.push(Entry {
       name: super::codex::NAME.to_owned(),
       env: Vec::new(),
@@ -321,13 +322,13 @@ impl Catalog {
   /// it offers, and whose turn may go with no progress for the stall; and the catalog as it stands when neither is
   /// given, or when it finds no program.
   #[must_use]
-  pub fn claude(self, bin: Option<PathBuf>, stall: Option<Duration>) -> Catalog {
+  pub fn claude(self, bin: Option<PathBuf>, stall: Option<Duration>) -> Self {
     blocking(self.discovered(bin, stall))
   }
 
   /// The catalog with the claude command line, as [`Catalog::claude`] gives it, for a caller that
   /// awaits.
-  pub async fn discovered(self, bin: Option<PathBuf>, stall: Option<Duration>) -> Catalog {
+  pub async fn discovered(self, bin: Option<PathBuf>, stall: Option<Duration>) -> Self {
     let Some(bin) = bin.or_else(|| stall.and_then(|_| claude::located())) else { return self };
     let claude = Claude::with(Some(bin), stall);
     let found = Some(claude.clone());
@@ -336,7 +337,7 @@ impl Catalog {
     let mut models: Vec<_> =
       claude.models().await.into_iter().map(|model| Offer::new(model, true)).collect();
     models.extend(network);
-    Catalog { models, claude: found, ..self }
+    Self { models, claude: found, ..self }
   }
 
   /// The catalog of the claude command line, which it offers when it found the program, of these providers, each model
@@ -347,7 +348,7 @@ impl Catalog {
     claude: Option<(Claude, Vec<Model>)>,
     local: Option<Arc<Server>>,
     env: impl Fn(&str) -> Option<String>,
-  ) -> Catalog {
+  ) -> Self {
     let env = |name: &str| env(name).filter(|one| !one.is_empty());
     let found = claude.is_some();
     let (kept, claude) = match claude {
@@ -366,7 +367,7 @@ impl Catalog {
         models.push(Offer::new(model(provider, id, listing, client, reach), offered));
       }
     }
-    Catalog { models, providers, local, thinking: env(super::ENV_THINKING), claude: kept }
+    Self { models, providers, local, thinking: env(super::ENV_THINKING), claude: kept }
   }
 
   /// What a first run checks: the claude command line, each provider of the network, and the local server, which it
@@ -625,7 +626,7 @@ impl Catalog {
             awaits, until the design of the host (#983) makes those doors async"
 )]
 pub(crate) fn blocking<T>(work: impl Future<Output = T>) -> T {
-  crate::ear::runtime().block_on(work)
+  ear::runtime().block_on(work)
 }
 
 /// The roster and the actor that a catalog still holds of what a host named, and the names that
@@ -794,8 +795,8 @@ struct Credential {
 }
 
 impl Credential {
-  fn bare(key: String) -> Credential {
-    Credential { key, bearer: false }
+  fn bare(key: String) -> Self {
+    Self { key, bearer: false }
   }
 }
 
@@ -892,13 +893,13 @@ impl Client {
   /// Anthropic does, and GitHub Copilot and the other models of Amazon read none.
   fn dialect(self, id: &str) -> Dialect {
     match self {
-      Client::Anthropic => Dialect::Anthropic,
-      Client::Bedrock if id.contains("anthropic.") => Dialect::Anthropic,
-      Client::Openai | Client::Xai => Dialect::Responses,
-      Client::Gemini | Client::Vertex => Dialect::Gemini,
-      Client::Openrouter => Dialect::OpenRouter,
-      Client::Pi => Dialect::Pi,
-      Client::Bedrock | Client::Copilot => Dialect::Silent,
+      Self::Anthropic => Dialect::Anthropic,
+      Self::Bedrock if id.contains("anthropic.") => Dialect::Anthropic,
+      Self::Openai | Self::Xai => Dialect::Responses,
+      Self::Gemini | Self::Vertex => Dialect::Gemini,
+      Self::Openrouter => Dialect::OpenRouter,
+      Self::Pi => Dialect::Pi,
+      Self::Bedrock | Self::Copilot => Dialect::Silent,
       _ => Dialect::Chat,
     }
   }

@@ -1,5 +1,6 @@
 //! What the tests of the crate share.
 
+use crate::ear;
 use std::{
   future::Future,
   pin::pin,
@@ -65,7 +66,7 @@ pub(crate) fn pause(time: Duration) {
   reason = "the one block on the reactor in the tests: a test fails by a panic, and the reactor waits for nothing else"
 )]
 pub(crate) fn on_reactor<T>(fut: impl Future<Output = T>) -> T {
-  crate::ear::reactor().block_on(fut)
+  ear::reactor().block_on(fut)
 }
 
 #[path = "../tests/common/yard.rs"]

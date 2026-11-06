@@ -33,9 +33,9 @@ pub(super) enum Event {
 impl Event {
   /// The event that a JSON value is. A value with no type is none of the events, and reads as
   /// `Other`.
-  pub(super) fn read(value: Value) -> Result<Event, serde_json::Error> {
+  pub(super) fn read(value: Value) -> Result<Self, serde_json::Error> {
     if value.get("type").is_none() {
-      return Ok(Event::Other);
+      return Ok(Self::Other);
     }
     serde_json::from_value(value)
   }
@@ -70,6 +70,9 @@ pub(super) enum Start {
   },
   Thinking {
     thinking: String,
+  },
+  RedactedThinking {
+    data: String,
   },
   #[serde(other)]
   Other,
@@ -106,6 +109,9 @@ pub(super) enum Whole {
   Thinking {
     thinking: String,
     signature: Option<String>,
+  },
+  RedactedThinking {
+    data: String,
   },
   #[serde(other)]
   Other,
@@ -152,19 +158,22 @@ pub(super) enum Stop {
   Other,
 }
 
-/// One block of a reply as the command line streams it: a text, or a thought and its signature.
+/// One block of a reply as the command line streams it: a text, a thought and its signature, or a
+/// thought that the API redacted, as its opaque data, which the next turn gives back whole.
 enum Block {
   Text(String),
   Thinking(String, Option<String>),
+  Redacted(String),
 }
 
 impl Block {
   fn content(&self) -> AssistantContent {
     match self {
-      Block::Text(text) => AssistantContent::text(text.clone()),
-      Block::Thinking(text, signature) => {
+      Self::Text(text) => AssistantContent::text(text.clone()),
+      Self::Thinking(text, signature) => {
         AssistantContent::Reasoning(Reasoning::new_with_signature(text, signature.clone()))
       }
+      Self::Redacted(data) => AssistantContent::Reasoning(Reasoning::redacted(data.clone())),
     }
   }
 }
@@ -188,7 +197,7 @@ pub(super) struct Reply<'a> {
 
 impl<'a> Reply<'a> {
   /// A reply with no block yet, whose parts go where the turn streams.
-  pub(super) fn new(deltas: Option<&'a Deltas>) -> Reply<'a> {
+  pub(super) fn new(deltas: Option<&'a Deltas>) -> Self {
     Reply { deltas, ..Reply::default() }
   }
 
@@ -204,7 +213,7 @@ impl<'a> Reply<'a> {
     let id = self.blocks.len().to_string();
     self.told(match block {
       Block::Text(_) => RawStreamingChoice::TextStart { id: id.into(), additional_params: None },
-      Block::Thinking(..) => {
+      Block::Thinking(..) | Block::Redacted(_) => {
         RawStreamingChoice::ReasoningStart { id: id.into(), provider_id: None }
       }
     });
@@ -228,7 +237,7 @@ impl<'a> Reply<'a> {
           reasoning,
         });
       }
-      None => {}
+      Some(Block::Redacted(_)) | None => {}
     }
   }
 
@@ -237,7 +246,7 @@ impl<'a> Reply<'a> {
     let id = at.to_string().into();
     match self.blocks.get(at) {
       Some(Block::Text(_)) => self.told(RawStreamingChoice::TextEnd { id }),
-      Some(block @ Block::Thinking(..)) => {
+      Some(block @ (Block::Thinking(..) | Block::Redacted(_))) => {
         let AssistantContent::Reasoning(reasoning) = block.content() else { return };
         let reasoning = Some(reasoning);
         self.told(RawStreamingChoice::ReasoningEnd {
@@ -263,6 +272,7 @@ impl<'a> Reply<'a> {
         let block = match content_block {
           Start::Text { text } => Block::Text(text.clone()),
           Start::Thinking { thinking } => Block::Thinking(thinking.clone(), None),
+          Start::RedactedThinking { data } => Block::Redacted(data.clone()),
           Start::Other => return,
         };
         places.insert(*index, self.blocks.len());
@@ -302,6 +312,7 @@ impl<'a> Reply<'a> {
         Whole::Thinking { thinking, signature } => {
           Some(Block::Thinking(thinking.clone(), signature.clone()))
         }
+        Whole::RedactedThinking { data } => Some(Block::Redacted(data.clone())),
         Whole::Other => None,
       };
       if let Some(streamed) = &self.streamed {
@@ -314,11 +325,13 @@ impl<'a> Reply<'a> {
         let Some(block) = block else { continue };
         let whole = match &block {
           Block::Text(text) | Block::Thinking(text, _) => text.clone(),
+          Block::Redacted(_) => String::new(),
         };
         let at = self.blocks.len();
         self.opened(match block {
           Block::Text(_) => Block::Text(String::new()),
           Block::Thinking(_, signature) => Block::Thinking(String::new(), signature),
+          redacted @ Block::Redacted(_) => redacted,
         });
         self.grew(at, &whole);
         self.closed(at);

@@ -14,6 +14,7 @@ use super::{
   super::codex, Catalog, Client, Cost, Entry, Error, LOCAL, Limit, Listed, Listing, Modalities,
   Model, Offer, cache, claude, listed, switched, update::MODELS,
 };
+use crate::extension;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -134,8 +135,8 @@ enum CommandPrefix {
 impl CommandPrefix {
   fn parts(self) -> Result<(PathBuf, Vec<String>), Error> {
     let mut words = match self {
-      CommandPrefix::Executable(bin) => vec![bin],
-      CommandPrefix::Words(words) => words,
+      Self::Executable(bin) => vec![bin],
+      Self::Words(words) => words,
     };
     if words.first().is_none_or(|bin| bin.trim().is_empty()) {
       return Err(Error::CommandEmpty);
@@ -318,19 +319,15 @@ impl Catalog {
   /// The catalog with the provider settings of the configs, in the order of [`crate::extension::configs`]: the user,
   /// the project, then the local config of the project. A false entry removes a provider.
   /// Invalid settings give an error. A running provider keeps its previous settings when a reload fails.
-  pub fn configured(self, directory: &Path, config: Option<&Path>) -> Result<Catalog, Error> {
+  pub fn configured(self, directory: &Path, config: Option<&Path>) -> Result<Self, Error> {
     super::blocking(self.configure(directory, config))
   }
 
   /// The catalog with the provider settings of the configs, as [`Catalog::configured`] gives it,
   /// for a caller that awaits.
-  pub async fn configure(
-    mut self,
-    directory: &Path,
-    config: Option<&Path>,
-  ) -> Result<Catalog, Error> {
-    let places = crate::extension::Places::here();
-    let files = crate::extension::configs(config.unwrap_or(&places.config), directory);
+  pub async fn configure(mut self, directory: &Path, config: Option<&Path>) -> Result<Self, Error> {
+    let places = extension::Places::here();
+    let files = extension::configs(config.unwrap_or(&places.config), directory);
     let entries = merged(files)?;
     let cached = cache().map(|at| at.join(MODELS));
     let defaults = listed(cached.as_ref());
@@ -434,9 +431,7 @@ impl Catalog {
     let listed = settings.into_listed(name, defaults.get(name))?;
     let at = self.first_of(name).unwrap_or(self.models.len());
     let replacement =
-      Catalog::of(&IndexMap::from([(name.to_owned(), listed)]), None, None, |key| {
-        env::var(key).ok()
-      });
+      Self::of(&IndexMap::from([(name.to_owned(), listed)]), None, None, |key| env::var(key).ok());
     let added: Vec<Offer> =
       replacement.models.into_iter().filter(|offer| is_of(&offer.model, name)).collect();
     self.drop_models(name);
