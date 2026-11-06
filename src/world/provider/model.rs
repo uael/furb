@@ -352,7 +352,8 @@ impl Model {
 /// What the chains stand on: the models and the operator, the directory, the default actor, and the
 /// path of the doctrine that a chain reads, which [`catalog::doctrine`] gives, each path as
 /// [`crate::world::files::tilded`] writes it, then the extensions that the engine seeds the root
-/// with, each as `[name, file, life word, root alone]`. A standing with no doctrine, or of a
+/// with, each as `[name, file, life word, root alone]`, then the absolute home of the user, which
+/// a path under the home hides as `~`. A standing with no doctrine, or of a
 /// provider that advertises no extensions, gives none, and the engine seeds no root then. Each
 /// model of the roster gives its class, and a model of the list of automatic work its place in that
 /// list, which the configs of the user, in the config directory, and of the project give, as
@@ -395,11 +396,14 @@ pub(super) fn standing(
     }))
   };
   let advertised = extensions.filter(|_| doctrine.is_some()).map(given);
+  let above =
+    advertised.as_ref().and(home.as_deref()).map(|one| Object::string(one.display().to_string()));
   Object::list(
     [roster, shown(Path::new(directory)), Object::string(actor)]
       .into_iter()
       .chain(doctrine)
-      .chain(advertised),
+      .chain(advertised)
+      .chain(above),
   )
 }
 

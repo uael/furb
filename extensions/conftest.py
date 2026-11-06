@@ -139,6 +139,7 @@ def extended(  # noqa: PLR0913
     taught = [
       str(path),
       [[x["name"], str(dict(x)["file"]) if x["word"].strip() else "", x["life"], x["root"]] for x in plays],
+      str(Path.home()),
     ]
   sand = replace(sand or sown(), stands=[list(roster) or STANDS[0], str(at / "work"), STANDS[2], *taught])
   files = _monty.files(str(at / "scratch"), str(at / "config"))

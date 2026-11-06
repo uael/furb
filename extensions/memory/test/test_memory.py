@@ -161,17 +161,19 @@ async def test_a_path_of_a_scheme_adds_no_folder_of_its_own(tmp_path: Path) -> N
 async def test_the_memory_files_above_the_home_of_the_user_load_from_the_root_down(
   tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-  """When the working directory stands under the home of the user, memory reads the memory files above the home as ~ and .. give them, from the root down, by name and never by a listing."""
-  home = tmp_path / "h" / "u"
+  """When the working directory stands under the home of the user, memory reads the memory files above the home, from the root down to the home, by name and never by a listing: it takes the folders from the absolute home that the standing ends with, as many as the path of the home has, since the World writes the home as ~."""
+  home = tmp_path / "a" / "b" / "c" / "d" / "u"
   home.mkdir(parents=True)
   home = home.resolve()
   monkeypatch.setenv("HOME", str(home))
   monkeypatch.setenv("USERPROFILE", str(home))
-  above = noted(home.parent, "a\n")
+  fifth, fourth, above = noted(home.parents[4], "e\n"), noted(home.parents[3], "f\n"), noted(home.parent, "a\n")
   top = noted(home, "h\n")
   work = noted(home / "work", "t\n")
-  _, root = extended("memory", home)
+  _, root = extended("memory", home, doctrine="Read first.\n")
   got = await engine.rung("close([one.path for one in memory()])", on=root)
-  assert got == [str(above), tilded(top), tilded(work)]
+  assert isinstance(got, list)
+  kept = [one for one in got if one.startswith((str(home.parents[4]), "~"))]
+  assert kept == [str(fifth), str(fourth), str(above), tilded(top), tilded(work)]
   listed = [str(a[4]) for a in engine.transcript(root) if a[0] == "read" and str(a[4]).endswith("/")]
   assert listed == ["./", "config://"]
