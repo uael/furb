@@ -622,6 +622,22 @@ test("a branch that a word made with a filter shows the messages that it took, w
     expect(shown).not.toContain("Watch a life");
   }));
 
+test("a click on the effort beside the model in the line under the input opens the efforts, and the one chosen is the effort", () =>
+  composing(async ({ session, frame, click }) => {
+    const { effort } = session.actorChoice;
+    const other = ["low", "medium", "high"].find((one) => one !== effort);
+    if (!other) throw new Error("No other effort.");
+    expect(await frame()).toContain(`/${effort}`);
+    await click(`/${effort}`);
+    await until(session, () => true);
+    const shown = await frame();
+    expect(shown).toContain("Effort of");
+    expect(shown).toContain(other);
+    await click(other);
+    await until(session, () => session.actorChoice.effort === other);
+    expect(await frame()).toContain(`/${other}`);
+  }));
+
 test("a paused chain says so at the end of its feed and in the footer, and Wake wakes it", () =>
   composing(async ({ session, frame, click }) => {
     await session.submit("/pause");
