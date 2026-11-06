@@ -230,8 +230,9 @@ The suite drives the engine through its public API alone, end to end, from the m
 ## The hygiene laws
 
 `test/test_hygiene.py` holds each contract and its suite to these laws, and it must stay green. The contracts are
-`engine.pyi`, whose suite is `test/`, and the contract of each extension, `extensions/<name>/<name>.pyi`, whose suite
-is the folder `test` beside it.
+`engine.pyi`, whose suite is `test/`, the contract of each official extension, `extensions/<name>/<name>.pyi`, and
+the contract of each extension of the project, `.furb/extensions/<name>/<name>.pyi`, each with the folder `test`
+beside it as its suite.
 
 1. Every sentence of a definition has exactly one test, in the file of that definition, whose docstring is that
    sentence. A constructor and a property are no definitions of their own: their sentences are the class's.
