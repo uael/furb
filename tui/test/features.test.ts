@@ -370,7 +370,10 @@ test("the setup of the root stands as code: a comment that names the setup, then
         const stood = () =>
           session.activity.some(
             (act) =>
-              act.kind === "rung" && act.by === act.chain && isDone(act) && /^stand\(\)\ncd\(/.test(act.word),
+              act.kind === "rung" &&
+              act.by === act.chain &&
+              isDone(act) &&
+              /^stand\(\)\ncd\(/.test(act.word ?? ""),
           );
         for (let step = 0; step < 200 && !stood(); step++) {
           await Bun.sleep(25);
@@ -390,7 +393,7 @@ test("the setup of the root stands as code: a comment that names the setup, then
         expect(setup.map((act) => act.words.slice(1))).toEqual(
           Array(setup.length).fill(["", setup[0]?.words[2]]),
         );
-        const words = setup.map((act) => act.word);
+        const words = setup.map((act) => act.word ?? "");
         expect(words[0]).toBe('debug(t"{standing()[4]=}")');
         // A path of Windows stands with its separators doubled, as python shows a backslash.
         expect(words[1]).toMatch(/^read\('.*[/\\]DOCTRINE\.md'\)$/);
