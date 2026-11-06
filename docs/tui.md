@@ -423,7 +423,7 @@ returns to now, then gives the keys back.
 
 One mark means one state in every view, dialog, and sidebar, from one table: `◆` for a question that waits for you,
 `●` for what ended or changed while you were away, `✗` for a failure, `◌` for paused work, a spinner for a model that
-thinks, which stands still as `✻`, `◉` for a command that runs or a word that awaits one, `◎` for work that waits on
+thinks, which stands still as `✻`, `◉` for a command that runs or a word that awaits one, which turns as `◐◓◑◒` while the view moves, `◎` for work that waits on
 another chain, `✓` for a done act, a faint `✓` for a done thread that you saw, `⊘` for a cancel, and `○` for rest. F1 lists the chords that the terminal in use sends, what each mark means, and every slash
 command.
 
