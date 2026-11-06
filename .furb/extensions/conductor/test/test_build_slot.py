@@ -42,13 +42,27 @@ def test_each_slot_goes_back_when_its_command_ends(tmp_path: Path) -> None:
   assert list((tmp_path / "slots").iterdir()) == []
 
 
-def peak_of(tmp: Path, **more: str) -> int:
-  log = tmp / "log"
-  body = f"echo in >> {log}; sleep 0.4; echo out >> {log}"
-  runs = [start(tmp, "sh", "-c", body, **more) for _ in range(6)]
+def entered(log: Path) -> int:
+  return log.read_text(encoding="utf-8").split().count("in") if log.exists() else 0
+
+
+def peak_of(tmp: Path, slots: int, **more: str) -> int:
+  # Each command holds until the test releases it, so the peak does not depend on how fast the machine starts them: the
+  # test waits for the slots to fill, gives the extra builds time to wrongly enter, and then lets everything end.
+  log, release = tmp / "log", tmp / "release"
+  body = f"echo in >> {log}; while [ ! -e {release} ]; do sleep 0.05; done; echo out >> {log}"
+  count = slots + 3
+  runs = [start(tmp, "sh", "-c", body, **more) for _ in range(count)]
+  try:
+    deadline = time.monotonic() + 30
+    while entered(log) < slots and time.monotonic() < deadline:
+      time.sleep(0.05)
+    time.sleep(0.5)
+  finally:
+    release.touch()
   for one in runs:
     one.communicate(timeout=60)
-  assert [one.returncode for one in runs] == [0] * 6
+  assert [one.returncode for one in runs] == [0] * count
   held = peak = 0
   for line in log.read_text(encoding="utf-8").split():
     held += 1 if line == "in" else -1
@@ -57,14 +71,14 @@ def peak_of(tmp: Path, **more: str) -> int:
 
 
 def test_no_more_commands_run_at_once_than_the_slots(tmp_path: Path) -> None:
-  assert peak_of(tmp_path, FURB_BUILD_SLOTS="2") == 2
+  assert peak_of(tmp_path, 2, FURB_BUILD_SLOTS="2") == 2
 
 
 @pytest.mark.parametrize(("memory", "slots"), [("36", 3), ("24", 2), ("8", 1)])
 def test_the_slots_default_to_one_for_each_12_gb_of_memory_and_at_least_one(
   tmp_path: Path, memory: str, slots: int
 ) -> None:
-  assert peak_of(tmp_path, FURB_BUILD_MEM_GB=memory) == slots
+  assert peak_of(tmp_path, slots, FURB_BUILD_MEM_GB=memory) == slots
 
 
 def test_the_slot_of_a_holder_that_ended_goes_to_the_next_build(tmp_path: Path) -> None:
