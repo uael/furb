@@ -652,7 +652,8 @@ try {
   await library.select(desk);
   session = desk.session;
   await session.submit("show live progress");
-  session.enqueue("Check keyboard navigation after this answer.");
+  await session.enqueue("Check keyboard navigation after this answer.");
+  await until(session, () => session.queued.length > 0);
   await capture("34-queued-follow-up");
   app().composer.setText("/queue");
   await app().submit();

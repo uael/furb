@@ -331,12 +331,13 @@ test("Up and Down walk the history from the edges of the input, and Up on an emp
       screen.mockInput.pressArrow("down");
       expect(app.composer.plainText).toBe("from");
       app.composer.setText("");
-      session.queueHeld = true;
-      session.enqueue("a queued message");
-      expect(session.queued).toHaveLength(1);
+      // A pause holds the chain, so the life keeps the follow-up in its queue.
+      await session.engine.pause(session.selected);
+      await session.enqueue("a queued message");
+      await until(session, () => session.queued.length === 1);
       screen.mockInput.pressArrow("up");
-      expect(app.composer.plainText).toBe("a queued message");
-      expect(session.queued).toEqual([]);
+      await until(session, () => app.composer.plainText === "a queued message");
+      await until(session, () => session.queued.length === 0);
     },
     { width: 120, height: 44, kittyKeyboard: true },
   ));

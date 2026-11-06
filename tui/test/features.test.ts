@@ -14,7 +14,6 @@ import { fileReferences, projectFiles } from "../src/files.ts";
 import { Session } from "../src/session.ts";
 import { publishShare, shareHtml, shareMarkdown } from "../src/share.ts";
 import { composing } from "./composing.ts";
-import { ended } from "./ended.ts";
 import { idle } from "./idle.ts";
 import { transcriptOf } from "./transcript.ts";
 
@@ -87,8 +86,7 @@ test("queued follow-ups wait for current work, attach files, and message undo an
   let session = await demoSession();
   try {
     await session.submit("show live progress");
-    session.enqueue("Explain @README.md after this answer.");
-    expect(session.queued).toHaveLength(1);
+    await session.enqueue("Explain @README.md after this answer.");
     expect(
       session.acts.some((act) => act.kind === "prompt" && String(act.words[1]).startsWith("Explain")),
     ).toBe(false);
@@ -121,22 +119,18 @@ test("queued follow-ups wait for current work, attach files, and message undo an
       "Explain @README.md after this answer.",
     );
     await session.submit("/pause");
-    session.enqueue("Keep this follow-up through exit.");
-    session.save();
-    const saved = JSON.parse(await readFile(`${session.host.record}.ui.json`, "utf8"));
-    expect(saved.queued[0].text).toBe("Keep this follow-up through exit.");
-    expect(session.acts.some((act) => act.kind === "prompt" && act.words[1] === saved.queued[0].text)).toBe(
-      false,
-    );
+    await session.enqueue("Keep this follow-up through exit.");
+    await until(session, () => session.queued.length === 1);
+    expect(
+      session.acts.some((act) => act.kind === "prompt" && act.words[1] === session.queued[0]?.message),
+    ).toBe(false);
     const record = session.host.record;
     if (!record) throw new Error("No record for the queued message.");
     await session.dispose();
+    // The record keeps the queue, so the reopened life holds the follow-up until its chain wakes.
     session = await demoSession({ record });
-    expect(session.queueHeld).toBe(true);
-    expect(session.queued[0]?.text).toBe("Keep this follow-up through exit.");
+    await until(session, () => session.queued[0]?.message === "Keep this follow-up through exit.");
     await session.submit("/wake");
-    session.queueHeld = false;
-    await session.drainQueue();
     await until(session, () =>
       session.acts.some(
         (act) =>
@@ -145,25 +139,10 @@ test("queued follow-ups wait for current work, attach files, and message undo an
     );
     await idle(session);
     await session.refresh();
-    const sent = session.acts.filter((act) => session.isUserPrompt(act)).length;
-    await session.dispose();
-    // The life ends in the daemon once its window let it go, and only then does its view stand still to be written.
-    await ended(record);
-    const stale = JSON.parse(await readFile(`${record}.ui.json`, "utf8"));
-    stale.queued = saved.queued;
-    await writeFile(`${record}.ui.json`, JSON.stringify(stale));
-    session = await demoSession({ record });
-    // The checkpoint holds the chain paused on the thread that it asks, so the reopened life waits for a wake. The queue
-    // that the stale view names was sent already, so the open drops it and sends no prompt again.
-    await until(session, () => session.acts.length > 0);
-    await Bun.sleep(1000);
-    await session.refresh();
-    expect(session.queued).toHaveLength(0);
     const resent = (await readFile(record, "utf8"))
       .split("\n")
       .filter((line) => line.startsWith('[["prompt",') && line.includes("Keep this follow-up through exit."));
     expect(resent).toHaveLength(1);
-    expect(sent).toBeGreaterThan(0);
   } finally {
     await session.dispose();
   }
@@ -504,23 +483,6 @@ test("an act that ended and told nothing shows nothing in the feed, as a read of
     );
   } finally {
     await remove(directory);
-  }
-});
-
-test("a follow-up that a window sends goes through the queue of the life, which sends it once for its entry", async () => {
-  // The life holds the queue and sends a follow-up once its chain rests; a reopen that finds the queue as it stood is
-  // a test of the life, in host/tests/life.rs.
-  const session = await demoSession();
-  try {
-    await idle(session);
-    const entry = { id: "once-check", chain: session.selected, shape: "str", text: "A queued question" };
-    const sent = await session.host.sendQueued(entry);
-    expect(await session.host.sendQueued(entry)).toBe(sent);
-    await session.refresh();
-    const asked = session.acts.filter((act) => act.kind === "prompt" && act.words[1] === entry.text);
-    expect(asked.map((act) => act.id)).toEqual([sent]);
-  } finally {
-    await session.dispose();
   }
 });
 

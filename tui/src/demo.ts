@@ -9,6 +9,9 @@ import { Workspaces } from "./workspaces.ts";
 
 /** The files of the demo project: a small notes app with the three parts that its answers name. */
 const demoFiles: Record<string, string> = {
+  // The doctrine of the project, which a chain reads in place of the doctrine of the checkout that drew it, so no path
+  // of a home folder stands in the pictures.
+  ".furb/DOCTRINE.md": "Work in this project, and keep each change small.\n",
   "README.md":
     "# Fieldnotes\n\nA small place to keep ideas.\n\n- Capture a thought\n- Find it when it matters\n- Keep everything local\n",
   "package.json": '{\n  "name": "fieldnotes",\n  "type": "module",\n  "scripts": { "test": "bun test" }\n}\n',
