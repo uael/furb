@@ -254,14 +254,9 @@ export class Daemon extends EventEmitter {
   async holding(lives: readonly string[]): Promise<Set<string>> {
     const listed = await this.ask({ verb: "list" });
     if (listed.answer !== "lives") throw new Error(`The daemon gave ${listed.answer}, and no list of lives.`);
-    const open = listed.data.filter((one) => one.open && lives.includes(one.life));
-    const present = await Promise.all(
-      open.map(async ({ life }) => {
-        const peers = await this.ask({ verb: "presence", life }).catch(() => undefined);
-        return peers?.answer === "presence" && peers.data.length > 0 ? [life] : [];
-      }),
+    return new Set(
+      listed.data.filter((one) => one.watched && lives.includes(one.life)).map((one) => one.life),
     );
-    return new Set(present.flat());
   }
 
   /** The life of a record gone from the daemon, which ends it once no window and no pin held it for its grace. It is

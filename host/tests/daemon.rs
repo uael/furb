@@ -404,13 +404,21 @@ mod daemon {
     let alone = opened(&mut window, &at, "a.jsonl").await;
     let workspace = Some(main.display().to_string());
     let mut wanted = vec![
-      Listed { life: one, workspace: workspace.clone(), held: true, open: true, name: None },
-      Listed { life: alone, workspace: None, held: true, open: true, name: None },
+      Listed {
+        life: one,
+        workspace: workspace.clone(),
+        held: true,
+        open: true,
+        watched: false,
+        name: None,
+      },
+      Listed { life: alone, workspace: None, held: true, open: true, watched: false, name: None },
       Listed {
         life: tree.join("two.jsonl").display().to_string(),
         workspace,
         held: false,
         open: false,
+        watched: false,
         name: None,
       },
     ];
@@ -419,6 +427,24 @@ mod daemon {
     assert_eq!(listed, wanted);
     let verbatim = |one: &Listed| one.life.starts_with(r"\\?\");
     assert!(!listed.iter().any(verbatim), "a worktree is listed under the path that made it");
+  }
+
+  #[tokio::test]
+  async fn the_list_says_whether_a_window_holds_each_life_and_a_pin_is_no_window() {
+    let at = place();
+    let (local, _daemon) = started(&at, GRACE).await;
+    let mut window = Window::dialed(&local).await;
+    let mut other = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    let watched = |listed: Vec<Listed>| listed.iter().any(|one| one.life == life && one.watched);
+    assert!(!watched(window.listed().await), "an open that attaches nothing is held by no window");
+    let pin = Verb::Pin { life: life.clone(), holder: "skill".to_owned() };
+    assert_eq!(window.ask(pin).await, Ok(Answer::Done));
+    assert!(!watched(window.listed().await), "a pin holds the life and no window holds it");
+    other.attach(&life).await;
+    assert!(watched(window.listed().await), "a window of another connection holds the life");
+    assert_eq!(other.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+    assert!(!watched(window.listed().await), "a window that detached holds nothing");
   }
 
   #[tokio::test]

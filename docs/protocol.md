@@ -145,7 +145,8 @@ it is not given. The daemon answers requests in any order.
   `workspaces.json` in the folder `config` names, the config folder of the daemon when the peer names none, in the
   `.furb/sessions` of its main checkout and of each worktree of it, with that main checkout as `workspace`, and each
   record that a life of the daemon holds. `held` says whether a life holds the record now, and `open` whether that
-  life lives and does not end. A window lists its sessions from it, so a window on another machine lists them the
+  life lives and does not end, and `watched` whether a window of any connection holds the life, which a pin
+  does not make, so a window finds the sessions that no window holds from the one list. A window lists its sessions from it, so a window on another machine lists them the
   same way.
 - The role to write holds each right of the role to read. A verb needs the role to write unless this table says read,
   and the daemon refuses it to a reader with the refusal `role`, which names both roles.
