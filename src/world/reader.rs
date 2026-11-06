@@ -450,16 +450,18 @@ impl Reader<'_> {
     // The fact stands after the facts that name it, and before those that it makes the reader say.
     self.flush();
     match kind {
-      "rung" if fact.question() && self.whole && named(by, "prompt") => {
+      "rung" if fact.question() && self.asks_kept && named(by, "prompt") => {
         if let Some(last) = self.rungs.insert(by.to_owned(), about.to_owned()) {
           self.end(&last, Object::none());
         }
       }
-      "rung" if fact.question() && !self.whole && !text(fact, 1).is_empty() => {
+      "rung" if fact.question() && !self.asks_kept && !text(fact, 1).is_empty() => {
         self.words.insert(about.to_owned(), text(fact, 1));
         self.rungs.insert(about.to_owned(), about.to_owned());
       }
-      MADE => self.whole = fact.word(2).and_then(Schema::read).is_some_and(|one| one.minor >= 1),
+      MADE => {
+        self.asks_kept = fact.word(2).and_then(Schema::read).is_some_and(|one| one.minor >= 1)
+      }
       "run" if fact.question() => {
         self.runs.insert(text(fact, 1), about.to_owned());
       }
@@ -513,7 +515,7 @@ impl Reader<'_> {
   /// A question: the chain and the rung that it names when the reader holds neither, then its own place.
   fn asked(&mut self, fact: &Fact) {
     let (kind, about, by, on) = (fact.kind(), fact.about(), fact.by(), fact.on());
-    if !self.whole {
+    if !self.asks_kept {
       self.inferred(kind, by, on);
     }
     let chain = self.scope(on);
@@ -571,7 +573,7 @@ impl Reader<'_> {
   /// The run of the word of a rung, once, unless the gate refused it, in a segment that does not
   /// keep it.
   fn ran(&mut self, rung: &str) {
-    if self.whole || self.runs.contains_key(rung) || self.done.contains(rung) {
+    if self.asks_kept || self.runs.contains_key(rung) || self.done.contains(rung) {
       return;
     }
     let (Some(word), Some(chain)) = (self.words.get(rung), self.scopes.get(rung)) else { return };
