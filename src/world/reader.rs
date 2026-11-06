@@ -1,30 +1,27 @@
-//! The reader of a record: what a record tells, read with no life, so no word runs again, no model is asked, no
-//! command runs, and a record of any engine opens. A host that reads a record hears these facts in order, as an ear
-//! hears the facts of a life.
+//! The reader of a record: what a record tells, read with no life, so no word runs again, no model
+//! is asked, no command runs, and a record of any engine opens. A host that reads a record hears
+//! these facts in order, as an ear hears the facts of a life.
 //!
-//! While the log beside the record agrees with it, the reader gives every fact of the log, as [`logged`] reads it.
-//! Else it gives the facts that the record kept, each value as the engine gives it. A segment of
-//! the minor 1 of the
-//! schema of the record, or of a later minor, keeps the question of each act that the life made. A
-//! segment of the minor
-//! 0 keeps only what the outside said: the World, the models and the operator. So the reader says,
-//! after the facts
-//! that name them, the facts that the engine said and the record does not keep, as far as the kept
-//! facts show them,
-//! and in a segment that keeps each question, only the dones and the findings:
+//! While the log beside the record agrees with it, the reader gives every fact of the log, as
+//! [`logged`] reads it. Else it gives the facts that the record kept, each value as the engine
+//! gives it. A segment of the minor 1 of the schema of the record, or of a later minor, keeps the
+//! question of each act that the life made. A segment of the minor 0 keeps only what the outside
+//! said: the World, the models and the operator. So the reader says, after the facts that name
+//! them, the facts that the engine said and the record does not keep, as far as the kept facts show
+//! them, and in a segment that keeps each question, only the dones and the findings:
 //!
-//! - each chain that a kept act stands on, made by the rung that makes the first prompt on it, or by the operator,
-//!   named by the first line of that prompt, or by its own name when the record keeps no prompt on it, and standing
-//!   under the chain that its maker ran on;
-//! - each rung that a kept act names as its maker, on the open prompt of its chain that is no question to the
-//!   operator, or on its chain, which ends the rung before it of the same maker;
-//! - the run of the word of each rung, which the rung holds or the reply that it asked for gives, once the gate lets it
-//!   run, and
-//!   the paragraph that tells the findings of the gate on a rung whose word it refused;
+//! - each chain that a kept act stands on, made by the rung that makes the first prompt on it, or
+//!   by the operator, named by the first line of that prompt, or by its own name when the record
+//!   keeps no prompt on it, and standing under the chain that its maker ran on;
+//! - each rung that a kept act names as its maker, on the open prompt of its chain that is no
+//!   question to the operator, or on its chain, which ends the rung before it of the same maker;
+//! - the run of the word of each rung, which the rung holds or the reply that it asked for gives,
+//!   once the gate lets it run, and the paragraph that tells the findings of the gate on a rung
+//!   whose word it refused;
 //! - the done of each act that the operator closed or cancelled.
 //!
-//! A question that the reader says names its maker, as the engine names it, and each other fact that it says is said
-//! by [`READER`].
+//! A question that the reader says names its maker, as the engine names it, and each other fact
+//! that it says is said by [`READER`].
 
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, Write};
@@ -438,8 +435,7 @@ struct Reader<'a> {
   runs: HashMap<String, String>,
   gated: HashSet<String>,
   /// Whether the segment that the reader reads keeps the question of each act that the life made,
-  /// as its fact made
-  /// says by the minor of its schema.
+  /// as its fact made says by the minor of its schema.
   whole: bool,
 }
 
