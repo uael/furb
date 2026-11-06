@@ -117,5 +117,5 @@ tells you an error, read the file again, change it with `replace`, and write it:
 `.furb/config.json`, and its part goes with it.
 
 An official extension of furb also has a contract, `notes.pyi`, a suite, `test/`, and, when it reads the disk, an ear
-of the World in the crate, `src/extension/notes.rs`. The crate carries its part, so the TUI loads it in an installed
+of the World in the crate, `src/world/notes.rs`. The crate carries its part, so the TUI loads it in an installed
 package too. [The guide of the extensions](https://github.com/uael/furb/blob/main/docs/skills.md) says the rest.

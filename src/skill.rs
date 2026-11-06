@@ -509,12 +509,15 @@ pub fn configured(places: &Places, project: &Path) -> Result<(Vec<Extension>, Ve
   let official = officials(places);
   let mut out = (Vec::new(), Vec::new());
   for (name, path) in turned_on(places, project)? {
-    // A copy of an official extension in the folder of the extensions of the project prevails over
-    // the one that furb carries, for its word and for the file that a chain reads.
+    // A copy of an official extension in the folder of the skills of the project prevails over the
+    // one that furb carries, for its word and for the file that a chain reads. A skill of that name
+    // with no word is a skill of the project alone, and the official one plays.
     let copied = project.join(".furb").join("skills").join(&name);
+    let worded = fs::read_to_string(copied.join(MANIFEST))
+      .is_ok_and(|text| frontmatter(&text).meta(WORD).is_some());
     let root = match path {
       Some(root) => root,
-      None if copied.join(MANIFEST).is_file() => copied,
+      None if worded => copied,
       None => {
         let one = official.iter().find(|one| one.name == name).cloned();
         out.0.push(one.expect("an official extension"));

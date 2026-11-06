@@ -7,17 +7,30 @@ description = "The core of an AI harness: the engine in a sandbox, behind an asy
 license = "AGPL-3.0-only"
 repository = "https://github.com/uael/furb"
 readme = "README.md"
-# What the crate on crates.io holds: the engine and what its build reads, the extensions that the crate carries, the
+# What the crate on crates.io holds: the engine and what its build reads, the skills that the crate carries by name, the
 # doctrine, and the examples. The rest of the repository is other packages and their tests.
 include = [
   "/build.rs",
   "/build/*.rs",
   "/src/**",
-  "/.agents/skills/*/SKILL.md",
-  "/.agents/skills/*/*.py",
-  "/.agents/skills/*/*.pyi",
-  "/.agents/skills/*/tui.ts",
-  "/.agents/skills/*/*/SKILL.md",
+  "/.agents/skills/catchup/SKILL.md",
+  "/.agents/skills/catchup/catchup.py*",
+  "/.agents/skills/memory/SKILL.md",
+  "/.agents/skills/memory/memory.py*",
+  "/.agents/skills/skills/SKILL.md",
+  "/.agents/skills/skills/skills.py*",
+  "/.agents/skills/compaction/SKILL.md",
+  "/.agents/skills/compaction/compaction.py*",
+  "/.agents/skills/compaction/tui.ts",
+  "/.agents/skills/naming/SKILL.md",
+  "/.agents/skills/naming/naming.py*",
+  "/.agents/skills/ouroboros/SKILL.md",
+  "/.agents/skills/ouroboros/ouroboros.py*",
+  "/.agents/skills/web/SKILL.md",
+  "/.agents/skills/web/web.py*",
+  "/.agents/skills/mcp/SKILL.md",
+  "/.agents/skills/mcp/mcp.py*",
+  "/.agents/skills/mcp/tui.ts",
   "/DOCTRINE.md",
   "/docs/examples/rust/*.rs",
   "/LICENSE",

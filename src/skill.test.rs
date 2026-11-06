@@ -1041,3 +1041,13 @@ fn a_fact_enable_gives_the_name_of_its_skill_and_the_program_that_it_names() {
   assert_eq!(enabled_by(&said(one.played(""))), has(Some("")));
   assert_eq!(enabled_by(&said(Fact::says("tell", "chain1", [Object::string("note")]))), None);
 }
+
+#[test]
+fn a_skill_of_the_project_with_no_word_and_the_name_of_an_official_one_leaves_that_one_on() {
+  let at = Yard::new("plain-official");
+  let plain = at.join(".furb").join("skills").join("memory").join("SKILL.md");
+  config(&plain, "---\nname: memory\ndescription: How this project keeps its notes.\n---\n");
+  let (on, refused) = configured(&places(&at), &at).expect("the configs read");
+  assert!(on.iter().any(|one| one.name == "memory"), "{on:?}");
+  assert!(refused.is_empty(), "{refused:?}");
+}

@@ -18,7 +18,7 @@ test("a session with no record keeps its images in a .furb that keeps itself out
     expect(imageContent(session.imageDirectory, image.uri).data).toBe(pixel);
     expect(session.imageDirectory).toBe(join(directory, ".furb/images"));
     expect(await readFile(join(directory, ".furb/.gitignore"), "utf8")).toBe(
-      "*\n!config.json\n!skills/\n!.agents/skills/**\n",
+      "*\n!config.json\n!skills/\n!skills/**\n",
     );
     const status = Bun.spawnSync(["git", "status", "--porcelain", "--untracked-files=all"], {
       cwd: directory,

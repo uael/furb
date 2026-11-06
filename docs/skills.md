@@ -145,7 +145,7 @@ Windows.
 
 A config of another form, a folder with no manifest, a manifest of another name, and a missing word are each refused
 with their path. The `.furb` of a project keeps all that it holds out of version control but `config.json` and
-`.agents/skills/`, since the extensions of a project are code of the project, which its team shares.
+`skills/`, since the extensions of a project are code of the project, which its team shares.
 
 ## Write your own
 
@@ -243,7 +243,7 @@ prompt on the chain with no `to` goes to the new actor. The note that a model
 limit tells a chain names the same two calls.
 
 An official extension also has a contract, `<name>.pyi`, whose laws its suite in `test/` holds, as [the hygiene
-laws](../AGENTS.md#the-hygiene-laws) say, and an ear of the World in `src/extension/<name>.rs` when it reads the disk or
+laws](../AGENTS.md#the-hygiene-laws) say, and an ear of the World in `src/world/<name>.rs` when it reads the disk or
 the network, as `skills` and `compaction` do. The search and the fetch of `web` are questions of the World, which the provider and the ear `fetch` answer, and the client of `mcp` is an ear of the World. Its part for the TUI, `tui.ts` beside its word as
 `compaction` and `mcp` have, is in the crate, so the TUI loads it from an installed package too, where no checkout of
 furb stands. It changes with a build of furb, and not live.

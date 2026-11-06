@@ -17,8 +17,8 @@
     "test": "bun run tui/script/test.ts",
     "bench": "bun run tui/script/bench.ts",
     "protocol": "bun run bind/typescript/script/protocol.ts",
-    "format": "biome format --write bind/typescript tui docs/examples .agents/skills/compaction .agents/skills/mcp package.json tsconfig.json biome.json",
-    "lint": "biome check bind/typescript tui docs/examples .agents/skills/compaction .agents/skills/mcp package.json tsconfig.json biome.json"
+    "format": "biome format --write bind/typescript tui docs/examples .agents/skills/*/tui.ts package.json tsconfig.json biome.json",
+    "lint": "biome check bind/typescript tui docs/examples .agents/skills/*/tui.ts package.json tsconfig.json biome.json"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.6",

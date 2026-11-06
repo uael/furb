@@ -140,7 +140,7 @@ no network.
 ### The extensions
 
 An official extension is a word, a contract and a suite in `.agents/skills/<name>/`, and an ear of the World in
-`src/extension/<name>.rs`, which answers the questions of its word from the disk. [The guide of the
+`src/world/<name>.rs`, which answers the questions of its word from the disk. [The guide of the
 extensions](docs/skills.md) says which hygiene laws hold it and how a life runs it. The crate carries the manifest
 and the word, so `uv run` builds it again after a change of either, as the `cache-keys` of `bind/python/pyproject.toml`
 and `cli/pyproject.toml` say.

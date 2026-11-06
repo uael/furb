@@ -25,4 +25,4 @@ Each folder holds these parts:
 -  `test/`, the suite, with one test for each sentence of the contract. `uv run pytest -q .agents/skills/<name> --no-cov`
   runs it.
 
-The parts of an extension that reach the disk or the network are ears of the crate, in `src/extension/`.
+The parts of an extension that reach the disk or the network are ears of the crate, in `src/world/`.

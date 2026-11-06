@@ -23,7 +23,7 @@ API of its own:
   enables each by a fact that the record keeps, plays its word as a rung on each chain where its manifest says, every
   chain or the root alone, and plays the setup of the root on a new record. `parts` gives the part of each extension for
   the TUI, which `tui/src/parts.ts` loads. `.agents/skills/` holds the official extensions, `catchup`, `memory`, `skills`,
-  `compaction`, `naming`, `ouroboros`, `web` and `mcp`, each a word, a contract and a suite, and `src/extension/` holds the ear of
+  `compaction`, `naming`, `ouroboros`, `web` and `mcp`, each a word, a contract and a suite, and `src/world/` holds the ear of
   the World of the one that has one, `skills.rs`. `docs/skills.md` says how an extension works.
 - `src/life.rs` opens a life as every host opens one, from one `Opening`: the record, the ears of the crate after the
   ears of the host, the default actor, the roster that the host names or every model of the catalog, and the extensions.
