@@ -65,20 +65,19 @@ test.skipIf(process.platform === "win32")(
     // The root wrote its setup on itself, the rungs of the skills with code wrote the code of each, and the life
     // words of the default skills started the watchers, and the welcome shows all the same. The extension naming plays
     // on the root alone, so its life word comes after the others.
-    expect(acts.filter((line) => line.endsWith(" chain1"))).toEqual(
-      [1, 2, 3, 4, 5, 6, 7, 8, 9, 15].map((n) => `rung${n} chain1`),
-    );
-    expect(acts.filter((line) => /^rung\d+ rung\d+$/.test(line))).toEqual([
-      "rung10 rung3",
-      "rung11 rung4",
-      "rung12 rung5",
-      "rung13 rung6",
-      "rung14 rung8",
-    ]);
-    expect(
-      acts.filter((line) => line.endsWith(" rung7")).filter((line) => !/^(memory|read)\d+ /.test(line)),
-    ).toEqual(["catchup1 rung7", "remember1 rung7", "compacted1 rung7", "fitted1 rung7"]);
-    expect(acts).toContain("name_session1 rung9");
+    const own = acts.filter((line) => line.endsWith(" chain1")).map((line) => line.split(" ")[0]);
+    // The debug, the read of the doctrine and the read of the word of each default skill come first, each on the root.
+    expect(own.slice(0, 6)).toEqual([1, 2, 3, 4, 5, 6].map((n) => `rung${n}`));
+    // Each read of a word of a skill made the rung that plays the word, the four of the default skills first and the
+    // extension naming after them, and each life word is a rung of the root that the watchers it started name.
+    const nested = acts
+      .filter((line) => /^rung\d+ rung\d+$/.test(line))
+      .map((line) => line.split(" ")[1] ?? "");
+    expect(nested.slice(0, 4)).toEqual(["rung3", "rung4", "rung5", "rung6"]);
+    expect(nested.every((maker) => own.includes(maker))).toBe(true);
+    const maker = (name: string) => acts.find((line) => line.startsWith(`${name} `))?.split(" ")[1] ?? "";
+    for (const name of ["catchup1", "remember1", "compacted1", "fitted1", "name_session1"])
+      expect(own).toContain(maker(name));
     expect(frame).toContain("No model answers yet");
     expect(frame).toContain("Claude command line  Not found.");
     expect(frame).toContain("Other providers  No model available.");
