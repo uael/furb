@@ -273,7 +273,8 @@ impl Conversation {
     gone: Duration,
   ) -> Result<Process, CompletionError> {
     let print = ["-p", "--input-format", "stream-json", "--output-format", "stream-json"];
-    let mut command = program.base_command(&print).map_err(|why| refused(Error::SignedOut(why)))?;
+    let mut command =
+      program.base_command(&print, true).map_err(|why| refused(Error::SignedOut(why)))?;
     command.args(["--verbose", "--include-partial-messages", "--model", &self.name]);
     let prompt = prompt_file(&self.system)?;
     command.arg("--system-prompt-file").arg(&prompt);

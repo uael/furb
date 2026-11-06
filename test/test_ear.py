@@ -278,7 +278,7 @@ async def test_a_later_life_on_a_record_finds_its_scratch_directory_again(tmp_pa
   assert empty == ""
 
 
-def listening(heard: list[tuple], names: set[str]) -> Generator[set[str], tuple]:
+def hearing(heard: list[tuple], names: set[str]) -> Generator[set[str], tuple]:
   """An ear that waits for these names and keeps each fact it hears."""
   while True:
     heard.append((yield names))
@@ -289,7 +289,7 @@ async def test_an_ear_that_yields_a_set_of_names_waits_for_the_facts_that_name_o
   _, _, root = born()
   other = engine.chain("other", on=root)
   heard: list[tuple] = []
-  engine.drive(listening(heard, {other, "clock"}), "listener")
+  engine.drive(hearing(heard, {other, "clock"}), "listener")
   engine.read("a.txt", on=root)
   engine.read("a.txt", on=other)
   engine.clock(on=root)
@@ -306,7 +306,7 @@ async def test_an_ear_that_yields_nothing_or_an_empty_set_waits_for_every_fact()
   """An ear that yields nothing, or an empty set, waits for every fact."""
   _, _, root = born()
   every: list[tuple] = []
-  engine.drive(listening(every, set()), "every")
+  engine.drive(hearing(every, set()), "every")
   read = engine.act("read", root, None, "a.txt")
   await settle()
   assert [a[:2] for a in every if a[1] == read] == [("read", read), ("done", read)]
@@ -317,7 +317,7 @@ async def test_every_ear_hears_every_pause_wake_cancel_and_close() -> None:
   """Every ear hears every pause, wake, cancel and close, whatever it waits for, so a control reaches each act that it is over."""
   _, _, _, act = slow()
   heard: list[tuple] = []
-  engine.drive(listening(heard, {"none"}), "listener")
+  engine.drive(hearing(heard, {"none"}), "listener")
   engine.pause(act)
   engine.wake(act)
   engine.cancel(act)

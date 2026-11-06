@@ -1,7 +1,7 @@
 # The protocol of the host
 
 `furb-host` is the daemon of a machine: it holds each life, and each window or skill reaches it over one protocol. This
-page says that protocol. Its version is `PROTOCOL`, now 1. The crate gives its JSON Schema in
+page says that protocol. Its version is `PROTOCOL`, now 3. The crate gives its JSON Schema in
 `host/protocol.schema.json`, and `bind/typescript/src/protocol.ts` holds the types that `bun run protocol` makes from
 that schema. A test of each side fails when the schema or the types do not agree with the code.
 
@@ -65,7 +65,7 @@ folder of furb (`~/.config/furb` by default), turns it on. WireGuard encrypts ea
 The first frame of a peer is its hello:
 
 ```json
-{"id": 0, "verb": "hello", "protocol": 1, "kind": "window", "name": null, "role": null}
+{"id": 0, "verb": "hello", "protocol": 2, "kind": "window", "name": null, "role": null}
 ```
 
 - `kind` is `window`, `skill`, or `daemon` for the daemon of a new build that asks the handover, and a skill gives
@@ -76,11 +76,17 @@ The first frame of a peer is its hello:
 - The daemon answers with its protocol and the peer as it knows it: its login, its role, its kind and its name.
 
   ```json
-  {"frame": "reply", "id": 0, "answer": "welcome", "data": {"protocol": 1, "peer": {"login": "uael", "role": "write", "kind": "window", "name": null}}}
+  {"frame": "reply", "id": 0, "answer": "welcome", "data": {"protocol": 2, "peer": {"login": "uael", "role": "write", "kind": "window", "name": null}}}
   ```
 
 - A hello of another protocol gets a refusal that names both versions, and the daemon closes the peer. A first frame
   that is no hello gets the refusal `first`, and the daemon closes the peer. A second hello gets the refusal `again`.
+- The version rises with each change of the schema, `host/protocol.schema.json`: a test of the crate keeps the digest
+  of the schema of each version. A window that meets a daemon of another version does not wait and asks no handover,
+  so it ends no life of another window: it says that the daemon of this machine is of another build. That daemon ends
+  once its last window quits and its grace passes, and the next window starts one of its own build.
+- A request that the daemon cannot read, as a verb of a later version, gets the refusal `unread` under its `id`, with
+  why it names the verb, so no request waits for an answer that never comes.
 
 ## Requests and answers
 
@@ -234,6 +240,9 @@ once it listens. A second daemon refuses to start there.
   nothing. A life with no holder for the grace of the daemon, 30 seconds unless `furb host --grace <seconds>` says
   otherwise, writes its checkpoint and ends, and `list` gives it as not `open` from then on. An `open` of a life
   that ends waits for its end, then opens it again from its checkpoint.
+- The daemon of a machine ends once it holds no peer and no life for its grace, so it does not outlive the windows
+  that started it; a window that dials later starts a new one. A daemon waits for its first peer before this bound
+  runs, and a daemon with a door on the tailnet does not end by it.
 - A life whose record does not hold each fact that it said yet, as on a full disk, does not end: its end, after the
   grace, at a handover or at the end of the daemon, waits until the record holds them, and the life tells why in a
   notice. Past 20000 facts that the record lacks, the life pauses each chain that lives and each chain

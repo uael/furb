@@ -174,12 +174,18 @@ where
     Some(file) => Some(Door::open(file).await?),
     None => None,
   };
-  let (daemon, mut leave) = Daemon::spawn(settings, handed);
+  let (grace, lasting) = (settings.grace, doors.is_some());
+  // A daemon that no peer reached yet waits for the first one, which the program that started it
+  // sends.
+  let mut met = !handed.is_empty();
+  let (daemon, mut leave, mut empty) = Daemon::spawn(settings, handed);
   let mut peers = JoinSet::new();
+  let mut quiet = None;
   let leaving = loop {
     tokio::select! {
       accepted = listener.accept() => match accepted {
         Ok(stream) => {
+          met = true;
           peers.spawn(peer(daemon.clone(), identity.clone(), stream));
         }
         Err(no) => report(log.as_ref(), &no),
@@ -192,6 +198,7 @@ where
       },
       knocked = knock(door.as_ref()) => match knocked {
         Ok((stream, ticket)) => {
+          met = true;
           peers.spawn(window(daemon.clone(), ticket, stream));
         }
         Err(no) => report(log.as_ref(), &no),
@@ -201,11 +208,17 @@ where
         Ok(Err(no)) => report(log.as_ref(), &no),
         Err(no) => report(log.as_ref(), &no),
       },
-      leaving = &mut leave => break leaving,
+      Ok(()) = empty.changed() => {}
+      () = until(quiet) => break None,
+      leaving = &mut leave => break leaving.ok(),
     }
+    // The daemon of this machine ends once it holds no peer and no life for its grace, so no
+    // daemon outlives the windows that started it. A daemon on the tailnet serves its doors.
+    let idle = met && !lasting && peers.is_empty() && *empty.borrow();
+    quiet = if idle { quiet.or_else(|| Some(Instant::now() + grace)) } else { None };
   };
   drop((listener, doors, door));
-  if let Ok(Leaving { handed, asker, reply }) = leaving {
+  if let Some(Leaving { handed, asker, reply }) = leaving {
     reply.send(Ok(Answer::Handed(handed))).ok();
     asker.closed().await;
   }
@@ -353,9 +366,13 @@ struct Leaving {
 impl Daemon {
   /// The task that owns the lives started, with the lives that a daemon before it gave, and what
   /// it says to the listener at a handover.
-  fn spawn(settings: Settings, handed: Vec<Handed>) -> (Self, oneshot::Receiver<Leaving>) {
+  fn spawn(
+    settings: Settings,
+    handed: Vec<Handed>,
+  ) -> (Self, oneshot::Receiver<Leaving>, watch::Receiver<bool>) {
     let (asks, heard) = mpsc::unbounded_channel();
     let (leave, leaving) = oneshot::channel();
+    let (empty, emptied) = watch::channel(handed.is_empty());
     let changes = settings.tailnet.as_ref().map(|one| one.identity.changes());
     let mut lives = Lives {
       changes,
@@ -365,10 +382,11 @@ impl Daemon {
       born: 0,
       leave,
       views: Views::default(),
+      empty,
     };
     lives.adopt(handed);
     tokio::spawn(lives.kept(heard));
-    (Self { asks }, leaving)
+    (Self { asks }, leaving, emptied)
   }
 
   /// What the task that owns the lives answers.
@@ -458,6 +476,7 @@ fn routed(verb: Verb) -> Routed {
     Verb::Queued { life, on } => (life, Command::Queued { on }),
     Verb::Desk { life, notices } => (life, Command::Desk { notices }),
     Verb::Threads { life, on, at, read } => (life, Command::Threads { on, at, read }),
+    Verb::Rail { life, hidden, at } => (life, Command::Rail { hidden, at }),
     Verb::AsOf { life, at } => (life, Command::AsOf { at }),
     Verb::Moments { life } => (life, Command::Moments),
     other => return Routed::Daemon(other),
@@ -485,6 +504,7 @@ impl From<Reply> for Answer {
       Reply::Inspected { kind, repr, value } => Self::Inspected { kind, repr, value },
       Reply::Desk(desk) => Self::Desk(desk),
       Reply::Threads(threads) => Self::Threads(threads),
+      Reply::Rail(threads) => Self::Rail(threads),
       Reply::Acts(acts) => Self::Acts(acts),
       Reply::Moments(moments) => Self::Moments(moments),
     }
@@ -528,6 +548,8 @@ struct Lives {
   born: u64,
   leave: oneshot::Sender<Leaving>,
   views: Views,
+  /// Whether the daemon holds no life, which the listener reads to end the daemon.
+  empty: watch::Sender<bool>,
 }
 
 /// The next change of the access list, or never when there is no list.
@@ -636,6 +658,8 @@ impl Lives {
         }
         Some(asked) => self.heard(asked),
       }
+      let empty = self.held.is_empty();
+      self.empty.send_if_modified(|was| std::mem::replace(was, empty) != empty);
     }
   }
 

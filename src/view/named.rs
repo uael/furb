@@ -116,8 +116,9 @@ pub fn said(word: &str) -> Option<String> {
 }
 
 /// The word that names a session with a name, as the operator says it: the word of `renameWord` in
-/// tui/src/names.ts, which the TUI sends. The crate builds it for its tests alone.
-#[cfg(test)]
+/// tui/src/names.ts, which the TUI sends. The crate builds it for its tests and for the feature
+/// `test-support`, which the tests of the host take.
+#[cfg(any(test, feature = "test-support"))]
 pub fn word(name: &str) -> String {
   format!("{}{}{}", WORD.0, Value::String(name.to_owned()), WORD.1)
 }

@@ -91,9 +91,9 @@ test("the row that a model writes takes the next number in the frame that shows 
   const numbers: number[] = [];
   for (const frame of frames) {
     const lines = frame.frame.split("\n");
-    const row = lines.findIndex((line) => /^[\s┃]*\d+[\u2800-\u28ff] /.test(line));
+    const row = lines.findIndex((line) => /^[\s┃]*\d+ [\u2800-\u28ff] /.test(line));
     if (row < 0) continue;
-    const number = Number(/(\d+)[\u2800-\u28ff] /.exec(lines[row] ?? "")?.[1]);
+    const number = Number(/(\d+) [\u2800-\u28ff] /.exec(lines[row] ?? "")?.[1]);
     numbers.push(number);
     // Each line before the number of the row stands above it as code, in the same frame.
     const above = lines.slice(0, row).filter((line) => !/[\u2800-\u28ff]/.test(line.slice(0, 12)));
