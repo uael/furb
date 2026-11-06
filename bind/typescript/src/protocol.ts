@@ -13,6 +13,7 @@ export type Request1 =
       verb: "hello";
     })
   | {
+      config?: string | null;
       verb: "list";
     }
   | {
@@ -787,12 +788,16 @@ export interface Peer {
   name?: string | null;
 }
 /**
- * A record of the machine, whether a life of the daemon holds it now, and the name of its session:
- * the one that the operator said last on the root, which wins, else the one that the extension
- * naming gave, and nothing while it holds neither. An empty name takes the default name again.
+ * A record of the machine: the main checkout of the workspace whose sessions hold it, when the
+ * list names one, whether a life of the daemon holds it now, whether that life lives and does not
+ * end, and the name of its session while a life holds it: the one that the operator said last on
+ * the root, which wins, else the one that the extension naming gave. An empty name takes the
+ * default name again.
  */
 export interface Listed {
   life: string;
+  workspace?: string | null;
+  held: boolean;
   open: boolean;
   name?: string | null;
 }

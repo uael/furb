@@ -1,10 +1,8 @@
-#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
-
+use crate::testing::pause;
 use std::{
   io::{Read, Write},
   net::{TcpListener, TcpStream},
   sync::mpsc,
-  thread,
   time::Duration,
 };
 
@@ -125,7 +123,7 @@ fn the_browser_callback_rejects_another_state_and_reads_a_split_request() {
   assert!(refusal.starts_with("HTTP/1.1 400 Bad Request"));
   let mut browser = TcpStream::connect(address).expect("browser");
   browser.write_all(b"GET /auth/call").expect("first packet");
-  thread::sleep(Duration::from_millis(20));
+  pause(Duration::from_millis(20));
   browser.write_all(b"back?code=accepted&state=expected HTTP/1.1\r\n\r\n").expect("second packet");
   let mut response = String::new();
   browser.read_to_string(&mut response).expect("response");

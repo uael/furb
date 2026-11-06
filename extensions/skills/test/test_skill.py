@@ -103,3 +103,19 @@ async def test_a_skill_of_a_name_that_no_skill_has_raises_refused(tmp_path: Path
   root, _ = brewed(tmp_path)
   with pytest.raises(Refused, match=r"There is no skill tea\."):
     await engine.rung('close(await skill("tea"))', on=root)
+
+
+async def test_a_skill_of_the_user_whose_word_binds_a_name_of_the_engine_raises_refused_and_plays_no_word(
+  tmp_path: Path,
+) -> None:
+  """A skill with code whose word binds a name of the engine at its top raises Refused where it is awaited, and the life enables no word of it."""
+  folder = skilled(
+    tmp_path / "config" / "skills", "note", "name: note\ndescription: A note.\nmetadata:\n  furb-word: note.py"
+  ).parent
+  (folder / "note.py").write_text(
+    "def filled(template: str) -> str:\n  return template\n", encoding="utf-8", newline=""
+  )
+  root = extended("skills", tmp_path, _monty.skills)[1]
+  with pytest.raises(Refused, match=r"The word note\.py binds filled of the engine at its top"):
+    await engine.rung('close(await skill("note"))', on=root)
+  assert [a for a in engine.transcript(on=root) if a[0] == "enable" and a[3] == "note"] == []

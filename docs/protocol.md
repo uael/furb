@@ -90,7 +90,7 @@ it is not given. The daemon answers requests in any order.
 
 | Verb | Fields | Role |
 | --- | --- | --- |
-| `list` | | read |
+| `list` | `config` | read |
 | `open` | `life`, `cwd`, `actor`, `roster`, `extensions`, `config`, `claude`, `answers`, `attach` | write |
 | `attach` | `life`, `from` | read |
 | `detach` | `life` | read |
@@ -134,10 +134,20 @@ it is not given. The daemon answers requests in any order.
 
 - `config` reads and changes the configs of the folder of a life, which the World writes, so no window writes a disk.
   A get gives `values`, each key with the value that wins for it and its layer, `user`, `project` or `local`. A key has
-  one or two names, as `["providers", "codex"]`. A set writes the key in its layer, `project` when none is named, or
+  one or two names, as `["providers", "codex"]`. A key that a schema names comes with its `property`, as
+  [`config.md`](config.md#the-schema) says, and with the `extension` that adds it, when one does; such a key that no
+  layer gives comes with its default and no layer, and an object of furb, as `providers`, comes with the object of
+  the values that win and no layer, then with a value for each of its names. A set refuses a value that the property
+  of its key does not take, and writes nothing. A set writes the key in its layer, `project` when none is named, or
   takes it out when no value is given, and then the life stands, so the answer is the act of the stand. A change that
   the catalog cannot read puts its config back as it was, and the life does not stand. A reload is a stand on the
   configs as the disk holds them, which asks again each model that waits to retry.
+- `list` gives each record of the machine as `lives`: each record of the sessions of each workspace that
+  `workspaces.json` in the folder `config` names, the config folder of the daemon when the peer names none, in the
+  `.furb/sessions` of its main checkout and of each worktree of it, with that main checkout as `workspace`, and each
+  record that a life of the daemon holds. `held` says whether a life holds the record now, and `open` whether that
+  life lives and does not end. A window lists its sessions from it, so a window on another machine lists them the
+  same way.
 - The role to write holds each right of the role to read. A verb needs the role to write unless this table says read,
   and the daemon refuses it to a reader with the refusal `role`, which names both roles.
 - An answer is a frame `reply` with the `id`, an `answer` that names its kind, and its `data`: `done`, `welcome`,

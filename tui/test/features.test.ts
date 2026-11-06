@@ -357,7 +357,7 @@ test("/extensions lists what a life runs, and a cancel of a word of the operator
       async ({ session, frame, click }) => {
         await session.command("/extensions");
         expect(session.notice).toBe(
-          "This life runs catchup with catchup(), memory with await recall(), skills with await listed(), compaction with fitted(), naming with name_session(), ouroboros, web, mcp with await mcp_index(). Run a word of one with /run.",
+          "This life runs catchup with catchup(), memory with await recall(), skills with await listed(), compaction with compacted(); fitted(), naming with name_session(), ouroboros, web, mcp with await mcp_index(). Run a word of one with /run.",
         );
         await session.command("/run await wait(60, __name__)");
         // The wait runs under the word, so the cancel asks first.
@@ -417,7 +417,7 @@ test("the setup of the root stands as code: a comment that names the setup, then
               ),
             ),
           ),
-          "catchup()\nawait recall()\nawait listed()\nfitted()\nawait mcp_index()",
+          "catchup()\nawait recall()\nawait listed()\ncompacted(); fitted()\nawait mcp_index()",
           // An extension that plays on the root alone comes after the others, with its life word.
           expect.stringMatching(
             /^rung\(read\('.*[/\\]+words[/\\]+naming[/\\]+naming\.py', HIDDEN\)\.content\)$/,
@@ -463,7 +463,7 @@ test("the setup of the root stands as code: a comment that names the setup, then
           "10 catchup()",
           "11 await recall()",
           "12 await listed()",
-          "13 fitted()",
+          "13 compacted(); fitted()",
           "14 await mcp_index()",
         ]);
         // The extension naming plays on the root alone, so its word and its life word come after the others.

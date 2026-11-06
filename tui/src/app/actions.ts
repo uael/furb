@@ -27,6 +27,7 @@ export const actions = part({
       queue: this.queuePicker,
       model: this.models,
       providers: this.providers,
+      config: this.configs,
       effort: this.effortPicker,
       shape: this.shapes,
       theme: () => this.themes(),

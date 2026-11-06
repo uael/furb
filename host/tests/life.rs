@@ -227,7 +227,9 @@ async fn the_configs_of_a_life_are_read_and_changed_through_its_commands_and_a_c
   let Reply::Values(settings) = life.send(Command::Settings).await.unwrap() else {
     panic!("the settings are values")
   };
-  assert_eq!(settings, vec![json!({"key": ["max_thinking_tokens"], "value": 0, "layer": "local"})]);
+  let thinking = settings.iter().find(|one| one["key"] == json!(["max_thinking_tokens"])).unwrap();
+  assert_eq!((&thinking["value"], &thinking["layer"]), (&json!(0), &json!("local")));
+  assert_eq!(thinking["property"]["type"], json!("integer"), "the schema names the key");
   let wrong =
     Change { key: key(&["providers", "nothing"]), value: Some(json!(true)), layer: Layer::Project };
   let refused = life.send(Command::Configure(wrong)).await;

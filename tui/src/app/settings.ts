@@ -16,7 +16,7 @@ import {
   themeLabels,
 } from "../theme.ts";
 import { part } from "./part.ts";
-import { inputColors, terminalDetail } from "./shared.ts";
+import { type Choice, inputColors, terminalDetail } from "./shared.ts";
 
 export const settings = part({
   /** The models of the roster and of the catalog under their providers, with the one the chain uses marked. */
@@ -134,6 +134,57 @@ export const settings = part({
           ],
           { note: "Changes apply to this project and are saved in .furb/config.json." },
         );
+      })
+      .catch(this.report);
+  },
+
+  /** Each key of the configs under the part that names it, furb or an extension, as the settings of VS Code show
+   * them: a flag changes at once, a key of some values opens them, and any other key goes to the composer. */
+  configs(): void {
+    void this.session.host
+      .settings()
+      .then((settings) => {
+        let group = "";
+        const choices = settings.map((one): Choice => {
+          const name = one.key.join(".");
+          const { property } = one;
+          // The names of an object of furb, as each provider, follow the setting of the object.
+          if (property) group = property.type === "object" && !one.extension ? (one.key[0] ?? "") : "";
+          const heading = property
+            ? (one.extension ?? "furb")
+            : one.key[0] === group
+              ? "furb"
+              : "Not in a schema";
+          const where = one.layer ? `${one.layer} config` : property?.type === "object" ? "" : "default";
+          const set = (value: unknown) => this.action(`/config ${name} ${JSON.stringify(value)}`);
+          const values = property?.enum;
+          return {
+            label: property || one.key[0] !== group ? name : `  ${one.key[1]}`,
+            detail: [clip(JSON.stringify(one.value) ?? "", 48), where, property?.description]
+              .filter(Boolean)
+              .join(" · "),
+            heading,
+            ...(typeof one.value === "boolean" ? { mark: this.current(one.value) } : {}),
+            run: () =>
+              typeof one.value === "boolean" && (!property || property.type === "boolean")
+                ? set(!one.value)
+                : values
+                  ? this.openPalette(
+                      name,
+                      values.map((value) => ({
+                        label: JSON.stringify(value),
+                        detail: property?.description ?? "",
+                        mark: this.current(value === one.value),
+                        run: () => set(value),
+                      })),
+                      { selected: Math.max(0, values.indexOf(one.value)) },
+                    )
+                  : this.insert(`/config ${name} `),
+          };
+        });
+        this.openPalette("Settings", choices, {
+          note: "A change goes to the config that gives the key, or to .furb/config.json. /config <key> resets it.",
+        });
       })
       .catch(this.report);
   },
@@ -330,6 +381,7 @@ export const settingsBound = [
   "codexModels",
   "authentication",
   "providers",
+  "configs",
   "effortPicker",
   "details",
   "shapes",

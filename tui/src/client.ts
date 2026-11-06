@@ -6,8 +6,9 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Fact, Standing, Turn } from "furb";
 import { type Compaction, followed, isDone, operated, type Spend, WORK } from "furb/life";
-import type { Act, Answer, Config, Event, Frame, Peer, Role, Request1 as Verb } from "furb/protocol";
+import type { Act, Answer, Config, Event, Frame, Listed, Peer, Role, Request1 as Verb } from "furb/protocol";
 import { PROTOCOL } from "furb/protocol";
+import type { Setting } from "./configs.ts";
 
 export type { Verb };
 
@@ -226,6 +227,14 @@ export class Daemon extends EventEmitter {
     });
   }
 
+  /** The records of the sessions of each workspace of the list in a config folder, as the daemon reads them, and each
+   * record whose life the daemon holds. */
+  async records(config: string): Promise<Listed[]> {
+    const listed = await this.ask({ verb: "list", config });
+    if (listed.answer !== "lives") throw new Error(`The daemon gave ${listed.answer}, and no list of lives.`);
+    return listed.data;
+  }
+
   /** The records whose life a window holds in the daemon now, of those given: a window of any connection, this one
    * too, and no pin. */
   async holding(lives: readonly string[]): Promise<Set<string>> {
@@ -249,7 +258,7 @@ export class Daemon extends EventEmitter {
       const listed = await this.ask({ verb: "list" });
       if (listed.answer !== "lives")
         throw new Error(`The daemon gave ${listed.answer}, and no list of lives.`);
-      if (!listed.data.some((one) => one.life === life)) return;
+      if (!listed.data.some((one) => one.life === life && one.held)) return;
       if ((await this.holding([life])).size > 0) throw new Error(`Another window holds the life of ${life}.`);
       if (Date.now() > until)
         throw new Error(`The life of ${life} did not end in ${patience / 1000} s: a pin holds it.`);
@@ -724,6 +733,12 @@ export class RemoteLife extends EventEmitter {
   /** What an act came to once it is done, which throws the fault that ended it. */
   async config(config: Config): Promise<string> {
     return await this.made(await this.verb({ verb: "config", life: this.record, config }));
+  }
+  /** Each key of the configs of the folder of the life, as the host joins them with their schema. */
+  async settings(): Promise<Setting[]> {
+    return valued(
+      await this.verb({ verb: "config", life: this.record, config: { action: "get" } }),
+    ) as Setting[];
   }
   async result(id: string): Promise<unknown> {
     const act = this.acts.get(id);

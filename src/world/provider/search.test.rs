@@ -1,10 +1,6 @@
 //! The native searches: what each API answers comes to an answer with its sources, and the claude command line
 //! searches with its tool WebSearch alone.
 
-#![cfg_attr(
-  unix,
-  expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")
-)]
 #![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
 #![cfg_attr(
   unix,
@@ -20,7 +16,10 @@ use serde_json::json;
 use super::claude;
 use super::{anthropic, deepseek, found, gemini, responses, sourced};
 #[cfg(unix)]
-use crate::{ear::reactor, testing::Yard, world::provider::claude::Program};
+use crate::{
+  testing::{Yard, on_reactor},
+  world::provider::claude::Program,
+};
 
 fn pair(title: &str, url: &str) -> (String, String) {
   (title.to_owned(), url.to_owned())
@@ -111,7 +110,7 @@ fn program(name: &str, args: &[&str], body: &str) -> (Yard, Program) {
 fn the_claude_command_line_searches_on_its_model_with_its_tool_web_search_alone_and_the_query_on_its_stdin()
  {
   let (_yard, bin) = program("echo", &[], r#"echo "$@"; cat"#);
-  let got = reactor().block_on(claude(bin, "haiku".to_owned())("what is rust".to_owned())).unwrap();
+  let got = on_reactor(claude(bin, "haiku".to_owned())("what is rust".to_owned())).unwrap();
   let (args, query) = got.split_once('\n').unwrap();
   assert!(
     args.starts_with("-p --model haiku --output-format text --system-prompt Search the web"),
@@ -120,7 +119,7 @@ fn the_claude_command_line_searches_on_its_model_with_its_tool_web_search_alone_
   assert!(args.ends_with("--allowedTools WebSearch --tools WebSearch"), "{args}");
   assert_eq!(query, "what is rust");
   let (_yard, bin) = program("fails", &[], "echo out; echo 'no credit' >&2; exit 3");
-  let no = reactor().block_on(claude(bin, "haiku".to_owned())("q".to_owned())).unwrap_err();
+  let no = on_reactor(claude(bin, "haiku".to_owned())("q".to_owned())).unwrap_err();
   assert_eq!(no.to_string(), "claude exit status: 3: no credit");
 }
 
@@ -129,7 +128,7 @@ fn the_claude_command_line_searches_on_its_model_with_its_tool_web_search_alone_
 fn the_claude_command_line_searches_with_its_command_prefix_once_before_its_flags() {
   let show = r#"printf '[%s]\n' "$@"; echo ---; cat"#;
   let (_yard, bin) = program("prefix", &["run", "two words"], show);
-  let got = reactor().block_on(claude(bin, "haiku".to_owned())("what is rust".to_owned())).unwrap();
+  let got = on_reactor(claude(bin, "haiku".to_owned())("what is rust".to_owned())).unwrap();
   let (args, query) = got.split_once("---\n").unwrap();
   assert!(args.starts_with("[run]\n[two words]\n[-p]\n[--model]\n[haiku]\n"), "{args}");
   assert_eq!(args.matches("[run]").count() + args.matches("[two words]").count(), 2);
