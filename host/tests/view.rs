@@ -3,6 +3,7 @@
 //! of TypeScript give.
 
 use std::collections::HashMap;
+use std::iter;
 
 use furb::view::{
   Act, Answer, Attention, ChainThread, Concern, Kind, NoteRun, Origin, Pause, Phase, Rows,
@@ -564,7 +565,7 @@ fn a_question_concerns_the_operator_in_any_thread_and_a_failure_or_a_pause_only_
     let found: HashMap<String, (Origin, bool, bool)> =
       nest_threads(chain_threads(&on, &rows), &rows)
         .iter()
-        .flat_map(|top| std::iter::once(top).chain(&top.agents))
+        .flat_map(|top| iter::once(top).chain(&top.agents))
         .map(|node| {
           (
             node.thread.prompt.clone(),

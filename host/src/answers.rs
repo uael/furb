@@ -10,6 +10,7 @@
 //! the life drops it, or when the connection of its peer ends; a turn or a write that comes after
 //! is refused, and the peer is not told that the life dropped the request.
 
+use std::sync::MutexGuard;
 use std::{
   collections::HashMap,
   sync::{Arc, Mutex, PoisonError},
@@ -46,7 +47,7 @@ impl Answerer {
   /// The peer of an outbox, as the answerer of the models of a life.
   pub(crate) fn new(life: String, outbox: Outbox) -> Self {
     let waiting = Waiting { outbox, next: 0, asks: HashMap::new() };
-    Answerer { life, waiting: Arc::new(Mutex::new(waiting)) }
+    Self { life, waiting: Arc::new(Mutex::new(waiting)) }
   }
 
   /// The peer of an outbox as the one that answers, in the place of a peer that is gone, or the
@@ -135,7 +136,7 @@ impl Answerer {
     }
   }
 
-  fn lock(&self) -> std::sync::MutexGuard<'_, Waiting> {
+  fn lock(&self) -> MutexGuard<'_, Waiting> {
     self.waiting.lock().unwrap_or_else(PoisonError::into_inner)
   }
 

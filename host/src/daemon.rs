@@ -33,7 +33,7 @@ use std::{
 
 use furb::{
   engine::OPERATOR,
-  life::{Log, Opening},
+  life::{Answer as Answered, Log, Opening},
   wire::parsed,
   world::config::Change,
 };
@@ -270,7 +270,7 @@ impl Doors {
   /// The doors listening on the first address of the machine on the tailnet, an address of IPv4
   /// before one of IPv6. A daemon that cannot listen there reports why, and serves the machine
   /// alone.
-  async fn listen(tailnet: &Tailnet, log: Option<&Log>) -> Option<Doors> {
+  async fn listen(tailnet: &Tailnet, log: Option<&Log>) -> Option<Self> {
     let opened = async {
       let mut ips = tailnet.identity.addresses().await?;
       ips.sort_by_key(IpAddr::is_ipv6);
@@ -285,13 +285,13 @@ impl Doors {
           report(log, &format_args!("listens on the tailnet at {at} by {name}"));
         }
       }
-      Ok::<_, TransportError>(Doors { identity: tailnet.identity.clone(), tcp, websocket })
+      Ok::<_, TransportError>(Self { identity: tailnet.identity.clone(), tcp, websocket })
     };
     opened.await.inspect_err(|no| report(log, &format_args!("no door on the tailnet: {no}"))).ok()
   }
 
   /// The next peer of the tailnet, with the identity that says who it is, or never with no door.
-  async fn arrival(doors: Option<&Doors>) -> Result<(Tailscale, Arrival), TransportError> {
+  async fn arrival(doors: Option<&Self>) -> Result<(Tailscale, Arrival), TransportError> {
     let Some(doors) = doors else { return future::pending().await };
     let arrival = tokio::select! {
       stream = accepted(doors.tcp.as_ref()) => Arrival::Tcp(stream?),
@@ -349,7 +349,7 @@ struct Leaving {
 impl Daemon {
   /// The task that owns the lives started, with the lives that a daemon before it gave, and what
   /// it says to the listener at a handover.
-  fn spawn(settings: Settings, handed: Vec<Handed>) -> (Daemon, oneshot::Receiver<Leaving>) {
+  fn spawn(settings: Settings, handed: Vec<Handed>) -> (Self, oneshot::Receiver<Leaving>) {
     let (asks, heard) = mpsc::unbounded_channel();
     let (leave, leaving) = oneshot::channel();
     let changes = settings.tailnet.as_ref().map(|one| one.identity.changes());
@@ -364,7 +364,7 @@ impl Daemon {
     };
     lives.adopt(handed);
     tokio::spawn(lives.kept(heard));
-    (Daemon { asks }, leaving)
+    (Self { asks }, leaving)
   }
 
   /// What the task that owns the lives answers.
@@ -471,15 +471,15 @@ fn configured(config: Config) -> Command {
 impl From<Reply> for Answer {
   fn from(reply: Reply) -> Self {
     match reply {
-      Reply::Done => Answer::Done,
-      Reply::Act(id) => Answer::Act(id),
-      Reply::Value(value) => Answer::Value(value),
-      Reply::Values(values) => Answer::Values(values),
-      Reply::Inspected { kind, repr, value } => Answer::Inspected { kind, repr, value },
-      Reply::Desk(desk) => Answer::Desk(desk),
-      Reply::Threads(threads) => Answer::Threads(threads),
-      Reply::Acts(acts) => Answer::Acts(acts),
-      Reply::Moments(moments) => Answer::Moments(moments),
+      Reply::Done => Self::Done,
+      Reply::Act(id) => Self::Act(id),
+      Reply::Value(value) => Self::Value(value),
+      Reply::Values(values) => Self::Values(values),
+      Reply::Inspected { kind, repr, value } => Self::Inspected { kind, repr, value },
+      Reply::Desk(desk) => Self::Desk(desk),
+      Reply::Threads(threads) => Self::Threads(threads),
+      Reply::Acts(acts) => Self::Acts(acts),
+      Reply::Moments(moments) => Self::Moments(moments),
     }
   }
 }
@@ -715,7 +715,7 @@ impl Lives {
   fn opened(&mut self, life: String, birth: Birth) -> Result<(), ProtocolError> {
     let Birth { cwd, actor, roster, extensions, config, claude, answerer, holder: _ } = birth;
     let base = &self.settings.opening;
-    let answer = answerer.as_ref().map(|one| furb::life::Answer(one.hosted()));
+    let answer = answerer.as_ref().map(|one| Answered(one.hosted()));
     let opening = Opening {
       record: Some(life.clone()),
       directory: cwd.clone(),

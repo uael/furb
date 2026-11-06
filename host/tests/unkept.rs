@@ -19,7 +19,8 @@ mod yard;
 fn main() {
   #[cfg(unix)]
   {
-    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build();
+    use tokio::runtime::Builder;
+    let runtime = Builder::new_current_thread().enable_all().build();
     let runtime = runtime.expect("the test has a runtime");
     runtime.block_on(unix::a_life_whose_record_takes_no_fact_holds_its_rebirth_and_keeps_its_end());
     runtime.block_on(
@@ -31,7 +32,9 @@ fn main() {
 #[cfg(unix)]
 mod unix {
   use std::{
+    fs,
     path::Path,
+    process, slice,
     sync::{
       Arc,
       atomic::{AtomicUsize, Ordering},
@@ -47,6 +50,7 @@ mod unix {
   use furb_host::{Command, Event, Life, LifeHandle, Reply, Seq};
   use futures::{Stream, StreamExt};
   use rustix::process::{Resource, getrlimit, setrlimit};
+  use tokio::time::timeout;
 
   use super::yard;
 
@@ -89,7 +93,7 @@ mod unix {
   ) -> Vec<Logged> {
     let mut got = Vec::new();
     loop {
-      let next = tokio::time::timeout(Duration::from_secs(120), events.next()).await;
+      let next = timeout(Duration::from_secs(120), events.next()).await;
       let Ok(Some(logged)) = next else {
         let last: Vec<String> =
           got.iter().rev().take(20).map(|one| format!("{:.300}", format!("{one:?}"))).collect();
@@ -127,16 +131,14 @@ mod unix {
 
   /// The lines of the record of the life, in order.
   fn lines(at: &Path) -> Vec<String> {
-    let text = std::fs::read_to_string(at.join("record.jsonl")).expect("the record reads");
+    let text = fs::read_to_string(at.join("record.jsonl")).expect("the record reads");
     text.lines().map(str::to_owned).collect()
   }
 
   /// The events that a life tells within half a second, which tell nothing more once it is quiet.
   async fn quiet(events: &mut (impl Stream<Item = Logged> + Unpin)) -> Vec<Logged> {
     let mut got = Vec::new();
-    while let Ok(Some(logged)) =
-      tokio::time::timeout(Duration::from_millis(500), events.next()).await
-    {
+    while let Ok(Some(logged)) = timeout(Duration::from_millis(500), events.next()).await {
       got.push(logged);
     }
     got
@@ -144,7 +146,7 @@ mod unix {
 
   /// The size of the record of the life in bytes.
   fn size(at: &Path) -> u64 {
-    std::fs::metadata(at.join("record.jsonl")).expect("the record stands").len()
+    fs::metadata(at.join("record.jsonl")).expect("the record stands").len()
   }
 
   /// Whether an event is a notice that says a text.
@@ -155,7 +157,7 @@ mod unix {
   #[expect(unsafe_code, reason = "no crate of the lock sets a signal to be ignored with no unsafe")]
   pub(super) async fn a_life_whose_record_lacks_too_many_facts_pauses_its_work_until_it_takes_them()
   {
-    let at = yard::Yard::new(format!("furb-host-backlog-{}", std::process::id()));
+    let at = yard::Yard::new(format!("furb-host-backlog-{}", process::id()));
     let life = Life::spawn(opening(&at)).expect("the life has a thread");
     let mut events = Box::pin(life.events(0));
     ran(&life, &mut events, "n = 1").await;
@@ -194,20 +196,18 @@ mod unix {
       said(&life, "b = 1", &late).await,
     ];
     let held = quiet(&mut events).await;
-    let ran: Vec<&String> = later
-      .iter()
-      .filter(|id| held.iter().any(|one| done(std::slice::from_ref(*id))(&one.1)))
-      .collect();
+    let ran: Vec<&String> =
+      later.iter().filter(|id| held.iter().any(|one| done(slice::from_ref(*id))(&one.1))).collect();
     assert!(ran.is_empty(), "words ran while the life held its work: {ran:?}");
     assert_eq!(size(&at), full, "the record took no fact while the limit stood");
 
     limited(libc::RLIM_INFINITY);
     let mut left: Vec<String> = later.to_vec();
     let freed = until(&mut events, notice("wakes the work")).await;
-    left.retain(|id| !freed.iter().any(|one| done(std::slice::from_ref(id))(&one.1)));
+    left.retain(|id| !freed.iter().any(|one| done(slice::from_ref(id))(&one.1)));
     while !left.is_empty() {
       let got = until(&mut events, done(&left)).await;
-      left.retain(|id| !got.iter().any(|one| done(std::slice::from_ref(id))(&one.1)));
+      left.retain(|id| !got.iter().any(|one| done(slice::from_ref(id))(&one.1)));
     }
     assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
     let kept = lines(&at);
@@ -255,7 +255,7 @@ mod unix {
 
   #[expect(unsafe_code, reason = "no crate of the lock sets a signal to be ignored with no unsafe")]
   pub(super) async fn a_life_whose_record_takes_no_fact_holds_its_rebirth_and_keeps_its_end() {
-    let at = yard::Yard::new(format!("furb-host-unkept-{}", std::process::id()));
+    let at = yard::Yard::new(format!("furb-host-unkept-{}", process::id()));
     let life = Life::spawn(opening(&at)).expect("the life has a thread");
     let mut events = Box::pin(life.events(0));
     let mut log = ran(&life, &mut events, "n = 1").await;
@@ -283,7 +283,7 @@ mod unix {
     limited(full);
     ran(&life, &mut events, "n = 2").await;
     let mut end = std::pin::pin!(life.send(Command::End));
-    let early = tokio::time::timeout(Duration::from_millis(500), &mut end).await;
+    let early = timeout(Duration::from_millis(500), &mut end).await;
     assert!(early.is_err(), "the life ended while its record did not hold its facts: {early:?}");
     until(
       &mut events,
@@ -294,7 +294,7 @@ mod unix {
 
     // The life keeps the end that it was told once, and ends once the record holds each fact.
     limited(libc::RLIM_INFINITY);
-    let ended = tokio::time::timeout(Duration::from_secs(120), end).await;
+    let ended = timeout(Duration::from_secs(120), end).await;
     assert!(matches!(ended, Ok(Ok(Reply::Done))), "{ended:?}");
     let told = until(&mut events, |event| matches!(event, Event::Ended(_))).await;
     assert!(matches!(&*told.last().expect("the end is told").1, Event::Ended(None)));

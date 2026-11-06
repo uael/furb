@@ -143,7 +143,7 @@ pub enum Command {
   End,
   /// A command of the engine said by a speaker of the life other than the operator, as the process
   /// of a skill under its name: each act and each fact that the command says is of that speaker.
-  By { speaker: String, command: Box<Command> },
+  By { speaker: String, command: Box<Self> },
 }
 
 impl Command {
@@ -902,7 +902,7 @@ struct Reader {
 
 impl Reader {
   /// The next event, and the reader after it.
-  async fn next(mut self) -> Option<(Logged, Reader)> {
+  async fn next(mut self) -> Option<(Logged, Self)> {
     while !self.over {
       if let Some(logged) = self.read.pop_front() {
         if logged.0 == self.next {
@@ -924,7 +924,7 @@ impl Reader {
   }
 
   /// One event given, and the reader after it.
-  fn given(mut self, logged: Logged) -> (Logged, Reader) {
+  fn given(mut self, logged: Logged) -> (Logged, Self) {
     self.next = logged.0 + 1;
     self.over = matches!(*logged.1, Event::Ended(_));
     (logged, self)

@@ -17,15 +17,16 @@ use std::{
   collections::HashMap,
   fmt::Display,
   io::{self, Write},
-  path::{Path, PathBuf},
+  path::{self, Path, PathBuf},
   process::ExitCode,
   time::Duration,
 };
 
 use clap::{Args, Parser, Subcommand};
-use furb::{life::Opening, value::entry, verbs, world};
+use furb::{checkpoint, life::Opening, value::entry, verbs, world};
 use furb_host::GRACE;
 use tokio::runtime;
+use tokio::task;
 
 use crate::{error::CliError, life::Life};
 
@@ -185,7 +186,7 @@ impl Place {
   /// A life in the directory of this place, on its record, which it keeps what it says to when `keeps` says so.
   fn opening(&self, keeps: bool) -> Opening {
     let cwd = self.cwd.clone().unwrap_or_else(|| PathBuf::from("."));
-    let directory = std::path::absolute(&cwd).unwrap_or(cwd).display().to_string();
+    let directory = path::absolute(&cwd).unwrap_or(cwd).display().to_string();
     let record = self.record.as_ref().map(|one| one.display().to_string());
     Opening { directory, record, keeps: Some(keeps), ..Opening::default() }
   }
@@ -269,7 +270,7 @@ async fn command(furb: Furb) -> Result<(), CliError> {
 async fn catalog(update: bool) -> Result<(), CliError> {
   let status = if update {
     // The update waits for the network on a thread that may block.
-    tokio::task::spawn_blocking(world::catalog::updated).await.map_err(CliError::Updating)?
+    task::spawn_blocking(world::catalog::updated).await.map_err(CliError::Updating)?
   } else {
     world::catalog::status()
   };
@@ -359,9 +360,9 @@ async fn run(opening: Opening, word: String) -> Result<(), CliError> {
 /// The checkpoint of the life of a record, made in a life that only inspects it and kept at its tip.
 async fn checkpoint(opening: Opening, record: &Path) -> Result<(), CliError> {
   let (mut engine, _) = Opening { inspecting: Some(true), ..opening }.open::<String>([]).await?;
-  let written = furb::checkpoint::written(&mut engine)?;
+  let written = checkpoint::written(&mut engine)?;
   drop(engine);
-  Ok(furb::checkpoint::keep(record, written)?)
+  Ok(checkpoint::keep(record, written)?)
 }
 
 /// Each extension that a life on the record runs, as its name and its life word, or its name alone when it has none,
