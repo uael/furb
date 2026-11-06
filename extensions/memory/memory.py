@@ -109,7 +109,7 @@ async def recall(on: str = "") -> Act:
 
 def visited(id: str, before: set[str], about: str, got: object) -> str:
   made = get(about)
-  if not made or made[0] not in ("read", "write", "cd") or scope(about) != scope(id) or about in before:
+  if made is None or made[0] not in ("read", "write", "cd") or scope(about) != scope(id) or about in before:
     return ""
   if not question(("rung", made[2])) or (made[0] == "read" and str(made[4]).endswith(("/", "\\"))):
     return ""
