@@ -22,6 +22,9 @@ fn main() {
     let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build();
     let runtime = runtime.expect("the test has a runtime");
     runtime.block_on(unix::a_life_whose_record_takes_no_fact_holds_its_rebirth_and_keeps_its_end());
+    runtime.block_on(
+      unix::a_life_whose_record_lacks_too_many_facts_pauses_its_work_until_it_takes_them(),
+    );
   }
 }
 
@@ -142,6 +145,56 @@ mod unix {
   /// The size of the record of the life in bytes.
   fn size(at: &Path) -> u64 {
     std::fs::metadata(at.join("record.jsonl")).expect("the record stands").len()
+  }
+
+  /// Whether an event is a notice that says a text.
+  fn notice(text: &'static str) -> impl Fn(&Event) -> bool {
+    move |event| matches!(event, Event::Notice(why) if why.contains(text))
+  }
+
+  #[expect(unsafe_code, reason = "no crate of the lock sets a signal to be ignored with no unsafe")]
+  pub(super) async fn a_life_whose_record_lacks_too_many_facts_pauses_its_work_until_it_takes_them()
+  {
+    let at = yard::Yard::new(format!("furb-host-backlog-{}", std::process::id()));
+    let life = Life::spawn(opening(&at)).expect("the life has a thread");
+    let mut events = Box::pin(life.events(0));
+    ran(&life, &mut events, "n = 1").await;
+    // SAFETY: the test sets the action of one signal, and no handler of its own.
+    unsafe { libc::signal(libc::SIGXFSZ, libc::SIG_IGN) };
+    let full = size(&at);
+    limited(full);
+    let word = format!("for i in range({}):\n  chance()", 5 * DRAWS);
+    let made = life.send(Command::Rung { word, on: None }).await;
+    assert!(matches!(made, Ok(Reply::Act(_))), "the word did not run: {made:?}");
+    let paused = until(&mut events, notice("pauses its work")).await;
+    let Event::Notice(said) = &*paused.last().expect("the pause is told").1 else { unreachable!() };
+    assert!(said.contains(&at.display().to_string()), "the notice names the folder: {said}");
+    assert!(said.contains(" left"), "the notice names the space left: {said}");
+    // A word of the operator while the life holds its work waits for the wake.
+    let made = life.send(Command::Rung { word: "m = 1".to_owned(), on: None }).await;
+    let Ok(Reply::Act(later)) = made else { panic!("the word did not run: {made:?}") };
+    let held = quiet(&mut events).await;
+    let ran = |log: &[Logged]| {
+      log.iter().any(|one| {
+        matches!(&*one.1, Event::Act(act) if act.id == later && matches!(act.phase, Phase::Done(_)))
+      })
+    };
+    assert!(!ran(&held), "a word ran while the life held its work");
+    assert_eq!(size(&at), full, "the record took no fact while the limit stood");
+
+    limited(libc::RLIM_INFINITY);
+    until(&mut events, notice("wakes the work")).await;
+    until(&mut events, |event| {
+      matches!(event, Event::Act(act) if act.id == later && matches!(act.phase, Phase::Done(_)))
+    })
+    .await;
+    assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
+    let kept = lines(&at);
+    let draws = kept.iter().filter(|line| line.starts_with("[[\"done\",\"chance")).count();
+    assert_eq!(draws, 5 * DRAWS, "the record holds each fact that waited");
+    let said = |head: &str| kept.iter().filter(|line| line.starts_with(head)).count();
+    assert_eq!(said("[[\"pause\",\"chain1\",\"operator\""), 1, "the life paused its root once");
+    assert_eq!(said("[[\"wake\",\"chain1\",\"operator\""), 1, "the life woke its root once");
   }
 
   #[expect(unsafe_code, reason = "no crate of the lock sets a signal to be ignored with no unsafe")]

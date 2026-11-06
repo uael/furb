@@ -103,37 +103,55 @@ pub(crate) fn each(path: impl AsRef<Path>, take: &mut dyn FnMut(Object)) -> Resu
   Ok(Format::of(path).each(path, take)?)
 }
 
-/// The entries that the store kept at a path whose fact is of one of some kinds, in order, read with no lease and
-/// changed in nothing. A file of lines is read from the head of each line, and parses only the lines of those kinds.
-pub fn heads(path: impl AsRef<Path>, kinds: &[&str]) -> Result<Vec<Object>, Fault> {
-  let path = path.as_ref();
-  let format = Format::of(path);
-  if format == Format::Lines {
-    let starts = Head::starts(kinds.iter().map(|&kind| Head::Kind(kind)));
-    return Ok(lines::heads(path, &starts)?);
-  }
-  let of = |entry: &Object| {
-    let fact = entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
-    fact.is_some_and(|one| kinds.contains(&one.kind()))
-  };
-  Ok(format.kept(path)?.into_iter().filter(of).collect())
+/// What the heads of the lines of a record tell, which one pass over the record reads: the entries
+/// of its facts made and of its checkpoints, in order, the place of each checkpoint among the
+/// entries, counted from 0, and the standing that its last answered stand gave.
+#[derive(Default)]
+pub struct Marks {
+  pub heads: Vec<Object>,
+  pub checkpoints: Vec<usize>,
+  pub standing: Option<Object>,
 }
 
-/// The standing that the last answered stand of the record at a path gave, read as [`heads`]
-/// reads, or nothing when it holds none. A file of lines reads from its end, a chunk at a time,
-/// until the last done of a stand, and parses only the lines of the done of a stand.
-pub fn standing(path: impl AsRef<Path>) -> Result<Option<Object>, Fault> {
-  let path = path.as_ref();
-  let format = Format::of(path);
-  if format == Format::Lines {
-    let starts = Head::starts([Head::Done("stand")]);
-    return Ok(lines::last(path, &starts, |entry| stood(&entry))?);
+impl Marks {
+  fn hear(&mut self, place: usize, entry: Object) {
+    if let Some(standing) = stood(&entry) {
+      self.standing = Some(standing);
+      return;
+    }
+    let kind = entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
+    match kind.as_ref().map(Fact::kind) {
+      Some(checkpoint::CHECKPOINT) => {
+        self.checkpoints.push(place);
+        self.heads.push(entry);
+      }
+      Some(MADE) => self.heads.push(entry),
+      _ => {}
+    }
   }
-  Ok(format.kept(path)?.iter().rev().find_map(stood))
 }
 
-/// The standing that an entry gives: the value of the done of a stand, when it is a list.
-fn stood(entry: &Object) -> Option<Object> {
+/// The marks of the record at a path, read with no lease and changed in nothing. A file of lines is
+/// read from the head of each line in one pass, and parses only the lines of a fact made, of a
+/// checkpoint and of the done of a stand.
+pub fn marks(path: impl AsRef<Path>) -> Result<Marks, Fault> {
+  let path = path.as_ref();
+  let format = Format::of(path);
+  let mut marks = Marks::default();
+  if format == Format::Lines {
+    let heads = [Head::Kind(MADE), Head::Kind(checkpoint::CHECKPOINT), Head::Done("stand")];
+    lines::heads(path, &heads, &mut |place, entry| marks.hear(place, entry))?;
+  } else {
+    for (place, entry) in format.kept(path)?.into_iter().enumerate() {
+      marks.hear(place, entry);
+    }
+  }
+  Ok(marks)
+}
+
+/// The standing that an entry gives, when it is the done of a stand of the root: the value of that
+/// done, when it is a list. This is the one place that finds the answer of a stand.
+pub fn stood(entry: &Object) -> Option<Object> {
   let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
   let value = fact.word(0)?;
   let stood =

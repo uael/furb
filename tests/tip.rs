@@ -9,8 +9,8 @@
 //! ```
 //!
 //! `FURB_PROBE_CONFIG` names the config directory, `FURB_PROBE_EXTENSIONS` set to anything runs
-//! the extensions that it turns on, and `FURB_PROBE_WHOLE` set to anything opens the record from its
-//! first entry, born again at each checkpoint, in the place of its last checkpoint alone.
+//! the extensions that it turns on, and `FURB_PROBE_WHOLE` set to anything opens the record from
+//! its first entry, born again at each checkpoint, in the place of its last checkpoint alone.
 
 use std::{fs, path::Path};
 

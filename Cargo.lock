@@ -1595,6 +1595,7 @@ name = "furb-host"
 version = "0.4.2"
 dependencies = [
  "base64 0.22.1",
+ "dunce",
  "form_urlencoded",
  "furb",
  "futures",

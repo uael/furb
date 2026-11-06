@@ -286,10 +286,13 @@ impl Opening {
     // A record of another major of its schema is refused before any build reads it whole or writes
     // on it, and the models of a life on a record that holds another engine read that engine.
     let mut system = None;
-    if let Some(path) = self.record.as_deref().filter(|one| Path::new(one).exists()) {
-      let heads = world::heads(path, &[world::MADE, checkpoint::CHECKPOINT])?;
-      world::readable(&heads)?;
-      let (source, _) = world::texts(checkpoint::segment(&heads))?;
+    let marks = match self.record.as_deref() {
+      Some(path) if Path::new(path).exists() => Some(world::marks(path)?),
+      _ => None,
+    };
+    if let Some(marks) = &marks {
+      world::readable(&marks.heads)?;
+      let (source, _) = world::texts(checkpoint::segment(&marks.heads))?;
       if source != crate::ENGINE {
         let unread = || Fault::refused("this build cannot minify the engine that the record holds");
         system = Some(crate::minify::minified(&source).ok_or_else(unread)?);
@@ -311,12 +314,7 @@ impl Opening {
       })
       .collect();
     // A life that names no actor or no roster goes on with the ones that its record stood on last.
-    let stood = match self.record.as_deref() {
-      Some(path) if Path::new(path).exists() && (self.actor.is_none() || self.roster.is_none()) => {
-        world::standing(path)?
-      }
-      _ => None,
-    };
+    let stood = marks.and_then(|marks| marks.standing);
     let (actor, roster) = stood.as_ref().map_or((None, None), |one| offered(one.as_ref()));
     let (actor, roster) = (self.actor.clone().or(actor), self.roster.clone().or(roster));
     let provider = match system {

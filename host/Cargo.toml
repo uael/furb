@@ -25,6 +25,8 @@ serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 # The JSON Schema of the protocol, from which bind/typescript/src/protocol.ts is made.
 schemars = "1"
+# The real path of a worktree, without the verbatim prefix that Windows gives.
+dunce = "1"
 thiserror = "2"
 # The WebSocket transport.
 tokio-tungstenite = { version = "0.29", default-features = false, features = ["handshake"] }

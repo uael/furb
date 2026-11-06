@@ -146,7 +146,7 @@ async fn a_reader_that_stands_behind_the_life_reads_its_events_again_from_the_lo
   let life = Life::spawn(scripted(&at, &[])).unwrap();
   let mut behind = Box::pin(life.events(0));
   let mut ahead = Box::pin(life.events(0));
-  let id = made(&life, rung("for n in range(300):\n  clock()")).await;
+  let id = made(&life, rung("for n in range(300):\n  chance()")).await;
   let heard = until(&mut ahead, done(&id)).await;
   assert!(heard.len() > 600, "{} events", heard.len());
   assert_eq!(until(&mut behind, done(&id)).await, heard);
