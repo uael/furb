@@ -279,6 +279,57 @@ fn a_word_that_binds_a_name_of_the_engine_at_its_top_is_a_finding_and_a_def_of_o
 }
 
 #[test]
+fn a_walrus_at_the_top_of_a_word_binds_a_name_of_the_engine_but_not_inside_a_lambda() {
+  let word = "(wait := 5)\nif (chance := 1):\n  pass\nk = [(cd := x) for x in ()]\nf = lambda: (turns := 1)\nclose(1)";
+  assert_eq!(
+    engine_names(word),
+    vec![(1, 4, "wait".to_owned()), (2, 7, "chance".to_owned()), (4, 9, "cd".to_owned())]
+  );
+}
+
+#[test]
+fn a_capture_of_a_match_at_the_top_of_a_word_binds_a_name_of_the_engine() {
+  let word = "match [1]:\n  case [wait, *chance]:\n    pass\n  case {'k': 1, **cd}:\n    pass\n  case int() as turns:\n    pass\n  case other:\n    pass\nclose(1)";
+  assert_eq!(
+    engine_names(word),
+    vec![
+      (2, 11, "wait".to_owned()),
+      (2, 18, "chance".to_owned()),
+      (4, 21, "cd".to_owned()),
+      (6, 19, "turns".to_owned()),
+    ]
+  );
+}
+
+#[test]
+fn a_global_of_a_def_or_a_class_binds_a_name_of_the_engine_in_the_module() {
+  let word = "def f():\n  global wait, chance, mine\n  wait = 1\ndef g():\n  def h():\n    global cd\n    cd = 1\nclass C:\n  def m(self):\n    global turns\nclose(1)";
+  assert_eq!(
+    engine_names(word),
+    vec![
+      (2, 12, "wait".to_owned()),
+      (2, 18, "chance".to_owned()),
+      (6, 14, "cd".to_owned()),
+      (10, 14, "turns".to_owned()),
+    ]
+  );
+}
+
+/// The line and the column of the word and the name of each finding of the engine-name rule.
+fn engine_names(word: &str) -> Vec<(usize, usize, String)> {
+  let (text, above) = acted(&[], &[], word);
+  found(&text)
+    .into_iter()
+    .filter(|(line, why)| *line > above && why.starts_with("error[engine-name]"))
+    .map(|(line, why)| {
+      let column = why.split("(column ").nth(1).and_then(|r| r.split(')').next());
+      let name = why.split('`').nth(1).unwrap_or_default();
+      (line - above, column.and_then(|c| c.parse().ok()).unwrap_or(0), name.to_owned())
+    })
+    .collect()
+}
+
+#[test]
 fn a_value_of_another_type_for_a_name_that_a_rung_declares_names_that_rung() {
   let program = ["def pr() -> int:\n  return 1", "import json\nmerged: set[int] = set()\nk = 1"];
   let word = "pr = 'a'\nfor merged in [[1]]:\n  pass\nk = 'b'\ndef f() -> int:\n  json = 1\n  return json\nclose(pr)";
