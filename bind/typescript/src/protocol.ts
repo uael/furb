@@ -1075,4 +1075,4 @@ export interface Open {
   chain: string;
 }
 
-export const PROTOCOL = 1;
+export const PROTOCOL = 2;
