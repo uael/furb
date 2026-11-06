@@ -192,15 +192,17 @@ it is not given. The daemon answers requests in any order.
 - After each `attach` and `detach`, the daemon pushes to each window of the life a frame `presence` with the `life`
   and its `peers`, each window that is attached now. Presence is no fact of the record.
 - The daemon watches each life that it holds, from outside the life: no word and no ear of the life runs the watch.
-  When a life holds an open act, a run of a word, a reply of a model or a command, and says no fact for the bound of
-  a stall, 20 minutes unless `stall` in `host.json` gives other seconds, the daemon pushes to each window of the life
-  a frame `stalled` with the `life`, its open `acts`, each with its `act`, its `kind` and its `chain`, and the
+  When a life holds an open act, a run of a word, a reply of a model or a command, and says no fact and no model
+  writes for the bound of a stall, 20 minutes unless `stall` in `host.json` gives other seconds, the daemon pushes
+  to each window of the life a frame `stalled` with the `life`, its open `acts`, each with its `act`, its `kind` and its `chain`, and the
   `notice` that a window shows as it stands. It also sends the notice to the root chain of the life as a prompt of
   `None`, so that its actor wakes.
 - The watch also holds the last change of each chain. A chain stalls when it holds a rung that no run, reply, command
   or wait lives beside on it, or a prompt to a model with no rung and nothing else on it, and no act of it changes for
-  60 seconds, or for the bound of a stall when that is shorter, even while other chains work. A paused act and a prompt
-  to the operator never stall a chain. The daemon pushes the frame `stalled` with the acts of that chain alone, and
+  60 seconds, or when a reply of a model on it writes nothing and no act of it changes for 5 minutes, each bound or
+  the bound of a stall when that is shorter, even while other chains work. Work that waits for the operator never
+  stalls a chain or the life: a paused act, a prompt to the operator, an act on a chain that asks him, and a rung or
+  a run whose word awaits such a prompt. The daemon pushes the frame `stalled` with the acts of that chain alone, and
   sends the notice as a prompt of `None` on that chain, so that its own actor wakes and no other.
 - The watch tells each stall once: nothing more until a fact of an act that its message did not make, on that chain
   for the stall of a chain, and a new stall after that fact. A stall is no fact of the record.
@@ -218,20 +220,25 @@ once it listens. A second daemon refuses to start there.
   made the file, and `unread` with why when the file could not be read as text, whose `before` is then empty and
   no undo puts back. A window reads it to show and to undo what each write changed. One journal serves each birth
   of the life, in the order of the writes, and the life ends, and replies to its end, only once the disk holds each
-  change; a fault of the disk is told at once as a notice, and the end of the life says what the journal lost.
+  change; a fault of the disk is told as a notice when the journal begins to lose changes, and again when it takes changes again, and the end of the life says what the journal lost.
 - A holder keeps a life: each window that attached it, and each pin, by the name of its holder. Work that runs holds
   nothing. A life with no holder for the grace of the daemon, 30 seconds unless `furb host --grace <seconds>` says
   otherwise, writes its checkpoint and ends, and `list` gives it as not `open` from then on. An `open` of a life
   that ends waits for its end, then opens it again from its checkpoint.
+- A life whose record does not hold each fact that it said yet, as on a full disk, does not end: its end, after the
+  grace, at a handover or at the end of the daemon, waits until the record holds them, and the life tells why in a
+  notice.
 - `detach` lets go of the window that says it alone, as `/end` does, and a window whose peer leaves is detached.
 - `furb host upgrade` serves the daemon of a new build in the place of the daemon that runs, which has no takeover.
   The new daemon says `handover`. The daemon that runs writes the checkpoint of each life, ends it, stops to listen
   and answers `handed` with each life, its folder and its pins. The new daemon listens and opens each life again with
   its pins, then the old one closes each window and ends. Each window dials again and attaches, and the life goes on
-  from its checkpoint. A life that does not end within 60 seconds is given up with no checkpoint, the log of the
-  daemon names it, and the new daemon opens it from its record.
+  from its checkpoint. The handover waits for each life to end, however long it takes, and the log of the daemon
+  names each life that it waits for: a life given up before its end would still hold its record and the facts that
+  its record does not hold yet. A life that ends already ends there and goes to no daemon, and the next `open` opens
+  it from its record.
 - A skill attaches a life as a window does, under its name, and hears its events from the place that it asks. Each verb of
-  a skill that says an act or a fact, as `run`, `prompt`, `bash` or `close`, speaks in the life under `skill/<name>`, and
+  a skill that says an act or a fact, as `run`, `prompt`, `bash` or `close`, speaks in the life under `skill/<name>`, but `seen`, `queue`, `unqueue` and `config` speak as the operator, whoever says them, since they are the operator's own, and
   the verbs of a window speak under `operator`. It holds no
   life, so a life with no window and no pin ends while a skill is attached. A skill that attaches again under its name takes
   the place of the first, and its views end. A skill that detaches, or whose peer leaves, ends its views.
