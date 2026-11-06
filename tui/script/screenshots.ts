@@ -223,6 +223,11 @@ try {
   await session.host.providers();
   await capture("91-providers");
   app().closeOverlay();
+  // The address is set first, so that the capture opens no browser.
+  app().authenticationUrl = "https://auth.openai.com/oauth/authorize?client_id=furb";
+  app().authentication({ state: "waiting", url: "https://auth.openai.com/oauth/authorize?client_id=furb" });
+  await capture("92-codex-sign-in");
+  app().closeOverlay();
   app().effortPicker();
   await capture("07-effort");
   app().closeOverlay();

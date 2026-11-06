@@ -73,7 +73,7 @@ export const settings = part({
           label: "Cancel sign-in",
           detail: "Keep using the current model",
           run: async () => {
-            await this.session.host.codexAuth("cancel");
+            await this.session.host.cancelSignIn();
           },
         },
       ],

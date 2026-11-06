@@ -507,7 +507,8 @@ pub fn begin(config: Option<&Path>) -> Result<SignIn, AuthError> {
   let (status, pending) = if !retry && usable(&path).is_some() {
     (SignIn::Connecting, None)
   } else {
-    let (url, pending) = authorize()?;
+    let (url, pending) =
+      authorize().inspect_err(|failure| publish(&path, SignIn::Failed(failure.to_string())))?;
     (SignIn::Waiting { url }, Some(pending))
   };
   {

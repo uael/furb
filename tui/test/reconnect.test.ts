@@ -175,6 +175,7 @@ test("the frame sign_in of the daemon shows as the event authentication of a lif
     socket.on("data", (chunk: string) => {
       const asked = JSON.parse(chunk.split("\n")[0] ?? "{}") as Asked & { verb?: string };
       verbs.push(asked.verb);
+      if (asked.verb !== "hello") return reply(socket, asked, { answer: "done" });
       reply(socket, asked, {
         answer: "welcome",
         data: { peer: { login: "test", role: "write", kind: "window" } },
@@ -204,4 +205,6 @@ test("the frame sign_in of the daemon shows as the event authentication of a lif
     { state: "failed", url: undefined, message: "No network." },
   ]);
   expect(verbs).toEqual(["hello"]);
+  await life.cancelSignIn();
+  expect(verbs).toEqual(["hello", "cancel_sign_in"]);
 });

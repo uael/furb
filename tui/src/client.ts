@@ -782,6 +782,10 @@ export class RemoteLife extends EventEmitter {
   async config(config: Config): Promise<string> {
     return await this.made(await this.verb({ verb: "config", life: this.record, config }));
   }
+  /** A cancel of the sign-in of codex that the daemon runs for the life, which refuses the config that asked it. */
+  async cancelSignIn(): Promise<void> {
+    await this.daemon.ask({ verb: "cancel_sign_in", life: this.record });
+  }
   /** Each key of the configs of the folder of the life, as the host joins them with their schema. */
   async settings(): Promise<Setting[]> {
     return valued(

@@ -116,6 +116,7 @@ it is not given. The daemon answers requests in any order.
 | `names` | `life`, `on` | read |
 | `gate` | `life`, `word`, `on` | read |
 | `stand` | `life` | write |
+| `cancel_sign_in` | `life` | write |
 | `config` | `life`, `config`: `{"action": "get"}`, `{"action": "set", "key", "value", "layer"}` | read for get, else write |
 | `seen` | `life`, `about` | write |
 | `queue` | `life`, `entry`, `shape`, `message`, `on` | write |
@@ -147,7 +148,8 @@ it is not given. The daemon answers requests in any order.
   `needs-login`, `failed` or `canceled`), the `url` of the browser while it waits, and the `message` that a person
   reads when it needs login or failed. The answer of the set comes when the sign-in ends: the act of the stand when
   it connects, and a refusal when the operator cancels it or it fails. A set to `false` cancels a sign-in that runs. A
-  window keeps no state of the sign-in beside these frames and asks for none.
+  window keeps no state of the sign-in beside these frames and asks for none. The verb `cancel_sign_in` cancels the
+  sign-in that the daemon runs for a life and writes no config, so the set that asked it is refused.
 - `list` gives each record of the machine as `lives`: each record of the sessions of each workspace that
   `workspaces.json` in the folder `config` names, the config folder of the daemon when the peer names none, in the
   `.furb/sessions` of its main checkout and of each worktree of it, with that main checkout as `workspace`, and each
