@@ -678,7 +678,7 @@ async def test_a_kernel_born_into_a_life_ends_each_run_that_an_earlier_kernel_to
   await settle()
   runs = [x[1] for x in engine.transcript(root, "run") if not engine.over(x[1])]
   wants = [x[1] for x in engine.transcript(root, "wants") if not engine.over(x[1])]
-  rungs = [engine.get(run)[4] for run in runs]
+  rungs = [str(engine.get(run)[4]) for run in runs]
   assert runs and wants and not any(engine.over(rung) for rung in rungs)
   with engine.site.set("kernel2"):
     engine.lives(furb.kernel.kernel(ENGINE), None)
