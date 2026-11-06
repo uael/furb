@@ -6,9 +6,10 @@
 //! record takes them, since the drop of its engine would lose them. A word that runs, as one that
 //! awaits a wait or a prompt, holds the rebirth until [`BOUND`] facts, and the rebirth then cuts
 //! it, which the new open ends as interrupted. The rebirth also cuts each act whose ear no
-//! checkpoint keeps. The new open tells the root each act that it cut, by name, in a prompt of
+//! checkpoint keeps, but the new open makes again the act of each life word of an extension, under
+//! a new name. The new open tells the root each other act that it cut, by name, in a prompt of
 //! None, so the one who runs the root starts again the work that it still needs, and each chain
-//! goes on as it stood.
+//! goes on as it stood. A rebirth that cut no work tells the root nothing.
 //!
 //! A fault that stops the sandbox cuts the life with no checkpoint, and ends it: the record keeps
 //! each fact up to the fault, and a later open replays them.
@@ -92,10 +93,14 @@ impl Watch {
   }
 
   /// Each act that lived before the rebirth and that the new open does not hold open, in order, but
-  /// an act that another of them made, which goes with its maker.
+  /// an act that another of them made, which goes with its maker, and an act that the new open made
+  /// again, as the life word of an extension makes an act of the same kind on the same chain.
   fn cut(&mut self, mut lives: impl FnMut(&str) -> bool) -> Vec<Act> {
     let before = std::mem::take(&mut self.before);
-    let gone: Vec<Act> = before.into_values().filter(|one| !lives(&one.id)).collect();
+    let again =
+      |one: &Act| self.open.values().any(|made| made.kind == one.kind && made.chain == one.chain);
+    let gone: Vec<Act> =
+      before.into_values().filter(|one| !lives(&one.id) && !again(one)).collect();
     let makers: HashSet<&str> = gone
       .iter()
       .flat_map(|one| {

@@ -230,7 +230,9 @@ meanings. The entry of such a name here gives only its form in the engine.
   opens it, and not the one that wrote it, says how its own journal makes each chain again. Each name of the past
   stays taken, an act that a value names stands known with its answer and runs nothing, each chain with an open
   prompt opens paused, and its prompt asks its model again at a wake. A name of the module whose value the record
-  cannot hold is lost, and the chain is told.
+  cannot hold is lost, and the chain is told. No checkpoint keeps the ear of an act, so the data names, for each chain,
+  the life word of each extension whose act lived on it, and the rung of the chain runs that life word again, which
+  makes that act again under a new name.
 - life word: the python of an extension that its rung runs after its word, and that the World plays alone on a chain
   whose origin had the extension, since that chain made the rung of its origin again. In a setup, the life words of
   the extensions run as one turn of the default actor, after the turns of their files.

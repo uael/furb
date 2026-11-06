@@ -69,6 +69,37 @@ async def test_chains_holds_the_root_the_chain_of_each_open_prompt_and_each_chai
   assert {"bash", "prompt", "tell"} <= {x[0] for x in one["turns"]} and "made" not in {x[0] for x in one["turns"]}
 
 
+KEEPER = """def keep(on=""):
+  def ear(id):
+    yield "started", id
+    while True:
+      yield {id}
+  return act("keep", on, ear)"""
+"""The word of an extension whose life word keep() makes an act that lives on."""
+
+ONCE = """def once(on=""):
+  def ear(id):
+    yield "done", id, 1
+  return act("once", on, ear)"""
+"""The word of an extension whose life word once() makes an act that is over at once."""
+
+
+async def test_plays_of_each_chain_in_chains_holds_once_each_the_life_word_of_each_extension_that_the_root_enabled_whose_word_makes_an_act_that_lives_on_that_chain_made_by_a_rung_that_holds_that_life_word_and_that_the_ear_of_the_extensions_did_not_make_since_no_checkpoint_keeps_the_ear_of_such_an_act_and_that_ear_plays_its_own_rungs_again() -> (
+  None
+):
+  """plays of each chain in chains holds, once each, the life word of each extension that the root enabled whose word makes an act that lives on that chain, made by a rung that holds that life word and that the ear of the extensions did not make, since no checkpoint keeps the ear of such an act, and that ear plays its own rungs again."""
+  _, _, root = born()
+  for _ in range(2):
+    world_says("enable", root, "keeper", KEEPER, "keep()")
+  world_says("enable", root, "oncer", ONCE, "once()")
+  world_says("enable", root, "other", "x = 1", "keep()\nonce()")
+  await engine.rung(f"{KEEPER}\n\n{ONCE}", on=root)
+  await engine.rung("keep()\nonce()", on=root)
+  await settle()
+  [one] = engine.gathered(lambda word: word, {})["chains"]
+  assert one["plays"] == ["keep()"]
+
+
 async def test_acts_holds_the_last_stand_the_last_clock_and_each_act_of_a_verb_that_a_value_names_or_that_is_a_command_of_a_chain_in_chains_an_act_that_is_over_with_its_value_an_open_prompt_with_its_shape_its_message_its_actor_and_the_ear_that_started_it_and_another_act_as_cut_with_a_refusal_that_says_why() -> (
   None
 ):

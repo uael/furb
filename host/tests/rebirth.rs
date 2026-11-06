@@ -39,6 +39,7 @@ fn main() {
   runtime.expect("the test has a runtime").block_on(async {
     a_life_goes_on_through_each_rebirth().await;
     a_rebirth_waits_for_each_word_up_to_its_bound_and_names_what_it_cuts().await;
+    a_rebirth_with_no_cut_work_tells_the_root_nothing().await;
   });
 }
 
@@ -49,6 +50,12 @@ fn place(name: &str) -> yard::Yard {
 
 /// A life that keeps its record, with no extension, whose model closes each request with None.
 fn opening(at: &Path) -> Opening {
+  Opening { extensions: Some(false), ..extended(at) }
+}
+
+/// A life that keeps its record, with the extensions on by default, whose model closes each request
+/// with None.
+fn extended(at: &Path) -> Opening {
   let asked = AtomicUsize::new(0);
   let answer = Answer(Arc::new(move |_, _| {
     asked.fetch_add(1, Ordering::SeqCst);
@@ -65,7 +72,7 @@ fn opening(at: &Path) -> Opening {
     record: Some(at.join("record.jsonl").display().to_string()),
     config: Some(at.join("config").display().to_string()),
     roster: Some(vec!["claude-cli:opus".to_owned()]),
-    extensions: Some(false),
+    extensions: None,
     answer: Some(answer),
     ..Opening::default()
   }
@@ -266,5 +273,27 @@ async fn a_rebirth_waits_for_each_word_up_to_its_bound_and_names_what_it_cuts() 
     "the rebirth names the word that it cut: {told}"
   );
   assert!(!told.contains(&late), "the rebirth names no prompt that the checkpoint keeps: {told}");
+  assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
+}
+
+async fn a_rebirth_with_no_cut_work_tells_the_root_nothing() {
+  let at = place("seeded");
+  let life = Life::spawn(extended(&at)).expect("the life has a thread");
+  let mut events = Box::pin(life.events(0));
+  let busy = ran(&life, "for i in range(2600):\n  chance()").await;
+  let mut log = until(&mut events, ran_out(&busy)).await;
+  log.extend(until(&mut events, reborn(false)).await);
+  let after = log.len();
+  let last = ran(&life, "n = 1").await;
+  log.extend(until(&mut events, ran_out(&last)).await);
+  let made = |logged: &[Logged], kind: &str| {
+    logged.iter().any(|one| matches!(&*one.1, Event::Act(act) if act.kind.as_str() == kind))
+  };
+  for kind in ["catchup", "remember"] {
+    assert!(made(&log[..after], kind), "the first life plays the life word that makes {kind}");
+    assert!(made(&log[after..], kind), "the new life makes {kind} again");
+  }
+  let told: Vec<String> = log[after..].iter().filter_map(|one| message(&one.1)).collect();
+  assert_eq!(told, Vec::<String>::new(), "a rebirth that cut no work prompts nothing");
   assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
 }

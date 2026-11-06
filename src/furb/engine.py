@@ -562,6 +562,7 @@ def seed(data):
         *(f"{named} = {text}" for named, text in c["values"].items()),
         HEARD,
         f'debug(t"The life goes on from a checkpoint. It lost {c["lost"] or "no name"}, and it cut {cut or "no act"}.")',
+        *c.get("plays", ()),
       ]
     ).strip()
     put("rung", f"rung{numbers['rung'] + 1}", OPERATOR, i, word, "", "")
@@ -645,6 +646,18 @@ def gathered(define, floor):
         "values": values[c],
         "lost": lost[c],
         "cut": [x for x in cut if scope(x) == c],
+        "plays": [
+          *dict.fromkeys(
+            e[5]
+            for e in transcript(ROOT, "enable")
+            for x in asked
+            if f'act("{x[0]}"' in e[4]
+            and scope(x[1]) == c
+            and not over(x[1])
+            and "extensions" not in (m := get(x[2]) or ())[2:3]
+            and e[5] in str(m[4:5])
+          )
+        ],
       }
     )
   return {"taken": taken, "chains": out, "acts": acts}

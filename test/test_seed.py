@@ -17,7 +17,14 @@ def chain(i: str, on: str, label: str, **fields: object) -> dict[str, object]:
 DATA = {
   "taken": {"chain": 3, "bash": 2, "prompt": 1, "stand": 1},
   "chains": [
-    chain("chain1", "", "root", definitions="def f():\n  return SIZE", values={"SIZE": "6", "shell": "Act('bash2')"}),
+    chain(
+      "chain1",
+      "",
+      "root",
+      definitions="def f():\n  return SIZE",
+      values={"SIZE": "6", "shell": "Act('bash2')"},
+      plays=["played = f() + 1"],
+    ),
     chain(
       "chain3",
       "chain1",
@@ -92,13 +99,14 @@ async def test_each_act_of_the_data_with_a_value_stands_known_on_its_chain_with_
   assert not [x for x in sand.calls if x[0] == "bash"]
 
 
-async def test_a_rung_of_the_operator_on_each_chain_binds_its_definitions_and_its_values_says_its_turns_as_its_prefix_and_tells_what_the_checkpoint_lost_and_cut_with_each_word_that_ran_on_it_in_the_data_of_schema_1_and_it_runs_no_word_again_so_the_model_of_the_chain_starts_a_cut_word_again_in_a_turn_that_shows() -> (
+async def test_a_rung_of_the_operator_on_each_chain_binds_its_definitions_and_its_values_says_its_turns_as_its_prefix_tells_what_the_checkpoint_lost_and_cut_with_each_word_that_ran_on_it_in_the_data_of_schema_1_and_runs_each_life_word_of_its_plays_and_it_runs_no_other_word_again_so_the_model_of_the_chain_starts_a_cut_word_again_in_a_turn_that_shows() -> (
   None
 ):
-  """A rung of the operator on each chain binds its definitions and its values, says its turns as its prefix, and tells what the checkpoint lost and cut, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows."""
+  """A rung of the operator on each chain binds its definitions and its values, says its turns as its prefix, tells what the checkpoint lost and cut, with each word that ran on it in the data of schema 1, and runs each life word of its plays, and it runs no other word again, so the model of the chain starts a cut word again in a turn that shows."""
   _, log = await seeded()
   root = engine.module("chain1")
   assert (root["f"](), root["shell"], engine.module("chain3").get("SIZE")) == (6, "bash2", None)
+  assert (root["played"], "played" in engine.module("chain3")) == (7, False)
   told = [x[3][0] for x in said(log, "tell") if "debugged" in x[3][0] and x[1].startswith("rung")]
   assert any("It lost ['gone'], and it cut ['rung9']." in x for x in told), told
   assert [x for x in said(log, "prefix") if x[1] == "chain3"]
