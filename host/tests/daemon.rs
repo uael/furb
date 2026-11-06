@@ -614,6 +614,33 @@ mod daemon {
   }
 
   #[tokio::test]
+  async fn a_skill_says_each_act_under_its_name_and_a_window_under_the_operator() {
+    let at = place();
+    let local = served(&at, None).await;
+    let mut writer = Window::dialed(&local).await;
+    let mut skill = Window::dialed_as(&local, Kind::Skill, Some("k")).await;
+    let life = opened(&mut writer, &at, "a.jsonl").await;
+    writer.attach(&life).await;
+    skill.attach(&life).await;
+    let to = Some("operator".to_owned());
+    let message = "from k".to_owned();
+    let asked =
+      Verb::Prompt { life: life.clone(), shape: "None".to_owned(), message, to, on: None };
+    let Ok(Answer::Act(asked)) = skill.ask(asked).await else { panic!("no prompt") };
+    let said = skill.ran(&life, "x = 1").await;
+    let mine = writer.ran(&life, "y = 1").await;
+    let mut speakers = Vec::new();
+    for id in [&asked, &said, &mine] {
+      let get = Verb::Get { life: life.clone(), act: id.clone() };
+      let Ok(Answer::Value(fact)) = writer.ask(get).await else { panic!("no act {id}") };
+      speakers.push(fact[2].clone());
+    }
+    assert_eq!(speakers, [json!("skill/k"), json!("skill/k"), json!("operator")]);
+    let y = Verb::Inspect { life: life.clone(), name: "x".to_owned(), on: None };
+    assert!(matches!(skill.ask(y).await, Ok(Answer::Inspected { .. })), "the word of a skill ran");
+  }
+
+  #[tokio::test]
   async fn a_second_daemon_of_the_machine_refuses_to_start() {
     let at = place();
     let (local, _daemon) = started(&at, GRACE).await;
@@ -968,12 +995,11 @@ mod daemon {
     skill.join("started")
   }
 
-  /// A daemon of a test that starts the processes of skills, and a window dialed to it.
-  #[cfg(unix)]
-  async fn hosting(at: &Path) -> Window {
+  /// A daemon of a test whose lives end after a short grace, and which starts the processes of
+  /// skills when it is given the folder where they dial it.
+  async fn served(at: &Path, host: Option<PathBuf>) -> Local {
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
-    let host = Some(at.join("sock"));
     let settings = Settings {
       opening: opening(at),
       grace: SHORT,
@@ -984,7 +1010,36 @@ mod daemon {
     };
     let served = local.clone();
     tokio::spawn(async move { run(&served, listener, settings).await });
-    Window::dialed(&local).await
+    local
+  }
+
+  /// A daemon of a test that starts the processes of skills, and a window dialed to it.
+  #[cfg(unix)]
+  async fn hosting(at: &Path) -> Window {
+    Window::dialed(&served(at, Some(at.join("sock"))).await).await
+  }
+
+  /// The skill probe of a test in the folder of the skills of a project, whose process is the
+  /// script given, and the file `started` of its folder.
+  #[cfg(unix)]
+  fn scripted(at: &Path, script: &str) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let skill = at.join(".furb").join("skills").join("probe");
+    fs::create_dir_all(&skill).unwrap();
+    fs::write(skill.join("SKILL.md"), PROBE).unwrap();
+    fs::write(skill.join("probe.py"), "PROBED = 1\n").unwrap();
+    let program = skill.join("probe.sh");
+    fs::write(&program, script).unwrap();
+    fs::set_permissions(&program, fs::Permissions::from_mode(0o755)).unwrap();
+    skill.join("started")
+  }
+
+  /// Whether a frame is the fact of a message that the process of the skill probe says to the
+  /// operator.
+  #[cfg(unix)]
+  fn crashed(frame: &Frame) -> bool {
+    matches!(frame, Frame::Event { event: Event::Fact(fact), .. }
+      if fact[0] == "prompt" && fact[2] == "skill/probe" && fact[6] == "operator")
   }
 
   #[cfg(unix)]
@@ -1034,5 +1089,53 @@ mod daemon {
     window.attach(&life).await;
     window.ran(&life, r#"act("skill", "", None, "probe")"#).await;
     assert!(lines(&started, 1).await[0].starts_with("probe "));
+  }
+
+  #[cfg(unix)]
+  #[tokio::test]
+  async fn a_process_that_ends_before_its_life_tells_the_operator_once_and_starts_at_the_next_enable()
+   {
+    let at = place();
+    let script = "#!/bin/sh\necho $$ >> started\necho first >&2\necho 'broke here' >&2\nexit 3\n";
+    let started = scripted(&at, script);
+    let mut window = hosting(&at).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    window.attach(&life).await;
+    window.ran(&life, r#"act("skill", "", None, "probe")"#).await;
+    let Frame::Event { event: Event::Fact(told), .. } = window.until(crashed).await else {
+      unreachable!()
+    };
+    assert_eq!((&told[3], &told[4]), (&json!("chain1"), &json!("None")));
+    let message = told[5].as_str().unwrap();
+    assert!(message.contains("probe.sh of the skill probe ended with exit status: 3"), "{message}");
+    assert!(message.ends_with("stderr:\nfirst\nbroke here"), "{message}");
+    let heard = window.during(PAST).await;
+    assert!(!heard.iter().any(crashed), "a process that ended is told once");
+    assert_eq!(lines(&started, 1).await.len(), 1, "a process that ended does not start by itself");
+    window.ran(&life, r#"write(Text("skills://probe", "PROBED = 2"))"#).await;
+    let again = at.join(".furb").join("extensions").join("probe").join("started");
+    assert_eq!(lines(&again, 2).await.len(), 2, "the next enable starts the process again");
+    window.until(crashed).await;
+  }
+
+  #[cfg(unix)]
+  #[tokio::test]
+  async fn the_end_of_a_life_kills_each_process_that_the_process_of_its_skill_started() {
+    let at = place();
+    let script = "#!/bin/sh\nsleep 600 &\necho \"$$ $!\" >> started\nexec sleep 600\n";
+    let started = scripted(&at, script);
+    let mut window = hosting(&at).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    window.attach(&life).await;
+    window.ran(&life, r#"act("skill", "", None, "probe")"#).await;
+    let pids = lines(&started, 1).await.remove(0);
+    let (process, child) = pids.split_once(' ').unwrap();
+    assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+    tokio::time::sleep(PAST).await;
+    assert!(!window.lives(&life).await);
+    assert!(gone(process).await, "the end of the life ends the process");
+    assert!(gone(child).await, "the end of the life ends what the process started");
+    let heard = window.during(PAST).await;
+    assert!(!heard.iter().any(crashed), "a process that the life ends is not told");
   }
 }

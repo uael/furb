@@ -178,7 +178,23 @@ What the notes are for.
   the life plays a new word of the extension. Its variables `FURB_HOST`, `FURB_LIFE` and `FURB_SKILL` give the folder
   where the daemon listens, the record of the life and the name of the extension, so it dials the daemon and attaches
   the life as a skill, as [the protocol](protocol.md) says. A folder that holds the extension starts nothing: only a
-  life that plays it does. It can be absent.
+  life that plays it does. A process that ends before its life tells the operator once, with its exit and the last
+  lines of its stderr, and starts again at the next play of the extension. It can be absent.
+
+The client `@uael/furb/skill` gives a process of TypeScript what it needs: it attaches the life from those variables,
+hears the facts of the kinds that it asks, says verbs that the life takes under `skill/<name>`, and serves a tree to
+each view that a window mounts.
+
+```typescript
+import { Skill } from "@uael/furb/skill";
+
+const skill = await Skill.attach({ kinds: ["prompt"] });
+skill.heard((fact) => {
+  if (fact[5] === "ping") void skill.run("pong = 1");
+});
+skill.served((view) => void view.tree({ id: "said", node: "text", runs: [{ text: "served" }] }));
+await skill.closed;
+```
 
 A field of furb that the manifest does not know is refused with its path, so a typo does not pass.
 

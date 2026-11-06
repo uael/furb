@@ -34,6 +34,10 @@
     "./protocol": {
       "types": "./dist/protocol.d.ts",
       "import": "./dist/protocol.js"
+    },
+    "./skill": {
+      "types": "./dist/skill.d.ts",
+      "import": "./dist/skill.js"
     }
   },
   "files": [
