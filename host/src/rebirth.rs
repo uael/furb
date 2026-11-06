@@ -2,21 +2,24 @@
 //! from that checkpoint on the same thread, for the same readers. A life is born again when it
 //! said [`TAIL`] facts since it opened while it holds no act that a checkpoint does not keep, so an
 //! open after a crash replays a short tail, and the engine lets go of what its words left. A
-//! checkpoint keeps each chain, each rung and each open prompt; each other act that lives, as a
-//! command, a reply, a word that runs or an act with an ear of its own, holds the rebirth until it
-//! ends, however long that takes, so a rebirth never cuts work. A life whose record does not hold
+//! checkpoint keeps each chain, each rung and each open prompt, and the seed makes again each act
+//! of a life word of the standing, under a rung whose word is that life word; each other act that
+//! lives, as a command, a reply, a word that runs or an act with an ear of its own, holds the
+//! rebirth until it ends, however long that takes, so a rebirth never cuts work. A life whose record does not hold
 //! each fact that it said, as on a full disk, holds its rebirth until the record takes them, since
 //! the drop of its engine would lose them.
 //!
 //! A fault that stops the sandbox cuts the life with no checkpoint, and ends it: the record keeps
 //! each fact up to the fault, and a later open replays them.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use furb::{
   Engine, Fault,
   view::{Kind, Phase},
 };
+
+use serde_json::Value;
 
 use crate::event::Event;
 
@@ -24,23 +27,41 @@ use crate::event::Event;
 /// at the first moment when it holds no act that a checkpoint does not keep.
 pub(crate) const TAIL: u64 = 10_000;
 
-/// What the actor watches of a life since it opened: the facts that it said, and each act that
-/// lives and that a checkpoint does not keep.
+/// What the actor watches of a life since it opened: the facts that it said, each act that lives
+/// and that a checkpoint does not keep, the word of each rung, and the life words of the last
+/// standing, whose acts the seed makes again.
 #[derive(Default)]
 pub(crate) struct Watch {
   facts: u64,
   held: HashSet<String>,
+  words: HashMap<String, String>,
+  lives: HashSet<String>,
 }
 
 impl Watch {
   /// One event that the life told.
   pub(crate) fn heard(&mut self, event: &Event) {
     match event {
-      Event::Fact(_) => self.facts += 1,
+      Event::Fact(fact) => {
+        self.facts += 1;
+        let stood =
+          fact[0] == "done" && fact[1].as_str().is_some_and(|one| one.starts_with("stand"));
+        if let Some(extensions) = fact[3].get(4).and_then(Value::as_array).filter(|_| stood) {
+          let words = extensions.iter().filter_map(|one| one.get(2)?.as_str());
+          self.lives = words.filter(|one| !one.is_empty()).map(str::to_owned).collect();
+        }
+      }
       Event::Act(act) if matches!(act.phase, Phase::Done(_)) => {
         self.held.remove(&act.id);
       }
-      Event::Act(act) if !matches!(act.kind, Kind::Chain | Kind::Rung | Kind::Prompt) => {
+      Event::Act(act) if act.kind == Kind::Rung => {
+        let word = act.words.first().and_then(Value::as_str).unwrap_or_default();
+        self.words.insert(act.id.clone(), word.to_owned());
+      }
+      Event::Act(act)
+        if !matches!(act.kind, Kind::Chain | Kind::Prompt)
+          && !self.words.get(&act.by).is_some_and(|word| self.lives.contains(word)) =>
+      {
         self.held.insert(act.id.clone());
       }
       _ => {}
