@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from conftest import settle
-from extensions.conftest import compacting, extended
+from extensions.conftest import compacting
 from furb import engine
 
 
@@ -50,18 +50,3 @@ async def test_the_record_keeps_each_act_of_the_chain(tmp_path: Path) -> None:
   assert len(acts) == 2 and [one for one in acts if one not in {x[1] for x in record}] == []
   names = [a[1] for a in before if engine.question(a)]
   assert [a[1] for a in after if engine.question(a)][: len(names)] == names
-
-
-async def test_a_clear_keeps_the_doctrine_and_the_setup_that_the_model_reads_first(tmp_path: Path) -> None:
-  """A clear cuts the turns but not the setup: the turn after it still shows the doctrine that the standing names and
-  the words of the setup, so the model of the chain still knows how it answers."""
-  sand, root = extended("compaction", tmp_path, doctrine="Answer in python alone.\n")
-  sand.files[f"{tmp_path / 'work'}/a.txt"] = "one\n"
-  await settle()
-  before = engine.turns(on=root)
-  await engine.rung("read('a.txt')", on=root)
-  await engine.rung("clear()", on=root)
-  await settle()
-  shown = "\n".join(str(turn[1]) for turn in engine.turns(on=root))
-  assert "Answer in python alone." in shown
-  assert [turn for turn in before if turn not in engine.turns(on=root)] == []

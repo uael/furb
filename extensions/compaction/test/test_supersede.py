@@ -2,7 +2,8 @@
 
 from pathlib import Path
 
-from extensions.conftest import compacting
+from conftest import settle
+from extensions.conftest import compacting, extended
 from furb import engine
 
 
@@ -29,3 +30,17 @@ async def test_so_the_chain_goes_on_under_its_name(tmp_path: Path) -> None:
   assert await engine.prompt(int, "the k", on=root) == 7
   assert engine.get("chain2") is None and len(str(engine.turns(on=root))) < len(str(turns)) + 400
   assert [a for a in engine.transcript(root) if a[0] == "tell" and "a.txt" in str(a)] == []
+
+
+async def test_supersede_keeps_whole_the_setup_that_the_model_reads_first(tmp_path: Path) -> None:
+  """supersede(keep) keeps whole the setup of the chain, each fact from its paragraph chain() up to its open, so a cut, even one that keeps nothing, leaves the doctrine and the words of the setup that its model reads first."""
+  sand, root = extended("compaction", tmp_path, doctrine="Answer in python alone.\n")
+  sand.files[f"{tmp_path / 'work'}/a.txt"] = "one\n"
+  await settle()
+  before = engine.turns(on=root)
+  await engine.rung("read('a.txt')", on=root)
+  await engine.rung("clear()", on=root)
+  await settle()
+  shown = "\n".join(str(turn[1]) for turn in engine.turns(on=root))
+  assert "Answer in python alone." in shown
+  assert [turn for turn in before if turn not in engine.turns(on=root)] == []

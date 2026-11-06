@@ -162,6 +162,14 @@ def reground(on: str = "") -> None:
       continue
 
 
+def headline(fact: tuple) -> str:
+  """The first line of the first note of a tell, or else the kind of the fact."""
+  match fact:
+    case ("tell", _, _, [str(first), *_]):
+      return first.split("\n")[0]
+  return str(fact[0])
+
+
 def supersede(keep: Filter | None = None, on: str = "") -> str:
   here = on or scope(acting())
   theirs = transcript(here)
@@ -177,13 +185,13 @@ def supersede(keep: Filter | None = None, on: str = "") -> str:
       kin.add(name)
       name = b[2]
 
-  heads = [(x[0] == "tell" and str(x[3][0]).split("\n")[0]) or x[0] for x in theirs]
+  heads = [headline(fact) for fact in theirs]
   lo = heads.index("chain()") if "chain()" in heads else len(theirs)
   hi = heads.index("#" + here, lo) if "#" + here in heads[lo:] else lo
-  setup = theirs[lo:hi]
+  setup = {id(fact) for fact in theirs[lo:hi]}
 
   def stays(it: tuple) -> bool:
-    if any(it is one for one in setup):
+    if id(it) in setup:
       return True
     made = get(it[1])
     if made is None:
