@@ -251,7 +251,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ⌥V / ⌥G | Switch the view of the life: main, the loom, or the graph / move in the loom or the graph |
 | ⌥T | Move in the sidebar: the workspaces, their sessions, and the threads of the session shown |
 | ↑↓ / Enter / → / ← or Esc after ⌥T | Move / open a workspace, a session or a thread / peek at a workspace / fold it again, or back to the input |
-| Space / r / o / a after ⌥T | Collapse or expand / resolve / reply to the thread / go to the next question |
+| Space / o / a after ⌥T | Collapse or expand / reply to the thread / go to the next question |
 | ⌥C | Collapse or expand the thread in the middle of the feed, as the toggle on its header does |
 | ⌥A | Go to the next question that waits for you, in any workspace |
 | ↑↓←→ / Enter / Esc after ⌥G | Move or fold / back to the input / back to now, or to the input |
@@ -403,7 +403,7 @@ files alone, so parallel work on the TUI does not conflict in one file.
 | `blocks.ts` | The blocks that the feed and the panels draw: cards, panels, code, Markdown, excerpts and chips. |
 | `details.ts` | The details of an act: prompts, commands, programs, and the references that open a value. |
 | `rail.ts` | The sidebar: the line on top that counts what waits for you, the tree of the workspaces with their sessions and the threads of the session shown, and the keys that move in it. |
-| `sidebar.ts` | The context of the chain shown, the threads of a chain: their fold, their reply and their resolve. |
+| `sidebar.ts` | The context of the chain shown, the threads of a chain: their fold and their reply. |
 | `spaces.ts` | The workspaces and the sessions in the sidebar, with their menus, rename, archive and delete. |
 | `composer.ts` | The input: drafts, history, submit, and the suggestions for a command, a path or a value. |
 | `questions.ts` | The questions that wait for the operator: the pick at the desk and the dialog of a question. |

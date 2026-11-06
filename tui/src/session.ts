@@ -457,10 +457,10 @@ export class Session extends EventEmitter {
   cause: PauseCause | null = null;
   editing?: string;
   /** The thread that the operator chose in the sidebar, to which the input sends each message as prompt(None, message,
-   * on=thread): its model reads it at its next step, and a message to a resolved thread opens it again. */
+   * on=thread): its model reads it at its next step, and a message to a thread that is over opens it again. */
   thread?: string;
   /** The open thread of the chain shown, to which the input sends a message by default, as long as the operator chose
-   * no thread and did not ask for a new one: its last thread that is not resolved. */
+   * no thread and did not ask for a new one: its last thread that is not over. */
   get openThread(): ChainThread | undefined {
     return this.threads.list.findLast((one) => !one.resolved);
   }
@@ -1444,22 +1444,6 @@ export class Session extends EventEmitter {
   async decline(ask: Ask, words: string): Promise<void> {
     await this.host.decline(ask.id, words);
     this.landed(ask, `Your words went to ${ask.id} on ${ask.label}.`);
-  }
-  /** The operator resolves a thread: its open prompt closes as the engine closes a prompt, with None where its shape
-   * takes None, with the word resolved where it takes a str, and else as Refused of the words resolved by the operator,
-   * which the await of the word that asked raises. The rungs that work for the thread end with it. */
-  async resolve(id: string): Promise<void> {
-    const act = this.indexed().ids.get(id);
-    if (!act || act.kind !== "prompt" || isDone(act)) return;
-    const shape = String(act.words[0] ?? "");
-    const value = /\bNone\b|^object$/.test(shape)
-      ? null
-      : shape === "str"
-        ? "resolved"
-        : { is: "Refused", args: ["resolved by the operator"] };
-    await this.engine.close(JSON.stringify(value), { id });
-    this.notice = `You resolved ${onThread(act) ?? id}. A message to it opens it again.`;
-    await this.refresh();
   }
   /** What the operator did to an ask, and what waits after it, in the notice. The pointer goes on to what waits next
    * on the chain shown. */

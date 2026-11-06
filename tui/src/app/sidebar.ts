@@ -1,7 +1,5 @@
 import type { BoxOptions, BoxRenderable, Renderable, TextRenderable } from "@opentui/core";
 import { unmarked } from "furb";
-import type { ChainThread } from "furb/life";
-import { isDone } from "furb/life";
 import { clip, count, dollars } from "../format.ts";
 import { theme as c, glyph, spacing as space, threadTone } from "../theme.ts";
 import { bold, type Part, plain } from "../ui.ts";
@@ -105,7 +103,7 @@ export const sidebar = part({
     ]);
   },
 
-  /** Whether a thread stands folded to its header in the feed: as the operator left it, and else when it is resolved,
+  /** Whether a thread stands folded to its header in the feed: as the operator left it, and else when it is over,
    * is not the last thread of its chain, and the preference folds what is over. */
   threadFolded(id: string): boolean {
     const w = this.session;
@@ -161,12 +159,6 @@ export const sidebar = part({
       if (!best || distance < best.distance) best = { thread, distance };
     }
     return best?.thread;
-  },
-
-  /** A thread resolves: its open prompt closes, and the model that works for it stops. */
-  resolveThread(thread: ChainThread): void {
-    const open = [thread.act, ...thread.messages].findLast((act) => !isDone(act));
-    if (open) void this.session.resolve(open.id).catch(this.report);
   },
 
   /** A thread unfolds, and the input takes the keys and sends its next messages to the thread, with the color of the
