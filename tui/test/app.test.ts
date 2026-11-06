@@ -1005,6 +1005,12 @@ test("slash commands and project files are suggested above the input as they are
       expect(await frame()).toContain("@README.md");
       screen.mockInput.pressEnter();
       expect(app.composer.plainText).toBe("Read @README.md ");
+      // The letters of a name in its order pick it, as the matcher of nucleo ranks a path.
+      app.composer.setText("");
+      await screen.mockInput.typeText("Read @rdme");
+      expect(await frame()).toContain("@README.md");
+      screen.mockInput.pressEnter();
+      expect(app.composer.plainText).toBe("Read @README.md ");
       expect(
         session.acts.some((act) => act.kind === "prompt" && String(act.words[1]).startsWith("Read")),
       ).toBe(false);

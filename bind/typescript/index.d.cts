@@ -508,6 +508,12 @@ export interface Opening {
    */
   config?: string
   /**
+   * The logins of the members who answer as the operator, as the access list of a host and its
+   * local login give them, each of which a prompt can ask with `to="operator/<login>"`; none when
+   * unsaid.
+   */
+  members?: Array<string>
+  /**
    * The actor a prompt goes to when it names none, as the catalog names a model, and an effort after a slash, at its
    * level as [`world::Model::at`] moves it. When unsaid, the default actor of the last stand
    * that the record answered, so a life opened again goes on with the actor it had, and on a
@@ -573,6 +579,12 @@ export interface Part {
  * one, as the configs of the user and of the project say it now, which a TUI loads beside the life.
  */
 export declare function parts(project: string): Array<Part>
+
+/**
+ * The files that a query after `@` picks from the directory, best first: from the files of the
+ * project that a walk gave, or from the folder that a query starting with `/`, `~` or `../` names.
+ */
+export declare function pickedFiles(directory: string, query: string, project: Array<string>): Array<string>
 
 /**
  * A provider as a first run checks it: its name, the names of its credential in the environment, whether the
@@ -655,6 +667,12 @@ export declare function time(): NativeEar
 
 /** TIMEOUT is the timeout, in seconds, of a command that does not say one. */
 export declare const TIMEOUT: number
+
+/**
+ * The files under a folder that the picker of a window offers, by their path from it with `/`
+ * between its parts, in order: each dot file too, but `.git` and each file that `.gitignore` hides.
+ */
+export declare function walkedFiles(root: string): Array<string>
 
 /** WINDOW is the window, in tokens, of a model whose roster entry does not say one. */
 export declare const WINDOW: number

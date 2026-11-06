@@ -1,4 +1,4 @@
-import { shapes } from "furb";
+import { pickedFiles, shapes } from "furb";
 import { isDone, takesNothing, unfinished, WORK } from "furb/life";
 import { canonical, slashes } from "../commands.ts";
 import { emojiNamed, emojis } from "../emoji.ts";
@@ -491,14 +491,14 @@ export const composer = part({
         .slice(0, 50)
         .map(({ label, detail, text }) => ({ label, detail: detail ?? "", text }));
     } else {
-      const wanted = token.text.toLowerCase();
-      // The completions of the parts after @ come before the files of the project.
+      // The completions of the parts after @ come before the files that the crate picks for the query, best first:
+      // from the files of the project, or from the folder that a query starting with /, ~ or ../ names.
       const given = this.parts.completions("@", token.text, this.seen());
       this.suggestionError = given.errors.join(" ");
       const theirs = given.items.map(({ label, detail, text }) => ({ label, detail: detail ?? "", text }));
       this.suggestions = theirs
         .concat(
-          this.paths((paths) => paths.filter((path) => path.toLowerCase().includes(wanted)), started)
+          this.paths((paths) => pickedFiles(this.session.workingDirectory, token.text, paths), started)
             .slice(0, 50)
             .map(({ value: path }) => ({
               label: `@${path}`,

@@ -29,6 +29,7 @@ pub(crate) mod files;
 mod log;
 pub mod mcp;
 mod operator;
+pub mod picker;
 mod provider;
 mod reader;
 mod scratch;
