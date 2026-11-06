@@ -812,17 +812,17 @@ export const feed = part({
           let wrote = 0;
           if (writer) {
             // The lines that the model finished stand in the window as lines of the thread, numbered as they come.
-            const { lines: done } = writing(w.host.streams.get(writer.step.id));
+            const { lines: done, numbers, count } = writing(w.host.streams.get(writer.step.id));
             const finished = done ? done.split("\n") : [];
-            wrote = finished.length;
+            wrote = count;
             given = [
               ...given,
               ...finished.map(
                 (text, at): ProgramLine => ({
                   kind: "code",
                   step: writer.step,
-                  number: at + 1,
-                  display: writer.display + at,
+                  number: numbers[at] ?? at + 1,
+                  display: writer.display + (numbers[at] ?? at + 1) - 1,
                   text,
                   acts: [],
                   runs: false,
@@ -1407,7 +1407,7 @@ export const feed = part({
           ],
           (box) => {
             const inner = this.box({ paddingLeft: space.between });
-            inner.add(this.turnCode(text));
+            inner.add(this.turnBody(text));
             box.add(inner);
           },
           { group: turn[0], shown: text },

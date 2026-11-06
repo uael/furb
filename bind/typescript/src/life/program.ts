@@ -171,16 +171,92 @@ function handled(acts: readonly LiveAct[], owed: ReadonlySet<string>): readonly 
   return failed.length && failed.length < acts.length ? acts.filter((act) => !failed.includes(act)) : acts;
 }
 
+/** A quote of a word: `<s:name>` at the start of a line, its text, and `</s:name>` at the end of a line. `end` is the
+ * index of its last line, and `closed` says whether its close mark came. */
+export type Quote = { name: string; body: string; end: number; closed: boolean };
+
+/** The quote that opens at a line of a word. A quote with no close mark is none, but in a word that a model still
+ * writes, `open`, where it runs to the end of what came, less the part of its close mark that came. */
+export function quoteAt(source: readonly string[], index: number, open = false): Quote | undefined {
+  const head = source[index]?.match(/^<s:(\w+)>(.*)$/);
+  if (!head) return undefined;
+  const name = head[1] ?? "";
+  const close = `</s:${name}>`;
+  const found = source.findIndex((one, at) => at >= index && one.endsWith(close));
+  if (found < 0 && !open) return undefined;
+  const end = found < 0 ? source.length - 1 : found;
+  // The word binds the text between the marks, less the line break that follows the opening mark.
+  let body = [head[2] ?? "", ...source.slice(index + 1, end + 1)].join("\n").replace(/^\n/, "");
+  if (found >= 0) body = body.slice(0, -close.length);
+  else
+    for (let size = close.length - 1; size >= 2; size--)
+      if (body.endsWith(close.slice(0, size))) {
+        body = body.slice(0, -size);
+        break;
+      }
+  return { name, body, end, closed: found >= 0 };
+}
+
+/** A quote as the binding that it makes: its name bound to its text as one string with escapes, as python writes
+ * it. */
+export function quoteBinding(quote: Quote): string {
+  return `${quote.name} = ${pythonString(quote.body)}`;
+}
+
+/** A text in its parts: the runs of its lines that are no quote, and each quote that closes. */
+export function quoteParts(text: string): ({ code: string } | { quote: Quote })[] {
+  const source = text.split("\n");
+  const out: ({ code: string } | { quote: Quote })[] = [];
+  let code: string[] = [];
+  for (let index = 0; index < source.length; index++) {
+    const quote = quoteAt(source, index);
+    if (!quote) {
+      code.push(source[index] ?? "");
+      continue;
+    }
+    if (code.length) out.push({ code: code.join("\n") });
+    code = [];
+    out.push({ quote });
+    index = quote.end;
+  }
+  if (code.length) out.push({ code: code.join("\n") });
+  return out;
+}
+
 /** What a model writes while its word has not come yet: the lines of the word that it finished, which are python,
- * and the line that it still writes. While it writes no word, the tail is the last line that it thinks. */
-export function writing(stream?: { text: string; thinking: string }): { lines: string; tail: string } {
+ * and the line that it still writes. While it writes no word, the tail is the last line that it thinks. A quote
+ * stands as its binding from its opening mark on, and its text grows in the quotes of the string as it comes, the
+ * line that it still writes too. `numbers` gives the line of the word where each line of `lines` starts, and `count`
+ * the lines of the word that `lines` holds. */
+export function writing(stream?: { text: string; thinking: string }): {
+  lines: string;
+  tail: string;
+  numbers: number[];
+  count: number;
+} {
   const text = stream?.text ?? "";
-  const end = text.lastIndexOf("\n");
-  const lines = end < 0 ? "" : text.slice(0, end).replace(/\n+$/, "");
-  if (lines) return { lines, tail: text.slice(end + 1).trim() };
+  const source = text.split("\n");
+  const rows: { text: string; number: number; end: number }[] = [];
+  let tail = source.at(-1) ?? "";
+  for (let index = 0; index < source.length; index++) {
+    const quote = quoteAt(source, index, true);
+    if (quote) {
+      rows.push({ text: quoteBinding(quote), number: index + 1, end: quote.end + 1 });
+      if (quote.end === source.length - 1) tail = "";
+      index = quote.end;
+    } else if (index < source.length - 1)
+      rows.push({ text: source[index] ?? "", number: index + 1, end: index + 1 });
+  }
+  while (rows.length && !rows.at(-1)?.text) rows.pop();
+  const lines = rows.map((row) => row.text).join("\n");
+  const numbers = rows.map((row) => row.number);
+  const count = rows.at(-1)?.end ?? 0;
+  if (lines) return { lines, tail: tail.trim(), numbers, count };
   return {
     lines,
     tail: ((text || stream?.thinking || "").replace(/\n+$/, "").split("\n").at(-1) ?? "").trim(),
+    numbers,
+    count,
   };
 }
 
@@ -228,25 +304,19 @@ export function stepLines(
   const failing = why ? Number(why.match(/\bline (\d+)/)?.[1] ?? source.length) : 0;
   for (let index = 0; index < source.length; index++) {
     const line = source[index] ?? "";
-    const quote = line.match(/^<s:(\w+)>(.*)$/);
-    const end = quote ? source.findIndex((one, at) => at >= index && one.endsWith(`</s:${quote[1]}>`)) : -1;
-    if (quote && end >= 0) {
-      // The word binds the text between the marks, less the line break that follows the opening mark.
-      const body = [quote[2] ?? "", ...source.slice(index + 1, end + 1)]
-        .join("\n")
-        .replace(/<\/s:\w+>$/, "")
-        .replace(/^\n/, "");
+    const quote = quoteAt(source, index);
+    if (quote) {
       out.push({
         kind: "code",
         step,
         number: index + 1,
         display: start + index + 1,
-        text: `${quote[1]} = ${pythonString(body)}`,
+        text: quoteBinding(quote),
         acts: [],
         runs: false,
-        hint: lines(lineCount(body)),
+        hint: lines(lineCount(quote.body)),
       });
-      index = end;
+      index = quote.end;
       continue;
     }
     // A string of three marks that runs over many lines stands in its statement as one string with its escapes.
