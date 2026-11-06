@@ -176,8 +176,7 @@ export const chrome = part({
       (shown.shape ? gaps + Bun.stringWidth(`returns ${w.shape}`) : 0) +
       // The stash takes a gap, its word, its quotes and their space, and its key, and its preview takes the rest.
       (stash ? gaps + "stashed “”  ⌃S".length : 0);
-    for (const part of ["provider", "shape", "chord"] as const)
-      if (width() > room) shown[part] = false;
+    for (const part of ["provider", "shape", "chord"] as const) if (width() > room) shown[part] = false;
     // The title of the thread takes the room that the row leaves free, and is cut only where the row is full.
     if (target && width() < room) title = clip(whole, Bun.stringWidth(title) + room - width());
     const gap = () => this.meta.add(this.text("   ", c.faint));
