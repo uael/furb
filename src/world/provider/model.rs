@@ -33,7 +33,7 @@ pub(super) type Streams = Arc<
 >;
 
 /// The streams of a model of rig.
-pub(super) fn streams<M: CompletionModel + 'static>(model: M) -> Streams {
+pub(super) fn streams(model: impl CompletionModel + 'static) -> Streams {
   let model = Arc::new(model);
   Arc::new(move |request| {
     let model = Arc::clone(&model);
@@ -182,10 +182,7 @@ pub struct Model {
 
 impl Model {
   /// A model of rig under a name, with the window it reads, and no effort yet.
-  pub fn new<M>(name: impl Into<String>, window: u64, model: M) -> Self
-  where
-    M: CompletionModel + 'static,
-  {
+  pub fn new(name: impl Into<String>, window: u64, model: impl CompletionModel + 'static) -> Self {
     let streams = streams(model);
     Self::lazy(name, window, move || Ok(Arc::clone(&streams)))
   }

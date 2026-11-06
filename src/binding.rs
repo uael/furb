@@ -13,14 +13,10 @@
 
 // This tree pays these lints already, so they hold here ahead of the workspace.
 #![deny(clippy::absolute_paths, clippy::use_self)]
-#![expect(clippy::doc_markdown, reason = "debt: a name in a doc comment with no backticks")]
-#![expect(clippy::map_err_ignore, reason = "debt: a map_err that drops the cause")]
-#![expect(clippy::map_unwrap_or, reason = "debt: map then unwrap_or, where map_or serves")]
 #![expect(
   clippy::needless_pass_by_value,
   reason = "debt: an argument taken by value and only borrowed"
 )]
-#![expect(clippy::ref_option, reason = "debt: &Option<T> where Option<&T> serves")]
 
 #[cfg(feature = "python")]
 pub mod py;
@@ -262,7 +258,7 @@ impl NativeEar {
     if let Some(shared) = hearing.lent.take().and_then(|one| one.upgrade()) {
       let ear = shared
         .try_borrow_mut()
-        .map_err(|_| Fault::refused("the ear hears, and cannot be let go now"))?
+        .map_err(|no| Fault::refused(format!("the ear hears, and cannot be let go now: {no}")))?
         .take();
       drop(ear);
     }
@@ -583,7 +579,7 @@ fn configured_catalog(
   config: Option<String>,
 ) -> Result<world::Catalog, Fault> {
   let directory =
-    directory.map(path::PathBuf::from).unwrap_or_else(|| env::current_dir().unwrap_or_default());
+    directory.map_or_else(|| env::current_dir().unwrap_or_default(), path::PathBuf::from);
   let config = config.map(path::PathBuf::from);
   world::Catalog::load()
     .claude(claude.map(Into::into), None)
@@ -670,7 +666,8 @@ pub fn model(
   Ok(configured_catalog(None, directory, config)?.find(&name).as_ref().map(ModelInfo::of))
 }
 
-/// A ChatGPT sign-in state, with its browser address while it waits and a message when it fails. It holds no token.
+/// A `ChatGPT` sign-in state, with its browser address while it waits and a message when it
+/// fails. It holds no token.
 #[cfg_attr(feature = "typescript", napi(object, object_from_js = false))]
 #[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
 pub struct CodexAuthInfo {
@@ -679,8 +676,9 @@ pub struct CodexAuthInfo {
   pub message: Option<String>,
 }
 
-/// Read, start, refresh or cancel ChatGPT sign-in for codex. The default action reads its state.
-/// The config directory is the user config directory when unsaid. A start returns before the browser completes.
+/// Read, start, refresh or cancel `ChatGPT` sign-in for codex. The default action reads its state.
+/// The config directory is the user config directory when unsaid. A start returns before the
+/// browser completes.
 #[cfg_attr(feature = "python", pyfunction, pyo3(signature = (action = None, config = None)))]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn codex_auth(action: Option<String>, config: Option<String>) -> Result<CodexAuthInfo, Fault> {
@@ -776,10 +774,10 @@ pub fn image_type(data: &[u8]) -> Result<ImageType, Fault> {
 /// The words of a call that a host gave, by position and by name, as the engine takes them.
 fn words(
   args: Option<Vec<Value>>,
-  kwargs: &Option<IndexMap<String, Value>>,
+  kwargs: Option<&IndexMap<String, Value>>,
 ) -> (Vec<Object>, Vec<(&str, Object)>) {
   let args = args.unwrap_or_default().into_iter().map(|one| one.0).collect();
-  (args, kwargs.iter().flatten().map(|(key, one)| (key.as_str(), one.0.clone())).collect())
+  (args, kwargs.into_iter().flatten().map(|(key, one)| (key.as_str(), one.0.clone())).collect())
 }
 
 /// Call back when the console of Windows ends this process: at Ctrl+Break, at the close of the console, at a logoff
@@ -813,7 +811,7 @@ mod console {
     reason = "debt: a let _ hides the type of what it drops"
   )]
 
-  use std::sync::OnceLock;
+  use std::{io, sync::OnceLock, thread};
 
   use windows_sys::{
     Win32::System::Console::{
@@ -871,7 +869,7 @@ mod console {
     if *ADDED.get_or_init(|| unsafe { SetConsoleCtrlHandler(Some(heard), 1) } != 0) {
       Ok(())
     } else {
-      let why = std::io::Error::last_os_error();
+      let why = io::Error::last_os_error();
       Err(Fault::refused(format!("The console handler was not added: {why}")))
     }
   }
@@ -892,7 +890,7 @@ mod console {
       return 0;
     }
     loop {
-      std::thread::park();
+      thread::park();
     }
   }
 }
