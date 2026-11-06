@@ -646,8 +646,8 @@ def owner_words() -> None:
       rows.append(f"## {x[1]}, his answer to my question\n\n{said}\n\n")
   if lead.get("words") == str(len(rows)):
     return
-  lead["words"] = str(len(rows))
   write(Text(WORDS, "# The words of the owner in this session, verbatim, in order\n\n" + "".join(rows)))
+  lead["words"] = str(len(rows))
 
 
 def align() -> None:

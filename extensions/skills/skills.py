@@ -42,14 +42,16 @@ def defined(*names: str) -> Show:
 
   def show(lines: list[str]) -> list[int]:
     out: list[int] = []
-    at, start = 0, 0
+    at, start, decorated = 0, 0, False
     while at < len(lines):
       first = at
       at += 1
       while at < len(lines) and (not lines[at] or lines[at][0] in " \t)]}"):
         at += 1
-      if lines[first].startswith("@"):
+      if lines[first].startswith("@") or (decorated and lines[first].startswith("#")):
+        decorated = True
         continue
+      decorated = False
       end = at
       while end > first + 1 and not lines[end - 1]:
         end -= 1

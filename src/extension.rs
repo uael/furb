@@ -581,17 +581,17 @@ pub fn parts(places: &Places, project: &Path) -> Result<Vec<Part>, Fault> {
 }
 
 /// The name and the text of the file of the keys of each extension that the configs turn on and
-/// whose manifest names one, in the order a life runs them. An official extension names none, and
-/// a folder whose manifest cannot be read gives none, since its extension does not play.
+/// whose manifest names one, in the order a life runs them. An official extension names none, a
+/// folder whose manifest cannot be read gives none, since its extension does not play, and a file
+/// of keys that cannot be read gives none, so the configs stay readable and writable, and a config
+/// can turn that extension off.
 pub(crate) fn contributed(places: &Places, project: &Path) -> Result<Vec<(String, String)>, Fault> {
   let mut out = Vec::new();
   for (name, root) in turned_on(places, project)? {
     let Some(root) = root else { continue };
     let Ok(text) = fs::read_to_string(root.join(MANIFEST)) else { continue };
-    if let Some(keys) = frontmatter(&text).meta(CONFIG) {
-      let file = root.join(keys);
-      let text = fs::read_to_string(&file)
-        .map_err(|no| Fault::refused(format!("{no}: {}", file.display())))?;
+    let keys = frontmatter(&text).meta(CONFIG).map(|keys| root.join(keys));
+    if let Some(Ok(text)) = keys.map(fs::read_to_string) {
       out.push((name, text));
     }
   }

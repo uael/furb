@@ -239,3 +239,22 @@ fn a_flag_on_an_object_that_is_no_provider_is_written_as_it_is() {
   assert_eq!(text(&project), json!({"notes": true}));
   fs::remove_dir_all(at).unwrap();
 }
+
+#[test]
+fn an_extension_whose_file_of_keys_is_missing_or_no_schema_names_no_key_and_a_config_turns_it_off()
+{
+  for (name, keys) in [("broken", Some("{not json")), ("missing", None)] {
+    let (at, layers) = place(name);
+    extension(&at, name, &json!({"properties": {}}));
+    let file = at.join("project/.furb").join(name).join("keys.json");
+    match keys {
+      Some(text) => fs::write(&file, text).unwrap(),
+      None => fs::remove_file(&file).unwrap(),
+    }
+    assert!(layers.get().unwrap().iter().all(|one| one.extension.is_none()));
+    set(&layers, change(&["extensions", name], Some(json!(false)), Layer::Project)).unwrap();
+    let config = at.join("project/.furb/config.json");
+    assert_eq!(text(&config), json!({"extensions": {name: false}}));
+    assert!(layers.get().is_ok());
+  }
+}
