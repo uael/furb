@@ -151,6 +151,7 @@ metadata:
   furb-plays: every
   furb-view: tui.ts
   furb-process: notes.ts
+  furb-config: config.json
 ---
 What the notes are for.
 ```
@@ -181,6 +182,8 @@ What the notes are for.
   where the daemon listens, the record of the life and the name of the extension, so it dials the daemon and attaches
   the life as a skill, as [the protocol](protocol.md) says. A folder that holds the extension starts nothing: only a
   life that plays it does. It can be absent.
+- `furb-config` is the JSON file of the keys that the extension adds to the configs, relative to the folder, as
+  [the schema](config.md#the-schema) says. `/config` shows them under the name of the extension. It can be absent.
 
 A field of furb that the manifest does not know is refused with its path, so a typo does not pass.
 

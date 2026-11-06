@@ -40,6 +40,10 @@ use futures::future::BoxFuture;
 use serde_json::Value;
 
 use self::search::Searches;
+pub(crate) use self::{
+  model::{KEY_AUTOMATIC, KEY_CLASSES},
+  thinking::{KEY_THINKING, THINKING},
+};
 use super::interrupted;
 use crate::{
   ear::{Co, Ear, Next, hearing},
@@ -51,7 +55,7 @@ use self::hearer::{Hearer, Replied, searched};
 use self::messages::banner;
 use self::model::{Class, Streams, streams};
 use self::retry::{LIMIT_POLL, resets};
-use self::thinking::{ENV_THINKING, KEY_THINKING, Thinking, Thought, thinking};
+use self::thinking::{ENV_THINKING, Thinking, Thought, thinking};
 use self::word::RAN;
 pub use self::{
   model::Model,

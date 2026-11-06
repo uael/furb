@@ -43,6 +43,7 @@ import {
 } from "furb/life";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { clock } from "./clock.ts";
+import { typed } from "./configs.ts";
 import { expandHome, fileReferences, fromDirectory, projectFiles, shortenHome } from "./files.ts";
 import { count, dollars } from "./format.ts";
 import { append, modeOf, seed, sentIn, workspaceRoot } from "./history.ts";
@@ -2078,6 +2079,22 @@ export class Session extends EventEmitter {
         await this.reloadCatalog();
         this.notice = "Provider settings reloaded. The life stands on the new settings.";
         break;
+      case "config": {
+        const [name = "", ...words] = argument.split(" ");
+        if (!name) throw new Error("Use /config <key> [value], or /config alone to see each key.");
+        const dot = name.indexOf(".");
+        const key = dot < 0 ? [name] : [name.slice(0, dot), name.slice(dot + 1)];
+        const text = words.join(" ").trim();
+        const value = text ? typed(text) : undefined;
+        const held = (await this.host.settings()).find((one) => one.key.join(".") === key.join("."));
+        const layer = held?.layer ?? "project";
+        await this.host.config({ action: "set", key, value, layer });
+        this.emit("configured");
+        this.notice = text
+          ? `${name} is ${JSON.stringify(value)} in the ${layer} config. The life stands on it.`
+          : `${name} is out of the ${layer} config. The life stands on the configs of now.`;
+        break;
+      }
       case "retry":
         await this.host.config({ action: "reload" });
         this.notice = "Each model that waited to retry is asked again now, on the provider settings of now.";
