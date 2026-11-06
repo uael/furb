@@ -1081,13 +1081,7 @@ test("a session enables the extensions of the configs, and a later session on it
   const first = new Session({ cwd, record, config });
   try {
     first.open();
-    expect(running(first)).toEqual([
-      "catchup",
-      "memory",
-      "skills",
-      "compaction",
-      "naming",
-    ]);
+    expect(running(first)).toEqual(["catchup", "memory", "skills", "compaction", "naming"]);
     // The life words of the setup read each memory file, after the reads of the doctrine and of the files of the
     // extensions, and the user turn after them shows what each read gave.
     const found = (first.engine?.transcript({ on: ROOT }) ?? []).find(

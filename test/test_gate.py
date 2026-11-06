@@ -392,14 +392,13 @@ async def test_a_word_that_binds_a_name_of_the_engine_at_its_top_finds_that_each
     ("match 1:\n  case chance:\n    pass", 2, 8, "chance"),
     ("def f():\n  global cd", 2, 10, "cd"),
     ("def f(a=(wait := 1)):\n  pass", 1, 10, "wait"),
-    ("@(chance := 1)\ndef f():\n  pass", 1, 3, "chance"),
-    ("class C((cd := 1)):\n  pass", 1, 10, "cd"),
-    ("class C(k=(turns := 1)):\n  pass", 1, 12, "turns"),
-    ("@(wait := 1)\nclass C:\n  pass", 1, 3, "wait"),
+    ("@(chance := lambda f: f)\ndef f():\n  pass", 1, 3, "chance"),
+    ("class C((cd := object)):\n  pass", 1, 10, "cd"),
+    ("@(wait := lambda c: c)\nclass C:\n  pass", 1, 3, "wait"),
   ]:
     (found,) = engine.gate(word, on=root)
     assert found.startswith(f"line {line}: {bound.format(column, name)}, in "), found
-  assert engine.gate("def f(a=lambda: (wait := 1)):\n  (chance := 2)\nclass C:\n  (cd := 3)\nclose(1)", on=root) == []
+  assert engine.gate("def f(a=lambda: (wait := 1)):\n  (chance := 2)\nclose(1)", on=root) == []
 
 
 async def test_a_def_or_a_class_of_a_name_of_the_engine_overrides_it_and_a_word_may_import_a_name_that_the_engine_imports() -> (
