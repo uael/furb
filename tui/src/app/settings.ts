@@ -1,7 +1,7 @@
 import { getTreeSitterClient, type Renderable, type RGBA } from "@opentui/core";
 import { gist } from "furb/life";
 import type { Layer } from "furb/protocol";
-import { type Setting, typed } from "../configs.ts";
+import { type Setting, shown, typed } from "../configs.ts";
 import { openFile } from "../editor.ts";
 import { shortenHomes } from "../files.ts";
 import { clip, modelName } from "../format.ts";
@@ -250,13 +250,18 @@ export const settings = part({
       {
         name: "value",
         label: property ? `${name}, ${property.type}` : name,
-        detail: [property?.description, "A string needs no quotes; any other value is JSON."]
+        detail: [
+          property?.description,
+          property?.type === "string"
+            ? "The text is kept as it is."
+            : "A string needs no quotes; any other value is JSON.",
+        ]
           .filter(Boolean)
           .join(" "),
-        value: typeof one.value === "string" ? one.value : (JSON.stringify(one.value) ?? ""),
+        value: shown(one.value, property),
         required: true,
       },
-    ]).then((got) => got && write(typed(got.value ?? "")), this.report);
+    ]).then((got) => got && write(typed(got.value ?? "", property)), this.report);
   },
 
   effortPicker(): void {

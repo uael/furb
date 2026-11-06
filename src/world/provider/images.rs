@@ -157,6 +157,11 @@ pub fn reference(name: &str, uri: &str) -> String {
 
 /// Each image a message names, in order.
 pub fn references(message: &str) -> Vec<Named> {
+  placed(message).into_iter().map(|(_, one)| one).collect()
+}
+
+/// Each image a message names, in order, with the place in the message where its text starts.
+fn placed(message: &str) -> Vec<(usize, Named)> {
   let mut found = Vec::new();
   let mut from = 0;
   while let Some(at) = message[from..].find("![") {
@@ -173,7 +178,7 @@ pub fn references(message: &str) -> Vec<Named> {
     }
     let end = from + close + 1 + uri.len() + 2;
     let (name, uri) = (rest[..close].to_owned(), uri.to_owned());
-    found.push(Named { text: message[open..end].to_owned(), name, uri });
+    found.push((open, Named { text: message[open..end].to_owned(), name, uri }));
     from = end;
   }
   found
@@ -211,20 +216,25 @@ impl Images {
     Self { directory, held: HashMap::new() }
   }
 
-  /// The images that the prompts a user turn opens name, and the images that its reads give, as images of rig, each
-  /// after a text that names it as the turn names it, so a model knows which image is which; and none when the life
-  /// has no directory of images. A prompt tells its message in its open, and a read of an image tells its text as
-  /// that image alone, so an image that anything else names, as a text file that a read shows, is no image of the
-  /// turn. An image comes once in a request: an image that an earlier turn of it gave, as the turns of the origin of
-  /// a fork, is not given again, since the model reads it there under its name.
+  /// The images that the prompts a user turn opens name, and the images that its reads give, each
+  /// with the place of the python of the turn where the text that names it ends, so [`sequence`]
+  /// hands them to a model after that text, in the order of the turn; and none when the life has no
+  /// directory of images. A prompt tells its message in its open, and a read of an image tells its
+  /// text as that image alone, so an image that anything else names, as a text file that a read
+  /// shows, is no image of the turn. An image comes once in a request: an image that an earlier
+  /// turn of it gave, as the turns of the origin of a fork, is not given again, since the model
+  /// reads it there under its name.
   pub(super) fn named(
     &mut self,
     python: &str,
     given: &mut HashSet<String>,
-  ) -> Result<Vec<UserContent>, Error> {
+  ) -> Result<Vec<Seen>, Error> {
     let Some(directory) = self.directory.clone() else { return Ok(Vec::new()) };
-    let mut uris: Vec<Named> = Vec::new();
+    let mut uris: Vec<(usize, Named)> = Vec::new();
+    let mut start = 0;
     for paragraph in paragraphs(python) {
+      let at = start;
+      start += paragraph.len() + 2;
       let name = paragraph.strip_prefix('#').and_then(|rest| rest.split([' ', '\n']).next());
       let name = name.unwrap_or_default();
       let opens = fact::named(name, "prompt")
@@ -233,18 +243,17 @@ impl Images {
       if !opens && !reads {
         continue;
       }
-      for one in references(&paragraph) {
+      for (place, one) in placed(&paragraph) {
         if (opens || alone(&paragraph, name, &one)) && given.insert(one.uri.clone()) {
-          uris.push(one);
+          uris.push((at + place + one.text.len(), one));
         }
       }
     }
-    let mut content = Vec::new();
-    for one in uris {
-      content.push(UserContent::text(one.text));
-      content.push(self.image(&directory, &one.uri)?);
+    let mut seen = Vec::new();
+    for (end, one) in uris {
+      seen.push(Seen { end, content: self.image(&directory, &one.uri)? });
     }
-    Ok(content)
+    Ok(seen)
   }
 
   /// The content of the image of a uri: the one read before while its file stays the same, or read now.
@@ -297,6 +306,49 @@ fn paragraphs(python: &str) -> Vec<String> {
     }
   }
   paragraphs
+}
+
+/// An image that a model is handed with a user turn: the place in the python of the turn where the
+/// text that names it ends, and its content.
+#[derive(Debug)]
+pub(super) struct Seen {
+  pub(super) end: usize,
+  pub(super) content: UserContent,
+}
+
+/// The parts that a model is handed for a user turn, in the order of its text: the text up to the
+/// end of the text that names an image, the image, and the text after it, so each image stands
+/// where the turn names it, as the APIs of Anthropic and of `OpenAI` take a message. `banner` is
+/// where the open of a chain starts, as [`super::banner`] finds it, which two line breaks stand
+/// before: the text from there is a block of its own, so the setup before it ends a block that a
+/// provider can keep in its cache.
+pub(super) fn sequence(
+  python: &str,
+  seen: Vec<Seen>,
+  mut banner: Option<usize>,
+) -> Vec<UserContent> {
+  let mut parts = Vec::new();
+  let mut from = 0;
+  let text = |parts: &mut Vec<UserContent>, from: usize, to: usize| {
+    if let Some(one) = python.get(from..to).filter(|one| !one.is_empty()) {
+      parts.push(UserContent::text(one));
+    }
+  };
+  for one in seen {
+    if let Some(at) = banner.filter(|at| one.end > at.saturating_sub(2)) {
+      text(&mut parts, from, at.saturating_sub(2));
+      (from, banner) = (at, None);
+    }
+    text(&mut parts, from, one.end);
+    parts.push(one.content);
+    from = one.end;
+  }
+  if let Some(at) = banner {
+    text(&mut parts, from, at.saturating_sub(2));
+    from = at;
+  }
+  text(&mut parts, from, python.len());
+  parts
 }
 
 #[cfg(test)]

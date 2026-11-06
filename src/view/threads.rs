@@ -10,6 +10,7 @@ use serde_json::Value;
 use super::{
   act::{Act, Kind, operator},
   fold::followed,
+  named::Named,
   state::State,
 };
 
@@ -333,7 +334,7 @@ fn named(out: &mut [ChainThread], on: &[&Act], rows: &Rows<'_>) {
   let Some(chain) = rows.get(chain.as_str()).filter(|act| act.kind == Kind::Chain) else { return };
   let root = chain.on.is_empty();
   let name = if root {
-    session_name(on)
+    Named::of_acts(on).name().map(|one| one.trim().to_owned())
   } else {
     chain.words.first().and_then(Value::as_str).map(str::trim).map(str::to_owned)
   };
@@ -341,21 +342,6 @@ fn named(out: &mut [ChainThread], on: &[&Act], rows: &Rows<'_>) {
   let first = out.iter_mut().find(|one| (one.origin == Origin::Operator) == root);
   if let Some(first) = first {
     first.title = name;
-  }
-}
-
-/// The name of the session from the acts of its root: the last name that the operator gave it with
-/// `rename_session`, else the last name that the extension naming gave it with `name_session`. An
-/// empty name of the operator stays empty, which names no thread, as the window then names the
-/// session by its directory.
-pub fn session_name(on: &[&Act]) -> Option<String> {
-  let last = |kind: &str| {
-    let given = on.iter().filter(|act| act.kind.as_str() == kind);
-    given.filter_map(|act| Some((act.began, act.value()?.as_str()?))).max_by_key(|one| one.0)
-  };
-  match last("rename_session") {
-    Some((_, said)) => Some(said.trim().to_owned()),
-    None => last("name_session").map(|(_, given)| given.trim().to_owned()),
   }
 }
 
@@ -745,7 +731,7 @@ mod tests {
       facts.extend(more);
       let acts = folded(facts);
       let on: Vec<&Act> = acts.iter().filter(|act| act.chain == "chain1").collect();
-      super::session_name(&on)
+      crate::view::Named::of_acts(&on).name().map(|one| one.trim().to_owned())
     };
     assert_eq!(named(vec![]).as_deref(), Some("A given name"));
     let said = |id: &str, name: &str| {

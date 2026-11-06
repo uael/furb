@@ -4,10 +4,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { until } from "../../bind/typescript/test/until.ts";
 import { openEngine } from "../src/bridge.ts";
-import { typed } from "../src/configs.ts";
+import { shown, typed } from "../src/configs.ts";
 import { Preferences } from "../src/preferences.ts";
 import { Session } from "../src/session.ts";
 import { composing } from "./composing.ts";
+
+test("the form of a key gives back the value that it showed, for a string of the schema and for any other", () => {
+  const text = { type: "string" as const, default: "", description: "" };
+  for (const value of ["12", "true", "null", '"quoted"', "plain", ""])
+    expect(typed(shown(value, text), text)).toBe(value);
+  for (const value of ["12", "null", 12, true, null, ["a"]]) expect(typed(shown(value))).toEqual(value);
+});
 
 test("a value that is no JSON is the text that the operator typed", () => {
   expect([typed("false"), typed("12"), typed('"a b"'), typed("a b")]).toEqual([false, 12, "a b", "a b"]);

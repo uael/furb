@@ -581,6 +581,12 @@ export interface Part {
 export declare function parts(project: string): Array<Part>
 
 /**
+ * The files that a query after `@` picks from the directory, best first: from the files of the
+ * project that a walk gave, or from the folder that a query starting with `/`, `~` or `../` names.
+ */
+export declare function pickedFiles(directory: string, query: string, project: Array<string>): Array<string>
+
+/**
  * A provider as a first run checks it: its name, the names of its credential in the environment, whether the
  * settings enable it, and how many of its models the catalog offers.
  */
@@ -661,6 +667,13 @@ export declare function time(): NativeEar
 
 /** TIMEOUT is the timeout, in seconds, of a command that does not say one. */
 export declare const TIMEOUT: number
+
+/**
+ * The files under a folder that the picker of a window offers, by their path from it with `/`
+ * between its parts, in order: each dot file too, but `.git` and each file that `.gitignore`
+ * hides.
+ */
+export declare function walkedFiles(root: string): Array<string>
 
 /** WINDOW is the window, in tokens, of a model whose roster entry does not say one. */
 export declare const WINDOW: number

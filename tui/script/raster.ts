@@ -121,6 +121,19 @@ function mark(glyph: string, x: number, y: number, color: string): string | unde
         const angle = (index / 8) * Math.PI * 2;
         return `<circle cx="${x + Math.cos(angle) * 3}" cy="${y + Math.sin(angle) * 3}" r="0.62" fill="${color}"/>`;
       }).join("");
+    // The four turns of the loader of a running line: a ring with one half filled, whatever font the machine has.
+    case "◐":
+    case "◑":
+    case "◒":
+    case "◓": {
+      const half = {
+        "◐": `M ${x} ${y - 2.9} A 2.9 2.9 0 0 0 ${x} ${y + 2.9} Z`,
+        "◑": `M ${x} ${y - 2.9} A 2.9 2.9 0 0 1 ${x} ${y + 2.9} Z`,
+        "◒": `M ${x - 2.9} ${y} A 2.9 2.9 0 0 0 ${x + 2.9} ${y} Z`,
+        "◓": `M ${x - 2.9} ${y} A 2.9 2.9 0 0 1 ${x + 2.9} ${y} Z`,
+      }[glyph];
+      return `<circle cx="${x}" cy="${y}" r="2.9" stroke="${color}" stroke-width="1.1" fill="none"/>${fill(half ?? "")}`;
+    }
     case "◆":
       return fill(`M ${x} ${y - 3.7} L ${x + 3.3} ${y} L ${x} ${y + 3.7} L ${x - 3.3} ${y} Z`);
     case "✓":
