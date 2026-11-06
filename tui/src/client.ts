@@ -205,6 +205,7 @@ export class Daemon extends EventEmitter {
     } else if (frame.frame === "event") this.emit("event", frame.life, frame.seq, frame.event);
     else if (frame.frame === "presence") this.emit("presence", frame.life, frame.peers);
     else if (frame.frame === "stalled") this.emit("stalled", frame.life, frame.notice);
+    else if (frame.frame === "sign_in") this.emit("authentication", frame);
     else if (frame.frame === "ask") this.emit("ask", frame.life, frame.ask, frame.request);
   }
 
@@ -442,10 +443,13 @@ export class RemoteLife extends EventEmitter {
     };
     const lost = (why: string) => this.lose(new Error(why));
     const stalled = (life: string, notice: string) => life === this.record && this.emit("log", notice);
+    const authentication = ({ state, url, message }: Extract<Frame, { frame: "sign_in" }>) =>
+      this.emit("authentication", { state, url: url ?? undefined, message: message ?? undefined });
     this.listening = [
       ["event", event],
       ["ask", ask],
       ["stalled", stalled],
+      ["authentication", authentication],
       ["reconnected", again],
       ["lost", lost],
     ];
