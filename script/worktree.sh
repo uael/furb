@@ -89,7 +89,17 @@ fi
 step="copy the build"
 # What the python side needs, said at each end of the script.
 python_note() {
+  # The .venv of the tree is its own: uv sync makes it on the warm target, so its python and the hooks import this
+  # tree. A file system with no copy on write gets it too, and builds the crate from nothing.
+  if [ ! -e "$path/.venv" ] && [ -f "$path/uv.lock" ] && command -v uv >/dev/null 2>&1; then
+    (cd "$path" && sh script/build-slot.sh uv sync --locked >/dev/null 2>&1) ||
+      echo "uv sync did not end in $path: run it there before you trust a test of python."
+  fi
   echo "TypeScript work needs no .venv: bun run build there suffices."
+  if [ -x "$path/.venv/bin/python" ]; then
+    echo "$path holds its own .venv, which uv sync made on this tree."
+    return
+  fi
   echo "$path has no .venv. For python work, uv sync there makes it, builds the crate again and takes minutes, and"
   echo "uv run --no-sync before it falls back to the system python, which lacks the packages. Run: (cd $path && uv sync)"
   if [ -x "$main/.venv/bin/python" ]; then
@@ -140,8 +150,7 @@ fi
 rm -f "$path/.worktree-probe"
 
 # The output of cargo, which maturin and napi share, the packages of bun, the build of the TypeScript package, and
-# the cache of the tests of the TUI. The environment of python is not copied: its scripts name the path of the main
-# checkout, and uv sync makes it again on the warm target.
+# the cache of the tests of the TUI.
 for dir in target node_modules bind/typescript/node_modules tui/node_modules bind/typescript/dist .furb/tests; do
   if [ -e "$src/$dir" ] && [ ! -e "$path/$dir" ]; then
     mkdir -p "$(dirname "$path/$dir")"
