@@ -460,7 +460,7 @@ impl Reader<'_> {
         self.rungs.insert(about.to_owned(), about.to_owned());
       }
       MADE => {
-        self.asks_kept = fact.word(2).and_then(Schema::read).is_some_and(|one| one.minor >= 1)
+        self.asks_kept = fact.word(2).and_then(Schema::read).is_some_and(|one| one.minor >= 1);
       }
       "run" if fact.question() => {
         self.runs.insert(text(fact, 1), about.to_owned());
