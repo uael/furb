@@ -657,7 +657,7 @@ export const feed = part({
         sections.push({
           id: act.id,
           label: user ? [["You", tone]] : [[sent, c.faint]],
-          key: `${message}\n${sent}\n${plain(state)}\n${rest}\n${thread?.resolved}\n${meta}\n${news}\n${folded}\n${this.feedWidth}\n${this.theme}`,
+          key: `${message}\n${sent}\n${plain(state)}\n${rest}\n${thread?.over}\n${meta}\n${news}\n${folded}\n${this.feedWidth}\n${this.theme}`,
           ...(bar ? { bar } : {}),
           act,
           shown: message,
@@ -1018,7 +1018,7 @@ export const feed = part({
         if (answered && !placed) sections.push(answerOf(act, `${act.id}-answer`));
         // A message that a branch took is answered on its source, so the branch offers no reply to it.
         if (!w.host.reading && !taken.has(act.id) && !aside) {
-          const over = Boolean(thread?.resolved);
+          const over = Boolean(thread?.over);
           sections.push({
             id: `${act.id}-reply`,
             key: `reply\n${over}\n${w.target === act.id}\n${this.feedWidth}\n${this.theme}`,

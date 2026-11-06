@@ -103,18 +103,18 @@ test("a line on an open thread is a message of None, over at once, and a line on
       expect(on()[0]?.words[0]).toBe("None");
       // The message is over at once, and it holds the thread open no more than the prompt of the thread does.
       await until(session, () => (on()[0] !== undefined && isDone(on()[0])) === true);
-      expect(listed(session).find((one) => one.act.id === id)?.resolved).toBe(false);
+      expect(listed(session).find((one) => one.act.id === id)?.over).toBe(false);
       await session.reply(id, "And once more");
       await until(session, () => on().length === 2);
       expect(on()[1]?.words[0]).toBe("None");
       // Its model closes the prompt of the thread, which ends the thread.
       await session.engine.close(JSON.stringify("done"), { id });
-      await until(session, () => listed(session).find((one) => one.act.id === id)?.resolved === true);
+      await until(session, () => listed(session).find((one) => one.act.id === id)?.over === true);
       expect(session.lineShape(id)).toBe("str");
       await session.submit("Look at it again");
       await until(session, () => on().length === 3);
       expect(on()[2]?.words[0]).toBe("str");
-      await until(session, () => listed(session).find((one) => one.act.id === id)?.resolved === false);
+      await until(session, () => listed(session).find((one) => one.act.id === id)?.over === false);
     },
     size,
     true,
@@ -163,7 +163,7 @@ test("a question that waits shows on top of the sidebar and as a mark on its wor
       // and a thread that is over is no target until he chooses it.
       const active = session.activeThread;
       expect(active).toBeDefined();
-      expect(session.openThread).toBe(active && !active.resolved ? active : undefined);
+      expect(session.openThread).toBe(active && !active.over ? active : undefined);
       expect(session.target).toBe(session.openThread?.act.id);
       await session.submit("/newthread");
       expect(session.fresh).toBe(true);

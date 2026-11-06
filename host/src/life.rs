@@ -19,7 +19,7 @@ use furb::{
   Engine, Fact, Fault, Object, Text, checkpoint,
   life::{Log, Opening, Stream},
   verbs,
-  view::{Act, Fold, Held, Named},
+  view::{Act, Desk, Fold, Held, Named, Threads},
   wire::{outward, parsed},
   world::{
     self, Shape, answered,
@@ -182,6 +182,14 @@ pub enum Reply {
   Values(Vec<Value>),
   /// A name of a module: the name of its type, its representation, and its value as JSON.
   Inspected { kind: String, repr: String, value: Value },
+  /// What waits for the operator.
+  Desk(Desk),
+  /// The threads of a chain.
+  Threads(Threads),
+  /// The acts as they stood at a moment.
+  Acts(Vec<Act>),
+  /// Each moment at which an act began or ended.
+  Moments(Vec<u64>),
 }
 
 /// One event under its place in the log.
@@ -658,15 +666,12 @@ async fn commanded(
       let waiting = waiting.iter().map(serde_json::to_value).collect::<Result<_, _>>();
       Ok(Reply::Values(waiting.map_err(|no| LifeError::Refused(no.to_string()))?))
     }
-    Command::Desk { notices } => valued(&held.desk(&notices)),
+    Command::Desk { notices } => Ok(Reply::Desk(held.desk(&notices))),
     Command::Threads { on, at, read } => {
-      valued(&held.threads(&chain(on), at, read.unwrap_or_default()))
+      Ok(Reply::Threads(held.threads(&chain(on), at, read.unwrap_or_default())))
     }
-    Command::AsOf { at } => {
-      let acts = held.as_of(at).iter().map(serde_json::to_value).collect::<Result<_, _>>();
-      Ok(Reply::Values(acts.map_err(|no| LifeError::Refused(no.to_string()))?))
-    }
-    Command::Moments => Ok(Reply::Values(held.moments().into_iter().map(Value::from).collect())),
+    Command::AsOf { at } => Ok(Reply::Acts(held.as_of(at))),
+    Command::Moments => Ok(Reply::Moments(held.moments())),
     Command::Settings => {
       let settings = configs.get()?.into_iter().map(|one| json!(one));
       Ok(Reply::Values(settings.collect()))
@@ -677,11 +682,6 @@ async fn commanded(
     }
     other => answered_by(engine, other),
   }
-}
-
-/// A meaning as the value of a reply.
-fn valued(meaning: &impl serde::Serialize) -> Result<Reply, LifeError> {
-  serde_json::to_value(meaning).map(Reply::Value).map_err(|no| LifeError::Refused(no.to_string()))
 }
 
 /// Each follow-up that is due sent as a prompt on its chain, or why its send failed, which holds

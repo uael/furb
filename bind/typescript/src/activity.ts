@@ -91,7 +91,7 @@ function chainState(
   on: readonly Act[],
   remote: readonly Act[],
   owed: ReadonlySet<string>,
-  unfinished: ReadonlySet<string>,
+  unfinished: { has(id: string): boolean },
 ): State {
   if (on.some((act) => owed.has(act.id))) return "asks";
   const live = on.filter((act) => WORK.includes(act.kind) && !unfinished.has(act.id));
@@ -152,6 +152,12 @@ export class Activity {
   private readonly runs = new Map<string, string>();
   private readonly ran = new Map<string, unknown>();
   private readonly refused = new Map<string, string>();
+  /** The acts that stand in each chain but its chains, and the prompts that a rung of each chain made on other
+   * chains, each in the order they began, so that the state of a chain reads its own acts and no others. */
+  private readonly inChain = new Map<string, Map<string, LiveAct>>();
+  private readonly madeFrom = new Map<string, Map<string, LiveAct>>();
+  /** How many times the spend of a chain or of a rung changed. */
+  spendChanges = 0;
 
   /** The chain whose transcript holds a fact about a name: the chain itself for a chain, the chain a question stands
    * on for any other question, and nothing for a name of no question. */
@@ -169,27 +175,15 @@ export class Activity {
    * record open to read, whose console owes the prompts that `owed` names. */
   hosted(acts: readonly LiveAct[], owed: ReadonlySet<string> = new Set()): Act[] {
     const out = new Map(acts.map((act) => [act.id, this.shape(act, owed)]));
-    const chains = new Set(acts.map((act) => act.on));
-    const on = new Map<string, Act[]>();
-    const remote = new Map<string, Act[]>();
-    const unfinished = new Set<string>();
-    const put = (lists: Map<string, Act[]>, chain: string, act: LiveAct) => {
-      const made = out.get(act.id) ?? this.shape(act, owed);
-      const list = lists.get(chain);
-      if (list) list.push(made);
-      else lists.set(chain, [made]);
-    };
-    for (const act of this.acts.values()) {
-      if (act.unfinished) unfinished.add(act.id);
-      if (act.kind !== "chain" && chains.has(act.on)) put(on, act.on, act);
-      const maker = act.kind === "prompt" ? this.acts.get(act.by) : undefined;
-      if (maker?.kind === "rung" && maker.on !== act.on && chains.has(maker.on)) put(remote, maker.on, act);
-    }
-    for (const chain of chains) {
+    const shaped = (act: LiveAct) => out.get(act.id) ?? this.shape(act, owed);
+    const unfinished = { has: (id: string) => this.acts.get(id)?.unfinished === true };
+    for (const chain of new Set(acts.map((act) => act.on))) {
       const act = this.acts.get(chain);
       if (act?.kind !== "chain") continue;
-      const made = out.get(chain) ?? this.shape(act, owed);
-      made.state = chainState(on.get(chain) ?? [], remote.get(chain) ?? [], owed, unfinished);
+      const made = shaped(act);
+      const own = [...(this.inChain.get(chain)?.values() ?? [])].map(shaped);
+      const remote = [...(this.madeFrom.get(chain)?.values() ?? [])].map(shaped);
+      made.state = chainState(own, remote, owed, unfinished);
       out.set(chain, made);
     }
     return [...out.values()];
@@ -300,6 +294,9 @@ export class Activity {
         };
       this.places.set(id, this.acts.size);
       this.acts.set(id, act);
+      if (kind !== "chain") this.indexed(this.inChain, act.on, act);
+      const maker = kind === "prompt" ? this.acts.get(by) : undefined;
+      if (maker?.kind === "rung" && maker.on !== act.on) this.indexed(this.madeFrom, maker.on, act);
       this.open.add(id);
       this.mark(act);
       if (!this.children.has(by)) this.children.set(by, new Set());
@@ -354,6 +351,7 @@ export class Activity {
         for (const one of [chain, ...(wrote?.kind === "rung" ? [maker] : [])]) {
           const spend = this.spends.get(one) ?? { dollars: 0, answers: 0 };
           this.spends.set(one, { dollars: spend.dollars + usage[4], answers: spend.answers + 1, actor });
+          this.spendChanges++;
         }
       }
       const rung = this.runs.get(id);
@@ -395,6 +393,11 @@ export class Activity {
       stream.content += String(fact[3]);
       this.mark(act);
     }
+  }
+  private indexed(table: Map<string, Map<string, LiveAct>>, chain: string, act: LiveAct): void {
+    const held = table.get(chain) ?? new Map<string, LiveAct>();
+    held.set(act.id, act);
+    table.set(chain, held);
   }
   /** Whether the last control over a new act is a pause. Only a control no older than the oldest pause can make
    * it one. */

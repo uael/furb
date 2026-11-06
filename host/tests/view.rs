@@ -441,7 +441,7 @@ fn thread(act: &Act, asks: &[&str]) -> ChainThread {
     asked: Vec::new(),
     asks: asks.iter().map(|one| (*one).to_owned()).collect(),
     state: if asks.is_empty() { State::Runs } else { State::Asks },
-    resolved: false,
+    over: false,
     origin: Origin::Rung,
     yours: false,
   }
@@ -506,7 +506,7 @@ fn the_closed_threads_stand_first_and_the_open_ones_last_each_group_by_its_last_
   let rows = rows(&all);
   let closed = |id: &str, messages: &[&str]| ChainThread {
     messages: messages.iter().map(|one| (*one).to_owned()).collect(),
-    resolved: true,
+    over: true,
     state: State::Done,
     ..thread(rows[id], &[])
   };
@@ -523,7 +523,7 @@ fn the_closed_threads_stand_first_and_the_open_ones_last_each_group_by_its_last_
   let before = nest_threads(list.clone(), &rows);
   assert_eq!(level(&before), ["prompt1", "prompt2", "prompt3", "prompt4", "prompt6"]);
   let tree = order_threads(nest_threads(list, &rows), &rows);
-  // prompt1 closed last at 50, and prompt3 had its last message at 40. prompt6 is resolved, and it
+  // prompt1 closed last at 50, and prompt3 had its last message at 40. prompt6 is over, and it
   // stands open since a question waits in its agent prompt7.
   assert_eq!(level(&tree), ["prompt2", "prompt1", "prompt4", "prompt6", "prompt3"]);
   assert_eq!(tree.iter().map(open).collect::<Vec<_>>(), [false, false, true, true, true]);
