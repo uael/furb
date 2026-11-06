@@ -92,7 +92,7 @@ python_note() {
   # The .venv of the tree is its own: uv sync makes it on the warm target, so its python and the hooks import this
   # tree. A file system with no copy on write gets it too, and builds the crate from nothing.
   if [ ! -e "$path/.venv" ] && [ -f "$path/uv.lock" ] && command -v uv >/dev/null 2>&1; then
-    (cd "$path" && sh script/build-slot.sh uv sync --locked >/dev/null 2>&1) ||
+    (cd "$path" && uv sync --locked >/dev/null 2>&1) ||
       echo "uv sync did not end in $path: run it there before you trust a test of python."
   fi
   echo "TypeScript work needs no .venv: bun run build there suffices."
