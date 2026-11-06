@@ -196,8 +196,8 @@ mod unix {
 
     limited(libc::RLIM_INFINITY);
     let mut left: Vec<String> = later.to_vec();
-    let woke = until(&mut events, notice("wakes the work")).await;
-    left.retain(|id| !woke.iter().any(|one| done(std::slice::from_ref(id))(&one.1)));
+    let freed = until(&mut events, notice("wakes the work")).await;
+    left.retain(|id| !freed.iter().any(|one| done(std::slice::from_ref(id))(&one.1)));
     while !left.is_empty() {
       let got = until(&mut events, done(&left)).await;
       left.retain(|id| !got.iter().any(|one| done(std::slice::from_ref(id))(&one.1)));
