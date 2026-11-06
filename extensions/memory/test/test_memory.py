@@ -82,15 +82,15 @@ async def test_the_memory_files_that_apply_to_a_path(tmp_path: Path) -> None:
 
 
 async def test_memory_finds_the_folders_with_reads_alone(tmp_path: Path) -> None:
-  """memory finds the folders with reads alone: config:// for the config directory, ./ for the working directory, the path of a folder and ../ for the folder above it, and the path of a folder and the name of an entry of it and / for a folder under it, each with a hidden show."""
+  """memory finds the folders with reads alone: config:// for the config directory, ./ for the working directory, and the path of a folder and the name of an entry of it and / for a folder under it, each with a hidden show, and for a folder above the working directory it reads the memory files by name, never a listing."""
   noted(tmp_path / "work" / "a", "a\n")
   _, root = extended("memory", tmp_path)
   ran = engine.rung('memory("a/b.txt")', on=root)
   await ran
   reads = [a[4] for a in engine.transcript(root) if a[0] == "read" and a[2] == ran]
   work = tilded(tmp_path / "work")
-  assert reads[:3] == ["./", f"{work}/../", f"{tilded(tmp_path)}/../"]
-  assert reads[-3:] == [f"{work}/a/", "config://", f"{tilded(tmp_path / 'work' / 'a')}/AGENTS.md"]
+  assert [one for one in reads if str(one).endswith("/")] == ["./", f"{work}/a/", "config://"]
+  assert reads[-1] == f"{tilded(tmp_path / 'work' / 'a')}/AGENTS.md"
   told = {a[1] for a in engine.transcript(root) if a[0] == "tell"}
   assert [a[4] for a in engine.transcript(root) if a[0] == "read" and a[2] == ran and a[1] in told] == [
     f"{tilded(tmp_path / 'work' / 'a')}/AGENTS.md"
