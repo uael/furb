@@ -135,8 +135,8 @@ fn bounded(socket: &Path) -> Result<(), TransportError> {
   Ok(())
 }
 
-fn listening(socket: &Path, source: io::Error) -> TransportError {
-  TransportError::Listen { place: shown(socket), source }
+fn listening(socket: &Path, cause: io::Error) -> TransportError {
+  TransportError::Listen { place: shown(socket), cause }
 }
 
 fn shown(socket: &Path) -> String {

@@ -110,6 +110,8 @@ async fn written(
   append: Append,
 ) {
   let mut lost: Option<JournalError> = None;
+  // The journal tells the operator when it begins to lose changes and when it takes changes again, not each change.
+  let mut failing = false;
   while let Some(line) = heard.recv().await {
     let (chain, change) = match line {
       Line::Change { chain, change } => (chain, change),
@@ -124,6 +126,12 @@ async fn written(
       // The chain of the write hears that its changes changed only now: a window that read the
       // journal at the fact of the write could find it without the change, and hear nothing after.
       Ok(Ok(())) => {
+        if failing {
+          failing = false;
+          let notice =
+            format!("the journal of file changes at {} takes changes again", at.display());
+          told.send(Event::Notice(notice)).ok();
+        }
         if !chain.is_empty() {
           told.send(Event::Changed(chain)).ok();
         }
@@ -132,8 +140,12 @@ async fn written(
       Ok(Err(no)) => no,
       Err(no) => io::Error::other(no),
     };
-    let notice = format!("the journal of file changes at {} took no change: {fault}", at.display());
-    told.send(Event::Notice(notice)).ok();
+    if !failing {
+      failing = true;
+      let notice =
+        format!("the journal of file changes at {} took no change: {fault}", at.display());
+      told.send(Event::Notice(notice)).ok();
+    }
     match &mut lost {
       Some(JournalError::Lost { count, .. }) => *count += 1,
       _ => lost = Some(JournalError::Lost { at: at.clone(), count: 1, first: fault }),

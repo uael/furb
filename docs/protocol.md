@@ -220,7 +220,7 @@ once it listens. A second daemon refuses to start there.
   made the file, and `unread` with why when the file could not be read as text, whose `before` is then empty and
   no undo puts back. A window reads it to show and to undo what each write changed. One journal serves each birth
   of the life, in the order of the writes, and the life ends, and replies to its end, only once the disk holds each
-  change; a fault of the disk is told at once as a notice, and the end of the life says what the journal lost.
+  change; a fault of the disk is told as a notice when the journal begins to lose changes, and again when it takes changes again, and the end of the life says what the journal lost.
 - A holder keeps a life: each window that attached it, and each pin, by the name of its holder. Work that runs holds
   nothing. A life with no holder for the grace of the daemon, 30 seconds unless `furb host --grace <seconds>` says
   otherwise, writes its checkpoint and ends, and `list` gives it as not `open` from then on. An `open` of a life
@@ -238,7 +238,7 @@ once it listens. A second daemon refuses to start there.
   its record does not hold yet. A life that ends already ends there and goes to no daemon, and the next `open` opens
   it from its record.
 - A skill attaches a life as a window does, under its name, and hears its events from the place that it asks. Each verb of
-  a skill that says an act or a fact, as `run`, `prompt`, `bash` or `close`, speaks in the life under `skill/<name>`, and
+  a skill that says an act or a fact, as `run`, `prompt`, `bash` or `close`, speaks in the life under `skill/<name>`, but `seen`, `queue`, `unqueue` and `config` speak as the operator, whoever says them, since they are the operator's own, and
   the verbs of a window speak under `operator`. It holds no
   life, so a life with no window and no pin ends while a skill is attached. A skill that attaches again under its name takes
   the place of the first, and its views end. A skill that detaches, or whose peer leaves, ends its views.
