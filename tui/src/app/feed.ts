@@ -28,6 +28,20 @@ import { part } from "./part.ts";
 import { type BlockOptions, hidden, MESSAGE_ROWS, PROGRAM_STEPS, spell, viewLabels } from "./shared.ts";
 import { SCROLL } from "./thread.ts";
 
+/** A note of the round, which the feed draws alone or in a run with the notes that follow it. */
+interface Note {
+  act: ActRow;
+  indent: number;
+  tone: ReturnType<typeof threadTone>;
+  unread: boolean;
+  /** The text that a search reads. */
+  shown: string;
+  /** What its card is made of, which changes when the row changes. */
+  key: string;
+  /** The row that it draws in the panel of its block. */
+  row: () => BoxRenderable;
+}
+
 export const feed = part({
   /** What a question that the input answers says under it: the list of its values takes the arrows and the numbers,
    * and a field takes the words of the shape. */
@@ -74,6 +88,9 @@ export const feed = part({
     let order = 0,
       items = 0,
       group = "";
+    // The notes that the host names, one after another with no other card between them, wait here until a card of
+    // another kind or the end of the feed closes the run, which then draws as one block under one header.
+    const run: Note[] = [];
     // A card that shows an item of the view says the text that the filter reads, and counts as an item once it shows.
     // A card of a done act names in same what its card is made of, and it is made again only when one of these, or
     // its place, changed: a change of the life makes again only the cards of the acts that changed, so that a frame
@@ -85,6 +102,7 @@ export const feed = part({
       body: (box: BoxRenderable) => void,
       options: BlockOptions & { shown?: string; same?: readonly unknown[] } = {},
     ) => {
+      flushNotes();
       if (options.shown !== undefined) {
         if (!matches(options.shown)) return;
         items++;
@@ -125,6 +143,54 @@ export const feed = part({
       const made = this.cards.get(id);
       if (made) made.same = same;
       order++;
+    };
+    // The notes of a run draw as one card: one header, which counts them and the ones not yet seen, and one panel that
+    // holds their rows one under the other, with no empty band between them. A run of one draws as it always did.
+    const drawNotes = (all: Note[]) => {
+      const notes = all.filter((one) => matches(one.shown));
+      const [first] = notes;
+      if (!first) return;
+      if (notes.length === 1) {
+        add(first.act.id, first.key, [], (box) => this.panel(box, first.tone).add(first.row()), {
+          group: "user",
+          heading: false,
+          separate: true,
+          open: true,
+          act: first.act,
+          indent: first.indent,
+          shown: first.shown,
+        });
+        return;
+      }
+      const unread = notes.filter((one) => one.unread).length;
+      const [dot, ink] = markOf("unread");
+      const label: Part[] = [
+        [`${glyph.prompt} `, c.faint],
+        ["Notes", c.text, bold],
+        [`  ${notes.length}`, c.faint],
+        ...(unread ? [[`  ${dot} ${unread} unread`, ink] as Part] : []),
+      ];
+      add(
+        first.act.id,
+        `notes\n${notes.map((one) => one.key).join("\n--\n")}`,
+        label,
+        (box) => {
+          const inner = this.panel(box, first.tone);
+          for (const one of notes) inner.add(one.row());
+        },
+        {
+          group: "user",
+          heading: true,
+          separate: true,
+          open: true,
+          act: first.act,
+          indent: first.indent,
+          shown: notes.map((one) => one.shown).join("\n"),
+        },
+      );
+    };
+    const flushNotes = () => {
+      if (run.length) drawNotes(run.splice(0));
     };
     if (w.preferences.notice)
       add("preferences-notice", w.preferences.notice, [], (box) => {
@@ -1247,17 +1313,21 @@ export const feed = part({
           const room = this.feedWidth - indent - 14 - Bun.stringWidth(meta);
           const tone = threadTone(act.id);
           // A notice shows ● until a fact seen of its chain covers it, and a faint ✓ once one does.
-          const [mark, ink, weight] = markOf(w.unreadThread(act.id, [act]) ? "unread" : "seen");
+          const unread = w.unreadThread(act.id, [act]);
+          const [mark, ink, weight] = markOf(unread ? "unread" : "seen");
           const toggle = () => {
             w.folds[act.id] = opened;
             w.save();
             this.renderContent();
           };
-          add(
-            act.id,
-            `${message}\n${opened}\n${mark}\n${this.feedWidth}\n${this.theme}`,
-            [],
-            (box) => {
+          const note: Note = {
+            act,
+            indent,
+            tone,
+            unread,
+            shown: message,
+            key: `${message}\n${opened}\n${mark}\n${this.feedWidth}\n${this.theme}`,
+            row: () => {
               const row = this.box({ flexDirection: "row" });
               const text = opened
                 ? this.markdown(message)
@@ -1267,10 +1337,15 @@ export const feed = part({
               row.add(text);
               if (meta) row.add(this.text(meta, c.faint, { marginLeft: space.between, run: toggle }));
               row.add(this.text([[mark, ink, weight]], ink, { marginLeft: space.between }));
-              this.panel(box, tone).add(row);
+              return row;
             },
-            { group: "user", heading: false, separate: true, open: true, act, indent, shown: message },
-          );
+          };
+          // A prompt that the host names a note stands in the run of the notes around it. A prompt of None that no
+          // aside names stands alone, as the console closed it.
+          if (aside && aside !== "question") {
+            if (run[0] && run[0].indent !== indent) flushNotes();
+            run.push(note);
+          } else drawNotes([note]);
         } else if (asksOperator(act)) {
           const message = String(act.words[1] ?? "");
           const ask = w.desk.asks.find((one) => one.id === act.id);
@@ -1305,6 +1380,7 @@ export const feed = part({
           );
         } else threadBox(act, depth, indent);
       }
+      flushNotes();
       for (const mark of pending.splice(0)) showMark(mark);
       // A paused chain says so at the end of its feed, with the cause that its pause gave, and a button that
       // wakes it, since nothing new runs on it until then.
