@@ -38,7 +38,8 @@ fn main() {
   let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build();
   runtime.expect("the test has a runtime").block_on(async {
     a_life_goes_on_through_each_rebirth().await;
-    a_rebirth_waits_for_each_word_up_to_its_bound_and_names_what_it_cuts().await;
+    a_rebirth_waits_for_each_word_that_runs().await;
+    a_rebirth_waits_for_each_act_with_an_ear_and_cuts_nothing().await;
   });
 }
 
@@ -208,13 +209,13 @@ async fn a_life_goes_on_through_each_rebirth() {
   assert!(matches!(again.send(Command::End).await, Ok(Reply::Done)));
 }
 
-/// A word that binds an act whose ear lives until its life ends, which no checkpoint keeps.
+/// A word that binds an act whose ear lives until a cancel ends it, which no checkpoint keeps.
 const LASTING: &str = "def lasting(on=''):
   def ear(id):
     yield 'started', id
     while True:
       yield {id}
-  return act('lasting', on, ear)
+  return act('lasting', on, controlled(ear))
 held = lasting()
 held_id = str(held)";
 
@@ -224,7 +225,7 @@ async fn bound(life: &LifeHandle, name: &str) -> String {
   got.trim_matches('\'').to_owned()
 }
 
-async fn a_rebirth_waits_for_each_word_up_to_its_bound_and_names_what_it_cuts() {
+async fn a_rebirth_waits_for_each_word_that_runs() {
   let at = place("bound");
   let life = Life::spawn(opening(&at)).expect("the life has a thread");
   let mut events = Box::pin(life.events(0));
@@ -247,24 +248,36 @@ async fn a_rebirth_waits_for_each_word_up_to_its_bound_and_names_what_it_cuts() 
     "the word ended before the rebirth"
   );
 
+  assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
+}
+
+async fn a_rebirth_waits_for_each_act_with_an_ear_and_cuts_nothing() {
+  let at = place("ear");
+  let life = Life::spawn(opening(&at)).expect("the life has a thread");
+  let mut events = Box::pin(life.events(0));
+  let mut log = Vec::new();
   ran(&life, LASTING).await;
   let held = bound(&life, "held_id").await;
   ran(&life, "late = prompt(str, 'Name a fruit.', to=OPERATOR)").await;
   let late = bound(&life, "late").await;
-  let stuck = ran(&life, "await wait(3600, late)").await;
-  ran(&life, "for i in range(6000):\n  chance()").await;
+  let stuck = ran(&life, "kept = await wait(3600, late)").await;
+  let busy = ran(&life, "for i in range(6000):\n  chance()").await;
+  log.extend(until(&mut events, ran_out(&busy)).await);
+  let since = log.iter().rposition(|one| matches!(*one.1, Event::Reborn(_))).unwrap_or(0);
+  assert!(
+    !log[since + 1..].iter().any(|one| matches!(*one.1, Event::Reborn(_))),
+    "a word that runs and an act with an ear hold the rebirth past twice the tail"
+  );
+  let answered = life.send(Command::Answer { id: late.clone(), line: "pear".to_owned() }).await;
+  assert!(matches!(answered, Ok(Reply::Done)), "the prompt stayed open: {answered:?}");
+  log.extend(until(&mut events, ran_out(&stuck)).await);
+  let ended = ran(&life, &format!("cancel('{held}')")).await;
+  log.extend(until(&mut events, ran_out(&ended)).await);
   log.extend(until(&mut events, reborn(false)).await);
-  let told =
-    until(&mut events, |event| message(event).is_some_and(|one| one.contains("born again")));
-  let told = message(&told.await.last().expect("the root was told").1).expect("a prompt");
+  assert_eq!(named(&life, "kept").await, Ok(format!("'{late}'")), "the word ended before it");
   assert!(
-    told.contains(&format!("{held} on ")),
-    "the rebirth names the act with an ear that it cut: {told}"
+    !log.iter().any(|one| message(&one.1).is_some_and(|said| said.contains("born again"))),
+    "a rebirth cuts nothing, so it tells the root nothing"
   );
-  assert!(
-    told.contains(&format!("(the word of {stuck})")),
-    "the rebirth names the word that it cut: {told}"
-  );
-  assert!(!told.contains(&late), "the rebirth names no prompt that the checkpoint keeps: {told}");
   assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
 }

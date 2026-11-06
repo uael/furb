@@ -12,7 +12,11 @@
 import { type FSWatcher, mkdirSync, realpathSync, statSync, watch, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { parts as configured, type LiveAct, type Part } from "furb";
+import { parts as configured, type Part } from "furb";
+import type { Act } from "furb/life";
+
+export type { Act } from "furb/life";
+
 import type { Compaction } from "furb/life";
 import * as model from "furb/life";
 import { commands, slashes } from "./commands.ts";
@@ -100,11 +104,11 @@ export interface Seen {
   /** The chain on screen. */
   chain: string;
   /** Every act of the life, in the order of the record. */
-  acts: readonly LiveAct[];
+  acts: readonly Act[];
   /** Each compaction of a chain of the life, in the order of the record, as `furb/life` gives it. */
   compactions: readonly Compaction[];
   /** The acts of a kind, in the order of the record. */
-  of(kind: string): LiveAct[];
+  of(kind: string): Act[];
   /** The names of the extensions that the life runs, in the order that it enabled them. */
   extensions(): Promise<string[]>;
   /** Runs python on the chain on screen, through the gate, as `/run` does, and gives, once the word ended, the value
@@ -145,7 +149,7 @@ export interface Furb {
   /** A panel over the input: a name, and the lines that it shows, which the TUI draws again with the life. */
   panel(name: string, draw: (seen: Seen) => readonly Line[]): void;
   /** The row of each act of a kind in the feed. The rows of a rung and of a prompt are the TUI's own. */
-  row(kind: string, draw: (act: LiveAct, seen: Seen) => Row): void;
+  row(kind: string, draw: (act: Act, seen: Seen) => Row): void;
   /** Marks in the feed: `draw(seen)` gives each mark, and the feed of its chain shows it as a rule with its title,
    * then its lines, after the last act that began before its place, or at its start. A moment of the past shows only
    * the marks before that moment. The TUI draws the marks again with the life. */
@@ -177,7 +181,7 @@ export interface Loaded {
   stamp?: string;
   error?: string;
   panels: { name: string; draw: (seen: Seen) => readonly Line[] }[];
-  rows: Map<string, (act: LiveAct, seen: Seen) => Row>;
+  rows: Map<string, (act: Act, seen: Seen) => Row>;
   marks: ((seen: Seen) => readonly Mark[])[];
   keys: { on: string; run: (seen: Seen) => unknown }[];
   commands: Command[];
@@ -379,17 +383,17 @@ export class Parts {
   }
 
   /** The list of writes that the parts heard last, and how many of it. */
-  private heardList?: readonly LiveAct[];
+  private heardList?: readonly Act[];
   private heardCount = 0;
   /** Hears the writes of the life that are done, in a list that only grows: a write that lands in the folder `.furb`
    * of the project or in the folder of a part loads the parts again. */
-  heard(writes: readonly LiveAct[]): void {
+  heard(writes: readonly Act[]): void {
     if (writes !== this.heardList) [this.heardList, this.heardCount] = [writes, 0];
     const fresh = writes.slice(this.heardCount);
     this.heardCount = writes.length;
     let loads = false;
     for (const act of fresh) {
-      if (act.kind !== "write" || !act.done || this.heardWrites.has(act.id)) continue;
+      if (act.kind !== "write" || act.phase.phase !== "done" || this.heardWrites.has(act.id)) continue;
       this.heardWrites.add(act.id);
       const path = (act.words[0] as { path?: unknown } | null)?.path;
       if (typeof path !== "string") continue;
@@ -528,7 +532,7 @@ export class Parts {
   }
 
   /** The row of an act of a kind that a part gives. */
-  row(kind: string): ((act: LiveAct, seen: Seen) => Row) | undefined {
+  row(kind: string): ((act: Act, seen: Seen) => Row) | undefined {
     for (const part of this.loaded) {
       const found = part.rows.get(kind);
       if (found) return found;

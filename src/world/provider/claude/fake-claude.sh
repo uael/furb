@@ -158,6 +158,12 @@ while IFS= read -r line; do
       say '{"type":"content_block_stop","index":0}'
       settle '{"type":"thinking","thinking":"hmm","signature":"sig"}'
       at=1 ;;
+    # A line that holds REDACT gets a thought that the API redacted before its word.
+    *REDACT*)
+      say '{"type":"content_block_start","index":0,"content_block":{"type":"redacted_thinking","data":"opaque"}}'
+      say '{"type":"content_block_stop","index":0}'
+      settle '{"type":"redacted_thinking","data":"opaque"}'
+      at=1 ;;
   esac
   say "{\"type\":\"content_block_start\",\"index\":$at,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}"
   if [ -f "$here/word.$count" ]; then

@@ -13,6 +13,7 @@ use crate::{
   fact::Fact,
   value::{Fault, Given, Object},
 };
+use tokio::time;
 
 /// The ear of time: it answers a clock with the seconds since the epoch and a chance with a number drawn, at least
 /// zero and under one, and it takes a wait and says it done when its time is up.
@@ -72,7 +73,7 @@ fn waited(id: String, deadline: f64) -> impl Stream<Item = String> {
   let left = Duration::try_from_secs_f64((deadline - now()).max(0.0)).ok();
   stream::once(async move {
     match left {
-      Some(left) => tokio::time::sleep(left).await,
+      Some(left) => time::sleep(left).await,
       None => future::pending().await,
     }
     id

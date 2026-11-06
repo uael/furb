@@ -9,15 +9,15 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use furb::view::{Act, Kind, State};
+use furb::{
+  engine::OPERATOR,
+  view::{Act, Kind, State},
+};
 
 use crate::event::Event;
 
 /// The kind of the facts of the queue, which the operator says on the chain of the follow-up.
 pub(crate) const QUEUE: &str = "queue";
-
-/// The site of the operator, who says each fact of the queue.
-const OPERATOR: &str = "operator";
 
 /// One follow-up that waits on a chain: its entry, which the window that queued it chose, the shape
 /// that its prompt wants, its message, and why its send failed, when it did. A follow-up that

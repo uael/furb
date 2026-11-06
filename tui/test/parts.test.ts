@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
-import type { LiveAct } from "furb";
+import type { Act } from "furb/life";
 import { demoSession } from "../src/demo.ts";
 import { loadPart, Parts, plainError, type Seen, summary } from "../src/parts.ts";
 import { composing, pressEscape } from "./composing.ts";
@@ -176,8 +176,13 @@ test("the parts load again when a write of the local config of the project lands
   await parts.load();
   expect(parts.loaded.map((one) => one.name)).toEqual(["compaction", "mcp", "todo"]);
   writeFileSync(join(directory, ".furb", "config.local.json"), '{"extensions": {"todo": false}}\n');
-  const write = { id: "write1", kind: "write", done: true, words: [{ path: ".furb/config.local.json" }] };
-  parts.heard([write as unknown as LiveAct]);
+  const write = {
+    id: "write1",
+    kind: "write",
+    phase: { phase: "done", value: null },
+    words: [{ path: ".furb/config.local.json" }],
+  };
+  parts.heard([write as unknown as Act]);
   for (let tries = 0; tries < 400 && changes < 2; tries++) await Bun.sleep(10);
   expect(parts.loaded.map((one) => one.name)).toEqual(["compaction", "mcp"]);
   parts.dispose();
@@ -810,7 +815,7 @@ test("a write of the life whose path starts with ~ and lands in .furb loads the 
     await parts.load();
     const version = parts.version;
     const path = `~/${relative(homedir(), join(directory, ".furb", "config.json"))}`;
-    const write = { kind: "write", id: "write1", done: true, words: [{ path }] };
+    const write = { kind: "write", id: "write1", phase: { phase: "done", value: null }, words: [{ path }] };
     parts.heard([write] as unknown as Parameters<Parts["heard"]>[0]);
     for (let tries = 0; tries < 200 && parts.version === version; tries++) await Bun.sleep(25);
     expect(parts.version).toBe(version + 1);

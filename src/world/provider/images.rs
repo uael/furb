@@ -14,6 +14,8 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use rig_core::message::{ImageMediaType, MimeType, UserContent};
 use sha2::{Digest, Sha256};
 
+use crate::fact;
+use crate::value;
 use crate::world::disk::{self, Access};
 
 /// The most bytes an image holds: 20 MiB.
@@ -187,7 +189,7 @@ fn parts(uri: &str) -> Option<(&str, &str)> {
 
 /// The digest of bytes, as lowercase hex.
 fn digest(bytes: &[u8]) -> String {
-  crate::value::hex(&Sha256::digest(bytes))
+  value::hex(&Sha256::digest(bytes))
 }
 
 /// The images of one life: the directory they stand in, and the content of each that a turn named, by its file,
@@ -205,8 +207,8 @@ struct Held {
 }
 
 impl Images {
-  pub(super) fn new(directory: Option<PathBuf>) -> Images {
-    Images { directory, held: HashMap::new() }
+  pub(super) fn new(directory: Option<PathBuf>) -> Self {
+    Self { directory, held: HashMap::new() }
   }
 
   /// The images that the prompts a user turn opens name, and the images that its reads give, as images of rig, each
@@ -225,9 +227,9 @@ impl Images {
     for paragraph in paragraphs(python) {
       let name = paragraph.strip_prefix('#').and_then(|rest| rest.split([' ', '\n']).next());
       let name = name.unwrap_or_default();
-      let opens = crate::fact::named(name, "prompt")
+      let opens = fact::named(name, "prompt")
         && paragraph.lines().last().is_some_and(|last| last.starts_with(&format!("{name}: Act[")));
-      let reads = crate::fact::named(name, "read");
+      let reads = fact::named(name, "read");
       if !opens && !reads {
         continue;
       }

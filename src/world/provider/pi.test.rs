@@ -7,6 +7,7 @@ use bytes::Bytes;
 use rig_core::streaming::RawStreamingChoice;
 
 use super::Heard;
+use futures::stream;
 
 #[test]
 fn a_letter_that_two_chunks_of_the_stream_split_is_read_whole() {
@@ -15,7 +16,7 @@ fn a_letter_that_two_chunks_of_the_stream_split_is_read_whole() {
                 data: {\"type\":\"done\",\"usage\":{}}\r\n\r\n";
   let cut = events.find('\u{e9}').expect("the letter") + 1;
   let chunks = [&events.as_bytes()[..cut], &events.as_bytes()[cut..]];
-  let body = futures::stream::iter(chunks.map(|one| Ok(Bytes::copy_from_slice(one))));
+  let body = stream::iter(chunks.map(|one| Ok(Bytes::copy_from_slice(one))));
   let (buffer, parts) = (Vec::new(), VecDeque::new());
   let mut heard = Heard { body: Box::pin(body), buffer, parts, over: false };
   let mut said = Vec::new();
@@ -29,7 +30,7 @@ fn a_letter_that_two_chunks_of_the_stream_split_is_read_whole() {
 #[test]
 fn an_event_that_lacks_a_field_its_protocol_gives_fails_the_reply() {
   let events = b"data: {\"type\":\"text_delta\"}\n\n";
-  let body = futures::stream::iter([events.as_slice()].map(|one| Ok(Bytes::copy_from_slice(one))));
+  let body = stream::iter([events.as_slice()].map(|one| Ok(Bytes::copy_from_slice(one))));
   let (buffer, parts) = (Vec::new(), VecDeque::new());
   let mut heard = Heard { body: Box::pin(body), buffer, parts, over: false };
   assert!(matches!(block_on(heard.next()), Some(Err(_))));

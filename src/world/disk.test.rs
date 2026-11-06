@@ -4,14 +4,18 @@ use std::{fs, io::Write};
 
 use super::{Access, beside, filled, write};
 use crate::testing::Yard;
+use std::io;
+use std::path;
+use std::process;
+use std::sync::atomic;
 
 /// An empty folder of the test, named with the id of the process, as every yard of the tests of
 /// the crate is.
 fn yard(name: &str) -> Yard {
-  Yard::new(format!("furb-disk-{name}-{}", std::process::id()))
+  Yard::new(format!("furb-disk-{name}-{}", process::id()))
 }
 
-fn names(folder: &std::path::Path) -> Vec<String> {
+fn names(folder: &path::Path) -> Vec<String> {
   let mut found: Vec<_> = fs::read_dir(folder)
     .expect("the folder reads")
     .map(|one| one.expect("an entry").file_name().to_string_lossy().into_owned())
@@ -44,7 +48,7 @@ fn a_write_that_fails_names_the_file_and_leaves_the_folder_as_it_was() {
   fs::write(at.join("held"), "a file").expect("a file where a folder is asked");
   let no = write(&at.join("held").join("state.json"), b"x", Access::Shared).expect_err("no folder");
   assert!(no.path.ends_with("held/state.json"));
-  let shown = std::path::Path::new("held").join("state.json");
+  let shown = path::Path::new("held").join("state.json");
   assert!(no.to_string().contains(&format!("{} was not written", shown.display())));
   assert_eq!(names(&at), ["held"]);
 }
@@ -57,10 +61,10 @@ fn a_write_that_fails_midway_as_on_a_full_disk_leaves_the_old_file_whole_and_no_
     fs::write(at.join("a.txt"), "old\n").unwrap();
     let torn = filled(&at.join("a.txt"), b"new content\n", access, |file, bytes| {
       file.write_all(&bytes[..4])?;
-      Err(std::io::Error::other("the disk is full"))
+      Err(io::Error::other("the disk is full"))
     });
     assert_eq!(torn.unwrap_err().source.to_string(), "the disk is full");
-    let full = |_: &mut fs::File, _: &[u8]| Err(std::io::Error::other("the disk is full"));
+    let full = |_: &mut fs::File, _: &[u8]| Err(io::Error::other("the disk is full"));
     assert!(filled(&at.join("b.png"), b"new\n", access, full).is_err(), "a new file fails too");
     assert_eq!(fs::read_to_string(at.join("a.txt")).unwrap(), "old\n");
     assert_eq!(names(&at), ["a.txt"], "no part file stays, and no part of a new file");
@@ -70,11 +74,11 @@ fn a_write_that_fails_midway_as_on_a_full_disk_leaves_the_old_file_whole_and_no_
 #[test]
 fn a_part_file_passes_each_name_that_a_crash_left() {
   let at = yard("stale");
-  let part = |count: u32| at.join(format!(".a.txt.{}.{count}.part", std::process::id()));
+  let part = |count: u32| at.join(format!(".a.txt.{}.{count}.part", process::id()));
   for count in 0..3 {
     fs::write(part(count), "stale").unwrap();
   }
-  let counts = std::sync::atomic::AtomicU32::new(0);
+  let counts = atomic::AtomicU32::new(0);
   let (made, _) = beside(&at.join("a.txt"), Access::Shared, &counts).expect("a part file opens");
   assert_eq!(made, part(3));
 }

@@ -10,6 +10,7 @@ use crate::{
   sand::{Nobody, Sand},
   value::{Object, entry},
 };
+use std::env;
 
 /// The word of the extension as far as a binding reads it, which the gate reads before a binding.
 const WORD: &str = "McpResult = dict[str, Any]\n\n\ndef mcp_call(server: str, tool: str, arguments: dict[str, Any] | None = None) -> Act[McpResult]:\n  return act(\"mcp_call\", \"\", None, server, tool, arguments)\n";
@@ -459,7 +460,7 @@ fn each_call_of_the_corpus_sends_in_monty_what_its_signature_gives() {
 
 #[test]
 fn each_call_of_a_function_that_maps_its_tool_exactly_sends_what_its_schema_asks() {
-  let report = std::env::var("FURB_MCP_MEASURE").ok();
+  let report = env::var("FURB_MCP_MEASURE").ok();
   let mut lines = vec![
     "| server | tools | exact | opaque objects | loose | word chars | calls | valid | constraint only | shape |".to_owned(),
     "|---|---|---|---|---|---|---|---|---|---|".to_owned(),

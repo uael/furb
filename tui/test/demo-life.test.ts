@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { failed, isDone } from "furb/life";
 import { scripts } from "../src/demo/index.ts";
 import { seedLife } from "../src/demo/life.ts";
 import { scripted } from "../src/demo/script.ts";
@@ -57,11 +58,15 @@ test("the life of the demo is as dense as a real one: chains in a tree, threads,
     const asks = [...session.host.prompts.values()].map((ask) => ask.shape);
     expect(asks).toEqual(expect.arrayContaining(["bool", "int", "str"]));
     expect(asks.some((shape) => shape.startsWith("Literal"))).toBe(true);
-    expect(session.acts.some((act) => act.run?.status === "failed")).toBe(true);
+    expect(session.acts.some((act) => failed(act))).toBe(true);
     expect(session.acts.some((act) => act.kind === "grant")).toBe(true);
-    expect(session.acts.some((act) => act.kind === "bash" && !act.done)).toBe(true);
+    expect(session.acts.some((act) => act.kind === "bash" && !isDone(act))).toBe(true);
     expect(standing.size).toBeGreaterThan(0);
-    for (const id of standing) expect(session.acts.find((act) => act.id === id)?.done).toBe(false);
+    for (const id of standing)
+      expect(
+        session.acts.find((act) => act.id === id) !== undefined &&
+          isDone(session.acts.find((act) => act.id === id)),
+      ).toBe(false);
   } finally {
     await session.dispose();
     await removeDemoDirectories();

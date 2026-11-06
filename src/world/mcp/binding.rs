@@ -21,6 +21,8 @@
 #![expect(clippy::too_many_lines, reason = "debt: a function longer than 60 lines")]
 
 use serde_json::{Map, Value};
+use std::mem;
+use std::slice;
 
 /// The most characters of the first sentence of a description that a docstring holds.
 const SENTENCE: usize = 200;
@@ -72,31 +74,31 @@ pub enum Shape {
   /// None, which sends null.
   None,
   /// A list of values of one shape.
-  List(Box<Shape>),
+  List(Box<Self>),
   /// A dict of keys of str and values of one shape.
-  Dict(Box<Shape>),
+  Dict(Box<Self>),
   /// One of these values, each a str, an int or a bool.
   Literal(Vec<Value>),
   /// One of these shapes, each once, with no union and no `Any` among them, and None last.
-  Union(Vec<Shape>),
+  Union(Vec<Self>),
 }
 
 impl Shape {
   /// The shape as an annotation of Python.
   pub fn python(&self) -> String {
     match self {
-      Shape::Any => "Any".to_owned(),
-      Shape::Str => "str".to_owned(),
-      Shape::Int => "int".to_owned(),
-      Shape::Float => "float".to_owned(),
-      Shape::Bool => "bool".to_owned(),
-      Shape::None => "None".to_owned(),
-      Shape::List(item) => format!("list[{}]", item.python()),
-      Shape::Dict(value) => format!("dict[str, {}]", value.python()),
-      Shape::Literal(values) => {
+      Self::Any => "Any".to_owned(),
+      Self::Str => "str".to_owned(),
+      Self::Int => "int".to_owned(),
+      Self::Float => "float".to_owned(),
+      Self::Bool => "bool".to_owned(),
+      Self::None => "None".to_owned(),
+      Self::List(item) => format!("list[{}]", item.python()),
+      Self::Dict(value) => format!("dict[str, {}]", value.python()),
+      Self::Literal(values) => {
         format!("Literal[{}]", values.iter().map(literal).collect::<Vec<_>>().join(", "))
       }
-      Shape::Union(members) => members.iter().map(Shape::python).collect::<Vec<_>>().join(" | "),
+      Self::Union(members) => members.iter().map(Self::python).collect::<Vec<_>>().join(" | "),
     }
   }
 }
@@ -226,7 +228,7 @@ fn function(tool: &str, about: &Value, taken: &mut Vec<String>) -> Function {
   let input = about.get("inputSchema").or_else(|| about.get("input")).unwrap_or(&ANY);
   let mut mapper = Mapper { root: input, seen: Vec::new(), notes: Vec::new(), opaque: 0 };
   let (fields, rest) = mapper.fields();
-  let mut loose = std::mem::take(&mut mapper.notes);
+  let mut loose = mem::take(&mut mapper.notes);
   let mut said = loose.clone();
   let mut names = vec![CALL.to_owned()];
   let mut params = Vec::new();
@@ -235,7 +237,7 @@ fn function(tool: &str, about: &Value, taken: &mut Vec<String>) -> Function {
   for (key, schema, required) in fields {
     let objects = mapper.opaque;
     let shape = mapper.shape(&schema);
-    let reasons = std::mem::take(&mut mapper.notes);
+    let reasons = mem::take(&mut mapper.notes);
     let name = unique(safe(&key, "argument", false), &mut names);
     if !reasons.is_empty() {
       loose.push(format!("{key}: {}", reasons.join(", ")));
@@ -471,7 +473,7 @@ impl<'a> Mapper<'a> {
       return got;
     }
     if let Some(value) = one.get("const") {
-      return self.literal(std::slice::from_ref(value));
+      return self.literal(slice::from_ref(value));
     }
     if let Some(values) = one.get("enum") {
       return match values.as_array() {

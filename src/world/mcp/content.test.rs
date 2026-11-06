@@ -7,10 +7,11 @@ use serde_json::json;
 use super::{LONGEST, called, cut, prompted, read};
 use crate::testing::Yard;
 use crate::{world::images, world::mcp::fixture::PICTURE};
+use std::process;
 
 /// A directory of images of its own for one test, and empty.
 fn gallery(name: &str) -> Yard {
-  Yard::unmade(format!("furb-mcp-content-{name}-{}", std::process::id()))
+  Yard::unmade(format!("furb-mcp-content-{name}-{}", process::id()))
 }
 
 #[test]

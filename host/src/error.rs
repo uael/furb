@@ -145,8 +145,9 @@ pub enum TransportError {
   Exposed { folder: PathBuf },
   #[error("a daemon already listens at {place}")]
   Taken { place: String },
-  #[error("the daemon cannot listen at {place}: {source}")]
-  Listen { place: String, source: io::Error },
+  /// The cause is in the text and not in `source`, since the daemon reports an error by its text.
+  #[error("the daemon cannot listen at {place}: {cause}")]
+  Listen { place: String, cause: io::Error },
   /// The path of a Unix socket is longer than the platform lets a socket address hold.
   #[error(
     "the socket path {place} is {length} bytes, over the bound of {bound} bytes of this platform"

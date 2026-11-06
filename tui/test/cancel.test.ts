@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { isDone } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { find } from "../script/stage.ts";
 import type { Session } from "../src/session.ts";
@@ -10,9 +11,9 @@ import { composing } from "./composing.ts";
 async function conductor(session: Session): Promise<{ thread: string; workers: string[] }> {
   await session.submit("Hire two workers.");
   const workers = () =>
-    session.acts.filter((act) => act.kind === "prompt" && act.on !== session.engine.root && !act.done);
+    session.acts.filter((act) => act.kind === "prompt" && act.chain !== session.engine.root && !isDone(act));
   const thinking = () =>
-    session.acts.filter((act) => act.kind === "rung" && act.on !== session.engine.root && !act.done);
+    session.acts.filter((act) => act.kind === "rung" && act.chain !== session.engine.root && !isDone(act));
   await until(session, () => workers().length === 2 && thinking().length === 2);
   const thread = session.activity.find((act) => session.isUserPrompt(act))?.id ?? "";
   return { thread, workers: workers().map((act) => act.id) };
@@ -20,7 +21,11 @@ async function conductor(session: Session): Promise<{ thread: string; workers: s
 
 /** Whether each act lives on. */
 const live = (session: Session, ids: string[]) =>
-  ids.every((id) => session.acts.find((act) => act.id === id)?.done === false);
+  ids.every(
+    (id) =>
+      (session.acts.find((act) => act.id === id) !== undefined &&
+        isDone(session.acts.find((act) => act.id === id))) === false,
+  );
 
 /** The last message of the operator on the chain, once its model thinks on it. */
 async function sent(session: Session, before: string): Promise<string> {
@@ -29,7 +34,7 @@ async function sent(session: Session, before: string): Promise<string> {
     return Boolean(
       last &&
         last.id !== before &&
-        session.activity.some((act) => act.kind === "rung" && act.by === last.id && !act.done),
+        session.activity.some((act) => act.kind === "rung" && act.by === last.id && !isDone(act)),
     );
   });
   return session.activity.findLast((act) => session.isUserPrompt(act))?.id ?? "";
@@ -46,7 +51,12 @@ test("⌃C cancels the last message of the owner alone, and never the thread or 
       await app.submit();
       const message = await sent(session, thread);
       screen.mockInput.pressCtrlC();
-      await until(session, () => session.acts.find((act) => act.id === message)?.done === true);
+      await until(
+        session,
+        () =>
+          (session.acts.find((act) => act.id === message) !== undefined &&
+            isDone(session.acts.find((act) => act.id === message))) === true,
+      );
       // No work ran under the message but its own answer, so the cancel asked nothing.
       expect(await frame()).not.toContain("Keep");
       expect(live(session, [thread, ...workers])).toBe(true);
@@ -54,11 +64,16 @@ test("⌃C cancels the last message of the owner alone, and never the thread or 
       app.composer.setText("");
       const reply = await session.engine.prompt("str", { message: "Think until I cancel.", on: thread });
       await until(session, () =>
-        session.activity.some((act) => act.kind === "rung" && act.by === reply && !act.done),
+        session.activity.some((act) => act.kind === "rung" && act.by === reply && !isDone(act)),
       );
       expect(session.lastOwn?.id).toBe(reply);
       screen.mockInput.pressCtrlC();
-      await until(session, () => session.acts.find((act) => act.id === reply)?.done === true);
+      await until(
+        session,
+        () =>
+          (session.acts.find((act) => act.id === reply) !== undefined &&
+            isDone(session.acts.find((act) => act.id === reply))) === true,
+      );
       expect(live(session, [thread, ...workers])).toBe(true);
       // The last message of the owner that is open is now the thread, which reaches the workers, so ⌃C asks first, and
       // ⌃C again closes the question and ends nothing.
@@ -132,7 +147,12 @@ test("the owner takes back his last message and writes it again, and no other wo
       await frame();
       screen.mockInput.pressCtrlC();
       await until(session, () => app.composer.plainText === "Think until I cancel.");
-      await until(session, () => session.acts.find((act) => act.id === message)?.done === true);
+      await until(
+        session,
+        () =>
+          (session.acts.find((act) => act.id === message) !== undefined &&
+            isDone(session.acts.find((act) => act.id === message))) === true,
+      );
       await session.refresh();
       expect(session.notice).toBe(`You took back ${message}. Change it in the input, and send it again.`);
       expect(await frame()).toContain("You took back");
@@ -142,7 +162,10 @@ test("the owner takes back his last message and writes it again, and no other wo
         session.activity.some((act) => act.words[1] === "Think until I cancel, and say when."),
       );
       expect(live(session, [thread, ...workers])).toBe(true);
-      expect(session.acts.find((act) => act.id === message)?.done).toBe(true);
+      expect(
+        session.acts.find((act) => act.id === message) !== undefined &&
+          isDone(session.acts.find((act) => act.id === message)),
+      ).toBe(true);
     },
     { width: 152, height: 60, exitOnCtrlC: false },
   ));
