@@ -908,6 +908,8 @@ export const feed = part({
                 room,
                 digits,
                 writer && thinks ? writer.display + wrote : "",
+                // The row of a model gains the line of its thought when the first token of it comes.
+                writer && thinks ? Boolean(w.host.streams.get(writer.step.id)?.thinking.trim()) : "",
                 ...segment.map((line) =>
                   line.kind === "code"
                     ? `${line.text}|${this.lineHint(line)}|${line.runs ? ((line.awaits?.act ?? line.acts.at(-1))?.id ?? "runs") : ""}|${line.awaited ?? ""}|${line.fails ?? ""}|${took(line.step)}|${this.lineOpen(line)}|${[...this.openStrings(line)]}`
