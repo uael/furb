@@ -159,6 +159,12 @@ mod unix {
     let life = Life::spawn(opening(&at)).expect("the life has a thread");
     let mut events = Box::pin(life.events(0));
     ran(&life, &mut events, "n = 1").await;
+    let chain =
+      |label: &str| Command::Chain { label: Some(label.to_owned()), source: None, on: None };
+    let made = life.send(chain("apart")).await;
+    let Ok(Reply::Act(apart)) = made else { panic!("no chain: {made:?}") };
+    let first = said(&life, "a = 1", &apart).await;
+    until(&mut events, done(&[first])).await;
     // SAFETY: the test sets the action of one signal, and no handler of its own.
     unsafe { libc::signal(libc::SIGXFSZ, libc::SIG_IGN) };
     let full = size(&at);
@@ -167,34 +173,60 @@ mod unix {
     let made = life.send(Command::Rung { word, on: None }).await;
     assert!(matches!(made, Ok(Reply::Act(_))), "the word did not run: {made:?}");
     let paused = until(&mut events, notice("pauses its work")).await;
-    let Event::Notice(said) = &*paused.last().expect("the pause is told").1 else { unreachable!() };
-    assert!(said.contains(&at.display().to_string()), "the notice names the folder: {said}");
-    assert!(said.contains(" left"), "the notice names the space left: {said}");
-    // A word of the operator while the life holds its work waits for the wake.
-    let made = life.send(Command::Rung { word: "m = 1".to_owned(), on: None }).await;
-    let Ok(Reply::Act(later)) = made else { panic!("the word did not run: {made:?}") };
+    let Event::Notice(told) = &*paused.last().expect("the pause is told").1 else { unreachable!() };
+    assert!(told.contains(&at.display().to_string()), "the notice names the folder: {told}");
+    assert!(told.contains(" left"), "the notice names the space left: {told}");
+    // A word of the operator on each chain, the one made before the hold and one made in it, waits
+    // for the wake.
+    let made = life.send(chain("late")).await;
+    let Ok(Reply::Act(late)) = made else { panic!("no chain: {made:?}") };
+    let root = "chain1".to_owned();
+    let later = [
+      said(&life, "m = 1", &root).await,
+      said(&life, "a = 2", &apart).await,
+      said(&life, "b = 1", &late).await,
+    ];
     let held = quiet(&mut events).await;
-    let ran = |log: &[Logged]| {
-      log.iter().any(|one| {
-        matches!(&*one.1, Event::Act(act) if act.id == later && matches!(act.phase, Phase::Done(_)))
-      })
-    };
-    assert!(!ran(&held), "a word ran while the life held its work");
+    let ran: Vec<&String> = later
+      .iter()
+      .filter(|id| held.iter().any(|one| done(std::slice::from_ref(*id))(&one.1)))
+      .collect();
+    assert!(ran.is_empty(), "words ran while the life held its work: {ran:?}");
     assert_eq!(size(&at), full, "the record took no fact while the limit stood");
 
     limited(libc::RLIM_INFINITY);
-    until(&mut events, notice("wakes the work")).await;
-    until(&mut events, |event| {
-      matches!(event, Event::Act(act) if act.id == later && matches!(act.phase, Phase::Done(_)))
-    })
-    .await;
+    let mut left: Vec<String> = later.to_vec();
+    let woke = until(&mut events, notice("wakes the work")).await;
+    left.retain(|id| !woke.iter().any(|one| done(std::slice::from_ref(id))(&one.1)));
+    while !left.is_empty() {
+      let got = until(&mut events, done(&left)).await;
+      left.retain(|id| !got.iter().any(|one| done(std::slice::from_ref(id))(&one.1)));
+    }
     assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
     let kept = lines(&at);
     let draws = kept.iter().filter(|line| line.starts_with("[[\"done\",\"chance")).count();
     assert_eq!(draws, 5 * DRAWS, "the record holds each fact that waited");
-    let said = |head: &str| kept.iter().filter(|line| line.starts_with(head)).count();
-    assert_eq!(said("[[\"pause\",\"chain1\",\"operator\""), 1, "the life paused its root once");
-    assert_eq!(said("[[\"wake\",\"chain1\",\"operator\""), 1, "the life woke its root once");
+    let count = |head: String| kept.iter().filter(|line| line.starts_with(&head)).count();
+    for one in [root.as_str(), &apart, &late] {
+      let (pause, wake) = (
+        format!("[[\"pause\",\"{one}\",\"operator\""),
+        format!("[[\"wake\",\"{one}\",\"operator\""),
+      );
+      assert_eq!(count(pause), 1, "the life paused {one} once");
+      assert_eq!(count(wake), 1, "the life woke {one} once");
+    }
+  }
+
+  /// A word that the operator says on a chain, with no wait: the name of its rung.
+  async fn said(life: &LifeHandle, word: &str, on: &str) -> String {
+    let made = life.send(Command::Rung { word: word.to_owned(), on: Some(on.to_owned()) }).await;
+    let Ok(Reply::Act(rung)) = made else { panic!("{word} did not run: {made:?}") };
+    rung
+  }
+
+  /// Whether an event is the end of one of some rungs.
+  fn done(rungs: &[String]) -> impl Fn(&Event) -> bool + '_ {
+    move |event| matches!(event, Event::Act(act) if rungs.contains(&act.id) && matches!(act.phase, Phase::Done(_)))
   }
 
   #[expect(unsafe_code, reason = "no crate of the lock sets a signal to be ignored with no unsafe")]

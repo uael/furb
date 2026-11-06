@@ -226,9 +226,9 @@ once it listens. A second daemon refuses to start there.
   that ends waits for its end, then opens it again from its checkpoint.
 - A life whose record does not hold each fact that it said yet, as on a full disk, does not end: its end, after the
   grace, at a handover or at the end of the daemon, waits until the record holds them, and the life tells why in a
-  notice. Past 20000 facts that the record lacks, the life pauses its root, which holds the work of each
-  chain, and tells in a notice the folder of the record and the space left on its disk; once the record holds each
-  fact, it wakes that pause, and a pause of the operator stays. The life drops no fact.
+  notice. Past 20000 facts that the record lacks, the life pauses each chain that lives and each chain
+  that opens while it holds, and tells in a notice the folder of the record and the space left on its disk; once the record holds each
+  fact, it wakes each chain that it paused, and a pause of the operator stays. The life drops no fact.
 - `detach` lets go of the window that says it alone, as `/end` does, and a window whose peer leaves is detached.
 - `furb host upgrade` serves the daemon of a new build in the place of the daemon that runs, which has no takeover.
   The new daemon says `handover`. The daemon that runs writes the checkpoint of each life, ends it, stops to listen
