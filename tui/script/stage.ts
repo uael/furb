@@ -135,7 +135,9 @@ export async function home(name: string, environment: Record<string, string> = {
     await mkdir(gallery, { recursive: true });
     const real = await realpath(gallery);
     short = await shorten(real, environment);
-    place = daemonPlace(join(short ?? cacheOf(real, environment), "furb", "host"));
+    // A cache that the caller names holds a daemon of the caller, which this run never ends.
+    const given = environment.XDG_CACHE_HOME || process.env.XDG_CACHE_HOME;
+    if (short || !given) place = daemonPlace(join(short ?? cacheOf(real, environment), "furb", "host"));
     child = Bun.spawn([process.execPath, Bun.main], {
       env: {
         ...process.env,
@@ -156,8 +158,8 @@ export async function home(name: string, environment: Record<string, string> = {
     clearTimeout(limit);
     process.exitCode = code || (child.signalCode ? 1 : 0);
   } finally {
-    // The window of the child started a daemon of its own, detached, in this home: it ends here, or it outlives the
-    // run and holds its lives for as long as the machine runs.
+    // The window of the child started a daemon of its own, detached, in a cache of this run: it ends here, or it
+    // outlives the run and holds its lives for as long as the machine runs.
     if (place) await handedOver(place).catch(() => {});
     if (short) await rm(short, { recursive: true, force: true });
     await rm(gallery, { recursive: true, force: true });
