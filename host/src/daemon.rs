@@ -639,11 +639,22 @@ impl Lives {
     }
     let holder = birth.holder.clone();
     let opened = match self.held.get_mut(&life).map(|held| &mut held.stage) {
-      Some(Stage::Living(_)) => Ok(()),
+      Some(Stage::Living(_)) => self.answers(&life, birth.answerer.as_ref()),
       Some(Stage::Ending(waiting)) => return waiting.push((birth, reply)),
       None => self.opened(life.clone(), birth),
     };
     reply.send(opened.and_then(|()| self.held_by(&life, holder))).ok();
+  }
+
+  /// A later open with `answers` of a life that lives: its peer answers the models of the life in
+  /// the place of a peer that is gone, and is refused while that one lives. The models of a life
+  /// that no peer answers stay its models.
+  fn answers(&self, life: &str, asked: Option<&Answerer>) -> Result<(), ProtocolError> {
+    let held = self.held.get(life).and_then(|held| held.answerer.as_ref());
+    match (asked, held) {
+      (Some(asked), Some(held)) => held.taken_by(&asked.outbox()),
+      _ => Ok(()),
+    }
   }
 
   /// The life attached by the peer that opened it, when that peer asked to, before any end of

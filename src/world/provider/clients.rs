@@ -210,7 +210,7 @@ fn headed(name: &'static str, value: &str) -> Result<HeaderMap, Error> {
 }
 
 /// What streams the responses of a model of rig that answers each whole: the text of a response streams at once.
-fn whole<M: CompletionModel + 'static>(model: M) -> Streams {
+fn whole(model: impl CompletionModel + 'static) -> Streams {
   let model = sync::Arc::new(model);
   sync::Arc::new(move |request| {
     let model = sync::Arc::clone(&model);

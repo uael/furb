@@ -110,7 +110,8 @@ async fn written(
   append: Append,
 ) {
   let mut lost: Option<JournalError> = None;
-  // The journal tells the operator when it begins to lose changes and when it takes changes again, not each change.
+  // The journal tells the operator when it begins to lose changes and when it takes changes again,
+  // not each change.
   let mut failing = false;
   while let Some(line) = heard.recv().await {
     let (chain, change) = match line {

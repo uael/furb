@@ -24,3 +24,38 @@ def skill_made[T](_shape: type[T], made) -> Act[T]:
 
 async def listed(on: str = "") -> None:
   skills(on)
+
+
+def defined(*names: str) -> Show:
+  def ident(text: str) -> str:
+    size = 0
+    while size < len(text) and (text[size].isalnum() or text[size] == "_"):
+      size += 1
+    return text[:size]
+
+  def named(line: str) -> str:
+    for prefix in ("async def ", "def ", "class ", "type "):
+      if line.startswith(prefix):
+        return ident(line[len(prefix) :])
+    name = ident(line)
+    return name if line[len(name) :].lstrip()[:1] in (":", "=") else ""
+
+  def show(lines: list[str]) -> list[int]:
+    out: list[int] = []
+    at, start = 0, 0
+    while at < len(lines):
+      first = at
+      at += 1
+      while at < len(lines) and (not lines[at] or lines[at][0] in " \t)]}"):
+        at += 1
+      if lines[first].startswith("@"):
+        continue
+      end = at
+      while end > first + 1 and not lines[end - 1]:
+        end -= 1
+      if named(lines[first]) in names:
+        out.extend(range(start + 1, end + 1))
+      start = at
+    return out
+
+  return show

@@ -658,6 +658,12 @@ pub(crate) fn pythonic(verbs: &[Verb]) -> String {
     };
     out!(out, "  /// {}", verb.doc);
     out!(out, "  #[pyo3(signature = ({}))]", signature.join(", "));
+    if given.len() + 1 > 7 {
+      out!(
+        out,
+        "  #[expect(clippy::too_many_arguments, reason = \"a method takes each word of its verb\")]"
+      );
+    }
     out!(
       out,
       "  fn {}(slf: &Bound<'_, Self>, {}) -> PyResult<{answer}> {{",

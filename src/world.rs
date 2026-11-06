@@ -12,6 +12,7 @@
 //! The host names the models it offers, and gives the rest, its console, which reads what the
 //! operator answers by the rules of [`answered`]. Beside the ears, [`config`] is the one writer of
 //! the configs that the provider and the extensions read, for each host and each window.
+//! [`spawn`] starts the child of a host in a group that ends with it.
 //!
 //! Each is an ear like any other, so an ear that comes before one of them in the order of boot takes a question in
 //! its place, and an ear that takes a question and asks it again wraps it.
@@ -40,6 +41,7 @@ use std::{
 };
 
 pub use bash::{bash, program, shell};
+pub use child::{Group, Unborn, spawn};
 pub use fetch::fetch;
 pub use files::{CONFIG, files};
 pub use log::{log, logged};

@@ -1,7 +1,7 @@
 import type { Script } from "./script.ts";
 
 /** The part for the TUI that the model writes, as TypeScript. It imports no value, as the skill ouroboros says. */
-const part = String.raw`<s:part>
+const part = `<s:part>
 export default function (furb) {
   const items = (seen) =>
     seen.of("todo").map((act) => ({ item: String(act.words[0]), done: Boolean(act.words[1]) }));
@@ -20,7 +20,7 @@ export default function (furb) {
 }
 </s:part>`;
 
-const define = String.raw`def todo(item, *, done=False, on=""):
+const define = `def todo(item, *, done=False, on=""):
   def ear(name):
     yield "done", name, None
   return act("todo", on, ear, item, done)`;
@@ -28,16 +28,16 @@ const define = String.raw`def todo(item, *, done=False, on=""):
 const extend = `${part}
 extend("todo", next(k for k, w in program().items() if w.startswith("def todo")), tui=part)`;
 
-const items = String.raw`todo("Read the capture", done=True)
+const items = `todo("Read the capture", done=True)
 todo("Draw the todo list in a panel")
 todo("Load the part again when its file changes")`;
 
-const read = String.raw`part = read(".furb/extensions/todo/tui.ts", grep("items|panel"))`;
+const read = `part = read(".furb/extensions/todo/tui.ts", grep("items|panel"))`;
 
-const sorted = String.raw`part = read(".furb/extensions/todo/tui.ts")
+const sorted = `part = read(".furb/extensions/todo/tui.ts")
 write(part.replace("const all = items(seen);", "const all = seen.todos.sort((one, other) => Number(one.done) - Number(other.done));"))`;
 
-const mended = String.raw`part = read(".furb/extensions/todo/tui.ts")
+const mended = `part = read(".furb/extensions/todo/tui.ts")
 write(part.replace("seen.todos.sort(", "items(seen).sort("))`;
 
 export const extending: Script[] = [

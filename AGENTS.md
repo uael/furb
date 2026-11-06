@@ -429,7 +429,9 @@ fix what your change broke, and report what was broken before.
   in a frame with no judge. Its scenario holds only that the walk goes to its end.
 - `bun run demo` and `bun run tui`: the TUI on the demo session, which asks no model, or on a real life.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
-  `tui/src/commands.ts`.
+  `tui/src/commands.ts`. A change of the types of the N-API door, or of the keys and the commands, runs
+  `bun run build` and `bun run docs` before its commit: the CI fails when `bind/typescript/index.d.cts` or
+  `tui/README.md` is not what they make. No hook of pre-commit runs them, since the job of the hooks has no bun.
 - `bun run bench`: the speed of the TUI on two recorded lives of about 2.6 KB for each fact, one of about 160000 facts
   and one of a tenth of that: the cost of a new fact, the first frame, the frames while the feed scrolls and a command
   streams, and the memory on Linux. It fails over its budgets, which the docstring of `tui/script/bench.ts` gives in paces of the

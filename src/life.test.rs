@@ -739,8 +739,13 @@ fn each_record_of_the_replays_replays_on_its_own_engine_with_no_drift() {
       "{name} holds no texts of its engine: give them with script/engines.py, as tests/replay/README.md says"
     );
     let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
-    if let Err(drift) = inspects.boot::<String>([]) {
+    if let Err(drift) = inspects.clone().boot::<String>([]) {
       panic!("{name} drifts on its own engine, a defect of this build: {drift}");
+    }
+    if crate::checkpoint::last(&kept).is_some()
+      && let Err(drift) = (Opening { whole: Some(true), ..inspects }).boot::<String>([])
+    {
+      panic!("{name} drifts from its first entry, born again at each checkpoint: {drift}");
     }
   }
 }
