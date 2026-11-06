@@ -30,7 +30,9 @@ cannot take a name of a key of furb. Its word reads its keys as `read("settings:
 with the value that a config gives, else its default, as `{"folder": "journal"}`; it reads them where it runs, so a
 change through `/config` holds from the next read. `read("settings://")` gives each key of the configs, and the name
 of a key of furb its value, as `read("settings://gate")`. The process of an extension reads its keys through the verb
-`config` of the [protocol](protocol.md).
+`config` of the [protocol](protocol.md). A file of keys that is missing or is no schema names no key, so
+`/config` still reads and changes the configs and can turn that extension off, and `read("settings://notes")`
+says why.
 
 ## The gate
 
