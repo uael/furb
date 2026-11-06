@@ -88,8 +88,8 @@ jobs:
             echo "::error::The gates of #$n at $sha ended with $gates (run $id), so no release comes today."
             exit 1
           fi
-          # A push to main cancels the run of main that waits for the run before it, so a cancelled run gives no verdict:
-          # the job reads the last run of main that ran to its end.
+          # A push to main cancels the run of main that waits for the run before it, so a cancelled run gives no
+          # verdict: the job reads the last run of main that ran to its end.
           read -r main ran <<EOF
           $(gh run list --workflow gates.yml --branch main --status completed --limit 100 --json conclusion,headSha \
             --jq '[.[] | select(.conclusion != "cancelled" and .conclusion != "skipped")][0] // {} | "\(.conclusion // "") \(.headSha // "")"')
