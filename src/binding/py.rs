@@ -431,7 +431,7 @@ impl PyLife {
     let mut life = lent.try_borrow_mut().map_err(|no| {
       Fault::refused(format!("{verb} is called while the life is in a call: {no}"))
     })?;
-    let (args, kwargs) = words(args, &kwargs);
+    let (args, kwargs) = words(args, kwargs.as_ref());
     life.call(verb, args, kwargs).map(Value)
   }
 }
@@ -832,7 +832,7 @@ impl PyEngine {
     args: Option<Vec<Value>>,
     kwargs: Option<IndexMap<String, Value>>,
   ) -> Result<Value, Fault> {
-    let (args, kwargs) = words(args, &kwargs);
+    let (args, kwargs) = words(args, kwargs.as_ref());
     self.said(name, args, kwargs).map(Value)
   }
 
@@ -848,7 +848,7 @@ impl PyEngine {
     args: Option<Vec<Value>>,
     kwargs: Option<IndexMap<String, Value>>,
   ) -> Result<Value, Fault> {
-    let (args, kwargs) = words(args, &kwargs);
+    let (args, kwargs) = words(args, kwargs.as_ref());
     self.call(|engine| engine.made(n, args, kwargs)).map(Value)
   }
 
@@ -893,7 +893,7 @@ impl PyEngine {
     args: Option<Vec<Value>>,
     kwargs: Option<IndexMap<String, Value>>,
   ) -> Result<String, Fault> {
-    let (args, kwargs) = words(args, &kwargs);
+    let (args, kwargs) = words(args, kwargs.as_ref());
     self.call(|engine| engine.keyed(key, kind, args, kwargs))
   }
 
