@@ -9,8 +9,7 @@ that a person meets as he uses the TUI, which need no ruling. The local file
 these issues whole, with its comments, as `gh issue view <n> --repo <repo> --comments`.
 
 1. In your workspace, run `sh <this folder>/capture.sh <main checkout> $TMPDIR/audit/<key>
-   $TMPDIR/audit/tui/records.json`. It checks out origin/main and writes its commit in `sha`, builds through
-   `script/build-slot.sh`, and captures the gallery of the demo and the records of the project that the last whole
+   $TMPDIR/audit/tui/records.json`. It checks out origin/main and writes its commit in `sha`, builds, and captures the gallery of the demo and the records of the project that the last whole
    capture pins, each a PNG with the cells of its frame. It also cuts a slice of the newest long life of the project,
    or the one that the last capture pins at its moment, into a recorded life, and plays on it the actions of an
    operator at 222x58: the end of the feed, its top expanded, the sidebar on a worker, the agents open, a fold opened,

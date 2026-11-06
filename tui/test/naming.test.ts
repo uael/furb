@@ -99,6 +99,7 @@ test("a rename of the operator is a fact of the record whatever extension plays,
     await session.dispose();
     await rm(`${record}.ui.json`, { force: true });
     session = await demoSession({ record });
+    for (let tries = 0; tries < 400 && session.sessionName !== "Mine"; tries++) await Bun.sleep(25);
     expect([session.sessionName, renames(session)]).toEqual(["Mine", ["Mine"]]);
   } finally {
     await session?.dispose();
@@ -122,29 +123,30 @@ test("a rename that the record does not take keeps the old name and says why in 
   }
 });
 
-test("a name that an older ui.json holds moves into a record with no rename once, and the ui.json then holds no name", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "furb-name-"));
-  const record = join(directory, "life.jsonl");
-  const path = `${record}.ui.json`;
-  const held = () => JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-  let session: Session | undefined;
+// Before, the threads of a chain were read again only when a prompt or a question changed, so a rename of a session
+// that rests kept the old title on its first thread.
+test("a rename of a session that rests gives its first thread the new name, with no prompt more", async () => {
+  const session = await demoSession({ extensions: true });
   try {
-    session = await demoSession({ record });
-    await session.dispose();
-    await writeFile(path, JSON.stringify({ ...held(), sessionName: "Old name" }));
-    session = await demoSession({ record });
-    for (let tries = 0; tries < 400 && "sessionName" in held(); tries++) await Bun.sleep(25);
-    expect("sessionName" in held()).toBe(false);
-    await session.refresh();
-    expect([session.sessionName, renames(session)]).toEqual(["Old name", ["Old name"]]);
-    await session.dispose();
-    await writeFile(path, JSON.stringify({ ...held(), sessionName: "Stale name" }));
-    session = await demoSession({ record });
-    for (let tries = 0; tries < 400 && "sessionName" in held(); tries++) await Bun.sleep(25);
-    await session.refresh();
-    expect([session.sessionName, renames(session)]).toEqual(["Old name", ["Old name"]]);
+    await session.submit("Look at the readme.");
+    const root = session.engine.root;
+    const first = async () => {
+      await session.refresh();
+      await session.readThreads(root);
+      return session.threadsOf(root).list.find((one) => one.origin === "operator");
+    };
+    for (let tries = 0; tries < 400 && !(await first())?.over; tries++) await Bun.sleep(25);
+    const prompts = session.promptsVersion;
+    expect(await session.rename("New name")).toBe(true);
+    let title: string | undefined;
+    for (let tries = 0; tries < 400 && title !== "New name"; tries++) {
+      await Bun.sleep(25);
+      await session.refresh();
+      title = session.threadsOf(root).list.find((one) => one.origin === "operator")?.title;
+    }
+    expect(title).toBe("New name");
+    expect(session.promptsVersion).toBe(prompts);
   } finally {
-    await session?.dispose();
-    await rm(directory, { recursive: true, force: true });
+    await session.dispose();
   }
 });

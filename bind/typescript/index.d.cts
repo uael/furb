@@ -203,6 +203,11 @@ export declare class Meaning {
    * which the window read the chain, from which its runs of notes count the notes not yet read.
    */
   threads(chain: string, at?: number | undefined | null, read?: number | undefined | null): import("./dist/protocol.js").Threads
+  /**
+   * The threads of every chain of the life but those that `hidden` names, as one tree in the order
+   * of the list of the threads, now or as they stood just after a moment.
+   */
+  rail(hidden?: Array<string> | undefined | null, at?: number | undefined | null): Array<import("./dist/protocol.js").ThreadNode>
   /** The acts as they stood just after a moment. */
   asOf(at: number): Array<import("./dist/protocol.js").Act>
   /** Each moment at which an act began or ended, in order. */
@@ -581,6 +586,12 @@ export interface Part {
 export declare function parts(project: string): Array<Part>
 
 /**
+ * The files that a query after `@` picks from the directory, best first: from the files of the
+ * project that a walk gave, or from the folder that a query starting with `/`, `~` or `../` names.
+ */
+export declare function pickedFiles(directory: string, query: string, project: Array<string>): Array<string>
+
+/**
  * A provider as a first run checks it: its name, the names of its credential in the environment, whether the
  * settings enable it, and how many of its models the catalog offers.
  */
@@ -661,6 +672,13 @@ export declare function time(): NativeEar
 
 /** TIMEOUT is the timeout, in seconds, of a command that does not say one. */
 export declare const TIMEOUT: number
+
+/**
+ * The files under a folder that the picker of a window offers, by their path from it with `/`
+ * between its parts, in order: each dot file too, but `.git` and each file that `.gitignore`
+ * hides.
+ */
+export declare function walkedFiles(root: string): Array<string>
 
 /** WINDOW is the window, in tokens, of a model whose roster entry does not say one. */
 export declare const WINDOW: number

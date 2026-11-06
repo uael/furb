@@ -3,9 +3,12 @@
 
 use std::{io, net::SocketAddr, path::PathBuf};
 
+use furb::world::config;
+use hyper::http;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tokio_tungstenite::tungstenite;
 use tokio_util::codec::LinesCodecError;
 
 use crate::protocol::{Kind, Role};
@@ -42,13 +45,13 @@ pub(crate) enum JournalError {
 
 impl From<furb::Fault> for LifeError {
   fn from(fault: furb::Fault) -> Self {
-    LifeError::Refused(fault.to_string())
+    Self::Refused(fault.to_string())
   }
 }
 
-impl From<furb::world::config::Error> for LifeError {
-  fn from(no: furb::world::config::Error) -> Self {
-    LifeError::Refused(no.to_string())
+impl From<config::Error> for LifeError {
+  fn from(no: config::Error) -> Self {
+    Self::Refused(no.to_string())
   }
 }
 
@@ -134,7 +137,7 @@ pub enum DaemonError {
 
 impl From<LifeError> for ProtocolError {
   fn from(no: LifeError) -> Self {
-    ProtocolError::Refused { why: no.to_string() }
+    Self::Refused { why: no.to_string() }
   }
 }
 
@@ -183,7 +186,7 @@ pub enum TransportError {
   #[error("a peer of the door of the windows gave no token of the daemon")]
   Tokenless,
   #[error("the WebSocket of a peer did not open")]
-  Upgrade(#[source] Box<tokio_tungstenite::tungstenite::Error>),
+  Upgrade(#[source] Box<tungstenite::Error>),
   #[error(transparent)]
   Access(#[from] AccessError),
 }
@@ -203,7 +206,7 @@ pub enum AccessError {
   #[error("the local API of Tailscale broke the exchange")]
   Http(#[from] hyper::Error),
   #[error("the request to the local API of Tailscale is not valid")]
-  Asked(#[from] hyper::http::Error),
+  Asked(#[from] http::Error),
   #[error("the local API of Tailscale refused {path} with {status}: {why}")]
   Status { path: String, status: u16, why: String },
   #[error("the local API of Tailscale answered {path} with no JSON that furb reads")]

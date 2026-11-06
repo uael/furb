@@ -25,7 +25,7 @@ A module that does not meet the lints yet says so at its top, one line for each 
 - A true exception is an `#[expect(<lint>, reason = "<why>")]` on the item, never an `allow`. An exception that holds
   only for a cfg is a `cfg_attr`, as `#[cfg_attr(not(test), expect(dead_code, reason = "only the tests call it"))]`.
 - The gates run clippy on more than one set of features and systems: the hooks on the workspace, and the jobs of the
-  crate on macOS, Windows and Linux with the bindings of TypeScript. Run both, through `script/build-slot.sh`. Code
+  crate on macOS, Windows and Linux with the bindings of TypeScript. Run both. Code
   under `cfg(windows)` builds only on the runner of Windows.
 
   ```sh

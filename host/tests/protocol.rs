@@ -14,7 +14,9 @@ mod protocol {
   use super::yard::Yard;
 
   use std::{
+    env, fs, future,
     path::PathBuf,
+    process,
     sync::atomic::{AtomicU32, Ordering},
   };
 
@@ -29,6 +31,7 @@ mod protocol {
     transport::{Dialer, Identity, Local, Who},
   };
   use serde_json::json;
+  use tokio::io::DuplexStream;
   use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, duplex};
 
   /// A host that answers each verb with the verb itself, as JSON.
@@ -44,7 +47,7 @@ mod protocol {
       let answer = serde_json::to_value(&verb)
         .map(Answer::Value)
         .map_err(|no| ProtocolError::Refused { why: no.to_string() });
-      std::future::ready(answer)
+      future::ready(answer)
     }
   }
 
@@ -291,14 +294,14 @@ mod protocol {
   }
 
   /// A peer served on a stream in memory, under a role.
-  fn served(role: Role) -> Client<tokio::io::DuplexStream> {
+  fn served(role: Role) -> Client<DuplexStream> {
     let (ours, theirs) = duplex(1 << 16);
     let who = Who { login: "uael".to_owned(), role };
     tokio::spawn(async move { serve(&Echo, theirs, who).await });
     Client { lines: BufReader::new(ours) }
   }
 
-  async fn hello_asking(client: &mut Client<tokio::io::DuplexStream>, role: Role) -> Frame {
+  async fn hello_asking(client: &mut Client<DuplexStream>, role: Role) -> Frame {
     let hello = Hello { protocol: PROTOCOL, kind: Kind::Window, name: None, role: Some(role) };
     client.ask(0, Verb::Hello(hello)).await
   }
@@ -458,7 +461,7 @@ mod protocol {
   fn folder() -> Yard {
     static NEXT: AtomicU32 = AtomicU32::new(0);
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
-    Yard::unmade(format!("fh{}-{n}", std::process::id()))
+    Yard::unmade(format!("fh{}-{n}", process::id()))
   }
 
   #[tokio::test]
@@ -497,8 +500,8 @@ mod protocol {
   async fn a_folder_open_to_others_holds_no_socket() {
     use std::os::unix::fs::PermissionsExt;
     let place = folder();
-    std::fs::create_dir_all(&place).unwrap();
-    std::fs::set_permissions(&place, std::fs::Permissions::from_mode(0o755)).unwrap();
+    fs::create_dir_all(&place).unwrap();
+    fs::set_permissions(&place, fs::Permissions::from_mode(0o755)).unwrap();
     let refused = Local::new(&place).listen().await;
     assert!(matches!(refused, Err(furb_host::TransportError::Exposed { .. })));
   }
@@ -507,10 +510,10 @@ mod protocol {
   fn the_schema_on_disk_is_the_schema_of_the_protocol() {
     let place = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("protocol.schema.json");
     let made = serde_json::to_string_pretty(&schema()).unwrap() + "\n";
-    if std::env::var_os("FURB_BLESS").is_some() {
-      std::fs::write(&place, &made).unwrap();
+    if env::var_os("FURB_BLESS").is_some() {
+      fs::write(&place, &made).unwrap();
     }
-    let held = std::fs::read_to_string(&place).unwrap_or_default();
+    let held = fs::read_to_string(&place).unwrap_or_default();
     assert!(held == made, "{} is stale: run FURB_BLESS=1 cargo test -p furb-host", place.display());
   }
 }

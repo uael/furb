@@ -667,7 +667,8 @@ test("the agents that a thread hires fold under it to their count in the sidebar
       expect(rows.filter((row) => row.includes("Think until I cancel"))).toHaveLength(0);
       await railClick(use, "Agents");
       rows = rail(session, await frame());
-      const agents = rows.filter((row) => row.includes("Think until I cancel"));
+      // The crate names the first thread of a chain under the root that no operator made by the label of its chain.
+      const agents = rows.filter((row) => / w\/\d+ *$/.test(row));
       expect(agents).toHaveLength(8);
       const lead = rows.find((row) => row.includes("Hire eight workers")) ?? "";
       expect((agents[0] ?? "").search(/\S/)).toBeGreaterThan(lead.search(/\S/));

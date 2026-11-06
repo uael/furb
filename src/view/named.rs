@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 
-use super::operator;
+use super::{act::Act, operator};
 
 /// The root chain of a life, which the session names.
 const ROOT: &str = "chain1";
@@ -51,6 +51,24 @@ impl Named {
   /// The name that the extension naming gave last.
   pub fn given(&self) -> Option<&str> {
     self.given.as_ref().map(|one| one.1.as_str())
+  }
+
+  /// The name that the acts of a chain give, as the fold of facts gives it: the last
+  /// `rename_session` that is done with a text, and the last `name_session` that is done with a
+  /// name, each by the place where its act began.
+  pub fn of_acts(on: &[&Act]) -> Self {
+    let mut named = Self::default();
+    for act in on {
+      let said = match act.kind.as_str() {
+        RENAME => true,
+        NAME => false,
+        _ => continue,
+      };
+      if let Some(value) = act.value().and_then(Value::as_str) {
+        named.take(said, act.began, value);
+      }
+    }
+    named
   }
 
   /// A fact of a life, in the order of its log: an act on the root that names the session, and its
@@ -97,7 +115,10 @@ pub fn said(word: &str) -> Option<String> {
   serde_json::from_str::<String>(inner).ok()
 }
 
-/// The word that names a session with a name, as the operator says it.
+/// The word that names a session with a name, as the operator says it: the word of `renameWord` in
+/// tui/src/names.ts, which the TUI sends. The crate builds it for its tests and for the feature
+/// `test-support`, which the tests of the host take.
+#[cfg(any(test, feature = "test-support"))]
 pub fn word(name: &str) -> String {
   format!("{}{}{}", WORD.0, Value::String(name.to_owned()), WORD.1)
 }

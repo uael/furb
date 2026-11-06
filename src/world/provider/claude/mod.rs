@@ -254,9 +254,9 @@ impl Claude {
   /// read of the cache apart from the rest of what it read.
   ///
   /// The command line says its models itself, with no model prompt, once for each version of its
-  /// program: a process of its own asks it, and furb keeps the answer in its cache until the
-  /// program changes or [`refresh`] is called. A command line that does not answer, as an older one
-  /// does not, gives the fixed table of furb, within 20 seconds.
+  /// program: a process of its own asks it, and furb keeps the answer in its cache for an
+  /// hour, until the program changes or [`refresh`] is called. A command line that does not
+  /// answer, as an older one does not, gives the fixed table of furb, within 20 seconds.
   pub async fn models(&self) -> Vec<Model> {
     self.family(discover::models(&self.program).await.unwrap_or_else(discover::fallback))
   }

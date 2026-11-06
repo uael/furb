@@ -895,6 +895,23 @@
             "life": {
               "type": "string"
             },
+            "verb": {
+              "type": "string",
+              "const": "cancel_sign_in"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "A cancel of the sign-in of codex that the daemon runs for the life, which refuses the config\nthat asked it. It writes no config."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
             "about": {
               "type": "string"
             },
@@ -1052,6 +1069,38 @@
             "life"
           ],
           "description": "The threads of a chain with their meaning, now or as they stood just after a moment. `read`\nis the place up to which the window read the chain, from which the runs of notes count the\nones not yet read; none reads nothing."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "life": {
+              "type": "string"
+            },
+            "hidden": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            },
+            "at": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint64",
+              "minimum": 0
+            },
+            "verb": {
+              "type": "string",
+              "const": "rail"
+            }
+          },
+          "required": [
+            "verb",
+            "life"
+          ],
+          "description": "The threads of every chain of a life but those it names, as one tree in the order of the\nlist of the threads, now or as they stood just after a moment."
         },
         {
           "type": "object",
@@ -2066,6 +2115,35 @@
         {
           "type": "object",
           "properties": {
+            "state": {
+              "type": "string"
+            },
+            "url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "message": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "frame": {
+              "type": "string",
+              "const": "sign_in"
+            }
+          },
+          "required": [
+            "frame",
+            "state"
+          ],
+          "description": "The state of the sign-in of codex that this peer asked with a config of its provider, pushed\nat each change of the state, so no window asks it again: the word of the state, the browser\naddress while it waits, and what to tell the operator when it needs him or failed."
+        },
+        {
+          "type": "object",
+          "properties": {
             "life": {
               "type": "string"
             },
@@ -2391,6 +2469,26 @@
             "data"
           ],
           "description": "The threads of a chain."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "rail"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/ThreadNode"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "The threads of every chain of a life, as one tree."
         },
         {
           "type": "object",

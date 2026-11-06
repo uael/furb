@@ -450,8 +450,15 @@ export const input = part({
           this.session.notice = "Only a message can wait in the queue. Enter runs this Python now.";
           return;
         }
-        void this.session.enqueue(this.composer.plainText).catch(this.report);
+        const key = this.draftKey;
+        const content = this.composer.plainText;
+        // The message leaves its draft as it is queued, and a rejection gives it back as a rejected send does.
         this.composer.setText("");
+        void this.session.enqueue(content).catch((error) => {
+          this.unsent(key, content);
+          this.report(error);
+          this.render();
+        });
       },
       stash: () => this.stash(),
       view: (key) => this.showView(views[Number(key?.name) - 1] ?? "feed"),

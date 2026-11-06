@@ -75,9 +75,10 @@ test("a word of the operator stands as his messages stand, as its program in a p
       expect(shown).not.toContain("◉");
       expect(shown).toMatch(/ 1 {2}await wait\(60, __name__\) +woke/);
     },
-    // The later life boots on the checkpoint that the end of the first one wrote, and the word of that boot stands
-    // under the words of the first life, so the frame is tall enough to hold both.
-    { width: 140, height: 90, useMouse: true },
+    // The later life boots on the checkpoint that the end of the first one wrote, and the word of that boot holds the
+    // setup of the life and its values, which stands under the words of the first life, so the frame is tall enough to
+    // hold both.
+    { width: 140, height: 200, useMouse: true },
     session,
   );
 });
@@ -367,8 +368,13 @@ test("the setup of the root stands as code: a comment that names the setup, then
         // The setup of the root ends with its last rung, the stand and the cd. A word of the operator that comes
         // sooner ends it, and that rung then stands after the word, as it does where the roster is slow to come.
         const stood = () =>
-          session.activity.filter((act) => act.kind === "rung" && act.by === act.chain && isDone(act))
-            .length === 10;
+          session.activity.some(
+            (act) =>
+              act.kind === "rung" &&
+              act.by === act.chain &&
+              isDone(act) &&
+              /^stand\(\)\ncd\(/.test(act.word ?? ""),
+          );
         for (let step = 0; step < 200 && !stood(); step++) {
           await Bun.sleep(25);
           await session.refresh();
@@ -383,26 +389,31 @@ test("the setup of the root stands as code: a comment that names the setup, then
         // retells: the debug of the extensions, the read of the doctrine, the word rung(read('<file>', HIDDEN).content) of each extension in the
         // order of the life, the life words in one word, then the stand and the cd.
         const setup = session.activity.filter((act) => act.kind === "rung" && act.by === act.chain);
-        expect(setup.map((act) => act.chain)).toEqual(Array(10).fill(session.engine.root));
-        expect(setup.map((act) => act.words.slice(1))).toEqual(Array(10).fill(["", setup[0]?.words[2]]));
-        expect(setup.map((act) => act.word)).toEqual([
-          'debug(t"{standing()[4]=}")',
-          // A path of Windows stands with its separators doubled, as python shows a backslash.
-          expect.stringMatching(/^read\('.*[/\\]DOCTRINE\.md'\)$/),
-          ...["catchup", "memory", "skills", "compaction"].map((name) =>
-            expect.stringMatching(
-              new RegExp(
-                `^rung\\(read\\('.*[/\\\\]+words[/\\\\]+${name}[/\\\\]+${name}\\.py', HIDDEN\\)\\.content\\)$`,
-              ),
-            ),
-          ),
-          "catchup()\nawait recall()\nawait listed()\ncompacted(); fitted()",
-          // An extension that plays on the root alone comes after the others, with its life word.
-          expect.stringMatching(
-            /^rung\(read\('.*[/\\]+words[/\\]+naming[/\\]+naming\.py', HIDDEN\)\.content\)$/,
-          ),
+        expect(setup.map((act) => act.chain)).toEqual(Array(setup.length).fill(session.engine.root));
+        expect(setup.map((act) => act.words.slice(1))).toEqual(
+          Array(setup.length).fill(["", setup[0]?.words[2]]),
+        );
+        const words = setup.map((act) => act.word ?? "");
+        expect(words[0]).toBe('debug(t"{standing()[4]=}")');
+        // A path of Windows stands with its separators doubled, as python shows a backslash.
+        expect(words[1]).toMatch(/^read\('.*[/\\]DOCTRINE\.md'\)$/);
+        expect(words.at(-1)).toMatch(/^stand\(\)\ncd\('.*'\)$/);
+        // The word of each extension is read in the order of the life, an extension that plays on the root alone
+        // after the others, and each life word stands as a rung of its own.
+        const reads = words.filter((word) => /^rung\(read\('.*', HIDDEN\)\.content\)$/.test(word));
+        expect(reads.map((word) => /[/\\]+words[/\\]+(\w+)[/\\]+/.exec(word)?.[1])).toEqual([
+          "catchup",
+          "memory",
+          "skills",
+          "compaction",
+          "naming",
+        ]);
+        expect(words.slice(2, -1).filter((word) => !reads.includes(word))).toEqual([
+          "catchup()",
+          "await recall()",
+          "await listed()",
+          "compacted(); fitted()",
           "name_session()",
-          expect.stringMatching(/^stand\(\)\ncd\('.*'\)$/),
         ]);
         let rows = (await frame()).split("\n");
         for (let step = 0; step < 80 && !rows.some((row) => /earlier steps/.test(row)); step++) {
@@ -432,7 +443,8 @@ test("the setup of the root stands as code: a comment that names the setup, then
           .filter((row) => /^\d+ /.test(row))
           .slice(0, 18);
         expect(shown[0]).toBe('1 debug(t"{standing()[4]=}")');
-        expect(shown[1]).toMatch(/^2 read\('.*DOCTRINE\.md'\)$/);
+        // The path of the doctrine is cut to the width of the card, so only its call shows whole.
+        expect(shown[1]).toMatch(/^2 read\('.*'\)$/);
         expect(
           shown.slice(2, 6).map((row) => /^\d+ rung\(read\('.*', HIDDEN\)\.content\)$/.test(row)),
         ).toEqual(Array(4).fill(true));

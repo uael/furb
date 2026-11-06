@@ -1,4 +1,4 @@
-import { shapes } from "furb";
+import { pickedFiles, shapes } from "furb";
 import { isDone, takesNothing, unfinished, WORK } from "furb/life";
 import { canonical, slashes } from "../commands.ts";
 import { emojiNamed, emojis } from "../emoji.ts";
@@ -138,6 +138,12 @@ export const composer = part({
     this.composer.requestRender();
   },
 
+  /** A text that was not sent goes back to its draft, unless that draft holds new text by now. */
+  unsent(key: string, content: string): void {
+    if (this.draftKey === key && !this.composer.plainText) this.composer.setText(content);
+    else if (this.draftKey !== key && !this.session.drafts[key]) this.session.drafts[key] = content;
+  },
+
   async submit(): Promise<void> {
     if (this.submitting) return;
     if (this.session.host.reading) {
@@ -180,9 +186,7 @@ export const composer = part({
       this.historyIndex = -1;
       this.historyPrefix = "";
     } catch (error) {
-      // A text that was not sent goes back to its draft, unless that draft holds new text by now.
-      if (this.draftKey === key && !this.composer.plainText) this.composer.setText(content);
-      else if (this.draftKey !== key && !this.session.drafts[key]) this.session.drafts[key] = content;
+      this.unsent(key, content);
       this.report(error);
     } finally {
       this.submitting = false;
@@ -491,14 +495,14 @@ export const composer = part({
         .slice(0, 50)
         .map(({ label, detail, text }) => ({ label, detail: detail ?? "", text }));
     } else {
-      const wanted = token.text.toLowerCase();
-      // The completions of the parts after @ come before the files of the project.
+      // The completions of the parts after @ come before the files that the crate picks for the query, best first:
+      // from the files of the project, or from the folder that a query starting with /, ~ or ../ names.
       const given = this.parts.completions("@", token.text, this.seen());
       this.suggestionError = given.errors.join(" ");
       const theirs = given.items.map(({ label, detail, text }) => ({ label, detail: detail ?? "", text }));
       this.suggestions = theirs
         .concat(
-          this.paths((paths) => paths.filter((path) => path.toLowerCase().includes(wanted)), started)
+          this.paths((paths) => pickedFiles(this.session.workingDirectory, token.text, paths), started)
             .slice(0, 50)
             .map(({ value: path }) => ({
               label: `@${path}`,

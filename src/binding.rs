@@ -752,6 +752,21 @@ pub fn image_path(directory: String, uri: String) -> Result<ImagePath, Fault> {
   Ok(ImagePath { path: found.path.display().to_string(), digest: found.digest })
 }
 
+/// The files under a folder that the picker of a window offers, by their path from it with `/`
+/// between its parts, in order: each dot file too, but `.git` and each file that `.gitignore`
+/// hides.
+#[cfg_attr(feature = "typescript", napi)]
+pub fn walked_files(root: String) -> Vec<String> {
+  world::picker::walked(path::Path::new(&root))
+}
+
+/// The files that a query after `@` picks from the directory, best first: from the files of the
+/// project that a walk gave, or from the folder that a query starting with `/`, `~` or `../` names.
+#[cfg_attr(feature = "typescript", napi)]
+pub fn picked_files(directory: String, query: String, project: Vec<String>) -> Vec<String> {
+  world::picker::picked(path::Path::new(&directory), &query, &project)
+}
+
 /// How a message names an image: `![name](uri)`.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
@@ -856,6 +871,17 @@ impl Meaning {
     let at = at.map(moment).transpose()?;
     let read = read.map(moment).transpose()?.unwrap_or_default();
     meant(&self.held.threads(&chain, at, read))
+  }
+
+  /// The threads of every chain of the life but those that `hidden` names, as one tree in the order
+  /// of the list of the threads, now or as they stood just after a moment.
+  #[cfg_attr(
+    feature = "typescript",
+    napi(ts_return_type = "Array<import(\"./dist/protocol.js\").ThreadNode>")
+  )]
+  pub fn rail(&self, hidden: Option<Vec<String>>, at: Option<i64>) -> Result<Value, Fault> {
+    let at = at.map(moment).transpose()?;
+    meant(&self.held.rail(&hidden.unwrap_or_default(), at))
   }
 
   /// The acts as they stood just after a moment.

@@ -27,8 +27,6 @@ import {
   type ChainAside,
   type ChainThread,
   cancelled,
-  chainNotes,
-  chainSorted,
   type Desk,
   desk,
   failed,
@@ -42,9 +40,10 @@ import {
   reasonOf,
   rollUp,
   type State,
+  type ThreadNode,
   threadWork,
 } from "furb/life";
-import type { FollowUp, Layer } from "furb/protocol";
+import type { ThreadNode as CrateNode, FollowUp, Layer, Threads } from "furb/protocol";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { clock } from "./clock.ts";
 import { typed } from "./configs.ts";
@@ -58,6 +57,31 @@ import { type Hunk, type Reviewed, revertWord, reviewed, type Scope, scopes } fr
 import { shareHtml, shareMarkdown } from "./share.ts";
 import { isThemeChoice, palettes, type ThemeChoice, type ThemeName, themeOf } from "./theme.ts";
 import { branchNotice } from "./watching.ts";
+
+/** The acts of a list of ids, each that the session holds, in order. */
+function rowsOf(list: readonly string[], ids: ReadonlyMap<string, ActRow>): ActRow[] {
+  return list.flatMap((id) => ids.get(id) ?? []);
+}
+/** A thread as the crate gives it, with the act of each id that the session holds, or nothing when it holds no act of
+ * its prompt yet. */
+function threadOf(one: CrateNode["thread"], ids: ReadonlyMap<string, ActRow>): ChainThread | undefined {
+  const act = ids.get(one.prompt);
+  if (!act) return undefined;
+  const { prompt: _, messages, asked, ...rest } = one;
+  return { ...rest, act, messages: rowsOf(messages, ids), asked: rowsOf(asked, ids) };
+}
+/** A tree of threads as the crate gives it, with the act of each id: a thread whose prompt the session does not hold
+ * yet leaves the tree with its agents, until the acts come. */
+export function nodesOf(tree: readonly CrateNode[], ids: ReadonlyMap<string, ActRow>): ThreadNode[] {
+  return tree.flatMap((node): ThreadNode[] => {
+    const thread = threadOf(node.thread, ids);
+    return thread ? [{ thread, agents: nodesOf(node.agents, ids), state: node.state }] : [];
+  });
+}
+/** Each thread of a tree, its agents after it. */
+export function flatThreads(tree: readonly ThreadNode[]): ChainThread[] {
+  return tree.flatMap((node) => [node.thread, ...flatThreads(node.agents)]);
+}
 
 /** The views of a chain: the feed of what it did, the transcript that the model reads, and the files it changed. */
 export const views = ["feed", "transcript", "changes"] as const;
@@ -172,6 +196,8 @@ interface Index {
    * a chain depend on its prompts alone, so an act of another kind reads no thread again. */
   threaded: Map<string, number>;
   prompts: number;
+  /** How many times an act that names the session came or changed. */
+  named: number;
   /** The chain of each act that came or changed, once each time, which tells the board which chains to read again. */
   touched: string[];
   /** The writes that are done, in the order that the session saw them done. */
@@ -183,9 +209,9 @@ interface Index {
   /** The last act on each chain that is no chain and no grant, and the chains whose last act failed. */
   latest: Map<string, ActRow>;
   failing: Set<string>;
-  /** The last rename_session that is done and the last name_session that gave a name, on each chain, from which the
-   * root gives the name of the session. */
-  named: Map<string, { said?: ActRow; given?: ActRow }>;
+  /** The acts that name the session and are done, whose count tells the session that its record holds a name that it
+   * has not read. */
+  names: Set<string>;
 }
 
 /** The place of an act in each list of an index that holds it, and whether it is among the writes that are done. */
@@ -225,6 +251,8 @@ function placed(index: Index, act: ActRow): void {
   index.stamps.set(act.by, (index.stamps.get(act.by) ?? 0) + 1);
   index.chained.set(act.chain, (index.chained.get(act.chain) ?? 0) + 1);
   if (act.kind === "prompt") index.threaded.set(act.chain, ++index.prompts);
+  // A name of the session names the first thread of the operator in the crate, so it reads the threads again.
+  if (act.kind === "name_session" || act.kind === "rename_session") index.named++;
   index.touched.push(act.chain);
   const latest = index.latest.get(act.chain);
   if (
@@ -236,13 +264,7 @@ function placed(index: Index, act: ActRow): void {
     if (failed(act)) index.failing.add(act.chain);
     else index.failing.delete(act.chain);
   }
-  const naming = act.kind === "rename_session" ? "said" : act.kind === "name_session" ? "given" : undefined;
-  if (naming && isDone(act) && typeof outcomeOf(act) === "string" && (naming === "said" || outcomeOf(act))) {
-    const names = index.named.get(act.chain) ?? {};
-    index.named.set(act.chain, names);
-    const past = names[naming];
-    if (!past || (index.at.get(past.id) ?? 0) <= (index.at.get(act.id) ?? 0)) names[naming] = act;
-  }
+  if ((act.kind === "rename_session" || act.kind === "name_session") && isDone(act)) index.names.add(act.id);
   if (act.kind === "read" && isDone(act) && act.words[0] === "skills://") {
     const past = index.skills;
     if (!past || (index.at.get(past.id) ?? 0) <= (index.at.get(act.id) ?? 0)) index.skills = act;
@@ -268,13 +290,14 @@ function indexOf(acts: readonly ActRow[], prompts = 0): Index {
     stamps: new Map(),
     chained: new Map(),
     threaded: new Map(),
+    named: 0,
     prompts,
     touched: [],
     written: [],
     work: new Map(),
     latest: new Map(),
     failing: new Set(),
-    named: new Map(),
+    names: new Set(),
   };
   for (const [place, act] of acts.entries()) {
     index.ids.set(act.id, act);
@@ -563,23 +586,17 @@ export class Session extends EventEmitter {
   private held = 0;
   private dirty = false;
   private closed = false;
-  /** The name that `<record>.ui.json` held, which moves into the record at the first read of the life. */
-  private legacyName?: string;
   /** The follow-ups that `<record>.ui.json` held from an older release, which move into the queue of the life. */
   private legacyQueue: Kept[] = [];
   private carryingQueue = false;
-  /** The last name that the operator gave the session in its record, by a plain scan of the record when the life
-   * opens, which every build reads, also when the life drifts or another host holds the record. */
-  private keptName?: string;
-  /** Whether the scan of the record in the worker came back, which the move of an old name into the record waits for. */
-  private scanned = false;
-  /** Whether the operator named the session in this life, whose name the older scan of the record must not hide. */
-  private renamed = false;
-  /** The renames of the operator that the record has not taken yet, while which the facts hold an older name. */
-  private renaming = 0;
+  /** The name that the fold of the crate gives the record, as a read of the record in the worker brought it. */
+  private foldedName?: string;
+  /** How many acts that name the session the last read of the record saw, and how many reads were made, of which only
+   * the last one counts. */
+  private nameReads?: number;
+  private nameScans = 0;
   /** Ends the scan of the record in the worker when the session goes. */
   private readonly scanning = new AbortController();
-  private carrying = false;
   /** The scope, the writes and the count of changes that `changes` was read at. */
   private changesRead = "";
   /** Whether the dialog of a record open to read was shown, so it shows once for each life of the session. */
@@ -604,8 +621,7 @@ export class Session extends EventEmitter {
         demo && path && !host.recorded ? join(dirname(path), "ui-preferences.json") : undefined,
       );
     if (path) {
-      const { view, name, queued, damage } = savedView(path);
-      this.legacyName = name;
+      const { view, queued, damage } = savedView(path);
       this.legacyQueue = queued ?? [];
       this.scanName(path);
       Object.assign(this, Object.fromEntries(kept.flatMap((key) => (key in view ? [[key, view[key]]] : []))));
@@ -696,19 +712,11 @@ export class Session extends EventEmitter {
   private factsChanged = () => {
     void this.refresh().catch(this.fail);
   };
-  /** The name that the record gives the session: the name that the operator said with rename_session, as the life
-   * tells it or else as the scan of the record found it, else a name that an older release kept in `<record>.ui.json`
-   * and the record does not hold yet, else the name that the extension naming gave with name_session. An empty name
-   * from the operator gives the name of the directory again. */
+  /** The name that the record gives the session, as the fold of the crate tells it: the name that the operator said
+   * last with rename_session, else the name that the extension naming gave with name_session. An empty name from the
+   * operator gives the name of the directory again. It stands once the first read of the record came back. */
   get recordName(): string | undefined {
-    const names = this.indexed().named.get(this.engine.root);
-    const said =
-      (names?.said ? outcomeOf(names?.said) : undefined) ??
-      this.keptName ??
-      this.legacyName ??
-      (names?.given ? outcomeOf(names?.given) : undefined);
-    const name = said === undefined ? undefined : String(said);
-    return name === undefined ? undefined : name || basename(this.host.directory);
+    return this.foldedName === undefined ? undefined : this.foldedName || basename(this.host.directory);
   }
   /** Whether a chain is the one where the extension naming asks a model for the name of the session, which the
    * sidebar hides. */
@@ -716,13 +724,13 @@ export class Session extends EventEmitter {
     const ids = this.indexed().ids;
     return ids.get(ids.get(chain)?.by ?? "")?.kind === "name_session";
   }
-  /** The session takes the name that its record gives it. */
+  /** A read of the record when the acts that name the session are more than the last read saw. */
   private named(): void {
-    if (this.renaming) return;
-    const name = this.recordName;
-    if (name === undefined || name === this.sessionName) return;
-    this.sessionName = name;
-    this.emit("change");
+    const acts = this.indexed().names.size;
+    // The first read began when the session opened, and saw the record as these acts are.
+    if (this.nameReads === undefined) this.nameReads = acts;
+    else if (acts !== this.nameReads && this.host.record && !this.closed)
+      this.scanName(this.host.record, acts);
   }
   /** The operator names the session. The name stands at once, and the act rename_session says it in the record, where
    * each window reads it, whatever extension plays: its word makes the act with an ear of its own. It tells whether
@@ -730,67 +738,40 @@ export class Session extends EventEmitter {
   async rename(name: string): Promise<boolean> {
     const said = name.trim();
     const before = this.sessionName;
-    const held = [this.legacyName, this.keptName];
-    this.renamed = true;
-    if (said !== this.legacyName) this.legacyName = undefined;
-    this.keptName = said;
-    this.renaming++;
+    // A read of the record that began before this name is no longer the last one.
+    this.nameScans++;
     this.sessionName = said || basename(this.host.directory);
     this.emit("change");
     const word = renameWord(said);
     try {
       await this.engine.result(await this.engine.rung({ word, on: this.engine.root }));
-      // The facts of the session show the name before the guard lifts, so no stale name takes the row back.
       await this.refresh().catch(() => {});
       return true;
     } catch (error) {
-      this.renamed = false;
-      [this.legacyName, this.keptName] = held;
       this.sessionName = before;
       this.notice = `The name was not kept: ${error instanceof Error ? error.message : String(error)}`;
       this.emit("change");
       return false;
-    } finally {
-      this.renaming--;
     }
   }
-  /** The name that the operator said is in the record, which only a scan of its bytes finds. The worker that lists the
-   * records makes that scan, so the thread that draws reads no byte of the record, and the session shows the name when
-   * it comes. */
-  private scanName(path: string): void {
+  /** The name of the session that the fold of the crate gives for the record. The worker that lists the records reads
+   * it, so the thread that draws reads no byte of the record, and the session shows the name when it comes. */
+  private scanName(path: string, acts?: number): void {
+    const read = ++this.nameScans;
+    if (acts !== undefined) this.nameReads = acts;
     inspectRecords([path], this.scanning.signal, []).then(
-      (states) => this.scannedName(states[path]?.said),
-      () => this.scannedName(undefined),
+      (states) => this.scannedName(read, states[path]?.name),
+      () => this.scannedName(read, undefined),
     );
   }
-  private scannedName(said: string | undefined): void {
-    if (this.closed) return;
-    this.scanned = true;
-    if (!this.renamed) this.keptName = said;
-    this.named();
-    this.carryName();
+  private scannedName(read: number, name: string | undefined): void {
+    if (this.closed || read !== this.nameScans) return;
+    if (name !== undefined) {
+      this.foldedName = name;
+      this.sessionName = this.recordName ?? this.sessionName;
+    }
     this.carryQueue();
     this.emit("change");
-  }
-  /** A name that an older release kept in `<record>.ui.json` moves into the record once the record is read: when the
-   * record holds no rename_session, the name is said as one, and the save that follows writes the view without it. */
-  private carryName(): void {
-    const name = this.legacyName;
-    if (name === undefined || this.carrying || !this.scanned) return;
-    // A record that this life cannot write keeps the name in the old home, which the next life carries.
-    if (this.closed || this.host.role === "read" || this.host.recorded || this.host.reading) return;
-    const said =
-      this.keptName !== undefined ||
-      (this.activityByChain.get(this.engine.root) ?? []).some((one) => one.kind === "rename_session");
-    this.carrying = true;
-    void (said ? Promise.resolve(true) : this.rename(name)).then((kept) => {
-      this.carrying = false;
-      // A session that closed while the name was said may have ended its life before the record held the name, and
-      // its last save kept the name in the old home: a save after it would take the name from there too.
-      if (!kept || this.closed) return;
-      this.legacyName = undefined;
-      this.save();
-    });
   }
   /** The follow-ups that an older release kept in `<record>.ui.json` go to the queue of the life under their own
    * entries, which the life takes once, and the save that follows writes the view without them. A record that this
@@ -930,8 +911,15 @@ export class Session extends EventEmitter {
           if (moved) this.version++;
         }
         this.counted = count;
+        // The threads of the chain shown and the tree of the sidebar come from the crate with the acts that they read,
+        // so a frame draws the threads of the acts that it shows.
+        // A read that began before these acts came gives the threads of before them, so the read goes again.
+        for (let tries = 0; tries < 3 && !(this.threadsFresh(selected) && this.railFresh); tries++)
+          await Promise.all([
+            this.threadsFresh(selected) ? undefined : this.readThreads(selected),
+            this.railFresh ? undefined : this.readRail(),
+          ]);
         this.named();
-        this.carryName();
         this.carryQueue();
         // The acts and the actor of one snapshot are of one moment: the choice holds until its rung is done there.
         const choice = this.choices.get(selected);
@@ -1119,20 +1107,55 @@ export class Session extends EventEmitter {
       (thread) => thread.over && thread.yours && this.unreadThread(thread.act.id, threadWork(thread)),
     );
   }
-  /** What the threads of the chains keep of each prompt that they read. */
-  private readonly threadsKnown = new WeakMap<Act, { message: string | undefined; title: string }>();
-  /** The threads of a chain, in the order they began, each by its id, with the thread of each message and of each
-   * question, and its asides, read again only when a prompt on the chain or a question that waits changes. */
+  /** The threads of each chain as the crate last gave them, with the stamp of the prompts of the chain and the
+   * questions that waited when it gave them. */
+  private readonly crateThreads = new Map<string, { stamp: number; owed: string; got: Threads }>();
+  /** The reads of the threads of a chain that the session waits for, one for each chain. */
+  private readonly askingThreads = new Map<string, Promise<void>>();
+  /** What the threads read beside the prompts of a chain: the questions that wait now, and the acts that name the
+   * session, whose name the crate gives the first thread of the operator. */
+  private get owedNow(): string {
+    return `${[...this.host.prompts.keys()].join(" ")}\n${this.indexed().named}`;
+  }
+  /** Whether the threads that the crate gave of a chain are of the prompts and the questions of now. */
+  threadsFresh(chain: string): boolean {
+    const kept = this.crateThreads.get(chain);
+    return kept?.stamp === this.threadStamp(chain) && kept.owed === this.owedNow;
+  }
+  /** The crate folds the threads of a chain, which the session asks for once at a time, and draws again once they
+   * come. */
+  readThreads(chain: string): Promise<void> {
+    const asking = this.askingThreads.get(chain);
+    if (asking) return asking;
+    const [stamp, owed] = [this.threadStamp(chain), this.owedNow];
+    const read = (async () => {
+      try {
+        const got = await this.host.threads(chain, undefined, this.read(chain));
+        this.crateThreads.set(chain, { stamp, owed, got });
+        this.emit("change");
+      } finally {
+        this.askingThreads.delete(chain);
+      }
+    })();
+    this.askingThreads.set(chain, read);
+    return read;
+  }
+  /** The threads of a chain as the crate folds them, each by its id, with the thread of each message and of each
+   * question, its asides and the runs of its notes. A chain whose prompts changed since the crate gave them shows the
+   * threads it gave until it gives them again. */
   threadsOf(chain: string): ThreadList {
-    const stamp = this.threadStamp(chain);
-    const owed = [...this.host.prompts.keys()].join(" ");
+    if (!this.threadsFresh(chain)) void this.readThreads(chain).catch(this.threadFault);
+    const got = this.crateThreads.get(chain)?.got;
     const kept = this.threadsRead.get(chain);
-    if (kept?.stamp === stamp && kept.owed === owed) return kept.threads;
-    const on = this.activityByChain.get(chain) ?? [];
-    const owes = new Set(this.host.prompts.keys());
     const ids = this.indexed().ids;
-    const sorted = chainSorted(on, ids, owes, this.threadsKnown);
-    const { threads: list, asides } = sorted;
+    if (kept && kept.got === got && kept.ids === ids) return kept.threads;
+    const own = flatThreads(nodesOf(got?.threads ?? [], ids)).filter((one) => one.act.chain === chain);
+    const list = own.sort((one, other) => one.act.began - other.act.began);
+    const asides = (got?.asides ?? []).flatMap((one): ChainAside[] => {
+      const act = ids.get(one.prompt);
+      return act ? [{ act, aside: one.aside, messages: rowsOf(one.messages, ids) }] : [];
+    });
+    const runs = (got?.notes ?? []).map((run): NoteRun => ({ ...run, prompts: rowsOf(run.prompts, ids) }));
     const threads: ThreadList = {
       list,
       by: new Map(list.map((one) => [one.act.id, one])),
@@ -1144,16 +1167,55 @@ export class Session extends EventEmitter {
       aside: new Map(
         asides.flatMap((one) => one.messages.map((message): [string, ChainAside] => [message.id, one])),
       ),
-      runs: new Map(
-        chainNotes(on, ids, sorted).flatMap((run) =>
-          run.prompts.map((act): [string, NoteRun] => [act.id, run]),
-        ),
-      ),
+      runs: new Map(runs.flatMap((run) => run.prompts.map((act): [string, NoteRun] => [act.id, run]))),
     };
-    this.threadsRead.set(chain, { stamp, owed, threads });
+    this.threadsRead.set(chain, { got, ids, threads });
     return threads;
   }
-  private readonly threadsRead = new Map<string, { stamp: number; owed: string; threads: ThreadList }>();
+  /** A read of the threads that failed says so, as a failure of the session. */
+  private readonly threadFault = (error: unknown): void => {
+    this.error = error instanceof Error ? error.message : String(error);
+    this.emit("change");
+  };
+  private readonly threadsRead = new Map<
+    string,
+    { got: Threads | undefined; ids: ReadonlyMap<string, ActRow>; threads: ThreadList }
+  >();
+  /** The threads of every chain of the session but those that name it, as one tree in the order of the sidebar, as the
+   * crate last gave them, with the version of the prompts and the questions that waited then. */
+  private railRead?: { version: number; owed: string; tree: CrateNode[] };
+  private railAsking?: Promise<void>;
+  /** The crate folds the threads of every chain as one tree, which the session asks for once at a time. */
+  readRail(): Promise<void> {
+    if (this.railAsking) return this.railAsking;
+    const [version, owed] = [this.promptsVersion, this.owedNow];
+    const hidden = [...this.activityByChain.keys()].filter((chain) => this.naming(chain));
+    this.railAsking = (async () => {
+      try {
+        this.railRead = { version, owed, tree: await this.host.rail(hidden) };
+        this.emit("change");
+      } finally {
+        this.railAsking = undefined;
+      }
+    })();
+    return this.railAsking;
+  }
+  /** The threads of the session as the sidebar shows them, as the crate orders them: the closed ones first and the
+   * open ones last, each with the agents that its ladder made under it. */
+  /** Whether the tree that the crate gave of the threads is of the prompts and the questions of now. */
+  private get railFresh(): boolean {
+    return this.railRead?.version === this.promptsVersion && this.railRead.owed === this.owedNow;
+  }
+  get rail(): ThreadNode[] {
+    if (!this.railFresh) void this.readRail().catch(this.threadFault);
+    const tree = this.railRead?.tree ?? [];
+    const ids = this.indexed().ids;
+    if (this.railNodes?.tree === tree && this.railNodes.ids === ids) return this.railNodes.nodes;
+    const nodes = nodesOf(tree, ids);
+    this.railNodes = { tree, ids, nodes };
+    return nodes;
+  }
+  private railNodes?: { tree: CrateNode[]; ids: ReadonlyMap<string, ActRow>; nodes: ThreadNode[] };
   /** The threads of the chain shown. */
   get threads(): ThreadList {
     return this.threadsOf(this.selected);
@@ -2060,8 +2122,8 @@ export class Session extends EventEmitter {
         const dot = name.indexOf(".");
         const key = dot < 0 ? [name] : [name.slice(0, dot), name.slice(dot + 1)];
         const text = words.join(" ").trim();
-        const value = text ? typed(text) : undefined;
         const held = (await this.host.settings()).find((one) => one.key.join(".") === key.join("."));
+        const value = text ? typed(text, held?.property) : undefined;
         await this.setConfig(key, value, held?.layer ?? "project");
         break;
       }
@@ -2086,8 +2148,11 @@ export class Session extends EventEmitter {
                   models: { [id || ""]: { window: Number(window) } },
                 }
               : true;
-        if (!(await this.host.config({ action: "set", key: ["providers", name], value, layer: "project" }))) {
-          this.notice = "Codex sign-in canceled.";
+        try {
+          await this.host.config({ action: "set", key: ["providers", name], value, layer: "project" });
+        } catch (error) {
+          if (name !== "codex" || !(error instanceof Error) || error.name !== "Refused") throw error;
+          this.notice = error.message;
           break;
         }
         this.emit("configured");
@@ -2375,8 +2440,6 @@ export class Session extends EventEmitter {
     const view: SavedView = {
       ...Object.fromEntries(kept.map((key) => [key, this[key]])),
       cost: this.savedCost,
-      // A name of an older release stays in its home until the record holds it, so no save loses it.
-      ...(this.legacyName === undefined ? {} : { sessionName: this.legacyName }),
       // The follow-ups of an older release stay in their home until the life holds them.
       ...(this.legacyQueue.length ? { queued: this.legacyQueue } : {}),
     };

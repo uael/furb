@@ -15,9 +15,16 @@ export interface Setting {
   extension?: string;
 }
 
-/** The value that the operator typed for a key: its JSON, or the text itself when it is no JSON, so a string needs no
- * quotes. */
-export const typed = (text: string): unknown => {
+/** The text of a value in the form of a key: a key that the schema types as a string shows its text as it is, and any
+ * other value shows as JSON, so a string with no schema shows in quotes. */
+export const shown = (value: unknown, property?: Setting["property"]): string =>
+  property?.type === "string" && typeof value === "string" ? value : (JSON.stringify(value) ?? "");
+
+/** The value that the operator typed for a key, the inverse of shown: a key that the schema types as a string takes
+ * its text literally, so a numeric text, a quote and the text null stay strings, and any other key takes its JSON, or
+ * the text itself when it is no JSON. */
+export const typed = (text: string, property?: Setting["property"]): unknown => {
+  if (property?.type === "string") return text;
   try {
     return JSON.parse(text) as unknown;
   } catch {

@@ -16,6 +16,8 @@ import type {
   Listed,
   Peer,
   Role,
+  ThreadNode,
+  Threads,
   Request1 as Verb,
 } from "furb/protocol";
 import { PROTOCOL } from "furb/protocol";
@@ -169,7 +171,18 @@ export class Daemon extends EventEmitter {
     return this.reaching;
   }
 
+  /** A daemon that closes before its welcome, as one that ends at its grace in the instant that this window dials it,
+   * is dialed again once, which starts a new daemon when none listens. */
   private async reach(): Promise<void> {
+    try {
+      await this.reached();
+    } catch (error) {
+      if (!(error instanceof Closed)) throw error;
+      await this.reached();
+    }
+  }
+
+  private async reached(): Promise<void> {
     const socket = (await dialed(this.place)) ?? (await started(this.folder, this.place));
     this.socket = socket;
     let held = "";
@@ -205,6 +218,7 @@ export class Daemon extends EventEmitter {
     } else if (frame.frame === "event") this.emit("event", frame.life, frame.seq, frame.event);
     else if (frame.frame === "presence") this.emit("presence", frame.life, frame.peers);
     else if (frame.frame === "stalled") this.emit("stalled", frame.life, frame.notice);
+    else if (frame.frame === "sign_in") this.emit("authentication", frame);
     else if (frame.frame === "ask") this.emit("ask", frame.life, frame.ask, frame.request);
   }
 
@@ -218,7 +232,8 @@ export class Daemon extends EventEmitter {
       waits.reject(closed);
     }
     this.waiting.clear();
-    if (this.closing) return;
+    // A socket that closes before its welcome fails the reach that dialed it, which dials again.
+    if (this.closing || this.reaching) return;
     this.connect().then(
       () => this.emit("reconnected"),
       (error: unknown) => this.emit("lost", error instanceof Error ? error.message : String(error)),
@@ -442,10 +457,13 @@ export class RemoteLife extends EventEmitter {
     };
     const lost = (why: string) => this.lose(new Error(why));
     const stalled = (life: string, notice: string) => life === this.record && this.emit("log", notice);
+    const authentication = ({ state, url, message }: Extract<Frame, { frame: "sign_in" }>) =>
+      this.emit("authentication", { state, url: url ?? undefined, message: message ?? undefined });
     this.listening = [
       ["event", event],
       ["ask", ask],
       ["stalled", stalled],
+      ["authentication", authentication],
       ["reconnected", again],
       ["lost", lost],
     ];
@@ -778,6 +796,10 @@ export class RemoteLife extends EventEmitter {
   async config(config: Config): Promise<string> {
     return await this.made(await this.verb({ verb: "config", life: this.record, config }));
   }
+  /** A cancel of the sign-in of codex that the daemon runs for the life, which refuses the config that asked it. */
+  async cancelSignIn(): Promise<void> {
+    await this.daemon.ask({ verb: "cancel_sign_in", life: this.record });
+  }
   /** Each key of the configs of the folder of the life, as the host joins them with their schema. */
   async settings(): Promise<Setting[]> {
     return valued(
@@ -897,6 +919,26 @@ export class RemoteLife extends EventEmitter {
     const got = await this.verb({ verb: "inspect", life: this.record, name, on: chain });
     if (got.answer !== "inspected") throw new Error(`The daemon gave ${got.answer}, and no name.`);
     return { kind: got.data.kind, representation: got.data.repr, value: got.data.value };
+  }
+  /** The threads of a chain as the crate folds them in the daemon, now or as they stood just after a moment, with the
+   * runs of its notes counted past the place up to which the window read it. */
+  async threads(on: string, at?: number, read?: number): Promise<Threads> {
+    const got = await this.verb({
+      verb: "threads",
+      life: this.record,
+      on,
+      at: at ?? null,
+      read: read ?? null,
+    });
+    if (got.answer !== "threads") throw new Error(`The daemon gave ${got.answer}, and no threads.`);
+    return got.data;
+  }
+  /** The threads of every chain of the life but those that `hidden` names, as one tree in the order of the list of
+   * the threads, as the crate folds them in the daemon, now or as they stood just after a moment. */
+  async rail(hidden: string[], at?: number): Promise<ThreadNode[]> {
+    const got = await this.verb({ verb: "rail", life: this.record, hidden, at: at ?? null });
+    if (got.answer !== "rail") throw new Error(`The daemon gave ${got.answer}, and no threads.`);
+    return got.data;
   }
   async pending(): Promise<Map<string, string>> {
     const got = valued(await this.verb({ verb: "pending", life: this.record })) as [string, string][];

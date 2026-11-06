@@ -10,6 +10,7 @@ use std::{
   ptr,
 };
 
+use rustix::process;
 use tokio::net::{UnixListener, UnixStream};
 
 use crate::error::TransportError;
@@ -94,7 +95,7 @@ pub(crate) fn private(file: &Path, bytes: &[u8]) -> io::Result<()> {
 }
 
 fn user() -> u32 {
-  rustix::process::geteuid().as_raw()
+  process::geteuid().as_raw()
 }
 
 /// The login of a user, from the database of the users.

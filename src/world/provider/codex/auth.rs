@@ -207,11 +207,22 @@ struct Listed {
   models: Vec<Listing>,
 }
 
-/// A sign-in that runs, with the way to cancel it. It outlives the call that began it: the
-/// host asks for the state in later calls, with no object of its own to hold it between them.
+/// The sign-in of a folder, with the way to cancel it. It outlives the call that began it: the
+/// host asks for the state in later calls, with no object of its own to hold it between them. Its
+/// state lives in the watch alone, which each writer sends to and each reader borrows from, so a
+/// host that subscribes sees each change at once and polls nothing.
 struct Flow {
-  status: SignIn,
+  state: watch::Sender<SignIn>,
   canceled: watch::Sender<bool>,
+}
+
+fn fresh(state: SignIn) -> Flow {
+  Flow { state: watch::channel(state).0, canceled: watch::channel(false).0 }
+}
+
+/// The new state of the sign-in of a folder, which each subscriber sees.
+fn publish(path: &Path, state: SignIn) {
+  flows().entry(path.to_owned()).or_insert_with(|| fresh(state.clone())).state.send_replace(state);
 }
 
 /// What a browser sign-in waits with: its port, its state and its verifier.
@@ -296,10 +307,11 @@ fn usable(path: &Path) -> Option<Credential> {
 /// The current sign-in state. This view starts no sign-in and makes no request.
 pub fn status(config: Option<&Path>) -> SignIn {
   let path = directory(config);
-  if let Some(flow) = flows().get(&path)
-    && flow.status != SignIn::Connected
-  {
-    return flow.status.clone();
+  if let Some(flow) = flows().get(&path) {
+    let state = flow.state.borrow().clone();
+    if !matches!(state, SignIn::Connected | SignIn::Disconnected) {
+      return state;
+    }
   }
   let connected = usable(&path).is_some_and(|one| {
     read::<Catalog>(&path.join("codex.models.json"))
@@ -308,11 +320,29 @@ pub fn status(config: Option<&Path>) -> SignIn {
   if connected { SignIn::Connected } else { SignIn::Disconnected }
 }
 
+/// The state of the sign-in of a folder as it changes: the current state at once, then each change
+/// that a writer of the sign-in makes, so a host tells its windows with no poll.
+pub fn subscribe(config: Option<&Path>) -> watch::Receiver<SignIn> {
+  let current = status(config);
+  let mut all = flows();
+  let flow = all.entry(directory(config)).or_insert_with(|| fresh(current.clone()));
+  // A state that no writer set, as the account that connects or disconnects, is read from the disk.
+  flow.state.send_if_modified(|state| {
+    let settled = matches!(state, SignIn::Connected | SignIn::Disconnected) && *state != current;
+    if settled {
+      *state = current;
+    }
+    settled
+  });
+  flow.state.subscribe()
+}
+
 /// Cancel a sign-in that has not finished. Saved credentials stay available.
 pub fn cancel(config: Option<&Path>) {
-  if let Some(flow) = flows().get_mut(&directory(config)).filter(|flow| flow.status.running()) {
+  let all = flows();
+  if let Some(flow) = all.get(&directory(config)).filter(|flow| flow.state.borrow().running()) {
     flow.canceled.send_replace(true);
-    flow.status = SignIn::Canceled;
+    flow.state.send_replace(SignIn::Canceled);
   }
 }
 
@@ -320,14 +350,12 @@ fn update(path: &Path, canceled: &watch::Receiver<bool>, status: SignIn) {
   if *canceled.borrow() {
     return;
   }
-  if let Some(flow) = flows().get_mut(path) {
-    flow.status = status;
-  }
+  publish(path, status);
 }
 
 pub(super) fn models(config: Option<&Path>) -> Vec<Listing> {
   let path = directory(config);
-  if flows().get(&path).is_some_and(|flow| matches!(flow.status, SignIn::NeedsLogin(_))) {
+  if flows().get(&path).is_some_and(|flow| matches!(*flow.state.borrow(), SignIn::NeedsLogin(_))) {
     return Vec::new();
   }
   let Some(credential) = held(&path) else { return Vec::new() };
@@ -337,14 +365,10 @@ pub(super) fn models(config: Option<&Path>) -> Vec<Listing> {
 }
 
 pub(super) fn needs_login(path: &Path) {
-  let mut all = flows();
-  if all.get(path).is_some_and(|flow| flow.status.running()) {
+  if flows().get(path).is_some_and(|flow| flow.state.borrow().running()) {
     return;
   }
-  all.insert(
-    path.to_owned(),
-    Flow { status: SignIn::NeedsLogin(AGAIN.to_owned()), canceled: watch::channel(false).0 },
-  );
+  publish(path, SignIn::NeedsLogin(AGAIN.to_owned()));
 }
 
 pub(super) fn failed(path: &Path, failure: &AuthError) {
@@ -473,19 +497,26 @@ pub fn begin(config: Option<&Path>) -> Result<SignIn, AuthError> {
   let retry;
   {
     let all = flows();
-    if let Some(flow) = all.get(&path).filter(|one| one.status.running()) {
-      return Ok(flow.status.clone());
+    if let Some(flow) = all.get(&path).filter(|one| one.state.borrow().running()) {
+      return Ok(flow.state.borrow().clone());
     }
-    retry = all.get(&path).is_some_and(|flow| matches!(flow.status, SignIn::NeedsLogin(_)));
+    retry =
+      all.get(&path).is_some_and(|flow| matches!(*flow.state.borrow(), SignIn::NeedsLogin(_)));
   }
   let (stop, canceled) = watch::channel(false);
   let (status, pending) = if !retry && usable(&path).is_some() {
     (SignIn::Connecting, None)
   } else {
-    let (url, pending) = authorize()?;
+    let (url, pending) =
+      authorize().inspect_err(|failure| publish(&path, SignIn::Failed(failure.to_string())))?;
     (SignIn::Waiting { url }, Some(pending))
   };
-  flows().insert(path.clone(), Flow { status: status.clone(), canceled: stop });
+  {
+    let mut all = flows();
+    let flow = all.entry(path.clone()).or_insert_with(|| fresh(status.clone()));
+    flow.canceled = stop;
+    flow.state.send_replace(status.clone());
+  }
   runtime().spawn(finish(path, pending, canceled));
   Ok(status)
 }
