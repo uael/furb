@@ -130,17 +130,17 @@ async def test_a_cycle_of_the_aggregator_starts_on_a_new_print_and_sends_each_fa
   assert len(conductor.asked("tuple[dict[str, str], str]")) == 2
 
 
-async def test_qa_runs_again_only_on_a_new_print_after_qa_every(conductor: Round) -> None:
-  await conductor.word('state.update(print="p1", qa_at=-1e9)')
+async def test_qa_runs_again_only_on_a_new_head_after_qa_every(conductor: Round) -> None:
+  await conductor.word('state.update(head="p1", qa_at=-1e9, last=1e12)')
   await conductor.beat()
   qa = [x for x in conductor.asked() if x[1] == "qa"]
   assert [x[3].split(".")[0] for x in qa] == ["Item qa-run-1 of the topic qa"]
   await conductor.end(qa[0][0], "clean")
   conductor.sand.now += 900
-  await conductor.word('state.update(print="p1", last=1e12)')
+  await conductor.word('state.update(head="p1")')
   await conductor.beat()
   assert len([x for x in conductor.asked() if x[1] == "qa"]) == 1
-  await conductor.word('state.update(print="p2")')
+  await conductor.word('state.update(head="p2")')
   await conductor.beat()
   assert len([x for x in conductor.asked() if x[1] == "qa"]) == 2
 
@@ -243,3 +243,23 @@ async def test_a_failure_of_a_topic_whose_fix_runs_waits_for_the_next_fix_of_tha
   await conductor.beat()
   assert conductor.asked()[-1][3].endswith("The brief of the aggregator:\n\ntest y fails at h2")
   assert conductor.ns["fixwait"] == {}
+
+
+async def test_qa_tests_the_head_that_a_cycle_published_and_no_cycle_starts_while_it_runs(conductor: Round) -> None:
+  conductor.say(r"pr list --head w/converge", [{"number": 7}])
+  conductor.say(r"pr checks 7", [{"bucket": "pending"}])
+  conductor.say(r"pr view 7", {"headRefOid": "h2"})
+  await conductor.word('state.update(head="h1", qa_at=-1e9, cycle_at=1e12, last=-1e9)')
+  await conductor.word('state["cycle"] = str(prompt(tuple[dict[str, str], str], "c", to="claude-cli:opus/medium", on=chain_of("converge")))')
+  await conductor.beat()
+  assert [x for x in conductor.asked() if x[1] == "qa"] == []
+  await conductor.end(conductor.ns["state"]["cycle"], ({}, "pushed h2"))
+  await conductor.beat()
+  assert conductor.ns["state"]["head"] == "h2"
+  await conductor.beat()
+  (qa,) = [x for x in conductor.asked() if x[1] == "qa"]
+  assert qa[3].endswith("The head to test: h2.")
+  conductor.say(r"pr checks 7", [{"bucket": "fail"}])
+  conductor.sand.now += 1000
+  await conductor.beat()
+  assert len(conductor.asked("tuple[dict[str, str], str]")) == 1

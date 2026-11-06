@@ -58,7 +58,7 @@ ground: dict[str, str] = globals().setdefault("ground", {})
 stuck: dict[str, str] = globals().setdefault("stuck", {})
 notes: list[str] = globals().setdefault("notes", [])
 state: dict[str, Any] = globals().setdefault(
-  "state", {"id": "", "cycle": "", "due": "", "print": "", "qa_print": "", "last": 0.0, "cycle_at": 0.0, "qa_at": 0.0, "review_at": 0.0, "qa": 0, "reviews": 0}
+  "state", {"id": "", "cycle": "", "due": "", "print": "", "head": "", "qa_head": "", "last": 0.0, "cycle_at": 0.0, "qa_at": 0.0, "review_at": 0.0, "qa": 0, "reviews": 0}
 )
 
 
@@ -104,9 +104,10 @@ def item_text(t: str, item: dict) -> str:
 
 
 def next_item(t: str, now: float) -> dict | None:
-  if t == QA and not queue(QA) and not live.get(QA) and state["print"] != state["qa_print"] and now - state["qa_at"] >= QA_EVERY:
-    state.update(qa=state["qa"] + 1, qa_print=state["print"], qa_at=now)
-    queue(QA).append({"key": f"qa-run-{state['qa']}", "model": QA_MODEL, "brief": QA_BRIEF})
+  head = state.get("head", "")
+  if t == QA and not queue(QA) and not live.get(QA) and not state["cycle"] and head and head != state.get("qa_head") and now - state["qa_at"] >= QA_EVERY:
+    state.update(qa=state["qa"] + 1, qa_head=head, qa_at=now)
+    queue(QA).append({"key": f"qa-run-{state['qa']}", "model": QA_MODEL, "brief": f"{QA_BRIEF} The head to test: {head}."})
   done, used = {k for _, k, _ in ended}, seats()
   held = ({kind(FIX_MODEL)} if fixwait else set()) | ({kind(AGG_MODEL)} if state["due"] else set())
   for n, item in enumerate(queue(t)):
@@ -176,7 +177,8 @@ def ground_step(t: str) -> str:
 def finger() -> str:
   heads = "\n".join(f'echo "c/{t} $(git -C {REPO} rev-parse --short c/{t} 2>/dev/null)"' for t in width)
   checks = "gh pr checks \"$n\" --json bucket --jq '[.[] | .bucket] | group_by(.) | map(\"\\(.[0]) \\(length)\") | join(\", \")'"
-  return f"{heads}\nn=$(gh pr list --head w/{AGG} --state open --json number --jq '.[0].number // empty')\necho \"pr ${{n:-none}}\"\n[ -n \"$n\" ] && {checks}\ntrue\n"
+  head = 'echo "head $(gh pr view "$n" --json headRefOid --jq .headRefOid)"'
+  return f"{heads}\nn=$(gh pr list --head w/{AGG} --state open --json number --jq '.[0].number // empty')\necho \"pr ${{n:-none}}\"\n[ -n \"$n\" ] && {checks}\n[ -n \"$n\" ] && {head}\ntrue\n"
 
 
 def beat() -> Generator[set[str], object, None]:
@@ -220,7 +222,9 @@ def beat() -> Generator[set[str], object, None]:
     out = peek(ran)
     seen = out.stdout.content if isinstance(out, Exit) else ""
     state["last"] = now
-    if seen != state["print"] and not ("pending" in seen and now - state["cycle_at"] < FLOOR):
+    state["head"] = next((x[5:] for x in seen.splitlines() if x.startswith("head ")), state.get("head", ""))
+    testing = any(not over(p) for p in live.get(QA, {}))
+    if seen != state["print"] and not testing and not ("pending" in seen and now - state["cycle_at"] < FLOOR):
       if seat(AGG_MODEL):
         state.update(print=seen, due="", cycle_at=now)
         state["cycle"] = str(prompt(tuple[dict[str, str], str], CYCLE, to=AGG_MODEL, on=chain_of(AGG)))
