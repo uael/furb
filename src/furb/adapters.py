@@ -3,7 +3,7 @@
 A record replays on the engine that made it, and an engine of the major may hold a defect of replay that a later
 build fixed at its root. Each entry holds the changes that fix such a defect in that engine, each a text of the engine
 and the text in its place, which the store makes in the engine of a record that names the digest, before the life
-replays it. An engine that no key names opens as it is.
+replays it. An engine that no key names opens as it is. The Kernel of a record takes what kernel gives.
 """
 
 ADAPTERS = {
@@ -24,3 +24,13 @@ ADAPTERS = {
     ),
   ]
 }
+
+
+def kernel(held: str, ours: str) -> str:
+  """The Kernel of a record, as it runs in this build: since 9146a67b8 a Kernel ends at its birth each run that an
+  earlier Kernel took and lost, and the opening of the sandbox does not, so a Kernel of the major that has no lost
+  takes the lost of the Kernel of this build, which its birth runs first."""
+  head = "def kernel(names: Names) -> Ear:\n"
+  if "def lost(" in held or head not in held:
+    return held
+  return held.replace(head, ours[ours.index("def lost(") : ours.index(head)] + head + "  yield from lost(names)\n", 1)
