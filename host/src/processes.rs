@@ -33,10 +33,9 @@ use furb::{
     skills::{process, program as program_of},
   },
   life::{Log, Opening},
+  world::{Group, Unborn, spawn},
 };
 use futures::{StreamExt, future};
-#[cfg(unix)]
-use rustix::process::{Pid, Signal, kill_process_group};
 use serde_json::Value;
 use tokio::{
   io::{AsyncBufReadExt, BufReader},
@@ -147,8 +146,8 @@ impl Played {
     };
     let Some(program) = program else { return };
     match self.spawned(name, &program) {
-      Ok(child) => {
-        running.insert(name.to_owned(), self.watch(name, &program, child));
+      Ok((child, group)) => {
+        running.insert(name.to_owned(), self.watch(name, &program, child, group));
       }
       Err(no) => said(
         self.log.as_ref(),
@@ -158,7 +157,7 @@ impl Played {
   }
 
   /// The watch of a process of a skill that started, on a task of its own.
-  fn watch(&self, name: &str, program: &Path, child: Child) -> Running {
+  fn watch(&self, name: &str, program: &Path, child: Child, group: Group) -> Running {
     let (end, ends) = oneshot::channel();
     let teller = Teller {
       handle: self.handle.clone(),
@@ -166,13 +165,13 @@ impl Played {
       program: program.display().to_string(),
       log: self.log.clone(),
     };
-    let watch = tokio::spawn(watched(Process::of(child), ends, teller));
+    let watch = tokio::spawn(watched(Process::of(child, group), ends, teller));
     Running { end, watch }
   }
 
   /// The process of a skill, in the folder of its program, with the variables that say where it
   /// dials and what it serves.
-  fn spawned(&self, name: &str, program: &Path) -> io::Result<Child> {
+  fn spawned(&self, name: &str, program: &Path) -> Result<(Child, Group), Unborn> {
     let script =
       program.extension().and_then(OsStr::to_str).is_some_and(|one| SCRIPTS.contains(&one));
     let mut command = if script {
@@ -191,9 +190,7 @@ impl Played {
       .stdout(Stdio::null())
       .stderr(Stdio::piped())
       .kill_on_drop(true);
-    #[cfg(unix)]
-    command.process_group(0);
-    command.spawn()
+    spawn(&mut command)
   }
 }
 
@@ -230,35 +227,9 @@ struct Process {
 }
 
 impl Process {
-  fn of(mut child: Child) -> Self {
-    let group = Group(child.id());
+  fn of(mut child: Child, group: Group) -> Self {
     let stderr = tokio::spawn(tail(child.stderr.take()));
     Process { child, group, stderr }
-  }
-}
-
-/// The group of a process, which holds each process that it started unless one left it. A kill
-/// ends them all, once, and so does a drop, so that no process of a skill outlives the daemon even
-/// when its runtime ends with no word. On a system other than Unix, the group is the process alone,
-/// which `kill_on_drop` ends.
-struct Group(Option<u32>);
-
-impl Group {
-  fn kill(&mut self) {
-    let pid = self.0.take();
-    #[cfg(unix)]
-    if let Some(pid) = pid.and_then(|one| i32::try_from(one).ok()).and_then(Pid::from_raw) {
-      // A group that is gone gives ESRCH, and nothing stays to end.
-      kill_process_group(pid, Signal::KILL).unwrap_or_default();
-    }
-    #[cfg(not(unix))]
-    let _: Option<u32> = pid;
-  }
-}
-
-impl Drop for Group {
-  fn drop(&mut self) {
-    self.kill();
   }
 }
 
@@ -294,7 +265,9 @@ async fn watched(mut process: Process, ends: oneshot::Receiver<()>, teller: Tell
   let status = tokio::select! {
     biased;
     _ = ends => {
-      process.group.kill();
+      if let Err(no) = process.group.slay() {
+        said(teller.log.as_ref(), &format!("the group of {} stays: {no}", teller.program));
+      }
       if let Err(no) = process.child.kill().await {
         said(teller.log.as_ref(), &format!("the process {} stays: {no}", teller.program));
       }
@@ -303,7 +276,9 @@ async fn watched(mut process: Process, ends: oneshot::Receiver<()>, teller: Tell
     }
     status = process.child.wait() => status,
   };
-  process.group.kill();
+  if let Err(no) = process.group.slay() {
+    said(teller.log.as_ref(), &format!("the group of {} stays: {no}", teller.program));
+  }
   let reader = process.stderr.abort_handle();
   let lines = timeout(DRAIN, process.stderr).await;
   reader.abort();
