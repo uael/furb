@@ -22,6 +22,12 @@ export async function ownDaemon(
     stdout: "ignore",
     stderr: "pipe",
   });
+  // A run that a signal ends ends its daemon first, which would else outlive it with no parent.
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const)
+    process.once(signal, () => {
+      served.kill();
+      process.exit(128 + (signal === "SIGHUP" ? 1 : signal === "SIGINT" ? 2 : 15));
+    });
   for (const until = Date.now() + PATIENCE; ; ) {
     const socket = await dialed(place);
     if (socket) {
