@@ -836,7 +836,7 @@ mod console {
             Ending::Callback(one) => callback = Some(one),
             Ending::Event(name, answer) => {
               // A handler that stopped waiting has returned already, so its answer is lost.
-              drop(answer.send(callback.as_ref().is_some_and(|one| (one.0)(name))));
+              answer.send(callback.as_ref().is_some_and(|one| (one.0)(name))).unwrap_or_default();
             }
           }
         }
