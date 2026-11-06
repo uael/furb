@@ -51,11 +51,13 @@ Eight extensions come with furb, and each life runs them unless a config turns t
   commands, `recent(n)`, the acts of the last `n` replies, and `await chosen()`, which asks a model.
   `together(*filters)` joins them, and `supersede(keep)` applies one. `await condense()` asks a model what to keep and
   compacts at once. `compacted()` does the same for one chain each time an answer fills more than `SHARE`, 0.6, of the
-  window, and moves, stops and pauses nothing. The extension has no life word.
+  window, and moves, stops and pauses nothing. Its life word, `fitted()`, watches each chain: when the model refuses
+  a reply because its prompt passes the window, it cuts the chain at once to its open prompts, with a summary that
+  says why, so the next reply reads less and the chain goes on with no pause.
   A project changes `SHARE`, `FILTERS`, `CHOOSER`, `LISTED` or `BRIEF` in an extension of its own. In the TUI, a rule
   with the summary marks each compaction in the feed, and `/compact` runs `await condense()` on the chain on screen.
 - **`naming`** gives the session a name from the first message of the operator. Its life word, `name_session()`, plays
-  on the root alone. At the first prompt that the operator makes in the life, it asks the actor that `automatic()` of the
+  on the root alone. At the first prompt that the operator makes in the life, even one made before the word plays, it asks the actor that `automatic()` of the
   engine gives for a name of a few words, on a chain of its own labelled `naming`. With no such actor, or with no
   name from it, the name is the first line of the message. The act is done with the name, and the record keeps the
   prompt and its answer, so a later life gives the same name and asks no model. `rename_session(name)` says the
