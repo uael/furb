@@ -27,12 +27,14 @@ use std::{
 };
 
 use furb::{
+  Fact,
   engine::OPERATOR,
   extension::{
-    ENABLE, Places,
+    ENABLE, Enabled, Places, enabled_by,
     skills::{process, program as program_of},
   },
   life::{Log, Opening},
+  wire::parsed,
   world::{Group, Unborn, spawn},
 };
 use futures::{StreamExt, future};
@@ -135,19 +137,20 @@ impl Played {
   /// The process of a skill started, once its earlier process ended, when its fact enable names
   /// one: the program of the folder that the life played the skill from, or, for a fact of a build
   /// before the program, the program that the folder of the life and its config find by name.
-  async fn start(&self, one: Enabled<'_>, running: &mut HashMap<String, Running>) {
+  async fn start(&self, one: Enabled, running: &mut HashMap<String, Running>) {
     let Enabled { name, program } = one;
-    if let Some(old) = running.remove(name) {
+    if let Some(old) = running.remove(&name) {
       old.ended().await;
     }
     let program = match program {
-      Some(named) => program_of(named),
-      None => process(name, &self.cwd, &self.places),
+      Some(named) => program_of(&named),
+      None => process(&name, &self.cwd, &self.places),
     };
     let Some(program) = program else { return };
-    match self.spawned(name, &program) {
+    match self.spawned(&name, &program) {
       Ok((child, group)) => {
-        running.insert(name.to_owned(), self.watch(name, &program, child, group));
+        let watch = self.watch(&name, &program, child, group);
+        running.insert(name, watch);
       }
       Err(no) => said(
         self.log.as_ref(),
@@ -314,20 +317,8 @@ impl Teller {
   }
 }
 
-/// What a fact enable says of the process of its skill: the name of the skill, and the program
-/// that the fact names, empty when the folder of the skill names none, and none for a fact of a
-/// build before the program.
-struct Enabled<'a> {
-  name: &'a str,
-  program: Option<&'a str>,
-}
-
-/// What a fact enable carries of the process of its skill, as JSON reads the fact: its kind, its
-/// about and its speaker, then the name, the word, the life word, the root, the file, the digest
-/// and the program.
-fn enabled(fact: &Value) -> Option<Enabled<'_>> {
-  let words = fact.as_array()?;
-  (words.first()?.as_str()? == ENABLE).then_some(())?;
-  let name = words.get(3)?.as_str()?;
-  Some(Enabled { name, program: words.get(9).and_then(Value::as_str) })
+/// What the crate reads of a fact enable, as JSON gives the fact.
+fn enabled(fact: &Value) -> Option<Enabled> {
+  let made = parsed(&fact.to_string()).ok()?;
+  enabled_by(&Fact::of(made.as_ref())?)
 }
