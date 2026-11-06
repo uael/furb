@@ -39,7 +39,8 @@ async def chosen(to: str = "", on: str = "") -> Filter:
   """chosen() asks choice() and gives a take of the ids that it comes to."""
 
 def reground(on: str = "") -> None:
-  """reground() reads again each file of each read or write whose tell the chain holds, once each, in the order of the first read or write, shows only the lines that changed since the last text that the chain holds of it, and skips a file that it cannot read, so the chain sees each file that it kept as it is now."""
+  """reground() reads again each file of each read or write whose tell the chain holds, once each, in the order of the first read or write, shows only the lines that changed since the last text that the chain holds of it, and skips a file that it cannot read, so the chain sees each file that it kept as it is now.
+  reground() shows a file whole again when the read that the chain holds of it is one that a reground made, which showed only what changed, so a chain cut twice in a row still sees the text of each file that it kept."""
 
 def supersede(keep: Filter | None = None, on: str = "") -> str:
   """supersede(keep) says on the chain of the caller a prefix of what the filter keep kept of its acts, everything that made what it kept, and every act of the chain, and gives the chain.
