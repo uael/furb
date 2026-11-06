@@ -130,19 +130,20 @@ async def test_a_cycle_of_the_aggregator_starts_on_a_new_print_and_sends_each_fa
   assert len(conductor.asked("tuple[dict[str, str], str]")) == 2
 
 
-async def test_qa_runs_again_only_on_a_new_head_after_qa_every(conductor: Round) -> None:
-  await conductor.word('state.update(head="p1", qa_at=-1e9, last=1e12)')
+async def test_each_cycle_that_ends_starts_one_qa_run_on_the_build_of_the_aggregator(conductor: Round) -> None:
+  await conductor.word('state.update(last=1e12)')
+  await conductor.word('state["cycle"] = str(prompt(tuple[dict[str, str], str], "c", to="claude-cli:opus/medium", on=chain_of("converge")))')
   await conductor.beat()
-  qa = [x for x in conductor.asked() if x[1] == "qa"]
-  assert [x[3].split(".")[0] for x in qa] == ["Item qa-run-1 of the topic qa"]
-  await conductor.end(qa[0][0], "clean")
-  conductor.sand.now += 900
-  await conductor.word('state.update(head="p1")')
+  assert [x for x in conductor.asked() if x[1] == "qa"] == []
+  await conductor.end(conductor.ns["state"]["cycle"], ({}, "pushed h2"))
+  await conductor.beat()
+  await conductor.beat()
+  (qa,) = [x for x in conductor.asked() if x[1] == "qa"]
+  assert qa[3].startswith("Item qa-run-1 of the topic qa") and "worktree.sh" not in qa[3]
+  await conductor.end(qa[0], "clean")
+  conductor.sand.now += 2000
   await conductor.beat()
   assert len([x for x in conductor.asked() if x[1] == "qa"]) == 1
-  await conductor.word('state.update(head="p2")')
-  await conductor.beat()
-  assert len([x for x in conductor.asked() if x[1] == "qa"]) == 2
 
 
 async def test_reviews_and_audits_on_astra_come_each_hour_and_once_for_each_kind(conductor: Round) -> None:
@@ -241,42 +242,35 @@ async def test_a_failure_of_a_topic_whose_fix_runs_waits_for_the_next_fix_of_tha
   assert conductor.notices()[-1].endswith("merged b Kept for the next fix of a.")
   await conductor.end(conductor.ns["first"], "fixed x")
   await conductor.beat()
-  assert conductor.asked()[-1][3].endswith("The brief of the aggregator:\n\ntest y fails at h2")
+  assert [x for x in conductor.asked() if x[1] != "qa"][-1][3].endswith("The brief of the aggregator:\n\ntest y fails at h2")
   assert conductor.ns["fixwait"] == {}
 
 
-async def test_qa_runs_in_its_own_tree_at_the_published_head_and_a_cycle_merges_beside_it(conductor: Round) -> None:
+async def test_a_cycle_starts_a_floor_after_the_last_ended_and_tells_a_live_qa_run_to_wrap_up(conductor: Round) -> None:
   conductor.say(r"pr list --head w/converge", [{"number": 7}])
-  conductor.say(r"pr checks 7", [{"bucket": "pending"}])
+  conductor.say(r"pr checks 7", [{"bucket": "pass"}])
   conductor.say(r"pr view 7", {"headRefOid": "h2"})
-  await conductor.word('state.update(head="h1", qa_at=-1e9, cycle_at=1e12, last=-1e9)')
+  await conductor.word('state.update(last=-1e9, cycle_at=-1e9)')
   await conductor.word('state["cycle"] = str(prompt(tuple[dict[str, str], str], "c", to="claude-cli:opus/medium", on=chain_of("converge")))')
-  await conductor.beat()
-  assert [x for x in conductor.asked() if x[1] == "qa"] == []
   await conductor.end(conductor.ns["state"]["cycle"], ({}, "pushed h2"))
   await conductor.beat()
-  assert conductor.ns["state"]["head"] == "h2"
   await conductor.beat()
   (qa,) = [x for x in conductor.asked() if x[1] == "qa"]
-  assert "The head to test: h2." in qa[3]
-  assert "script/worktree.sh ~/src/github.com/uael/furb-qa q/converge h2" in qa[3]
   conductor.say(r"pr checks 7", [{"bucket": "fail"}])
-  conductor.sand.now += 1000
+  conductor.sand.now += 400
   await conductor.beat()
-  cycles = conductor.asked("tuple[dict[str, str], str]")
-  assert len(cycles) == 2
-  conductor.say(r"pr view 7", {"headRefOid": "h3"})
-  await conductor.end(cycles[-1][0], ({}, "pushed h3"))
-  conductor.sand.now += 1000
+  assert len(conductor.asked("tuple[dict[str, str], str]")) == 1
+  conductor.sand.now += 600
   await conductor.beat()
-  assert conductor.ns["state"]["head"] == "h3"
-  await conductor.end(qa[0], "clean h2")
-  if conductor.ns["state"]["cycle"]:
-    await conductor.end(conductor.ns["state"]["cycle"], ({}, "pushed h3"))
-  conductor.sand.now += 1000
+  assert len(conductor.asked("tuple[dict[str, str], str]")) == 2
+  wraps = [x for x in said(conductor.log, "prompt") if x[3] == qa[0] and x[4] == "None"]
+  assert [str(x[5]) for x in wraps] == [conductor.ns["QA_WRAP"]]
+  await conductor.end(qa[0], "rows")
+  conductor.sand.now += 400
+  await conductor.beat()
+  assert len([x for x in conductor.asked() if x[1] == "qa"]) == 1
+  await conductor.end(conductor.ns["state"]["cycle"], ({}, "pushed h3"))
   await conductor.beat()
   await conductor.beat()
   runs = [x for x in conductor.asked() if x[1] == "qa"]
-  assert len(runs) == 2
-  assert "The head to test: h3." in runs[-1][3]
-  assert "q/converge h3" in runs[-1][3]
+  assert [x[3].split(".")[0] for x in runs] == ["Item qa-run-1 of the topic qa", "Item qa-run-2 of the topic qa"]

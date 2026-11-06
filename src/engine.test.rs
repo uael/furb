@@ -1883,14 +1883,40 @@ fn a_life_whose_words_each_ran_within_the_bound_replays_and_keeps_its_checkpoint
 
 #[test]
 fn a_kernel_that_raises_ends_each_run_whose_word_it_lost_so_a_later_message_gets_its_step() {
-  let words = [
-    "await wait(600, __name__)\nclose(1)",
-    "await wait(0.2, __name__)\nclose(2)",
-    "close(7)",
-    "close(7)",
-    "close(7)",
-  ];
-  let mut lived = Lived::new("lost", &words, true).unwrap();
+  lost_runs_end(Lived::new("lost", &LOST, true).unwrap());
+}
+
+#[test]
+fn a_kernel_of_the_major_from_before_it_ended_its_lost_runs_ends_them_through_its_adapter() {
+  // The root and the fact made of a record of 0.4.2, whose Kernel has no lost, as a record that a
+  // life of that build began.
+  let old = include_str!("../tests/corpus/next/language.jsonl");
+  let head: Vec<&str> = old.lines().take(2).collect();
+  assert!(
+    head[1].contains("\"made\"") && !head[1].contains("def lost("),
+    "the record holds an older Kernel"
+  );
+  let name = format!("furb-engine-lost-old-{}", std::process::id());
+  let yard = Yard::new(&name);
+  fs::create_dir_all(std::env::temp_dir().join(&name)).unwrap();
+  fs::write(std::env::temp_dir().join(&name).join("record.jsonl"), head.join("\n") + "\n").unwrap();
+  let mut lived = Lived::new("lost-old", &LOST, false).unwrap();
+  lived.yard = Some(yard);
+  lost_runs_end(lived);
+}
+
+/// The words of the model in a life whose Kernel raises while two runs await.
+const LOST: [&str; 5] = [
+  "await wait(600, __name__)\nclose(1)",
+  "await wait(0.2, __name__)\nclose(2)",
+  "close(7)",
+  "close(7)",
+  "close(7)",
+];
+
+/// The scenario of the lost runs: the Kernel raises while two runs await, and each prompt is asked
+/// again after the loss, a later one first.
+fn lost_runs_end(mut lived: Lived) {
   let root = lived.root();
   // The Kernel asserts that Exit is a type as it carries a word past an act that it awaited,
   // so with Exit rebound it raises at the end of the short wait, and loses the word that
