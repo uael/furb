@@ -18,7 +18,7 @@ pub use held::{Held, Threads};
 pub use state::{State, chain_state, restate, working};
 pub use threads::{
   Aside, Attention, ChainAside, ChainThread, Concern, NoteRun, Origin, Rows, ThreadNode, attention,
-  chain_asides, chain_notes, chain_threads, concerns, nest_threads, open, order_threads, root_of,
-  thread_of,
+  chain_asides, chain_notes, chain_threads, chain_tree, concerns, nest_threads, open,
+  order_threads, root_of, session_name, thread_of,
 };
 pub use time::{as_of, moments_of};
