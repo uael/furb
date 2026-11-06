@@ -152,10 +152,8 @@ export class Activity {
   private readonly runs = new Map<string, string>();
   private readonly ran = new Map<string, unknown>();
   private readonly refused = new Map<string, string>();
-  /** The acts that stand in each chain but its chains, and the prompts that a rung of each chain made on other
-   * chains, each in the order they began, so that the state of a chain reads its own acts and no others. */
-  private readonly inChain = new Map<string, Map<string, LiveAct>>();
-  private readonly madeFrom = new Map<string, Map<string, LiveAct>>();
+  /** The acts that stand in each chain but its chains, in the order they began. */
+  private readonly inChain = new Map<string, LiveAct[]>();
   /** How many times the spend of a chain or of a rung changed. */
   spendChanges = 0;
 
@@ -177,16 +175,40 @@ export class Activity {
     const out = new Map(acts.map((act) => [act.id, this.shape(act, owed)]));
     const shaped = (act: LiveAct) => out.get(act.id) ?? this.shape(act, owed);
     const unfinished = { has: (id: string) => this.acts.get(id)?.unfinished === true };
+    const open = [...this.open].flatMap((id) => this.acts.get(id) ?? []);
     for (const chain of new Set(acts.map((act) => act.on))) {
       const act = this.acts.get(chain);
       if (act?.kind !== "chain") continue;
       const made = shaped(act);
-      const own = [...(this.inChain.get(chain)?.values() ?? [])].map(shaped);
-      const remote = [...(this.madeFrom.get(chain)?.values() ?? [])].map(shaped);
-      made.state = chainState(own, remote, owed, unfinished);
+      const remote = open.filter(
+        (one) =>
+          one.kind === "prompt" &&
+          one.on !== chain &&
+          this.acts.get(this.acts.get(one.by)?.kind === "rung" ? one.by : "")?.on === chain,
+      );
+      made.state = chainState(
+        this.stating(chain, open, owed).map(shaped),
+        remote.map(shaped),
+        owed,
+        unfinished,
+      );
       out.set(chain, made);
     }
     return [...out.values()];
+  }
+  /** The acts of a chain that its state reads, in the order they began: the acts that the operator owes, the acts that
+   * are not done, its last act of work, and its first prompt. Its other acts decide nothing, so a chain with a long
+   * life reads as few acts as a short one. */
+  private stating(chain: string, open: readonly LiveAct[], owed: ReadonlySet<string>): LiveAct[] {
+    const mine = this.inChain.get(chain) ?? [];
+    const work = (act: LiveAct) => WORK.includes(act.kind) && !act.unfinished;
+    const asked = [...owed].flatMap((id) => this.acts.get(id) ?? []);
+    const read = new Set(
+      [...open, ...asked, mine.findLast(work), mine.find((act) => act.kind === "prompt" && work(act))].filter(
+        (act): act is LiveAct => act !== undefined && act.kind !== "chain" && act.on === chain,
+      ),
+    );
+    return [...read].sort((one, other) => (this.places.get(one.id) ?? 0) - (this.places.get(other.id) ?? 0));
   }
   /** One act as the daemon gives it, in the state that it holds alone. */
   private shape(act: LiveAct, owed: ReadonlySet<string>): Act {
@@ -294,9 +316,7 @@ export class Activity {
         };
       this.places.set(id, this.acts.size);
       this.acts.set(id, act);
-      if (kind !== "chain") this.indexed(this.inChain, act.on, act);
-      const maker = kind === "prompt" ? this.acts.get(by) : undefined;
-      if (maker?.kind === "rung" && maker.on !== act.on) this.indexed(this.madeFrom, maker.on, act);
+      if (kind !== "chain") (this.inChain.get(act.on) ?? this.inChain.set(act.on, []).get(act.on))?.push(act);
       this.open.add(id);
       this.mark(act);
       if (!this.children.has(by)) this.children.set(by, new Set());
@@ -393,11 +413,6 @@ export class Activity {
       stream.content += String(fact[3]);
       this.mark(act);
     }
-  }
-  private indexed(table: Map<string, Map<string, LiveAct>>, chain: string, act: LiveAct): void {
-    const held = table.get(chain) ?? new Map<string, LiveAct>();
-    held.set(act.id, act);
-    table.set(chain, held);
   }
   /** Whether the last control over a new act is a pause. Only a control no older than the oldest pause can make
    * it one. */

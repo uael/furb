@@ -598,3 +598,14 @@ fn a_word_binds_no_builtin_that_a_def_of_the_program_reads() {
   assert_eq!(said(&program, "sum = 'ls'"), vec![], "no def reads sum");
   assert_eq!(said(&[], "list = 'ls'"), vec![], "no def reads list");
 }
+
+#[test]
+fn a_word_of_an_extension_that_binds_a_name_of_the_engine_in_a_block_a_walrus_a_capture_or_a_global_binds_it()
+ {
+  let bound = |word: &str| super::engine_bound(word, ENGINE);
+  assert_eq!(bound("if True:\n  over = 1"), vec!["over"]);
+  assert_eq!(bound("(question := 1)"), vec!["question"]);
+  assert_eq!(bound("match 1:\n  case scope:\n    pass"), vec!["scope"]);
+  assert_eq!(bound("def f():\n  global under\n  under = 1"), vec!["under"]);
+  assert_eq!(bound("accepts = None\nactor = 'x'\nimport re"), Vec::<String>::new());
+}

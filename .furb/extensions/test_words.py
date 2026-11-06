@@ -61,12 +61,13 @@ def reads(text: str) -> set[str]:
 
 
 def test_each_builtin_of_ruff_is_a_name_that_a_word_defines_for_a_word_after_it() -> None:
-  """Ruff reads a name of another word as a builtin, so a name that no word before the reader defines hides a fault."""
+  """Ruff reads a name of another word as a builtin, so a name that no word before the reader defines hides a fault: the official words play first, then the words of the project."""
   builtins = tomllib.loads((PROJECT.parent / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["ruff"]["builtins"]
   assert builtins
+  order = [one["word"] for one in _monty.official()] + [word(one) for one in NAMES]
   for name in builtins:
-    defined = [at for at, one in enumerate(NAMES) if name in defines(word(one))]
-    read = [at for at, one in enumerate(NAMES) if name in reads(word(one))]
+    defined = [at for at, one in enumerate(order) if name in defines(one)]
+    read = [at for at, one in enumerate(order) if name in reads(one)]
     assert defined, name
     assert any(first < later for first in defined for later in read), name
     assert name not in ENGINE, name

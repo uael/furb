@@ -383,9 +383,10 @@ export const input = part({
       }
     }
     if (up && !anywhere && !this.composer.plainText && queued && this.historyIndex < 0) {
-      this.session.removeQueued(queued.id);
-      this.insert(queued.text);
-      this.session.notice = "The queued message is back in the input. ⌥Enter queues it again.";
+      void this.session.removeQueued(queued.entry).then(() => {
+        this.insert(queued.message);
+        this.session.notice = "The queued message is back in the input. ⌥Enter queues it again.";
+      }, this.report);
       return true;
     }
     const cursor = this.composer.visualCursor.visualRow;
@@ -449,7 +450,7 @@ export const input = part({
           this.session.notice = "Only a message can wait in the queue. Enter runs this Python now.";
           return;
         }
-        this.session.enqueue(this.composer.plainText);
+        void this.session.enqueue(this.composer.plainText).catch(this.report);
         this.composer.setText("");
       },
       stash: () => this.stash(),

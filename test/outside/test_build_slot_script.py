@@ -165,34 +165,37 @@ def test_no_build_sticks_when_holders_die_by_kill_9_and_the_system_gives_their_p
     held = {int((s / "pid").read_text(encoding="utf-8")): s for s in slots.glob("slot*")}
     dead = [p for p in holders if p.pid in held]
     assert len(dead) == 4
-    for line in log.read_text(encoding="utf-8").splitlines():
-      os.kill(int(line.split()[1]), signal.SIGKILL)
+    # A script frees its slot as soon as its command ends, so each script dies before its command does.
     for p in dead:
       p.kill()
       p.wait()
+    for line in log.read_text(encoding="utf-8").splitlines():
+      os.kill(int(line.split()[1]), signal.SIGKILL)
     for p, other in zip(dead, others, strict=True):
       (held[p.pid] / "pid").write_text(f"{other.pid}\n", encoding="utf-8")
     guard.rmdir()
     while entered(log) < 8 and time.monotonic() < deadline + 30:
       time.sleep(0.02)
     assert entered(log) == 8
+    release.touch()
+    survivors = [p for p in holders if p not in dead]
+    for p in survivors:
+      p.communicate(timeout=60)
+    assert [p.returncode for p in survivors] == [0] * 8
+    # The four commands of the dead holders ended at the kill, before the log holds any later line.
+    lines = [line.split()[0] for line in log.read_text(encoding="utf-8").splitlines()]
+    assert lines.count("in") == 12 and lines.count("out") == 8
+    live = peak = 0
+    for line in lines[4:]:
+      live += 1 if line == "in" else -1
+      peak = max(peak, live)
+    assert peak == 4
+    assert list(slots.iterdir()) == []
   finally:
+    # A test that fails leaves no process behind, since the pytest that follows would report its unwaited Popen.
     release.touch()
     for f in files:
       f.close()
-  survivors = [p for p in holders if p not in dead]
-  for p in survivors:
-    p.communicate(timeout=60)
-  assert [p.returncode for p in survivors] == [0] * 8
-  # The four commands of the dead holders ended at the kill, before the log holds any later line.
-  lines = [line.split()[0] for line in log.read_text(encoding="utf-8").splitlines()]
-  assert lines.count("in") == 12 and lines.count("out") == 8
-  live = peak = 0
-  for line in lines[4:]:
-    live += 1 if line == "in" else -1
-    peak = max(peak, live)
-  assert peak == 4
-  assert list(slots.iterdir()) == []
-  for p in [*dead, *others]:
-    p.kill()
-    p.communicate()
+    for p in [*holders, *others]:
+      p.kill()
+      p.communicate()

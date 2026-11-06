@@ -37,6 +37,7 @@ pub use check::{checked, checked_on};
 pub use findings::{Finding, Rule};
 use ruff_python_ast::{ExceptHandler, Expr, ModModule, Stmt};
 use ruff_python_parser::parse_module;
+use ruff_text_size::Ranged;
 
 /// The key of a config that turns the gate off when it is false, as `{"gate": false}`.
 pub const KEY: &str = "gate";
@@ -45,16 +46,14 @@ pub const KEY: &str = "gate";
 pub const ON: bool = true;
 
 /// Whether the gate reads each word of a life, as the configs of the user and of the project say
-/// it, in the order of [`crate::extension::configs`], a later one winning: true unless the key
-/// [`KEY`] of one says false. A value that is no bool, and a config that is no json, are as unsaid.
-/// With the gate off, its ear answers each word with no finding, so the word runs one statement at
-/// a time and stops at the first that raises.
+/// it through [`crate::world::config::Layers`], a later layer winning: true unless the key [`KEY`]
+/// says false. Configs that do not read, as with a value of the key that is no bool, leave it on.
+/// With the gate
+/// off, its ear answers each word with no finding, so the word runs one statement at a time and
+/// stops at the first that raises.
 pub fn configured(user: &std::path::Path, project: &std::path::Path) -> bool {
-  let read = |file: std::path::PathBuf| -> Option<bool> {
-    let text = std::fs::read_to_string(file).ok()?;
-    serde_json::from_str::<serde_json::Value>(&text).ok()?.get(KEY)?.as_bool()
-  };
-  crate::extension::configs(user, project).into_iter().rev().find_map(read).unwrap_or(ON)
+  let layers = crate::world::config::Layers::new(project, Some(user.to_path_buf()));
+  layers.values().ok().and_then(|values| values.get(KEY)?.as_bool()).unwrap_or(ON)
 }
 
 /// The name the checker holds the engine under, which is `MODULE` of `furb.sheet`: the sheet alone
@@ -183,43 +182,31 @@ fn named(target: &Expr) -> Vec<&str> {
   }
 }
 
-/// Each name of the engine that a statement at the top of a word binds, once and in its order. A
-/// word may import a name that the engine imports under that name, since it binds the same thing.
+/// Each name of the engine that a statement at the top of a word binds or deletes, once and in its
+/// order, by the rule that [`findings::contracted`] holds for a word: in a block, by a walrus, by a
+/// capture or by a `global` too. A word may import a name that the engine imports under that name,
+/// since it binds the same thing, and it binds the names that a chain binds as its own.
 pub(crate) fn engine_bound(word: &str, engine: &str) -> Vec<String> {
-  let (word, engine) = (Parsed::new(word), Parsed::new(engine));
-  let (Some(body), Some(held)) = (word.body(), engine.body()) else { return vec![] };
-  let names: Vec<&str> = held.iter().flat_map(binds).collect();
-  let imports: Vec<&str> = held.iter().flat_map(unaliased).collect();
+  let (word, held) = (Parsed::new(word), Parsed::new(engine));
+  let (Some(body), Some(held)) = (word.body(), held.body()) else { return vec![] };
+  let names: Vec<&str> =
+    held.iter().flat_map(binds).filter(|name| !findings::OWN.contains(name)).collect();
+  let imports = findings::imported(engine);
   let mut found: Vec<String> = vec![];
-  for stmt in body {
-    let same = unaliased(stmt);
-    for name in binds(stmt) {
-      let rebinds = names.contains(&name) && !(same.contains(&name) && imports.contains(&name));
-      if rebinds && !found.iter().any(|one| one == name) {
-        found.push(name.to_owned());
-      }
+  let mut bound = findings::bound(body);
+  let defined = body.iter().filter(|stmt| matches!(stmt, Stmt::FunctionDef(_) | Stmt::ClassDef(_)));
+  bound.extend(
+    defined
+      .flat_map(|stmt| binds(stmt).into_iter().map(|name| (stmt.start().to_usize(), name, false))),
+  );
+  bound.sort_by_key(|(at, ..)| *at);
+  for (_, name, import) in bound {
+    let rebinds = names.contains(&name) && !(import && imports.iter().any(|one| one == name));
+    if rebinds && !found.iter().any(|one| one == name) {
+      found.push(name.to_owned());
     }
   }
   found
-}
-
-/// The names that an import binds under the name that it imports, with no `as`.
-fn unaliased(stmt: &Stmt) -> Vec<&str> {
-  match stmt {
-    Stmt::Import(one) => one
-      .names
-      .iter()
-      .filter(|alias| alias.asname.is_none())
-      .map(|alias| alias.name.as_str().split('.').next().unwrap_or_default())
-      .collect(),
-    Stmt::ImportFrom(one) => one
-      .names
-      .iter()
-      .filter(|alias| alias.asname.is_none())
-      .map(|alias| alias.name.as_str())
-      .collect(),
-    _ => vec![],
-  }
 }
 
 /// The names that the statements at the top of a body leave deleted: each name that a `del` deletes

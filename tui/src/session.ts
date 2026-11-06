@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -45,6 +44,7 @@ import {
   type State,
   threadWork,
 } from "furb/life";
+import type { FollowUp } from "furb/protocol";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { clock } from "./clock.ts";
 import { typed } from "./configs.ts";
@@ -307,13 +307,6 @@ export interface Cancel {
   back: boolean;
 }
 
-export interface FollowUp {
-  id: string;
-  chain: string;
-  text: string;
-  shape: string;
-}
-
 /** Where a view stands: the end of a view that follows its end while it stands there, and an offset otherwise. */
 export type Scroll = number | "end";
 
@@ -332,8 +325,6 @@ const kept = [
   "started",
   "changedAt",
   "took",
-  "queued",
-  "queueError",
   "images",
   "redo",
   "drafts",
@@ -345,6 +336,7 @@ const kept = [
 export type SavedView = Partial<Pick<Session, (typeof kept)[number]>> & {
   cost?: number;
   sessionName?: string;
+  queued?: Kept[];
 };
 
 /** The form of each field that `<record>.ui.json` keeps, which a field must have to be read: a text, a flag, a
@@ -363,8 +355,6 @@ const forms: Record<(typeof kept)[number] | "cost", "text" | "flag" | "number" |
   started: "map",
   changedAt: "map",
   took: "map",
-  queued: "maps",
-  queueError: "text",
   images: "map",
   redo: "maps",
   drafts: "map",
@@ -393,9 +383,22 @@ function formed(value: unknown, form: (typeof forms)[keyof typeof forms]): boole
   }
 }
 
+/** A follow-up that an older release kept in `<record>.ui.json`. */
+interface Kept {
+  id: string;
+  chain: string;
+  text: string;
+  shape: string;
+}
+
 /** The saved view of a record: nothing when it has none, the defaults with the reason when its file holds no view
  * that can be read, and the view less each field of another form, with the names of those fields. */
-export function savedView(record: string): { view: SavedView; name?: string; damage?: string } {
+export function savedView(record: string): {
+  view: SavedView;
+  name?: string;
+  queued?: Kept[];
+  damage?: string;
+} {
   const path = `${record}.ui.json`;
   try {
     const view: unknown = JSON.parse(readFileSync(path, "utf8"));
@@ -408,11 +411,19 @@ export function savedView(record: string): { view: SavedView; name?: string; dam
     // The name of the session that an older release kept here: the record holds it now, and this one is read once.
     const name =
       typeof held.sessionName === "string" && held.sessionName.trim() ? held.sessionName.trim() : undefined;
-    if (!wrong.length) return { view: held, name };
+    // The follow-ups that an older release kept here: the life holds the queue now, and this one is carried once.
+    const queued = Array.isArray(held.queued)
+      ? held.queued.filter(
+          (one): one is Kept =>
+            one && ["id", "chain", "text", "shape"].every((key) => typeof one[key] === "string"),
+        )
+      : [];
+    if (!wrong.length) return { view: held, name, queued };
     const fields = wrong.join(", ");
     return {
       view: held,
       name,
+      queued,
       damage: `${path} holds ${fields} in a form this release does not read: each opened empty.`,
     };
   } catch (error) {
@@ -522,13 +533,8 @@ export class Session extends EventEmitter {
   models: string[] = [];
   findings: string[] = [];
   rejectedWord = "";
-  queued: FollowUp[] = [];
-  dispatched: string[] = [];
   images: Record<string, ImageAttachment[]> = {};
-  queueHeld = false;
-  queueError = "";
   redo: { from: string; to: string }[] = [];
-  private draining = false;
   private savedCost = 0;
   /** The folder that owns the history of the workspace of the session: the main checkout, for a worktree. */
   private readonly workspace: string;
@@ -559,6 +565,9 @@ export class Session extends EventEmitter {
   private closed = false;
   /** The name that `<record>.ui.json` held, which moves into the record at the first read of the life. */
   private legacyName?: string;
+  /** The follow-ups that `<record>.ui.json` held from an older release, which move into the queue of the life. */
+  private legacyQueue: Kept[] = [];
+  private carryingQueue = false;
   /** The last name that the operator gave the session in its record, by a plain scan of the record when the life
    * opens, which every build reads, also when the life drifts or another host holds the record. */
   private keptName?: string;
@@ -595,13 +604,12 @@ export class Session extends EventEmitter {
         demo && path && !host.recorded ? join(dirname(path), "ui-preferences.json") : undefined,
       );
     if (path) {
-      const { view, name, damage } = savedView(path);
+      const { view, name, queued, damage } = savedView(path);
       this.legacyName = name;
+      this.legacyQueue = queued ?? [];
       this.scanName(path);
       Object.assign(this, Object.fromEntries(kept.flatMap((key) => (key in view ? [[key, view[key]]] : []))));
       this.savedCost = view.cost ?? 0;
-      // A saved queue waits for the choice of the operator before it sends.
-      this.queueHeld = this.queued.length > 0;
       if (damage) this.notice = damage;
     }
     this.workspace = workspaceRoot(host.directory);
@@ -761,6 +769,7 @@ export class Session extends EventEmitter {
     if (!this.renamed) this.keptName = said;
     this.named();
     this.carryName();
+    this.carryQueue();
     this.emit("change");
   }
   /** A name that an older release kept in `<record>.ui.json` moves into the record once the record is read: when the
@@ -782,6 +791,27 @@ export class Session extends EventEmitter {
       this.legacyName = undefined;
       this.save();
     });
+  }
+  /** The follow-ups that an older release kept in `<record>.ui.json` go to the queue of the life under their own
+   * entries, which the life takes once, and the save that follows writes the view without them. A record that this
+   * life cannot write keeps them in the old home, which the next life carries. */
+  private carryQueue(): void {
+    if (!this.legacyQueue.length || this.carryingQueue || this.closed) return;
+    if (this.host.role === "read" || this.host.recorded || this.host.reading) return;
+    const left = this.legacyQueue;
+    this.carryingQueue = true;
+    void Promise.all(left.map((one) => this.host.queue(one.shape, one.text, one.chain, one.id))).then(
+      () => {
+        this.carryingQueue = false;
+        if (this.closed) return;
+        this.legacyQueue = this.legacyQueue.filter((one) => !left.includes(one));
+        this.save();
+      },
+      (error: unknown) => {
+        this.carryingQueue = false;
+        this.fail(error);
+      },
+    );
   }
   fail = (error: unknown) => {
     this.error = error instanceof Error ? error.message : String(error);
@@ -902,21 +932,12 @@ export class Session extends EventEmitter {
         this.counted = count;
         this.named();
         this.carryName();
+        this.carryQueue();
         // The acts and the actor of one snapshot are of one moment: the choice holds until its rung is done there.
         const choice = this.choices.get(selected);
         if (choice?.rung && this.actOf(choice.rung) !== undefined && isDone(this.actOf(choice.rung)))
           this.choices.delete(selected);
         else if (choice) this.actor = choice.actor;
-        const dispatched = new Set(this.dispatched);
-        const queued = this.queued.filter((entry) => !dispatched.has(entry.id));
-        if (queued.length !== this.queued.length) {
-          this.queued = queued;
-          if (!queued.length) {
-            this.queueHeld = false;
-            this.queueError = "";
-          }
-          this.save();
-        }
         if (this.view === "changes") {
           const writes = this.scope === "branch" ? null : this.writes();
           const read = `${this.scope}:${this.host.changes}:${writes ? `${writes[0]}:${writes.length}:${writes.at(-1)}` : ""}`;
@@ -945,7 +966,6 @@ export class Session extends EventEmitter {
       this.refreshTask = undefined;
       this.loading = false;
       if (!this.closed) this.emit("change");
-      if (!this.closed) void this.drainQueue().catch(this.fail);
     });
     return this.refreshTask;
   }
@@ -1024,7 +1044,7 @@ export class Session extends EventEmitter {
     // A damaged journal of file changes fails the view that shows it, and not the session that the list marks.
     if (chain ? this.error : Object.entries(this.errors).some(([key, error]) => error && !this.damaged[key]))
       return "failed";
-    if (this.queueHeld && this.queued.length) return "asks";
+    if (this.queued.some((follow) => follow.failed)) return "asks";
     if (!chain && this.host.prompts.size) return "asks";
     const state = this.actStatus(chain);
     return this.paused && (state === "idle" || state === "failed") ? "paused" : state;
@@ -1606,77 +1626,36 @@ export class Session extends EventEmitter {
       })
       .catch(this.fail);
   }
-  enqueue(text: string): void {
+  /** The follow-ups that wait on each chain, in order: the life holds them, and sends the first of a chain once the
+   * chain rests. */
+  get queued(): FollowUp[] {
+    return this.host.queued;
+  }
+  /** A message put in the queue of the chain shown. The reads of the files that it names come first on the chain, so
+   * the chain works until they are done, and the life sends the message after them, also on a chain that a pause holds
+   * until its wake. */
+  async enqueue(text: string): Promise<void> {
     if (!text.trim()) return;
-    this.queued.push({
-      id: randomUUID(),
-      chain: this.selected,
-      text: this.withImages(text),
-      shape: this.shape,
-    });
+    await this.attachFiles(text, this.selected, false);
+    await this.host.queue(this.shape, this.withImages(text), this.selected);
     delete this.images[this.selected];
     this.save();
     this.notice = "Follow-up queued.";
-    // The queue sends once the acts of the chain are read as they stand now, which the end of a refresh drains.
-    void this.refresh().catch(this.fail);
   }
-  async drainQueue(): Promise<void> {
-    if (this.closed || this.draining || this.queueHeld || !this.queued.length) return;
-    this.draining = true;
-    // The queue is read again before each send, since the operator may remove or take back a follow-up meanwhile.
-    const queued = (entry: FollowUp) => this.queued.some((item) => item.id === entry.id);
-    const passed = new Set<string>();
-    const next = () =>
-      this.closed || this.queueHeld
-        ? undefined
-        : this.queued.find(
-            (entry) =>
-              !passed.has(entry.id) &&
-              !(this.actOf(entry.chain) !== undefined && isPaused(this.actOf(entry.chain))) &&
-              !(this.liveOn().get(entry.chain) ?? []).some(
-                (act) => !isDone(act) && ["prompt", "rung"].includes(act.kind),
-              ),
-          );
-    try {
-      for (let entry = next(); entry; entry = next()) {
-        passed.add(entry.id);
-        await this.attachFiles(entry.text, entry.chain);
-        // A session that closed while the files attached sends nothing: the queue waits in its view for the next one.
-        if (this.closed) return;
-        if (!queued(entry)) continue;
-        this.track(await this.host.sendQueued(entry));
-        this.queued = this.queued.filter((item) => item.id !== entry.id);
-        this.save();
-        await this.refresh();
-      }
-    } catch (error) {
-      if (!this.closed) {
-        this.queueHeld = true;
-        this.queueError = error instanceof Error ? error.message : String(error);
-        this.notice = `Queue stopped: ${this.queueError}`;
-        this.save();
-      }
-    } finally {
-      this.draining = false;
-      this.emit("change");
-    }
-  }
-  removeQueued(id: string): void {
-    if (!this.queued.some((entry) => entry.id === id))
-      throw new Error("This follow-up has already been sent.");
-    this.queued = this.queued.filter((entry) => entry.id !== id);
-    if (!this.queued.length) {
-      this.queueHeld = false;
-      this.queueError = "";
-    }
-    this.save();
+  /** A follow-up taken out of its queue before the life sent it. */
+  async removeQueued(entry: string): Promise<void> {
+    await this.host.unqueue(entry);
     this.notice = "Follow-up removed.";
   }
-  private async attachFiles(text: string, chain = this.selected): Promise<void> {
+  /** A read of each file that a message names, on its chain, each done before the next unless the reads only start. */
+  private async attachFiles(text: string, chain = this.selected, settle = true): Promise<void> {
     const directory = resolve(this.host.directory, expandHome(await this.engine.cwd({ on: chain })));
-    for (const path of await fileReferences(text, directory))
-      await this.engine.result(await this.engine.rung({ word: `read(${JSON.stringify(path)})`, on: chain }));
+    for (const path of await fileReferences(text, directory)) {
+      const read = await this.engine.rung({ word: `read(${JSON.stringify(path)})`, on: chain });
+      if (settle) await this.engine.result(read);
+    }
   }
+
   /** The name of a new branch of this chain: its name and the first number that no chain takes, as Main 2. */
   private branchLabel(): string {
     const base = this.label.replace(/ \d+$/, "");
@@ -2172,7 +2151,7 @@ export class Session extends EventEmitter {
       }
       case "queue":
         if (!argument) throw new Error("Use /queue followed by a message.");
-        this.enqueue(argument);
+        await this.enqueue(argument);
         break;
       case "autocollapse":
         this.preferences.foldThreads = !this.preferences.foldThreads;
@@ -2383,6 +2362,8 @@ export class Session extends EventEmitter {
       cost: this.savedCost,
       // A name of an older release stays in its home until the record holds it, so no save loses it.
       ...(this.legacyName === undefined ? {} : { sessionName: this.legacyName }),
+      // The follow-ups of an older release stay in their home until the life holds them.
+      ...(this.legacyQueue.length ? { queued: this.legacyQueue } : {}),
     };
     saveFile(path, JSON.stringify(view));
   }

@@ -1562,7 +1562,10 @@ fn the_gate_is_on_unless_the_last_config_that_names_it_says_false() {
   fs::write(user.join("config.json"), r#"{"gate": false}"#).unwrap();
   assert!(!gated(), "the config of the user turns it off");
   fs::write(furb.join("config.json"), r#"{"gate": "no"}"#).unwrap();
-  assert!(!gated(), "a value that is no bool is as unsaid");
+  assert!(
+    gated(),
+    "configs that do not read, as with a value of the key that is no bool, leave it on"
+  );
   fs::write(furb.join("config.local.json"), r#"{"gate": true}"#).unwrap();
   assert!(gated(), "the local config of the project wins");
 }
