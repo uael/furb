@@ -231,12 +231,13 @@ async def test_the_ear_of_an_act_is_given_the_name_of_the_act_and_hears_every_fa
 
 
 async def test_an_act_carries_the_words_of_its_kind() -> None:
-  """An act carries the words of its kind, which are the plain arguments the verb was given, in the order of the verb, and a show or a filter is none of them."""
+  """An act carries the words of its kind, which are the arguments the verb was given, in the order of the verb, so a show is one of them, and a filter is none, since a chain carries the ids of the acts that its filter kept."""
   sand, _, root = born()
   one = engine.bash("echo hi", "go", 5.0, None, HIDDEN, HIDDEN, on=root)
-  assert engine.get(one) == ("bash", one, OPERATOR, root, "echo hi", "go", 5.0, None)
+  assert engine.get(one) == ("bash", one, OPERATOR, root, "echo hi", "go", 5.0, None, HIDDEN, HIDDEN)
+  under = [x[1] for x in engine.transcript(root) if engine.question(x) and engine.under(x[1], root)]
   two = engine.chain("two", source=root, filter=take(root))
-  assert engine.get(two) == ("chain", two, OPERATOR, "", "two", root)
+  assert engine.get(two) == ("chain", two, OPERATOR, "", "two", root, under)
   sand.files["/w/a.txt"] = "one\n"
   sand.script[root] = ["write(read('a.txt').replace('one', 'uno'))\nclose(1)"]
   assert await engine.prompt(int, "edit", on=root) == 1

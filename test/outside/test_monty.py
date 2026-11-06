@@ -58,7 +58,7 @@ async def test_an_ear_that_says_a_verb_the_world_refuses_is_answered_with_the_re
 
 
 async def test_a_show_the_engine_made_is_called_back_by_an_ear_while_it_hears() -> None:
-  """A show the engine made crosses to an ear as a callable, which the ear calls back while it hears."""
+  """A show that a word wrote crosses to an ear as a callable, which the ear calls back while it hears."""
   sand = Sand(files={"/w/n.txt": "one\ntwo\n"}, stands=STANDS)
   picked: list[list[int]] = []
 
@@ -68,7 +68,7 @@ async def test_a_show_the_engine_made_is_called_back_by_an_ear_while_it_hears() 
         picked.append(a[3](["one", "two"]))
 
   root = engine.boot((), world=sand.hears(), looking=looking())
-  sand.script[root] = ["say('shown', acting(), span(2, 2))\nclose(1)"]
+  sand.script[root] = ["say('shown', acting(), lambda lines: [len(lines)])\nclose(1)"]
   assert await engine.prompt(int, "read it", on=root) == 1
   assert picked == [[2]]
 

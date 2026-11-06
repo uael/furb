@@ -727,7 +727,7 @@ def test_a_life_settles_an_await_of_its_acts_from_outside_a_run_in_the_loop_it_i
 
 
 async def test_an_act_whose_maker_is_neither_an_act_nor_an_ear_boot_was_given_is_said_again_through_its_verb() -> None:
-  """An act whose maker is neither an act nor an ear that boot was given is said again through its verb, with the words the record holds and the chain it names, so its ear is the verb's, a host finds it made when boot returns and makes it not again, and a show or a filter it was given is not said again, since the record holds none."""
+  """An act whose maker is neither an act nor an ear that boot was given is said again through its verb, with the words the record holds and the chain it names, so its ear is the verb's, a host finds it made when boot returns and makes it not again, and each show and the acts that each filter kept come again with its words, since the record holds them."""
   sand, log, root = born()
   one = engine.bash("echo hi", show=HIDDEN, on=root)
   assert (await one).code == 0
@@ -739,10 +739,7 @@ async def test_an_act_whose_maker_is_neither_an_act_nor_an_ear_boot_was_given_is
   assert said(again, "bash") == said(log, "bash") and said(again, "chain") == said(log, "chain")
   assert [name for name, a in acts(log).items() if a[2] == "outside"] == [child]
   assert engine.read(f"{one}/stdout", on=over).content == "ran echo hi\n"
-  assert [head for head in heads(engine.turns(on=over)) if head.startswith(f"#{one}")] == [
-    f"#{one}",
-    f"#{one} exited 0",
-  ]
+  assert [head for head in heads(engine.turns(on=over)) if head.startswith(f"#{one}")] == [f"#{one}"]
   first, _, root = born()
   engine.drive(watching(root), "watcher")
   engine.say("tell", root, [f"#{root} go"])

@@ -62,17 +62,17 @@ The Kernel sets the site to the rung whose word it steps, for as long as it step
 The Kernel holds the run of the word of a turn of a model, once that word is over, while a command that the word started and did not await is open, for 30 seconds at the most, by a wait that the run makes, so the chain tells what the command gave before it asks the next reply.
 """
 
-type Show = Callable[[list[str]], list[int]]
-"""A show is given the lines of a text and gives the numbers of the lines to tell.
-A show is any callable of that shape, so a word adds a show by writing one, and span, grep and differs make the shows of the file.
-A show is no word of a fact: the verb that was given it keeps it for what it tells, and the ear of the act closes over it, so no record holds one.
+type Show = tuple | Callable[[list[str]], list[int]]
+"""A show says which lines of a text to tell, and picked gives their numbers from the lines of the text.
+A show of the file is plain data, which span, grep and differs make, so it is a word of each act that it is given to and a record holds it.
+A show is any callable that is given the lines of a text and gives the numbers of the lines to tell, so a word adds a show by writing one, which the word makes again when it runs again.
 """
 type Filter = Callable[[list[Question]], list[Question]]
 """A filter is given the acts of the transcript up to the source of a chain that has one.
 A filter says which acts the turns of that chain keep, each with its entries.
 A filter is any callable of that shape, so a word adds a filter by writing one, and take makes the filter of the file.
 A later life runs the filter again and keeps the same acts, since the word that opened the chain opens it again with it.
-A filter is no word of a chain: the verb keeps it for what the chain holds, so no record holds one.
+A filter is no word of a chain: the chain keeps as a word the ids of the acts that its filter kept, so a record holds them, and a chain that is given those ids keeps the same acts.
 """
 
 def say(kind: str, about: str, *words: object) -> Fact:
@@ -103,7 +103,7 @@ def act(kind: str, on: str, ear: Callable[[str], Ear] | None, *words: object) ->
   The engine refuses an act said from outside a run that names no chain, a chain apart.
   The chain an act is on is the chain named to the call, or the scope of the one that made it when the call names none.
   The ear of an act is given the name of the act and hears every fact said after its birth that it waits for, and it speaks by yielding a saying.
-  An act carries the words of its kind, which are the plain arguments the verb was given, in the order of the verb, and a show or a filter is none of them.
+  An act carries the words of its kind, which are the arguments the verb was given, in the order of the verb, so a show is one of them, and a filter is none, since a chain carries the ids of the acts that its filter kept.
   """
 
 def drive(g: Ear, name: str) -> None:
@@ -141,6 +141,9 @@ def grep(pattern: str) -> Show:
 
 def differs(old: list[str]) -> Show:
   """differs(lines) is the show of the lines that differ from the lines it holds, which is what a write shows of what came back."""
+
+def picked(show: Show, lines: list[str]) -> list[int]:
+  """picked gives the numbers of the lines that a show tells of a text, from the lines of the text: those that a show of the file names, or what a show that is a callable gives."""
 
 HEAD: Final[Show] = span(1, 2000)
 """HEAD is the span of the first 2000 lines, which a read without a show is told as."""
@@ -527,7 +530,7 @@ def prompt[T](shape: type[T], message: str = "", to: str = "", on: str = "") -> 
 def prompt(shape: str, message: str = "", to: str = "", on: str = "") -> Act: ...
 @overload
 def prompt(shape: object, message: str = "", to: str = "", on: str = "") -> Act: ...
-def chain(label: str = "", source: str = "", filter: Filter | None = None, on: str = "") -> Act[Never]:
+def chain(label: str = "", source: str = "", filter: Filter | list[str] | None = None, on: str = "") -> Act[Never]:
   """chain says what a chain does: how it is opened, what it tells, and what it answers for.
   boot gives the root, and chain gives the chain, which never settles.
   The open of a chain with a source binds its label and its source.
@@ -687,7 +690,7 @@ def bash(
   """A command: its streams as they come, its exit, the door of its streams and of its stdin, and what it came to.
   bash is given one show for each stream that bash tells.
   The commands of the World run at the same time.
-  bash is given a command, its stdin, a timeout, the codes that it accepts, and a show for each stream, the plain words first, so the journal makes it again.
+  bash is given a command, its stdin, a timeout, the codes that it accepts, and a show for each stream, each a word of its act in that order when either is not its default, so the journal makes it again.
   bash gives the command, which is awaited for its exit code and its streams.
   The World runs the command in the working directory of the chain, which it reads.
   The World runs the command in a POSIX sh: /bin/sh, and on Windows the sh of Git for Windows, which it finds on PATH, beside the git on PATH, or in the folder of the programs of the machine.
@@ -723,7 +726,7 @@ def bash(
   The stdout of a command without a show is told as TAIL, which is the span of its last 250 lines.
   The World refuses a write to the door bash1/stdout or bash1/stderr, and a write to bash1/stdin once the command ended or was cancelled, once its stdin is closed, as a stdin of text is from the start, or once a crash cut the command.
   The World asks a command whether its stderr flows into its stdout, and the command answers from what its verb was given.
-  The World hears the bash itself, with the command, the stdin and the timeout, and no working directory and no show.
+  The World hears the bash itself, with the command, the stdin, the timeout, the codes that it accepts and a show for each stream, and no working directory.
   """
 
 @dataclass
@@ -1022,7 +1025,7 @@ type Chain = tuple[Literal["chain"], str, str, str, str, str]
 type Grant = tuple[Literal["grant"], str, str, str, float | None, float | None]
 """A grant carries the ceiling in dollars and the ceiling in share of the window."""
 type Bash = tuple[Literal["bash"], str, str, str, str, str | None, float, tuple[int | None, ...] | bool | None]
-"""A bash carries the command, the stdin and the timeout, and no show and no working directory."""
+"""A bash carries the command, the stdin, the timeout, the codes that it accepts and a show for each stream, and no working directory."""
 
 def literal(v: object, into: set[str] | None = None) -> str | bool:
   """literal gives the python that makes a value again when the value is one that a checkpoint carries: None, a bool, an int, a float, a str, a Text, an Exit or an exception as python shows it, and a list, a tuple, a set or a dict of those as python writes it.
@@ -1199,7 +1202,7 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   A boot is a life; a second boot is a second life, and the first is gone.
   The names operator and journal are the life's own, and boot refuses a generator of the outside under either name.
   A life settles an await of its acts from outside a run in the loop it is opened in, so boot outside a running loop raises before it makes anything.
-  An act whose maker is neither an act nor an ear that boot was given is said again through its verb, with the words the record holds and the chain it names, so its ear is the verb's, a host finds it made when boot returns and makes it not again, and a show or a filter it was given is not said again, since the record holds none.
+  An act whose maker is neither an act nor an ear that boot was given is said again through its verb, with the words the record holds and the chain it names, so its ear is the verb's, a host finds it made when boot returns and makes it not again, and each show and the acts that each filter kept come again with its words, since the record holds them.
   A later life says an act whose maker is neither an act nor an ear that boot was given again only through a verb in the globals of its chain, and an act whose kind no verb binds is a drift.
   The journal says again a done that is the first answer of an act when the act is made again, and every later fact of it at the place where the record holds it, the started of each act that a wake began again among them.
   An act that the life makes under no site, as the chain makes the reply of an advance whose rung ended, is no fact of the World, so a later life makes it again with no drift.
