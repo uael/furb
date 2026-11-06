@@ -335,6 +335,26 @@ fn a_word_that_polls_the_clock_ends_at_the_bound_of_a_turn_and_two_readings_in_a
 }
 
 #[test]
+fn a_life_whose_open_act_a_verb_of_no_words_made_ends_with_a_checkpoint_in_its_record() {
+  let at = place("ends-kept");
+  let mut life =
+    Opening { extensions: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+  // A verb with no words makes an act that makes an open prompt, as name_session makes the
+  // prompt of its chain.
+  let word = "with site.set(act('named', ROOT, None)):\n  named = prompt(str, 'Name?', to=OPERATOR)\nclose(1)";
+  assert_eq!(closed(&mut life, word).as_ref().as_int(), Some(1));
+  drop(life);
+  let mut inspected =
+    Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+  let written =
+    crate::checkpoint::written(&mut inspected).expect("the life gathers its checkpoint");
+  drop(inspected);
+  crate::checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  let kept = world::kept(at.join("record.jsonl")).unwrap();
+  assert!(crate::checkpoint::last(&kept).is_some(), "the record holds a checkpoint entry");
+}
+
+#[test]
 fn a_life_that_a_fault_of_the_sandbox_stopped_opens_again_and_goes_on() {
   crate::sand::BOUND.set(std::time::Duration::from_millis(100));
   let at = place("faulted");
