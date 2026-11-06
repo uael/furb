@@ -959,7 +959,7 @@ export const details = part({
     const parts = quoteParts(safeText(source));
     const only = parts[0];
     if (parts.length === 1 && only && "code" in only) return this.code(only.code);
-    const box = this.box({ flexDirection: "column" });
+    const box = this.box({ flexDirection: "column", flexShrink: 0 });
     for (const part of parts) {
       if ("code" in part) {
         box.add(this.code(part.code));
@@ -967,7 +967,10 @@ export const details = part({
       }
       box.add(this.code(`${part.quote.name} =`));
       const body = part.quote.body.replace(/\n$/, "");
-      if (body) box.add(this.inset(space.between, this.text(body, c.text)));
+      if (!body) continue;
+      const text = this.box({ paddingLeft: space.between, flexShrink: 0 });
+      text.add(this.text(body, c.text, { flexShrink: 0 }));
+      box.add(text);
     }
     return box;
   },

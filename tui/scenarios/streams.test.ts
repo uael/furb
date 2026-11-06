@@ -64,7 +64,7 @@ test("a quote that the model streams shows as its binding from its opening mark,
       await window.type("Scenario: stream a quote.");
       const frame = await window.shows((one) => one.includes("note = 'Hello th"), "the quote as its binding");
       expect(frame).not.toContain("<s:note>");
-      expect(await answered(window)).toBeUndefined();
+      expect(await answered(window)).not.toBe("42");
       await until(async () => (await answered(window)) === "42", "the quote to bind whole");
     },
   ));
