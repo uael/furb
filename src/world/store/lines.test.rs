@@ -4,7 +4,7 @@ use std::{fs, io::Write};
 
 use serde_json::json;
 
-use super::{Lines, backwards, heads, stamped};
+use super::{Head, Lines, backwards, heads, stamped};
 use crate::world::{kept, store::Store};
 use crate::{testing::Yard, value::Object};
 use std::process;
@@ -53,7 +53,7 @@ fn the_heads_of_a_record_are_its_entries_of_some_kinds_in_order_and_no_other_lin
     "[[\"made\",\"chain1\",\"store\",\"abc\",1],1]\n[[\"done\",\"bash1\",\"bash\", not json\n[[\"checkpoint\",\"chain1\",\"store\",{}],2]\n[[\"made\",\"chain1\",\"store\",\"abd\",1]]\n",
   )
   .unwrap();
-  let starts = [r#"[["made","#.to_owned(), r#"[["checkpoint","#.to_owned()];
+  let starts = Head::starts([Head::Kind("made"), Head::Kind("checkpoint")]);
   let read = heads(&at, &starts).unwrap();
   let shown: Vec<String> = read.iter().map(|one| one.as_ref().py_repr()).collect();
   assert_eq!(
@@ -88,7 +88,7 @@ fn crossing(name: &str) -> (Yard, String) {
 #[test]
 fn the_last_entry_taken_from_the_end_is_the_one_taken_from_the_head_at_every_size_of_chunk() {
   let (at, _) = crossing("backwards");
-  let starts = [r#"[["done","stand"#.to_owned()];
+  let starts = Head::starts([Head::Done("stand")]);
   let pick = |entry: Object| {
     let shown = entry.as_ref().py_repr();
     shown.contains("wanted").then_some(shown)
@@ -107,7 +107,7 @@ fn the_last_entry_taken_from_the_end_is_the_one_taken_from_the_head_at_every_siz
 #[test]
 fn a_read_from_the_end_stops_at_the_entry_it_takes_and_a_record_that_stands_not_holds_none() {
   let (at, _) = crossing("stops");
-  let starts = [r#"[["done","stand"#.to_owned()];
+  let starts = Head::starts([Head::Done("stand")]);
   let mut seen = 0;
   let found = backwards(&at, &starts, 8, |entry: Object| {
     seen += 1;
