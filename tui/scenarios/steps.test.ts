@@ -1,13 +1,15 @@
 // The steps of a chain: the order in which the chain asks its rungs, and a fault of the Kernel while a word awaits.
+
 import { expect } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { operated } from "furb/life";
 import { scenario, test, until, type Window } from "./harness.ts";
 
 /** The value of each prompt of the operator on the root, by its message. */
 async function answers(window: Window): Promise<Record<string, unknown>> {
   const facts = await window.engine.transcript({ on: window.root, of: "prompt" });
-  const mine = facts.filter((fact) => fact[2] === "operator");
+  const mine = facts.filter((fact) => operated(String(fact[2])));
   return Object.fromEntries(
     await Promise.all(mine.map(async (fact) => [fact[5] as string, await window.engine.peek(fact[1])])),
   );

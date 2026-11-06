@@ -1,12 +1,14 @@
 // The messages of the operator: each gets the answer of the model, while a word of its thread awaits a command too,
 // and a step that leaves one unanswered is asked again.
+
 import { expect } from "bun:test";
+import { operated } from "furb/life";
 import { scenario, test, until, type Window } from "./harness.ts";
 
 /** The prompts of the operator on the root, in order: each id, shape, message and value. */
 async function asked(window: Window) {
   const facts = await window.engine.transcript({ on: window.root, of: "prompt" });
-  const mine = facts.filter((fact) => fact[2] === "operator");
+  const mine = facts.filter((fact) => operated(String(fact[2])));
   return Promise.all(
     mine.map(async (fact) => ({
       id: fact[1],
