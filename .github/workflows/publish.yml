@@ -209,6 +209,10 @@ jobs:
     name: the engine of npm for ${{ matrix.system }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    # The step clear deletes the cache of rust that this job replaces.
+    permissions:
+      contents: read
+      actions: write
     strategy:
       fail-fast: false
       matrix:
@@ -223,9 +227,13 @@ jobs:
       # Before the setup, so the key of the cache of rust names the target.
       - if: matrix.target
         run: echo "CARGO_BUILD_TARGET=${{ matrix.target }}" >> "$GITHUB_ENV"
+      # A key for each system, since the two engines for macOS share a job and a system, and a release build of a
+      # system is a cache of 600 to 950 MB: with no clear, each change of a manifest stacked a new cache of the five
+      # beside the old ones, and the store past its 10 GB ended the caches that the gates restore.
       - uses: ./.github/actions/setup
         with:
           python: none
+          key: ${{ matrix.system }}
       - if: matrix.target
         run: rustup target add "${{ matrix.target }}"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -240,6 +248,9 @@ jobs:
           path: |
             bind/typescript/furb.${{ matrix.system }}.node
             bind/typescript/index.cjs
+      - uses: ./.github/actions/clear
+        with:
+          key: ${{ matrix.system }}
 
   npm:
     name: npm pack
