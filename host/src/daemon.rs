@@ -32,6 +32,7 @@ use std::{
 };
 
 use furb::{
+  engine::OPERATOR,
   life::{Log, Opening},
   wire::parsed,
   world::config::Change,
@@ -388,6 +389,7 @@ impl Host for Daemon {
       Routed::Life(life, command) => {
         let command = match (peer.kind, &peer.name) {
           (Kind::Skill, Some(name)) => command.by(processes::speaker(name)),
+          (Kind::Window, _) => command.by(format!("{OPERATOR}/{}", peer.login)),
           _ => command,
         };
         let handle = self.asked(|reply| Asked::Life { life, reply }).await??;
@@ -784,7 +786,8 @@ impl Lives {
 
   /// Each record of the workspaces of the list in a config folder, the config folder of the
   /// daemon when none is given, and each life of the daemon, by the path of its record, with
-  /// whether a life holds it, whether that life lives or ends, and the name of its session.
+  /// whether a life holds it, whether that life lives or ends, whether a window holds it, and the
+  /// name of its session.
   fn listed(&self, config: Option<String>) -> Vec<Listed> {
     let config = config.or_else(|| self.settings.opening.config.clone());
     let folder = processes::places(&Opening { config, ..Opening::default() }).config;
@@ -793,20 +796,22 @@ impl Lives {
     for one in &found {
       for life in &one.records {
         let workspace = Some(one.workspace.clone());
-        listed.push(Listed { life: life.clone(), workspace, held: false, open: false, name: None });
+        let (held, open, watched, name) = (false, false, false, None);
+        listed.push(Listed { life: life.clone(), workspace, held, open, watched, name });
       }
     }
     for (life, held) in &self.held {
       let (open, name) = (matches!(held.stage, Stage::Living(_)), held.handle.name());
+      let watched = matches!(&held.stage, Stage::Living(holders) if !holders.presence().is_empty());
       if let Some(one) = listed.iter_mut().find(|one| &one.life == life) {
-        (one.held, one.open, one.name) = (true, open, name);
+        (one.held, one.open, one.watched, one.name) = (true, open, watched, name);
         continue;
       }
       // A record that a life opens stands in the list before the disk holds it.
       let at = Path::new(life).parent();
       let workspace = found.iter().find(|one| Some(one.folder.as_path()) == at);
       let workspace = workspace.map(|one| one.workspace.clone());
-      listed.push(Listed { life: life.clone(), workspace, held: true, open, name });
+      listed.push(Listed { life: life.clone(), workspace, held: true, open, watched, name });
     }
     listed.sort_by(|one, other| one.life.cmp(&other.life));
     listed
