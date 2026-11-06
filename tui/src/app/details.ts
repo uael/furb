@@ -15,15 +15,21 @@ import {
   type CodeRow,
   cancelled,
   type Exit,
+  exitOf,
   FOLD,
   type Fold,
   failed,
+  isDone,
+  isPaused,
   layout,
   literals,
   operated,
+  outcomeOf,
   type ProgramLine,
   quoteParts,
+  reasonOf,
   tailOf,
+  unfinished,
   writing,
 } from "furb/life";
 import { clock } from "../clock.ts";
@@ -129,15 +135,15 @@ export const details = part({
    * for, and a mark and a word only when a cancel or a failure ended it, or a pause holds it. */
   promptState(act: ActRow): Part[] {
     const shape: Part = [String(act.words[0] ?? ""), c.faint];
-    if (act.unfinished && !act.done)
+    if (unfinished(act))
       return [shape, [`   ${markOf("idle")[0]} not finished when the record ends`, c.faint]];
-    const state = act.done
+    const state = isDone(act)
       ? failed(act)
         ? stateOf("failed")
         : cancelled(act)
           ? stateOf("cancelled")
           : undefined
-      : act.paused
+      : isPaused(act)
         ? stateOf("paused")
         : undefined;
     return state ? [shape, [`   ${state.mark} ${state.word}`, state.color]] : [shape];
@@ -202,7 +208,7 @@ export const details = part({
   /** The one line that says what to do after the gate refused the word of a rung, and nothing for any other rung:
    * the operator fixes his own word, and the chain asks a model for its word again with the findings. */
   gateHint(act: ActRow): string | undefined {
-    if (act.kind !== "rung" || !act.done || !act.run?.refused) return undefined;
+    if (act.kind !== "rung" || !isDone(act) || act.run?.run !== "refused") return undefined;
     return operated(act.by)
       ? "Press ↑ in the input to bring the word back, fix the line that the gate names, and send it again."
       : "The chain tells the model these findings and asks it for its word again.";
@@ -213,7 +219,7 @@ export const details = part({
       this.word(
         box,
         String(this.session.program[act.id] || act.words[0] || ""),
-        act.run?.reason,
+        reasonOf(act.run),
         this.gateHint(act),
       );
       return;
@@ -249,9 +255,9 @@ export const details = part({
         ]),
       );
     }
-    if (act.done && act.value !== null)
+    if (isDone(act) && outcomeOf(act) !== null)
       details.add(
-        this.text(display(act.value), failed(act) ? c.danger : c.text, { marginTop: space.section }),
+        this.text(display(outcomeOf(act)), failed(act) ? c.danger : c.text, { marginTop: space.section }),
       );
   },
 
@@ -262,7 +268,7 @@ export const details = part({
     details.add(node);
     details.add(this.reference(act.id, act.id));
     void this.session.host.act(act.id).then((whole) => {
-      const text = (whole?.kind === "write" ? whole.words[0] : whole?.value) as
+      const text = (whole?.kind === "write" ? whole.words[0] : whole ? outcomeOf(whole) : undefined) as
         | { content?: unknown }
         | undefined;
       if (!node.isDestroyed && typeof text?.content === "string")
@@ -274,7 +280,7 @@ export const details = part({
    * in its heading. What it
    * printed to stderr takes the color of a failure, and each stream is named only when the command printed to both. */
   commandDetails(details: BoxRenderable, act: ActRow): void {
-    const exit = (act.value && typeof act.value === "object" ? act.value : {}) as Exit;
+    const exit = exitOf(act) ?? {};
     const both = Boolean(exit.stdout?.content && exit.stderr?.content);
     const shown: TextRenderable[] = [];
     for (const [name, color] of [
@@ -307,7 +313,7 @@ export const details = part({
     // The row holds the tail of what the command printed, and the card reads the whole of it once it opens.
     if (act.output !== undefined)
       void this.session.host.act(act.id).then((whole) => {
-        const streams = whole?.value as Exit | undefined;
+        const streams = (whole ? outcomeOf(whole) : undefined) as Exit | undefined;
         const contents = [streams?.stdout?.content, streams?.stderr?.content].filter(Boolean) as string[];
         for (const [index, node] of shown.entries())
           if (!node.isDestroyed && contents[index] !== undefined)
@@ -753,7 +759,7 @@ export const details = part({
       open = () => this.go("feed", line.step.id);
     } else if (line.kind === "code") {
       if (line.fails) {
-        const refused = Boolean((line.step as ActRow).run?.refused);
+        const refused = Boolean((line.step as ActRow).run?.run === "refused");
         nodes.push(
           this.text(
             `${glyph.failed} ${refused ? "The gate refused" : `${line.step.id} raised at`} line ${line.display}`,
@@ -769,7 +775,7 @@ export const details = part({
       const acts = [...(line.awaits ? [line.awaits.act] : []), ...line.acts.slice(-3)] as ActRow[];
       for (const act of acts) {
         const held = await this.actPreview(act);
-        const state = act.done
+        const state = isDone(act)
           ? stateOf(failed(act) ? "failed" : "done")
           : { word: "runs", mark: markOf("runs")[0], color: markOf("runs")[1] };
         const head: Part[] = [
@@ -793,19 +799,19 @@ export const details = part({
   /** What an act came to, as its card under the pointer shows it: the text of a read or of a write, what a command
    * printed, and the value of any other act, read whole from the host. */
   async actPreview(act: ActRow): Promise<string> {
-    if (!act.done) return act.kind === "bash" ? tailOf(act, 10) || "runs" : "pending";
+    if (!isDone(act)) return act.kind === "bash" ? tailOf(act, 10) || "runs" : "pending";
     const whole = (await this.session.host.act(act.id).catch(() => undefined)) ?? act;
     const text = (value: unknown) => (value as { content?: unknown } | null)?.content;
-    if (act.kind === "read" && typeof text(whole.value) === "string")
-      return String(text(whole.value)).trimEnd();
+    if (act.kind === "read" && typeof text(outcomeOf(whole)) === "string")
+      return String(text(outcomeOf(whole))).trimEnd();
     if (act.kind === "write" && typeof text(whole.words[0]) === "string")
       return String(text(whole.words[0])).trimEnd();
     if (act.kind === "bash") {
-      const exit = (whole.value ?? {}) as Exit;
+      const exit = exitOf(whole) ?? exitOf(act) ?? {};
       const printed = [exit.stdout?.content, exit.stderr?.content].filter(Boolean).join("\n").trimEnd();
       return printed || (exit.code === null || exit.code === undefined ? "timed out" : `exit ${exit.code}`);
     }
-    return display(whole.value);
+    return display(outcomeOf(whole));
   },
 
   /** The strings of a line of a program that the operator opened, which show whole. */
@@ -911,7 +917,7 @@ export const details = part({
     const act = this.session.actOf(value);
     if (value.startsWith("furb-image://")) this.imageActions(value);
     else if (act?.kind === "chain") await this.session.select(act.id);
-    else if (act && act.id === value && act.on === this.session.selected) this.go("feed", act.id);
+    else if (act && act.id === value && act.chain === this.session.selected) this.go("feed", act.id);
     else this.showValue(value, await this.referenced(value));
   },
 
@@ -923,7 +929,8 @@ export const details = part({
     const act = this.session.actOf(value);
     if (!act) return (await this.session.host.look(value, this.session.selected)).content;
     const whole = (await this.session.host.act(act.id)) ?? act;
-    const held = whole.value && typeof whole.value === "object" ? Object.values(whole.value) : [];
+    const outcome = outcomeOf(whole);
+    const held = outcome && typeof outcome === "object" ? Object.values(outcome) : [];
     const door = held.find(
       (one): one is { path: string; content: string } =>
         Boolean(one) && typeof one === "object" && (one as { path?: unknown }).path === value,
@@ -937,7 +944,7 @@ export const details = part({
       const detail = value.startsWith("furb-image://")
         ? "Image attachment. Click to open its actions."
         : act
-          ? `${act.kind}  ${act.done ? display(act.value) : "pending"}`
+          ? `${act.kind}  ${isDone(act) ? display(outcomeOf(act)) : "pending"}`
           : display(await this.referenced(value));
       if (this.closed || this.overlay) return;
       this.hoverCard(

@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
-import { busy, type Exit } from "furb/life";
+import { busy, type Exit, isDone, outcomeOf } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
@@ -83,7 +83,7 @@ async function settle(): Promise<void> {
   await session.refresh();
   for (let attempt = 0, quiet = 0; attempt < 20; attempt++) {
     const pending = session.activity.filter(
-      (act) => !act.done && ["prompt", "rung"].includes(act.kind) && !standing.has(act.id),
+      (act) => !isDone(act) && ["prompt", "rung"].includes(act.kind) && !standing.has(act.id),
     );
     // A message that the queue sent shows its prompt a moment later, so the work settles only when two reads a moment
     // apart find nothing to wait for.
@@ -306,7 +306,7 @@ try {
     on: session.selected,
     to: "operator",
   });
-  await until(session, () => session.acts.some((act) => act.id === notice && act.done));
+  await until(session, () => session.acts.some((act) => act.id === notice && isDone(act)));
   await session.refresh();
   await capture("22-operator-notice");
   app().question();
@@ -347,7 +347,7 @@ try {
     to: "operator",
   });
   // A notice settles as a quiet line, which opens to its whole message.
-  await until(session, () => session.acts.some((act) => act.id === markdown && act.done));
+  await until(session, () => session.acts.some((act) => act.id === markdown && isDone(act)));
   session.folds[markdown] = false;
   await session.refresh();
   await capture("51-markdown");
@@ -445,8 +445,8 @@ try {
       (act) =>
         act.kind === "bash" &&
         act.by === command &&
-        !act.done &&
-        Boolean((act.value as Exit | undefined)?.stdout?.content),
+        !isDone(act) &&
+        Boolean((outcomeOf(act) as Exit | undefined)?.stdout?.content),
     ),
   );
   // After a second, the line says how long its command has run.
@@ -545,7 +545,7 @@ try {
   session.host.snapshot = snapshot;
   await session.select(session.engine.root);
   await session.submit("/read missing-file.txt");
-  await until(session, () => session.acts.some((act) => act.run?.status === "failed"));
+  await until(session, () => session.acts.some((act) => act.state === "failed"));
   await capture("26-error");
   await session.engine.write(
     { path: "preview.txt", content: "A change to inspect.\n" },
@@ -835,7 +835,7 @@ try {
   await until(
     session,
     () =>
-      session.acts.filter((act) => act.kind === "rung" && act.on !== session.engine.root && !act.done)
+      session.acts.filter((act) => act.kind === "rung" && act.chain !== session.engine.root && !isDone(act))
         .length === 2,
   );
   const thread = session.activity.find((act) => session.isUserPrompt(act))?.id ?? "";
@@ -847,7 +847,7 @@ try {
   await until(session, () => {
     const last = session.lastOwn;
     return Boolean(
-      last && last.id !== thread && session.activity.some((act) => act.by === last.id && !act.done),
+      last && last.id !== thread && session.activity.some((act) => act.by === last.id && !isDone(act)),
     );
   });
   await session.refresh();
@@ -868,7 +868,7 @@ try {
   // ⌃C takes back the last message alone, and the workers go on.
   const message = session.lastOwn?.id;
   await session.command("/cancel");
-  await until(session, () => session.acts.some((act) => act.id === message && act.done));
+  await until(session, () => session.acts.some((act) => act.id === message && isDone(act)));
   await rest();
   await capture("59-take-back");
   // The last row of a thread while its model works: a loader left of the number of the line that comes, and
@@ -878,7 +878,7 @@ try {
     on: session.selected,
   });
   await until(session, () =>
-    session.acts.some((act) => act.kind === "rung" && act.by === thinks && !act.done),
+    session.acts.some((act) => act.kind === "rung" && act.by === thinks && !isDone(act)),
   );
   await session.refresh();
   await capture("84-thinking-row");
@@ -1059,7 +1059,7 @@ try {
   await quietSession.command('/run read("a.txt")');
   await until(quietSession, () =>
     quietSession.activity.some(
-      (act) => act.kind === "read" && String(act.words[0]).endsWith("/") && act.done,
+      (act) => act.kind === "read" && String(act.words[0]).endsWith("/") && isDone(act),
     ),
   );
   // The extensions stand on one quiet row: the file of markdown that memory told shows no row for each heading, and
@@ -1075,7 +1075,7 @@ try {
   const playing = tour(watched, 300);
   await until(
     watched,
-    () => watched.acts.filter((act) => act.kind === "prompt" && act.words[2] && !act.done).length === 3,
+    () => watched.acts.filter((act) => act.kind === "prompt" && act.words[2] && !isDone(act)).length === 3,
   );
   await rest();
   await capture("64-watch-a-life");

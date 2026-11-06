@@ -15,12 +15,12 @@ import {
   type TextRenderable,
   treeSitterToTextChunks,
 } from "@opentui/core";
-import { safeText, WORK } from "furb";
-import { type Chip, cancelled, failed } from "furb/life";
+import { safeText } from "furb";
+import { busy, type Chip, failed, isDone, unfinished } from "furb/life";
 import type { Token, Tokens } from "marked";
 import { shortenHomes } from "../files.ts";
 import { clip } from "../format.ts";
-import { type ActRow, working } from "../session.ts";
+import type { ActRow } from "../session.ts";
 import { theme as c, glyph, type MarkState, markOf, spacing as space } from "../theme.ts";
 import { type Part, plain, styled } from "../ui.ts";
 import { Gutter } from "./gutter.ts";
@@ -557,14 +557,15 @@ export const blocks = part({
     return block;
   },
 
-  /** Whether a card is folded: by the operator's click, or else as its kind starts. A rung that runs, or that failed
-   * with no rung that took its place, stands open, and any other rung starts folded when the preference says so. */
+  /** Whether a card is folded: by the operator's click, or else as its kind starts. A rung that runs or waits for its
+   * turn, or that failed with no rung that took its place, stands open, and any other rung starts folded when the preference says so. */
   folded(state: string, rung?: ActRow, compact = false): boolean {
     return (
       this.session.folds[state] ??
       (rung
         ? this.session.preferences.foldThreads &&
-          !working(rung) &&
+          !busy(rung.state) &&
+          rung.state !== "idle" &&
           (!failed(rung) || Boolean(this.retry(rung)))
         : compact)
     );
@@ -629,49 +630,49 @@ export const blocks = part({
     return row;
   },
 
-  /** What an act is doing: the word that says it, the glyph that shows it, and their color. A done act says
-   * nothing, since its glyph says it. */
+  /** What an act is doing, from the state that the life gives it: the word that says it, the glyph that shows it, and
+   * their color. A done act says nothing, since its glyph says it. */
   actState(act: ActRow): State {
     const w = this.session;
-    // At a moment of the past, an act that had not ended yet shows so, with no spinner and no time, since nothing runs
-    // there.
     const as = (word: string, state: MarkState): State => {
       const [mark, color] = markOf(state);
       return { word, mark, color };
     };
-    // A rung whose word has not come yet waits on its model, which thinks while a reply of the rung runs, and else
-    // waits for its turn; other work runs.
-    const thinks = act.kind === "rung" && !w.program[act.id];
-    const running = () =>
-      w.moment !== undefined
-        ? as("not done yet", "idle")
-        : thinks && !act.asking
-          ? as("waits for its turn", "idle")
-          : as(`running ${this.progress(act.id)}`, thinks ? "thinks" : "runs");
-    if (act.kind === "grant" && act.done) return as("ended", "idle");
-    // Only work moves: an act of another kind that lives, as a grant or the watcher of an extension, lives until
-    // something ends it, as a chain does, and work waits on it.
-    if (!act.done && !WORK.includes(act.kind)) return as("", "delegates");
+    // At a moment of the past, an act that had not ended yet shows so, with no spinner and no time, since nothing runs
+    // there.
+    const running = (state: "thinks" | "runs") =>
+      w.moment !== undefined ? as("not done yet", "idle") : as(`running ${this.progress(act.id)}`, state);
+    if (act.kind === "grant" && isDone(act)) return as("ended", "idle");
     // In a record open to read, the work that had no end when the record ended has none to come: it neither runs nor
     // waits for a wake.
-    if (act.unfinished && !act.done) return as("not finished when the record ends", "idle");
-    // A rung that a pause holds waits for the wake, and says so, where it would otherwise seem to run.
-    if (act.kind === "rung")
-      return cancelled(act)
-        ? stateOf("cancelled")
-        : act.run?.status === "failed"
-          ? this.retry(act)
-            ? { word: `retried as ${this.retry(act)?.id}`, mark: glyph.failed, color: c.faint }
-            : stateOf("failed")
-          : act.run?.status === "done"
-            ? stateOf("done")
-            : act.paused
-              ? stateOf("paused")
-              : running();
-    if (act.done) return stateOf(failed(act) ? "failed" : cancelled(act) ? "cancelled" : "done");
-    if (w.host.prompts.has(act.id)) return as("needs input", "asks");
-    if (act.paused && act.kind !== "bash") return stateOf("paused");
-    return running();
+    if (unfinished(act)) return as("not finished when the record ends", "idle");
+    switch (act.state) {
+      case "asks":
+        return as("needs input", "asks");
+      case "failed": {
+        const retry = act.kind === "rung" ? this.retry(act) : undefined;
+        return retry
+          ? { word: `retried as ${retry.id}`, mark: glyph.failed, color: c.faint }
+          : stateOf("failed");
+      }
+      case "cancelled":
+      case "done":
+        return stateOf(act.state);
+      // A command that a pause holds still prints what it printed, so it shows as it runs.
+      case "paused":
+        return act.kind === "bash" ? running("runs") : stateOf("paused");
+      // Only work moves: an act of another kind that lives, as a grant or the watcher of an extension, lives until
+      // something ends it, as a chain does, and work waits on it.
+      case "delegates":
+        return as("", "delegates");
+      // A rung whose word has not come yet and whose model is not asked waits for its turn.
+      case "idle":
+        return w.moment !== undefined ? as("not done yet", "idle") : as("waits for its turn", "idle");
+      case "thinks":
+        return running("thinks");
+      default:
+        return running("runs");
+    }
   },
 
   /** The first lines of a text that take at most a count of rows of the feed, and how many lines are left out. */

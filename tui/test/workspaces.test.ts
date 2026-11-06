@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { boot, type NativeEar, scratch, store } from "furb";
+import { isDone } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
@@ -162,9 +163,13 @@ test("workspaces keep sessions alive, report background completion and input, an
     const restored = library.groups[0]?.sessions.find((entry) => entry.path === record);
     if (!restored) throw new Error("The saved session is missing.");
     await library.select(restored);
-    expect(restored.status).toBe("idle");
+    // The session rests: the daemon says done for a chain whose prompts all closed, and idle for one with none.
+    expect(["idle", "done"]).toContain(restored.status);
     expect(restored.session?.host.pending.size).toBe(0);
-    expect(restored.session?.acts.find((act) => act.id === waiting)?.done).toBe(true);
+    expect(
+      restored.session?.acts.find((act) => act.id === waiting) !== undefined &&
+        isDone(restored.session?.acts.find((act) => act.id === waiting)),
+    ).toBe(true);
     const metadata = JSON.parse(await readFile(`${record}.session.json`, "utf8"));
     expect(metadata.pending).toBeUndefined();
   }));

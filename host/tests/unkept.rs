@@ -40,7 +40,8 @@ mod unix {
     Object,
     life::{Answer, Opening},
   };
-  use furb_host::{Command, Event, Life, LifeError, LifeHandle, Reply, Seq, view::Phase};
+  use furb::view::Phase;
+  use furb_host::{Command, Event, Life, LifeError, LifeHandle, Reply, Seq};
   use futures::{Stream, StreamExt};
 
   use super::yard;

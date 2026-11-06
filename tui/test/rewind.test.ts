@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { existsSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { isDone } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { removeDemoDirectories } from "../src/demo.ts";
 import type { Session } from "../src/session.ts";
@@ -41,8 +42,8 @@ test("a branch at rung4 of the demo with its files gives back the README as it w
     expect(branch).not.toBe(source);
     expect(await readFile(path, "utf8")).toBe(readme);
     // The restore is a rung of the operator on the branch, so the record holds its write.
-    const restore = session.acts.findLast((act) => act.kind === "write" && act.on === branch);
-    expect(restore?.done).toBe(true);
+    const restore = session.acts.findLast((act) => act.kind === "write" && act.chain === branch);
+    expect(restore !== undefined && isDone(restore)).toBe(true);
     expect(session.acts.find((act) => act.id === restore?.by)?.by).toBe("operator");
     expect(session.notice).toContain("1 file is back as it was");
   }));

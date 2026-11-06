@@ -1,6 +1,7 @@
 import { expect, setSystemTime, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { RGBA } from "@opentui/core";
+import { isDone, onThread } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { glyph, palettes, spacing as space } from "../src/theme.ts";
 import { type Composing, cellAt, composing } from "./composing.ts";
@@ -177,14 +178,14 @@ test("a line on an open thread is a message of None, over at once, and a line on
       const id = await session.engine.prompt("str", { message: "Hold this thread open", on: root });
       await session.refresh();
       await until(session, () => listed(session).some((one) => one.act.id === id));
-      const on = () => session.acts.filter((act) => act.thread === id);
+      const on = () => session.acts.filter((act) => onThread(act) === id);
       session.aim(id);
       expect(session.lineShape(id)).toBe("None");
       await session.submit("Look at it once");
       await until(session, () => on().length === 1);
       expect(on()[0]?.words[0]).toBe("None");
       // The message is over at once, and it holds the thread open no more than the prompt of the thread does.
-      await until(session, () => on()[0]?.done === true);
+      await until(session, () => (on()[0] !== undefined && isDone(on()[0])) === true);
       expect(listed(session).find((one) => one.act.id === id)?.resolved).toBe(false);
       await session.reply(id, "And once more");
       await until(session, () => on().length === 2);
@@ -694,7 +695,7 @@ test("a line that failed says its reason once, under it, and not again beside it
   composing(
     async ({ session, frame }) => {
       const id = await session.engine.rung({ word: 'read("missing-file.txt")', on: session.selected });
-      await until(session, () => session.activity.some((act) => act.id === id && act.done));
+      await until(session, () => session.activity.some((act) => act.id === id && isDone(act)));
       await session.refresh();
       const shown = await frame();
       expect(shown.split("There is no file").length - 1).toBe(1);

@@ -3026,6 +3026,11 @@
           ],
           "description": "The word of a rung, once its chain took it to run or to refuse."
         },
+        "asking": {
+          "type": "boolean",
+          "description": "Whether a reply of a rung runs, while its model writes its word. A rung with no word and no\nreply that runs waits for its turn.",
+          "default": false
+        },
         "began": {
           "type": "integer",
           "format": "uint64",

@@ -238,10 +238,11 @@ record when moving a session.
 The model of a life is the views that a host derives from the acts of a life, in `src/life`, which `furb/life`
 gives. It holds no native code and no module of node, so a terminal and a window of the web read the same views:
 
-- `acts`: the act as a view reads it, `LiveAct`, the kinds of work, `WORK`, whether a site is the operator or a member
-  of the operator, `operated`, what a command came to, `Exit`, the measure of a chain, `Measure`, which `measureOf`
-  gives from the answers of its models, a compaction of a chain, `Compaction`, which an `Activity` keeps for each
-  prefix said on a chain after its birth, and whether an act failed or was cancelled.
+- `acts`: the act as a view reads it, `Act`, which the daemon gives with its meaning, and what a view reads of it:
+  whether it is done, `isDone`, what it came to, `outcomeOf`, whether a pause holds it, `isPaused`, and whether it
+  failed or was cancelled; the kinds of work, `WORK`, whether a site is the operator or a member of the operator,
+  `operated`, what a command came to, `Exit`, the measure of a chain, `Measure`, and a compaction of a chain,
+  `Compaction`, which an `Activity` keeps for each prefix said on a chain after its birth.
 - `asks`: the desk of the operator, `desk`: each question that waits for him and each notice that he did not dismiss,
   the oldest first, each with its chain and the choices of its shape, `choicesOf`: yes and no for a bool, and each
   value of a Literal. `aimed` gives the ask that the operator acts on, on the chain that he reads, `beside` the ask a

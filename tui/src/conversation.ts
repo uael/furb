@@ -1,5 +1,5 @@
 import { bound, opens, type Paragraph, paragraphs, plain, type Turn } from "furb";
-import { failed } from "furb/life";
+import { failed, isDone } from "furb/life";
 import type { ActRow } from "./session.ts";
 
 /** One thing the conversation shows, read off the python of the turns of a chain.
@@ -45,7 +45,7 @@ export function conversation(
       if (
         rung &&
         asked?.kind === "prompt" &&
-        asked.done &&
+        isDone(asked) &&
         !answered.has(asked.id) &&
         ranUntil(rung, asked)
       ) {
@@ -101,9 +101,7 @@ export function conversation(
 /** Whether a prompt ended while a rung ran, as when the word of the rung closed it. */
 function ranUntil(rung: ActRow, prompt: ActRow): boolean {
   return (
-    prompt.ended !== undefined &&
-    prompt.ended >= rung.began &&
-    (rung.ended === undefined || prompt.ended <= rung.ended)
+    prompt.ended != null && prompt.ended >= rung.began && (rung.ended == null || prompt.ended <= rung.ended)
   );
 }
 

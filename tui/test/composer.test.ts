@@ -1,6 +1,7 @@
 import { afterAll, expect, setSystemTime, test } from "bun:test";
 import { RGBA } from "@opentui/core";
 import { setRendererCapabilities } from "@opentui/core/testing";
+import { isDone } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { removeDemoDirectories } from "../src/demo.ts";
 import { emojis } from "../src/emoji.ts";
@@ -396,7 +397,7 @@ test("Escape twice opens the rewind tree in the feed, which keys move, fold, and
       screen.mockInput.pressEscape();
       await frame();
       expect(rows().some((id) => id.startsWith("tree-"))).toBe(false);
-      expect(session.selected).toBe(last?.on ?? "");
+      expect(session.selected).toBe(last?.chain ?? "");
     },
     { width: 132, height: 44, kittyKeyboard: true },
     true,
@@ -577,11 +578,11 @@ test("the usage of a fork counts the answers of the fork alone, and not those of
 test("a branch that a word made with a filter shows the messages that it took, with their answers, and not the one it left out", () =>
   composing(async ({ session, frame, screen }) => {
     await session.submit("Explore this project.");
-    await until(session, () => session.activity.some((act) => session.isUserPrompt(act) && act.done));
+    await until(session, () => session.activity.some((act) => session.isUserPrompt(act) && isDone(act)));
     await session.submit("Read the notes again.");
     await until(
       session,
-      () => session.activity.filter((act) => session.isUserPrompt(act) && act.done).length === 2,
+      () => session.activity.filter((act) => session.isUserPrompt(act) && isDone(act)).length === 2,
     );
     const origin = session.selected;
     const [first] = session.activity.filter((act) => session.isUserPrompt(act));
@@ -619,7 +620,7 @@ test("a paused chain names no cancel as its cause, since a word that closed its 
       word: "from asyncio import CancelledError\nraise CancelledError()",
       on: session.selected,
     });
-    await until(session, () => session.activity.some((act) => act.id === id && act.done));
+    await until(session, () => session.activity.some((act) => act.id === id && isDone(act)));
     await session.submit("/pause");
     await until(session, () => session.paused);
     const rows = (await frame()).split("\n");
@@ -632,7 +633,7 @@ test("a paused chain names no cancel as its cause, since a word that closed its 
 test("a paused chain names the act that paused it and its own error, and no older error of a word", () =>
   composing(async ({ session, frame }) => {
     const id = await session.engine.rung({ word: 'read("scratch://missing.txt")', on: session.selected });
-    await until(session, () => session.activity.some((act) => act.id === id && act.done));
+    await until(session, () => session.activity.some((act) => act.id === id && isDone(act)));
     await session.engine.pause(session.selected, { why: "reply9 found no ear to take it" });
     await until(session, () => session.paused);
     const rows = (await frame()).split("\n");
@@ -679,7 +680,7 @@ test("the footer offers the keys of the top layer that acts, and a click on one 
       await until(session, () => session.editing === undefined);
       app.composer.setText("Think until I cancel.");
       await app.submit();
-      await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
+      await until(session, () => session.activity.some((act) => act.kind === "rung" && !isDone(act)));
       expect(await footer()).toEndWith("⌃P commands   ⌃C take back   Esc pause   F1 help");
       screen.mockInput.pressEscape();
       await until(session, () => session.paused);
@@ -721,7 +722,7 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
   composing(async ({ session, app, screen, frame }) => {
     app.composer.setText("Think until I cancel.");
     await app.submit();
-    await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
+    await until(session, () => session.activity.some((act) => act.kind === "rung" && !isDone(act)));
     await session.submit("/cancel");
     await idle(session);
     await session.submit("/newthread");

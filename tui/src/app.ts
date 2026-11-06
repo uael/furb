@@ -1174,13 +1174,13 @@ export class App {
     const w = this.session;
     const rows = new Map(w.acts.map((one) => [one.id, one]));
     let at = rows.get(id);
-    if (!at || at.on !== w.selected) return undefined;
+    if (!at || at.chain !== w.selected) return undefined;
     w.folds[`prompts:${w.selected}`] = false;
     let head: string | undefined;
     const threads = w.threads.by;
     for (let step = 0; at && step < 64; step++) {
       const maker = rows.get(at.by);
-      if (!maker || maker.on !== w.selected) break;
+      if (!maker || maker.chain !== w.selected) break;
       if (maker.kind === "prompt") {
         w.folds[`rungs:${maker.id}`] = false;
         if (threads.has(maker.id)) head = maker.id;

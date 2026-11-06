@@ -6,7 +6,7 @@
 //! holds its log for the readers until each handle of the life is gone.
 
 use std::{
-  collections::{HashSet, VecDeque},
+  collections::{HashMap, VecDeque},
   future::poll_fn,
   hash::{DefaultHasher, Hash, Hasher},
   path::PathBuf,
@@ -19,7 +19,7 @@ use furb::{
   Engine, Fact, Fault, Object, Text, checkpoint,
   life::{Log, Opening, Stream},
   verbs,
-  view::Held,
+  view::{Act, Fold, Held},
   wire::{outward, parsed},
   world::{
     self, Shape, answered,
@@ -168,13 +168,16 @@ enum Message {
 }
 
 /// The log of a life on its thread: each event that it told, the readers that hear each next one,
-/// what the ears and the provider told that is not in the log yet, the digest of each fact that it
-/// told, and what the actor watches to know when the life is born again.
+/// what the ears and the provider told that is not in the log yet, how many facts it told and the
+/// place of each by its digest, the place in the log of each fact that the engine of this birth
+/// heard, and what the actor watches to know when the life is born again.
 pub struct Life {
   log: Vec<Arc<Event>>,
   readers: broadcast::Sender<Logged>,
   heard: UnboundedReceiver<Event>,
-  facts: HashSet<u64>,
+  said: Seq,
+  facts: HashMap<u64, Seq>,
+  births: Vec<Seq>,
   watch: Watch,
   configs: Layers,
   queue: Queue,
@@ -209,7 +212,8 @@ impl Life {
   /// event changed them.
   fn put(&mut self, event: Event) {
     if let Event::Fact(fact) = &event {
-      self.facts.insert(digest(fact));
+      self.said += 1;
+      self.facts.entry(digest(fact)).or_insert(self.said);
     }
     self.watch.heard(&event);
     let queued = self.queue.heard(&event);
@@ -232,6 +236,14 @@ impl Life {
       match event {
         Event::Changed(chain) if !changed.contains(&chain) => changed.push(chain),
         Event::Changed(_) => {}
+        Event::Fact(fact) => {
+          self.put(Event::Fact(fact));
+          self.births.push(self.said);
+        }
+        Event::Act(act) => {
+          let act = self.placed(act);
+          self.put(Event::Act(act));
+        }
         event => self.put(event),
       }
     }
@@ -248,12 +260,32 @@ impl Life {
     while let Ok(event) = self.heard.try_recv() {
       told.push(event);
     }
+    self.births.clear();
     let mut opening = true;
     for event in told {
-      if !matches!(&event, Event::Fact(fact) if self.restates(&mut opening, fact)) {
-        self.told(Some(event));
+      match &event {
+        Event::Fact(fact) if self.restates(&mut opening, fact) => {
+          let place = self.facts.get(&digest(fact)).copied().unwrap_or(self.said);
+          self.births.push(place);
+        }
+        _ => self.told(Some(event)),
       }
     }
+  }
+
+  /// An act that the engine of this birth told, at its place in the log. The fold of the engine
+  /// counts the facts that it heard, and the log holds each fact of the life once, from its first
+  /// birth on, so a reader reads the place of each act in one time for the whole life.
+  fn placed(&self, mut act: Box<Act>) -> Box<Act> {
+    act.began = self.place(act.began);
+    act.ended = act.ended.map(|ended| self.place(ended));
+    act
+  }
+
+  /// The place in the log of a fact that the engine of this birth heard, by its count in the fold.
+  fn place(&self, clock: Seq) -> Seq {
+    let at = clock.checked_sub(1).and_then(|one| usize::try_from(one).ok());
+    at.and_then(|one| self.births.get(one)).copied().unwrap_or(clock)
   }
 
   /// Whether a fact of an opening restates a fact that the log told, which ends the opening when it
@@ -263,11 +295,12 @@ impl Life {
     let word = |at: usize| fact.get(at).and_then(Value::as_str);
     *opening &=
       !checkpoint::opened(word(0).unwrap_or_default(), word(2).unwrap_or_default(), word(3));
-    *opening && self.facts.contains(&digest(fact))
+    *opening && self.facts.contains_key(&digest(fact))
   }
 
-  /// The facts of a record before its last checkpoint, told first, in order: the life boots on that
-  /// checkpoint and replays none of them, so each reader hears the life whole, as after a rebirth.
+  /// The facts of a record before its last checkpoint, told first, in order, each with the acts
+  /// that it changed: the life boots on that checkpoint and replays none of them, so each reader
+  /// hears the life whole, as after a rebirth. No engine reads them, so no pause covers their acts.
   /// Each birth on a checkpoint before the last opened by saying again what that checkpoint
   /// restates, which its log told no reader twice, and this one tells none twice either; each other
   /// fact is told, though it equals one before it, as a second pause of a chain. A record that the
@@ -288,13 +321,18 @@ impl Life {
       return;
     }
     let (mut passed, mut opening) = (0, false);
+    let mut fold = Fold::default();
     for (kept, a) in facts.iter().filter(|one| one.1.kind() != checkpoint::CHECKPOINT) {
       while marks.get(passed).is_some_and(|mark| kept >= mark) {
         (passed, opening) = (passed + 1, true);
       }
       let fact = json_of(a);
       if !self.restates(&mut opening, &fact) {
+        let acts = fold.hear(&fact, &[], None);
         self.put(Event::Fact(fact));
+        for act in acts {
+          self.put(Event::Act(Box::new(act)));
+        }
       }
     }
     self.watch.reborn();
@@ -353,7 +391,9 @@ async fn run(
     log: Vec::new(),
     readers,
     heard,
-    facts: HashSet::new(),
+    said: 0,
+    facts: HashMap::new(),
+    births: Vec::new(),
     watch: Watch::default(),
     configs,
     queue: Queue::default(),

@@ -16,6 +16,7 @@ fn act(kind: &str, id: &str, chain: &str, words: &[Value]) -> Act {
     words: words.to_vec(),
     phase: Phase::Started,
     operator: false,
+    asking: false,
     pause: None,
     run: None,
     word: None,

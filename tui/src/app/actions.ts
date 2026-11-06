@@ -1,5 +1,5 @@
 import { imageContent, imagePath, WORK } from "furb";
-import { asksOperator } from "furb/life";
+import { asksOperator, isDone, outcomeOf, unfinished } from "furb/life";
 import { clipboardImage } from "../clipboard.ts";
 import { externalEditor, openFile } from "../editor.ts";
 import { shortenHome } from "../files.ts";
@@ -316,8 +316,8 @@ export const actions = part({
             kind: act.kind,
             by: act.by,
             words: act.words,
-            done: act.done,
-            value: act.value,
+            done: isDone(act),
+            value: outcomeOf(act),
           }),
       },
       ...(!w.host.reading && w.editable(act)
@@ -329,7 +329,7 @@ export const actions = part({
             },
           ]
         : []),
-      ...(!w.host.reading && !act.done && !act.unfinished && WORK.includes(act.kind)
+      ...(!w.host.reading && !isDone(act) && !unfinished(act) && WORK.includes(act.kind)
         ? [
             w.lastOwn?.id === act.id && message
               ? {

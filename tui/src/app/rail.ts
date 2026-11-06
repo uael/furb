@@ -295,7 +295,7 @@ export const rail = part({
     const id = thread.act.id;
     this.railAt = `th:${id}`;
     void (async () => {
-      if (thread.act.on !== w.selected) await w.select(thread.act.on);
+      if (thread.act.chain !== w.selected) await w.select(thread.act.chain);
       w.aim(id);
       if (this.threadFolded(id)) {
         w.folds[`thread:${id}`] = false;
