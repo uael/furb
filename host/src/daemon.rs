@@ -40,14 +40,14 @@ use tokio::{
   net::{TcpListener, TcpStream},
   sync::{mpsc, oneshot},
   task::JoinSet,
-  time::{Instant, sleep_until, timeout},
+  time::{Instant, sleep, sleep_until, timeout},
 };
 use tokio_util::codec::{Framed, LinesCodec};
 
 use crate::{
   access::Ports,
   answers::Answerer,
-  error::{DaemonError, ProtocolError, TransportError},
+  error::{DaemonError, LifeError, ProtocolError, TransportError},
   event::{Event, Seq},
   holders::{Holders, Window},
   life::{Command, Life, LifeHandle, Reply},
@@ -866,9 +866,17 @@ async fn until(due: Option<Instant>) {
 
 /// A life told to write its checkpoint and end, once its commands before ran. A fault of that
 /// checkpoint is the fault of the event `Ended` of the life, which its windows and its watch hear.
+///
+/// A life refuses its end while its record does not hold each fact that it said, as on a full disk,
+/// so the daemon tells it again every [`AGAIN`] until it ends.
 async fn end(life: &LifeHandle) {
-  life.send(Command::End).await.ok();
+  while let Err(LifeError::Refused(_)) = life.send(Command::End).await {
+    sleep(AGAIN).await;
+  }
 }
+
+/// How long the daemon waits before it tells a life that refused its end to end again.
+const AGAIN: Duration = Duration::from_secs(5);
 
 /// The watch of one birth of a life, which no word of the life runs: its handle, its record, its
 /// birth, the bound of a stall, and the log of the reports of the daemon.
