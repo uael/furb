@@ -202,24 +202,13 @@ export const actions = part({
     this.openPalette(
       "Queued follow-ups",
       [
-        ...(session.queueHeld
-          ? [
-              {
-                label: "Resume queue",
-                detail: session.queueError || "Send when this chain's current work is complete",
-                run: async () => {
-                  session.queueHeld = false;
-                  session.queueError = "";
-                  await session.drainQueue();
-                },
-              },
-            ]
-          : []),
         ...session.queued.map((entry) => ({
-          label: entry.text.split("\n")[0] ?? "Follow-up",
+          label: entry.message.split("\n")[0] ?? "Follow-up",
           // A follow-up asks the actor of its chain when it is sent, and the session reads that actor for the
           // selected chain alone.
-          detail: `${entry.chain === session.selected ? `to ${this.model("").name} ` : ""}on ${session.labelOf(entry.chain)}`,
+          detail:
+            entry.failed ??
+            `${entry.chain === session.selected ? `to ${this.model("").name} ` : ""}on ${session.labelOf(entry.chain)}`,
           mark: [`${glyph.ring} `, c.faint] as Part,
           run: () =>
             this.openPalette("Queued message", [
@@ -227,17 +216,15 @@ export const actions = part({
                 label: "Edit in composer",
                 detail: "Remove from the queue and edit before sending again",
                 run: async () => {
-                  session.removeQueued(entry.id);
+                  await session.removeQueued(entry.entry);
                   await session.select(entry.chain);
-                  this.insert(entry.text);
+                  this.insert(entry.message);
                 },
               },
               {
                 label: "Remove",
                 detail: "Remove this queued message",
-                run: () => {
-                  session.removeQueued(entry.id);
-                },
+                run: () => session.removeQueued(entry.entry),
               },
             ]),
         })),

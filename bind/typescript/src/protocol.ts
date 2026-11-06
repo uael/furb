@@ -296,13 +296,9 @@ export type Config =
       value?: unknown;
       layer?: Layer | null;
       action: "set";
-    }
-  | {
-      action: "reload";
     };
 /**
- * A layer of the configs, from the one that wins least to the one that wins most: the config of
- * the user, the config of the project, and its local config, which git ignores.
+ * A layer of the configs, from the one that wins least to the one that wins most.
  */
 export type Layer = "user" | "project" | "local";
 /**
@@ -524,6 +520,98 @@ export type Answer =
   | {
       answer: "handed";
       data: Handed[];
+    }
+  | {
+      answer: "desk";
+      data: Desk;
+    }
+  | {
+      answer: "threads";
+      data: Threads;
+    }
+  | {
+      answer: "acts";
+      data: Act[];
+    }
+  | {
+      answer: "moments";
+      data: number[];
+    };
+/**
+ * The state of work: it asks the operator, it ended while the operator looked away, it failed, a
+ * pause holds it, its model thinks or writes its word, a word or a command of it runs, its word
+ * awaits a prompt on another chain, it ended well, a cancel ended it, or it rests. The order is
+ * the order of the roll-up. Only a window says unread, since only it knows what its operator saw.
+ */
+export type State =
+  | "asks"
+  | "unread"
+  | "failed"
+  | "paused"
+  | "thinks"
+  | "runs"
+  | "delegates"
+  | "done"
+  | "cancelled"
+  | "idle";
+/**
+ * Who made the prompt of a thread: the operator, a rung of a word, or an ear.
+ */
+export type Origin = "operator" | "rung" | "ear";
+/**
+ * What a prompt of a chain is that is no conversation, which the feed of its chain draws as what
+ * it is and the list of its threads leaves out.
+ */
+export type Aside =
+  | {
+      aside: "notice";
+    }
+  | {
+      aside: "rung";
+    }
+  | {
+      aside: "wake";
+    }
+  | {
+      aside: "question";
+      from: string;
+    };
+/**
+ * Where an act stands: asked, started by the ear that owns it, or done, with what it came to.
+ */
+export type Phase =
+  | {
+      phase: "asked";
+    }
+  | {
+      phase: "started";
+    }
+  | {
+      phase: "done";
+      value: unknown;
+    };
+/**
+ * How the word of a rung ran: it runs or waits for its word, it ran, a fault or a cancel ended it,
+ * or the gate refused it, each with what a person reads.
+ */
+export type RunState =
+  | {
+      run: "running";
+    }
+  | {
+      run: "done";
+    }
+  | {
+      run: "failed";
+      reason: string;
+    }
+  | {
+      run: "cancelled";
+      reason: string;
+    }
+  | {
+      run: "refused";
+      reason: string;
     };
 /**
  * Why the daemon refuses a frame of a peer. It crosses the protocol as data, beside its text.
@@ -660,60 +748,6 @@ export type Event =
       event: "ended";
       data: string | null;
     };
-/**
- * Where an act stands: asked, started by the ear that owns it, or done, with what it came to.
- */
-export type Phase =
-  | {
-      phase: "asked";
-    }
-  | {
-      phase: "started";
-    }
-  | {
-      phase: "done";
-      value: unknown;
-    };
-/**
- * How the word of a rung ran: it runs or waits for its word, it ran, a fault or a cancel ended it,
- * or the gate refused it, each with what a person reads.
- */
-export type RunState =
-  | {
-      run: "running";
-    }
-  | {
-      run: "done";
-    }
-  | {
-      run: "failed";
-      reason: string;
-    }
-  | {
-      run: "cancelled";
-      reason: string;
-    }
-  | {
-      run: "refused";
-      reason: string;
-    };
-/**
- * The state of work: it asks the operator, it ended while the operator looked away, it failed, a
- * pause holds it, its model thinks or writes its word, a word or a command of it runs, its word
- * awaits a prompt on another chain, it ended well, a cancel ended it, or it rests. The order is
- * the order of the roll-up. Only a window says unread, since only it knows what its operator saw.
- */
-export type State =
-  | "asks"
-  | "unread"
-  | "failed"
-  | "paused"
-  | "thinks"
-  | "runs"
-  | "delegates"
-  | "done"
-  | "cancelled"
-  | "idle";
 
 /**
  * Both ways of the protocol, which its schema holds.
@@ -812,6 +846,125 @@ export interface Handed {
   life: string;
   cwd: string;
   pins: string[];
+}
+/**
+ * What waits for the operator in a life: each ask, the oldest first, and how many of them are
+ * questions and notices.
+ */
+export interface Desk {
+  asks: Ask[];
+  questions: number;
+  notices: number;
+}
+/**
+ * A prompt to the operator that waits for him. A question waits for an answer of its shape. A
+ * notice is a prompt of None, which the console closed as it took it, and which waits only until
+ * the operator dismisses it.
+ */
+export interface Ask {
+  id: string;
+  /**
+   * The chain that the prompt stands in.
+   */
+  chain: string;
+  /**
+   * Who made the prompt: a rung, an ear, or the operator.
+   */
+  by: string;
+  shape: string;
+  message: string;
+  notice: boolean;
+  /**
+   * The lines that answer a choice, one for each value that the shape allows.
+   */
+  choices: string[];
+  /**
+   * The values of a list of a Literal, which the operator ticks.
+   */
+  ticks: Tick[];
+  /**
+   * What the line of the operator is, in words, when its shape is more than text or a choice.
+   */
+  hint: string;
+  began: number;
+}
+/**
+ * A value of a list of a Literal: as the operator reads it, and as the line of the list writes it.
+ */
+export interface Tick {
+  shown: string;
+  json: string;
+}
+/**
+ * The threads of one chain as a window draws them: the tree of its threads, its asides, the runs
+ * of its notes, what the tree says to the operator, and the state of the chain.
+ */
+export interface Threads {
+  threads: ThreadNode[];
+  asides: ChainAside[];
+  notes: NoteRun[];
+  attention: Attention;
+  state: State;
+}
+/**
+ * A thread with the threads that its ladder made, its agents. Its state is its own, or asks while
+ * a question waits in an agent under it: a failure or an unread in an agent does not roll up.
+ */
+export interface ThreadNode {
+  thread: ChainThread;
+  agents: ThreadNode[];
+  state: State;
+}
+/**
+ * One thread of a chain: its prompt, its name, its messages, the prompts to the operator that it
+ * made and the questions of them that wait, and its state. A thread is over once its prompt
+ * and each of its messages is done, and a message to a thread that is over opens it again until
+ * its model closes the message.
+ */
+export interface ChainThread {
+  prompt: string;
+  /**
+   * The name of the thread: the label of its chain for the first thread that no operator made on
+   * a chain under the root, the name of the session for the first thread of the operator on the
+   * root, and else the first line of its message that is not empty.
+   */
+  title: string;
+  messages: string[];
+  asked: string[];
+  asks: string[];
+  state: State;
+  over: boolean;
+  origin: Origin;
+  /**
+   * Whether the operator started it, himself or by a word of his own.
+   */
+  yours: boolean;
+}
+/**
+ * A prompt of a chain that is no thread, with what it is and the prompts on it, in order.
+ */
+export interface ChainAside {
+  prompt: string;
+  aside: Aside;
+  messages: string[];
+}
+/**
+ * A run of notes: the asides of a chain that are no question and follow one another in its feed
+ * with no card of another kind between them, which a window draws as one block. `unread` counts
+ * the notes that began or ended after the place up to which the operator read the chain.
+ */
+export interface NoteRun {
+  prompts: string[];
+  count: number;
+  unread: number;
+}
+/**
+ * What a tree of threads says to the operator, counted by thread.
+ */
+export interface Attention {
+  asks: number;
+  failed: number;
+  paused: number;
 }
 /**
  * One act of a life with its meaning, as it stands after the last fact about it.

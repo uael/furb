@@ -1352,19 +1352,6 @@
             "key"
           ],
           "description": "A key of a layer, the project when none is named, set to a value, or taken out with no\nvalue, then a stand of the life on the configs. A change that the catalog refuses puts its\nconfig back as it was, and the life does not stand."
-        },
-        {
-          "type": "object",
-          "properties": {
-            "action": {
-              "type": "string",
-              "const": "reload"
-            }
-          },
-          "required": [
-            "action"
-          ],
-          "description": "A stand of the life on the configs as the disk holds them, which asks again each model that\nwaits to retry."
         }
       ],
       "description": "What a peer asks of the configs of a life, which the World writes, so no window writes a disk."
@@ -1376,7 +1363,7 @@
         "project",
         "local"
       ],
-      "description": "A layer of the configs, from the one that wins least to the one that wins most: the config of\nthe user, the config of the project, and its local config, which git ignores."
+      "description": "A layer of the configs, from the one that wins least to the one that wins most."
     },
     "Slot": {
       "oneOf": [
@@ -2370,6 +2357,82 @@
             "data"
           ],
           "description": "The lives that a daemon gave at its handover."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "desk"
+            },
+            "data": {
+              "$ref": "#/definitions/Desk"
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "What waits for the operator."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "threads"
+            },
+            "data": {
+              "$ref": "#/definitions/Threads"
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "The threads of a chain."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "acts"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/Act"
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "The acts as they stood at a moment."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "answer": {
+              "type": "string",
+              "const": "moments"
+            },
+            "data": {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              }
+            }
+          },
+          "required": [
+            "answer",
+            "data"
+          ],
+          "description": "Each moment at which an act began or ended."
         }
       ],
       "description": "What a verb comes to."
@@ -2454,6 +2517,661 @@
         "pins"
       ],
       "description": "A life that a daemon gave at its handover: its record, its folder, and the holder of each pin."
+    },
+    "Desk": {
+      "type": "object",
+      "properties": {
+        "asks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Ask"
+          }
+        },
+        "questions": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "notices": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "asks",
+        "questions",
+        "notices"
+      ],
+      "description": "What waits for the operator in a life: each ask, the oldest first, and how many of them are\nquestions and notices."
+    },
+    "Ask": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "chain": {
+          "type": "string",
+          "description": "The chain that the prompt stands in."
+        },
+        "by": {
+          "type": "string",
+          "description": "Who made the prompt: a rung, an ear, or the operator."
+        },
+        "shape": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "notice": {
+          "type": "boolean"
+        },
+        "choices": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The lines that answer a choice, one for each value that the shape allows."
+        },
+        "ticks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Tick"
+          },
+          "description": "The values of a list of a Literal, which the operator ticks."
+        },
+        "hint": {
+          "type": "string",
+          "description": "What the line of the operator is, in words, when its shape is more than text or a choice."
+        },
+        "began": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "chain",
+        "by",
+        "shape",
+        "message",
+        "notice",
+        "choices",
+        "ticks",
+        "hint",
+        "began"
+      ],
+      "description": "A prompt to the operator that waits for him. A question waits for an answer of its shape. A\nnotice is a prompt of None, which the console closed as it took it, and which waits only until\nthe operator dismisses it."
+    },
+    "Tick": {
+      "type": "object",
+      "properties": {
+        "shown": {
+          "type": "string"
+        },
+        "json": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "shown",
+        "json"
+      ],
+      "description": "A value of a list of a Literal: as the operator reads it, and as the line of the list writes it."
+    },
+    "Threads": {
+      "type": "object",
+      "properties": {
+        "threads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ThreadNode"
+          }
+        },
+        "asides": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ChainAside"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/NoteRun"
+          }
+        },
+        "attention": {
+          "$ref": "#/definitions/Attention"
+        },
+        "state": {
+          "$ref": "#/definitions/State"
+        }
+      },
+      "required": [
+        "threads",
+        "asides",
+        "notes",
+        "attention",
+        "state"
+      ],
+      "description": "The threads of one chain as a window draws them: the tree of its threads, its asides, the runs\nof its notes, what the tree says to the operator, and the state of the chain."
+    },
+    "ThreadNode": {
+      "type": "object",
+      "properties": {
+        "thread": {
+          "$ref": "#/definitions/ChainThread"
+        },
+        "agents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ThreadNode"
+          }
+        },
+        "state": {
+          "$ref": "#/definitions/State"
+        }
+      },
+      "required": [
+        "thread",
+        "agents",
+        "state"
+      ],
+      "description": "A thread with the threads that its ladder made, its agents. Its state is its own, or asks while\na question waits in an agent under it: a failure or an unread in an agent does not roll up."
+    },
+    "ChainThread": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string",
+          "description": "The name of the thread: the label of its chain for the first thread that no operator made on\na chain under the root, the name of the session for the first thread of the operator on the\nroot, and else the first line of its message that is not empty."
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "asked": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "asks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "state": {
+          "$ref": "#/definitions/State"
+        },
+        "over": {
+          "type": "boolean"
+        },
+        "origin": {
+          "$ref": "#/definitions/Origin"
+        },
+        "yours": {
+          "type": "boolean",
+          "description": "Whether the operator started it, himself or by a word of his own."
+        }
+      },
+      "required": [
+        "prompt",
+        "title",
+        "messages",
+        "asked",
+        "asks",
+        "state",
+        "over",
+        "origin",
+        "yours"
+      ],
+      "description": "One thread of a chain: its prompt, its name, its messages, the prompts to the operator that it\nmade and the questions of them that wait, and its state. A thread is over once its prompt\nand each of its messages is done, and a message to a thread that is over opens it again until\nits model closes the message."
+    },
+    "State": {
+      "type": "string",
+      "enum": [
+        "asks",
+        "unread",
+        "failed",
+        "paused",
+        "thinks",
+        "runs",
+        "delegates",
+        "done",
+        "cancelled",
+        "idle"
+      ],
+      "description": "The state of work: it asks the operator, it ended while the operator looked away, it failed, a\npause holds it, its model thinks or writes its word, a word or a command of it runs, its word\nawaits a prompt on another chain, it ended well, a cancel ended it, or it rests. The order is\nthe order of the roll-up. Only a window says unread, since only it knows what its operator saw."
+    },
+    "Origin": {
+      "type": "string",
+      "enum": [
+        "operator",
+        "rung",
+        "ear"
+      ],
+      "description": "Who made the prompt of a thread: the operator, a rung of a word, or an ear."
+    },
+    "ChainAside": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string"
+        },
+        "aside": {
+          "$ref": "#/definitions/Aside"
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "prompt",
+        "aside",
+        "messages"
+      ],
+      "description": "A prompt of a chain that is no thread, with what it is and the prompts on it, in order."
+    },
+    "Aside": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "aside": {
+              "type": "string",
+              "const": "notice"
+            }
+          },
+          "required": [
+            "aside"
+          ],
+          "description": "A notice of the round: a prompt of None that a rung or a chain made, which no one answers, as\nthe acknowledgment of an act that stands in no thread of the chain."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "aside": {
+              "type": "string",
+              "const": "rung"
+            }
+          },
+          "required": [
+            "aside"
+          ],
+          "description": "What a word of the operator told the chain: a prompt of None that a rung of his made, or the\nacknowledgment of a rung that stands in no thread."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "aside": {
+              "type": "string",
+              "const": "wake"
+            }
+          },
+          "required": [
+            "aside"
+          ],
+          "description": "A wake of the chain: a prompt of None that an ear or a verb of the round made."
+        },
+        {
+          "type": "object",
+          "properties": {
+            "aside": {
+              "type": "string",
+              "const": "question"
+            },
+            "from": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "aside",
+            "from"
+          ],
+          "description": "A question of another chain to this one, a worker that asks its coordinator, with the chain\nthat asks."
+        }
+      ],
+      "description": "What a prompt of a chain is that is no conversation, which the feed of its chain draws as what\nit is and the list of its threads leaves out."
+    },
+    "NoteRun": {
+      "type": "object",
+      "properties": {
+        "prompts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "count": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "unread": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "prompts",
+        "count",
+        "unread"
+      ],
+      "description": "A run of notes: the asides of a chain that are no question and follow one another in its feed\nwith no card of another kind between them, which a window draws as one block. `unread` counts\nthe notes that began or ended after the place up to which the operator read the chain."
+    },
+    "Attention": {
+      "type": "object",
+      "properties": {
+        "asks": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "paused": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "asks",
+        "failed",
+        "paused"
+      ],
+      "description": "What a tree of threads says to the operator, counted by thread."
+    },
+    "Act": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "by": {
+          "type": "string"
+        },
+        "on": {
+          "type": "string",
+          "description": "What the act is on: a chain, or the prompt of a thread for a prompt on a thread."
+        },
+        "chain": {
+          "type": "string",
+          "description": "The chain that the act stands in."
+        },
+        "words": {
+          "type": "array",
+          "items": true,
+          "description": "The words of the act after its kind, its name, its maker and what it is on."
+        },
+        "phase": {
+          "$ref": "#/definitions/Phase"
+        },
+        "operator": {
+          "type": "boolean",
+          "description": "Whether the console of the operator took the act: a question to him, or a notice."
+        },
+        "pause": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Pause"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The pause that holds the act while it lives."
+        },
+        "run": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/RunState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How the word of a rung ran, for a rung alone."
+        },
+        "word": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The word of a rung, once its chain took it to run or to refuse."
+        },
+        "asking": {
+          "type": "boolean",
+          "description": "Whether a reply of a rung runs, while its model writes its word. A rung with no word and no\nreply that runs waits for its turn.",
+          "default": false
+        },
+        "began": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0,
+          "description": "How many facts the life had said when the act was made, which is its place in time."
+        },
+        "ended": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0,
+          "description": "How many facts the life had said when the act was done."
+        },
+        "spend": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/Spend"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What the models cost: the answers that wrote the word of a rung, or each answer on a chain."
+        },
+        "state": {
+          "description": "The state of the act, or of the work of a chain for a chain.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/State"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "by",
+        "on",
+        "chain",
+        "words",
+        "phase",
+        "operator",
+        "began",
+        "state"
+      ],
+      "description": "One act of a life with its meaning, as it stands after the last fact about it."
+    },
+    "Phase": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "phase": {
+              "type": "string",
+              "const": "asked"
+            }
+          },
+          "required": [
+            "phase"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "phase": {
+              "type": "string",
+              "const": "started"
+            }
+          },
+          "required": [
+            "phase"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "phase": {
+              "type": "string",
+              "const": "done"
+            },
+            "value": true
+          },
+          "required": [
+            "phase",
+            "value"
+          ]
+        }
+      ],
+      "description": "Where an act stands: asked, started by the ear that owns it, or done, with what it came to."
+    },
+    "Pause": {
+      "type": "object",
+      "properties": {
+        "by": {
+          "type": "string"
+        },
+        "why": true
+      },
+      "required": [
+        "by"
+      ],
+      "description": "A pause, as its fact holds it: who said it, and the cause that it gave."
+    },
+    "RunState": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "run": {
+              "type": "string",
+              "const": "running"
+            }
+          },
+          "required": [
+            "run"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "run": {
+              "type": "string",
+              "const": "done"
+            }
+          },
+          "required": [
+            "run"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "run": {
+              "type": "string",
+              "const": "failed"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "run",
+            "reason"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "run": {
+              "type": "string",
+              "const": "cancelled"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "run",
+            "reason"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "run": {
+              "type": "string",
+              "const": "refused"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "run",
+            "reason"
+          ],
+          "description": "The findings of the gate, one for each line."
+        }
+      ],
+      "description": "How the word of a rung ran: it runs or waits for its word, it ran, a fault or a cancel ended it,\nor the gate refused it, each with what a person reads."
+    },
+    "Spend": {
+      "type": "object",
+      "properties": {
+        "dollars": {
+          "type": "number",
+          "format": "double"
+        },
+        "answers": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "actor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "dollars",
+        "answers"
+      ],
+      "description": "What the answers of models cost: their dollars, how many they are, and the actor of the last."
     },
     "ProtocolError": {
       "oneOf": [
@@ -3013,296 +3731,6 @@
         }
       ],
       "description": "What a life tells its clients, in the order of its log."
-    },
-    "Act": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "type": "string"
-        },
-        "id": {
-          "type": "string"
-        },
-        "by": {
-          "type": "string"
-        },
-        "on": {
-          "type": "string",
-          "description": "What the act is on: a chain, or the prompt of a thread for a prompt on a thread."
-        },
-        "chain": {
-          "type": "string",
-          "description": "The chain that the act stands in."
-        },
-        "words": {
-          "type": "array",
-          "items": true,
-          "description": "The words of the act after its kind, its name, its maker and what it is on."
-        },
-        "phase": {
-          "$ref": "#/definitions/Phase"
-        },
-        "operator": {
-          "type": "boolean",
-          "description": "Whether the console of the operator took the act: a question to him, or a notice."
-        },
-        "pause": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/Pause"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "The pause that holds the act while it lives."
-        },
-        "run": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/RunState"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "How the word of a rung ran, for a rung alone."
-        },
-        "word": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "The word of a rung, once its chain took it to run or to refuse."
-        },
-        "asking": {
-          "type": "boolean",
-          "description": "Whether a reply of a rung runs, while its model writes its word. A rung with no word and no\nreply that runs waits for its turn.",
-          "default": false
-        },
-        "began": {
-          "type": "integer",
-          "format": "uint64",
-          "minimum": 0,
-          "description": "How many facts the life had said when the act was made, which is its place in time."
-        },
-        "ended": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0,
-          "description": "How many facts the life had said when the act was done."
-        },
-        "spend": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/Spend"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "What the models cost: the answers that wrote the word of a rung, or each answer on a chain."
-        },
-        "state": {
-          "description": "The state of the act, or of the work of a chain for a chain.",
-          "allOf": [
-            {
-              "$ref": "#/definitions/State"
-            }
-          ]
-        }
-      },
-      "required": [
-        "kind",
-        "id",
-        "by",
-        "on",
-        "chain",
-        "words",
-        "phase",
-        "operator",
-        "began",
-        "state"
-      ],
-      "description": "One act of a life with its meaning, as it stands after the last fact about it."
-    },
-    "Phase": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "phase": {
-              "type": "string",
-              "const": "asked"
-            }
-          },
-          "required": [
-            "phase"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "phase": {
-              "type": "string",
-              "const": "started"
-            }
-          },
-          "required": [
-            "phase"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "phase": {
-              "type": "string",
-              "const": "done"
-            },
-            "value": true
-          },
-          "required": [
-            "phase",
-            "value"
-          ]
-        }
-      ],
-      "description": "Where an act stands: asked, started by the ear that owns it, or done, with what it came to."
-    },
-    "Pause": {
-      "type": "object",
-      "properties": {
-        "by": {
-          "type": "string"
-        },
-        "why": true
-      },
-      "required": [
-        "by"
-      ],
-      "description": "A pause, as its fact holds it: who said it, and the cause that it gave."
-    },
-    "RunState": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "run": {
-              "type": "string",
-              "const": "running"
-            }
-          },
-          "required": [
-            "run"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "run": {
-              "type": "string",
-              "const": "done"
-            }
-          },
-          "required": [
-            "run"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "run": {
-              "type": "string",
-              "const": "failed"
-            },
-            "reason": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "run",
-            "reason"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "run": {
-              "type": "string",
-              "const": "cancelled"
-            },
-            "reason": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "run",
-            "reason"
-          ]
-        },
-        {
-          "type": "object",
-          "properties": {
-            "run": {
-              "type": "string",
-              "const": "refused"
-            },
-            "reason": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "run",
-            "reason"
-          ],
-          "description": "The findings of the gate, one for each line."
-        }
-      ],
-      "description": "How the word of a rung ran: it runs or waits for its word, it ran, a fault or a cancel ended it,\nor the gate refused it, each with what a person reads."
-    },
-    "Spend": {
-      "type": "object",
-      "properties": {
-        "dollars": {
-          "type": "number",
-          "format": "double"
-        },
-        "answers": {
-          "type": "integer",
-          "format": "uint32",
-          "minimum": 0
-        },
-        "actor": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "dollars",
-        "answers"
-      ],
-      "description": "What the answers of models cost: their dollars, how many they are, and the actor of the last."
-    },
-    "State": {
-      "type": "string",
-      "enum": [
-        "asks",
-        "unread",
-        "failed",
-        "paused",
-        "thinks",
-        "runs",
-        "delegates",
-        "done",
-        "cancelled",
-        "idle"
-      ],
-      "description": "The state of work: it asks the operator, it ended while the operator looked away, it failed, a\npause holds it, its model thinks or writes its word, a word or a command of it runs, its word\nawaits a prompt on another chain, it ended well, a cancel ended it, or it rests. The order is\nthe order of the roll-up. Only a window says unread, since only it knows what its operator saw."
     },
     "FollowUp": {
       "type": "object",

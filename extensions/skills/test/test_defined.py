@@ -33,3 +33,12 @@ async def test_a_read_with_defined_tells_those_definitions_and_gives_the_whole_w
   assert got == Text("skills://note", WORD.rstrip("\n"))
   told = of(engine.turns(on=root), "read")[-1]
   assert "def one" in told and "def two" not in told and "LIMIT" not in told
+
+
+async def test_defined_keeps_a_decorator_across_a_comment_and_a_blank_line(tmp_path: Path) -> None:
+  """defined(*names) keeps the decorators of a definition when a comment or a blank line at the top of the text stands between a decorator and its definition."""
+  source = "A = 1\n\n@cached\n# why\n\n@other\ndef one() -> int:\n  return 1\n\n# apart\nB = 2\n"
+  _, root = extended("skills", tmp_path, _monty.skills)
+  for name, lines in (("one", [3, 4, 5, 6, 7, 8]), ("B", [11]), ("A", [1])):
+    got = await engine.rung(f"close(shown(Text('p', {source!r}), defined({name!r})))", on=root)
+    assert got == "\n".join(source.splitlines()[n - 1] for n in lines)

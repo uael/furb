@@ -69,7 +69,7 @@ test("a redraw between a press and its release folds nothing, and no click on a 
     await Bun.sleep(300);
     const shown = rail(window, await window.frame());
     expect(shown.some((line) => /Resolve/.test(line))).toBe(false);
-    expect(listed(window).find((one) => one.act.id === id)?.resolved).toBe(false);
+    expect(listed(window).find((one) => one.act.id === id)?.over).toBe(false);
     expect(await engine.peek(id)).toBeNull();
   }));
 
@@ -130,7 +130,7 @@ test("the toggle of a thread taller than the screen stays in view and folds it, 
       await settle();
     }
     expect(session.folds[`thread:${id}`]).not.toBe(true);
-    expect(listed(window).find((one) => one.act.id === id)?.resolved).toBe(false);
+    expect(listed(window).find((one) => one.act.id === id)?.over).toBe(false);
     expect(await engine.peek(id)).toBeNull();
     // #1253: a press on a row of the feed, then a redraw that puts the toggle under the still pointer, then the
     // release: nothing folds.
@@ -164,7 +164,7 @@ test("the toggle of a thread taller than the screen stays in view and folds it, 
     const node = head();
     expect(node && node.y >= viewport.y && node.y < viewport.y + viewport.height).toBe(true);
     expect(folded.filter((line) => line.includes("Expand"))).toHaveLength(1);
-    expect(listed(window).find((one) => one.act.id === id)?.resolved).toBe(false);
+    expect(listed(window).find((one) => one.act.id === id)?.over).toBe(false);
     expect(await engine.peek(id)).toBeNull();
   }));
 

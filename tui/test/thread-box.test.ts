@@ -29,6 +29,8 @@ test("a thread is one box: its message with a line of its color, its program as 
   composing(
     async ({ session, app, frame }) => {
       await idle(session);
+      // The input targets the thread by default, so a box that ends with its Reply is one that the input does not target.
+      session.aim();
       let rows = (await frame()).split("\n").map((row) => feedOf(session, row));
       // A row of the program quotes the answer, so the text of the answer is the one that no call of close holds.
       const answered = (row: string) =>
@@ -114,8 +116,12 @@ test("a click on Reply makes the thread the target of the input, whose line and 
     async ({ session, app, screen, click, frame }) => {
       await idle(session);
       const id = listed(session)[0]?.act.id ?? "";
-      expect(listed(session)[0]?.resolved).toBe(true);
-      // A thread that is over is no target until a click asks for it.
+      expect(listed(session)[0]?.over).toBe(true);
+      // The thread that the view shows is the target by default, also once its model closed it.
+      expect(session.target).toBe(id);
+      // + New thread sends the next message to a thread of its own, and Reply makes the thread the target again.
+      session.aim();
+      await frame();
       expect(session.target).toBeUndefined();
       await click("Reply to open it again");
       expect(session.target).toBe(id);
@@ -131,7 +137,7 @@ test("a click on Reply makes the thread the target of the input, whose line and 
       await session.command(`/pause ${id}`);
       screen.mockInput.pressEnter();
       await until(session, () => (listed(session)[0]?.messages.length ?? 0) === 1);
-      expect(listed(session)[0]?.resolved).toBe(false);
+      expect(listed(session)[0]?.over).toBe(false);
       await session.command(`/wake ${id}`);
       expect(session.target).toBe(id);
       await click("+ New thread");
@@ -309,6 +315,8 @@ test("the box of a thread starts where the input of the chain starts, and the wo
   composing(
     async ({ session, frame }) => {
       await idle(session);
+      // The box of a thread that the input does not target ends with its Reply.
+      session.aim();
       const rows = (await frame()).split("\n").map((row) => feedOf(session, row));
       const ask = rows.find((row) => row.includes("Ask anything")) ?? "";
       const reply = rows.find((row) => row.includes("↳ Reply")) ?? "";

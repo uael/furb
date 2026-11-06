@@ -3,7 +3,7 @@ import { isDone } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { find } from "../script/stage.ts";
 import type { Session } from "../src/session.ts";
-import { composing } from "./composing.ts";
+import { composing, open } from "./composing.ts";
 
 /** A life as a conductor makes it: a message of the operator, the thread, whose model hires two workers, each with a
  * prompt on a chain of its own that thinks until a cancel, under a wait that holds the thread open. It gives the
@@ -19,13 +19,16 @@ async function conductor(session: Session): Promise<{ thread: string; workers: s
   return { thread, workers: workers().map((act) => act.id) };
 }
 
-/** Whether each act lives on. */
-const live = (session: Session, ids: string[]) =>
-  ids.every(
-    (id) =>
-      (session.acts.find((act) => act.id === id) !== undefined &&
-        isDone(session.acts.find((act) => act.id === id))) === false,
-  );
+/** Whether each act exists and lives on. */
+const live = (session: Session, ids: string[]) => ids.every((id) => open(session, id));
+
+test("an act that is missing lives on no more than an act that is done", () =>
+  composing(async ({ session }) => {
+    const { thread, workers } = await conductor(session);
+    expect(live(session, [thread, ...workers])).toBe(true);
+    expect(live(session, [thread, "no-such-act"])).toBe(false);
+    expect(live(session, ["no-such-act"])).toBe(false);
+  }));
 
 /** The last message of the operator on the chain, once its model thinks on it. */
 async function sent(session: Session, before: string): Promise<string> {

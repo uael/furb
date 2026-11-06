@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
-import { busy, type Exit, isDone, outcomeOf } from "furb/life";
+import { busy, exitOf, isDone } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
@@ -453,14 +453,11 @@ try {
     word: `index = await bash("printf 'Building the search index...\\n'; sleep 4; printf '3 notes indexed.\\n'")\nprint(index.stdout.content)`,
     on: session.selected,
   });
-  // The command shows once it has printed its first line.
+  // The command shows once it has printed its first line, which the window holds beside the act while it runs.
   await until(session, () =>
     session.acts.some(
       (act) =>
-        act.kind === "bash" &&
-        act.by === command &&
-        !isDone(act) &&
-        Boolean((outcomeOf(act) as Exit | undefined)?.stdout?.content),
+        act.kind === "bash" && act.by === command && !isDone(act) && Boolean(exitOf(act)?.stdout?.content),
     ),
   );
   // After a second, the line says how long its command has run.
@@ -655,7 +652,8 @@ try {
   await library.select(desk);
   session = desk.session;
   await session.submit("show live progress");
-  session.enqueue("Check keyboard navigation after this answer.");
+  await session.enqueue("Check keyboard navigation after this answer.");
+  await until(session, () => session.queued.length > 0);
   await capture("34-queued-follow-up");
   app().composer.setText("/queue");
   await app().submit();
@@ -1197,6 +1195,11 @@ try {
   await opens("/status");
   await capture("75i-status");
   app().closeOverlay();
+  // The settings, each key by the part that gives it, with the description, the type, the default and the layer of the key
+  // under the pointer.
+  await opens("/config");
+  await capture("75j-config");
+  app().closeOverlay();
   app().dispose();
   await library.dispose();
 
@@ -1218,19 +1221,19 @@ try {
     "Add a component for this todo list: a panel with the items, and a line in the feed for each.",
   );
   await settle();
-  await shows("Ready");
+  await shows("Done");
   await shows("2 open of 3");
   await rest();
   await capture("74b-extend-live");
   await session.submit("Sort the Todo panel: the open items first.");
   await settle();
-  await shows("Ready");
+  await shows("Done");
   await shows("evaluating 'seen.todos");
   await rest();
   await capture("75b-extend-broken");
   await session.submit("The Todo panel shows an error. Fix it.");
   await settle();
-  await shows("Ready");
+  await shows("Done");
   await shows("evaluating 'seen.todos", false);
   await rest();
   await capture("75c-extend-fixed");

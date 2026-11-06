@@ -10,7 +10,7 @@ CLEAN = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "COVER
 GITS = [
   "test/outside/test_paths.py::test_a_folder_that_a_rule_of_git_ignores_as_a_folder_stands_before_a_build_makes_it",
   ".furb/extensions/conductor/test/test_conductor.py"
-  "::test_settle_gives_no_workspace_with_work_off_a_branch_and_gives_one_on_the_head_of_a_merged_pr",
+  "::test_a_cycle_of_the_aggregator_starts_on_a_new_print_and_sends_each_failure_to_its_topic",
 ]
 
 

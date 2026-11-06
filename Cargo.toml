@@ -199,3 +199,11 @@ ruff_text_size = "0.0.9"
 opt-level = 3
 debug-assertions = false
 overflow-checks = false
+
+# The crate and the command line keep the lines of their code, so a backtrace names a source line, and drop the rest
+# of the debug information, which only a debugger reads and which costs compile and link time at each sync.
+[profile.dev.package.furb]
+debug = "line-tables-only"
+
+[profile.dev.package.furb-cli]
+debug = "line-tables-only"

@@ -26,11 +26,14 @@ key by its name, as the `configuration` of an extension of VS Code does:
 ```
 
 The configs hold these keys under the name of the extension, as `{"notes": {"folder": "journal"}}`. An extension
-cannot take a name of a key of furb. Its word reads its keys as `read("settings://notes")`, a JSON object of each key
+that takes a name of a key of furb does not load, and the root is told why, so it names no key and no read of
+the configs fails. Its word reads its keys as `read("settings://notes")`, a JSON object of each key
 with the value that a config gives, else its default, as `{"folder": "journal"}`; it reads them where it runs, so a
 change through `/config` holds from the next read. `read("settings://")` gives each key of the configs, and the name
 of a key of furb its value, as `read("settings://gate")`. The process of an extension reads its keys through the verb
-`config` of the [protocol](protocol.md).
+`config` of the [protocol](protocol.md). A file of keys that is missing or is no schema names no key, so
+`/config` still reads and changes the configs and can turn that extension off, and `read("settings://notes")`
+says why.
 
 ## The gate
 

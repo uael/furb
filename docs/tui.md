@@ -116,7 +116,7 @@ column at the right edge of the block holds what the acts of each line came to, 
 did not measure shows nothing. A message that you send to the thread, and each notice of
 the chain, stands as a comment among the steps. While the model of the thread works on a step, each line of its word
 that it finished stands above as Python in its colors, and the loader stands in the column of the states, on the line
-that the model still writes. While no line is written, the label says `opus/high · thinking 4s`. The footer turns no
+that the model still writes. While no line is written, the label says `opus/high · thinking 4s`, and once the model thinks aloud it adds the size of its thought, as `26 chars`, and the last line of it, faint, so a long thought shows that the model works. The footer turns no
 second loader for that step. The answer of the thread stands under its program, with the
 model that gave it and its effort at its right. A thread that you fold stands as one line, with the line of its color
 half a row above and under it. A word that you run stands as your messages stand, as its program in a panel of its own
@@ -415,7 +415,7 @@ the chain of that thread and the chains of its agents.
 
 ![The graph](screenshots/68-graph.png)
 
-⌥G gives the keys to the map, and the keys of the loom act there too. The arrows move to the program nearest in their
+A click on a program selects its chain, and the feed under the map shows it. ⌥G gives the keys to the map, and the keys of the loom act there too. The arrows move to the program nearest in their
 direction, and the feed under the map shows its chain. Enter gives the keys back to the input on that chain, and Esc
 returns to now, then gives the keys back.
 
@@ -423,7 +423,7 @@ returns to now, then gives the keys back.
 
 One mark means one state in every view, dialog, and sidebar, from one table: `◆` for a question that waits for you,
 `●` for what ended or changed while you were away, `✗` for a failure, `◌` for paused work, a spinner for a model that
-thinks, which stands still as `✻`, `◉` for a command that runs or a word that awaits one, `◎` for work that waits on
+thinks, which stands still as `✻`, `◉` for a command that runs or a word that awaits one, which turns as `◐◓◑◒` while the view moves, `◎` for work that waits on
 another chain, `✓` for a done act, a faint `✓` for a done thread that you saw, `⊘` for a cancel, and `○` for rest. F1 lists the chords that the terminal in use sends, what each mark means, and every slash
 command.
 
@@ -689,6 +689,15 @@ status in the footer.
 ![A form of a part](screenshots/75f-part-form.png)
 
 ![The completion of a part](screenshots/75g-part-completion.png)
+
+`/config` opens the settings. Each key stands under the part that gives it, furb first and then each skill, with its value
+and the config that gives it. The key under the pointer shows its description, its type and its values, its default and
+where its value comes from, and the filter searches the names and the descriptions. Enter edits the key in place, a flag
+or a key of some values offering them and any other key taking its value in a field, and then asks which config to write,
+the one that gives the key now first, or to reset the key. The schema comes from the crate through the host, and the
+window keeps no copy of it.
+
+![The settings](screenshots/75j-config.png)
 
 The extension `mcp` shows the servers of the Model Context Protocol in such a list with `/mcp`, each with its state,
 its scope and its tools, and the keys that reconnect, enable, disable, approve, log in or log out a server.

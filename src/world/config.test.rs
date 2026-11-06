@@ -3,6 +3,7 @@ use std::{fs, path::PathBuf};
 use serde_json::{Value, json};
 
 use super::{Change, Error, Kind, Layer, Layers, Property, Setting};
+use crate::extension::{Places, load};
 use crate::world::catalog::blocking;
 use std::env;
 use std::path;
@@ -159,10 +160,14 @@ fn a_value_that_the_property_of_its_key_does_not_take_is_refused_and_writes_noth
 }
 
 #[test]
-fn an_extension_that_adds_keys_under_a_name_of_furb_is_refused() {
+fn an_extension_that_takes_a_name_of_furb_does_not_load_and_names_no_key() {
   let (at, layers) = place("clash");
-  extension(&at, "providers", &json!({"properties": {}}));
-  assert!(matches!(layers.get(), Err(Error::Clash(name)) if name == "providers"));
+  extension(&at, "providers", &json!({"properties": {"x": {"type": "string", "default": "y"}}}));
+  let places = Places { config: at.join("user"), home: None };
+  let no = load("providers", &at.join("project/.furb/providers"), &places).unwrap_err();
+  assert!(no.message().contains("The name providers is a key of furb in the configs"));
+  let got = layers.get().unwrap();
+  assert!(got.iter().all(|one| one.extension.is_none() && one.key != ["providers", "x"]));
   fs::remove_dir_all(at).unwrap();
 }
 
@@ -238,4 +243,23 @@ fn a_flag_on_an_object_that_is_no_provider_is_written_as_it_is() {
   set(&layers, change(&["notes"], Some(json!(true)), Layer::Project)).unwrap();
   assert_eq!(text(&project), json!({"notes": true}));
   fs::remove_dir_all(at).unwrap();
+}
+
+#[test]
+fn an_extension_whose_file_of_keys_is_missing_or_no_schema_names_no_key_and_a_config_turns_it_off()
+{
+  for (name, keys) in [("broken", Some("{not json")), ("missing", None)] {
+    let (at, layers) = place(name);
+    extension(&at, name, &json!({"properties": {}}));
+    let file = at.join("project/.furb").join(name).join("keys.json");
+    match keys {
+      Some(text) => fs::write(&file, text).unwrap(),
+      None => fs::remove_file(&file).unwrap(),
+    }
+    assert!(layers.get().unwrap().iter().all(|one| one.extension.is_none()));
+    set(&layers, change(&["extensions", name], Some(json!(false)), Layer::Project)).unwrap();
+    let config = at.join("project/.furb/config.json");
+    assert_eq!(text(&config), json!({"extensions": {name: false}}));
+    assert!(layers.get().is_ok());
+  }
 }

@@ -91,7 +91,7 @@ function chainState(
   on: readonly Act[],
   remote: readonly Act[],
   owed: ReadonlySet<string>,
-  unfinished: ReadonlySet<string>,
+  unfinished: { has(id: string): boolean },
 ): State {
   if (on.some((act) => owed.has(act.id))) return "asks";
   const live = on.filter((act) => WORK.includes(act.kind) && !unfinished.has(act.id));
@@ -152,6 +152,10 @@ export class Activity {
   private readonly runs = new Map<string, string>();
   private readonly ran = new Map<string, unknown>();
   private readonly refused = new Map<string, string>();
+  /** The acts that stand in each chain but its chains, in the order they began. */
+  private readonly inChain = new Map<string, LiveAct[]>();
+  /** How many times the spend of a chain or of a rung changed. */
+  spendChanges = 0;
 
   /** The chain whose transcript holds a fact about a name: the chain itself for a chain, the chain a question stands
    * on for any other question, and nothing for a name of no question. */
@@ -169,30 +173,42 @@ export class Activity {
    * record open to read, whose console owes the prompts that `owed` names. */
   hosted(acts: readonly LiveAct[], owed: ReadonlySet<string> = new Set()): Act[] {
     const out = new Map(acts.map((act) => [act.id, this.shape(act, owed)]));
-    const chains = new Set(acts.map((act) => act.on));
-    const on = new Map<string, Act[]>();
-    const remote = new Map<string, Act[]>();
-    const unfinished = new Set<string>();
-    const put = (lists: Map<string, Act[]>, chain: string, act: LiveAct) => {
-      const made = out.get(act.id) ?? this.shape(act, owed);
-      const list = lists.get(chain);
-      if (list) list.push(made);
-      else lists.set(chain, [made]);
-    };
-    for (const act of this.acts.values()) {
-      if (act.unfinished) unfinished.add(act.id);
-      if (act.kind !== "chain" && chains.has(act.on)) put(on, act.on, act);
-      const maker = act.kind === "prompt" ? this.acts.get(act.by) : undefined;
-      if (maker?.kind === "rung" && maker.on !== act.on && chains.has(maker.on)) put(remote, maker.on, act);
-    }
-    for (const chain of chains) {
+    const shaped = (act: LiveAct) => out.get(act.id) ?? this.shape(act, owed);
+    const unfinished = { has: (id: string) => this.acts.get(id)?.unfinished === true };
+    const open = [...this.open].flatMap((id) => this.acts.get(id) ?? []);
+    for (const chain of new Set(acts.map((act) => act.on))) {
       const act = this.acts.get(chain);
       if (act?.kind !== "chain") continue;
-      const made = out.get(chain) ?? this.shape(act, owed);
-      made.state = chainState(on.get(chain) ?? [], remote.get(chain) ?? [], owed, unfinished);
+      const made = shaped(act);
+      const remote = open.filter(
+        (one) =>
+          one.kind === "prompt" &&
+          one.on !== chain &&
+          this.acts.get(this.acts.get(one.by)?.kind === "rung" ? one.by : "")?.on === chain,
+      );
+      made.state = chainState(
+        this.stating(chain, open, owed).map(shaped),
+        remote.map(shaped),
+        owed,
+        unfinished,
+      );
       out.set(chain, made);
     }
     return [...out.values()];
+  }
+  /** The acts of a chain that its state reads, in the order they began: the acts that the operator owes, the acts that
+   * are not done, its last act of work, and its first prompt. Its other acts decide nothing, so a chain with a long
+   * life reads as few acts as a short one. */
+  private stating(chain: string, open: readonly LiveAct[], owed: ReadonlySet<string>): LiveAct[] {
+    const mine = this.inChain.get(chain) ?? [];
+    const work = (act: LiveAct) => WORK.includes(act.kind) && !act.unfinished;
+    const asked = [...owed].flatMap((id) => this.acts.get(id) ?? []);
+    const read = new Set(
+      [...open, ...asked, mine.findLast(work), mine.find((act) => act.kind === "prompt" && work(act))].filter(
+        (act): act is LiveAct => act !== undefined && act.kind !== "chain" && act.on === chain,
+      ),
+    );
+    return [...read].sort((one, other) => (this.places.get(one.id) ?? 0) - (this.places.get(other.id) ?? 0));
   }
   /** One act as the daemon gives it, in the state that it holds alone. */
   private shape(act: LiveAct, owed: ReadonlySet<string>): Act {
@@ -300,6 +316,7 @@ export class Activity {
         };
       this.places.set(id, this.acts.size);
       this.acts.set(id, act);
+      if (kind !== "chain") (this.inChain.get(act.on) ?? this.inChain.set(act.on, []).get(act.on))?.push(act);
       this.open.add(id);
       this.mark(act);
       if (!this.children.has(by)) this.children.set(by, new Set());
@@ -354,6 +371,7 @@ export class Activity {
         for (const one of [chain, ...(wrote?.kind === "rung" ? [maker] : [])]) {
           const spend = this.spends.get(one) ?? { dollars: 0, answers: 0 };
           this.spends.set(one, { dollars: spend.dollars + usage[4], answers: spend.answers + 1, actor });
+          this.spendChanges++;
         }
       }
       const rung = this.runs.get(id);

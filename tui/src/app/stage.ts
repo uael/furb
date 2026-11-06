@@ -114,8 +114,17 @@ export const stage = part({
     this.stage.content = styled(joined(this.graph.rows(width, height)));
   },
 
-  /** A click on a row of the loom selects its chain, or answers for the row of the operator. The map takes no click. */
-  clickStage(row: number): void {
+  /** A click on a row of the loom selects its chain, or answers for the row of the operator, and a click on a program
+   * of the map selects its chain. */
+  clickStage(x: number, row: number): void {
+    if (this.lifeView === "graph") {
+      const chain = this.graph.at(x, row);
+      if (chain) {
+        this.graph.node = chain;
+        void this.selectAt(chain).catch(this.report);
+      }
+      return;
+    }
     if (this.lifeView !== "loom") return;
     const chain = this.loom.click(row);
     if (chain === "operator") this.question();

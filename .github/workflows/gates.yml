@@ -140,6 +140,17 @@ jobs:
         env:
           UV_NO_SYNC: "1"
           FURB_UNCOUNTED: ${{ runner.os == 'Windows' && '*/src/furb/life.py' || '' }}
+      # What the walls of the engine and of the doctrine leave, as the script of the tokens says it, kept as an artifact.
+      - if: always() && runner.os == 'Linux'
+        env:
+          UV_NO_SYNC: "1"
+        run: |
+          mkdir -p "$RUNNER_TEMP/measures"
+          uv run python script/tokens.py > "$RUNNER_TEMP/measures/tokens.txt" 2>&1 || echo "exit $?" >> "$RUNNER_TEMP/measures/tokens.txt"
+      - if: always() && runner.os == 'Linux'
+        uses: ./.github/actions/measures
+        with:
+          name: tokens
       - uses: ./.github/actions/clear
 
   crate:
@@ -223,7 +234,7 @@ jobs:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile
       # The job of the crate runs the clippy and the tests of the crate with this feature on Windows and on macOS, and
-      # the job of the speed of the TUI on Linux.
+      # the hooks on Linux.
       - run: bun run build
       - run: bun run docs
       - run: git diff --exit-code -- bind/typescript/index.d.cts tui/README.md
@@ -238,10 +249,10 @@ jobs:
     # The budget of the speed of the TUI holds on Linux, on a machine that runs no other work while it measures: the
     # first frame of a life of 160000 facts, the frames of the renderer at 60 each second while it scrolls and streams,
     # and the cost of a new fact against that in a life of a tenth of the size, each against a measure of the same
-    # machine, since one runner of ubuntu-latest is half as fast as another. Then the job runs the clippy and the tests
-    # of the crate with the feature of the bindings. It runs beside the bindings on Linux, whose tests take most of
-    # their time, so neither job waits for the other.
-    name: the crate and the speed of the TUI on ubuntu-latest
+    # machine, since one runner of ubuntu-latest is half as fast as another. It runs beside the bindings on Linux,
+    # whose tests take most of their time, so neither job waits for the other. The clippy and the tests of the crate
+    # with the feature of the bindings run in the hooks, and not here a second time.
+    name: the speed of the TUI on ubuntu-latest
     needs: scope
     if: needs.scope.outputs.code == 'true'
     runs-on: ubuntu-latest
@@ -266,9 +277,22 @@ jobs:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile
       - run: bun run build
-      - run: bun run bench
-      - run: cargo clippy --all-targets --features typescript -- -D warnings
-      - run: cargo test --features typescript
+      # The measures of the run stay as an artifact, so an audit reads the exact numbers of each run and not the rounded
+      # lines of its log, and a run that goes over a budget keeps them too.
+      - env:
+          FURB_BENCH_JSON: ${{ runner.temp }}/measures/bench.jsonl
+        run: |
+          mkdir -p "$RUNNER_TEMP/measures"
+          bun run bench 2>&1 | tee "$RUNNER_TEMP/measures/bench.log"
+      - if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/measures"
+          printf '{"fixture_bytes":%s,"fixture_lines":%s}\n' "$(wc -c < tui/fixtures/conductor.jsonl)" \
+            "$(wc -l < tui/fixtures/conductor.jsonl)" > "$RUNNER_TEMP/measures/fixture.json"
+      - if: always()
+        uses: ./.github/actions/measures
+        with:
+          name: bench
 
   gates:
     # The one check that reports on each pull request and stands for all the gates, so that a ruleset of main requires

@@ -116,7 +116,7 @@ it is not given. The daemon answers requests in any order.
 | `names` | `life`, `on` | read |
 | `gate` | `life`, `word`, `on` | read |
 | `stand` | `life` | write |
-| `config` | `life`, `config`: `{"action": "get"}`, `{"action": "set", "key", "value", "layer"}` or `{"action": "reload"}` | read for get, else write |
+| `config` | `life`, `config`: `{"action": "get"}`, `{"action": "set", "key", "value", "layer"}` | read for get, else write |
 | `seen` | `life`, `about` | write |
 | `queue` | `life`, `entry`, `shape`, `message`, `on` | write |
 | `unqueue` | `life`, `entry` | write |
@@ -140,8 +140,7 @@ it is not given. The daemon answers requests in any order.
   the values that win and no layer, then with a value for each of its names. A set refuses a value that the property
   of its key does not take, and writes nothing. A set writes the key in its layer, `project` when none is named, or
   takes it out when no value is given, and then the life stands, so the answer is the act of the stand. A change that
-  the catalog cannot read puts its config back as it was, and the life does not stand. A reload is a stand on the
-  configs as the disk holds them, which asks again each model that waits to retry.
+  the catalog cannot read puts its config back as it was, and the life does not stand.
 - `list` gives each record of the machine as `lives`: each record of the sessions of each workspace that
   `workspaces.json` in the folder `config` names, the config folder of the daemon when the peer names none, in the
   `.furb/sessions` of its main checkout and of each worktree of it, with that main checkout as `workspace`, and each
@@ -227,7 +226,9 @@ once it listens. A second daemon refuses to start there.
   that ends waits for its end, then opens it again from its checkpoint.
 - A life whose record does not hold each fact that it said yet, as on a full disk, does not end: its end, after the
   grace, at a handover or at the end of the daemon, waits until the record holds them, and the life tells why in a
-  notice.
+  notice. Past 20000 facts that the record lacks, the life pauses each chain that lives and each chain
+  that opens while it holds, and tells in a notice the folder of the record and the space left on its disk; once the record holds each
+  fact, it wakes each chain that it paused, and a pause of the operator stays. The life drops no fact.
 - `detach` lets go of the window that says it alone, as `/end` does, and a window whose peer leaves is detached.
 - `furb host upgrade` serves the daemon of a new build in the place of the daemon that runs, which has no takeover.
   The new daemon says `handover`. The daemon that runs writes the checkpoint of each life, ends it, stops to listen

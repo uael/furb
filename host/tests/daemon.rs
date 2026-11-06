@@ -392,7 +392,7 @@ mod daemon {
     }
     fs::write(marks.join("gitdir"), format!("{}\n", tree.join(".git").display())).unwrap();
     fs::write(tree.join(".git"), "gitdir: elsewhere\n").unwrap();
-    let tree = fs::canonicalize(&tree).unwrap().join(".furb").join("sessions");
+    let tree = dunce::canonicalize(&tree).unwrap().join(".furb").join("sessions");
     fs::write(tree.join("two.jsonl"), "").unwrap();
     fs::write(tree.join("two.changes.jsonl"), "").unwrap();
     let list = json!({ "workspaces": [{ "directory": main.display().to_string() }] });
@@ -415,7 +415,10 @@ mod daemon {
       },
     ];
     wanted.sort_by(|a, b| a.life.cmp(&b.life));
-    assert_eq!(window.listed().await, wanted);
+    let listed = window.listed().await;
+    assert_eq!(listed, wanted);
+    let verbatim = |one: &Listed| one.life.starts_with(r"\\?\");
+    assert!(!listed.iter().any(verbatim), "a worktree is listed under the path that made it");
   }
 
   #[tokio::test]
@@ -526,6 +529,64 @@ mod daemon {
     window.attach(&good).await;
     window.ran(&good, "x = 1").await;
     assert!(window.lives(&good).await);
+    assert!(!daemon.is_finished());
+  }
+
+  /// A record whose replay drifts at the place of its first stand: its checkpoints dropped, so the
+  /// life replays it from its first entry, and its first stand moved to a place that the life does
+  /// not stand in.
+  fn drifted(life: &str) -> Vec<u8> {
+    let text = fs::read_to_string(life).unwrap();
+    let checkpoint = |line: &&str| line.starts_with(r#"[["checkpoint","#);
+    let mut lines: Vec<String> =
+      text.lines().filter(|line| !checkpoint(line)).map(str::to_owned).collect();
+    let stood = lines.iter().position(|line| line.starts_with(r#"[["done","stand1","#)).unwrap();
+    let mut entry: Value = serde_json::from_str(&lines[stood]).unwrap();
+    let place = entry[0][3][1].as_str().expect("the stand names its place").to_owned();
+    entry[0][3][1] = Value::from(format!("{place}-elsewhere"));
+    lines[stood] = entry.to_string();
+    fs::write(life, lines.join("\n") + "\n").unwrap();
+    fs::write(format!("{life}.log"), "{\"entries\": 0}\n").unwrap();
+    fs::read(life).unwrap()
+  }
+
+  #[tokio::test]
+  async fn a_drift_at_the_open_of_a_life_tells_its_window_why_and_leaves_the_daemon() {
+    let at = place();
+    let lines = Arc::new(Mutex::new(Vec::<String>::new()));
+    let kept = Arc::clone(&lines);
+    let log = Log(Arc::new(move |line: &str| kept.lock().unwrap().push(line.to_owned())));
+    let (local, daemon) =
+      started_with(&at, SHORT, Opening { log: Some(log), ..opening(&at) }).await;
+    let mut window = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    window.attach(&life).await;
+    window.ran(&life, "x = 1").await;
+    assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+    tokio::time::sleep(PAST).await;
+    assert!(!window.lives(&life).await);
+    let held = drifted(&life);
+    let mut later = Window::dialed(&local).await;
+    opened(&mut later, &at, "a.jsonl").await;
+    let drift = |why: &str| why.starts_with("Drift: ") && why.contains(" drifts: ");
+    match later.ask(Verb::Attach { life: life.clone(), from: 0 }).await {
+      Ok(Answer::Done) => {
+        let ended = |frame: &Frame| matches!(frame, Frame::Event { life: one, event: Event::Ended(Some(why)), .. } if *one == life && drift(why));
+        later.until(ended).await;
+      }
+      refused => assert_eq!(refused, Err(ProtocolError::Closed { life: life.clone() })),
+    }
+    let said = format!("furb host: the life of {life} ended: ");
+    let told = |line: &String| line.strip_prefix(&said).is_some_and(drift);
+    let start = Instant::now();
+    while !lines.lock().unwrap().iter().any(told) {
+      assert!(start.elapsed() < PATIENCE, "{:?}", lines.lock().unwrap());
+      tokio::time::sleep(SHORT).await;
+    }
+    assert_eq!(fs::read(&life).unwrap(), held, "a life that drifts keeps nothing in its record");
+    let other = opened(&mut later, &at, "b.jsonl").await;
+    later.attach(&other).await;
+    later.ran(&other, "y = 1").await;
     assert!(!daemon.is_finished());
   }
 

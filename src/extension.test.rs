@@ -5,6 +5,7 @@
 use std::{
   fs,
   path::{Path, PathBuf},
+  process, slice,
 };
 
 use super::{
@@ -12,7 +13,7 @@ use super::{
   extensions, frontmatter, load, parts, projected, reloads, skills::process, telling, word,
 };
 use crate::testing::Yard;
-use crate::value::{ObjectRef, entry};
+use crate::value::{ObjectRef, Text, entry};
 use crate::{
   Ear, Engine, Fact, Object,
   ear::{ear, hear, say},
@@ -21,7 +22,7 @@ use crate::{
 
 /// A directory of its own for one test, and empty.
 fn place(name: &str) -> Yard {
-  Yard::new(format!("furb-extension-{name}-{}", std::process::id()))
+  Yard::new(format!("furb-extension-{name}-{}", process::id()))
 }
 
 /// A folder of an extension: its manifest and the file of its word.
@@ -286,7 +287,7 @@ fn the_parts_for_a_tui_are_those_of_the_extensions_that_the_configs_turn_on_and_
   let alone = parts(&places, &project).unwrap();
   assert_eq!(
     alone,
-    std::slice::from_ref(&compaction),
+    slice::from_ref(&compaction),
     "the crate carries the part of an official extension that plays by default"
   );
   let todo = project.join(".furb").join("extensions").join("todo");
@@ -951,9 +952,7 @@ fn a_write_of_the_life_in_the_folder_of_an_extension_that_a_config_turns_on_relo
   let mut engine = lived(&at, vec![load("note", &root, &places(&at)).unwrap()]);
   let newer = "def note(on=\"\"):\n  return read(\"other.txt\", on=on)\n";
   let file = root.join("note.py").display().to_string();
-  engine
-    .write(&crate::value::Text::new(file, newer), verbs::Write { on: Some("chain1".to_owned()) })
-    .unwrap();
+  engine.write(&Text::new(file, newer), verbs::Write { on: Some("chain1".to_owned()) }).unwrap();
   let full = format!("{NOTE}\n\nnote()");
   let expected = [("chain1".to_owned(), full), ("chain1".to_owned(), newer.trim_end().to_owned())];
   assert_eq!(words(&mut engine, &["chain1"]), expected);
@@ -961,10 +960,7 @@ fn a_write_of_the_life_in_the_folder_of_an_extension_that_a_config_turns_on_relo
   fs::write(at.join("elsewhere.py"), "").unwrap();
   let other = at.join("elsewhere.py").display().to_string();
   engine
-    .write(
-      &crate::value::Text::new(other, "X = 1\n"),
-      verbs::Write { on: Some("chain1".to_owned()) },
-    )
+    .write(&Text::new(other, "X = 1\n"), verbs::Write { on: Some("chain1".to_owned()) })
     .unwrap();
   assert_eq!(enables(&at).len(), 2, "a write outside the folder of an extension reloads nothing");
 }
@@ -1016,9 +1012,7 @@ fn a_write_of_the_local_config_of_the_project_turns_on_each_extension_that_it_gi
   let mut engine = lived(&at, vec![]);
   let file = projected(&at)[1].display().to_string();
   let text = r#"{"extensions": {"note": "extensions/note"}}"#;
-  engine
-    .write(&crate::value::Text::new(file, text), verbs::Write { on: Some("chain1".to_owned()) })
-    .unwrap();
+  engine.write(&Text::new(file, text), verbs::Write { on: Some("chain1".to_owned()) }).unwrap();
   assert_eq!(enables(&at), [NOTE.to_owned()]);
 }
 #[test]

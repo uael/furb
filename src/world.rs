@@ -57,8 +57,8 @@ pub use reader::{READER, Retold, retold};
 pub use scratch::{SCRATCH, Scratch};
 pub(crate) use store::Format;
 pub use store::{
-  CHECKPOINT_SCHEMA, Lines, MADE, RECORD_SCHEMA, Schema, SchemaError, Sqlite, Store, engine, heads,
-  keeping, kept, made, readable, release, standing, store, texts,
+  CHECKPOINT_SCHEMA, Lines, MADE, Marks, RECORD_SCHEMA, Schema, SchemaError, Sqlite, Store, engine,
+  keeping, kept, made, marks, readable, release, stood, store, texts,
 };
 pub use time::time;
 
@@ -81,13 +81,13 @@ pub(crate) fn beside(record: &Path, suffix: &str) -> PathBuf {
 /// The bytes that a process may still write on the disk that holds a folder, none when the disk
 /// does not say.
 #[cfg(unix)]
-pub(crate) fn free(folder: &Path) -> Option<u64> {
+pub fn free(folder: &Path) -> Option<u64> {
   let stat = fs::statvfs(folder).ok()?;
   stat.f_bavail.checked_mul(stat.f_frsize)
 }
 
 #[cfg(not(unix))]
-pub(crate) fn free(_: &Path) -> Option<u64> {
+pub fn free(_: &Path) -> Option<u64> {
   None
 }
 

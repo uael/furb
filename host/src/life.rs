@@ -19,7 +19,7 @@ use furb::{
   Engine, Fact, Fault, Object, Text, checkpoint,
   life::{Log, Opening, Stream},
   verbs,
-  view::{Act, Fold, Held, Named},
+  view::{Act, Desk, Fold, Held, Named, Threads},
   wire::{outward, parsed},
   world::{
     self, Shape, answered,
@@ -39,6 +39,7 @@ use tokio::{
 };
 
 use crate::{
+  backlog::{self, Backlog},
   changes::{Journal, journal},
   ears::{ears, json_of},
   error::LifeError,
@@ -182,6 +183,14 @@ pub enum Reply {
   Values(Vec<Value>),
   /// A name of a module: the name of its type, its representation, and its value as JSON.
   Inspected { kind: String, repr: String, value: Value },
+  /// What waits for the operator.
+  Desk(Desk),
+  /// The threads of a chain.
+  Threads(Threads),
+  /// The acts as they stood at a moment.
+  Acts(Vec<Act>),
+  /// Each moment at which an act began or ended.
+  Moments(Vec<u64>),
 }
 
 /// One event under its place in the log.
@@ -212,6 +221,7 @@ pub struct Life {
   configs: Layers,
   queue: Queue,
   held: Held,
+  backlog: Backlog,
   /// The name of the session, folded from each fact of the life, and where the handle reads it.
   named: Named,
   name: Arc<Mutex<Option<String>>>,
@@ -347,13 +357,10 @@ impl Life {
   /// fact is told, though it equals one before it, as a second pause of a chain. A record that the
   /// store cannot read tells nothing here, and its open says why.
   fn recalled(&mut self, record: &str) {
-    // A record with no checkpoint tells nothing here, so only the head of each line is read to know that.
-    match world::heads(record, &[checkpoint::CHECKPOINT]) {
-      Ok(marked) if !marked.is_empty() => {}
-      _ => return,
-    }
-    let Ok(entries) = world::kept(record) else { return };
-    let marks: Vec<usize> = checkpoint::all(&entries).into_iter().map(|at| at + 1).collect();
+    // One pass over the heads of the lines gives the place of each checkpoint, and a record with
+    // none tells nothing here.
+    let Ok(world::Marks { checkpoints, .. }) = world::marks(record) else { return };
+    let marks: Vec<usize> = checkpoints.into_iter().map(|at| at + 1).collect();
     let Some(&last) = marks.last() else { return };
     let Ok(told) = world::retold(record) else { return };
     let mut facts = Vec::new();
@@ -441,6 +448,7 @@ async fn run(
     configs,
     queue: Queue::default(),
     held: Held::default(),
+    backlog: Backlog::default(),
     named: Named::default(),
     name,
   };
@@ -550,7 +558,8 @@ async fn driven(
   let (mut gone, mut asked) = (false, Vec::new());
   loop {
     let ends = gone || !asked.is_empty();
-    let waits = (ends || record.is_some() && life.watch.due()) && engine.unkept() > 0;
+    let waits =
+      (ends || life.backlog.holds() || record.is_some() && life.watch.due()) && engine.unkept() > 0;
     let woke = tokio::select! {
       biased;
       Some(event) = life.heard.recv() => Woke::Told(event),
@@ -571,7 +580,7 @@ async fn driven(
         reply.send(life.since(from)).ok();
       }
       Woke::Said(Some(Message::Command(Command::End, reply))) if engine.unkept() > 0 => {
-        life.put(Event::Notice(unkept(engine.unkept())));
+        life.put(Event::Notice(backlog::unkept(engine.unkept())));
         asked.push(reply);
       }
       Woke::Said(Some(Message::Command(Command::End, reply))) => {
@@ -588,6 +597,7 @@ async fn driven(
       }
     }
     drained(&mut engine, life);
+    weighed(&mut engine, life, record);
     if let Some(fault) = engine.stopped().cloned() {
       drop(engine);
       return Drove::Ended(Some(fault), asked);
@@ -604,12 +614,14 @@ async fn driven(
   }
 }
 
-/// Why a life does not end yet while its record does not hold a number of the facts that it said.
-fn unkept(count: usize) -> String {
-  format!(
-    "The life does not end yet: its record does not hold {count} facts, which an end now loses. \
-     Give the disk of the record room. The life ends once the record holds them."
-  )
+/// The work of a life paused or woken as its record lacks facts or holds each again, as
+/// [`backlog`] says, with the notice of each change.
+fn weighed(engine: &mut Engine, life: &mut Life, record: Option<&str>) {
+  match record.map(|one| life.backlog.weighed(engine, one)) {
+    Some(Ok(Some(notice))) => life.put(Event::Notice(notice)),
+    Some(Err(no)) => life.put(Event::Notice(format!("The life cannot hold its work: {no}"))),
+    Some(Ok(None)) | None => {}
+  }
 }
 
 /// What the engine comes to, pumped: a fault that stops it, or, when the life waits for its record,
@@ -658,15 +670,12 @@ async fn commanded(
       let waiting = waiting.iter().map(serde_json::to_value).collect::<Result<_, _>>();
       Ok(Reply::Values(waiting.map_err(|no| LifeError::Refused(no.to_string()))?))
     }
-    Command::Desk { notices } => valued(&held.desk(&notices)),
+    Command::Desk { notices } => Ok(Reply::Desk(held.desk(&notices))),
     Command::Threads { on, at, read } => {
-      valued(&held.threads(&chain(on), at, read.unwrap_or_default()))
+      Ok(Reply::Threads(held.threads(&chain(on), at, read.unwrap_or_default())))
     }
-    Command::AsOf { at } => {
-      let acts = held.as_of(at).iter().map(serde_json::to_value).collect::<Result<_, _>>();
-      Ok(Reply::Values(acts.map_err(|no| LifeError::Refused(no.to_string()))?))
-    }
-    Command::Moments => Ok(Reply::Values(held.moments().into_iter().map(Value::from).collect())),
+    Command::AsOf { at } => Ok(Reply::Acts(held.as_of(at))),
+    Command::Moments => Ok(Reply::Moments(held.moments())),
     Command::Settings => {
       let settings = configs.get()?.into_iter().map(|one| json!(one));
       Ok(Reply::Values(settings.collect()))
@@ -677,11 +686,6 @@ async fn commanded(
     }
     other => answered_by(engine, other),
   }
-}
-
-/// A meaning as the value of a reply.
-fn valued(meaning: &impl serde::Serialize) -> Result<Reply, LifeError> {
-  serde_json::to_value(meaning).map(Reply::Value).map_err(|no| LifeError::Refused(no.to_string()))
 }
 
 /// Each follow-up that is due sent as a prompt on its chain, or why its send failed, which holds

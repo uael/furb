@@ -50,7 +50,7 @@ fn checkouts(main: &Path) -> Vec<PathBuf> {
   for entry in entries.flatten() {
     let Ok(mark) = fs::read_to_string(entry.path().join("gitdir")) else { continue };
     let Some(tree) = Path::new(mark.trim()).parent() else { continue };
-    if let Ok(real) = fs::canonicalize(tree)
+    if let Ok(real) = dunce::canonicalize(tree)
       && !found.contains(&real)
     {
       found.push(real);

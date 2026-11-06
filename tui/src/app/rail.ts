@@ -182,7 +182,7 @@ export const rail = part({
             part.list.map((one) => [
               one.act.id,
               one.state,
-              one.resolved,
+              one.over,
               one.title,
               one.messages.length,
               plain(this.threadMeta(one)),
@@ -227,7 +227,7 @@ export const rail = part({
     if (state === "paused") return ["paused", c.warning];
     if (state === "failed") return ["failed", c.danger];
     if (state === "cancelled") return ["cancelled", c.faint];
-    if (thread.resolved) return ["done", c.faint];
+    if (thread.over) return ["done", c.faint];
     return [statusLabels[busy(state) ? state : "runs"].toLowerCase(), c.accent];
   },
 
@@ -490,7 +490,7 @@ export const rail = part({
           [glyph.mark, threadTone(thread.act.id)],
           [" "],
           [`${mark} `, tone],
-          [title, lit ? c.text : thread.resolved ? c.faint : c.muted, lit ? bold : 0],
+          [title, lit ? c.text : thread.over ? c.faint : c.muted, lit ? bold : 0],
         ],
         this.threadMeta(thread, state),
         () => this.chooseThread(thread),

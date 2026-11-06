@@ -45,12 +45,13 @@ repos:
         pass_filenames: false
       - id: pytest
         name: pytest
-        entry: uv run pytest -q
+        # The tests that the files of the commit reach, which script/hooks/reach.py names; the gates give every file.
+        entry: python3 script/hooks/reach.py pytest
         language: system
         # The suite drives the engine through furb-monty, which builds the crate, so a change of the Rust is read too.
         types_or: [python, pyi, toml, json, rust]
         files: ^(src/|build/|test/|extensions/|\.furb/|bind/python/|script/|tests/|docs/examples/python/)|^(pyproject|Cargo|rust-toolchain)\.toml$
-        pass_filenames: false
+        require_serial: true
       - id: fmt
         name: fmt
         entry: cargo fmt --all --check
@@ -61,21 +62,24 @@ repos:
         name: no comment of rust goes past 100 characters
         entry: python3 script/rustwidth.py
         language: system
-        files: (\.rs|^script/rustwidth\.py)$
-        pass_filenames: false
+        # The files that the commit stages, as the hooks of the tests read them, so a long comment that the tree holds
+        # in a file of another topic fails no commit of this one.
+        files: \.rs$
       - id: clippy
         name: clippy
-        entry: cargo clippy --workspace --all-targets -- -D warnings
+        # With the feature of the bindings of TypeScript, so the one run holds the code that the feature adds: the gates
+        # run no other clippy on Linux.
+        entry: cargo clippy --workspace --all-targets --features furb/typescript -- -D warnings
         language: system
         types_or: [rust]
         pass_filenames: false
       - id: cargo-test
         name: cargo test
-        entry: cargo test --workspace
+        entry: python3 script/hooks/reach.py cargo
         language: system
         # The files that the crate and its tests read. The gates run every hook on every file.
-        files: ^(src|cli|extensions|tests|docs/examples)/|^(build\.rs|Cargo\.toml|Cargo\.lock|DOCTRINE\.md)$
-        pass_filenames: false
+        files: ^(src|cli|host|extensions|tests|docs/examples)/|^(build\.rs|Cargo\.toml|Cargo\.lock|DOCTRINE\.md)$
+        require_serial: true
       - id: links
         name: the links of the READMEs of the packages
         # No sync: a sync in a new worktree builds the crate, and that outlasts a bash. The script reads git only.

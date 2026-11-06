@@ -516,7 +516,7 @@ export class App {
       flexShrink: 0,
       visible: false,
       marginTop: space.section,
-      onMouseUp: (event) => this.clickStage(event.y - this.stage.y),
+      onMouseUp: (event) => this.clickStage(event.x - this.stage.x, event.y - this.stage.y),
     });
     center.add(this.stage);
     this.graph = new Graph(this.stageOf());
@@ -1023,17 +1023,16 @@ export class App {
     }
     const queued = w.queued.filter((entry) => entry.chain === w.selected);
     this.queueBox.visible = w.queued.length > 0;
-    if (this.paneChanged(this.queueBox, [w.queued, w.queueHeld, w.selected, this.theme])) {
+    // A send that failed holds the queue of its chain until the operator takes the follow-up out.
+    const held = w.queued.some((follow) => follow.failed);
+    if (this.paneChanged(this.queueBox, [w.queued, held, w.selected, this.theme])) {
       this.clear(this.queueBox);
-      const first = (queued.at(-1) ?? w.queued.at(-1))?.text.split("\n")[0] ?? "";
+      const first = (queued.at(-1) ?? w.queued.at(-1))?.message.split("\n")[0] ?? "";
       this.queueBox.add(
         this.line(
           [
-            [`${w.queueHeld ? glyph.held : glyph.ring} `, w.queueHeld ? c.warning : c.faint],
-            [
-              `${w.queueHeld ? "Queue held" : "Queued"} ${w.queued.length}  `,
-              w.queueHeld ? c.warning : c.text,
-            ],
+            [`${held ? glyph.held : glyph.ring} `, held ? c.warning : c.faint],
+            [`${held ? "Queue held" : "Queued"} ${w.queued.length}  `, held ? c.warning : c.text],
             [first, c.muted],
           ],
           c.muted,

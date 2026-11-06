@@ -52,6 +52,12 @@ linker, the C tools of your system are missing. When `bun: command not found` sh
 come first. It gives the TUI `--demo`, `--record`, `--cwd`, the model and the effort of its `--model` as `--model`
 and `--effort`, each `--roster`, and the words after `--`, as [the command line](../cli/README.md) says.
 
+`--read` opens a window that reads the life and changes nothing, on any transport: its hello asks the daemon for the role
+to read, and the daemon gives the lesser of that role and the one that the transport proved, so each send of the window
+is refused with the reason. A request that the daemon leaves when it goes, as at a handover, is sent again once the life
+is open again when a second time changes nothing, as a read or a pause; a request that makes an act fails with the
+request, since the act may have been made. The window shows a stall that the daemon tells as a notice.
+
 The welcome of an empty chain offers "Watch a life" first: a short life that plays by itself and asks no model, so
 it costs nothing. `/watch` plays it too, and `bun run demo` opens on it.
 [A tour of the TUI](../docs/tui.md#watch-a-life) shows it and its keys.
@@ -338,8 +344,9 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 The command table comes from the same source as completion, the palette, and help. Run `bun run docs` after
 changing that source. Enter sends a message straight to the engine. The engine gives the next
 ask to the rung that has waited longest. ⌥Enter or `/queue text` holds a follow-up until the chain's
-current prompt and rungs complete. `/queue` edits or removes waiting messages. Saved queues require a resume
-choice; a dispatch recorded before a crash is not sent twice. Editing a prompt's program writes its door, and the engine
+current prompt and rungs complete. `/queue` edits or removes waiting messages. The life holds the queue and sends each
+follow-up once, from any window, and its record keeps the queue, so a reopen finds it as it stood. A send that fails holds
+the queue of its chain, with its cause, until you take the follow-up out. Editing a prompt's program writes its door, and the engine
 makes the program again only when the edit drops a word that ran; else it keeps the module and runs only the new words.
 A slash command typed while a program is under edit runs as a command, since no Python program starts with a
 slash. Python input uses the same gate as a model's word and marks a refused line in the word and editor.

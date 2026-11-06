@@ -1,4 +1,5 @@
 from furb.engine import (
+  HEAD,
   Act,
   Exit,
   Filter,
@@ -143,7 +144,7 @@ FILTERS: list[Filter] = [latest(), recent(8)]
 def reground(on: str = "") -> None:
   here = on or scope(acting())
   voiced = {x[1] for x in transcript(here) if x[0] == "tell"}
-  held: dict[str, Text] = {}
+  held: dict[str, tuple[Text, bool]] = {}
   for a in transcript(here):
     if (
       a[0] in ("read", "write")
@@ -152,12 +153,21 @@ def reground(on: str = "") -> None:
       and "://" not in t.path
       and get(t.path.split("/")[0]) is None
     ):
-      held[t.path] = t
-  for path, text in held.items():
+      made = get(a[2]) or ("",)
+      held[t.path] = (t, made[0] == "rung" and str(made[4:5]).endswith("reground()',)"))
+  for path, (text, again) in held.items():
     try:
-      read(path, differs(text.lines), on=on)
+      read(path, HEAD if again else differs(text.lines), on=on)
     except Refused:
       continue
+
+
+def headline(fact: tuple) -> str:
+  """The first line of the first note of a tell, or else the kind of the fact."""
+  match fact:
+    case ("tell", _, _, [str(first), *_]):
+      return first.split("\n")[0]
+  return str(fact[0])
 
 
 def supersede(keep: Filter | None = None, on: str = "") -> str:
@@ -175,7 +185,14 @@ def supersede(keep: Filter | None = None, on: str = "") -> str:
       kin.add(name)
       name = b[2]
 
+  heads = [headline(fact) for fact in theirs]
+  lo = heads.index("chain()") if "chain()" in heads else len(theirs)
+  hi = heads.index("#" + here, lo) if "#" + here in heads[lo:] else lo
+  setup = {id(fact) for fact in theirs[lo:hi]}
+
   def stays(it: tuple) -> bool:
+    if id(it) in setup:
+      return True
     made = get(it[1])
     if made is None:
       return it[2] in kin

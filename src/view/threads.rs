@@ -20,9 +20,9 @@ pub type Rows<'a> = HashMap<&'a str, &'a Act>;
 const DEEP: usize = 64;
 
 /// One thread of a chain: its prompt, its name, its messages, the prompts to the operator that it
-/// made and the questions of them that wait, and its state. A thread is resolved once its prompt
-/// and each of its messages is done, and a message to a resolved thread opens it again until its
-/// model closes the message.
+/// made and the questions of them that wait, and its state. A thread is over once its prompt
+/// and each of its messages is done, and a message to a thread that is over opens it again until
+/// its model closes the message.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ChainThread {
   pub prompt: String,
@@ -34,7 +34,7 @@ pub struct ChainThread {
   pub asked: Vec<String>,
   pub asks: Vec<String>,
   pub state: State,
-  pub resolved: bool,
+  pub over: bool,
   pub origin: Origin,
   /// Whether the operator started it, himself or by a word of his own.
   pub yours: bool,
@@ -312,7 +312,7 @@ fn sorted(on: &[&Act], rows: &Rows<'_>) -> (Vec<ChainThread>, Vec<ChainAside>) {
   for thread in &mut out {
     let acts = std::iter::once(&thread.prompt).chain(&thread.messages);
     let open = acts.filter_map(|id| rows.get(id.as_str())).rfind(|act| !act.done());
-    thread.resolved = open.is_none();
+    thread.over = open.is_none();
     thread.state = match open.or_else(|| rows.get(thread.prompt.as_str())) {
       _ if !thread.asks.is_empty() => State::Asks,
       Some(act) => State::of(act),
@@ -409,7 +409,7 @@ fn opened(act: &Act, rows: &Rows<'_>) -> ChainThread {
     asked: Vec::new(),
     asks: Vec::new(),
     state: State::Done,
-    resolved: true,
+    over: true,
     origin,
     yours: mine || (origin == Origin::Rung && maker.is_some_and(|one| operator(&one.by))),
   }
@@ -462,10 +462,10 @@ pub fn order_threads(mut nodes: Vec<ThreadNode>, rows: &Rows<'_>) -> Vec<ThreadN
   nodes
 }
 
-/// Whether a thread stands open in the list of the threads: it is not resolved, or a question
+/// Whether a thread stands open in the list of the threads: it is not over, or a question
 /// waits in it or in an agent under it.
 pub fn open(node: &ThreadNode) -> bool {
-  !node.thread.resolved || node.state == State::Asks
+  !node.thread.over || node.state == State::Asks
 }
 
 /// When the last message of a thread began: its prompt, or the last prompt on it.

@@ -39,11 +39,13 @@ async def chosen(to: str = "", on: str = "") -> Filter:
   """chosen() asks choice() and gives a take of the ids that it comes to."""
 
 def reground(on: str = "") -> None:
-  """reground() reads again each file of each read or write whose tell the chain holds, once each, in the order of the first read or write, shows only the lines that changed since the last text that the chain holds of it, and skips a file that it cannot read, so the chain sees each file that it kept as it is now."""
+  """reground() reads again each file of each read or write whose tell the chain holds, once each, in the order of the first read or write, shows only the lines that changed since the last text that the chain holds of it, and skips a file that it cannot read, so the chain sees each file that it kept as it is now.
+  reground() shows a file whole again when the read that the chain holds of it is one that a reground made, which showed only what changed, so a chain cut twice in a row still sees the text of each file that it kept."""
 
 def supersede(keep: Filter | None = None, on: str = "") -> str:
   """supersede(keep) says on the chain of the caller a prefix of what the filter keep kept of its acts, everything that made what it kept, and every act of the chain, and gives the chain.
   So the chain goes on under its name with its module, its ladders and its acts, and only its turns are cut.
+  supersede(keep) keeps whole the setup of the chain, each fact from its paragraph chain() up to its open, so a cut, even one that keeps nothing, leaves the doctrine and the words of the setup that its model reads first.
   """
 
 def compact(filters: list[Filter] | None = None, summary: str = "", on: str = "") -> str:

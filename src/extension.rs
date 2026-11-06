@@ -25,7 +25,7 @@
 pub mod skills;
 
 use std::{
-  fs,
+  env, fs,
   io::ErrorKind,
   path::{Path, PathBuf},
 };
@@ -43,7 +43,7 @@ use crate::{
   fact::{Fact, named},
   gate,
   value::{Fault, Object, Text, entry},
-  world::files,
+  world::{config, files},
 };
 
 /// The kind of the fact that enables an extension in a life, which [`extensions`] says and reads.
@@ -251,11 +251,11 @@ pub struct Extension {
 
 impl Extension {
   /// The extension that a fact which enables one carries.
-  fn of(a: &Fact) -> Option<Extension> {
+  fn of(a: &Fact) -> Option<Self> {
     let text = |at| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
     let root = text(3).as_deref() == Some(ROOTED);
     let file = text(4).unwrap_or_default();
-    Some(Extension { name: text(0)?, word: text(1)?, life: text(2)?, root, file })
+    Some(Self { name: text(0)?, word: text(1)?, life: text(2)?, root, file })
   }
 
   /// The saying that enables the extension, about the root: its name, its word, its life word,
@@ -299,9 +299,9 @@ pub struct Places {
 impl Places {
   /// The places of this process: the config directory is `FURB_CONFIG_DIR`, else `furb` under `XDG_CONFIG_HOME`,
   /// under `APPDATA` on Windows, or under `.config` in the home, where the TUI keeps its preferences too.
-  pub fn here() -> Places {
-    let var = |key: &str| std::env::var_os(key).map(PathBuf::from);
-    let home = std::env::home_dir();
+  pub fn here() -> Self {
+    let var = |key: &str| env::var_os(key).map(PathBuf::from);
+    let home = env::home_dir();
     let config = var("FURB_CONFIG_DIR").unwrap_or_else(|| {
       var("XDG_CONFIG_HOME")
         .or_else(|| var("APPDATA").filter(|_| cfg!(windows)))
@@ -309,7 +309,7 @@ impl Places {
         .unwrap_or_default()
         .join("furb")
     });
-    Places { config, home }
+    Self { config, home }
   }
 }
 
@@ -429,6 +429,11 @@ pub(crate) fn manifested<T: AsRef<str>>(
       "A manifest gives a name, and the file of a word under metadata as {WORD}"
     ));
   };
+  if config::furb_key(name) {
+    return Err(format!(
+      "The name {name} is a key of furb in the configs: give the skill a name of its own"
+    ));
+  }
   let foreign =
     |key: &&(String, String)| key.0.starts_with("furb-") && !FIELDS.contains(&key.0.as_str());
   if let Some((key, _)) = manifest.metadata.iter().find(foreign) {
@@ -581,17 +586,17 @@ pub fn parts(places: &Places, project: &Path) -> Result<Vec<Part>, Fault> {
 }
 
 /// The name and the text of the file of the keys of each extension that the configs turn on and
-/// whose manifest names one, in the order a life runs them. An official extension names none, and
-/// a folder whose manifest cannot be read gives none, since its extension does not play.
+/// whose manifest names one, in the order a life runs them. An official extension names none, a
+/// folder whose manifest cannot be read gives none, since its extension does not play, and a file
+/// of keys that cannot be read gives none, so the configs stay readable and writable, and a config
+/// can turn that extension off.
 pub(crate) fn contributed(places: &Places, project: &Path) -> Result<Vec<(String, String)>, Fault> {
   let mut out = Vec::new();
   for (name, root) in turned_on(places, project)? {
     let Some(root) = root else { continue };
     let Ok(text) = fs::read_to_string(root.join(MANIFEST)) else { continue };
-    if let Some(keys) = frontmatter(&text).meta(CONFIG) {
-      let file = root.join(keys);
-      let text = fs::read_to_string(&file)
-        .map_err(|no| Fault::refused(format!("{no}: {}", file.display())))?;
+    let keys = frontmatter(&text).meta(CONFIG).map(|keys| root.join(keys));
+    if let Some(Ok(text)) = keys.map(fs::read_to_string) {
       out.push((name, text));
     }
   }

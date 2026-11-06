@@ -111,7 +111,7 @@ test("the threads that the ladder of a thread made nest under it, and a question
     asked: [],
     asks,
     state: asks.length ? "asks" : "runs",
-    resolved: false,
+    over: false,
     origin: "rung",
     yours: false,
   });
@@ -143,7 +143,7 @@ test("nesting changes no thread of its list, so a question that is answered leav
     asked: [],
     asks,
     state: asks.length ? "asks" : "runs",
-    resolved: false,
+    over: false,
     origin: "rung",
     yours: false,
     ...more,
@@ -237,12 +237,12 @@ test("the closed threads stand first and the open ones last, each group by the t
     asked: [],
     asks: [],
     state: "runs",
-    resolved: false,
+    over: false,
     origin: "rung",
     yours: false,
     ...more,
   });
-  const closed = (one: Act, messages: Act[] = []) => thread(one, { messages, resolved: true, state: "done" });
+  const closed = (one: Act, messages: Act[] = []) => thread(one, { messages, over: true, state: "done" });
   const at = (id: string, began: number) => prompt(id, began);
   const agents = [
     act("prompt7", "prompt", "chain1", "rung1", 8),
@@ -266,7 +266,7 @@ test("the closed threads stand first and the open ones last, each group by the t
   // Before, main showed the threads in the order they began.
   expect(ids(nestThreads(list, rows))).toEqual(["prompt1", "prompt2", "prompt3", "prompt4", "prompt6"]);
   const tree = orderThreads(nestThreads(list, rows));
-  // prompt6 is resolved, and it stands open since a question waits in its agent prompt7.
+  // prompt6 is over, and it stands open since a question waits in its agent prompt7.
   expect(ids(tree)).toEqual(["prompt2", "prompt1", "prompt4", "prompt6", "prompt3"]);
   expect(tree.map(threadOpen)).toEqual([false, false, true, true, true]);
   expect(ids(tree[3]?.agents ?? [])).toEqual(["prompt8", "prompt7"]);

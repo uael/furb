@@ -1,6 +1,7 @@
 //! The one protocol of the host: what a peer says to the daemon, and what the daemon says to a
 //! peer, each frame one line of JSON.
 
+use furb::view::{Act, Desk, Threads};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -408,30 +409,9 @@ pub enum Config {
   /// value, then a stand of the life on the configs. A change that the catalog refuses puts its
   /// config back as it was, and the life does not stand.
   Set { key: Vec<String>, value: Option<Value>, layer: Option<Layer> },
-  /// A stand of the life on the configs as the disk holds them, which asks again each model that
-  /// waits to retry.
-  Reload,
 }
 
-/// A layer of the configs, from the one that wins least to the one that wins most: the config of
-/// the user, the config of the project, and its local config, which git ignores.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum Layer {
-  User,
-  Project,
-  Local,
-}
-
-impl From<Layer> for furb::world::config::Layer {
-  fn from(layer: Layer) -> Self {
-    match layer {
-      Layer::User => Self::User,
-      Layer::Project => Self::Project,
-      Layer::Local => Self::Local,
-    }
-  }
-}
+pub use furb::world::config::Layer;
 
 /// What the daemon says to a peer.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -496,6 +476,14 @@ pub enum Answer {
   Presence(Vec<Peer>),
   /// The lives that a daemon gave at its handover.
   Handed(Vec<Handed>),
+  /// What waits for the operator.
+  Desk(Desk),
+  /// The threads of a chain.
+  Threads(Threads),
+  /// The acts as they stood at a moment.
+  Acts(Vec<Act>),
+  /// Each moment at which an act began or ended.
+  Moments(Vec<u64>),
 }
 
 /// An act that stays open in a life that stalled: its name, its kind, and the chain that it stands
