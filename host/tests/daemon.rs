@@ -38,13 +38,14 @@ mod daemon {
     Object,
     life::{Answer as Answered, Log, Opening},
     view::Phase,
+    world::codex,
   };
   use furb_host::{
     DaemonError, Event, GRACE, ProtocolError, STALL, Settings, Tailnet, TransportError,
     access::{Access, Ports},
     protocol::{
-      Answer, Axis, Dispose, Effect, Frame, Gesture, Hello, Kind, Listed, Mount, Node, PROTOCOL,
-      Request, Role, Shape, Slot, Tree, Verb, ViewEffect, ViewEvent,
+      Answer, Axis, Config, Dispose, Effect, Frame, Gesture, Hello, Kind, Listed, Mount, Node,
+      PROTOCOL, Request, Role, Shape, Slot, Tree, Verb, ViewEffect, ViewEvent,
     },
     run,
     transport::{Accepted, Dialer, Identity, Local, LocalApi, Tailscale, Who},
@@ -215,6 +216,7 @@ mod daemon {
     lines: Framed<<Local as Dialer>::Stream, LinesCodec>,
     next: u64,
     pushed: VecDeque<Frame>,
+    life: String,
   }
 
   impl Window {
@@ -226,7 +228,7 @@ mod daemon {
     /// A peer of a kind that dialed the daemon and said its hello.
     async fn dialed_as(local: &Local, kind: Kind, name: Option<&str>) -> Self {
       let lines = Framed::new(local.dial().await.unwrap(), LinesCodec::new());
-      let mut window = Self { lines, next: 0, pushed: VecDeque::new() };
+      let mut window = Self { lines, next: 0, pushed: VecDeque::new(), life: String::new() };
       let name = name.map(str::to_owned);
       let hello = Verb::Hello(Hello { protocol: PROTOCOL, kind, name, role: None });
       let welcome = window.ask(hello).await;
@@ -264,6 +266,17 @@ mod daemon {
         if wanted(&frame) {
           return frame;
         }
+      }
+    }
+
+    /// The first frame that the test waits for, which keeps each frame before it for `until`.
+    async fn keeping(&mut self, wanted: impl Fn(&Frame) -> bool) -> Frame {
+      loop {
+        let frame = self.read().await.expect("the daemon pushes the frame");
+        if wanted(&frame) {
+          return frame;
+        }
+        self.pushed.push_back(frame);
       }
     }
 
@@ -1664,5 +1677,66 @@ mod daemon {
     assert!(gone(child).await, "the end of the life ends what the process started");
     let heard = window.during(PAST).await;
     assert!(!heard.iter().any(crashed), "a process that the life ends is not told");
+  }
+
+  /// One test at a time holds the port of the browser callback of a sign-in.
+  static PORT: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+  /// The request that turns codex on, said with no wait for its answer, and its id.
+  async fn signing(window: &mut Window) -> u64 {
+    let id = window.next;
+    window.next += 1;
+    let key = ["providers", "codex"].map(str::to_owned).to_vec();
+    let config = Config::Set { key, value: Some(json!(true)), layer: None };
+    let verb = Verb::Config { life: window.life.clone(), config };
+    window.lines.send(serde_json::to_string(&Request { id, verb }).unwrap()).await.unwrap();
+    id
+  }
+
+  fn signed_in(state: &'static str) -> impl Fn(&Frame) -> bool {
+    move |frame| matches!(frame, Frame::SignIn { state: got, .. } if got == state)
+  }
+
+  #[tokio::test]
+  async fn a_sign_in_of_codex_that_fails_is_pushed_to_the_window_and_refuses_its_config() {
+    let _port = PORT.lock().await;
+    let at = place();
+    let (local, _daemon) = started(&at, GRACE).await;
+    let mut window = Window::dialed(&local).await;
+    window.life = opened(&mut window, &at, "a.jsonl").await;
+    let life = window.life.clone();
+    window.attach(&life).await;
+    let taken = std::net::TcpListener::bind(("127.0.0.1", 1455)).unwrap();
+    let id = signing(&mut window).await;
+    let Frame::SignIn { url, message, .. } = window.keeping(signed_in("failed")).await else {
+      unreachable!()
+    };
+    assert_eq!(url, None);
+    assert!(message.is_some_and(|why| !why.is_empty()), "the frame tells why it failed");
+    let answer =
+      window.until(|frame| matches!(frame, Frame::Refused { id: Some(got), .. } if *got == id));
+    assert!(matches!(answer.await, Frame::Refused { error: ProtocolError::Refused { .. }, .. }));
+    drop(taken);
+  }
+
+  #[tokio::test]
+  async fn a_sign_in_of_codex_that_the_operator_cancels_is_pushed_and_refuses_its_config() {
+    let _port = PORT.lock().await;
+    let at = place();
+    let (local, _daemon) = started(&at, GRACE).await;
+    let mut window = Window::dialed(&local).await;
+    window.life = opened(&mut window, &at, "a.jsonl").await;
+    let life = window.life.clone();
+    window.attach(&life).await;
+    let id = signing(&mut window).await;
+    let Frame::SignIn { url, .. } = window.keeping(signed_in("waiting")).await else {
+      unreachable!()
+    };
+    assert!(url.is_some_and(|one| one.starts_with("https://")), "the frame holds the address");
+    codex::cancel(Some(&at.join("config")));
+    window.keeping(signed_in("canceled")).await;
+    let answer =
+      window.until(|frame| matches!(frame, Frame::Refused { id: Some(got), .. } if *got == id));
+    assert!(matches!(answer.await, Frame::Refused { error: ProtocolError::Refused { .. }, .. }));
   }
 }

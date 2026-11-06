@@ -975,6 +975,27 @@ fn the_models_are_asked_again_after_a_refresh() {
 }
 
 #[test]
+fn a_discovery_that_is_an_hour_old_is_asked_again_so_a_model_that_the_command_line_names_now_shows()
+{
+  use super::discover::{LASTS, models_at};
+  let yard = Yard::new("lasts");
+  fs::write(yard.at.join("models"), "opus 100 low\n").unwrap();
+  let claude = yard.claude(10_000);
+  let aliases = |at: u64| -> Vec<String> {
+    let found = on_reactor(models_at(&claude.program, at)).expect("the command line answers");
+    found.into_iter().map(|one| one.alias).collect()
+  };
+  assert_eq!(aliases(1_000), ["opus"]);
+  fs::write(yard.at.join("models"), "opus 100 low\nfable 100 low\n").unwrap();
+  assert_eq!(aliases(1_000 + LASTS - 1), ["opus"], "a discovery that is young holds");
+  assert_eq!(
+    aliases(1_000 + LASTS),
+    ["opus", "fable"],
+    "the roster names fable once it is asked again"
+  );
+}
+
+#[test]
 fn a_command_line_that_answers_no_discovery_gives_the_fixed_models() {
   let yard = Yard::new("fixed");
   let got = said(&yard.claude(10_000));

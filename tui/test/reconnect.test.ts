@@ -164,3 +164,44 @@ test("a window that reads asks its role in its hello, and the frame stalled show
   expect(hellos).toEqual(["read"]);
   expect(await told).toBe("The life stalled.");
 });
+
+test("the frame sign_in of the daemon shows as the event authentication of a life, and the window asks nothing again", async () => {
+  const verbs: unknown[] = [];
+  const folder = mkdtempSync(join(tmpdir(), "furb-reconnect-"));
+  const place = join(folder, "host.sock");
+  const server = createServer((socket) => {
+    socket.setEncoding("utf8");
+    socket.on("error", () => {});
+    socket.on("data", (chunk: string) => {
+      const asked = JSON.parse(chunk.split("\n")[0] ?? "{}") as Asked & { verb?: string };
+      verbs.push(asked.verb);
+      reply(socket, asked, {
+        answer: "welcome",
+        data: { peer: { login: "test", role: "write", kind: "window" } },
+      });
+      for (const frame of [
+        { frame: "sign_in", state: "waiting", url: "https://auth.example/login", message: null },
+        { frame: "sign_in", state: "failed", url: null, message: "No network." },
+      ])
+        socket.write(`${JSON.stringify(frame)}\n`);
+    });
+  });
+  server.listen(place);
+  const daemon = new Daemon(folder, place, "write");
+  made.push({ folder, server, daemon });
+  const life = new RemoteLife(daemon, "life.jsonl");
+  const told: unknown[] = [];
+  const done = new Promise<void>((resolve) =>
+    life.on("authentication", (status: unknown) => {
+      told.push(status);
+      if (told.length === 2) resolve();
+    }),
+  );
+  await daemon.connect();
+  await done;
+  expect(told).toEqual([
+    { state: "waiting", url: "https://auth.example/login", message: undefined },
+    { state: "failed", url: undefined, message: "No network." },
+  ]);
+  expect(verbs).toEqual(["hello"]);
+});

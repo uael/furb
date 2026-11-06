@@ -313,18 +313,6 @@ fix what your change broke, and report what was broken before.
   `git worktree add`. Copy on write needs APFS, Btrfs or XFS; on another file system, the script makes a
   plain worktree. Remove a worktree with `git worktree remove --force <path>`, then `git branch -D <branch>`. The
   checkout at the root can stand behind `origin/main`, so read and change code in a worktree.
-- `sh script/build-slot.sh <command> [argument...]`: run a command that builds, as `cargo`, `bun run build`, `uv sync`,
-  `uv run pytest` or `git commit` (its hooks run cargo and the suite), in one of the slots of builds that all the
-  worktrees of the machine share, with at most 4 jobs of cargo. A slot is a folder of `/tmp/furb-build-slots-<uid>`
-  that holds the pid of its holder. A build in a slot keeps no incremental state of cargo, which no copy on write shares
-  and which filled the disk, unless `CARGO_INCREMENTAL` asks for it: a warm build of the crate takes 14 s, against 4 s.
-  A build starts only while the disk of its worktree keeps `FURB_BUILD_MIN_FREE_GB` GB free (60): below that it waits as for
-  a slot and then exits 75, so no build starts on a disk that is nearly full. It bounds the start and not the growth of a build.
-  The slot of a holder that ended, or whose pid went to another process, goes to
-  the next build. `FURB_BUILD_SLOTS` sets the slots (one for each 9 GB of memory, at least 1; `FURB_BUILD_MEM_GB`
-  replaces the memory the machine reports), `FURB_BUILD_JOBS` the cap of jobs (4), `FURB_BUILD_WAIT` the seconds to
-  wait for a slot (1200, then exit 75) and `FURB_BUILD_DIR` the folder. The workers of the conductor build only through it: with no cap, 28 rustc processes took
-  13.8 GB, and the machine ran out of memory.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
   whole.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.

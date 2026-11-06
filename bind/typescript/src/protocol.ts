@@ -455,6 +455,12 @@ export type Frame =
       frame: "stalled";
     }
   | {
+      state: string;
+      url?: string | null;
+      message?: string | null;
+      frame: "sign_in";
+    }
+  | {
       life: string;
       ask: number;
       request: unknown;
