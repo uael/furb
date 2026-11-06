@@ -12,7 +12,7 @@
 //! A fault that stops the sandbox cuts the life with no checkpoint, and ends it: the record keeps
 //! each fact up to the fault, and a later open replays them.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use furb::{
   Engine, Fault,
@@ -28,13 +28,14 @@ use crate::event::Event;
 pub(crate) const TAIL: u64 = 10_000;
 
 /// What the actor watches of a life since it opened: the facts that it said, each act that lives
-/// and that a checkpoint does not keep, the word of each rung, and the life words of the last
-/// standing, whose acts the seed makes again.
+/// and that a checkpoint does not keep, the rungs that say a life word of the last standing, whose
+/// acts the seed makes again, and those life words. The rungs go with the birth: the next birth
+/// makes its own.
 #[derive(Default)]
 pub(crate) struct Watch {
   facts: u64,
   held: HashSet<String>,
-  words: HashMap<String, String>,
+  seeds: HashSet<String>,
   lives: HashSet<String>,
 }
 
@@ -56,11 +57,12 @@ impl Watch {
       }
       Event::Act(act) if act.kind == Kind::Rung => {
         let word = act.words.first().and_then(Value::as_str).unwrap_or_default();
-        self.words.insert(act.id.clone(), word.to_owned());
+        if self.lives.contains(word) {
+          self.seeds.insert(act.id.clone());
+        }
       }
       Event::Act(act)
-        if !matches!(act.kind, Kind::Chain | Kind::Prompt)
-          && !self.words.get(&act.by).is_some_and(|word| self.lives.contains(word)) =>
+        if !matches!(act.kind, Kind::Chain | Kind::Prompt) && !self.seeds.contains(&act.by) =>
       {
         self.held.insert(act.id.clone());
       }
@@ -74,10 +76,12 @@ impl Watch {
     self.facts >= TAIL && self.held.is_empty()
   }
 
-  /// The life opened again, with no fact said and no act held.
+  /// The life opened again, with no fact said, no act held and no rung of a life word: the seed of
+  /// the new birth says them again.
   pub(crate) fn reborn(&mut self) {
     self.facts = 0;
     self.held.clear();
+    self.seeds.clear();
   }
 }
 
@@ -86,3 +90,7 @@ impl Watch {
 pub(crate) fn ended(engine: Engine, keeps: bool) -> Option<Fault> {
   keeps.then(|| engine.checkpoint()).and_then(Result::err)
 }
+
+#[cfg(test)]
+#[path = "rebirth.test.rs"]
+mod tests;
