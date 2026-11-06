@@ -1,4 +1,5 @@
 from furb.engine import (
+  HEAD,
   Act,
   Exit,
   Filter,
@@ -143,7 +144,7 @@ FILTERS: list[Filter] = [latest(), recent(8)]
 def reground(on: str = "") -> None:
   here = on or scope(acting())
   voiced = {x[1] for x in transcript(here) if x[0] == "tell"}
-  held: dict[str, Text] = {}
+  held: dict[str, tuple[Text, bool]] = {}
   for a in transcript(here):
     if (
       a[0] in ("read", "write")
@@ -152,10 +153,11 @@ def reground(on: str = "") -> None:
       and "://" not in t.path
       and get(t.path.split("/")[0]) is None
     ):
-      held[t.path] = t
-  for path, text in held.items():
+      made = get(a[2]) or ("",)
+      held[t.path] = (t, made[0] == "rung" and str(made[4:5]).endswith("reground()',)"))
+  for path, (text, again) in held.items():
     try:
-      read(path, differs(text.lines), on=on)
+      read(path, HEAD if again else differs(text.lines), on=on)
     except Refused:
       continue
 
