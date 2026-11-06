@@ -241,7 +241,8 @@ once it listens. A second daemon refuses to start there.
   it from its record.
 - A skill attaches a life as a window does, under its name, and hears its events from the place that it asks. Each verb of
   a skill that says an act or a fact, as `run`, `prompt`, `bash` or `close`, speaks in the life under `skill/<name>`, but `seen`, `queue`, `unqueue` and `config` speak as the operator, whoever says them, since they are the operator's own, and
-  the verbs of a window speak under `operator`. It holds no
+  the verbs of a window speak under `operator/<login>`, the member that its transport proved, so a model asks one
+  person with `to="operator/<login>"`. It holds no
   life, so a life with no window and no pin ends while a skill is attached. A skill that attaches again under its name takes
   the place of the first, and its views end. A skill that detaches, or whose peer leaves, ends its views.
 - The daemon starts the process that the manifest of a skill names under `furb-process` when a life plays the skill: at

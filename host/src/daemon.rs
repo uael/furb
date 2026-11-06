@@ -32,6 +32,7 @@ use std::{
 };
 
 use furb::{
+  engine::OPERATOR,
   life::{Log, Opening},
   wire::parsed,
   world::config::Change,
@@ -388,6 +389,7 @@ impl Host for Daemon {
       Routed::Life(life, command) => {
         let command = match (peer.kind, &peer.name) {
           (Kind::Skill, Some(name)) => command.by(processes::speaker(name)),
+          (Kind::Window, _) => command.by(format!("{OPERATOR}/{}", peer.login)),
           _ => command,
         };
         let handle = self.asked(|reply| Asked::Life { life, reply }).await??;

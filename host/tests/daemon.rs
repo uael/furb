@@ -842,7 +842,7 @@ mod daemon {
   }
 
   #[tokio::test]
-  async fn a_skill_says_each_act_under_its_name_and_a_window_under_the_operator() {
+  async fn a_skill_says_each_act_under_its_name_and_a_window_under_its_operator() {
     let at = place();
     let local = served(&at, None).await;
     let mut writer = Window::dialed(&local).await;
@@ -863,7 +863,13 @@ mod daemon {
       let Ok(Answer::Value(fact)) = writer.ask(get).await else { panic!("no act {id}") };
       speakers.push(fact[2].clone());
     }
-    assert_eq!(speakers, [json!("skill/k"), json!("skill/k"), json!("operator")]);
+    let Ok(Answer::Presence(peers)) = writer.ask(Verb::Presence { life: life.clone() }).await
+    else {
+      panic!("no presence")
+    };
+    let login = peers.iter().find(|one| one.kind == Kind::Window).map(|one| one.login.clone());
+    let member = json!(format!("operator/{}", login.expect("the window is present")));
+    assert_eq!(speakers, [json!("skill/k"), json!("skill/k"), member]);
     let y = Verb::Inspect { life: life.clone(), name: "x".to_owned(), on: None };
     assert!(matches!(skill.ask(y).await, Ok(Answer::Inspected { .. })), "the word of a skill ran");
   }
