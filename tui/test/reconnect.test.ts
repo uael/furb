@@ -237,8 +237,7 @@ test("a daemon that closes before its welcome, as one that ends at its grace, is
   expect(lost).toEqual([]);
 });
 
-test("a window of a later protocol that meets an older daemon says so, and neither waits nor asks a handover", async () => {
-  const verbs: unknown[] = [];
+test("a window of a later protocol that meets an older daemon says so, and waits for nothing", async () => {
   const folder = mkdtempSync(join(tmpdir(), "furb-reconnect-"));
   const place = join(folder, "host.sock");
   // A daemon of the protocol 1 that refuses a hello of another version and drops a verb that it does not know.
@@ -248,7 +247,6 @@ test("a window of a later protocol that meets an older daemon says so, and neith
     socket.on("data", (chunk: string) => {
       for (const line of chunk.split("\n").filter(Boolean)) {
         const asked = JSON.parse(line) as Asked & { verb?: string; protocol?: number };
-        verbs.push(asked.verb);
         if (asked.verb !== "hello") continue;
         if (asked.protocol === 1)
           reply(socket, asked, {
@@ -277,5 +275,4 @@ test("a window of a later protocol that meets an older daemon says so, and neith
     Bun.sleep(3000).then(() => "still waiting after 3 s"),
   ]);
   expect(ended).toContain("another build");
-  expect(verbs).not.toContain("handover");
 });

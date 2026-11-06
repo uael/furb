@@ -202,7 +202,7 @@ export class Daemon extends EventEmitter {
       kind: "window",
       role: this.role,
     }).catch((error: unknown) => {
-      // A daemon of another build is told plainly, and asked no handover, which would end the lives of its windows.
+      // A refusal of the version is told as a daemon of another build.
       if (!(error instanceof Refused) || error.kind !== "protocol") throw error;
       throw new Error(
         `The daemon of this machine is of another build (${error.message}). It ends once its windows quit and its grace passes, and the next window starts one of this build.`,

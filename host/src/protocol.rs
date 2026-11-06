@@ -15,14 +15,6 @@ use crate::{
 /// The version of the protocol. A peer of another version is refused at its hello.
 pub const PROTOCOL: u32 = 2;
 
-/// The digest of the schema of each version of the protocol, the version 1 first, as SHA-256 of the
-/// schema with no `x-protocol`. Its length is the version, so a change of the schema takes a new
-/// version: a test of the crate refuses a schema whose digest is not the last of these.
-pub const SCHEMAS: [&str; PROTOCOL as usize] = [
-  "47031c042fe6fb592fb69f92b67f51070323406b0b5d1caf05844955f9741229",
-  "01259fdbe2fd874bee6082d6ae3a0dbd2ac131b92f7640b40afd29836504b73d",
-];
-
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
 

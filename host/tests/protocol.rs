@@ -24,13 +24,13 @@ mod protocol {
     Host, Outbox, ProtocolError,
     protocol::{
       Answer, Axis, BOUND, Config, Dispose, Effect, Frame, Gesture, Hello, Kind, Layer, Mount,
-      Node, PROTOCOL, Peer, Request, Role, Run, SCHEMAS, Shape, Slot, Tone, Tree, Verb, ViewEffect,
+      Node, PROTOCOL, Peer, Request, Role, Run, Shape, Slot, Tone, Tree, Verb, ViewEffect,
       ViewEvent, schema,
     },
     serve,
     transport::{Dialer, Identity, Local, Who},
   };
-  use serde_json::json;
+  use serde_json::{Value, json};
   use tokio::io::DuplexStream;
   use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, duplex};
 
@@ -421,11 +421,41 @@ mod protocol {
     assert_eq!(client.heard().await, None);
   }
 
+  /// The digest of the shape of the schema of each version, the version 1 first: the SHA-256 of
+  /// the schema with no `x-protocol`, no `description` and no `title`, so the words of a doc
+  /// comment take no new version. Its length is the version, so a new shape takes one.
+  const SCHEMAS: [&str; PROTOCOL as usize] = [
+    "43cd8affad009b9de1c73c355ae4822f1de6149d95d919a5f02171f8c7072604",
+    "3d67e6b3dc718819064aae275d0f84cdd16c0f39b92d2a82a945461a19589713",
+  ];
+
+  /// A schema with no word that never crosses the wire: each `description` and `title` of a schema,
+  /// and no property that bears such a name.
+  fn shape(schema: &mut Value) {
+    match schema {
+      Value::Object(map) => {
+        map.remove("description");
+        map.remove("title");
+        for (key, one) in map.iter_mut() {
+          match (key.as_str(), one.as_object_mut()) {
+            ("properties" | "definitions" | "$defs", Some(named)) => {
+              named.values_mut().for_each(shape);
+            }
+            _ => shape(one),
+          }
+        }
+      }
+      Value::Array(all) => all.iter_mut().for_each(shape),
+      _ => {}
+    }
+  }
+
   #[test]
   fn each_change_of_the_schema_raises_the_protocol() {
     use sha2::{Digest, Sha256};
     let mut made = schema();
     made.as_object_mut().unwrap().remove("x-protocol");
+    shape(&mut made);
     let digest = format!("{:x}", Sha256::digest(made.to_string()));
     assert_eq!(
       SCHEMAS.last().copied(),
