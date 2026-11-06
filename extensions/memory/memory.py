@@ -110,10 +110,10 @@ async def recall(on: str = "") -> Act:
 def remember(on: str = "") -> Act:
   def ear(id):
     yield "started", id
-    before = {x[1] for x in transcript(on, "read")}
+    before = {x[1] for kind in ("read", "write", "cd") for x in transcript(on, kind)}
     memory(on=on)
     while True:
-      match (yield {id, "read", "stand"}):
+      match (yield {id, "read", "write", "cd", "stand"}):
         case ("done", about, _, Text(path)) if (
           question(("read", about))
           and scope(about) == scope(id)
@@ -122,6 +122,23 @@ def remember(on: str = "") -> Act:
           and question(("rung", (made := get(about))[2]))
           and not str(made[4]).endswith(("/", "\\"))
           and not remembered(path)
+        ):
+          memory(path, on)
+        case ("done", about, _, Text()) if (
+          question(("write", about))
+          and scope(about) == scope(id)
+          and "://" not in (path := str(getattr(get(about)[4], "path", "")))
+          and about not in before
+          and question(("rung", get(about)[2]))
+          and not remembered(path)
+        ):
+          memory(path, on)
+        case ("done", about, _, str() as path) if (
+          question(("cd", about))
+          and scope(about) == scope(id)
+          and "://" not in path
+          and about not in before
+          and question(("rung", get(about)[2]))
         ):
           memory(path, on)
         case ("done", about, *_) if question(("stand", about)) and not question(("rung", get(about)[2])):
