@@ -52,7 +52,8 @@ fn the_heads_of_a_record_are_its_entries_of_some_kinds_in_order_and_no_other_lin
     "[[\"made\",\"chain1\",\"store\",\"abc\",1],1]\n[[\"done\",\"bash1\",\"bash\", not json\n[[\"checkpoint\",\"chain1\",\"store\",{}],2]\n[[\"made\",\"chain1\",\"store\",\"abd\",1]]\n",
   )
   .unwrap();
-  let read = heads(&at, &["made", "checkpoint"]).unwrap();
+  let starts = [r#"[["made","#.to_owned(), r#"[["checkpoint","#.to_owned()];
+  let read = heads(&at, &starts).unwrap();
   let shown: Vec<String> = read.iter().map(|one| one.as_ref().py_repr()).collect();
   assert_eq!(
     shown,

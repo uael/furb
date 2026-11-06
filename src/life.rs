@@ -22,8 +22,9 @@ use std::{
 };
 
 use crate::{
-  Ear, Engine, Fault, Object, checkpoint,
+  Ear, Engine, Fault, Object, ObjectRef, checkpoint,
   ear::{hear, hearing, lasting},
+  engine::OPERATOR,
   extension::{self, Places, skills::skills},
   world::{self, Catalog, Retries, Scratch, Writes, mcp::mcp},
 };
@@ -95,13 +96,17 @@ pub struct Opening {
   #[cfg_attr(feature = "python", pyo3(default))]
   pub config: Option<String>,
   /// The actor a prompt goes to when it names none, as the catalog names a model, and an effort after a slash, at its
-  /// level as [`world::Model::at`] moves it; the first model of the roster when unsaid, and
-  /// the first when the catalog lacks the model of the actor.
+  /// level as [`world::Model::at`] moves it. When unsaid, the default actor of the last stand
+  /// that the record answered, so a life opened again goes on with the actor it had, and on a
+  /// record with no stand, the first model of the roster; the first when the catalog lacks the
+  /// model of the actor.
   #[cfg_attr(feature = "python", pyo3(default))]
   pub actor: Option<String>,
   /// The models the provider offers beside the model of the actor, as the catalog names them;
   /// a name that the catalog lacks is dropped, and each chain is told so once.
   /// When it is unsaid, the
+  /// roster of the last stand that the record answered, less the operator, so a life opened
+  /// again goes on with the roster it had, and on a record with no stand, the
   /// provider offers every model that the catalog offers, after the model of the actor; a roster that names none
   /// offers the model of the actor alone, and, with no actor, the operator alone.
   #[cfg_attr(feature = "python", pyo3(default))]
@@ -288,9 +293,18 @@ impl Opening {
         (one.name.clone(), file, one.life.clone(), one.root)
       })
       .collect();
+    // A life that names no actor or no roster goes on with the ones that its record stood on last.
+    let stood = match self.record.as_deref() {
+      Some(path) if Path::new(path).exists() && (self.actor.is_none() || self.roster.is_none()) => {
+        world::standing(path)?
+      }
+      _ => None,
+    };
+    let (actor, roster) = stood.as_ref().map_or((None, None), |one| offered(one.as_ref()));
+    let (actor, roster) = (self.actor.clone().or(actor), self.roster.clone().or(roster));
     let provider = match system {
-      Some(one) => self.provider(advertised)?.system(one.into()),
-      None => self.provider(advertised)?,
+      Some(one) => self.provider(advertised, actor, roster)?.system(one.into()),
+      None => self.provider(advertised, actor, roster)?,
     };
     let gated = crate::gate::configured(&places.config, Path::new(&self.directory));
     Ok(Prepared { places, extensions, provider, gated })
@@ -299,7 +313,12 @@ impl Opening {
   /// The provider: the models of the roster that the catalog makes, which the function of the host answers when it
   /// gives one, and which a life that inspects asks nothing; and the native search of the web of each of them, which
   /// the provider answers the question search with.
-  fn provider(&self, advertised: Vec<world::Advertised>) -> Result<world::Provider, Fault> {
+  fn provider(
+    &self,
+    advertised: Vec<world::Advertised>,
+    actor: Option<String>,
+    roster: Option<Vec<String>>,
+  ) -> Result<world::Provider, Fault> {
     let works = self.works();
     let gallery = self.gallery();
     let stall = self.stall.and_then(|seconds| Duration::try_from_secs_f64(seconds).ok());
@@ -315,13 +334,12 @@ impl Opening {
       Arc::new(|_, _| Box::pin(async { Err("a life that inspects asks no model".to_owned()) }));
     let answer =
       if works { self.answer.as_ref().map(|one| Arc::clone(&one.0)) } else { Some(asks) };
-    let kept = catalog.keep(self.roster.as_deref(), self.actor.as_deref());
+    let kept = catalog.keep(roster.as_deref(), actor.as_deref());
     let mut provider = catalog
       .provider(directory.clone(), kept.names.as_deref(), kept.actor.as_deref(), answer.clone())
       .map_err(|no| Fault::refused(no.to_string()))?
       .gone(kept.left);
-    let names = self.roster.clone();
-    let preferred = self.actor.clone();
+    let (names, preferred) = (roster, actor);
     provider = provider.refreshing(Arc::new(move || {
       let (claude, config, directory) = (claude.clone(), config.clone(), directory.clone());
       let (names, preferred, answer) = (names.clone(), preferred.clone(), answer.clone());
@@ -410,6 +428,18 @@ impl Opening {
     }
     Ok((engine, record))
   }
+}
+
+/// The default actor of a standing, and the name of each model of its roster but the operator.
+fn offered(standing: ObjectRef<'_>) -> (Option<String>, Option<Vec<String>>) {
+  let Some(held) = standing.items() else { return (None, None) };
+  let actor = held.get(2).and_then(ObjectRef::as_str).map(str::to_owned);
+  let roster = held.first().and_then(ObjectRef::items).map(|models| {
+    let names =
+      models.iter().filter_map(|model| Some(model.items()?.first()?.as_str()?.to_owned()));
+    names.filter(|name| name != OPERATOR).collect()
+  });
+  (actor, roster)
 }
 
 /// An ear that takes nothing and says nothing, which stands in the place of an ear that does work.
