@@ -3,7 +3,7 @@ import { copyFile, mkdir, mkdtemp, readdir, readFile, stat, writeFile } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { store } from "furb";
-import { alive, printPid, remove } from "../../bind/typescript/test/processes.ts";
+import { alive, printPid, remove } from "../../binding/typescript/test/processes.ts";
 import { ended } from "./ended.ts";
 
 /** The moment a condition holds, read again every 20 ms: a process in a terminal tells its state by no event. */

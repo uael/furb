@@ -80,7 +80,7 @@ fn found(
   let Some(bun) = world::program("bun", env::split_paths(path)) else {
     return Err(CliError::NoBun(checkout.to_owned()));
   };
-  if !checkout.join("bind/typescript/dist").is_dir() {
+  if !checkout.join("binding/typescript/dist").is_dir() {
     return Err(CliError::Unbuilt(checkout.to_owned()));
   }
   Ok(vec![bun.into(), "run".into(), cli.into()])

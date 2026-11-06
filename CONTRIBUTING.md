@@ -129,12 +129,12 @@ no network.
 | File | What it holds |
 | --- | --- |
 | `src/binding.rs` | The host API that both doors give, each function once, and the doors, each behind the feature that names it. |
-| `src/binding/py.rs` | The door to Python, which `bind/python` makes into the package `furb-monty`. |
-| `bind/python/furb_monty/engine.py` | Every name of the contract over one life of the engine in the sandbox. |
-| `src/binding/ts.rs` | The door to TypeScript through N-API, which also makes the declarations of `bind/typescript`. |
+| `src/binding/py.rs` | The door to Python, which `binding/python` makes into the package `furb-monty`. |
+| `binding/python/furb_monty/engine.py` | Every name of the contract over one life of the engine in the sandbox. |
+| `src/binding/ts.rs` | The door to TypeScript through N-API, which also makes the declarations of `binding/typescript`. |
 | `src/binding/ts/host.rs` | The door on the thread of JavaScript: a value as the engine takes it, and a generator heard as an ear. |
-| `bind/typescript/src/life/` | The model of a life, which every host reads, with no native code. |
-| `src/furb/life.py`, `bind/typescript/src/framework.ts`, `src/life/host.rs` | A life as a program holds it, with the same names in each door. Change the three together. |
+| `binding/typescript/src/life/` | The model of a life, which every host reads, with no native code. |
+| `src/furb/life.py`, `binding/typescript/src/framework.ts`, `src/life/host.rs` | A life as a program holds it, with the same names in each door. Change the three together. |
 | `docs/examples/` | Five examples for each door, which a test of that door runs. Change an example with its door. |
 
 ### The extensions
@@ -142,7 +142,7 @@ no network.
 An official extension is a word, a contract and a suite in `extensions/<name>/`, and an ear of the World in
 `src/extension/<name>.rs`, which answers the questions of its word from the disk. [The guide of the
 extensions](docs/extensions.md) says which hygiene laws hold it and how a life runs it. The crate carries the manifest
-and the word, so `uv run` builds it again after a change of either, as the `cache-keys` of `bind/python/pyproject.toml`
+and the word, so `uv run` builds it again after a change of either, as the `cache-keys` of `binding/python/pyproject.toml`
 and `cli/pyproject.toml` say.
 
 ### The command line
@@ -225,5 +225,5 @@ Write all prose in Simplified Technical English, with no em dash and no en dash,
 - [`AGENTS.md`](AGENTS.md): every rule and every command of the repository.
 - [`src/furb/AGENTS.md`](src/furb/AGENTS.md): the technical names of the engine.
 - [`tui/README.md`](tui/README.md) and [`docs/tui.md`](docs/tui.md): what the TUI does, and a picture of each screen.
-- [`bind/typescript/README.md`](bind/typescript/README.md): the TypeScript API.
+- [`binding/typescript/README.md`](binding/typescript/README.md): the TypeScript API.
 - [`docs/extensions.md`](docs/extensions.md): how an extension works.

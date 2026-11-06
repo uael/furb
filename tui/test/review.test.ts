@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { until } from "../../bind/typescript/test/until.ts";
+import { until } from "../../binding/typescript/test/until.ts";
 import { removeDemoDirectories } from "../src/demo.ts";
 import { branchChanges, commentStart, lines, net, revertWord } from "../src/review.ts";
 import type { Session } from "../src/session.ts";

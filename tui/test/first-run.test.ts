@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
-import { remove } from "../../bind/typescript/test/processes.ts";
+import { remove } from "../../binding/typescript/test/processes.ts";
 import { ownDaemon } from "../script/daemon.ts";
 
 /** The frame of the first run of a real life, not a demo, in a new home whose environment holds no key, and on a

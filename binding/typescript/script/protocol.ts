@@ -4,13 +4,13 @@ import { compile } from "json-schema-to-typescript";
 
 const root = join(import.meta.dir, "..", "..", "..");
 export const schemaPath = join(root, "host", "protocol.schema.json");
-export const typesPath = join(root, "bind", "typescript", "src", "protocol.ts");
+export const typesPath = join(root, "binding", "typescript", "src", "protocol.ts");
 
 /** The types of the protocol, as the JSON Schema that the crate furb-host gives makes them. */
 export async function generated(): Promise<string> {
   const schema = JSON.parse(readFileSync(schemaPath, "utf8"));
   const banner = `/* The types of the one protocol of the host, made from host/protocol.schema.json by
- * bind/typescript/script/protocol.ts: run bun run protocol after a change of the protocol. */`;
+ * binding/typescript/script/protocol.ts: run bun run protocol after a change of the protocol. */`;
   const types = await compile(schema, "Protocol", {
     bannerComment: banner,
     additionalProperties: false,

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { until } from "../../bind/typescript/test/until.ts";
+import { until } from "../../binding/typescript/test/until.ts";
 import { find } from "../script/stage.ts";
 import type { Session } from "../src/session.ts";
 import { composing } from "./composing.ts";

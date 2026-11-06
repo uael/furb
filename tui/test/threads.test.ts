@@ -1,7 +1,7 @@
 import { expect, setSystemTime, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { RGBA } from "@opentui/core";
-import { until } from "../../bind/typescript/test/until.ts";
+import { until } from "../../binding/typescript/test/until.ts";
 import { glyph, palettes, spacing as space } from "../src/theme.ts";
 import { type Composing, cellAt, composing } from "./composing.ts";
 import { idle } from "./idle.ts";

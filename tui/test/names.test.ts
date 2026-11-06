@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inspectRecord, type NativeEar, store } from "furb";
-import { until } from "../../bind/typescript/test/until.ts";
+import { until } from "../../binding/typescript/test/until.ts";
 import { recordName } from "../src/names.ts";
 import { Preferences } from "../src/preferences.ts";
 import { Workspaces } from "../src/workspaces.ts";

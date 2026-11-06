@@ -1,4 +1,4 @@
-/** The build of the TypeScript side, bind/typescript/index.cjs and bind/typescript/dist, stands for the commit that made
+/** The build of the TypeScript side, binding/typescript/index.cjs and binding/typescript/dist, stands for the commit that made
  * it. A switch of branch, a pull or a copy of a build from another commit leaves it behind the sources, and a test then
  * fails with "Export named earProgram not found", or fails as on main, with no sign of the cause. A source that changed
  * after the build that reads it shows that the build is stale. */
@@ -20,11 +20,11 @@ const crate = [
   "extensions/*/*/SKILL.md",
 ];
 /** What tsc reads, beside the types that the native build wrote. */
-const side = ["bind/typescript/src/**/*", "bind/typescript/tsconfig.json", "bind/typescript/index.d.cts"];
+const side = ["binding/typescript/src/**/*", "binding/typescript/tsconfig.json", "binding/typescript/index.d.cts"];
 /** Each file that a build writes at each run, with the sources that it reads. */
 const builds: [string, string[]][] = [
-  ["bind/typescript/index.cjs", crate],
-  ["bind/typescript/dist/index.js", side],
+  ["binding/typescript/index.cjs", crate],
+  ["binding/typescript/dist/index.js", side],
 ];
 /** A file that the build does not read. */
 const apart = /(\.test\.rs|(^|\/)(AGENTS|CLAUDE)\.md)$/;

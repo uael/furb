@@ -2,7 +2,7 @@
 
 `furb-host` is the daemon of a machine: it holds each life, and each window or skill reaches it over one protocol. This
 page says that protocol. Its version is `PROTOCOL`, now 1. The crate gives its JSON Schema in
-`host/protocol.schema.json`, and `bind/typescript/src/protocol.ts` holds the types that `bun run protocol` makes from
+`host/protocol.schema.json`, and `binding/typescript/src/protocol.ts` holds the types that `bun run protocol` makes from
 that schema. A test of each side fails when the schema or the types do not agree with the code.
 
 ## Transports

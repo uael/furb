@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Loom, Row } from "furb/life";
-import { until } from "../../bind/typescript/test/until.ts";
+import { until } from "../../binding/typescript/test/until.ts";
 import { drawChains, quietFolds } from "../src/chains.ts";
 import { plain } from "../src/ui.ts";
 import { composing, pressEscape } from "./composing.ts";

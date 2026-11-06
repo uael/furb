@@ -46,7 +46,7 @@ dev = [
 ]
 
 [tool.uv.workspace]
-members = ["bind/python", "cli"]
+members = ["binding/python", "cli"]
 
 [tool.uv]
 # An environment of development builds the crate in the dev profile, which optimizes each dependency and builds the
@@ -61,7 +61,7 @@ furb-cli = { workspace = true }
 line-length = 120
 indent-width = 2
 target-version = "py314"
-src = ["src", "test", "bind/python"]
+src = ["src", "test", "binding/python"]
 # A path given on the command line, as a hook or a worker gives it, keeps the exclude.
 force-exclude = true
 # A word of the project reads the names that a word before it in .furb/config.json defines: pr and shq of pr. A test
@@ -135,13 +135,13 @@ skip-magic-trailing-comma = true
 [tool.ty.src]
 # The words of the project, and no test of theirs: a test drives the engine through a double, which the checker
 # cannot follow.
-include = ["src", "test", "script", "bind/python", "extensions", ".furb/extensions/*/*.py"]
+include = ["src", "test", "script", "binding/python", "extensions", ".furb/extensions/*/*.py"]
 
 # The suite of an extension imports the harness of the engine as conftest, as pytest does from its pythonpath, and
 # its own helpers from extensions.conftest. The package furb_monty is read from its source and the stub of its
 # extension, so the check needs no build of the crate.
 [tool.ty.environment]
-extra-paths = ["test", "bind/python"]
+extra-paths = ["test", "binding/python"]
 
 # The engine holds the loop's state in the closure of boot, and ty does not narrow a captured name; what it reads
 # of an act, a task or a standing it reads after the check the sentence beside it makes. boot binds the names of its
@@ -158,7 +158,7 @@ unresolved-global = "ignore"
 # The engine of monty reads the engine of this interpreter as the module the switch keeps, whose names ty does not
 # see through a module object, and the extension it stands on is built and not read.
 [[tool.ty.overrides]]
-include = ["bind/python/furb_monty/engine.py"]
+include = ["binding/python/furb_monty/engine.py"]
 
 [tool.ty.overrides.rules]
 unresolved-attribute = "ignore"

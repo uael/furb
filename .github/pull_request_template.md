@@ -62,8 +62,8 @@ state machine. Put a number in a table. -->
 <!-- Only when the change forces a downstream caller to change code.
 Give each break its own line. Do not merge two, and do not abbreviate one. Add a before snippet
 and an after snippet where the call site moves:
-- Ground the snippet in the real doors of furb: the crate (`src/lib.rs`), `bind/python`,
-  `bind/typescript`, and the contract `src/furb/engine.pyi`.
+- Ground the snippet in the real doors of furb: the crate (`src/lib.rs`), `binding/python`,
+  `binding/typescript`, and the contract `src/furb/engine.pyi`.
 - Keep a snippet to 3 to 6 lines. Show the call site and nothing else.
 - Skip the snippet when the call site does not move.
 A PR with this section carries the `breaking-change` label, and its title carries a `!`. -->

@@ -13,9 +13,9 @@ const command = [
   "--features",
   "typescript",
   "--package-json-path",
-  "bind/typescript/package.json",
+  "binding/typescript/package.json",
   "--output-dir",
-  "bind/typescript",
+  "binding/typescript",
   // The engine is furb.<system>.node, as the package of the engine of each system names it, and index.cjs, which napi
   // writes, loads it from beside itself or from that package.
   "--platform",
@@ -39,7 +39,7 @@ if (await program.exited) process.exit(1);
 
 await rm(new URL("dist", import.meta.url), { recursive: true, force: true });
 const javascript = Bun.spawn(
-  [process.execPath, "x", "--no-install", "tsc", "-p", "bind/typescript/tsconfig.json"],
+  [process.execPath, "x", "--no-install", "tsc", "-p", "binding/typescript/tsconfig.json"],
   {
     cwd: root,
     stdout: "inherit",

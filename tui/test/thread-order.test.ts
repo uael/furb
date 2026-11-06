@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { nestThreads, orderThreads, threadOpen } from "furb/life";
-import { until } from "../../bind/typescript/test/until.ts";
+import { until } from "../../binding/typescript/test/until.ts";
 import { openEngine } from "../src/bridge.ts";
 import { Session } from "../src/session.ts";
 import { type Composing, composing, ownPreferences } from "./composing.ts";

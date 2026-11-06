@@ -1,5 +1,5 @@
 /* The types of the one protocol of the host, made from host/protocol.schema.json by
- * bind/typescript/script/protocol.ts: run bun run protocol after a change of the protocol. */
+ * binding/typescript/script/protocol.ts: run bun run protocol after a change of the protocol. */
 
 /**
  * One request of a peer: an id that the reply gives back, and the verb. A verb names an act as

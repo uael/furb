@@ -2,12 +2,12 @@
   "name": "furb-workspace",
   "private": true,
   "workspaces": [
-    "bind/typescript",
+    "binding/typescript",
     "tui",
     "docs/examples"
   ],
   "scripts": {
-    "build": "bun run bind/typescript/build.ts",
+    "build": "bun run binding/typescript/build.ts",
     "tui": "bun run tui/src/cli.ts",
     "demo": "bun run tui/src/cli.ts --demo",
     "screenshots": "bun run tui/script/screenshots.ts",
@@ -16,9 +16,9 @@
     "check": "tsc --noEmit",
     "test": "bun run tui/script/test.ts",
     "bench": "bun run tui/script/bench.ts",
-    "protocol": "bun run bind/typescript/script/protocol.ts",
-    "format": "biome format --write bind/typescript tui docs/examples extensions package.json tsconfig.json biome.json",
-    "lint": "biome check bind/typescript tui docs/examples extensions package.json tsconfig.json biome.json"
+    "protocol": "bun run binding/typescript/script/protocol.ts",
+    "format": "biome format --write binding/typescript tui docs/examples extensions package.json tsconfig.json biome.json",
+    "lint": "biome check binding/typescript tui docs/examples extensions package.json tsconfig.json biome.json"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.6",

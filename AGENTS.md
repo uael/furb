@@ -66,7 +66,7 @@ API of its own:
   opening of a life, the catalog, the extensions, the images and the gate. A door holds only how a value of its
   language crosses, its `Engine` and its `Act`, and the loop that drives them. The `Engine` of each door has the same
   methods, one for each verb of the contract, which the build makes from the contract.
-- `src/binding/py.rs`, behind the `python` feature, is the door to python. `bind/python` is the package `furb-monty`,
+- `src/binding/py.rs`, behind the `python` feature, is the door to python. `binding/python` is the package `furb-monty`,
   whose module `furb_monty.engine` gives every name of the contract over one life in the sandbox, and
   `FURB_ENGINE=monty` makes `from furb import engine` give it.
 - `cli/` is `furb-cli`, the second package of the workspace of the crate, whose program is `furb`, on clap. With no
@@ -93,7 +93,7 @@ API of its own:
   stands outside it and tells its windows and its root when it holds an open act, or a rung or a prompt that no act lives beside, and says no fact, and `daemon` the
   daemon of the machine, which holds each life by its record while a window or a pin of `holders` holds it, and gives its place to
   a new build at a handover. `furb host` serves it, and `furb host upgrade` hands it over. `docs/protocol.md` says the
-  protocol, and `bun run protocol` makes `bind/typescript/src/protocol.ts` again from `host/protocol.schema.json`.
+  protocol, and `bun run protocol` makes `binding/typescript/src/protocol.ts` again from `host/protocol.schema.json`.
 
 The suite runs on both engines, but for the tests that `MONTY_SKIPS` in `test/conftest.py` names: these boot on a Kernel
 of this interpreter, and the engine of monty holds its own. The suite of each extension, `extensions/<name>/test/`, runs
@@ -104,11 +104,11 @@ the contract says.
 The TypeScript side is a bun workspace at the root, whose packages are the three below and the examples of
 `docs/examples`:
 
-- `bind/typescript` is the crate through N-API. Its views, its queries and its controls are synchronous, and an
+- `binding/typescript` is the crate through N-API. Its views, its queries and its controls are synchronous, and an
   act that is answered later can be awaited. It includes a `Session`: an engine on the ears of the crate, the
-  provider among them, and on a console of the operator. `bind/typescript/README.md` says how to use it. Its
+  provider among them, and on a console of the operator. `binding/typescript/README.md` says how to use it. Its
   model of a life, `furb/life` in `src/life`, gives the views of a life that every host draws, with no native
-  code. The TUI imports its build in `bind/typescript/dist`, which `bun run build` makes again.
+  code. The TUI imports its build in `binding/typescript/dist`, which `bun run build` makes again.
 - `tui` is the OpenTUI application on that package. `tui/README.md` says what the TUI does, and `docs/tui.md` shows
   each screen. A life of the TUI runs in the daemon of the machine, `furb host`, whose protocol `docs/protocol.md`
   says, so the life outlives each window: `tui/src/client.ts` dials the daemon, or starts it when none listens, and
@@ -118,8 +118,8 @@ The TypeScript side is a bun workspace at the root, whose packages are the three
 `docs/examples/` holds the examples of the framework: five short programs for each door, in `python/`,
 `typescript/` and `rust/`, which a user runs as they stand, and which `docs/examples/README.md` shows. They stand on
 a life as a program holds it, which each door gives with the same names: `src/furb/life.py`, which `furb.open`
-gives, `bind/typescript/src/framework.ts`, and `src/life/host.rs`. `test/outside/test_examples.py`,
-`bind/typescript/test/examples.test.ts` and `tests/examples.rs` run each example as a process, on a claude command
+gives, `binding/typescript/src/framework.ts`, and `src/life/host.rs`. `test/outside/test_examples.py`,
+`binding/typescript/test/examples.test.ts` and `tests/examples.rs` run each example as a process, on a claude command
 line that answers from a script.
 
 `CONTRIBUTING.md` is the guide for a person who changes the repository: the tools to install, how to set up a clone,
@@ -417,7 +417,7 @@ fix what your change broke, and report what was broken before.
   A script of bun in `$TMPDIR` cannot import the package `furb`, so write a quick check in the worktree, where
   `node_modules` stands.
 - `bun run test scenarios`: the scenarios of `tui/scenarios`, the path of the owner end to end. A scripted claude
-  command line, `bind/typescript/test/programs/scenario.ts`, answers a real host, and a headless window of the TUI on
+  command line, `binding/typescript/test/programs/scenario.ts`, answers a real host, and a headless window of the TUI on
   a test terminal drives it with keys and the mouse, never a window on the terminal of the machine. Each scenario
   guards a defect that a life of the owner met, and fails on the commit before its fix. `bun run test` runs them with
   the other tests, on macOS and Linux, so they are a required check of each pull request. Each fix of a path of the
@@ -491,7 +491,7 @@ request and at each edit of its title, and reads the types from their one home, 
 A comment says what the code cannot tell by itself. It is a disclaimer: the code does not behave as a reader would
 assume, and one sentence spares them a debugging session. Documentation adds edges to symbols and enumerates the
 invariants; a public type of furb always gets it, because a client developer reads it: a type of the contract
-`src/furb/engine.pyi`, and a type of a door, the crate in `src/lib.rs`, `bind/python` or `bind/typescript`. The code,
+`src/furb/engine.pyi`, and a type of a door, the crate in `src/lib.rs`, `binding/python` or `binding/typescript`. The code,
 its names, the module tree and `git log` say the rest.
 
 A comment older than your change is not yours to remove. `TODO` and `FIXME` go with the change that completes the work

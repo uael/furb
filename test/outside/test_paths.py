@@ -11,17 +11,17 @@ assert SPEC and SPEC.loader
 paths = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(paths)
 
-FILES = {"bind/typescript/test/programs/claude.ts", "docs/models.md", "script/real.py", "src/lib.rs", "README.md"}
+FILES = {"binding/typescript/test/programs/claude.ts", "docs/models.md", "script/real.py", "src/lib.rs", "README.md"}
 
 
 def test_a_path_that_names_a_file_or_a_folder_of_git_stands() -> None:
-  texts = {"script/a.sh": "cp docs/models.md out\nls bind/typescript/test/programs/\nbun build bind/typescript"}
+  texts = {"script/a.sh": "cp docs/models.md out\nls binding/typescript/test/programs/\nbun build binding/typescript"}
   assert paths.stale(FILES, texts) == []
 
 
 def test_a_path_that_a_move_left_behind_is_named_with_its_file_and_its_line() -> None:
-  texts = {"script/prove-npm.sh": 'set -e\nbun build --compile "$root/bind/typescript/test/claude.ts" --outfile x\n'}
-  assert paths.stale(FILES, texts) == [("script/prove-npm.sh", 2, "bind/typescript/test/claude.ts")]
+  texts = {"script/prove-npm.sh": 'set -e\nbun build --compile "$root/binding/typescript/test/claude.ts" --outfile x\n'}
+  assert paths.stale(FILES, texts) == [("script/prove-npm.sh", 2, "binding/typescript/test/claude.ts")]
 
 
 def test_a_path_in_a_string_of_a_script_or_in_a_workflow_is_checked_as_well() -> None:
@@ -37,7 +37,9 @@ def test_a_path_in_a_string_of_a_script_or_in_a_workflow_is_checked_as_well() ->
 
 
 def test_a_path_with_a_variable_or_a_pattern_in_it_is_no_whole_path_and_is_not_checked() -> None:
-  texts = {"script/a.sh": "cp bind/typescript/furb.$system.node x\nls docs/*.md\nrm bind/typescript/furb.${{ x }}.node"}
+  texts = {
+    "script/a.sh": "cp binding/typescript/furb.$system.node x\nls docs/*.md\nrm binding/typescript/furb.${{ x }}.node"
+  }
   assert paths.stale(FILES, texts) == []
 
 
@@ -49,7 +51,7 @@ def test_a_word_that_is_not_a_path_of_the_repository_is_not_checked() -> None:
 
 
 def test_a_path_that_a_build_makes_and_git_ignores_stands() -> None:
-  texts = {"script/a.sh": "ls bind/typescript/dist\ncp docs/gone.md x"}
+  texts = {"script/a.sh": "ls binding/typescript/dist\ncp docs/gone.md x"}
   made = paths.stale(FILES, texts, lambda found: {x for x in found if x.endswith("dist")})
   assert made == [("script/a.sh", 2, "docs/gone.md")]
 
@@ -65,4 +67,4 @@ def test_a_folder_that_a_rule_of_git_ignores_as_a_folder_stands_before_a_build_m
   subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)  # noqa: S607
   (tmp_path / ".gitignore").write_text("dist/\n")
   monkeypatch.setattr(paths, "ROOT", tmp_path)
-  assert paths.ignored(["bind/dist", "bind/src"]) == {"bind/dist"}
+  assert paths.ignored(["binding/dist", "binding/src"]) == {"binding/dist"}
