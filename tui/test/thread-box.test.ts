@@ -215,7 +215,7 @@ const code = (count: number, runs = -1): ProgramLine[] =>
     }),
   );
 
-/** What a window shows, row by row: the number of a line, or ... for a row that stands for lines. */
+/** What a window shows, row by row: the number of a line, or the fold row that stands for lines. */
 const rows = (lines: ProgramLine[]) => lines.map((line) => (line.kind === "code" ? line.display : line.text));
 
 test("a window of code shows seven rows: the first line or a ..., the line that runs second to last, and a ... or the row where the model writes", () =>
@@ -223,16 +223,32 @@ test("a window of code shows seven rows: the first line or a ..., the line that 
     // Lines that fit stand whole.
     expect(rows(app.rolling(code(5), "w1", false).lines)).toEqual([1, 2, 3, 4, 5]);
     expect(rows(app.rolling(code(7), "w2", false).lines)).toEqual([1, 2, 3, 4, 5, 6, 7]);
-    // Lines that are over show the last seven, and a ... stands first.
-    expect(rows(app.rolling(code(12), "w3", false).lines)).toEqual(["…", 7, 8, 9, 10, 11, 12]);
+    // Lines that are over show the last seven, and a fold row stands first.
+    expect(rows(app.rolling(code(12), "w3", false).lines)).toEqual([
+      "▸ 6 earlier lines",
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+    ]);
     // The line that runs stands second to last, with a ... after it, while lines come after.
-    expect(rows(app.rolling(code(12, 8), "w4", false).lines)).toEqual(["…", 4, 5, 6, 7, 8, "…"]);
+    expect(rows(app.rolling(code(12, 8), "w4", false).lines)).toEqual([
+      "▸ 3 earlier lines",
+      4,
+      5,
+      6,
+      7,
+      8,
+      "▸ 4 more lines",
+    ]);
     // The first line stands first while the line that runs is near it.
-    expect(rows(app.rolling(code(12, 3), "w5", false).lines)).toEqual([1, 2, 3, 4, 5, 6, "…"]);
+    expect(rows(app.rolling(code(12, 3), "w5", false).lines)).toEqual([1, 2, 3, 4, 5, 6, "▸ 6 more lines"]);
     // The last row is where the model writes.
-    expect(rows(app.rolling(code(12), "w6", true).lines)).toEqual(["…", 8, 9, 10, 11, 12]);
+    expect(rows(app.rolling(code(12), "w6", true).lines)).toEqual(["▸ 7 earlier lines", 8, 9, 10, 11, 12]);
     expect(rows(app.rolling(code(6), "w7", true).lines)).toEqual([1, 2, 3, 4, 5, 6]);
-    expect(rows(app.rolling(code(7), "w8", true).lines)).toEqual(["…", 3, 4, 5, 6, 7]);
+    expect(rows(app.rolling(code(7), "w8", true).lines)).toEqual(["▸ 2 earlier lines", 3, 4, 5, 6, 7]);
     // An opened window shows its lines, the last four hundred at most.
     app.session.folds["window:w9"] = false;
     expect(app.rolling(code(12), "w9", false)).toMatchObject({ opened: true });
@@ -242,16 +258,23 @@ test("a window of code shows seven rows: the first line or a ..., the line that 
     expect(app.rolling(code(12), "w10:2", false).opened).toBe(true);
   }));
 
-test("a click on a ... of a window of code opens it in a block that fits its lines and scrolls past them, and a click on Roll up rolls it again", async () =>
+test("a click on a fold row of a window of code opens it in a block that fits its lines and scrolls past them, and a click on Roll up rolls it again", async () =>
   composing(
     async ({ session, app, screen, frame }) => {
       await session.refresh();
       await session.select(
         session.chains.find((chain) => session.labelOf(chain.id) === "life3/feed")?.id ?? "",
       );
+      // The fold row of a window stands inside the card of its program, and not in the fold of a reply.
+      const inside = (y: number) =>
+        app.scroll
+          .getChildren()
+          .some((node) => node.id.startsWith("program-") && y >= node.y && y < node.y + node.height);
       const gaps = async () => {
         const shown = (await frame()).split("\n").map((row) => feedOf(session, row));
-        return shown.flatMap((row, y) => (/^[\s┃]+…\s*$/.test(row) ? [{ x: row.indexOf("…"), y }] : []));
+        return shown.flatMap((row, y) =>
+          /^[\s┃]+▸ \d+ (earlier|more) lines?\s*$/.test(row) && inside(y) ? [{ x: row.indexOf("▸"), y }] : [],
+        );
       };
       const first = (await gaps())[0];
       if (!first) throw new Error("No window is rolled.");

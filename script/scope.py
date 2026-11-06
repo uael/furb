@@ -83,7 +83,7 @@ def lines(answer: dict[str, object]) -> str:
 
 
 def main() -> None:
-  # A run that is no pull request has no change to read, and a path that no rule names runs every job.
+  # A run by hand and the run of each night give no paths, and a path that no rule names runs every job.
   paths = ["every"] if "--all" in sys.argv[1:] else [line.strip() for line in sys.stdin if line.strip()]
   sys.stdout.write(lines(scope(paths)))
 

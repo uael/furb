@@ -165,8 +165,11 @@ mod net {
     let mut client = Client { lines: BufReader::new(stream) };
     assert_eq!(client.hello().await, Some(welcomed("alice@github", Role::Write)));
     assert_eq!(heard.recv().await, Some(whois(from)));
-    let answer = Answer::Value(serde_json::to_value(Verb::List).unwrap());
-    assert_eq!(client.ask(1, Verb::List).await, Some(Frame::Reply { id: 1, answer }));
+    let answer = Answer::Value(serde_json::to_value(Verb::List { config: None }).unwrap());
+    assert_eq!(
+      client.ask(1, Verb::List { config: None }).await,
+      Some(Frame::Reply { id: 1, answer })
+    );
   }
 
   #[tokio::test]
@@ -242,7 +245,9 @@ mod net {
     let (api, _) = tailscale("alice@github").await;
     let ports = Ports { tcp: Some(free().await), websocket: Some(free().await) };
     let identity = Tailscale::new(api, access("alice@github", Role::Read));
-    let opening = Opening { extensions: Some(false), ..Opening::default() };
+    let held = folder();
+    let config = Some(held.join("config").display().to_string());
+    let opening = Opening { extensions: Some(false), config, ..Opening::default() };
     let settings = Settings {
       opening,
       grace: Duration::from_secs(1),
@@ -252,7 +257,6 @@ mod net {
       door: None,
       host: None,
     };
-    let held = folder();
     let local = Local::new(held.join("host"));
     let listener = local.listen().await.unwrap();
     tokio::spawn(async move { run(&local, listener, settings).await });
@@ -269,16 +273,20 @@ mod net {
     let mut ws = Client { lines: BufReader::new(ws) };
     assert_eq!(tcp.hello().await, Some(welcomed("alice@github", Role::Read)));
     assert_eq!(
-      tcp.ask(1, Verb::List).await,
+      tcp.ask(1, Verb::List { config: None }).await,
       Some(Frame::Reply { id: 1, answer: Answer::Lives(vec![]) })
     );
     assert_eq!(ws.hello().await, Some(welcomed("alice@github", Role::Read)));
     assert_eq!(
-      ws.ask(1, Verb::List).await,
+      ws.ask(1, Verb::List { config: None }).await,
       Some(Frame::Reply { id: 1, answer: Answer::Lives(vec![]) })
     );
   }
   /// The login of the user of this test, from the same call of the system as the daemon makes.
+  #[cfg_attr(
+    windows,
+    expect(unsafe_code, reason = "the login is a call of Windows, as the daemon makes it")
+  )]
   fn me() -> String {
     #[cfg(unix)]
     {

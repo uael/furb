@@ -1,7 +1,6 @@
 //! The provider of models in a life of the real engine: models of rig that answer from a script, a model that never
 //! answers, and the claude command line of the tests.
 
-#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
 #![expect(
   clippy::format_collect,
   reason = "debt: a format! for each item, collected into a String"
@@ -62,8 +61,7 @@ use super::{
 };
 use crate::{Act, Ear, Engine, Fact, Object, SYSTEM, Text, verbs, world};
 
-use crate::testing::Yard;
-use crate::testing::{block_on, waker};
+use crate::testing::{Yard, block_on, on_reactor, park, pause, waker};
 
 /// A yard of one test, empty.
 fn yard(name: &str) -> Yard {
@@ -153,7 +151,7 @@ fn within(engine: &mut Engine, time: Duration, holds: impl Fn(&mut Engine) -> bo
     if holds(engine) {
       return true;
     }
-    thread::park_timeout(Duration::from_millis(20));
+    park(Duration::from_millis(20));
   }
   false
 }
@@ -659,7 +657,7 @@ fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line_and_each_l
   use super::claude::test::Yard;
   let yard = Yard::new("chain");
   let claude = yard.claude(10_000);
-  let (mut engine, _) = life("claude", crate::ear::reactor().block_on(claude.models()));
+  let (mut engine, _) = life("claude", on_reactor(claude.models()));
   let root = engine.root().to_owned();
   let mut answer = |message: &str| {
     let with = verbs::Prompt { message: Some(message.into()), on: on(&root), ..Default::default() };
@@ -679,7 +677,7 @@ fn the_replies_of_a_chain_keep_one_process_of_the_claude_command_line_and_each_l
   assert_eq!(heard.len(), 2);
   assert!(heard[1].contains("second task") && !heard[1].contains("first task"), "{}", heard[1]);
   // The ids of chains repeat in every life, and a life on the same command line keeps a conversation of its own.
-  let (mut other, _) = life("claude-other", crate::ear::reactor().block_on(claude.models()));
+  let (mut other, _) = life("claude-other", on_reactor(claude.models()));
   let with =
     verbs::Prompt { message: Some("first task".into()), on: on(&root), ..Default::default() };
   block_on(other.prompt(Object::string("str"), with).expect("a prompt is made"))
@@ -703,12 +701,9 @@ fn a_claude_that_an_update_took_away_is_asked_again_after_its_backoff_until_it_c
   let claude = Claude::with_command(fake.prefix(), Vec::new(), Some(Duration::from_secs(10)));
   let (retries, told) = retried();
   let backoff = Backoff { most: 10, first: Duration::from_millis(100) };
-  let provider = Provider::new(
-    yard("away").display().to_string(),
-    crate::ear::reactor().block_on(claude.models()),
-  )
-  .backoff(backoff)
-  .retries(retries);
+  let provider = Provider::new(yard("away").display().to_string(), on_reactor(claude.models()))
+    .backoff(backoff)
+    .retries(retries);
   let mut engine = lived(provider);
   let root = engine.root().to_owned();
   fake.away();
@@ -733,10 +728,7 @@ fn the_claude_command_line_is_told_the_most_thought_of_the_provider_unless_the_e
   let claude = fake.claude(10_000);
   let inherited = Thinking { most: 4096, inherited: true };
   for (name, most) in [("most-told", Thinking::default()), ("most-inherited", inherited)] {
-    let provider = Provider::new(
-      yard(name).display().to_string(),
-      crate::ear::reactor().block_on(claude.models()),
-    );
+    let provider = Provider::new(yard(name).display().to_string(), on_reactor(claude.models()));
     let mut engine = lived(provider.thinking(most).actor(Some("claude-cli:opus/high".into())));
     let root = engine.root().to_owned();
     let with = verbs::Prompt { message: Some("task".into()), on: on(&root), ..Default::default() };
@@ -758,7 +750,7 @@ fn the_word_of_the_claude_command_line_is_the_text_it_settled_over_the_parts_it_
   use super::claude::test::Yard;
   let yard = Yard::new("gap");
   let claude = yard.claude(10_000);
-  let (mut engine, _) = life("claude-gap", crate::ear::reactor().block_on(claude.models()));
+  let (mut engine, _) = life("claude-gap", on_reactor(claude.models()));
   let root = engine.root().to_owned();
   // The command line streams the text of its reply less its first part, and then says the text whole.
   let with =
@@ -832,11 +824,8 @@ fn the_claude_command_line_sees_each_image_that_a_prompt_names_and_each_image_th
   let word = format!("read({:?})", at.join("read.png").display().to_string());
   fs::write(fake.at.join("word.1"), serde_json::to_string(&word).expect("a word of json"))
     .expect("the word is written");
-  let provider = Provider::new(
-    at.display().to_string(),
-    crate::ear::reactor().block_on(fake.claude(10_000).models()),
-  )
-  .images(at.join("images"));
+  let provider = Provider::new(at.display().to_string(), on_reactor(fake.claude(10_000).models()))
+    .images(at.join("images"));
   let mut engine = seeing(provider, Some(at.join("images")));
   let root = engine.root().to_owned();
   let message = format!("look at {}", images::reference("named.png", &kept.uri));
@@ -1118,7 +1107,7 @@ fn exchanged(listener: &TcpListener, events: &str) -> String {
     match listener.accept() {
       Ok((stream, _)) => break stream,
       Err(no) if no.kind() == std::io::ErrorKind::WouldBlock && Instant::now() < end => {
-        thread::sleep(Duration::from_millis(10));
+        pause(Duration::from_millis(10));
       }
       Err(no) => panic!("the provider is asked: {no}"),
     }
@@ -2085,7 +2074,7 @@ fn a_claude_command_line_at_its_usage_limit_is_asked_again_at_the_reset_and_answ
   use super::claude::test::Yard;
   let yard = Yard::new("limit");
   let claude = yard.claude(10_000);
-  let (mut engine, _) = life("claude-limit", crate::ear::reactor().block_on(claude.models()));
+  let (mut engine, _) = life("claude-limit", on_reactor(claude.models()));
   let root = engine.root().to_owned();
   let with =
     verbs::Prompt { message: Some("LIMIT task".into()), on: on(&root), ..Default::default() };

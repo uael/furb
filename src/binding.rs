@@ -29,7 +29,6 @@ use indexmap::IndexMap;
 use std::{
   any::Any,
   cell::RefCell,
-  mem::ManuallyDrop,
   ops::{Deref, DerefMut},
   rc::{Rc, Weak},
   sync::{Arc, Mutex, PoisonError},
@@ -92,12 +91,20 @@ struct Hearing {
 /// another thread drops goes to [`ORPHANS`], and its home thread drops it when it makes its next homed value.
 pub(crate) struct Homed<T: 'static> {
   home: ThreadId,
-  held: ManuallyDrop<T>,
+  held: Option<T>,
 }
 
+#[expect(
+  unsafe_code,
+  reason = "a value of a host is not Send, and only a check at run time keeps it on its thread"
+)]
 // SAFETY: the value is reached on its home thread alone, which each deref checks. Another thread only moves it, whole
 // and untouched, into ORPHANS, and the home thread alone drops it there.
 unsafe impl<T> Send for Homed<T> {}
+#[expect(
+  unsafe_code,
+  reason = "a value of a host is not Sync, and only a check at run time keeps it on its thread"
+)]
 // SAFETY: as for Send, since no thread but the home thread reaches the value.
 unsafe impl<T> Sync for Homed<T> {}
 
@@ -107,6 +114,10 @@ struct Orphan {
   _held: Box<dyn Any>,
 }
 
+#[expect(
+  unsafe_code,
+  reason = "a value of a host is not Send, and only its home thread drops it, which no type says"
+)]
 // SAFETY: an orphan is moved between threads whole, and only its home thread drops it, in `Homed::new`.
 unsafe impl Send for Orphan {}
 
@@ -126,7 +137,7 @@ impl<T: 'static> Homed<T> {
       mine
     };
     drop(mine);
-    Homed { home, held: ManuallyDrop::new(held) }
+    Homed { home, held: Some(held) }
   }
 
   fn home(&self) {
@@ -137,29 +148,35 @@ impl<T: 'static> Homed<T> {
 impl<T> Deref for Homed<T> {
   type Target = T;
 
+  #[expect(
+    clippy::expect_used,
+    reason = "only the drop takes the value, and nothing reads it after"
+  )]
   fn deref(&self) -> &T {
     self.home();
-    &self.held
+    self.held.as_ref().expect("a homed value holds its value until its drop")
   }
 }
 
 impl<T> DerefMut for Homed<T> {
+  #[expect(
+    clippy::expect_used,
+    reason = "only the drop takes the value, and nothing reads it after"
+  )]
   fn deref_mut(&mut self) -> &mut T {
     self.home();
-    &mut self.held
+    self.held.as_mut().expect("a homed value holds its value until its drop")
   }
 }
 
 impl<T> Drop for Homed<T> {
   fn drop(&mut self) {
-    if thread::current().id() == self.home {
-      // SAFETY: the value is dropped once, here, and never reached after.
-      unsafe { ManuallyDrop::drop(&mut self.held) };
-    } else {
-      // SAFETY: the value is taken once, here, and never reached after.
-      let held = Box::new(unsafe { ManuallyDrop::take(&mut self.held) });
-      let orphan = Orphan { home: self.home, _held: held };
-      ORPHANS.lock().unwrap_or_else(PoisonError::into_inner).push(orphan);
+    match self.held.take() {
+      Some(held) if thread::current().id() != self.home => {
+        let orphan = Orphan { home: self.home, _held: Box::new(held) };
+        ORPHANS.lock().unwrap_or_else(PoisonError::into_inner).push(orphan);
+      }
+      held => drop(held),
     }
   }
 }
@@ -827,6 +844,10 @@ mod console {
   }
 
   /// The callback, kept, and the handler of this module, added to the handlers of the process, once.
+  #[expect(
+    unsafe_code,
+    reason = "the handler of the console is a call of Windows that no safe crate of the lock makes"
+  )]
   pub(super) fn listen(callback: Told) -> Result<(), Fault> {
     static ADDED: OnceLock<bool> = OnceLock::new();
     ending()
@@ -845,6 +866,7 @@ mod console {
 
   /// The system calls this on a thread of its own. It gives the event to the host and keeps the thread, since the
   /// system ends the process once a handler returns. An event with no callback, and Ctrl+C, go on to the next handler.
+  #[expect(unsafe_code, reason = "Windows calls the handler through a pointer of this unsafe type")]
   unsafe extern "system" fn heard(event: u32) -> BOOL {
     let name = match event {
       CTRL_BREAK_EVENT => "break",

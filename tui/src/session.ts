@@ -30,11 +30,13 @@ import {
   type ChainAside,
   type ChainThread,
   cancelled,
+  chainNotes,
   chainSorted,
   type Desk,
   desk,
   failed,
   momentsOf,
+  type NoteRun,
   operated,
   rollUp,
   type State,
@@ -79,6 +81,8 @@ export interface ThreadList {
   /** The prompts of the chain that are no conversation, each by its id, and the aside of each prompt on one. */
   asides: Map<string, ChainAside>;
   aside: Map<string, ChainAside>;
+  /** The run of notes that each note stands in, by the id of its prompt. */
+  runs: Map<string, NoteRun>;
 }
 /** The net change of a file in the scope of the review, with its hunks. */
 export type ShownChange = Reviewed;
@@ -534,6 +538,15 @@ export class Session extends EventEmitter {
   /** How many milliseconds each act took that a life of the session ran, which a later life does not know, since the
    * record holds no time. */
   took: Record<string, number> = {};
+  /** How many snapshots changed each act or the word of each step. A view that keys what it drew on the revisions of
+   * what it reads draws again when any field of an act changes, with no list of the fields that it reads. */
+  private revised = new Map<string, number>();
+  revision(id: string): number {
+    return this.revised.get(id) ?? 0;
+  }
+  private revise(id: string): void {
+    this.revised.set(id, this.revision(id) + 1);
+  }
   directory = "";
   private refreshTask?: Promise<void>;
   /** The count of changes of the act table that `acts` holds. */
@@ -850,6 +863,7 @@ export class Session extends EventEmitter {
           this.answers = [...this.answers.slice(0, answers.from), ...answers.list];
         if (program?.whole) this.program = program.words;
         else if (program) Object.assign(this.program, program.words);
+        for (const id of Object.keys(program?.words ?? {})) this.revise(id);
         // A snapshot carries the acts that changed since the session last read them, in the order of the table.
         if (acts.length) {
           // Each act that changed takes its place in the list of the acts, and a new act stands after the others, so
@@ -864,6 +878,7 @@ export class Session extends EventEmitter {
             if (place !== undefined) next[place] = act;
             else index.at.set(act.id, next.push(act) - 1);
             index.ids.set(act.id, act);
+            this.revise(act.id);
             placed(index, act);
             if (!act.done) this.started[act.id] ??= clock();
             // Only the prompts tell when a thread changed, so the table stays as small as the threads: a step stamps the
@@ -1123,7 +1138,9 @@ export class Session extends EventEmitter {
     if (kept?.stamp === stamp && kept.owed === owed) return kept.threads;
     const on = this.activityByChain.get(chain) ?? [];
     const owes = new Set(this.host.prompts.keys());
-    const { threads: list, asides } = chainSorted(on, this.indexed().ids, owes, this.threadsKnown);
+    const ids = this.indexed().ids;
+    const sorted = chainSorted(on, ids, owes, this.threadsKnown);
+    const { threads: list, asides } = sorted;
     const threads: ThreadList = {
       list,
       by: new Map(list.map((one) => [one.act.id, one])),
@@ -1134,6 +1151,11 @@ export class Session extends EventEmitter {
       asides: new Map(asides.map((one) => [one.act.id, one])),
       aside: new Map(
         asides.flatMap((one) => one.messages.map((message): [string, ChainAside] => [message.id, one])),
+      ),
+      runs: new Map(
+        chainNotes(on, ids, sorted).flatMap((run) =>
+          run.prompts.map((act): [string, NoteRun] => [act.id, run]),
+        ),
       ),
     };
     this.threadsRead.set(chain, { stamp, owed, threads });
@@ -1158,6 +1180,11 @@ export class Session extends EventEmitter {
     // folded thread of it shows new work.
     const left = Math.max(this.host.seen.get(chain) ?? 0, this.told.get(chain) ?? 0);
     return this.placeOf(acts) > Math.max(this.read(id), left);
+  }
+  /** How many notes of a run are new to the operator: each that began or ended past what he read of its chain or of
+   * itself. */
+  unreadNotes(run: NoteRun): number {
+    return run.prompts.filter((act) => this.unreadThread(act.id, [act])).length;
   }
   /** The place up to which the operator read a chain or a thread: the last fact seen of the record, or what this
    * window shows him or said that he read, whose fact did not come back yet. */

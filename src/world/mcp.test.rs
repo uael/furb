@@ -2,14 +2,11 @@
 //! over the older HTTP with SSE, each act and each state, the controls that write the local scope, the changes that
 //! the ear tells, a login by OAuth, and a later life that replays its record and asks no server.
 
-#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
-
 use std::{
   collections::HashMap,
   fs,
   path::Path,
   sync::Arc,
-  thread,
   time::{Duration, Instant},
 };
 
@@ -88,7 +85,7 @@ fn settings(at: &Path, variables: &[(&str, &str)]) -> Settings {
   }
 }
 
-use crate::testing::block_on;
+use crate::testing::{block_on, pause};
 
 /// The ear that answers a stand with the operator alone, in the directory of the project.
 fn standing(at: &Path) -> Box<dyn Ear> {
@@ -156,7 +153,7 @@ fn until(engine: &mut Engine, mut holds: impl FnMut(&mut Engine) -> bool) {
   while !holds(engine) {
     assert!(Instant::now() < deadline, "the life did not come to what the test waits for");
     closed(engine, "close(1)").unwrap();
-    thread::sleep(Duration::from_millis(100));
+    pause(Duration::from_millis(100));
   }
 }
 
@@ -505,7 +502,7 @@ fn the_process_of_a_server_over_stdio_ends_with_the_life() {
   let deadline = Instant::now() + Duration::from_secs(5);
   while alive(&pid) {
     assert!(Instant::now() < deadline, "the process {pid} outlived its life");
-    thread::sleep(Duration::from_millis(50));
+    pause(Duration::from_millis(50));
   }
 }
 

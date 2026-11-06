@@ -2,8 +2,9 @@
 # Runs a command in one of the slots of builds that this machine holds, and caps its jobs of cargo. Each worktree builds
 # on its own, so with no slot the builds add up: 28 rustc processes took 13.8 GB, and the machine ran out of memory.
 # A slot is a folder of FURB_BUILD_DIR that holds the pid of its holder.
-# FURB_BUILD_SLOTS: the slots, one for each 12 GB of memory of the machine and at least 1. FURB_BUILD_JOBS: the cap of CARGO_BUILD_JOBS, 4. FURB_BUILD_WAIT: the seconds to
-# wait for a slot, 1200, and then exit 75. FURB_BUILD_POLL: the seconds between two looks at the slots, 2.
+# FURB_BUILD_SLOTS: the slots, one for each 9 GB of memory of the machine and at least 1. FURB_BUILD_JOBS: the cap of
+# CARGO_BUILD_JOBS, 4. FURB_BUILD_WAIT: the seconds to wait for a slot, 1200, and then exit 75. FURB_BUILD_POLL: the
+# seconds between two looks at the slots, 2.
 [ $# -gt 0 ] || { echo "usage: sh script/build-slot.sh <command> [argument...]" >&2; exit 2; }
 jobs=${FURB_BUILD_JOBS:-4}
 case ${CARGO_BUILD_JOBS:-} in
@@ -20,7 +21,7 @@ memory() {
   else echo $(($(awk '/MemTotal/ { print $2 }' /proc/meminfo 2>/dev/null || echo 0) / 1048576))
   fi
 }
-slots=${FURB_BUILD_SLOTS:-$(($(memory) / 12))}
+slots=${FURB_BUILD_SLOTS:-$(($(memory) / 9))}
 [ "$slots" -ge 1 ] || slots=1
 limit=${FURB_BUILD_WAIT:-1200}
 poll=${FURB_BUILD_POLL:-2}
@@ -31,7 +32,9 @@ mkdir -p "$dir" || exit 1
 old() { [ -n "$(find "$1" -prune -mmin +1 2>/dev/null)" ]; }
 stale() {
   holder=$(cat "$1/pid" 2>/dev/null)
-  if [ -n "$holder" ]; then ! kill -0 "$holder" 2>/dev/null; else old "$1"; fi
+  # A pid that the system gave to another process since is no holder: only a build-slot.sh process holds a slot, and ps
+  # names no process for a pid that ended.
+  if [ -n "$holder" ]; then ! ps -o command= -p "$holder" 2>/dev/null | grep -q build-slot.sh; else old "$1"; fi
 }
 
 # The look at the slots runs under a guard that stands for milliseconds, so two waiters never free one stale slot twice.
@@ -54,7 +57,8 @@ take() {
 }
 
 start=$(date +%s)
-said=$start
+# The first wait logs at once, so a build that waits shows it before its first 30 seconds.
+said=$((start - 30))
 take
 while [ -z "$got" ]; do
   now=$(date +%s)

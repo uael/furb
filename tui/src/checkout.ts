@@ -1,18 +1,5 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { readFileSync, realpathSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-
-function git(directory: string, ...args: string[]): string | undefined {
-  try {
-    return execFileSync("git", ["-C", directory, ...args], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-      timeout: 10_000,
-    }).trim();
-  } catch {
-    return undefined;
-  }
-}
 
 function real(path: string): string {
   try {
@@ -39,17 +26,6 @@ export function mainCheckout(directory: string): string {
   } catch {
     return directory;
   }
-}
-
-/** The main checkout, then each worktree that git lists for it and that stands on the disk. */
-export function checkouts(main: string): string[] {
-  const listed = (git(main, "worktree", "list", "--porcelain") ?? "")
-    .split("\n\n")
-    .filter((block) => !block.split("\n").includes("bare"))
-    .map((block) => /^worktree (.+)$/m.exec(block)?.[1])
-    .filter((path): path is string => path !== undefined && existsSync(path))
-    .map(real);
-  return [main, ...listed.filter((path) => path !== main)];
 }
 
 /** The checkout whose .furb/sessions holds a record, or the fallback when the record stands elsewhere. */

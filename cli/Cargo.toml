@@ -38,7 +38,7 @@ tokio = { version = "1", features = ["process", "net", "time", "io-util", "macro
 tokio-util = { version = "0.7", features = ["codec"] }
 
 [target.'cfg(unix)'.dev-dependencies]
-# The signals that end the daemon, and the FIFO of the test.
+# The numbers of the signals that end the daemon.
 libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]

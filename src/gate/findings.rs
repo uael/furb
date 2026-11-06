@@ -386,7 +386,8 @@ pub(super) fn unawaited(sheet: &Parsed<'_>) -> Vec<Finding> {
     .collect()
 }
 
-/// Each call of an async function that stands as a statement of the word, by the line it stands on.
+/// Each call of an async function that nothing awaits or binds, by the line it stands on: a
+/// statement, an argument, an element of a container, a return.
 ///
 /// A call of an `async def` makes a coroutine and runs nothing until it is awaited, and the checker
 /// lets the statement pass, so the word goes on as if the call had run. The gate refuses it first
@@ -394,7 +395,8 @@ pub(super) fn unawaited(sheet: &Parsed<'_>) -> Vec<Finding> {
 /// and the word adds the ones that it defines.
 pub(super) fn dropped(sheet: &Parsed<'_>, known: &HashSet<String>) -> Vec<Finding> {
   let Some(body) = sheet.bodied() else { return vec![] };
-  let mut calls = Coroutines { names: known.clone(), depth: 0, found: vec![] };
+  let mut calls =
+    Coroutines { names: known.clone(), depth: 0, found: vec![], taken: HashSet::new() };
   calls.visit_body(word_of(body));
   calls
     .found
@@ -418,6 +420,16 @@ struct Coroutines {
   names: HashSet<String>,
   depth: usize,
   found: Vec<(usize, String)>,
+  /// The calls that something takes: one under `await` or bound by a store stands for its result.
+  taken: HashSet<usize>,
+}
+
+impl Coroutines {
+  fn take(&mut self, value: &Expr) {
+    if let Expr::Call(call) = value {
+      self.taken.insert(call.start().to_usize());
+    }
+  }
 }
 
 impl<'a> Visitor<'a> for Coroutines {
@@ -434,14 +446,13 @@ impl<'a> Visitor<'a> for Coroutines {
           self.names.insert(def.name.to_string());
         }
       }
-      Stmt::Expr(one) => {
-        if let Expr::Call(call) = &*one.value
-          && let Expr::Name(name) = &*call.func
-          && self.names.contains(name.id.as_str())
-        {
-          self.found.push((stmt.start().to_usize(), name.id.to_string()));
+      Stmt::Assign(one) => self.take(&one.value),
+      Stmt::AnnAssign(one) => {
+        if let Some(value) = &one.value {
+          self.take(value);
         }
       }
+      Stmt::AugAssign(one) => self.take(&one.value),
       _ => {}
     }
     let scoped = matches!(stmt, Stmt::FunctionDef(_) | Stmt::ClassDef(_));
@@ -451,10 +462,21 @@ impl<'a> Visitor<'a> for Coroutines {
   }
 
   fn visit_expr(&mut self, expr: &'a Expr) {
-    if let Expr::Name(one) = expr
-      && matches!(one.ctx, ExprContext::Store)
-    {
-      self.names.remove(one.id.as_str());
+    match expr {
+      Expr::Name(one) if matches!(one.ctx, ExprContext::Store) => {
+        self.names.remove(one.id.as_str());
+      }
+      Expr::Await(one) => self.take(&one.value),
+      Expr::Named(one) => self.take(&one.value),
+      Expr::Call(call) => {
+        if let Expr::Name(name) = &*call.func
+          && self.names.contains(name.id.as_str())
+          && !self.taken.contains(&call.start().to_usize())
+        {
+          self.found.push((expr.start().to_usize(), name.id.to_string()));
+        }
+      }
+      _ => {}
     }
     visitor::walk_expr(self, expr);
   }
@@ -861,7 +883,9 @@ impl<'a> Visitor<'a> for Bound<'a> {
 /// The names that a statement binds in the module by a way that `binds` does not read: the target
 /// of a walrus (also inside a comprehension, which binds it in the scope around it), each capture
 /// of a pattern of a match, and each name that a def or a class declares `global`, at any depth. A
-/// lambda binds its walrus apart, so nothing inside it counts.
+/// lambda binds its walrus apart, so nothing inside it counts. A def or a class runs its decorators,
+/// the defaults of its parameters, and its bases and keywords in the module, so a walrus there binds
+/// too, but a walrus in its body binds apart. Python refuses a walrus in an annotation.
 struct Reached<'a>(Vec<(usize, &'a str)>);
 
 impl<'a> Visitor<'a> for Reached<'a> {
@@ -870,6 +894,17 @@ impl<'a> Visitor<'a> for Reached<'a> {
       let mut globals = Globals(vec![]);
       StatementVisitor::visit_stmt(&mut globals, stmt);
       self.0.extend(globals.0);
+      match stmt {
+        Stmt::FunctionDef(one) => {
+          one.decorator_list.iter().for_each(|one| self.visit_decorator(one));
+          self.visit_parameters(&one.parameters);
+        }
+        Stmt::ClassDef(one) => {
+          one.decorator_list.iter().for_each(|one| self.visit_decorator(one));
+          one.arguments.iter().for_each(|one| self.visit_arguments(one));
+        }
+        _ => {}
+      }
     } else {
       visitor::walk_stmt(self, stmt);
     }

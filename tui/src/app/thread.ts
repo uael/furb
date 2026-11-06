@@ -4,7 +4,7 @@ import type { ActRow } from "../session.ts";
 import { theme as c, glyph, spacing as space, threadTone } from "../theme.ts";
 import type { Part } from "../ui.ts";
 import { part } from "./part.ts";
-import { noBorder } from "./shared.ts";
+import { hidden, noBorder } from "./shared.ts";
 
 /** How many rows a window of code shows until a click opens it: the first, the five after it, and the last. */
 export const WINDOW = 7;
@@ -14,8 +14,8 @@ export const SCROLL = 24;
 
 export const thread = part({
   /** The lines of a run of code as its window shows them: all of them while they fit, else seven rows. The first row is
-   * the first line, or a ... once the window rolled. The line that runs stands second to last, and the last row is a
-   * ... while more lines come after it, else the row where the model writes. A window that was opened shows the last
+   * the first line, or a fold row once the window rolled. The line that runs stands second to last, and the last row is a
+   * fold row while more lines come after it, else the row where the model writes. A window that was opened shows the last
    * lines of the run, without the ... rows. */
   rolling(
     given: readonly ProgramLine[],
@@ -30,11 +30,12 @@ export const thread = part({
     if (n + (writing ? 1 : 0) <= WINDOW) return { lines: [...given], opened };
     const base = given[0];
     if (!base) return { lines: [], opened };
-    const gap = (at: ProgramLine | undefined, count: number): ProgramLine => ({
+    // A row that the window leaves out stands as the one fold row of the feed: its glyph, its count and its noun.
+    const gap = (at: ProgramLine | undefined, count: number, where: "more" | "earlier"): ProgramLine => ({
       kind: "earlier",
       step: (at ?? base).step,
       count,
-      text: "…",
+      text: `${glyph.closed} ${hidden(count, "line", where)}`,
     });
     const runs = given.findLastIndex((line) => line.kind === "code" && line.runs);
     const anchor = runs < 0 ? n - 1 : runs;
@@ -47,8 +48,8 @@ export const thread = part({
     }
     const shown = given.slice(start, start + body);
     const lines = [...shown];
-    if (start > 0) lines[0] = gap(shown[0], start + 1);
-    if (more) lines.push(gap(shown.at(-1), n - start - body));
+    if (start > 0) lines[0] = gap(shown[0], start + 1, "earlier");
+    if (more) lines.push(gap(shown.at(-1), n - start - body, "more"));
     return { lines, opened };
   },
 

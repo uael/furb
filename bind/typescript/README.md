@@ -253,9 +253,10 @@ gives. It holds no native code and no module of node, so a terminal and a window
   of its ladder and their acts, the last steps at each level, and one line in place of each run of earlier ones, read
   from the index of acts that a host holds.
 - `threads`: the threads of a chain, `chainThreads`, where a thread is a prompt to a model with the messages that came
-  to it, and the asides of the chain, `chainAsides`; the tree of a list of threads, `nestThreads`, where each thread
-  that the ladder of a thread made is its agent, in the order of the list of the threads, `orderThreads`; and how a
-  thread concerns the operator, `concerns` and `attentionOf`.
+  to it, the asides of the chain, `chainAsides`, and the runs of notes that follow one another in its feed,
+  `chainNotes`; the tree of a list of threads, `nestThreads`, where each thread that the ladder of a thread made is its
+  agent, in the order of the list of the threads, `orderThreads`; and how a thread concerns the operator, `concerns`
+  and `attentionOf`.
 - `map`: the place of each chain on the map, which no later chain moves, the messages that flow between chains, and
   the way of a message along the tree of hires.
 - `program`: the program of a thread as the feed shows it, `threadProgram`: the words of its steps as one program,

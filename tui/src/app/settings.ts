@@ -227,7 +227,11 @@ export const settings = part({
       // Each fold of the feed opens in place, as a click on its row does.
       ...[...this.foldRows]
         .filter(([, one]) => !one.node.isDestroyed)
-        .map(([key, one]) => ({ label: one.label, detail: "Expand", run: () => this.openFold(key) })),
+        .map(([key, one]) => ({
+          label: one.label,
+          detail: "Expand",
+          run: () => (one.open ? one.open() : this.openFold(key)),
+        })),
     ]);
   },
 
