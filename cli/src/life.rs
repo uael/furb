@@ -64,7 +64,8 @@ impl Life {
     })
   }
 
-  /// Whether a pause stands over an act of the operator on the root, or over the root, as the engine reads it.
+  /// Whether a pause stands over an act of the operator on the root, or over the root, as the
+  /// engine reads it.
   pub(crate) fn paused(&mut self, id: &str) -> Result<bool, CliError> {
     paused(&mut self.engine, id)
   }

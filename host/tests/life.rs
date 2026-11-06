@@ -664,8 +664,8 @@ async fn a_life_on_its_checkpoints_tells_each_repeated_fact_of_its_history_in_or
   let first = birth(&at, word, vec![pause(), wake()]).await;
   let second = birth(&at, "z = 0", vec![pause(), wake()]).await;
   let third = birth(&at, "y = 1", vec![pause(), wake()]).await;
-  // The pause and the wake that a birth says again at its seed, as the journal, belong to the birth, not to the
-  // history that it retells.
+  // The pause and the wake that a birth says again at its seed, as the journal, belong to the
+  // birth, not to the history that it retells.
   let controls = |facts: &[serde_json::Value]| -> Vec<(String, String)> {
     let controls = facts.iter().filter(|one| {
       one[1] == "chain2"
