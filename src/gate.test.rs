@@ -172,6 +172,19 @@ fn a_call_of_an_async_function_that_nothing_awaits_is_a_finding_of_its_line() {
 }
 
 #[test]
+fn a_call_of_an_async_function_in_an_argument_a_container_or_a_return_is_a_finding() {
+  let hire = "async def hire():\n  return 1";
+  let found =
+    |word: &str| said(&[hire], word).into_iter().map(|(line, _)| line).collect::<Vec<_>>();
+  assert_eq!(found("close(hire())"), vec![1]);
+  assert_eq!(found("x = [hire(), 2]"), vec![1]);
+  assert_eq!(found("x = {'a': hire()}"), vec![1]);
+  assert_eq!(found("async def go():\n  return hire()\nawait go()"), vec![2]);
+  assert_eq!(found("close(await hire())\ny = (hire() or 1)"), vec![2]);
+  assert_eq!(found("close(await hire())\ng = hire()\nh = (k := hire())"), Vec::<usize>::new());
+}
+
+#[test]
 fn a_call_that_is_awaited_or_bound_or_of_another_function_is_no_finding() {
   let hire = "async def hire():\n  return 1";
   assert_eq!(said(&[hire], "await hire()\ngot = hire()\nclose(await got)"), vec![]);
