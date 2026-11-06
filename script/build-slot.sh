@@ -12,6 +12,10 @@ case ${CARGO_BUILD_JOBS:-} in
   *) [ "$CARGO_BUILD_JOBS" -ge "$jobs" ] || jobs=$CARGO_BUILD_JOBS ;;
 esac
 export CARGO_BUILD_JOBS=$jobs
+# The incremental state of cargo is the part of a target that no copy on write shares and that grows with each build:
+# the worktrees of the converge held 143 GB of it, and the disk filled. Without it a warm build of the crate after an
+# edit takes 14 s, against 4 s with it. CARGO_INCREMENTAL of the caller stays.
+export CARGO_INCREMENTAL=${CARGO_INCREMENTAL:-0}
 # A command that this script started holds its slot already, so a build inside it takes no second one.
 [ -z "${FURB_BUILD_SLOT:-}" ] || exec "$@"
 # FURB_BUILD_MEM_GB replaces the memory that the machine reports.
