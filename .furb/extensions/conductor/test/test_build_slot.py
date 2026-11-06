@@ -135,3 +135,31 @@ def test_a_slot_with_no_pid_frees_after_a_minute_and_not_before(tmp_path: Path) 
 def test_a_build_inside_a_slot_takes_no_second_slot(tmp_path: Path) -> None:
   got = run(tmp_path, "sh", str(SCRIPT), "echo", "inner", FURB_BUILD_SLOTS="1", FURB_BUILD_WAIT="3")
   assert (got.returncode, got.stdout) == (0, "inner\n")
+
+
+def test_no_build_sticks_when_holders_die_by_kill_9_and_the_system_gives_their_pids_to_other_processes(
+  tmp_path: Path,
+) -> None:
+  slots = tmp_path / "slots"
+  others = [subprocess.Popen(["sleep", "300"]) for _ in range(4)]
+  release = tmp_path / "release"
+  wait = f"while [ ! -e {release} ]; do sleep 0.02; done"
+  holders = [start(tmp_path, "sh", "-c", wait, FURB_BUILD_SLOTS="4", FURB_BUILD_WAIT="120") for _ in range(12)]
+  try:
+    while len(list(slots.glob("slot*/pid"))) < 4:
+      time.sleep(0.02)
+    held = {int((s / "pid").read_text(encoding="utf-8")): s for s in slots.glob("slot*") if (s / "pid").exists()}
+    dead = [p for p in holders if p.pid in held]
+    for p in dead:
+      p.kill()
+      p.wait()
+    for p, other in zip(dead, others, strict=True):
+      (held[p.pid] / "pid").write_text(f"{other.pid}\n", encoding="utf-8")
+    release.touch()
+    assert [p.wait() for p in holders if p not in dead] == [0] * 8
+    left = {(s / "pid").read_text(encoding="utf-8").strip() for s in slots.iterdir()}
+    assert left <= {str(other.pid) for other in others}
+  finally:
+    for p in [*holders, *others]:
+      p.kill()
+      p.communicate()
