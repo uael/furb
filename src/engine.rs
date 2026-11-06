@@ -86,6 +86,10 @@ const TOOK: &str = "peek(__id, ...) is not ... or \
 /// Whether an act waits: it is not done, and no pause holds it.
 const WAITS: &str = "peek(__id, ...) is ... and not paused(__id)";
 
+/// The names that a chain binds: its module, or, for a chain that the life holds no module of,
+/// the names of the engine alone.
+const BOUND: &str = "(module(__chain) or globals())";
+
 /// The act that the operator made for a key of the client on a chain: the first question that the operator made on
 /// the chain after a key fact of that key and that kind, when it is of that kind, and nothing otherwise.
 const KEYED: &str = "next((b[1] for f, k, w in [(transcript(__on), __key, __kind)] \
@@ -818,6 +822,8 @@ impl Engine {
 
   /// One name that the module of a chain binds, the root when no chain is given, read without calling it: the name
   /// of its type, its representation, and its value, which goes out as every value does.
+  /// A chain that the life holds no module of, as one that the last checkpoint of its record
+  /// left out, binds the names of the engine alone, so its actor reads as none.
   pub fn inspect(
     &mut self,
     name: &str,
@@ -826,7 +832,7 @@ impl Engine {
     let chain = Object::string(chain.unwrap_or(&self.root));
     let bound = vec![("__chain", chain), ("__name", Object::string(name))];
     let got =
-      self.word("(lambda x: (type(x).__name__, repr(x), x))(module(__chain)[__name])", bound)?;
+      self.word(&format!("(lambda x: (type(x).__name__, repr(x), x))({BOUND}[__name])"), bound)?;
     let got = got.as_ref();
     let text =
       |at| entry(&got, at).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
@@ -835,9 +841,10 @@ impl Engine {
   }
 
   /// Every name that the module of a chain binds, the root when no chain is given, in the order it bound them.
+  /// They are the names that [`Engine::inspect`] reads.
   pub fn names(&mut self, chain: Option<&str>) -> Result<Vec<String>, Fault> {
     let chain = Object::string(chain.unwrap_or(&self.root));
-    Plain::plain(self.word("[str(x) for x in module(__chain)]", vec![("__chain", chain)])?)
+    Plain::plain(self.word(&format!("[str(x) for x in {BOUND}]"), vec![("__chain", chain)])?)
   }
 
   /// What to do when an act is done, given what it came to: told at once for an act that is done already, and once

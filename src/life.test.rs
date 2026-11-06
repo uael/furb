@@ -1460,3 +1460,42 @@ fn the_gate_is_on_unless_the_last_config_that_names_it_says_false() {
   fs::write(furb.join("config.local.json"), r#"{"gate": true}"#).unwrap();
   assert!(gated(), "the local config of the project wins");
 }
+
+#[test]
+fn a_life_that_inspects_a_checkpoint_reads_the_actor_each_chain_stood_on_or_none() {
+  let at = place("checkpoint-actor");
+  let mut first = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  let made =
+    closed(&mut first, "close(str(chain('naming')))").as_ref().as_str().unwrap().to_owned();
+  let actor = first.inspect("actor", None).unwrap().2;
+  assert!(
+    actor.as_ref().as_str().is_some_and(|one| !one.is_empty()),
+    "the root stands on an actor"
+  );
+  assert_eq!(
+    first.inspect("actor", Some(&made)).unwrap().2,
+    actor,
+    "a chain takes the actor of its root"
+  );
+  first.checkpoint().unwrap();
+  let kept = world::kept(at.join("record.jsonl")).unwrap();
+  let fact = entry(&kept[crate::checkpoint::last(&kept).unwrap()].as_ref(), 0).and_then(Fact::of);
+  let data = crate::wire::outward(fact.unwrap().word(0).unwrap());
+  let chains: Vec<&str> =
+    data["chains"].as_array().unwrap().iter().filter_map(|one| one["id"].as_str()).collect();
+  assert_eq!(chains, ["chain1"], "the checkpoint leaves out the chain that no value names");
+  let mut inspected =
+    Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+  assert_eq!(
+    inspected.inspect("actor", None).unwrap().2,
+    actor,
+    "the root reads the actor it stood on"
+  );
+  let left = inspected.inspect("actor", Some(&made)).unwrap();
+  assert_eq!(
+    (left.0.as_str(), left.2.as_ref().as_str()),
+    ("str", Some("")),
+    "a chain that the checkpoint left out reads no actor, and the open goes on"
+  );
+  assert!(inspected.names(Some(&made)).unwrap().contains(&"actor".to_owned()));
+}
