@@ -43,11 +43,6 @@ export function asker(model: string, chain: boolean): string {
   return chain ? `furb tells ${model}` : `the program asks ${model}`;
 }
 
-/** The line that holds the earlier steps of a long chain until a click opens them. */
-export function earlierSteps(count: number): string {
-  return `${count} earlier ${count === 1 ? "step" : "steps"}`;
-}
-
 /** Where a branch starts: from a moment of the chain that it branched from, with the files as they were then. */
 export function branchStart(source: string): string {
   return `This branch starts from a moment of ${source}, with the files as they were.`;

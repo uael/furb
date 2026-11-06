@@ -78,9 +78,6 @@ test("the toggle of a thread taller than the screen stays in view and folds it, 
     const id = await engine.prompt("str", { message: long("Row"), on: root });
     const other = await engine.prompt("str", { message: long("Line"), on: root });
     await until(() => listed(window).some((one) => one.act.id === other), "the threads");
-    await window.shows((frame) => frame.includes("more lines"), "the fold of the long messages");
-    await window.click("more lines");
-    await window.click("more lines");
     const feed = (frame: string) =>
       frame.split("\n").map((line) => line.slice(0, window.width - session.preferences.sidebarWidth));
     const { viewport } = app.scroll;
