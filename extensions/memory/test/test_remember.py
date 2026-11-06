@@ -138,3 +138,27 @@ async def test_at_a_stand_the_catch_up_of_the_chain_tells_what_changed_in_each_m
   caught = [one for one in paragraphs(engine.turns(on=root)) if one.startswith("#chain1 caught up")]
   assert caught == [f"#chain1 caught up\nchain1_changed = {{{tilded(top)!r}: {{2: 'three'}}}}"]
   assert recalled(root, tmp_path)[1:] == [memorized(new, "local\n")]
+
+
+async def test_remember_tells_the_memory_of_a_folder_after_a_cd_of_a_word_on_the_chain_into_it(tmp_path: Path) -> None:
+  """remember tells the memory of a folder after a cd of a word on the chain into it, as it does after a read of a text in it: the memory of the path that the cd gave."""
+  top = noted(tmp_path / "work", "one\n")
+  sub = noted(tmp_path / "work" / "sub", "two\n")
+  _, root = extended("memory", tmp_path)
+  await engine.rung("close(remember())", on=root)
+  assert recalled(root, tmp_path) == [memorized(top, "one\n")]
+  await engine.rung('cd("sub")', on=root)
+  assert recalled(root, tmp_path)[1:] == [memorized(sub, "two\n")]
+
+
+async def test_remember_tells_the_memory_of_the_folder_of_a_text_after_a_write_of_a_word_on_the_chain(
+  tmp_path: Path,
+) -> None:
+  """remember tells the memory of the folder of a text after a write of a word on the chain, as it does after a read of that text."""
+  top = noted(tmp_path / "work", "one\n")
+  deep = noted(tmp_path / "work" / "deep", "three\n")
+  _, root = extended("memory", tmp_path)
+  await engine.rung("close(remember())", on=root)
+  assert recalled(root, tmp_path) == [memorized(top, "one\n")]
+  await engine.rung('write(Text("deep/b.txt", "b\\n"))', on=root)
+  assert recalled(root, tmp_path)[1:] == [memorized(deep, "three\n")]

@@ -42,6 +42,8 @@ compaction = """Compaction cuts this chain to the work that it still needs, and 
 - compacted() wraps a chain: after an answer that reads more than SHARE of the window, it asks choice(), and at the
   next reply once that came, it compacts the chain to what the model chose. It moves, stops and pauses nothing. No
   chain is wrapped unless a word wraps it.
+- fitted() watches each chain: when its model refuses a reply because the prompt passes its window, it cuts the
+  chain at once to its open prompts, so the next reply reads less and the chain goes on with no pause.
 - A project changes the defaults in an extension of its own, whose word rebinds SHARE, FILTERS, CHOOSER, LISTED or
   BRIEF."""
 SHARE = 0.6
@@ -49,6 +51,9 @@ CHOOSER = ""
 
 
 LISTED = 40
+OVERFLOW = "the prompt passes the window of the model"
+OVERFLOWED = """The model refused the last reply of this chain, since its prompt passed the window of the model,
+so compaction cut the chain to its open prompts: read again what the work still needs."""
 BRIEF = """The chain below grows past its window, and it goes on with what the work still needs.
 Choose what it keeps: each act that holds a decision or a ruling of the operator, a brief, a finding that the work
 still needs, and the last state of each command that matters. A step keeps all that it made, and an act keeps the
@@ -218,6 +223,22 @@ def compacted(on: str = "") -> Act:
           pending, chose = "", None
 
   return act("compacted", on, controlled(ear))
+
+
+def fitted(on: str = "") -> Act:
+  def ear(id):
+    yield "started", id
+    here, row = scope(id), False
+    while True:
+      match (yield {id, here}):
+        case ("done", about, _, Refused() as why) if question(("reply", about)) and scope(about) == here:
+          if OVERFLOW in str(why) and not row:
+            compact([lambda acts: [a for a in acts if a[0] == "prompt" and not over(a[1])]], OVERFLOWED, here)
+          row = OVERFLOW in str(why)
+        case ("done", about, _, tuple()) if question(("reply", about)) and scope(about) == here:
+          row = False
+
+  return act("fitted", on, controlled(ear))
 
 
 async def condense(to: str = "", on: str = "") -> str:

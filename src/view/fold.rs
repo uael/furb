@@ -5,14 +5,14 @@ use std::{
   mem,
 };
 
-use furb::fact::named;
+use crate::fact::named;
 use serde_json::Value;
 
 use super::{
   act::{Act, Answer, Kind, Pause, Phase, RunState, Spend, fault},
   state::{State, chain_state},
 };
-use crate::ears::CONSOLE;
+use crate::world::CONSOLE;
 
 /// The questions that the engine asks on the way to what an act does, which no person follows: each
 /// is answered for the act that asked it, which shows what it came to.
@@ -20,7 +20,7 @@ const STEPS: [&str; 11] =
   ["setup", "stand", "clock", "chance", "gate", "cd", "merged", "run", "writing", "wants", "reply"];
 
 /// Whether a person follows an act of a kind, so that a pause can hold it.
-pub(crate) fn followed(kind: &str) -> bool {
+pub fn followed(kind: &str) -> bool {
   !STEPS.contains(&kind)
 }
 
@@ -47,7 +47,7 @@ struct Reply {
 /// the fact says alone, and takes from the engine what the engine alone can say: which acts a pause
 /// or a wake covers.
 #[derive(Default)]
-pub(crate) struct Fold {
+pub struct Fold {
   acts: HashMap<String, Act>,
   /// How many facts the fold heard, which is the place in time of the fact that it hears.
   clock: u64,
@@ -67,20 +67,20 @@ pub(crate) struct Fold {
 
 impl Fold {
   /// The chain that an act stands in.
-  pub(crate) fn chain_of(&self, id: &str) -> Option<&str> {
+  pub fn chain_of(&self, id: &str) -> Option<&str> {
     self.acts.get(id).map(|act| act.chain.as_str())
   }
 
   /// The live acts whose pause a pause, or a wake, would change: each that no pause holds, or each
   /// that one holds.
-  pub(crate) fn open(&self, pausing: bool) -> Vec<String> {
+  pub fn open(&self, pausing: bool) -> Vec<String> {
     let acts = self.live.values().filter_map(|id| self.acts.get(id));
     acts.filter(|act| act.pause.is_some() != pausing).map(|act| act.id.clone()).collect()
   }
 
   /// The acts that a fact changes, each as it stands after the fact. `covered` names each live act
   /// that a pause or a wake covers, and `born` the pause that holds a new act, as the engine found.
-  pub(crate) fn hear(&mut self, fact: &Value, covered: &[String], born: Option<Pause>) -> Vec<Act> {
+  pub fn hear(&mut self, fact: &Value, covered: &[String], born: Option<Pause>) -> Vec<Act> {
     self.clock += 1;
     let text = |at: usize| fact.get(at).and_then(Value::as_str).unwrap_or_default();
     let (kind, about, by) = (text(0), text(1), text(2));
