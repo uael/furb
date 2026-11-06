@@ -140,6 +140,17 @@ jobs:
         env:
           UV_NO_SYNC: "1"
           FURB_UNCOUNTED: ${{ runner.os == 'Windows' && '*/src/furb/life.py' || '' }}
+      # What the walls of the engine and of the doctrine leave, as the script of the tokens says it, kept as an artifact.
+      - if: always() && runner.os == 'Linux'
+        env:
+          UV_NO_SYNC: "1"
+        run: |
+          mkdir -p "$RUNNER_TEMP/measures"
+          uv run python script/tokens.py > "$RUNNER_TEMP/measures/tokens.txt" 2>&1 || echo "exit $?" >> "$RUNNER_TEMP/measures/tokens.txt"
+      - if: always() && runner.os == 'Linux'
+        uses: ./.github/actions/measures
+        with:
+          name: tokens
       - uses: ./.github/actions/clear
 
   crate:
@@ -266,7 +277,22 @@ jobs:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile
       - run: bun run build
-      - run: bun run bench
+      # The measures of the run stay as an artifact, so an audit reads the exact numbers of each run and not the rounded
+      # lines of its log, and a run that goes over a budget keeps them too.
+      - env:
+          FURB_BENCH_JSON: ${{ runner.temp }}/measures/bench.jsonl
+        run: |
+          mkdir -p "$RUNNER_TEMP/measures"
+          bun run bench 2>&1 | tee "$RUNNER_TEMP/measures/bench.log"
+      - if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/measures"
+          printf '{"fixture_bytes":%s,"fixture_lines":%s,"facts":%s}\n' "$(wc -c < tui/fixtures/conductor.jsonl)" \
+            "$(wc -l < tui/fixtures/conductor.jsonl)" "${FURB_BENCH_FACTS:-160000}" > "$RUNNER_TEMP/measures/fixture.json"
+      - if: always()
+        uses: ./.github/actions/measures
+        with:
+          name: bench
 
   gates:
     # The one check that reports on each pull request and stands for all the gates, so that a ruleset of main requires
