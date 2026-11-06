@@ -42,14 +42,27 @@ def test_each_slot_goes_back_when_its_command_ends(tmp_path: Path) -> None:
   assert list((tmp_path / "slots").iterdir()) == []
 
 
+def entered(log: Path) -> int:
+  return log.read_text(encoding="utf-8").split().count("in") if log.exists() else 0
+
+
 def peak_of(tmp: Path, slots: int, **more: str) -> int:
-  log = tmp / "log"
-  wait = f"i=0; while [ $(grep -c '^in$' {log}) -lt {slots} ] && [ $i -lt 300 ]; do sleep 0.1; i=$((i+1)); done"
-  body = f"echo in >> {log}; {wait}; sleep 0.2; echo out >> {log}"
-  runs = [start(tmp, "sh", "-c", body, **more) for _ in range(6)]
+  # Each command holds until the test releases it, so the peak does not depend on how fast the machine starts them: the
+  # test waits for the slots to fill, gives the extra builds time to wrongly enter, and then lets everything end.
+  log, release = tmp / "log", tmp / "release"
+  body = f"echo in >> {log}; while [ ! -e {release} ]; do sleep 0.05; done; echo out >> {log}"
+  count = slots + 3
+  runs = [start(tmp, "sh", "-c", body, **more) for _ in range(count)]
+  try:
+    deadline = time.monotonic() + 30
+    while entered(log) < slots and time.monotonic() < deadline:
+      time.sleep(0.05)
+    time.sleep(0.5)
+  finally:
+    release.touch()
   for one in runs:
     one.communicate(timeout=60)
-  assert [one.returncode for one in runs] == [0] * 6
+  assert [one.returncode for one in runs] == [0] * count
   held = peak = 0
   for line in log.read_text(encoding="utf-8").split():
     held += 1 if line == "in" else -1

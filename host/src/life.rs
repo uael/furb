@@ -19,6 +19,7 @@ use furb::{
   Engine, Fact, Fault, Object, Text, checkpoint,
   life::{Log, Opening, Stream},
   verbs,
+  view::Held,
   wire::{outward, parsed},
   world::{
     self, Shape, answered,
@@ -44,7 +45,6 @@ use crate::{
   event::{Event, Seq},
   queue::{FollowUp, QUEUE, Queue},
   rebirth::{self, Watch},
-  view::Held,
 };
 
 /// How many events a reader may stand behind the life before it reads them again from the log of
@@ -125,10 +125,10 @@ pub enum Command {
   Unqueue { entry: String },
   /// The follow-ups that wait on a chain, in order.
   Queued { on: Option<String> },
-  /// What waits for the operator, as a [`crate::view::Desk`], with each notice that the window
+  /// What waits for the operator, as a [`furb::view::Desk`], with each notice that the window
   /// still shows.
   Desk { notices: Vec<String> },
-  /// The threads of a chain, as [`crate::view::Threads`], now or as they stood just after a
+  /// The threads of a chain, as [`furb::view::Threads`], now or as they stood just after a
   /// moment.
   Threads { on: Option<String>, at: Option<u64> },
   /// The acts as they stood just after a moment, each with its meaning then.
@@ -213,7 +213,9 @@ impl Life {
     }
     self.watch.heard(&event);
     let queued = self.queue.heard(&event);
-    self.held.heard(&event);
+    if let Event::Act(act) = &event {
+      self.held.heard(act);
+    }
     let (seq, event) = (self.log.len() as Seq, Arc::new(event));
     self.log.push(Arc::clone(&event));
     self.readers.send((seq, event)).ok();
@@ -444,34 +446,52 @@ enum Woke {
   Told(Event),
   Stopped(Fault),
   Said(Option<Message>),
+  /// The time to look again whether the record took the facts that waited for it.
+  Unkept,
 }
+
+/// How long a life whose record did not take each fact waits before it looks again.
+const AGAIN: std::time::Duration = std::time::Duration::from_secs(1);
 
 /// The engine driven while it hears each command, until a client ends it, each handle is gone, a
 /// fault stops it, or the life is due to be born again. A life that keeps a record ends with its
 /// checkpoint.
+///
+/// While the record holds no place for facts that the life said, as on a full disk, the engine
+/// holds them in memory, and a drop of the engine loses them: the life refuses an end with a
+/// message, outlives its handles, and holds its rebirth, until the record takes each of them.
 async fn driven(
   mut engine: Engine,
   life: &mut Life,
   received: &mut UnboundedReceiver<Message>,
   record: Option<&str>,
 ) -> Drove {
+  let mut gone = false;
   loop {
+    // The record can take what waits with no fact said, so a life that waits for it looks again.
+    let waits = (gone || record.is_some() && life.watch.due()) && engine.unkept() > 0;
     let woke = tokio::select! {
       biased;
       Some(event) = life.heard.recv() => Woke::Told(event),
       fault = pumped(&mut engine) => Woke::Stopped(fault),
-      message = received.recv() => Woke::Said(message),
+      message = received.recv(), if !gone => Woke::Said(message),
+      () = tokio::time::sleep(AGAIN), if waits => Woke::Unkept,
     };
     match woke {
       Woke::Told(event) => life.told(Some(event)),
+      Woke::Unkept => {}
       Woke::Stopped(fault) => {
         drop(engine);
         return stopped(fault);
       }
+      Woke::Said(None) if engine.unkept() > 0 => gone = true,
       Woke::Said(None) => return Drove::Ended(rebirth::ended(engine, record.is_some()), None),
       Woke::Said(Some(Message::Since(from, reply))) => {
         life.told(None);
         reply.send(life.since(from)).ok();
+      }
+      Woke::Said(Some(Message::Command(Command::End, reply))) if engine.unkept() > 0 => {
+        reply.send(Err(LifeError::Refused(unkept(engine.unkept())))).ok();
       }
       Woke::Said(Some(Message::Command(Command::End, reply))) => {
         return Drove::Ended(rebirth::ended(engine, record.is_some()), Some(reply));
@@ -490,13 +510,25 @@ async fn driven(
       drop(engine);
       return stopped(fault);
     }
-    if record.is_some() && life.watch.due() {
+    if gone && engine.unkept() == 0 {
+      return Drove::Ended(rebirth::ended(engine, record.is_some()), None);
+    }
+    if record.is_some() && life.watch.due() && engine.unkept() == 0 {
       return match engine.checkpoint() {
         Ok(()) => Drove::Reborn(None),
         Err(fault) => stopped(fault),
       };
     }
   }
+}
+
+/// Why a life does not end while its record does not hold a number of the facts that it said.
+fn unkept(count: usize) -> String {
+  format!(
+    "The life does not end: its record does not hold {count} facts yet, which an end now loses. \
+     Give the disk of the record room. The life tells you when the record holds them: end it \
+     again then."
+  )
 }
 
 /// What a fault that stopped the sandbox or its checkpoint comes to, once the engine is gone: the

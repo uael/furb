@@ -29,7 +29,7 @@ import {
 import { clock } from "../clock.ts";
 import { conversation } from "../conversation.ts";
 import { shortenHomes } from "../files.ts";
-import { clip, dollars, modelName, share } from "../format.ts";
+import { clip, dollars, modelLabel, modelName, share } from "../format.ts";
 import type { ActRow } from "../session.ts";
 import { theme as c, glyph, markOf, pulse, spacing as space, spin } from "../theme.ts";
 import { bold, type Part, styled, underline } from "../ui.ts";
@@ -60,8 +60,9 @@ const thinkingText = (label: Part[], tail?: Part[]): Part[] => [
  * of the operator. */
 const modelOf = (step: { kind: string; words: readonly unknown[] }) => {
   const actor = step.kind === "rung" && typeof step.words[2] === "string" ? step.words[2] : "";
-  const { id } = modelName(actor);
-  return actor && id !== "operator" ? id : "";
+  const { model, effort } = actorParts(actor);
+  const { id } = modelName(model);
+  return actor && id !== "operator" ? modelLabel(id, effort) : "";
 };
 
 /** The label of the block of a word: the model that wrote it, as opus/high, or the operator. */

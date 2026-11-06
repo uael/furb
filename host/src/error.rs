@@ -145,8 +145,13 @@ pub enum TransportError {
   Exposed { folder: PathBuf },
   #[error("a daemon already listens at {place}")]
   Taken { place: String },
-  #[error("the daemon cannot listen at {place}")]
+  #[error("the daemon cannot listen at {place}: {source}")]
   Listen { place: String, source: io::Error },
+  /// The path of a Unix socket is longer than the platform lets a socket address hold.
+  #[error(
+    "the socket path {place} is {length} bytes, over the bound of {bound} bytes of this platform"
+  )]
+  TooLong { place: String, length: usize, bound: usize },
   #[error("no daemon answers at {place}")]
   Dial { place: String, source: io::Error },
   #[error("the transport accepts no peer")]
