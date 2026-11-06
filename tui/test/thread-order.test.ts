@@ -53,7 +53,7 @@ const wide = { width: 152, height: 46 };
 const short = { width: 152, height: 30 };
 const tall = { width: 152, height: 80 };
 
-// Before, main listed the open threads first and the resolved ones under them, each in the order they began.
+// Before, main listed the open threads first and the ones that are over under them, each in the order they began.
 test("the sidebar lists the closed threads at the top and the open ones last, nearest the input, each by the time of its last message", async () =>
   composing(
     async (use) => {

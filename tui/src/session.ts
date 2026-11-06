@@ -462,7 +462,7 @@ export class Session extends EventEmitter {
   /** The open thread of the chain shown, to which the input sends a message by default, as long as the operator chose
    * no thread and did not ask for a new one: its last thread that is not over. */
   get openThread(): ChainThread | undefined {
-    return this.threads.list.findLast((one) => !one.resolved);
+    return this.threads.list.findLast((one) => !one.over);
   }
   /** The thread that the feed shows now: the one that the operator chose, else the open thread, else the last thread
    * of the chain shown. */
@@ -1096,7 +1096,7 @@ export class Session extends EventEmitter {
     const read = this.read(id);
     if (on.some((act) => notice(act) && !onThread(act) && act.began > read)) return true;
     return this.threadsOf(id).list.some(
-      (thread) => thread.resolved && thread.yours && this.unreadThread(thread.act.id, threadWork(thread)),
+      (thread) => thread.over && thread.yours && this.unreadThread(thread.act.id, threadWork(thread)),
     );
   }
   /** What the threads of the chains keep of each prompt that they read. */

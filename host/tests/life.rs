@@ -372,33 +372,34 @@ async fn the_life_gives_the_meaning_of_the_acts_that_it_told() {
   };
   let asked = made(&life, prompt).await;
   until(&mut events, stands("chain1".to_owned(), State::Asks)).await;
-  let Reply::Value(desk) = life.send(Command::Desk { notices: vec![] }).await.unwrap() else {
-    panic!("the desk is a value")
+  let Reply::Desk(desk) = life.send(Command::Desk { notices: vec![] }).await.unwrap() else {
+    panic!("the desk is a desk")
   };
+  let desk = serde_json::to_value(desk).unwrap();
   assert_eq!(desk["questions"], json!(1), "{desk}");
   assert_eq!(desk["asks"][0]["id"], json!(asked));
   assert_eq!(desk["asks"][0]["choices"], json!(["yes", "no"]));
   let threads = Command::Threads { on: None, at: None, read: None };
-  let Reply::Value(now) = life.send(threads).await.unwrap() else { panic!("a value") };
-  assert_eq!(now["state"], json!("asks"), "{now}");
-  let Reply::Values(moments) = life.send(Command::Moments).await.unwrap() else {
-    panic!("the moments are values")
+  let Reply::Threads(now) = life.send(threads).await.unwrap() else { panic!("the threads") };
+  assert_eq!(now.state, State::Asks, "{now:?}");
+  let Reply::Moments(moments) = life.send(Command::Moments).await.unwrap() else {
+    panic!("the moments")
   };
-  let first = moments.first().and_then(serde_json::Value::as_u64).expect("a moment");
+  let first = *moments.first().expect("a moment");
   let past = Command::Threads { on: None, at: Some(first), read: None };
-  let Reply::Value(back) = life.send(past).await.unwrap() else { panic!("a value") };
-  assert_ne!(back["state"], json!("asks"), "the chain asked nothing at its first moment: {back}");
-  let Reply::Values(then) = life.send(Command::AsOf { at: first }).await.unwrap() else {
-    panic!("the acts then are values")
+  let Reply::Threads(back) = life.send(past).await.unwrap() else { panic!("the threads") };
+  assert_ne!(back.state, State::Asks, "the chain asked nothing at its first moment: {back:?}");
+  let Reply::Acts(then) = life.send(Command::AsOf { at: first }).await.unwrap() else {
+    panic!("the acts then")
   };
-  assert!(then.iter().all(|act| act["began"].as_u64() <= Some(first)), "{then:?}");
-  assert!(!then.iter().any(|act| act["id"] == json!(asked)), "{then:?}");
+  assert!(then.iter().all(|act| act.began <= first), "{then:?}");
+  assert!(!then.iter().any(|act| act.id == asked), "{then:?}");
   life.send(Command::Answer { id: asked, line: "yes".to_owned() }).await.unwrap();
   until(&mut events, stands("chain1".to_owned(), State::Done)).await;
-  let Reply::Value(desk) = life.send(Command::Desk { notices: vec![] }).await.unwrap() else {
-    panic!("the desk is a value")
+  let Reply::Desk(desk) = life.send(Command::Desk { notices: vec![] }).await.unwrap() else {
+    panic!("the desk is a desk")
   };
-  assert_eq!(desk["questions"], json!(0), "{desk}");
+  assert_eq!(serde_json::to_value(desk).unwrap()["questions"], json!(0));
   life.send(Command::End).await.unwrap();
   while events.next().await.is_some() {}
 }

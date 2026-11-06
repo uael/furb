@@ -68,7 +68,7 @@ export const threadMarks = (
   markOf(
     state === "asks" || state === "paused" || state === "failed" || state === "cancelled"
       ? state
-      : thread.resolved
+      : thread.over
         ? unread && thread.yours
           ? "unread"
           : "seen"

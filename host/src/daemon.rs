@@ -473,6 +473,10 @@ impl From<Reply> for Answer {
       Reply::Value(value) => Answer::Value(value),
       Reply::Values(values) => Answer::Values(values),
       Reply::Inspected { kind, repr, value } => Answer::Inspected { kind, repr, value },
+      Reply::Desk(desk) => Answer::Desk(desk),
+      Reply::Threads(threads) => Answer::Threads(threads),
+      Reply::Acts(acts) => Answer::Acts(acts),
+      Reply::Moments(moments) => Answer::Moments(moments),
     }
   }
 }
