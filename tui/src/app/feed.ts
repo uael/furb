@@ -1295,7 +1295,7 @@ export const feed = part({
               ? `wake from ${act.by}`
               : aside === "rung"
                 ? "your word"
-                : act.by === "operator"
+                : operated(act.by)
                   ? ""
                   : `from ${act.by}`;
           const opened = w.folds[act.id] === false;
@@ -1354,7 +1354,7 @@ export const feed = part({
             [
               [`${glyph.asks} `, waiting ? c.warning : c.faint],
               ["Question", c.text, bold],
-              [`  ${act.by === "operator" ? "for you" : `from ${act.by}`}`, c.faint],
+              [`  ${operated(act.by) ? "for you" : `from ${act.by}`}`, c.faint],
             ],
             (box) => {
               this.panel(box, waiting ? c.warning : c.border).add(this.markdown(message));

@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { LineNumberRenderable, type Renderable, RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
-import { isDone, outcomeOf } from "furb/life";
+import { isDone, operated, outcomeOf } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { Gutter } from "../src/app/gutter.ts";
 import { App, sessionDetail } from "../src/app.ts";
@@ -947,7 +947,7 @@ test("a delayed snapshot cannot restore the chain selected before a switch", () 
 
 test("editing a prompt program is a durable operator rung", async () => {
   const first = await demoSession({ seed: true });
-  const prompt = first.activity.find((act) => act.kind === "prompt" && act.by === "operator");
+  const prompt = first.activity.find((act) => act.kind === "prompt" && operated(act.by));
   if (!prompt) throw new Error("No prompt in the fixture.");
   await first.command(`/edit ${prompt.id}`);
   await first.submit('saved_edit = 42\nclose("edited")');
