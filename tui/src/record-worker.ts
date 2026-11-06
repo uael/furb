@@ -1,7 +1,16 @@
-import { inspectRecord } from "furb";
-import { recordName } from "./names.ts";
+import { inspectRecord, retold } from "furb";
 
 declare const self: Worker & { close(): void };
+
+/** The name that the operator said last for the session of a record, as the crate reads it with no life, and nothing
+ * when the record names none or cannot be read. */
+function toldSaid(path: string): string | undefined {
+  try {
+    return retold(path).said ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
 self.onmessage = async ({ data }: MessageEvent<{ paths: string[]; replay: string[] }>) => {
   const states: Record<
     string,
@@ -15,8 +24,9 @@ self.onmessage = async ({ data }: MessageEvent<{ paths: string[]; replay: string
     }
   > = {};
   for (const path of data.paths) {
-    // The name that the operator gave comes from a plain scan of the record, which no drift and no other build stops.
-    const said = recordName(path);
+    // The name that the operator gave comes from the reader of the crate, which runs no word, so no drift and no other
+    // build stops it.
+    const said = toldSaid(path);
     const named = said === undefined ? {} : { said };
     if (!data.replay.includes(path)) {
       states[path] = { state: "saved", ...named, replayed: false };

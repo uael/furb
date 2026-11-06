@@ -2392,13 +2392,19 @@
         },
         "open": {
           "type": "boolean"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
         "life",
         "open"
       ],
-      "description": "A record of the machine, and whether a life of the daemon holds it now."
+      "description": "A record of the machine, whether a life of the daemon holds it now, and the name of its session:\nthe one that the operator said last on the root, which wins, else the one that the extension\nnaming gave, and nothing while it holds neither. An empty name takes the default name again."
     },
     "Handed": {
       "type": "object",

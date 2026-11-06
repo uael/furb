@@ -544,9 +544,11 @@ export interface ProviderInfo {
  * facts, one on each line, in order. The facts are those of the log when it agrees with the
  * record, and else those that the record kept, with the chains, the rungs, the runs and the dones
  * that they name. A line of the file that does not start with `[`, and a line `["keep", "", n]`,
- * holds no fact.
+ * holds no fact. The name of the session is the one that the operator said last on the root,
+ * which wins, else the one that the extension naming gave, and `said` is the one that the
+ * operator said alone; an empty name takes the default name again.
  */
-export declare function retold(path: string): { made: string | null; engine: string; logged: boolean; file: string }
+export declare function retold(path: string): { made: string | null; engine: string; logged: boolean; file: string; name: string | null; said: string | null }
 
 /** ROOT is the name of the root, which every life opens first under that one name, and on which boot stands the life. */
 export declare const ROOT: string

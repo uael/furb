@@ -120,20 +120,3 @@ export function measureOf(answers: readonly { actor: string; usage: readonly num
   const dollars = answers.reduce((sum, answer) => sum + (answer.usage[4] ?? 0), 0);
   return { dollars, spent: dollars, answers: answers.length, actor: answers.at(-1)?.actor };
 }
-
-/** The name that a record gives its session, from the acts of its root in the order of the record: the value of the
- * last rename_session that is done, which the operator said and which may be empty to take the default name again,
- * else the value of name_session, which the extension naming gave. */
-export function sessionNamed(
-  acts: Iterable<Pick<LiveAct, "kind" | "on" | "done" | "value">>,
-  root: string,
-): string | undefined {
-  let given: string | undefined;
-  let said: string | undefined;
-  for (const act of acts) {
-    if (act.on !== root || !act.done || typeof act.value !== "string") continue;
-    if (act.kind === "rename_session") said = act.value;
-    else if (act.kind === "name_session" && act.value) given = act.value;
-  }
-  return said ?? given;
-}
