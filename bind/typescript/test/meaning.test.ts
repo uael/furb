@@ -1,10 +1,15 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Meaning, retold } from "../index.cjs";
 
-/** The meaning of a recorded life, folded in the crate from each fact that the record tells, in order. */
-function folded(record: string): Meaning {
+/** The meaning of a recorded life, folded in the crate from each fact that the record tells, in order. The record
+ * is read from a copy, since the crate retells it in a file beside it. */
+function folded(source: string): Meaning {
+  const record = join(mkdtempSync(join(tmpdir(), "furb-meaning-")), "record.jsonl");
+  copyFileSync(source, record);
   const meaning = new Meaning();
   for (const line of readFileSync(retold(record).file, "utf8").split("\n")) {
     if (!line.startsWith("[")) continue;
