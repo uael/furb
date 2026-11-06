@@ -36,3 +36,9 @@ async def checked(number: int, where: str = "", bound: float = 3600.0, every: fl
   At the bound it gives pending with what pends: the checks that pend, the run that is open, or that no check started.
   For each failed check it gives [machine] for a fault of the runner or the network, [defect], [cancelled] or [unread], with its run, its job and its first failed lines.
   """
+
+async def commit(title: str, paths: list[str], body: str = "", qa: tuple[str, ...] | list[str] = (), where: str = "") -> tuple[str, list[str]]:
+  """commit(title, paths) commits the named paths alone, in the worktree at where, through sh script/build-slot.sh git commit with every hook, and gives a tuple of the short sha and the QA trailers of the commit.
+  It gives the body as a second paragraph of the message, and one trailer QA: <entry> for each entry of qa, so the QA reads what to test with git log.
+  It refuses an empty list of paths, and its bash has a timeout of 2400 s, since the hooks run the suites.
+  """
