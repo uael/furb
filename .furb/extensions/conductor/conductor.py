@@ -71,7 +71,7 @@ TESTS = re.compile(r"(^|/)(tests?|__tests__)/|\.test\.[a-z]+$|_test\.[a-z]+$|(^|
 limits: dict[str, Any] = globals().setdefault(
   "limits",
   {
-    "room": {"opus/high": 3, "opus/medium": 3, "sonnet/high": 3, "sonnet/medium": 3, "gpt-6-astra/high": 1},
+    "room": {"opus/high": 2, "opus/medium": 2, "sonnet/high": 3, "sonnet/medium": 3, "gpt-6-astra/high": 1},
     "fixer": "claude-cli:sonnet/medium",
     "models": {"editor": "claude-cli:sonnet/high", "audit": "claude-cli:opus/high", "lead": "claude-cli:opus/medium", "astra": "codex:gpt-6-astra/high"},
   },
