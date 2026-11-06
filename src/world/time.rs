@@ -11,7 +11,6 @@ use futures::{Stream, stream};
 use crate::{
   ear::{Co, Ear, Next, hearing, say},
   fact::Fact,
-  sand,
   value::{Fault, Given, Object},
 };
 use tokio::time;
@@ -35,14 +34,6 @@ pub fn time() -> Box<dyn Ear> {
       };
       let about = a.about().to_owned();
       match a.kind() {
-        // A word whose step ran past the bound of a turn reads no more, so a poll ends there.
-        "clock" | "chance"
-          if a.question()
-            && let Some(bound) = sand::past() =>
-        {
-          let why = format!("the step of the word ran past the bound of a turn of {bound:?}");
-          say(&mut co, Fact::says("done", &about, [Fault::refused(why).object()]));
-        }
         "clock" if a.question() => {
           say(&mut co, Fact::says("done", &about, [Object::float(now())]));
         }
