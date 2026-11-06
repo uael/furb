@@ -9,9 +9,10 @@ use std::{
 
 use super::{
   Extension, Part, Places, configs, configured, definitions, enabled, extensions, frontmatter,
-  load, parts, projected, reloads, skills::process, word,
+  load, parts, projected, reloads, skills::process, telling, word,
 };
 use crate::testing::Yard;
+use crate::value::entry;
 use crate::{
   Ear, Engine, Fact, Object,
   ear::{ear, hear, say},
@@ -155,7 +156,7 @@ fn the_configs_turn_on_each_extension_they_give_a_folder_the_project_after_the_u
   let project = at.join("project");
   let names = |got: Vec<Extension>| got.into_iter().map(|one| one.name).collect::<Vec<_>>();
   assert_eq!(
-    names(configured(&places, &project).unwrap()),
+    names(configured(&places, &project).unwrap().0),
     ["catchup", "memory", "skills", "compaction", "naming", "ouroboros", "web", "mcp"],
     "the official ones are on"
   );
@@ -167,7 +168,7 @@ fn the_configs_turn_on_each_extension_they_give_a_folder_the_project_after_the_u
     r#"{"extensions": {"tilde": "~/tilde", "near": "near", "far": false, "skills": false}}"#,
   );
   assert_eq!(
-    names(configured(&places, &project).unwrap()),
+    names(configured(&places, &project).unwrap().0),
     ["catchup", "memory", "compaction", "naming", "ouroboros", "web", "mcp", "tilde", "near"]
   );
   config(
@@ -175,7 +176,7 @@ fn the_configs_turn_on_each_extension_they_give_a_folder_the_project_after_the_u
     r#"{"extensions": {"near": false, "far": "../far", "tilde": true, "skills": true}}"#,
   );
   assert_eq!(
-    names(configured(&places, &project).unwrap()),
+    names(configured(&places, &project).unwrap().0),
     [
       "catchup",
       "memory",
@@ -203,7 +204,7 @@ fn a_config_that_is_not_of_the_form_is_refused_with_its_path() {
   };
   let refused = |text: &str| read(text).unwrap_err().message();
   let shown = file.display();
-  assert_eq!(read(r#"{"theme": "dark"}"#).unwrap().len(), 8, "a config may name no extension");
+  assert_eq!(read(r#"{"theme": "dark"}"#).unwrap().0.len(), 8, "a config may name no extension");
   assert_eq!(refused("[]"), format!("A config is a map, whose extensions is a map: {shown}"));
   assert_eq!(
     refused(r#"{"extensions": []}"#),
@@ -420,8 +421,7 @@ fn a_life_enables_at_its_tip_each_extension_it_is_given_and_plays_its_word_then_
   fs::write(at.join("note.txt"), "noted\n").unwrap();
   let mut engine = lived(&at, vec![note(NOTE)]);
   let kept = world::kept(at.join("record.jsonl")).unwrap();
-  let facts =
-    kept.iter().map(|one| Fact::of(crate::value::entry(&one.as_ref(), 0).unwrap()).unwrap());
+  let facts = kept.iter().map(|one| Fact::of(entry(&one.as_ref(), 0).unwrap()).unwrap());
   let facts = facts.map(|one| (one.kind().to_owned(), one.by().to_owned())).collect::<Vec<_>>();
   let expected = [
     ("chain", "operator"),
@@ -431,7 +431,7 @@ fn a_life_enables_at_its_tip_each_extension_it_is_given_and_plays_its_word_then_
     ("enable", "extensions"),
   ];
   assert_eq!(facts[..5], expected.map(|(kind, by)| (kind.to_owned(), by.to_owned())));
-  let enable = Fact::of(crate::value::entry(&kept[4].as_ref(), 0).unwrap()).unwrap();
+  let enable = Fact::of(entry(&kept[4].as_ref(), 0).unwrap()).unwrap();
   let words: Vec<_> = (0..3).map(|at| enable.word(at).and_then(|one| one.as_str())).collect();
   assert_eq!(
     (enable.about(), words),
@@ -529,6 +529,77 @@ fn a_manifest_says_whether_its_extension_plays_on_every_chain_or_on_the_root_alo
 }
 
 #[test]
+fn a_word_that_binds_a_name_of_the_engine_at_its_top_is_refused_and_an_import_of_the_engine_is_not()
+{
+  let at = place("engine");
+  let manifest = skill("note", &[("word", "note.py")]);
+  let word = "import re\nimport json as wait\n\n\ndef filled(template: str) -> str:\n  return template\n\n\nturns = re.escape('a')\n";
+  folder(&at.join("bad"), &manifest, word);
+  let file = at.join("bad").join("SKILL.md").display().to_string();
+  assert_eq!(
+    load("note", &at.join("bad"), &places(&at)).unwrap_err().message(),
+    format!(
+      "The word note.py binds wait, filled, turns of the engine at its top, which each word of a \
+       chain reads: give each a name of its own: {file}"
+    )
+  );
+  let word = "import re\nfrom typing import Any\n\nhint: Any = re.escape('a')\n";
+  folder(&at.join("good"), &manifest, word);
+  assert_eq!(load("note", &at.join("good"), &places(&at)).unwrap().word, word.trim_end());
+}
+
+#[test]
+fn an_extension_of_a_config_that_does_not_load_does_not_play_and_the_others_do() {
+  let at = place("unplayed");
+  let places = Places { config: at.join("user"), home: None };
+  let project = at.join("project");
+  let word = "def filled(template: str) -> str:\n  return template\n";
+  folder(&project.join("near"), &skill("near", &[("word", "note.py")]), word);
+  config(&project.join(".furb").join("config.json"), r#"{"extensions": {"near": "../near"}}"#);
+  let (on, refused) = configured(&places, &project).unwrap();
+  assert_eq!(
+    on.into_iter().map(|one| one.name).collect::<Vec<_>>(),
+    ["catchup", "memory", "skills", "compaction", "naming", "ouroboros", "web", "mcp"]
+  );
+  let manifest = project.join(".furb").join("..").join("near").join("SKILL.md");
+  let manifest = manifest.display();
+  assert_eq!(
+    refused,
+    [format!(
+      "The extension near does not play: The word note.py binds filled of the engine at its top, \
+       which each word of a chain reads: give each a name of its own: {manifest}"
+    )]
+  );
+}
+
+#[test]
+fn the_ear_tells_the_root_once_why_each_extension_that_does_not_play_does_not_play() {
+  let yard = place("told");
+  let at: &Path = &yard;
+  let (record, store) = world::store(at.join("record.jsonl")).unwrap();
+  let why = ["The extension a does not play: one", "The extension b does not play: two"];
+  let ears = [
+    ("extensions", telling(vec![], why.map(str::to_owned).to_vec(), places(at))),
+    ("stand", standing(at.to_owned())),
+    ("files", world::files(world::Scratch::own(), at.join("user"), None)),
+    ("store", store),
+  ];
+  let mut engine = Engine::boot(record, ears).unwrap();
+  assert!(engine.raised().is_none(), "{:?}", engine.raised());
+  engine.stand(verbs::Stand { on: Some("chain1".to_owned()) }).unwrap();
+  let on = verbs::Transcript { on: Some("chain1".to_owned()), of: None };
+  let told: Vec<String> = engine
+    .transcript(on)
+    .unwrap()
+    .iter()
+    .filter(|one| one.kind() == "tell" && one.by() == "extensions")
+    .filter_map(|one| one.word(0).and_then(|notes| entry(&notes, 0)))
+    .filter_map(|note| note.as_str().map(str::to_owned))
+    .collect();
+  assert_eq!(told, [why.join("\n")]);
+}
+
+#[test]
 fn an_extension_of_the_root_alone_plays_on_the_root_and_on_a_chain_whose_source_had_it() {
   let at = place("rooted");
   let first = format!("{NOTE}\n\nseen = ['first']");
@@ -544,8 +615,7 @@ fn an_extension_of_the_root_alone_plays_on_the_root_and_on_a_chain_whose_source_
     assert_eq!(played(&mut engine, &chains), expected, "a chain with no source takes nothing");
   }
   let kept = world::kept(at.join("record.jsonl")).unwrap();
-  let mut facts =
-    kept.iter().map(|one| Fact::of(crate::value::entry(&one.as_ref(), 0).unwrap()).unwrap());
+  let mut facts = kept.iter().map(|one| Fact::of(entry(&one.as_ref(), 0).unwrap()).unwrap());
   let enable = facts.rfind(|one| one.kind() == "enable").unwrap();
   assert_eq!(
     enable.word(3).and_then(|one| one.as_str()),
@@ -761,8 +831,7 @@ fn words(engine: &mut Engine, chains: &[&str]) -> Vec<(String, String)> {
 /// The words of each fact enable that the record at a place keeps.
 fn enables(at: &Path) -> Vec<String> {
   let kept = world::kept(at.join("record.jsonl")).unwrap();
-  let facts =
-    kept.iter().map(|one| Fact::of(crate::value::entry(&one.as_ref(), 0).unwrap()).unwrap());
+  let facts = kept.iter().map(|one| Fact::of(entry(&one.as_ref(), 0).unwrap()).unwrap());
   let enabled = facts
     .filter(|one| one.kind() == "enable")
     .map(|one| one.word(1).unwrap().as_str().unwrap().to_owned());
@@ -901,7 +970,7 @@ fn the_local_config_of_a_project_comes_after_its_config_and_wins_for_a_name() {
   config(&furb.join("config.json"), r#"{"extensions": {"near": "../near", "skills": false}}"#);
   let names = |got: Vec<Extension>| got.into_iter().map(|one| one.name).collect::<Vec<_>>();
   assert_eq!(
-    names(configured(&places, &project).unwrap()),
+    names(configured(&places, &project).unwrap().0),
     ["catchup", "memory", "compaction", "naming", "ouroboros", "web", "mcp", "near"]
   );
   config(
@@ -909,7 +978,7 @@ fn the_local_config_of_a_project_comes_after_its_config_and_wins_for_a_name() {
     r#"{"extensions": {"near": false, "skills": true, "mcp": false}}"#,
   );
   assert_eq!(
-    names(configured(&places, &project).unwrap()),
+    names(configured(&places, &project).unwrap().0),
     ["catchup", "memory", "skills", "compaction", "naming", "ouroboros", "web"],
     "the local config wins for a name"
   );
