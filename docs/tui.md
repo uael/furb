@@ -690,6 +690,15 @@ status in the footer.
 
 ![The completion of a part](screenshots/75g-part-completion.png)
 
+`/config` opens the settings. Each key stands under the part that gives it, furb first and then each skill, with its value
+and the config that gives it. The key under the pointer shows its description, its type and its values, its default and
+where its value comes from, and the filter searches the names and the descriptions. Enter edits the key in place, a flag
+or a key of some values offering them and any other key taking its value in a field, and then asks which config to write,
+the one that gives the key now first, or to reset the key. The schema comes from the crate through the host, and the
+window keeps no copy of it.
+
+![The settings](screenshots/75j-config.png)
+
 The extension `mcp` shows the servers of the Model Context Protocol in such a list with `/mcp`, each with its state,
 its scope and its tools, and the keys that reconnect, enable, disable, approve, log in or log out a server.
 

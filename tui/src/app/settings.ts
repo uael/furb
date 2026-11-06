@@ -1,5 +1,7 @@
 import { getTreeSitterClient, type Renderable, type RGBA } from "@opentui/core";
 import { gist } from "furb/life";
+import type { Layer } from "furb/protocol";
+import { type Setting, typed } from "../configs.ts";
 import { openFile } from "../editor.ts";
 import { shortenHomes } from "../files.ts";
 import { clip, modelName } from "../format.ts";
@@ -15,6 +17,7 @@ import {
   type ThemeName,
   themeLabels,
 } from "../theme.ts";
+import type { Part } from "../ui.ts";
 import { part } from "./part.ts";
 import { type Choice, inputColors, terminalDetail } from "./shared.ts";
 
@@ -138,8 +141,10 @@ export const settings = part({
       .catch(this.report);
   },
 
-  /** Each key of the configs under the part that names it, furb or an extension, as the settings of VS Code show
-   * them: a flag changes at once, a key of some values opens them, and any other key goes to the composer. */
+  /** The settings: each key of the configs under the part that gives it, furb and then each skill, with its value and
+   * the layer that gives it. The key under the pointer shows its description, its type and its values, its default
+   * and where its value comes from, the filter searches the keys and their descriptions, and Enter edits the key in
+   * place, then asks the layer to write. */
   configs(): void {
     void this.session.host
       .settings()
@@ -155,38 +160,103 @@ export const settings = part({
             : one.key[0] === group
               ? "furb"
               : "Not in a schema";
-          const where = one.layer ? `${one.layer} config` : property?.type === "object" ? "" : "default";
-          const set = (value: unknown) => this.action(`/config ${name} ${JSON.stringify(value)}`);
-          const values = property?.enum;
+          const from = one.layer ? `${one.layer} config` : property?.type === "object" ? "" : "default";
+          const shown = (value: unknown) => clip(JSON.stringify(value) ?? "none", 48);
+          const line = (name: string, value: string): Part[] => [
+            [`${name.padEnd(9)}`, c.faint],
+            [value, c.text],
+          ];
+          const kind = property
+            ? [
+                property.type,
+                ...(property.enum ? [`one of ${property.enum.map(shown).join(", ")}`] : []),
+              ].join(" · ")
+            : "";
           return {
             label: property || one.key[0] !== group ? name : `  ${one.key[1]}`,
-            detail: [clip(JSON.stringify(one.value) ?? "", 48), where, property?.description]
-              .filter(Boolean)
-              .join(" · "),
+            detail: [shown(one.value), from].filter(Boolean).join("  ·  "),
             heading,
             ...(typeof one.value === "boolean" ? { mark: this.current(one.value) } : {}),
-            run: () =>
-              typeof one.value === "boolean" && (!property || property.type === "boolean")
-                ? set(!one.value)
-                : values
-                  ? this.openPalette(
-                      name,
-                      values.map((value) => ({
-                        label: JSON.stringify(value),
-                        detail: property?.description ?? "",
-                        mark: this.current(value === one.value),
-                        run: () => set(value),
-                      })),
-                      { selected: Math.max(0, values.indexOf(one.value)) },
-                    )
-                  : this.insert(`/config ${name} `),
+            // The filter reads the detail, so the description of a key is searched too.
+            ...(property?.description ? { command: property.description } : {}),
+            lines: [
+              ...(property?.description ? [[[property.description, c.muted] as Part]] : []),
+              ...(kind ? [line("type", kind)] : []),
+              ...(property ? [line("default", shown(property.default))] : []),
+              line("from", from || "an object of furb"),
+            ],
+            run: () => this.editConfig(one),
           };
         });
         this.openPalette("Settings", choices, {
-          note: "A change goes to the config that gives the key, or to .furb/config.json. /config <key> resets it.",
+          note: "Type to search the keys and their descriptions. Enter edits the key, then asks which config to write.",
         });
       })
       .catch(this.report);
+  },
+
+  /** A key of the configs edited in place: a flag or a key of some values offers them, any other key takes its value in
+   * a field, and then the layer that the value goes to, the one that gives it now first. */
+  editConfig(one: Setting): void {
+    const name = one.key.join(".");
+    const { property } = one;
+    const write = (value: unknown) => {
+      const layers: Layer[] = ["project", "local", "user"];
+      const said: Record<Layer, string> = {
+        project: ".furb/config.json of the project, which git keeps",
+        local: ".furb/config.local.json of the project, which git ignores",
+        user: "the config of the user, for each project",
+      };
+      this.openPalette(
+        `Write ${name} = ${clip(JSON.stringify(value) ?? "", 40)} to`,
+        [
+          ...layers.map((layer) => ({
+            label: `${layer} config`,
+            detail: said[layer],
+            mark: this.current(layer === (one.layer ?? "project")),
+            run: () => this.session.setConfig(one.key, value, layer).catch(this.report),
+          })),
+          ...(one.layer
+            ? [
+                {
+                  label: "Reset",
+                  detail: `Take ${name} out of the ${one.layer} config, so the next config or the default gives it`,
+                  run: () =>
+                    this.session.setConfig(one.key, undefined, one.layer as Layer).catch(this.report),
+                },
+              ]
+            : []),
+        ],
+        { selected: Math.max(0, layers.indexOf(one.layer ?? "project")) },
+      );
+    };
+    const values =
+      property?.enum ??
+      (typeof one.value === "boolean" || property?.type === "boolean" ? [true, false] : undefined);
+    if (values) {
+      this.openPalette(
+        name,
+        values.map((value) => ({
+          label: JSON.stringify(value),
+          detail: value === property?.default ? "the default" : "",
+          mark: this.current(value === one.value),
+          run: () => write(value),
+        })),
+        { selected: Math.max(0, values.indexOf(one.value)), note: property?.description ?? "" },
+      );
+      return;
+    }
+    void this.partForm(name, [
+      {
+        name: "value",
+        label: property ? `${name}, ${property.type}` : name,
+        detail: [property?.description, "A string needs no quotes; any other value is JSON."]
+          .filter(Boolean)
+          .join(" "),
+        value: typeof one.value === "string" ? one.value : (JSON.stringify(one.value) ?? ""),
+        required: true,
+      },
+    ]).then((got) => got && write(typed(got.value ?? "")), this.report);
   },
 
   effortPicker(): void {

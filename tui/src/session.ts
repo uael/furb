@@ -44,7 +44,7 @@ import {
   type State,
   threadWork,
 } from "furb/life";
-import type { FollowUp } from "furb/protocol";
+import type { FollowUp, Layer } from "furb/protocol";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { clock } from "./clock.ts";
 import { typed } from "./configs.ts";
@@ -2054,12 +2054,7 @@ export class Session extends EventEmitter {
         const text = words.join(" ").trim();
         const value = text ? typed(text) : undefined;
         const held = (await this.host.settings()).find((one) => one.key.join(".") === key.join("."));
-        const layer = held?.layer ?? "project";
-        await this.host.config({ action: "set", key, value, layer });
-        this.emit("configured");
-        this.notice = text
-          ? `${name} is ${JSON.stringify(value)} in the ${layer} config. The life stands on it.`
-          : `${name} is out of the ${layer} config. The life stands on the configs of now.`;
+        await this.setConfig(key, value, held?.layer ?? "project");
         break;
       }
       case "retry":
@@ -2331,6 +2326,16 @@ export class Session extends EventEmitter {
     }
   }
 
+  /** A key of the configs set in a layer, or taken out of it for no value, and the life stands on the configs of now. */
+  async setConfig(key: string[], value: unknown, layer: Layer): Promise<void> {
+    await this.host.config({ action: "set", key, value, layer });
+    this.emit("configured");
+    const name = key.join(".");
+    this.notice =
+      value === undefined
+        ? `${name} is out of the ${layer} config. The life stands on the configs of now.`
+        : `${name} is ${JSON.stringify(value)} in the ${layer} config. The life stands on it.`;
+  }
   async reloadCatalog(): Promise<void> {
     this.catalog = await this.host.catalog();
     this.catalogRead = true;
