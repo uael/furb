@@ -2,7 +2,13 @@
 size in <out>/records.json. A record that <out>/pins.json names keeps its pinned size, so that a later capture opens the
 same records at the same sizes.
 
+It also names in <out>/slice.json the log of a long real life, which tui/script/fixture.ts cuts into a recorded life: the
+log and the moment that pins.json pins under the key slice, else the newest log of at least LONG bytes, at its end. Once
+the fixture stands, `records.py pin <out> <fixture>` pins the count of facts that it cut at, so that a later capture
+shows the same moment of the same life.
+
 Usage: python3 -I records.py <folder of the records> <out> <how many> <largest size in bytes>
+       python3 -I records.py pin <out> <fixture>
 """
 
 from __future__ import annotations
@@ -22,7 +28,31 @@ def chosen(source: Path, pins: dict, many: int, most: int) -> dict[str, int]:
   return kept
 
 
-if __name__ == "__main__":
+LONG = 300_000_000
+"""The least size of the log of a life that the slice takes, in bytes: a life of hours of work."""
+
+
+def sliced(source: Path, pins: dict) -> dict | None:
+  pin = pins.get("slice")
+  if isinstance(pin, dict) and isinstance(pin.get("moment"), int) and (source / str(pin.get("log"))).is_file():
+    return {"log": str(source / pin["log"]), "moment": pin["moment"]}
+  logs = [one for one in source.iterdir() if one.name.endswith(".jsonl.log") and one.stat().st_size >= LONG]
+  newest = max(logs, key=lambda one: one.stat().st_mtime, default=None)
+  return newest and {"log": str(newest), "moment": "end"}
+
+
+def pin(out: Path, fixture: Path) -> None:
+  with fixture.open(encoding="utf-8") as given:
+    header = json.loads(given.readline())
+  named = json.loads((out / "slice.json").read_text(encoding="utf-8"))
+  taken = json.loads((out / "records.json").read_text(encoding="utf-8"))
+  taken["slice"] = {"log": Path(named["log"]).name, "moment": header["cut"]}
+  (out / "records.json").write_text(json.dumps(taken), encoding="utf-8")
+
+
+if __name__ == "__main__" and sys.argv[1] == "pin":
+  pin(Path(sys.argv[2]), Path(sys.argv[3]))
+elif __name__ == "__main__":
   source, out, many, most = Path(sys.argv[1]), Path(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
   try:
     pins = json.loads((out / "pins.json").read_text(encoding="utf-8"))
@@ -36,3 +66,4 @@ if __name__ == "__main__":
     (out / "records" / name).write_bytes(data)
     taken[name] = len(data)
   (out / "records.json").write_text(json.dumps(taken), encoding="utf-8")
+  (out / "slice.json").write_text(json.dumps(sliced(source, pins if isinstance(pins, dict) else {})), encoding="utf-8")

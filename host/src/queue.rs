@@ -9,10 +9,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{
-  event::Event,
-  view::{Act, Kind, State},
-};
+use furb::view::{Act, Kind, State};
+
+use crate::event::Event;
 
 /// The kind of the facts of the queue, which the operator says on the chain of the follow-up.
 pub(crate) const QUEUE: &str = "queue";

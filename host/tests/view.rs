@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use furb_host::view::{
+use furb::view::{
   Act, Answer, Attention, ChainThread, Concern, Kind, Origin, Pause, Phase, Rows, RunState, Spend,
   State, ThreadNode, Tick, as_of, attention, chain_threads, choices, concerns, desk, hint,
   moments_of, nest_threads, open, operator, order_threads, restate, takes_nothing, ticks, wants,

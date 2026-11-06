@@ -6,20 +6,14 @@ use std::collections::HashSet;
 use furb::{
   Ear, Fact, Fault, Object,
   ear::{Co, ear, hear, hearing},
+  view::{Fold, Pause, followed},
   wire::outward,
-  world::Asked,
+  world::{Asked, CONSOLE},
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::{
-  changes::Journal,
-  event::Event,
-  view::{Fold, Pause, followed},
-};
-
-/// The name of the console of the operator, whose start of a prompt makes it a question to him.
-pub(crate) const CONSOLE: &str = "console";
+use crate::{changes::Journal, event::Event};
 
 /// The ears of the host, each under its name, in the order of boot: the console of the operator,
 /// the ear that tells each fact as events, and the ear of the journal of the changes of files of a
