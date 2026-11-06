@@ -3,20 +3,6 @@
 //! comes out as the instance of `furb.python` it is, an exception as the one object it is for the life, a generator
 //! of python goes in as an ear, and a function as one the sandbox calls back.
 #![deny(clippy::needless_pass_by_value, clippy::map_err_ignore)]
-#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
-#![expect(
-  clippy::clone_on_ref_ptr,
-  reason = "debt: a clone of an Arc or an Rc that hides its kind"
-)]
-#![expect(clippy::too_many_arguments, reason = "debt: more than 4 parameters is a struct")]
-#![expect(
-  clippy::unnecessary_wraps,
-  reason = "debt: a Result or an Option that is always Ok or Some"
-)]
-#![cfg_attr(
-  not(test),
-  expect(clippy::wildcard_imports, reason = "debt: an import of * that hides what it takes")
-)]
 
 use indexmap::IndexMap;
 use std::{
@@ -44,7 +30,6 @@ use pyo3::{
 
 use super::{Given, Homed, NativeEar, Record, Said, Told, Value, words};
 use crate::engine;
-use crate::value;
 use crate::wire;
 use crate::{
   Ear, Engine, Fact, Fault, Heard, Object, ObjectRef, Step,
@@ -550,11 +535,9 @@ fn pump(ear: &Bound<'_, NativeEar>) -> PyResult<()> {
   };
   loop {
     let token = site.call_method1("set", (&name,))?;
-    let said = polled(ear).and_then(|polled| match polled {
-      Poll::Ready(Spoken::Saying(saying)) => {
-        let saying = to_python(py, saying.0.as_ref())?;
-        say.call1(saying.cast::<PyTuple>()?).map(|_| true)
-      }
+    let said = match polled(ear) {
+      Poll::Ready(Spoken::Saying(saying)) => to_python(py, saying.0.as_ref())
+        .and_then(|saying| say.call1(saying.cast::<PyTuple>()?).map(|_| true)),
       // What the verb came to goes back to the ear, which takes it at its next poll.
       Poll::Ready(Spoken::Verb(call)) => {
         let got = answer_of(py, &call);
@@ -564,7 +547,7 @@ fn pump(ear: &Bound<'_, NativeEar>) -> PyResult<()> {
         Ok(true)
       }
       Poll::Pending => Ok(false),
-    });
+    };
     site.call_method1("reset", (token,))?;
     if !said? {
       return Ok(());
@@ -573,14 +556,14 @@ fn pump(ear: &Bound<'_, NativeEar>) -> PyResult<()> {
 }
 
 /// What an ear of the crate says of its own accord now, polled with what wakes the loop.
-fn polled(ear: &Bound<'_, NativeEar>) -> PyResult<Poll<Spoken>> {
+fn polled(ear: &Bound<'_, NativeEar>) -> Poll<Spoken> {
   let mut held = ear.borrow_mut();
   let hearing = &mut *held.hearing;
   let (Some(stepped), Some(one)) = (hearing.stepped.as_ref(), hearing.ear.as_mut()) else {
-    return Ok(Poll::Pending);
+    return Poll::Pending;
   };
   let waker = stepped.waker.clone();
-  Ok(one.poll(&mut Context::from_waker(&waker)))
+  one.poll(&mut Context::from_waker(&waker))
 }
 
 /// What a verb that an ear of the crate called came to in the engine of this interpreter.
@@ -653,7 +636,7 @@ fn waker(
     PyCFunction::new_closure(py, None, None, move |args, _| drive(args.py()))?.into_any().unbind();
   let (wanted, wakes) = mpsc::channel::<()>();
   let waiting = Arc::new(AtomicBool::new(false));
-  let seen = waiting.clone();
+  let seen = Arc::clone(&waiting);
   let woken = move || {
     while wakes.recv().is_ok() {
       seen.store(false, Ordering::Release);
@@ -1146,7 +1129,7 @@ fn recorded<'py>(
 
 /// A value that is no plain data and no map: an exception, an instance with fields, or a class.
 fn other<'py>(py: Python<'py>, said: ObjectRef<'_>, made: &Made) -> PyResult<Bound<'py, PyAny>> {
-  if let Some(fault) = value::Fault::of(said) {
+  if let Some(fault) = Fault::of(said) {
     let args = each(py, fault.args.iter().map(Object::as_ref).collect())?;
     return made.fault(py, &fault.name, args);
   }
@@ -1256,6 +1239,7 @@ fn of_plain(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
 }
 
 /// A class a word defined and a callable the engine made go back in by their number.
+#[expect(clippy::unnecessary_wraps, reason = "each reader of the table gives a PyResult")]
 fn of_made(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
   if let Ok(n) = value.getattr("__monty__").and_then(|n| n.extract::<i64>())
     && (value.is_instance_of::<PyType>() || value.is_instance_of::<PyFunction>())
@@ -1482,7 +1466,6 @@ fn bare(shown: &str) -> String {
 /// the system prompt, and each constant of the contract.
 #[pymodule]
 fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
-  use super::*;
   module.add_class::<PyEngine>()?;
   module.add_class::<PyAct>()?;
   module.add_class::<NativeEar>()?;
@@ -1492,41 +1475,41 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   none.set_item("default", module.py().None())?;
   module.add("life", life.call(("life",), Some(&none))?)?;
   let functions = [
-    wrap_pyfunction!(files, module)?,
-    wrap_pyfunction!(bash, module)?,
-    wrap_pyfunction!(scratch, module)?,
-    wrap_pyfunction!(time, module)?,
-    wrap_pyfunction!(store, module)?,
-    wrap_pyfunction!(kept, module)?,
-    wrap_pyfunction!(log, module)?,
-    wrap_pyfunction!(logged, module)?,
-    wrap_pyfunction!(retold, module)?,
-    wrap_pyfunction!(decode_record, module)?,
-    wrap_pyfunction!(opened, module)?,
-    wrap_pyfunction!(gate, module)?,
-    wrap_pyfunction!(official, module)?,
-    wrap_pyfunction!(enabled, module)?,
-    wrap_pyfunction!(extensions, module)?,
-    wrap_pyfunction!(parts, module)?,
-    wrap_pyfunction!(skills, module)?,
-    wrap_pyfunction!(config_directory, module)?,
-    wrap_pyfunction!(shell, module)?,
-    wrap_pyfunction!(shapes, module)?,
-    wrap_pyfunction!(answers, module)?,
-    wrap_pyfunction!(answered, module)?,
-    wrap_pyfunction!(models, module)?,
-    wrap_pyfunction!(model, module)?,
-    wrap_pyfunction!(codex_auth, module)?,
-    wrap_pyfunction!(config_set, module)?,
-    wrap_pyfunction!(levels, module)?,
-    wrap_pyfunction!(setup, module)?,
-    wrap_pyfunction!(attach_image, module)?,
-    wrap_pyfunction!(image_content, module)?,
-    wrap_pyfunction!(image_path, module)?,
-    wrap_pyfunction!(image_reference, module)?,
-    wrap_pyfunction!(image_references, module)?,
-    wrap_pyfunction!(image_type, module)?,
-    wrap_pyfunction!(on_console_end, module)?,
+    wrap_pyfunction!(super::files, module)?,
+    wrap_pyfunction!(super::bash, module)?,
+    wrap_pyfunction!(super::scratch, module)?,
+    wrap_pyfunction!(super::time, module)?,
+    wrap_pyfunction!(super::store, module)?,
+    wrap_pyfunction!(super::kept, module)?,
+    wrap_pyfunction!(super::log, module)?,
+    wrap_pyfunction!(super::logged, module)?,
+    wrap_pyfunction!(super::retold, module)?,
+    wrap_pyfunction!(super::decode_record, module)?,
+    wrap_pyfunction!(super::opened, module)?,
+    wrap_pyfunction!(super::gate, module)?,
+    wrap_pyfunction!(super::official, module)?,
+    wrap_pyfunction!(super::enabled, module)?,
+    wrap_pyfunction!(super::extensions, module)?,
+    wrap_pyfunction!(super::parts, module)?,
+    wrap_pyfunction!(super::skills, module)?,
+    wrap_pyfunction!(super::config_directory, module)?,
+    wrap_pyfunction!(super::shell, module)?,
+    wrap_pyfunction!(super::shapes, module)?,
+    wrap_pyfunction!(super::answers, module)?,
+    wrap_pyfunction!(super::answered, module)?,
+    wrap_pyfunction!(super::models, module)?,
+    wrap_pyfunction!(super::model, module)?,
+    wrap_pyfunction!(super::codex_auth, module)?,
+    wrap_pyfunction!(super::config_set, module)?,
+    wrap_pyfunction!(super::levels, module)?,
+    wrap_pyfunction!(super::setup, module)?,
+    wrap_pyfunction!(super::attach_image, module)?,
+    wrap_pyfunction!(super::image_content, module)?,
+    wrap_pyfunction!(super::image_path, module)?,
+    wrap_pyfunction!(super::image_reference, module)?,
+    wrap_pyfunction!(super::image_references, module)?,
+    wrap_pyfunction!(super::image_type, module)?,
+    wrap_pyfunction!(super::on_console_end, module)?,
   ];
   for one in functions {
     module.add_function(one)?;

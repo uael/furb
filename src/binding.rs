@@ -15,7 +15,7 @@
 #![deny(clippy::absolute_paths, clippy::use_self)]
 #![expect(
   clippy::needless_pass_by_value,
-  reason = "debt: an argument taken by value and only borrowed"
+  reason = "a function of the API serves both doors, and N-API gives each argument owned"
 )]
 
 #[cfg(feature = "python")]
