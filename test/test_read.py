@@ -7,7 +7,7 @@ import pytest
 
 from conftest import NUMS, Dead, born, life, machine, of, paragraphs, said, scratched, settle
 from furb import engine
-from furb.engine import HEAD, HIDDEN, LARGEST, OPERATOR, Refused, Text, span
+from furb.engine import HEAD, HIDDEN, LARGEST, OPERATOR, Refused, Text, picked, span
 from furb_monty import _monty
 
 if sys.platform == "win32":
@@ -66,7 +66,8 @@ async def test_read_gives_a_text() -> None:
 
 async def test_a_text_without_a_show_is_told_as_head() -> None:
   """A text without a show is told as HEAD, which is the span of its first 2000 lines."""
-  assert HEAD(BIG.splitlines()) == span(1, 2000)(BIG.splitlines()) == list(range(1, 2001))
+  born()
+  assert picked(HEAD, BIG.splitlines()) == picked(span(1, 2000), BIG.splitlines()) == list(range(1, 2001))
   _, _, root = born("read('big.txt')\nclose(1)", files={"/w/big.txt": BIG})
   assert await engine.prompt(int, "read it", on=root) == 1
   told = ["#read1", "read1_path = 'big.txt'", "<s:read1_text>", *[f"line {i}" for i in range(1, 2001)]]
