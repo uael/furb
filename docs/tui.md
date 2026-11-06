@@ -423,7 +423,7 @@ returns to now, then gives the keys back.
 
 One mark means one state in every view, dialog, and sidebar, from one table: `◆` for a question that waits for you,
 `●` for what ended or changed while you were away, `✗` for a failure, `◌` for paused work, a spinner for a model that
-thinks, which stands still as `✻`, `◉` for a command that runs or a word that awaits one, `◎` for work that waits on
+thinks, which stands still as `✻`, `◉` for a command that runs or a word that awaits one, which turns as `◐◓◑◒` while the view moves, `◎` for work that waits on
 another chain, `✓` for a done act, a faint `✓` for a done thread that you saw, `⊘` for a cancel, and `○` for rest. F1 lists the chords that the terminal in use sends, what each mark means, and every slash
 command.
 
@@ -689,6 +689,15 @@ status in the footer.
 ![A form of a part](screenshots/75f-part-form.png)
 
 ![The completion of a part](screenshots/75g-part-completion.png)
+
+`/config` opens the settings. Each key stands under the part that gives it, furb first and then each skill, with its value
+and the config that gives it. The key under the pointer shows its description, its type and its values, its default and
+where its value comes from, and the filter searches the names and the descriptions. Enter edits the key in place, a flag
+or a key of some values offering them and any other key taking its value in a field, and then asks which config to write,
+the one that gives the key now first, or to reset the key. The schema comes from the crate through the host, and the
+window keeps no copy of it.
+
+![The settings](screenshots/75j-config.png)
 
 The extension `mcp` shows the servers of the Model Context Protocol in such a list with `/mcp`, each with its state,
 its scope and its tools, and the keys that reconnect, enable, disable, approve, log in or log out a server.

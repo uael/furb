@@ -37,6 +37,12 @@ test("/config shows each key with its schema, flips a flag, takes a key out and 
         expect(await frame()).toContain("Not in a schema");
         await screen.mockInput.typeText("gate");
         expect(await frame()).toContain("Read each word of a model");
+        // A flag offers its two values, with the one that holds first, then the config to write.
+        screen.mockInput.pressEnter();
+        expect(await frame()).toContain("the default");
+        screen.mockInput.pressArrow("down");
+        screen.mockInput.pressEnter();
+        expect(await frame()).toContain("Write gate = false to");
         screen.mockInput.pressEnter();
         await until(session, () => session.notice.startsWith("gate is false"));
         expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ other: 1, gate: false });

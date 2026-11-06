@@ -44,7 +44,7 @@ import {
   type State,
   threadWork,
 } from "furb/life";
-import type { FollowUp } from "furb/protocol";
+import type { FollowUp, Layer } from "furb/protocol";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { clock } from "./clock.ts";
 import { typed } from "./configs.ts";
@@ -492,7 +492,7 @@ export class Session extends EventEmitter {
   get target(): string | undefined {
     if (this.mode !== "prompt" || this.editing || this.operatorPrompt) return undefined;
     if (this.pinned !== undefined) return this.pinned ?? undefined;
-    return this.thread ?? (this.fresh || this.shape !== "str" ? undefined : this.openThread?.act.id);
+    return this.thread ?? (this.fresh || this.shape !== "str" ? undefined : this.activeThread?.act.id);
   }
   /** The shape of a line sent on a thread: None, a message that its model reads at its next step and that is done at
    * once, while the prompt of the thread is open and a model answers it, else str, a prompt that opens a thread over
@@ -1533,11 +1533,8 @@ export class Session extends EventEmitter {
     this.save();
     this.notice = `${image.name} attached.`;
   }
-  private withImages(text: string): string {
-    return [
-      text,
-      ...(this.images[this.selected] ?? []).map(({ name, uri }) => imageReference(name, uri)),
-    ].join("\n");
+  private withImages(text: string, images = this.images[this.selected] ?? []): string {
+    return [text, ...images.map(({ name, uri }) => imageReference(name, uri))].join("\n");
   }
   /** The name of a chain: its label, or Main for the root. */
   labelOf(id: string): string {
@@ -1636,9 +1633,14 @@ export class Session extends EventEmitter {
    * until its wake. */
   async enqueue(text: string): Promise<void> {
     if (!text.trim()) return;
-    await this.attachFiles(text, this.selected, false);
-    await this.host.queue(this.shape, this.withImages(text), this.selected);
-    delete this.images[this.selected];
+    // The follow-up goes where the operator sent it, whatever chain he shows while the reads and the queue answer.
+    const { selected: chain, shape } = this;
+    const images = [...(this.images[chain] ?? [])];
+    await this.attachFiles(text, chain, false);
+    await this.host.queue(shape, this.withImages(text, images), chain);
+    const left = (this.images[chain] ?? []).filter((one) => !images.includes(one));
+    if (left.length) this.images[chain] = left;
+    else delete this.images[chain];
     this.save();
     this.notice = "Follow-up queued.";
   }
@@ -1991,17 +1993,25 @@ export class Session extends EventEmitter {
       const pending = this.operatorPrompt;
       if (pending) await this.answer(pending, input);
       else {
-        await this.attachFiles(input);
-        this.redo = [];
+        // The message goes where the operator sent it, whatever chain he shows while the reads and the prompt answer.
+        const { selected: chain, shape } = this;
         const thread = this.target;
+        const images = [...(this.images[chain] ?? [])];
+        await this.attachFiles(input, chain);
+        this.redo = [];
         this.fresh = false;
         this.pinned = undefined;
         const id = thread
-          ? await this.engine.prompt(this.lineShape(thread), { message: this.withImages(input), on: thread })
-          : await this.engine.prompt(this.shape, { message: this.withImages(input), on: this.selected });
+          ? await this.engine.prompt(this.lineShape(thread), {
+              message: this.withImages(input, images),
+              on: thread,
+            })
+          : await this.engine.prompt(shape, { message: this.withImages(input, images), on: chain });
         if (thread) this.notice = `Your message went to the thread ${thread}.`;
         this.sentTo.set(id, thread);
-        delete this.images[this.selected];
+        const left = (this.images[chain] ?? []).filter((one) => !images.includes(one));
+        if (left.length) this.images[chain] = left;
+        else delete this.images[chain];
         this.save();
         this.track(id);
       }
@@ -2052,12 +2062,7 @@ export class Session extends EventEmitter {
         const text = words.join(" ").trim();
         const value = text ? typed(text) : undefined;
         const held = (await this.host.settings()).find((one) => one.key.join(".") === key.join("."));
-        const layer = held?.layer ?? "project";
-        await this.host.config({ action: "set", key, value, layer });
-        this.emit("configured");
-        this.notice = text
-          ? `${name} is ${JSON.stringify(value)} in the ${layer} config. The life stands on it.`
-          : `${name} is out of the ${layer} config. The life stands on the configs of now.`;
+        await this.setConfig(key, value, held?.layer ?? "project");
         break;
       }
       case "retry":
@@ -2329,6 +2334,16 @@ export class Session extends EventEmitter {
     }
   }
 
+  /** A key of the configs set in a layer, or taken out of it for no value, and the life stands on the configs of now. */
+  async setConfig(key: string[], value: unknown, layer: Layer): Promise<void> {
+    await this.host.config({ action: "set", key, value, layer });
+    this.emit("configured");
+    const name = key.join(".");
+    this.notice =
+      value === undefined
+        ? `${name} is out of the ${layer} config. The life stands on the configs of now.`
+        : `${name} is ${JSON.stringify(value)} in the ${layer} config. The life stands on it.`;
+  }
   async reloadCatalog(): Promise<void> {
     this.catalog = await this.host.catalog();
     this.catalogRead = true;

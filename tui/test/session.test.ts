@@ -111,8 +111,115 @@ test("the setup of a demo life reads the doctrine of its own project, and no pat
     );
     const path = /^read\('(.*)'\)$/.exec(String(read?.word))?.[1] ?? "";
     // The engine writes a path under the home folder with a ~, so the project is known by its name and its folder.
-    expect(path.endsWith(join(basename(session.host.directory), ".furb", "DOCTRINE.md"))).toBe(true);
+    // The word is Python, which writes each backslash of a Windows path twice.
+    expect(
+      path.replaceAll("\\\\", "\\").endsWith(join(basename(session.host.directory), ".furb", "DOCTRINE.md")),
+    ).toBe(true);
   } finally {
+    await session.dispose();
+  }
+});
+
+test("a follow-up goes to the chain that the operator sent it on, with its images, whatever chain he shows meanwhile", async () => {
+  const session = await demoSession();
+  const { engine, host } = session;
+  const queue = host.queue;
+  try {
+    const a = session.selected;
+    const b = await engine.chain({ label: "Other" });
+    const image = (name: string) =>
+      ({ name, uri: `furb-image://${name}`, mime: "image/png", size: 1 }) as never;
+    const asked: unknown[][] = [];
+    for (const at of ["read", "queue"] as const) {
+      let open = () => {};
+      const gate = new Promise<void>((resolve) => {
+        open = resolve;
+      });
+      // The read of the directory and the queue answer when the test lets them, after a change of chain.
+      Object.assign(session, {
+        engine: new Proxy(engine, {
+          get: (target, key) =>
+            key === "cwd" && at === "read"
+              ? async (...args: Parameters<typeof engine.cwd>) => {
+                  await gate;
+                  return target.cwd(...args);
+                }
+              : Reflect.get(target, key),
+        }),
+      });
+      host.queue = async (...args) => {
+        asked.push(args);
+        if (at === "queue") await gate;
+      };
+      await session.select(a);
+      session.images = { [a]: [image(`a-${at}`)], [b]: [image(`b-${at}`)] };
+      const sent = session.enqueue(`Sent on the first chain, ${at}`);
+      await session.select(b);
+      open();
+      await sent;
+      expect(asked.at(-1)?.slice(0, 1).concat(asked.at(-1)?.slice(2))).toEqual(["str", a]);
+      expect(String(asked.at(-1)?.[1])).toContain(`a-${at}`);
+      expect(String(asked.at(-1)?.[1])).not.toContain(`b-${at}`);
+      expect(session.images[a]).toBeUndefined();
+      expect(session.images[b]?.map((one) => one.name)).toEqual([`b-${at}`]);
+    }
+  } finally {
+    Object.assign(session, { engine });
+    host.queue = queue;
+    await session.dispose();
+  }
+});
+
+test("a message goes to the chain that the operator sent it on, with its images, whatever chain he shows meanwhile", async () => {
+  const session = await demoSession();
+  const { engine } = session;
+  const prompt = engine.prompt;
+  try {
+    const a = session.selected;
+    const b = await engine.chain({ label: "Other" });
+    const image = (name: string) =>
+      ({ name, uri: `furb-image://${name}`, mime: "image/png", size: 1 }) as never;
+    const asked: { message?: string; on?: string }[] = [];
+    for (const at of ["read", "prompt"] as const) {
+      let open = () => {};
+      const gate = new Promise<void>((resolve) => {
+        open = resolve;
+      });
+      // The read of the directory and the prompt answer when the test lets them, after a change of chain.
+      Object.assign(session, {
+        engine: new Proxy(engine, {
+          get: (target, key) => {
+            if (key === "cwd" && at === "read")
+              return async (...args: Parameters<typeof engine.cwd>) => {
+                await gate;
+                return target.cwd(...args);
+              };
+            if (key === "prompt")
+              return async (...args: Parameters<typeof engine.prompt>) => {
+                asked.push(args[1] ?? {});
+                if (at === "prompt") await gate;
+                return "prompt0";
+              };
+            return Reflect.get(target, key);
+          },
+        }),
+      });
+      await session.select(a);
+      session.aim();
+      session.images = { [a]: [image(`a-${at}`)], [b]: [image(`b-${at}`)] };
+      const sent = session.submit(`Sent on the first chain, ${at}`);
+      await session.select(b);
+      open();
+      await sent;
+      expect(asked.at(-1)?.on).toBe(a);
+      expect(asked.at(-1)?.message).toContain(`a-${at}`);
+      expect(asked.at(-1)?.message).not.toContain(`b-${at}`);
+      expect(session.images[a]).toBeUndefined();
+      expect(session.images[b]?.map((one) => one.name)).toEqual([`b-${at}`]);
+    }
+  } finally {
+    Object.assign(session, { engine });
+    engine.prompt = prompt;
     await session.dispose();
   }
 });

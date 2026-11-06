@@ -1195,6 +1195,11 @@ try {
   await opens("/status");
   await capture("75i-status");
   app().closeOverlay();
+  // The settings, each key by the part that gives it, with the description, the type, the default and the layer of the key
+  // under the pointer.
+  await opens("/config");
+  await capture("75j-config");
+  app().closeOverlay();
   app().dispose();
   await library.dispose();
 
