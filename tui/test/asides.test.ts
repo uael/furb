@@ -34,7 +34,7 @@ const sorted = (session: Session, chain: string) => {
 
 // Before, main listed each prompt of these asides as a thread of its chain: a notice that the ladder of a thread made,
 // and a question that a worker asked its coordinator. The suite of the host proves the same on the same record, with
-// a wake and a word of the operator, in host/src/view/threads.rs.
+// a wake and a word of the operator, in src/view/threads.rs.
 test("a notice and a question of another chain stand as asides of the chain, and its threads are its conversations alone", async () =>
   composing(
     async ({ session, frame }) => {

@@ -19,6 +19,7 @@ use furb::{
   Engine, Fact, Fault, Object, Text, checkpoint,
   life::{Log, Opening, Stream},
   verbs,
+  view::Held,
   wire::{outward, parsed},
   world::{
     self, Shape, answered,
@@ -44,7 +45,6 @@ use crate::{
   event::{Event, Seq},
   queue::{FollowUp, QUEUE, Queue},
   rebirth::{self, Watch},
-  view::Held,
 };
 
 /// How many events a reader may stand behind the life before it reads them again from the log of
@@ -125,10 +125,10 @@ pub enum Command {
   Unqueue { entry: String },
   /// The follow-ups that wait on a chain, in order.
   Queued { on: Option<String> },
-  /// What waits for the operator, as a [`crate::view::Desk`], with each notice that the window
+  /// What waits for the operator, as a [`furb::view::Desk`], with each notice that the window
   /// still shows.
   Desk { notices: Vec<String> },
-  /// The threads of a chain, as [`crate::view::Threads`], now or as they stood just after a
+  /// The threads of a chain, as [`furb::view::Threads`], now or as they stood just after a
   /// moment.
   Threads { on: Option<String>, at: Option<u64> },
   /// The acts as they stood just after a moment, each with its meaning then.
@@ -213,7 +213,9 @@ impl Life {
     }
     self.watch.heard(&event);
     let queued = self.queue.heard(&event);
-    self.held.heard(&event);
+    if let Event::Act(act) = &event {
+      self.held.heard(act);
+    }
     let (seq, event) = (self.log.len() as Seq, Arc::new(event));
     self.log.push(Arc::clone(&event));
     self.readers.send((seq, event)).ok();
