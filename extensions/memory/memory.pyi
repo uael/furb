@@ -20,6 +20,8 @@ async def recall(on: str = "") -> Act:
 
 def remember(on: str = "") -> Act:
   """The memory of a chain, kept: an act on the chain that tells the memory of its working directory when it is made, then the memory of the path of each text that a read of a word on the chain after it gives, and the memory that changed at each stand, and that never completes.
+  remember tells the memory of a folder after a cd of a word on the chain into it, as it does after a read of a text in it: the memory of the path that the cd gave.
+  remember tells the memory of the folder of a text after a write of a word on the chain, as it does after a read of that text.
   A cancel over it ends it, as it ends every act, and a pause over it holds it until the wake.
   remember asks nothing of a read made before it, whose done a later life can say before or after the birth of remember, so a life and its replay make the same reads.
   remember asks nothing of a read of a memory file, or of a path that ends with /, as each read of memory, since it read the folder of each.

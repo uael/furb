@@ -116,6 +116,12 @@ export class Refused extends Error {
   }
 }
 
+/** A request that the daemon left with no answer when its socket closed, as when it ends or hands over to another
+ * build: it takes the stack of the verb that asked it, which names its caller. */
+export class Closed extends Error {
+  override name = "Closed";
+}
+
 /** The connection of a window to the daemon of its machine, which it starts when none answers. Each request takes a
  * number and its answer, and each frame that the daemon pushes is an event of the connection: `event` with the life,
  * the place and the event, `presence` with the life and the peers, and `ask` with the life, the number and the request
@@ -190,7 +196,11 @@ export class Daemon extends EventEmitter {
   private gone(socket: Socket): void {
     if (this.socket !== socket) return;
     this.socket = undefined;
-    for (const waits of this.waiting.values()) waits.reject(new Error("The daemon of this machine closed."));
+    for (const waits of this.waiting.values()) {
+      const closed = new Closed("The daemon of this machine closed.");
+      closed.stack = `${closed.name}: ${closed.message}\n${waits.asked.stack?.split("\n").slice(1).join("\n") ?? ""}`;
+      waits.reject(closed);
+    }
     this.waiting.clear();
     if (this.closing) return;
     this.connect().then(
@@ -243,6 +253,11 @@ export class Daemon extends EventEmitter {
       if (Date.now() > until)
         throw new Error(`The life of ${life} did not end in ${patience / 1000} s: a pin holds it.`);
     }
+  }
+
+  /** Whether the window closed the connection, so that it dials no more. */
+  get closed(): boolean {
+    return this.closing;
   }
 
   /** The connection closed by the window: it dials no more. */
@@ -413,24 +428,50 @@ export class RemoteLife extends EventEmitter {
     this.lost = "";
     const answers = Boolean(models);
     const life = this.record;
-    await this.daemon.ask({
-      verb: "open",
-      life,
-      cwd,
-      actor,
-      roster,
-      extensions,
-      config,
-      claude,
-      answers,
-      attach: 0,
-    });
+    try {
+      await this.daemon.ask({
+        verb: "open",
+        life,
+        cwd,
+        actor,
+        roster,
+        extensions,
+        config,
+        claude,
+        answers,
+        attach: 0,
+      });
+    } catch (error) {
+      if (error instanceof Closed) return await this.reopened(error);
+      throw error;
+    }
     await told;
     // A verb of a life waits for the open of the life to end, as its replay, and fails when the life ended there, as
     // on a drift: the window holds the life once a verb was answered, or knows why it ended.
     const ended = new Promise<void>((resolve) => this.once("ended", () => resolve()));
-    await this.daemon.ask({ verb: "pending", life }).catch(() => (this.lost ? undefined : ended));
+    await this.daemon
+      .ask({ verb: "pending", life })
+      .catch((error: unknown) =>
+        error instanceof Closed ? this.reopened(error) : this.lost ? undefined : ended,
+      );
     if (this.lost) throw new Error(this.lost);
+  }
+
+  /** The open that the connection makes again once the daemon that went before it answered this open is back, as
+   * after a crash, a kill or a handover: the connection dials again, and its open stands for this one, which ends with
+   * it. A window that closed the connection dials no more, so the open fails with the request that the daemon left. */
+  private reopened(closed: Closed): Promise<void> {
+    if (this.daemon.closed) return Promise.reject(closed);
+    return new Promise<void>((resolve, reject) => {
+      const heard = () => {
+        this.off("reset", heard);
+        this.off("ended", heard);
+        if (this.lost) reject(new Error(this.lost));
+        else resolve();
+      };
+      this.on("reset", heard);
+      this.on("ended", heard);
+    });
   }
 
   private lose(error: unknown): void {

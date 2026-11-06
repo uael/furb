@@ -1,4 +1,4 @@
-import { mkdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type CliRenderer, CodeRenderable, type Renderable } from "@opentui/core";
@@ -13,6 +13,23 @@ import type { Workspaces } from "../src/workspaces.ts";
 const STEP = 180,
   LIMIT = 1800,
   WAIT = 1800;
+
+/** The longest path, in bytes, that the socket of a daemon may have in a home of the gallery. A Unix socket holds 104
+ * bytes on macOS and 108 on Linux, the end of the string among them, so a longer path makes the bind fail. */
+const SOCKET = 100;
+
+/** The cache of furb for the child of a home when the socket of its daemon would pass SOCKET bytes there: a private
+ * folder in /tmp, of mode 0700, which the caller removes. The child keeps the cache that its home gives when that
+ * socket fits, and on Windows, where the daemon listens on a named pipe. */
+async function shorten(real: string, environment: Record<string, string>): Promise<string | undefined> {
+  if (process.platform === "win32") return undefined;
+  const base =
+    environment.XDG_CACHE_HOME ||
+    process.env.XDG_CACHE_HOME ||
+    (process.platform === "darwin" ? join(real, "Library", "Caches") : join(real, ".cache"));
+  if (Buffer.byteLength(join(base, "furb", "host", "host.sock")) <= SOCKET) return undefined;
+  return mkdtemp("/tmp/furb-sock-");
+}
 
 /** Whether a process runs. A process of another user that runs refuses the signal. */
 function alive(pid: number): boolean {
@@ -80,8 +97,11 @@ async function hold(lock: string): Promise<void> {
  * such a path, and /tmp of macOS is a link to /private/tmp.
  * One run at a time holds the home: two runs in it would open the same records, and each would remove the files of
  * the other, so a second run waits for the first. FURB_GALLERY_ROOT names another folder for the home and its lock,
- * so that runs in two trees, each with a root of its own, run at once. The child ends when its parent ends, and the parent stops the child
- * when the parent is stopped or when the child runs past LIMIT seconds. */
+ * so that runs in two trees, each with a root of its own, run at once. Whatever the root, the daemon of the child
+ * listens on a socket that fits the bound of a Unix socket: when the socket under the home would pass SOCKET bytes,
+ * the child gets an XDG_CACHE_HOME in a short private folder of /tmp, which the parent removes at the end. The child
+ * ends when its parent ends, and the parent stops the child when the parent is stopped or when the child runs past
+ * LIMIT seconds. */
 export async function home(name: string, environment: Record<string, string> = {}): Promise<string> {
   const given = process.env.FURB_GALLERY_HOME;
   if (given) {
@@ -100,18 +120,21 @@ export async function home(name: string, environment: Record<string, string> = {
   const lock = `${gallery}.lock`;
   await hold(lock);
   let child: ReturnType<typeof Bun.spawn> | undefined;
+  let short: string | undefined;
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const)
     process.on(signal, () => child?.kill(signal));
   try {
     await rm(gallery, { recursive: true, force: true });
     await mkdir(gallery, { recursive: true });
     const real = await realpath(gallery);
+    short = await shorten(real, environment);
     child = Bun.spawn([process.execPath, Bun.main], {
       env: {
         ...process.env,
         ...environment,
         HOME: real,
         USERPROFILE: real,
+        ...(short ? { XDG_CACHE_HOME: short } : {}),
         FURB_GALLERY_HOME: real,
         FURB_GALLERY_PARENT: String(process.pid),
       },
@@ -125,6 +148,7 @@ export async function home(name: string, environment: Record<string, string> = {
     clearTimeout(limit);
     process.exitCode = code || (child.signalCode ? 1 : 0);
   } finally {
+    if (short) await rm(short, { recursive: true, force: true });
     await rm(gallery, { recursive: true, force: true });
     await rm(lock, { recursive: true, force: true });
   }

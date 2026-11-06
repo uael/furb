@@ -1,0 +1,106 @@
+// A daemon that goes before it answers a request, as at a crash, a kill or a handover: the request that waits fails as
+// closed, and the open of a life goes on with the daemon in its place once the connection dialed it again.
+import { afterEach, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { createServer, type Server, type Socket } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Closed, Daemon, RemoteLife } from "../src/client.ts";
+
+type Asked = { id: number; verb: string; life?: string };
+
+/** A daemon of a test on a socket of its own: each line that it hears goes to `answer`, which replies or closes. */
+function served(answer: (asked: Asked, socket: Socket, connection: number) => void): {
+  folder: string;
+  place: string;
+  server: Server;
+} {
+  const folder = mkdtempSync(join(tmpdir(), "furb-reconnect-"));
+  const place = join(folder, "host.sock");
+  let connections = 0;
+  const server = createServer((socket) => {
+    const connection = connections++;
+    let held = "";
+    socket.setEncoding("utf8");
+    socket.on("error", () => {});
+    socket.on("data", (chunk: string) => {
+      held += chunk;
+      for (let end = held.indexOf("\n"); end >= 0; end = held.indexOf("\n")) {
+        const line = held.slice(0, end);
+        held = held.slice(end + 1);
+        const asked = JSON.parse(line) as Asked;
+        if (asked.verb === "hello")
+          reply(socket, asked, {
+            answer: "welcome",
+            data: { peer: { login: "test", role: "write", kind: "window" } },
+          });
+        else answer(asked, socket, connection);
+      }
+    });
+  });
+  server.listen(place);
+  return { folder, place, server };
+}
+
+function reply(socket: Socket, asked: Asked, answer: unknown): void {
+  socket.write(`${JSON.stringify({ frame: "reply", id: asked.id, answer })}\n`);
+}
+
+const made: { folder: string; server: Server; daemon: Daemon }[] = [];
+afterEach(() => {
+  for (const { folder, server, daemon } of made.splice(0)) {
+    daemon.close();
+    server.close();
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
+
+test("a request that the daemon leaves when it goes fails as closed, with the stack of its caller", async () => {
+  const { folder, place, server } = served((_asked, socket) => socket.destroy());
+  const daemon = new Daemon(folder, place);
+  made.push({ folder, server, daemon });
+  await daemon.connect();
+  const failed = await daemon.ask({ verb: "list" }).catch((error: unknown) => error);
+  expect(failed).toBeInstanceOf(Closed);
+  expect((failed as Error).message).toBe("The daemon of this machine closed.");
+  expect((failed as Error).stack).toContain("reconnect.test.ts");
+});
+
+test("an open that the daemon leaves when it goes ends with the open that the connection makes once it is back", async () => {
+  const opens: number[] = [];
+  const { folder, place, server } = served((asked, socket, connection) => {
+    if (asked.verb === "open") {
+      opens.push(connection);
+      // The first daemon goes before it answers the open, as a kill of it does.
+      if (connection === 0) return void socket.destroy();
+      reply(socket, asked, { answer: "done" });
+      socket.write(
+        `${JSON.stringify({ frame: "event", life: asked.life, seq: 0, event: { event: "changed" } })}\n`,
+      );
+    } else if (asked.verb === "pending") reply(socket, asked, { answer: "values", data: [] });
+    else if (asked.verb === "detach") reply(socket, asked, { answer: "done" });
+  });
+  const daemon = new Daemon(folder, place);
+  made.push({ folder, server, daemon });
+  const life = new RemoteLife(daemon, join(folder, "life.jsonl"));
+  let reset = 0;
+  life.on("reset", () => reset++);
+  await life.open();
+  expect(opens).toEqual([0, 1]);
+  expect(reset).toBe(1);
+  expect(life.lost).toBe("");
+  await life.detach();
+});
+
+test("an open that the daemon leaves fails as closed when the window closed its connection", async () => {
+  const { folder, place, server } = served((asked, socket) => {
+    if (asked.verb === "open") {
+      daemon.close();
+      socket.destroy();
+    }
+  });
+  const daemon = new Daemon(folder, place);
+  made.push({ folder, server, daemon });
+  const life = new RemoteLife(daemon, join(folder, "life.jsonl"));
+  expect(await life.open().catch((error: unknown) => error)).toBeInstanceOf(Closed);
+});

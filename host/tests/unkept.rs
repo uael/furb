@@ -1,5 +1,5 @@
 //! A life whose record takes no fact for a time, past the tail of facts that a checkpoint bounds:
-//! it holds its rebirth and refuses its end until the record takes them again. The test fills the
+//! it holds its rebirth and keeps its end until the record takes them again. The test fills the
 //! record with the limit of the size of a file of the process, which only a system of Unix gives,
 //! so it runs in a process of its own, with no harness.
 
@@ -21,7 +21,7 @@ fn main() {
   {
     let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build();
     let runtime = runtime.expect("the test has a runtime");
-    runtime.block_on(unix::a_life_whose_record_takes_no_fact_holds_its_rebirth_and_its_end());
+    runtime.block_on(unix::a_life_whose_record_takes_no_fact_holds_its_rebirth_and_keeps_its_end());
   }
 }
 
@@ -36,12 +36,12 @@ mod unix {
     time::Duration,
   };
 
+  use furb::view::Phase;
   use furb::{
     Object,
     life::{Answer, Opening},
-    view::Phase,
   };
-  use furb_host::{Command, Event, Life, LifeError, LifeHandle, Reply, Seq};
+  use furb_host::{Command, Event, Life, LifeHandle, Reply, Seq};
   use futures::{Stream, StreamExt};
 
   use super::yard;
@@ -132,7 +132,23 @@ mod unix {
     text.lines().map(str::to_owned).collect()
   }
 
-  pub(super) async fn a_life_whose_record_takes_no_fact_holds_its_rebirth_and_its_end() {
+  /// The events that a life tells within half a second, which tell nothing more once it is quiet.
+  async fn quiet(events: &mut (impl Stream<Item = Logged> + Unpin)) -> Vec<Logged> {
+    let mut got = Vec::new();
+    while let Ok(Some(logged)) =
+      tokio::time::timeout(Duration::from_millis(500), events.next()).await
+    {
+      got.push(logged);
+    }
+    got
+  }
+
+  /// The size of the record of the life in bytes.
+  fn size(at: &Path) -> u64 {
+    std::fs::metadata(at.join("record.jsonl")).expect("the record stands").len()
+  }
+
+  pub(super) async fn a_life_whose_record_takes_no_fact_holds_its_rebirth_and_keeps_its_end() {
     let at = yard::Yard::new(format!("furb-host-unkept-{}", std::process::id()));
     let life = Life::spawn(opening(&at)).expect("the life has a thread");
     let mut events = Box::pin(life.events(0));
@@ -142,28 +158,40 @@ mod unix {
     // ignored: the write then fails, as on a full disk.
     // SAFETY: the test sets the action of one signal, and no handler of its own.
     unsafe { libc::signal(libc::SIGXFSZ, libc::SIG_IGN) };
-    let size = std::fs::metadata(at.join("record.jsonl")).expect("the record stands").len();
-    limited(size);
+    let full = size(&at);
+    limited(full);
     log.extend(ran(&life, &mut events, &format!("for i in range({DRAWS}):\n  chance()")).await);
-    let refused = life.send(Command::End).await;
-    let Err(LifeError::Refused(why)) = refused else {
-      panic!("the life ended while its record did not hold its facts: {refused:?}")
-    };
-    assert!(why.contains("does not hold"), "{why}");
-    while let Ok(Some(logged)) =
-      tokio::time::timeout(Duration::from_millis(500), events.next()).await
-    {
-      log.push(logged);
-    }
+    log.extend(quiet(&mut events).await);
     let rebirths = log.iter().filter(|one| matches!(*one.1, Event::Reborn(_))).count();
     assert_eq!(rebirths, 0, "no rebirth while the record does not hold each fact");
-    let held = std::fs::metadata(at.join("record.jsonl")).expect("the record stands").len();
-    assert_eq!(held, size, "the record took no fact while the limit stood");
+    assert_eq!(size(&at), full, "the record took no fact while the limit stood");
 
+    // The life wakes on the write that lands, and is born again then.
     limited(libc::RLIM_INFINITY);
     until(&mut events, |event| matches!(event, Event::Reborn(None))).await;
-    assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
-    until(&mut events, |event| matches!(event, Event::Ended(None))).await;
+    // The new birth opens after the event of the rebirth: a word that runs on it waits for it.
+    ran(&life, &mut events, "m = 0").await;
+    quiet(&mut events).await;
+
+    let full = size(&at);
+    limited(full);
+    ran(&life, &mut events, "n = 2").await;
+    let mut end = std::pin::pin!(life.send(Command::End));
+    let early = tokio::time::timeout(Duration::from_millis(500), &mut end).await;
+    assert!(early.is_err(), "the life ended while its record did not hold its facts: {early:?}");
+    until(
+      &mut events,
+      |event| matches!(event, Event::Notice(why) if why.contains("does not end yet")),
+    )
+    .await;
+    assert_eq!(size(&at), full, "the record took no fact while the limit stood");
+
+    // The life keeps the end that it was told once, and ends once the record holds each fact.
+    limited(libc::RLIM_INFINITY);
+    let ended = tokio::time::timeout(Duration::from_secs(120), end).await;
+    assert!(matches!(ended, Ok(Ok(Reply::Done))), "{ended:?}");
+    let told = until(&mut events, |event| matches!(event, Event::Ended(_))).await;
+    assert!(matches!(&*told.last().expect("the end is told").1, Event::Ended(None)));
 
     let kept = lines(&at);
     let draws: Vec<usize> = kept
@@ -183,7 +211,7 @@ mod unix {
     assert!(draws.last() < checkpoints.first(), "the checkpoint of the rebirth follows each fact");
     let again = Life::spawn(opening(&at)).expect("the life has a thread");
     let n = again.send(Command::Inspect { name: "n".to_owned(), on: None }).await;
-    assert!(matches!(n, Ok(Reply::Inspected { ref repr, .. }) if repr == "1"), "{n:?}");
+    assert!(matches!(n, Ok(Reply::Inspected { ref repr, .. }) if repr == "2"), "{n:?}");
     assert!(matches!(again.send(Command::End).await, Ok(Reply::Done)));
   }
 }
