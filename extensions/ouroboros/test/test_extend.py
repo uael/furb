@@ -118,3 +118,31 @@ async def test_a_write_again_of_an_extension_that_the_life_runs_reloads_its_defi
   await settle()
   assert await engine.rung("close(enabled())", on=again) == ["ouroboros", "kit"]
   assert [engine.module(again).get(name) for name in ("kept", "LIMIT")] == [[], 2]
+
+
+async def test_extend_with_session_keeps_the_kit_in_the_record_alone(tmp_path: Path) -> None:
+  """extend with session keeps the kit in the record alone: it writes no file, says the fact enable of the root with the word, so each chain plays it as an extension, and gives the word at session://<name>/<name>.py."""
+  _, root = extended("ouroboros", tmp_path, lives=True, sand=Disk())
+  f = engine.rung(F, on=root)
+  await f
+  got = await engine.rung(f"close(extend('todo', {f!r}, session=True))", on=root)
+  assert isinstance(got, engine.Text) and (got.path, got.content) == ("session://todo/todo.py", F + "\n")
+  assert not (tmp_path / "work" / ".furb").exists()
+  await engine.rung("two = chain('two')", on=root)
+  await settle()
+  assert engine.module(engine.module(root)["two"])["f"]() == 1
+
+
+async def test_a_later_life_plays_the_session_kit_from_the_record(tmp_path: Path) -> None:
+  """A later life on the record plays the kit on each chain from that fact, with no file in the project or the config."""
+  sand, root = extended("ouroboros", tmp_path, lives=True, sand=Disk())
+  f = engine.rung(F, on=root)
+  await f
+  await engine.rung(f"extend('todo', {f!r}, session=True)", on=root)
+  await settle()
+  _, again = extended("ouroboros", tmp_path, lives=True, sand=Disk(), record=plain(sand.record))
+  await settle()
+  await engine.rung("three = chain('three')", on=again)
+  await settle()
+  assert engine.module(engine.module(again)["three"])["f"]() == 1
+  assert not (tmp_path / "work" / ".furb").exists()

@@ -310,6 +310,46 @@ fn a_timeout_or_a_wait_past_the_longest_timer_runs_its_full_time() {
 }
 
 #[test]
+fn a_command_runs_where_a_request_for_an_editor_or_a_terminal_fails_at_once() {
+  let mut lived = Lived::new("unasked", &[], true).unwrap();
+  let root = lived.root();
+  let with = verbs::Bash { timeout: Some(30.0), on: on(&root), ..Default::default() };
+  let line = r#"printf '%s %s %s %s' "$GIT_EDITOR" "$VISUAL" "$EDITOR" "$GIT_TERMINAL_PROMPT""#;
+  let exit: Exit = block_on(lived.engine.bash(line, with).unwrap()).unwrap();
+  assert_eq!(exit.stdout.content, "false false false 0");
+  // A commit with no message opens the editor, which is `false` here: the commit fails at once.
+  let with = verbs::Bash { timeout: Some(30.0), on: on(&root), ..Default::default() };
+  // A hook of git hands its own index to each command that it runs, which the repository of the
+  // test must not use.
+  let line = "unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX; cd \"$TMPDIR\" && rm -rf unasked && git init -q unasked && cd unasked && echo a > a \
+              && git add a && git -c user.name=t -c user.email=t@t commit";
+  let begun = Instant::now();
+  let exit: Exit = block_on(lived.engine.bash(line, with).unwrap()).unwrap();
+  assert!(matches!(exit.code, Some(code) if code != 0), "{exit:?}");
+  assert!(begun.elapsed() < Duration::from_secs(25), "the commit waited for an editor");
+  assert!(exit.stdout.content.to_lowercase().contains("editor"), "{}", exit.stdout.content);
+}
+
+#[test]
+#[cfg(unix)]
+fn a_timeout_ends_the_command_though_a_process_of_it_left_its_group_holding_the_stream() {
+  // A process in a session of its own is in no group that the World ends, and it holds the stdout
+  // of the command for LONG seconds, so an exit before LONG has passed proves that the timeout
+  // ended the act, not the stream.
+  const LONG: u64 = 60;
+  let mut lived = Lived::new("escaped", &[], true).unwrap();
+  let with = verbs::Bash { timeout: Some(0.3), on: on(&lived.root()), ..Default::default() };
+  let line = format!("perl -e 'use POSIX; POSIX::setsid(); sleep {LONG}' & echo $!; sleep {LONG}");
+  let begun = Instant::now();
+  let exit: Exit = block_on(lived.engine.bash(&line, with).unwrap()).unwrap();
+  let took = begun.elapsed();
+  let pid = exit.stdout.content.lines().next().unwrap_or_default().to_owned();
+  std::process::Command::new("kill").arg(&pid).status().unwrap();
+  assert_eq!(exit.code, None);
+  assert!(took < Duration::from_secs(LONG / 2), "the act outlived its timeout, for {took:?}");
+}
+
+#[test]
 fn a_command_that_outlives_its_timeout_ends_with_no_code() {
   // Each process of the command sleeps for LONG, and the one in the background holds the stdout of the command, which
   // the World reads to its end before it says the exit. So an exit before LONG has passed proves that the World ended

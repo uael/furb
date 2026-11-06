@@ -362,6 +362,7 @@ pub(super) fn standing(
   directory: &str,
   actor: &str,
   extensions: Option<&[Advertised]>,
+  members: &[String],
   user: &Path,
 ) -> Object {
   let given = configured(user, Path::new(directory));
@@ -374,11 +375,12 @@ pub(super) fn standing(
     let fields = [Object::string(&model.name), Object::list(efforts), Object::int(window)];
     Object::list(fields.into_iter().chain([Object::string(class.name())]).chain(place))
   });
-  // The operator answers in person, with no effort, reads the window of the engine, and costs no
-  // dollar.
+  // The operator answers in person, reads the window of the engine, and costs no dollar. In place
+  // of efforts it lists the logins of its members, so `operator/<login>` names one person, as
+  // `<model>/<effort>` names an effort.
   let operator = Object::list([
     Object::string(OPERATOR),
-    Object::list([]),
+    Object::list(members.iter().map(Object::string)),
     Object::int(WINDOW),
     Object::string(Class::Cheap.name()),
   ]);

@@ -686,6 +686,39 @@ fn a_conversation_that_grows_out_of_another_forks_it() {
 }
 
 #[test]
+fn a_fork_of_a_fork_resumes_the_mark_of_the_cache_of_its_origin_and_marks_no_block_more() {
+  let yard = Yard::new("fork-marks");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let opened = |n: usize| Message::User {
+    content: vec![
+      UserContent::text(format!("#read{n}")),
+      UserContent::text(format!("#chain{n}\nchain{n}: Act[object]")),
+    ],
+  };
+  let mut messages = vec![opened(1)];
+  for (at, session) in ["origin", "fork", "fork-of-fork"].into_iter().enumerate() {
+    if at > 0 {
+      messages.push(opened(at + 1));
+    }
+    let one = asked(&model, &messages, json!({"session": session})).unwrap();
+    messages.push(Message::Assistant { id: None, content: one.choice });
+  }
+  // A request carries each mark of the lines that the conversations of its lineage heard, since a
+  // fork resumes its parent, and the command line adds the marks of its system prompt and of its
+  // last message: so furb marks one block at most in a lineage.
+  let marks: Vec<usize> =
+    yard.heard().iter().map(|line| line.matches("cache_control").count()).collect();
+  let lineage: Vec<usize> = marks
+    .iter()
+    .scan(0, |all, one| {
+      *all += one;
+      Some(*all)
+    })
+    .collect();
+  assert_eq!(lineage, [1, 1, 1], "the marks of each line: {marks:?}");
+}
+
+#[test]
 fn a_thought_streams_as_it_comes_and_settles_once_at_its_place() {
   let yard = Yard::new("thought");
   let model = yard.claude(10_000).completion_model("sonnet");

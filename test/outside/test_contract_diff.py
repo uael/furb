@@ -1,6 +1,7 @@
 """The contract of a build is compared with the contract of the last release, and each break is named."""
 
 import importlib.util
+import json
 import os
 import shutil
 import subprocess
@@ -263,3 +264,58 @@ def test_a_break_that_the_base_holds_already_fails_no_later_pull_request(
   assert "a: the parameter x goes" not in out
   assert "break: src/furb/engine.pyi b: the parameter y goes" in out
   assert "1 changes already stand on HEAD." in out
+
+
+def schema(given: dict[str, list[str]]) -> str:
+  """A schema of the protocol whose Node is the nodes given, each with its own fields, beside the id of every node."""
+  one_of = [{"properties": {"node": {"const": name}, **{f: {} for f in fields}}} for name, fields in given.items()]
+  return json.dumps({"definitions": {"Node": {"properties": {"id": {}}, "oneOf": one_of}}})
+
+
+def nodes_of(old: dict[str, list[str]], new: dict[str, list[str]]) -> list[str]:
+  return [f"{x.level}: {x.what}" for x in contract.node_diff(contract.SCHEMA, schema(old), schema(new))]
+
+
+def test_a_node_of_a_view_that_goes_is_a_break() -> None:
+  assert nodes_of({"text": ["runs"], "code": ["text"]}, {"text": ["runs"]}) == ["break: the node code goes"]
+
+
+def test_a_field_of_a_node_that_goes_is_a_break() -> None:
+  assert nodes_of({"code": ["text", "language"]}, {"code": ["text"]}) == [
+    "break: the field language of the node code goes"
+  ]
+  assert (
+    contract.node_diff(
+      contract.SCHEMA,
+      schema({"code": ["text"]}),
+      json.dumps({"definitions": {"Node": {"oneOf": [{"properties": {"node": {"const": "code"}, "text": {}}}]}}}),
+    )[0].what
+    == "the field id of the node code goes"
+  )
+
+
+def test_a_node_or_a_field_more_is_a_minor() -> None:
+  assert nodes_of({"text": ["runs"]}, {"text": ["runs", "wrap"], "link": ["url"]}) == [
+    "minor: the node link is more",
+    "minor: the field wrap of the node text is more",
+  ]
+
+
+def test_the_schema_of_the_protocol_holds_the_closed_set_of_the_nodes_of_a_view() -> None:
+  held = contract.nodes((Path(__file__).resolve().parents[2] / contract.SCHEMA).read_text(encoding="utf-8"))
+  assert sorted(held) == sorted(
+    ["box", "text", "list", "table", "input", "button", "progress", "code", "diff", "markdown"]
+  )
+  assert all("id" in fields for fields in held.values())
+
+
+def test_the_contract_holds_the_schema_of_the_protocol(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+  tagged(tmp_path, "def a() -> int: ...\n")
+  (tmp_path / "host").mkdir()
+  (tmp_path / contract.SCHEMA).write_text(schema({"text": ["runs"], "code": ["text"]}), encoding="utf-8")
+  git(tmp_path, "add", "-A")
+  git(tmp_path, "commit", "-q", "-m", "schema")
+  git(tmp_path, "tag", "v0.3.0")
+  (tmp_path / contract.SCHEMA).write_text(schema({"text": ["runs"]}), encoding="utf-8")
+  assert contract.main([], root=tmp_path) == 1
+  assert "break: host/protocol.schema.json: the node code goes" in capsys.readouterr().out

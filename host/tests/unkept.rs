@@ -165,6 +165,11 @@ mod unix {
     let Ok(Reply::Act(apart)) = made else { panic!("no chain: {made:?}") };
     let first = said(&life, "a = 1", &apart).await;
     until(&mut events, done(&[first])).await;
+    // A chain that the operator pauses before the hold, one that he pauses in it, and one that he
+    // wakes in it.
+    let [before, after, woken] = chains(&life, ["before", "after", "woken"]).await;
+    let pause = |id: &str| Command::Pause { id: id.to_owned(), why: Some("mine".to_owned()) };
+    assert!(matches!(life.send(pause(&before)).await, Ok(Reply::Done)));
     // SAFETY: the test sets the action of one signal, and no handler of its own.
     unsafe { libc::signal(libc::SIGXFSZ, libc::SIG_IGN) };
     let full = size(&at);
@@ -180,6 +185,8 @@ mod unix {
     // for the wake.
     let made = life.send(chain("late")).await;
     let Ok(Reply::Act(late)) = made else { panic!("no chain: {made:?}") };
+    assert!(matches!(life.send(pause(&after)).await, Ok(Reply::Done)));
+    assert!(matches!(life.send(Command::Wake { id: woken.clone() }).await, Ok(Reply::Done)));
     let root = "chain1".to_owned();
     let later = [
       said(&life, "m = 1", &root).await,
@@ -206,15 +213,32 @@ mod unix {
     let kept = lines(&at);
     let draws = kept.iter().filter(|line| line.starts_with("[[\"done\",\"chance")).count();
     assert_eq!(draws, 5 * DRAWS, "the record holds each fact that waited");
-    let count = |head: String| kept.iter().filter(|line| line.starts_with(&head)).count();
     for one in [root.as_str(), &apart, &late] {
-      let (pause, wake) = (
-        format!("[[\"pause\",\"{one}\",\"operator\""),
-        format!("[[\"wake\",\"{one}\",\"operator\""),
-      );
-      assert_eq!(count(pause), 1, "the life paused {one} once");
-      assert_eq!(count(wake), 1, "the life woke {one} once");
+      assert_eq!(controls(&kept, one), (1, 1), "the life paused and woke {one} once");
     }
+    assert_eq!(controls(&kept, &before), (1, 0), "a pause of the operator before the hold stays");
+    assert_eq!(controls(&kept, &after), (2, 0), "a pause of the operator in the hold stays");
+    assert_eq!(controls(&kept, &woken), (1, 1), "the life wakes no chain that the operator woke");
+  }
+
+  /// Chains made on the root under some labels: the name of each.
+  async fn chains<const N: usize>(life: &LifeHandle, labels: [&str; N]) -> [String; N] {
+    let mut made = Vec::new();
+    for label in labels {
+      let chain = Command::Chain { label: Some(label.to_owned()), source: None, on: None };
+      let Ok(Reply::Act(one)) = life.send(chain).await else { panic!("no chain {label}") };
+      made.push(one);
+    }
+    made.try_into().expect("a chain for each label")
+  }
+
+  /// How many pauses and how many wakes of a chain the record holds, each said by the operator.
+  fn controls(kept: &[String], chain: &str) -> (usize, usize) {
+    let count = |kind: &str| {
+      let head = format!("[[\"{kind}\",\"{chain}\",\"operator\"");
+      kept.iter().filter(|line| line.starts_with(&head)).count()
+    };
+    (count("pause"), count("wake"))
   }
 
   /// A word that the operator says on a chain, with no wait: the name of its rung.

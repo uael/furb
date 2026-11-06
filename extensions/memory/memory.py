@@ -19,6 +19,7 @@ from furb.engine import (
 
 NAMES = ("AGENTS.md", "CLAUDE.md")
 LOCAL = ("AGENTS.local.md", "CLAUDE.local.md")
+ABOVE_HOME = 3
 
 
 def lacking(known: set[str]) -> Show:
@@ -50,24 +51,26 @@ def pieces(path: str) -> list[str]:
   return kept
 
 
-def folders(path: str = ".", on: str = "") -> list[Text]:
-  up: list[Text] = []
-  at = "./"
-  while (got := looked(at, on)) is not None and not (up and got.path == up[-1].path):
-    up.append(got)
-    at = joined(got.path, "../")
-  down: list[Text] = []
-  if up and "://" not in path:
-    here = pieces(up[0].path)
-    absolute = path.startswith(("/", "\\", "~")) or path[1:3] in (":/", ":\\")
-    full = pieces(path if absolute else joined(up[0].path, path))
-    held = up[0]
-    for one in full[len(here) :] if full[: len(here)] == here else []:
-      if one + "/" not in held.lines or (deeper := looked(joined(held.path, one + "/"), on)) is None:
-        break
-      down.append(held := deeper)
+def folders(path: str = ".", on: str = "") -> list[tuple[str, set[str] | None]]:
+  found: list[tuple[str, set[str] | None]] = []
+  here = looked("./", on)
+  if here is not None:
+    parts = pieces(here.path)
+    if parts[0] == "~":
+      found += [("/".join(["~", *[".."] * up]), None) for up in range(ABOVE_HOME, 0, -1)]
+    found += [("/".join(parts[:k]) or "/", None) for k in range(1, len(parts))]
+    found.append((here.path, set(here.lines)))
+    if "://" not in path:
+      absolute = path.startswith(("/", "\\", "~")) or path[1:3] in (":/", ":\\")
+      full = pieces(path if absolute else joined(here.path, path))
+      held = here
+      for one in full[len(parts) :] if full[: len(parts)] == parts else []:
+        if one + "/" not in held.lines or (deeper := looked(joined(held.path, one + "/"), on)) is None:
+          break
+        found.append((deeper.path, set(deeper.lines)))
+        held = deeper
   user = looked("config://", on)
-  return [*([user] if user else []), *up[::-1], *down]
+  return [*([(user.path, set(user.lines))] if user else []), *found]
 
 
 def memory(path: str = ".", on: str = "") -> list[Text]:
@@ -82,11 +85,13 @@ def memory(path: str = ".", on: str = "") -> list[Text]:
         if remembered(place):
           held.add(content)
   got: list[Text] = []
-  for folder in folders(path, on):
-    names = set(folder.lines)
+  for folder, names in folders(path, on):
     for group in NAMES, LOCAL:
-      name = next((one for one in group if one in names), "")
-      if not name or (found := looked(joined(folder.path, name), on)) is None:
+      found = None
+      for entry in group:
+        if (names is None or entry in names) and (found := looked(joined(folder, entry), on)) is not None:
+          break
+      if found is None:
         continue
       if found.content in held or any(one.path == found.path or one.content == found.content for one in got):
         continue

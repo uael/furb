@@ -8,7 +8,7 @@ from extensions.conftest import extended
 from furb import engine
 from furb.engine import Refused
 
-BIG = "\n".join(f"line {n} " + "x" * 50 for n in range(200)) + "\n"
+BIG = "\n".join(f"line {n} " + "x" * 50 for n in range(400)) + "\n"
 """BIG is a file whose tell passes the window of the double."""
 
 

@@ -9,6 +9,7 @@ from furb.engine import (
   acting,
   automatic,
   chain,
+  close,
   controlled,
   differs,
   filled,
@@ -23,6 +24,7 @@ from furb.engine import (
   say,
   scope,
   take,
+  told,
   transcript,
   under,
 )
@@ -62,8 +64,9 @@ still needs, and the last state of each command that matters. A step keeps all t
 step that made it. The chain keeps its module, its prompts and its steps, so keep no act for a value that the module
 holds. It reads again each file whose read or write you keep and shows what changed since, so keep the last read or
 write of each file that the work still needs, and no other.
-Close with a tuple: the ids to keep, as list[str], and a summary, in a few short lines, of what the acts that you
-drop hold and the work still needs to know."""
+Close with one call, close((ids, summary)): the ids to keep, as list[str] of the heads below, and a summary, in a
+few short lines, of what the acts that you drop hold and the work still needs to know. A tuple written bare closes
+nothing, and the choice ends refused after 4 words that close nothing."""
 
 
 def together(*filters: Filter) -> Filter:
@@ -128,8 +131,35 @@ def choice(to: str = "", on: str = "") -> Act:
       )
     else:
       lines.append(f"{entry[1]} {', '.join(map(repr, entry[4:]))[:200]}{state}")
-  brief = BRIEF + "\n\n" + "\n".join(lines)
-  return prompt(tuple[list[str], str], brief, to=to or CHOOSER or automatic(), on=chain("chosen", on=here))
+  heads = [item[1] for item in acts if item[0] != "rung"][:2] or [item[1] for item in acts][:2]
+  example = "close(([" + ", ".join(map(repr, heads)) + "], 'what the acts that you drop hold'))"
+  brief = (
+    BRIEF
+    + "\n\n"
+    + "\n".join(lines)
+    + "\n\nAnswer with this one call alone, the ids taken from the heads above:\n"
+    + example
+  )
+  side = chain("chosen", on=here)
+  asked: Act = prompt(tuple[list[str], str], brief, to=to or CHOOSER or automatic(), on=side)
+  bound = 4
+
+  def ear(id):
+    yield "started", id
+    replies, maker = 0, get(asked)[2]
+    while not over(asked):
+      match (yield {id, side, asked, maker}):
+        case ("done", about, _, _) if question(("reply", about)) and scope(about) == side:
+          replies += 1
+          if replies >= bound and not over(asked):
+            close(Refused(f"{asked}: the model of choice wrote {replies} words on {side} and closed none"), asked)
+        # The chain of choice asks the prompt no more after words that made nothing new, so it ends refused.
+        case ("tell", _, _, [head, *_]) if head.startswith(f"#{asked} asked no more") and not over(asked):
+          close(Refused(f"{asked}: the model of choice wrote {replies} words on {side} that made nothing new"), asked)
+    yield "done", id, None
+
+  act("bounded", side, controlled(ear))
+  return asked
 
 
 async def chosen(to: str = "", on: str = "") -> Filter:
@@ -139,6 +169,9 @@ async def chosen(to: str = "", on: str = "") -> Filter:
 
 
 FILTERS: list[Filter] = [latest(), recent(8)]
+
+
+regrounded: set[str] = set()
 
 
 def reground(on: str = "") -> None:
@@ -153,13 +186,14 @@ def reground(on: str = "") -> None:
       and "://" not in t.path
       and get(t.path.split("/")[0]) is None
     ):
-      made = get(a[2]) or ("",)
-      held[t.path] = (t, made[0] == "rung" and str(made[4:5]).endswith("reground()',)"))
+      held[t.path] = (t, a[1] in regrounded)
   for path, (text, again) in held.items():
+    seen = {x[1] for x in transcript(here) if x[0] == "read"}
     try:
       read(path, HEAD if again else differs(text.lines), on=on)
     except Refused:
       continue
+    regrounded.update(x[1] for x in transcript(here) if x[0] == "read" and x[1] not in seen)
 
 
 def headline(fact: tuple) -> str:
@@ -219,7 +253,7 @@ def clear(on: str = "") -> str:
 def compacted(on: str = "") -> Act:
   def ear(id):
     yield "started", id
-    here, pending, seen = scope(id), "", set()
+    here, pending, seen, refused = scope(id), "", set(), False
     chose: tuple | None = None
 
     def keeping(ids: list[str], after: set) -> Filter:
@@ -227,12 +261,17 @@ def compacted(on: str = "") -> Act:
 
     while True:
       match (yield {id, here} | ({pending} if pending else set())):
+        case ("done", about, _, Refused() as why) if about == pending:
+          pending, refused = "", True
+          yield told(id, "kept the chain as it is", why=why)
         case ("done", about, _, value) if about == pending:
           chose = (None, "")
           match value:
             case (list() as listed, str() as summary):
               chose = ([keeping([i for i in listed if isinstance(i, str) and scope(i)], set(seen)), latest()], summary)
-        case ("done", about, *_) if question(("reply", about)) and scope(about) == here and not (pending or chose):
+        case ("done", about, *_) if (
+          question(("reply", about)) and scope(about) == here and not (pending or chose or refused)
+        ):
           if (filled(about) or 0) > SHARE:
             seen = {fact[1] for fact in transcript(here) if question(fact)}
             pending = str(choice(on=here))

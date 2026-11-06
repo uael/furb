@@ -173,6 +173,9 @@ impl Keeper {
     if let Some(donor) = donor {
       made.parent = Some(donor.id.clone());
       made.chain.clone_from(&donor.chain);
+      // The fork resumes each block of its parent, with the mark of the cache that one holds, so
+      // it marks none more, and a fork of a fork stays within the four marks that the API takes.
+      made.marked = donor.marked;
     }
     made
   }
