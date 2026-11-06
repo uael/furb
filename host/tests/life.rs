@@ -202,7 +202,9 @@ async fn the_name_of_the_session_is_the_last_that_the_operator_said_on_the_root_
   let mut events = Box::pin(life.events(0));
   assert_eq!(life.name(), None);
   for name in ["First", "Mine"] {
-    let id = made(&life, rung(&furb::view::word(name))).await;
+    let word =
+      format!("act(\"rename_session\", \"\", lambda id: (yield \"done\", id, {}))", json!(name));
+    let id = made(&life, rung(&word)).await;
     until(&mut events, done(&id)).await;
   }
   assert_eq!(life.name().as_deref(), Some("Mine"));
