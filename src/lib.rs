@@ -7,7 +7,8 @@
 //! the store of the record, and the provider of models. [`extension`] says what an extension is and plays the ones a
 //! life runs as rungs, and [`life::Opening`] opens a life on the record and on the ears of the crate, to which a host
 //! adds its own. The Kernel and the gate are the crate's. [`wire`] carries a value as JSON, as the record keeps it,
-//! and [`binding`] gives the host API to python and to TypeScript.
+//! and [`binding`] gives the host API to python and to TypeScript. [`view`] folds the facts of a
+//! life into the meaning that every window shows.
 
 pub mod checkpoint;
 pub mod ear;
@@ -21,6 +22,7 @@ mod sand;
 #[cfg(test)]
 mod testing;
 pub mod value;
+pub mod view;
 pub mod wire;
 pub mod world;
 
