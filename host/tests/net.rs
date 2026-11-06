@@ -66,7 +66,12 @@ mod net {
     }
 
     async fn hello(&mut self) -> Option<Frame> {
-      self.ask(0, Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Window, name: None })).await
+      self
+        .ask(
+          0,
+          Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Window, name: None, role: None }),
+        )
+        .await
     }
   }
 
@@ -347,7 +352,8 @@ mod net {
     let addr = url.trim_start_matches("ws://").split('/').next().unwrap().to_owned();
     let stream = tokio::net::TcpStream::connect(&addr).await.unwrap();
     let (mut socket, _) = tokio_tungstenite::client_async(url, stream).await.unwrap();
-    let hello = Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Window, name: None });
+    let hello =
+      Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Window, name: None, role: None });
     let request = serde_json::to_string(&Request { id: 0, verb: hello }).unwrap();
     socket.send(Message::text(request)).await.unwrap();
     let Some(Ok(Message::Text(heard))) = socket.next().await else { panic!("no welcome") };

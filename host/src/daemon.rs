@@ -127,7 +127,7 @@ type Asker = Framed<<Local as Dialer>::Stream, LinesCodec>;
 /// The lives that the daemon of a stream gave at its handover, and the stream.
 async fn handover(stream: <Local as Dialer>::Stream) -> Result<(Vec<Handed>, Asker), DaemonError> {
   let mut lines = Framed::new(stream, LinesCodec::new_with_max_length(BOUND));
-  let hello = Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Daemon, name: None });
+  let hello = Verb::Hello(Hello { protocol: PROTOCOL, kind: Kind::Daemon, name: None, role: None });
   for (id, verb) in [(0, hello), (1, Verb::Handover)] {
     let request = serde_json::to_string(&Request { id, verb }).map_err(TransportError::from)?;
     lines.send(request).await.map_err(TransportError::from)?;

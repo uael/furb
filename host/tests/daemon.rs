@@ -208,7 +208,7 @@ mod daemon {
       let lines = Framed::new(local.dial().await.unwrap(), LinesCodec::new());
       let mut window = Window { lines, next: 0, pushed: VecDeque::new() };
       let name = name.map(str::to_owned);
-      let hello = Verb::Hello(Hello { protocol: PROTOCOL, kind, name });
+      let hello = Verb::Hello(Hello { protocol: PROTOCOL, kind, name, role: None });
       let welcome = window.ask(hello).await;
       assert!(matches!(welcome, Ok(Answer::Welcome { .. })), "{welcome:?}");
       window
