@@ -1,9 +1,9 @@
 //! The facts that the record of a life does not hold yet, as on a full disk, which the life holds
 //! in memory and never drops: the one home of the bound on them, and of the rule that a life whose
-//! record lacks some of its facts does not end. Past the bound, the life pauses its work on the
-//! root, which covers each chain, and tells the operator once, with the folder of the record and
-//! the space left on its disk. Once the record holds each fact, the life wakes the work that it
-//! paused, and a pause that the operator set stays.
+//! record lacks some of its facts does not end. Past the bound, the life pauses each chain that
+//! lives, and each chain that opens while it holds, and tells the operator once, with the folder of
+//! the record and the space left on its disk. Once the record holds each fact, the life wakes each
+//! chain that it paused, and a pause that the operator set stays.
 
 use std::path::Path;
 
@@ -14,48 +14,52 @@ use furb::{Engine, Fault, Object, verbs, wire::outward};
 /// waits for its rebirth never meets it.
 pub(crate) const UNKEPT: usize = 20_000;
 
-/// Why the life paused its root.
+/// Why the life paused a chain.
 const WHY: &str = "the record of this life does not hold its facts yet";
 
-/// Whether the life paused its root for its record.
+/// Whether the life holds its work for its record, and each chain that it paused for it.
 #[derive(Default)]
 pub(crate) struct Backlog {
-  paused: bool,
+  holding: bool,
+  paused: Vec<String>,
 }
 
 impl Backlog {
   /// Whether the life holds its work until its record takes each fact.
   pub(crate) fn holds(&self) -> bool {
-    self.paused
+    self.holding
   }
 
-  /// The notice of a pause or a wake of the root of a life whose record lacks some of its facts,
-  /// when one comes now: a pause past [`UNKEPT`], unless the root is paused already, and a wake of
-  /// that pause once the record holds each fact.
+  /// The notice of a hold or a wake of the work of a life whose record lacks some of its facts,
+  /// when one comes now: a hold past [`UNKEPT`], which pauses each chain that lives and no pause
+  /// covers, then each chain that opens while it holds, and a wake of each chain that it paused
+  /// once the record holds each fact.
   pub(crate) fn weighed(
     &mut self,
     engine: &mut Engine,
     record: &str,
   ) -> Result<Option<String>, Fault> {
-    let (count, root) = (engine.unkept(), engine.root().to_owned());
-    if self.paused && count == 0 {
-      engine.wake(&root)?;
-      self.paused = false;
+    let count = engine.unkept();
+    if self.holding && count == 0 {
+      for chain in std::mem::take(&mut self.paused) {
+        engine.wake(&chain)?;
+      }
+      self.holding = false;
       return Ok(Some(
         "The record of this life holds each of its facts again, so the life wakes the work that it \
          paused."
           .to_owned(),
       ));
     }
-    if self.paused || count <= UNKEPT {
+    if !self.holding && count <= UNKEPT {
       return Ok(None);
     }
-    let paused = engine.verb("paused", vec![Object::string(&root)], vec![])?;
-    if outward(paused.as_ref()).as_bool() == Some(true) {
+    let told = !self.holding;
+    self.holding = true;
+    self.paused_each(engine)?;
+    if !told {
       return Ok(None);
     }
-    engine.pause(&root, verbs::Pause { why: Some(Object::string(WHY)) })?;
-    self.paused = true;
     let folder = Path::new(record).parent().unwrap_or(Path::new("."));
     let left = furb::world::free(folder)
       .map_or_else(|| "an unknown space".to_owned(), |free| format!("{} MB", free / 1_000_000));
@@ -65,6 +69,26 @@ impl Backlog {
        wakes its work once the record holds them.",
       folder.display()
     )))
+  }
+
+  /// Each chain that lives and that no pause covers, paused for the record.
+  fn paused_each(&mut self, engine: &mut Engine) -> Result<(), Fault> {
+    for n in 1.. {
+      let chain = format!("chain{n}");
+      if engine.get(&chain)?.is_none() {
+        return Ok(());
+      }
+      if self.paused.contains(&chain) || engine.outcome(&chain)?.is_some() {
+        continue;
+      }
+      let paused = engine.verb("paused", vec![Object::string(&chain)], vec![])?;
+      if outward(paused.as_ref()).as_bool() == Some(true) {
+        continue;
+      }
+      engine.pause(&chain, verbs::Pause { why: Some(Object::string(WHY)) })?;
+      self.paused.push(chain);
+    }
+    Ok(())
   }
 }
 
