@@ -241,6 +241,7 @@ def dump(*names: str, on: str = "") -> str:
   """dump gives names of the module of a chain as python, which a word of another life runs to bind them again, so no verb loads them.
   A name whose value a checkpoint carries gives its name, =, and the literal of its value.
   A name of a function or of a class gives the last word of the program of the chain that defines it at the start of a line, whole, and a word that defines two of the names comes once.
+  A name of a function or of a class whose own name is another, as after an import of another function as f, raises Refused, since no word of the program defines its value under that name.
   A name of an Act, or of a value that holds one, raises Refused, which names it, since an act is of its life alone, so dump never writes a live Act.
   A name of a value that literal cannot write, a name of a function or a class that no word of the program defines, and a name that the module does not hold raise Refused, which names it, so no name is lost in silence.
   dump reads the module and the program of the chain and asks nothing, so no act is made and the journal keeps nothing.
@@ -651,14 +652,15 @@ def seed(data: object) -> list[Entry]:
   Each open prompt of the data is made again through prompt under its name, and each chain that the data says paused is paused.
   Each chain with an open prompt opens paused while the seed binds it, and wakes after it unless the data says it was paused, so an open prompt asks its model again at once.
   Each act of the data with a value stands known on its chain with that value and runs nothing.
-  A rung of the operator on each chain binds its definitions and its values, says its turns as its prefix, and tells what the checkpoint lost and cut, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows.
-  The rung binds the definitions and the values of the chain after it says the prefix and tells what the checkpoint lost and cut, so a value that raises as it is bound leaves the turns of the chain whole.
+  A rung of the operator on each chain says its turns as its prefix, binds its definitions and its values, awaits a rung of each life word whose act was open on it at the tip, says its turns as its prefix again with each fact since but a tell, and tells what the checkpoint lost and cut when it lost or cut one, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows.
+  The rung binds the definitions and the values of the chain after it says the prefix, so a value that raises as it is bound leaves the turns of the chain whole.
+  A birth tells no turn of its own: the turns of a chain after it are its turns at the tip, and each act that a life word made lives again under a rung whose word is that life word.
   """
 
 def gathered(define: Callable[[str], str], floor: dict[str, int]) -> dict:
   """gathered gives the data of a checkpoint of the life at its tip, which seed reads, as plain data that each build of the major reads: taken, chains and acts.
   taken gives the highest number of each kind that an act of a chain took, and at least the number that floor gives, since a later life makes no act again that an ear of the outside made.
-  chains holds each chain of the life, a chain at rest among them, each with its parent, its label, its source, whether it is paused, its turns but the facts made, what define gives of each word that ran on it, the text that binds each plain value of its module again, the names of the other values, and the acts that it cut, each word that ran on it among them.
+  chains holds each chain of the life, a chain at rest among them, each with its parent, its label, its source, whether it is paused, its turns but the facts made, what define gives of each word that ran on it, the text that binds each plain value of its module again, the names of the other values, the acts that it cut, each word that ran on it among them, and each life word of the standing whose act was open on it at the tip, as lives.
   chains holds each plain value of a chain whatever its size, and seed binds a large one from the carried fact of its chain, so a later life holds it exactly and no turn tells it.
   acts holds the last stand, the last clock, and each act of a verb that a value names or that is a command of a chain in chains: an act that is over with its value, an open prompt with its shape, its message, its actor and the ear that started it, and another act as cut, with a refusal that says why.
   paused says whether a pause stands over the chain at the tip, and no prompt of it pauses it, so a later life goes on as the tip left it.

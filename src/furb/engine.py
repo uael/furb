@@ -130,7 +130,7 @@ def dump(*names: str, on="") -> str:
   here, out = module(on), {}
   for name in names:
     if name in here and callable(here[name]):
-      text = next(
+      text = getattr(here[name], "__name__", name) == name and next(
         (w for w in reversed(program(on).values()) if re.search(rf"(?m)^(async )?(def|class) {name}\b", w)), ""
       )
     else:
@@ -549,13 +549,15 @@ def seeded(id, last, to):
     k and (yield "setup", id)
     for x in last[4]:
       x[1] and x[3] == k and rung(f"rung(read({x[1]!r}, HIDDEN).content)", to=to)
-    (w := "\n".join(y[2] for y in last[4] if y[3] == k and y[2])) and rung(w, to=to)
+    for y in last[4]:
+      y[3] == k and y[2] and rung(y[2], to=to)
 
 
 HEARD = (
-  "say('prefix', scope(acting()), [*transcript(of='module')[-1:], *transcript(of='carried')[-1][3], "
-  "*transcript(of='stand')[-1:], *transcript(of='pause'), *[x for x in transcript() if acting() in x[1::3]]])"
+  "say('prefix', scope(acting()), __kept := [*transcript(of='module')[-1:], *transcript(of='carried')[-1][3], "
+  "*transcript(of='stand')[-1:], *transcript(of='pause'), *[x for x in transcript() if acting() in x[1::3] and x[0] != 'tell']])"
 )
+KEPT = "say('prefix', scope(acting()), [*__kept, *[x for x in transcript()[len(__kept) :] if x[0] != 'tell']])"
 
 
 def seed(data):
@@ -591,14 +593,17 @@ def seed(data):
     word = "\n".join(
       [
         HEARD,
-        f'debug(t"The life goes on from a checkpoint. It lost {c["lost"] or "no name"}, and it cut {cut or "no act"}.")',
         c["definitions"],
         *(
           f"{named} = " + (f"eval(transcript(of='carried')[-1][4][{named!r}])" if text[LARGEST // 16 :] else text)
           for named, text in c["values"].items()
         ),
+        *(f"await rung({one!r})" for one in c.get("lives", ())),
+        KEPT,
+        *[f'debug(t"The life goes on from a checkpoint. It lost {c["lost"]}, and it cut {cut}.")']
+        * bool(c["lost"] or cut),
       ]
-    ).strip()
+    )
     put("rung", f"rung{numbers['rung'] + 1}", OPERATOR, i, word, "", "")
     put("gate", gated := f"gate{numbers['gate'] + 1}", i, i, word)
     entries.append((("done", gated, "gate", []),))
@@ -635,6 +640,7 @@ def gathered(define, floor):
   for one in asked:
     taken[one[0]] = max(taken.get(one[0], 0), number(one[1]))
   verbs = ("prompt", "bash", "read", "write", "wait", "cd", "chance")
+  words = {y[2] for y in (standing()[4:5] or [()])[0]}
   done = {x[1] for x in asked if x[0] == "bash"}
   borne = sorted((x for x in named - gone | done if get(x)[0] in verbs), key=lambda r: (get(r)[0], number(r)))
   stands = [x[1] for x in transcript(ROOT, "stand") if question(x) and over(x[1])][-1:]
@@ -676,6 +682,11 @@ def gathered(define, floor):
         "values": values[c],
         "lost": lost[c],
         "cut": [x for x in cut if scope(x) == c],
+        "lives": [
+          *dict.fromkeys(
+            m[4] for x in transcript(c) if question(x) and not over(x[1]) and (m := get(x[2])) and m[4] in words
+          )
+        ],
       }
     )
   return {"taken": taken, "chains": out, "acts": acts}
