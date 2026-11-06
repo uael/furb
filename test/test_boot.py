@@ -32,10 +32,11 @@ from conftest import (
   settle,
   sown,
   tip,
+  verbs,
   world_says,
 )
 from furb import engine
-from furb.engine import HIDDEN, OPERATOR, Drift, Exit, Refused, Text, idle, site, take
+from furb.engine import HIDDEN, OPERATOR, Exit, Refused, Text, idle, site, take
 
 
 def ours(log: list[tuple]) -> dict[str, tuple]:
@@ -70,6 +71,7 @@ def watching(root: str) -> Generator[tuple | None, tuple]:
 async def test_a_life_everything_that_is_said_in_it_is_said_here() -> None:
   """A life: everything that is said in it is said here, so the log of what was said, the generators that listen by their names and the tables of the life are its own, and it binds the names that reach them: say, which says a fact, act, which makes an act, drive, which brings a generator to life, and get, peek and transcript, which read the tables."""
   _, _, root = await lived()
+  await verbs(root, "note")
   heard: list[tuple] = []
   its: list[tuple] = []
   engine.drive(keeping(heard), "keeper")
@@ -434,12 +436,14 @@ async def test_the_record_a_life_was_opened_from_from_which_the_journal_answers(
 
 
 async def test_the_journal_an_ear_of_the_engine_which_hears_everything() -> None:
-  """The journal: an ear of the engine, which hears everything and keeps every act that no act of the life made and every fact that no act of the life said, the act it is about before it, and nothing that a generator an act brought to life made or said, nor anything it says itself, since a later life makes again everything that an act made or said and brings that generator to life again, and what the journal says the record holds already."""
+  """The journal: an ear of the engine, which hears everything and keeps every act that the life makes, as it is made, and every fact that no act of the life said, the act it is about before it, and nothing else that a generator an act brought to life said, nor anything it says itself, since a later life makes again everything that an act made or said and brings that generator to life again, and what the journal says the record holds already, so the record holds the maker, the kind, the chain and the words of each act that a reader shows with no life."""
   sand, log, _ = await lived()
   assert {e[0][0] for e in sand.record} == {
     "chain",
     "stand",
     "prompt",
+    "rung",
+    "run",
     "reply",
     "started",
     "gate",
@@ -472,13 +476,17 @@ async def test_the_journal_an_ear_of_the_engine_which_hears_everything() -> None
     ("done", "stand1"),
     ("chain", child),
     ("rung", step),
+    ("run", "run1"),
     ("gate", "gate1"),
     ("done", "gate1"),
+    ("run", "run2"),
     ("bash", command),
     ("started", command),
     ("joined", ""),
     ("merged", "merged1"),
     ("prompt", asked),
+    ("rung", "rung2"),
+    ("run", "run3"),
     ("reply", reply),
     ("started", reply),
   ]
@@ -637,7 +645,7 @@ async def test_given_at_its_birth_what_the_world_kept_of_an_earlier_life() -> No
 
 
 async def test_an_entry_whose_act_this_life_has_not_made_again_the_journal_steps_over() -> None:
-  """An entry whose act this life has not made again when every fact said before it has been heard, which for an act whose maker is neither an act nor an ear that boot was given is the chain it is on, the journal steps over, since this life will not make that act at that place, and it keeps the name of that act taken, so the entries after it go on and their acts keep their names."""
+  """An entry whose act this life has not made again when every fact said before it has been heard, as an act that an act made and that the outside never answered, or an act on a chain that this life has not made, which for an act whose maker is neither an act nor an ear that boot was given is the chain it is on, the journal steps over, since this life will not make that act at that place, and it keeps the name of that act taken, so the entries after it go on and their acts keep their names."""
   first, _, root = born()
   sub = engine.rung("sub = chain('sub')", on=root)
   await sub
@@ -728,7 +736,7 @@ def test_a_life_settles_an_await_of_its_acts_from_outside_a_run_in_the_loop_it_i
 
 
 async def test_an_act_whose_maker_is_neither_an_act_nor_an_ear_boot_was_given_is_said_again_through_its_verb() -> None:
-  """An act whose maker is neither an act nor an ear that boot was given is said again through its verb, with the words the record holds and the chain it names, so its ear is the verb's, a host finds it made when boot returns and makes it not again, and a show or a filter it was given is not said again, since the record holds none."""
+  """An act whose maker is neither an act nor an ear that boot was given is said again through its verb, with the words the record holds and the chain it names, so its ear is the verb's, a host finds it made when boot returns and makes it not again, and each show and the acts that each filter kept come again with its words, since the record holds them."""
   sand, log, root = born()
   one = engine.bash("echo hi", show=HIDDEN, on=root)
   assert (await one).code == 0
@@ -740,10 +748,7 @@ async def test_an_act_whose_maker_is_neither_an_act_nor_an_ear_boot_was_given_is
   assert said(again, "bash") == said(log, "bash") and said(again, "chain") == said(log, "chain")
   assert [name for name, a in acts(log).items() if a[2] == "outside"] == [child]
   assert engine.read(f"{one}/stdout", on=over).content == "ran echo hi\n"
-  assert [head for head in heads(engine.turns(on=over)) if head.startswith(f"#{one}")] == [
-    f"#{one}",
-    f"#{one} exited 0",
-  ]
+  assert [head for head in heads(engine.turns(on=over)) if head.startswith(f"#{one}")] == [f"#{one}"]
   first, _, root = born()
   engine.drive(watching(root), "watcher")
   engine.say("tell", root, [f"#{root} go"])
@@ -755,7 +760,7 @@ async def test_an_act_whose_maker_is_neither_an_act_nor_an_ear_boot_was_given_is
 
 
 async def test_a_later_life_says_such_an_act_again_only_through_a_verb_in_the_globals_of_its_chain() -> None:
-  """A later life says an act whose maker is neither an act nor an ear that boot was given again only through a verb in the globals of its chain, and an act whose kind no verb binds is a drift."""
+  """A later life says an act whose maker is neither an act nor an ear that boot was given again only through a verb in the globals of its chain, and an act whose kind no verb binds is refused when it is made, so no record holds one."""
   sand, _, root = born()
   word = "def remind(text, on=''):\n  def ear(id):\n    yield 'started', id\n    yield from idle(id)\n\n"
   await engine.rung(word + "  return act('remind', on, ear, text)\n", on=root)
@@ -766,10 +771,8 @@ async def test_a_later_life_says_such_an_act_again_only_through_a_verb_in_the_gl
   second = Sand()
   again, over = await relived(second, list(sand.record))
   assert over == root and said(again, "remind") == [("remind", note, OPERATOR, root, "soon")]
-  bare = engine.act("note", root, idle, "one")
-  await settle()
-  with pytest.raises(Drift, match=f"{bare} drifts"):
-    life(Sand(), [*sand.record, *second.record])
+  with pytest.raises(Refused, match="no verb note on chain1"):
+    engine.act("note", root, idle, "one")
 
 
 async def test_the_journal_says_again_the_first_answer_of_an_act_when_the_act_is_made_again() -> None:

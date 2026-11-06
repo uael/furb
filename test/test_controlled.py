@@ -3,7 +3,7 @@
 from asyncio import CancelledError
 from collections.abc import Generator
 
-from conftest import born, dones, hushed, said, settle, slow, stalled
+from conftest import born, dones, hushed, said, settle, slow, stalled, verbs
 from furb import engine
 from furb.engine import Text
 
@@ -80,6 +80,7 @@ async def test_a_rung_carries_on_only_while_its_own_chain_is_not_paused() -> Non
 async def test_a_control_from_outside_reaches_a_paused_act_at_once() -> None:
   """A control from outside reaches a paused act at once, where what the words of the act say waits for the wake."""
   _, _, root, act = slow()
+  await verbs(root, "probe")
   await settle()
   engine.pause(act)
   engine.cancel(act)
@@ -108,6 +109,7 @@ async def test_a_control_from_outside_reaches_a_paused_act_at_once() -> None:
 async def test_a_paused_ear_hears_at_once_an_act_put_to_it() -> None:
   """A paused ear hears at once an act put to it, and every other fact at the wake."""
   _, _, root = born()
+  await verbs(root, "probe")
   heard: list[tuple] = []
 
   def listening(id: str) -> Generator[tuple | None, tuple]:
@@ -153,6 +155,7 @@ async def test_an_ear_that_is_not_lasting_is_over_as_it_says_a_done_of_its_own()
 async def test_a_lasting_ear_lives_past_the_done_of_its_act() -> None:
   """A lasting ear lives past the done of its act until it returns, as the ear of a command does to hear that done, whoever said it, and to tell its exit, and a cancel or a close over its act ends the act all the same."""
   _, _, root = born()
+  await verbs(root, "door")
 
   def serving(id: str) -> Generator[tuple | None, tuple]:
     yield "started", id
@@ -185,6 +188,7 @@ async def test_what_an_act_a_control_is_over_is_done_with() -> None:
 async def test_a_controlled_ear_waits_for_what_the_ear_that_it_carries_waits_for() -> None:
   """A controlled ear waits for what the ear that it carries waits for."""
   _, _, root = born()
+  await verbs(root, "probe")
   heard: list[tuple] = []
 
   def asking(id: str) -> Generator[tuple | set[str], tuple]:

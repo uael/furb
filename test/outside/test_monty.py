@@ -58,7 +58,7 @@ async def test_an_ear_that_says_a_verb_the_world_refuses_is_answered_with_the_re
 
 
 async def test_a_show_the_engine_made_is_called_back_by_an_ear_while_it_hears() -> None:
-  """A show the engine made crosses to an ear as a callable, which the ear calls back while it hears."""
+  """A show that a word wrote crosses to an ear as a callable, which the ear calls back while it hears."""
   sand = Sand(files={"/w/n.txt": "one\ntwo\n"}, stands=STANDS)
   picked: list[list[int]] = []
 
@@ -68,7 +68,7 @@ async def test_a_show_the_engine_made_is_called_back_by_an_ear_while_it_hears() 
         picked.append(a[3](["one", "two"]))
 
   root = engine.boot((), world=sand.hears(), looking=looking())
-  sand.script[root] = ["say('shown', acting(), span(2, 2))\nclose(1)"]
+  sand.script[root] = ["say('shown', acting(), lambda lines: [len(lines)])\nclose(1)"]
   assert await engine.prompt(int, "read it", on=root) == 1
   assert picked == [[2]]
 
@@ -355,7 +355,7 @@ async def test_the_ear_of_the_log_writes_the_log_of_a_life_on_the_engine_of_this
   heads = [fact[:2] for fact in logged]
   assert heads[0] == ["chain", "chain1"]
   assert ["rung", "rung1"] in heads and ["run", "run1"] in heads
-  assert ["run", "run1"] not in [fact[:2] for (fact,) in _monty.kept(path)]
+  assert ["run", "run1"] in [fact[:2] for (fact,) in _monty.kept(path)]
   retold = _monty.retold(path)
   assert retold["logged"] and retold["file"] == f"{path}.log"
   Path(f"{path}.log").unlink()

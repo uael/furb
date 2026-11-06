@@ -9,6 +9,7 @@ from furb.engine import (
   get,
   headed,
   peek,
+  picked,
   question,
   read,
   scope,
@@ -45,7 +46,7 @@ def catchup(on: str = "") -> Act:
               except Refused:
                 seen[path] = "gone"
                 continue
-              lines = {i: now[i - 1] for i in differs(was.lines)(now)}
+              lines = {i: now[i - 1] for i in picked(differs(was.lines), now)}
               lines |= dict.fromkeys(range(len(now) + 1, len(was.lines) + 1))
               seen[path] = len(lines) if len(lines) > CAP else lines or None
           clocks = [x for one in transcript(ROOT, "clock") if isinstance(x := peek(one[1]), float)][-2:] or [0.0]

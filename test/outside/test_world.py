@@ -119,7 +119,7 @@ async def test_the_answers_a_record_holds_are_the_turns_its_replies_came_to(yard
   await settle()
   live.end()
   said = kept(record)
-  replies = [fact[1] for (fact,) in said if fact[0] == "reply"]
+  replies = [fact[1] for (fact,) in said if fact[0] == "started" and engine.question(("reply", fact[1]))]
   assert len(replies) == 2
   assert [(one[1], one[3][1]) for one in answered(said)] == [(replies[1], "close(3)")]
 

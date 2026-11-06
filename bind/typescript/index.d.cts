@@ -112,6 +112,8 @@ export declare class Engine {
   grep(pattern: string): unknown
   /** differs(lines) is the show of the lines that differ from the lines it holds, which is what a write shows of what came back. */
   differs(old: string[]): unknown
+  /** picked gives the numbers of the lines that a show tells of a text, from the lines of the text: those that a show of the file names, or what a show that is a callable gives. */
+  picked(show: unknown, lines: string[]): unknown
   /** take keeps the acts it names and everything they made. */
   take(ids?: string[], options?: { inside?: boolean } | null): unknown
   /** A read: whoever serves the path answers it with the text of it, which the read tells by the lines its show picks. */
@@ -448,6 +450,18 @@ export interface Opening {
    * their names, so it runs no command and touches no file.
    */
   inspecting?: boolean
+  /**
+   * Whether the life opens from the first entry of its record, born again at each checkpoint as
+   * each life of the
+   * record was, and not from its last checkpoint alone; false when unsaid. Each checkpoint then
+   * has to end the life
+   * that wrote it and to hold what a life born on the entries before it gathers, or the open is
+   * refused, as
+   * [`checkpoint::reborn`] says. Both opens reach one state at the tip, so the tests and the
+   * gates open this way to
+   * prove each checkpoint of a record.
+   */
+  whole?: boolean
   /**
    * Whether the life enables at its tip the extensions that the configs turn on; true when unsaid. A life runs what
    * its record enables either way.

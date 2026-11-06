@@ -15,7 +15,7 @@ site = ContextVar("site", default=OPERATOR)
 raised = None
 actor = ""
 accepts = None
-type Show = Callable[[list[str]], list[int]]
+type Show = tuple | Callable[[list[str]], list[int]]
 type Filter = Callable[[list[tuple]], list[tuple]]
 
 
@@ -26,15 +26,26 @@ def ask(kind, on, *words):
 
 
 def span(lo: int, hi: int) -> Show:
-  return lambda lines: list(range(1, len(lines) + 1)[lo - (lo > 0) : hi if hi >= 0 else hi + 1 or None])
+  return "span", lo, hi
 
 
 def grep(pattern: str) -> Show:
-  return lambda lines: [i for i, line in enumerate(lines, 1) if re.search(pattern, line)]
+  return "grep", pattern
 
 
 def differs(old: list[str]) -> Show:
-  return lambda lines: [i for i, line in enumerate(lines, 1) if old[i - 1 : i] != [line]]
+  return "differs", old
+
+
+def picked(show: Show, lines: list[str]) -> list[int]:
+  match show:
+    case "span", lo, hi:
+      return list(range(1, len(lines) + 1)[lo - (lo > 0) : hi if hi >= 0 else hi + 1 or None])
+    case "grep", str() as pattern:
+      return [i for i, line in enumerate(lines, 1) if re.search(pattern, line)]
+    case "differs", list() as old:
+      return [i for i, line in enumerate(lines, 1) if old[i - 1 : i] != [line]]
+  return show(lines)  # ty: ignore[call-non-callable]
 
 
 HEAD, TAIL, HIDDEN = span(1, 2000), span(-250, -1), span(0, 0)
@@ -48,7 +59,7 @@ def read(path: str, show: Show = HEAD, on="") -> Text:
   got = ask("read", on, path)
   if acting() and isinstance(got, Text) and (size := len(shown(got, show).encode())) > LARGEST:
     raise Refused(f"{path} shows {size} bytes, over {LARGEST}")
-  show is HIDDEN or tell(on, path, got, show)
+  show == HIDDEN or tell(on, path, got, show)
   return got
 
 
@@ -315,9 +326,14 @@ def prompt[T](shape: type[T] | object, message="", to="", on="") -> Act[T]:
   return act("prompt", on, controlled(ear), named, message, to)
 
 
-def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never]:
+def chain(label="", source="", filter: Filter | list[str] | None = None, on="") -> Act[Never]:
   if scope(source) != source:
     raise Refused("no chain " + source)
+  kept = (
+    filter
+    if filter is None or isinstance(filter, list)
+    else [one[1] for one in filter([x for x in transcript(source or ROOT) if question(x)])]
+  )
 
   def ear(id):
     t = transcript(source or ROOT)
@@ -354,7 +370,11 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
           rung(words)
 
     if source or t[lo:hi]:
-      kin = {source, *[n for one in (filter or list)([x for x in t if question(x)]) for n in lineage(one[1])]}
+      kin = {
+        source,
+        id,
+        *[n for one in ([x[1] for x in t if question(x)] if kept is None else kept) for n in lineage(one)],
+      }
       later = {x[1] for x in t[h.index("setup") :] if question(x) and (not get(x[2]) or x[:3:2] == ("rung", ROOT))}
       later |= {x[1] for x in t if x[0] == "run" and not later.isdisjoint(lineage(x[4]))}
       yield (
@@ -512,7 +532,7 @@ def chain(label="", source="", filter: Filter | None = None, on="") -> Act[Never
         prompted(ours) and (news[2] or not over(ours)) and prompt(None, news[0], on=ours)
         news = ""
 
-  return act("chain", on, ear, label, source)
+  return act("chain", on, ear, label, source, *[kept] * (kept is not None))
 
 
 def seeded(id, last, to):
@@ -676,14 +696,14 @@ def bash(
   command: str, stdin: str | None = "", timeout=TIMEOUT, ok=None, show: Show = TAIL, show_err: Show | None = None, on=""
 ) -> Act[Exit]:
   def ear(id):
-    yield opened(id, "Exit", command="" if show is HIDDEN else command)
+    yield opened(id, "Exit", command="" if show == HIDDEN else command)
     while True:
       match (yield {id, "merged"}):
         case ("merged", qid, *_, about) if about == id:
           yield "done", qid, show_err is None
         case ("done", about, _, got) if about == id:
           match got:
-            case Exit(code, out, err) if show is not HIDDEN:
+            case Exit(code, out, err) if show != HIDDEN:
               yield told(
                 id,
                 f"timed out after {timeout}s" if code is None else f"exited {code}",
@@ -695,7 +715,16 @@ def bash(
   def cut(text, most=LARGEST // 16):
     return text if len(text) <= 2 * most else text[:most] + f"\n... ({len(text)} chars)\n" + text[-most:]
 
-  return act("bash", on, controlled(ear, True), command, stdin, timeout, ok)
+  return act(
+    "bash",
+    on,
+    controlled(ear, True),
+    command,
+    stdin,
+    timeout,
+    ok,
+    *[show, show_err] * ((show, show_err) != (TAIL, None)),
+  )
 
 
 @dataclass
@@ -805,7 +834,10 @@ def tell(on, path="", got=None, show=HEAD, **words):
       transcript(on, who)[-1][1],
       path=path,
       **words,
-      **{"numbers": at if (at := show(got.lines)) and at[-1] - at[0] >= len(at) else None, "text": shown(got, show)}
+      **{
+        "numbers": at if (at := picked(show, got.lines)) and at[-1] - at[0] >= len(at) else None,
+        "text": shown(got, show),
+      }
       if isinstance(got, Text)
       else {"value": got},
     )
@@ -866,7 +898,7 @@ def opened(id, of, **words):
 
 def shown(text, show):
   lines = text.lines
-  return "\n".join(x[:1000] + f"... ({len(x)} chars)" if (x := lines[i - 1])[1000:] else x for i in show(lines))
+  return "\n".join(x[:1000] + f"... ({len(x)} chars)" if (x := lines[i - 1])[1000:] else x for i in picked(show, lines))
 
 
 def unquoted(word):
@@ -952,6 +984,7 @@ def boot(record=(), **outside):
   made, known, done, held, log, alive, born, busy, left, heed = Counter(), {}, {}, {}, [], {}, {}, set(), [], {}
   first, owned, taken = {e[1]: e for (e,) in record[::-1] if e[0] in ("started", "done")}, set(), {}
   due = [e for (e,) in record[::-1] if first.get(e[1]) is not e]
+  ranks = {id(e): n for n, (e,) in enumerate(record)}
   saved, again = {e[1]: e for (e,) in record if question(e)}, {}
 
   def drift(name):
@@ -975,6 +1008,7 @@ def boot(record=(), **outside):
       case (kind, name, by, on, *words) if question((kind, name)):
         if (
           by in saved
+          or (name not in first and re.fullmatch(r"\w+?\d+", by))
           or (on and not get(on))
           or (by == "journal" and not holds(scope(on), [known.setdefault(name, (kind, name, by, on))]))
         ):
@@ -998,7 +1032,7 @@ def boot(record=(), **outside):
         while owed() and (
           not (log or left)
           or (due[-1][0] == "joined" and not question(due[-2]) and due.pop() and due)
-          or (a and a[::2] == ("wake", "journal") and due[-1][1] in taken)
+          or (a and a[::2] == ("wake", "journal") and due[-1][1] in taken and due[-1][2] in outside)
         ):
           recount(due.pop())
         b = a
@@ -1021,6 +1055,8 @@ def boot(record=(), **outside):
                 glue and (yield glue)
                 yield "keep", "", (a,)
               last = a
+            elif a is q and about not in saved:
+              yield "keep", "", (saved.setdefault(about, q),)
             if kind == "wake" and not owed():
               for name in [x for x in taken if taken[x] and covers(a, x) and not over(x)]:
                 del taken[name]
@@ -1047,6 +1083,8 @@ def boot(record=(), **outside):
     on = on or scope(speaker)
     if not on and kind != "chain":
       raise Refused("no chain for " + kind)
+    if by and not (get(by) or by in outside or callable((module(on) or globals()).get(kind))):
+      raise Refused(f"no verb {kind} on {on}, so a later life cannot make the act again")
     names = born.setdefault(kind, {})
     a = (kind, name := names.setdefault((by, made[speaker, kind]), kind + str(len(names) + 1)), by, on, *words)
     if known.setdefault(name, a) is a:
@@ -1062,6 +1100,8 @@ def boot(record=(), **outside):
         if saved.get(name, a) == a:
           if name not in taken and (f := first.get(name)):
             taken[name] = f[0] == "started"
+            while owed() and not question(due[-1]) and ranks[id(due[-1])] < ranks[id(f)]:
+              recount(due.pop())
             repeat(*f)
             while taken[name] and owed() and due[-1][0] == "joined" and due.pop() and due:
               recount(due.pop())

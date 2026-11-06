@@ -18,7 +18,8 @@ GROWS = (
 
 async def test_differs_lines_is_the_show_of_the_lines_that_differ_from_the_lines_it_holds() -> None:
   """differs(lines) is the show of the lines that differ from the lines it holds, which is what a write shows of what came back."""
-  assert engine.differs(["one", "two"])(["one", "new", "two"]) == [2, 3]
+  born()
+  assert engine.picked(engine.differs(["one", "two"]), ["one", "new", "two"]) == [2, 3]
   _, _, root = born(GROWS)
   assert await engine.prompt(str, "a door of my own", on=root) == "one\ntwo\n"
   await settle()
