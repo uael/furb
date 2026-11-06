@@ -157,6 +157,42 @@ fn an_await_in_an_async_function_or_at_the_top_of_the_word_is_no_finding() {
 }
 
 #[test]
+fn a_call_of_an_async_function_that_nothing_awaits_is_a_finding_of_its_line() {
+  let why = |column: usize| {
+    format!(
+      "error[unawaited-coroutine] (column {column}) `hire` is an async function, which runs nothing until it is awaited: write `await hire(...)`"
+    )
+  };
+  assert_eq!(said(&[], "async def hire():\n  return 1\nhire()"), vec![(3, why(3))]);
+  assert_eq!(said(&["async def hire():\n  return 1"], "hire()"), vec![(1, why(3))]);
+  assert_eq!(
+    said(&["async def hire():\n  return 1"], "async def go():\n  hire()\nawait go()"),
+    vec![(2, why(5))]
+  );
+}
+
+#[test]
+fn a_call_that_is_awaited_or_bound_or_of_another_function_is_no_finding() {
+  let hire = "async def hire():\n  return 1";
+  assert_eq!(said(&[hire], "await hire()\ngot = hire()\nclose(await got)"), vec![]);
+  assert_eq!(said(&[hire, "def hire():\n  return 1"], "hire()"), vec![]);
+  assert_eq!(said(&[hire], "def go(hire):\n  hire()\ngo(len)"), vec![]);
+  assert_eq!(said(&[], "class K:\n  async def read(self):\n    return 1\nread('a')"), vec![]);
+}
+
+#[test]
+fn a_call_of_an_async_function_that_a_full_module_of_the_program_declares_is_a_finding() {
+  let mut program = vec!["async def hire():\n  return 1".to_owned()];
+  program.extend((0..2 * CHUNK).map(|n| format!("k = {n}")));
+  let mut program: Vec<&str> = program.iter().map(String::as_str).collect();
+  let found = said(&program, "hire()");
+  assert_eq!(found.len(), 1, "{found:?}");
+  assert!(found[0].1.starts_with("error[unawaited-coroutine] (column 3)"), "{found:?}");
+  program.push("hire = 1");
+  assert_eq!(said(&program, "hire()"), vec![]);
+}
+
+#[test]
 fn a_name_bound_again_has_the_type_of_its_last_binding() {
   assert_eq!(
     said(&["x = 1", "def x() -> int:\n  return 1"], "y: int = x()\ndef z() -> int:\n  return x()"),
