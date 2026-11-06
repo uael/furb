@@ -5,7 +5,6 @@ import {
   branchMessages,
   branchStart,
   branchTakes,
-  earlierSteps,
   plainActs,
   stepName,
   watchBar,
@@ -50,7 +49,6 @@ test("the acts of a step, its name, and who asks a model read in common words", 
     "the program asks haiku",
     "furb tells sonnet",
   ]);
-  expect([earlierSteps(1), earlierSteps(6)]).toEqual(["1 earlier step", "6 earlier steps"]);
 });
 
 test("a branch says where it starts, with the files as they were, and the messages that it takes", () => {

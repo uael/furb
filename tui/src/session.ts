@@ -704,7 +704,7 @@ export class Session extends EventEmitter {
     const before = this.sessionName;
     const held = [this.legacyName, this.keptName];
     this.renamed = true;
-    this.legacyName = undefined;
+    if (said !== this.legacyName) this.legacyName = undefined;
     this.keptName = said;
     this.renaming++;
     this.sessionName = said || basename(this.host.directory);

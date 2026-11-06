@@ -74,7 +74,7 @@ test.skipIf(process.platform === "win32")(
     ]);
     expect(
       acts.filter((line) => line.endsWith(" rung10")).filter((line) => !/^(memory|read)\d+ /.test(line)),
-    ).toEqual(["catchup1 rung10", "remember1 rung10", "mcp_index1 rung10"]);
+    ).toEqual(["catchup1 rung10", "remember1 rung10", "fitted1 rung10", "mcp_index1 rung10"]);
     expect(acts).toContain("name_session1 rung12");
     expect(frame).toContain("No model answers yet");
     expect(frame).toContain("Claude command line  Not found.");
