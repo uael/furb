@@ -20,7 +20,7 @@ export function environment(
 ): Record<string, string | undefined> {
   const tests = join(root, ".furb/tests");
   const cache = join(
-    process.platform === "win32" ? tmpdir() : "/tmp",
+    process.platform === "win32" ? base.FURB_MACHINE_TMPDIR || tmpdir() : "/tmp",
     `furb-cache-${createHash("sha256").update(root).digest("hex").slice(0, 8)}`,
   );
   const kept = Object.fromEntries(

@@ -32,3 +32,17 @@ test("the socket of the daemon of the tests fits a Unix socket in a worktree at 
   expect(here.XDG_CACHE_HOME).not.toBe(environment({}, `${long}2`).XDG_CACHE_HOME);
   expect(here.FURB_CONFIG_DIR).toBe(join(long, ".furb/tests"));
 });
+
+test("on Windows the cache of the tests stands in the temporary directory of the machine, whatever yard a process has", () => {
+  const platform = Object.getOwnPropertyDescriptor(process, "platform");
+  Object.defineProperty(process, "platform", { value: "win32" });
+  try {
+    const machine = "/machine";
+    const runner = environment({ FURB_MACHINE_TMPDIR: machine });
+    const test = environment({ FURB_MACHINE_TMPDIR: machine, TMPDIR: "/yard", TEMP: "/yard", TMP: "/yard" });
+    expect(runner.XDG_CACHE_HOME?.startsWith(join(machine, "furb-cache-"))).toBe(true);
+    expect(test.XDG_CACHE_HOME).toBe(runner.XDG_CACHE_HOME);
+  } finally {
+    if (platform) Object.defineProperty(process, "platform", platform);
+  }
+});
