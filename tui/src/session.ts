@@ -1533,11 +1533,8 @@ export class Session extends EventEmitter {
     this.save();
     this.notice = `${image.name} attached.`;
   }
-  private withImages(text: string): string {
-    return [
-      text,
-      ...(this.images[this.selected] ?? []).map(({ name, uri }) => imageReference(name, uri)),
-    ].join("\n");
+  private withImages(text: string, images = this.images[this.selected] ?? []): string {
+    return [text, ...images.map(({ name, uri }) => imageReference(name, uri))].join("\n");
   }
   /** The name of a chain: its label, or Main for the root. */
   labelOf(id: string): string {
@@ -1636,9 +1633,14 @@ export class Session extends EventEmitter {
    * until its wake. */
   async enqueue(text: string): Promise<void> {
     if (!text.trim()) return;
-    await this.attachFiles(text, this.selected, false);
-    await this.host.queue(this.shape, this.withImages(text), this.selected);
-    delete this.images[this.selected];
+    // The follow-up goes where the operator sent it, whatever chain he shows while the reads and the queue answer.
+    const { selected: chain, shape } = this;
+    const images = [...(this.images[chain] ?? [])];
+    await this.attachFiles(text, chain, false);
+    await this.host.queue(shape, this.withImages(text, images), chain);
+    const left = (this.images[chain] ?? []).filter((one) => !images.includes(one));
+    if (left.length) this.images[chain] = left;
+    else delete this.images[chain];
     this.save();
     this.notice = "Follow-up queued.";
   }

@@ -120,6 +120,56 @@ test("the setup of a demo life reads the doctrine of its own project, and no pat
   }
 });
 
+test("a follow-up goes to the chain that the operator sent it on, with its images, whatever chain he shows meanwhile", async () => {
+  const session = await demoSession();
+  const { engine, host } = session;
+  const queue = host.queue;
+  try {
+    const a = session.selected;
+    const b = await engine.chain({ label: "Other" });
+    const image = (name: string) =>
+      ({ name, uri: `furb-image://${name}`, mime: "image/png", size: 1 }) as never;
+    const asked: unknown[][] = [];
+    for (const at of ["read", "queue"] as const) {
+      let open = () => {};
+      const gate = new Promise<void>((resolve) => {
+        open = resolve;
+      });
+      // The read of the directory and the queue answer when the test lets them, after a change of chain.
+      Object.assign(session, {
+        engine: new Proxy(engine, {
+          get: (target, key) =>
+            key === "cwd" && at === "read"
+              ? async (...args: Parameters<typeof engine.cwd>) => {
+                  await gate;
+                  return target.cwd(...args);
+                }
+              : Reflect.get(target, key),
+        }),
+      });
+      host.queue = async (...args) => {
+        asked.push(args);
+        if (at === "queue") await gate;
+      };
+      await session.select(a);
+      session.images = { [a]: [image(`a-${at}`)], [b]: [image(`b-${at}`)] };
+      const sent = session.enqueue(`Sent on the first chain, ${at}`);
+      await session.select(b);
+      open();
+      await sent;
+      expect(asked.at(-1)?.slice(0, 1).concat(asked.at(-1)?.slice(2))).toEqual(["str", a]);
+      expect(String(asked.at(-1)?.[1])).toContain(`a-${at}`);
+      expect(String(asked.at(-1)?.[1])).not.toContain(`b-${at}`);
+      expect(session.images[a]).toBeUndefined();
+      expect(session.images[b]?.map((one) => one.name)).toEqual([`b-${at}`]);
+    }
+  } finally {
+    Object.assign(session, { engine });
+    host.queue = queue;
+    await session.dispose();
+  }
+});
+
 test("a session that cannot save its view still lets its life go, which ends in the daemon of the tests with its command", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-dispose-"));
   const record = join(directory, "life.jsonl");
