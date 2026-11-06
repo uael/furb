@@ -101,13 +101,34 @@ pub fn heads(path: impl AsRef<Path>, kinds: &[&str]) -> Result<Vec<Object>, Faul
   let path = path.as_ref();
   let format = Format::of(path);
   if format == Format::Lines {
-    return Ok(lines::heads(path, kinds)?);
+    let starts: Vec<String> = kinds.iter().map(|kind| format!("[[\"{kind}\",")).collect();
+    return Ok(lines::heads(path, &starts)?);
   }
   let of = |entry: &Object| {
     let fact = entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
     fact.is_some_and(|one| kinds.contains(&one.kind()))
   };
   Ok(format.kept(path)?.into_iter().filter(of).collect())
+}
+
+/// The standing that the last answered stand of the record at a path gave, read as [`heads`]
+/// reads, or nothing when it holds none. A file of lines parses only the lines of the done of a
+/// stand.
+pub fn standing(path: impl AsRef<Path>) -> Result<Option<Object>, Fault> {
+  let path = path.as_ref();
+  let format = Format::of(path);
+  let entries = if format == Format::Lines {
+    lines::heads(path, &[r#"[["done","stand"#.to_owned()])?
+  } else {
+    format.kept(path)?
+  };
+  Ok(entries.iter().rev().find_map(|entry| {
+    let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
+    let value = fact.word(0)?;
+    let stood =
+      fact.kind() == "done" && crate::fact::named(fact.about(), "stand") && value.items().is_some();
+    stood.then(|| value.to_owned())
+  }))
 }
 
 /// The kind of the fact by which a record names the build that made it: `("made", "chain1",

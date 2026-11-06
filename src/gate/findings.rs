@@ -30,8 +30,12 @@ pub enum Rule {
   Await,
   /// A read of asyncio in a word.
   Asyncio,
+  /// A call of an async function that nothing awaits.
+  Coroutine,
   /// A name that the transcript binds.
   Told,
+  /// A name of the engine that a word binds.
+  Engine,
   /// A value that is not of the type that its name is declared with.
   Assign,
   /// Any other rule of the checker, by its name.
@@ -54,7 +58,9 @@ impl Rule {
       Rule::Import => "unresolved-import",
       Rule::Await => "await-outside-async",
       Rule::Asyncio => "asyncio-in-word",
+      Rule::Coroutine => "unawaited-coroutine",
       Rule::Told => "transcript-name",
+      Rule::Engine => "engine-name",
       Rule::Assign => "invalid-assignment",
       Rule::Checker(name) => name,
     }
@@ -377,6 +383,85 @@ pub(super) fn unawaited(sheet: &Parsed<'_>) -> Vec<Finding> {
     .collect()
 }
 
+/// Each call of an async function that stands as a statement of the word, by the line it stands on.
+///
+/// A call of an `async def` makes a coroutine and runs nothing until it is awaited, and the checker
+/// lets the statement pass, so the word goes on as if the call had run. The gate refuses it first
+/// and names the fix. `known` holds the async functions that the program of the chain binds last,
+/// and the word adds the ones that it defines.
+pub(super) fn dropped(sheet: &Parsed<'_>, known: &HashSet<String>) -> Vec<Finding> {
+  let Some(body) = sheet.bodied() else { return vec![] };
+  let mut calls = Coroutines { names: known.clone(), depth: 0, found: vec![] };
+  calls.visit_body(word_of(body));
+  calls
+    .found
+    .into_iter()
+    .map(|(at, name)| Finding {
+      line: sheet.line(at),
+      column: sheet.column(at),
+      rule: Rule::Coroutine,
+      why: format!(
+        "`{name}` is an async function, which runs nothing until it is awaited: write `await {name}(...)`"
+      ),
+    })
+    .collect()
+}
+
+/// The statements that call an async function, each by where it starts, with the name that it
+/// calls. A name is async from its def at the top of the word to its next binding anywhere: a def,
+/// a class, an import, a store or a parameter ends it, so a name that a function binds for itself
+/// is never taken for the async function, and a missed call is the price of no false finding.
+struct Coroutines {
+  names: HashSet<String>,
+  depth: usize,
+  found: Vec<(usize, String)>,
+}
+
+impl<'a> Visitor<'a> for Coroutines {
+  fn visit_stmt(&mut self, stmt: &'a Stmt) {
+    match stmt {
+      Stmt::FunctionDef(_) | Stmt::ClassDef(_) | Stmt::Import(_) | Stmt::ImportFrom(_) => {
+        for name in binds(stmt) {
+          self.names.remove(name);
+        }
+        if let Stmt::FunctionDef(def) = stmt
+          && def.is_async
+          && self.depth == 0
+        {
+          self.names.insert(def.name.to_string());
+        }
+      }
+      Stmt::Expr(one) => {
+        if let Expr::Call(call) = &*one.value
+          && let Expr::Name(name) = &*call.func
+          && self.names.contains(name.id.as_str())
+        {
+          self.found.push((stmt.start().to_usize(), name.id.to_string()));
+        }
+      }
+      _ => {}
+    }
+    let scoped = matches!(stmt, Stmt::FunctionDef(_) | Stmt::ClassDef(_));
+    self.depth += usize::from(scoped);
+    visitor::walk_stmt(self, stmt);
+    self.depth -= usize::from(scoped);
+  }
+
+  fn visit_expr(&mut self, expr: &'a Expr) {
+    if let Expr::Name(one) = expr
+      && matches!(one.ctx, ExprContext::Store)
+    {
+      self.names.remove(one.id.as_str());
+    }
+    visitor::walk_expr(self, expr);
+  }
+
+  fn visit_parameter(&mut self, parameter: &'a Parameter) {
+    self.names.remove(parameter.name.as_str());
+    visitor::walk_parameter(self, parameter);
+  }
+}
+
 /// Each name of asyncio but `CancelledError` that the word reads, by the line it stands on.
 ///
 /// A word runs in a call of the host, where the sandbox refuses each future of asyncio:
@@ -518,6 +603,134 @@ pub(super) fn told(sheet: &Parsed<'_>) -> Vec<Finding> {
       why: format!("the transcript binds `{name}`: a word reads it and never binds it"),
     })
     .collect()
+}
+
+/// The names that a chain binds of its own, though the engine binds each first: the actor, the last
+/// raise and the policy of the codes of a command, which a word binds like any name.
+const OWN: [&str; 3] = ["actor", "raised", "accepts"];
+
+/// Each name of the engine that a statement at the top of the word binds or deletes, by the line it
+/// stands on.
+///
+/// The module of a chain holds each name of the engine, which the sheet binds from `MODULE`, and
+/// each later word and each extension of the chain reads it there: a word that binds one by
+/// accident, as `peek = await bash('ls')`, gives them a wrong value under that name, so the gate
+/// refuses it. A def or a class of such a name overrides the verb on purpose, and a name that a
+/// def, a class, a lambda or a comprehension binds inside itself stays its own.
+pub(super) fn contracted(sheet: &Parsed<'_>, engine: &str) -> Vec<Finding> {
+  let Some(body) = sheet.bodied() else { return vec![] };
+  let imports = imported(engine);
+  let names: Vec<&str> = body
+    .iter()
+    .filter_map(|stmt| match stmt {
+      Stmt::Assign(one) => match (one.targets.as_slice(), &*one.value) {
+        ([Expr::Name(name)], Expr::Attribute(from))
+          if matches!(&*from.value, Expr::Name(module) if module.id.as_str() == MODULE) =>
+        {
+          Some(name.id.as_str())
+        }
+        _ => None,
+      },
+      _ => None,
+    })
+    .filter(|name| !OWN.contains(name))
+    .collect();
+  let mut found = vec![];
+  topped(word_of(body), &mut found);
+  found
+    .into_iter()
+    .filter(|(_, name, import)| {
+      names.contains(name) && !(*import && imports.iter().any(|one| one == name))
+    })
+    .map(|(at, name, _)| Finding {
+      line: sheet.line(at),
+      column: sheet.column(at),
+      rule: Rule::Engine,
+      why: format!(
+        "`{name}` is a name of the engine, which each later word reads: give the value a name of its own"
+      ),
+    })
+    .collect()
+}
+
+/// Each name that a statement at the top of a body binds or deletes, by where it starts, and
+/// whether an import binds it, into the bodies of an if, a for, a while, a with, a try and a match,
+/// since python binds each name of those bodies in the module too. A def and a class bind their
+/// names apart, and nothing inside them stands at the top.
+fn topped<'a>(body: &'a [Stmt], found: &mut Vec<(usize, &'a str, bool)>) {
+  for stmt in body {
+    let names = match stmt {
+      Stmt::FunctionDef(_) | Stmt::ClassDef(_) => vec![],
+      Stmt::AugAssign(one) => named(&one.target),
+      Stmt::For(one) => named(&one.target),
+      Stmt::With(one) => {
+        one.items.iter().filter_map(|item| item.optional_vars.as_deref()).flat_map(named).collect()
+      }
+      Stmt::Delete(one) => one.targets.iter().flat_map(named).collect(),
+      _ => binds(stmt),
+    };
+    let plain: Vec<bool> = match stmt {
+      Stmt::Import(one) => one.names.iter().map(|alias| alias.asname.is_none()).collect(),
+      Stmt::ImportFrom(one) => one.names.iter().map(|alias| alias.asname.is_none()).collect(),
+      _ => vec![],
+    };
+    found.extend(
+      names
+        .into_iter()
+        .enumerate()
+        .map(|(at, name)| (stmt.start().to_usize(), name, plain.get(at).copied().unwrap_or(false))),
+    );
+    match stmt {
+      Stmt::If(one) => {
+        topped(&one.body, found);
+        for clause in &one.elif_else_clauses {
+          topped(&clause.body, found);
+        }
+      }
+      Stmt::For(one) => {
+        topped(&one.body, found);
+        topped(&one.orelse, found);
+      }
+      Stmt::While(one) => {
+        topped(&one.body, found);
+        topped(&one.orelse, found);
+      }
+      Stmt::With(one) => topped(&one.body, found),
+      Stmt::Try(one) => {
+        topped(&one.body, found);
+        for handler in &one.handlers {
+          let ExceptHandler::ExceptHandler(caught) = handler;
+          found.extend(
+            caught.name.iter().map(|name| (caught.start().to_usize(), name.as_str(), false)),
+          );
+          topped(&caught.body, found);
+        }
+        topped(&one.orelse, found);
+        topped(&one.finalbody, found);
+      }
+      Stmt::Match(one) => {
+        for case in &one.cases {
+          topped(&case.body, found);
+        }
+      }
+      _ => {}
+    }
+  }
+}
+
+/// The names that an engine imports, which a word may import too under the same name, since each
+/// is no name of the contract. The imports of an engine stand at its head, before its first other
+/// statement, and one may hold more than one line.
+fn imported(engine: &str) -> Vec<String> {
+  let head: String = engine
+    .split_inclusive('\n')
+    .take_while(|line| {
+      line.trim().is_empty()
+        || ["import ", "from ", " ", ")"].iter().any(|start| line.starts_with(start))
+    })
+    .collect();
+  let Ok(parsed) = parse_module(&head) else { return vec![] };
+  parsed.syntax().body.iter().flat_map(binds).map(str::to_owned).collect()
 }
 
 /// The names that a body binds at any depth, each by where it starts: each target of a statement or

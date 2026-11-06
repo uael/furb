@@ -173,6 +173,10 @@ export const settings = part({
             this.scrollAfterLayout({ card: id });
           },
         })),
+      // Each fold of the feed opens in place, as a click on its row does.
+      ...[...this.foldRows]
+        .filter(([, one]) => !one.node.isDestroyed)
+        .map(([key, one]) => ({ label: one.label, detail: "Expand", run: () => this.openFold(key) })),
     ]);
   },
 

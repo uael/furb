@@ -36,7 +36,7 @@ pub mod transport;
 pub mod view;
 mod views;
 
-pub use daemon::{GRACE, Settings, Tailnet, run, upgrade};
+pub use daemon::{END, GRACE, Settings, Tailnet, run, upgrade};
 pub use error::{AccessError, DaemonError, LifeError, ProtocolError, TransportError};
 pub use event::{Event, Seq};
 pub use life::{Command, Life, LifeHandle, Reply};

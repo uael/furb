@@ -14,6 +14,7 @@ def name_of(text: str) -> str:
 
 def name_session(on: str = "") -> Act:
   """The name of the session: an act on the root that waits for the first prompt that the operator makes in the life, and that is done with a name of the session that its message gives.
+  A prompt that the operator made before the act started counts as the first prompt of the operator.
   The life word of the extension is name_session(), and the extension plays on the root alone, so a life names its session once.
   It asks the name of the actor that automatic() gives, with a prompt of str on a new chain of its own labelled naming, which reads NAME_BRIEF and then the message.
   With no such actor, or when that prompt gives no name, the name is name_of the message.

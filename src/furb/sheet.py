@@ -31,7 +31,9 @@ word may await at its top level. ty gives every module names that a chain in the
 so the body declares each of them and never binds it: ty refuses a word that reads it, as the sandbox does, on
 every engine. The module of a chain holds every name of the engine, an import of the engine among them, so the
 body binds each of them next, with the type the engine gives it. Each is a plain binding, as it is in the module
-of a chain, so a word may read a name of the engine and bind it again to any value, as the contract lets it. The
+of a chain, so a word may read a name of the engine, and a def or a class of one overrides it. The gate refuses
+any other binding of one at the top of a word, as peek = await bash('ls'), since each later word reads that name.
+It lets a word bind actor, raised and accepts, as the chain's own. The
 two names a chain binds of its own come next, with the types the contract gives them. The names of the acts of the
 chain come next, as ACTS, which the gate reads: the transcript binds the name of each act and each name of a value
 that a tell of it binds, as bash12_stdout, so a word that binds one says what no act gave, and the gate refuses it.

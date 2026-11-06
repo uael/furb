@@ -853,31 +853,29 @@ test("a tick writes only the time of a line that runs, and the text of its progr
 test("a name inside a transcript tag opens the same live inspector as Python code", () =>
   composing(
     async ({ session, app, screen, frame }) => {
-      await session.engine.result(
-        await session.engine.rung({ word: "answer = 17", on: session.engine.root }),
-      );
+      await session.engine.result(await session.engine.rung({ word: "total = 17", on: session.engine.root }));
       await session.refresh();
       session.show("transcript");
       await frame();
       // The transcript opens at its top, where the doctrine of the actor of the chain stands.
       app.scroll.scrollTo(app.scroll.scrollHeight);
       const lines = (await frame()).split("\n");
-      const row = lines.findIndex((line) => line.includes("answer = 17"));
+      const row = lines.findIndex((line) => line.includes("total = 17"));
       expect(row).toBeGreaterThanOrEqual(0);
-      const column = lines[row]?.indexOf("answer") ?? -1;
+      const column = lines[row]?.indexOf("total") ?? -1;
       await screen.mockMouse.click(column + 1, row, 0, { modifiers: { ctrl: true } });
-      await until(screen.renderer, () => screen.captureCharFrame().includes("answer: int"), "frame");
+      await until(screen.renderer, () => screen.captureCharFrame().includes("total: int"), "frame");
       expect(screen.captureCharFrame()).toContain("17");
     },
     { width: 120, height: 44, useMouse: true },
   ));
 
-test("a quote in a turn of the transcript takes the colors of a string region", () =>
+test("a quote in a turn of the transcript draws as the binding that it makes, its text drawn as text", () =>
   composing(
     async ({ session, app, screen, frame }) => {
       await session.engine.result(
         await session.engine.rung({
-          word: "<s:note>\nquoted body\n</s:note>\nanswer = 17",
+          word: "<s:note>\nquoted body\n</s:note>\ntotal = 17",
           on: session.engine.root,
         }),
       );
@@ -890,35 +888,27 @@ test("a quote in a turn of the transcript takes the colors of a string region", 
           app.scroll.scrollTo(app.scroll.scrollHeight);
           screen.renderer.requestRender();
           const shown = screen.captureCharFrame();
-          return /^\s*<s:\w+>/m.test(shown) && shown.includes("quoted body");
+          return /note =\s*$/m.test(shown) && shown.includes("quoted body");
         },
         "frame",
       );
       const lines = screen.captureCharFrame().split("\n");
-      // The first quote of the turn has tags that are keywords, and its body, the quoted body among it, is a string.
-      const open = lines.findIndex((line) => /^\s*<s:\w+>/.test(line));
+      expect(lines.some((line) => line.includes("<s:note>") || line.includes("</s:note>"))).toBe(false);
+      // The binding stands on a line of its own, and the text of the quote under it, in the color of text.
+      const binding = lines.findIndex((line) => /note =\s*$/.test(line));
       const body = lines.findIndex((line) => line.includes("quoted body"));
-      expect(open).toBeGreaterThanOrEqual(0);
-      expect(body).toBeGreaterThan(open);
+      expect(body).toBe(binding + 1);
+      expect(lines[body]?.indexOf("quoted")).toBeGreaterThan(lines[binding]?.indexOf("note") ?? 0);
       const palette = palettes.ink;
-      const column = lines[open]?.indexOf("<s:") ?? -1;
       const at = lines[body]?.indexOf("quoted") ?? -1;
-      const colored = () => {
-        const spans = screen.captureSpans();
-        return (
-          cellAt(spans, column, open).fg?.equals(RGBA.fromHex(palette.syntaxKeyword)) === true &&
-          cellAt(spans, at, body).fg?.equals(RGBA.fromHex(palette.syntaxString)) === true
-        );
-      };
       await until(
         screen.renderer,
         () => {
           screen.renderer.requestRender();
-          return colored();
+          return cellAt(screen.captureSpans(), at, body).fg?.equals(RGBA.fromHex(palette.text)) === true;
         },
         "frame",
       );
-      expect(colored()).toBe(true);
     },
     { width: 120, height: 44 },
   ));

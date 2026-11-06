@@ -30,6 +30,6 @@ async def test_the_words_of_the_extensions_that_play_on_the_chain_count_each_und
   got = await engine.rung("close(bound_by())", on=root)
   assert isinstance(got, dict)
   assert played and got["extend"] == played[-1] and "read" not in got
-  await engine.rung("read = 1", on=root)
+  await engine.rung("def read(path: str) -> str:\n  return path", on=root)
   again = await engine.rung("close(bound_by())", on=root)
   assert isinstance(again, dict) and "read" in again

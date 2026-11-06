@@ -117,15 +117,15 @@ pub(super) fn each(path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), Stor
   read(path, take).map(drop)
 }
 
-/// The entries of the file of lines at a path whose fact is of one of some kinds, as [`kept`] reads them: a line whose
-/// head names another kind is not parsed, and a line that does not parse is passed over.
-pub(super) fn heads(path: &Path, kinds: &[&str]) -> Result<Vec<Object>, StoreError> {
+/// The entries of the file of lines at a path whose line starts with one of some heads, as
+/// [`kept`] reads them: a line with another head is not parsed, and a line that does not parse
+/// is passed over.
+pub(super) fn heads(path: &Path, starts: &[String]) -> Result<Vec<Object>, StoreError> {
   let data = match std::fs::read(path) {
     Ok(data) => data,
     Err(no) if no.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
     Err(no) => return Err(StoreError::io(path)(no)),
   };
-  let starts: Vec<String> = kinds.iter().map(|kind| format!("[[\"{kind}\",")).collect();
   let mut entries = Vec::new();
   let mut start = 0;
   while start < data.len() {
