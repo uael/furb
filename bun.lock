@@ -18,13 +18,13 @@
     },
     "bind/typescript": {
       "name": "@uael/furb",
-      "version": "0.4.2",
+      "version": "0.5.0",
       "optionalDependencies": {
-        "@uael/furb-darwin-arm64": "0.4.2",
-        "@uael/furb-darwin-x64": "0.4.2",
-        "@uael/furb-linux-arm64-gnu": "0.4.2",
-        "@uael/furb-linux-x64-gnu": "0.4.2",
-        "@uael/furb-win32-x64-msvc": "0.4.2",
+        "@uael/furb-darwin-arm64": "0.5.0",
+        "@uael/furb-darwin-x64": "0.5.0",
+        "@uael/furb-linux-arm64-gnu": "0.5.0",
+        "@uael/furb-linux-x64-gnu": "0.5.0",
+        "@uael/furb-win32-x64-msvc": "0.5.0",
       },
     },
     "docs/examples": {
@@ -377,8 +377,6 @@
     "picomatch": ["picomatch@4.0.7", "", {}, "sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA=="],
 
     "prettier": ["prettier@3.9.10", "", { "bin": { "prettier": "bin/prettier.cjs" } }, "sha512-skGHTH1Yb9QvaTC4hWnRTzEYtCpApF0UMBPz+t/0ZPzP8ihefo/btKd+QA7pUE0fEwA1SbS/NmhyEcstdXOIdA=="],
-
-    "react": ["react@19.3.1", "", {}, "sha512-QNhWdt7nrgVWWQG58QuGsAR3jv3Hbe4mb4vz7w2csnHavciZJgda1CPNaldF6eVxv90ud3jUXpKlHL69gO38yw=="],
 
     "safer-buffer": ["safer-buffer@2.1.2", "", {}, "sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg=="],
 
