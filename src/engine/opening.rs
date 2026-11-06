@@ -85,7 +85,7 @@ def __parking(ear):
   except StopIteration:
     return
 
-__fresh = {"kernel": lambda: __kernel["kernel"](__engine), "gate": lambda: __sheet["gating"](__engine, __gate, __gated)}
+__fresh = {"kernel": lambda: __kernel["kernel"](__engine), "gate": lambda: __sheet["gating"](__engine, __gate, __gating)}
 
 def __lasting(name, ear):
   told = False
@@ -132,7 +132,7 @@ def __lasting(name, ear):
   "parking": __parking,
   "park": lambda names: __parked.update(names),
   "unpark": lambda name: __parked.discard(name),
-  "against": lambda on, word: __sheet["against"](__engine, __gate, on, word) if __gated() else [],
+  "against": lambda on, word: __sheet["against"](__engine, __gate, on, word) if __gating() else [],
   "lasting": __lasting,
   "unmade": lambda: __sheet["Recorded"](),
   "recorded": lambda entries: __sheet["recorded"](__engine, entries),

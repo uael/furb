@@ -66,7 +66,7 @@ const GATE: &str = "gate";
 /// The function of the host that says whether the gate reads each word, as the key `gate` of the
 /// configs says it when the life opens: when it says no, the ear of the gate answers each word with
 /// no finding.
-const GATED: &str = "gated";
+const GATING: &str = "gating";
 /// The function of the host that starts an ear of the host again after it raised, by its name.
 const AGAIN: &str = "again";
 /// The function of the host by which the Kernel bounds the turn while a word of a rung steps, and
@@ -160,9 +160,9 @@ struct Outside {
   given: u128,
   /// The text of the engine that the sandbox runs, on which the gate reads each word.
   source: String,
-  /// Whether a config turned the gate off for this life, which the record does not keep: each
-  /// life reads it again.
-  ungated: bool,
+  /// Whether the gate reads each word of this life, as the configs say it when the life opens,
+  /// which the record does not keep: each life reads it again.
+  gating: bool,
   /// The jobs whose word the Kernel steps, the innermost last: a run, or the part of a writing.
   stepping: Vec<String>,
 }
@@ -179,9 +179,9 @@ impl Host for Outside {
     let got = match on {
       // A gate that cannot read a word raises where the gate was called, so the ear of the gate answers that word.
       None if name == GATE => {
-        return gated(&self.source, args.first()).map_or_else(Answer::Fault, Answer::Value);
+        return found(&self.source, args.first()).map_or_else(Answer::Fault, Answer::Value);
       }
-      None if name == GATED => Ok(Object::bool(!self.ungated)),
+      None if name == GATING => Ok(Object::bool(self.gating)),
       None if name == AGAIN => Ok(Object::bool(self.reborn(args.first()))),
       None if name == TURN => {
         let bounded = args.first().is_some_and(|one| one.as_ref().as_bool().unwrap_or(false));
@@ -207,14 +207,14 @@ fn inputs(source: &str, kernel: &str) -> NamedValues {
   inputs.push("__sheet_source", Object::string(SHEET));
   inputs.push("__kernel_source", Object::string(kernel));
   inputs.push("__gate", Object::function(GATE, None));
-  inputs.push("__gated", Object::function(GATED, None));
+  inputs.push("__gating", Object::function(GATING, None));
   inputs.push("__again", Object::function(AGAIN, None));
   inputs.push("__turn", Object::function(TURN, None));
   inputs
 }
 
 /// What the gate found in a sheet, each finding by its line.
-fn gated(engine: &str, sheet: Option<&Object>) -> Result<Object, Fault> {
+fn found(engine: &str, sheet: Option<&Object>) -> Result<Object, Fault> {
   let sheet = sheet.and_then(|one| one.as_ref().as_str().map(str::to_owned)).unwrap_or_default();
   let found = checked_on(engine, &sheet)?;
   Ok(Object::list(found.into_iter().map(|one| {
@@ -241,7 +241,7 @@ impl Outside {
       opened,
       given: 0,
       source: String::new(),
-      ungated: false,
+      gating: true,
       stepping: Vec::new(),
     })
   }
@@ -433,6 +433,25 @@ impl Outside {
   }
 }
 
+/// The state of a record while no life holds it, as [`Engine::kept`] gives it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kept {
+  /// It holds work that the open of the next life on it resumes at once.
+  Runs,
+  /// It holds no such work.
+  Saved,
+}
+
+impl Kept {
+  /// The name of the state, as a list of records shows it.
+  pub fn name(self) -> &'static str {
+    match self {
+      Kept::Runs => "runs",
+      Kept::Saved => "saved",
+    }
+  }
+}
+
 /// One life of the engine, as a host holds it.
 ///
 /// One host holds one engine and says one thing at a time, as an operator does: its methods are the verbs of the
@@ -577,7 +596,7 @@ impl Engine {
     sand.bound(false);
     let opened = sand.run(OPENING, inputs(&source, &kernel), &mut Nobody("the opening"))?;
     let mut outside = Outside::new(given, &opened)?;
-    outside.ungated = !gated;
+    outside.gating = gated;
     outside.source = source;
     let Opened { kernel, gate, lasting, parking, park, .. } = outside.opened.clone();
     let record = seeded(&mut sand, &mut outside, record)?;
@@ -756,11 +775,16 @@ impl Engine {
     Ok(pending)
   }
 
-  /// The state of the record as a list of records shows it while no life holds it: `runs` when
-  /// it holds the work of [`Engine::pending`], which the open of the next life on it resumes at
-  /// once, so that work runs and no pause holds it, and `saved` when it holds none.
+  /// The state of the record as a list of records shows it while no life holds it: [`Kept::Runs`]
+  /// when it holds the work of [`Engine::pending`], which the open of the next life on it resumes at
+  /// once, so that work runs and no pause holds it, and [`Kept::Saved`] when it holds none.
+  pub fn kept(&mut self) -> Result<Kept, Fault> {
+    Ok(if self.pending()?.is_empty() { Kept::Saved } else { Kept::Runs })
+  }
+
+  /// The name of [`Engine::kept`], as a door gives it: `runs` or `saved`.
   pub fn saved(&mut self) -> Result<&'static str, Fault> {
-    Ok(if self.pending()?.is_empty() { "saved" } else { "runs" })
+    self.kept().map(Kept::name)
   }
 
   /// The work that an earlier life left, put to the outside again with no wake from a host: a
