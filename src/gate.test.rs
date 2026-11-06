@@ -211,6 +211,38 @@ fn a_name_that_the_transcript_binds_is_a_finding_of_the_line_that_binds_it() {
 }
 
 #[test]
+fn a_word_that_binds_a_name_of_the_engine_at_its_top_is_a_finding_and_a_def_of_one_overrides_it() {
+  let word = "wait = 5\nfor chance in []:\n  pass\nimport json as cd\ndel turns\ndef read(path: str) -> str:\n  return path\ndef f(grep: int) -> int:\n  return grep\nactor = 'm/low'\naccepts = None\nraised = None\nk = [over for over in ()]\nimport re, json as wait_\nfrom json import loads as re\nCancelledError = 5\ntry:\n  scope = 1\nexcept Refused as span:\n  pass\nclose(1)";
+  let (text, above) = acted(&[], &[], word);
+  let got: Vec<_> = found(&text)
+    .into_iter()
+    .filter(|(line, why)| *line > above && why.starts_with("error[engine-name]"))
+    .map(|(line, why)| (line - above, why))
+    .collect();
+  let bound = |line: usize, name: &str| {
+    (
+      line,
+      format!(
+        "error[engine-name] (column 3) `{name}` is a name of the engine, which each later word reads: give the value a name of its own"
+      ),
+    )
+  };
+  assert_eq!(
+    got,
+    vec![
+      bound(1, "wait"),
+      bound(2, "chance"),
+      bound(4, "cd"),
+      bound(5, "turns"),
+      bound(15, "re"),
+      bound(16, "CancelledError"),
+      (18, bound(18, "scope").1.replace("column 3", "column 5")),
+      bound(19, "span"),
+    ]
+  );
+}
+
+#[test]
 fn a_value_of_another_type_for_a_name_that_a_rung_declares_names_that_rung() {
   let program = ["def pr() -> int:\n  return 1", "import json\nmerged: set[int] = set()\nk = 1"];
   let word = "pr = 'a'\nfor merged in [[1]]:\n  pass\nk = 'b'\ndef f() -> int:\n  json = 1\n  return json\nclose(pr)";

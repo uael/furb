@@ -52,20 +52,21 @@ def test_a_finding_arrives_in_the_numbering_of_the_word_itself() -> None:
 
 
 def test_the_gate_reads_the_names_of_the_engine_as_a_chain_binds_them() -> None:
-  """A name of the engine is a binding of the chain, so a word may read it, subclass it and rebind it."""
+  """A name of the engine is a binding of the chain, so a word may read it, subclass it and override it with a def."""
   assert said("got = span(1, 2)\nx: list[int] = got(['a', 'b'])") == []
   assert said("x: str = span(1, 2)(['a'])")[0].startswith("line 1: error[invalid-assignment]")
-  assert said("old = HEAD\nHEAD = old\nx = TIMEOUT + 1") == []
+  assert said("old = HEAD\nx = TIMEOUT + 1") == []
+  assert said("old = HEAD\nHEAD = old")[0].startswith("line 2: error[engine-name]")
   assert said("class Mine(Act): ...\nx: int = 1") == []
   assert said('x = 3\ndebug(t"{x}")') == []
 
 
-def test_a_word_binds_a_name_of_the_engine_again_to_any_value() -> None:
-  """A name of the engine is a plain binding of the chain, so a word may bind it again to a value of any type, after
-  it read the name or before."""
-  assert said("read = 1\nclose(read)") == []
-  assert said("x = read('a')\nread = 1\nclose(x)") == []
-  assert said("def mine(path: str) -> str:\n  return path\nread = mine\nclose(read('a'))") == []
+def test_a_word_that_binds_a_name_of_the_engine_at_its_top_is_refused_and_a_def_overrides_it() -> None:
+  """A name of the engine is a binding of the chain that a word reads and a def overrides, but a word that binds it
+  at its top is refused, since each later word reads it."""
+  assert said("read = 1\nclose(read)")[0].startswith("line 1: error[engine-name]")
+  assert said("x = read('a')\nread = 1\nclose(x)")[0].startswith("line 2: error[engine-name]")
+  assert said("def read(path: str) -> str:\n  return path\nclose(read('a'))") == []
 
 
 @pytest.mark.parametrize("which", [furb.python, furb_monty.engine], ids=["python", "monty"])
@@ -76,12 +77,11 @@ async def test_a_word_reads_a_name_of_the_engine_as_the_program_bound_it_last(wh
   swapped(which)
   try:
     root = engine.boot((), world=worlds(STANDS), **kernel())
-    assert await engine.rung("read = 1", on=root) is None
-    with pytest.raises(TypeError, match="not callable"):
-      await engine.rung("f: Any = read\nclose(f('a'))", on=root)
-    assert engine.gate("close(read('a'))", on=root)[0].startswith("line 1: error[call-non-callable]")
+    assert await engine.rung("def read(path: str) -> int:\n  return len(path)", on=root) is None
+    assert await engine.rung("close(read('ab'))", on=root) == 2
+    assert engine.gate("x: str = read('a')\nclose(x)", on=root)[0].startswith("line 1: error[invalid-assignment]")
     with pytest.raises(Refused):
-      await engine.rung("close(read('a'))", on=root)
+      await engine.rung("x: str = read('a')\nclose(x)", on=root)
   finally:
     swapped(furb.python)
 

@@ -8,7 +8,7 @@ use monty_types::{TypeCheckingConfig, TypeCheckingFormat};
 
 use super::{
   MODULE, Parsed,
-  findings::{Finding, declared, read, signed, told, unawaited, unrun, unscheduled},
+  findings::{Finding, contracted, declared, read, signed, told, unawaited, unrun, unscheduled},
   layout::{laid, program_lines, rebound, shortened},
   shallow::shallowed,
 };
@@ -64,23 +64,24 @@ pub fn checked_on(engine: &str, sheet: &str) -> Result<Vec<Finding>, Fault> {
     let parsed = Parsed::new(&sheet);
     let (text, stands) = rebound(&parsed);
     let found = declared(&parsed, typed(engine, &[], &text, &stands)?, None);
-    return Ok(signed(gated(&parsed, found), &[&sheet], engine));
+    return Ok(signed(gated(&parsed, found, engine), &[&sheet], engine));
   };
   let parsed = Parsed::new(&short);
   let found =
     declared(&parsed, typed(engine, &laid.modules, &laid.main, &laid.lines)?, Some(&laid.declares));
   let mut sources: Vec<&str> = vec![&laid.main];
   sources.extend(laid.modules.iter().rev().map(|(_, module)| &**module));
-  Ok(signed(gated(&parsed, found), &sources, engine))
+  Ok(signed(gated(&parsed, found, engine), &sources, engine))
 }
 
 /// What the checker found with each finding of a rule that the gate checks itself, in the order of
 /// their lines.
-fn gated(sheet: &Parsed<'_>, mut found: Vec<Finding>) -> Vec<Finding> {
+fn gated(sheet: &Parsed<'_>, mut found: Vec<Finding>, engine: &str) -> Vec<Finding> {
   found.extend(unrun(sheet));
   found.extend(unawaited(sheet));
   found.extend(unscheduled(sheet));
   found.extend(told(sheet));
+  found.extend(contracted(sheet, engine));
   found.sort_by_key(|one| one.line);
   found
 }
