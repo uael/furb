@@ -1048,6 +1048,7 @@ mod daemon {
       tailnet: None,
       door: None,
       host: None,
+      end: END,
     };
     let served = local.clone();
     tokio::spawn(async move { run(&served, listener, settings).await });
