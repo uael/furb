@@ -134,6 +134,9 @@ test("a name that an older release kept beside the record shows in the list and 
     if (!session) throw new Error("The record did not open.");
     await until(library, () => session.sessionName === "pf-1193");
     await library.dispose();
+    // The carry of the name into the record may still run when the window lets go, and the record stands still only
+    // once its life ended in the daemon, so the read of either home waits for that end.
+    await ended(record);
     // The name stays in its old home, or the life that could write the record moved it there.
     expect(held().sessionName ?? recordName(record)).toBe("pf-1193");
   }));
