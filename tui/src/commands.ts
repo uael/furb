@@ -10,6 +10,11 @@ export const commands = {
     "<add|remove> <name> [URL model window key_env protocol]",
     "Save a provider in the project settings and use it now",
   ],
+  config: [
+    "Settings",
+    "[key] [value]",
+    "Show each key of the configs and change it, or set a key; a key with no value leaves the config that gives it",
+  ],
   reload: ["Reload settings", "", "Read provider settings again and update the standing of this life"],
   skills: [
     "Reload skills",

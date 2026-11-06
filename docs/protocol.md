@@ -134,7 +134,11 @@ it is not given. The daemon answers requests in any order.
 
 - `config` reads and changes the configs of the folder of a life, which the World writes, so no window writes a disk.
   A get gives `values`, each key with the value that wins for it and its layer, `user`, `project` or `local`. A key has
-  one or two names, as `["providers", "codex"]`. A set writes the key in its layer, `project` when none is named, or
+  one or two names, as `["providers", "codex"]`. A key that a schema names comes with its `property`, as
+  [`config.md`](config.md#the-schema) says, and with the `extension` that adds it, when one does; such a key that no
+  layer gives comes with its default and no layer, and an object of furb, as `providers`, comes with the object of
+  the values that win and no layer, then with a value for each of its names. A set refuses a value that the property
+  of its key does not take, and writes nothing. A set writes the key in its layer, `project` when none is named, or
   takes it out when no value is given, and then the life stands, so the answer is the act of the stand. A change that
   the catalog cannot read puts its config back as it was, and the life does not stand. A reload is a stand on the
   configs as the disk holds them, which asks again each model that waits to retry.
