@@ -43,7 +43,7 @@ Eight extensions come with furb, and each life runs them unless a config turns t
   for it or the default of its `furb-config`, and `read("config://")` each key of the configs, as
   [the schema](config.md#the-schema) says. A write of
   `skills://<name>` writes the word in `.furb/extensions/<name>` of the project, after a copy of the folder there
-  when it stands elsewhere, and reloads the skill when the life runs it. Its life word, `await listed()`, reads
+  when it stands elsewhere, and reloads the skill when the life runs it. A word that binds a name of the engine at its top is refused, and the write changes no file. Its life word, `await listed()`, reads
   `skills://`
   in the setup of the root, which every new chain holds. The TUI
   lists each skill after `/`, and its command reads the skill for the chain. `/skills`, or `/reload-skills`, reads the
