@@ -1,5 +1,6 @@
 # ruff: noqa: S603, S607
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -141,26 +142,57 @@ def test_a_build_inside_a_slot_takes_no_second_slot(tmp_path: Path) -> None:
 def test_no_build_sticks_when_holders_die_by_kill_9_and_the_system_gives_their_pids_to_other_processes(
   tmp_path: Path,
 ) -> None:
-  slots = tmp_path / "slots"
+  slots, log, release = tmp_path / "slots", tmp_path / "log", tmp_path / "release"
+  # Each command logs its own pid and that of its script, and holds until the test releases it.
+  body = f'echo "in $$ $PPID" >> {log}; while [ ! -e {release} ]; do sleep 0.02; done; echo out >> {log}'
   others = [subprocess.Popen(["sleep", "300"]) for _ in range(4)]
-  release = tmp_path / "release"
-  wait = f"while [ ! -e {release} ]; do sleep 0.02; done"
-  holders = [start(tmp_path, "sh", "-c", wait, FURB_BUILD_SLOTS="4", FURB_BUILD_WAIT="120") for _ in range(12)]
+  errs = [tmp_path / f"err{n}" for n in range(12)]
+  files = [e.open("w", encoding="utf-8") for e in errs]
+  holders = [start(tmp_path, "sh", "-c", body, err=f, FURB_BUILD_SLOTS="4", FURB_BUILD_WAIT="120") for f in files]
   try:
-    while len(list(slots.glob("slot*/pid"))) < 4:
+    deadline = time.monotonic() + 30
+    while (entered(log) < 4 or waiting(errs) < 8) and time.monotonic() < deadline:
       time.sleep(0.02)
-    held = {int((s / "pid").read_text(encoding="utf-8")): s for s in slots.glob("slot*") if (s / "pid").exists()}
+    assert entered(log) == 4 and waiting(errs) == 8
+    # The waiters look at the slots under this guard, so none reclaims a slot between the kill and the new pid.
+    guard = slots / "guard"
+    while True:
+      try:
+        guard.mkdir()
+        break
+      except FileExistsError:
+        time.sleep(0.005)
+    held = {int((s / "pid").read_text(encoding="utf-8")): s for s in slots.glob("slot*")}
     dead = [p for p in holders if p.pid in held]
+    assert len(dead) == 4
+    for line in log.read_text(encoding="utf-8").splitlines():
+      os.kill(int(line.split()[1]), signal.SIGKILL)
     for p in dead:
       p.kill()
       p.wait()
     for p, other in zip(dead, others, strict=True):
       (held[p.pid] / "pid").write_text(f"{other.pid}\n", encoding="utf-8")
-    release.touch()
-    assert [p.wait() for p in holders if p not in dead] == [0] * 8
-    left = {(s / "pid").read_text(encoding="utf-8").strip() for s in slots.iterdir()}
-    assert left <= {str(other.pid) for other in others}
+    guard.rmdir()
+    while entered(log) < 8 and time.monotonic() < deadline + 30:
+      time.sleep(0.02)
+    assert entered(log) == 8
   finally:
-    for p in [*holders, *others]:
-      p.kill()
-      p.communicate()
+    release.touch()
+    for f in files:
+      f.close()
+  survivors = [p for p in holders if p not in dead]
+  for p in survivors:
+    p.communicate(timeout=60)
+  assert [p.returncode for p in survivors] == [0] * 8
+  # The four commands of the dead holders ended at the kill, before the log holds any later line.
+  lines = [line.split()[0] for line in log.read_text(encoding="utf-8").splitlines()]
+  assert lines.count("in") == 12 and lines.count("out") == 8
+  live = peak = 0
+  for line in lines[4:]:
+    live += 1 if line == "in" else -1
+    peak = max(peak, live)
+  assert peak == 4
+  assert list(slots.iterdir()) == []
+  for p in [*dead, *others]:
+    p.kill()
+    p.communicate()
