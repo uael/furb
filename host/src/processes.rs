@@ -250,7 +250,7 @@ impl Group {
       unsafe { libc::killpg(pid, libc::SIGKILL) };
     }
     #[cfg(not(unix))]
-    let _ = pid;
+    let _: Option<u32> = pid;
   }
 }
 
