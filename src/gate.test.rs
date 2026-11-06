@@ -315,6 +315,35 @@ fn a_global_of_a_def_or_a_class_binds_a_name_of_the_engine_in_the_module() {
   );
 }
 
+#[test]
+fn a_walrus_in_a_default_an_annotation_or_a_decorator_of_a_def_binds_a_name_of_the_engine() {
+  let word = "def f(a=(wait := 1), b: (chance := 2) = 0) -> (cd := 3):\n  (turns := 4)\n@(span := 5)\ndef g():\n  pass\nclose(1)";
+  assert_eq!(
+    engine_names(word),
+    vec![
+      (1, 12, "wait".to_owned()),
+      (1, 28, "chance".to_owned()),
+      (1, 50, "cd".to_owned()),
+      (3, 5, "span".to_owned()),
+    ]
+  );
+}
+
+#[test]
+fn a_walrus_in_a_base_a_keyword_or_a_decorator_of_a_class_binds_a_name_of_the_engine() {
+  let word = "@(turns := 0)\nclass C((span := 5), k=(wait := 6)):\n  (cd := 7)\nclose(1)";
+  assert_eq!(
+    engine_names(word),
+    vec![(1, 5, "turns".to_owned()), (2, 12, "span".to_owned()), (2, 27, "wait".to_owned())]
+  );
+}
+
+#[test]
+fn a_walrus_in_the_body_of_a_def_or_a_class_or_in_a_lambda_of_a_default_binds_nothing() {
+  let word = "def f(a=lambda: (wait := 1)):\n  (chance := 2)\nclass C:\n  (cd := 3)\nclose(1)";
+  assert_eq!(engine_names(word), vec![]);
+}
+
 /// The line and the column of the word and the name of each finding of the engine-name rule.
 fn engine_names(word: &str) -> Vec<(usize, usize, String)> {
   let (text, above) = acted(&[], &[], word);
