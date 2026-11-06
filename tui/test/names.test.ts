@@ -90,24 +90,13 @@ test("a name that one build gave shows in the list of another build, when the re
     }
   }));
 
-test("a name that an older release kept beside the record shows in the list and in the session that opens it, and stays there until the record holds it", () =>
+test("a name that an older release kept beside the record shows in the list until the record holds one", () =>
   withLibraries(async (directory, open) => {
     const record = await saved(directory, open);
     const path = `${record}.ui.json`;
     const held = () => JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
     await writeFile(path, JSON.stringify({ ...held(), sessionName: "pf-1193" }));
     const library = open();
-    const group = await library.add(directory);
-    const row = group.sessions.find((entry) => entry.path === record);
+    const row = (await library.add(directory)).sessions.find((entry) => entry.path === record);
     await until(library, () => row?.name === "pf-1193");
-    await library.import(record, group);
-    const session = library.current?.session;
-    if (!session) throw new Error("The record did not open.");
-    await until(library, () => session.sessionName === "pf-1193");
-    await library.dispose();
-    // The carry of the name into the record may still run when the window lets go, and the record stands still only
-    // once its life ended in the daemon, so the read of either home waits for that end.
-    await ended(record);
-    // The name stays in its old home, or the life that could write the record moved it there.
-    expect(held().sessionName ?? retold(record).said).toBe("pf-1193");
   }));

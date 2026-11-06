@@ -8,7 +8,9 @@ mock.module("../src/records.ts", () => ({
     new Promise((resolve) => {
       expect(replay).toEqual([]);
       scan.give = (said) =>
-        resolve(Object.fromEntries(paths.map((path) => [path, { state: "saved", said, replayed: false }])));
+        resolve(
+          Object.fromEntries(paths.map((path) => [path, { state: "saved", name: said, replayed: false }])),
+        );
     }),
 }));
 

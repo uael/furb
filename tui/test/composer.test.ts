@@ -299,6 +299,23 @@ test("a slash command typed under edit runs as the command it names, and the pro
     true,
   ));
 
+test("a message that the queue shortcut sends comes back to its composer when the enqueue is rejected, and newer text stays", () =>
+  composing(async ({ session, app, screen }) => {
+    session.enqueue = async () => {
+      throw new Error("Not yet: the checks run.");
+    };
+    app.composer.setText("a follow-up");
+    screen.mockInput.pressEnter({ meta: true });
+    expect(app.composer.plainText).toBe("");
+    await Bun.sleep(100);
+    expect(app.composer.plainText).toBe("a follow-up");
+    // Text typed while the enqueue is pending stays, and is not replaced by the message that came back.
+    screen.mockInput.pressEnter({ meta: true });
+    app.composer.setText("newer text");
+    await Bun.sleep(50);
+    expect(app.composer.plainText).toBe("newer text");
+  }));
+
 test("Up and Down walk the history from the edges of the input, and Up on an empty input takes back a queued message", () =>
   composing(
     async ({ session, app, screen }) => {
