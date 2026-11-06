@@ -65,13 +65,15 @@ repos:
         pass_filenames: false
       - id: clippy
         name: clippy
-        entry: cargo clippy --workspace --all-targets -- -D warnings
+        # With the feature of the bindings of TypeScript, so the one run holds the code that the feature adds: the gates
+        # run no other clippy on Linux.
+        entry: cargo clippy --workspace --all-targets --features furb/typescript -- -D warnings
         language: system
         types_or: [rust]
         pass_filenames: false
       - id: cargo-test
         name: cargo test
-        entry: cargo test --workspace
+        entry: cargo test --workspace --features furb/typescript
         language: system
         # The files that the crate and its tests read. The gates run every hook on every file.
         files: ^(src|cli|extensions|tests|docs/examples)/|^(build\.rs|Cargo\.toml|Cargo\.lock|DOCTRINE\.md)$

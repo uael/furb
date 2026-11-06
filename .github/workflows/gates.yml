@@ -223,7 +223,7 @@ jobs:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile
       # The job of the crate runs the clippy and the tests of the crate with this feature on Windows and on macOS, and
-      # the job of the speed of the TUI on Linux.
+      # the hooks on Linux.
       - run: bun run build
       - run: bun run docs
       - run: git diff --exit-code -- bind/typescript/index.d.cts tui/README.md
@@ -238,10 +238,10 @@ jobs:
     # The budget of the speed of the TUI holds on Linux, on a machine that runs no other work while it measures: the
     # first frame of a life of 160000 facts, the frames of the renderer at 60 each second while it scrolls and streams,
     # and the cost of a new fact against that in a life of a tenth of the size, each against a measure of the same
-    # machine, since one runner of ubuntu-latest is half as fast as another. Then the job runs the clippy and the tests
-    # of the crate with the feature of the bindings. It runs beside the bindings on Linux, whose tests take most of
-    # their time, so neither job waits for the other.
-    name: the crate and the speed of the TUI on ubuntu-latest
+    # machine, since one runner of ubuntu-latest is half as fast as another. It runs beside the bindings on Linux,
+    # whose tests take most of their time, so neither job waits for the other. The clippy and the tests of the crate
+    # with the feature of the bindings run in the hooks, and not here a second time.
+    name: the speed of the TUI on ubuntu-latest
     needs: scope
     if: needs.scope.outputs.code == 'true'
     runs-on: ubuntu-latest
@@ -267,8 +267,6 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run build
       - run: bun run bench
-      - run: cargo clippy --all-targets --features typescript -- -D warnings
-      - run: cargo test --features typescript
 
   gates:
     # The one check that reports on each pull request and stands for all the gates, so that a ruleset of main requires
