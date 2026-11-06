@@ -57,8 +57,12 @@ async def test_chains_holds_each_chain_of_the_life_a_chain_at_rest_among_them_ea
 ):
   """chains holds each chain of the life, a chain at rest among them, each with its parent, its label, its source, whether it is paused, its turns but the facts made, what define gives of each word that ran on it, the text that binds each plain value of its module again, the names of the other values, the acts that it cut, each word that ran on it among them, and each life word of the standing whose act was open on it at the tip, as lives."""
   root, _ = await gather()
+  # A verb with no words makes an act that makes an open prompt, as name_session makes the prompt of its chain.
+  await engine.rung("with site.set(act('named', ROOT, None)):\n  named = prompt(str, 'Name?', to=OPERATOR)", on=root)
+  await settle()
   world_says("made", root, "an engine", 9, "1.0", "0.4.2", "its text", "the text of its Kernel")
   [one] = engine.gathered(lambda word: word, {"wait": 9})["chains"]
+  assert one["lives"] == []
   assert (one["id"], one["on"], one["label"], one["source"], one["paused"]) == (root, "", "root", "", False)
   assert WORD in one["definitions"]
   assert one["values"]["k"] == "[1, 'x', {2: (3,)}]"

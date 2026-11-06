@@ -83,6 +83,9 @@ binds a name that the transcript binds."""
 WORDS = "__words"
 """WORDS is the name the sheet binds to the names of the rungs of the program, in the order of their words, which the
 gate reads to name the rung that declares a name that a word binds again."""
+VALUED = "__valued"
+"""VALUED is the name the sheet binds to the shape of the prompt whose step the word answers, when that prompt wants
+a value, which the gate reads to refuse a word that ends with a bare expression, as a value that closes nothing."""
 BOUND = '  actor = ""\n  raised: BaseException | None = None\n'
 """BOUND binds the two names a chain binds of its own."""
 OPENED = "  try:\n    acting()\n"
@@ -342,14 +345,15 @@ def laid(text: str, depth: int) -> str:
 
 
 def sheet(
-  engine: dict[str, object], program: Mapping[str, str], word: str, acts: Sequence[str] = ()
+  engine: dict[str, object], program: Mapping[str, str], word: str, acts: Sequence[str] = (), valued: Sequence[str] = ()
 ) -> tuple[str, int]:
   """The word on its sheet, laid out as this module says, and how many lines stand above the word, which every
   finding is counted back by. The program gives each word under the name of its rung, in its order."""
   unbound = "".join(f"  {name}: object\n" for name in UNBOUND)
   names = "".join(f"  {name} = {MODULE}.{name}\n" for name in engine if not name.startswith("_"))
   words = "".join(OPENED + laid(one, 4) + CAUGHT for one in program.values())
-  above = f"import {MODULE}\nasync def __body():\n{unbound}{names}{BOUND}  {ACTS} = {tuple(acts)!r}\n  {WORDS} = {tuple(program)!r}\n{words or OPENED + CAUGHT}"
+  above = f"import {MODULE}\nasync def __body():\n{unbound}{names}{BOUND}  {ACTS} = {tuple(acts)!r}\n  {WORDS} = {tuple(program)!r}\n"
+  above += f"  {VALUED} = {tuple(valued)!r}\n{words or OPENED + CAUGHT}"
   return above + laid(word, 2), above.count("\n")
 
 
@@ -363,17 +367,21 @@ def shifted(why: str) -> str:
 
 
 def gate(
-  engine: dict[str, object], program: Mapping[str, str], word: str, checked: Checked, acts: Sequence[str] = ()
+  engine: dict[str, object],
+  program: Mapping[str, str],
+  word: str,
+  checked: Checked,
+  asked: tuple[Sequence[str], Sequence[str]] = ((), ()),
 ) -> list[str]:
   """What the gate finds against a word: the word is read for what the interpreter will take, and then ty reads it
   on its sheet after the program of its chain, and each finding below the word is counted back to its line."""
   if found := python(word):
     return found
-  text, above = sheet(engine, program, word, acts)
+  text, above = sheet(engine, program, word, *asked)
   return [quoted(word, n - above, shifted(why)) for n, why in checked(text) if n > above]
 
 
-def against(engine: dict[str, object], checked: Checked, on: str, word: str) -> list[str]:
+def against(engine: dict[str, object], checked: Checked, on: str, word: str, valued: Sequence[str] = ()) -> list[str]:
   """What the gate finds against a word on the sheet of the engine whose names it is given, after the program of its
   chain as it stands now and the parts that the writings of a rung with no run hold, each word under the name of its
   rung, with the names of the acts of the chain. It makes no
@@ -391,7 +399,21 @@ def against(engine: dict[str, object], checked: Checked, on: str, word: str) -> 
       written = {}
     elif x[0] == "writing" and x[1] not in words:
       written[str(x[1])] = written.get(str(x[1]), "") + str(x[3])
-  return gate(engine, {**words, **written}, word, checked, [str(x[1]) for x in facts if question(x)])
+  return gate(engine, {**words, **written}, word, checked, ([str(x[1]) for x in facts if question(x)], valued))
+
+
+def asking(engine: dict[str, object], on: str) -> tuple[str, ...]:
+  """The shape of the prompt whose step the last word that is ready on the chain answers, when that prompt wants a
+  value, which the gate reads to refuse a word that ends with a bare expression; nothing for any other word."""
+  get, prompted, transcript = engine["get"], engine["prompted"], engine["transcript"]
+  assert callable(get)
+  assert callable(prompted)
+  assert callable(transcript)
+  ready = transcript(on, "ready")
+  assert isinstance(ready, list)
+  rung = ready and get(ready[-1][1])
+  made = isinstance(rung, tuple) and prompted(rung[2]) and get(rung[2])
+  return (str(made[4]),) if isinstance(made, tuple) and made[4] != "None" else ()
 
 
 def gating(engine: dict[str, object], checked: Checked, gated: Callable[[], bool] = lambda: True) -> Ear:
@@ -408,7 +430,7 @@ def gating(engine: dict[str, object], checked: Checked, gated: Callable[[], bool
         yield "done", qid, []
       case ("gate", qid, _, on, word):
         name = lone(word)
-        found = against(engine, checked, on, word)
+        found = against(engine, checked, on, word, asking(engine, on))
         yield "done", qid, found or ([quoted(word, 1, LONE.format(name=name))] if name else [])
 
 

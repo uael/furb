@@ -165,6 +165,9 @@ struct Outside {
   gating: bool,
   /// The jobs whose word the Kernel steps, the innermost last: a run, or the part of a writing.
   stepping: Vec<String>,
+  /// The question that the host refused in this step of a word, past the bound of a turn, and its
+  /// maker.
+  past: Option<(String, String)>,
 }
 
 impl Host for Outside {
@@ -192,6 +195,7 @@ impl Host for Outside {
         // Each step of a word starts a stretch of the bound, and a round trip to the host
         // starts none.
         crate::sand::step(bounded && !self.stepping.is_empty());
+        self.past = None;
         Ok(Object::bool(sand.bound(bounded)))
       }
       None => self.called(sand, name, &args),
@@ -246,6 +250,7 @@ impl Outside {
       source: String::new(),
       gating: true,
       stepping: Vec::new(),
+      past: None,
     })
   }
 
@@ -527,6 +532,7 @@ impl Engine {
       Err(cut) => {
         // No act that a watcher waits on comes to anything after the cut, so each watcher goes, unanswered.
         self.watchers.clear();
+        crate::sand::step(false);
         self.outside.cut();
         self.stopped = Some(cut.clone());
         return Err(cut);

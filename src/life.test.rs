@@ -347,6 +347,91 @@ fn a_word_that_polls_the_clock_ends_at_the_bound_of_a_turn_and_two_readings_in_a
   assert!(again.raised().is_none(), "a later life replays the poll and its refusal with no drift");
 }
 
+/// A prompt of the root, in a life that a test opened, and what it came to: an error when the life
+/// stopped before it closed.
+fn asked_of(life: &mut Engine, message: &str) -> Result<Object, crate::value::Fault> {
+  let asked = verbs::Prompt {
+    message: Some(message.to_owned()),
+    on: Some("chain1".to_owned()),
+    ..Default::default()
+  };
+  let prompt = life.prompt(Object::string("object"), asked).unwrap().id().to_owned();
+  executor::block_on(Act::<Object>::of(life, &prompt))
+}
+
+#[test]
+fn a_word_that_loops_on_an_answer_of_the_host_ends_at_the_bound_of_a_turn_with_a_bounded_record() {
+  BOUND.set(Duration::from_secs(2));
+  let at = place("cd-spin");
+  let spin = "while True:\n  cd('.')";
+  let mut life = Opening { extensions: Some(false), ..scripted(&at, &[spin, "close(1)"]) }
+    .boot::<String>([])
+    .unwrap()
+    .0;
+  let started = Instant::now();
+  let got = asked_of(&mut life, "go").unwrap();
+  let took = started.elapsed();
+  assert!(life.stopped().is_none(), "the refusal raises in the word and leaves the life whole");
+  assert_eq!(got.as_ref().as_int(), Some(1), "the prompt asks its model again");
+  let raised = life
+    .word("repr([x[3] for x in transcript('chain1', 'tell') if 'raised' in x[3][0]][:1])", vec![])
+    .unwrap();
+  let raised = raised.as_ref().as_str().unwrap_or_default().to_owned();
+  assert!(raised.contains("past the bound of a turn"), "the loop ends at the bound: {raised}");
+  let cds = life.word("len(transcript('chain1', 'cd'))", vec![]).unwrap();
+  let cds = cds.as_ref().as_int().unwrap_or_default();
+  eprintln!("the loop made {cds} acts of cd in {took:?}");
+  assert!(took < Duration::from_secs(20), "the loop was cut near 2 s: {took:?}");
+  assert!(cds < 200_000, "the record holds the acts of the bound alone: {cds}");
+  drop(life);
+  let again = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  assert!(again.raised().is_none(), "a later life replays the loop and its refusal with no drift");
+}
+
+#[test]
+fn a_word_that_catches_the_refusal_of_the_bound_and_loops_ends_its_step_and_leaves_no_deadline() {
+  BOUND.set(Duration::from_secs(2));
+  let at = place("clock-caught");
+  let caught = "while True:\n  try:\n    clock()\n  except Refused:\n    pass";
+  let mut first =
+    Opening { extensions: Some(false), ..scripted(&at, &[caught]) }.boot::<String>([]).unwrap().0;
+  let started = Instant::now();
+  drop(asked_of(&mut first, "go"));
+  assert!(first.stopped().is_some(), "a word that asks past the refusal ends its step");
+  assert!(started.elapsed() < Duration::from_secs(20), "the step ends near 2 s");
+  assert!(crate::sand::past().is_none(), "the stop leaves no deadline on the thread");
+  drop(first);
+  let mut later = Opening {
+    extensions: Some(false),
+    ..scripted(&at, &["close(clock() > 0)", "close(clock() > 0)"])
+  }
+  .boot::<String>([])
+  .expect("a life that the bound stopped opens again")
+  .0;
+  assert!(later.stopped().is_none() && later.raised().is_none(), "{:?}", later.raised());
+  let got = asked_of(&mut later, "go on").unwrap();
+  assert_eq!(got.as_ref().as_bool(), Some(true), "the next step reads the clock");
+}
+
+#[test]
+fn a_life_whose_open_act_a_verb_of_no_words_made_ends_with_a_checkpoint_in_its_record() {
+  let at = place("ends-kept");
+  let mut life =
+    Opening { extensions: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+  // A verb with no words makes an act that makes an open prompt, as name_session makes the
+  // prompt of its chain.
+  let word = "with site.set(act('named', ROOT, None)):\n  named = prompt(str, 'Name?', to=OPERATOR)\nclose(1)";
+  assert_eq!(closed(&mut life, word).as_ref().as_int(), Some(1));
+  drop(life);
+  let mut inspected =
+    Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+  let written = checkpoint::written(&mut inspected).expect("the life gathers its checkpoint");
+  drop(inspected);
+  checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  let kept = world::kept(at.join("record.jsonl")).unwrap();
+  assert!(checkpoint::last(&kept).is_some(), "the record holds a checkpoint entry");
+}
+
 #[test]
 fn a_life_that_a_fault_of_the_sandbox_stopped_opens_again_and_goes_on() {
   BOUND.set(Duration::from_millis(100));

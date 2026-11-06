@@ -9,7 +9,7 @@ use monty_types::{TypeCheckingConfig, TypeCheckingFormat};
 use super::{
   MODULE, Parsed,
   findings::{
-    Finding, contracted, declared, dropped, read, signed, told, unawaited, unrun, unscheduled,
+    Finding, bare, contracted, declared, dropped, read, signed, told, unawaited, unrun, unscheduled,
   },
   layout::{laid, program_lines, rebound, shortened},
   shallow::shallowed,
@@ -91,6 +91,7 @@ fn gated(
   found.extend(dropped(sheet, coroutines));
   found.extend(unscheduled(sheet));
   found.extend(told(sheet));
+  found.extend(bare(sheet));
   found.extend(contracted(sheet, engine, whole));
   found.sort_by_key(|one| one.line);
   found

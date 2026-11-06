@@ -341,8 +341,8 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
     t = transcript(source or ROOT)
     h = [(x[0] == "tell" and x[3][0][:6]) or x[0] for x in t] + ["chain(", "#chain", "setup"]
     hi = h.index("#chain", lo := h.index("chain("))
-    blocked, running, waiting, last, heard, seen, dull = set(), {}, {}, standing(), [], set(), 0
-    step = news = ran = reply = note = to = mute = loud = ""
+    blocked, running, waiting, last, heard, seen = set(), {}, {}, standing(), [], set()
+    step = news = ran = reply = note = to = mute = loud = dull = stuck = names = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def placed(went):
@@ -450,11 +450,15 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         ):
           seen.add(about)
       if a[1] in seen and a[0] == "done":
-        mute = dull = 0
+        mute = dull = stuck = ""
       if scope(a[1]) != id:
         continue
       if a[0] in ("ready", "done"):
         waiting.pop(a[1], None)
+      if a[0] == "done" and prompted(r[2]) and a[1] in (ran, *blocked) and len(module(id)) == names:
+        if stuck := dull:
+          yield "tell", get(r[2])[2], [headed(r[2], "asked no more until a fact comes")]
+        dull = 1
       match a:
         case ("read", about, by, _, path) if prompted(path) and scope(path) == id:
           yield "done", about, Text(path, "\n".join(w for x, w in ladder.items() if x != by and under(x, path)))
@@ -483,6 +487,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         case ("tell", *_, notes) if notes not in (["chain()"], [*r[4:5]]):
           heard.append("\n".join(notes))
           ran = mute = ""
+          a[2] == id or (prompted(a[2]) and prompted(get(a[2])[2])) or (dull := "") or (stuck := "")
           loud = a[2]
           if a is note:
             note = bind(step)
@@ -490,6 +495,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           with site.set(step):
             reply = act("reply", id, controlled(idle), to)
         case ("ready", rid, _, word):
+          names = len(module(id))
           try:
             rid == step or bind(rid)
             ladder[(donor := r[5]) or rid] = word
@@ -516,7 +522,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
       waits = [c for *_, c in transcript(id, "wants") if not over(c)]
       if (
         (step not in waiting or paused(step))
-        and ladder.get(ran * (ran == step)) != dull
+        and not stuck
         and (
           (
             got := next(
@@ -540,9 +546,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         if offered(last[0], to) is None:
           close(Refused(to + " no actor"), maker * prompted(maker) or step)
         else:
-          if ran:
-            dull = ladder.get(ran)
-            yield told(ran, "told nothing")
+          ran and (yield told(ran, "told nothing"))
           note = yield told(step, "advance on " + maker, share=filled(reply) or None, waits=waits or None)
           news = ""
       if news and not waiting and (r[2] in running or over(r[2]) or a[0] == "tell"):
@@ -704,7 +708,9 @@ def gathered(define, floor):
         "cut": [x for x in cut if scope(x) == c],
         "lives": [
           *dict.fromkeys(
-            m[4] for x in transcript(c) if question(x) and not over(x[1]) and (m := get(x[2])) and m[4] in words
+            m[4]
+            for x in transcript(c)
+            if question(x) and not over(x[1]) and question(("rung", x[2])) and (m := get(x[2])) and m[4] in words
           )
         ],
       }
