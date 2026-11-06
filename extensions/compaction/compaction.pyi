@@ -33,6 +33,8 @@ def choice(to: str = "", on: str = "") -> Act:
   """choice() asks a model, on a chain of its own, which acts of the chain the work still needs, in a prompt of the shape tuple[list[str], str], the ids to keep and a summary of what the rest holds, and gives that prompt.
   The prompt says what to keep, then lists each open prompt with its message, then each act of the chain by its id and its words, with the thousands of characters of its text or its output when they pass a thousand, each act that a step made under that step, and no reply, run, wants, gate or stand.
   It lists of a step only the last LISTED acts that it made, and says how many it left out.
+  The prompt ends with the one call that answers, close(([<ids>], <summary>)), with ids taken from the heads that it lists.
+  When the model of choice writes 4 words on its chain and closes none, the prompt ends refused, so no chooser loops.
   """
 
 async def chosen(to: str = "", on: str = "") -> Filter:
@@ -63,6 +65,7 @@ def compacted(on: str = "") -> Act:
   """compacted() wraps a chain: after an answer that reads more than SHARE of the window of its actor, it asks choice() of the chain, and at the next reply on the chain once that came, it compacts the chain, which it wraps still.
   The chain keeps the acts that the model chose, each act said on the chain after it asked, and of each path only the last read or write, and the summary of the model.
   When the model gives no tuple of a list and a str, it compacts the chain with FILTERS and no summary of the model.
+  When the choice ends refused, it keeps the chain as it is, tells why, and asks no choice again.
   It moves, stops and pauses nothing, so each open prompt, each rung that waits and each word that runs goes on in the chain.
   It never completes.
   """

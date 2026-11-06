@@ -3,6 +3,7 @@
 import re
 from pathlib import Path
 
+from conftest import settle
 from extensions.conftest import compacting
 from furb import engine
 
@@ -61,3 +62,28 @@ async def test_it_lists_of_a_step_only_the_last_listed_acts_that_it_made(tmp_pat
   reads = [str(a[1]) for a in engine.transcript(root) if a[0] == "read" and a[4] == "a.txt"]
   assert [f"  {one} 'a.txt'" in lines for one in reads] == [False, True]
   assert f"{ran} step of {act} (open): {' '.join(word.split())} (1 earlier acts of it unlisted)" in lines
+
+
+async def test_the_prompt_ends_with_the_one_call_that_answers(tmp_path: Path) -> None:
+  """The prompt ends with the one call that answers, close(([<ids>], <summary>)), with ids taken from the heads that it lists."""
+  sand, root, _ = compacting(tmp_path)
+  await engine.rung("read('a.txt')", on=root)
+  (first,) = [str(a[1]) for a in engine.transcript(root) if a[0] == "read"]
+  sand.script.update({"chain2": ["(['x'], 'gist')", f"close(([{first!r}], 'gist'))"]})
+  await engine.rung("got = choice()", on=root)
+  await settle()
+  assert engine.peek(engine.module(root)["got"]) == ([first], "gist")
+  message = next(str(a[5]) for a in engine.transcript("chain2") if a[0] == "prompt")
+  assert message.endswith(f"close(([{first!r}], 'what the acts that you drop hold'))")
+  assert f"\n  {first} " in message
+
+
+async def test_a_chooser_that_never_closes_ends_refused(tmp_path: Path) -> None:
+  """When the model of choice writes 4 words on its chain and closes none, the prompt ends refused, so no chooser loops."""
+  sand, root, _ = compacting(tmp_path)
+  sand.script.update({root: ["got = choice()"], "chain2": [f"n = {k}" for k in range(12)]})
+  await engine.rung("got = choice()", on=root)
+  await settle()
+  got = engine.module(root)["got"]
+  assert isinstance(engine.peek(got), engine.Refused)
+  assert len([a for a in engine.transcript("chain2") if a[0] == "reply"]) == 4
