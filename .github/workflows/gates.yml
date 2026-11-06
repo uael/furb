@@ -6,6 +6,9 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # A merge queue tests each group of pull requests on the main that it lands on. GitHub gives a queue only to a
+  # repository that an organization owns, so no group runs here while a user owns this one.
+  merge_group:
 
 # One run of the gates for one branch: a push that follows another ends the run before it. On main, it ends only a run
 # that waits, since a group holds one run that waits at most, and the run in progress goes to its end. Only a run of
@@ -31,8 +34,8 @@ jobs:
   scope:
     # A runner of macOS waits in a queue of its own, for 10 minutes in the median. The jobs on Linux always run and hold
     # the whole proof of the logic; the jobs on macOS and on Windows prove the system alone, so a pull request runs them
-    # only when a path that it changes can behave in another way there, which script/scope.py says. A run on main, or
-    # by hand, runs every job.
+    # only when a path that it changes can behave in another way there, which script/scope.py says. A group of a merge
+    # queue takes the same choice from all its paths. A run on main, or by hand, runs every job.
     # The commit of a pull request is the merge of its branch into the base, whose first parent is the base, so two
     # commits of history hold the change. The whole history took 4 minutes to fetch, and the other jobs fetch one commit
     # in under 40 seconds.
@@ -52,10 +55,17 @@ jobs:
         with:
           fetch-depth: 2
           persist-credentials: false
+      # The commit of a group of a merge queue stands on the pull requests before it in the queue, so its diff starts
+      # at the base of the queue, which the checkout does not fetch. A fetch that fails runs every job, and so ejects
+      # no group for a fault of the network.
       - id: scope
+        env:
+          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             git diff --name-only HEAD^1 HEAD | python3 script/scope.py
+          elif [ "$GITHUB_EVENT_NAME" = merge_group ] && git fetch --no-tags --depth=1 origin "$QUEUE_BASE"; then
+            git diff --name-only "$QUEUE_BASE" HEAD | python3 script/scope.py
           else
             python3 script/scope.py --all
           fi | tee -a "$GITHUB_OUTPUT"

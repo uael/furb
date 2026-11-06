@@ -3,8 +3,9 @@
 The jobs on Linux always run: they hold the whole proof of the logic. A job on macOS or on Windows proves the system
 alone, and a runner of macOS waits in a queue for minutes, so a change runs those jobs only when one of its paths can
 behave in another way there. The paths come one on each line from the standard input, and the answer is the lines
-`key=value` that a step of GitHub takes into its outputs. With `--all`, which each run but a pull request takes, every
-job runs. A change to the files of the gallery alone runs no hook, which the output hooks says.
+`key=value` that a step of GitHub takes into its outputs. With `--all`, which each run but a pull request or a group of
+a merge queue takes, every job runs. A change to the files of the gallery alone runs no hook, which the output hooks
+says.
 """
 
 import json
