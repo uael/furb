@@ -48,7 +48,7 @@ exec(__kernel_source, __kernel)
 
 def __bounding(step):
   def bounded(*args, **kwargs):
-    was = __turn(True)
+    was = __turn(True, args[1])
     try:
       return step(*args, **kwargs)
     finally:
