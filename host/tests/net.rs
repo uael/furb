@@ -15,7 +15,7 @@ mod yard;
 mod net {
   use super::yard::Yard;
   use std::{
-    env, fs, future,
+    fs, future,
     net::SocketAddr,
     path::Path,
     process,
@@ -295,7 +295,7 @@ mod net {
   fn me() -> String {
     #[cfg(unix)]
     {
-      env::var("USER").unwrap()
+      std::env::var("USER").unwrap()
     }
     #[cfg(windows)]
     {
