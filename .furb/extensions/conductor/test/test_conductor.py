@@ -457,9 +457,9 @@ async def test_an_audit_whose_brief_names_a_workspace_takes_one(conductor: Round
 async def test_the_round_turns_on_auto_merge_for_its_prs_behind_the_ruleset_and_off_for_a_held_one(conductor: Round) -> None:
   await conductor.word('held("a", "b", "c", "d")')
   boxed = raw(4, "d", body="- [ ] Its prose obeys AGENTS.md")
-  conductor.github(raw(1, "a"), raw(2, "b", labels=("hold",), autoMergeRequest={}), raw(3, "c", isDraft=True), boxed, raw(5, "other"))
+  conductor.github(raw(1, "a"), raw(2, "b", labels=("hold",), autoMergeRequest={}), raw(3, "c", isDraft=True), boxed, raw(5, "lost"), raw(6))
   await conductor.step("sweep")
-  assert [x for x in conductor.gh() if x.startswith("pr merge")] == ["pr merge 1 --auto --squash", "pr merge 2 --disable-auto"]
+  assert [x for x in conductor.gh() if x.startswith("pr merge")] == ["pr merge 1 --auto --squash", "pr merge 2 --disable-auto", "pr merge 5 --auto --squash"]
 
 
 @POSIX
@@ -547,15 +547,38 @@ async def test_a_red_pr_with_no_live_maker_gets_at_most_two_fixers_for_a_head_th
 
 @POSIX
 @JQ
-async def test_a_red_main_sends_no_fixer_to_a_red_pr_and_tells_once(conductor: Round) -> None:
-  await conductor.word('held("a")')
-  conductor.github(raw(1, "a", checks=(("the gates", "FAILURE"),)), main="failure")
+async def test_a_red_main_tells_once_and_a_red_pr_that_fails_where_main_passes_still_gets_its_fixer(conductor: Round) -> None:
+  await conductor.word('held("a", "b")')
+  conductor.github(raw(1, "a", checks=(("the gates", "FAILURE"), ("bench", "FAILURE"))), raw(2, "b", checks=(("the gates", "FAILURE"), ("ruff", "FAILURE"))), main="failure")
+  conductor.say(r"commits/main/check-runs", {"check_runs": [{"name": "the gates", "conclusion": "failure"}, {"name": "bench", "conclusion": "failure"}]})
   await conductor.step("sweep")
   await conductor.step("sweep")
-  assert conductor.hired() == []
+  assert conductor.hired() == ["fix2"]
   [told] = conductor.notices()
-  assert told.startswith("main is red at m1: find its cause first.")
-  assert conductor.ns["heard"] == ["#1 is red at sha1 while main is red, so it waits for main."]
+  assert told.startswith("main is red at m1: find its cause first. A red PR that fails only where main fails waits for main;")
+  assert conductor.ns["heard"] == ["#1 is red at sha1 only on bench, the gates, which main fails too, so the round hires no fixer for it."]
+
+
+@POSIX
+@JQ
+async def test_a_red_pr_whose_item_the_round_lost_gets_a_fixer(conductor: Round) -> None:
+  conductor.github(raw(1, "lost", checks=(("the gates", "FAILURE"),), labels=("thread:t",)), raw(2, checks=(("the gates", "FAILURE"),)))
+  await conductor.step("sweep")
+  assert conductor.hired() == ["fix1"]
+
+
+@POSIX
+@JQ
+async def test_a_pr_with_no_run_of_the_gates_at_a_head_that_two_sweeps_saw_gets_one_run_for_that_head(conductor: Round) -> None:
+  await conductor.word('held("a", "b", "c")')
+  conductor.github(raw(1, "a", checks=()), raw(2, "b", checks=()), raw(3, "c"))
+  conductor.say(r"run list --workflow gates.yml", [{"headSha": "sha2"}, {"headSha": "sha3"}])
+  await conductor.step("sweep")
+  assert not [x for x in conductor.gh() if x.startswith("workflow run")]
+  await conductor.step("sweep")
+  await conductor.step("sweep")
+  assert [x for x in conductor.gh() if x.startswith("workflow run")] == ["workflow run gates.yml --ref w/a"]
+  assert conductor.ns["heard"] == ["#1 had no run of the gates at sha1, so the round started one."]
 
 
 def pushed(conductor: Round, *branches: str) -> dict[str, str]:
@@ -609,7 +632,7 @@ async def test_a_sweep_that_gh_fails_raises_refused(conductor: Round) -> None:
 async def test_a_comment_of_the_owner_goes_to_the_worker_on_the_pr_and_holds_it(conductor: Round) -> None:
   maker = await conductor.busy("a")
   await conductor.word('held("b")')
-  conductor.github(raw(1, "a"), raw(2, "b"), raw(3, "foreign"))
+  conductor.github(raw(1, "a"), raw(2, "b"), raw(3))
   await conductor.step("sweep")
   await conductor.word('comments.add("seen")')
   conductor.say(r"pulls/1/comments", [{"pull_request_url": "x/pulls/1", "id": 10, "user": {"login": "uael"}, "path": "a.py", "line": 3, "body": "Name it well."}])

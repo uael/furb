@@ -40,8 +40,8 @@ Put each item in queue as a dict, in the order of the work, the hard work first:
 2. The files of an item are its areas, which you write, and a test file holds no item. An item with no areas holds no file. A conflict on a file that need not change alone gets a fixer, by E3 of #1084. Each item that waits on a PR or a file is one line of the next notice, with its cause, once.
 3. A worker runs on a chain thread/key, at model_of(item), and an edit or a fix in a workspace {repo}-wN of its own, never one whose furb-holder names the chain of a live worker, and never one that holds work off a branch: a dirty tree, or a commit that no remote holds while its branch is the head of no merged PR. The round skips such a workspace and tells you once. Each round keep_disk() keeps KEEP GB of the disk free: it deletes the target of the idle workspace whose last worker was hired first, never of one that a live worker holds, and tells you once when it cannot. Its brief starts with the asks of the owner that its item carries. Its brief sends each build of the worker through script/build-slot.sh, which holds the slots of builds that all the workers of the machine share and caps the jobs of cargo: the tool holds that rule, and the round only briefs it.
 4. A worker that ends gives its report whole in the next notice. A worker that ends with no PR is a decision, and its notice wakes you.
-5. A PR of the round is an open PR whose label w:key names an item that the round holds. A red or conflicting one counts as handled only while a worker that knows of its head acts: its live maker, which the round tells at once, once for each head and problem, to fix it before any other step, else a fixer that the round sent for that head, at most 2 for a head, then a notice. A fixer runs at the model of the fixer on a fork of the chain of the worker that made the PR, when the round holds that worker, so it starts with what that worker read and did. A head that such a worker has not moved in UNMOVED seconds is one notice, with the worker and its last act. handler() holds that rule for the sweep.
-6. While the newest run of the gates on main failed, the round sends no order and no fixer for a red PR, and tells you once. A red PR whose failed checks all fail on main too gets no fixer either, and the round says so in one line.
+5. A PR of the round is an open PR with a label w:key, whether the round still holds that item or not, so a PR whose worker a former round made still merges and gets its fixer. A red or conflicting one counts as handled only while a worker that knows of its head acts: its live maker, which the round tells at once, once for each head and problem, to fix it before any other step, else a fixer that the round sent for that head, at most 2 for a head, then a notice. A fixer runs at the model of the fixer on a fork of the chain of the worker that made the PR, when the round holds that worker, so it starts with what that worker read and did. A head that such a worker has not moved in UNMOVED seconds is one notice, with the worker and its last act. handler() holds that rule for the sweep.
+6. While the newest run of the gates on main failed, the round tells you once. A red PR whose failed checks all fail on main too gets no fixer, and the round says so in one line; each other red PR gets its order or its fixer at once, since a red main holds no merge. When two sweeps see a PR of the round at a head with no run of the gates, the round starts one with gh workflow run, once for each head, since a push of a bot starts no workflow.
 7. A green PR merges by the auto-merge of GitHub, which the round turns on for each PR of the round, else by a plain merge, else by gh stack merge for a layer of a stack, behind a ruleset of main that requires the check GATE. With no such ruleset, the round turns on no auto-merge and tells you once. A draft, an open box of its checklist, or the label hold, hold:owner-review or owner-merge keeps a PR from the merge, and the label paused takes it out of the round.
 8. At ALIGN_EVERY merged PRs since the last audit of each target of AUDITS, the round queues the next free audit of that target, alignN or tuiN, of kind audit, on limits["models"]["astra"] when N is odd, else on the model of audit. alignN checks main against the words of the owner, and tuiN judges the TUI of main in a workspace of its own, as the skill converge-tui says. Each row of its register becomes an item, queued in the order of the register after the items of queue, unless the coordinator asks for the rows before the items that no worker holds yet.
 9. Each message of the owner that no ask of owner_asks names is one line, and so is each ask that is not done or a decision while no item in queue, at work or on an open PR of the round carries it. asked() gives the new lines in one notice, and no new notice while its last one stands open: no word of the owner drops between his message and main. A worker that ends with a line Left: <ids> queues one follow-up for each ask that no other item carries, and a follow-up that leaves it again is a decision.
@@ -175,6 +175,8 @@ gh api 'repos/{owner}/{repo}/rules/branches/main' --jq '[.[] | select(.type == "
 c=$?; echo; echo "--- $c"
 gh api 'repos/{owner}/{repo}/commits/main/check-runs?per_page=100' --jq '[.check_runs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | .name]'
 c=$?; echo; echo "--- $c"
+gh run list --workflow gates.yml --limit 300 --json headSha --jq '[.[].headSha] | unique'
+c=$?; echo; echo "--- $c"
 """
 
 REVIEWS = r"""for n in {prs}; do
@@ -264,7 +266,7 @@ def maker_key(pr: dict) -> str:
 
 
 def ours(pr: dict) -> bool:
-  return maker_key(pr) in held_keys()
+  return bool(maker_key(pr))
 
 
 def maker_of(pr: dict) -> str:
@@ -542,9 +544,10 @@ def mend(pr: dict, problem: str) -> Generator[set[str], object, None]:
 def sweep() -> Generator[set[str], object, None]:
   got = yield from shell(PRS, timeout=300)
   bits = re.split(r"\n--- (\d+)\n", "\n" + got.stdout.content)
-  if len(bits) != 11 or any(code != "0" for code in bits[1:8:2]):
+  if len(bits) != 13 or any(code != "0" for code in bits[1:8:2]):
     raise Refused(f"gh listed no PRs: {got.stderr.content.strip()[-300:] or 'it said nothing'}")
   mine = {n for n, pr in prs.items() if ours(pr)}
+  seen = {n: pr["sha"] for n, pr in prs.items()}
   prs.clear()
   prs.update({pr["n"]: pr for pr in json.loads(bits[0])})
   fresh = {n: head for n, head in json.loads(bits[2]) if n not in merges}
@@ -558,8 +561,12 @@ def sweep() -> Generator[set[str], object, None]:
     broke = set(json.loads(bits[8]))
   except ValueError:
     broke = set()
+  try:
+    ran: set[str] | None = set(json.loads(bits[10]))
+  except ValueError:
+    ran = None
   if red:
-    notice(f"red {main['sha']}", f"main is red at {str(main['sha'])[:7]}: find its cause first. The round sends no order and no fixer for a red PR until the gates of main pass.")
+    notice(f"red {main['sha']}", f"main is red at {str(main['sha'])[:7]}: find its cause first. A red PR that fails only where main fails waits for main; each other red PR gets its order or its fixer.")
   if not gated:
     notice("ruleset", f"main has no ruleset that requires the check {GATE}, so the round turns on no auto-merge and merges no PR.")
   for gone in [k for k in assigned if k not in prs]:
@@ -575,9 +582,11 @@ def sweep() -> Generator[set[str], object, None]:
     want = gated and not (labelled or pr["draft"] or pr["open"]) and now != "conflicting"
     if want != pr["auto"]:
       flips.append(f"gh pr merge {n} --auto --squash || gh pr merge {n} --squash || gh stack merge {n} --yes --squash" if want else f"gh pr merge {n} --disable-auto")
-    if now == "red" and red:
-      once(f"main waits {n} {pr['sha']}", f"#{n} is red at {pr['sha'][:7]} while main is red, so it waits for main.")
-    elif now == "red" and failing and not pr["open"] and not failing - broke:
+    ungated = f"ungated {n} {pr['sha']}"
+    if ran is not None and GATE not in pr["names"] and pr["sha"] not in ran and seen.get(n) == pr["sha"] and ungated not in noticed:
+      once(ungated, f"#{n} had no run of the gates at {pr['sha'][:7]}, so the round started one.")
+      flips.append(f"gh workflow run gates.yml --ref {shq(pr['head'])}")
+    if now == "red" and failing and not pr["open"] and not failing - broke:
       once(f"main fails {n} {pr['sha']}", f"#{n} is red at {pr['sha'][:7]} only on {', '.join(sorted(failing))}, which main fails too, so the round hires no fixer for it.")
     elif (problem := trouble(pr)) and not labelled:
       yield from mend(pr, problem)
