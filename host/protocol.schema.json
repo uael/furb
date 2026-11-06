@@ -2748,7 +2748,7 @@
         "origin",
         "yours"
       ],
-      "description": "One thread of a chain: its prompt, its name, its messages, the prompts to the operator that it\nmade and the questions of them that wait, and its state. A thread is over once its prompt\nand each of its messages is done, and a message to a thread that is over opens it again until its\nmodel closes the message."
+      "description": "One thread of a chain: its prompt, its name, its messages, the prompts to the operator that it\nmade and the questions of them that wait, and its state. A thread is over once its prompt\nand each of its messages is done, and a message to a thread that is over opens it again until\nits model closes the message."
     },
     "State": {
       "type": "string",
