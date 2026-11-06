@@ -18,6 +18,7 @@ import { loadParsers } from "../src/parsers.ts";
 import { Session } from "../src/session.ts";
 import { paletteOf } from "../src/theme.ts";
 import { cells, rasterize } from "./raster.ts";
+import { refusal } from "./refusal.ts";
 import { highlighting, home, mount } from "./stage.ts";
 
 // The home of the user is a folder of its own, so that the preferences of the captures never touch those of the owner.
@@ -157,17 +158,7 @@ if (slice) {
     });
     await step("06-palette", () => app().palette(), true);
     app().closeOverlay();
-    await step(
-      "07-read-only-refusal",
-      async () => {
-        await test.mockInput.typeText("Go on with the work.");
-        test.mockInput.pressEnter();
-        for (let wait = 0; wait < 50 && !session.notice; wait++)
-          await new Promise((done) => setTimeout(done, 20));
-        if (!session.notice) throw new Error("The life open to read gave no refusal.");
-      },
-      true,
-    );
+    await step("07-read-only-refusal", () => refusal(test, app()), true);
     for (const [width, height] of [
       [82, 32],
       [60, 24],
