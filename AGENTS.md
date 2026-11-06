@@ -260,8 +260,9 @@ file that its build reads changed, which the `cache-keys` of its `pyproject.toml
 python that the crate carries, and the extensions. So a change of `src/furb/engine.py` reaches the suite at the next
 `uv run`, after a build of a few seconds, and a short command can take minutes. To run with no sync, which builds
 nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
-A worktree holds no `.venv`: run one test file there with the `.venv/bin/python` of the main checkout, as
-`<main>/.venv/bin/python -m pytest -q <file> -p no:cacheprovider --no-cov`, which syncs nothing.
+`script/worktree.sh` makes the `.venv` of a new worktree, so run one test file there as
+`.venv/bin/python -m pytest -q <file> -p no:cacheprovider --no-cov`, which syncs nothing. Where the script could not make
+it, probe with the `.venv/bin/python` of the main checkout, which imports main and not your change.
 
 Set the timeout of each command, and the bound of each wait, to about twice the time that the step should take, never a
 round 600 or 900 seconds in case: a ceiling that is too large hides a hang for as long. Make a step that can take
@@ -305,10 +306,11 @@ fix what your change broke, and report what was broken before.
   to the new commit, so cargo builds only the crates of the workspace again: the `target` of cargo, the `node_modules`
   of bun, the build of the TypeScript package and the cache of the tests of the TUI. Then it runs
   `bun install --offline` and `bun run build`. It sets `core.hooksPath` of the clone to `script/hooks` when no value
-  stands, so that the hooks of each worktree print only what fails. It copies on write the `.venv` of that checkout too, says again each path
-  of it for the new tree and syncs it with `uv sync` on the warm target, so the python of its hooks imports its own tree: a
-  new worktree takes about 250 s with it, against about 130 s without, on this machine. A first build takes about 6 minutes, against about 35 in
-  a worktree of `git worktree add`. Copy on write needs APFS, Btrfs or XFS; on another file system, the script makes a
+  stands, so that the hooks of each worktree print only what fails. It copies no `.venv`: it makes the `.venv` of the new tree with
+  `uv sync --locked` on the warm target, so the python of its hooks imports its own tree. That takes about 52 s in a new
+  tree, and next to no time when uv holds the wheel in its cache. If `uv` is missing or the sync fails, the script says
+  so and names the command to run. A first build takes about 6 minutes, against about 35 in a worktree of
+  `git worktree add`. Copy on write needs APFS, Btrfs or XFS; on another file system, the script makes a
   plain worktree. Remove a worktree with `git worktree remove --force <path>`, then `git branch -D <branch>`. The
   checkout at the root can stand behind `origin/main`, so read and change code in a worktree.
 - `sh script/build-slot.sh <command> [argument...]`: run a command that builds, as `cargo`, `bun run build`, `uv sync`,
