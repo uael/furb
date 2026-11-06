@@ -74,8 +74,8 @@ def test_no_more_commands_run_at_once_than_the_slots(tmp_path: Path) -> None:
   assert peak_of(tmp_path, 2, FURB_BUILD_SLOTS="2") == 2
 
 
-@pytest.mark.parametrize(("memory", "slots"), [("36", 3), ("24", 2), ("8", 1)])
-def test_the_slots_default_to_one_for_each_12_gb_of_memory_and_at_least_one(
+@pytest.mark.parametrize(("memory", "slots"), [("36", 4), ("27", 3), ("24", 2), ("8", 1)])
+def test_the_slots_default_to_one_for_each_9_gb_of_memory_and_at_least_one(
   tmp_path: Path, memory: str, slots: int
 ) -> None:
   assert peak_of(tmp_path, slots, FURB_BUILD_MEM_GB=memory) == slots
