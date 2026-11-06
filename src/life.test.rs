@@ -914,6 +914,27 @@ fn a_record_of_an_engine_that_an_adapter_names_drifts_on_that_engine_without_the
   assert!(format!("{drift:?}").contains("rung3230 drifts"), "{drift:?}");
 }
 
+#[test]
+fn a_life_of_an_engine_whose_gathered_raised_on_an_act_that_no_rung_made_writes_its_checkpoint_through_its_adapter()
+ {
+  let at = place("lives");
+  laid(&replays().join("lives.jsonl.zst"), &at.join("record.jsonl"));
+  let inspects = Opening { inspecting: Some(true), ..opening(&at, false) };
+  let mut inspected = inspects.boot::<String>([]).unwrap().0;
+  let written = checkpoint::written(&mut inspected)
+    .expect("the adapter gives the engine lives that raise nothing");
+  drop(inspected);
+  checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  let kept = fs::read_to_string(at.join("record.jsonl")).unwrap();
+  let tip: serde_json::Value = serde_json::from_str(kept.lines().last().unwrap()).unwrap();
+  assert_eq!(tip[0][0], "checkpoint");
+  let lives = tip[0][3]["chains"][0]["lives"].as_array().unwrap();
+  assert!(
+    lives.iter().any(|one| one == "compacted(); fitted()"),
+    "the checkpoint carries the life word of compaction, whose act holds the act of its own ear open: {lives:?}"
+  );
+}
+
 /// Each run of each chain whose word no turn of that chain shows, as a python expression in the names of the engine.
 const UNSHOWN: &str = "[(c, x[1], x[4]) for c in [f'chain{n}' for n in range(1, 99) if get(f'chain{n}')] \
                        for x in transcript(c, 'run') if x[3] == c \
