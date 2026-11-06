@@ -405,12 +405,13 @@ fix what your change broke, and report what was broken before.
   in the root and in each package gives a plain run the limit of thirty seconds and the folders of the runner.
   `FURB_TEST_OUTPUT=1` shows all that each run wrote. The tests read the built package, so a build older than its
   sources, as after a switch of branch, fails them as they fail on main: the runner warns before the run and after a
-  failure, and `bun run build` makes the build again. The tests read the configs and the cache of `.furb/tests` of the
-  root, from any folder, not those of the machine. A plain `bun test` gives them that folder in process.env, which the
-  native part, reading the environment that the process started with, never sees: so each test that builds Preferences
-  or Workspaces gives them a config directory of its own, and the preload fails a test that changes a file of the config
-  directory of the machine, and names the file. As root, the test of a folder that cannot be read fails, since
-  root reads every folder.
+  failure, and `bun run build` makes the build again. The tests read the configs of `.furb/tests` of the root, and
+  their cache in `/tmp/furb-cache-<the first 8 hex digits of the sha256 of the root>`, or in the temporary folder on
+  Windows, from any folder, not those of the machine. A plain `bun test` gives them those folders in process.env,
+  which the native part, reading the environment that the process started with, never sees: so each test that builds
+  Preferences or Workspaces gives them a config directory of its own, and the preload fails a test that changes a file
+  of the config directory of the machine, and names the file. As root, the test of a folder that cannot be read fails,
+  since root reads every folder.
   A script of bun in `$TMPDIR` cannot import the package `furb`, so write a quick check in the worktree, where
   `node_modules` stands.
 - `bun run test scenarios`: the scenarios of `tui/scenarios`, the path of the owner end to end. A scripted claude

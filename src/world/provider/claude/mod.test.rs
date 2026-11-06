@@ -996,6 +996,24 @@ fn a_discovery_that_is_an_hour_old_is_asked_again_so_a_model_that_the_command_li
 }
 
 #[test]
+fn a_discovery_asks_with_the_traffic_of_the_command_line_on_so_it_lists_each_model_that_it_names() {
+  let yard = Yard::new("traffic");
+  fs::write(
+    yard.at.join("models"),
+    "opus 750000 low\nfable 850000 low\nsonnet 300000 low\nhaiku 850000 low\n",
+  )
+  .unwrap();
+  // What the real command line lists with its traffic off: fable only as `claude-fable-5-1[1m]`.
+  fs::write(yard.at.join("offline"), include_str!("offline-models.json")).unwrap();
+  let got = said(&yard.claude(10_000));
+  let names: Vec<_> = got.iter().map(|one| one.0.as_str()).collect();
+  assert_eq!(
+    names,
+    ["claude-cli:opus", "claude-cli:fable", "claude-cli:sonnet", "claude-cli:haiku"]
+  );
+}
+
+#[test]
 fn a_command_line_that_answers_no_discovery_gives_the_fixed_models() {
   let yard = Yard::new("fixed");
   let got = said(&yard.claude(10_000));

@@ -217,7 +217,7 @@ fn plain(alias: &str) -> bool {
 async fn probe(program: &Program) -> Option<Vec<Found>> {
   let print =
     ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"];
-  let mut command = program.base_command(&print).ok()?;
+  let mut command = program.base_command(&print, false).ok()?;
   command.args(["--tools", ""]);
   command.env("FURB_CLAUDE_DISCOVER", "1");
   command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());

@@ -13,8 +13,6 @@ mod yard;
 mod daemon {
   use super::yard::Yard;
 
-  use std::process::Command;
-  use std::process::Stdio;
   use std::sync::mpsc::Receiver;
   use std::sync::mpsc::Sender;
   use std::sync::mpsc::channel;
@@ -349,6 +347,19 @@ mod daemon {
     };
     assert_eq!(window.ask(verb).await, Ok(Answer::Done));
     life
+  }
+
+  #[tokio::test]
+  async fn a_daemon_whose_last_window_left_ends_once_its_grace_passed() {
+    let at = place();
+    let (local, daemon) = started(&at, SHORT).await;
+    let mut window = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    window.attach(&life).await;
+    drop(window);
+    let ended = timeout(Duration::from_secs(20), daemon).await;
+    assert!(matches!(ended, Ok(Ok(Ok(())))), "the daemon ends with no window: {ended:?}");
+    assert!(local.dial().await.is_err(), "no daemon listens after its grace");
   }
 
   #[tokio::test]
@@ -1293,9 +1304,9 @@ mod daemon {
   #[cfg(unix)]
   async fn gone(pid: &str) -> bool {
     let lives = || {
-      Command::new("kill")
+      process::Command::new("kill")
         .args(["-0", pid])
-        .stderr(Stdio::null())
+        .stderr(process::Stdio::null())
         .status()
         .is_ok_and(|one| one.success())
     };

@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { nestThreads, orderThreads, threadOpen } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { openEngine } from "../src/bridge.ts";
 import { Session } from "../src/session.ts";
@@ -46,8 +45,10 @@ async function settled({ frame }: Composing): Promise<string> {
 }
 
 /** The threads of the session shown, as the sidebar orders them. */
-const ordered = (app: Composing["app"], session: Session) =>
-  orderThreads(nestThreads(app.railThreads(), session.boardIndex.ids));
+const ordered = async (app: Composing["app"], session: Session) => {
+  await session.readRail();
+  return app.railTree();
+};
 
 const wide = { width: 152, height: 46 };
 const short = { width: 152, height: 30 };
@@ -60,7 +61,7 @@ test("the sidebar lists the closed threads at the top and the open ones last, ne
       const { session, app } = use;
       await session.refresh();
       await session.select("chain1");
-      const tree = ordered(app, session);
+      const tree = await ordered(app, session);
       // prompt95 began after prompt1, and prompt1 had its last message after prompt45: the closed ones come first.
       expect(tree.map((one) => one.thread.act.id)).toEqual([
         "prompt29",
@@ -73,7 +74,17 @@ test("the sidebar lists the closed threads at the top and the open ones last, ne
         "prompt99",
         "prompt1",
       ]);
-      expect(tree.map(threadOpen)).toEqual([false, false, false, false, false, false, false, false, true]);
+      expect(tree.map((one) => !one.thread.over || one.state === "asks")).toEqual([
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+      ]);
       const shown = await settled(use);
       keep("order-sidebar", shown);
       const rows = rail(use, shown, tall.width);
@@ -154,5 +165,33 @@ test("a click on a thread in the sidebar moves the feed to the end of that threa
       expect(shown).toContain("↳ Replying here");
     },
     short,
+    await recorded(),
+  ));
+
+// Before, the sidebar kept the list that it read while the tree of the crate had not come, under the version of the
+// prompts, so the tree that came later showed no thread until a prompt changed.
+test("the sidebar draws the tree of the crate that comes after a frame that it read without it", async () =>
+  composing(
+    async ({ session, app, frame }) => {
+      let release = () => {};
+      const held = new Promise<void>((done) => {
+        release = done;
+      });
+      const rail = session.host.rail.bind(session.host);
+      session.host.rail = async (...args) => {
+        await held;
+        return await rail(...args);
+      };
+      // The select refreshes, and the refresh waits for the tree that the crate holds back, so it is awaited after.
+      const selecting = session.select("chain1");
+      await frame();
+      expect(app.railThreads()).toEqual([]);
+      release();
+      await selecting;
+      await session.readRail();
+      await frame();
+      expect(app.railThreads().map((one) => one.act.id)).toContain("prompt95");
+    },
+    tall,
     await recorded(),
   ));
