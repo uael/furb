@@ -3,11 +3,14 @@
 //! record with the limit of the size of a file of the process, which only a system of Unix gives,
 //! so it runs in a process of its own, with no harness.
 
-#![expect(
-  clippy::disallowed_methods,
-  reason = "the test blocks on the runtime that it starts for itself"
+#![cfg_attr(
+  unix,
+  expect(
+    clippy::disallowed_methods,
+    reason = "the test blocks on the runtime that it starts for itself"
+  )
 )]
-#![expect(clippy::expect_used, reason = "a test with no harness fails by a panic")]
+#![cfg_attr(unix, expect(clippy::expect_used, reason = "a test with no harness fails by a panic"))]
 
 #[cfg(unix)]
 #[path = "../../tests/common/yard.rs"]
