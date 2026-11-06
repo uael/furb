@@ -69,4 +69,5 @@ def test_a_contract_test_an_official_extension_test_and_a_project_contract_reach
   assert laws in reach.suite(["test/test_peek.py"])
   assert laws in reach.suite(["extensions/memory/test/test_memory.py"])
   assert laws in reach.suite([".furb/extensions/pr/pr.py"])
+  assert laws in reach.suite([".furb/extensions/pr/test/test_commit.py"])
   assert laws not in reach.suite(["test/outside/test_scope.py"])
