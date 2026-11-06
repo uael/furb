@@ -75,6 +75,34 @@ test("a view whose field has another form opens that field empty and names it, a
   }
 });
 
+test("a follow-up that an older ui.json holds goes to the queue of the life, once, and leaves the file", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-view-queue-"));
+  const record = join(directory, "life.jsonl");
+  let session: Session | undefined;
+  try {
+    session = await demoSession({ record });
+    // A pause of the chain holds its queue, so the follow-up stays where the life puts it.
+    await session.engine.pause(session.selected);
+    const chain = session.selected;
+    await session.dispose();
+    const view = JSON.parse(await readFile(`${record}.ui.json`, "utf8"));
+    const old = { id: "old-1", chain, text: "A follow-up of an older release", shape: "str" };
+    await writeFile(`${record}.ui.json`, JSON.stringify({ ...view, queued: [old] }));
+    const reopened = await demoSession({ record });
+    session = reopened;
+    await until(reopened, () => reopened.queued.some((one) => one.entry === "old-1"));
+    expect(reopened.queued.map((one) => [one.entry, one.chain, one.message])).toEqual([
+      ["old-1", chain, old.text],
+    ]);
+    const left = async () => "queued" in JSON.parse(await readFile(`${record}.ui.json`, "utf8"));
+    for (let tries = 0; tries < 200 && (await left()); tries++) await Bun.sleep(25);
+    expect(await left()).toBe(false);
+  } finally {
+    await session?.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("a session that cannot save its view still lets its life go, which ends in the daemon of the tests with its command", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-dispose-"));
   const record = join(directory, "life.jsonl");

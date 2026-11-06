@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -337,6 +336,7 @@ const kept = [
 export type SavedView = Partial<Pick<Session, (typeof kept)[number]>> & {
   cost?: number;
   sessionName?: string;
+  queued?: Kept[];
 };
 
 /** The form of each field that `<record>.ui.json` keeps, which a field must have to be read: a text, a flag, a
@@ -383,9 +383,22 @@ function formed(value: unknown, form: (typeof forms)[keyof typeof forms]): boole
   }
 }
 
+/** A follow-up that an older release kept in `<record>.ui.json`. */
+interface Kept {
+  id: string;
+  chain: string;
+  text: string;
+  shape: string;
+}
+
 /** The saved view of a record: nothing when it has none, the defaults with the reason when its file holds no view
  * that can be read, and the view less each field of another form, with the names of those fields. */
-export function savedView(record: string): { view: SavedView; name?: string; damage?: string } {
+export function savedView(record: string): {
+  view: SavedView;
+  name?: string;
+  queued?: Kept[];
+  damage?: string;
+} {
   const path = `${record}.ui.json`;
   try {
     const view: unknown = JSON.parse(readFileSync(path, "utf8"));
@@ -398,11 +411,19 @@ export function savedView(record: string): { view: SavedView; name?: string; dam
     // The name of the session that an older release kept here: the record holds it now, and this one is read once.
     const name =
       typeof held.sessionName === "string" && held.sessionName.trim() ? held.sessionName.trim() : undefined;
-    if (!wrong.length) return { view: held, name };
+    // The follow-ups that an older release kept here: the life holds the queue now, and this one is carried once.
+    const queued = Array.isArray(held.queued)
+      ? held.queued.filter(
+          (one): one is Kept =>
+            one && ["id", "chain", "text", "shape"].every((key) => typeof one[key] === "string"),
+        )
+      : [];
+    if (!wrong.length) return { view: held, name, queued };
     const fields = wrong.join(", ");
     return {
       view: held,
       name,
+      queued,
       damage: `${path} holds ${fields} in a form this release does not read: each opened empty.`,
     };
   } catch (error) {
@@ -544,6 +565,9 @@ export class Session extends EventEmitter {
   private closed = false;
   /** The name that `<record>.ui.json` held, which moves into the record at the first read of the life. */
   private legacyName?: string;
+  /** The follow-ups that `<record>.ui.json` held from an older release, which move into the queue of the life. */
+  private legacyQueue: Kept[] = [];
+  private carryingQueue = false;
   /** The last name that the operator gave the session in its record, by a plain scan of the record when the life
    * opens, which every build reads, also when the life drifts or another host holds the record. */
   private keptName?: string;
@@ -580,8 +604,9 @@ export class Session extends EventEmitter {
         demo && path && !host.recorded ? join(dirname(path), "ui-preferences.json") : undefined,
       );
     if (path) {
-      const { view, name, damage } = savedView(path);
+      const { view, name, queued, damage } = savedView(path);
       this.legacyName = name;
+      this.legacyQueue = queued ?? [];
       this.scanName(path);
       Object.assign(this, Object.fromEntries(kept.flatMap((key) => (key in view ? [[key, view[key]]] : []))));
       this.savedCost = view.cost ?? 0;
@@ -744,6 +769,7 @@ export class Session extends EventEmitter {
     if (!this.renamed) this.keptName = said;
     this.named();
     this.carryName();
+    this.carryQueue();
     this.emit("change");
   }
   /** A name that an older release kept in `<record>.ui.json` moves into the record once the record is read: when the
@@ -765,6 +791,27 @@ export class Session extends EventEmitter {
       this.legacyName = undefined;
       this.save();
     });
+  }
+  /** The follow-ups that an older release kept in `<record>.ui.json` go to the queue of the life under their own
+   * entries, which the life takes once, and the save that follows writes the view without them. A record that this
+   * life cannot write keeps them in the old home, which the next life carries. */
+  private carryQueue(): void {
+    if (!this.legacyQueue.length || this.carryingQueue || this.closed) return;
+    if (this.host.role === "read" || this.host.recorded || this.host.reading) return;
+    const left = this.legacyQueue;
+    this.carryingQueue = true;
+    void Promise.all(left.map((one) => this.host.queue(one.shape, one.text, one.chain, one.id))).then(
+      () => {
+        this.carryingQueue = false;
+        if (this.closed) return;
+        this.legacyQueue = this.legacyQueue.filter((one) => !left.includes(one));
+        this.save();
+      },
+      (error: unknown) => {
+        this.carryingQueue = false;
+        this.fail(error);
+      },
+    );
   }
   fail = (error: unknown) => {
     this.error = error instanceof Error ? error.message : String(error);
@@ -885,6 +932,7 @@ export class Session extends EventEmitter {
         this.counted = count;
         this.named();
         this.carryName();
+        this.carryQueue();
         // The acts and the actor of one snapshot are of one moment: the choice holds until its rung is done there.
         const choice = this.choices.get(selected);
         if (choice?.rung && this.actOf(choice.rung) !== undefined && isDone(this.actOf(choice.rung)))
@@ -2314,6 +2362,8 @@ export class Session extends EventEmitter {
       cost: this.savedCost,
       // A name of an older release stays in its home until the record holds it, so no save loses it.
       ...(this.legacyName === undefined ? {} : { sessionName: this.legacyName }),
+      // The follow-ups of an older release stay in their home until the life holds them.
+      ...(this.legacyQueue.length ? { queued: this.legacyQueue } : {}),
     };
     saveFile(path, JSON.stringify(view));
   }

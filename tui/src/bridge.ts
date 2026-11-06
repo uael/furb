@@ -923,8 +923,10 @@ export class HostView extends EventEmitter {
   get queued(): FollowUp[] {
     return [...this.life.queues.values()].flat();
   }
-  /** A message put in the queue of a chain, which the life sends once the chain rests. */
-  queue = (shape: string, message: string, on: string) => this.life.queue(randomUUID(), shape, message, on);
+  /** A message put in the queue of a chain, which the life sends once the chain rests. A second queue of the same
+   * entry changes nothing. */
+  queue = (shape: string, message: string, on: string, entry: string = randomUUID()) =>
+    this.life.queue(entry, shape, message, on);
   /** A follow-up taken out of its queue before the life sent it. */
   unqueue = (entry: string) => this.life.unqueue(entry);
   pin = (holder: string) => this.life.pin(holder);
