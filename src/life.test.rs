@@ -10,7 +10,7 @@ use std::{
   collections::VecDeque,
   env, fs, future, io,
   path::{Path, PathBuf},
-  process, slice,
+  process,
   sync::{Arc, Mutex},
   time::Duration,
 };
@@ -585,7 +585,7 @@ fn a_record_of_another_engine_that_holds_no_texts_replays_and_goes_on() {
 }
 
 #[test]
-fn a_record_of_another_engine_replays_on_the_texts_that_it_holds_and_goes_on_with_them() {
+fn a_record_of_another_engine_crosses_to_this_build_by_a_checkpoint_and_goes_on_with_its_kernel() {
   use sha2::{Digest, Sha256};
   let at = place("texts");
   let source = format!("{}\ncrossed = True\n", crate::ENGINE);
@@ -599,17 +599,22 @@ fn a_record_of_another_engine_replays_on_the_texts_that_it_holds_and_goes_on_wit
   let open = || Opening { extensions: Some(false), ..opening(&at, true) };
   let mut later = open().boot::<String>([]).unwrap().0;
   assert_eq!(
-    closed(&mut later, "close(crossed and x + 1)").as_ref().as_int(),
-    Some(2),
-    "the life replays and goes on on the engine that its record holds"
+    closed(&mut later, "close([x + 1, globals().get('crossed')])").as_ref().py_repr(),
+    "[2, None]",
+    "the life keeps each name of the record and goes on on the engine of this build, not on the one that its \
+     record holds"
   );
   drop(later);
-  assert_eq!(builds(&record), slice::from_ref(&named), "the record names it alone");
+  assert_eq!(
+    builds(&record),
+    [named.clone(), world::engine()],
+    "the life of this build opens after the checkpoint of the older one"
+  );
   let mut again = open().boot::<String>([]).unwrap().0;
   assert_eq!(
-    closed(&mut again, "close(x + 2)").as_ref().as_int(),
-    Some(3),
-    "it replays its tail on it"
+    closed(&mut again, "close([x + 2, globals().get('crossed')])").as_ref().py_repr(),
+    "[3, None]",
+    "a later open replays the tail of this build on it"
   );
   drop(again);
   fs::write(&record, text.replace(&named, &"0".repeat(64))).unwrap();

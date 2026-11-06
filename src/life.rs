@@ -292,6 +292,9 @@ impl Opening {
   /// host with a runtime waits for it on a blocking thread.
   fn prepared(&self) -> Result<Prepared, Fault> {
     let works = self.works();
+    if self.keeps() {
+      self.crossed()?;
+    }
     // A record of another major of its schema is refused before any build reads it whole or writes
     // on it, and the models of a life on a record that holds another engine read that engine.
     let mut system = None;
@@ -455,6 +458,35 @@ impl Opening {
       engine.resume()?;
     }
     Ok((engine, record))
+  }
+
+  /// Carries a record whose last life ran another engine of the major across to this build, so a
+  /// life never dies on a fault that this build fixed in the kernel: a life that inspects the
+  /// record, born on the engine that its fact made holds, writes its checkpoint after its last
+  /// entry, as a life that ends writes one, and the life opens from that checkpoint on the engine
+  /// of this build. A record of this build, or of a build whose fact made holds no texts, stays as
+  /// it is.
+  fn crossed(&self) -> Result<(), Fault> {
+    let Some(path) = self.record.as_deref().filter(|one| Path::new(one).exists()) else {
+      return Ok(());
+    };
+    let marks = world::marks(path)?;
+    world::readable(&marks.heads)?;
+    let segment = checkpoint::segment(&marks.heads);
+    let (source, _) = world::texts(segment)?;
+    if source == crate::ENGINE || segment.is_empty() {
+      return Ok(());
+    }
+    let record = checkpoint::booted(world::kept(path)?);
+    let inspects = Self { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
+    let prepared = inspects.prepared()?;
+    let gated = prepared.gated;
+    let ears = inspects.eared(prepared, &record)?;
+    let mut engine = Engine::gated(record, ears, gated)?;
+    if let Some(no) = engine.raised() {
+      return Err(no.clone());
+    }
+    checkpoint::keep(Path::new(path), checkpoint::written(&mut engine)?)
   }
 
   /// Proves each checkpoint of the record: a life that inspects the entries before it, born on them
