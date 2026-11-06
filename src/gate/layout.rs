@@ -34,17 +34,40 @@ pub(super) struct Laid {
   pub(super) main: String,
   pub(super) lines: Vec<usize>,
   pub(super) declares: HashMap<String, usize>,
+  pub(super) coroutines: HashSet<String>,
 }
 
 /// What the program binds after its full modules: the module that bound each name last, each name
 /// that a word declares and the place of the word that declares it last, each name that a word
-/// binds, and the modules.
+/// binds, each name that a def of async declares last, and the modules.
 #[derive(Clone, Default)]
 struct Laying {
   source: HashMap<String, String>,
   declared: HashMap<String, usize>,
+  coroutines: HashSet<String>,
   bound: HashSet<String>,
   modules: Vec<(String, Rc<str>)>,
+}
+
+impl Laying {
+  /// One more word of the program: each name that it binds is no longer async, then each name that
+  /// it declares is async when its last declaration is an async def, and each name that it deletes
+  /// is not.
+  fn asynchronous(&mut self, unit: &Unit) {
+    for name in unit.names.iter().chain(&unit.inner) {
+      self.coroutines.remove(name);
+    }
+    for name in &unit.declares {
+      if unit.asyncs.contains(name) {
+        self.coroutines.insert(name.clone());
+      } else {
+        self.coroutines.remove(name);
+      }
+    }
+    for name in &unit.deletes {
+      self.coroutines.remove(name);
+    }
+  }
 }
 
 /// The most states of a program after a full module that the gate keeps, before it lays each
@@ -114,6 +137,7 @@ pub(super) fn laid(lines: &[&str], first: usize, tail: usize, short: &str) -> Op
     main: header + &rest.text,
     lines: stands,
     declares: state.declared,
+    coroutines: state.coroutines,
   })
 }
 
@@ -204,6 +228,7 @@ fn chunked(state: &mut Laying, lines: &[&str], chunk: &[(usize, usize)], at: usi
     binders.extend(unit.names.iter().chain(&unit.inner).cloned());
     undeclared.retain(|one| !unit.declares.contains(one));
     declares.extend(unit.declares.iter().map(|one| (one.clone(), at * CHUNK + place)));
+    state.asynchronous(&unit);
     for one in &unit.deletes {
       declares.retain(|(name, _)| name != one);
       undeclared.push(one.clone());
@@ -251,6 +276,7 @@ impl Rest {
     for one in &unit.declares {
       state.declared.insert(one.clone(), place);
     }
+    state.asynchronous(&unit);
     for one in &unit.deletes {
       state.declared.remove(one);
     }
@@ -328,14 +354,15 @@ pub(super) fn program_lines(lines: &[&str]) -> Option<(usize, usize)> {
 
 /// What the gate reads of one word of the program, in its try: its text at the top of a module, the
 /// names that the statements at its top bind, the names that a statement beneath them binds, the
-/// names that it declares, the names that the statements at its top leave deleted, and each name
-/// that it names.
+/// names that it declares, the names that the statements at its top leave deleted, each name that
+/// it declares last with an async def, and each name that it names.
 struct Unit {
   text: String,
   names: Vec<String>,
   inner: Vec<String>,
   declares: Vec<String>,
   deletes: Vec<String>,
+  asyncs: Vec<String>,
   named: Vec<String>,
 }
 
@@ -367,15 +394,23 @@ fn read_unit(lines: &[&str]) -> Rc<Unit> {
     _ => None,
   });
   let owned = |names: Vec<&str>| names.into_iter().map(str::to_owned).collect::<Vec<_>>();
-  let (names, inner, declares, deletes) =
-    tried.map_or((vec![], vec![], vec![], vec![]), |inside| {
+  let (names, inner, declares, deletes, asyncs) =
+    tried.map_or((vec![], vec![], vec![], vec![], vec![]), |inside| {
       let mut nested = Nested(vec![]);
       nested.visit_body(inside);
       let names = owned(inside.iter().flat_map(binds).collect());
-      (names, owned(nested.0), owned(Declared::of(inside)), owned(deleted(inside)))
+      let declared = Declared::of(inside);
+      (names, owned(nested.0), owned(declared.0), owned(deleted(inside)), owned(declared.1))
     });
-  let unit =
-    Rc::new(Unit { text, names, inner, declares, deletes, named: owned(Names::of(body).0) });
+  let unit = Rc::new(Unit {
+    text,
+    names,
+    inner,
+    declares,
+    deletes,
+    asyncs,
+    named: owned(Names::of(body).0),
+  });
   UNITS_READ.with_borrow_mut(|held| {
     if held.len() >= UNITS {
       held.clear();
@@ -472,16 +507,17 @@ impl<'a> Visitor<'a> for Names<'a> {
 }
 
 /// Each name that statements declare in their scope, at any depth but in a def or a class: a def, a
-/// class, an import, a type alias and a name with a type.
-struct Declared<'a>(Vec<&'a str>);
+/// class, an import, a type alias and a name with a type. Then each of them whose last declaration
+/// is an async def.
+struct Declared<'a>(Vec<&'a str>, Vec<&'a str>);
 
 impl<'a> Declared<'a> {
-  fn of(body: &'a [Stmt]) -> Vec<&'a str> {
-    let mut declared = Declared(vec![]);
+  fn of(body: &'a [Stmt]) -> Self {
+    let mut declared = Declared(vec![], vec![]);
     for stmt in body {
       declared.visit_stmt(stmt);
     }
-    declared.0
+    declared
   }
 }
 
@@ -493,9 +529,18 @@ impl<'a> StatementVisitor<'a> for Declared<'a> {
       | Stmt::Import(_)
       | Stmt::ImportFrom(_)
       | Stmt::TypeAlias(_) => {
-        self.0.extend(binds(stmt));
+        let names = binds(stmt);
+        self.1.retain(|name| !names.contains(name));
+        if matches!(stmt, Stmt::FunctionDef(def) if def.is_async) {
+          self.1.extend(&names);
+        }
+        self.0.extend(names);
       }
-      Stmt::AnnAssign(one) => self.0.extend(named(&one.target)),
+      Stmt::AnnAssign(one) => {
+        let names = named(&one.target);
+        self.1.retain(|name| !names.contains(name));
+        self.0.extend(names);
+      }
       _ => walk_stmt(self, stmt),
     }
   }

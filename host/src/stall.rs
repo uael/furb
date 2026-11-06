@@ -2,6 +2,8 @@
 //! the life runs it, so it sees a life whose words are lost, which no watch that a word runs can.
 //! A life is stalled when it holds an open act, a run of a word, a reply of a model or a command,
 //! and says no fact for the bound of the daemon, [`STALL`] unless `host.json` says otherwise.
+//! A rung, or a prompt to a model, is an open act too when nothing else lives on its chain: no
+//! run, no reply, no command and no wait. That is a chain whose ear is lost.
 
 use std::{collections::HashSet, time::Duration};
 
@@ -11,19 +13,19 @@ use tokio::time::Instant;
 use crate::{
   event::Event,
   protocol::Open,
-  view::{Act, Kind, Phase},
+  view::{Act, Kind, Phase, operator},
 };
 
 /// How long a life that holds an open act says no fact before the daemon tells that it stalled,
 /// unless the settings of the daemon say otherwise.
 pub const STALL: Duration = Duration::from_mins(20);
 
-/// What the watch holds of a life: when it said its last fact, each open act, whether it told the
-/// stall that stands, and each act that its own message made.
+/// What the watch holds of a life: when it said its last fact, each act that lives and that the
+/// watch reads, whether it told the stall that stands, and each act that its own message made.
 pub(crate) struct Quiet {
   bound: Duration,
   last: Instant,
-  open: Vec<Open>,
+  acts: Vec<Act>,
   told: Told,
   ours: HashSet<String>,
 }
@@ -39,8 +41,8 @@ enum Told {
 
 impl Quiet {
   pub(crate) fn new(bound: Duration) -> Self {
-    let (last, open, ours) = (Instant::now(), Vec::new(), HashSet::new());
-    Quiet { bound, last, open, told: Told::No, ours }
+    let (last, acts, ours) = (Instant::now(), Vec::new(), HashSet::new());
+    Quiet { bound, last, acts, told: Told::No, ours }
   }
 
   /// One event of the life. After a rebirth, the new open tells again each act that lives.
@@ -48,7 +50,7 @@ impl Quiet {
     match event {
       Event::Fact(fact) => self.fact(fact),
       Event::Act(act) => self.act(act),
-      Event::Reborn(_) => self.open.clear(),
+      Event::Reborn(_) => self.acts.clear(),
       _ => {}
     }
   }
@@ -72,11 +74,13 @@ impl Quiet {
   /// chain than its own, since the actor that the message woke works there.
   fn act(&mut self, act: &Act) {
     let done = matches!(act.phase, Phase::Done(_));
-    if matches!(act.kind, Kind::Run | Kind::Reply | Kind::Bash) {
-      self.open.retain(|one| one.act != act.id);
+    if matches!(
+      act.kind,
+      Kind::Run | Kind::Reply | Kind::Bash | Kind::Wait | Kind::Rung | Kind::Prompt
+    ) {
+      self.acts.retain(|one| one.id != act.id);
       if !done {
-        let (kind, chain) = (act.kind.to_string(), act.chain.clone());
-        self.open.push(Open { act: act.id.clone(), kind, chain });
+        self.acts.push(act.clone());
       }
     }
     match &self.told {
@@ -87,17 +91,46 @@ impl Quiet {
     }
   }
 
+  /// Whether something else lives on a chain: a run, a reply, a command or a wait, each of which
+  /// ends with a fact.
+  fn working(&self, chain: &str) -> bool {
+    let kinds = [Kind::Run, Kind::Reply, Kind::Bash, Kind::Wait];
+    self.acts.iter().any(|one| one.chain == chain && kinds.contains(&one.kind))
+  }
+
+  /// The acts that stay open with no fact to come: each run, reply and command, a rung that nothing
+  /// else lives beside on its chain, and a prompt to a model whose chain holds no rung and nothing
+  /// else. A paused act and a prompt to the operator wait on purpose.
+  fn open(&self) -> Vec<Open> {
+    let stuck = |one: &&Act| match one.kind {
+      Kind::Rung => one.pause.is_none() && !self.working(&one.chain),
+      Kind::Prompt => {
+        let to = one.words.get(2).and_then(Value::as_str).unwrap_or_default();
+        let ruled = self.acts.iter().any(|rung| rung.chain == one.chain && rung.kind == Kind::Rung);
+        one.pause.is_none() && !one.operator && !operator(to) && !ruled && !self.working(&one.chain)
+      }
+      _ => matches!(one.kind, Kind::Run | Kind::Reply | Kind::Bash),
+    };
+    let open = |one: &Act| Open {
+      act: one.id.clone(),
+      kind: one.kind.to_string(),
+      chain: one.chain.clone(),
+    };
+    self.acts.iter().filter(stuck).map(open).collect()
+  }
+
   /// When the life stalls, while it holds an open act and the watch did not tell this stall.
   pub(crate) fn due(&self) -> Option<Instant> {
-    let armed = matches!(self.told, Told::No) && !self.open.is_empty();
+    let armed = matches!(self.told, Told::No) && !self.open().is_empty();
     armed.then(|| self.last + self.bound)
   }
 
   /// The stall told: each open act, and the notice that names each one and its chain, which the
   /// watch sends to the root as its message.
   pub(crate) fn stalled(&mut self) -> (Vec<Open>, String) {
+    let open = self.open();
     let named: Vec<String> =
-      self.open.iter().map(|one| format!("{} {} on {}", one.kind, one.act, one.chain)).collect();
+      open.iter().map(|one| format!("{} {} on {}", one.kind, one.act, one.chain)).collect();
     let notice = format!(
       "The life said no fact for {}, and these acts stay open: {}. The watch of the daemon, \
        which no word of the life runs, tells this once until a new fact.",
@@ -105,7 +138,7 @@ impl Quiet {
       named.join(", "),
     );
     self.told = Told::Sent(notice.clone());
-    (self.open.clone(), notice)
+    (open, notice)
   }
 }
 
@@ -125,3 +158,7 @@ fn spoken(bound: Duration) -> String {
     _ => format!("{} seconds", bound.as_secs_f64()),
   }
 }
+
+#[cfg(test)]
+#[path = "stall.test.rs"]
+mod tests;

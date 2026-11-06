@@ -8,7 +8,9 @@ use monty_types::{TypeCheckingConfig, TypeCheckingFormat};
 
 use super::{
   MODULE, Parsed,
-  findings::{Finding, contracted, declared, read, signed, told, unawaited, unrun, unscheduled},
+  findings::{
+    Finding, contracted, declared, dropped, read, signed, told, unawaited, unrun, unscheduled,
+  },
   layout::{laid, program_lines, rebound, shortened},
   shallow::shallowed,
 };
@@ -41,9 +43,10 @@ struct Held {
 /// What the gate found on a sheet, in the order of its lines: each error of the checker by the line
 /// it stands on, in the concise form it writes, and no warning, since a warning refuses no word;
 /// each import that the sandbox cannot run, in place of what the checker says of the imports; each
-/// await in a function that is not async; and each name that the word binds and that the transcript
-/// binds. An error on a value of another type for a name that a rung of the program declares names
-/// that rung. Each is read on the sheet with each literal that holds more than `DEEP` brackets cut,
+/// await in a function that is not async; each call of an async function that the word makes as a
+/// statement and nothing awaits; and each name that the word binds and that the transcript binds.
+/// An error on a value of another type for a name that a rung of the program declares names that
+/// rung. Each is read on the sheet with each literal that holds more than `DEEP` brackets cut,
 /// which the checker could not read in time.
 pub fn checked(sheet: &str) -> Result<Vec<Finding>, Fault> {
   checked_on(ENGINE, sheet)
@@ -64,21 +67,27 @@ pub fn checked_on(engine: &str, sheet: &str) -> Result<Vec<Finding>, Fault> {
     let parsed = Parsed::new(&sheet);
     let (text, stands) = rebound(&parsed);
     let found = declared(&parsed, typed(engine, &[], &text, &stands)?, None);
-    return Ok(signed(gated(&parsed, found, engine), &[&sheet], engine));
+    return Ok(signed(gated(&parsed, found, engine, &HashSet::new()), &[&sheet], engine));
   };
   let parsed = Parsed::new(&short);
   let found =
     declared(&parsed, typed(engine, &laid.modules, &laid.main, &laid.lines)?, Some(&laid.declares));
   let mut sources: Vec<&str> = vec![&laid.main];
   sources.extend(laid.modules.iter().rev().map(|(_, module)| &**module));
-  Ok(signed(gated(&parsed, found, engine), &sources, engine))
+  Ok(signed(gated(&parsed, found, engine, &laid.coroutines), &sources, engine))
 }
 
 /// What the checker found with each finding of a rule that the gate checks itself, in the order of
 /// their lines.
-fn gated(sheet: &Parsed<'_>, mut found: Vec<Finding>, engine: &str) -> Vec<Finding> {
+fn gated(
+  sheet: &Parsed<'_>,
+  mut found: Vec<Finding>,
+  engine: &str,
+  coroutines: &HashSet<String>,
+) -> Vec<Finding> {
   found.extend(unrun(sheet));
   found.extend(unawaited(sheet));
+  found.extend(dropped(sheet, coroutines));
   found.extend(unscheduled(sheet));
   found.extend(told(sheet));
   found.extend(contracted(sheet, engine));

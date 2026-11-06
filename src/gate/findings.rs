@@ -30,6 +30,8 @@ pub enum Rule {
   Await,
   /// A read of asyncio in a word.
   Asyncio,
+  /// A call of an async function that nothing awaits.
+  Coroutine,
   /// A name that the transcript binds.
   Told,
   /// A name of the engine that a word binds.
@@ -56,6 +58,7 @@ impl Rule {
       Rule::Import => "unresolved-import",
       Rule::Await => "await-outside-async",
       Rule::Asyncio => "asyncio-in-word",
+      Rule::Coroutine => "unawaited-coroutine",
       Rule::Told => "transcript-name",
       Rule::Engine => "engine-name",
       Rule::Assign => "invalid-assignment",
@@ -378,6 +381,85 @@ pub(super) fn unawaited(sheet: &Parsed<'_>) -> Vec<Finding> {
       ),
     })
     .collect()
+}
+
+/// Each call of an async function that stands as a statement of the word, by the line it stands on.
+///
+/// A call of an `async def` makes a coroutine and runs nothing until it is awaited, and the checker
+/// lets the statement pass, so the word goes on as if the call had run. The gate refuses it first
+/// and names the fix. `known` holds the async functions that the program of the chain binds last,
+/// and the word adds the ones that it defines.
+pub(super) fn dropped(sheet: &Parsed<'_>, known: &HashSet<String>) -> Vec<Finding> {
+  let Some(body) = sheet.bodied() else { return vec![] };
+  let mut calls = Coroutines { names: known.clone(), depth: 0, found: vec![] };
+  calls.visit_body(word_of(body));
+  calls
+    .found
+    .into_iter()
+    .map(|(at, name)| Finding {
+      line: sheet.line(at),
+      column: sheet.column(at),
+      rule: Rule::Coroutine,
+      why: format!(
+        "`{name}` is an async function, which runs nothing until it is awaited: write `await {name}(...)`"
+      ),
+    })
+    .collect()
+}
+
+/// The statements that call an async function, each by where it starts, with the name that it
+/// calls. A name is async from its def at the top of the word to its next binding anywhere: a def,
+/// a class, an import, a store or a parameter ends it, so a name that a function binds for itself
+/// is never taken for the async function, and a missed call is the price of no false finding.
+struct Coroutines {
+  names: HashSet<String>,
+  depth: usize,
+  found: Vec<(usize, String)>,
+}
+
+impl<'a> Visitor<'a> for Coroutines {
+  fn visit_stmt(&mut self, stmt: &'a Stmt) {
+    match stmt {
+      Stmt::FunctionDef(_) | Stmt::ClassDef(_) | Stmt::Import(_) | Stmt::ImportFrom(_) => {
+        for name in binds(stmt) {
+          self.names.remove(name);
+        }
+        if let Stmt::FunctionDef(def) = stmt
+          && def.is_async
+          && self.depth == 0
+        {
+          self.names.insert(def.name.to_string());
+        }
+      }
+      Stmt::Expr(one) => {
+        if let Expr::Call(call) = &*one.value
+          && let Expr::Name(name) = &*call.func
+          && self.names.contains(name.id.as_str())
+        {
+          self.found.push((stmt.start().to_usize(), name.id.to_string()));
+        }
+      }
+      _ => {}
+    }
+    let scoped = matches!(stmt, Stmt::FunctionDef(_) | Stmt::ClassDef(_));
+    self.depth += usize::from(scoped);
+    visitor::walk_stmt(self, stmt);
+    self.depth -= usize::from(scoped);
+  }
+
+  fn visit_expr(&mut self, expr: &'a Expr) {
+    if let Expr::Name(one) = expr
+      && matches!(one.ctx, ExprContext::Store)
+    {
+      self.names.remove(one.id.as_str());
+    }
+    visitor::walk_expr(self, expr);
+  }
+
+  fn visit_parameter(&mut self, parameter: &'a Parameter) {
+    self.names.remove(parameter.name.as_str());
+    visitor::walk_parameter(self, parameter);
+  }
 }
 
 /// Each name of asyncio but `CancelledError` that the word reads, by the line it stands on.

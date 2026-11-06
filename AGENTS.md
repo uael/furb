@@ -85,7 +85,7 @@ API of its own:
   tailnet, behind a `Dialer` and an `Identity`, and the door of the windows, a WebSocket on loopback that lets in the
   peer that gives the token of `window.json`, `access` the role of each login of the network from `host.json`,
   `serve` the door to one peer, which checks the role of each verb, `stall` the watch of each life, which
-  stands outside it and tells its windows and its root when it holds an open act and says no fact, and `daemon` the
+  stands outside it and tells its windows and its root when it holds an open act, or a rung or a prompt that no act lives beside, and says no fact, and `daemon` the
   daemon of the machine, which holds each life by its record while a window or a pin of `holders` holds it, and gives its place to
   a new build at a handover. `furb host` serves it, and `furb host upgrade` hands it over. `docs/protocol.md` says the
   protocol, and `bun run protocol` makes `bind/typescript/src/protocol.ts` again from `host/protocol.schema.json`.

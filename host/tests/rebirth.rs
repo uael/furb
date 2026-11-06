@@ -24,7 +24,10 @@ use furb::{
   life::{Answer, Opening},
   world,
 };
-use furb_host::{Command, Event, Life, LifeHandle, Reply, Seq, view::Phase};
+use furb_host::{
+  Command, Event, Life, LifeHandle, Reply, Seq,
+  view::{Kind, Phase},
+};
 use futures::{Stream, StreamExt};
 
 /// The events of a life, each under its place in the log.
@@ -35,12 +38,15 @@ const TAIL: usize = 10_000;
 
 fn main() {
   let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build();
-  runtime.expect("the test has a runtime").block_on(a_life_goes_on_through_each_rebirth());
+  runtime.expect("the test has a runtime").block_on(async {
+    a_life_goes_on_through_each_rebirth().await;
+    a_rebirth_waits_for_each_word_up_to_its_bound_and_names_what_it_cuts().await;
+  });
 }
 
-/// A directory of the test, empty.
-fn place() -> yard::Yard {
-  yard::Yard::new(format!("furb-host-rebirth-{}", std::process::id()))
+/// A directory of the test, empty, under a name of its own.
+fn place(name: &str) -> yard::Yard {
+  yard::Yard::new(format!("furb-host-rebirth-{name}-{}", std::process::id()))
 }
 
 /// A life that keeps its record, with no extension, whose model closes each request with None.
@@ -89,10 +95,31 @@ async fn until(
   }
 }
 
-/// A word that runs on the root as a turn of the operator.
-async fn ran(life: &LifeHandle, word: &str) {
-  let made = life.send(Command::Rung { word: word.to_owned(), on: None }).await;
-  assert!(matches!(made, Ok(Reply::Act(_))), "{word} ran: {made:?}");
+/// A word that runs on the root as a turn of the operator: the name of its rung.
+async fn ran(life: &LifeHandle, word: &str) -> String {
+  match life.send(Command::Rung { word: word.to_owned(), on: None }).await {
+    Ok(Reply::Act(rung)) => rung,
+    made => panic!("{word} ran: {made:?}"),
+  }
+}
+
+/// Whether an event is the run of the word of a rung, once it is done.
+fn ran_out(rung: &str) -> impl Fn(&Event) -> bool {
+  move |event| {
+    matches!(event, Event::Act(act) if act.kind == Kind::Run
+      && matches!(act.phase, Phase::Done(_))
+      && act.words.first().and_then(|word| word.as_str()) == Some(rung))
+  }
+}
+
+/// The message of a prompt, when an event is a prompt.
+fn message(event: &Event) -> Option<String> {
+  match event {
+    Event::Act(act) if act.kind == Kind::Prompt => {
+      act.words.get(1).and_then(|word| word.as_str()).map(str::to_owned)
+    }
+    _ => None,
+  }
 }
 
 /// The representation of a name of the module of the root, or why it has none.
@@ -138,7 +165,7 @@ fn restated(log: &[Logged]) -> Vec<String> {
 }
 
 async fn a_life_goes_on_through_each_rebirth() {
-  let at = place();
+  let at = place("tail");
   let life = Life::spawn(opening(&at)).expect("the life has a thread");
   let mut events = Box::pin(life.events(0));
   ran(&life, "n = 1\nwork = chain('work')").await;
@@ -181,4 +208,65 @@ async fn a_life_goes_on_through_each_rebirth() {
   let again = Life::spawn(opening(&at)).expect("the life has a thread");
   assert_eq!(named(&again, "n").await, Ok("1".to_owned()), "a later life goes on");
   assert!(matches!(again.send(Command::End).await, Ok(Reply::Done)));
+}
+
+/// A word that binds an act whose ear lives until its life ends, which no checkpoint keeps.
+const LASTING: &str = "def lasting(on=''):
+  def ear(id):
+    yield 'started', id
+    while True:
+      yield {id}
+  return act('lasting', on, ear)
+held = lasting()
+held_id = str(held)";
+
+/// The name that a value of the root binds, as a string.
+async fn bound(life: &LifeHandle, name: &str) -> String {
+  let got = named(life, name).await.unwrap_or_else(|no| panic!("the root binds no {name}: {no}"));
+  got.trim_matches('\'').to_owned()
+}
+
+async fn a_rebirth_waits_for_each_word_up_to_its_bound_and_names_what_it_cuts() {
+  let at = place("bound");
+  let life = Life::spawn(opening(&at)).expect("the life has a thread");
+  let mut events = Box::pin(life.events(0));
+  ran(&life, "asked = prompt(str, 'Name a color.', to=OPERATOR)").await;
+  let asked = bound(&life, "asked").await;
+  let waits = ran(&life, "got = await wait(3600, asked)").await;
+  let busy = ran(&life, "for i in range(2600):\n  chance()").await;
+  let mut log = until(&mut events, ran_out(&busy)).await;
+  assert!(
+    !log.iter().any(|one| matches!(*one.1, Event::Reborn(_))),
+    "a word that awaits a wait holds the rebirth past the tail"
+  );
+  let answered = life.send(Command::Answer { id: asked.clone(), line: "red".to_owned() }).await;
+  assert!(matches!(answered, Ok(Reply::Done)), "the prompt stayed open: {answered:?}");
+  log.extend(until(&mut events, ran_out(&waits)).await);
+  log.extend(until(&mut events, reborn(false)).await);
+  assert_eq!(
+    named(&life, "got").await,
+    Ok(format!("'{asked}'")),
+    "the word ended before the rebirth"
+  );
+
+  ran(&life, LASTING).await;
+  let held = bound(&life, "held_id").await;
+  ran(&life, "late = prompt(str, 'Name a fruit.', to=OPERATOR)").await;
+  let late = bound(&life, "late").await;
+  let stuck = ran(&life, "await wait(3600, late)").await;
+  ran(&life, "for i in range(6000):\n  chance()").await;
+  log.extend(until(&mut events, reborn(false)).await);
+  let told =
+    until(&mut events, |event| message(event).is_some_and(|one| one.contains("born again")));
+  let told = message(&told.await.last().expect("the root was told").1).expect("a prompt");
+  assert!(
+    told.contains(&format!("{held} on ")),
+    "the rebirth names the act with an ear that it cut: {told}"
+  );
+  assert!(
+    told.contains(&format!("(the word of {stuck})")),
+    "the rebirth names the word that it cut: {told}"
+  );
+  assert!(!told.contains(&late), "the rebirth names no prompt that the checkpoint keeps: {told}");
+  assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
 }

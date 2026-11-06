@@ -14,6 +14,7 @@ import type { ActRow } from "../session.ts";
 import { theme as c, glyph, spacing as space } from "../theme.ts";
 import { bold, type Part } from "../ui.ts";
 import { part } from "./part.ts";
+import { foldOf } from "./shared.ts";
 
 /** The places of the acts of each kind in the list of the acts. A place keeps its kind and the list only grows, so a
  * new act adds its place alone, and a component that reads the acts of a kind at each frame scans no long life. */
@@ -189,8 +190,8 @@ export const desk = part({
   },
 
   /** The panels of the parts over the input, while the feed shows: each panel of a part that loaded, and the error of
-   * a part that did not load or of a panel that throws, in plain words in its own panel. A panel shows twelve lines at
-   * most. */
+   * a part that did not load or of a panel that throws, in plain words in its own panel. A panel shows FOLD_ROWS lines,
+   * then the fold of the rest. */
   renderDock(): void {
     const w = this.session;
     const shown: { title: string; lines: readonly PartLine[]; error?: string }[] = [];
@@ -217,7 +218,8 @@ export const desk = part({
       return;
     }
     // A spinner moves at the tick of the App, so the key holds no frame of it, and an input keeps its focus.
-    const key = JSON.stringify([shown, trees, w.host.role, this.feedWidth, this.theme]);
+    const opened = shown.map((one) => w.folds[`dock:${one.title}`]);
+    const key = JSON.stringify([shown, opened, trees, w.host.role, this.feedWidth, this.theme]);
     if (key === this.dockKey) return;
     this.dockKey = key;
     this.dock.backgroundColor = c.panel;
@@ -228,10 +230,11 @@ export const desk = part({
       const mark: Part[] = one.error ? [[`${glyph.failed} `, c.danger]] : [];
       box.add(this.line([...mark, [one.title, c.text, bold]], c.text, { truncate: true }));
       if (one.error) box.add(this.text(one.error, c.danger));
-      const lines = one.lines.slice(0, 12);
-      for (const line of lines) box.add(this.line(this.partLine(line), c.text, { truncate: true }));
-      if (one.lines.length > lines.length)
-        box.add(this.line(`${one.lines.length - lines.length} more lines`, c.faint));
+      const fold = `dock:${one.title}`;
+      const hide = w.folds[fold] === false ? 0 : foldOf(one.lines.length);
+      for (const line of one.lines.slice(0, one.lines.length - hide))
+        box.add(this.line(this.partLine(line), c.text, { truncate: true }));
+      if (hide) box.add(this.foldLine(fold, hide, "line"));
       this.dock.add(box);
     }
     for (const { viewer, tree } of trees) {
