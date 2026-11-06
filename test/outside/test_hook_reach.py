@@ -30,8 +30,8 @@ def test_a_file_of_the_engine_of_the_crate_or_of_a_manifest_reaches_the_whole_su
 
 
 def test_a_script_reaches_the_tests_that_name_it_and_no_other() -> None:
-  assert "test/outside/test_build_slot_script.py" in reach.suite(["script/build-slot.sh"])
-  assert "test/test_boot.py" not in reach.suite(["script/build-slot.sh"])
+  assert "test/outside/test_title_script.py" in reach.suite(["script/title.py"])
+  assert "test/test_boot.py" not in reach.suite(["script/title.py"])
   assert "test/outside/test_scope.py" in reach.suite(["script/scope.py"])
 
 
@@ -57,9 +57,9 @@ def test_every_file_of_the_tree_reaches_the_whole_set_as_the_gates_give_it() -> 
 
 
 def test_a_selection_of_tests_runs_with_no_coverage_and_the_whole_suite_keeps_it() -> None:
-  got = reach.command("pytest", ["script/build-slot.sh"])
+  got = reach.command("pytest", ["script/title.py"])
   assert got[:5] == ["uv", "run", "pytest", "-q", "--no-cov"]
-  assert "test/outside/test_build_slot_script.py" in got[5:]
+  assert "test/outside/test_title_script.py" in got[5:]
   assert reach.command("pytest", ["src/furb/engine.py"]) == ["uv", "run", "pytest", "-q"]
   assert reach.command("pytest", ["tui/src/app.ts"]) is None
 
@@ -69,4 +69,5 @@ def test_a_contract_test_an_official_extension_test_and_a_project_contract_reach
   assert laws in reach.suite(["test/test_peek.py"])
   assert laws in reach.suite(["extensions/memory/test/test_memory.py"])
   assert laws in reach.suite([".furb/extensions/pr/pr.py"])
+  assert laws in reach.suite([".furb/extensions/pr/test/test_commit.py"])
   assert laws not in reach.suite(["test/outside/test_scope.py"])

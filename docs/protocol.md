@@ -141,6 +141,13 @@ it is not given. The daemon answers requests in any order.
   of its key does not take, and writes nothing. A set writes the key in its layer, `project` when none is named, or
   takes it out when no value is given, and then the life stands, so the answer is the act of the stand. A change that
   the catalog cannot read puts its config back as it was, and the life does not stand.
+  A set of `["providers", "codex"]` to `true` starts the sign-in of codex on the machine of the daemon, unless an
+  account is connected or a sign-in runs. The daemon pushes to the peer that asked the frame `sign_in` at the current
+  state and at each change of it, with the `state` (`disconnected`, `waiting`, `connecting`, `connected`,
+  `needs-login`, `failed` or `canceled`), the `url` of the browser while it waits, and the `message` that a person
+  reads when it needs login or failed. The answer of the set comes when the sign-in ends: the act of the stand when
+  it connects, and a refusal when the operator cancels it or it fails. A set to `false` cancels a sign-in that runs. A
+  window keeps no state of the sign-in beside these frames and asks for none.
 - `list` gives each record of the machine as `lives`: each record of the sessions of each workspace that
   `workspaces.json` in the folder `config` names, the config folder of the daemon when the peer names none, in the
   `.furb/sessions` of its main checkout and of each worktree of it, with that main checkout as `workspace`, and each

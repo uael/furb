@@ -175,7 +175,7 @@ async def commit(title: str, paths: list[str], body: str = "", qa: tuple[str, ..
   named = " ".join(shq(one) for one in paths)
   run = (
     f"{entered(where)}git add -- {named} || exit 1\n"
-    f"sh script/build-slot.sh git commit -q -m {shq(title)}{more}{note} -- {named} || exit 1\n"
+    f"git commit -q -m {shq(title)}{more}{note} -- {named} || exit 1\n"
     "git rev-parse --short HEAD\n"
     "git log -1 --format='%(trailers:key=QA,valueonly)'\n"
   )
