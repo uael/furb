@@ -423,6 +423,9 @@ fix what your change broke, and report what was broken before.
   guards a defect that a life of the owner met, and fails on the commit before its fix. `bun run test` runs them with
   the other tests, on macOS and Linux, so they are a required check of each pull request. Each fix of a path of the
   operator adds a scenario that fails on the code before the fix.
+  `tui/scenarios/walk.ts` walks the TUI the same way for the audit of the skill converge-tui: each key of the table,
+  each shape of answer, the sizes, and the newest records of the project read-only, with probes that find a defect
+  in a frame with no judge. Its scenario holds only that the walk goes to its end.
 - `bun run demo` and `bun run tui`: the TUI on the demo session, which asks no model, or on a real life.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
   `tui/src/commands.ts`.
