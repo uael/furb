@@ -227,7 +227,13 @@ export const feed = part({
         this.scrollAfterLayout(0);
       }
     } else if (w.view === "feed") {
-      if (welcomed) this.scroll.stickyScroll = !this.tree;
+      // The feed that replaces the welcome opens at its end, as a feed that was never shown does. The welcome asked
+      // the next frame for its top, and a screen that had not drawn that frame yet must not take it for the feed.
+      if (welcomed) {
+        this.scroll.stickyScroll = !this.tree;
+        this.scrollNow("end");
+        this.scrollAfterLayout("end");
+      }
       // The feed shows the acts as they stood at the moment that the operator moved to, or as they stand now. Its fold
       // reads them from the index of the session, which spares the fold a pass over every act in each frame.
       const shown = w.at(w.acts);

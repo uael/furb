@@ -756,7 +756,9 @@ export class Session extends EventEmitter {
     this.carrying = true;
     void (said ? Promise.resolve(true) : this.rename(name)).then((kept) => {
       this.carrying = false;
-      if (!kept) return;
+      // A session that closed while the name was said may have ended its life before the record held the name, and
+      // its last save kept the name in the old home: a save after it would take the name from there too.
+      if (!kept || this.closed) return;
       this.legacyName = undefined;
       this.save();
     });
