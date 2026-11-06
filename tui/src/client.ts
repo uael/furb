@@ -384,6 +384,8 @@ export class RemoteLife extends EventEmitter {
   /** What the answers of the models cost each chain, by the chain, and all chains together, in dollars. */
   readonly spends = new Map<string, Spend>();
   cost = 0;
+  /** How many times a spend changed, which tells a view when to read the spends again. */
+  spendChanges = 0;
   /** How many changes of an act the window heard, and the count at the last change of each act that a person
    * follows, so that a reader takes only the acts that changed since it last read. */
   private changes = 0;
@@ -455,6 +457,7 @@ export class RemoteLife extends EventEmitter {
     this.outputs.clear();
     this.completed = 0;
     this.spends.clear();
+    this.spendChanges++;
     this.cost = 0;
     this.changed.clear();
     this.log = { count: [], name: [] };
@@ -638,6 +641,7 @@ export class RemoteLife extends EventEmitter {
       if (act.kind === "chain" && act.spend && act.spend !== was?.spend) {
         this.cost += act.spend.dollars - (this.spends.get(act.id)?.dollars ?? 0);
         this.spends.set(act.id, act.spend);
+        this.spendChanges++;
       }
       if (isDone(act) && !(was && isDone(was))) {
         this.outputs.delete(act.id);

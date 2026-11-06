@@ -184,8 +184,17 @@ class ReadLife extends EventEmitter {
   /** What the answers of the models cost each chain, by the chain. */
   get spends(): ReadonlyMap<string, Spend> {
     const { activity } = this.reader;
-    return new Map([...activity.spends].filter(([id]) => activity.acts.get(id)?.kind === "chain"));
+    const kept = this.chainSpends;
+    if (kept?.at === activity.spendChanges) return kept.spends;
+    const spends = new Map([...activity.spends].filter(([id]) => activity.acts.get(id)?.kind === "chain"));
+    this.chainSpends = { at: activity.spendChanges, spends };
+    return spends;
   }
+  /** How many times a spend changed, which tells a view when to read the spends again. */
+  get spendChanges(): number {
+    return this.reader.activity.spendChanges;
+  }
+  private chainSpends?: { at: number; spends: Map<string, Spend> };
   /** What a command that had no end when the record ended printed. */
   output(id: string): { stdout: string; stderr: string } | undefined {
     const act = this.reader.activity.acts.get(id);
@@ -348,6 +357,8 @@ export class HostView extends EventEmitter {
   recorded?: boolean;
   /** The measure of each chain whose models answered, by the chain. */
   measures: Record<string, Measure> = {};
+  /** The life and the count of spend changes that the measures were read at. */
+  private spent?: { life: Held; at: number };
   compactions: Compaction[] = [];
   /** The count of facts that the window heard. */
   seq = 0;
@@ -489,15 +500,18 @@ export class HostView extends EventEmitter {
     // A view keys on the measures, the compactions, the seen and the prompts, as the loom of the life does on the
     // measures: each keeps its object while nothing of it changed, so a fact that changes none of them, as a line of a
     // command, weaves nothing again in a long life.
-    const measures = Object.fromEntries(
-      [...life.spends].map(([chain, spend]) => [chain, this.measure(chain, spend)]),
-    );
-    const held = Object.keys(this.measures);
-    if (
-      held.length !== Object.keys(measures).length ||
-      held.some((chain) => this.measures[chain] !== measures[chain])
-    )
-      this.measures = measures;
+    if (this.spent?.life !== life || this.spent.at !== life.spendChanges) {
+      this.spent = { life, at: life.spendChanges };
+      const measures = Object.fromEntries(
+        [...life.spends].map(([chain, spend]) => [chain, this.measure(chain, spend)]),
+      );
+      const held = Object.keys(this.measures);
+      if (
+        held.length !== Object.keys(measures).length ||
+        held.some((chain) => this.measures[chain] !== measures[chain])
+      )
+        this.measures = measures;
+    }
     const { compactions, seenAt: seen } = life;
     if (compactions.length !== this.compactions.length || compactions.at(-1) !== this.compactions.at(-1))
       this.compactions = [...compactions];
