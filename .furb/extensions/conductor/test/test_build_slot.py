@@ -101,11 +101,26 @@ def test_the_slot_of_a_holder_that_ended_goes_to_the_next_build(tmp_path: Path) 
 
 def test_the_slot_of_a_live_holder_holds_until_the_wait_ends(tmp_path: Path) -> None:
   folder = tmp_path / "slots" / "slot1"
+  release = tmp_path / "release"
+  body = f"while [ ! -e {release} ]; do sleep 0.05; done"
+  holder = start(tmp_path, "sh", "-c", body, FURB_BUILD_SLOTS="1")
+  try:
+    deadline = time.monotonic() + 30
+    while not (folder / "pid").exists() and time.monotonic() < deadline:
+      time.sleep(0.05)
+    got = run(tmp_path, "true", FURB_BUILD_SLOTS="1", FURB_BUILD_WAIT="1")
+    assert got.returncode == 75 and "no slot of 1 freed in 1s" in got.stderr
+    assert folder.is_dir()
+  finally:
+    release.touch()
+    holder.communicate(timeout=60)
+
+
+def test_the_slot_whose_pid_went_to_another_process_goes_to_the_next_build(tmp_path: Path) -> None:
+  folder = tmp_path / "slots" / "slot1"
   folder.mkdir(parents=True)
   (folder / "pid").write_text(f"{os.getpid()}\n", encoding="utf-8")
-  got = run(tmp_path, "true", FURB_BUILD_SLOTS="1", FURB_BUILD_WAIT="1")
-  assert got.returncode == 75 and "no slot of 1 freed in 1s" in got.stderr
-  assert folder.is_dir()
+  assert run(tmp_path, "true", FURB_BUILD_SLOTS="1", FURB_BUILD_WAIT="5").returncode == 0
 
 
 def test_a_slot_with_no_pid_frees_after_a_minute_and_not_before(tmp_path: Path) -> None:
