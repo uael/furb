@@ -571,10 +571,28 @@ async def raises_again() -> None:
   record = [((*e, "x", "y") if e[0] == "read" and e[2] == OPERATOR else e,) for (e,) in sand.record]
   with pytest.raises(TypeError):
     await relived(Sand(), record)
+  tip, _, top = born()
+  word = (
+    "b = bash('echo hi')\n"
+    "def noisy(id):\n  yield 'started', id\n  while True:\n    a = yield {b}\n"
+    "    if a[0] == 'done':\n      raise TypeError('noisy')\n"
+    "n = act('noisy', '', noisy)\nawait wait(0.05, b)\nlast = bash('echo after')\nawait last"
+  )
+  await engine.rung(word, on=top)
+  await settle()
+  b = engine.module(top)["b"]
+  cut = next(n for n, (e,) in enumerate(tip.record) if e[:2] == ("done", b))
+  first, second = list(tip.record)[: cut + 1], Sand()
+  _, again = await relived(second, first)
+  live = viewed(again)
+  _, over = await relived(Sand(), [*first, *second.record])
+  later = viewed(over)
+  assert {k: v[: len(live["facts"][k])] for k, v in later["facts"].items() if k in live["facts"]} == live["facts"]
+  assert engine.module(over)["last"] == engine.module(again)["last"]
 
 
 async def test_given_at_its_birth_what_the_world_kept_of_an_earlier_life() -> None:
-  """Given at its birth what the World kept of an earlier life, it says those entries again in the order it was given them, each once every fact said before it has been heard, or once a raise that is no drift stopped the bus with some of them unheard: an act whose maker is neither an act nor an ear that boot was given it makes again through its verb under the site of its maker, once the chain it is on has been made again, since that maker makes nothing again of what the record holds; an act whose maker is an act it makes not, since the word of that act makes it again; an act whose maker is an ear that boot was given it makes through act under the site of that ear, with no ear of its own, when that ear did not make it again by then, so a view of a later life holds it where the first life held it; and any other fact it says once the act it is about has been made again, so that its controls and its dones land where they landed."""
+  """Given at its birth what the World kept of an earlier life, it says those entries again in the order it was given them, each once every fact said before it has been heard, or once a raise that is no drift stopped the bus with some of them unheard, but for an act that an act of the record makes, which comes of a fact still unheard: an act whose maker is neither an act nor an ear that boot was given it makes again through its verb under the site of its maker, once the chain it is on has been made again, since that maker makes nothing again of what the record holds; an act whose maker is an act it makes not, since the word of that act makes it again; an act whose maker is an ear that boot was given it makes through act under the site of that ear, with no ear of its own, when that ear did not make it again by then, so a view of a later life holds it where the first life held it; and any other fact it says once the act it is about has been made again, so that its controls and its dones land where they landed."""
   sand, log, root = born()
   step = engine.rung("await wait(100.0, __name__)\nclose(7)", on=root)
   await settle()

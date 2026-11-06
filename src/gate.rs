@@ -180,6 +180,45 @@ fn named(target: &Expr) -> Vec<&str> {
   }
 }
 
+/// Each name of the engine that a statement at the top of a word binds, once and in its order. A
+/// word may import a name that the engine imports under that name, since it binds the same thing.
+pub(crate) fn engine_bound(word: &str, engine: &str) -> Vec<String> {
+  let (word, engine) = (Parsed::new(word), Parsed::new(engine));
+  let (Some(body), Some(held)) = (word.body(), engine.body()) else { return vec![] };
+  let names: Vec<&str> = held.iter().flat_map(binds).collect();
+  let imports: Vec<&str> = held.iter().flat_map(unaliased).collect();
+  let mut found: Vec<String> = vec![];
+  for stmt in body {
+    let same = unaliased(stmt);
+    for name in binds(stmt) {
+      let rebinds = names.contains(&name) && !(same.contains(&name) && imports.contains(&name));
+      if rebinds && !found.iter().any(|one| one == name) {
+        found.push(name.to_owned());
+      }
+    }
+  }
+  found
+}
+
+/// The names that an import binds under the name that it imports, with no `as`.
+fn unaliased(stmt: &Stmt) -> Vec<&str> {
+  match stmt {
+    Stmt::Import(one) => one
+      .names
+      .iter()
+      .filter(|alias| alias.asname.is_none())
+      .map(|alias| alias.name.as_str().split('.').next().unwrap_or_default())
+      .collect(),
+    Stmt::ImportFrom(one) => one
+      .names
+      .iter()
+      .filter(|alias| alias.asname.is_none())
+      .map(|alias| alias.name.as_str())
+      .collect(),
+    _ => vec![],
+  }
+}
+
 /// The names that the statements at the top of a body leave deleted: each name that a `del` deletes
 /// and that no later statement at the top binds again.
 fn deleted(body: &[Stmt]) -> Vec<&str> {

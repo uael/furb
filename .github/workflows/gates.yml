@@ -175,8 +175,9 @@ jobs:
     needs: scope
     if: needs.scope.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
-    # A change of the lock or of this file makes every system build each crate from nothing, and main saves the cache
-    # only from a job that passes. A limit shorter than that build fails every later run too, since none finds a cache.
+    # A change of the lock, of this file or of the script of the build makes every system build each crate from
+    # nothing, and main saves the cache only from a job that passes. A limit shorter than that build fails every later
+    # run too, since none finds a cache.
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -196,6 +197,7 @@ jobs:
         with:
           python: none
           key: ${{ runner.os == 'Windows' && 'package' || '' }}
+          hashed: bind/typescript/build.ts
       # napi builds for the triple of the machine, in a folder of its own: cargo builds for it too, so the tests and
       # the package share every dependency.
       - run: |
@@ -243,6 +245,7 @@ jobs:
         with:
           python: none
           shared: typescript
+          hashed: bind/typescript/build.ts
       - run: |
           echo "CARGO_BUILD_TARGET=$(rustc -vV | sed -n 's/^host: //p')" >> "$GITHUB_ENV"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0

@@ -60,3 +60,9 @@ tokio = { version = "1", features = ["rt", "macros", "time"] }
 # The test of a rebirth runs in a process of its own, with no harness.
 name = "rebirth"
 harness = false
+
+[[test]]
+# The test of a record that takes no fact runs in a process of its own, with no harness, since it
+# sets a limit of the process.
+name = "unkept"
+harness = false

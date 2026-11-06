@@ -35,6 +35,10 @@ API of its own:
   replay on their own engines with no drift. `tests/corpus` holds the records of each release, which each later build must open, as
   `tests/corpus/README.md` says. Each door gives it as
   `opened` and as `Engine.open`.
+- `src/view.rs` and `src/view/` fold the facts of a life into its meaning, which every window shows the same way: the
+  state of each act and of each chain, the desk of the operator, the threads of a chain, the spend, and the acts as
+  they stood at a moment. It depends on the crate alone, so the host and each door read one fold. `Fold` hears each
+  fact, and `Held` keeps the acts that a host told, from which it draws the desk, the threads and the moments.
 - `src/checkpoint.rs` holds the checkpoint of a life: a fact at the tip of its record with each chain that lives, its
   turns, its module and its open prompts, from which a later life of any build goes on: the fact, its store and the
   boot, while `gathered` and `seed` of `engine.py` write and read its data. A life ends with one through
@@ -80,7 +84,8 @@ API of its own:
   `host/src/rebirth.rs` says. A fault that stops the sandbox ends the life, and its record keeps each fact up to the
   fault. The
   crate holds the one list of the ears of the host that each life hears: the console of the operator, and the ear
-  that tells each fact as events. `protocol` holds the one protocol of the daemon, a `Verb` and a `Frame` of JSON
+  that tells each fact as events, each act with the meaning that `furb::view` folds, which the verbs of the desk,
+  the threads and the moments serve from the same fold. `protocol` holds the one protocol of the daemon, a `Verb` and a `Frame` of JSON
   lines with the version `PROTOCOL`, `transport` the socket or the pipe of the machine, TCP and WebSocket on the
   tailnet, behind a `Dialer` and an `Identity`, and the door of the windows, a WebSocket on loopback that lets in the
   peer that gives the token of `window.json`, `access` the role of each login of the network from `host.json`,

@@ -139,9 +139,11 @@ life of a conductor of furb with 23 chains. It also adds four workspaces with ei
 recorded life is a log whose first line says `"recorded": true`. The TUI reads it as a record open to read, so what
 you send to it fails with the reason.
 
-`bun run tui/script/fixture.ts <record>.jsonl.log [out]` makes such a fixture from the log of a real life. It keeps
-what the models read and each word whole, cuts each message and output to its first lines, and replaces each key,
-address of mail and home directory.
+`bun run tui/script/fixture.ts <record>.jsonl.log [out] [moment]` makes such a fixture from the log of a real life,
+which it reads one line at a time, so a log of gigabytes fits. It keeps what the models read and each word whole, cuts
+each message and output to its first lines, and replaces each key, address of mail and home directory in each string,
+so each line stays JSON. The moment is `end`, the default, `busiest`, the moment with the most work at once, or a count
+of facts, which cuts a log that grew since at the same fact.
 
 ## Look and access
 

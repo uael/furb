@@ -129,6 +129,12 @@ export function modelName(name: string): { provider: string; id: string } {
   return at < 0 ? { provider: "", id: name } : { provider: name.slice(0, at), id: name.slice(at + 1) };
 }
 
+/** The label of a model in each place that names it, as opus/high: the model by its id, and its effort after a slash
+ * when it has one. The header of a word, the tag of a reply and the line under the input all read it. */
+export function modelLabel(id: string, effort = ""): string {
+  return effort && effort !== "off" ? `${id}/${effort}` : id;
+}
+
 /** A text that HTML and XML read as the text itself, with no mark of either. */
 export const escaped = (value: string) =>
   value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
