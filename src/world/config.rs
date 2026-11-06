@@ -284,7 +284,9 @@ impl Layers {
   }
 
   /// Each key that a schema names: the keys of furb, then the keys that each extension that the
-  /// configs turn on adds under its name, in the order a life runs them.
+  /// configs turn on adds under its name, in the order a life runs them. A file of keys that is no
+  /// schema names no key, so the configs stay readable and a config can turn its extension off,
+  /// and the read of `settings://` and the name of that extension says why.
   fn schema(&self) -> Result<Vec<Named>, Error> {
     let places = Places { config: self.user.clone(), home: Places::here().home };
     let mut named = own();
@@ -292,8 +294,7 @@ impl Layers {
       if named.iter().any(|one| one.key[0] == name) {
         return Err(Error::Clash(name));
       }
-      let keys: Keys = serde_json::from_str(&text)
-        .map_err(|source| Error::Schema { name: name.clone(), source })?;
+      let Ok(keys) = serde_json::from_str::<Keys>(&text) else { continue };
       named.extend(keys.properties.into_iter().map(|(one, property)| Named {
         key: vec![name.clone(), one],
         property,

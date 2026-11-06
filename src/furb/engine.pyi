@@ -65,7 +65,7 @@ The Kernel holds the run of the word of a turn of a model, once that word is ove
 type Show = tuple | Callable[[list[str]], list[int]]
 """A show says which lines of a text to tell, and picked gives their numbers from the lines of the text.
 A show of the file is plain data, which span, grep and differs make, so it is a word of each act that it is given to and a record holds it.
-A show is any callable that is given the lines of a text and gives the numbers of the lines to tell, so a word adds a show by writing one, which the word makes again when it runs again.
+A show is any callable that is given the lines of a text and gives the numbers of the lines to tell, so a word adds a show by writing one, which the word makes again when it runs again; no later life makes it again as it was, so it is no word of an act, which holds None in its place.
 """
 type Filter = Callable[[list[Question]], list[Question]]
 """A filter is given the acts of the transcript up to the source of a chain that has one.
@@ -658,7 +658,7 @@ def gathered(define: Callable[[str], str], floor: dict[str, int]) -> dict:
   """gathered gives the data of a checkpoint of the life at its tip, which seed reads, as plain data that each build of the major reads: taken, chains and acts.
   taken gives the highest number of each kind that an act of a chain took, and at least the number that floor gives, since a later life makes no act again that an ear of the outside made.
   chains holds each chain of the life, a chain at rest among them, each with its parent, its label, its source, whether it is paused, its turns but the facts made, what define gives of each word that ran on it, the text that binds each plain value of its module again, the names of the other values, and the acts that it cut, each word that ran on it among them.
-  chains names among the other values of a chain each plain value whose text passes LARGEST bytes, since a tell keeps no more.
+  chains holds each plain value of a chain whatever its size, and seed binds a large one from the carried fact of its chain, so a later life holds it exactly and no turn tells it.
   acts holds the last stand, the last clock, and each act of a verb that a value names or that is a command of a chain in chains: an act that is over with its value, an open prompt with its shape, its message, its actor and the ear that started it, and another act as cut, with a refusal that says why.
   paused says whether a pause stands over the chain at the tip, and no prompt of it pauses it, so a later life goes on as the tip left it.
   gathered is a view: it makes nothing and says nothing.

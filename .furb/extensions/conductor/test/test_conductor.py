@@ -435,6 +435,17 @@ async def test_asked_writes_the_words_of_the_owner_at_each_new_message_and_only_
   assert conductor.sand.files[path].endswith(f"## {later}, his message\n\nNext.\n\n")
 
 
+async def test_a_refused_write_of_the_words_of_the_owner_is_tried_again_with_no_new_message(conductor: Round) -> None:
+  told = conductor.engine.prompt(str, "Do it.", on=conductor.root)
+  await conductor.word('real = write\nfails = [1]\n\n\ndef write(text, on=""):\n  if fails:\n    fails.pop()\n    raise Refused("disk full")\n  return real(text, on=on)')
+  with pytest.raises(Refused, match="disk full"):
+    await conductor.word("owner_words()")
+  path = "scratch://owner/words.md"
+  assert path not in conductor.sand.files
+  await conductor.word("owner_words()")
+  assert conductor.sand.files[path].endswith(f"## {told}, his message\n\nDo it.\n\n")
+
+
 async def test_an_audit_of_each_target_starts_at_four_merges_on_astra_and_the_model_of_audit_in_turn(conductor: Round) -> None:
   await conductor.word(f'limits["models"]["astra"] = {ASTRA!r}\nalign()')
   assert conductor.ns["align_state"] == {"align": {"base": "0"}, "tui": {"base": "0"}}

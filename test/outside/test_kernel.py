@@ -9,6 +9,7 @@ import pytest
 
 import furb
 import furb.kernel
+import furb.sheet
 import furb_monty.engine
 from conftest import Py, Sand, born, kernel, plain, relived, swapped
 from furb import engine, sheet
@@ -236,11 +237,11 @@ async def test_a_record_whose_acts_hold_a_callable_or_an_address_replays_on_the_
     engine.boot(record, **kernel(), world=Sand().hears())
   log, again = await relived(Sand(), record)
   assert again == root and [a[4] for a in log if a[0] == "bash"][:1] == ["one"]
-  held = furb.kernel.Recorded("<f at 0x1>")
-  assert furb.kernel.Recorded() == len and held == "<f at 0x2>" and held != "<g at 0x1>"
-  assert (
-    held == furb.kernel.Recorded("<f at 0x1>") and repr(furb.kernel.Recorded()) == "<a callable of an earlier life>"
+  held = furb.sheet.Recorded("<f at 0x1>")
+  assert furb.sheet.Recorded() == len and held == "<f at 0x2>" and held != "<g at 0x1>"
+  assert held == furb.sheet.Recorded("<f at 0x1>") and repr(furb.sheet.Recorded()) == "<a callable of an earlier life>"
+  wrote = (
+    ("write", "write1", "rung1", "chain1", engine.Text("a", "<A at 0x1>"), ["<B at 0x1>"], {"c": "<C at 0xAB>"}),
   )
-  wrote = (("write", "write1", "rung1", "chain1", engine.Text("a", "<A at 0x1>"), ["<B at 0x1>"]),)
-  (stood,) = furb.kernel.recorded(vars(furb.python), [wrote])
-  assert stood[0][4:] == (engine.Text("a", "<A at 0x2>"), ["<B at 0x2>"])
+  (stood,) = furb.sheet.recorded(vars(furb.python), [wrote])
+  assert stood[0][4:] == (engine.Text("a", "<A at 0x2>"), ["<B at 0x2>"], {"c": "<C at 0x2f>"})

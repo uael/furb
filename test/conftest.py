@@ -475,7 +475,7 @@ def kernel() -> dict[str, Kernel]:
 def given(record: Sequence[tuple]) -> Sequence[tuple]:
   """A record as boot is given it, as a host gives it: the engine of monty takes it through the opening of its
   sandbox, and a host of the engine of this interpreter gives what recorded of the Kernel makes of it."""
-  return furb.kernel.recorded(ENGINE, list(record)) if engine is furb.python else record
+  return sheet.recorded(ENGINE, list(record)) if engine is furb.python else record
 
 
 def life(world: Sand, record: Sequence[tuple] = (), **ears: World) -> tuple[list[tuple], str]:
