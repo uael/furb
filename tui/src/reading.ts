@@ -8,6 +8,7 @@ import {
   FileChanges,
   isQuestion,
   type LiveAct,
+  Meaning,
   questionKind,
   type Turn,
   WORK,
@@ -207,6 +208,8 @@ export function row(
 export class Reader {
   readonly root = "chain1";
   readonly activity = new Activity();
+  /** The meaning of the record as the crate folds it from each fact, as a daemon folds a life that runs. */
+  readonly meaning = new Meaning();
   readonly facts: Fact[] = [];
   readonly entries: Entry[] = [];
   readonly streams = new Map<string, never>();
@@ -253,7 +256,9 @@ export class Reader {
       for (const act of [...this.activity.acts.values()]) {
         if (act.done || act.began > at || !WORK.includes(act.kind) || !this.covers(fact, act.id)) continue;
         const ended = kind === "close" && act.id === about ? value : { is: "CancelledError", args: [] };
-        this.feed(["done", act.id, "", ended] as Fact);
+        const done = ["done", act.id, "", ended] as Fact;
+        this.feed(done);
+        this.meaning.hear(done as unknown[]);
       }
     }
   }
@@ -335,6 +340,8 @@ export class Reader {
     const whole = this.normalize(told);
     this.feed(whole);
     const fact = line ? this.cut(whole, line) : whole;
+    // The crate keeps of the fact what its row keeps, since the file holds its long texts whole.
+    this.meaning.hear((line ? shortened(told) : told) as unknown[]);
     this.facts.push(fact);
     const [kind, about] = fact;
     // A question stands in the transcript of the chain that it is on, and any other fact in that of what it is about.

@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { chainNotes, chainSorted } from "furb/life";
 import { openEngine } from "../src/bridge.ts";
 import { Session } from "../src/session.ts";
 import { composing, ownPreferences } from "./composing.ts";
@@ -22,13 +21,12 @@ async function recorded(): Promise<Session> {
 }
 
 /** The threads of a chain of the session, and its asides with what each is, as the feed and the sidebar read them. */
-const sorted = (session: Session, chain: string) => {
-  const on = session.acts.filter((act) => act.chain === chain);
-  const rows = new Map(session.acts.map((act) => [act.id, act]));
-  const { threads, asides } = chainSorted(on, rows, new Set(session.host.prompts.keys()));
+const sorted = async (session: Session, chain: string) => {
+  await session.readThreads(chain);
+  const { list, asides } = session.threadsOf(chain);
   return {
-    threads: threads.map((one) => one.act.id),
-    asides: asides.map((one) => [one.act.id, one.aside]),
+    threads: list.map((one) => one.act.id),
+    asides: [...asides.values()].map((one) => [one.act.id, one.aside]),
   };
 };
 
@@ -41,7 +39,7 @@ test("a notice and a question of another chain stand as asides of the chain, and
       await session.refresh();
       await session.select("chain1");
       const question = (from: string) => ({ aside: "question" as const, from });
-      expect(sorted(session, "chain1")).toEqual({
+      expect(await sorted(session, "chain1")).toEqual({
         threads: ["prompt1", "prompt29", "prompt34", "prompt95", "prompt97"],
         asides: [
           ["prompt43", { aside: "notice" }],
@@ -54,11 +52,11 @@ test("a notice and a question of another chain stand as asides of the chain, and
           ["prompt93", question("chain10")],
         ],
       });
-      expect(sorted(session, "chain7")).toEqual({
+      expect(await sorted(session, "chain7")).toEqual({
         threads: ["prompt31"],
         asides: [["prompt36", { aside: "notice" }]],
       });
-      expect(sorted(session, "chain2")).toEqual({
+      expect(await sorted(session, "chain2")).toEqual({
         threads: ["prompt3"],
         asides: [
           ["prompt47", { aside: "notice" }],
@@ -89,7 +87,10 @@ test("the notes that follow one another draw as one block under one header, with
       await session.select("chain2");
       // The host names the two notes of the chain, and nothing else stands between them in its feed.
       expect(
-        sorted(session, "chain2").asides.map(([id, aside]) => [id, (aside as { aside: string }).aside]),
+        (await sorted(session, "chain2")).asides.map(([id, aside]) => [
+          id,
+          (aside as { aside: string }).aside,
+        ]),
       ).toEqual([
         ["prompt47", "notice"],
         ["prompt64", "notice"],
@@ -116,7 +117,7 @@ test("a note that no other note follows draws alone, with no header", async () =
     async ({ session, frame }) => {
       await session.refresh();
       await session.select("chain7");
-      expect(sorted(session, "chain7").asides).toHaveLength(1);
+      expect((await sorted(session, "chain7")).asides).toHaveLength(1);
       const shown = await frame();
       keep("notes-one-block-chain7", shown);
       expect(shown).not.toContain("› Notes");
@@ -126,11 +127,9 @@ test("a note that no other note follows draws alone, with no header", async () =
   ));
 
 /** The runs of notes of a chain of the session, each as the ids of its prompts, as the feed draws them. */
-const noted = (session: Session, chain: string) => {
-  const on = session.acts.filter((act) => act.on === chain);
-  const rows = new Map(session.acts.map((act) => [act.id, act]));
-  const found = chainSorted(on, rows, new Set(session.host.prompts.keys()));
-  return chainNotes(on, rows, found).map((run) => ({
+const noted = async (session: Session, chain: string) => {
+  await session.readThreads(chain);
+  return [...new Set(session.threadsOf(chain).runs.values())].map((run) => ({
     prompts: run.prompts.map((one) => one.id),
     count: run.count,
   }));
@@ -143,9 +142,9 @@ test("the notes of a chain that follow one another are one run, which the feed d
   composing(
     async ({ session }) => {
       await session.refresh();
-      expect(noted(session, "chain2")).toEqual([{ prompts: ["prompt47", "prompt64"], count: 2 }]);
-      expect(noted(session, "chain7")).toEqual([{ prompts: ["prompt36"], count: 1 }]);
-      expect(noted(session, "chain1")).toEqual([]);
+      expect(await noted(session, "chain2")).toEqual([{ prompts: ["prompt47", "prompt64"], count: 2 }]);
+      expect(await noted(session, "chain7")).toEqual([{ prompts: ["prompt36"], count: 1 }]);
+      expect(await noted(session, "chain1")).toEqual([]);
     },
     size,
     await recorded(),
