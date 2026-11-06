@@ -36,11 +36,12 @@ mod unix {
     time::Duration,
   };
 
+  use furb::view::Phase;
   use furb::{
     Object,
     life::{Answer, Opening},
   };
-  use furb_host::{Command, Event, Life, LifeError, LifeHandle, Reply, Seq, view::Phase};
+  use furb_host::{Command, Event, Life, LifeError, LifeHandle, Reply, Seq};
   use futures::{Stream, StreamExt};
   use rustix::process::{Resource, getrlimit, setrlimit};
 

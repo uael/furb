@@ -15,12 +15,13 @@
 
 use std::collections::{BTreeMap, HashSet};
 
-use furb::{Engine, Fault, verbs, world::Shape};
-
-use crate::{
-  event::Event,
+use furb::{
+  Engine, Fault, verbs,
   view::{Act, Kind, Phase},
+  world::Shape,
 };
+
+use crate::event::Event;
 
 /// How many facts a life says after it opened before it writes its checkpoint and is born again,
 /// at the first moment when no command, no reply and no word runs, which a rebirth would cut.
