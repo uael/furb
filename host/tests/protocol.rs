@@ -13,7 +13,6 @@ mod yard;
 mod protocol {
   use super::yard::Yard;
 
-  use std::fs::Permissions;
   use std::{
     env, fs, future,
     path::PathBuf,
@@ -502,7 +501,7 @@ mod protocol {
     use std::os::unix::fs::PermissionsExt;
     let place = folder();
     fs::create_dir_all(&place).unwrap();
-    fs::set_permissions(&place, Permissions::from_mode(0o755)).unwrap();
+    fs::set_permissions(&place, fs::Permissions::from_mode(0o755)).unwrap();
     let refused = Local::new(&place).listen().await;
     assert!(matches!(refused, Err(furb_host::TransportError::Exposed { .. })));
   }
