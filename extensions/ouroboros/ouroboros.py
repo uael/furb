@@ -1,6 +1,6 @@
 import json
 
-from furb.engine import HIDDEN, ROOT, Refused, Text, program, read, transcript, write
+from furb.engine import HIDDEN, ROOT, Refused, Text, program, read, say, transcript, write
 
 
 def enabled() -> list[str]:
@@ -22,8 +22,13 @@ def bound_by(on: str = "") -> dict[str, str]:
   return found
 
 
-def extend(name: str, *rungs: str, tui: str = "") -> Text:
+def extend(name: str, *rungs: str, tui: str = "", session: bool = False) -> Text:
   words, folder = program(), f".furb/extensions/{name}"
+  if session:
+    held = next((str(x[4]) for x in reversed(transcript(ROOT)) if x[0] == "enable" and x[3] == name), "")
+    word = "\n\n".join([held.strip("\n"), *(words[one] for one in rungs)]).strip("\n") + "\n"
+    say("enable", ROOT, name, word, "", "", "")
+    return Text(f"session://{name}/{name}.py", word)
   try:
     held = read(f"{folder}/{name}.py", HIDDEN).content
   except Refused:
