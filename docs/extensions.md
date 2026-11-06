@@ -38,7 +38,10 @@ Eight extensions come with furb, and each life runs them unless a config turns t
   the `SKILL.md` of a skill with no code, and it tells the prose and the interface of a skill with code, or its word
   when it ships no interface, after the life enables it, once for each word, so it plays as an extension that a config
   turns on. `await skill()` plays each skill with code that says `furb-default: "true"`. `read("skills://<name>")`
-  gives the word of a skill with code, and `read("skills://<name>/<file>")` a file of its folder. A write of
+  gives the word of a skill with code, and `read("skills://<name>/<file>")` a file of its folder.
+  `read("config://<name>")` gives the keys of a skill in the configs as a JSON object, each with the value that wins
+  for it or the default of its `furb-config`, and `read("config://")` each key of the configs, as
+  [the schema](config.md#the-schema) says. A write of
   `skills://<name>` writes the word in `.furb/extensions/<name>` of the project, after a copy of the folder there
   when it stands elsewhere, and reloads the skill when the life runs it. Its life word, `await listed()`, reads
   `skills://`
@@ -51,9 +54,13 @@ Eight extensions come with furb, and each life runs them unless a config turns t
   commands, `recent(n)`, the acts of the last `n` replies, and `await chosen()`, which asks a model.
   `together(*filters)` joins them, and `supersede(keep)` applies one. `await condense()` asks a model what to keep and
   compacts at once. `compacted()` does the same for one chain each time an answer fills more than `SHARE`, 0.6, of the
-  window, and moves, stops and pauses nothing. Its life word, `fitted()`, watches each chain: when the model refuses
-  a reply because its prompt passes the window, it cuts the chain at once to its open prompts, with a summary that
-  says why, so the next reply reads less and the chain goes on with no pause.
+  window, and moves, stops and pauses nothing. `fitted()` watches a chain: when the model refuses a reply because its
+  prompt passes the window, it cuts the chain at once to its open prompts, with a summary that says why, so the next
+  reply reads less and the chain goes on with no pause. Its life word, `compacted(); fitted()`, wraps each chain with
+  both, so a chain compacts to what a model chose, with its summary, before its prompt passes the window, and keeps
+  its reads and its findings. The cut of `fitted()` comes only as the last resort, when one reply grows past the
+  window before the compaction. Each compaction costs one prompt more, to the actor that `CHOOSER` names, else the
+  one that `automatic()` gives.
   A project changes `SHARE`, `FILTERS`, `CHOOSER`, `LISTED` or `BRIEF` in an extension of its own. In the TUI, a rule
   with the summary marks each compaction in the feed, and `/compact` runs `await condense()` on the chain on screen.
 - **`naming`** gives the session a name from the first message of the operator. Its life word, `name_session()`, plays
@@ -151,6 +158,7 @@ metadata:
   furb-plays: every
   furb-view: tui.ts
   furb-process: notes.ts
+  furb-config: config.json
 ---
 What the notes are for.
 ```
@@ -182,6 +190,9 @@ What the notes are for.
   the life as a skill, as [the protocol](protocol.md) says. A folder that holds the extension starts nothing: only a
   life that plays it does. A process that ends before its life tells the operator once, with its exit and the last
   lines of its stderr, and starts again at the next play of the extension. It can be absent.
+- `furb-config` is the JSON file of the keys that the extension adds to the configs, relative to the folder, as
+  [the schema](config.md#the-schema) says. `/config` shows them under the name of the extension, and its word reads
+  them as `json.loads(read("config://<name>", HIDDEN).content)`. It can be absent.
 
 The client `@uael/furb/skill` gives a process of TypeScript what it needs: it attaches the life from those variables,
 hears the facts of the kinds that it asks, says verbs that the life takes under `skill/<name>`, and serves a tree to
