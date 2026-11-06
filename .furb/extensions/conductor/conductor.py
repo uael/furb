@@ -201,10 +201,16 @@ def beat() -> Generator[set[str], object, None]:
   if (cycle := state["cycle"]) and over(cycle):
     got, state["cycle"] = peek(cycle), ""
     if isinstance(got, tuple) and len(got) == 2 and isinstance(got[0], dict):
+      sent, kept = [], []
       for t, why in got[0].items():
-        if t in width and why and not fixing.get(t) and t not in fixwait:
+        if t in width and why and (fixing.get(t) or t in fixwait):
+          fixwait[t] = "\n\n".join(filter(None, [fixwait.get(t, ""), str(why)]))
+          kept.append(t)
+        elif t in width and why:
           fix(t, str(why))
-      notes.append(f"cycle {cycle}: {got[1]}" + (f" Sent to {', '.join(got[0])}." if got[0] else ""))
+          sent.append(t)
+      told = (f" Sent to {', '.join(sent)}." if sent else "") + (f" Kept for the next fix of {', '.join(kept)}." if kept else "")
+      notes.append(f"cycle {cycle}: {got[1]}{told}")
     else:
       notes.append(f"cycle {cycle} ended with {str(got)[:1500]}")
   if not state["cycle"] and now - state["last"] >= EVERY:

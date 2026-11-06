@@ -230,3 +230,16 @@ async def test_a_new_conduct_ends_the_old_one_so_one_beat_starts_a_cycle_and_the
   assert conductor.ns["state"]["cycle"] == cycle
   assert "fail 1" in conductor.ns["state"]["print"]
   assert not conductor.engine.over(worker)
+
+
+async def test_a_failure_of_a_topic_whose_fix_runs_waits_for_the_next_fix_of_that_topic(conductor: Round) -> None:
+  await conductor.word('state["last"] = 1e12\nfirst = fix("a", "test x fails at h1")')
+  await conductor.word('state["cycle"] = str(prompt(tuple[dict[str, str], str], "c", to="claude-cli:opus/medium", on=chain_of("converge")))')
+  await conductor.end(conductor.ns["state"]["cycle"], ({"a": "test y fails at h2"}, "merged b"))
+  await conductor.beat()
+  assert conductor.ns["fixwait"] == {"a": "test y fails at h2"}
+  assert conductor.notices()[-1].endswith("merged b Kept for the next fix of a.")
+  await conductor.end(conductor.ns["first"], "fixed x")
+  await conductor.beat()
+  assert conductor.asked()[-1][3].endswith("The brief of the aggregator:\n\ntest y fails at h2")
+  assert conductor.ns["fixwait"] == {}
