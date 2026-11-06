@@ -353,24 +353,15 @@ export const feed = part({
       const waiting = new Set(w.desk.asks.map((ask) => ask.id));
       const named = (chain: string) => w.labelOf(chain);
       const madeMap = () => index.made;
-      // A program is made again only when what it shows changed: a step, its word, its state, or an act of it, as its
-      // state and what its command printed. A new act on another thread leaves it as it was.
-      const stepOf = (rung: ActRow) => {
-        const acts = madeBy(rung.id);
-        let done = 0;
-        let printed = 0;
-        // The lines that a write added and removed come after the write, with the journal of its change, and its hint
-        // says them in place of its count of lines.
-        let counted = "";
-        for (const one of acts) {
-          if (one.done) done++;
-          printed += one.output ?? 0;
-          if (one.lines) counted += `${one.lines.added}/${one.lines.removed},`;
-        }
-        // The word of a step that runs can still come, and the word of a step that ended stays as it is.
-        const said = rung.done ? "" : (w.program[rung.id]?.length ?? 0);
-        return `${rung.id}:${rung.done}:${rung.run?.status ?? ""}:${said}:${acts.length}:${done}:${printed}:${counted}`;
-      };
+      // A program is made again only when what it shows changed: the session counts each time a snapshot changes a step,
+      // its word or an act of it, so the key holds those counts and no list of the fields that the drawing reads. A new
+      // act on another thread leaves it as it was.
+      const stepOf = (rung: ActRow) =>
+        [
+          rung.id,
+          w.revision(rung.id),
+          ...madeBy(rung.id).map((one) => `${one.id}.${w.revision(one.id)}`),
+        ].join(":");
       const liveOf = (ids: readonly string[]) =>
         ids
           .map((id) =>
@@ -1277,9 +1268,7 @@ export const feed = part({
           if (act.kind === "grant") continue;
           programCard(
             act.id,
-            programFor(`act:${act.id}`, `${act.done}:${act.paused}:${act.output ?? 0}`, () =>
-              actLines(act, owed, named),
-            ),
+            programFor(`act:${act.id}`, String(w.revision(act.id)), () => actLines(act, owed, named)),
             indent,
             { frame: true, first: act.id, shown: act.id },
           );
