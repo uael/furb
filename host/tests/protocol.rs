@@ -427,6 +427,7 @@ mod protocol {
   const SCHEMAS: [&str; PROTOCOL as usize] = [
     "43cd8affad009b9de1c73c355ae4822f1de6149d95d919a5f02171f8c7072604",
     "3d67e6b3dc718819064aae275d0f84cdd16c0f39b92d2a82a945461a19589713",
+    "b7fcc6ef6baf1e729e50bc4c81bd3ea06e83a906a66e62709d6aa40607e5a2cf",
   ];
 
   /// A schema with no word that never crosses the wire: each `description` and `title` of a schema,

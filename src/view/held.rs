@@ -13,7 +13,7 @@ use super::{
   state::State,
   threads::{
     Attention, ChainAside, NoteRun, Rows, ThreadNode, attention, chain_asides, chain_notes,
-    chain_tree,
+    chain_threads, chain_tree, nest_threads, order_threads,
   },
   time::{as_of, moments_of},
 };
@@ -77,6 +77,31 @@ impl Held {
       rows.get(chain).filter(|act| act.kind == Kind::Chain).map_or(State::Idle, |act| act.state);
     let (asides, notes) = (chain_asides(&on, &rows), chain_notes(&on, &rows, read));
     Threads { attention: attention(&threads), asides, notes, threads, state }
+  }
+
+  /// The threads of every chain of the life but those that `hidden` names, as one tree in the
+  /// order of the list of the threads: each thread under the thread whose ladder made its prompt,
+  /// the closed ones first and the open ones last, now or as they stood just after a moment.
+  pub fn rail(&self, hidden: &[String], at: Option<u64>) -> Vec<ThreadNode> {
+    let acts = self.then(at);
+    let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
+    let mut chains: Vec<&str> = Vec::new();
+    let mut on: HashMap<&str, Vec<&Act>> = HashMap::new();
+    for act in acts.iter().filter(|act| act.id != act.chain) {
+      let chain = act.chain.as_str();
+      if hidden.iter().any(|one| one == chain) {
+        continue;
+      }
+      on.entry(chain).or_insert_with(|| {
+        chains.push(chain);
+        Vec::new()
+      });
+      on.entry(chain).or_default().push(act);
+    }
+    let mut list: Vec<_> =
+      chains.iter().flat_map(|chain| chain_threads(&on[chain], &rows)).collect();
+    list.sort_by_key(|one| rows.get(one.prompt.as_str()).map_or(0, |act| act.began));
+    order_threads(nest_threads(list, &rows), &rows)
   }
 
   /// The acts as they stood just after a moment.

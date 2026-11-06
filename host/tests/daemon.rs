@@ -1303,11 +1303,10 @@ mod daemon {
   /// Whether the process of a pid ends.
   #[cfg(unix)]
   async fn gone(pid: &str) -> bool {
-    use std::process::{Command, Stdio};
     let lives = || {
-      Command::new("kill")
+      process::Command::new("kill")
         .args(["-0", pid])
-        .stderr(Stdio::null())
+        .stderr(process::Stdio::null())
         .status()
         .is_ok_and(|one| one.success())
     };

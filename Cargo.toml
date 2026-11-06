@@ -99,6 +99,8 @@ path = "docs/examples/rust/door.rs"
 python = ["dep:pyo3"]
 extension-module = ["python", "pyo3/extension-module"]
 typescript = ["dep:napi", "dep:napi-derive", "dep:napi-build"]
+# What a test of another crate builds with: the host reads it in its dev-dependencies, so no build of a program has it.
+test-support = []
 
 [dependencies]
 # The sandbox the engine runs in, and its type checker, which is the gate of the

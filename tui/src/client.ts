@@ -16,6 +16,8 @@ import type {
   Listed,
   Peer,
   Role,
+  ThreadNode,
+  Threads,
   Request1 as Verb,
 } from "furb/protocol";
 import { PROTOCOL } from "furb/protocol";
@@ -928,6 +930,26 @@ export class RemoteLife extends EventEmitter {
     const got = await this.verb({ verb: "inspect", life: this.record, name, on: chain });
     if (got.answer !== "inspected") throw new Error(`The daemon gave ${got.answer}, and no name.`);
     return { kind: got.data.kind, representation: got.data.repr, value: got.data.value };
+  }
+  /** The threads of a chain as the crate folds them in the daemon, now or as they stood just after a moment, with the
+   * runs of its notes counted past the place up to which the window read it. */
+  async threads(on: string, at?: number, read?: number): Promise<Threads> {
+    const got = await this.verb({
+      verb: "threads",
+      life: this.record,
+      on,
+      at: at ?? null,
+      read: read ?? null,
+    });
+    if (got.answer !== "threads") throw new Error(`The daemon gave ${got.answer}, and no threads.`);
+    return got.data;
+  }
+  /** The threads of every chain of the life but those that `hidden` names, as one tree in the order of the list of
+   * the threads, as the crate folds them in the daemon, now or as they stood just after a moment. */
+  async rail(hidden: string[], at?: number): Promise<ThreadNode[]> {
+    const got = await this.verb({ verb: "rail", life: this.record, hidden, at: at ?? null });
+    if (got.answer !== "rail") throw new Error(`The daemon gave ${got.answer}, and no threads.`);
+    return got.data;
   }
   async pending(): Promise<Map<string, string>> {
     const got = valued(await this.verb({ verb: "pending", life: this.record })) as [string, string][];
