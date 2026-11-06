@@ -131,7 +131,10 @@ async def test_the_rung_binds_the_definitions_and_the_values_of_the_chain_after_
 ):
   """The rung binds the definitions and the values of the chain after it says the prefix and tells what the checkpoint lost and cut, so a value that raises as it is bound leaves the turns of the chain whole."""
   life(sown())
-  data = {**DATA, "chains": [chain("chain1", "", "root", values={"bad": "nan", "SIZE": "6"}), chain("chain3", "chain1", "work")]}
+  data = {
+    **DATA,
+    "chains": [chain("chain1", "", "root", values={"bad": "nan", "SIZE": "6"}), chain("chain3", "chain1", "work")],
+  }
   log, _ = life(sown(), engine.seed(data))
   await settle()
   assert [x for x in said(log, "prefix") if x[1] == "chain1"]
