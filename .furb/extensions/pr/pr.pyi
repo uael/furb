@@ -38,7 +38,7 @@ async def checked(number: int, where: str = "", bound: float = 3600.0, every: fl
   """
 
 async def commit(title: str, paths: list[str], body: str = "", qa: tuple[str, ...] | list[str] = (), where: str = "") -> tuple[str, list[str]]:
-  """commit(title, paths) commits the named paths alone, in the worktree at where, through sh script/build-slot.sh git commit with every hook, and gives a tuple of the short sha and the QA trailers of the commit.
+  """commit(title, paths) commits the named paths alone, in the worktree at where, with git commit and every hook, and gives a tuple of the short sha and the QA trailers of the commit.
   It gives the body as a second paragraph of the message, and one trailer QA: <entry> for each entry of qa, so the QA reads what to test with git log.
   It refuses an empty list of paths, and its bash has a timeout of 2400 s, since the hooks run the suites.
   """
