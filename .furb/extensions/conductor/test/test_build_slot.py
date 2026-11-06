@@ -42,9 +42,10 @@ def test_each_slot_goes_back_when_its_command_ends(tmp_path: Path) -> None:
   assert list((tmp_path / "slots").iterdir()) == []
 
 
-def peak_of(tmp: Path, **more: str) -> int:
+def peak_of(tmp: Path, slots: int, **more: str) -> int:
   log = tmp / "log"
-  body = f"echo in >> {log}; sleep 0.4; echo out >> {log}"
+  wait = f"i=0; while [ $(grep -c '^in$' {log}) -lt {slots} ] && [ $i -lt 300 ]; do sleep 0.1; i=$((i+1)); done"
+  body = f"echo in >> {log}; {wait}; sleep 0.2; echo out >> {log}"
   runs = [start(tmp, "sh", "-c", body, **more) for _ in range(6)]
   for one in runs:
     one.communicate(timeout=60)
@@ -57,14 +58,14 @@ def peak_of(tmp: Path, **more: str) -> int:
 
 
 def test_no_more_commands_run_at_once_than_the_slots(tmp_path: Path) -> None:
-  assert peak_of(tmp_path, FURB_BUILD_SLOTS="2") == 2
+  assert peak_of(tmp_path, 2, FURB_BUILD_SLOTS="2") == 2
 
 
 @pytest.mark.parametrize(("memory", "slots"), [("36", 3), ("24", 2), ("8", 1)])
 def test_the_slots_default_to_one_for_each_12_gb_of_memory_and_at_least_one(
   tmp_path: Path, memory: str, slots: int
 ) -> None:
-  assert peak_of(tmp_path, FURB_BUILD_MEM_GB=memory) == slots
+  assert peak_of(tmp_path, slots, FURB_BUILD_MEM_GB=memory) == slots
 
 
 def test_the_slot_of_a_holder_that_ended_goes_to_the_next_build(tmp_path: Path) -> None:
