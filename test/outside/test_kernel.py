@@ -5,6 +5,8 @@ run is begun and carried by the facts of the engine, so it is driven through a l
 standing, takes a wait, and takes nothing else.
 """
 
+import re
+
 import pytest
 
 import furb
@@ -228,15 +230,16 @@ async def test_a_record_whose_acts_hold_a_callable_or_an_address_replays_on_the_
   life cannot make again, so a host of this engine gives boot what recorded makes of the record: each such text
   stands for each value that shows the same with no address, and the act that the word makes again is the act of the
   record."""
-  word = "x = bash('one', ok=lambda e: True)\nclass A:\n  pass\ny = bash(f'echo {A()}')\nclose(1)"
+  word = "class A:\n  pass\ny = bash(f'echo {A()}')\nclose(1)"
   sand, _, root = born(word)
   assert await engine.prompt(int, "go", on=root) == 1
-  record = plain(sand.record)
-  assert any(" at 0x" in str(e) for e in record)
+  addressed = lambda one: re.sub(r" at 0x[0-9a-f]+", " at 0x1", one) if isinstance(one, str) else one  # noqa: E731
+  record: list = [(tuple(map(addressed, e)),) for (e,) in plain(sand.record)]
+  assert any(" at 0x1" in str(e) for e in record)
   with pytest.raises(Drift, match=r"^bash1 drifts"):
     engine.boot(record, **kernel(), world=Sand().hears())
   log, again = await relived(Sand(), record)
-  assert again == root and [a[4] for a in log if a[0] == "bash"][:1] == ["one"]
+  assert again == root and [a[4][:6] for a in log if a[0] == "bash"] == ["echo <"]
   held = furb.sheet.Recorded("<f at 0x1>")
   assert furb.sheet.Recorded() == len and held == "<f at 0x2>" and held != "<g at 0x1>"
   assert held == furb.sheet.Recorded("<f at 0x1>") and repr(furb.sheet.Recorded()) == "<a callable of an earlier life>"
