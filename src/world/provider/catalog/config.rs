@@ -12,7 +12,7 @@ use serde_json::{Map, Value};
 
 use super::{
   super::codex, Catalog, Client, Cost, Entry, Error, LOCAL, Limit, Listed, Listing, Modalities,
-  Model, Offer, cache, claude, listed, update::MODELS,
+  Model, Offer, cache, claude, listed, switched, update::MODELS,
 };
 
 #[derive(Deserialize)]
@@ -291,8 +291,8 @@ fn merged(files: impl IntoIterator<Item = PathBuf>) -> Result<IndexMap<String, V
     for (name, form) in providers {
       match (entries.get_mut(&name), form) {
         (Some(Value::Object(held)), Value::Object(fields)) => held.extend(fields),
-        (Some(Value::Object(held)), form @ Value::Bool(_)) => {
-          held.insert("enabled".to_owned(), form);
+        (Some(Value::Object(held)), Value::Bool(on)) => {
+          switched(held, on);
         }
         (_, form) => {
           entries.insert(name, form);

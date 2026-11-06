@@ -239,6 +239,12 @@ struct Entry {
   enabled: bool,
 }
 
+/// The settings of a provider that a true or a false is given over: an object keeps its fields and takes the flag as
+/// its field `enabled`, so a provider that is off keeps its settings, which each writer of the configs keeps.
+pub(crate) fn switched(settings: &mut Map<String, Value>, on: bool) {
+  settings.insert("enabled".to_owned(), Value::Bool(on));
+}
+
 /// The models this machine can ask, each with whether the catalog offers it: those of the claude command line and of
 /// the network, the local server that the environment names, which holds what it listed, and the most tokens of
 /// thought of a model in one turn that the environment gives as `MAX_THINKING_TOKENS`.
