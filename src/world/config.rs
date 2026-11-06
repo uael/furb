@@ -21,7 +21,7 @@ use serde_json::{Map, Value, json};
 use super::{
   Catalog, catalog,
   disk::{self, Access},
-  provider::{KEY_AUTOMATIC, KEY_CLASSES, KEY_THINKING, THINKING},
+  provider::{KEY_AUTOMATIC, KEY_CLASSES, KEY_THINKING, THINKING, catalog::switched},
 };
 use crate::{
   extension::{self, Places, configs},
@@ -172,8 +172,7 @@ fn own() -> Vec<Named> {
 }
 
 /// A key of a layer set to a value, or taken out when the value is none. A true or a false on a
-/// key whose value is an object sets its field `enabled`, so a provider that is off keeps its
-/// settings.
+/// provider whose value is an object is [`switched`], as each reader of the providers takes it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Change {
   pub key: Vec<String>,
@@ -408,8 +407,8 @@ fn changed(
     (None, _) => {
       held.shift_remove(name);
     }
-    (Some(Value::Bool(on)), Some(Value::Object(fields))) => {
-      fields.insert("enabled".to_owned(), Value::Bool(on));
+    (Some(Value::Bool(on)), Some(Value::Object(fields))) if key[0] == PROVIDERS => {
+      switched(fields, on);
     }
     (Some(value), _) => {
       held.insert(name.clone(), value);
