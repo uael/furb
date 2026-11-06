@@ -392,7 +392,7 @@ mod daemon {
     }
     fs::write(marks.join("gitdir"), format!("{}\n", tree.join(".git").display())).unwrap();
     fs::write(tree.join(".git"), "gitdir: elsewhere\n").unwrap();
-    let tree = fs::canonicalize(&tree).unwrap().join(".furb").join("sessions");
+    let tree = dunce::canonicalize(&tree).unwrap().join(".furb").join("sessions");
     fs::write(tree.join("two.jsonl"), "").unwrap();
     fs::write(tree.join("two.changes.jsonl"), "").unwrap();
     let list = json!({ "workspaces": [{ "directory": main.display().to_string() }] });
@@ -415,7 +415,10 @@ mod daemon {
       },
     ];
     wanted.sort_by(|a, b| a.life.cmp(&b.life));
-    assert_eq!(window.listed().await, wanted);
+    let listed = window.listed().await;
+    assert_eq!(listed, wanted);
+    let verbatim = |one: &Listed| one.life.starts_with(r"\\?\");
+    assert!(!listed.iter().any(verbatim), "a worktree is listed under the path that made it");
   }
 
   #[tokio::test]
