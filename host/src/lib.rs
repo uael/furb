@@ -15,7 +15,8 @@
 //! long as a window or a pin holds it, and [`upgrade`] puts the daemon of a new build in its place.
 //! The daemon starts the process of each skill that a life plays, which reads where it dials in
 //! [`processes`], and watches each life from outside it: a life that holds an open act and says
-//! no fact for [`STALL`] is told to its windows and to its root.
+//! no fact for [`STALL`] is told to its windows and to its root, and a chain whose rung or prompt
+//! to a model has nothing that works beside it for [`HUNG`] is told to its windows and to itself.
 
 pub mod access;
 mod answers;
@@ -41,4 +42,4 @@ pub use event::{Event, Seq};
 pub use life::{Command, Life, LifeHandle, Reply};
 pub use queue::FollowUp;
 pub use serve::{Host, Outbox, serve};
-pub use stall::STALL;
+pub use stall::{HUNG, STALL};

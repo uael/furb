@@ -182,11 +182,15 @@ it is not given. The daemon answers requests in any order.
   When a life holds an open act, a run of a word, a reply of a model or a command, and says no fact for the bound of
   a stall, 20 minutes unless `stall` in `host.json` gives other seconds, the daemon pushes to each window of the life
   a frame `stalled` with the `life`, its open `acts`, each with its `act`, its `kind` and its `chain`, and the
-  `notice` that a window shows as it stands. A rung that no run, reply, command or wait lives beside on its chain is an
-  open act too, and so is a prompt to a model whose chain holds no rung and nothing else, but not a paused act or a
-  prompt to the operator. It also sends the notice to the root chain of the life as a prompt of
-  `None`, so that its actor wakes. It tells nothing more until a fact of an act that its message did not make, and a
-  new stall after that fact. A stall is no fact of the record.
+  `notice` that a window shows as it stands. It also sends the notice to the root chain of the life as a prompt of
+  `None`, so that its actor wakes.
+- The watch also holds the last change of each chain. A chain stalls when it holds a rung that no run, reply, command
+  or wait lives beside on it, or a prompt to a model with no rung and nothing else on it, and no act of it changes for
+  60 seconds, or for the bound of a stall when that is shorter, even while other chains work. A paused act and a prompt
+  to the operator never stall a chain. The daemon pushes the frame `stalled` with the acts of that chain alone, and
+  sends the notice as a prompt of `None` on that chain, so that its own actor wakes and no other.
+- The watch tells each stall once: nothing more until a fact of an act that its message did not make, on that chain
+  for the stall of a chain, and a new stall after that fact. A stall is no fact of the record.
 
 ## The daemon
 
