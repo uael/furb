@@ -354,7 +354,7 @@ test("/extensions lists what a life runs, and a cancel of a word of the operator
       async ({ session, frame, click }) => {
         await session.command("/extensions");
         expect(session.notice).toBe(
-          "This life runs catchup with catchup(), memory with await recall(), skills with await listed(), compaction, naming with name_session(), ouroboros, web, mcp with await mcp_index(). Run a word of one with /run.",
+          "This life runs catchup with catchup(), memory with await recall(), skills with await listed(), compaction with fitted(), naming with name_session(), ouroboros, web, mcp with await mcp_index(). Run a word of one with /run.",
         );
         await session.command("/run await wait(60, __name__)");
         // The wait runs under the word, so the cancel asks first.
@@ -414,7 +414,7 @@ test("the setup of the root stands as code: a comment that names the setup, then
               ),
             ),
           ),
-          "catchup()\nawait recall()\nawait listed()\nawait mcp_index()",
+          "catchup()\nawait recall()\nawait listed()\nfitted()\nawait mcp_index()",
           // An extension that plays on the root alone comes after the others, with its life word.
           expect.stringMatching(
             /^rung\(read\('.*[/\\]+words[/\\]+naming[/\\]+naming\.py', HIDDEN\)\.content\)$/,
@@ -456,17 +456,18 @@ test("the setup of the root stands as code: a comment that names the setup, then
         ).toEqual(Array(7).fill(true));
         // The life words stand as the calls that end their one word, each on its line, then the stand and the cd,
         // and the card ends there.
-        expect(shown.slice(9, 13)).toEqual([
+        expect(shown.slice(9, 14)).toEqual([
           "10 catchup()",
           "11 await recall()",
           "12 await listed()",
-          "13 await mcp_index()",
+          "13 fitted()",
+          "14 await mcp_index()",
         ]);
         // The extension naming plays on the root alone, so its word and its life word come after the others.
-        expect(shown[13]).toMatch(/^14 rung\(read\('.*', HIDDEN\)\.content\)$/);
-        expect(shown.slice(14, 16)).toEqual(["15 name_session()", "16 stand()"]);
-        expect(shown[16]).toMatch(/^17 cd\('.*'\)$/);
-        expect(shown[17] ?? "").not.toMatch(/^18 /);
+        expect(shown[14]).toMatch(/^15 rung\(read\('.*', HIDDEN\)\.content\)$/);
+        expect(shown.slice(15, 17)).toEqual(["16 name_session()", "17 stand()"]);
+        expect(shown[17]).toMatch(/^18 cd\('.*'\)$/);
+        expect(shown[18] ?? "").not.toMatch(/^19 /);
         expect(rows.join("\n")).not.toMatch(/rung\d+…\d+|remember1|ouroboros1|catchup1/);
       },
       { width: 140, height: 90 },
