@@ -6,7 +6,7 @@
 //! reads them. [`process`] gives the program of the process of a skill, which a daemon runs.
 
 use std::{
-  fs,
+  env, fs, io,
   path::{Component, Path, PathBuf},
 };
 
@@ -64,13 +64,13 @@ struct Skill {
 impl Skill {
   /// The skill that the text of a manifest gives, under the name of its folder when the frontmatter
   /// gives none.
-  fn of(text: &str, folder: &str, place: Place) -> Skill {
+  fn of(text: &str, folder: &str, place: Place) -> Self {
     let front = frontmatter(text);
     let name = front.field("name").unwrap_or(folder).to_owned();
     let description = front.field("description").unwrap_or_default().to_owned();
     let word = front.meta(WORD).map(str::to_owned);
     let default = front.meta(DEFAULT) == Some("true");
-    Skill { name, description, word, default, manifest: text.to_owned(), place }
+    Self { name, description, word, default, manifest: text.to_owned(), place }
   }
 
   /// The line of the index of the skill: its name, the marks that hold of code, on and default,
@@ -158,7 +158,7 @@ pub fn skills(config: PathBuf) -> Box<dyn Ear> {
       let asked = asked.to_owned();
       let here = here(&mut co, a.on()).await?;
       let project = project(&mut co).await?.unwrap_or_else(|| here.clone());
-      let places = Places { config: config.clone(), home: std::env::home_dir() };
+      let places = Places { config: config.clone(), home: env::home_dir() };
       let found = found(&here, &project, &places);
       let runs = enables(&mut co).await?;
       let seen = Seen { chain: a.on().to_owned(), found, runs, places, project };
@@ -309,7 +309,7 @@ fn written(co: &mut Co, seen: &Seen, name: &str, content: &str) -> Result<Text, 
 /// Each file of the folder of a skill, and the files that the crate carries of an official one,
 /// copied in a folder.
 fn copied(one: &Skill, target: &Path) -> Result<(), Fault> {
-  let failed = |no: std::io::Error| Fault::refused(format!("{no}: {}", target.display()));
+  let failed = |no: io::Error| Fault::refused(format!("{no}: {}", target.display()));
   fs::create_dir_all(target).map_err(failed)?;
   match &one.place {
     Place::Folder(folder) => {

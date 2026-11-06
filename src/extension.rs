@@ -25,7 +25,7 @@
 pub mod skills;
 
 use std::{
-  fs,
+  env, fs,
   io::ErrorKind,
   path::{Path, PathBuf},
 };
@@ -251,11 +251,11 @@ pub struct Extension {
 
 impl Extension {
   /// The extension that a fact which enables one carries.
-  fn of(a: &Fact) -> Option<Extension> {
+  fn of(a: &Fact) -> Option<Self> {
     let text = |at| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
     let root = text(3).as_deref() == Some(ROOTED);
     let file = text(4).unwrap_or_default();
-    Some(Extension { name: text(0)?, word: text(1)?, life: text(2)?, root, file })
+    Some(Self { name: text(0)?, word: text(1)?, life: text(2)?, root, file })
   }
 
   /// The saying that enables the extension, about the root: its name, its word, its life word,
@@ -299,9 +299,9 @@ pub struct Places {
 impl Places {
   /// The places of this process: the config directory is `FURB_CONFIG_DIR`, else `furb` under `XDG_CONFIG_HOME`,
   /// under `APPDATA` on Windows, or under `.config` in the home, where the TUI keeps its preferences too.
-  pub fn here() -> Places {
-    let var = |key: &str| std::env::var_os(key).map(PathBuf::from);
-    let home = std::env::home_dir();
+  pub fn here() -> Self {
+    let var = |key: &str| env::var_os(key).map(PathBuf::from);
+    let home = env::home_dir();
     let config = var("FURB_CONFIG_DIR").unwrap_or_else(|| {
       var("XDG_CONFIG_HOME")
         .or_else(|| var("APPDATA").filter(|_| cfg!(windows)))
@@ -309,7 +309,7 @@ impl Places {
         .unwrap_or_default()
         .join("furb")
     });
-    Places { config, home }
+    Self { config, home }
   }
 }
 
