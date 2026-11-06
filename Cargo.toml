@@ -200,9 +200,8 @@ opt-level = 3
 debug-assertions = false
 overflow-checks = false
 
-# The crates of the workspace keep the lines of their code for a backtrace and drop the rest of the debug
-# information, which the compile and the link of the extension module wrote at each sync: a sync that follows a change
-# of the crate took 31 s with the full information and 23 s with the lines alone, and the suite ran as long.
+# The crate and the command line keep the lines of their code, so a backtrace names a source line, and drop the rest
+# of the debug information, which only a debugger reads and which costs compile and link time at each sync.
 [profile.dev.package.furb]
 debug = "line-tables-only"
 
