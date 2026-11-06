@@ -31,7 +31,7 @@ members = ["cli", "host"]
 
 # The one version of furb: each crate takes it, and maturin gives it to the wheel of each crate.
 [workspace.package]
-version = "0.4.2"
+version = "0.5.0"
 
 # The bar of the Rust of furb, which the skill rust says. A module that breaks it holds an expect at its top.
 [workspace.lints.rust]
