@@ -805,7 +805,7 @@ mod console {
     reason = "debt: a let _ hides the type of what it drops"
   )]
 
-  use std::sync::OnceLock;
+  use std::{io, sync::OnceLock, thread};
 
   use windows_sys::{
     Win32::System::Console::{
@@ -863,7 +863,7 @@ mod console {
     if *ADDED.get_or_init(|| unsafe { SetConsoleCtrlHandler(Some(heard), 1) } != 0) {
       Ok(())
     } else {
-      let why = std::io::Error::last_os_error();
+      let why = io::Error::last_os_error();
       Err(Fault::refused(format!("The console handler was not added: {why}")))
     }
   }
@@ -884,7 +884,7 @@ mod console {
       return 0;
     }
     loop {
-      std::thread::park();
+      thread::park();
     }
   }
 }
