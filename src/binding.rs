@@ -39,11 +39,14 @@ use napi_derive::napi;
 #[cfg(feature = "python")]
 use pyo3::pyfunction;
 
+use serde::Serialize;
+
 use crate::gate::checked;
 use crate::{
   Ear, Fact, Fault, Heard, Life, Object, Spoken, Step,
   extension::{self, Extension, Part},
   life::Opening,
+  view::{Fold, Held, Pause},
   wire,
   world::{self, images},
 };
@@ -780,6 +783,103 @@ fn words(
   (args, kwargs.into_iter().flatten().map(|(key, one)| (key.as_str(), one.0.clone())).collect())
 }
 
+/// The meaning of a life that each window draws, folded in the crate from the facts of the life in
+/// the order of its log, as a daemon folds it: the acts, the desk, the threads of a chain, the acts
+/// as they stood at a moment, and the moments. A window that reads a record with no daemon folds it
+/// here, so it draws the meaning that a daemon serves.
+#[cfg_attr(feature = "typescript", napi)]
+#[derive(Default)]
+pub struct Meaning {
+  fold: Fold,
+  held: Held,
+}
+
+#[cfg_attr(feature = "typescript", napi)]
+impl Meaning {
+  /// A meaning that heard no fact yet.
+  #[cfg_attr(feature = "typescript", napi(constructor))]
+  pub fn new() -> Self {
+    Self::default()
+  }
+
+  /// The acts that a fact changes, each as it stands after the fact. `covered` names each act of
+  /// `open` that a pause or a wake covers, and `born` the last pause or wake that covers a new act,
+  /// as the engine finds them. A reader with no engine gives neither.
+  #[cfg_attr(
+    feature = "typescript",
+    napi(
+      ts_args_type = "fact: unknown[], covered?: string[], born?: unknown[] | null",
+      ts_return_type = "Array<import(\"./dist/protocol.js\").Act>"
+    )
+  )]
+  pub fn hear(
+    &mut self,
+    fact: Value,
+    covered: Option<Vec<String>>,
+    born: Option<Value>,
+  ) -> Result<Value, Fault> {
+    let fact = wire::outward(fact.0.as_ref());
+    let born = born.and_then(|one| Pause::of(&wire::outward(one.0.as_ref())));
+    let acts = self.fold.hear(&fact, &covered.unwrap_or_default(), born);
+    for act in &acts {
+      self.held.heard(act);
+    }
+    meant(&acts)
+  }
+
+  /// The live acts whose pause a pause would change, or a wake: each that no pause holds, or each
+  /// that one holds.
+  #[cfg_attr(feature = "typescript", napi)]
+  pub fn open(&self, pausing: bool) -> Vec<String> {
+    self.fold.open(pausing)
+  }
+
+  /// What waits for the operator, with each notice that the window still shows.
+  #[cfg_attr(feature = "typescript", napi(ts_return_type = "import(\"./dist/protocol.js\").Desk"))]
+  pub fn desk(&self, notices: Option<Vec<String>>) -> Result<Value, Fault> {
+    meant(&self.held.desk(&notices.unwrap_or_default()))
+  }
+
+  /// The threads of a chain, now or as they stood just after a moment. `read` is the place up to
+  /// which the window read the chain, from which its runs of notes count the notes not yet read.
+  #[cfg_attr(
+    feature = "typescript",
+    napi(ts_return_type = "import(\"./dist/protocol.js\").Threads")
+  )]
+  pub fn threads(&self, chain: String, at: Option<i64>, read: Option<i64>) -> Result<Value, Fault> {
+    let at = at.map(moment).transpose()?;
+    let read = read.map(moment).transpose()?.unwrap_or_default();
+    meant(&self.held.threads(&chain, at, read))
+  }
+
+  /// The acts as they stood just after a moment.
+  #[cfg_attr(
+    feature = "typescript",
+    napi(ts_return_type = "Array<import(\"./dist/protocol.js\").Act>")
+  )]
+  pub fn as_of(&self, at: i64) -> Result<Value, Fault> {
+    meant(&self.held.as_of(moment(at)?))
+  }
+
+  /// Each moment at which an act began or ended, in order.
+  #[cfg_attr(feature = "typescript", napi(ts_return_type = "number[]"))]
+  pub fn moments(&self) -> Result<Value, Fault> {
+    meant(&self.held.moments())
+  }
+}
+
+/// A meaning as a value of the engine, which crosses each door as JSON would.
+fn meant(meaning: &impl Serialize) -> Result<Value, Fault> {
+  let json = serde_json::to_value(meaning)
+    .map_err(|no| Fault::refused(format!("the meaning is no JSON: {no}")))?;
+  wire::inward(&json).map(Value)
+}
+
+/// A moment of a life, which counts the facts that the meaning heard before it.
+fn moment(at: i64) -> Result<u64, Fault> {
+  u64::try_from(at).map_err(|no| Fault::refused(format!("{at} is no moment: {no}")))
+}
+
 /// Call back when the console of Windows ends this process: at Ctrl+Break, at the close of the console, at a logoff
 /// and at a shutdown, with the name of the event: `break`, `close`, `logoff` or `shutdown`. The system holds the
 /// process until the callback ends it, or, at a close, a logoff or a shutdown, until the system's own limit. A later
@@ -836,7 +936,7 @@ mod console {
             Ending::Callback(one) => callback = Some(one),
             Ending::Event(name, answer) => {
               // A handler that stopped waiting has returned already, so its answer is lost.
-              drop(answer.send(callback.as_ref().is_some_and(|one| (one.0)(name))));
+              answer.send(callback.as_ref().is_some_and(|one| (one.0)(name))).unwrap_or_default();
             }
           }
         }
