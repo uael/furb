@@ -172,9 +172,12 @@ impl Scratch {
     if last.and_then(|one| one.elapsed().ok()).is_some_and(|since| since < DAY) {
       return;
     }
-    // A stamp that cannot be written only lets the next life reap again.
-    drop(fs::write(&stamp, ""));
-    thread::spawn(move || reaped(&root, bound, SystemTime::now()));
+    // The stamp is written once the reap ends, so a life that ends first leaves the reap to the
+    // next life; a stamp that cannot be written only lets the next life reap again.
+    thread::spawn(move || {
+      reaped(&root, bound, SystemTime::now());
+      drop(fs::write(&stamp, ""));
+    });
   }
 
   /// What a read or a write of a path of the scheme came to: the file at that path, with the content of the write
@@ -248,7 +251,10 @@ impl Scratch {
 /// The scratch directories of the records under `root` that no life holds and whose last use is
 /// older than `bound` at `now`, removed; it gives the ones that it removed. A directory is one
 /// whose name is the digest of a record, or such a name with `.new` that a remake left. Its last
-/// use is the later time of the directory and of its mark, which each life that holds it sets.
+/// use is the latest time of a change of any entry of the directory, at any depth, and of the
+/// directory itself, so a process that still writes in it keeps it; each life that holds it sets
+/// the time of its mark. A directory that the system refuses to remove, as one that holds an open
+/// file on Windows, stays, and the reap goes on with the others.
 pub(crate) fn reaped(root: &Path, bound: Duration, now: SystemTime) -> Vec<PathBuf> {
   let Ok(entries) = fs::read_dir(root) else { return Vec::new() };
   let mut gone = Vec::new();
@@ -260,9 +266,7 @@ pub(crate) fn reaped(root: &Path, bound: Duration, now: SystemTime) -> Vec<PathB
     }
     let at = entry.path();
     let mark = at.join(WHOLE);
-    let used =
-      [&at, &mark].iter().filter_map(|one| fs::metadata(one).and_then(|m| m.modified()).ok()).max();
-    if used.is_none_or(|used| now.duration_since(used).unwrap_or_default() < bound) {
+    if latest(&at).is_none_or(|used| now.duration_since(used).unwrap_or_default() < bound) {
       continue;
     }
     // The lock of the mark, held while the directory goes: a life that opens on it meanwhile
@@ -274,6 +278,25 @@ pub(crate) fn reaped(root: &Path, bound: Duration, now: SystemTime) -> Vec<PathB
     }
   }
   gone
+}
+
+/// The latest time of a change of a directory and of each entry under it, at any depth, never
+/// through a link; none when the directory cannot be read.
+fn latest(at: &Path) -> Option<SystemTime> {
+  let mut latest = fs::symlink_metadata(at).and_then(|one| one.modified()).ok()?;
+  let mut folders = vec![at.to_path_buf()];
+  while let Some(folder) = folders.pop() {
+    for entry in fs::read_dir(&folder).into_iter().flatten().flatten() {
+      let Ok(info) = entry.metadata() else { continue };
+      if let Ok(changed) = info.modified() {
+        latest = latest.max(changed);
+      }
+      if info.is_dir() {
+        folders.push(entry.path());
+      }
+    }
+  }
+  Some(latest)
 }
 
 fn gone(at: &Path, log: &dyn Fn(&str)) {
