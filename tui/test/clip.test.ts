@@ -21,7 +21,7 @@ test("a wide character and a joined emoji never cross the bound", () => {
   expect(clip("日本語のテキスト", 5)).toBe("日本…");
 });
 
-test("a width of 0 or 1 shows no ellipsis, and a width of 1 keeps the first grapheme of one cell", () => {
+test("a width of 0 or 1 shows no ellipsis, and a width of 1 keeps the grapheme at the edge that stays when it takes one cell", () => {
   expect(clip("abcdef", 0)).toBe("");
   expect(clip("abcdef", 1)).toBe("a");
   expect(clip("abcdef", 1, "end")).toBe("f");
@@ -41,6 +41,11 @@ test("the renderer draws a clipped row in the cells of its width, none past them
     "日本語のテキストです",
     "a👍🏽b👨‍👩‍👧c日本語😀😀",
     "e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301",
+    // The lines on which Bun and another table of widths disagree, which the cut was made for.
+    "ab가cd가가가",
+    "abกำcdกำกำ",
+    "❤️❤️❤️❤️❤️❤️",
+    "🇫🇷🇫🇷🇫🇷🇫🇷",
   ];
   for (const text of lines)
     for (const size of [2, 3, 4, 5, 6, 7, 8])
