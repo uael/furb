@@ -164,8 +164,12 @@ export const input = part({
     const watched = () => bare() && this.session.watching && !this.composer.plainText;
     const past = () => this.session.moment !== undefined;
     layer(watched, "watch", [
-      { on: "ctrl+left", run: () => this.session.travel(-1), hint: ["⌃←→", "move in time"] },
-      { on: "ctrl+right", run: () => this.session.travel(1) },
+      {
+        on: "ctrl+left",
+        run: () => void this.session.travel(-1).catch(() => {}),
+        hint: ["⌃←→", "move in time"],
+      },
+      { on: "ctrl+right", run: () => void this.session.travel(1).catch(() => {}) },
       {
         on: "meta+b",
         run: () => void this.session.branchHere().catch(this.report),
