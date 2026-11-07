@@ -183,6 +183,9 @@ export class Walk {
   async step(action: string, act: () => unknown = () => {}): Promise<string> {
     const name = `${this.journey}-${String(this.steps.length + 1).padStart(2, "0")}`;
     console.log(`${name}: ${action}`);
+    // The steps of a person stand further apart than the time in which a second Escape rewinds, so no Escape of a step
+    // counts as the first of a pair with the Escape of the step before.
+    this.view.app().escapedAt = 0;
     try {
       await act();
     } catch (error) {
