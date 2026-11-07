@@ -36,13 +36,19 @@ hooks() {
     { grep -vE '(Passed|Skipped)$' "$out"; return 1; }
 }
 mark() { mkdir -p "$marks" && for one; do : >"$marks/$one"; done; }
+# data <commit>: a commit that shares no history with origin/main, as a branch of captures. The hooks check the work, and
+# a tree of the work reaches main only through a pull request, where the gates run every hook on every file.
+data() {
+  base=$(git rev-parse -q --verify origin/main) && ! git merge-base "$base" "$1" >/dev/null 2>&1
+}
 # check <tip>: script/hooks/pre-push runs it for each pushed tip. It runs the hooks once on the files of the commits
-# under it that no remote holds and that hold no mark, as the work tree holds them, and marks the tip when they pass: a
-# commit made with --no-verify, or by an amend or a rebase. So the tip must be HEAD, with no change that is not committed.
+# under it that no remote holds, that hold no mark and that are no data, as the work tree holds them, and marks the tip
+# when they pass: a commit made with --no-verify, or by an amend or a rebase. So the tip must be HEAD, with no change
+# that is not committed.
 if [ "${1:-}" = check ]; then
   todo=
   for one in $(git rev-list "$2" --not --remotes); do
-    [ -e "$marks/$(key "$one^1" "$(git rev-parse "$one^{tree}")")" ] || todo="$todo $one"
+    [ -e "$marks/$(key "$one^1" "$(git rev-parse "$one^{tree}")")" ] || data "$one" || todo="$todo $one"
   done
   [ -n "$todo" ] || exit 0
   if [ "$2" != "$(git rev-parse HEAD)" ] || ! git diff --quiet HEAD; then

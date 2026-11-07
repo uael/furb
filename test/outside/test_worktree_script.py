@@ -25,6 +25,7 @@ def clone_with_origin(root: Path) -> Path:
   (main / "script").mkdir()
   shutil.copy(SCRIPT, main / "script" / "worktree.sh")
   shutil.copy(SHARE, main / "script" / "share-target.sh")
+  shutil.copy(SCRIPT.with_name("heavy.sh"), main / "script" / "heavy.sh")
   (main / ".cargo").mkdir()
   shutil.copy(SCRIPT.parents[1] / ".cargo" / "config.toml", main / ".cargo" / "config.toml")
   git(main, "add", ".")
