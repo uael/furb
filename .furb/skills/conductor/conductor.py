@@ -18,6 +18,7 @@ from furb.engine import (
   clock,
   close,
   controlled,
+  covers,
   dump,
   filled,
   get,
@@ -39,10 +40,9 @@ from furb.engine import (
 )
 
 # The values that the lead rules: a load of the kit keeps the values bound before it.
-ROOM_CAP: dict[str, int] = globals().setdefault("ROOM_CAP", {"opus/high": 3, "opus/medium": 3, "sonnet/high": 3, "sonnet/medium": 3})
+ROOM_CAP: dict[str, int] = globals().setdefault("ROOM_CAP", {"opus/high": 3, "opus/medium": 3, "sonnet/high": 3, "sonnet/medium": 3, "gpt-6-astra/high": 2})
 TOPICS: list[str] = globals().setdefault("TOPICS", ["engine", "host", "tui", "skills", "rust", "ci", "tidy", "review", "qa"])
 desk_width: dict[str, int] = globals().setdefault("desk_width", dict.fromkeys(TOPICS, 1))
-PAUSE_FOR_FIX: bool = globals().setdefault("PAUSE_FOR_FIX", True)
 FIX_MODEL: str = globals().setdefault("FIX_MODEL", "claude-cli:sonnet/high")
 AGG_MODEL: str = globals().setdefault("AGG_MODEL", "claude-cli:opus/medium")
 ASTRA: str = globals().setdefault("ASTRA", "codex:gpt-6-astra/high")
@@ -60,7 +60,11 @@ EFFORT_UP = {"medium": "high", "high": "xhigh"}
 EVERY, FLOOR, CI_EVERY, DISK_EVERY, HOUR = 300.0, 900.0, 120.0, 900.0, 3600.0
 STALL, STUCK, STUCK_RUNNING, ROUNDS, MERGES = 600.0, 1200.0, 2700.0, 3, 4
 DISK_FLOOR = 60
+ROOM_WHY, FIX_WHY = "past the room of its class", "a fix of the CI of w/converge runs first on this topic"
 DF = "df -k ~ | tail -1"
+MEM = "memory_pressure | tail -1; sysctl -n vm.swapusage"
+GH_POLL = 'sh "$TMPDIR/converge/gh.sh"'
+SHOTS = 'sh "$TMPDIR/converge/shots.sh"'
 REGROUND, REGROUND_TOKENS, REGROUND_GROWTH = 0.5, 300000, 150000
 NO_VERIFY = '^(audit|review|qa-run|words-audit|perf-|libs-audit|align-audit|fold)'
 URGENT_NOTE = '(?m)The disk|The memory runs low|not applied|\\bP0\\b|checks of CI of w/converge pass|push of the captures'
@@ -85,9 +89,10 @@ ROUTE = "Route the checks of w/converge now, with no merge and no push: the run 
 DISK_BRIEF = "The disk holds FREE GB free, under the floor of FLOOR GB. Free the target of the oldest ended worktree first, then the next one in age order, until the disk holds the floor again; never the target of a worktree that a live item or fix builds in, a record, or a worktree with uncommitted work. Report each folder freed and the free disk after."
 LANES = {
   "triage": "This chain is the triage of the converge. It keeps the reads that ground it: the words of the owner, his picks, the top 10, the plan, the ledger of his asks and the paths of each topic. Its charter, scratch://converge/triage.md, holds its rules.",
+  "words": "This chain is the words chain of the converge: it judges each text of the owner part by part against the items of scratch://converge/items-full.md, which it reads again for each text.",
   "proof": "This chain is the proof lane of the converge: it proves on the path of the owner, in batches, the asks that stand committed with no proof, and keeps its ledger in scratch://converge/proof.md.",
 }
-PAGED = ["desk", "desk_beat", "admit", "pick", "room_step", "start_fix", "ends_step", "cycle_step", "merges_step", "ci_step", "disk_step", "ground_step", "chain_due", "verify_step", "blanks_and_stuck", "chain_stalls", "triage_step", "deps_step", "priority"]
+PAGED = ["desk", "desk_beat", "admit", "pick", "room_step", "ours", "start_fix", "ends_step", "cycle_step", "merges_step", "ci_step", "disk_step", "ground_step", "chain_due", "verify_step", "blanks_and_stuck", "chain_stalls", "triage_step", "deps_step", "priority"]
 
 # The state of the round: a load of the kit keeps the state bound before it.
 topic_chain: dict[str, str] = globals().setdefault("topic_chain", {})
@@ -122,6 +127,10 @@ review_round: dict[str, int] = globals().setdefault("review_round", {"n": 0})
 gh_seen: set[str] = globals().setdefault("gh_seen", set())
 owner_seen: set[str] = globals().setdefault("owner_seen", set())
 words_live: dict[str, str] = globals().setdefault("words_live", {})
+for _lane in ("triage", "proof", "words"):
+  if desk_text.get(f"{_lane}_chain"):
+    topic_chain.setdefault(_lane, desk_text.pop(f"{_lane}_chain"))
+desk_time.setdefault("merges", desk_time.get("align_mark", 0.0))
 
 
 def chain_of(name: str) -> str:
@@ -216,6 +225,16 @@ def pick() -> tuple[str, dict] | None:
   return None
 
 
+def ours(p: str, why: str) -> bool:
+  """Whether the last pause that covers p is the one that the desk made on p for why, so that no pause of the operator ends by a wake of the desk."""
+  facts = [x for x in transcript(p, "pause") if covers(x, p)]
+  return bool(facts) and facts[-1][:2] == ("pause", p) and str(facts[-1][3:4]).find(why) >= 0
+
+
+def number(p: str) -> int:
+  return int(re.sub(r"\D", "", p) or 0)
+
+
 def admit() -> None:
   while got := pick():
     t, item = got
@@ -227,17 +246,16 @@ def admit() -> None:
 def room_step() -> list[str]:
   """Pause the newest items past the room of their class, and wake the oldest of them once a seat of their class is free."""
   notes, used, held = [], seats_used(), desk_paused.setdefault("room", [])
-  for t in TOPICS:
-    for p, x in reversed(list(desk_live[t].items())):
-      k = kind(str(x["model"]))
-      if not over(p) and not paused(p) and used.get(k, 0) > ROOM_CAP.get(k, 0):
-        pause(p, f"the room of {k} holds {ROOM_CAP.get(k, 0)} seats")
-        held.append(p)
-        used[k] -= 1
-        notes.append(f"{t}: {p} ({x['key']}) paused, past the room of {k}; it resumes when a seat is free.")
+  newest = sorted(((p, t, x) for t in TOPICS for p, x in desk_live[t].items() if not over(p) and not paused(p)), key=lambda one: -number(one[0]))
+  for p, t, x in newest:
+    if used.get(k := kind(str(x["model"])), 0) > ROOM_CAP.get(k, 0):
+      pause(p, ROOM_WHY)
+      held.append(p)
+      used[k] -= 1
+      notes.append(f"{t}: {p} ({x['key']}) paused, past the room of {k}; it resumes when a seat is free.")
   for p in list(held):
     t, x = next(((t, desk_live[t][p]) for t in TOPICS if p in desk_live[t]), ("", None))
-    if x is None or over(p):
+    if x is None or over(p) or not ours(p, ROOM_WHY):
       held.remove(p)
     elif not desk_fixing.get(t) and used.get(k := kind(str(x["model"])), 0) < ROOM_CAP.get(k, 0):
       wake(p)
@@ -251,11 +269,10 @@ def start_fix(t: str, why: str) -> str:
   if (live := desk_fixing.get(t, "")) and not over(live):
     prompt(None, f"A new failure of the CI of w/converge for this fix:\n\n{why}", on=live)
     return live
-  if PAUSE_FOR_FIX:
-    for p in desk_live[t]:
-      if not over(p) and not paused(p):
-        pause(p, "a fix of the CI of w/converge runs first on this topic")
-        desk_paused.setdefault(t, []).append(p)
+  for p in desk_live[t]:
+    if not over(p) and not paused(p):
+      pause(p, FIX_WHY)
+      desk_paused.setdefault(t, []).append(p)
   desk_fixing[t] = str(prompt(str, FIX_HEAD + why, to=FIX_MODEL, on=chain_of(t)))
   return desk_fixing[t]
 
@@ -295,7 +312,7 @@ def ends_step() -> None:
     if (fix := desk_fixing.get(t, "")) and over(fix):
       desk_fixing.pop(t)
       for p in desk_paused.pop(t, []):
-        over(p) or wake(p)
+        over(p) or not ours(p, FIX_WHY) or wake(p)
       desk_notes.append(f"{t} ended the fix {fix} of CI: {str(peek(fix))[:2000]}" + skip_note(fix) + route_needs(t, fix, fix))
     for p in [p for p in desk_live[t] if over(p)]:
       item = desk_live[t].pop(p)
@@ -319,7 +336,8 @@ def merges_step(seen: str) -> None:
   n = int(desk_time.get("merges", 0.0))
   if n - desk_time.get("align_mark", 0.0) >= MERGES and not any(str(x["key"]).startswith("align-audit") for x in [*desk_queue[REVIEW], *desk_live[REVIEW].values()]):
     desk_time["align_mark"] = float(n)
-    model = ASTRA if (n // MERGES) % 2 else CLASSES["opus/high"]
+    desk_time["audits"] = desk_time.get("audits", 0.0) + 1
+    model = ASTRA if desk_time["audits"] % 2 else CLASSES["opus/high"]
     desk_queue[REVIEW].insert(0, {"key": f"align-audit-m{n}", "model": model, "brief": "P0. " + ALIGN_BRIEF})
 
 
@@ -393,7 +411,9 @@ def disk_step() -> Generator[set[str], object, None]:
   cols = out.stdout.content.split() if isinstance(out, Exit) else []
   free = int(cols[3]) // 1048576 if len(cols) > 3 and cols[3].isdigit() else -1
   if 0 <= free < DISK_FLOOR and not any(str(x["key"]) == "free-disk" for x in [*desk_queue["tidy"], *desk_live["tidy"].values()]):
-    desk_queue["tidy"].insert(0, {"key": "free-disk", "model": SONNET_M, "brief": "P0. " + DISK_BRIEF.replace("FREE", str(free)).replace("FLOOR", str(DISK_FLOOR))})
+    keep = sorted({t for t in TOPICS if any(not over(p) for p in desk_live[t]) or (desk_fixing.get(t) and not over(desk_fixing[t]))})
+    brief = DISK_BRIEF.replace("FREE", str(free)).replace("FLOOR", str(DISK_FLOOR)) + f" The topics that build now, whose worktrees you keep: {', '.join(keep) or 'none'}."
+    desk_queue["tidy"].insert(0, {"key": "free-disk", "model": SONNET_M, "brief": "P0. " + brief})
     desk_notes.append(f"The disk holds {free} GB free, under the floor of {DISK_FLOOR} GB, so tidy frees the targets of the ended worktrees.")
 
 
@@ -536,7 +556,7 @@ def gh_step() -> list[str]:
           prompt(None, f"The owner wrote on GitHub, {parts[0]} {parts[2]}: {parts[3]}\nRead it whole with gh, answer it there with a body that starts with 🤖, and act on it as a message of his.", on=ROOT)
   if clock() - desk_time.get("gh_at", 0.0) >= CI_EVERY:
     desk_time["gh_at"] = clock()
-    desk_text["gh_live"] = str(bash(f'sh "$TMPDIR/converge/gh.sh" {desk_text.get("gh_since", "")}', show=HIDDEN, ok=True, timeout=60))
+    desk_text["gh_live"] = str(bash(f"{GH_POLL} {desk_text.get('gh_since', '')}", show=HIDDEN, ok=True, timeout=60))
   return []
 
 
@@ -555,7 +575,7 @@ def shots_step() -> list[str]:
       desk_text["shots_last"] = out.splitlines()[-1]
   if clock() - desk_time.get("shots_at", 0.0) >= EVERY:
     desk_time["shots_at"] = clock()
-    desk_text["shots_live"] = str(bash('sh "$TMPDIR/converge/shots.sh"', show=HIDDEN, ok=True, timeout=300))
+    desk_text["shots_live"] = str(bash(SHOTS, show=HIDDEN, ok=True, timeout=300))
   return notes
 
 
@@ -574,7 +594,7 @@ def mem_step() -> list[str]:
       notes.append(f"The memory runs low: {desk_text['mem_last']}. Find the processes that hold it (ps by rss) and tell the owner.")
   elif not live and clock() - desk_time.get("mem_at", 0.0) >= CI_EVERY:
     desk_time["mem_at"] = clock()
-    desk_text["mem_live"] = str(bash("memory_pressure | tail -1; sysctl -n vm.swapusage", show=HIDDEN, ok=True, timeout=30))
+    desk_text["mem_live"] = str(bash(MEM, show=HIDDEN, ok=True, timeout=30))
   return notes
 
 
@@ -873,7 +893,7 @@ def words_files() -> str:
   write(Text("scratch://converge/words-life.md", "# The words of the owner in this life, and the messages of the lead to him, in order\n\n" + "\n\n".join(said) + "\n"))
   done = {str(k) for _, k, _ in desk_ended}
   queues = "\n".join(f"- {t}: width {desk_width.get(t, 0)}; live {[(str(i['key']), kind(str(i['model']))) for i in desk_live[t].values()]}; queued {[(str(x['key']), f'P{priority(x)}', kind(str(x['model'])), [a for a in afters_of(x) if a not in done]) for x in desk_queue[t]]}" for t in TOPICS)
-  names = ["ROOM_CAP", "PAUSE_FOR_FIX", "TOPICS", "topic_chain", "desk_width", "desk_fixing", "desk_paused", "desk_ground", "SERIAL2", "FIX_MODEL", "AGG_MODEL", "ASTRA", "VERIFIER", "RANK", "desk_prio", "desk_time", "DISK_FLOOR"]
+  names = ["ROOM_CAP", "TOPICS", "topic_chain", "desk_width", "desk_fixing", "desk_paused", "desk_ground", "SERIAL2", "FIX_MODEL", "AGG_MODEL", "ASTRA", "VERIFIER", "RANK", "desk_prio", "desk_time", "DISK_FLOOR"]
   values = "\n".join(f"{n} = {globals()[n]!r}" for n in names) + f"\nseats_used() = {seats_used()!r}"
   page = f"# The converge as it runs\n\nThe kit conductor runs the converge; each definition below is the one bound now.\n\nTopics, widths and queues (key, priority, class, the keys that it still waits for):\n{queues}\n\n## Values bound now\n{values}\n\n## FIX_HEAD\n{FIX_HEAD}\n\n## CYCLE\n{CYCLE}\n\n## FINGER\n{FINGER}\n\n## QA_BRIEF\n{QA_BRIEF}\n\n## REVIEW_BRIEF\n{REVIEW_BRIEF}\n\n## WORDS_BRIEF\n{WORDS_BRIEF}\n\n## ALIGN_BRIEF\n{ALIGN_BRIEF}\n\n## PERF_BRIEF\n{PERF_BRIEF}\n\n## The definitions bound now\n{dump(*PAGED)}\n"
   write(Text("scratch://converge/desk.md", page))
