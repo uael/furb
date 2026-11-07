@@ -75,6 +75,11 @@ pub(super) enum Streamed {
   ContentBlockStop {
     index: u64,
   },
+  /// The end of a message, with what its request spent in all. The usage of the assistant events
+  /// before it is the usage of the start of the message.
+  MessageDelta {
+    usage: Spent,
+  },
   #[serde(other)]
   Other,
 }
@@ -148,6 +153,16 @@ pub(super) struct Spent {
   pub(super) cache_read: u64,
   #[serde(rename = "cache_creation_input_tokens")]
   pub(super) cache_creation: u64,
+}
+
+impl Spent {
+  /// The counts of a later usage of the same message, which only grow.
+  fn grow(&mut self, later: &Self) {
+    self.input = self.input.max(later.input);
+    self.output = self.output.max(later.output);
+    self.cache_read = self.cache_read.max(later.cache_read);
+    self.cache_creation = self.cache_creation.max(later.cache_creation);
+  }
 }
 
 /// The end of a turn. Only a turn that fails has an error, a subtype and a status, so the fields
@@ -283,6 +298,7 @@ impl<'a> Reply<'a> {
     if matches!(update, Streamed::MessageStart) {
       self.streamed = Some(HashMap::new());
       self.settled = 0;
+      self.spent = None;
     }
     let places = self.streamed.get_or_insert_default();
     match update {
@@ -316,6 +332,7 @@ impl<'a> Reply<'a> {
           self.closed(at);
         }
       }
+      Streamed::MessageDelta { usage } => self.spent.get_or_insert_default().grow(usage),
       Streamed::MessageStart | Streamed::Other => {}
     }
   }

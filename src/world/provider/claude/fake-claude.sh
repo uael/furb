@@ -197,8 +197,11 @@ while IFS= read -r line; do
     part "\"\\\"reply $n\\\")\""
   fi
   say "{\"type\":\"content_block_stop\",\"index\":$at}"
+  # As the real command line, the message settles with the usage of its start, which counts one
+  # token out, and the delta at its end says what it spent in all.
+  settle "{\"type\":\"text\",\"text\":$word}" "{\"input_tokens\":10,\"output_tokens\":1,\"cache_read_input_tokens\":20,\"cache_creation_input_tokens\":3}"
+  say '{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":20,"cache_creation_input_tokens":3}}'
   say '{"type":"message_stop"}'
-  settle "{\"type\":\"text\",\"text\":$word}" "{\"input_tokens\":10,\"output_tokens\":5,\"cache_read_input_tokens\":20,\"cache_creation_input_tokens\":3}"
   paid="0.0$n"
   if [ -f "$here/cost" ]; then paid=$(awk "BEGIN { print $n * $(cat "$here/cost") }"); fi
   printf '%s\n' "{\"type\":\"result\",\"session_id\":\"$id\",\"total_cost_usd\":$paid,\"usage\":$used}"
