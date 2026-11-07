@@ -74,6 +74,11 @@ use crate::{
 /// How long a life with no holder lives, unless the settings of the daemon say otherwise.
 pub const GRACE: Duration = Duration::from_secs(30);
 
+/// How many frames of the events of a life may wait for a window before the daemon reads the next
+/// event: a window that reads slowly stands behind the life, and reads the log of the life again
+/// once it reads on, in the place of a copy of each event in its outbox.
+const WAITING: usize = 256;
+
 /// What the daemon opens each life on.
 #[derive(Clone)]
 pub struct Settings {
@@ -1140,8 +1145,8 @@ async fn woken(
   }
 }
 
-/// The events of a life pushed to the peer of a window, until the life ends or the peer is gone,
-/// which the daemon hears.
+/// The events of a life pushed to the peer of a window, no more than [`WAITING`] of them ahead of
+/// what the peer read, until the life ends or the peer is gone, which the daemon hears.
 async fn told(
   life: String,
   events: impl Stream<Item = (Seq, Arc<Event>)>,
@@ -1154,6 +1159,7 @@ async fn told(
       () = outbox.closed() => break,
       next = events.next() => match next {
         Some((seq, event)) => {
+          outbox.room(WAITING).await;
           let frame = Frame::Event { life: life.clone(), seq, event: Event::clone(&event) };
           if outbox.send(frame).is_err() {
             break;
