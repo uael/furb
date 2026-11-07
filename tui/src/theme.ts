@@ -578,14 +578,14 @@ function styles(): Parameters<typeof SyntaxStyle.fromStyles>[0] {
     fact: { fg: theme.faint },
     matching: { fg: theme.accent, bg: theme.selected, bold: true },
     conceal: { fg: theme.faint },
-    "markup.heading": { fg: theme.text, bold: true },
+    "markup.heading": { fg: theme.prose, bold: true },
     // A heading takes the style of its level, and no level falls back to the style of a heading.
-    "markup.heading.1": { fg: theme.text, bold: true },
-    "markup.heading.2": { fg: theme.text, bold: true },
-    "markup.heading.3": { fg: theme.text, bold: true },
-    "markup.heading.4": { fg: theme.muted, bold: true },
-    "markup.heading.5": { fg: theme.muted, bold: true },
-    "markup.heading.6": { fg: theme.muted, bold: true },
+    "markup.heading.1": { fg: theme.prose, bold: true },
+    "markup.heading.2": { fg: theme.prose, bold: true },
+    "markup.heading.3": { fg: theme.prose, bold: true },
+    "markup.heading.4": { fg: theme.prose, bold: true },
+    "markup.heading.5": { fg: theme.prose, bold: true },
+    "markup.heading.6": { fg: theme.prose, bold: true },
     "markup.strong": { fg: theme.text, bold: true },
     "markup.italic": { fg: theme.text, italic: true },
     "markup.strikethrough": { fg: theme.muted },
@@ -594,7 +594,7 @@ function styles(): Parameters<typeof SyntaxStyle.fromStyles>[0] {
     "markup.link": { fg: theme.link, underline: true },
     "markup.link.label": { fg: theme.link },
     "markup.link.url": { fg: theme.faint, underline: true },
-    "markup.quote": { fg: theme.muted, italic: true },
+    "markup.quote": { fg: theme.prose, italic: true },
   };
 }
 export function syntax(): SyntaxStyle {

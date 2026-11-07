@@ -652,13 +652,13 @@ test("the markdown of a message draws each element with no marks, and a code blo
       // of a word.
       expect(cellAt(spans, x - 1, label + 1).bg?.equals(RGBA.fromHex(palette.raised))).toBe(true);
       expect(cellAt(spans, x, label - 2).bg?.equals(RGBA.fromHex(palette.panel))).toBe(true);
-      // Its body draws in prose, and its heading in the text.
+      // Its body and its heading draw in the one prose role, the heading in bold.
       const body = rows.findIndex((row) => row.includes("Press Ctrl+K"));
       const bodyColumn = rows[body]?.indexOf("Press Ctrl+K") ?? -1;
       expect(cellAt(spans, bodyColumn, body).fg?.equals(RGBA.fromHex(palette.prose))).toBe(true);
       const heading = rows.findIndex((row) => row.includes("The shortcut"));
       const headingColumn = rows[heading]?.indexOf("The shortcut") ?? -1;
-      expect(cellAt(spans, headingColumn, heading).fg?.equals(RGBA.fromHex(palette.text))).toBe(true);
+      expect(cellAt(spans, headingColumn, heading).fg?.equals(RGBA.fromHex(palette.prose))).toBe(true);
     },
     { width: 140, height: 60 },
   ));

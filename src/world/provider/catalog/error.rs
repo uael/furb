@@ -20,8 +20,10 @@ pub enum Error {
   Builtin(String),
   #[error("Invalid provider {name}: {source}")]
   Invalid { name: String, source: serde_json::Error },
-  #[error("{0}")]
-  Codex(String),
+  #[error("Invalid codex settings: {0}")]
+  CodexSettings(serde_json::Error),
+  #[error("The codex model_context_window must be positive")]
+  CodexWindow,
   #[error("The URL of {name} is invalid")]
   Url { name: String, source: url::ParseError },
   #[error("The URL of {0} must use HTTP or HTTPS with no credential")]

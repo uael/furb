@@ -108,14 +108,17 @@ struct Settings {
   model_context_window: Option<u64>,
 }
 
-pub(super) fn offered(config: Option<&Path>, form: &Value) -> Result<Vec<super::Model>, String> {
+pub(super) fn offered(
+  config: Option<&Path>,
+  form: &Value,
+) -> Result<Vec<super::Model>, super::catalog::Error> {
   let settings: Settings = if *form == Value::Bool(true) {
     Settings::default()
   } else {
-    serde_json::from_value(form.clone()).map_err(|no| format!("Invalid codex settings: {no}"))?
+    serde_json::from_value(form.clone()).map_err(super::catalog::Error::CodexSettings)?
   };
   if settings.model_context_window == Some(0) {
-    return Err("The codex model_context_window must be positive".to_owned());
+    return Err(super::catalog::Error::CodexWindow);
   }
   let directory = auth::directory(config);
   Ok(

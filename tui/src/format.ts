@@ -1,4 +1,3 @@
-import cliTruncate from "cli-truncate";
 import type { Retry } from "furb";
 import { clock } from "./clock.ts";
 
@@ -62,8 +61,29 @@ export const graphemes = new Intl.Segmenter();
  * the end of a path. It fills the width to its last cell, and shows no ellipsis where none fits. */
 export function clip(line: string, width: number, keep: "start" | "end" = "start"): string {
   if (Bun.stringWidth(line) <= width) return line;
-  if (width < 2) return width === 1 ? "…" : "";
-  return cliTruncate(line, width, { position: keep === "end" ? "start" : "end", truncationCharacter: "…" });
+  // One measure, Bun.stringWidth, says both the guard and the cut, and the cut reads only the graphemes that it keeps
+  // from the side that stays, so a long text costs what the room shows.
+  const parts =
+    keep === "end"
+      ? [...graphemes.segment(line)].map(({ segment }) => segment).reverse()
+      : (function* () {
+          for (const { segment } of graphemes.segment(line)) yield segment;
+        })();
+  // Below two cells no ellipsis fits: a width of one keeps the grapheme at the edge that stays when it takes one cell.
+  if (width < 2) {
+    if (width < 1) return "";
+    for (const part of parts) return Bun.stringWidth(part) === 1 ? part : "";
+    return "";
+  }
+  const kept: string[] = [];
+  let taken = 0;
+  for (const part of parts) {
+    const cells = Bun.stringWidth(part);
+    if (taken + cells > width - 1) break;
+    kept.push(part);
+    taken += cells;
+  }
+  return keep === "end" ? `…${kept.reverse().join("")}` : `${kept.join("")}…`;
 }
 
 /** A span of time, short: 42s, 3m 05s, 1h 02m. */
