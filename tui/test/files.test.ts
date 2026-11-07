@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { FilePicker } from "furb";
 import { projectFiles } from "../src/files.ts";
 
 /** Drop from this process the privileges to back up and restore files, and give the function that sets them back.
@@ -96,3 +97,35 @@ test("the project files leave out a folder that cannot be read, .git and what .g
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("a picker in a tree of 50000 files takes each key at once, and its rows come as its walk and its match end", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-picker-"));
+  try {
+    for (let folder = 0; folder < 500; folder++) {
+      await mkdir(join(directory, `folder${folder}`));
+      await Promise.all(
+        Array.from({ length: 100 }, (_, file) =>
+          writeFile(join(directory, `folder${folder}`, `file${file}.ts`), ""),
+        ),
+      );
+    }
+    // The keys come as fast as a test types them, from the open of the picker, while its walk runs.
+    const picker = new FilePicker(directory);
+    const waited: number[] = [];
+    let typed = "";
+    let found = picker.rows(50);
+    for (const key of "folder42/file7") {
+      typed += key;
+      const began = performance.now();
+      found = picker.find(typed, 50);
+      waited.push(performance.now() - began);
+    }
+    // A walk of the tree takes about 300 ms and a match of it about 20 ms, so a key that waited for one goes past this.
+    expect(Math.max(...waited)).toBeLessThan(250);
+    for (const until = Date.now() + 20_000; found.running && Date.now() < until; await Bun.sleep(10))
+      found = picker.rows(50);
+    expect(found.paths[0]).toBe("folder42/file7.ts");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 60_000);

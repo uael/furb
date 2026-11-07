@@ -33,11 +33,15 @@ use std::{
 
 use furb::{
   engine::OPERATOR,
-  life::{Log, Opening},
+  life::{Answer as Answered, Log, Opening},
   wire::parsed,
-  world::config::Change,
+  world::{
+    codex::{self, SignIn},
+    config::Change,
+  },
 };
 use futures::{SinkExt, Stream, StreamExt, future};
+use serde_json::Value;
 use tokio::{
   net::{TcpListener, TcpStream},
   sync::{mpsc, oneshot, watch},
@@ -59,7 +63,7 @@ use crate::{
     Request, Verb,
   },
   records,
-  serve::{Host, Outbox, serve},
+  serve::{Host, Outbox, fixed, serve},
   stall::{Quiet, Stall},
   transport::{
     Accepted, Dialer, Door, Identity, Listener, Local, Tailscale, Tcp, Ticket, own, upgraded,
@@ -170,12 +174,18 @@ where
     Some(file) => Some(Door::open(file).await?),
     None => None,
   };
-  let (daemon, mut leave) = Daemon::spawn(settings, handed);
+  let (grace, lasting) = (settings.grace, doors.is_some());
+  // A daemon that no peer reached yet waits for the first one, which the program that started it
+  // sends.
+  let mut met = !handed.is_empty();
+  let (daemon, mut leave, mut empty) = Daemon::spawn(settings, handed);
   let mut peers = JoinSet::new();
+  let mut quiet = None;
   let leaving = loop {
     tokio::select! {
       accepted = listener.accept() => match accepted {
         Ok(stream) => {
+          met = true;
           peers.spawn(peer(daemon.clone(), identity.clone(), stream));
         }
         Err(no) => report(log.as_ref(), &no),
@@ -188,6 +198,7 @@ where
       },
       knocked = knock(door.as_ref()) => match knocked {
         Ok((stream, ticket)) => {
+          met = true;
           peers.spawn(window(daemon.clone(), ticket, stream));
         }
         Err(no) => report(log.as_ref(), &no),
@@ -197,11 +208,17 @@ where
         Ok(Err(no)) => report(log.as_ref(), &no),
         Err(no) => report(log.as_ref(), &no),
       },
-      leaving = &mut leave => break leaving,
+      Ok(()) = empty.changed() => {}
+      () = until(quiet) => break None,
+      leaving = &mut leave => break leaving.ok(),
     }
+    // The daemon of this machine ends once it holds no peer and no life for its grace, so no
+    // daemon outlives the windows that started it. A daemon on the tailnet serves its doors.
+    let idle = met && !lasting && peers.is_empty() && *empty.borrow();
+    quiet = if idle { quiet.or_else(|| Some(Instant::now() + grace)) } else { None };
   };
   drop((listener, doors, door));
-  if let Ok(Leaving { handed, asker, reply }) = leaving {
+  if let Some(Leaving { handed, asker, reply }) = leaving {
     reply.send(Ok(Answer::Handed(handed))).ok();
     asker.closed().await;
   }
@@ -215,7 +232,8 @@ async fn peer<I: Identity<Stream = Accepted>>(
   stream: Accepted,
 ) -> Result<(), TransportError> {
   let who = identity.identify(&stream).await?;
-  serve(&daemon, stream, who).await
+  let granted = fixed(who.role);
+  serve(&daemon, stream, who, granted).await
 }
 
 /// One peer of the tailnet, identified by Tailscale, upgraded when it came by WebSocket, then
@@ -228,11 +246,13 @@ async fn remote(
   match arrival {
     Arrival::Tcp(stream) => {
       let who = identity.identify(&stream).await?;
-      serve(&daemon, stream, who).await
+      let granted = identity.follow(&who);
+      serve(&daemon, stream, who, granted).await
     }
     Arrival::WebSocket(stream) => {
       let who = identity.identify(&stream).await?;
-      serve(&daemon, upgraded(stream).await?, who).await
+      let granted = identity.follow(&who);
+      serve(&daemon, upgraded(stream).await?, who, granted).await
     }
   }
 }
@@ -249,7 +269,8 @@ async fn knock(door: Option<&Door>) -> Result<(TcpStream, Ticket), TransportErro
 /// leaves.
 async fn window(daemon: Daemon, ticket: Ticket, stream: TcpStream) -> Result<(), TransportError> {
   let (stream, who) = ticket.admitted(stream).await?;
-  serve(&daemon, stream, who).await
+  let granted = fixed(who.role);
+  serve(&daemon, stream, who, granted).await
 }
 
 /// The listeners of the daemon on the address of the machine on the tailnet, each where the
@@ -270,7 +291,7 @@ impl Doors {
   /// The doors listening on the first address of the machine on the tailnet, an address of IPv4
   /// before one of IPv6. A daemon that cannot listen there reports why, and serves the machine
   /// alone.
-  async fn listen(tailnet: &Tailnet, log: Option<&Log>) -> Option<Doors> {
+  async fn listen(tailnet: &Tailnet, log: Option<&Log>) -> Option<Self> {
     let opened = async {
       let mut ips = tailnet.identity.addresses().await?;
       ips.sort_by_key(IpAddr::is_ipv6);
@@ -285,13 +306,13 @@ impl Doors {
           report(log, &format_args!("listens on the tailnet at {at} by {name}"));
         }
       }
-      Ok::<_, TransportError>(Doors { identity: tailnet.identity.clone(), tcp, websocket })
+      Ok::<_, TransportError>(Self { identity: tailnet.identity.clone(), tcp, websocket })
     };
     opened.await.inspect_err(|no| report(log, &format_args!("no door on the tailnet: {no}"))).ok()
   }
 
   /// The next peer of the tailnet, with the identity that says who it is, or never with no door.
-  async fn arrival(doors: Option<&Doors>) -> Result<(Tailscale, Arrival), TransportError> {
+  async fn arrival(doors: Option<&Self>) -> Result<(Tailscale, Arrival), TransportError> {
     let Some(doors) = doors else { return future::pending().await };
     let arrival = tokio::select! {
       stream = accepted(doors.tcp.as_ref()) => Arrival::Tcp(stream?),
@@ -324,12 +345,31 @@ struct Daemon {
 
 type Replied = oneshot::Sender<Result<Answer, ProtocolError>>;
 
+/// The door of a peer that lives in the process of the daemon, as a kit of a session does: it says
+/// its verbs as a peer of a transport does, with an outbox of its own, and holds the task that owns
+/// the lives no longer than the daemon does.
+#[derive(Clone)]
+pub(crate) struct Inside(mpsc::WeakUnboundedSender<Asked>);
+
+impl Inside {
+  /// The answer to a verb of the peer, or the refusal that the daemon stopped.
+  pub(crate) async fn answer(
+    &self,
+    peer: &Peer,
+    verb: Verb,
+    outbox: &Outbox,
+  ) -> Result<Answer, ProtocolError> {
+    let asks = self.0.upgrade().ok_or(ProtocolError::Stopped)?;
+    Daemon { asks }.answer(peer, verb, outbox).await
+  }
+}
+
 /// What the task that owns the lives hears.
 enum Asked {
   /// A verb of the daemon, from a peer.
   Verb { peer: Peer, verb: Box<Verb>, outbox: Outbox, reply: Replied },
   /// The handle of a life, for a verb of that life.
-  Life { life: String, reply: oneshot::Sender<Result<LifeHandle, ProtocolError>> },
+  Life { life: String, reply: oneshot::Sender<Result<(LifeHandle, Option<String>), ProtocolError>> },
   /// A window whose peer is gone.
   Left { life: String, outbox: Outbox },
   /// A life whose thread told its end, in one of its births.
@@ -349,9 +389,13 @@ struct Leaving {
 impl Daemon {
   /// The task that owns the lives started, with the lives that a daemon before it gave, and what
   /// it says to the listener at a handover.
-  fn spawn(settings: Settings, handed: Vec<Handed>) -> (Daemon, oneshot::Receiver<Leaving>) {
+  fn spawn(
+    settings: Settings,
+    handed: Vec<Handed>,
+  ) -> (Self, oneshot::Receiver<Leaving>, watch::Receiver<bool>) {
     let (asks, heard) = mpsc::unbounded_channel();
     let (leave, leaving) = oneshot::channel();
+    let (empty, emptied) = watch::channel(handed.is_empty());
     let changes = settings.tailnet.as_ref().map(|one| one.identity.changes());
     let mut lives = Lives {
       changes,
@@ -361,10 +405,11 @@ impl Daemon {
       born: 0,
       leave,
       views: Views::default(),
+      empty,
     };
     lives.adopt(handed);
     tokio::spawn(lives.kept(heard));
-    (Daemon { asks }, leaving)
+    (Self { asks }, leaving, emptied)
   }
 
   /// What the task that owns the lives answers.
@@ -394,7 +439,10 @@ impl Host for Daemon {
           (Kind::Window, _) => command.by(format!("{OPERATOR}/{}", peer.login)),
           _ => command,
         };
-        let handle = self.asked(|reply| Asked::Life { life, reply }).await??;
+        let (handle, config) = self.asked(|reply| Asked::Life { life, reply }).await??;
+        if let Command::Configure(change) = &command {
+          signed(change, config.as_deref().map(Path::new), outbox).await?;
+        }
         Ok(handle.send(command).await?.into())
       }
       Routed::Daemon(verb) => {
@@ -472,16 +520,16 @@ fn configured(config: Config) -> Command {
 impl From<Reply> for Answer {
   fn from(reply: Reply) -> Self {
     match reply {
-      Reply::Done => Answer::Done,
-      Reply::Act(id) => Answer::Act(id),
-      Reply::Value(value) => Answer::Value(value),
-      Reply::Values(values) => Answer::Values(values),
-      Reply::Inspected { kind, repr, value } => Answer::Inspected { kind, repr, value },
-      Reply::Desk(desk) => Answer::Desk(desk),
-      Reply::Threads(threads) => Answer::Threads(threads),
-      Reply::Rail(threads) => Answer::Rail(threads),
-      Reply::Acts(acts) => Answer::Acts(acts),
-      Reply::Moments(moments) => Answer::Moments(moments),
+      Reply::Done => Self::Done,
+      Reply::Act(id) => Self::Act(id),
+      Reply::Value(value) => Self::Value(value),
+      Reply::Values(values) => Self::Values(values),
+      Reply::Inspected { kind, repr, value } => Self::Inspected { kind, repr, value },
+      Reply::Desk(desk) => Self::Desk(desk),
+      Reply::Threads(threads) => Self::Threads(threads),
+      Reply::Rail(threads) => Self::Rail(threads),
+      Reply::Acts(acts) => Self::Acts(acts),
+      Reply::Moments(moments) => Self::Moments(moments),
     }
   }
 }
@@ -523,6 +571,8 @@ struct Lives {
   born: u64,
   leave: oneshot::Sender<Leaving>,
   views: Views,
+  /// Whether the daemon holds no life, which the listener reads to end the daemon.
+  empty: watch::Sender<bool>,
 }
 
 /// The next change of the access list, or never when there is no list.
@@ -533,11 +583,69 @@ async fn changed(changes: Option<&mut watch::Receiver<Access>>) -> Option<()> {
   }
 }
 
-/// A life of the daemon: its handle, its folder, its birth, its stage, and the peer that answers
-/// its models, when one does.
+/// The sign-in of codex that a change of its provider asks, driven on this machine: a cancel when
+/// the change turns codex off, and, when it turns codex on, a sign-in that waits for the browser,
+/// whose state the window hears at each change. It ends with the sign-in, and is refused when the
+/// operator cancels the sign-in or it fails.
+async fn signed(
+  change: &Change,
+  config: Option<&Path>,
+  outbox: &Outbox,
+) -> Result<(), ProtocolError> {
+  if change.key != ["providers", "codex"] {
+    return Ok(());
+  }
+  match change.value {
+    Some(Value::Bool(false)) => codex::cancel(config),
+    Some(Value::Bool(true)) => return signing(config, outbox).await,
+    _ => {}
+  }
+  Ok(())
+}
+
+/// A sign-in of codex, started unless one runs or the account is connected, told to the window
+/// from the state that it shows now until the state ends it.
+async fn signing(config: Option<&Path>, outbox: &Outbox) -> Result<(), ProtocolError> {
+  let refused = |why: &str| ProtocolError::Refused { why: why.to_owned() };
+  let told = |state: &SignIn| {
+    let frame = Frame::SignIn {
+      state: state.state().to_owned(),
+      url: state.url().map(str::to_owned),
+      message: state.message().map(str::to_owned),
+    };
+    outbox.send(frame).ok();
+  };
+  let mut states = codex::subscribe(config);
+  // A start that fails publishes its failure in the watch, which the loop below reads.
+  codex::refresh(config)
+    .and_then(|state| match state {
+      SignIn::Disconnected | SignIn::NeedsLogin(_) | SignIn::Failed(_) | SignIn::Canceled => {
+        codex::begin(config)
+      }
+      running => Ok(running),
+    })
+    .ok();
+  loop {
+    let state = states.borrow_and_update().clone();
+    told(&state);
+    match state {
+      SignIn::Connected => return Ok(()),
+      SignIn::Waiting { .. } | SignIn::Connecting => {
+        states.changed().await.or(Err(ProtocolError::Stopped))?;
+      }
+      SignIn::Canceled => return Err(refused("the sign-in of codex was canceled")),
+      SignIn::NeedsLogin(why) | SignIn::Failed(why) => return Err(refused(&why)),
+      SignIn::Disconnected => return Err(refused("the sign-in of codex ended with no account")),
+    }
+  }
+}
+
+/// A life of the daemon: its handle, its folder, the folder of its configs when it has one, its
+/// birth, its stage, and the peer that answers its models, when one does.
 struct Held {
   handle: LifeHandle,
   cwd: String,
+  config: Option<String>,
   born: u64,
   stage: Stage,
   answerer: Option<Answerer>,
@@ -573,6 +681,8 @@ impl Lives {
         }
         Some(asked) => self.heard(asked),
       }
+      let empty = self.held.is_empty();
+      self.empty.send_if_modified(|was| std::mem::replace(was, empty) != empty);
     }
   }
 
@@ -591,7 +701,7 @@ impl Lives {
     match asked {
       Asked::Verb { peer, verb, outbox, reply } => self.verb(peer, *verb, &outbox, reply),
       Asked::Life { life, reply } => {
-        let found = self.held.get(&life).map(|held| held.handle.clone());
+        let found = self.held.get(&life).map(|held| (held.handle.clone(), held.config.clone()));
         reply.send(found.ok_or(ProtocolError::Closed { life })).ok();
       }
       Asked::Left { life, outbox } => {
@@ -649,6 +759,13 @@ impl Lives {
         let wrote = |one: &Answerer| one.wrote(outbox, ask, &text, &thinking);
         self.answerer(&life).and_then(wrote).map(|()| Answer::Done)
       }
+      Verb::CancelSignIn { life } => match self.held.get(&life) {
+        Some(held) => {
+          codex::cancel(held.config.as_deref().map(Path::new));
+          Ok(Answer::Done)
+        }
+        None => Err(ProtocolError::Closed { life }),
+      },
       Verb::ViewMount(mount) => self.mount(mount, &peer, outbox),
       Verb::ViewEvent(event) => self.views.event(event, outbox).map(|()| Answer::Done),
       Verb::ViewDispose(dispose) => self.views.dispose(&dispose, outbox).map(|()| Answer::Done),
@@ -717,14 +834,15 @@ impl Lives {
   fn opened(&mut self, life: String, birth: Birth) -> Result<(), ProtocolError> {
     let Birth { cwd, actor, roster, extensions, config, claude, answerer, holder: _ } = birth;
     let base = &self.settings.opening;
-    let answer = answerer.as_ref().map(|one| furb::life::Answer(one.hosted()));
+    let config = config.or_else(|| base.config.clone());
+    let answer = answerer.as_ref().map(|one| Answered(one.hosted()));
     let opening = Opening {
       record: Some(life.clone()),
       directory: cwd.clone(),
       actor: actor.or_else(|| base.actor.clone()),
       roster: roster.or_else(|| base.roster.clone()),
       extensions: extensions.or(base.extensions),
-      config: config.or_else(|| base.config.clone()),
+      config: config.clone(),
       claude: claude.or_else(|| base.claude.clone()),
       answer: answer.or_else(|| base.answer.clone()),
       members: Some(self.members()),
@@ -747,13 +865,14 @@ impl Lives {
         life: life.clone(),
         cwd: PathBuf::from(&cwd),
         host: host.clone(),
+        inside: Inside(self.asks.clone()),
         places,
         log: self.settings.opening.log.clone(),
       };
       tokio::spawn(played.run());
     }
     let stage = Stage::Living(Holders::new(self.settings.grace));
-    self.held.insert(life, Held { handle, cwd, born: self.born, stage, answerer });
+    self.held.insert(life, Held { handle, cwd, config, born: self.born, stage, answerer });
     Ok(())
   }
 

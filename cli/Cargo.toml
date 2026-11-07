@@ -28,6 +28,8 @@ futures = "0.3"
 unsync = "0.2"
 # The errors of the command line, each with the words that the operator reads.
 thiserror = "2"
+# The events of the files of the system, by which the daemon reads `host.json` again when it changes.
+notify = "8"
 # The protocol: one command or one event per line, as JSON, whose value is read before anything rounds it.
 serde_json = { version = "1", features = ["raw_value"] }
 

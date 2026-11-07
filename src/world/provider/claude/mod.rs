@@ -254,9 +254,9 @@ impl Claude {
   /// read of the cache apart from the rest of what it read.
   ///
   /// The command line says its models itself, with no model prompt, once for each version of its
-  /// program: a process of its own asks it, and furb keeps the answer in its cache until the
-  /// program changes or [`refresh`] is called. A command line that does not answer, as an older one
-  /// does not, gives the fixed table of furb, within 20 seconds.
+  /// program: a process of its own asks it, and furb keeps the answer in its cache for an
+  /// hour, until the program changes or [`refresh`] is called. A command line that does not
+  /// answer, as an older one does not, gives the fixed table of furb, within 20 seconds.
   pub async fn models(&self) -> Vec<Model> {
     self.family(discover::models(&self.program).await.unwrap_or_else(discover::fallback))
   }
@@ -330,15 +330,18 @@ impl Program {
 
   /// A command that holds the program and its words, then these flags, then the flags and the
   /// environment that furb gives the command line for a turn, a probe and a search alike: no source
-  /// of settings, no server of another, no command of its own, no bundled skill and no traffic of
-  /// no use. Each adds its own flags after them. It fails with the reason when the token of the
-  /// account cannot be read.
-  pub(super) fn base_command(&self, first: &[&str]) -> Result<Command, String> {
+  /// of settings, no server of another, no command of its own and no bundled skill, and no traffic
+  /// of no use when `quiet`. The probe of the models is not quiet, since the command line lists
+  /// fewer models with its traffic off. Each adds its own flags after them. It fails with the
+  /// reason when the token of the account cannot be read.
+  pub(super) fn base_command(&self, first: &[&str], quiet: bool) -> Result<Command, String> {
     let mut command = self.command()?;
     command.args(first);
     command.args(["--setting-sources", "", "--strict-mcp-config", "--disable-slash-commands"]);
     command.env("CLAUDE_CODE_DISABLE_BUNDLED_SKILLS", "1");
-    command.env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1");
+    if quiet {
+      command.env("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1");
+    }
     Ok(command)
   }
 

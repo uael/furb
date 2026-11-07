@@ -51,6 +51,7 @@ use crate::{
   extension::definitions,
   fact::Fact,
   value::{Fault, Object, ObjectRef, entry},
+  wire,
   world::{self, CHECKPOINT_SCHEMA, Store},
 };
 
@@ -149,7 +150,7 @@ fn fields(one: &Object) -> Option<Vec<(String, serde_json::Value)>> {
   Some(
     pairs
       .into_iter()
-      .filter_map(|(key, value)| Some((key.as_str()?.to_owned(), crate::wire::record(value))))
+      .filter_map(|(key, value)| Some((key.as_str()?.to_owned(), wire::record(value))))
       .collect(),
   )
 }

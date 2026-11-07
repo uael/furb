@@ -1,7 +1,7 @@
 # The protocol of the host
 
 `furb-host` is the daemon of a machine: it holds each life, and each window or skill reaches it over one protocol. This
-page says that protocol. Its version is `PROTOCOL`, now 1. The crate gives its JSON Schema in
+page says that protocol. Its version is `PROTOCOL`, now 3. The crate gives its JSON Schema in
 `host/protocol.schema.json`, and `bind/typescript/src/protocol.ts` holds the types that `bun run protocol` makes from
 that schema. A test of each side fails when the schema or the types do not agree with the code.
 
@@ -46,7 +46,10 @@ folder of furb (`~/.config/furb` by default), turns it on. WireGuard encrypts ea
   its role, and the daemon closes the peer of a login that it does not name, before its hello.
 - `stall` gives the seconds after which the daemon tells that a life with an open act and no new fact stalled, as
   the section on attach says. With no `stall`, the bound is 1200 seconds.
-- The daemon reads `host.json` when it starts. A change takes effect at the next start or upgrade.
+- The daemon reads `host.json` when it starts and at each change of the file, and a file that does not parse keeps
+  the list before. A change of `roles` takes effect at once on each connected peer: a login that the file drops gets
+  a refusal and loses its connection, and a login whose role changes holds the new role from its next verb. A change
+  of `tailnet` or `stall` takes effect at the next start or upgrade.
 - The daemon finds the local API on the socket of `tailscaled`, or on the port of the app for macOS from the
   standalone download. It does not find the app of the App Store.
 - Plain TCP listens only on loopback or on the tailnet, `100.64.0.0/10` and `fd7a:115c:a1e0::/48`, since no other
@@ -65,7 +68,7 @@ folder of furb (`~/.config/furb` by default), turns it on. WireGuard encrypts ea
 The first frame of a peer is its hello:
 
 ```json
-{"id": 0, "verb": "hello", "protocol": 1, "kind": "window", "name": null, "role": null}
+{"id": 0, "verb": "hello", "protocol": 3, "kind": "window", "name": null, "role": null}
 ```
 
 - `kind` is `window`, `skill`, or `daemon` for the daemon of a new build that asks the handover, and a skill gives
@@ -76,11 +79,17 @@ The first frame of a peer is its hello:
 - The daemon answers with its protocol and the peer as it knows it: its login, its role, its kind and its name.
 
   ```json
-  {"frame": "reply", "id": 0, "answer": "welcome", "data": {"protocol": 1, "peer": {"login": "uael", "role": "write", "kind": "window", "name": null}}}
+  {"frame": "reply", "id": 0, "answer": "welcome", "data": {"protocol": 3, "peer": {"login": "uael", "role": "write", "kind": "window", "name": null}}}
   ```
 
 - A hello of another protocol gets a refusal that names both versions, and the daemon closes the peer. A first frame
   that is no hello gets the refusal `first`, and the daemon closes the peer. A second hello gets the refusal `again`.
+- The version rises with each change of the schema, `host/protocol.schema.json`: a test of the crate keeps the digest
+  of the schema of each version. A window that meets a daemon of another version does not wait and asks no handover,
+  so it ends no life of another window: it says that the daemon of this machine is of another build. That daemon ends
+  once its last window quits and its grace passes, and the next window starts one of its own build.
+- A request that the daemon cannot read, as a verb of a later version, gets the refusal `unread` under its `id`, with
+  why it names the verb, so no request waits for an answer that never comes.
 
 ## Requests and answers
 
@@ -116,6 +125,7 @@ it is not given. The daemon answers requests in any order.
 | `names` | `life`, `on` | read |
 | `gate` | `life`, `word`, `on` | read |
 | `stand` | `life` | write |
+| `cancel_sign_in` | `life` | write |
 | `config` | `life`, `config`: `{"action": "get"}`, `{"action": "set", "key", "value", "layer"}` | read for get, else write |
 | `seen` | `life`, `about` | write |
 | `queue` | `life`, `entry`, `shape`, `message`, `on` | write |
@@ -141,6 +151,14 @@ it is not given. The daemon answers requests in any order.
   of its key does not take, and writes nothing. A set writes the key in its layer, `project` when none is named, or
   takes it out when no value is given, and then the life stands, so the answer is the act of the stand. A change that
   the catalog cannot read puts its config back as it was, and the life does not stand.
+  A set of `["providers", "codex"]` to `true` starts the sign-in of codex on the machine of the daemon, unless an
+  account is connected or a sign-in runs. The daemon pushes to the peer that asked the frame `sign_in` at the current
+  state and at each change of it, with the `state` (`disconnected`, `waiting`, `connecting`, `connected`,
+  `needs-login`, `failed` or `canceled`), the `url` of the browser while it waits, and the `message` that a person
+  reads when it needs login or failed. The answer of the set comes when the sign-in ends: the act of the stand when
+  it connects, and a refusal when the operator cancels it or it fails. A set to `false` cancels a sign-in that runs. A
+  window keeps no state of the sign-in beside these frames and asks for none. The verb `cancel_sign_in` cancels the
+  sign-in that the daemon runs for a life and writes no config, so the set that asked it is refused.
 - `list` gives each record of the machine as `lives`: each record of the sessions of each workspace that
   `workspaces.json` in the folder `config` names, the config folder of the daemon when the peer names none, in the
   `.furb/sessions` of its main checkout and of each worktree of it, with that main checkout as `workspace`, and each
@@ -225,6 +243,9 @@ once it listens. A second daemon refuses to start there.
   nothing. A life with no holder for the grace of the daemon, 30 seconds unless `furb host --grace <seconds>` says
   otherwise, writes its checkpoint and ends, and `list` gives it as not `open` from then on. An `open` of a life
   that ends waits for its end, then opens it again from its checkpoint.
+- The daemon of a machine ends once it holds no peer and no life for its grace, so it does not outlive the windows
+  that started it; a window that dials later starts a new one. A daemon waits for its first peer before this bound
+  runs, and a daemon with a door on the tailnet does not end by it.
 - A life whose record does not hold each fact that it said yet, as on a full disk, does not end: its end, after the
   grace, at a handover or at the end of the daemon, waits until the record holds them, and the life tells why in a
   notice. Past 20000 facts that the record lacks, the life pauses each chain that lives and each chain

@@ -16,7 +16,9 @@ pub use act::{Act, Answer, Kind, Pause, Phase, RunState, Spend, operator};
 pub use desk::{Ask, Desk, Tick, choices, desk, hint, takes_nothing, ticks, wants};
 pub use fold::{Fold, followed};
 pub use held::{Held, Threads};
-pub use named::{NAME, Named, RENAME, said, word};
+#[cfg(any(test, feature = "test-support"))]
+pub use named::word;
+pub use named::{NAME, Named, RENAME, said};
 pub use state::{State, chain_state, restate, working};
 pub use threads::{
   Aside, Attention, ChainAside, ChainThread, Concern, NoteRun, Origin, Rows, ThreadNode, attention,

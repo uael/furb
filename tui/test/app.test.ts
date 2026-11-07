@@ -997,8 +997,7 @@ test("slash commands and project files are suggested above the input as they are
 
       app.composer.setText("");
       await screen.mockInput.typeText("Read @READ");
-      await session.projectFiles();
-      expect(await frame()).toContain("@README.md");
+      await framed(frame, (shown) => shown.includes("@README.md"), "the file README.md");
       screen.mockInput.pressEscape();
       expect(await frame()).not.toContain("@README.md");
       await screen.mockInput.typeText("M");
@@ -1008,7 +1007,7 @@ test("slash commands and project files are suggested above the input as they are
       // The letters of a name in its order pick it, as the matcher of nucleo ranks a path.
       app.composer.setText("");
       await screen.mockInput.typeText("Read @rdme");
-      expect(await frame()).toContain("@README.md");
+      await framed(frame, (shown) => shown.includes("@README.md"), "the file README.md");
       screen.mockInput.pressEnter();
       expect(app.composer.plainText).toBe("Read @README.md ");
       expect(

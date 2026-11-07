@@ -201,6 +201,10 @@ export type Request1 =
     }
   | {
       life: string;
+      verb: "cancel_sign_in";
+    }
+  | {
+      life: string;
       about: string;
       verb: "seen";
     }
@@ -463,6 +467,12 @@ export type Frame =
       acts: Open[];
       notice: string;
       frame: "stalled";
+    }
+  | {
+      state: string;
+      url?: string | null;
+      message?: string | null;
+      frame: "sign_in";
     }
   | {
       life: string;
@@ -1084,4 +1094,4 @@ export interface Open {
   chain: string;
 }
 
-export const PROTOCOL = 2;
+export const PROTOCOL = 4;

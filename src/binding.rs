@@ -760,11 +760,39 @@ pub fn walked_files(root: String) -> Vec<String> {
   world::picker::walked(path::Path::new(&root))
 }
 
-/// The files that a query after `@` picks from the directory, best first: from the files of the
-/// project that a walk gave, or from the folder that a query starting with `/`, `~` or `../` names.
+/// The picker of the files of a window, which walks its folder once as it opens, in the
+/// background: each key gives it the query and reads the first rows that stand then, so no key
+/// waits for the walk or the match.
 #[cfg_attr(feature = "typescript", napi)]
-pub fn picked_files(directory: String, query: String, project: Vec<String>) -> Vec<String> {
-  world::picker::picked(path::Path::new(&directory), &query, &project)
+pub struct FilePicker(world::picker::Picker);
+
+#[cfg_attr(feature = "typescript", napi)]
+impl FilePicker {
+  /// A picker of the files of a directory, whose walk starts now.
+  #[cfg_attr(feature = "typescript", napi(constructor))]
+  pub fn new(directory: String) -> Self {
+    Self(world::picker::Picker::new(path::Path::new(&directory)))
+  }
+
+  /// The picker opened again on a directory, for a new `@`: the walks of the last open stop now,
+  /// and a walk of the directory starts.
+  #[cfg_attr(feature = "typescript", napi)]
+  pub fn open(&mut self, directory: String) {
+    self.0 = world::picker::Picker::new(path::Path::new(&directory));
+  }
+
+  /// Takes the query that the operator typed after `@`, and gives the first rows that stand now.
+  #[cfg_attr(feature = "typescript", napi)]
+  pub fn find(&mut self, query: String, most: u32) -> world::picker::Rows {
+    self.0.find(&query);
+    self.0.rows(most)
+  }
+
+  /// The first rows of the last query as they stand now, which a window reads again while they run.
+  #[cfg_attr(feature = "typescript", napi)]
+  pub fn rows(&mut self, most: u32) -> world::picker::Rows {
+    self.0.rows(most)
+  }
 }
 
 /// How a message names an image: `![name](uri)`.

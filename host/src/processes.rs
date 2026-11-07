@@ -48,6 +48,7 @@ use tokio::{
 };
 
 use crate::{
+  daemon::Inside,
   event::Event,
   kits::Kit,
   life::{Command, LifeHandle, Reply},
@@ -82,12 +83,13 @@ pub(crate) fn speaker(skill: &str) -> String {
 }
 
 /// A life whose skills get their processes: its handle, its record, its folder, where the daemon
-/// listens, where the skills of the user stand, and the log of the daemon.
+/// listens, its door in process, where the skills of the user stand, and the log of the daemon.
 pub(crate) struct Played {
   pub(crate) handle: LifeHandle,
   pub(crate) life: String,
   pub(crate) cwd: PathBuf,
   pub(crate) host: PathBuf,
+  pub(crate) inside: Inside,
   pub(crate) places: Places,
   pub(crate) log: Option<Log>,
 }
@@ -151,7 +153,7 @@ impl Played {
         handle: self.handle.clone(),
         name: name.clone(),
         value,
-        host: self.host.clone(),
+        inside: self.inside.clone(),
       };
       let (end, ends) = oneshot::channel();
       running.insert(name, Running { end, watch: tokio::spawn(kit.served(ends)) });
@@ -247,7 +249,7 @@ struct Process {
 impl Process {
   fn of(mut child: Child, group: Group) -> Self {
     let stderr = tokio::spawn(tail(child.stderr.take()));
-    Process { child, group, stderr }
+    Self { child, group, stderr }
   }
 }
 
@@ -307,7 +309,7 @@ async fn watched(mut process: Process, ends: oneshot::Receiver<()>, teller: Tell
 impl Teller {
   /// The operator told, by a message under the name of the skill, that its process ended.
   async fn told(&self, status: &io::Result<ExitStatus>, lines: VecDeque<String>) {
-    let Teller { handle, skill, program, log } = self;
+    let Self { handle, skill, program, log } = self;
     let exit = match status {
       Ok(status) => status.to_string(),
       Err(no) => format!("no status that the daemon could read ({no})"),

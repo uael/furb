@@ -15,16 +15,20 @@
 #![expect(clippy::match_bool, reason = "debt: a match on a bool")]
 
 use std::{
+  panic,
   path::{Path, PathBuf},
   sync::Arc,
   time::Duration,
 };
+
+use tokio::task;
 
 use crate::{
   Ear, Engine, Fault, Object, ObjectRef, checkpoint,
   ear::{hear, hearing, lasting},
   engine::OPERATOR,
   extension::{self, Places, skills::skills},
+  gate, minify,
   world::{self, Catalog, Mode, Retries, Scratch, Writes, mcp::mcp},
 };
 
@@ -288,6 +292,9 @@ impl Opening {
   /// host with a runtime waits for it on a blocking thread.
   fn prepared(&self) -> Result<Prepared, Fault> {
     let works = self.works();
+    if self.keeps() {
+      self.crossed()?;
+    }
     // A record of another major of its schema is refused before any build reads it whole or writes
     // on it, and the models of a life on a record that holds another engine read that engine.
     let mut system = None;
@@ -300,7 +307,7 @@ impl Opening {
       let (source, _) = world::texts(checkpoint::segment(&marks.heads))?;
       if source != crate::ENGINE {
         let unread = || Fault::refused("this build cannot minify the engine that the record holds");
-        system = Some(crate::minify::minified(&source).ok_or_else(unread)?);
+        system = Some(minify::minified(&source).ok_or_else(unread)?);
       }
     }
     let here = Places::here();
@@ -326,7 +333,7 @@ impl Opening {
       Some(one) => self.provider(advertised, actor, roster)?.system(one.into()),
       None => self.provider(advertised, actor, roster)?,
     };
-    let gated = crate::gate::configured(&places.config, Path::new(&self.directory));
+    let gated = gate::configured(&places.config, Path::new(&self.directory));
     Ok(Prepared { places, extensions, refused, provider, gated })
   }
 
@@ -414,14 +421,14 @@ impl Opening {
     self,
     host: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
   ) -> Result<(Engine, Vec<Object>), Fault> {
-    let waited = tokio::task::spawn_blocking(move || {
+    let waited = task::spawn_blocking(move || {
       let prepared = self.prepared();
       (self, prepared)
     });
     let (opening, prepared) = match waited.await {
       Ok(both) => both,
       Err(no) => match no.try_into_panic() {
-        Ok(panic) => std::panic::resume_unwind(panic),
+        Ok(panic) => panic::resume_unwind(panic),
         Err(no) => return Err(Fault::refused(format!("the life did not open: {no}"))),
       },
     };
@@ -453,6 +460,35 @@ impl Opening {
     Ok((engine, record))
   }
 
+  /// Carries a record whose last life ran another engine of the major across to this build, so a
+  /// life never dies on a fault that this build fixed in the kernel: a life that inspects the
+  /// record, born on the engine that its fact made holds, writes its checkpoint after its last
+  /// entry, as a life that ends writes one, and the life opens from that checkpoint on the engine
+  /// of this build. A record of this build, or of a build whose fact made holds no texts, stays as
+  /// it is.
+  fn crossed(&self) -> Result<(), Fault> {
+    let Some(path) = self.record.as_deref().filter(|one| Path::new(one).exists()) else {
+      return Ok(());
+    };
+    let marks = world::marks(path)?;
+    world::readable(&marks.heads)?;
+    let segment = checkpoint::segment(&marks.heads);
+    let (source, _) = world::texts(segment)?;
+    if source == crate::ENGINE || segment.is_empty() {
+      return Ok(());
+    }
+    let record = checkpoint::booted(world::kept(path)?);
+    let inspects = Self { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
+    let prepared = inspects.prepared()?;
+    let gated = prepared.gated;
+    let ears = inspects.eared(prepared, &record)?;
+    let mut engine = Engine::gated(record, ears, gated)?;
+    if let Some(no) = engine.raised() {
+      return Err(no.clone());
+    }
+    checkpoint::keep(Path::new(path), checkpoint::written(&mut engine)?)
+  }
+
   /// Proves each checkpoint of the record: a life that inspects the entries before it, born on them
   /// as the life that wrote it was, gathers it again, as [`checkpoint::reborn`] says.
   fn reborn(&self) -> Result<(), Fault> {
@@ -460,8 +496,7 @@ impl Opening {
       return Ok(());
     };
     let record = world::kept(path)?;
-    let inspects =
-      Opening { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
+    let inspects = Self { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
     for at in checkpoint::all(&record) {
       let before = checkpoint::booted(record[..at].to_vec());
       let prepared = inspects.prepared()?;

@@ -31,7 +31,7 @@ impl Holders {
   /// No holder yet: a life that no window attaches and no pin holds ends after the grace.
   pub(crate) fn new(grace: Duration) -> Self {
     let idle = Some(Instant::now() + grace);
-    Holders { windows: Vec::new(), pins: BTreeSet::new(), grace, idle }
+    Self { windows: Vec::new(), pins: BTreeSet::new(), grace, idle }
   }
 
   /// When the life ends, while it has no holder.

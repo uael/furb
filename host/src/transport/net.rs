@@ -4,7 +4,7 @@
 //! local API of Tailscale gives for its address, with the role that the access list gives it.
 
 use std::{
-  io,
+  fs, io, mem,
   net::{IpAddr, Ipv4Addr, SocketAddr},
   path::{Path, PathBuf},
   pin::Pin,
@@ -21,14 +21,18 @@ use http_body_util::{BodyExt, Empty};
 use hyper::{
   Request, StatusCode,
   body::Bytes,
+  client::conn::http1,
   header::{AUTHORIZATION, HOST},
 };
 use hyper_util::rt::TokioIo;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+#[cfg(unix)]
+use tokio::net::UnixStream;
 use tokio::{
   io::{AsyncRead, AsyncWrite, ReadBuf},
   net::{TcpListener, TcpStream},
   sync::watch,
+  task::spawn_blocking,
 };
 use tokio_tungstenite::{
   WebSocketStream,
@@ -46,6 +50,7 @@ use crate::{
   access::Access,
   error::{AccessError, TransportError},
   protocol::{BOUND, Role},
+  serve::Granted,
 };
 
 /// The transport of TCP at an address on loopback or on the tailnet. A listener of WebSocket is a
@@ -63,7 +68,7 @@ pub struct WebSocket {
 
 impl Tcp {
   pub fn new(addr: SocketAddr) -> Self {
-    Tcp { addr }
+    Self { addr }
   }
 
   /// The transport listening, or refused at an address that is neither on loopback nor on the
@@ -87,7 +92,7 @@ impl Dialer for Tcp {
 
 impl WebSocket {
   pub fn new(addr: SocketAddr) -> Self {
-    WebSocket { addr }
+    Self { addr }
   }
 }
 
@@ -137,7 +142,7 @@ pub struct Messages<S> {
 
 impl<S> Messages<S> {
   fn new(socket: WebSocketStream<S>) -> Self {
-    Messages { socket, read: Vec::new(), at: 0, written: Vec::new() }
+    Self { socket, read: Vec::new(), at: 0, written: Vec::new() }
   }
 }
 
@@ -243,31 +248,31 @@ impl LocalApi {
   /// The local API of the Tailscale that runs on this machine: the socket of tailscaled, or the
   /// port of the app for macOS. None when no Tailscale runs here, or when it is the app of the App
   /// Store, whose port no file names.
-  pub fn find() -> Option<LocalApi> {
+  pub fn find() -> Option<Self> {
     #[cfg(unix)]
     const SOCKETS: [&str; 2] = ["/var/run/tailscale/tailscaled.sock", "/var/run/tailscaled.socket"];
     #[cfg(windows)]
     const SOCKETS: [&str; 1] = [r"\\.\pipe\ProtectedPrefix\Administrators\Tailscale\tailscaled"];
     if let Some(socket) = SOCKETS.iter().map(PathBuf::from).find(|one| one.exists()) {
-      return Some(LocalApi::Socket(socket));
+      return Some(Self::Socket(socket));
     }
-    let port = std::fs::read_link("/Library/Tailscale/ipnport").ok()?;
+    let port = fs::read_link("/Library/Tailscale/ipnport").ok()?;
     let port: u16 = port.to_str()?.parse().ok()?;
-    let token = std::fs::read_to_string(format!("/Library/Tailscale/sameuserproof-{port}")).ok()?;
-    Some(LocalApi::Port { port, token: token.trim().to_owned() })
+    let token = fs::read_to_string(format!("/Library/Tailscale/sameuserproof-{port}")).ok()?;
+    Some(Self::Port { port, token: token.trim().to_owned() })
   }
 
   /// The answer of the local API to a path, as JSON.
   async fn asked<T: DeserializeOwned>(&self, path: &str) -> Result<T, AccessError> {
     let request = Request::get(path).header(HOST, "local-tailscaled.sock");
     let body = match self {
-      LocalApi::Socket(socket) => {
+      Self::Socket(socket) => {
         let place = || socket.display().to_string();
         let stream =
           connected(socket).await.map_err(|source| AccessError::Api { place: place(), source })?;
         fetched(stream, request.body(Empty::new())?).await?
       }
-      LocalApi::Port { port, token } => {
+      Self::Port { port, token } => {
         let place = (Ipv4Addr::LOCALHOST, *port);
         let stream = TcpStream::connect(place).await;
         let stream =
@@ -287,8 +292,8 @@ impl LocalApi {
 }
 
 #[cfg(unix)]
-async fn connected(socket: &Path) -> io::Result<tokio::net::UnixStream> {
-  tokio::net::UnixStream::connect(socket).await
+async fn connected(socket: &Path) -> io::Result<UnixStream> {
+  UnixStream::connect(socket).await
 }
 
 #[cfg(windows)]
@@ -302,8 +307,7 @@ async fn fetched<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
   stream: S,
   request: Request<Empty<Bytes>>,
 ) -> Result<(StatusCode, Bytes), AccessError> {
-  let (mut sender, connection) =
-    hyper::client::conn::http1::handshake(TokioIo::new(stream)).await?;
+  let (mut sender, connection) = http1::handshake(TokioIo::new(stream)).await?;
   let asked = async move {
     let response = sender.send_request(request).await?;
     let status = response.status();
@@ -318,23 +322,51 @@ async fn fetched<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
 
 impl Tailscale {
   pub fn new(api: LocalApi, access: Access) -> Self {
-    Tailscale { api, access: Arc::new(watch::channel(access).0) }
+    Self { api, access: Arc::new(watch::channel(access).0) }
   }
 
   /// The access list in the place of the one that this identity holds, which each clone of it
   /// follows, and which those that [`Tailscale::changes`] gave hear.
+  /// The lives hear nothing when the list is the same.
   pub fn replace(&self, access: Access) {
-    self.access.send_replace(access);
+    self.access.send_if_modified(|held| {
+      let changed = *held != access;
+      *held = access;
+      changed
+    });
+  }
+
+  /// The access list as it stands now.
+  pub fn access(&self) -> Access {
+    self.access.borrow().clone()
   }
 
   /// Each login that the access list names now.
-  pub(crate) fn logins(&self) -> Vec<String> {
+  pub fn logins(&self) -> Vec<String> {
     self.access.borrow().logins()
   }
 
   /// The access list as it changes.
-  pub(crate) fn changes(&self) -> watch::Receiver<Access> {
+  pub fn changes(&self) -> watch::Receiver<Access> {
     self.access.subscribe()
+  }
+
+  /// The role that the access list gives a peer, as it changes: its login's role stands until the
+  /// list says otherwise, and none once the list drops the login.
+  pub fn follow(&self, who: &Who) -> Granted {
+    let (told, granted) = watch::channel(Some(who.role));
+    let (mut access, login) = (self.changes(), who.login.clone());
+    tokio::spawn(async move {
+      loop {
+        let role = access.borrow_and_update().role(&login).ok();
+        told.send_if_modified(|held| mem::replace(held, role) != role);
+        tokio::select! {
+          () = told.closed() => return,
+          Ok(()) = access.changed() => {}
+        }
+      }
+    });
+    granted
   }
 
   /// The addresses of this machine on the tailnet.
@@ -383,7 +415,7 @@ struct Said<'a> {
 impl Door {
   /// The door listening on a free port of loopback, with a new token, and its address written in
   /// a file that only the user reads.
-  pub(crate) async fn open(file: &Path) -> Result<Door, TransportError> {
+  pub(crate) async fn open(file: &Path) -> Result<Self, TransportError> {
     let listener = Tcp::new(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 0)).listen().await?;
     let at = listener.local_addr().map_err(TransportError::Accept)?;
     let mut drawn = [0u8; 32];
@@ -397,7 +429,7 @@ impl Door {
       .await
       .map_err(|source| TransportError::Door { file: file.to_owned(), source })?;
     let ticket = Ticket { token: token.into(), login: super::local::own()?.into() };
-    Ok(Door { listener, ticket })
+    Ok(Self { listener, ticket })
   }
 
   /// The next peer of the door, and what it must give.
@@ -447,9 +479,9 @@ fn same(one: &[u8], other: &[u8]) -> bool {
 async fn written(file: &Path, bytes: Vec<u8>) -> io::Result<()> {
   let file = file.to_owned();
   let draft = file.with_extension("draft");
-  let wrote = tokio::task::spawn_blocking(move || {
+  let wrote = spawn_blocking(move || {
     super::local::private(&draft, &bytes)?;
-    std::fs::rename(&draft, &file)
+    fs::rename(&draft, &file)
   });
   wrote.await.map_err(io::Error::other)?
 }

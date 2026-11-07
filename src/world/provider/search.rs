@@ -134,7 +134,7 @@ pub(super) fn claude(program: Program, model: String) -> Searches {
     let (program, model) = (program.clone(), model.clone());
     timed(async move {
       let first = ["-p", "--model", &model, "--output-format", "text", "--system-prompt", BRIEF];
-      let mut command = program.base_command(&first).map_err(Error::Command)?;
+      let mut command = program.base_command(&first, true).map_err(Error::Command)?;
       command.args([
         "--no-session-persistence",
         "--allowedTools",

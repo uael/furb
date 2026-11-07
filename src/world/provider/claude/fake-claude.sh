@@ -36,6 +36,8 @@ if [ -f "$here/orphan" ]; then sleep 600 </dev/null >/dev/null 2>&1 & fi
 # leaves no trace of a process of a turn. It writes a line in discoveries for each one. When the file models stands
 # beside it, each of its lines is an alias, its window and its efforts joined by commas, or - for none, and it
 # answers from them; else it answers each request with an error, as a command line that has no discovery does.
+# When the file offline stands too, a process that has CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC set answers initialize
+# with its content, as the real command line lists other models with its traffic off.
 if [ -n "${FURB_CLAUDE_DISCOVER-}" ]; then
   echo "$$" >> "$here/discoveries"
   while IFS= read -r line; do
@@ -44,8 +46,9 @@ if [ -n "${FURB_CLAUDE_DISCOVER-}" ]; then
     if [ -f "$here/models" ]; then
       case $line in
         *'"initialize"'*)
+          if [ -n "${CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC-}" ] && [ -f "$here/offline" ]; then body=$(cat "$here/offline"); else
           list=$(awk '{n = split($3, e, ","); l = ""; if ($3 != "-") for (i = 1; i <= n; i++) l = l (i > 1 ? "," : "") "\"" e[i] "\""; printf "%s{\"value\":\"%s\",\"supportsEffort\":%s,\"supportedEffortLevels\":[%s]}", (NR > 1 ? "," : ""), $1, ($3 == "-" ? "false" : "true"), l}' "$here/models")
-          body="{\"models\":[{\"value\":\"default\",\"supportsEffort\":true},$list]}" ;;
+          body="{\"models\":[{\"value\":\"default\",\"supportsEffort\":true},$list]}"; fi ;;
         *set_model*) printf '%s' "$line" | sed 's/.*"model":"\([^"]*\)".*/\1/' > "$here/model"; body='{}' ;;
         *get_context_usage*)
           body=$(awk -v m="$(cat "$here/model")" '$1 == m {printf "{\"maxTokens\":%s,\"model\":\"resolved-%s\"}", $2, m}' "$here/models") ;;

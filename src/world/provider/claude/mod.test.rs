@@ -975,6 +975,45 @@ fn the_models_are_asked_again_after_a_refresh() {
 }
 
 #[test]
+fn a_discovery_that_is_an_hour_old_is_asked_again_so_a_model_that_the_command_line_names_now_shows()
+{
+  use super::discover::{LASTS, models_at};
+  let yard = Yard::new("lasts");
+  fs::write(yard.at.join("models"), "opus 100 low\n").unwrap();
+  let claude = yard.claude(10_000);
+  let aliases = |at: u64| -> Vec<String> {
+    let found = on_reactor(models_at(&claude.program, at)).expect("the command line answers");
+    found.into_iter().map(|one| one.alias).collect()
+  };
+  assert_eq!(aliases(1_000), ["opus"]);
+  fs::write(yard.at.join("models"), "opus 100 low\nfable 100 low\n").unwrap();
+  assert_eq!(aliases(1_000 + LASTS - 1), ["opus"], "a discovery that is young holds");
+  assert_eq!(
+    aliases(1_000 + LASTS),
+    ["opus", "fable"],
+    "the roster names fable once it is asked again"
+  );
+}
+
+#[test]
+fn a_discovery_asks_with_the_traffic_of_the_command_line_on_so_it_lists_each_model_that_it_names() {
+  let yard = Yard::new("traffic");
+  fs::write(
+    yard.at.join("models"),
+    "opus 750000 low\nfable 850000 low\nsonnet 300000 low\nhaiku 850000 low\n",
+  )
+  .unwrap();
+  // What the real command line lists with its traffic off: fable only as `claude-fable-5-1[1m]`.
+  fs::write(yard.at.join("offline"), include_str!("offline-models.json")).unwrap();
+  let got = said(&yard.claude(10_000));
+  let names: Vec<_> = got.iter().map(|one| one.0.as_str()).collect();
+  assert_eq!(
+    names,
+    ["claude-cli:opus", "claude-cli:fable", "claude-cli:sonnet", "claude-cli:haiku"]
+  );
+}
+
+#[test]
 fn a_command_line_that_answers_no_discovery_gives_the_fixed_models() {
   let yard = Yard::new("fixed");
   let got = said(&yard.claude(10_000));

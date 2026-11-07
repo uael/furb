@@ -2194,8 +2194,11 @@ export class Session extends EventEmitter {
                   models: { [id || ""]: { window: Number(window) } },
                 }
               : true;
-        if (!(await this.host.config({ action: "set", key: ["providers", name], value, layer: "project" }))) {
-          this.notice = "Codex sign-in canceled.";
+        try {
+          await this.host.config({ action: "set", key: ["providers", name], value, layer: "project" });
+        } catch (error) {
+          if (name !== "codex" || !(error instanceof Error) || error.name !== "Refused") throw error;
+          this.notice = error.message;
           break;
         }
         this.emit("configured");

@@ -14,12 +14,14 @@ mod protocol {
   use super::yard::Yard;
 
   use std::{
+    env, fs, future,
     path::PathBuf,
+    process,
     sync::atomic::{AtomicU32, Ordering},
   };
 
   use furb_host::{
-    Host, Outbox, ProtocolError,
+    Host, Outbox, ProtocolError, fixed,
     protocol::{
       Answer, Axis, BOUND, Config, Dispose, Effect, Frame, Gesture, Hello, Kind, Layer, Mount,
       Node, PROTOCOL, Peer, Request, Role, Run, Shape, Slot, Tone, Tree, Verb, ViewEffect,
@@ -28,7 +30,8 @@ mod protocol {
     serve,
     transport::{Dialer, Identity, Local, Who},
   };
-  use serde_json::json;
+  use serde_json::{Value, json};
+  use tokio::io::DuplexStream;
   use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, duplex};
 
   /// A host that answers each verb with the verb itself, as JSON.
@@ -44,7 +47,7 @@ mod protocol {
       let answer = serde_json::to_value(&verb)
         .map(Answer::Value)
         .map_err(|no| ProtocolError::Refused { why: no.to_string() });
-      std::future::ready(answer)
+      future::ready(answer)
     }
   }
 
@@ -291,14 +294,14 @@ mod protocol {
   }
 
   /// A peer served on a stream in memory, under a role.
-  fn served(role: Role) -> Client<tokio::io::DuplexStream> {
+  fn served(role: Role) -> Client<DuplexStream> {
     let (ours, theirs) = duplex(1 << 16);
     let who = Who { login: "uael".to_owned(), role };
-    tokio::spawn(async move { serve(&Echo, theirs, who).await });
+    tokio::spawn(async move { serve(&Echo, theirs, who, fixed(role)).await });
     Client { lines: BufReader::new(ours) }
   }
 
-  async fn hello_asking(client: &mut Client<tokio::io::DuplexStream>, role: Role) -> Frame {
+  async fn hello_asking(client: &mut Client<DuplexStream>, role: Role) -> Frame {
     let hello = Hello { protocol: PROTOCOL, kind: Kind::Window, name: None, role: Some(role) };
     client.ask(0, Verb::Hello(hello)).await
   }
@@ -418,6 +421,53 @@ mod protocol {
     assert_eq!(client.heard().await, None);
   }
 
+  /// The digest of the shape of the schema of each version, the version 1 first: the SHA-256 of
+  /// the schema with no `x-protocol`, no `description` and no `title`, so the words of a doc
+  /// comment take no new version. Its length is the version, so a new shape takes one.
+  const SCHEMAS: [&str; PROTOCOL as usize] = [
+    "43cd8affad009b9de1c73c355ae4822f1de6149d95d919a5f02171f8c7072604",
+    "3d67e6b3dc718819064aae275d0f84cdd16c0f39b92d2a82a945461a19589713",
+    "b7fcc6ef6baf1e729e50bc4c81bd3ea06e83a906a66e62709d6aa40607e5a2cf",
+    "31c217c979811fbf74d11684749ed59de0ca097e387b59820826b22478069d41",
+  ];
+
+  /// A schema with no word that never crosses the wire: each `description` and `title` of a schema,
+  /// and no property that bears such a name.
+  fn shape(schema: &mut Value) {
+    match schema {
+      Value::Object(map) => {
+        map.remove("description");
+        map.remove("title");
+        for (key, one) in map.iter_mut() {
+          match (key.as_str(), one.as_object_mut()) {
+            ("properties" | "definitions" | "$defs", Some(named)) => {
+              named.values_mut().for_each(shape);
+            }
+            _ => shape(one),
+          }
+        }
+      }
+      Value::Array(all) => all.iter_mut().for_each(shape),
+      _ => {}
+    }
+  }
+
+  #[test]
+  fn each_change_of_the_schema_raises_the_protocol() {
+    use sha2::{Digest, Sha256};
+    let mut made = schema();
+    made.as_object_mut().unwrap().remove("x-protocol");
+    shape(&mut made);
+    let digest = format!("{:x}", Sha256::digest(made.to_string()));
+    assert_eq!(
+      SCHEMAS.last().copied(),
+      Some(digest.as_str()),
+      "the schema of the protocol changed: raise PROTOCOL and end SCHEMAS with {digest}"
+    );
+    let distinct: std::collections::BTreeSet<_> = SCHEMAS.iter().collect();
+    assert_eq!(distinct.len(), SCHEMAS.len(), "each version has a schema of its own");
+  }
+
   #[tokio::test]
   async fn a_hello_of_another_version_is_refused_with_both_versions() {
     let mut client = served(Role::Write);
@@ -447,10 +497,12 @@ mod protocol {
     let mut client = served(Role::Write);
     client.hello(PROTOCOL).await;
     client.say("{\"id\": 1, \"verb\": \"fly\"}").await;
-    assert!(matches!(
-      client.heard().await,
-      Some(Frame::Refused { id: None, error: ProtocolError::Unread { .. }, .. })
-    ));
+    let heard = client.heard().await;
+    let Some(Frame::Refused { id, error: ProtocolError::Unread { .. }, why }) = heard else {
+      panic!("no refusal: {heard:?}")
+    };
+    assert_eq!(id, Some(1), "a verb that the daemon does not know is refused to its request");
+    assert!(why.contains("fly"), "the refusal names the verb: {why}");
     assert!(matches!(client.ask(2, Verb::List { config: None }).await, Frame::Reply { id: 2, .. }));
   }
 
@@ -458,7 +510,7 @@ mod protocol {
   fn folder() -> Yard {
     static NEXT: AtomicU32 = AtomicU32::new(0);
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
-    Yard::unmade(format!("fh{}-{n}", std::process::id()))
+    Yard::unmade(format!("fh{}-{n}", process::id()))
   }
 
   #[tokio::test]
@@ -470,7 +522,8 @@ mod protocol {
     tokio::spawn(async move {
       let stream = listener.accept().await.unwrap();
       let who = door.identify(&stream).await.unwrap();
-      serve(&Echo, stream, who).await
+      let granted = fixed(who.role);
+      serve(&Echo, stream, who, granted).await
     });
     let mut client = Client { lines: BufReader::new(local.dial().await.unwrap()) };
     let Frame::Reply { answer: Answer::Welcome { peer, .. }, .. } = client.hello(PROTOCOL).await
@@ -497,8 +550,8 @@ mod protocol {
   async fn a_folder_open_to_others_holds_no_socket() {
     use std::os::unix::fs::PermissionsExt;
     let place = folder();
-    std::fs::create_dir_all(&place).unwrap();
-    std::fs::set_permissions(&place, std::fs::Permissions::from_mode(0o755)).unwrap();
+    fs::create_dir_all(&place).unwrap();
+    fs::set_permissions(&place, fs::Permissions::from_mode(0o755)).unwrap();
     let refused = Local::new(&place).listen().await;
     assert!(matches!(refused, Err(furb_host::TransportError::Exposed { .. })));
   }
@@ -507,10 +560,10 @@ mod protocol {
   fn the_schema_on_disk_is_the_schema_of_the_protocol() {
     let place = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("protocol.schema.json");
     let made = serde_json::to_string_pretty(&schema()).unwrap() + "\n";
-    if std::env::var_os("FURB_BLESS").is_some() {
-      std::fs::write(&place, &made).unwrap();
+    if env::var_os("FURB_BLESS").is_some() {
+      fs::write(&place, &made).unwrap();
     }
-    let held = std::fs::read_to_string(&place).unwrap_or_default();
+    let held = fs::read_to_string(&place).unwrap_or_default();
     assert!(held == made, "{} is stale: run FURB_BLESS=1 cargo test -p furb-host", place.display());
   }
 }
