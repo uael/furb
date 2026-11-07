@@ -80,6 +80,9 @@ jobs:
           # A render that changes no file still moves the branch to the head, so the branch shows each head it rendered.
           git switch -q -C "$BRANCH"
           git commit -q --allow-empty -m "$title" -m "The render of $head in $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID."
+          # A pull request of w/gallery into another base, as the old one into main, would take all of this head.
+          gh pr list --head "$BRANCH" --state open --json number,baseRefName --jq ".[] | select(.baseRefName != \"$BASE\") | .number" |
+            while read -r stray; do gh pr close "$stray" --comment "🤖 The gallery follows w/converge now, on one pull request into it."; done
           git push -q --force "$remote" "$BRANCH"
           run="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           cat > "$RUNNER_TEMP/body.md" <<EOF
@@ -95,6 +98,7 @@ jobs:
           - Against the gallery that this head holds: files added: $added. Files changed: $changed. Files removed: $removed.
           - A runner of CI drew them with bun run screenshots and bun run animation, in $run.
           - Each push to w/converge draws the gallery again on this branch and in this body. No other pull request of the gallery opens.
+          - A merge of this pull request puts these files in w/converge, and so in main at its next release.
 
           ---
 
