@@ -1045,6 +1045,7 @@ def boot(record=(), **outside):
   due = [e for (e,) in record[::-1] if first.get(e[1]) is not e]
   ranks = {id(e): n for n, (e,) in enumerate(record)}
   saved, again = {e[1]: e for (e,) in record if question(e)}, {}
+  recorded = {**saved}
   schemas = [(*e[5:6], None)[0] for (e,) in record if e[0] == "made"]
   stable = not schemas or tuple(map(int, str(schemas[-1] or "0.0").split("."))) >= (1, 1)
   top, asked, strays, back = Counter(), {}, {}, []
@@ -1055,7 +1056,7 @@ def boot(record=(), **outside):
   def drift(name, fact=None):
     ours, name = fact or get(name), strays.get(name) or name
     return Drift(
-      f"{name} drifts: the life made {ours or 'no act'!s:.300}, the record holds {(fact and first[fact[1]]) or saved.get(name)!r:.300}"
+      f"{name} drifts: the life made {ours or 'no act'!s:.300}, the record holds {(fact and first[fact[1]]) or recorded.get(name)!r:.300}"
     )
 
   def matched(sort, maker, *said):

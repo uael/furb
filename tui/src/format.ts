@@ -59,13 +59,22 @@ export function share(value: number): string {
 export const graphemes = new Intl.Segmenter();
 /** A line cut to a width of terminal cells, with an ellipsis where it was cut: at its end, or at its start to keep
  * the end of a path. It fills the width to its last cell, and shows no ellipsis where none fits. */
-export function clip(line: string, width: number, keep: "start" | "end" = "start"): string {
+export function clip(raw: string, width: number, keep: "start" | "end" = "start"): string {
+  // A tab and the other control characters measure 0 cells for Bun and a few or none for the renderer, so each is one cell.
+  const line = raw.replace(/\p{Cc}/gu, " ");
   if (Bun.stringWidth(line) <= width) return line;
-  // One measure, Bun.stringWidth, says both the guard and the cut, and the cut reads only the graphemes that it keeps
-  // from the side that stays, so a long text costs what the room shows.
+  // One measure, Bun.stringWidth, says both the guard and the cut. The guard reads the whole line once, and the cut
+  // then reads only the graphemes that it keeps, from the edge that stays, so it costs what the room shows.
   const parts =
     keep === "end"
-      ? [...graphemes.segment(line)].map(({ segment }) => segment).reverse()
+      ? (function* () {
+          for (let at = line.length; at > 0; ) {
+            const part = graphemes.segment(line).containing(at - 1);
+            if (!part) return;
+            yield part.segment;
+            at = part.index;
+          }
+        })()
       : (function* () {
           for (const { segment } of graphemes.segment(line)) yield segment;
         })();

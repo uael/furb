@@ -13,7 +13,8 @@ import pytest
 SCRIPT = Path(__file__).resolve().parents[2] / "script" / "memwatch.sh"
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="the script runs in sh")
 MB = 1024
-MINE = os.getuid()
+# os.getuid is no function of Windows, and the import runs before the mark skips the tests there.
+MINE = 0 if sys.platform == "win32" else os.getuid()
 Row = tuple[int, int, str, int]
 
 

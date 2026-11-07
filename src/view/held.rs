@@ -47,6 +47,9 @@ pub struct Held {
   on: HashMap<String, Vec<usize>>,
   /// The places of the acts that live: not done, or a rung whose word runs.
   live: BTreeSet<usize>,
+  /// Whether an act was told that began before the last one held, so the order of the acts is not
+  /// the order they began.
+  unordered: bool,
 }
 
 impl Held {
@@ -66,14 +69,12 @@ impl Held {
       at
     } else {
       let at = self.acts.len();
-      // A read of now takes the acts in place as the order they began, so an act first told begins
-      // after each act held.
-      debug_assert!(
-        self.acts.last().is_none_or(|last| last.began <= act.began),
-        "{} began before {}, which was told first",
-        act.id,
-        self.acts.last().map_or("", |last| last.id.as_str()),
-      );
+      // A read of now takes the acts in place as the order they began, which a host and a record
+      // tell them in. A window that makes acts of its own may tell one that began before the last,
+      // and then the reads sort a copy.
+      if self.acts.last().is_some_and(|last| last.began > act.began) {
+        self.unordered = true;
+      }
       self.at.insert(act.id.clone(), at);
       self.made.entry(act.by.clone()).or_default().push(at);
       self.on.entry(act.chain.clone()).or_default().push(at);
@@ -116,7 +117,14 @@ impl Held {
   /// stand in the order they were first told, which is the order they began, so they are read in
   /// place: a read of the threads, the rail or the desk takes no copy of the life.
   fn then(&self, at: Option<u64>) -> Cow<'_, [Act]> {
-    let Some(at) = at else { return Cow::Borrowed(&self.acts) };
+    let Some(at) = at else {
+      if !self.unordered {
+        return Cow::Borrowed(&self.acts);
+      }
+      let mut acts = self.acts.clone();
+      acts.sort_by_key(|act| act.began);
+      return Cow::Owned(acts);
+    };
     let mut acts = as_of(&self.acts, at);
     acts.sort_by_key(|act| act.began);
     Cow::Owned(acts)

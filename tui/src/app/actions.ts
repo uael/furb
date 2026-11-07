@@ -30,6 +30,7 @@ export const actions = part({
       effort: this.effortPicker,
       shape: this.shapes,
       theme: () => this.themes(),
+      inspect: () => this.names(),
       help: () => this.help(),
       exit: () => this.options.quit(),
       end: () => library.end(),
@@ -65,10 +66,8 @@ export const actions = part({
       else throw new Error(`Choose ${lifeViews.join(", ")}.`);
       return true;
     }
-    if (name === "inspect") {
-      // With no name, the command lists the names that it can inspect, as ⌃G does, in place of doing nothing.
-      if (argument) await this.inspect(argument);
-      else await this.names();
+    if (name === "inspect" && argument) {
+      await this.inspect(argument);
       return true;
     }
     if (text === "/image" || text.startsWith("/image ")) {
