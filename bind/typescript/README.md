@@ -225,8 +225,8 @@ not what an extension started on it.
 ## Images
 
 `session.attachImage(path)` copies an image into the record's `.images` directory and returns its name, type, size, and
-`furb-image://` reference. A session with no record copies it into `.furb/images` of its directory. The `.furb` that it
-makes holds a `.gitignore` that keeps it out of version control but its `config.json`, as `furbDirectory` makes it. Put
+`furb-image://` reference. A session with no record copies it into `.furb/images` of its directory. Each open of it writes a `.gitignore` in `.furb`, when it has none, that keeps it out of version control but its
+`config.json`, as `furbDirectory` does. Put
 that reference in the prompt as a Markdown image, `![design](furb-image://...)`, which `imageReference(name, uri)`
 writes and `imageReferences(message)` reads. The provider hands the python of the turn as it is, and adds each image
 that the message of a prompt of that turn references, to a model that takes images. The stored bytes are checked against

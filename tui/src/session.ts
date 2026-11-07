@@ -1135,7 +1135,7 @@ export class Session extends EventEmitter {
     return kept?.stamp === this.threadStamp(chain) && kept.owed === this.owedNow;
   }
   /** The ladders that the crate last gave, by the chain and whether a branch took them, with what they were read of. */
-  private readonly crateLadders = new Map<string, { key: string; of: unknown; got: Rung[] }>();
+  private readonly crateLadders = new Map<string, { key: string; of: unknown; at?: number; got: Rung[] }>();
   /** The reads of a ladder that the session waits for, one for each slot. */
   private readonly askingLadders = new Map<string, Promise<void>>();
   /** Once each ladder that the session asked the crate for came, as a test waits for before it reads a frame. */
@@ -1145,7 +1145,8 @@ export class Session extends EventEmitter {
   /** The ladder of a chain as the crate folds it, now or as it stood just after a moment: the steps that show and the
    * folds of the others, with the folds that the operator opened, the prompts that the operator owes, and the only acts
    * at its top when `taken` names them. The session asks the crate once at a time and draws again once it comes, and
-   * shows the ladder that the crate gave until it gives one of the acts of now. */
+   * shows the ladder that the crate gave of the same moment until it gives one of the acts of now. A ladder of a
+   * moment of the past holds while the acts change, since that moment does not. */
   ladderOf(
     chain: string,
     opened: readonly string[],
@@ -1157,12 +1158,13 @@ export class Session extends EventEmitter {
     const slot = taken ? `taken:${chain}` : chain;
     const kept = this.crateLadders.get(slot);
     // The mark of the snapshot that the acts came in moves with each change of them, which are changed in place.
-    if ((kept?.key !== key || kept.of !== this.held) && !this.askingLadders.has(slot)) {
+    const stale = kept?.key !== key || (at === undefined && kept.of !== this.held);
+    if (stale && !this.askingLadders.has(slot)) {
       const of = this.held;
       const read = (async () => {
         try {
           const got = await this.host.ladder(chain, at, [...opened], owed, taken && [...taken]);
-          this.crateLadders.set(slot, { key, of, got });
+          this.crateLadders.set(slot, { key, of, at, got });
           this.emit("change");
         } finally {
           this.askingLadders.delete(slot);
@@ -1171,7 +1173,7 @@ export class Session extends EventEmitter {
       this.askingLadders.set(slot, read);
       read.catch(this.threadFault);
     }
-    return kept?.key === key || kept?.key.startsWith(`["${chain}"`) ? kept.got : [];
+    return kept?.key === key || (kept?.key.startsWith(`["${chain}"`) && kept.at === at) ? kept.got : [];
   }
   /** The crate folds the threads of a chain, which the session asks for once at a time, and draws again once they
    * come. */

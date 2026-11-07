@@ -1032,9 +1032,9 @@ pub fn laddered(
   shown: Option<Value>,
 ) -> Result<Value, Fault> {
   let json = wire::outward(acts.0.as_ref());
-  let mut acts: Vec<ViewAct> = serde_json::from_value(json)
+  // The acts stand in the order given, as a host tells them, and as the daemon folds them.
+  let acts: Vec<ViewAct> = serde_json::from_value(json)
     .map_err(|no| Fault::refused(format!("these are no acts: {no}")))?;
-  acts.sort_by_key(|act| act.began);
   let (opened, owed) = (opened.unwrap_or_default(), owed.unwrap_or_default());
   meant(&ladder(&acts, &chain, &opened, &owed, taken.as_deref(), counted(shown)?))
 }
