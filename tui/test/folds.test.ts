@@ -94,10 +94,12 @@ test("a long string in a folded word has the one fold row of the feed under its 
     );
     const text = String(Reflect.get(Reflect.get(view, "target") as object, "content") ?? "");
     const rows = text.split("\n");
-    expect(rows[0]).toContain('…"');
-    expect(rows[1]).toMatch(/^▸ \d+ more characters$/);
+    // What the cut line hides stands at its end, in its trailer, and in no row of its own under it.
+    expect(rows[0]).toMatch(/…"\s+…\+\d+$/);
+    expect(rows.some((one) => /more characters/.test(one))).toBe(false);
     const row = app.foldRows.get("string:rung1:1:0");
-    expect(row?.label).toBe(rows[1]?.slice(2));
+    expect(row?.label).toMatch(/^\d+ more characters$/);
+    expect(rows[0]).toContain(`…+${row?.label.split(" ")[0]}`);
     // The Details entry opens it in place, as a click on the row does.
     app.openFold("string:rung1:1:0");
     expect(session.folds["string:rung1:1:0"]).toBe(false);
