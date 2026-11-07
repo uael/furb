@@ -304,7 +304,6 @@ export const feed = part({
       }
       // The feed shows the acts as they stood at the moment that the operator moved to, or as they stand now. Its fold
       // reads them from the index of the session, which spares the fold a pass over every act in each frame.
-      const shown = w.at(w.acts);
       const past = w.moment !== undefined;
       const index = w.ladderIndex;
       const rows = index.ids;
