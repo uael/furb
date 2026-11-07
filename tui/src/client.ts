@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from "node:fs";
 import { createConnection, type Socket } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -21,6 +21,7 @@ import type {
   Request1 as Verb,
 } from "furb/protocol";
 import { PROTOCOL } from "furb/protocol";
+import { program } from "../../bind/typescript/program.ts";
 import type { Setting } from "./configs.ts";
 
 export type { Verb };
@@ -46,18 +47,10 @@ export function daemonPlace(folder = daemonFolder()): string {
     : join(folder, "host.sock");
 }
 
-/** The program furb that serves the daemon: the one that FURB_BIN names, else the newest that `bun run build` made in
- * the target folder of this clone, else furb on the PATH. */
+/** The program furb that serves the daemon: the one that FURB_BIN names, else the one that `bun run build` made for
+ * this tree, else furb on the PATH. */
 export function furbProgram(env: Record<string, string | undefined> = process.env): string {
-  if (env.FURB_BIN) return env.FURB_BIN;
-  const target = env.CARGO_TARGET_DIR || join(import.meta.dir, "..", "..", "target");
-  const name = process.platform === "win32" ? "furb.exe" : "furb";
-  const triple = env.CARGO_BUILD_TARGET ? [env.CARGO_BUILD_TARGET] : [];
-  const built = ["debug", "release"]
-    .map((profile) => join(target, ...triple, profile, name))
-    .filter((path) => existsSync(path))
-    .sort((one, other) => statSync(other).mtimeMs - statSync(one).mtimeMs);
-  return built[0] ?? "furb";
+  return env.FURB_BIN || (existsSync(program) ? program : "furb");
 }
 
 /** How long a window waits for the end of a life that it let go, in milliseconds: the grace of the daemon, 30 s, and
