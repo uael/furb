@@ -51,6 +51,7 @@ def reground(on: str = "") -> None:
 def supersede(keep: Filter | None = None, on: str = "") -> str:
   """supersede(keep) says on the chain of the caller a prefix of what the filter keep kept of its acts, everything that made what it kept, and every act of the chain, and gives the chain.
   So the chain goes on under its name with its module, its ladders and its acts, and only its turns are cut.
+  With no filter, supersede() keeps every act of the chain, and it reads no builtin from the module of the chain, which a record from before the gate refused such a name may bind to a str.
   supersede(keep) keeps whole the setup of the chain, each fact from its paragraph chain() up to its open, so a cut, even one that keeps nothing, leaves the doctrine and the words of the setup that its model reads first.
   """
 
@@ -77,6 +78,7 @@ def compacted(on: str = "") -> Act:
 async def condense(to: str = "", on: str = "") -> str:
   """condense() asks choice() of the chain of the caller, and at once compacts that chain to the acts that the model chose, each act said on the chain after it asked, of each path only the last read or write, and the summary of the model, and gives the chain.
   When the model gives no tuple of a list and a str, it compacts the chain with FILTERS and no summary of the model.
+  It reads no builtin from the module of the chain when it asks choice(), as a record from before the gate refused such a name may bind it to a str.
   """
 
 def fitted(on: str = "") -> Act:

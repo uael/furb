@@ -4,9 +4,9 @@ from collections.abc import Generator
 
 import pytest
 
-from conftest import born, keeping, said, settle, verbs
+from conftest import Sand, born, keeping, relived, said, settle, verbs, viewed
 from furb import engine
-from furb.engine import Refused
+from furb.engine import OPERATOR, Refused
 
 
 def ends(mark: list[tuple]) -> Generator[tuple | None, tuple | None]:
@@ -136,3 +136,66 @@ async def test_a_generator_that_yields_a_saying_is_given_the_fact_as_the_bus_sai
   engine.bash("echo hi", on=root)
   await settle()
   assert got[1:] == log[at:]
+  await raises_again()
+
+
+async def raises_again() -> None:
+  """A replay of a life whose ears raised, in a delivery and in an act made again, says the same facts as that life, also at the last entry, and ends at a raise before the act that it makes again exists."""
+  probe, _, top = born()
+  word = (
+    "b = bash('echo hi')\n"
+    "def noisy(id):\n  yield 'started', id\n  while True:\n    a = yield {b}\n"
+    "    if a[0] == 'done':\n      raise TypeError('noisy')\n"
+    "n = act('noisy', '', noisy)\nawait wait(0.05, b)\nwent = peek(b).code\nlast = bash('echo ' + str(went))\nawait last"
+  )
+  await engine.rung(word, on=top)
+  await settle()
+  live, b = viewed(top), engine.module(top)["b"]
+  assert live["modules"][top]["went"] == "0" and isinstance(engine.peek(engine.module(top)["n"]), Refused)
+  _, over = await relived(Sand(), list(probe.record))
+  later = viewed(over)
+  assert {k: v[: len(live["facts"][k])] for k, v in later["facts"].items() if k in live["facts"]} == live["facts"]
+  assert live["modules"] == later["modules"]
+  assert {k: later["outcomes"].get(k) for k in live["outcomes"]} == live["outcomes"]
+  cut = next(n for n, (e,) in enumerate(probe.record) if e[:2] == ("done", b))
+  await relived(Sand(), list(probe.record)[: cut + 1])
+  door, _, top = born()
+  await engine.rung(
+    "def touchy(id):\n  yield 'started', id\n  yield {'read'}\n  raise TypeError('touchy')\nt = act('touchy', '', touchy)",
+    on=top,
+  )
+  await settle()
+  with pytest.raises(Refused, match="nothing takes read"):
+    engine.read("a", on=top)
+  assert str(engine.peek(engine.module(top)["t"])).endswith("raised TypeError('touchy')")
+  after = engine.bash("echo after", on=top)
+  await settle()
+  live = viewed(top)
+  _, over = await relived(Sand(), list(door.record))
+  later = viewed(over)
+  assert {k: v[: len(live["facts"][k])] for k, v in later["facts"].items() if k in live["facts"]} == live["facts"]
+  assert {k: later["outcomes"].get(k) for k in live["outcomes"]} == live["outcomes"] and after in live["outcomes"]
+  sand, _, top = born()
+  with pytest.raises(Refused):
+    engine.read("missing", on=top)
+  record = [((*e, "x", "y") if e[0] == "read" and e[2] == OPERATOR else e,) for (e,) in sand.record]
+  with pytest.raises(TypeError):
+    await relived(Sand(), record)
+  tip, _, top = born()
+  word = (
+    "b = bash('echo hi')\n"
+    "def noisy(id):\n  yield 'started', id\n  while True:\n    a = yield {b}\n"
+    "    if a[0] == 'done':\n      raise TypeError('noisy')\n"
+    "n = act('noisy', '', noisy)\nawait wait(0.05, b)\nlast = bash('echo after')\nawait last"
+  )
+  await engine.rung(word, on=top)
+  await settle()
+  b = engine.module(top)["b"]
+  cut = next(n for n, (e,) in enumerate(tip.record) if e[:2] == ("done", b))
+  first, second = list(tip.record)[: cut + 1], Sand()
+  _, again = await relived(second, first)
+  live = viewed(again)
+  _, over = await relived(Sand(), [*first, *second.record])
+  later = viewed(over)
+  assert {k: v[: len(live["facts"][k])] for k, v in later["facts"].items() if k in live["facts"]} == live["facts"]
+  assert engine.module(over)["last"] == engine.module(again)["last"]

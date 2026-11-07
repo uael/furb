@@ -644,7 +644,7 @@ def seed(data):
 
 def gathered(define, floor):
   def number(called):
-    return int(re.sub("^[a-z_]+", "", called) or 0)
+    return int(re.sub(r"^\D+", "", called) or 0)
 
   chains = [x for x in listening() if question(("chain", x))]
   asked = [*map(get, chains)] + [x for h in chains for x in transcript(h) if x is get(x[1])]
@@ -673,8 +673,8 @@ def gathered(define, floor):
   words = {y[2] for y in (standing()[4:5] or [()])[0]}
   done = {x[1] for x in asked if x[0] == "bash"}
   borne = sorted((x for x in named - gone | done if get(x)[0] in verbs), key=lambda r: (get(r)[0], number(r)))
-  stands = [x[1] for x in transcript(ROOT, "stand") if question(x) and over(x[1])][-1:]
-  ticks = [x[1] for x in transcript(ROOT, "clock") if question(x) and isinstance(peek(x[1]), float)][-1:]
+  stands = [x[1] for x in transcript(ROOT, "stand") if over(x[1])][-1:]
+  ticks = [x[1] for x in transcript(ROOT, "clock") if isinstance(peek(x[1]), float)][-1:]
   acts = []
   for one in [*stands, *ticks, *borne]:
     a = get(one)
@@ -1052,10 +1052,10 @@ def boot(record=(), **outside):
     top[quest[0]] = max(top[quest[0]], int(quest[1][len(quest[0]) :]))
     asked.setdefault(quest[:3:2], []).append((quest[1], quest[3:]))
 
-  def drift(name):
-    ours, name = repr(get(name)) if get(name) else "no act that the record holds under it", strays.get(name) or name
+  def drift(name, fact=None):
+    ours, name = fact or get(name), strays.get(name) or name
     return Drift(
-      f"{name} drifts: the life made {ours:.300}, the record holds {saved.get(name) or first.get(name)!r:.300}"
+      f"{name} drifts: the life made {ours or 'no act'!s:.300}, the record holds {(fact and first[fact[1]]) or saved.get(name)!r:.300}"
     )
 
   def matched(sort, maker, *said):
@@ -1063,8 +1063,8 @@ def boot(record=(), **outside):
     at = next((n for n, x in enumerate(ahead) if x[1] == said), None)
     if at is None:
       top[sort] += 1
-      strays[sort + str(top[sort])] = ahead[0][0] if ahead else None
-      return sort + str(top[sort])
+      strays[name := sort + str(top[sort])] = ahead[0][0] if ahead else None
+      return name
     return ahead.pop(at)[0]
 
   def owed():
@@ -1121,8 +1121,8 @@ def boot(record=(), **outside):
           case (kind, about, by, *_) if (
             (q := get(about)) and by != "journal" and (by or repr(first.get(about)) != repr(a))
           ):
-            if not by and a != q and (owed() or about in first):
-              raise drift(about)
+            if not by and a != q and ((owed() and strays.get(about, 1)) or about in first):
+              raise drift(about, about in first and a)
             if by not in known and by not in owned:
               glue = (
                 b is last is not None
@@ -1241,9 +1241,12 @@ def boot(record=(), **outside):
           alive.pop(name)
           stop = isinstance(fault, CancelledError)
           if not (stop and over(name)):
-            why = Refused(f"{name} raised {fault!r}")
             shut = [x[3] for x in transcript(name, "close") if stop and x[1] == name]
-            say("done" if get(name) and not over(name) else "dropped", name, (*shut, why)[0])
+            say(
+              "done" if get(name) and not over(name) else "dropped",
+              name,
+              (*shut, Refused(f"{name} raised {fault!r}"))[0],
+            )
         finally:
           busy.discard(name)
 
@@ -1256,7 +1259,7 @@ def boot(record=(), **outside):
     dispatch()
 
   def listening():
-    return alive
+    return dict(alive)
 
   def get(about):
     return known.get(about)

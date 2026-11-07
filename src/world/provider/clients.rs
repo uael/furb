@@ -85,8 +85,8 @@ pub(super) enum Error {
   Bedrock(String),
   #[error("{0}")]
   Vertex(String),
-  #[error("{0}")]
-  Unreached(String),
+  #[error(transparent)]
+  Unreached(#[from] super::catalog::Unreached),
 }
 
 impl From<http_client::Error> for Error {

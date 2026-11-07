@@ -41,7 +41,7 @@ mod locate;
 mod process;
 mod protocol;
 use accounts::Accounts;
-pub use accounts::{Account, Source, Switch};
+pub use accounts::{Account, Source, Switch, Token};
 use conversation::{Conversation, Run};
 use discover::Found;
 pub use discover::refresh;
@@ -96,6 +96,13 @@ pub(super) enum Error {
   /// asks again.
   #[error("{0}")]
   SignedOut(String),
+  /// An account with no token to give the command line, which a token or another account ends,
+  /// as it ends a failed sign in.
+  #[error(transparent)]
+  NoToken(#[from] Token),
+  /// Every account signed out.
+  #[error("Every account of the claude command line is signed out. Sign one in, then run /reload.")]
+  Exhausted,
   /// The program was missing or did not run, as while an update of claude replaces it, which
   /// passes.
   #[error("No program to run: {0}")]
@@ -319,8 +326,8 @@ impl Program {
   }
 
   /// A command that holds the program and its words, and the credential of its account. It fails
-  /// with the reason when the token of the account cannot be read.
-  fn command(&self) -> Result<Command, String> {
+  /// when the token of the account cannot be read.
+  fn command(&self) -> Result<Command, Token> {
     let mut command = Command::new(&*self.bin);
     command.args(&*self.args);
     let at = self.pin.unwrap_or_else(|| self.accounts.first_free(SystemTime::now()));
@@ -332,9 +339,9 @@ impl Program {
   /// environment that furb gives the command line for a turn, a probe and a search alike: no source
   /// of settings, no server of another, no command of its own and no bundled skill, and no traffic
   /// of no use when `quiet`. The probe of the models is not quiet, since the command line lists
-  /// fewer models with its traffic off. Each adds its own flags after them. It fails with the
-  /// reason when the token of the account cannot be read.
-  pub(super) fn base_command(&self, first: &[&str], quiet: bool) -> Result<Command, String> {
+  /// fewer models with its traffic off. Each adds its own flags after them. It fails when the
+  /// token of the account cannot be read.
+  pub(super) fn base_command(&self, first: &[&str], quiet: bool) -> Result<Command, Token> {
     let mut command = self.command()?;
     command.args(first);
     command.args(["--setting-sources", "", "--strict-mcp-config", "--disable-slash-commands"]);
@@ -481,10 +488,7 @@ impl Claude {
   fn exhausted(&self, now: SystemTime) -> CompletionError {
     refused(match self.program.accounts.earliest(now) {
       Some(end) => Error::Limit { until: Some(end) },
-      None => Error::SignedOut(
-        "Every account of the claude command line is signed out. Sign one in, then run /reload."
-          .to_owned(),
-      ),
+      None => Error::Exhausted,
     })
   }
 
@@ -502,7 +506,9 @@ impl Claude {
       Some(Error::Limit { until }) => {
         (Some(until.unwrap_or(now + super::LIMIT_POLL)), "its usage limit")
       }
-      Some(Error::SignedOut(_)) => (None, "its sign in failed"),
+      Some(Error::SignedOut(_) | Error::NoToken(_) | Error::Exhausted) => {
+        (None, "its sign in failed")
+      }
       _ => return no,
     };
     accounts.park(at, until);

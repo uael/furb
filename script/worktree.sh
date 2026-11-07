@@ -97,7 +97,7 @@ python_note() {
   # The .venv of the tree is its own: uv sync makes it on the warm target, so its python and the hooks import this
   # tree. A file system with no copy on write gets it too, and builds the crate from nothing.
   if [ ! -e "$path/.venv" ] && [ -f "$path/uv.lock" ] && command -v uv >/dev/null 2>&1; then
-    (cd "$path" && sh script/heavy.sh uv sync --locked >/dev/null 2>&1) ||
+    (cd "$path" && uv sync --locked >/dev/null 2>&1) ||
       echo "uv sync did not end in $path: run it there before you trust a test of python."
   fi
   echo "TypeScript work needs no .venv: bun run build there suffices."
@@ -170,7 +170,7 @@ done
 # workspace from the copied cache, then build the native module and the TypeScript package of this tree on the warm
 # target, so that bun run check and bun run test run at once.
 if [ -d "$path/node_modules" ] && command -v bun >/dev/null 2>&1; then
-  if ! (cd "$path" && bun install --frozen-lockfile --offline >/dev/null 2>&1 && sh script/heavy.sh bun run build >/dev/null 2>&1); then
+  if ! (cd "$path" && bun install --frozen-lockfile --offline >/dev/null 2>&1 && bun run build >/dev/null 2>&1); then
     echo "$path is ready on $branch, but the TypeScript side did not build. Run bun install and bun run build there."
     python_note
     exit 0

@@ -44,3 +44,12 @@ async def test_supersede_keeps_whole_the_setup_that_the_model_reads_first(tmp_pa
   shown = "\n".join(str(turn[1]) for turn in engine.turns(on=root))
   assert "Answer in python alone." in shown
   assert [turn for turn in before if turn not in engine.turns(on=root)] == []
+
+
+async def test_supersede_reads_no_name_that_the_module_of_the_chain_binds(tmp_path: Path) -> None:
+  """With no filter, supersede() keeps every act of the chain, and it reads no builtin from the module of the chain, which a record from before the gate refused such a name may bind to a str."""
+  _, root, _ = compacting(tmp_path)
+  # The gate refuses that binding in a new word, so the test binds it as a record from before the rule holds it.
+  assert await engine.rung("globals()['list'] = 'ls -la'\ncut = supersede()", on=root) is None
+  assert engine.module(root)["cut"] == root
+  assert engine.module(root)["list"] == "ls -la"

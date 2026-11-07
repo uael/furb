@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 use tokio::io::AsyncWriteExt;
 
 use super::{
-  claude::Program,
+  claude::{Program, Token},
   clients::{Client, Reach},
 };
 use crate::{ear::spawned, world::child};
@@ -31,17 +31,11 @@ pub enum Cut {
   Lost(String),
 }
 
-impl From<Cut> for String {
-  fn from(cut: Cut) -> Self {
-    cut.to_string()
-  }
-}
-
 /// Why a search gives no answer.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-  #[error("{0}")]
-  Command(String),
+  #[error(transparent)]
+  Command(#[from] Token),
   #[error("{program} {source}")]
   Start { program: String, source: child::Unborn },
   #[error(transparent)]
@@ -134,7 +128,7 @@ pub(super) fn claude(program: Program, model: String) -> Searches {
     let (program, model) = (program.clone(), model.clone());
     timed(async move {
       let first = ["-p", "--model", &model, "--output-format", "text", "--system-prompt", BRIEF];
-      let mut command = program.base_command(&first, true).map_err(Error::Command)?;
+      let mut command = program.base_command(&first, true)?;
       command.args([
         "--no-session-persistence",
         "--allowedTools",

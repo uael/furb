@@ -33,6 +33,7 @@ from conftest import (
   sown,
   tip,
   verbs,
+  viewed,
   world_says,
 )
 from furb import engine
@@ -192,23 +193,6 @@ async def test_the_engine_derives_the_transcripts_the_turns_the_globals_and_the_
   assert [x for x in ids(engine.transcript(over)) if engine.get(x)[2] != WORLD] == [*held, "stand2"]
   assert paragraphs(engine.turns(on=over)) == told
   assert engine.module(over)["k"] == 2 and engine.cwd(on=over) == "/deep"
-
-
-def viewed(root: str) -> dict[str, dict]:
-  """What a word reads of a life: each view of each chain by kind and by speaker, the outcome of each act, and each
-  plain name of each module, which a module fact holds with the functions of its life."""
-  facts: dict[tuple[str, str], list[str]] = {}
-  outcomes: dict[str, str] = {}
-  modules: dict[str, dict[str, str]] = {}
-  plain = (str, int, float, tuple, list, dict, engine.Text, engine.Exit, type(None))
-  for one in [root, *[a[1] for a in engine.transcript(root, "chain")]]:
-    every = engine.transcript(one)
-    for of in {"", *(x[0] for x in every), *(x[2] for x in every)}:
-      facts[one, of] = [repr(x[:3] if x[0] == "module" else x) for x in engine.transcript(one, of)]
-    outcomes |= {x[1]: repr(engine.peek(x[1], ...)) for x in every if engine.question(x)}
-    held = engine.module(one).items()
-    modules[one] = {k: repr(v) for k, v in held if not k.startswith("__") and isinstance(v, plain)}
-  return {"facts": facts, "outcomes": outcomes, "modules": modules}
 
 
 async def test_a_fact_that_the_journal_says_again_carries_the_speaker_that_the_record_holds() -> None:
@@ -541,68 +525,6 @@ async def test_what_it_keeps_it_says() -> None:
   assert said(third, "bash") == [] and once == root
 
 
-async def raises_again() -> None:
-  """A replay of a life whose ears raised, in a delivery and in an act made again, says the same facts as that life, also at the last entry, and ends at a raise before the act that it makes again exists."""
-  probe, _, top = born()
-  word = (
-    "b = bash('echo hi')\n"
-    "def noisy(id):\n  yield 'started', id\n  while True:\n    a = yield {b}\n"
-    "    if a[0] == 'done':\n      raise TypeError('noisy')\n"
-    "n = act('noisy', '', noisy)\nawait wait(0.05, b)\nwent = peek(b).code\nlast = bash('echo ' + str(went))\nawait last"
-  )
-  await engine.rung(word, on=top)
-  await settle()
-  live, b = viewed(top), engine.module(top)["b"]
-  assert live["modules"][top]["went"] == "0" and isinstance(engine.peek(engine.module(top)["n"]), Refused)
-  _, over = await relived(Sand(), list(probe.record))
-  later = viewed(over)
-  assert {k: v[: len(live["facts"][k])] for k, v in later["facts"].items() if k in live["facts"]} == live["facts"]
-  assert live["modules"] == later["modules"]
-  assert {k: later["outcomes"].get(k) for k in live["outcomes"]} == live["outcomes"]
-  cut = next(n for n, (e,) in enumerate(probe.record) if e[:2] == ("done", b))
-  await relived(Sand(), list(probe.record)[: cut + 1])
-  door, _, top = born()
-  await engine.rung(
-    "def touchy(id):\n  yield 'started', id\n  yield {'read'}\n  raise TypeError('touchy')\nt = act('touchy', '', touchy)",
-    on=top,
-  )
-  await settle()
-  with pytest.raises(Refused, match="nothing takes read"):
-    engine.read("a", on=top)
-  assert str(engine.peek(engine.module(top)["t"])).endswith("raised TypeError('touchy')")
-  after = engine.bash("echo after", on=top)
-  await settle()
-  live = viewed(top)
-  _, over = await relived(Sand(), list(door.record))
-  later = viewed(over)
-  assert {k: v[: len(live["facts"][k])] for k, v in later["facts"].items() if k in live["facts"]} == live["facts"]
-  assert {k: later["outcomes"].get(k) for k in live["outcomes"]} == live["outcomes"] and after in live["outcomes"]
-  sand, _, top = born()
-  with pytest.raises(Refused):
-    engine.read("missing", on=top)
-  record = [((*e, "x", "y") if e[0] == "read" and e[2] == OPERATOR else e,) for (e,) in sand.record]
-  with pytest.raises(TypeError):
-    await relived(Sand(), record)
-  tip, _, top = born()
-  word = (
-    "b = bash('echo hi')\n"
-    "def noisy(id):\n  yield 'started', id\n  while True:\n    a = yield {b}\n"
-    "    if a[0] == 'done':\n      raise TypeError('noisy')\n"
-    "n = act('noisy', '', noisy)\nawait wait(0.05, b)\nlast = bash('echo after')\nawait last"
-  )
-  await engine.rung(word, on=top)
-  await settle()
-  b = engine.module(top)["b"]
-  cut = next(n for n, (e,) in enumerate(tip.record) if e[:2] == ("done", b))
-  first, second = list(tip.record)[: cut + 1], Sand()
-  _, again = await relived(second, first)
-  live = viewed(again)
-  _, over = await relived(Sand(), [*first, *second.record])
-  later = viewed(over)
-  assert {k: v[: len(live["facts"][k])] for k, v in later["facts"].items() if k in live["facts"]} == live["facts"]
-  assert engine.module(over)["last"] == engine.module(again)["last"]
-
-
 async def test_given_at_its_birth_what_the_world_kept_of_an_earlier_life() -> None:
   """Given at its birth what the World kept of an earlier life, it says those entries again in the order it was given them, each once every fact said before it has been heard: an act whose maker is neither an act nor an ear that boot was given it makes again through its verb under the site of its maker, once the chain it is on has been made again, since that maker makes nothing again of what the record holds; an act whose maker is an act it makes not, since the word of that act makes it again; an act whose maker is an ear that boot was given it makes through act under the site of that ear, with no ear of its own, when that ear did not make it again by then, so a view of a later life holds it where the first life held it; and any other fact it says once the act it is about has been made again, so that its controls and its dones land where they landed."""
   sand, log, root = born()
@@ -643,8 +565,6 @@ async def test_given_at_its_birth_what_the_world_kept_of_an_earlier_life() -> No
   life(Sand(), list(noting.record), asker=asking())
   await settle(300)
   assert engine.transcript(root, "asker") == noted and [a[:2] for a in noted] == [("note", "note1")]
-
-  await raises_again()
 
 
 async def test_an_entry_whose_act_this_life_has_not_made_again_the_journal_steps_over() -> None:
@@ -775,10 +695,7 @@ async def test_a_question_of_the_record_that_no_act_took_on_a_chain_that_the_lif
     if e[1] == "bash2" and e[0] in ("bash", "started", "done")
   ]
   at = next(n for n, (e,) in enumerate(record) if e[:2] == ("bash", "bash2"))
-  with pytest.raises(
-    Drift,
-    match=r"^bash1 drifts: the life made no act that the record holds under it, the record holds \('bash', 'bash1', ",
-  ):
+  with pytest.raises(Drift, match=r"^bash1 drifts: the life made no act, the record holds \('bash', 'bash1', "):
     life(Sand(), [*record[:at], *extra, *record[at:]])
 
 
@@ -800,7 +717,7 @@ async def test_a_record_whose_last_fact_made_names_a_schema_before_1_1_holds_no_
   again, _ = await relived(Sand(), [(("made", "chain1", "store", "e", None, "1.0", "0.4.2"),), *kept])
   assert {(e[0], e[1]) for e in again if engine.question(e) and e[0] != "stand"} <= set(made)
   assert [a[1] for a in said(again, "rung")] == [a[1] for a in said(log, "rung")] == ["rung1", "rung2", "rung3"]
-  with pytest.raises(Drift, match=r"^reply1 drifts: the life made no act that the record holds under it, "):
+  with pytest.raises(Drift, match=r"^reply1 drifts: the life made no act, "):
     life(Sand(), [(("made", "chain1", "store", "e", None, "1.1", "0.4.2"),), *kept])
 
 

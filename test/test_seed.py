@@ -4,7 +4,7 @@ import ast
 
 from conftest import STANDS, Sand, born, life, said, settle, sown, world_says
 from furb import engine
-from furb.engine import OPERATOR, Exit, Text
+from furb.engine import OPERATOR, Exit, Refused, Text
 
 SHELL = Exit(0, Text("bash2/stdout", "one\n"), Text("bash2/stderr", ""))
 """What the command that the checkpoint carries came to."""
@@ -182,6 +182,37 @@ async def test_a_birth_tells_no_turn_of_its_own_and_each_act_that_a_life_word_ma
     held = [a for a in engine.transcript("chain1") if a[0] == "held" and not engine.over(a[1])]
     assert "__kept" not in engine.module("chain1")
     assert (engine.turns(on="chain1"), [engine.get(a[2])[4] for a in held]) == (before, ["held()"])
+
+
+TICKED = [["ticked", "/w/ticked.py", "ticked()", False], ["tocked", "/w/ticked.py", "tocked()", False]]
+"""The extensions of a standing whose two life words each ask the clock and then make an act that lives until a
+control ends it, as catchup does: a birth makes the first again while the journal still owes the rung of
+the second."""
+
+
+TICKED_FILES = {
+  **HELD_FILES,
+  "/w/ticked.py": "def ticked(on='', kind='ticked'):\n  act('clock', on, None)\n  def ear(id):\n    yield 'started', id\n    while True:\n      yield {id}\n  return act(kind, on, controlled(ear))\ndef tocked(on=''):\n  return ticked(on, 'tocked')\n",
+}
+"""The files of a World that gives TICKED: the doctrine and the file that defines ticked and tocked."""
+
+
+async def test_a_birth_makes_again_each_life_word_that_asks_the_clock_and_a_life_that_inspects_its_record_reads_no_drift() -> (
+  None
+):
+  """A birth makes again each life word that asks the clock, and a life that inspects its record hears the clock silent: that clock ends as nothing takes it and the journal reads no drift, because the record holds no fact of it, so the turns are those of a life that answers the clock."""
+  stands = [*STANDS, "/w/DOCTRINE.md", TICKED]
+  born(stands=stands, files=TICKED_FILES)
+  await settle()
+  before = engine.turns(on="chain1")
+  data = engine.gathered(defined, {})
+  assert [x["lives"] for x in data["chains"]] == [["ticked()", "tocked()"]]
+  for quiet, ends in ((frozenset(), float), (frozenset({"clock"}), Refused)):
+    life(sown(stands=stands, files=TICKED_FILES, quiet=quiet), engine.seed(data))
+    await settle()
+    clocks = [engine.peek(a[1], None) for a in engine.transcript("chain1") if a[0] == "clock"]
+    assert len(clocks) == 2 and all(isinstance(x, ends) for x in clocks), clocks
+    assert engine.turns(on="chain1") == before
 
 
 DEEP = [["deep", "/w/deep.py", "deep()", False], ["pinged", "/w/pinged.py", "pinged()", False]]
