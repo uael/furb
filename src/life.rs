@@ -378,12 +378,10 @@ impl Opening {
           .discovered(claude, stall)
           .await
           .configure(Path::new(&directory), config.as_deref())
-          .await
-          .map_err(|no| no.to_string())?;
+          .await?;
         let kept = fresh.keeping(names.as_deref(), preferred.as_deref()).await;
         let (names, actor) = (kept.names.as_deref(), kept.actor.as_deref());
-        let candidate =
-          fresh.provided(directory, names, actor, answer).await.map_err(|no| no.to_string())?;
+        let candidate = fresh.provided(directory, names, actor, answer).await?;
         Ok(candidate.into_settings())
       })
     }));

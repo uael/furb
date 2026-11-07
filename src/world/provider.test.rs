@@ -3140,3 +3140,24 @@ fn a_model_of_rig_reads_the_thought_of_each_earlier_turn_whole_and_one_that_forg
   model.forgets = true;
   assert_eq!(said(&model), Some(blocks[1..].to_vec()), "a model that forgets reads its word alone");
 }
+
+#[test]
+fn a_refresh_that_reads_no_settings_refuses_the_stand_with_its_cause() {
+  let model = scripted(&MockCompletionModel::default());
+  let provider = Provider::new(yard("unrefreshed").display().to_string(), vec![model]).refreshing(
+    Arc::new(|| {
+      let no = super::catalog::Unknown::Name { name: "gone".to_owned() };
+      Box::pin(async move { Err(super::Unrefreshed::Roster(no)) })
+    }),
+  );
+  let mut engine = lived(provider);
+  let root = engine.root().to_owned();
+  let stand = engine.stand(verbs::Stand { on: Some(root) }).expect("the life stands");
+  let stand = stand.id().to_owned();
+  let refused = |engine: &mut Engine| {
+    engine.peek(&stand, verbs::Peek::default()).is_ok_and(|one| {
+      one.py_repr() == "Refused(args=('No model is gone. Name one as provider:id.'))"
+    })
+  };
+  assert!(until(&mut engine, refused), "the stand says why the refresh read nothing");
+}
