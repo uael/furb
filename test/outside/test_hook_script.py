@@ -146,10 +146,11 @@ PUSH = HOOK.parent / "pre-push"
 
 
 def pushing(
-  tmp_path: Path, *refs: str, verify: bool = False, name: str = "a.txt", amend: bool = False
+  tmp_path: Path, *refs: str, verify: bool = False, name: str = "a.txt", amend: bool = False, data: bool = False
 ) -> tuple[subprocess.CompletedProcess[str], str, list[str]]:
   """Pushes of a clone with the hooks of the repository, to each ref named, after one commit of a file that skipped its
-  hooks or ran them, and with amend a second change that runs them and amends it. A stub runs the hooks: it logs each run and fails on bad.txt. Gives the push, the branches of
+  hooks or ran them, and with amend a second change that runs them and amends it, and with data the push of a commit of
+  captures that git commit-tree makes with no history and no hook, beside origin/main. A stub runs the hooks: it logs each run and fails on bad.txt. Gives the push, the branches of
   origin after it, and the runs of the hooks."""
   origin, repo = tmp_path / "origin.git", tmp_path / "repo"
   stub, seen = tmp_path / "stub.sh", tmp_path / "seen.txt"
@@ -174,7 +175,22 @@ def pushing(
     git("add", "c.txt")
     git("commit", "-q", "--amend", "--no-edit")
   git("remote", "add", "origin", origin.as_posix())
-  got = git("push", "origin", *[f"HEAD:{one}" for one in refs])
+  tip = "HEAD"
+  if data:
+    git("update-ref", "refs/remotes/origin/main", "HEAD")
+    (repo / "capture.png").write_bytes(b"\x89PNG\r\n")
+    blob = git("hash-object", "-w", "capture.png").stdout.strip()
+    tree = subprocess.run(
+      ["git", "mktree"],
+      input=f"100644 blob {blob}\tcapture.png\n",
+      cwd=repo,
+      env=env,
+      capture_output=True,
+      text=True,
+      check=True,
+    ).stdout.strip()
+    tip = git("commit-tree", tree, "-m", "The screens of w/converge").stdout.strip()
+  got = git("push", "origin", *[f"{tip}:{one}" for one in refs])
   heads = subprocess.run(
     ["git", "for-each-ref", "--format=%(refname)"], cwd=origin, env=CLEAN, capture_output=True, text=True, check=True
   )
@@ -209,3 +225,9 @@ def test_a_push_of_a_commit_that_ran_its_hooks_runs_them_no_second_time(tmp_path
   got, heads, runs = pushing(tmp_path, "refs/heads/w/mine", verify=True)
   assert got.returncode == 0 and heads == "refs/heads/w/mine\n"
   assert len(runs) == 1 and runs[0].startswith("hook-impl")
+
+
+def test_a_push_of_a_commit_with_no_history_beside_main_goes_through_and_runs_no_hook(tmp_path: Path):
+  got, heads, runs = pushing(tmp_path, "refs/heads/w/shots", name="bad.txt", data=True)
+  assert got.returncode == 0 and heads == "refs/heads/w/shots\n"
+  assert runs == []
