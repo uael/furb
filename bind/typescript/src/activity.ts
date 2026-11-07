@@ -133,7 +133,13 @@ export class Activity {
       return act && (!act.unfinished || owed.has(id)) ? [act] : [];
     });
     // The crate gives each act its state, and each chain the state that the acts that stand in it give.
-    const states = new Map(restated([...out.values()]).map((act) => [act.id, act.state]));
+    // An act that had no end when the record ended stays held, since nothing runs to end it, so the crate reads it as
+    // held by a pause, and it shows held with no pause over it.
+    const held = (act: Act): Act =>
+      this.acts.get(act.id)?.unfinished && act.phase.phase !== "done"
+        ? { ...act, pause: act.pause ?? { by: "" } }
+        : act;
+    const states = new Map(restated([...out.values()].map(held)).map((act) => [act.id, act.state]));
     const chains = new Set([
       ...acts.map((act) => act.on),
       ...acts.flatMap((act) => (act.kind === "chain" ? [act.id] : [])),
@@ -148,7 +154,7 @@ export class Activity {
           this.acts.get(this.acts.get(one.by)?.kind === "rung" ? one.by : "")?.on === chain,
       );
       const read = [act, ...this.stating(chain, open, owed), ...remote].map(shaped);
-      states.set(chain, restated(read).find((one) => one.id === chain)?.state ?? "idle");
+      states.set(chain, restated(read.map(held)).find((one) => one.id === chain)?.state ?? "idle");
       out.set(chain, shaped(act));
     }
     for (const [id, act] of out) act.state = states.get(id) ?? act.state;
@@ -181,8 +187,7 @@ export class Activity {
       words: act.words,
       phase: act.done ? { phase: "done", value: act.value } : { phase: "asked" },
       operator: owed.has(act.id),
-      // An act that had no end when the record ended stays held, since nothing runs to end it.
-      pause: act.paused || act.unfinished ? (act.pause ?? { by: "" }) : null,
+      pause: act.paused ? (act.pause ?? { by: "" }) : null,
       run: !run
         ? null
         : run.status !== "failed"

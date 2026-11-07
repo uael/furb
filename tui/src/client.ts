@@ -16,6 +16,7 @@ import type {
   Listed,
   Peer,
   Role,
+  Rung,
   ThreadNode,
   Threads,
   Request1 as Verb,
@@ -935,6 +936,28 @@ export class RemoteLife extends EventEmitter {
       read: read ?? null,
     });
     if (got.answer !== "threads") throw new Error(`The daemon gave ${got.answer}, and no threads.`);
+    return got.data;
+  }
+  /** The ladder of a chain as the crate folds it in the daemon, now or as it stood just after a moment: the steps that
+   * show and the folds of the others, with the folds that the window opened, the prompts that the operator owes, and
+   * the only acts at its top when `taken` names them. */
+  async ladder(
+    on: string,
+    at?: number,
+    opened: string[] = [],
+    owed: string[] = [],
+    taken?: string[],
+  ): Promise<Rung[]> {
+    const got = await this.verb({
+      verb: "ladder",
+      life: this.record,
+      on,
+      at: at ?? null,
+      opened,
+      owed,
+      taken: taken ?? null,
+    });
+    if (got.answer !== "ladder") throw new Error(`The daemon gave ${got.answer}, and no ladder.`);
     return got.data;
   }
   /** The threads of every chain of the life but those that `hidden` names, as one tree in the order of the list of

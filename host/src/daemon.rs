@@ -505,6 +505,9 @@ fn routed(verb: Verb) -> Routed {
     Verb::Desk { life, notices } => (life, Command::Desk { notices }),
     Verb::Threads { life, on, at, read } => (life, Command::Threads { on, at, read }),
     Verb::Rail { life, hidden, at } => (life, Command::Rail { hidden, at }),
+    Verb::Ladder { life, on, at, opened, owed, taken, shown } => {
+      (life, Command::Ladder { on, at, opened, owed, taken, shown })
+    }
     Verb::AsOf { life, at } => (life, Command::AsOf { at }),
     Verb::Moments { life, on } => (life, Command::Moments { on }),
     other => return Routed::Daemon(other),
@@ -533,6 +536,7 @@ impl From<Reply> for Answer {
       Reply::Desk(desk) => Self::Desk(desk),
       Reply::Threads(threads) => Self::Threads(threads),
       Reply::Rail(threads) => Self::Rail(threads),
+      Reply::Ladder(rungs) => Self::Ladder(rungs),
       Reply::Acts(acts) => Self::Acts(acts),
       Reply::Moments(moments) => Self::Moments(moments),
     }

@@ -178,7 +178,12 @@ test("a record open to read says so in its footer and its composer, and shows no
       open.screen.mockInput.pressEscape();
       await open.screen.renderOnce();
       await Bun.sleep(50);
-      await open.screen.renderOnce();
+      // The crate folds the ladder of the chain shown, which the next frame draws once it came.
+      for (let pass = 0; pass < 3; pass++) {
+        await open.session.laddersRead();
+        await Bun.sleep(50);
+        await open.screen.renderOnce();
+      }
       const frame = open.frame();
       expect(open.session.host.reading).toBeDefined();
       expect(frame).toContain("Read only. This build cannot resume this record");

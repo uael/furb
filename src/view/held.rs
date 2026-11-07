@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use super::{
   act::{Act, Kind},
   desk::{Desk, desk},
+  ladder::{Rung, Shown, ladder},
   state::State,
   threads::{
     Attention, ChainAside, NoteRun, Rows, ThreadNode, attention, chain_asides, chain_notes,
@@ -46,6 +47,21 @@ impl Held {
       self.at.insert(act.id.clone(), self.acts.len());
       self.acts.push(act.clone());
     }
+  }
+
+  /// The ladder of a chain, now or as it stood just after a moment, with the folds that the window
+  /// opened, the prompts that the operator owes, and the only acts at its top when `taken` names
+  /// them, as [`ladder`] folds it.
+  pub fn ladder(
+    &self,
+    chain: &str,
+    at: Option<u64>,
+    opened: &[String],
+    owed: &[String],
+    taken: Option<&[String]>,
+    shown: Shown,
+  ) -> Vec<Rung> {
+    ladder(&self.then(at), chain, opened, owed, taken, shown)
   }
 
   /// The acts now, or as they stood just after a moment.
