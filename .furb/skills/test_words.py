@@ -16,7 +16,7 @@ from furb_monty import _monty
 
 PROJECT = Path(__file__).resolve().parent.parent
 CONFIG = json.loads((PROJECT / "config.json").read_text(encoding="utf-8"))
-NAMES = list(CONFIG["extensions"])
+NAMES = list(CONFIG["skills"])
 IMPORT = re.compile(r"^(?:from furb(?:\.\w+)* import \([^)]*\)|from furb(?:\.\w+)* import [^\n(]*|import furb[^\n]*)\n", re.M)
 BOOTED = [name for node in ast.walk(ast.parse(inspect.getsource(furb.python.boot))) if isinstance(node, ast.Global) for name in node.names]
 ENGINE = {**vars(furb.python), **dict.fromkeys(BOOTED)}
@@ -25,7 +25,7 @@ ENGINE = {**vars(furb.python), **dict.fromkeys(BOOTED)}
 
 def word(name: str) -> str:
   """The word of an extension of the project: its file less the imports of furb, as the crate plays it."""
-  folder = PROJECT / CONFIG["extensions"][name]
+  folder = PROJECT / CONFIG["skills"][name]
   manifest = (folder / "SKILL.md").read_text(encoding="utf-8")
   file = re.search(r"^  furb-word: (\S+)$", manifest, re.M)
   assert file, f"the manifest of {name} names no word"

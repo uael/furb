@@ -12,7 +12,7 @@ use furb::{
   engine::OPERATOR,
   fact,
   life::Opening,
-  skill::{self, Extension},
+  skill::{self, Skill},
   verbs,
   wire::outward,
   world::Catalog,
@@ -43,8 +43,8 @@ impl Life {
     Ok(Self { engine, root, held })
   }
 
-  /// The extensions that the life runs, in the order it enabled them.
-  pub(crate) fn extensions(&mut self) -> Result<Vec<Extension>, CliError> {
+  /// The skills that the life runs, in the order it enabled them.
+  pub(crate) fn skills(&mut self) -> Result<Vec<Skill>, CliError> {
     let root = self.engine.transcript(verbs::Transcript { on: Some(self.root.clone()), of: None });
     Ok(skill::enabled(&root?))
   }

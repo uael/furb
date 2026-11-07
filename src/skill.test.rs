@@ -11,8 +11,8 @@ use std::{
 };
 
 use super::{
-  Enabled, Extension, Part, Places, configs, configured, definitions, enabled, enabled_by,
-  extensions, frontmatter, load, parts, projected, reloads, telling, word,
+  Enabled, Part, Places, Skill, configs, configured, definitions, enabled, enabled_by, extensions,
+  frontmatter, load, parts, projected, reloads, telling, turned, word,
 };
 use crate::testing::Yard;
 use crate::value::{ObjectRef, Text, entry};
@@ -41,8 +41,8 @@ fn config(file: &Path, text: &str) {
   fs::write(file, text).unwrap();
 }
 
-fn note(word: &str) -> Extension {
-  Extension {
+fn note(word: &str) -> Skill {
+  Skill {
     name: "note".to_owned(),
     word: word.to_owned(),
     life: "note()".to_owned(),
@@ -66,9 +66,9 @@ fn places(at: &Path) -> Places {
 
 /// The extension that a folder loads, with the file of its word: the copy of that word in the
 /// config directory of the test, whatever the folder.
-fn filed(one: Extension, at: &Path) -> Extension {
+fn filed(one: Skill, at: &Path) -> Skill {
   let copy = at.join("user").join("words").join("note").join("note.py");
-  Extension { file: copy.display().to_string(), ..one }
+  Skill { file: copy.display().to_string(), ..one }
 }
 
 #[test]
@@ -158,7 +158,7 @@ fn the_configs_turn_on_each_extension_they_give_a_folder_the_project_after_the_u
   let at = place("configs");
   let places = Places { config: at.join("user"), home: Some(at.join("home")) };
   let project = at.join("project");
-  let names = |got: Vec<Extension>| got.into_iter().map(|one| one.name).collect::<Vec<_>>();
+  let names = |got: Vec<Skill>| got.into_iter().map(|one| one.name).collect::<Vec<_>>();
   assert_eq!(
     names(configured(&places, &project).unwrap().0),
     ["catchup", "memory", "skills", "compaction", "naming"],
@@ -169,7 +169,7 @@ fn the_configs_turn_on_each_extension_they_give_a_folder_the_project_after_the_u
   folder(&project.join("far"), &skill("far", &[("word", "note.py")]), "f = 1");
   config(
     &at.join("user").join("config.json"),
-    r#"{"extensions": {"tilde": "~/tilde", "near": "near", "far": false, "skills": false}}"#,
+    r#"{"skills": {"tilde": "~/tilde", "near": "near", "far": false, "skills": false}}"#,
   );
   assert_eq!(
     names(configured(&places, &project).unwrap().0),
@@ -177,7 +177,7 @@ fn the_configs_turn_on_each_extension_they_give_a_folder_the_project_after_the_u
   );
   config(
     &project.join(".furb").join("config.json"),
-    r#"{"extensions": {"near": false, "far": "../far", "tilde": true, "skills": true, "web": true}}"#,
+    r#"{"skills": {"near": false, "far": "../far", "tilde": true, "skills": true, "web": true}}"#,
   );
   assert_eq!(
     names(configured(&places, &project).unwrap().0),
@@ -198,23 +198,20 @@ fn a_config_that_is_not_of_the_form_is_refused_with_its_path() {
   let refused = |text: &str| read(text).unwrap_err().message();
   let shown = file.display();
   assert_eq!(read(r#"{"theme": "dark"}"#).unwrap().0.len(), 5, "a config may name no extension");
-  assert_eq!(refused("[]"), format!("A config is a map, whose extensions is a map: {shown}"));
+  assert_eq!(refused("[]"), format!("A config is a map, whose skills is a map: {shown}"));
   assert_eq!(
-    refused(r#"{"extensions": []}"#),
-    format!("A config is a map, whose extensions is a map: {shown}")
+    refused(r#"{"skills": []}"#),
+    format!("A config is a map, whose skills is a map: {shown}")
   );
   let form = "is true, false, or the path of its folder when it is not official";
+  assert_eq!(refused(r#"{"skills": {"note": 1}}"#), format!("The extension note {form}: {shown}"));
   assert_eq!(
-    refused(r#"{"extensions": {"note": 1}}"#),
-    format!("The extension note {form}: {shown}")
-  );
-  assert_eq!(
-    refused(r#"{"extensions": {"skills": "."}}"#),
+    refused(r#"{"skills": {"skills": "."}}"#),
     format!("The extension skills {form}: {shown}")
   );
   assert_eq!(
-    refused(r#"{"extensions": {"note": true}}"#),
-    format!("No config gives the folder of the extension note: {shown}")
+    refused(r#"{"skills": {"note": true}}"#),
+    format!("No config gives the folder of the skill note: {shown}")
   );
   assert!(refused("{").ends_with(&format!(": {shown}")));
 }
@@ -248,7 +245,7 @@ fn a_manifest_names_the_view_of_an_extension_for_a_tui_and_no_other_field_of_fur
   folder(&at.join("good"), &skill("note", &[("word", "note.py"), ("view", "tui.ts")]), "x = 1\n");
   assert_eq!(
     load("note", &at.join("good"), &places(&at)).unwrap(),
-    filed(Extension { life: String::new(), ..note("x = 1") }, &at)
+    filed(Skill { life: String::new(), ..note("x = 1") }, &at)
   );
   folder(&at.join("bad"), &skill("note", &[("word", "note.py"), ("tui", "tui.ts")]), "x = 1\n");
   let manifest = at.join("bad").join("SKILL.md").display().to_string();
@@ -299,7 +296,7 @@ fn the_parts_for_a_tui_are_those_of_the_extensions_that_the_configs_turn_on_and_
   folder(&project.join("off"), &skill("off", &[("word", "note.py"), ("view", "off.ts")]), "o = 1");
   config(
     &project.join(".furb").join("config.json"),
-    r#"{"extensions": {"todo": "skills/todo", "plain": "../plain", "off": false, "mcp": true}}"#,
+    r#"{"skills": {"todo": "skills/todo", "plain": "../plain", "off": false, "mcp": true}}"#,
   );
   let got = parts(&places, &project).unwrap();
   let todo =
@@ -307,7 +304,7 @@ fn the_parts_for_a_tui_are_those_of_the_extensions_that_the_configs_turn_on_and_
   assert_eq!(got, [compaction, mcp, todo]);
   config(
     &project.join(".furb").join("config.json"),
-    r#"{"extensions": {"compaction": false, "mcp": false}}"#,
+    r#"{"skills": {"compaction": false, "mcp": false}}"#,
   );
   assert_eq!(
     parts(&places, &project).unwrap(),
@@ -337,7 +334,7 @@ fn standing(at: PathBuf) -> Box<dyn Ear> {
 
 /// A life in a directory of the tests, on the record that the store keeps there, given these
 /// extensions.
-fn lived(at: &Path, given: Vec<Extension>) -> Engine {
+fn lived(at: &Path, given: Vec<Skill>) -> Engine {
   let (record, store) = world::store(at.join("record.jsonl")).unwrap();
   let ears = [
     ("extensions", extensions(given, places(at))),
@@ -463,7 +460,7 @@ fn a_chain_takes_each_extension_at_its_birth_and_a_later_life_plays_the_same_run
     ];
     assert_eq!(played(&mut engine, &["chain1", "chain2", "chain3"]), expected);
   }
-  let other = Extension {
+  let other = Skill {
     name: "other".to_owned(),
     word: "o = 1".to_owned(),
     life: String::new(),
@@ -510,7 +507,7 @@ fn a_manifest_says_whether_its_extension_plays_on_every_chain_or_on_the_root_alo
   folder(&at.join("root"), &manifest("root"), "x = 1\n");
   assert_eq!(
     load("note", &at.join("root"), &places(&at)).unwrap(),
-    filed(Extension { root: true, ..note("x = 1") }, &at)
+    filed(Skill { root: true, ..note("x = 1") }, &at)
   );
   let refused = |root: &str| load("note", &at.join(root), &places(&at)).unwrap_err().message();
   let file = |root: &str| at.join(root).join("SKILL.md").display().to_string();
@@ -551,7 +548,7 @@ fn an_extension_of_a_config_that_does_not_load_does_not_play_and_the_others_do()
   let project = at.join("project");
   let word = "def filled(template: str) -> str:\n  return template\n";
   folder(&project.join("near"), &skill("near", &[("word", "note.py")]), word);
-  config(&project.join(".furb").join("config.json"), r#"{"extensions": {"near": "../near"}}"#);
+  config(&project.join(".furb").join("config.json"), r#"{"skills": {"near": "../near"}}"#);
   let (on, refused) = configured(&places, &project).unwrap();
   assert_eq!(
     on.into_iter().map(|one| one.name).collect::<Vec<_>>(),
@@ -562,7 +559,7 @@ fn an_extension_of_a_config_that_does_not_load_does_not_play_and_the_others_do()
   assert_eq!(
     refused,
     [format!(
-      "The extension near does not play: The word note.py binds filled of the engine at its top, \
+      "The skill near does not play: The word note.py binds filled of the engine at its top, \
        which each word of a chain reads: give each a name of its own: {manifest}"
     )]
   );
@@ -575,7 +572,7 @@ fn an_extension_of_the_config_of_the_user_goes_through_the_same_check_and_a_refu
   let places = places(&at);
   let (user, project) = (at.join("user"), at.join("project"));
   let manifest = skill("mine", &[("word", "note.py")]);
-  config(&user.join("config.json"), r#"{"extensions": {"mine": "mine"}}"#);
+  config(&user.join("config.json"), r#"{"skills": {"mine": "mine"}}"#);
   folder(&user.join("mine"), &manifest, "def filled(template: str) -> str:\n  return template\n");
   let (on, refused) = configured(&places, &project).unwrap();
   assert!(on.iter().all(|one| one.name != "mine"));
@@ -583,7 +580,7 @@ fn an_extension_of_the_config_of_the_user_goes_through_the_same_check_and_a_refu
   assert_eq!(
     refused,
     [format!(
-      "The extension mine does not play: The word note.py binds filled of the engine at its top, \
+      "The skill mine does not play: The word note.py binds filled of the engine at its top, \
        which each word of a chain reads: give each a name of its own: {file}"
     )]
   );
@@ -602,7 +599,7 @@ fn the_ear_tells_the_root_once_why_each_extension_that_does_not_play_does_not_pl
   let yard = place("told");
   let at: &Path = &yard;
   let (record, store) = world::store(at.join("record.jsonl")).unwrap();
-  let why = ["The extension a does not play: one", "The extension b does not play: two"];
+  let why = ["The skill a does not play: one", "The skill b does not play: two"];
   let ears = [
     ("extensions", telling(vec![], why.map(str::to_owned).to_vec(), places(at))),
     ("stand", standing(at.to_owned())),
@@ -629,7 +626,7 @@ fn an_extension_of_the_root_alone_plays_on_the_root_and_on_a_chain_whose_source_
   let at = place("rooted");
   let first = format!("{NOTE}\n\nseen = ['first']");
   let full = format!("{first}\n\nnote()");
-  let rooted = |word: &str| Extension { root: true, ..note(word) };
+  let rooted = |word: &str| Skill { root: true, ..note(word) };
   let chains = ["chain1", "chain2", "chain3"];
   {
     let mut engine = lived(&at, vec![rooted(&first)]);
@@ -668,21 +665,21 @@ fn an_extension_of_the_root_alone_plays_on_the_root_and_on_a_chain_whose_source_
 /// A life in a directory of the tests whose standing names a doctrine, so the ear of the extensions
 /// sets up its root,
 /// given these extensions, each with the file of its word in that directory.
-fn set_up(at: &Path, given: Vec<Extension>) -> Engine {
+fn set_up(at: &Path, given: Vec<Skill>) -> Engine {
   set_up_in(at, given, at)
 }
 
 /// A life as `set_up` opens it, whose standing names another directory.
-fn set_up_in(at: &Path, given: Vec<Extension>, directory: &Path) -> Engine {
+fn set_up_in(at: &Path, given: Vec<Skill>, directory: &Path) -> Engine {
   fs::write(at.join("DOCTRINE.md"), "Work.\n").unwrap();
   let doctrine = at.join("DOCTRINE.md").display().to_string();
   let here = directory.to_owned();
-  let given: Vec<Extension> = given
+  let given: Vec<Skill> = given
     .into_iter()
     .map(|one| {
       let file = at.join(format!("{}.py", one.name));
       fs::write(&file, &one.word).unwrap();
-      Extension { file: file.display().to_string(), ..one }
+      Skill { file: file.display().to_string(), ..one }
     })
     .collect();
   // The standing gives each extension, as the provider of a life does, so the engine seeds the
@@ -731,9 +728,9 @@ fn set_up_in(at: &Path, given: Vec<Extension>, directory: &Path) -> Engine {
 fn the_setup_of_the_root_ends_with_the_extensions_of_the_root_alone_and_a_chain_with_no_source_holds_none_of_them()
  {
   let at = place("setup");
-  let shared = Extension { name: "shared".to_owned(), life: "y = 2".to_owned(), ..note("x = 1") };
+  let shared = Skill { name: "shared".to_owned(), life: "y = 2".to_owned(), ..note("x = 1") };
   let rooted =
-    Extension { name: "rooted".to_owned(), life: String::new(), root: true, ..note("z = 3") };
+    Skill { name: "rooted".to_owned(), life: String::new(), root: true, ..note("z = 3") };
   let mut engine = set_up(&at, vec![shared, rooted]);
   let rooted = at.join("rooted.py").display().to_string();
   let texts = |engine: &mut Engine, chain: &str| -> Vec<String> {
@@ -777,8 +774,8 @@ fn the_setup_of_the_root_ends_with_the_extensions_of_the_root_alone_and_a_chain_
 #[test]
 fn the_setup_plays_no_read_and_no_run_for_an_extension_whose_word_is_blank() {
   let at = place("blank");
-  let kept = Extension { name: "kept".to_owned(), life: String::new(), ..note("x = 1") };
-  let blank = Extension { name: "blank".to_owned(), life: String::new(), ..note("\n") };
+  let kept = Skill { name: "kept".to_owned(), life: String::new(), ..note("x = 1") };
+  let blank = Skill { name: "blank".to_owned(), life: String::new(), ..note("\n") };
   let mut engine = set_up(&at, vec![kept, blank]);
   let on = verbs::Transcript { on: Some("chain1".to_owned()), of: None };
   let text = |one: &Fact, at: usize| one.word(at).and_then(|one| one.as_str().map(str::to_owned));
@@ -957,7 +954,7 @@ fn a_write_of_the_life_in_the_folder_of_an_extension_that_a_config_turns_on_relo
   fs::write(at.join("note.txt"), "noted\n").unwrap();
   let root = at.join(".furb").join("skills").join("note");
   folder(&root, &skill("note", &[("word", "note.py"), ("life", "note()")]), NOTE);
-  config(&at.join(".furb").join("config.json"), r#"{"extensions": {"note": "skills/note"}}"#);
+  config(&at.join(".furb").join("config.json"), r#"{"skills": {"note": "skills/note"}}"#);
   let mut engine = lived(&at, vec![load("note", &root, &places(&at)).unwrap()]);
   let newer = "def note(on=\"\"):\n  return read(\"other.txt\", on=on)\n";
   let file = root.join("note.py").display().to_string();
@@ -990,15 +987,15 @@ fn the_local_config_of_a_project_comes_after_its_config_and_wins_for_a_name() {
     &skill("near", &[("word", "note.py"), ("view", "tui.ts")]),
     "n = 1",
   );
-  config(&furb.join("config.json"), r#"{"extensions": {"near": "../near", "skills": false}}"#);
-  let names = |got: Vec<Extension>| got.into_iter().map(|one| one.name).collect::<Vec<_>>();
+  config(&furb.join("config.json"), r#"{"skills": {"near": "../near", "skills": false}}"#);
+  let names = |got: Vec<Skill>| got.into_iter().map(|one| one.name).collect::<Vec<_>>();
   assert_eq!(
     names(configured(&places, &project).unwrap().0),
     ["catchup", "memory", "compaction", "naming", "near"]
   );
   config(
     &furb.join("config.local.json"),
-    r#"{"extensions": {"near": false, "skills": true, "web": true}}"#,
+    r#"{"skills": {"near": false, "skills": true, "web": true}}"#,
   );
   assert_eq!(
     names(configured(&places, &project).unwrap().0),
@@ -1020,7 +1017,7 @@ fn a_write_of_the_local_config_of_the_project_turns_on_each_extension_that_it_gi
   );
   let mut engine = lived(&at, vec![]);
   let file = projected(&at)[1].display().to_string();
-  let text = r#"{"extensions": {"note": "skills/note"}}"#;
+  let text = r#"{"skills": {"note": "skills/note"}}"#;
   engine.write(&Text::new(file, text), verbs::Write { on: Some("chain1".to_owned()) }).unwrap();
   assert_eq!(enables(&at), [NOTE.to_owned()]);
 }
@@ -1050,4 +1047,28 @@ fn a_skill_of_the_project_with_no_word_and_the_name_of_an_official_one_leaves_th
   let (on, refused) = configured(&places(&at), &at).expect("the configs read");
   assert!(on.iter().any(|one| one.name == "memory"), "{on:?}");
   assert!(refused.is_empty(), "{refused:?}");
+}
+
+#[test]
+fn a_config_that_gives_the_former_key_turns_nothing_on_and_says_that_the_key_is_now_skills() {
+  let at = Yard::new("former-key");
+  let file = at.join(".furb").join("config.json");
+  config(&file, r#"{"extensions": {"memory": false, "notes": "notes"}}"#);
+  let (on, refused) = configured(&places(&at), &at).expect("the configs read");
+  assert!(on.iter().any(|one| one.name == "memory"), "{on:?}");
+  assert!(!on.iter().any(|one| one.name == "notes"), "{on:?}");
+  let told =
+    format!("The key extensions of {} is now skills, so it turns nothing on", file.display());
+  assert_eq!(refused, [told]);
+}
+
+#[test]
+fn a_write_of_a_config_with_the_former_key_turns_nothing_on_and_says_that_the_key_is_now_skills() {
+  let at = Yard::new("former-write");
+  let file = at.join(".furb").join("config.local.json");
+  let (on, refused) = turned(&file, r#"{"extensions": {"note": "skills/note"}}"#, &places(&at));
+  assert!(on.is_empty(), "{on:?}");
+  let told =
+    format!("The key extensions of {} is now skills, so it turns nothing on", file.display());
+  assert_eq!(refused, [told]);
 }

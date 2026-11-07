@@ -18,11 +18,11 @@ From a clone, `uv run furb` runs the `furb` of the clone, and `cargo run -p furb
 | `furb run WORD` | Run a word of Python on the root chain, and print what it gave to `close`. |
 | `furb turns --record FILE` | Print the turns of the root chain of a record, as the model reads them. It replays the record in a life that only inspects it, and asks no model. |
 | `furb facts --record FILE` | Print each fact of a record, after the number of its line. `--act` and `--chain` filter them. It opens no life. |
-| `furb extensions` | Print the extensions that a life here runs, each with its life word. |
+| `furb skills` | Print the skills that a life here runs, each with its life word. |
 | `furb checkpoint --record FILE` | Write at the tip of a record the checkpoint of its life, from which a build of a later version goes on. It asks no model. |
 | `furb catalog` | Print where the models of this machine came from. `--update` fetches them again now. |
 
-These words go with each command that opens a life. `extensions` and `checkpoint` take only `--record` and `--cwd`:
+These words go with each command that opens a life. `skills` and `checkpoint` take only `--record` and `--cwd`:
 
 - `--record FILE` keeps the life in a record, and goes on from it when it holds a life already. A name that ends in
   `.sqlite`, `.sqlite3` or `.db` makes a database of SQLite. With no record, the life keeps nothing.
