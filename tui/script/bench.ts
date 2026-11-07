@@ -182,7 +182,9 @@ const add = (record: string, ...added: unknown[][]) =>
 async function open(record: string) {
   const began = performance.now();
   const session = await demoSession({ record, cwd: root, preferences });
+  const read = performance.now() - began;
   const library = await demoLibrary(session);
+  const listed = performance.now() - began - read;
   const screen = await createTestRenderer({
     width: 152,
     height: 46,
@@ -201,7 +203,10 @@ async function open(record: string) {
     screen.renderer.destroy();
     await library.dispose();
   };
-  return { record, session, app, screen, first, close };
+  // Where the first frame went: the open of the record, which reads and folds each fact of it, the library of the
+  // workspaces, and the first draw of the App on the test terminal.
+  const phases = { read, library: listed, draw: first - read - listed };
+  return { record, session, app, screen, first, phases, close };
 }
 type Opened = Awaited<ReturnType<typeof open>>;
 
@@ -491,6 +496,9 @@ const rows: Row[] = [
   ["pace of the machine", unit, "ms", {}],
   ["first frame, cold", cold.first, "ms", {}],
   ["first frame, warm", first, "ms", { under: FIRST * unit }],
+  ["first frame, warm: read and fold", (warm.first <= again.first ? warm : again).phases.read, "ms", {}],
+  ["first frame, warm: library", (warm.first <= again.first ? warm : again).phases.library, "ms", {}],
+  ["first frame, warm: draw", (warm.first <= again.first ? warm : again).phases.draw, "ms", {}],
   ...(memory === undefined ? [] : [["memory of a life open", memory / 2 ** 20, "MB", {}] as Row]),
   ["frames each second, empty", fullest.empty, "fps", {}],
   ["frames each second", fullest.rate, "fps", { least: fullest.empty * 0.95 }],
