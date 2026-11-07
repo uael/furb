@@ -12,17 +12,19 @@ use super::{
   desk::{Desk, desk},
   state::State,
   threads::{
-    Attention, ChainAside, Rows, ThreadNode, attention, chain_asides, chain_threads, nest_threads,
+    Attention, ChainAside, NoteRun, Rows, ThreadNode, attention, chain_asides, chain_notes,
+    chain_threads, chain_tree, nest_threads, order_threads,
   },
   time::{as_of, moments_of},
 };
 
-/// The threads of one chain as a window draws them: the tree of its threads, its asides, what the
-/// tree says to the operator, and the state of the chain.
+/// The threads of one chain as a window draws them: the tree of its threads, its asides, the runs
+/// of its notes, what the tree says to the operator, and the state of the chain.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Threads {
   pub threads: Vec<ThreadNode>,
   pub asides: Vec<ChainAside>,
+  pub notes: Vec<NoteRun>,
   pub attention: Attention,
   pub state: State,
 }
@@ -62,15 +64,44 @@ impl Held {
     desk(&self.then(None), &notices)
   }
 
-  /// The threads of a chain, now or as they stood just after a moment.
-  pub fn threads(&self, chain: &str, at: Option<u64>) -> Threads {
+  /// The threads of a chain, with the workers of its rounds nested under the thread that started
+  /// each, now or as they stood just after a moment. `read` is the place up to which the window
+  /// read the chain, from which its runs of notes count the notes not yet read.
+  pub fn threads(&self, chain: &str, at: Option<u64>, read: u64) -> Threads {
     let acts = self.then(at);
     let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
+    let all: Vec<&Act> = acts.iter().collect();
     let on: Vec<&Act> = acts.iter().filter(|act| act.chain == chain && act.id != chain).collect();
-    let threads = nest_threads(chain_threads(&on, &rows), &rows);
+    let threads = chain_tree(chain, &all, &rows);
     let state =
       rows.get(chain).filter(|act| act.kind == Kind::Chain).map_or(State::Idle, |act| act.state);
-    Threads { attention: attention(&threads), asides: chain_asides(&on, &rows), threads, state }
+    let (asides, notes) = (chain_asides(&on, &rows), chain_notes(&on, &rows, read));
+    Threads { attention: attention(&threads), asides, notes, threads, state }
+  }
+
+  /// The threads of every chain of the life but those that `hidden` names, as one tree in the
+  /// order of the list of the threads: each thread under the thread whose ladder made its prompt,
+  /// the closed ones first and the open ones last, now or as they stood just after a moment.
+  pub fn rail(&self, hidden: &[String], at: Option<u64>) -> Vec<ThreadNode> {
+    let acts = self.then(at);
+    let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
+    let mut chains: Vec<&str> = Vec::new();
+    let mut on: HashMap<&str, Vec<&Act>> = HashMap::new();
+    for act in acts.iter().filter(|act| act.id != act.chain) {
+      let chain = act.chain.as_str();
+      if hidden.iter().any(|one| one == chain) {
+        continue;
+      }
+      on.entry(chain).or_insert_with(|| {
+        chains.push(chain);
+        Vec::new()
+      });
+      on.entry(chain).or_default().push(act);
+    }
+    let mut list: Vec<_> =
+      chains.iter().flat_map(|chain| chain_threads(&on[chain], &rows)).collect();
+    list.sort_by_key(|one| rows.get(one.prompt.as_str()).map_or(0, |act| act.began));
+    order_threads(nest_threads(list, &rows), &rows)
   }
 
   /// The acts as they stood just after a moment.

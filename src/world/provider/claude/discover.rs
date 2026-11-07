@@ -3,15 +3,15 @@
 //! The command line answers control requests with no model prompt: `initialize` lists its aliases with the efforts that
 //! each takes, and `set_model` then `get_context_usage` give the window of the model that an alias resolves to now.
 //! A process of its own asks them once for each program. Furb keeps the answer in memory and in its cache until the
-//! program changes or [`refresh`] is called. A command line that does not answer, as an older one does not, leaves the
-//! fixed table of [`fallback`].
+//! program changes, [`LASTS`] seconds pass, or [`refresh`] is called. A command line that does not
+//! answer, as an older one does not, leaves the fixed table of [`fallback`].
 
 use std::{
   collections::HashMap,
   fs,
   process::Stdio,
   sync::{Mutex, OnceLock, PoisonError},
-  time::{Duration, Instant, UNIX_EPOCH},
+  time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use serde::{Deserialize, Serialize};
@@ -22,10 +22,13 @@ use tokio::{
 };
 
 use super::{EFFORTS, Program};
+use crate::world;
 use crate::world::{
   child,
   disk::{self, Access},
 };
+use std::path;
+use tokio::time;
 
 /// One model of the command line as it said itself: the alias, the window of the model that it resolves to, and the
 /// efforts that it takes, none when it takes no effort.
@@ -46,6 +49,11 @@ const WITHIN: Duration = Duration::from_secs(20);
 /// How long a failed discovery holds before the next models ask the command line again.
 const RETRY: Duration = Duration::from_secs(300);
 
+/// How many seconds a discovery holds, in memory and in the cache, before the next models ask
+/// the command line again: the models that an account may use change while the program of its
+/// command line does not.
+pub(super) const LASTS: u64 = 3600;
+
 /// The file of the cache of furb that holds the discoveries.
 const FILE: &str = "claude-models.json";
 
@@ -63,7 +71,7 @@ pub(super) fn fallback() -> Vec<Found> {
 }
 
 enum Seen {
-  Found(Vec<Found>),
+  Found(Vec<Found>, u64),
   Failed(Instant),
 }
 
@@ -85,18 +93,25 @@ fn stamp(program: &Program) -> String {
   format!("{}\0{}\0{time}\0{size}", program.bin.display(), program.args.join("\u{1f}"))
 }
 
-fn cached() -> Option<std::path::PathBuf> {
-  crate::world::cache().map(|at| at.join(FILE))
+fn cached() -> Option<path::PathBuf> {
+  world::cache().map(|at| at.join(FILE))
 }
 
-fn stored(stamp: &str) -> Option<Vec<Found>> {
+/// A discovery as the cache holds it: what the command line said, and the second that it said it.
+#[derive(Serialize, Deserialize)]
+struct Told {
+  at: u64,
+  found: Vec<Found>,
+}
+
+fn stored(stamp: &str, now: u64) -> Option<Vec<Found>> {
   let text = fs::read_to_string(cached()?).ok()?;
   let map: serde_json::Map<String, Value> = serde_json::from_str(&text).ok()?;
-  let found: Vec<Found> = serde_json::from_value(map.get(stamp)?.clone()).ok()?;
-  (!found.is_empty()).then_some(found)
+  let told: Told = serde_json::from_value(map.get(stamp)?.clone()).ok()?;
+  (!told.found.is_empty() && now.saturating_sub(told.at) < LASTS).then_some(told.found)
 }
 
-fn store(stamp: &str, found: &[Found]) {
+fn store(stamp: &str, found: &[Found], now: u64) {
   let Some(file) = cached() else { return };
   let mut map: serde_json::Map<String, Value> = fs::read_to_string(&file)
     .ok()
@@ -105,7 +120,7 @@ fn store(stamp: &str, found: &[Found]) {
   // One entry for each program: an older stamp of it goes.
   let program = stamp.splitn(3, '\0').take(2).collect::<Vec<_>>().join("\0");
   map.retain(|key, _| !key.starts_with(&program));
-  map.insert(stamp.to_owned(), json!(found));
+  map.insert(stamp.to_owned(), json!({"at": now, "found": found}));
   while map.len() > 16 {
     let Some(oldest) = map.keys().next().cloned() else { break };
     map.shift_remove(&oldest);
@@ -118,25 +133,32 @@ fn store(stamp: &str, found: &[Found]) {
 /// none when it does not answer. No lock is held while the program is asked, so two catalogs
 /// that ask at once may each ask it.
 pub(super) async fn models(program: &Program) -> Option<Vec<Found>> {
+  let now = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |one| one.as_secs());
+  models_at(program, now).await
+}
+
+/// [`models`] as of a second: a discovery that [`LASTS`] seconds or more came before is asked
+/// again.
+pub(super) async fn models_at(program: &Program, now: u64) -> Option<Vec<Found>> {
   let stamp = stamp(program);
   let held = match seen().lock().unwrap_or_else(PoisonError::into_inner).get(&stamp) {
-    Some(Seen::Found(found)) => Some(Some(found.clone())),
+    Some(Seen::Found(found, at)) if now.saturating_sub(*at) < LASTS => Some(Some(found.clone())),
     Some(Seen::Failed(at)) if at.elapsed() < RETRY => Some(None),
     _ => None,
   };
   if let Some(held) = held {
     return held;
   }
-  let found = if let Some(found) = stored(&stamp) {
+  let found = if let Some(found) = stored(&stamp, now) {
     Some(found)
   } else {
     let found = probe(program).await;
     if let Some(found) = &found {
-      store(&stamp, found);
+      store(&stamp, found, now);
     }
     found
   };
-  let kept = found.clone().map_or(Seen::Failed(Instant::now()), Seen::Found);
+  let kept = found.clone().map_or(Seen::Failed(Instant::now()), |found| Seen::Found(found, now));
   seen().lock().unwrap_or_else(PoisonError::into_inner).insert(stamp, kept);
   found
 }
@@ -195,14 +217,14 @@ fn plain(alias: &str) -> bool {
 async fn probe(program: &Program) -> Option<Vec<Found>> {
   let print =
     ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"];
-  let mut command = program.base_command(&print).ok()?;
+  let mut command = program.base_command(&print, false).ok()?;
   command.args(["--tools", ""]);
   command.env("FURB_CLAUDE_DISCOVER", "1");
   command.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
   // The group ends the child as it drops, and the runtime reaps it.
   let (mut child, _group) = child::spawn(&mut command).ok()?;
   let (stdin, stdout) = child.stdin.take().zip(child.stdout.take())?;
-  let found = tokio::time::timeout(WITHIN, asked(stdin, BufReader::new(stdout).lines())).await;
+  let found = time::timeout(WITHIN, asked(stdin, BufReader::new(stdout).lines())).await;
   found.ok().flatten()
 }
 

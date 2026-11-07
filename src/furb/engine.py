@@ -104,8 +104,10 @@ def literal(v, into=None):
   match v:
     case Act():
       return f"Act({str(v)!r})" * (into is not None)
-    case None | bool() | int() | float() | str() | Text() | Exit() | BaseException():
-      return repr(v)
+    case BaseException():
+      return literal(v.args) and repr(v)
+    case None | bool() | int() | float() | str() | Text() | Exit():
+      return repr(v) * (not (isinstance(v, float) and v - v))
     case dict():
       s = [(literal(k, into), literal(y, into)) for k, y in v.items()]
       return all(p and o for p, o in s) and "{" + ", ".join(f"{p}: {o}" for p, o in s) + "}"
@@ -128,7 +130,7 @@ def dump(*names: str, on="") -> str:
   here, out = module(on), {}
   for name in names:
     if name in here and callable(here[name]):
-      text = next(
+      text = getattr(here[name], "__name__", name) == name and next(
         (w for w in reversed(program(on).values()) if re.search(rf"(?m)^(async )?(def|class) {name}\b", w)), ""
       )
     else:
@@ -339,8 +341,8 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
     t = transcript(source or ROOT)
     h = [(x[0] == "tell" and x[3][0][:6]) or x[0] for x in t] + ["chain(", "#chain", "setup"]
     hi = h.index("#chain", lo := h.index("chain("))
-    blocked, running, waiting, last, heard, seen, dull = set(), {}, {}, standing(), [], set(), 0
-    step = news = ran = reply = note = to = mute = loud = ""
+    blocked, running, waiting, last, heard, seen = set(), {}, {}, standing(), [], set()
+    step = news = ran = reply = note = to = mute = loud = dull = stuck = names = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def placed(went):
@@ -448,11 +450,15 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         ):
           seen.add(about)
       if a[1] in seen and a[0] == "done":
-        mute = dull = 0
+        mute = dull = stuck = ""
       if scope(a[1]) != id:
         continue
       if a[0] in ("ready", "done"):
         waiting.pop(a[1], None)
+      if a[0] == "done" and prompted(r[2]) and a[1] in (ran, *blocked) and len(module(id)) == names:
+        if stuck := dull:
+          yield "tell", get(r[2])[2], [headed(r[2], "asked no more until a fact comes")]
+        dull = 1
       match a:
         case ("read", about, by, _, path) if prompted(path) and scope(path) == id:
           yield "done", about, Text(path, "\n".join(w for x, w in ladder.items() if x != by and under(x, path)))
@@ -481,6 +487,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         case ("tell", *_, notes) if notes not in (["chain()"], [*r[4:5]]):
           heard.append("\n".join(notes))
           ran = mute = ""
+          a[2] == id or (prompted(a[2]) and prompted(get(a[2])[2])) or (dull := "") or (stuck := "")
           loud = a[2]
           if a is note:
             note = bind(step)
@@ -488,6 +495,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           with site.set(step):
             reply = act("reply", id, controlled(idle), to)
         case ("ready", rid, _, word):
+          names = len(module(id))
           try:
             rid == step or bind(rid)
             ladder[(donor := r[5]) or rid] = word
@@ -513,21 +521,32 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         continue
       waits = [c for *_, c in transcript(id, "wants") if not over(c)]
       if (
-        step not in waiting
-        and ladder.get(ran * (ran == step)) != dull
+        (step not in waiting or paused(step))
+        and not stuck
         and (
-          step := next(
-            (x for x in waiting if not (paused(x) or over(x) or (mute == get(x)[2] and not all(map(over, seen))))), ""
-          )
-        )
+          (
+            got := next(
+              (
+                x
+                for x in waiting
+                if not (
+                  paused(x)
+                  or over(x)
+                  or x in {y[2] for y in transcript(id, "reply") if not over(y[1])}
+                  or (mute == get(x)[2] and not all(map(over, seen)))
+                )
+              ),
+              "",
+            )
+          ),
+          step := got or step * (step in waiting),
+        )[0]
       ):
         maker, to = get(step)[2::4]
         if offered(last[0], to) is None:
           close(Refused(to + " no actor"), maker * prompted(maker) or step)
         else:
-          if ran:
-            dull = ladder.get(ran)
-            yield told(ran, "told nothing")
+          ran and (yield told(ran, "told nothing"))
           note = yield told(step, "advance on " + maker, share=filled(reply) or None, waits=waits or None)
           news = ""
       if news and not waiting and (r[2] in running or over(r[2]) or a[0] == "tell"):
@@ -545,12 +564,17 @@ def seeded(id, last, to):
     k and (yield "setup", id)
     for x in last[4]:
       x[1] and x[3] == k and rung(f"rung(read({x[1]!r}, HIDDEN).content)", to=to)
-    (w := "\n".join(y[2] for y in last[4] if y[3] == k and y[2])) and rung(w, to=to)
+    for y in last[4]:
+      y[3] == k and y[2] and rung(y[2], to=to)
 
 
 HEARD = (
-  "say('prefix', scope(acting()), [*transcript(of='module')[-1:], *transcript(of='carried')[-1][3], "
-  "*transcript(of='stand')[-1:], *transcript(of='pause'), *[x for x in transcript() if acting() in x[1::3]]])"
+  "say('prefix', scope(acting()), [*transcript(of='module')[-1:], *transcript(of='carried')[-1:], "
+  "*transcript(of='carried')[-1][3], *transcript(of='stand')[-1:], *transcript(of='pause'), "
+  "*[x for x in transcript() if acting() in x[1::3] and x[0] != 'tell']])"
+)
+KEPT = (
+  "say('prefix', scope(acting()), [x for x in transcript() if x[0] != 'tell' or x in transcript(of='carried')[-1][3]])"
 )
 
 
@@ -563,13 +587,18 @@ def seed(data):
     numbers[sort] = max(numbers[sort], last - 1) + bool(words)
     words and entries.append(((sort, called, *words),))
 
+  asking = {a["on"] for a in data["acts"] if "value" not in a}
   for c in data["chains"]:
     put("chain", c["id"], OPERATOR, c["on"], c["label"], "")
-    entries.append((("carried", c["id"], "journal", c["turns"]),))
-    c["paused"] and entries.append((("pause", c["id"], OPERATOR),))
+    entries.append(
+      (("carried", c["id"], "journal", c["turns"], {k: t for k, t in c["values"].items() if t[LARGEST // 16 :]}),)
+    )
+    (c["paused"] or c["id"] in asking) and entries.append((("pause", c["id"], OPERATOR),))
   for x in data["acts"]:
-    "value" in x or put("prompt", x["id"], OPERATOR, x["on"], x["shape"], x["message"], x["to"])
-    "value" in x or (x["held"] and entries.append((("started", x["id"], x["held"]),)))
+    "value" in x or (
+      put("prompt", x["id"], OPERATOR, x["on"], x["shape"], x["message"], x["to"]),
+      x["held"] and entries.append((("started", x["id"], x["held"]),)),
+    )
   for kind, most in data["taken"].items():
     put(kind, f"{kind}{most + 1}")
   for x in data["acts"]:
@@ -579,18 +608,30 @@ def seed(data):
     )
   for c in data["chains"]:
     i, cut = c["id"], c["cut"] + [y["rung"] for y in c.get("again", ())]
+    loud = bool(c["lost"] or cut)
+    note = [
+      f'debug(t"The life goes on from a checkpoint. It lost {c["lost"] or "no name"}, and it cut {cut or "no act"}.")'
+    ]
     word = "\n".join(
       [
-        c["definitions"],
-        *(f"{named} = {text}" for named, text in c["values"].items()),
         HEARD,
-        f'debug(t"The life goes on from a checkpoint. It lost {c["lost"] or "no name"}, and it cut {cut or "no act"}.")',
+        c["definitions"],
+        *(
+          f"{named} = " + (f"eval(transcript(of='carried')[-1][4][{named!r}])" if text[LARGEST // 16 :] else text)
+          for named, text in c["values"].items()
+        ),
+        *(f"await rung({one!r})" for one in c.get("lives", ())),
+        *note[loud:],
+        KEPT,
+        *note[:loud],
       ]
-    ).strip()
-    put("rung", f"rung{numbers['rung'] + 1}", OPERATOR, i, word, "", "")
-    put("gate", gated := f"gate{numbers['gate'] + 1}", i, i, word)
-    entries.append((("done", gated, "gate", []),))
-  return entries
+    )
+    seat = f"rung{numbers['rung'] + 1}"
+    for maker, said in [(OPERATOR, word), *((seat, one) for one in c.get("lives", ()))]:
+      put("rung", f"rung{numbers['rung'] + 1}", maker, i, said, "", "")
+      put("gate", gated := f"gate{numbers['gate'] + 1}", i, i, said)
+      entries.append((("done", gated, "gate", []),))
+  return entries + [(("wake", y["id"], OPERATOR),) for y in data["chains"] if y["id"] in asking and not y["paused"]]
 
 
 def gathered(define, floor):
@@ -601,37 +642,34 @@ def gathered(define, floor):
   while get(f"chain{len(chains) + 1}"):
     chains.append(f"chain{len(chains) + 1}")
   asked = [get(h) for h in chains] + [x for h in chains for x in transcript(h) if question(x) and x[0] != "chain"]
-  asks = [x[1] for x in asked if x[0] == "prompt" and not over(x[1])]
   cut = sorted((x[1] for x in asked if x[0] == "run" and not over(x[1]) and get(x[4])), key=number)
   gone = {x[4] for x in asked if x[0] == "wants" and x[2] in cut and prompted(x[4]) and not over(x[1])}
-  asks = [x for x in asks if x not in gone]
-  live, values, lost, named = {ROOT, *map(scope, asks)}, {}, {}, set(asks)
-  while live - values.keys():
-    for c in sorted(live - values.keys(), key=number):
-      here, values[c], lost[c] = module(c), {}, []
-      for key, value in here.items():
-        if not (key.startswith("__") or callable(value) or globals().get(key, here) is value):
-          found = set()
-          try:
-            text = literal(value, found)
-          except RecursionError:
-            text = ""
-          if text:
-            values[c][key] = text
-            named |= found
-          else:
-            lost[c].append(key)
-    live |= {*map(scope, named)}
-  live = sorted(live, key=number)
+  asks = [x[1] for x in asked if x[0] == "prompt" and not over(x[1]) and x[1] not in gone]
+  values, lost, named = {}, {}, set(asks)
+  for c in chains:
+    here, values[c], lost[c] = module(c), {}, []
+    for key, value in here.items():
+      if not (key.startswith("__") or callable(value) or globals().get(key, here) is value):
+        found = set()
+        try:
+          text = literal(value, found)
+        except RecursionError:
+          text = ""
+        if text:
+          values[c][key] = text
+          named |= found
+        else:
+          lost[c].append(key)
   taken = dict(floor)
   for one in asked:
     taken[one[0]] = max(taken.get(one[0], 0), number(one[1]))
   verbs = ("prompt", "bash", "read", "write", "wait", "cd", "chance")
-  done = {x[1] for x in asked if x[0] == "bash" and scope(x[1]) in live}
-  borne = sorted((x for x in named | done if get(x)[0] in verbs), key=lambda r: (get(r)[0], number(r)))
+  words = {y[2] for y in (standing()[4:5] or [()])[0]}
+  done = {x[1] for x in asked if x[0] == "bash"}
+  borne = sorted((x for x in named - gone | done if get(x)[0] in verbs), key=lambda r: (get(r)[0], number(r)))
   stands = [x[1] for x in transcript(ROOT, "stand") if question(x) and over(x[1])][-1:]
   ticks = [x[1] for x in transcript(ROOT, "clock") if question(x) and isinstance(peek(x[1]), float)][-1:]
-  acts, asking = [], {scope(x) for x in borne if prompted(x)}
+  acts = []
   for one in [*stands, *ticks, *borne]:
     a = get(one)
     d = {"kind": a[0], "id": one, "on": a[3]}
@@ -644,7 +682,7 @@ def gathered(define, floor):
       cut.append(one)
       acts.append({**d, "value": Refused(one + " was interrupted: the life that ran it ended before it did")})
   out = []
-  for c in live:
+  for c in chains:
     a = get(c)
     saved = [
       x
@@ -653,14 +691,14 @@ def gathered(define, floor):
       and literal(x, set())
       and (not question(x) or x[0] == "reply" or x[1] in borne)
     ]
-    held = {ROOT, *live, *borne, *(x[1] for x in saved if question(x))}
+    held = {*chains, *borne, *(x[1] for x in saved if question(x))}
     out.append(
       {
         "id": c,
-        "on": a[3] if a[3] in live else "",
+        "on": a[3] if a[3] in chains else "",
         "label": a[4],
         "source": a[5],
-        "paused": c in asking or paused(c),
+        "paused": paused(c),
         "turns": [x for x in saved if x[0] not in ("started", "done") or x[1] in held],
         "definitions": "\n\n".join(
           filter(None, [define(w) for r, w in program(c).items() if (get(r) or [0] * 3)[2] != "extensions"])
@@ -668,6 +706,15 @@ def gathered(define, floor):
         "values": values[c],
         "lost": lost[c],
         "cut": [x for x in cut if scope(x) == c],
+        "lives": [
+          *dict.fromkeys(
+            get(r)[4]
+            for x in listening()
+            if scope(x) == c
+            for r in lineage(x)
+            if question(("rung", r)) and get(r)[4] in words
+          )
+        ],
       }
     )
   return {"taken": taken, "chains": out, "acts": acts}
@@ -698,6 +745,9 @@ def grant(usd: float | None = None, share: float | None = None, on="") -> Act[No
 def bash(
   command: str, stdin: str | None = "", timeout=TIMEOUT, ok=None, show: Show = TAIL, show_err: Show | None = None, on=""
 ) -> Act[Exit]:
+  if callable(ok):
+    raise Refused("no callable ok")
+
   def ear(id):
     yield opened(id, "Exit", command="" if show == HIDDEN else command)
     while True:
@@ -710,7 +760,7 @@ def bash(
               yield told(
                 id,
                 f"timed out after {timeout}s" if code is None else f"exited {code}",
-                stdout=cut(shown(out, show)),
+                stdout=cut(shown(out, show or TAIL)),
                 stderr=show_err and cut(shown(err, show_err)),
               )
           return
@@ -726,7 +776,7 @@ def bash(
     stdin,
     timeout,
     ok,
-    *[show, show_err] * ((show, show_err) != (TAIL, None)),
+    *[None if callable(one) else one for one in (show, show_err)] * ((show, show_err) != (TAIL, None)),
   )
 
 
@@ -982,7 +1032,7 @@ def controlled(ear, lasting=False):
 
 
 def boot(record=(), **outside):
-  global say, act, drive, get, peek, transcript
+  global say, act, drive, get, peek, transcript, listening
   get_running_loop()
   made, known, done, held, log, alive, born, busy, left, heed = Counter(), {}, {}, {}, [], {}, {}, set(), [], {}
   first, owned, taken = {e[1]: e for (e,) in record[::-1] if e[0] in ("started", "done")}, set(), {}
@@ -1198,6 +1248,9 @@ def boot(record=(), **outside):
     alive[name] = g
     hear(name, g, None)
     dispatch()
+
+  def listening():
+    return alive
 
   def get(about):
     return known.get(about)

@@ -1,4 +1,13 @@
-import { busy, type Loom, momentsOf, owedAt, type ThreadNode, weave } from "furb/life";
+import {
+  busy,
+  type ChainThread,
+  isDone,
+  type Loom,
+  momentsOf,
+  owedAt,
+  type ThreadNode,
+  weave,
+} from "furb/life";
 import type { Stage } from "../graph.ts";
 import { actorOf, joined, type LifeView, LoomPane, lifeViews } from "../overview.ts";
 import { styled } from "../ui.ts";
@@ -114,8 +123,17 @@ export const stage = part({
     this.stage.content = styled(joined(this.graph.rows(width, height)));
   },
 
-  /** A click on a row of the loom selects its chain, or answers for the row of the operator. The map takes no click. */
-  clickStage(row: number): void {
+  /** A click on a row of the loom selects its chain, or answers for the row of the operator, and a click on a program
+   * of the map selects its chain. */
+  clickStage(x: number, row: number): void {
+    if (this.lifeView === "graph") {
+      const chain = this.graph.at(x, row);
+      if (chain) {
+        this.graph.node = chain;
+        void this.selectAt(chain).catch(this.report);
+      }
+      return;
+    }
     if (this.lifeView !== "loom") return;
     const chain = this.loom.click(row);
     if (chain === "operator") this.question();
@@ -154,18 +172,18 @@ export const stage = part({
     const active = this.session.activeThread;
     const then = this.cursor;
     const stood = (node: ThreadNode) => then === undefined || node.thread.act.began <= then;
-    const find = (nodes: readonly ThreadNode[]): ThreadNode | undefined => {
+    const find = (nodes: readonly ThreadNode[], active: ChainThread): ThreadNode | undefined => {
       for (const node of nodes) {
-        const found = node.thread === active ? node : find(node.agents);
+        const found = node.thread.act.id === active.act.id ? node : find(node.agents, active);
         if (found) return found;
       }
       return undefined;
     };
-    const node = active && find(this.railTree());
+    const node = active && find(this.railTree(), active);
     if (!node || !stood(node)) return undefined;
     const chains = new Set<string>();
     const visit = (one: ThreadNode): void => {
-      chains.add(one.thread.act.on);
+      chains.add(one.thread.act.chain);
       for (const agent of one.agents) if (stood(agent)) visit(agent);
     };
     visit(node);
@@ -260,7 +278,8 @@ export const stage = part({
   },
 
   rungsDone(chain: string): number {
-    return this.session.acts.filter((act) => act.on === chain && act.kind === "rung" && act.done).length;
+    return this.session.acts.filter((act) => act.chain === chain && act.kind === "rung" && isDone(act))
+      .length;
   },
 
   /** Each chain that a step let run pauses again once a rung of it that the step let run ends. */

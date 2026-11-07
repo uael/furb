@@ -10,6 +10,7 @@
 use std::{
   cell::RefCell,
   collections::VecDeque,
+  env,
   future::{IntoFuture, poll_fn},
   marker::PhantomData,
   rc::Rc,
@@ -69,7 +70,7 @@ pub struct Thread<T> {
 
 impl<T> Clone for Thread<T> {
   fn clone(&self) -> Self {
-    Thread { id: self.id.clone(), chain: self.chain.clone(), shape: PhantomData }
+    Self { id: self.id.clone(), chain: self.chain.clone(), shape: PhantomData }
   }
 }
 
@@ -152,7 +153,7 @@ impl Open {
   async fn opened(self) -> Result<Life, Fault> {
     let mut opening = self.0;
     if opening.directory.is_empty() {
-      let here = std::env::current_dir().map_err(|no| Fault::refused(no.to_string()))?;
+      let here = env::current_dir().map_err(|no| Fault::refused(no.to_string()))?;
       opening.directory = here.display().to_string();
     }
     let asked = Rc::new(RefCell::new(VecDeque::new()));
@@ -441,7 +442,7 @@ impl Life {
   /// Wait until a condition of the life holds, which the life checks again each time that the engine moves.
   async fn until(
     &mut self,
-    mut holds: impl FnMut(&mut Life) -> Result<bool, Fault>,
+    mut holds: impl FnMut(&mut Self) -> Result<bool, Fault>,
   ) -> Result<(), Fault> {
     poll_fn(|cx| {
       if let Err(fault) = self.engine.pump(cx.waker()) {

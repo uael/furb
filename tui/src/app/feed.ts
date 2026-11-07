@@ -6,7 +6,10 @@ import {
   cancelled,
   earProgram,
   gist,
+  isDone,
+  type NoteRun,
   operated,
+  outcomeOf,
   type ProgramLine,
   pauseSaid,
   stepLines,
@@ -33,7 +36,6 @@ interface Note {
   act: ActRow;
   indent: number;
   tone: ReturnType<typeof threadTone>;
-  unread: boolean;
   /** The text that a search reads. */
   shown: string;
   /** What its card is made of, which changes when the row changes. */
@@ -88,8 +90,8 @@ export const feed = part({
     let order = 0,
       items = 0,
       group = "";
-    // The notes that the host names, one after another with no other card between them, wait here until a card of
-    // another kind or the end of the feed closes the run, which then draws as one block under one header.
+    // The notes of a run that the view names wait here until the last of them comes, which then draws as one block under
+    // one header.
     const run: Note[] = [];
     // A card that shows an item of the view says the text that the filter reads, and counts as an item once it shows.
     // A card of a done act names in same what its card is made of, and it is made again only when one of these, or
@@ -102,7 +104,6 @@ export const feed = part({
       body: (box: BoxRenderable) => void,
       options: BlockOptions & { shown?: string; same?: readonly unknown[] } = {},
     ) => {
-      flushNotes();
       if (options.shown !== undefined) {
         if (!matches(options.shown)) return;
         items++;
@@ -146,11 +147,11 @@ export const feed = part({
     };
     // The notes of a run draw as one card: one header, which counts them and the ones not yet seen, and one panel that
     // holds their rows one under the other, with no empty band between them. A run of one draws as it always did.
-    const drawNotes = (all: Note[]) => {
+    const drawNotes = (all: Note[], of?: NoteRun) => {
       const notes = all.filter((one) => matches(one.shown));
       const [first] = notes;
       if (!first) return;
-      if (notes.length === 1) {
+      if (!of || of.count === 1) {
         add(first.act.id, first.key, [], (box) => this.panel(box, first.tone).add(first.row()), {
           group: "user",
           heading: false,
@@ -162,17 +163,17 @@ export const feed = part({
         });
         return;
       }
-      const unread = notes.filter((one) => one.unread).length;
+      const unread = w.unreadNotes(of);
       const [dot, ink] = markOf("unread");
       const label: Part[] = [
         [`${glyph.prompt} `, c.faint],
         ["Notes", c.text, bold],
-        [`  ${notes.length}`, c.faint],
+        [`  ${of.count}`, c.faint],
         ...(unread ? [[`  ${dot} ${unread} unread`, ink] as Part] : []),
       ];
       add(
         first.act.id,
-        `notes\n${notes.map((one) => one.key).join("\n--\n")}`,
+        `notes\n${of.count}\n${unread}\n${notes.map((one) => one.key).join("\n--\n")}`,
         label,
         (box) => {
           const inner = this.panel(box, first.tone);
@@ -189,8 +190,9 @@ export const feed = part({
         },
       );
     };
+    let held: NoteRun | undefined;
     const flushNotes = () => {
-      if (run.length) drawNotes(run.splice(0));
+      if (run.length) drawNotes(run.splice(0), held);
     };
     if (w.preferences.notice)
       add("preferences-notice", w.preferences.notice, [], (box) => {
@@ -353,24 +355,15 @@ export const feed = part({
       const waiting = new Set(w.desk.asks.map((ask) => ask.id));
       const named = (chain: string) => w.labelOf(chain);
       const madeMap = () => index.made;
-      // A program is made again only when what it shows changed: a step, its word, its state, or an act of it, as its
-      // state and what its command printed. A new act on another thread leaves it as it was.
-      const stepOf = (rung: ActRow) => {
-        const acts = madeBy(rung.id);
-        let done = 0;
-        let printed = 0;
-        // The lines that a write added and removed come after the write, with the journal of its change, and its hint
-        // says them in place of its count of lines.
-        let counted = "";
-        for (const one of acts) {
-          if (one.done) done++;
-          printed += one.output ?? 0;
-          if (one.lines) counted += `${one.lines.added}/${one.lines.removed},`;
-        }
-        // The word of a step that runs can still come, and the word of a step that ended stays as it is.
-        const said = rung.done ? "" : (w.program[rung.id]?.length ?? 0);
-        return `${rung.id}:${rung.done}:${rung.run?.status ?? ""}:${said}:${acts.length}:${done}:${printed}:${counted}`;
-      };
+      // A program is made again only when what it shows changed: the session counts each time a snapshot changes a step,
+      // its word or an act of it, so the key holds those counts and no list of the fields that the drawing reads. A new
+      // act on another thread leaves it as it was.
+      const stepOf = (rung: ActRow) =>
+        [
+          rung.id,
+          w.revision(rung.id),
+          ...madeBy(rung.id).map((one) => `${one.id}.${w.revision(one.id)}`),
+        ].join(":");
       const liveOf = (ids: readonly string[]) =>
         ids
           .map((id) =>
@@ -395,12 +388,12 @@ export const feed = part({
       // What a step took and cost once it is done, and how long the line that waits has waited.
       // The cost stands on the header of a block alone, so a word that joins the block above it shows its time and no cost.
       const took = (step: ActRow, costs = true) =>
-        step.kind !== "rung" || !step.done
+        step.kind !== "rung" || !isDone(step)
           ? ""
           : [
               // A time under a millisecond is one that this life did not measure, as a step that it replayed.
               (w.took[step.id] ?? 0) < 1 ? "" : spell(w.took[step.id] ?? 0),
-              costs && step.cost ? dollars(step.cost) : "",
+              costs && step.spend ? dollars(step.spend.dollars) : "",
             ]
               .filter(Boolean)
               .join(" ");
@@ -517,7 +510,7 @@ export const feed = part({
           if (open?.kind === "code" && this.lineOpen(open) && open.acts.length)
             add(
               `opened-${id}-${at}`,
-              open.acts.map((one) => `${one.id}:${one.done}:${(one as ActRow).output ?? ""}`).join(" ") +
+              open.acts.map((one) => `${one.id}:${isDone(one)}:${(one as ActRow).output ?? ""}`).join(" ") +
                 this.theme,
               [],
               (box) => {
@@ -664,7 +657,7 @@ export const feed = part({
         sections.push({
           id: act.id,
           label: user ? [["You", tone]] : [[sent, c.faint]],
-          key: `${message}\n${sent}\n${plain(state)}\n${rest}\n${thread?.resolved}\n${meta}\n${news}\n${folded}\n${this.feedWidth}\n${this.theme}`,
+          key: `${message}\n${sent}\n${plain(state)}\n${rest}\n${thread?.over}\n${meta}\n${news}\n${folded}\n${this.feedWidth}\n${this.theme}`,
           ...(bar ? { bar } : {}),
           act,
           shown: message,
@@ -711,7 +704,11 @@ export const feed = part({
         // What a model answered stands as markdown with no line of color, since it is no message of the operator.
         const answerOf = (target: ActRow, id: string): Section => {
           const value =
-            typeof target.value === "boolean" ? (target.value ? "yes" : "no") : display(target.value);
+            typeof outcomeOf(target) === "boolean"
+              ? outcomeOf(target)
+                ? "yes"
+                : "no"
+              : display(outcomeOf(target));
           const model = String(target.words[2] || act.words[2] || "");
           return {
             id,
@@ -766,14 +763,15 @@ export const feed = part({
           const unseen = notice && w.unreadThread(act.id, [ask]);
           const pending = w.desk.asks.find((one) => one.id === ask.id);
           const aimed = Boolean(pending) && w.aimed?.id === ask.id;
-          const value = typeof ask.value === "boolean" ? (ask.value ? "yes" : "no") : display(ask.value);
+          const value =
+            typeof outcomeOf(ask) === "boolean" ? (outcomeOf(ask) ? "yes" : "no") : display(outcomeOf(ask));
           const short = !value.includes("\n") && Bun.stringWidth(value) < this.feedWidth - 24 - indent;
           // A long notice shows its first rows until a click opens it, as a long message does.
           const [shortened, rest] =
             notice && w.folds[`message:${ask.id}`] !== false ? this.firstRows(text, MESSAGE_ROWS) : [text, 0];
           return {
             id: `${act.id}-ask-${ask.id}`,
-            key: `${text}\n${notice}\n${unseen}\n${Boolean(pending)}\n${aimed}\n${ask.done ? value : ""}\n${rest}\n${this.feedWidth}\n${this.theme}`,
+            key: `${text}\n${notice}\n${unseen}\n${Boolean(pending)}\n${aimed}\n${isDone(ask) ? value : ""}\n${rest}\n${this.feedWidth}\n${this.theme}`,
             apart: true,
             act: ask,
             shown: text,
@@ -805,7 +803,7 @@ export const feed = part({
                     },
                   ),
                 );
-              else if (ask.done && !notice)
+              else if (isDone(ask) && !notice)
                 box.add(
                   short
                     ? this.text(
@@ -935,6 +933,7 @@ export const feed = part({
                   if (segment.length) {
                     const view = this.programView(segment, room, took, since, heads, digits, {
                       more: () => this.openWindow(where),
+                      key: `window:${where}`,
                     });
                     block.add(
                       window.opened
@@ -970,7 +969,7 @@ export const feed = part({
               if (open?.kind === "code" && this.lineOpen(open) && open.acts.length)
                 sections.push({
                   id: `${act.id}-opened-${index}-${at}`,
-                  key: `${open.acts.map((one) => `${one.id}:${one.done}:${(one as ActRow).output ?? ""}`).join(" ")}${this.theme}`,
+                  key: `${open.acts.map((one) => `${one.id}:${isDone(one)}:${(one as ActRow).output ?? ""}`).join(" ")}${this.theme}`,
                   body: (box) => {
                     const inner = this.box({ paddingLeft: space.between * 2, gap: space.stack });
                     for (const one of open.acts) this.actDetails(inner, one as ActRow);
@@ -986,7 +985,7 @@ export const feed = part({
           if (next) {
             // The answer of the thread stands where it came in time: before a message that came after it and opened the
             // thread again, so each message stands with its own answer.
-            if (answered && !placed && act.ended !== undefined && next.began > act.ended) {
+            if (answered && !placed && act.ended != null && next.began > act.ended) {
               sections.push(answerOf(act, `${act.id}-answer`));
               placed = true;
             }
@@ -1010,7 +1009,7 @@ export const feed = part({
             });
             // A message of a shape that asks an answer stands with its answer, after the code that answered it, so that
             // a thread holds pairs of a message and its answer.
-            if (next.done && next.words[0] !== "None" && !cancelled(next))
+            if (isDone(next) && next.words[0] !== "None" && !cancelled(next))
               waiting = answerOf(next, `${act.id}-say-${next.id}-answer`);
           }
         }
@@ -1019,7 +1018,7 @@ export const feed = part({
         if (answered && !placed) sections.push(answerOf(act, `${act.id}-answer`));
         // A message that a branch took is answered on its source, so the branch offers no reply to it.
         if (!w.host.reading && !taken.has(act.id) && !aside) {
-          const over = Boolean(thread?.resolved);
+          const over = Boolean(thread?.over);
           sections.push({
             id: `${act.id}-reply`,
             key: `reply\n${over}\n${w.target === act.id}\n${this.feedWidth}\n${this.theme}`,
@@ -1180,7 +1179,8 @@ export const feed = part({
         } else if (line.type === "value") {
           // A notice closes with nothing, which its panel says already.
           if (act.words[0] === "None") continue;
-          const value = typeof act.value === "boolean" ? (act.value ? "yes" : "no") : display(act.value);
+          const value =
+            typeof outcomeOf(act) === "boolean" ? (outcomeOf(act) ? "yes" : "no") : display(outcomeOf(act));
           const answered = asksOperator(act);
           const short = !value.includes("\n") && Bun.stringWidth(value) < this.feedWidth - 20 - indent;
           // The answer of a model closes its thread as the thread opened: a panel of its color, with the model and its
@@ -1277,9 +1277,7 @@ export const feed = part({
           if (act.kind === "grant") continue;
           programCard(
             act.id,
-            programFor(`act:${act.id}`, `${act.done}:${act.paused}:${act.output ?? 0}`, () =>
-              actLines(act, owed, named),
-            ),
+            programFor(`act:${act.id}`, String(w.revision(act.id)), () => actLines(act, owed, named)),
             indent,
             { frame: true, first: act.id, shown: act.id },
           );
@@ -1297,7 +1295,7 @@ export const feed = part({
               ? `wake from ${act.by}`
               : aside === "rung"
                 ? "your word"
-                : act.by === "operator"
+                : operated(act.by)
                   ? ""
                   : `from ${act.by}`;
           const opened = w.folds[act.id] === false;
@@ -1318,7 +1316,6 @@ export const feed = part({
             act,
             indent,
             tone,
-            unread,
             shown: message,
             key: `${message}\n${opened}\n${mark}\n${this.feedWidth}\n${this.theme}`,
             row: () => {
@@ -1334,12 +1331,18 @@ export const feed = part({
               return row;
             },
           };
-          // A prompt that the host names a note stands in the run of the notes around it. A prompt of None that no
-          // aside names stands alone, as the console closed it.
-          if (aside && aside !== "question") {
-            if (run[0] && run[0].indent !== indent) flushNotes();
+          // A prompt that the host names a note stands in the run that the view gives it, which draws once its last note
+          // came. A prompt of None that no aside names stands alone, as the console closed it.
+          const of = aside && aside !== "question" ? threadsOwn.runs.get(act.id) : undefined;
+          if (of) {
+            if (held !== of) flushNotes();
+            held = of;
             run.push(note);
-          } else drawNotes([note]);
+            if (of.prompts.at(-1)?.id === act.id) flushNotes();
+          } else {
+            flushNotes();
+            drawNotes([note]);
+          }
         } else if (asksOperator(act)) {
           const message = String(act.words[1] ?? "");
           const ask = w.desk.asks.find((one) => one.id === act.id);
@@ -1351,7 +1354,7 @@ export const feed = part({
             [
               [`${glyph.asks} `, waiting ? c.warning : c.faint],
               ["Question", c.text, bold],
-              [`  ${act.by === "operator" ? "for you" : `from ${act.by}`}`, c.faint],
+              [`  ${operated(act.by) ? "for you" : `from ${act.by}`}`, c.faint],
             ],
             (box) => {
               this.panel(box, waiting ? c.warning : c.border).add(this.markdown(message));

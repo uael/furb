@@ -230,16 +230,17 @@ The suite drives the engine through its public API alone, end to end, from the m
 ## The hygiene laws
 
 `test/test_hygiene.py` holds each contract and its suite to these laws, and it must stay green. The contracts are
-`engine.pyi`, whose suite is `test/`, and the contract of each extension, `extensions/<name>/<name>.pyi`, whose suite
-is the folder `test` beside it.
+`engine.pyi`, whose suite is `test/`, the contract of each official extension, `extensions/<name>/<name>.pyi`, and
+the contract of each extension of the project, `.furb/extensions/<name>/<name>.pyi`, each with the folder `test`
+beside it as its suite.
 
 1. Every sentence of a definition has exactly one test, in the file of that definition, whose docstring is that
    sentence. A constructor and a property are no definitions of their own: their sentences are the class's.
 2. Every test carries a sentence of the contract.
 3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
 4. The module docstring of each contract is empty.
-5. `engine.py`, minified with its program kept as it is, costs fewer than 9854 tokens of `o200k_base`, the
-   tokenizer of OpenAI, and the doctrine of furb, `DOCTRINE.md`, costs at most 1000. The test counts with `o200k_base`
+5. `engine.py`, minified with its program kept as it is, costs fewer tokens of `o200k_base`, the tokenizer of OpenAI,
+   than `BUDGET` of `script/tokens.py`, and the doctrine of furb, `DOCTRINE.md`, costs at most 1000. The test counts with `o200k_base`
    because it is local and the same on each machine: the tokenizer of Claude is not public, and only the network
    counts with it. The wall is a proxy for the cost to Claude, which reads about 1.5 tokens for each token of
    `o200k_base` in the engine.
@@ -259,8 +260,9 @@ file that its build reads changed, which the `cache-keys` of its `pyproject.toml
 python that the crate carries, and the extensions. So a change of `src/furb/engine.py` reaches the suite at the next
 `uv run`, after a build of a few seconds, and a short command can take minutes. To run with no sync, which builds
 nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
-A worktree holds no `.venv`: run one test file there with the `.venv/bin/python` of the main checkout, as
-`<main>/.venv/bin/python -m pytest -q <file> -p no:cacheprovider --no-cov`, which syncs nothing.
+`script/worktree.sh` makes the `.venv` of a new worktree, so run one test file there as
+`.venv/bin/python -m pytest -q <file> -p no:cacheprovider --no-cov`, which syncs nothing. Where the script could not make
+it, probe with the `.venv/bin/python` of the main checkout, which imports main and not your change.
 
 Set the timeout of each command, and the bound of each wait, to about twice the time that the step should take, never a
 round 600 or 900 seconds in case: a ceiling that is too large hides a hang for as long. Make a step that can take
@@ -297,26 +299,21 @@ fix what your change broke, and report what was broken before.
   `uv sync --reinstall-package furb-monty --reinstall-package furb-cli` builds them again in any case. This build,
   `cargo test` and `bun run build` take the dev profile, which optimizes every dependency, the interpreter among them,
   so a word runs as fast as in a release while the crates of the workspace build quickly. A wheel for PyPI takes the
-  release.
+  release. A build keeps no incremental state (`.cargo/config.toml`), so no folder grows in a worktree;
+  a rebuild of the crate takes about 45 s.
 - `script/worktree.sh <path> <branch> [base]`: make a git worktree whose build starts warm. It checks out a branch that
   stands on origin or in this clone, and moves a local branch that lags behind origin up to it; a new branch starts from
   `base`, `origin/main` by default. It copies on write the build directories of the checkout whose build stands nearest
   to the new commit, so cargo builds only the crates of the workspace again: the `target` of cargo, the `node_modules`
   of bun, the build of the TypeScript package and the cache of the tests of the TUI. Then it runs
   `bun install --offline` and `bun run build`. It sets `core.hooksPath` of the clone to `script/hooks` when no value
-  stands, so that the hooks of each worktree print only what fails. It does not copy `.venv`: run the `uv sync` that it prints, and before
-  that, probe with the `.venv/bin/python` of the main checkout. A first build takes about 6 minutes, against about 35 in
-  a worktree of `git worktree add`. Copy on write needs APFS, Btrfs or XFS; on another file system, the script makes a
+  stands, so that the hooks of each worktree print only what fails. It copies no `.venv`: it makes the `.venv` of the new tree with
+  `uv sync --locked` on the warm target, so the python of its hooks imports its own tree. That takes about 52 s in a new
+  tree, and next to no time when uv holds the wheel in its cache. If `uv` is missing or the sync fails, the script says
+  so and names the command to run. A first build takes about 6 minutes, against about 35 in a worktree of
+  `git worktree add`. Copy on write needs APFS, Btrfs or XFS; on another file system, the script makes a
   plain worktree. Remove a worktree with `git worktree remove --force <path>`, then `git branch -D <branch>`. The
   checkout at the root can stand behind `origin/main`, so read and change code in a worktree.
-- `sh script/build-slot.sh <command> [argument...]`: run a command that builds, as `cargo`, `bun run build`, `uv sync`,
-  `uv run pytest` or `git commit` (its hooks run cargo and the suite), in one of the slots of builds that all the
-  worktrees of the machine share, with at most 4 jobs of cargo. A slot is a folder of `/tmp/furb-build-slots-<uid>`
-  that holds the pid of its holder, and the slot of a holder that ended goes to the next build. `FURB_BUILD_SLOTS` sets
-  the slots (one for each 12 GB of memory, at least 1; `FURB_BUILD_MEM_GB` replaces the memory the machine reports),
-  `FURB_BUILD_JOBS` the cap of jobs (4), `FURB_BUILD_WAIT` the seconds to wait for a slot (1200, then exit 75) and
-  `FURB_BUILD_DIR` the folder. The workers of the conductor build only through it: with no cap, 28 rustc processes took
-  13.8 GB, and the machine ran out of memory.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
   whole.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
@@ -352,7 +349,7 @@ fix what your change broke, and report what was broken before.
   `--files <files>` to run some files. In a new worktree, `uv run --no-sync pre-commit` makes an empty `.venv` and runs
   the old `pre-commit` of the system, which cannot read the config, so do not use it there. A `git commit` runs the hooks, `cargo test`
   among them, and takes minutes: give it a timeout in `bash` of twice the time that it took last. The hook
-  `script/hooks/pre-commit`, which `git config core.hooksPath script/hooks` turns on, prints only what fails. The hook `script/hooks/pre-push` refuses each push that moves or deletes `main` of a remote: `main` changes only through the merge of a pull request, `gh pr merge`, which runs no hook here. A merge commit, which `git merge` makes or `git commit` ends after a conflict, runs the hooks on
+  `script/hooks/pre-commit`, which `git config core.hooksPath script/hooks` turns on, prints only what fails. The hook `script/hooks/commit-msg` refuses a commit whose title breaks the rules of `script/title.py`, which CI checks on the pull request, so that no commit is amended and pushed again. The hook `script/hooks/pre-push` refuses each push that moves or deletes `main` of a remote: `main` changes only through the merge of a pull request, `gh pr merge`, which runs no hook here. A merge commit, which `git merge` makes or `git commit` ends after a conflict, runs the hooks on
   each file that it changes against its first parent, as a commit does. Run the
   push as its own command after the commit, so that its result stands in the tail of that command. The hook `cargo test` runs only when a file that the crate
   or its tests read changed, and the gates run every hook on every file. The hook of the links runs only for a README or
@@ -409,12 +406,13 @@ fix what your change broke, and report what was broken before.
   in the root and in each package gives a plain run the limit of thirty seconds and the folders of the runner.
   `FURB_TEST_OUTPUT=1` shows all that each run wrote. The tests read the built package, so a build older than its
   sources, as after a switch of branch, fails them as they fail on main: the runner warns before the run and after a
-  failure, and `bun run build` makes the build again. The tests read the configs and the cache of `.furb/tests` of the
-  root, from any folder, not those of the machine. A plain `bun test` gives them that folder in process.env, which the
-  native part, reading the environment that the process started with, never sees: so each test that builds Preferences
-  or Workspaces gives them a config directory of its own, and the preload fails a test that changes a file of the config
-  directory of the machine, and names the file. As root, the test of a folder that cannot be read fails, since
-  root reads every folder.
+  failure, and `bun run build` makes the build again. The tests read the configs of `.furb/tests` of the root, and
+  their cache in `/tmp/furb-cache-<the first 8 hex digits of the sha256 of the root>`, or in the temporary folder on
+  Windows, from any folder, not those of the machine. A plain `bun test` gives them those folders in process.env,
+  which the native part, reading the environment that the process started with, never sees: so each test that builds
+  Preferences or Workspaces gives them a config directory of its own, and the preload fails a test that changes a file
+  of the config directory of the machine, and names the file. As root, the test of a folder that cannot be read fails,
+  since root reads every folder.
   A script of bun in `$TMPDIR` cannot import the package `furb`, so write a quick check in the worktree, where
   `node_modules` stands.
 - `bun run test scenarios`: the scenarios of `tui/scenarios`, the path of the owner end to end. A scripted claude
@@ -423,9 +421,14 @@ fix what your change broke, and report what was broken before.
   guards a defect that a life of the owner met, and fails on the commit before its fix. `bun run test` runs them with
   the other tests, on macOS and Linux, so they are a required check of each pull request. Each fix of a path of the
   operator adds a scenario that fails on the code before the fix.
+  `tui/scenarios/walk.ts` walks the TUI the same way for the audit of the skill converge-tui: each key of the table,
+  each shape of answer, the sizes, and the newest records of the project read-only, with probes that find a defect
+  in a frame with no judge. Its scenario holds only that the walk goes to its end.
 - `bun run demo` and `bun run tui`: the TUI on the demo session, which asks no model, or on a real life.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
-  `tui/src/commands.ts`.
+  `tui/src/commands.ts`. A change of the types of the N-API door, or of the keys and the commands, runs
+  `bun run build` and `bun run docs` before its commit: the CI fails when `bind/typescript/index.d.cts` or
+  `tui/README.md` is not what they make. No hook of pre-commit runs them, since the job of the hooks has no bun.
 - `bun run bench`: the speed of the TUI on two recorded lives of about 2.6 KB for each fact, one of about 160000 facts
   and one of a tenth of that: the cost of a new fact, the first frame, the frames while the feed scrolls and a command
   streams, and the memory on Linux. It fails over its budgets, which the docstring of `tui/script/bench.ts` gives in paces of the

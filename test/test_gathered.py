@@ -1,8 +1,8 @@
 """gathered, the data of a checkpoint of a life."""
 
-from conftest import born, settle, world_says
+from conftest import born, definitions, life, paragraphs, settle, sown, world_says
 from furb import engine
-from furb.engine import OPERATOR, Refused
+from furb.engine import LARGEST, OPERATOR, Refused
 
 WORD = """def f():
   return 1
@@ -52,14 +52,18 @@ async def test_taken_gives_the_highest_number_of_each_kind_that_an_act_of_a_chai
   assert data["taken"]["chain"] == 1
 
 
-async def test_chains_holds_the_root_the_chain_of_each_open_prompt_and_each_chain_that_a_plain_value_of_a_chain_in_chains_names_each_with_its_parent_its_label_its_source_whether_it_is_paused_its_turns_but_the_facts_made_what_define_gives_of_each_word_that_ran_on_it_the_text_that_binds_each_plain_value_of_its_module_again_the_names_of_the_other_values_and_the_acts_that_it_cut_each_word_that_ran_on_it_among_them() -> (
+async def test_chains_holds_each_chain_of_the_life_a_chain_at_rest_among_them_each_with_its_parent_its_label_its_source_whether_it_is_paused_its_turns_but_the_facts_made_what_define_gives_of_each_word_that_ran_on_it_the_text_that_binds_each_plain_value_of_its_module_again_the_names_of_the_other_values_and_the_acts_that_it_cut_each_word_that_ran_on_it_among_them() -> (
   None
 ):
-  """chains holds the root, the chain of each open prompt and each chain that a plain value of a chain in chains names, each with its parent, its label, its source, whether it is paused, its turns but the facts made, what define gives of each word that ran on it, the text that binds each plain value of its module again, the names of the other values, and the acts that it cut, each word that ran on it among them."""
+  """chains holds each chain of the life, a chain at rest among them, each with its parent, its label, its source, whether it is paused, its turns but the facts made, what define gives of each word that ran on it, the text that binds each plain value of its module again, the names of the other values, the acts that it cut, each word that ran on it among them, and each life word of the standing whose rung stands in the lineage of an act whose ear still hears on it at the tip, an open act or a done act with a lasting ear, as lives."""
   root, _ = await gather()
+  # A verb with no words makes an act that makes an open prompt, as name_session makes the prompt of its chain.
+  await engine.rung("with site.set(act('named', ROOT, None)):\n  named = prompt(str, 'Name?', to=OPERATOR)", on=root)
+  await settle()
   world_says("made", root, "an engine", 9, "1.0", "0.4.2", "its text", "the text of its Kernel")
   [one] = engine.gathered(lambda word: word, {"wait": 9})["chains"]
-  assert (one["id"], one["on"], one["label"], one["source"], one["paused"]) == (root, "", "root", "", True)
+  assert one["lives"] == []
+  assert (one["id"], one["on"], one["label"], one["source"], one["paused"]) == (root, "", "root", "", False)
   assert WORD in one["definitions"]
   assert one["values"]["k"] == "[1, 'x', {2: (3,)}]"
   assert one["values"]["shell"] == f"Act({value(root, 'shell')!r})"
@@ -67,6 +71,16 @@ async def test_chains_holds_the_root_the_chain_of_each_open_prompt_and_each_chai
   [run] = [x[1] for x in engine.transcript(root, "run") if not engine.over(x[1]) and x[5] == "await wait(600, asked)"]
   assert one["cut"] == [run, value(root, "later")] and "again" not in one
   assert {"bash", "prompt", "tell"} <= {x[0] for x in one["turns"]} and "made" not in {x[0] for x in one["turns"]}
+  rest = engine.chain("rest", source=root)
+  await engine.rung("small = 1", on=rest)
+  await settle()
+  was = paragraphs(engine.turns(on=rest))
+  data = engine.gathered(lambda word: word, {})
+  assert rest in [x["id"] for x in data["chains"]]
+  life(sown(), engine.seed(data))
+  await settle()
+  now = paragraphs(engine.turns(on=rest))
+  assert now[: len(was) - 1] == was[:-1] and now[len(was) - 1].startswith(was[-1]), (was, now)
 
 
 async def test_acts_holds_the_last_stand_the_last_clock_and_each_act_of_a_verb_that_a_value_names_or_that_is_a_command_of_a_chain_in_chains_an_act_that_is_over_with_its_value_an_open_prompt_with_its_shape_its_message_its_actor_and_the_ear_that_started_it_and_another_act_as_cut_with_a_refusal_that_says_why() -> (
@@ -90,3 +104,38 @@ async def test_gathered_is_a_view_it_makes_nothing_and_says_nothing() -> None:
   before = engine.transcript(root)
   engine.gathered(lambda word: word, {})
   assert engine.transcript(root) == before
+
+
+async def test_paused_says_whether_a_pause_stands_over_the_chain_at_the_tip_and_no_prompt_of_it_pauses_it_so_a_later_life_goes_on_as_the_tip_left_it() -> (
+  None
+):
+  """paused says whether a pause stands over the chain at the tip, and no prompt of it pauses it, so a later life goes on as the tip left it."""
+  root, data = await gather()
+  assert [x["paused"] for x in data["chains"]] == [False]
+  engine.pause(root)
+  [one] = engine.gathered(lambda word: word, {})["chains"]
+  assert one["paused"]
+
+
+async def test_chains_holds_each_plain_value_of_a_chain_whatever_its_size_and_seed_binds_a_large_one_from_the_carried_fact_of_its_chain_so_a_later_life_holds_it_exactly_and_no_turn_tells_it() -> (
+  None
+):
+  """chains holds each plain value of a chain whatever its size, and seed binds a large one from the carried fact of its chain, so a later life holds it exactly and no turn tells it."""
+  _, _, root = born()
+  rest = engine.chain("rest", source=root)
+  await engine.rung("big = 'x' * LARGEST\nran = Exit(0, Text('o', 'y' * LARGEST), Text('e', ''))\nsmall = 1", on=rest)
+  await settle()
+  big, ran = engine.module(rest)["big"], engine.module(rest)["ran"]
+  for _ in (1, 2):
+    data = engine.gathered(definitions, {})
+    [one] = [x for x in data["chains"] if x["id"] == rest]
+    assert (one["values"]["small"], {"big", "ran"} <= one["values"].keys(), one["lost"]) == ("1", True, [])
+    assert "LARGEST" not in one["definitions"]
+    entries = engine.seed(data)
+    assert all(len(str(word).encode()) < LARGEST // 8 for x in entries if x[0][0] == "rung" for word in x[0][4:5])
+    log, _ = life(sown(), entries)
+    await settle()
+    here = engine.module(rest)
+    assert (here["big"], here["ran"], here["small"], here["raised"]) == (big, ran, 1, None)
+    assert all(len(str(x).encode()) < LARGEST // 8 for x in log if x[0] == "tell")
+    assert not [x for x in log if x[0] == "tell" and " raised" in x[3][0].split("\n")[0]]

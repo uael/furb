@@ -2,14 +2,11 @@
 //! over the older HTTP with SSE, each act and each state, the controls that write the local scope, the changes that
 //! the ear tells, a login by OAuth, and a later life that replays its record and asks no server.
 
-#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
-
 use std::{
   collections::HashMap,
   fs,
   path::Path,
   sync::Arc,
-  thread,
   time::{Duration, Instant},
 };
 
@@ -20,6 +17,7 @@ use super::{
   fixture::{self, FIXTURE, PICTURE, STARTS},
   mcp, valued,
 };
+use crate::testing;
 use crate::{
   Ear, Engine, Fact, Object,
   ear::{ear, hear, say},
@@ -28,6 +26,10 @@ use crate::{
   verbs,
   world::images,
 };
+use std::env;
+#[cfg(unix)]
+use std::os::unix::fs as unix_fs;
+use std::process;
 
 /// The name of the test that runs the server of the tests over stdio, which the test program runs as a process.
 const SERVING: &str =
@@ -35,14 +37,14 @@ const SERVING: &str =
 
 #[test]
 fn the_test_program_is_the_server_of_the_tests_over_stdio_when_it_is_asked_to_be() {
-  if std::env::var_os(FIXTURE).is_some() {
+  if env::var_os(FIXTURE).is_some() {
     fixture::stdio();
   }
 }
 
 /// A directory of its own for one test, and empty.
-fn place(name: &str) -> crate::testing::Yard {
-  let at = crate::testing::Yard::new(format!("furb-mcp-{name}-{}", std::process::id()));
+fn place(name: &str) -> testing::Yard {
+  let at = testing::Yard::new(format!("furb-mcp-{name}-{}", process::id()));
   fs::create_dir_all(at.join("project")).unwrap();
   at
 }
@@ -56,7 +58,7 @@ fn config(path: &Path, value: &Value) {
 /// The definition of the server of the tests over stdio, which writes a line at each start in the file `starts` of a
 /// directory, with more keys.
 fn stdio(at: &Path, more: &Value) -> Value {
-  let exe = std::env::current_exe().unwrap().display().to_string();
+  let exe = env::current_exe().unwrap().display().to_string();
   let starts = at.join("starts").display().to_string();
   let mut server = json!({
     "command": exe,
@@ -88,7 +90,7 @@ fn settings(at: &Path, variables: &[(&str, &str)]) -> Settings {
   }
 }
 
-use crate::testing::block_on;
+use crate::testing::{block_on, pause};
 
 /// The ear that answers a stand with the operator alone, in the directory of the project.
 fn standing(at: &Path) -> Box<dyn Ear> {
@@ -156,7 +158,7 @@ fn until(engine: &mut Engine, mut holds: impl FnMut(&mut Engine) -> bool) {
   while !holds(engine) {
     assert!(Instant::now() < deadline, "the life did not come to what the test waits for");
     closed(engine, "close(1)").unwrap();
-    thread::sleep(Duration::from_millis(100));
+    pause(Duration::from_millis(100));
   }
 }
 
@@ -436,7 +438,7 @@ fn a_server_that_asks_for_a_login_needs_auth_until_a_login_by_oauth_and_refreshe
   );
   #[cfg(unix)]
   assert_eq!(
-    std::os::unix::fs::PermissionsExt::mode(&fs::metadata(&tokens).unwrap().permissions()) & 0o777,
+    unix_fs::PermissionsExt::mode(&fs::metadata(&tokens).unwrap().permissions()) & 0o777,
     0o600
   );
   assert_eq!(
@@ -496,7 +498,7 @@ fn the_process_of_a_server_over_stdio_ends_with_the_life() {
   let pid =
     fs::read_to_string(at.join("starts")).unwrap().split_whitespace().nth(1).unwrap().to_owned();
   let alive = |pid: &str| {
-    let got = std::process::Command::new("ps").args(["-o", "stat=", "-p", pid]).output().unwrap();
+    let got = process::Command::new("ps").args(["-o", "stat=", "-p", pid]).output().unwrap();
     let state = String::from_utf8_lossy(&got.stdout).trim().to_owned();
     !state.is_empty() && !state.starts_with('Z')
   };
@@ -505,7 +507,7 @@ fn the_process_of_a_server_over_stdio_ends_with_the_life() {
   let deadline = Instant::now() + Duration::from_secs(5);
   while alive(&pid) {
     assert!(Instant::now() < deadline, "the process {pid} outlived its life");
-    thread::sleep(Duration::from_millis(50));
+    pause(Duration::from_millis(50));
   }
 }
 

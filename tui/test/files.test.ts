@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 import { chmod, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { FilePicker } from "furb";
 import { projectFiles } from "../src/files.ts";
 
 /** Drop from this process the privileges to back up and restore files, and give the function that sets them back.
@@ -73,38 +74,58 @@ async function unreadable(folder: string): Promise<() => Promise<void>> {
   };
 }
 
-test("the project files leave out a folder that cannot be read, through rg and through the walk without rg", async () => {
+test("the project files leave out a folder that cannot be read, .git and what .gitignore hides, and list dot files", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-files-"));
   const project = join(directory, "project");
   let readable = async () => {};
   try {
     await mkdir(join(project, "src"), { recursive: true });
     await mkdir(join(project, "locked"));
+    await mkdir(join(project, ".git"));
+    await mkdir(join(project, "target"));
     await writeFile(join(project, "src/a.py"), "a = 1\n");
     await writeFile(join(project, "README.md"), "# Read me\n");
+    await writeFile(join(project, ".env"), "A=1\n");
+    await writeFile(join(project, ".gitignore"), "target/\n");
+    await writeFile(join(project, ".git/HEAD"), "ref: refs/heads/main\n");
+    await writeFile(join(project, "target/built.rs"), "");
     readable = await unreadable(join(project, "locked"));
     await expect(readdir(join(project, "locked"))).rejects.toThrow();
-    expect(await projectFiles(project)).toEqual(["README.md", "src/a.py"]);
-    // A process with no PATH finds no rg, so it walks the folders itself.
-    const walk = Bun.spawn(
-      [
-        process.execPath,
-        "-e",
-        `import { projectFiles } from ${JSON.stringify(join(import.meta.dir, "../src/files.ts"))};
-console.log(JSON.stringify(await projectFiles(${JSON.stringify(project)})));`,
-      ],
-      { env: { ...process.env, PATH: "" }, stdout: "pipe", stderr: "pipe" },
-    );
-    const [code, output, errors] = await Promise.all([
-      walk.exited,
-      new Response(walk.stdout).text(),
-      new Response(walk.stderr).text(),
-    ]);
-    expect(errors).toBe("");
-    expect(code).toBe(0);
-    expect(JSON.parse(output)).toEqual(["README.md", "src/a.py"]);
+    expect(await projectFiles(project)).toEqual([".env", ".gitignore", "README.md", "src/a.py"]);
   } finally {
     await readable();
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("a picker in a tree of 50000 files takes each key at once, and its rows come as its walk and its match end", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-picker-"));
+  try {
+    for (let folder = 0; folder < 500; folder++) {
+      await mkdir(join(directory, `folder${folder}`));
+      await Promise.all(
+        Array.from({ length: 100 }, (_, file) =>
+          writeFile(join(directory, `folder${folder}`, `file${file}.ts`), ""),
+        ),
+      );
+    }
+    // The keys come as fast as a test types them, from the open of the picker, while its walk runs.
+    const picker = new FilePicker(directory);
+    const waited: number[] = [];
+    let typed = "";
+    let found = picker.rows(50);
+    for (const key of "folder42/file7") {
+      typed += key;
+      const began = performance.now();
+      found = picker.find(typed, 50);
+      waited.push(performance.now() - began);
+    }
+    // A walk of the tree takes about 300 ms and a match of it about 20 ms, so a key that waited for one goes past this.
+    expect(Math.max(...waited)).toBeLessThan(250);
+    for (const until = Date.now() + 20_000; found.running && Date.now() < until; await Bun.sleep(10))
+      found = picker.rows(50);
+    expect(found.paths[0]).toBe("folder42/file7.ts");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 60_000);

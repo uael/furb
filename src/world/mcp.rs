@@ -65,6 +65,9 @@ use crate::{
   fact::Fact,
   value::{Fault, Object, ObjectRef},
 };
+use std::env;
+use std::time;
+use tokio::task;
 
 /// The kinds of the acts that the ear answers.
 const KINDS: [&str; 5] = ["mcp_servers", "mcp_call", "mcp_read", "mcp_prompt", "mcp_control"];
@@ -93,13 +96,13 @@ enum Kind {
 
 impl Kind {
   /// The act of a kind of [`KINDS`], or none.
-  fn of(kind: &str) -> Option<Kind> {
+  fn of(kind: &str) -> Option<Self> {
     match kind {
-      "mcp_servers" => Some(Kind::Servers),
-      "mcp_call" => Some(Kind::Call),
-      "mcp_read" => Some(Kind::Read),
-      "mcp_prompt" => Some(Kind::Prompt),
-      "mcp_control" => Some(Kind::Control),
+      "mcp_servers" => Some(Self::Servers),
+      "mcp_call" => Some(Self::Call),
+      "mcp_read" => Some(Self::Read),
+      "mcp_prompt" => Some(Self::Prompt),
+      "mcp_control" => Some(Self::Control),
       _ => None,
     }
   }
@@ -130,7 +133,7 @@ enum Error {
   #[error("the config of the server {server} denies its tool {tool}")]
   Denied { server: String, tool: String },
   #[error("{what} took more than {} seconds, so furb cancelled it", seconds(*bound))]
-  Late { what: String, bound: std::time::Duration },
+  Late { what: String, bound: time::Duration },
   #[error("{what} failed: {said}")]
   Request { what: String, said: String },
   /// A fault that the configs, the logins or the content of a server give as a text.
@@ -143,12 +146,12 @@ enum Error {
   #[error(transparent)]
   Vault(#[from] VaultError),
   #[error(transparent)]
-  Task(#[from] tokio::task::JoinError),
+  Task(#[from] task::JoinError),
 }
 
 impl From<String> for Error {
-  fn from(said: String) -> Error {
-    Error::Said(said)
+  fn from(said: String) -> Self {
+    Self::Said(said)
   }
 }
 
@@ -156,13 +159,13 @@ impl Settings {
   /// The settings of a life on the directory of a project, the config directory of the user and the directory of
   /// the images of the life: the tokens in the store of this machine, the browser of the system, and the variables
   /// of this process.
-  pub fn of(project: PathBuf, config: PathBuf, gallery: Option<PathBuf>) -> Settings {
-    Settings {
+  pub fn of(project: PathBuf, config: PathBuf, gallery: Option<PathBuf>) -> Self {
+    Self {
       vault: oauth::vault(&config),
       places: Places { config, project },
       gallery,
       opener: oauth::opener(),
-      variables: Arc::new(|name| std::env::var(name).ok()),
+      variables: Arc::new(|name| env::var(name).ok()),
     }
   }
 }

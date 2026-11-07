@@ -2,12 +2,16 @@ use std::{fs, path::PathBuf};
 
 use serde_json::{Value, json};
 
-use super::{Change, Error, Layer, Layers, Setting};
+use super::{Change, Error, Kind, Layer, Layers, Property, Setting};
+use crate::extension::{Places, load};
 use crate::world::catalog::blocking;
+use std::env;
+use std::path;
+use std::process;
 
 /// A project and a config directory of a user, each empty, in a folder of the test alone.
 fn place(name: &str) -> (PathBuf, Layers) {
-  let at = std::env::temp_dir().join(format!("furb-config-{name}-{}", std::process::id()));
+  let at = env::temp_dir().join(format!("furb-config-{name}-{}", process::id()));
   drop(fs::remove_dir_all(&at));
   fs::create_dir_all(at.join("project/.furb")).unwrap();
   fs::create_dir_all(at.join("user")).unwrap();
@@ -24,7 +28,29 @@ fn change(key: &[&str], value: Option<Value>, layer: Layer) -> Change {
 }
 
 fn setting(key: &[&str], value: Value, layer: Layer) -> Setting {
-  Setting { key: key.iter().map(|one| (*one).to_owned()).collect(), value, layer }
+  let key = key.iter().map(|one| (*one).to_owned()).collect();
+  Setting { key, value, layer: Some(layer), property: None, extension: None }
+}
+
+/// The key, the value and the layer of each setting, which the tests of the order read.
+fn won(layers: &Layers) -> Vec<(String, Value, Option<Layer>)> {
+  let settings = layers.get().unwrap().into_iter();
+  settings.map(|one| (one.key.join("."), one.value, one.layer)).collect()
+}
+
+/// An extension in a folder of the project, which the project config turns on, and whose manifest
+/// names the file of its keys.
+fn extension(at: &path::Path, name: &str, keys: &Value) {
+  let root = at.join("project/.furb").join(name);
+  fs::create_dir_all(&root).unwrap();
+  let manifest = format!(
+    "---\nname: {name}\ndescription: A test.\nmetadata:\n  furb-word: {name}.py\n  furb-config: keys.json\n---\n"
+  );
+  fs::write(root.join("SKILL.md"), manifest).unwrap();
+  fs::write(root.join(format!("{name}.py")), "").unwrap();
+  fs::write(root.join("keys.json"), keys.to_string()).unwrap();
+  let config = at.join("project/.furb/config.json");
+  fs::write(config, json!({"extensions": {name: name}}).to_string()).unwrap();
 }
 
 /// A change kept as a life keeps it, which a test of no runtime waits for.
@@ -54,15 +80,94 @@ fn the_configs_give_each_key_with_the_value_and_the_layer_that_win_for_it() {
     json!({"max_thinking_tokens": 2}).to_string(),
   )
   .unwrap();
+  let got = layers.get().unwrap();
+  assert!(got.contains(&setting(&["providers", "a"], json!(true), Layer::User)), "{got:?}");
+  assert!(got.contains(&setting(&["providers", "b"], json!(false), Layer::Project)), "{got:?}");
+  assert!(got.contains(&setting(&["extensions", "x"], json!("x"), Layer::Project)), "{got:?}");
+  let thinking = got.iter().find(|one| one.key == ["max_thinking_tokens"]).unwrap();
+  assert_eq!((&thinking.value, thinking.layer), (&json!(2), Some(Layer::Local)));
+  fs::remove_dir_all(at).unwrap();
+}
+
+#[test]
+fn the_keys_of_furb_come_first_with_their_defaults_and_each_object_with_its_names_after_it() {
+  let (at, layers) = place("schema");
+  fs::write(
+    at.join("project/.furb/config.json"),
+    json!({"other": 1, "providers": {"b": false}, "gate": false}).to_string(),
+  )
+  .unwrap();
   assert_eq!(
-    layers.get().unwrap(),
+    won(&layers),
     vec![
-      setting(&["max_thinking_tokens"], json!(2), Layer::Local),
-      setting(&["providers", "a"], json!(true), Layer::User),
-      setting(&["providers", "b"], json!(false), Layer::Project),
-      setting(&["extensions", "x"], json!("x"), Layer::Project),
+      ("gate".to_owned(), json!(false), Some(Layer::Project)),
+      ("max_thinking_tokens".to_owned(), json!(32768), None),
+      ("automatic".to_owned(), json!([]), None),
+      ("classes".to_owned(), json!({}), None),
+      ("providers".to_owned(), json!({"b": false}), None),
+      ("providers.b".to_owned(), json!(false), Some(Layer::Project)),
+      ("extensions".to_owned(), json!({}), None),
+      ("other".to_owned(), json!(1), Some(Layer::Project)),
     ]
   );
+  let gate = layers.get().unwrap().into_iter().next().unwrap();
+  assert_eq!(gate.property.map(|one| one.kind), Some(Kind::Boolean));
+  fs::remove_dir_all(at).unwrap();
+}
+
+#[test]
+fn an_extension_adds_the_keys_of_its_schema_under_its_name() {
+  let (at, layers) = place("extension");
+  let keys = json!({"properties": {
+    "folder": {"type": "string", "default": "notes", "description": "Where notes go."},
+    "mode": {"type": "string", "enum": ["a", "b"]},
+  }});
+  extension(&at, "notes", &keys);
+  set(&layers, change(&["notes", "mode"], Some(json!("b")), Layer::Local)).unwrap();
+  let got = layers.get().unwrap();
+  let folder = got.iter().find(|one| one.key == ["notes", "folder"]).unwrap();
+  assert_eq!(
+    (&folder.value, folder.layer, folder.extension.as_deref()),
+    (&json!("notes"), None, Some("notes"))
+  );
+  let property = Property {
+    kind: Kind::String,
+    default: json!("notes"),
+    description: "Where notes go.".to_owned(),
+    values: vec![],
+  };
+  assert_eq!(folder.property.as_ref(), Some(&property));
+  let mode = got.iter().find(|one| one.key == ["notes", "mode"]).unwrap();
+  assert_eq!((&mode.value, mode.layer), (&json!("b"), Some(Layer::Local)));
+  fs::remove_dir_all(at).unwrap();
+}
+
+#[test]
+fn a_value_that_the_property_of_its_key_does_not_take_is_refused_and_writes_nothing() {
+  let (at, layers) = place("kind");
+  extension(&at, "notes", &json!({"properties": {"mode": {"type": "string", "enum": ["a", "b"]}}}));
+  let before = fs::read_to_string(at.join("project/.furb/config.json")).unwrap();
+  let refused = set(&layers, change(&["gate"], Some(json!("no")), Layer::Project));
+  assert!(matches!(&refused, Err(Error::Value { key, .. }) if key == "gate"), "{refused:?}");
+  let refused = set(&layers, change(&["notes", "mode"], Some(json!("c")), Layer::Project));
+  assert_eq!(
+    refused.map_err(|no| no.to_string()),
+    Err(r#"The key notes.mode takes one of "a", "b", and "c" is not"#.to_owned())
+  );
+  assert_eq!(fs::read_to_string(at.join("project/.furb/config.json")).unwrap(), before);
+  set(&layers, change(&["gate"], None, Layer::Project)).unwrap();
+  fs::remove_dir_all(at).unwrap();
+}
+
+#[test]
+fn an_extension_that_takes_a_name_of_furb_does_not_load_and_names_no_key() {
+  let (at, layers) = place("clash");
+  extension(&at, "providers", &json!({"properties": {"x": {"type": "string", "default": "y"}}}));
+  let places = Places { config: at.join("user"), home: None };
+  let no = load("providers", &at.join("project/.furb/providers"), &places).unwrap_err();
+  assert!(no.message().contains("The name providers is a key of furb in the configs"));
+  let got = layers.get().unwrap();
+  assert!(got.iter().all(|one| one.extension.is_none() && one.key != ["providers", "x"]));
   fs::remove_dir_all(at).unwrap();
 }
 
@@ -129,4 +234,32 @@ fn a_key_of_no_name_or_of_three_names_is_refused_and_writes_nothing() {
   }
   assert!(!at.join("project/.furb/config.json").exists());
   fs::remove_dir_all(at).unwrap();
+}
+#[test]
+fn a_flag_on_an_object_that_is_no_provider_is_written_as_it_is() {
+  let (at, layers) = place("flag");
+  let project = at.join("project/.furb/config.json");
+  set(&layers, change(&["notes"], Some(json!({"folder": "journal"})), Layer::Project)).unwrap();
+  set(&layers, change(&["notes"], Some(json!(true)), Layer::Project)).unwrap();
+  assert_eq!(text(&project), json!({"notes": true}));
+  fs::remove_dir_all(at).unwrap();
+}
+
+#[test]
+fn an_extension_whose_file_of_keys_is_missing_or_no_schema_names_no_key_and_a_config_turns_it_off()
+{
+  for (name, keys) in [("broken", Some("{not json")), ("missing", None)] {
+    let (at, layers) = place(name);
+    extension(&at, name, &json!({"properties": {}}));
+    let file = at.join("project/.furb").join(name).join("keys.json");
+    match keys {
+      Some(text) => fs::write(&file, text).unwrap(),
+      None => fs::remove_file(&file).unwrap(),
+    }
+    assert!(layers.get().unwrap().iter().all(|one| one.extension.is_none()));
+    set(&layers, change(&["extensions", name], Some(json!(false)), Layer::Project)).unwrap();
+    let config = at.join("project/.furb/config.json");
+    assert_eq!(text(&config), json!({"extensions": {name: false}}));
+    assert!(layers.get().is_ok());
+  }
 }

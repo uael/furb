@@ -1,8 +1,6 @@
 //! The parts of a login by OAuth that the life of the ear does not show: a challenge, the store of the tokens in a
 //! file, the discovery of the endpoints, the refusals of a refresh, and the accounts of the Keychain.
 
-#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
-
 use std::future::Future;
 
 use reqwest::Client;
@@ -11,17 +9,20 @@ use super::{
   Endpoints, Filed, Keychain, Tokens, Vault, authority, challenged, protected, refreshed, store,
   stored,
 };
-use crate::testing::Yard;
+use crate::testing::{Yard, block_on};
 use crate::{ear::reactor, world::mcp::fixture};
+use std::process;
+#[cfg(unix)]
+use std::{fs, os::unix::fs as unix_fs};
 
 /// A directory of its own for one test, and empty.
 fn place(name: &str) -> Yard {
-  Yard::unmade(format!("furb-mcp-oauth-{name}-{}", std::process::id()))
+  Yard::unmade(format!("furb-mcp-oauth-{name}-{}", process::id()))
 }
 
 /// What a work on the reactor came to.
 fn reacted<T: Send + 'static>(work: impl Future<Output = T> + Send + 'static) -> T {
-  futures::executor::block_on(reactor().spawn(work)).unwrap()
+  block_on(reactor().spawn(work)).unwrap()
 }
 
 /// Tokens of the tests, refreshed at an endpoint.
@@ -64,8 +65,8 @@ fn a_file_of_tokens_keeps_each_by_its_key_and_only_the_user_reads_it() {
   assert_eq!(stored(&vault, "s"), Some(held));
   #[cfg(unix)]
   assert_eq!(
-    std::os::unix::fs::PermissionsExt::mode(
-      &std::fs::metadata(yard.join("mcp-tokens.json")).unwrap().permissions()
+    unix_fs::PermissionsExt::mode(
+      &fs::metadata(yard.join("mcp-tokens.json")).unwrap().permissions()
     ) & 0o777,
     0o600
   );

@@ -6,8 +6,10 @@ export const projects: Record<string, Record<string, string>> = {
     "README.md":
       "# Atlas\n\nMap tiles for a web page.\n\n- Fetch a tile\n- Keep it for later\n- Work with no network\n",
     "src/tiles.ts":
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: the text is the source of a file of the demo project, which holds a template literal
       "export interface Tile {\n  z: number;\n  x: number;\n  y: number;\n}\n\nexport const url = (tile: Tile) => `https://tiles.example.com/${tile.z}/${tile.x}/${tile.y}.png`;\n\nexport async function fetchTile(tile: Tile): Promise<Uint8Array> {\n  const response = await fetch(url(tile));\n  if (!response.ok) throw new Error(`tile ${tile.z}/${tile.x}/${tile.y}: ${response.status}`);\n  return new Uint8Array(await response.arrayBuffer());\n}\n",
     "src/cache.ts":
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: the text is the source of a file of the demo project, which holds a template literal
       'import type { Tile } from "./tiles.ts";\n\nconst kept = new Map<string, Uint8Array>();\nconst key = (tile: Tile) => `${tile.z}/${tile.x}/${tile.y}`;\n\nexport const get = (tile: Tile) => kept.get(key(tile));\nexport const put = (tile: Tile, bytes: Uint8Array) => void kept.set(key(tile), bytes);\n',
     "test/tiles.test.ts":
       'import { expect, test } from "bun:test";\nimport { url } from "../src/tiles.ts";\n\ntest("a tile has one address", () => {\n  expect(url({ z: 3, x: 4, y: 5 })).toBe("https://tiles.example.com/3/4/5.png");\n});\n',
@@ -16,6 +18,7 @@ export const projects: Record<string, Record<string, string>> = {
     "README.md":
       "# Marlin API\n\nThe service behind the Marlin app.\n\n- GET /boats\n- GET /boats/:id\n- POST /boats\n",
     "src/routes.ts":
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: the text is the source of a file of the demo project, which holds a template literal
       'export const routes = [\n  { method: "GET", path: "/boats" },\n  { method: "GET", path: "/boats/:id" },\n  { method: "POST", path: "/boats" },\n];\n\nexport function list(page = 1, size = 20) {\n  const all = Array.from({ length: 95 }, (_, id) => ({ id, name: `boat ${id}` }));\n  return all.slice(page * size, (page + 1) * size);\n}\n',
     "src/limits.ts":
       "const hits = new Map<string, number[]>();\n\nexport function allow(client: string, now = Date.now(), per = 60_000, most = 100): boolean {\n  const recent = (hits.get(client) ?? []).filter((at) => now - at < per);\n  recent.push(now);\n  hits.set(client, recent);\n  return recent.length <= most;\n}\n",
@@ -32,6 +35,7 @@ export const projects: Record<string, Record<string, string>> = {
     "site.css":
       "body { font: 16px system-ui; margin: 2rem auto; max-width: 40rem; }\na { color: #0b57d0; }\n",
     "build.ts":
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: the text is the source of a file of the demo project, which holds a template literal
       'import { readFileSync, writeFileSync } from "node:fs";\n\nconst page = (title: string, body: string) =>\n  `<!doctype html><title>${title}</title><link rel="stylesheet" href="site.css">${body}`;\n\nwriteFileSync("pricing.html", page("Pricing", readFileSync("pricing.md", "utf8")));\n',
   },
 };

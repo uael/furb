@@ -35,11 +35,13 @@ async def test_checked_waits_for_a_check_no_pending_and_no_open_run(pulling: Ben
 
 async def test_checked_writes_a_line_at_each_beat(pulling: Bench) -> None:
   """Its command writes one short line each every seconds while it waits, so its chain says a fact."""
-  github(pulling, [], [])
-  await pulling.value("await checked(5, bound=2, every=0.2)")
+  github(pulling, [{"name": "a", "bucket": "pass", "link": ""}], [{"status": "completed", "workflowName": "gates"}])
+  pulling.say(r"^pr checks 5 --json bucket", [], times=2)
+  assert (await pulling.value("await checked(5, bound=60, every=0.2)"))[0] == "pass"
   [ran] = [x[1] for x in said(pulling.log, "bash") if "gh pr checks" in str(x[4])]
   beats = pulling.engine.peek(ran).stderr.lines
-  assert len(beats) >= 2 and all(x.startswith("waits ") for x in beats)
+  polls = [x for x in pulling.gh() if x.startswith("pr checks 5 --json bucket")]
+  assert len(beats) == 2 and len(polls) == 3 and all(x.startswith("waits ") for x in beats)
 
 
 async def test_checked_names_what_pends_at_the_bound(pulling: Bench) -> None:

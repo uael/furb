@@ -2,23 +2,27 @@
 //! code or with none: the folders of skills on the disk, the extensions of the project and of the
 //! configs, and the official extensions that the crate carries. It answers the act `skill`, which
 //! loads a skill on a chain, and a write of `skills://` and a name, which writes the word of a
-//! skill. [`process`] gives the program of the process of a skill, which a daemon runs.
+//! skill, and a read of `settings://`, which gives the keys of a skill in the configs, so its word
+//! reads them. [`process`] gives the program of the process of a skill, which a daemon runs.
 
 use std::{
-  fs,
+  env, fs, io,
   path::{Component, Path, PathBuf},
 };
+
+use serde_json::{Map, Value};
 
 use crate::{
   ear::{Co, Ear, hear, hearing, say},
   engine::ROOT,
   extension::{
-    DEFAULT, ENABLE, Extension, INTERFACE, MANIFEST, PROCESS, Places, WORD, copy, enabled,
+    CONFIG, DEFAULT, ENABLE, Extension, INTERFACE, MANIFEST, PROCESS, Places, WORD, copy, enabled,
     frontmatter, imports_furb, load, manifested, manifests, shipped, turned_on, word,
   },
   fact::Fact,
   value::{Fault, Object, Text, entry},
   world::{
+    config::{self, Layers},
     files::{self, read},
     here,
   },
@@ -27,11 +31,17 @@ use crate::{
 /// The scheme of the paths that the ear serves.
 const SCHEME: &str = "skills://";
 
+/// The scheme of the values of the configs, which a word reads: `settings://` gives each key with
+/// the value that wins for it, and `settings://` and a name the value of that key, as the object of
+/// the keys of a skill.
+const CONFIGS: &str = "settings://";
+
 /// The first line of the index, which says how a chain loads and reads a skill.
 const USE: &str = "skill(name) loads a skill: a skill with code plays its word and tells its \
                    interface, and any other tells its SKILL.md. skill() plays each default skill. \
                    read(\"skills://<name>\") gives the word of a skill with code, and \
-                   read(\"skills://<name>/<file>\") a file of its folder.";
+                   read(\"skills://<name>/<file>\") a file of its folder. \
+                   read(\"settings://<name>\") gives the keys of a skill in the configs, as JSON.";
 
 /// Where the files of a skill stand: a folder on the disk, the files that the crate carries of an
 /// official extension.
@@ -54,13 +64,13 @@ struct Skill {
 impl Skill {
   /// The skill that the text of a manifest gives, under the name of its folder when the frontmatter
   /// gives none.
-  fn of(text: &str, folder: &str, place: Place) -> Skill {
+  fn of(text: &str, folder: &str, place: Place) -> Self {
     let front = frontmatter(text);
     let name = front.field("name").unwrap_or(folder).to_owned();
     let description = front.field("description").unwrap_or_default().to_owned();
     let word = front.meta(WORD).map(str::to_owned);
     let default = front.meta(DEFAULT) == Some("true");
-    Skill { name, description, word, default, manifest: text.to_owned(), place }
+    Self { name, description, word, default, manifest: text.to_owned(), place }
   }
 
   /// The line of the index of the skill: its name, the marks that hold of code, on and default,
@@ -123,7 +133,8 @@ impl Seen {
 /// that word, and with the SKILL.md file of a skill with none. The act with no name plays each
 /// default skill that the life does not run. A write of `skills://` and a name writes the word of a
 /// skill with code in `.furb/extensions` of the project, and says the fact enable again when the
-/// life runs it, which reloads it. It finds the skills in `.furb/skills`, `.agents/skills` and
+/// life runs it, which reloads it. A read of `settings://` gives the values of the configs, as
+/// [`configs`] says. It finds the skills in `.furb/skills`, `.agents/skills` and
 /// `.claude/skills` of the working directory of the chain and of each folder above it, nearest
 /// first, then in `skills` of the config directory of the user, then in the folders of the
 /// extensions of the project in `.furb/extensions` and of each folder that a config turns on, then
@@ -140,15 +151,19 @@ pub fn skills(config: PathBuf) -> Box<dyn Ear> {
         "write" => a.word(1).and_then(Text::of).map(|one| one.path),
         _ => Some(SCHEME.to_owned()),
       };
-      let Some(asked) = path.as_deref().and_then(|one| one.strip_prefix(SCHEME)) else { continue };
+      let configured =
+        a.kind() == "read" && path.as_deref().is_some_and(|one| one.starts_with(CONFIGS));
+      let scheme = if configured { CONFIGS } else { SCHEME };
+      let Some(asked) = path.as_deref().and_then(|one| one.strip_prefix(scheme)) else { continue };
       let asked = asked.to_owned();
       let here = here(&mut co, a.on()).await?;
       let project = project(&mut co).await?.unwrap_or_else(|| here.clone());
-      let places = Places { config: config.clone(), home: std::env::home_dir() };
+      let places = Places { config: config.clone(), home: env::home_dir() };
       let found = found(&here, &project, &places);
       let runs = enables(&mut co).await?;
       let seen = Seen { chain: a.on().to_owned(), found, runs, places, project };
       let answer = match a.kind() {
+        "read" if configured => configs(&seen, &asked),
         "read" => answered(&seen, &asked),
         "skill" => {
           let name = a.word(1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
@@ -184,6 +199,42 @@ fn answered(seen: &Seen, asked: &str) -> Result<Text, Fault> {
     (None, Place::Folder(folder)) => read(&folder.join(MANIFEST)),
     (None, _) => Ok(Text::new(path, one.manifest.clone())),
   }
+}
+
+/// The answer of a read of `settings://` and what follows it: the value of each key of the
+/// configs as one JSON object, or the value of the key of a name. The keys of a skill whose
+/// manifest names a file of keys under `furb-config` come with the default of each key that no
+/// config gives, whether the configs turn the skill on or a folder of skills holds it, and a skill
+/// whose keys no config gives comes as an empty object. Any other name that no config gives and no
+/// schema names is refused.
+fn configs(seen: &Seen, asked: &str) -> Result<Text, Fault> {
+  let path = format!("{CONFIGS}{asked}");
+  let refused = |no: config::Error| Fault::refused(no.to_string());
+  let mut values =
+    Layers::new(&seen.project, Some(seen.places.config.clone())).values().map_err(refused)?;
+  if asked.is_empty() {
+    return Ok(Text::new(path, json(&Value::Object(values))));
+  }
+  let mut value = values.remove(asked);
+  if let Some(one) = seen.found.iter().find(|one| one.name == asked) {
+    let within = value.get_or_insert_with(|| Value::Object(Map::new()));
+    if let Some(file) = frontmatter(&one.manifest).meta(CONFIG)
+      && let Value::Object(within) = within
+    {
+      let text = filed(one, file, &path)?.content;
+      for (key, default) in config::defaults(asked, &text).map_err(refused)? {
+        within.entry(key).or_insert(default);
+      }
+    }
+  }
+  let value = value
+    .ok_or_else(|| Fault::refused(format!("No config gives {path}, and no schema names it.")))?;
+  Ok(Text::new(path, json(&value)))
+}
+
+/// A value as the JSON text that a word reads, one key on each line.
+fn json(value: &Value) -> String {
+  serde_json::to_string_pretty(value).unwrap_or_default()
 }
 
 /// The answer of the act `skill`: the prose and the interface or the code of a skill with code,
@@ -224,12 +275,15 @@ fn loaded(co: &mut Co, seen: &Seen, name: &str) -> Result<Text, Fault> {
 /// The answer of a write of `skills://` and a name: the word of a skill with code written in the
 /// folder of the skill in `.furb/extensions` of the project, after a copy of its folder there when
 /// it stands elsewhere, with the imports of furb that the top of its file holds. The fact enable
-/// with the new word reloads the skill when the life runs it.
+/// with the new word reloads the skill when the life runs it. A word that the skill refuses, as one
+/// that binds a name of the engine at its top, changes no file, and no copy of the folder stands.
 fn written(co: &mut Co, seen: &Seen, name: &str, content: &str) -> Result<Text, Fault> {
   let one = seen.named(name)?;
   let Some(file) = one.word.as_deref() else {
     return Err(Fault::refused(format!("The skill {name} has no code to write.")));
   };
+  let given = content.trim_matches('\n');
+  manifested(&one.manifest, |_| Ok(given)).map_err(Fault::refused)?;
   let target = seen.project.join(".furb").join("extensions").join(name);
   let stays = matches!(&one.place, Place::Folder(folder) if *folder == target);
   if !stays {
@@ -242,7 +296,6 @@ fn written(co: &mut Co, seen: &Seen, name: &str, content: &str) -> Result<Text, 
     .take_while(|line| line.is_empty() || imports_furb(line) || line.starts_with([' ', ')']))
     .collect();
   let imports = imports.join("\n").trim_end().to_owned();
-  let given = content.trim_matches('\n');
   let whole =
     if imports.is_empty() { format!("{given}\n") } else { format!("{imports}\n\n\n{given}\n") };
   fs::write(&at, whole).map_err(|no| Fault::refused(format!("{no}: {}", at.display())))?;
@@ -256,7 +309,7 @@ fn written(co: &mut Co, seen: &Seen, name: &str, content: &str) -> Result<Text, 
 /// Each file of the folder of a skill, and the files that the crate carries of an official one,
 /// copied in a folder.
 fn copied(one: &Skill, target: &Path) -> Result<(), Fault> {
-  let failed = |no: std::io::Error| Fault::refused(format!("{no}: {}", target.display()));
+  let failed = |no: io::Error| Fault::refused(format!("{no}: {}", target.display()));
   fs::create_dir_all(target).map_err(failed)?;
   match &one.place {
     Place::Folder(folder) => {

@@ -63,6 +63,9 @@ pub struct Fold {
   live: BTreeMap<u64, String>,
   /// The acts that the fact that the fold hears changed, in order.
   moved: Vec<String>,
+  /// Each pause and each wake that the fold heard, in order, which [`Fold::recorded`] reads to find
+  /// what a pause or a wake covers and the pause that holds a new act.
+  pauses: Vec<Value>,
 }
 
 impl Fold {
@@ -76,6 +79,68 @@ impl Fold {
   pub fn open(&self, pausing: bool) -> Vec<String> {
     let acts = self.live.values().filter_map(|id| self.acts.get(id));
     acts.filter(|act| act.pause.is_some() != pausing).map(|act| act.id.clone()).collect()
+  }
+
+  /// The acts that a fact of a record changes, each as it stands after the fact, for a reader with
+  /// no engine: the fold finds itself, as the engine does, each live act that a pause or a wake
+  /// covers, and the last pause or wake that covers a new act, so a record folds as its life did.
+  pub fn recorded(&mut self, fact: &Value) -> Vec<Act> {
+    let text = |at: usize| fact.get(at).and_then(Value::as_str).unwrap_or_default();
+    let (kind, about, by) = (text(0), text(1), text(2));
+    if named(about, kind) {
+      let on = text(3);
+      let chain = if kind == "chain" { about } else { self.chain_of(on).unwrap_or(on) };
+      let covers = |of: &str| {
+        of == about
+          || (kind == "prompt" && self.reaches(of, on))
+          || self.lineage_reaches(of, by)
+          || chain == of
+      };
+      let last =
+        self.pauses.iter().rev().find(|one| one.get(1).and_then(Value::as_str).is_some_and(covers));
+      let born = last.and_then(Pause::of);
+      return self.hear(fact, &[], born);
+    }
+    if matches!(kind, "pause" | "wake") {
+      let open = self.open(kind == "pause");
+      let covered: Vec<String> = open.into_iter().filter(|id| self.covers(about, id)).collect();
+      return self.hear(fact, &covered, None);
+    }
+    self.hear(fact, &[], None)
+  }
+
+  /// Whether a pause or a wake of `of` covers an act, as the engine finds: the act or a maker of it
+  /// is `of`, or stands on `of` through the prompts that it was made on, or its chain is `of`.
+  fn covers(&self, of: &str, id: &str) -> bool {
+    self.lineage_reaches(of, id) || self.chain_of(id) == Some(of)
+  }
+
+  /// Whether an act or a maker of it reaches `of` through the prompts that it stands on.
+  fn lineage_reaches(&self, of: &str, id: &str) -> bool {
+    let mut name = Some(id);
+    for _ in 0..=self.acts.len() {
+      let Some(one) = name else { return false };
+      if self.reaches(of, one) {
+        return true;
+      }
+      name = self.acts.get(one).map(|act| act.by.as_str());
+    }
+    false
+  }
+
+  /// Whether a name is `of`, or a prompt that stands on `of` through the prompts it was made on.
+  fn reaches(&self, of: &str, name: &str) -> bool {
+    let mut name = name;
+    for _ in 0..=self.acts.len() {
+      if name == of {
+        return true;
+      }
+      match self.acts.get(name) {
+        Some(act) if act.kind == Kind::Prompt => name = &act.on,
+        _ => return false,
+      }
+    }
+    false
   }
 
   /// The acts that a fact changes, each as it stands after the fact. `covered` names each live act
@@ -117,6 +182,10 @@ impl Fold {
       }
       Kind::Reply => {
         let reply = Reply { chain: on.clone(), actor: text(1), maker: by.to_owned() };
+        if let Some(maker) = self.acts.get_mut(by).filter(|act| act.kind == Kind::Rung) {
+          maker.asking = true;
+          self.moved.push(by.to_owned());
+        }
         self.replies.insert(id.to_owned(), reply);
       }
       _ => {}
@@ -134,6 +203,7 @@ impl Fold {
       pause: born.filter(|_| followed),
       run,
       word: None,
+      asking: false,
       began: self.clock,
       ended: None,
       spend: None,
@@ -176,6 +246,7 @@ impl Fold {
   fn said(&mut self, [kind, about, by]: [&str; 3], fact: &Value, covered: &[String]) {
     match kind {
       "pause" | "wake" => {
+        self.pauses.push(fact.clone());
         let pause = Pause::of(fact);
         for id in covered {
           if let Some(act) = self.acts.get_mut(id) {
@@ -217,6 +288,10 @@ impl Fold {
   /// the run of a word ends its rung, and the act ends with its value.
   fn done(&mut self, about: &str, value: Value) {
     if let Some(reply) = self.replies.remove(about) {
+      if let Some(maker) = self.acts.get_mut(&reply.maker).filter(|act| act.asking) {
+        maker.asking = false;
+        self.moved.push(reply.maker.clone());
+      }
       let usage = value.get(2).and_then(Value::as_array);
       if let Some(usage) = usage {
         let part = |at: usize| usage.get(at).and_then(Value::as_f64).unwrap_or_default();
@@ -406,3 +481,7 @@ fn python(said: &str) -> Option<String> {
   }
   Some(out)
 }
+
+#[cfg(test)]
+#[path = "fold.test.rs"]
+mod test;

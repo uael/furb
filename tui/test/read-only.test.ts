@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
 import { retold } from "furb";
+import { refusal } from "../script/refusal.ts";
 import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { Preferences } from "../src/preferences.ts";
@@ -256,6 +257,9 @@ test("a close in the record ends the work it closed without ending truncated wor
     expect(closed).toMatchObject({ done: true });
     expect(closed?.unfinished).toBeUndefined();
     expect(reader.activity.acts.get("rung2")).toMatchObject({ done: false, unfinished: true });
+    // The crate folds the end that the close gave too, so the thread that the close ended is over in the sidebar.
+    const [node] = reader.meaning.threads("chain1").threads;
+    expect([node?.thread.prompt, node?.thread.over, node?.state]).toEqual(["prompt1", true, "done"]);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -404,6 +408,25 @@ test("a record with no journal gains no journal when its replay drifts", async (
       await open.close();
     }
     expectKept(await folder(record), before);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("the step of the capture of a slice that plays the refusal of a record open to read passes on a small recorded life", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-reading-refusal-"));
+  try {
+    const record = await lived(directory, "refusal");
+    await drifting(record);
+    const open = await shown(record, directory, 120);
+    try {
+      open.app.render();
+      open.app.closeOverlay();
+      await refusal(open.screen, open.app);
+      expect(open.app.composer.plainText).toBe("");
+    } finally {
+      await open.close();
+    }
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

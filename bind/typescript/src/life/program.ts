@@ -1,8 +1,7 @@
-import { type Exit, failed, type LiveAct, operated } from "./acts.js";
+import { type Act, type Exit, failed, isDone, operated, outcomeOf } from "./acts.js";
 import { type Chip, tailOf, valueText } from "./ladder.js";
 import { unmarked } from "./marks.js";
 import { reason } from "./plain.js";
-import { actState } from "./states.js";
 
 /** One line of the program of a thread, as the feed shows it.
  *
@@ -22,21 +21,21 @@ import { actState } from "./states.js";
 export type ProgramLine =
   | {
       kind: "code";
-      step: LiveAct;
+      step: Act;
       number: number;
       display: number;
       text: string;
-      acts: LiveAct[];
+      acts: Act[];
       runs: boolean;
       fails?: string;
       hint: string;
-      awaits?: { act: LiveAct; display: number };
+      awaits?: { act: Act; display: number };
       awaited?: number;
     }
-  | { kind: "output"; step: LiveAct; act: LiveAct; text: string }
-  | { kind: "writes"; step: LiveAct; display: number; text: string }
-  | { kind: "note"; step: LiveAct; text: string }
-  | { kind: "earlier"; step: LiveAct; count: number; text: string };
+  | { kind: "output"; step: Act; act: Act; text: string }
+  | { kind: "writes"; step: Act; display: number; text: string }
+  | { kind: "note"; step: Act; text: string }
+  | { kind: "earlier"; step: Act; count: number; text: string };
 
 /** The verbs whose acts stand on the line that calls them. */
 const followed = new Set(["bash", "read", "write", "prompt", "chain", "wait", "rung", "grant", "cd"]);
@@ -58,7 +57,7 @@ function callsOf(extra: string): RegExp {
 
 /** The acts that a word made, each on the line of the word that made it: the next line that calls its verb, or for a
  * line that a loop runs again, the last line that calls it, or else the last line. */
-export function placed(text: string, made: readonly LiveAct[]): LiveAct[][] {
+export function placed(text: string, made: readonly Act[]): Act[][] {
   const lines = text.split("\n");
   // A verb of an extension, as todo, stands on a line that calls it by its name, and a def of that name calls nothing.
   const extra = [...new Set(made.map((act) => act.kind))].filter(
@@ -68,7 +67,7 @@ export function placed(text: string, made: readonly LiveAct[]): LiveAct[][] {
   const slots: [line: number, kind: string][] = [];
   for (const [index, line] of lines.entries())
     for (const match of line.matchAll(calls)) slots.push([index, match[1] ?? ""]);
-  const out = lines.map((): LiveAct[] => []);
+  const out = lines.map((): Act[] => []);
   let next = 0;
   for (const act of made) {
     if (!followed.has(act.kind) && !slots.some(([, kind]) => kind === act.kind)) continue;
@@ -94,21 +93,21 @@ const first = (text: string) =>
 const lines = (n: number) => `${n} ${n === 1 ? "line" : "lines"}`;
 
 /** What one act came to, in a few words. A notice to the operator says its message. */
-function said(act: LiveAct, owed: ReadonlySet<string>, label: (chain: string) => string): string {
-  const state = actState(act, owed);
+function said(act: Act, label: (chain: string) => string): string {
+  const state = act.state;
   if (state === "asks") return "asks you";
   if (state === "failed") return first(reason(act) ?? "") || "failed";
   if (state === "cancelled") return "cancelled";
   if (state === "paused") return "paused";
   if (act.kind === "bash") {
-    if (!act.done) return "runs";
-    const exit = act.value as Exit | undefined;
+    if (!isDone(act)) return "runs";
+    const exit = outcomeOf(act) as Exit | undefined;
     if (exit?.code === null || exit?.code === undefined) return "timed out";
     const out = lineCount(exit.stdout?.content);
     return `exit ${exit.code}${out ? `, ${lines(out)}` : ""}`;
   }
   if (act.kind === "read" || act.kind === "write") {
-    const text = (act.kind === "write" ? act.words[0] : act.value) as
+    const text = (act.kind === "write" ? act.words[0] : outcomeOf(act)) as
       | { content?: string; lines?: number }
       | undefined;
     // A host that leaves the text out of an act keeps the count of its lines, and for a write what its change added and
@@ -129,17 +128,17 @@ function said(act: LiveAct, owed: ReadonlySet<string>, label: (chain: string) =>
   if (act.kind === "prompt") {
     // A word to another thread says what this line did, which is to tell it, and not what it told: that is the line of that thread.
     if (act.words[0] === "None") return "told";
-    if (act.done) return first(valueText(act.value)) || "done";
-    return act.words[2] === "operator" ? "waits for you" : `waits for ${label(act.on)}`;
+    if (isDone(act)) return first(valueText(outcomeOf(act))) || "done";
+    return act.words[2] === "operator" ? "waits for you" : `waits for ${label(act.chain)}`;
   }
   if (act.kind === "chain") return label(act.id);
   if (act.kind === "wait")
-    return act.done
-      ? valueText(act.value)
-        ? `woke by ${valueText(act.value)}`
+    return isDone(act)
+      ? valueText(outcomeOf(act))
+        ? `woke by ${valueText(outcomeOf(act))}`
         : "woke"
       : `waits ${act.words[0] ?? ""}s`;
-  if (act.kind === "cd") return valueText(act.value);
+  if (act.kind === "cd") return valueText(outcomeOf(act));
   if (act.kind === "grant") return `grant $${unmarked(act.words[0]) ?? ""}`;
   return "";
 }
@@ -147,18 +146,18 @@ function said(act: LiveAct, owed: ReadonlySet<string>, label: (chain: string) =>
 /** What the acts of a line came to, as a quiet hint at its end: one act in a few words, and a loop as its count and
  * what its last turn came to, as "x6  exit 0". */
 export function hintOf(
-  acts: readonly LiveAct[],
-  owed: ReadonlySet<string>,
+  acts: readonly Act[],
+  _owed: ReadonlySet<string>,
   label: (chain: string) => string,
 ): string {
   const last = acts.at(-1);
   if (!last) return "";
   if (acts.length > 1 && acts.every((act) => act.kind === last.kind)) {
-    const what = said(last, owed, label);
+    const what = said(last, label);
     return what ? `x${acts.length}  ${what}` : "";
   }
   return acts
-    .map((act) => said(act, owed, label))
+    .map((act) => said(act, label))
     .filter(Boolean)
     .join("  ");
 }
@@ -166,8 +165,8 @@ export function hintOf(
 /** The acts of a line that does not fail, less the ones that failed while its word went on, as a read of a file that may
  * not stand: the word handled them, so the hint of the line says nothing of them. Every act of the line failed: all
  * stay. */
-function handled(acts: readonly LiveAct[], owed: ReadonlySet<string>): readonly LiveAct[] {
-  const failed = acts.filter((act) => actState(act, owed) === "failed");
+function handled(acts: readonly Act[]): readonly Act[] {
+  const failed = acts.filter((act) => act.state === "failed");
   return failed.length && failed.length < acts.length ? acts.filter((act) => !failed.includes(act)) : acts;
 }
 
@@ -264,9 +263,9 @@ export function writing(stream?: { text: string; thinking: string }): {
  * with the output that streams under it, and the line that a refusal names. A step whose word has not come shows what
  * its model writes. `start` is the count of the lines of the thread before the step, which its numbers go on from. */
 export function stepLines(
-  step: LiveAct,
-  made: ReadonlyMap<string, readonly LiveAct[]>,
-  word: (rung: LiveAct) => string,
+  step: Act,
+  made: ReadonlyMap<string, readonly Act[]>,
+  word: (rung: Act) => string,
   owed: ReadonlySet<string>,
   label: (chain: string) => string,
   streams?: ReadonlyMap<string, { text: string; thinking: string }>,
@@ -277,7 +276,7 @@ export function stepLines(
   const why = reason(step);
   if (!text) {
     if (why) out.push({ kind: "note", step, text: `# ${step.id} failed: ${first(why)}` });
-    else if (!step.done) {
+    else if (!isDone(step)) {
       out.push({
         kind: "writes",
         step,
@@ -289,8 +288,8 @@ export function stepLines(
   }
   const children = made.get(step.id) ?? [];
   const on = placed(text, children);
-  const running = ["thinks", "runs"].includes(actState(step, owed));
-  const open = running ? children.findLast((act) => !act.done && followed.has(act.kind)) : undefined;
+  const running = ["thinks", "runs"].includes(step.state);
+  const open = running ? children.findLast((act) => !isDone(act) && followed.has(act.kind)) : undefined;
   const source = text.split("\n");
   // A line that awaits the act of the name that an earlier line binds, as `b = await build` after
   // `build = bash(...)`, is where the word stands while that act runs.
@@ -329,7 +328,7 @@ export function stepLines(
     const failed = Boolean(why) && failing >= index + 1 && failing <= last + 1;
     const hint = awaits
       ? `waits on ${open?.id} of line ${awaits.display}`
-      : hintOf(failed ? acts : handled(acts, owed), owed, label);
+      : hintOf(failed ? acts : handled(acts), owed, label);
     out.push({
       kind: "code",
       step,
@@ -363,22 +362,22 @@ export function stepLines(
  * from each step to the next, also across the steps that a fold keeps out. A thread is its prompt and the messages
  * that came to it, and each message stands as a quiet comment among the steps. */
 export function threadProgram(
-  prompts: readonly LiveAct[],
-  made: ReadonlyMap<string, readonly LiveAct[]>,
-  word: (rung: LiveAct) => string,
+  prompts: readonly Act[],
+  made: ReadonlyMap<string, readonly Act[]>,
+  word: (rung: Act) => string,
   owed: ReadonlySet<string>,
   label: (chain: string) => string,
   streams?: ReadonlyMap<string, { text: string; thinking: string }>,
   keep?: number,
 ): ProgramLine[] {
-  let steps: LiveAct[] = [];
+  let steps: Act[] = [];
   for (const [at, prompt] of prompts.entries()) {
     if (at > 0) steps.push(prompt);
     for (const rung of made.get(prompt.id) ?? []) if (rung.kind === "rung") steps.push(rung);
   }
   steps.sort((a, b) => a.began - b.began);
   // The count of the lines of the thread before each step, which the numbers of the step go on from.
-  const starts = new Map<LiveAct, number>();
+  const starts = new Map<Act, number>();
   let count = 0;
   for (const step of steps) {
     if (step.kind !== "rung") continue;
@@ -402,11 +401,11 @@ export function threadProgram(
   }
   // The notices that a chain gives a thread in a row, as the end of each act of the operator, stand on one comment.
   let notices: string[] = [];
-  const flush = (step: LiveAct | undefined) => {
+  const flush = (step: Act | undefined) => {
     if (step && notices.length) out.push({ kind: "note", step, text: `# ${notices.join("; ")}` });
     notices = [];
   };
-  let last: LiveAct | undefined;
+  let last: Act | undefined;
   for (const step of steps) {
     const message = first(String(step.words[1] ?? ""));
     if (step.kind === "prompt" && !operated(step.by)) {
@@ -477,16 +476,16 @@ function python(value: unknown): string {
  * came to on the last line. A word that only defines shows no line. The last line runs while an act of the word is at
  * work, and not while an act lives that is no work, as the watcher of an extension does after it said it done. */
 export function earProgram(
-  ear: LiveAct,
-  rungs: readonly LiveAct[],
+  ear: Act,
+  rungs: readonly Act[],
   chips: readonly Chip[],
-  made: (id: string) => readonly LiveAct[],
-  subject: (rung: LiveAct) => string,
+  made: (id: string) => readonly Act[],
+  subject: (rung: Act) => string,
   owed: ReadonlySet<string>,
   label: (chain: string) => string,
 ): ProgramLine[] {
   // A chain that wrote rungs on itself, as the root writes its setup, has an id that names no maker for a reader.
-  const who = ear.by === ear.on ? "setup" : ear.by;
+  const who = ear.by === ear.chain ? "setup" : ear.by;
   const out: ProgramLine[] = [{ kind: "note", step: ear, text: `# ${who}` }];
   for (const rung of rungs) {
     const source = subject(rung).trimEnd().split("\n");
@@ -502,8 +501,7 @@ export function earProgram(
         display: out.length,
         text: source[at] ?? "",
         acts: at === source.length - 1 ? acts : [],
-        runs:
-          at === source.length - 1 && acts.some((one) => ["thinks", "runs"].includes(actState(one, owed))),
+        runs: at === source.length - 1 && acts.some((one) => ["thinks", "runs"].includes(one.state)),
         hint: at === source.length - 1 ? hintOf(acts, owed, label) : "",
       });
   }
@@ -520,7 +518,7 @@ export function earProgram(
 /** An act that no word made, as the operator or an ear makes it, as one line of python: its call, bound to its name,
  * with its hint, lit while it runs, and the last lines that its command prints under it. */
 export function actLines(
-  act: LiveAct,
+  act: Act,
   owed: ReadonlySet<string>,
   label: (chain: string) => string,
 ): ProgramLine[] {
@@ -528,7 +526,7 @@ export function actLines(
   const words = act.kind === "bash" ? act.words.slice(0, 1) : [...act.words];
   while (words.length && (words.at(-1) === "" || words.at(-1) === null || words.at(-1) === undefined))
     words.pop();
-  const runs = ["thinks", "runs"].includes(actState(act, owed));
+  const runs = ["thinks", "runs"].includes(act.state);
   const out: ProgramLine[] = [
     {
       kind: "code",

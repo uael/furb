@@ -52,6 +52,16 @@ async def test_a_name_of_a_function_or_of_a_class_gives_the_last_word_that_defin
   assert engine.dump("g", "f", on=root) == "def g():\n  def f():\n    return 0\n  return f\n" + DEFINES
 
 
+async def test_a_name_of_a_function_or_of_a_class_whose_own_name_is_another_raises_refused() -> None:
+  """A name of a function or of a class whose own name is another, as after an import of another function as f, raises Refused, since no word of the program defines its value under that name."""
+  _, _, root = born()
+  await engine.rung("def f():\n  return 1\n\n\ndef g():\n  return 2", on=root)
+  await engine.rung("from math import sqrt as f", on=root)
+  with pytest.raises(Refused, match="no dump of f"):
+    engine.dump("f", on=root)
+  assert engine.dump("g", on=root).startswith("def f():")
+
+
 async def test_a_name_of_an_act_or_of_a_value_that_holds_one_raises_refused_which_names_it() -> None:
   """A name of an Act, or of a value that holds one, raises Refused, which names it, since an act is of its life alone, so dump never writes a live Act."""
   _, _, root = born()

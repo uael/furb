@@ -13,15 +13,22 @@ mod yard;
 mod daemon {
   use super::yard::Yard;
 
+  use std::sync::mpsc::Receiver;
+  use std::sync::mpsc::Sender;
+  use std::sync::mpsc::channel;
   use std::{
     cell::RefCell,
     collections::VecDeque,
+    env,
     fs::{self, File},
+    ops::Deref,
     path::{Path, PathBuf},
+    process,
     sync::{
       Arc, Mutex,
       atomic::{AtomicU32, AtomicUsize, Ordering},
     },
+    thread,
     time::{Duration, Instant},
   };
 
@@ -31,18 +38,21 @@ mod daemon {
     view::Phase,
   };
   use furb_host::{
-    DaemonError, END, Event, GRACE, ProtocolError, STALL, Settings, TransportError,
+    DaemonError, Event, GRACE, ProtocolError, STALL, Settings, Tailnet, TransportError,
+    access::{Access, Ports},
     protocol::{
-      Answer, Axis, Dispose, Effect, Frame, Gesture, Hello, Kind, Listed, Mount, Node, PROTOCOL,
-      Request, Role, Shape, Slot, Tree, Verb, ViewEffect, ViewEvent,
+      Answer, Axis, Config, Dispose, Effect, Frame, Gesture, Hello, Kind, Listed, Mount, Node,
+      PROTOCOL, Request, Role, Shape, Slot, Tree, Verb, ViewEffect, ViewEvent,
     },
     run,
-    transport::{Accepted, Dialer, Identity, Local, Who},
+    transport::{Accepted, Dialer, Identity, Local, LocalApi, Tailscale, Who},
     upgrade,
   };
   use futures::{SinkExt, StreamExt};
   use serde_json::Value;
   use serde_json::json;
+  use tokio::task;
+  use tokio::time;
   use tokio::{task::JoinHandle, time::timeout};
   use tokio_util::codec::{Framed, LinesCodec};
 
@@ -60,13 +70,13 @@ mod daemon {
   fn place() -> Place {
     static NEXT: AtomicU32 = AtomicU32::new(0);
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
-    Place(Yard::new(format!("fd{}-{n}", std::process::id())))
+    Place(Yard::new(format!("fd{}-{n}", process::id())))
   }
 
   /// The folder of one test, which goes with it.
   struct Place(Yard);
 
-  impl std::ops::Deref for Place {
+  impl Deref for Place {
     type Target = Path;
 
     fn deref(&self) -> &Path {
@@ -97,7 +107,7 @@ mod daemon {
 
   impl Drop for Held {
     fn drop(&mut self) {
-      let kept = std::env::var_os("FURB_KEEP_YARDS").is_some();
+      let kept = env::var_os("FURB_KEEP_YARDS").is_some();
       for (folder, leases) in self.0.take() {
         // A write of a life that lives on makes its folder again, and a life that the test asked
         // may still open, so the folder goes at each look until each lease is free, with a bound
@@ -111,7 +121,7 @@ mod daemon {
           if free || Instant::now() > end {
             break;
           }
-          std::thread::sleep(Duration::from_millis(20));
+          thread::sleep(Duration::from_millis(20));
         }
         if !kept {
           drop(fs::remove_dir_all(&folder));
@@ -156,8 +166,7 @@ mod daemon {
   ) -> (Local, JoinHandle<Result<(), DaemonError>>) {
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
-    let settings =
-      Settings { opening, grace, end: END, stall: STALL, tailnet: None, door: None, host: None };
+    let settings = Settings { opening, grace, stall: STALL, tailnet: None, door: None, host: None };
     let served = local.clone();
     (local, tokio::spawn(async move { run(&served, listener, settings).await }))
   }
@@ -188,7 +197,6 @@ mod daemon {
     let settings = Settings {
       opening: opening(at),
       grace: GRACE,
-      end: END,
       stall: STALL,
       tailnet: None,
       door: None,
@@ -205,18 +213,19 @@ mod daemon {
     lines: Framed<<Local as Dialer>::Stream, LinesCodec>,
     next: u64,
     pushed: VecDeque<Frame>,
+    life: String,
   }
 
   impl Window {
     /// A window that dialed the daemon and said its hello.
-    async fn dialed(local: &Local) -> Window {
-      Window::dialed_as(local, Kind::Window, None).await
+    async fn dialed(local: &Local) -> Self {
+      Self::dialed_as(local, Kind::Window, None).await
     }
 
     /// A peer of a kind that dialed the daemon and said its hello.
-    async fn dialed_as(local: &Local, kind: Kind, name: Option<&str>) -> Window {
+    async fn dialed_as(local: &Local, kind: Kind, name: Option<&str>) -> Self {
       let lines = Framed::new(local.dial().await.unwrap(), LinesCodec::new());
-      let mut window = Window { lines, next: 0, pushed: VecDeque::new() };
+      let mut window = Self { lines, next: 0, pushed: VecDeque::new(), life: String::new() };
       let name = name.map(str::to_owned);
       let hello = Verb::Hello(Hello { protocol: PROTOCOL, kind, name, role: None });
       let welcome = window.ask(hello).await;
@@ -257,6 +266,17 @@ mod daemon {
       }
     }
 
+    /// The first frame that the test waits for, which keeps each frame before it for `until`.
+    async fn keeping(&mut self, wanted: impl Fn(&Frame) -> bool) -> Frame {
+      loop {
+        let frame = self.read().await.expect("the daemon pushes the frame");
+        if wanted(&frame) {
+          return frame;
+        }
+        self.pushed.push_back(frame);
+      }
+    }
+
     /// Whether the daemon closed the stream of the window.
     async fn closed(&mut self) -> bool {
       while self.read().await.is_some() {}
@@ -285,7 +305,9 @@ mod daemon {
     }
 
     async fn listed(&mut self) -> Vec<Listed> {
-      let Ok(Answer::Lives(lives)) = self.ask(Verb::List).await else { panic!("no list") };
+      let Ok(Answer::Lives(lives)) = self.ask(Verb::List { config: None }).await else {
+        panic!("no list")
+      };
       lives
     }
 
@@ -328,6 +350,19 @@ mod daemon {
   }
 
   #[tokio::test]
+  async fn a_daemon_whose_last_window_left_ends_once_its_grace_passed() {
+    let at = place();
+    let (local, daemon) = started(&at, SHORT).await;
+    let mut window = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    window.attach(&life).await;
+    drop(window);
+    let ended = timeout(Duration::from_secs(20), daemon).await;
+    assert!(matches!(ended, Ok(Ok(Ok(())))), "the daemon ends with no window: {ended:?}");
+    assert!(local.dial().await.is_err(), "no daemon listens after its grace");
+  }
+
+  #[tokio::test]
   async fn two_windows_on_one_life_both_stay_and_hear_it() {
     let at = place();
     let (local, _daemon) = started(&at, GRACE).await;
@@ -354,7 +389,7 @@ mod daemon {
     second.attach(&life).await;
     assert_eq!(first.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
     second.until(present(1)).await;
-    tokio::time::sleep(PAST).await;
+    time::sleep(PAST).await;
     assert!(second.lives(&life).await);
     second.ran(&life, "x = 1").await;
     let refused = first.ask(Verb::Detach { life: life.clone() }).await;
@@ -369,14 +404,82 @@ mod daemon {
     let life = opened(&mut window, &at, "a.jsonl").await;
     let pin = || Verb::Pin { life: life.clone(), holder: "job".to_owned() };
     assert_eq!(window.ask(pin()).await, Ok(Answer::Done));
-    tokio::time::sleep(PAST).await;
+    time::sleep(PAST).await;
     assert!(window.lives(&life).await);
     let unpin = Verb::Unpin { life: life.clone(), holder: "job".to_owned() };
     assert_eq!(window.ask(unpin).await, Ok(Answer::Done));
-    tokio::time::sleep(PAST).await;
+    time::sleep(PAST).await;
     assert!(!window.lives(&life).await);
     let refused = window.ask(pin()).await;
     assert!(matches!(refused, Err(ProtocolError::Closed { .. })), "{refused:?}");
+  }
+
+  #[tokio::test]
+  async fn the_list_gives_each_record_of_the_sessions_of_each_workspace_and_whether_a_life_holds_it()
+   {
+    let at = place();
+    let main = at.join("main");
+    let sessions = main.join(".furb").join("sessions");
+    let tree = at.join("tree");
+    let marks = main.join(".git").join("worktrees").join("tree");
+    for folder in [&sessions, &tree.join(".furb").join("sessions"), &marks] {
+      fs::create_dir_all(folder).unwrap();
+    }
+    fs::write(marks.join("gitdir"), format!("{}\n", tree.join(".git").display())).unwrap();
+    fs::write(tree.join(".git"), "gitdir: elsewhere\n").unwrap();
+    let tree = dunce::canonicalize(&tree).unwrap().join(".furb").join("sessions");
+    fs::write(tree.join("two.jsonl"), "").unwrap();
+    fs::write(tree.join("two.changes.jsonl"), "").unwrap();
+    let list = json!({ "workspaces": [{ "directory": main.display().to_string() }] });
+    fs::create_dir_all(at.join("config")).unwrap();
+    fs::write(at.join("config").join("workspaces.json"), list.to_string()).unwrap();
+    let (local, _daemon) = started(&at, GRACE).await;
+    let mut window = Window::dialed(&local).await;
+    let one = opened(&mut window, &sessions, "one.jsonl").await;
+    let alone = opened(&mut window, &at, "a.jsonl").await;
+    let workspace = Some(main.display().to_string());
+    let mut wanted = vec![
+      Listed {
+        life: one,
+        workspace: workspace.clone(),
+        held: true,
+        open: true,
+        watched: false,
+        name: None,
+      },
+      Listed { life: alone, workspace: None, held: true, open: true, watched: false, name: None },
+      Listed {
+        life: tree.join("two.jsonl").display().to_string(),
+        workspace,
+        held: false,
+        open: false,
+        watched: false,
+        name: None,
+      },
+    ];
+    wanted.sort_by(|a, b| a.life.cmp(&b.life));
+    let listed = window.listed().await;
+    assert_eq!(listed, wanted);
+    let verbatim = |one: &Listed| one.life.starts_with(r"\\?\");
+    assert!(!listed.iter().any(verbatim), "a worktree is listed under the path that made it");
+  }
+
+  #[tokio::test]
+  async fn the_list_says_whether_a_window_holds_each_life_and_a_pin_is_no_window() {
+    let at = place();
+    let (local, _daemon) = started(&at, GRACE).await;
+    let mut window = Window::dialed(&local).await;
+    let mut other = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    let watched = |listed: Vec<Listed>| listed.iter().any(|one| one.life == life && one.watched);
+    assert!(!watched(window.listed().await), "an open that attaches nothing is held by no window");
+    let pin = Verb::Pin { life: life.clone(), holder: "skill".to_owned() };
+    assert_eq!(window.ask(pin).await, Ok(Answer::Done));
+    assert!(!watched(window.listed().await), "a pin holds the life and no window holds it");
+    other.attach(&life).await;
+    assert!(watched(window.listed().await), "a window of another connection holds the life");
+    assert_eq!(other.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+    assert!(!watched(window.listed().await), "a window that detached holds nothing");
   }
 
   #[tokio::test]
@@ -398,11 +501,11 @@ mod daemon {
     };
     assert_eq!(window.ask(open).await, Ok(Answer::Done));
     window.until(present(1)).await;
-    tokio::time::sleep(PAST).await;
+    time::sleep(PAST).await;
     assert!(window.lives(&life).await);
     window.ran(&life, "x = 1").await;
     assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
-    tokio::time::sleep(PAST).await;
+    time::sleep(PAST).await;
     assert!(!window.lives(&life).await);
   }
 
@@ -415,7 +518,7 @@ mod daemon {
     window.attach(&life).await;
     window.ran(&life, "x = 41 + 1").await;
     assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
-    tokio::time::sleep(PAST).await;
+    time::sleep(PAST).await;
     assert!(!window.lives(&life).await);
     opened(&mut window, &at, "a.jsonl").await;
     let inspect = Verb::Inspect { life, name: "x".to_owned(), on: None };
@@ -432,7 +535,7 @@ mod daemon {
     window.attach(&life).await;
     let first = window.ran(&life, "x = 41 + 1").await;
     assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
-    tokio::time::sleep(PAST).await;
+    time::sleep(PAST).await;
     assert!(!window.lives(&life).await);
     // A second birth opens on the checkpoint of the first, and ends with a checkpoint of its own.
     let mut between = Window::dialed(&local).await;
@@ -440,7 +543,7 @@ mod daemon {
     between.attach(&life).await;
     between.ran(&life, "z = 0").await;
     assert_eq!(between.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
-    tokio::time::sleep(PAST).await;
+    time::sleep(PAST).await;
     assert!(!between.lives(&life).await);
     let mut later = Window::dialed(&local).await;
     opened(&mut later, &at, "a.jsonl").await;
@@ -490,6 +593,70 @@ mod daemon {
     assert!(!daemon.is_finished());
   }
 
+  /// A record whose replay drifts at the place of its first stand: its checkpoints dropped, so the
+  /// life replays it from its first entry, and its first stand moved to a place that the life does
+  /// not stand in.
+  fn drifted(life: &str) -> Vec<u8> {
+    let text = fs::read_to_string(life).unwrap();
+    let checkpoint = |line: &&str| line.starts_with(r#"[["checkpoint","#);
+    let mut lines: Vec<String> =
+      text.lines().filter(|line| !checkpoint(line)).map(str::to_owned).collect();
+    let stood = lines.iter().position(|line| line.starts_with(r#"[["done","stand1","#)).unwrap();
+    let mut entry: Value = serde_json::from_str(&lines[stood]).unwrap();
+    let place = entry[0][3][1].as_str().expect("the stand names its place").to_owned();
+    entry[0][3][1] = Value::from(format!("{place}-elsewhere"));
+    lines[stood] = entry.to_string();
+    fs::write(life, lines.join("\n") + "\n").unwrap();
+    fs::write(format!("{life}.log"), "{\"entries\": 0}\n").unwrap();
+    fs::read(life).unwrap()
+  }
+
+  #[tokio::test]
+  async fn a_drift_at_the_open_of_a_life_tells_its_window_why_and_leaves_the_daemon() {
+    let at = place();
+    let lines = Arc::new(Mutex::new(Vec::<String>::new()));
+    let kept = Arc::clone(&lines);
+    let log = Log(Arc::new(move |line: &str| kept.lock().unwrap().push(line.to_owned())));
+    let (local, daemon) =
+      started_with(&at, SHORT, Opening { log: Some(log), ..opening(&at) }).await;
+    let mut window = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    window.attach(&life).await;
+    window.ran(&life, "x = 1").await;
+    assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+    time::sleep(PAST).await;
+    assert!(!window.lives(&life).await);
+    let held = drifted(&life);
+    let mut later = Window::dialed(&local).await;
+    let drift = |why: &str| why.starts_with("Drift: ") && why.contains(" drifts: ");
+    let verb = Verb::Open {
+      life: life.clone(),
+      cwd: Some(at.display().to_string()),
+      actor: None,
+      roster: None,
+      extensions: None,
+      config: None,
+      claude: None,
+      answers: false,
+      attach: Some(0),
+    };
+    assert_eq!(later.ask(verb).await, Ok(Answer::Done));
+    let ended = |frame: &Frame| matches!(frame, Frame::Event { life: one, event: Event::Ended(Some(why)), .. } if *one == life && drift(why));
+    later.until(ended).await;
+    let said = format!("furb host: the life of {life} ended: ");
+    let told = |line: &String| line.strip_prefix(&said).is_some_and(drift);
+    let start = Instant::now();
+    while !lines.lock().unwrap().iter().any(told) {
+      assert!(start.elapsed() < PATIENCE, "{:?}", lines.lock().unwrap());
+      time::sleep(SHORT).await;
+    }
+    assert_eq!(fs::read(&life).unwrap(), held, "a life that drifts keeps nothing in its record");
+    let other = opened(&mut later, &at, "b.jsonl").await;
+    later.attach(&other).await;
+    later.ran(&other, "y = 1").await;
+    assert!(!daemon.is_finished());
+  }
+
   #[tokio::test]
   async fn the_log_of_the_daemon_says_each_end_of_a_life_with_its_fault() {
     let at = place();
@@ -504,7 +671,7 @@ mod daemon {
     let start = Instant::now();
     while !lines.lock().unwrap().contains(&said) {
       assert!(start.elapsed() < PATIENCE, "{:?}", lines.lock().unwrap());
-      tokio::time::sleep(SHORT).await;
+      time::sleep(SHORT).await;
     }
   }
 
@@ -521,7 +688,6 @@ mod daemon {
     let settings = Settings {
       opening: opening(&at),
       grace: SHORT,
-      end: END,
       stall: STALL,
       tailnet: None,
       door: None,
@@ -538,19 +704,16 @@ mod daemon {
     assert_eq!(value, json!(42));
     window.ran(&life, "y = x").await;
     assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
-    tokio::time::sleep(PAST).await;
+    time::sleep(PAST).await;
     assert!(window.lives(&life).await);
     assert!(!new.is_finished());
   }
 
   /// The opening of a test whose model blocks the thread of its life: it tells the test that it
   /// began, then waits until the test drops the sender of the gate.
-  fn blocking(
-    at: &Path,
-    log: Arc<Mutex<Vec<String>>>,
-  ) -> (Opening, std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>) {
-    let (hold, gate) = std::sync::mpsc::channel::<()>();
-    let (began, entered) = std::sync::mpsc::channel::<()>();
+  fn blocking(at: &Path, log: Arc<Mutex<Vec<String>>>) -> (Opening, Sender<()>, Receiver<()>) {
+    let (hold, gate) = channel::<()>();
+    let (began, entered) = channel::<()>();
     let (gate, began) = (Mutex::new(gate), Mutex::new(began));
     let inner = opening(at).answer.expect("the opening of a test has a model");
     let answer = Answered(Arc::new(move |kind, message| {
@@ -563,17 +726,15 @@ mod daemon {
   }
 
   #[tokio::test]
-  async fn a_handover_gives_up_a_life_that_does_not_end_within_its_bound() {
+  async fn a_handover_waits_for_each_life_to_end_and_the_life_goes_on() {
     let at = place();
     let log = Arc::new(Mutex::new(Vec::new()));
     let (blocked, hold, entered) = blocking(&at, Arc::clone(&log));
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
-    let bound = SHORT;
     let settings = Settings {
       opening: blocked,
       grace: GRACE,
-      end: bound,
       stall: STALL,
       tailnet: None,
       door: None,
@@ -584,35 +745,97 @@ mod daemon {
     let mut window = Window::dialed(&local).await;
     let life = opened(&mut window, &at, "a.jsonl").await;
     window.attach(&life).await;
-    let verb = Verb::Run { life: life.clone(), word: "prompt(None, 'go')".to_owned(), on: None };
+    window.ran(&life, "x = 41 + 1").await;
+    let word = "prompt(None, 'go', on=chain('side'))".to_owned();
+    let verb = Verb::Run { life: life.clone(), word, on: None };
     assert!(matches!(window.ask(verb).await, Ok(Answer::Act(_))));
-    let began = tokio::task::spawn_blocking(move || entered.recv_timeout(PATIENCE));
+    let began = task::spawn_blocking(move || entered.recv_timeout(PATIENCE));
     assert!(began.await.unwrap().is_ok(), "the model of the life blocks its thread");
     let settings = Settings {
       opening: opening(&at),
       grace: GRACE,
-      end: END,
       stall: STALL,
       tailnet: None,
       door: None,
       host: None,
     };
     let next = local.clone();
-    let asked = Instant::now();
     let new = tokio::spawn(async move { upgrade(&next, settings).await });
-    let gone =
-      timeout(PATIENCE, old).await.expect("a life that blocks holds the upgrade past its bound");
-    assert!(matches!(gone, Ok(Ok(()))));
-    assert!(asked.elapsed() >= bound, "the handover waits for the bound of each life");
+    time::sleep(PAST).await;
+    assert!(!old.is_finished(), "the handover waits for a life that has not ended");
     let seen = log.lock().unwrap().join("\n");
     assert!(
-      seen.contains(&life) && seen.contains("did not end"),
-      "the log tells which life did not end: {seen}"
+      seen.contains("the handover waits for each life to end") && seen.contains(&life),
+      "the log says which lives the handover waits for: {seen}"
     );
-    let mut window = Window::dialed(&local).await;
-    assert!(window.lives(&life).await, "the new daemon opens the life that was given up");
-    assert!(!new.is_finished());
     drop(hold);
+    let gone = timeout(PATIENCE, old).await.expect("the handover ends once each life ended");
+    assert!(matches!(gone, Ok(Ok(()))));
+    let mut window = Window::dialed(&local).await;
+    window.attach(&life).await;
+    window.ran(&life, "y = x").await;
+    let inspect = Verb::Inspect { life: life.clone(), name: "y".to_owned(), on: None };
+    let Ok(Answer::Inspected { value, .. }) = window.ask(inspect).await else { panic!() };
+    assert_eq!(value, json!(42), "the new daemon holds the life whole, and a word runs on it");
+    assert!(!new.is_finished());
+  }
+
+  /// A view mounted in the footer by a window, once the skill that serves it attached the life.
+  async fn mounted(window: &mut Window, verb: &Verb) {
+    let start = Instant::now();
+    while window.ask(verb.clone()).await != Ok(Answer::Done) {
+      assert!(start.elapsed() < PATIENCE, "no skill serves {verb:?}");
+      time::sleep(SHORT).await;
+    }
+  }
+
+  /// Whether a frame is a tree whose first run says a text.
+  fn shows(text: &str) -> impl Fn(&Frame) -> bool + '_ {
+    move |frame| {
+      matches!(frame, Frame::ViewTree(Tree { tree: Node { shape: Shape::Text { runs }, .. }, .. })
+        if runs.first().is_some_and(|run| run.text == text))
+    }
+  }
+
+  #[tokio::test]
+  async fn a_kit_of_a_session_gives_its_view_to_each_window_in_each_life_of_its_record() {
+    let at = place();
+    fs::create_dir_all(at.join(".furb")).unwrap();
+    fs::write(at.join(".furb").join("config.json"), r#"{"extensions": {"ouroboros": true}}"#)
+      .unwrap();
+    let local = Local::new(at.join("sock"));
+    let listener = local.listen().await.unwrap();
+    let opening = Opening { extensions: None, ..opening(&at) };
+    let host = Some(at.join("sock"));
+    let settings =
+      Settings { opening, grace: SHORT, stall: STALL, tailnet: None, door: None, host };
+    let served = local.clone();
+    tokio::spawn(async move { run(&served, listener, settings).await });
+    let mut window = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    window.attach(&life).await;
+    let said = |text: &str| {
+      format!(r#"view = {{"id": "todo", "node": "text", "runs": [{{"text": "{text}"}}]}}"#)
+    };
+    let word = window.ran(&life, &said("first")).await;
+    window.ran(&life, &format!("extend('todo', '{word}', session=True, view='view')")).await;
+    let mount = |viewer: &str| {
+      let (viewer, life, skill) = (viewer.to_owned(), life.clone(), "todo".to_owned());
+      Verb::ViewMount(Mount { viewer, life, slot: Slot::Footer, skill })
+    };
+    mounted(&mut window, &mount("v1")).await;
+    window.until(shows("first")).await;
+    window.ran(&life, &said("second")).await;
+    window.until(shows("second")).await;
+    assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+    time::sleep(PAST).await;
+    assert!(!window.lives(&life).await);
+    let mut later = Window::dialed(&local).await;
+    opened(&mut later, &at, "a.jsonl").await;
+    later.attach(&life).await;
+    mounted(&mut later, &mount("v2")).await;
+    later.until(shows("second")).await;
+    assert!(!at.join(".furb").join("extensions").exists(), "the kit writes no file");
   }
 
   /// The view of a skill that a window mounts in the footer of a life.
@@ -715,7 +938,7 @@ mod daemon {
   }
 
   #[tokio::test]
-  async fn a_skill_says_each_act_under_its_name_and_a_window_under_the_operator() {
+  async fn a_skill_says_each_act_under_its_name_and_a_window_under_its_operator() {
     let at = place();
     let local = served(&at, None).await;
     let mut writer = Window::dialed(&local).await;
@@ -736,9 +959,117 @@ mod daemon {
       let Ok(Answer::Value(fact)) = writer.ask(get).await else { panic!("no act {id}") };
       speakers.push(fact[2].clone());
     }
-    assert_eq!(speakers, [json!("skill/k"), json!("skill/k"), json!("operator")]);
+    let Ok(Answer::Presence(peers)) = writer.ask(Verb::Presence { life: life.clone() }).await
+    else {
+      panic!("no presence")
+    };
+    let login = peers.iter().find(|one| one.kind == Kind::Window).map(|one| one.login.clone());
+    let member = json!(format!("operator/{}", login.expect("the window is present")));
+    assert_eq!(speakers, [json!("skill/k"), json!("skill/k"), member]);
     let y = Verb::Inspect { life: life.clone(), name: "x".to_owned(), on: None };
     assert!(matches!(skill.ask(y).await, Ok(Answer::Inspected { .. })), "the word of a skill ran");
+  }
+
+  #[tokio::test]
+  async fn the_roster_of_a_life_names_the_user_of_the_daemon_as_a_member_of_the_operator() {
+    let at = place();
+    let (local, _daemon) = started(&at, GRACE).await;
+    let mut window = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    window.attach(&life).await;
+    let Ok(Answer::Presence(peers)) = window.ask(Verb::Presence { life: life.clone() }).await
+    else {
+      panic!("no presence")
+    };
+    let login = peers.iter().find(|one| one.kind == Kind::Window).map(|one| one.login.clone());
+    let login = login.expect("the window is present");
+    let word = format!(
+      "members = [x[1] for x in standing()[0] if x[0] == OPERATOR][0]\nasks = offered(standing()[0], 'operator/{login}') is not None"
+    );
+    window.ran(&life, &word).await;
+    let read = |name: &str| Verb::Inspect { life: life.clone(), name: name.to_owned(), on: None };
+    let Ok(Answer::Inspected { value: members, .. }) = window.ask(read("members")).await else {
+      panic!("no members")
+    };
+    assert_eq!(members, json!([login]), "the operator of the roster lists the user");
+    let Ok(Answer::Inspected { value: asks, .. }) = window.ask(read("asks")).await else {
+      panic!("no asks")
+    };
+    assert_eq!(asks, json!(true), "a prompt can ask that member by name");
+  }
+
+  /// The facts of the stands of a life, which grow with each stand that it asks or hears.
+  async fn stands(window: &mut Window, life: &str) -> usize {
+    let of = Some("stand".to_owned());
+    let verb = Verb::Transcript { life: life.to_owned(), on: None, of };
+    let Ok(Answer::Values(facts)) = window.ask(verb).await else { panic!("no stands") };
+    facts.len()
+  }
+
+  /// The members of the operator in the roster of a life, read again until they are `until`, or
+  /// as they stand when the patience of the test runs out.
+  async fn members(window: &mut Window, life: &str, until: &Value) -> Value {
+    let word = "members = [x[1] for x in standing()[0] if x[0] == OPERATOR][0]";
+    let read = Verb::Inspect { life: life.to_owned(), name: "members".to_owned(), on: None };
+    let mut found = Value::Null;
+    for _ in 0..100 {
+      window.ran(life, word).await;
+      let Ok(Answer::Inspected { value, .. }) = window.ask(read.clone()).await else {
+        panic!("no members")
+      };
+      found = value;
+      if found == *until {
+        break;
+      }
+      time::sleep(Duration::from_millis(50)).await;
+    }
+    found
+  }
+
+  #[tokio::test]
+  async fn the_roster_names_the_access_list_and_a_change_of_it_tells_each_life_to_stand() {
+    let at = place();
+    let list = |logins: &[&str]| -> Access {
+      logins.iter().map(|one| ((*one).to_owned(), Role::Write)).collect()
+    };
+    let api = LocalApi::Port { port: 1, token: "none".to_owned() };
+    let identity = Tailscale::new(api, list(&["ann", "bob"]));
+    let tailnet = Some(Tailnet { identity: identity.clone(), ports: Ports::default() });
+    let local = Local::new(at.join("sock"));
+    let listener = local.listen().await.unwrap();
+    let settings = Settings {
+      opening: opening(&at),
+      grace: GRACE,
+      stall: STALL,
+      tailnet,
+      door: None,
+      host: None,
+    };
+    let served = local.clone();
+    let _daemon = tokio::spawn(async move { run(&served, listener, settings).await });
+    let mut window = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    window.attach(&life).await;
+    let Ok(Answer::Presence(peers)) = window.ask(Verb::Presence { life: life.clone() }).await
+    else {
+      panic!("no presence")
+    };
+    let login = peers.iter().find(|one| one.kind == Kind::Window).map(|one| one.login.clone());
+    let login = login.expect("the window is present");
+    let before = json!([login, "ann", "bob"]);
+    assert_eq!(members(&mut window, &life, &before).await, before, "the list gives the members");
+    let stood = stands(&mut window, &life).await;
+    identity.replace(list(&["ann", "bob", "cat"]));
+    for _ in 0..100 {
+      if stands(&mut window, &life).await > stood {
+        break;
+      }
+      time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(
+      stands(&mut window, &life).await > stood,
+      "a change of the list tells the life to stand"
+    );
   }
 
   #[tokio::test]
@@ -812,6 +1143,52 @@ mod daemon {
   }
 
   #[tokio::test]
+  async fn a_peer_that_opens_with_answers_answers_in_the_place_of_one_that_is_gone() {
+    let at = place();
+    let (local, _daemon) = started(&at, GRACE).await;
+    let life = at.join("a.jsonl").display().to_string();
+    let open = Verb::Open {
+      life: life.clone(),
+      cwd: Some(at.display().to_string()),
+      actor: None,
+      roster: Some(vec!["claude-cli:sonnet".to_owned()]),
+      extensions: None,
+      config: None,
+      claude: None,
+      answers: true,
+      attach: Some(0),
+    };
+    let mut first = Window::dialed(&local).await;
+    assert_eq!(first.ask(open.clone()).await, Ok(Answer::Done));
+    drop(first);
+    let mut window = Window::dialed(&local).await;
+    let mut taken = window.ask(open.clone()).await;
+    while taken.is_err() {
+      time::sleep(SHORT).await;
+      taken = window.ask(open.clone()).await;
+    }
+    assert_eq!(taken, Ok(Answer::Done), "the peer that answered is gone");
+    let prompt = Verb::Prompt {
+      life: life.clone(),
+      shape: "str".to_owned(),
+      message: "Say ok.".to_owned(),
+      to: None,
+      on: None,
+    };
+    let Ok(Answer::Act(id)) = window.ask(prompt).await else { panic!("no prompt") };
+    let Frame::Ask { ask, .. } = window.until(|one| matches!(one, Frame::Ask { .. })).await else {
+      panic!("the new peer is asked")
+    };
+    let turn = Some(json!(["assistant", "close('ok')", [10, 10, 0, 0, 0.0], null]));
+    let answered = Verb::Answered { life: life.clone(), ask, turn, why: None };
+    assert_eq!(window.ask(answered).await, Ok(Answer::Done));
+    let Frame::Event { event: Event::Act(act), .. } = window.until(done(&id)).await else {
+      panic!("no act")
+    };
+    assert_eq!(act.value(), Some(&json!("ok")));
+  }
+
+  #[tokio::test]
   async fn a_second_writer_cannot_answer_the_request_of_the_peer_that_answers_the_models() {
     let at = place();
     let (local, _daemon) = started(&at, GRACE).await;
@@ -830,7 +1207,8 @@ mod daemon {
     };
     assert_eq!(window.ask(open.clone()).await, Ok(Answer::Done));
     window.attach(&life).await;
-    assert_eq!(other.ask(open).await, Ok(Answer::Done));
+    let answering = Err(ProtocolError::Answering { life: life.clone() });
+    assert_eq!(other.ask(open).await, answering, "the peer that answers lives");
     other.attach(&life).await;
     let prompt = Verb::Prompt {
       life: life.clone(),
@@ -916,7 +1294,7 @@ mod daemon {
         if got.len() >= count {
           return got;
         }
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        time::sleep(Duration::from_millis(50)).await;
       }
     });
     waited.await.expect("the file gets its lines")
@@ -926,15 +1304,15 @@ mod daemon {
   #[cfg(unix)]
   async fn gone(pid: &str) -> bool {
     let lives = || {
-      std::process::Command::new("kill")
+      process::Command::new("kill")
         .args(["-0", pid])
-        .stderr(std::process::Stdio::null())
+        .stderr(process::Stdio::null())
         .status()
         .is_ok_and(|one| one.success())
     };
     let waited = timeout(PATIENCE, async {
       while lives() {
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        time::sleep(Duration::from_millis(50)).await;
       }
     });
     waited.await.is_ok()
@@ -960,7 +1338,6 @@ mod daemon {
     let settings = Settings {
       opening: opening(&at),
       grace: SHORT,
-      end: END,
       stall: STALL,
       tailnet: None,
       door: None,
@@ -987,12 +1364,12 @@ mod daemon {
     assert!(gone(first[3]).await, "a reload ends the process that ran");
     let second = second.rsplit(' ').next().unwrap().to_owned();
     assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
-    tokio::time::sleep(PAST).await;
+    time::sleep(PAST).await;
     assert!(!window.lives(&life).await);
     assert!(gone(&second).await, "the end of the life ends its process");
     opened(&mut window, &at, "a.jsonl").await;
     let third = lines(&started, 3).await.remove(2);
-    tokio::time::sleep(PAST).await;
+    time::sleep(PAST).await;
     assert_eq!(lines(&started, 3).await.len(), 3, "a replay starts the process once, at its tip");
     assert!(third.starts_with("probe "));
   }
@@ -1025,8 +1402,8 @@ mod daemon {
     /// Each frame that the daemon pushed for a while.
     async fn during(&mut self, span: Duration) -> Vec<Frame> {
       let mut heard: Vec<Frame> = self.pushed.drain(..).collect();
-      let end = tokio::time::Instant::now() + span;
-      while let Ok(Some(line)) = tokio::time::timeout_at(end, self.lines.next()).await {
+      let end = time::Instant::now() + span;
+      while let Ok(Some(line)) = time::timeout_at(end, self.lines.next()).await {
         heard.push(serde_json::from_str(&line.unwrap()).unwrap());
       }
       heard
@@ -1041,7 +1418,6 @@ mod daemon {
     let settings = Settings {
       opening: opening(&at),
       grace: GRACE,
-      end: END,
       stall: QUIET,
       tailnet: None,
       door: None,
@@ -1057,9 +1433,9 @@ mod daemon {
     let Ok(Answer::Act(rung)) = window.ask(verb).await else { panic!("no rung") };
     let heard = window.heard_until(done(&rung)).await;
     assert!(!heard.iter().any(stall), "a run whose facts flow for twice the bound never stalls");
-    let asked = r#"await prompt(str, "never answered", to="operator")"#;
+    let asked = r#"await bash("sleep 20", timeout=60)"#;
     let verb = Verb::Run { life: life.clone(), word: asked.to_owned(), on: None };
-    let began = tokio::time::Instant::now();
+    let began = Instant::now();
     let Ok(Answer::Act(_)) = window.ask(verb).await else { panic!("no rung") };
     let Frame::Stalled { acts, notice, .. } = window.until(stall).await else { unreachable!() };
     assert!(began.elapsed() >= QUIET, "the daemon tells a stall after its bound alone");
@@ -1091,7 +1467,6 @@ mod daemon {
     let settings = Settings {
       opening: opening(&at),
       grace: GRACE,
-      end: END,
       stall: QUIET,
       tailnet: None,
       door: None,
@@ -1102,9 +1477,10 @@ mod daemon {
     let mut window = Window::dialed(&local).await;
     let life = opened(&mut window, &at, "a.jsonl").await;
     window.attach(&life).await;
-    let waits = "never = prompt(str, \"never answered\", to=\"operator\")\nrung(\"x = 1\", never)";
+    let waits = "side = chain(\"side\")\nlong = bash(\"for i in $(seq 100); do echo $i; sleep 0.1; done\", \
+                 on=side)\nrung(\"x = 1\", long)";
     let verb = Verb::Run { life: life.clone(), word: waits.to_owned(), on: None };
-    let began = tokio::time::Instant::now();
+    let began = Instant::now();
     let Ok(Answer::Act(_)) = window.ask(verb).await else { panic!("no rung") };
     let Frame::Stalled { acts, notice, .. } = window.until(stall).await else { unreachable!() };
     assert!(began.elapsed() >= QUIET, "the daemon tells a stall after its bound alone");
@@ -1124,7 +1500,6 @@ mod daemon {
     let settings = Settings {
       opening: opening(&at),
       grace: GRACE,
-      end: END,
       stall: QUIET,
       tailnet: None,
       door: None,
@@ -1135,8 +1510,8 @@ mod daemon {
     let mut window = Window::dialed(&local).await;
     let life = opened(&mut window, &at, "a.jsonl").await;
     window.attach(&life).await;
-    let word = "never = prompt(str, \"never answered\", to=\"operator\")\nside = chain(\"side\")\n\
-                rung(\"x = 1\", never, on=side)\nfor _ in range(80):\n  await wait(0.05, __name__)";
+    let word = "long = bash(\"for i in $(seq 100); do echo $i; sleep 0.1; done\")\nside = chain(\"side\")\n\
+                rung(\"x = 1\", long, on=side)\nfor _ in range(80):\n  await wait(0.05, __name__)";
     let verb = Verb::Run { life: life.clone(), word: word.to_owned(), on: None };
     let Ok(Answer::Act(rung)) = window.ask(verb).await else { panic!("no rung") };
     let heard = window.heard_until(stall).await;
@@ -1178,7 +1553,6 @@ mod daemon {
     let settings = Settings {
       opening: opening(at),
       grace: SHORT,
-      end: END,
       stall: STALL,
       tailnet: None,
       door: None,
@@ -1231,14 +1605,14 @@ mod daemon {
     window.ran(&life, &format!("cd({:?})", two.display().to_string())).await;
     window.ran(&life, r#"act("skill", "", None, "probe")"#).await;
     let started = lines(&second, 1).await.remove(0);
-    tokio::time::sleep(PAST).await;
+    time::sleep(PAST).await;
     assert!(!first.exists(), "the skill of the folder of the birth starts no process");
     assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
-    tokio::time::sleep(PAST).await;
+    time::sleep(PAST).await;
     assert!(gone(started.rsplit(' ').next().unwrap()).await, "the end of the life ends it");
     opened(&mut window, &one, "a.jsonl").await;
     lines(&second, 2).await;
-    tokio::time::sleep(PAST).await;
+    time::sleep(PAST).await;
     assert!(!first.exists(), "a reopen starts the process of the folder that the record names");
   }
 
@@ -1307,11 +1681,84 @@ mod daemon {
     let pids = lines(&started, 1).await.remove(0);
     let (process, child) = pids.split_once(' ').unwrap();
     assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
-    tokio::time::sleep(PAST).await;
+    time::sleep(PAST).await;
     assert!(!window.lives(&life).await);
     assert!(gone(process).await, "the end of the life ends the process");
     assert!(gone(child).await, "the end of the life ends what the process started");
     let heard = window.during(PAST).await;
     assert!(!heard.iter().any(crashed), "a process that the life ends is not told");
+  }
+
+  /// One test at a time holds the port of the browser callback of a sign-in.
+  static PORT: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+  /// A folder of configs whose credential of codex ended, so that no account of this machine serves
+  /// and no request goes out.
+  fn signed_out(at: &Path) {
+    let folder = at.join("config").join("auth");
+    fs::create_dir_all(&folder).unwrap();
+    let ended = r#"{"access":"","refresh":null,"expires":0,"account":"none"}"#;
+    fs::write(folder.join("codex.json"), ended).unwrap();
+  }
+
+  /// The request that turns codex on, said with no wait for its answer, and its id.
+  async fn signing(window: &mut Window) -> u64 {
+    let id = window.next;
+    window.next += 1;
+    let key = ["providers", "codex"].map(str::to_owned).to_vec();
+    let config = Config::Set { key, value: Some(json!(true)), layer: None };
+    let verb = Verb::Config { life: window.life.clone(), config };
+    window.lines.send(serde_json::to_string(&Request { id, verb }).unwrap()).await.unwrap();
+    id
+  }
+
+  fn signed_in(state: &'static str) -> impl Fn(&Frame) -> bool {
+    move |frame| matches!(frame, Frame::SignIn { state: got, .. } if got == state)
+  }
+
+  #[tokio::test]
+  async fn a_sign_in_of_codex_that_fails_is_pushed_to_the_window_and_refuses_its_config() {
+    let _port = PORT.lock().await;
+    let at = place();
+    signed_out(&at);
+    let (local, _daemon) = started(&at, GRACE).await;
+    let mut window = Window::dialed(&local).await;
+    window.life = opened(&mut window, &at, "a.jsonl").await;
+    let life = window.life.clone();
+    window.attach(&life).await;
+    let taken = std::net::TcpListener::bind(("127.0.0.1", 1455)).unwrap();
+    let id = signing(&mut window).await;
+    let Frame::SignIn { url, message, .. } = window.keeping(signed_in("failed")).await else {
+      unreachable!()
+    };
+    assert_eq!(url, None);
+    assert!(message.is_some_and(|why| !why.is_empty()), "the frame tells why it failed");
+    let answer =
+      window.until(|frame| matches!(frame, Frame::Refused { id: Some(got), .. } if *got == id));
+    assert!(matches!(answer.await, Frame::Refused { error: ProtocolError::Refused { .. }, .. }));
+    drop(taken);
+  }
+
+  #[tokio::test]
+  async fn a_sign_in_of_codex_that_the_operator_cancels_is_pushed_and_refuses_its_config() {
+    let _port = PORT.lock().await;
+    let at = place();
+    signed_out(&at);
+    let (local, _daemon) = started(&at, GRACE).await;
+    let mut window = Window::dialed(&local).await;
+    window.life = opened(&mut window, &at, "a.jsonl").await;
+    let life = window.life.clone();
+    window.attach(&life).await;
+    let id = signing(&mut window).await;
+    let Frame::SignIn { url, .. } = window.keeping(signed_in("waiting")).await else {
+      unreachable!()
+    };
+    assert!(url.is_some_and(|one| one.starts_with("https://")), "the frame holds the address");
+    let cancel = Verb::CancelSignIn { life: window.life.clone() };
+    assert_eq!(window.ask(cancel).await, Ok(Answer::Done));
+    window.until(signed_in("canceled")).await;
+    let answer =
+      window.until(|frame| matches!(frame, Frame::Refused { id: Some(got), .. } if *got == id));
+    assert!(matches!(answer.await, Frame::Refused { error: ProtocolError::Refused { .. }, .. }));
   }
 }

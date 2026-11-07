@@ -176,6 +176,64 @@ export declare class Engine {
 export type JsEngine = Engine
 
 /**
+ * The picker of the files of a window, which walks its folder once as it opens, in the
+ * background: each key gives it the query and reads the first rows that stand then, so no key
+ * waits for the walk or the match.
+ */
+export declare class FilePicker {
+  /** A picker of the files of a directory, whose walk starts now. */
+  constructor(directory: string)
+  /**
+   * The picker opened again on a directory, for a new `@`: the walks of the last open stop now,
+   * and a walk of the directory starts.
+   */
+  open(directory: string): void
+  /** Takes the query that the operator typed after `@`, and gives the first rows that stand now. */
+  find(query: string, most: number): Rows
+  /** The first rows of the last query as they stand now, which a window reads again while they run. */
+  rows(most: number): Rows
+}
+
+/**
+ * The meaning of a life that each window draws, folded in the crate from the facts of the life in
+ * the order of its log, as a daemon folds it: the acts, the desk, the threads of a chain, the acts
+ * as they stood at a moment, and the moments. A window that reads a record with no daemon folds it
+ * here, so it draws the meaning that a daemon serves.
+ */
+export declare class Meaning {
+  /** A meaning that heard no fact yet. */
+  constructor()
+  /**
+   * The acts that a fact changes, each as it stands after the fact. `covered` names each act of
+   * `open` that a pause or a wake covers, and `born` the last pause or wake that covers a new act,
+   * as the engine finds them. A reader with no engine gives neither, and the fold finds both
+   * itself, as the engine does, so a record folds as its life did.
+   */
+  hear(fact: unknown[], covered?: string[], born?: unknown[] | null): Array<import("./dist/protocol.js").Act>
+  /**
+   * The live acts whose pause a pause would change, or a wake: each that no pause holds, or each
+   * that one holds.
+   */
+  open(pausing: boolean): Array<string>
+  /** What waits for the operator, with each notice that the window still shows. */
+  desk(notices?: Array<string> | undefined | null): import("./dist/protocol.js").Desk
+  /**
+   * The threads of a chain, now or as they stood just after a moment. `read` is the place up to
+   * which the window read the chain, from which its runs of notes count the notes not yet read.
+   */
+  threads(chain: string, at?: number | undefined | null, read?: number | undefined | null): import("./dist/protocol.js").Threads
+  /**
+   * The threads of every chain of the life but those that `hidden` names, as one tree in the order
+   * of the list of the threads, now or as they stood just after a moment.
+   */
+  rail(hidden?: Array<string> | undefined | null, at?: number | undefined | null): Array<import("./dist/protocol.js").ThreadNode>
+  /** The acts as they stood just after a moment. */
+  asOf(at: number): Array<import("./dist/protocol.js").Act>
+  /** Each moment at which an act began or ended, in order. */
+  moments(): number[]
+}
+
+/**
  * An ear that the crate writes: given once, to the boot of an engine or to a verb that takes an ear. It is let go
  * when it is disposed, so what it holds goes: a command ends, a wait ends, and a store lets its record go. The
  * engine of python steps it as a generator of its own too.
@@ -212,12 +270,16 @@ export declare function attachImage(directory: string, path: string): ImageAttac
 export declare function bash(scratch: string): NativeEar
 
 /**
- * Read, start, refresh or cancel ChatGPT sign-in for codex. The default action reads its state.
- * The config directory is the user config directory when unsaid. A start returns before the browser completes.
+ * Read, start, refresh or cancel `ChatGPT` sign-in for codex. The default action reads its state.
+ * The config directory is the user config directory when unsaid. A start returns before the
+ * browser completes.
  */
 export declare function codexAuth(action?: string | undefined | null, config?: string | undefined | null): CodexAuthInfo
 
-/** A ChatGPT sign-in state, with its browser address while it waits and a message when it fails. It holds no token. */
+/**
+ * A `ChatGPT` sign-in state, with its browser address while it waits and a message when it
+ * fails. It holds no token.
+ */
 export interface CodexAuthInfo {
   state: string
   url?: string
@@ -452,14 +514,11 @@ export interface Opening {
   inspecting?: boolean
   /**
    * Whether the life opens from the first entry of its record, born again at each checkpoint as
-   * each life of the
-   * record was, and not from its last checkpoint alone; false when unsaid. Each checkpoint then
-   * has to end the life
-   * that wrote it and to hold what a life born on the entries before it gathers, or the open is
-   * refused, as
-   * [`checkpoint::reborn`] says. Both opens reach one state at the tip, so the tests and the
-   * gates open this way to
-   * prove each checkpoint of a record.
+   * each life of the record was, and not from its last checkpoint alone; false when unsaid. Each
+   * checkpoint then has to end the life that wrote it and to hold what a life born on the entries
+   * before it gathers, or the open is refused, as [`checkpoint::reborn`] says. Both opens reach
+   * one state at the tip, so the tests and the gates open this way to prove each checkpoint of a
+   * record.
    */
   whole?: boolean
   /**
@@ -472,6 +531,12 @@ export interface Opening {
    * when unsaid.
    */
   config?: string
+  /**
+   * The logins of the members who answer as the operator, as the access list of a host and its
+   * local login give them, each of which a prompt can ask with `to="operator/<login>"`; none when
+   * unsaid.
+   */
+  members?: Array<string>
   /**
    * The actor a prompt goes to when it names none, as the catalog names a model, and an effort after a slash, at its
    * level as [`world::Model::at`] moves it. When unsaid, the default actor of the last stand
@@ -558,12 +623,23 @@ export interface ProviderInfo {
  * facts, one on each line, in order. The facts are those of the log when it agrees with the
  * record, and else those that the record kept, with the chains, the rungs, the runs and the dones
  * that they name. A line of the file that does not start with `[`, and a line `["keep", "", n]`,
- * holds no fact.
+ * holds no fact. The name of the session is the one that the operator said last on the root,
+ * which wins, else the one that the extension naming gave, and `said` is the one that the
+ * operator said alone; an empty name takes the default name again.
  */
-export declare function retold(path: string): { made: string | null; engine: string; logged: boolean; file: string }
+export declare function retold(path: string): { made: string | null; engine: string; logged: boolean; file: string; name: string | null; said: string | null }
 
 /** ROOT is the name of the root, which every life opens first under that one name, and on which boot stands the life. */
 export declare const ROOT: string
+
+/**
+ * What a key of the picker shows: the first rows that the query picks, best first, and whether the
+ * walk or the match still runs, so later rows may come.
+ */
+export interface Rows {
+  paths: Array<string>
+  running: boolean
+}
 
 /**
  * The scratch directory of the record at a path, in the cache of furb, which a host removes when it deletes the
@@ -618,6 +694,13 @@ export declare function time(): NativeEar
 
 /** TIMEOUT is the timeout, in seconds, of a command that does not say one. */
 export declare const TIMEOUT: number
+
+/**
+ * The files under a folder that the picker of a window offers, by their path from it with `/`
+ * between its parts, in order: each dot file too, but `.git` and each file that `.gitignore`
+ * hides.
+ */
+export declare function walkedFiles(root: string): Array<string>
 
 /** WINDOW is the window, in tokens, of a model whose roster entry does not say one. */
 export declare const WINDOW: number

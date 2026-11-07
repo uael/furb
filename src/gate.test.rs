@@ -38,6 +38,50 @@ fn acted(program: &[&str], acts: &[&str], word: &str) -> (String, usize) {
   (text, usize::try_from(above).expect("a count of lines is no negative number"))
 }
 
+/// What the gate finds below a word that answers the step of a prompt of these shapes, which is a
+/// prompt that wants a value when it is given one, each finding by its line in the word.
+fn answering(word: &str, valued: &[&str]) -> Vec<(usize, String)> {
+  let code = "__engine = {}\nexec(__source, __engine)\n__sheet = {}\nexec(__sheet_source, __sheet)\n__sheet['sheet'](__engine, {}, __word, [], __valued)";
+  let mut named = NamedValues::new();
+  named.push("__source", Object::string(ENGINE));
+  named.push("__sheet_source", Object::string(SOURCE));
+  named.push("__word", Object::string(word));
+  named.push("__valued", Object::list(valued.iter().map(|one| Object::string(*one))));
+  let got =
+    Sand::new().run(code, named, &mut Nobody("the sheet")).expect("furb.sheet writes the sheet");
+  let got = got.as_ref();
+  let text = entry(&got, 0).and_then(|one| one.as_str()).expect("a sheet is a text").to_owned();
+  let above = entry(&got, 1).and_then(|one| one.as_int()).expect("a sheet counts its lines");
+  let above = usize::try_from(above).expect("a count of lines is no negative number");
+  found(&text)
+    .into_iter()
+    .filter(|(line, _)| *line > above)
+    .map(|(line, why)| (line - above, why))
+    .collect()
+}
+
+#[test]
+fn a_word_that_answers_a_prompt_with_a_value_by_a_bare_expression_is_refused_with_its_close() {
+  let shape = ["tuple[list[str], str]"];
+  let found = answering("ids = ['chain1']\n(ids, 'kept')", &shape);
+  assert_eq!(found.len(), 1, "{found:?}");
+  assert_eq!(found[0].0, 2, "{found:?}");
+  assert!(
+    found[0].1.contains("[bare-answer]") && found[0].1.contains("close((ids, 'kept'))"),
+    "{found:?}"
+  );
+  // A word whose last line is a call, or an await, closes or waits as it says, and a prompt that
+  // wants no value takes a bare expression as any word.
+  for (word, valued) in [
+    ("ids = ['chain1']\nclose((ids, 'kept'))", &shape[..]),
+    ("got = bash('ls')\nawait got", &shape[..]),
+    ("ids = ['chain1']\n(ids, 'kept')", &[][..]),
+  ] {
+    let found = answering(word, valued);
+    assert!(!found.iter().any(|one| one.1.contains("bare-answer")), "{word}: {found:?}");
+  }
+}
+
 fn found(text: &str) -> Vec<(usize, String)> {
   let found = checked(text).expect("the gate reads the sheet");
   found.into_iter().map(|one| (one.line, one.to_string())).collect()
@@ -168,6 +212,23 @@ fn a_call_of_an_async_function_that_nothing_awaits_is_a_finding_of_its_line() {
   assert_eq!(
     said(&["async def hire():\n  return 1"], "async def go():\n  hire()\nawait go()"),
     vec![(2, why(5))]
+  );
+}
+
+#[test]
+fn a_call_of_an_async_function_in_an_argument_a_container_or_a_return_is_a_finding() {
+  let hire = "async def hire():\n  return 1";
+  let found =
+    |word: &str| said(&[hire], word).into_iter().map(|(line, _)| line).collect::<Vec<_>>();
+  assert_eq!(found("close(hire())"), vec![1]);
+  assert_eq!(found("x = [hire(), 2]"), vec![1]);
+  assert_eq!(found("x = {'a': hire()}"), vec![1]);
+  assert_eq!(found("async def go():\n  return hire()\nawait go()"), vec![2]);
+  assert_eq!(found("close(await hire())\ny = (hire() or 1)"), vec![2]);
+  assert_eq!(found("close(await hire())\ng = hire()\nh = (k := hire())"), Vec::<usize>::new());
+  assert_eq!(
+    found("async def g():\n  yield 1\nasync for x in g():\n  close([y async for y in g()])"),
+    Vec::<usize>::new()
   );
 }
 
@@ -313,6 +374,30 @@ fn a_global_of_a_def_or_a_class_binds_a_name_of_the_engine_in_the_module() {
       (10, 14, "turns".to_owned()),
     ]
   );
+}
+
+#[test]
+fn a_walrus_in_a_default_or_a_decorator_of_a_def_binds_a_name_of_the_engine() {
+  let word = "def f(a=(wait := 1), b=(chance := 2)):\n  (turns := 4)\n@(span := 5)\ndef g():\n  pass\nclose(1)";
+  assert_eq!(
+    engine_names(word),
+    vec![(1, 12, "wait".to_owned()), (1, 27, "chance".to_owned()), (3, 5, "span".to_owned())]
+  );
+}
+
+#[test]
+fn a_walrus_in_a_base_a_keyword_or_a_decorator_of_a_class_binds_a_name_of_the_engine() {
+  let word = "@(turns := 0)\nclass C((span := 5), k=(wait := 6)):\n  (cd := 7)\nclose(1)";
+  assert_eq!(
+    engine_names(word),
+    vec![(1, 5, "turns".to_owned()), (2, 12, "span".to_owned()), (2, 27, "wait".to_owned())]
+  );
+}
+
+#[test]
+fn a_walrus_in_the_body_of_a_def_or_a_class_or_in_a_lambda_of_a_default_binds_nothing() {
+  let word = "def f(a=lambda: (wait := 1)):\n  (chance := 2)\nclass C:\n  (cd := 3)\nclose(1)";
+  assert_eq!(engine_names(word), vec![]);
 }
 
 /// The line and the column of the word and the name of each finding of the engine-name rule.
@@ -556,4 +641,15 @@ fn a_word_binds_no_builtin_that_a_def_of_the_program_reads() {
   assert!(found[0].1.contains("`list` is a builtin that a def of this chain reads"), "{found:?}");
   assert_eq!(said(&program, "sum = 'ls'"), vec![], "no def reads sum");
   assert_eq!(said(&[], "list = 'ls'"), vec![], "no def reads list");
+}
+
+#[test]
+fn a_word_of_an_extension_that_binds_a_name_of_the_engine_in_a_block_a_walrus_a_capture_or_a_global_binds_it()
+ {
+  let bound = |word: &str| super::engine_bound(word, ENGINE);
+  assert_eq!(bound("if True:\n  over = 1"), vec!["over"]);
+  assert_eq!(bound("(question := 1)"), vec!["question"]);
+  assert_eq!(bound("match 1:\n  case scope:\n    pass"), vec!["scope"]);
+  assert_eq!(bound("def f():\n  global under\n  under = 1"), vec!["under"]);
+  assert_eq!(bound("accepts = None\nactor = 'x'\nimport re"), Vec::<String>::new());
 }

@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { link, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, extname, join } from "node:path";
+import { isDone, isPaused, operated } from "furb/life";
 import { executable, programs } from "../../bind/typescript/test/executable.ts";
 import { remove } from "../../bind/typescript/test/processes.ts";
 import { until } from "../../bind/typescript/test/until.ts";
@@ -13,7 +14,6 @@ import { fileReferences, projectFiles } from "../src/files.ts";
 import { Session } from "../src/session.ts";
 import { publishShare, shareHtml, shareMarkdown } from "../src/share.ts";
 import { composing } from "./composing.ts";
-import { ended } from "./ended.ts";
 import { idle } from "./idle.ts";
 import { transcriptOf } from "./transcript.ts";
 
@@ -42,7 +42,7 @@ test("a word of the operator stands as his messages stand, as its program in a p
       await session.refresh();
       const done = line(await frame());
       expect(done).not.toContain("◉");
-      expect(done).toMatch(/ 1 {2}await wait\(60, __name__\) +woke/);
+      expect(done).toMatch(/ 1 {3}await wait\(60, __name__\) +woke/);
       session.show("transcript");
       await session.refresh();
       await frame();
@@ -55,12 +55,12 @@ test("a word of the operator stands as his messages stand, as its program in a p
           (act) => act.kind === "rung" && act.words[0] === "this is invalid python !!!",
         );
       // The daemon gates the word after the submit made its rung, and the window hears the refusal then.
-      await until(session, () => refused()?.run?.status === "failed" && session.findings.length > 0);
+      await until(session, () => refused()?.run?.run === "refused" && session.findings.length > 0);
       expect(session.error).toBe("");
       expect(session.findings.join("\n")).toContain("line 1");
       await session.refresh();
       const rows = (await frame()).split("\n");
-      const at = rows.findIndex((row) => /1✗ this is invalid python !!!/.test(row));
+      const at = rows.findIndex((row) => /1 ✗ this is invalid python !!!/.test(row));
       expect(at).toBeGreaterThan(0);
       expect(rows[at + 1]).toMatch(/^ +┃ +# \S/);
       record = session.host.record;
@@ -73,11 +73,12 @@ test("a word of the operator stands as his messages stand, as its program in a p
     async ({ frame }) => {
       const shown = line(await frame());
       expect(shown).not.toContain("◉");
-      expect(shown).toMatch(/ 1 {2}await wait\(60, __name__\) +woke/);
+      expect(shown).toMatch(/ 1 {3}await wait\(60, __name__\) +woke/);
     },
-    // The later life boots on the checkpoint that the end of the first one wrote, and the word of that boot stands
-    // under the words of the first life, so the frame is tall enough to hold both.
-    { width: 140, height: 90, useMouse: true },
+    // The later life boots on the checkpoint that the end of the first one wrote, and the word of that boot holds the
+    // setup of the life and its values, which stands under the words of the first life, so the frame is tall enough to
+    // hold both.
+    { width: 140, height: 200, useMouse: true },
     session,
   );
 });
@@ -86,8 +87,7 @@ test("queued follow-ups wait for current work, attach files, and message undo an
   let session = await demoSession();
   try {
     await session.submit("show live progress");
-    session.enqueue("Explain @README.md after this answer.");
-    expect(session.queued).toHaveLength(1);
+    await session.enqueue("Explain @README.md after this answer.");
     expect(
       session.acts.some((act) => act.kind === "prompt" && String(act.words[1]).startsWith("Explain")),
     ).toBe(false);
@@ -97,7 +97,9 @@ test("queued follow-ups wait for current work, attach files, and message undo an
         session.queued.length === 0 &&
         session.acts.some(
           (act) =>
-            session.isUserPrompt(act) && act.words[1] === "Explain @README.md after this answer." && act.done,
+            session.isUserPrompt(act) &&
+            act.words[1] === "Explain @README.md after this answer." &&
+            isDone(act),
         ),
     );
     await idle(session);
@@ -118,49 +120,30 @@ test("queued follow-ups wait for current work, attach files, and message undo an
       "Explain @README.md after this answer.",
     );
     await session.submit("/pause");
-    session.enqueue("Keep this follow-up through exit.");
-    session.save();
-    const saved = JSON.parse(await readFile(`${session.host.record}.ui.json`, "utf8"));
-    expect(saved.queued[0].text).toBe("Keep this follow-up through exit.");
-    expect(session.acts.some((act) => act.kind === "prompt" && act.words[1] === saved.queued[0].text)).toBe(
-      false,
-    );
+    await session.enqueue("Keep this follow-up through exit.");
+    await until(session, () => session.queued.length === 1);
+    expect(
+      session.acts.some((act) => act.kind === "prompt" && act.words[1] === session.queued[0]?.message),
+    ).toBe(false);
     const record = session.host.record;
     if (!record) throw new Error("No record for the queued message.");
     await session.dispose();
+    // The record keeps the queue, so the reopened life holds the follow-up until its chain wakes.
     session = await demoSession({ record });
-    expect(session.queueHeld).toBe(true);
-    expect(session.queued[0]?.text).toBe("Keep this follow-up through exit.");
+    await until(session, () => session.queued[0]?.message === "Keep this follow-up through exit.");
     await session.submit("/wake");
-    session.queueHeld = false;
-    await session.drainQueue();
     await until(session, () =>
       session.acts.some(
         (act) =>
-          session.isUserPrompt(act) && act.words[1] === "Keep this follow-up through exit." && act.done,
+          session.isUserPrompt(act) && act.words[1] === "Keep this follow-up through exit." && isDone(act),
       ),
     );
     await idle(session);
     await session.refresh();
-    const sent = session.acts.filter((act) => session.isUserPrompt(act)).length;
-    await session.dispose();
-    // The life ends in the daemon once its window let it go, and only then does its view stand still to be written.
-    await ended(record);
-    const stale = JSON.parse(await readFile(`${record}.ui.json`, "utf8"));
-    stale.queued = saved.queued;
-    await writeFile(`${record}.ui.json`, JSON.stringify(stale));
-    session = await demoSession({ record });
-    // The checkpoint holds the chain paused on the thread that it asks, so the reopened life waits for a wake. The queue
-    // that the stale view names was sent already, so the open drops it and sends no prompt again.
-    await until(session, () => session.acts.length > 0);
-    await Bun.sleep(1000);
-    await session.refresh();
-    expect(session.queued).toHaveLength(0);
     const resent = (await readFile(record, "utf8"))
       .split("\n")
       .filter((line) => line.startsWith('[["prompt",') && line.includes("Keep this follow-up through exit."));
     expect(resent).toHaveLength(1);
-    expect(sent).toBeGreaterThan(0);
   } finally {
     await session.dispose();
   }
@@ -354,14 +337,14 @@ test("/extensions lists what a life runs, and a cancel of a word of the operator
       async ({ session, frame, click }) => {
         await session.command("/extensions");
         expect(session.notice).toBe(
-          "This life runs catchup with catchup(), memory with await recall(), skills with await listed(), compaction with fitted(), naming with name_session(), ouroboros, web, mcp with await mcp_index(). Run a word of one with /run.",
+          "This life runs catchup with catchup(), memory with await recall(), skills with await listed(), compaction with compacted(); fitted(), naming with name_session(). Run a word of one with /run.",
         );
         await session.command("/run await wait(60, __name__)");
         // The wait runs under the word, so the cancel asks first.
-        await until(session, () => session.activity.some((act) => act.kind === "wait" && !act.done));
+        await until(session, () => session.activity.some((act) => act.kind === "wait" && !isDone(act)));
         await session.command("/cancel");
         await click("Cancel it");
-        await until(session, () => session.activity.every((act) => act.kind !== "wait" || act.done));
+        await until(session, () => session.activity.every((act) => act.kind !== "wait" || isDone(act)));
         await session.refresh();
         // The watcher lives on, and shows no work in the feed.
         expect((await session.engine.outcome("remember1")).done).toBe(false);
@@ -385,8 +368,13 @@ test("the setup of the root stands as code: a comment that names the setup, then
         // The setup of the root ends with its last rung, the stand and the cd. A word of the operator that comes
         // sooner ends it, and that rung then stands after the word, as it does where the roster is slow to come.
         const stood = () =>
-          session.activity.filter((act) => act.kind === "rung" && act.by === act.on && act.done).length ===
-          13;
+          session.activity.some(
+            (act) =>
+              act.kind === "rung" &&
+              act.by === act.chain &&
+              isDone(act) &&
+              /^stand\(\)\ncd\(/.test(act.word ?? ""),
+          );
         for (let step = 0; step < 200 && !stood(); step++) {
           await Bun.sleep(25);
           await session.refresh();
@@ -394,33 +382,38 @@ test("the setup of the root stands as code: a comment that names the setup, then
         expect(stood()).toBe(true);
         await session.command("/run x = 1");
         await until(session, () =>
-          session.activity.some((act) => act.kind === "rung" && act.by === "operator" && act.done),
+          session.activity.some((act) => act.kind === "rung" && operated(act.by) && isDone(act)),
         );
         await session.refresh();
         // The root writes its setup on itself, each rung to the one default actor and with no rung whose word it
         // retells: the debug of the extensions, the read of the doctrine, the word rung(read('<file>', HIDDEN).content) of each extension in the
         // order of the life, the life words in one word, then the stand and the cd.
-        const setup = session.activity.filter((act) => act.kind === "rung" && act.by === act.on);
-        expect(setup.map((act) => act.on)).toEqual(Array(13).fill(session.engine.root));
-        expect(setup.map((act) => act.words.slice(1))).toEqual(Array(13).fill(["", setup[0]?.words[2]]));
-        expect(setup.map((act) => act.word)).toEqual([
-          'debug(t"{standing()[4]=}")',
-          // A path of Windows stands with its separators doubled, as python shows a backslash.
-          expect.stringMatching(/^read\('.*[/\\]DOCTRINE\.md'\)$/),
-          ...["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"].map((name) =>
-            expect.stringMatching(
-              new RegExp(
-                `^rung\\(read\\('.*[/\\\\]+words[/\\\\]+${name}[/\\\\]+${name}\\.py', HIDDEN\\)\\.content\\)$`,
-              ),
-            ),
-          ),
-          "catchup()\nawait recall()\nawait listed()\nfitted()\nawait mcp_index()",
-          // An extension that plays on the root alone comes after the others, with its life word.
-          expect.stringMatching(
-            /^rung\(read\('.*[/\\]+words[/\\]+naming[/\\]+naming\.py', HIDDEN\)\.content\)$/,
-          ),
+        const setup = session.activity.filter((act) => act.kind === "rung" && act.by === act.chain);
+        expect(setup.map((act) => act.chain)).toEqual(Array(setup.length).fill(session.engine.root));
+        expect(setup.map((act) => act.words.slice(1))).toEqual(
+          Array(setup.length).fill(["", setup[0]?.words[2]]),
+        );
+        const words = setup.map((act) => act.word ?? "");
+        expect(words[0]).toBe('debug(t"{standing()[4]=}")');
+        // A path of Windows stands with its separators doubled, as python shows a backslash.
+        expect(words[1]).toMatch(/^read\('.*[/\\]DOCTRINE\.md'\)$/);
+        expect(words.at(-1)).toMatch(/^stand\(\)\ncd\('.*'\)$/);
+        // The word of each extension is read in the order of the life, an extension that plays on the root alone
+        // after the others, and each life word stands as a rung of its own.
+        const reads = words.filter((word) => /^rung\(read\('.*', HIDDEN\)\.content\)$/.test(word));
+        expect(reads.map((word) => /[/\\]+words[/\\]+(\w+)[/\\]+/.exec(word)?.[1])).toEqual([
+          "catchup",
+          "memory",
+          "skills",
+          "compaction",
+          "naming",
+        ]);
+        expect(words.slice(2, -1).filter((word) => !reads.includes(word))).toEqual([
+          "catchup()",
+          "await recall()",
+          "await listed()",
+          "compacted(); fitted()",
           "name_session()",
-          expect.stringMatching(/^stand\(\)\ncd\('.*'\)$/),
         ]);
         let rows = (await frame()).split("\n");
         for (let step = 0; step < 80 && !rows.some((row) => /earlier steps/.test(row)); step++) {
@@ -444,30 +437,30 @@ test("the setup of the root stands as code: a comment that names the setup, then
             row
               .slice(0, 80)
               .trim()
-              .replace(/^(\d+) {2}/, "$1 ")
+              .replace(/^(\d+) {3}/, "$1 ")
               .replace(/\s{2,}.*$/, ""),
           )
           .filter((row) => /^\d+ /.test(row))
           .slice(0, 18);
         expect(shown[0]).toBe('1 debug(t"{standing()[4]=}")');
-        expect(shown[1]).toMatch(/^2 read\('.*DOCTRINE\.md'\)$/);
+        // The path of the doctrine is cut to the width of the card, so only its call shows whole.
+        expect(shown[1]).toMatch(/^2 read\('.*'\)$/);
         expect(
-          shown.slice(2, 9).map((row) => /^\d+ rung\(read\('.*', HIDDEN\)\.content\)$/.test(row)),
-        ).toEqual(Array(7).fill(true));
+          shown.slice(2, 6).map((row) => /^\d+ rung\(read\('.*', HIDDEN\)\.content\)$/.test(row)),
+        ).toEqual(Array(4).fill(true));
         // The life words stand as the calls that end their one word, each on its line, then the stand and the cd,
         // and the card ends there.
-        expect(shown.slice(9, 14)).toEqual([
-          "10 catchup()",
-          "11 await recall()",
-          "12 await listed()",
-          "13 fitted()",
-          "14 await mcp_index()",
+        expect(shown.slice(6, 10)).toEqual([
+          "7 catchup()",
+          "8 await recall()",
+          "9 await listed()",
+          "10 compacted(); fitted()",
         ]);
         // The extension naming plays on the root alone, so its word and its life word come after the others.
-        expect(shown[14]).toMatch(/^15 rung\(read\('.*', HIDDEN\)\.content\)$/);
-        expect(shown.slice(15, 17)).toEqual(["16 name_session()", "17 stand()"]);
-        expect(shown[17]).toMatch(/^18 cd\('.*'\)$/);
-        expect(shown[18] ?? "").not.toMatch(/^19 /);
+        expect(shown[10]).toMatch(/^11 rung\(read\('.*', HIDDEN\)\.content\)$/);
+        expect(shown.slice(11, 13)).toEqual(["12 name_session()", "13 stand()"]);
+        expect(shown[13]).toMatch(/^14 cd\('.*'\)$/);
+        expect(shown[14] ?? "").not.toMatch(/^15 /);
         expect(rows.join("\n")).not.toMatch(/rung\d+…\d+|remember1|ouroboros1|catchup1/);
       },
       { width: 140, height: 90 },
@@ -488,7 +481,7 @@ test("an act that ended and told nothing shows nothing in the feed, as a read of
         await session.command('/run read("a.txt")');
         await until(session, () =>
           session.activity.some(
-            (act) => act.kind === "read" && String(act.words[0]).endsWith("/") && act.done,
+            (act) => act.kind === "read" && String(act.words[0]).endsWith("/") && isDone(act),
           ),
         );
         await session.refresh();
@@ -502,23 +495,6 @@ test("an act that ended and told nothing shows nothing in the feed, as a read of
     );
   } finally {
     await remove(directory);
-  }
-});
-
-test("a follow-up that a window sends goes through the queue of the life, which sends it once for its entry", async () => {
-  // The life holds the queue and sends a follow-up once its chain rests; a reopen that finds the queue as it stood is
-  // a test of the life, in host/tests/life.rs.
-  const session = await demoSession();
-  try {
-    await idle(session);
-    const entry = { id: "once-check", chain: session.selected, shape: "str", text: "A queued question" };
-    const sent = await session.host.sendQueued(entry);
-    expect(await session.host.sendQueued(entry)).toBe(sent);
-    await session.refresh();
-    const asked = session.acts.filter((act) => act.kind === "prompt" && act.words[1] === entry.text);
-    expect(asked.map((act) => act.id)).toEqual([sent]);
-  } finally {
-    await session.dispose();
   }
 });
 
@@ -552,7 +528,7 @@ test("/wake with no chain wakes every paused chain of the life, and /wake with a
     const second = session.selected;
     await session.submit("/pause");
     const stopped = () =>
-      session.chains.filter((chain) => [first, second].includes(chain.id) && chain.paused);
+      session.chains.filter((chain) => [first, second].includes(chain.id) && isPaused(chain));
     await until(session, () => stopped().length === 2);
     await session.submit(`/wake ${first}`);
     await until(session, () => stopped().length === 1);

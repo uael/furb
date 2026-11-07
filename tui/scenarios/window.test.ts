@@ -1,5 +1,5 @@
-// What the owner does in the window: he closes, cancels, folds and resolves threads with the keys and the mouse, a
-// redraw between a press and its release resolves and folds nothing, and "thinking" shows only while a reply of a model
+// What the owner does in the window: he closes, cancels and folds threads with the keys and the mouse, a redraw between
+// a press and its release folds nothing, no click closes a thread, and "thinking" shows only while a reply of a model
 // runs.
 import { expect } from "bun:test";
 import { scenario, test, until, type Window } from "./harness.ts";
@@ -21,11 +21,12 @@ async function railClick(window: Window, text: string): Promise<void> {
   await window.frame();
 }
 
-// #1253: the sidebar orders the open threads by their last message, so a message moved a thread under a still
-// pointer, and a release on the Resolve that the redraw put there resolved a thread that nobody resolved.
-test("a redraw between a press and its release resolves nothing, and a click on Resolve resolves the thread", () =>
+// #1253: the sidebar orders the open threads by their last message, so a message moves a thread under a still
+// pointer, and a release on the control that the redraw put there took a click that nobody made. A thread ends only
+// when its model closes its prompt: no control of the window closes it.
+test("a redraw between a press and its release folds nothing, and no click on a thread in the sidebar closes it", () =>
   scenario([], async (window) => {
-    const { engine } = window;
+    const { engine, app } = window;
     const root = window.root;
     await engine.pause(root);
     const id = await engine.prompt("str", { message: "Hold this thread open", on: root });
@@ -36,40 +37,46 @@ test("a redraw between a press and its release resolves nothing, and a click on 
     await until(() => listed(window).some((one) => one.act.id === other), "the second thread");
     const left = window.width - window.session.preferences.sidebarWidth;
     const before = rail(window, await window.frame());
-    const x = (before.find((line) => line.includes("✓ Resolve")) ?? "").indexOf("Resolve");
-    // The press lands on the row of the other thread, under the controls of the thread held open, which the message
-    // moves under that row.
+    expect(before.some((line) => /Resolve/.test(line))).toBe(false);
+    const x = (before.find((line) => line.includes("Collapse")) ?? "").indexOf("Collapse");
+    // The press lands on the row of the other thread, in the column of the Collapse of the thread held open, whose
+    // controls the message moves under the pointer.
     const y = before.findIndex((line) => line.includes("Another thread"));
     expect(x).toBeGreaterThan(0);
-    expect(before[y - 1]).toContain("✓ Resolve");
-    expect(before[y]?.[x]).toBe(" ");
+    expect(before[y - 1]).toContain("Collapse");
     await window.screen.mockMouse.pressDown(left + x, y);
-    // A message moves the thread held open, and its Resolve comes under the pointer, which did not move.
+    // A message moves the thread held open, and its Collapse comes under the pointer, which did not move.
     await window.session.submit("One more word on it");
     await until(
       () => (listed(window).find((one) => one.act.id === id)?.messages.length ?? 0) > 0,
       "the message",
     );
     let after = before;
-    for (let step = 0; step < 80 && !after[y]?.includes("Resolve"); step++) {
+    for (let step = 0; step < 80 && !after[y]?.includes("Collapse"); step++) {
       await Bun.sleep(25);
       after = rail(window, await window.frame());
     }
-    expect(after[y]?.slice(x, x + "Resolve".length)).toBe("Resolve");
+    expect(after[y]?.slice(x, x + "Collapse".length)).toBe("Collapse");
     await window.screen.mockMouse.release(left + x, y);
     await window.frame();
     await Bun.sleep(300);
-    expect(listed(window).find((one) => one.act.id === id)?.resolved).toBe(false);
+    expect(app.threadFolded(id)).toBe(false);
+    // Each control of the thread and its row take a click, and none of them closes the thread.
+    for (const text of [" Collapse", " Expand", " Reply", "Hold this thread open"]) {
+      await window.shows((frame) => rail(window, frame).some((line) => line.includes(text)), text);
+      await railClick(window, text);
+    }
+    await Bun.sleep(300);
+    const shown = rail(window, await window.frame());
+    expect(shown.some((line) => /Resolve/.test(line))).toBe(false);
+    expect(listed(window).find((one) => one.act.id === id)?.over).toBe(false);
     expect(await engine.peek(id)).toBeNull();
-    await railClick(window, " Resolve ");
-    await until(() => listed(window).find((one) => one.act.id === id)?.resolved === true, "the resolve");
-    expect(await engine.peek(id)).toBe("resolved");
   }));
 
 // A thread is folded by one toggle alone: the Collapse or the Expand of its header, which stands pinned at the top of
 // the feed while the header of a thread taller than the screen scrolled above it. A click in the body of a thread
-// once folded it, and a click on its header resolved it beside that toggle.
-test("the toggle of a thread taller than the screen stays in view and folds it, and a click in its body folds and resolves nothing", () =>
+// once folded it, and a click on its header closed it beside that toggle.
+test("the toggle of a thread taller than the screen stays in view and folds it, and a click in its body folds and closes nothing", () =>
   scenario([], async (window) => {
     const { engine, app, session } = window;
     const root = window.root;
@@ -99,14 +106,21 @@ test("the toggle of a thread taller than the screen stays in view and folds it, 
       return settle();
     };
     // The middle of the thread stands at the top of the feed, and its header far above it.
-    const middle = feed(await scrollTo(40));
+    await scrollTo(40);
+    // A slow runner draws the body of the thread a frame after the pin, so wait for a row of it.
+    const middle = feed(
+      await window.shows(
+        (frame) => feed(frame).some((line, at) => at > viewport.y + 5 && /Row \d+\./.test(line)),
+        "the body under the pinned toggle",
+      ),
+    );
     expect(head()?.y ?? 0).toBeLessThan(viewport.y);
     const top = middle[viewport.y] ?? "";
     expect(top).toContain("Row 1.");
     expect(top).toContain("▾ Collapse");
     expect(middle.filter((line) => line.includes("Collapse"))).toHaveLength(1);
     const toggle = top.indexOf("Collapse");
-    // A click on the line at the left of the body and a click on its text fold nothing and resolve nothing.
+    // A click on the line at the left of the body and a click on its text fold nothing and close nothing.
     const y = middle.findIndex((line, at) => at > viewport.y + 5 && /Row \d+\./.test(line));
     const body = middle[y] ?? "";
     expect(y).toBeGreaterThan(0);
@@ -116,13 +130,13 @@ test("the toggle of a thread taller than the screen stays in view and folds it, 
       await settle();
     }
     expect(session.folds[`thread:${id}`]).not.toBe(true);
-    expect(listed(window).find((one) => one.act.id === id)?.resolved).toBe(false);
+    expect(listed(window).find((one) => one.act.id === id)?.over).toBe(false);
     expect(await engine.peek(id)).toBeNull();
     // #1253: a press on a row of the feed, then a redraw that puts the toggle under the still pointer, then the
     // release: nothing folds.
     const shown = feed(await scrollTo(0));
     expect(shown[viewport.y]).not.toContain("Collapse");
-    // The header of the thread in the feed holds the toggle alone: the sidebar and /close resolve a thread.
+    // The header of the thread in the feed holds the toggle alone.
     expect(shown.some((line) => line.includes("▾ Collapse"))).toBe(true);
     expect(shown.some((line) => line.includes("Resolve"))).toBe(false);
     await window.screen.mockMouse.pressDown(toggle, viewport.y);
@@ -150,7 +164,7 @@ test("the toggle of a thread taller than the screen stays in view and folds it, 
     const node = head();
     expect(node && node.y >= viewport.y && node.y < viewport.y + viewport.height).toBe(true);
     expect(folded.filter((line) => line.includes("Expand"))).toHaveLength(1);
-    expect(listed(window).find((one) => one.act.id === id)?.resolved).toBe(false);
+    expect(listed(window).find((one) => one.act.id === id)?.over).toBe(false);
     expect(await engine.peek(id)).toBeNull();
   }));
 

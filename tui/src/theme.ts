@@ -472,9 +472,19 @@ export function markOf(
   now?: number,
 ): readonly [text: string, fg: RGBA, attributes: number] {
   const one = marks[state];
-  return [state === "thinks" ? spin(now) : one.glyph, theme[one.role], one.attributes];
+  // Only the states that move move: a model that thinks spins, and work that runs turns. A state that waits on the
+  // operator or that ended stands still.
+  const shown = state === "thinks" ? spin(now) : state === "runs" ? turn(now) : one.glyph;
+  return [shown, theme[one.role], one.attributes];
 }
 const spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+/** The frames of work that runs, as a command or a word that awaits one: a circle that turns at half the pace of the
+ * spinner, and the mark of work that runs when the view holds still. */
+const turning = ["◐", "◓", "◑", "◒"];
+export function turn(now = clock()): string {
+  if (motion.still) return glyph.running;
+  return turning[Math.floor(now / (2 * frame)) % turning.length] ?? glyph.running;
+}
 /** The frames that the renderer draws in a second, which bun run bench holds each frame to. */
 export const fps = 60;
 /** The time between two frames of the spinner, which the view ticks at. */

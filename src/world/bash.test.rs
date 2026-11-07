@@ -1,10 +1,15 @@
 //! The ear of the commands.
 
 use super::Running;
+#[cfg(unix)]
+use std::io;
+#[cfg(unix)]
+use tokio::process;
+use unsync::spsc;
 
 #[test]
 fn a_text_fed_to_a_command_that_reads_no_more_is_refused_and_its_close_is_not() {
-  let (stdin, fed) = unsync::spsc::unbounded();
+  let (stdin, fed) = spsc::unbounded();
   let mut one = Running { stdin };
   assert!(one.feed(Some("one\n".to_owned())).is_ok());
   drop(fed);
@@ -23,10 +28,10 @@ fn an_error_of_the_wait_on_the_shell_ends_the_watch_with_that_error_not_an_exit_
   use std::future;
 
   let outcome = runtime().block_on(async {
-    let mut command = tokio::process::Command::new("sh");
+    let mut command = process::Command::new("sh");
     command.arg("-c").arg("sleep 5");
     let (_child, mut group) = spawn(&mut command).unwrap();
-    let shell = runtime().spawn(async { Err(std::io::Error::other("wait broke")) });
+    let shell = runtime().spawn(async { Err(io::Error::other("wait broke")) });
     let got = watch(
       shell,
       future::pending::<Result<(), super::Unread>>(),

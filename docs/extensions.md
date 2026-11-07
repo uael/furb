@@ -13,8 +13,22 @@ caches of the chain stays valid.
 
 ## The official extensions
 
-Eight extensions come with furb, and each life runs them unless a config turns them off. `catchup`, `memory`,
-`compaction` and `naming` play by default, as their manifests say.
+Eight extensions come with furb, each a skill with code. `catchup`, `memory`, `skills`, `compaction` and `naming` play
+by default, as their manifests say, and `ouroboros`, `web` and `mcp` play on need, as the rule below says.
+
+### Which skill plays on which chain
+
+One rule says it. A skill with code plays in one of three ways:
+
+- By default: an official skill whose manifest says `furb-default: "true"` plays from the setup of the root, unless a
+  config turns it off.
+- By a config: a config that turns a skill on, by `true` for an official one or by the path of its folder for any
+  other, plays it from the setup, or from the write of that config in the middle of a life.
+- On need: `await skill(name)` plays it from then on, as a word loads `web` or `mcp` when its work needs them.
+
+A skill that plays, plays on every chain of the life, and one whose manifest says `furb-plays: root` plays on the root
+alone and on a chain whose source had it. The index, `skills://`, marks `on` each skill that plays on the chain that
+reads it.
 
 - **`catchup`** keeps a chain up to date with the machine. At each stand, as when a later life opens on a record, it
   reads again each file that the chain read or wrote, and tells the chain in one paragraph headed caught up the lines
@@ -38,9 +52,14 @@ Eight extensions come with furb, and each life runs them unless a config turns t
   the `SKILL.md` of a skill with no code, and it tells the prose and the interface of a skill with code, or its word
   when it ships no interface, after the life enables it, once for each word, so it plays as an extension that a config
   turns on. `await skill()` plays each skill with code that says `furb-default: "true"`. `read("skills://<name>")`
-  gives the word of a skill with code, and `read("skills://<name>/<file>")` a file of its folder. A write of
+  gives the word of a skill with code, and `read("skills://<name>/<file>")` a file of its folder.
+  `defined(*names)` is a `Show` that selects the definitions of those names in a text, so
+  `read("skills://<name>", defined("f"))` tells those definitions and gives the whole word to edit and write.
+  `read("settings://<name>")` gives the keys of a skill in the configs as a JSON object, each with the value that wins
+  for it or the default of its `furb-config`, and `read("settings://")` each key of the configs, as
+  [the schema](config.md#the-schema) says. A write of
   `skills://<name>` writes the word in `.furb/extensions/<name>` of the project, after a copy of the folder there
-  when it stands elsewhere, and reloads the skill when the life runs it. Its life word, `await listed()`, reads
+  when it stands elsewhere, and reloads the skill when the life runs it. A word that binds a name of the engine at its top is refused, and the write changes no file. Its life word, `await listed()`, reads
   `skills://`
   in the setup of the root, which every new chain holds. The TUI
   lists each skill after `/`, and its command reads the skill for the chain. `/skills`, or `/reload-skills`, reads the
@@ -51,9 +70,13 @@ Eight extensions come with furb, and each life runs them unless a config turns t
   commands, `recent(n)`, the acts of the last `n` replies, and `await chosen()`, which asks a model.
   `together(*filters)` joins them, and `supersede(keep)` applies one. `await condense()` asks a model what to keep and
   compacts at once. `compacted()` does the same for one chain each time an answer fills more than `SHARE`, 0.6, of the
-  window, and moves, stops and pauses nothing. Its life word, `fitted()`, watches each chain: when the model refuses
-  a reply because its prompt passes the window, it cuts the chain at once to its open prompts, with a summary that
-  says why, so the next reply reads less and the chain goes on with no pause.
+  window, and moves, stops and pauses nothing. `fitted()` watches a chain: when the model refuses a reply because its
+  prompt passes the window, it cuts the chain at once to its open prompts, with a summary that says why, so the next
+  reply reads less and the chain goes on with no pause. Its life word, `compacted(); fitted()`, wraps each chain with
+  both, so a chain compacts to what a model chose, with its summary, before its prompt passes the window, and keeps
+  its reads and its findings. The cut of `fitted()` comes only as the last resort, when one reply grows past the
+  window before the compaction. Each compaction costs one prompt more, to the actor that `CHOOSER` names, else the
+  one that `automatic()` gives.
   A project changes `SHARE`, `FILTERS`, `CHOOSER`, `LISTED` or `BRIEF` in an extension of its own. In the TUI, a rule
   with the summary marks each compaction in the feed, and `/compact` runs `await condense()` on the chain on screen.
 - **`naming`** gives the session a name from the first message of the operator. Its life word, `name_session()`, plays
@@ -67,7 +90,11 @@ Eight extensions come with furb, and each life runs them unless a config turns t
   client is the same act, which the client makes with an ear of its own, so it lasts whatever extension plays.
 - **`ouroboros`** gives `extend(name, *rungs)`, which writes the words of those rungs as an extension of the project
   and turns it on, so every later chain runs it, and `extend(name, *rungs, tui=module)`, which also writes a [part for
-  the TUI](#a-part-for-the-tui). How to extend furb stands in one home, the text of its
+  the TUI](#a-part-for-the-tui). `extend(name, *rungs, session=True)` keeps the kit in the record alone: it writes no
+  file and says the fact `enable` with the word, so each chain of this session, and of each later life on its record,
+  plays it. `view="name"` names in that fact the value of the root that holds the tree of the view of the kit, a node
+  of the protocol as a dict: the daemon serves it to each window that mounts the view of the kit, and again each time
+  that the value changes. How to extend furb stands in one home, the text of its
   [`SKILL.md`](../extensions/ouroboros/SKILL.md), which a model reads with `skill("ouroboros")`: the three ways to extend
   furb and when to take each, with an example for each. `enabled()` gives the extensions that the life runs. `bound_by()` gives each name that a word of the chain bound, with the rung of that word.
 - **`web`** searches the web and reads its pages. `web_search(query)` uses the search of the provider of the model of
@@ -151,6 +178,7 @@ metadata:
   furb-plays: every
   furb-view: tui.ts
   furb-process: notes.ts
+  furb-config: config.json
 ---
 What the notes are for.
 ```
@@ -163,8 +191,9 @@ What the notes are for.
   It only defines: it holds no comment and binds no name of the engine. It can hold one quote of guidance for the
   model, which holds no law.
 - `furb-interface` is the file of the interface of the extension, its contract. It can be absent.
-- `furb-default` is `"true"` for an extension that plays by default, as `catchup`, `memory`, `compaction` and
-  `naming`. It can be absent, which is `"false"`.
+- `furb-default` is `"true"` for an extension that plays by default, as `catchup`, `memory`, `skills`, `compaction`
+  and `naming`. It can be absent, which is `"false"`: the extension then plays only when a config turns it on or a
+  word loads it with `skill(name)`.
 - `furb-life` is the life word, a line of Python that starts the work of the extension, such as `await recall()`. It
   awaits each act that it starts whose first answer comes later, as `await mcp_index()` does, so what that act tells
   stands in the turn of the life words of the setup. It can be absent.
@@ -182,6 +211,9 @@ What the notes are for.
   the life as a skill, as [the protocol](protocol.md) says. A folder that holds the extension starts nothing: only a
   life that plays it does. A process that ends before its life tells the operator once, with its exit and the last
   lines of its stderr, and starts again at the next play of the extension. It can be absent.
+- `furb-config` is the JSON file of the keys that the extension adds to the configs, relative to the folder, as
+  [the schema](config.md#the-schema) says. `/config` shows them under the name of the extension, and its word reads
+  them as `json.loads(read("settings://<name>", HIDDEN).content)`. It can be absent.
 
 The client `@uael/furb/skill` gives a process of TypeScript what it needs: it attaches the life from those variables,
 hears the facts of the kinds that it asks, says verbs that the life takes under `skill/<name>`, and serves a tree to
@@ -207,7 +239,7 @@ a change of furb. The skill `ouroboros` gives an example of each.
 
 A word sets the actor of a chain that it made, or of a chain that waits, with a rung on that chain: `rung("actor =
 'claude-cli:sonnet/medium'", on=chain)` rebinds the default actor, and `wake(chain)` lets a paused chain go on. The next
-prompt on the chain with no `to` goes to the new actor. `hire()` of the conductor does this, and the note that a model
+prompt on the chain with no `to` goes to the new actor. The note that a model
 limit tells a chain names the same two calls.
 
 An official extension also has a contract, `<name>.pyi`, whose laws its suite in `test/` holds, as [the hygiene

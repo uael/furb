@@ -238,12 +238,6 @@ export const input = part({
       },
       { on: "a", run: () => void this.nextAttention().catch(this.report), hint: ["a", "question"] },
       {
-        on: "r",
-        run: onThread((thread) => this.resolveThread(thread)),
-        when: () => this.railThread()?.resolved === false,
-        hint: ["r", "resolve"],
-      },
-      {
         on: "o",
         run: onThread((thread) => this.replyTo(thread.act.id)),
         when: () => Boolean(this.railThread()),
@@ -389,9 +383,10 @@ export const input = part({
       }
     }
     if (up && !anywhere && !this.composer.plainText && queued && this.historyIndex < 0) {
-      this.session.removeQueued(queued.id);
-      this.insert(queued.text);
-      this.session.notice = "The queued message is back in the input. ⌥Enter queues it again.";
+      void this.session.removeQueued(queued.entry).then(() => {
+        this.insert(queued.message);
+        this.session.notice = "The queued message is back in the input. ⌥Enter queues it again.";
+      }, this.report);
       return true;
     }
     const cursor = this.composer.visualCursor.visualRow;
@@ -455,8 +450,15 @@ export const input = part({
           this.session.notice = "Only a message can wait in the queue. Enter runs this Python now.";
           return;
         }
-        this.session.enqueue(this.composer.plainText);
+        const key = this.draftKey;
+        const content = this.composer.plainText;
+        // The message leaves its draft as it is queued, and a rejection gives it back as a rejected send does.
         this.composer.setText("");
+        void this.session.enqueue(content).catch((error) => {
+          this.unsent(key, content);
+          this.report(error);
+          this.render();
+        });
       },
       stash: () => this.stash(),
       view: (key) => this.showView(views[Number(key?.name) - 1] ?? "feed"),

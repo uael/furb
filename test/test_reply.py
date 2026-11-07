@@ -356,3 +356,21 @@ async def test_the_chain_asks_one_model_at_a_time() -> None:
   await settle()
   assert engine.peek(mine) is None and engine.peek(theirs) is None
   assert [a[3] for a in said(log, "reply")[2:]] == [root, side]
+
+
+async def test_a_pause_over_the_rung_that_the_chain_asked_for_gives_the_turn_of_the_chain_to_the_next_rung_that_waits() -> (
+  None
+):
+  """A pause over the rung that the chain asked for gives the turn of the chain to the next rung that waits, so a paused prompt holds no other prompt of the chain, and the paused rung takes the turn again after its wake."""
+  sand, log, root = born("close(1)", "close(2)")
+  one = engine.prompt(int, "a", on=root)
+  engine.pause(one)
+  two = engine.prompt(int, "b", on=root)
+  await settle()
+  assert (engine.over(one), engine.peek(two)) == (False, 2)
+  assert [a[2] for a in said(log, "reply")] == [x[1] for x in said(log, "rung")][:2]
+  engine.wake(one)
+  await settle()
+  assert engine.peek(one) == 1
+  await relived(Sand(), plain(sand.record))
+  assert (engine.peek(one), engine.peek(two)) == (1, 2)

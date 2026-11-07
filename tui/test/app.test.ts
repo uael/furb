@@ -3,6 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { LineNumberRenderable, type Renderable, RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
+import { isDone, operated, outcomeOf } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { Gutter } from "../src/app/gutter.ts";
 import { App, sessionDetail } from "../src/app.ts";
@@ -13,7 +14,7 @@ import type { Session } from "../src/session.ts";
 import { glyph, palettes, spin, theme } from "../src/theme.ts";
 import { mix } from "../src/ui.ts";
 import { type SessionEntry, Workspaces } from "../src/workspaces.ts";
-import { cellAt, composing, drawn, withDemo } from "./composing.ts";
+import { cellAt, composing, drawn, framed, withDemo } from "./composing.ts";
 import { ended } from "./ended.ts";
 import { idle } from "./idle.ts";
 import { transcriptOf } from "./transcript.ts";
@@ -85,8 +86,8 @@ test("the real native life drives the feed, the transcript, and responsive views
       expect(ids).toContain("program-prompt1");
       expect(ids.some((id) => /^(rung|bash|read)\d+$/.test(id))).toBe(false);
       const program = await drawn(frame, screen.renderer.root);
-      expect(program).toMatch(/ 1 {2}notes = read\("README\.md"\) +7 lines/);
-      expect(program).toMatch(/ 2 {2}check = await bash\(.* +exit 0, 3 lines/);
+      expect(program).toMatch(/ 1 {3}notes = read\("README\.md"\) +7 lines/);
+      expect(program).toMatch(/ 2 {3}check = await bash\(.* +exit 0, 3 lines/);
       // A command that is over shows its output no more: its hint says what it came to.
       expect(program).not.toMatch(/# {3}✓ search/);
       // The control on the header of a thread folds it to its header, and a click on that header opens it again.
@@ -137,7 +138,7 @@ test("a click on a line of a program opens it in place, with its whole text and 
       await seedDemo(session);
       const row = async () => {
         const rows = (await drawn(frame, screen.renderer.root)).split("\n");
-        const y = rows.findIndex((one) => / 2 {2}check = await bash\(/.test(one));
+        const y = rows.findIndex((one) => / 2 {3}check = await bash\(/.test(one));
         return { rows, y, x: rows[y]?.indexOf("check") ?? -1 };
       };
       await until(session, () => session.turns.some((turn) => turn[0] === "assistant"));
@@ -227,7 +228,7 @@ test("refreshes keep content in place, act failures stay in the record, and hidd
         expect(await frame()).not.toContain("Refresh view");
         expect(
           session.activity.some(
-            (act) => act.done && act.kind === "rung" && JSON.stringify(act.value).includes("Refused"),
+            (act) => isDone(act) && act.kind === "rung" && JSON.stringify(outcomeOf(act)).includes("Refused"),
           ),
         ).toBe(true);
 
@@ -352,15 +353,13 @@ test("the block of a word whose model works holds the loader in the column of th
   composing(async ({ session, app, frame }) => {
     app.composer.setText("Think until I cancel.");
     await app.submit();
-    await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
+    await until(session, () => session.activity.some((act) => act.kind === "rung" && !isDone(act)));
     await session.refresh();
-    const step = session.activity.find((act) => act.kind === "rung" && !act.done)?.id ?? "";
+    const step = session.activity.find((act) => act.kind === "rung" && !isDone(act))?.id ?? "";
     // The feed draws the block of the step at a later tick than the refresh, later on a slow runner.
-    let rows = (await frame()).split("\n");
-    for (let tries = 0; tries < 40 && !rows.some((row) => row.includes(" · thinking")); tries++) {
-      await new Promise((done) => setTimeout(done, 50));
-      rows = (await frame()).split("\n");
-    }
+    const rows = (
+      await framed(frame, (shown) => shown.includes(" · thinking"), "the step that thinks")
+    ).split("\n");
     const label = rows.find((row) => row.includes(" · thinking")) ?? "";
     expect(label).toMatch(/[\u2800-\u28ff] +\S+ · thinking/);
     expect(label).not.toContain("word · ");
@@ -373,11 +372,7 @@ test("the block of a word whose model works holds the loader in the column of th
       session.host,
       () => session.host.streams.get(step)?.thinking === "First I read.\nThen I wait.",
     );
-    let thought = await frame();
-    for (let tries = 0; tries < 40 && !thought.includes("26 chars"); tries++) {
-      await new Promise((done) => setTimeout(done, 50));
-      thought = await frame();
-    }
+    const thought = await framed(frame, (shown) => shown.includes("26 chars"), "the size of the thought");
     expect(thought).toContain(" · thinking");
     expect(thought).toContain("26 chars");
     expect(thought).toContain("Then I wait.");
@@ -392,13 +387,13 @@ test("the block of a rung whose model is not asked yet says that it waits for it
     async ({ session, app, frame }) => {
       app.composer.setText("Think until I cancel.");
       await app.submit();
-      await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
+      await until(session, () => session.activity.some((act) => act.kind === "rung" && !isDone(act)));
       await session.submit("/newthread");
       app.composer.setText("Think until I cancel, too.");
       await app.submit();
       await until(
         session,
-        () => session.activity.filter((act) => act.kind === "rung" && !act.done).length === 2,
+        () => session.activity.filter((act) => act.kind === "rung" && !isDone(act)).length === 2,
       );
       await session.refresh();
       const rows = (await frame()).split("\n");
@@ -420,21 +415,21 @@ test("each word stands in a block under its label, with the mark of the line tha
       // The gate of the daemon answers the word after the verb that sent it, and the session reads its findings then.
       await until(session, () => session.findings.length > 0);
       let shown = await frame();
-      expect(shown).toMatch(/2✗ next = = 2/);
+      expect(shown).toMatch(/2 ✗ next = = 2/);
       expect(shown).toMatch(/┃ +operator +$/m);
       expect(shown).not.toMatch(/word · rung\d+/);
       void session.command('/run build = bash("sleep 3")\nsize = 1\nbuilt = await build').catch(() => {});
-      await until(session, () => session.activity.some((act) => act.kind === "bash" && !act.done));
+      await until(session, () => session.activity.some((act) => act.kind === "bash" && !isDone(act)));
       for (let tries = 0; tries < 50 && !shown.includes("waits on"); tries++) {
         await new Promise((done) => setTimeout(done, 50));
         shown = await frame();
       }
       const rows = shown.split("\n");
       const waits = rows.find((row) => row.includes("built = await build")) ?? "";
-      expect(waits).toMatch(/(?:\d|[\u2800-\u28ff✻]) {2}built = await build +waits on bash\d+/);
+      expect(waits).toMatch(/(?:\d|[\u2800-\u28ff✻]) {3}built = await build +waits on bash\d+/);
       expect(waits).not.toContain("#");
       const runs = rows.find((row) => row.includes('build = bash("sleep 3")')) ?? "";
-      expect(runs).toMatch(/1 {2}build = bash\("sleep 3"\) {4,}runs/);
+      expect(runs).toMatch(/1 {3}build = bash\("sleep 3"\) {4,}runs/);
       await idle(session);
     },
     { width: 120, height: 40 },
@@ -465,7 +460,9 @@ test("the words that one model wrote one after another stand in one block under 
       const setup = rows.findIndex((row) => row.includes("# setup"));
       const steps = rows.slice(setup + 1, setup + 8);
       expect(steps[0]).toMatch(/^ +\S+\/\S+ +/);
-      expect(steps.slice(1, 5).map((row) => row.match(/^ +(\d+) /)?.[1])).toEqual(["1", "2", "3", "4"]);
+      // A line that folds a string has the fold row of that string under it, which holds no number.
+      const numbers = steps.slice(1).flatMap((row) => row.match(/^ +(\d+) /)?.[1] ?? []);
+      expect(numbers.slice(0, 4)).toEqual(["1", "2", "3", "4"]);
       expect(steps.slice(1).filter((row) => /^ +\S+\/high +/.test(row))).toEqual([]);
     },
     { width: 120, height: 40 },
@@ -508,7 +505,7 @@ test("a prompt of None to the operator is a notice that settles as a quiet line,
       });
       expect(await session.engine.result(id)).toBeNull();
       // The console closes the notice as it takes it, so it waits on no desk.
-      await until(session, () => session.acts.some((act) => act.id === id && act.done));
+      await until(session, () => session.acts.some((act) => act.id === id && isDone(act)));
       await session.refresh();
       expect(session.operatorPrompt).toBeUndefined();
       expect(session.desk.asks).toEqual([]);
@@ -528,16 +525,14 @@ test("a word that awaits a prompt of None to the operator goes on at once, since
         word: 'await prompt(None, "The build is green.", to="operator")\nafter = 1',
         on: session.engine.root,
       });
-      await until(session, () =>
-        session.activity.some((act) => act.id === rung && act.run?.status === "done"),
-      );
+      await until(session, () => session.activity.some((act) => act.id === rung && act.run?.run === "done"));
       await session.refresh();
       // The word ran to its end: no desk holds a question, no dialog waits, and no row of the feed still runs or asks.
       expect(session.operatorPrompt).toBeUndefined();
       expect(session.desk.asks).toEqual([]);
       const notices = session.activity.filter((act) => act.kind === "prompt" && act.by === rung);
       expect(notices.length).toBe(1);
-      expect(notices.every((act) => act.done)).toBe(true);
+      expect(notices.every((act) => isDone(act))).toBe(true);
       const shown = await frame();
       expect(shown).toContain("after = 1");
       expect(shown).not.toContain("◉");
@@ -626,7 +621,7 @@ test("the markdown of a message draws each element with no marks, and a code blo
         to: "operator",
         on: session.engine.root,
       });
-      await until(session, () => session.acts.some((act) => act.id === id && act.done));
+      await until(session, () => session.acts.some((act) => act.id === id && isDone(act)));
       // A notice settles folded, and opens to its message.
       session.folds[id] = false;
       await session.refresh();
@@ -952,7 +947,7 @@ test("a delayed snapshot cannot restore the chain selected before a switch", () 
 
 test("editing a prompt program is a durable operator rung", async () => {
   const first = await demoSession({ seed: true });
-  const prompt = first.activity.find((act) => act.kind === "prompt" && act.by === "operator");
+  const prompt = first.activity.find((act) => act.kind === "prompt" && operated(act.by));
   if (!prompt) throw new Error("No prompt in the fixture.");
   await first.command(`/edit ${prompt.id}`);
   await first.submit('saved_edit = 42\nclose("edited")');
@@ -1002,12 +997,17 @@ test("slash commands and project files are suggested above the input as they are
 
       app.composer.setText("");
       await screen.mockInput.typeText("Read @READ");
-      await session.projectFiles();
-      expect(await frame()).toContain("@README.md");
+      await framed(frame, (shown) => shown.includes("@README.md"), "the file README.md");
       screen.mockInput.pressEscape();
       expect(await frame()).not.toContain("@README.md");
       await screen.mockInput.typeText("M");
       expect(await frame()).toContain("@README.md");
+      screen.mockInput.pressEnter();
+      expect(app.composer.plainText).toBe("Read @README.md ");
+      // The letters of a name in its order pick it, as the matcher of nucleo ranks a path.
+      app.composer.setText("");
+      await screen.mockInput.typeText("Read @rdme");
+      await framed(frame, (shown) => shown.includes("@README.md"), "the file README.md");
       screen.mockInput.pressEnter();
       expect(app.composer.plainText).toBe("Read @README.md ");
       expect(
@@ -1039,9 +1039,9 @@ test("each line of a word says what its acts did as a quiet hint: a read its lin
         () => session.acts.filter((act) => act.kind === "write" && act.lines).length === 2,
       );
       const shown = await drawn(frame, screen.renderer.root);
-      expect(shown).toMatch(/ 1 {2}write\(Text\("notes\.md".* +\+2 -0/);
-      expect(shown).toMatch(/ 2 {2}write\(read\("notes\.md"\).* +2 lines {2}\+2 -1/);
-      expect(shown).toMatch(/ 3 {2}await bash\("true"\) +exit 0/);
+      expect(shown).toMatch(/ 1 {3}write\(Text\("notes\.md".* +\+2 -0/);
+      expect(shown).toMatch(/ 2 {3}write\(read\("notes\.md"\).* +2 lines {2}\+2 -1/);
+      expect(shown).toMatch(/ 3 {3}await bash\("true"\) +exit 0/);
     },
     { width: 160, height: 40 },
   ));
@@ -1057,7 +1057,7 @@ test("one gutter of furb draws the cells of each block of code: the number, the 
           to: "operator",
           on: session.engine.root,
         });
-        await until(session, () => session.acts.some((act) => act.id === note && act.done));
+        await until(session, () => session.acts.some((act) => act.id === note && isDone(act)));
         session.folds[note] = false;
         await session.refresh();
         const nodes: Renderable[] = [];
@@ -1069,9 +1069,9 @@ test("one gutter of furb draws the cells of each block of code: the number, the 
           setSystemTime(new Date(base + index * 100));
           const rows = (await frame()).split("\n");
           const y = rows.findIndex((row) => row.includes(text));
-          const x = (rows[y] ?? "").indexOf(`  ${text}`) - 1;
+          const x = (rows[y] ?? "").indexOf(`   ${text}`) - 1;
           const spans = screen.captureSpans();
-          return { text: rows[y]?.[x] ?? "", state: rows[y]?.[x + 1], x, fg: cellAt(spans, x, y).fg };
+          return { text: rows[y]?.[x] ?? "", state: rows[y]?.[x + 2], x, fg: cellAt(spans, x, y).fg };
         };
         const near = (got: RGBA | undefined, want: RGBA) =>
           expect([got?.r, got?.g, got?.b].map((one) => Math.round((one ?? -1) * 255))).toEqual(
@@ -1107,7 +1107,7 @@ test("one gutter of furb draws the cells of each block of code: the number, the 
     { width: 120, height: 40 },
   ));
 
-test("the blocks of a word and of a code block of markdown stand alike in each palette: one background, and their numbers in one column with the code two cells after them", () =>
+test("the blocks of a word and of a code block of markdown stand alike in each palette: one background, and their numbers in one column with the code three cells after them", () =>
   composing(
     async ({ session, screen, frame }) => {
       await session.command("/run alpha = 1\nbeta = 2");
@@ -1117,7 +1117,7 @@ test("the blocks of a word and of a code block of markdown stand alike in each p
         to: "operator",
         on: session.engine.root,
       });
-      await until(session, () => session.acts.some((act) => act.id === id && act.done));
+      await until(session, () => session.acts.some((act) => act.id === id && isDone(act)));
       session.folds[id] = false;
       for (const name of Object.keys(palettes) as (keyof typeof palettes)[]) {
         session.theme = name;
@@ -1128,14 +1128,14 @@ test("the blocks of a word and of a code block of markdown stand alike in each p
         const find = (text: string) => {
           const y = rows.findIndex((one) => one.includes(text));
           const x = (rows[y] ?? "").indexOf(text);
-          return { x, number: (rows[y] ?? "").slice(x - 3, x), bg: cellAt(spans, x - 3, y).bg };
+          return { x, number: (rows[y] ?? "").slice(x - 4, x), bg: cellAt(spans, x - 4, y).bg };
         };
         const word = find("alpha = 1");
         const block = find("gamma = 3");
         expect(word.x).toBeGreaterThan(0);
         expect(block.x).toBe(word.x);
         for (const one of [word, block]) {
-          expect(one.number).toMatch(/^\d {2}$/);
+          expect(one.number).toMatch(/^\d {3}$/);
           expect(one.bg?.equals(RGBA.fromHex(palettes[name].raised))).toBe(true);
         }
       }
@@ -1160,7 +1160,7 @@ test("a word and a code block of markdown take one ground, one label, one gutter
         to: "operator",
         on: session.engine.root,
       });
-      await until(session, () => session.acts.some((act) => act.id === id && act.done));
+      await until(session, () => session.acts.some((act) => act.id === id && isDone(act)));
       session.folds[id] = false;
       for (const name of Object.keys(palettes) as (keyof typeof palettes)[]) {
         session.theme = name;
@@ -1193,8 +1193,8 @@ test("a word and a code block of markdown take one ground, one label, one gutter
           const one = cells(word + at);
           const other = cells(block + at);
           const number = (cell: (typeof one)[number] | undefined) => ({ fg: cell?.fg, bg: cell?.bg });
-          expect(number(other[x - 3])).toEqual(number(one[x - 3]));
-          expect(one[x - 3]?.fg).toBe(RGBA.fromHex(palettes[name].faint).toString());
+          expect(number(other[x - 4])).toEqual(number(one[x - 4]));
+          expect(one[x - 4]?.fg).toBe(RGBA.fromHex(palettes[name].faint).toString());
           for (let k = 0; k < line.length; k++) {
             if (line[k] === " ") continue;
             expect(other[x + k], `${name} row ${at} column ${k}`).toEqual(one[x + k]);
@@ -1213,7 +1213,7 @@ test("a notice to the operator shows ● until a fact seen of its chain covers i
         to: "operator",
         on: session.engine.root,
       });
-      await until(session, () => session.acts.some((act) => act.id === id && act.done));
+      await until(session, () => session.acts.some((act) => act.id === id && isDone(act)));
       const line = async () =>
         (await frame()).split("\n").find((row) => row.includes("The search shortcut")) ?? "";
       expect(await line()).toContain("●");

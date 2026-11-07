@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { until } from "../../bind/typescript/test/until.ts";
-import { composing } from "./composing.ts";
+import { composing, open } from "./composing.ts";
 
 /** A question to the operator, once the console holds it and the session shows it. */
 async function asked(
@@ -116,7 +116,7 @@ test("a question of a shape that is more than text says what its line is, and ta
       app.composer.setText("a, b");
       await app.submit();
       expect(session.desk.asks.map((ask) => ask.id)).toEqual([names]);
-      expect(session.acts.find((act) => act.id === names)?.done).toBe(false);
+      expect(open(session, names), `${names} stays open`).toBe(true);
       // The refusal says why, in a dialog, and the line goes back to the input.
       expect(await frame()).toContain('Refused: "a, b" is no list[str]');
       expect(app.composer.plainText).toBe("a, b");

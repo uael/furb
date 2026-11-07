@@ -3,20 +3,6 @@
 //! comes out as the instance of `furb.python` it is, an exception as the one object it is for the life, a generator
 //! of python goes in as an ear, and a function as one the sandbox calls back.
 #![deny(clippy::needless_pass_by_value, clippy::map_err_ignore)]
-#![expect(unused_qualifications, reason = "debt: a path where its name is in scope")]
-#![expect(
-  clippy::clone_on_ref_ptr,
-  reason = "debt: a clone of an Arc or an Rc that hides its kind"
-)]
-#![expect(clippy::too_many_arguments, reason = "debt: more than 4 parameters is a struct")]
-#![expect(
-  clippy::unnecessary_wraps,
-  reason = "debt: a Result or an Option that is always Ok or Some"
-)]
-#![cfg_attr(
-  not(test),
-  expect(clippy::wildcard_imports, reason = "debt: an import of * that hides what it takes")
-)]
 
 use indexmap::IndexMap;
 use std::{
@@ -43,6 +29,8 @@ use pyo3::{
 };
 
 use super::{Given, Homed, NativeEar, Record, Said, Told, Value, words};
+use crate::engine;
+use crate::wire;
 use crate::{
   Ear, Engine, Fact, Fault, Heard, Object, ObjectRef, Step,
   ear::{Call, Spoken},
@@ -50,6 +38,7 @@ use crate::{
   life::{Answer, Log, Opening, Retrying, Stream},
   value::{IS, entry, field, marked, templated},
 };
+use tokio::task;
 
 /// What makes a value of the engine the python object it is: the engine of this interpreter, whose classes an
 /// instance is made from, and the one object each exception of the life is, by its name and what it was made
@@ -148,8 +137,8 @@ impl Made {
 
 impl From<Fault> for PyErr {
   /// What the engine raised, raised here as the exception it is.
-  fn from(fault: Fault) -> PyErr {
-    Python::attach(|py| exception(py, &fault).map_or_else(|no| no, PyErr::from_value))
+  fn from(fault: Fault) -> Self {
+    Python::attach(|py| exception(py, &fault).map_or_else(|no| no, Self::from_value))
   }
 }
 
@@ -187,7 +176,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Maybe {
   type Error = PyErr;
 
   fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
-    of_python(&value).map(|one| Maybe(Some(Value(one))))
+    of_python(&value).map(|one| Self(Some(Value(one))))
   }
 }
 
@@ -217,13 +206,13 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Given {
   /// An ear of the crate as itself, and a generator heard as an ear.
   fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
     if let Ok(held) = value.cast::<NativeEar>() {
-      return Ok(Given(held.borrow_mut().taken()?));
+      return Ok(Self(held.borrow_mut().taken()?));
     }
     if !generator(&value)? {
       let kind = value.get_type().name()?;
       return Err(PyTypeError::new_err(format!("{kind} is no ear: an ear is a generator")));
     }
-    Ok(Given(Box::new(PyEar { ear: Some(value.to_owned().unbind()) })))
+    Ok(Self(Box::new(PyEar { ear: Some(value.to_owned().unbind()) })))
   }
 }
 
@@ -231,7 +220,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Said {
   type Error = PyErr;
 
   fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
-    Ok(Said(value.extract::<Vec<String>>().ok()))
+    Ok(Self(value.extract::<Vec<String>>().ok()))
   }
 }
 
@@ -242,7 +231,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Told {
   /// to the hook of python for what no one can raise.
   fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
     let told = value.to_owned().unbind();
-    Ok(Told(Arc::new(move |event| {
+    Ok(Self(Arc::new(move |event| {
       Python::attach(|py| {
         if let Err(no) = told.call1(py, (event,)) {
           no.write_unraisable(py, None);
@@ -260,7 +249,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Stream {
   /// can raise.
   fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
     let stream = value.to_owned().unbind();
-    Ok(Stream(Arc::new(move |rung, chain, text, thinking| {
+    Ok(Self(Arc::new(move |rung, chain, text, thinking| {
       Python::attach(|py| {
         if let Err(no) = stream.call1(py, (rung, chain, text, thinking)) {
           no.write_unraisable(py, None);
@@ -278,7 +267,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Retrying {
   /// raise.
   fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
     let retry = value.to_owned().unbind();
-    Ok(Retrying(Arc::new(move |rung, chain, one| {
+    Ok(Self(Arc::new(move |rung, chain, one| {
       Python::attach(|py| {
         let said = (rung, chain, one.attempt, one.most, one.wait.as_secs_f64(), one.why.as_str());
         if let Err(no) = retry.call1(py, said) {
@@ -296,7 +285,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Log {
   /// what no one can raise.
   fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
     let log = value.to_owned().unbind();
-    Ok(Log(Arc::new(move |line| {
+    Ok(Self(Arc::new(move |line| {
       Python::attach(|py| {
         if let Err(no) = log.call1(py, (line,)) {
           no.write_unraisable(py, None);
@@ -314,10 +303,10 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Answer {
   /// answer, and what it raised the refusal.
   fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
     let answer = Arc::new(value.to_owned().unbind());
-    Ok(Answer(Arc::new(move |request, told| {
+    Ok(Self(Arc::new(move |request, told| {
       let answer = Arc::clone(&answer);
       Box::pin(async move {
-        let called = tokio::task::spawn_blocking(move || {
+        let called = task::spawn_blocking(move || {
           Python::attach(|py| {
             let json = py.import("json")?;
             let request = json.call_method1("loads", (request.to_string(),))?;
@@ -334,7 +323,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Answer {
           .map_err(|no| no.to_string())
         });
         let turn = called.await.map_err(|no| no.to_string())??;
-        crate::wire::parsed(&turn).map_err(|fault| fault.message())
+        wire::parsed(&turn).map_err(|fault| fault.message())
       })
     })))
   }
@@ -380,8 +369,8 @@ struct Lent(Rc<RefCell<Life>>);
 
 impl Lent {
   /// The life gives itself to be lent.
-  fn new(life: Life) -> Lent {
-    Lent(Rc::new(RefCell::new(life)))
+  fn new(life: Life) -> Self {
+    Self(Rc::new(RefCell::new(life)))
   }
 
   /// The way that python reaches the life by while it is lent.
@@ -427,7 +416,7 @@ impl PyLife {
     let mut life = lent.try_borrow_mut().map_err(|no| {
       Fault::refused(format!("{verb} is called while the life is in a call: {no}"))
     })?;
-    let (args, kwargs) = words(args, &kwargs);
+    let (args, kwargs) = words(args, kwargs.as_ref());
     life.call(verb, args, kwargs).map(Value)
   }
 }
@@ -484,7 +473,7 @@ impl NativeEar {
   }
 
   fn __next__(slf: &Bound<'_, Self>) -> PyResult<Py<PyAny>> {
-    NativeEar::send(slf, &slf.py().None().into_bound(slf.py()))
+    Self::send(slf, &slf.py().None().into_bound(slf.py()))
   }
 
   /// The ear heard, as the engine of this interpreter steps a generator: nothing at its birth, which is given the
@@ -497,7 +486,7 @@ impl NativeEar {
     let heard = if born {
       let name: String = python.getattr("site")?.call_method0("get")?.extract()?;
       let weak = py.import("weakref")?.getattr("ref")?.call1((slf,))?.unbind();
-      let waker = waker(py, move |py| match weak.bind(py).call0()?.cast::<NativeEar>() {
+      let waker = waker(py, move |py| match weak.bind(py).call0()?.cast::<Self>() {
         Ok(ear) => pump(ear),
         Err(_) => Ok(()),
       })?;
@@ -546,11 +535,9 @@ fn pump(ear: &Bound<'_, NativeEar>) -> PyResult<()> {
   };
   loop {
     let token = site.call_method1("set", (&name,))?;
-    let said = polled(ear).and_then(|polled| match polled {
-      Poll::Ready(Spoken::Saying(saying)) => {
-        let saying = to_python(py, saying.0.as_ref())?;
-        say.call1(saying.cast::<PyTuple>()?).map(|_| true)
-      }
+    let said = match polled(ear) {
+      Poll::Ready(Spoken::Saying(saying)) => to_python(py, saying.0.as_ref())
+        .and_then(|saying| say.call1(saying.cast::<PyTuple>()?).map(|_| true)),
       // What the verb came to goes back to the ear, which takes it at its next poll.
       Poll::Ready(Spoken::Verb(call)) => {
         let got = answer_of(py, &call);
@@ -560,7 +547,7 @@ fn pump(ear: &Bound<'_, NativeEar>) -> PyResult<()> {
         Ok(true)
       }
       Poll::Pending => Ok(false),
-    });
+    };
     site.call_method1("reset", (token,))?;
     if !said? {
       return Ok(());
@@ -569,14 +556,14 @@ fn pump(ear: &Bound<'_, NativeEar>) -> PyResult<()> {
 }
 
 /// What an ear of the crate says of its own accord now, polled with what wakes the loop.
-fn polled(ear: &Bound<'_, NativeEar>) -> PyResult<Poll<Spoken>> {
+fn polled(ear: &Bound<'_, NativeEar>) -> Poll<Spoken> {
   let mut held = ear.borrow_mut();
   let hearing = &mut *held.hearing;
   let (Some(stepped), Some(one)) = (hearing.stepped.as_ref(), hearing.ear.as_mut()) else {
-    return Ok(Poll::Pending);
+    return Poll::Pending;
   };
   let waker = stepped.waker.clone();
-  Ok(one.poll(&mut Context::from_waker(&waker)))
+  one.poll(&mut Context::from_waker(&waker))
 }
 
 /// What a verb that an ear of the crate called came to in the engine of this interpreter.
@@ -649,7 +636,7 @@ fn waker(
     PyCFunction::new_closure(py, None, None, move |args, _| drive(args.py()))?.into_any().unbind();
   let (wanted, wakes) = mpsc::channel::<()>();
   let waiting = Arc::new(AtomicBool::new(false));
-  let seen = waiting.clone();
+  let seen = Arc::clone(&waiting);
   let woken = move || {
     while wakes.recv().is_ok() {
       seen.store(false, Ordering::Release);
@@ -698,15 +685,15 @@ struct Driven {
 
 impl PyEngine {
   /// The engine, held for python, driven once.
-  fn held(py: Python<'_>, engine: Engine, record: Vec<Object>) -> PyResult<Py<PyEngine>> {
+  fn held(py: Python<'_>, engine: Engine, record: Vec<Object>) -> PyResult<Py<Self>> {
     made(py)?.faults.bind(py).clear();
     let root = engine.root().to_owned();
     let raised = engine.raised().cloned();
     let home = Homed::new(Driven { engine: RefCell::new(Some(engine)), waker: OnceCell::new() });
-    let held = PyEngine { home, root, raised, record };
+    let held = Self { home, root, raised, record };
     let held = Py::new(py, held)?;
     let weak = py.import("weakref")?.getattr("ref")?.call1((&held,))?.unbind();
-    let waker = waker(py, move |py| match weak.bind(py).call0()?.cast::<PyEngine>() {
+    let waker = waker(py, move |py| match weak.bind(py).call0()?.cast::<Self>() {
       Ok(engine) => engine.borrow().pump().map_err(Into::into),
       Err(_) => Ok(()),
     })?;
@@ -764,14 +751,10 @@ impl PyEngine {
   /// An engine, opened from the record, on these ears, each a generator of python or an ear of the crate under the
   /// name the engine hears it by, in the order the engine offers them a question. It is booted in the running loop.
   #[staticmethod]
-  fn boot(
-    py: Python<'_>,
-    record: Vec<Value>,
-    ears: Vec<(String, Given)>,
-  ) -> PyResult<Py<PyEngine>> {
+  fn boot(py: Python<'_>, record: Vec<Value>, ears: Vec<(String, Given)>) -> PyResult<Py<Self>> {
     let ears = ears.into_iter().map(|(name, ear)| (name, ear.0));
     let engine = Engine::boot(record.into_iter().map(|one| one.0), ears)?;
-    PyEngine::held(py, engine, Vec::new())
+    Self::held(py, engine, Vec::new())
   }
 
   /// A life opened as every host of the crate opens one: on its record, on these ears of the host, and then on the
@@ -782,10 +765,10 @@ impl PyEngine {
     py: Python<'_>,
     ears: Vec<(String, Given)>,
     opening: Option<Opening>,
-  ) -> PyResult<Py<PyEngine>> {
+  ) -> PyResult<Py<Self>> {
     let opening = opening.ok_or_else(|| Fault::refused("a life opens on a directory"))?;
     let (engine, record) = opening.boot(ears.into_iter().map(|(name, ear)| (name, ear.0)))?;
-    PyEngine::held(py, engine, record)
+    Self::held(py, engine, record)
   }
 
   /// The root chain of the life, which is the first act of any record.
@@ -832,7 +815,7 @@ impl PyEngine {
     args: Option<Vec<Value>>,
     kwargs: Option<IndexMap<String, Value>>,
   ) -> Result<Value, Fault> {
-    let (args, kwargs) = words(args, &kwargs);
+    let (args, kwargs) = words(args, kwargs.as_ref());
     self.said(name, args, kwargs).map(Value)
   }
 
@@ -848,7 +831,7 @@ impl PyEngine {
     args: Option<Vec<Value>>,
     kwargs: Option<IndexMap<String, Value>>,
   ) -> Result<Value, Fault> {
-    let (args, kwargs) = words(args, &kwargs);
+    let (args, kwargs) = words(args, kwargs.as_ref());
     self.call(|engine| engine.made(n, args, kwargs)).map(Value)
   }
 
@@ -893,7 +876,7 @@ impl PyEngine {
     args: Option<Vec<Value>>,
     kwargs: Option<IndexMap<String, Value>>,
   ) -> Result<String, Fault> {
-    let (args, kwargs) = words(args, &kwargs);
+    let (args, kwargs) = words(args, kwargs.as_ref());
     self.call(|engine| engine.keyed(key, kind, args, kwargs))
   }
 
@@ -969,13 +952,13 @@ pub struct PyAct {
 
 impl PyAct {
   /// The act a verb of the engine made.
-  fn of(engine: &Bound<'_, PyEngine>, got: &Object) -> Result<PyAct, Fault> {
+  fn of(engine: &Bound<'_, PyEngine>, got: &Object) -> Result<Self, Fault> {
     let id = got
       .as_ref()
       .as_str()
       .map(str::to_owned)
       .ok_or_else(|| Fault::refused("a verb gave no act"))?;
-    Ok(PyAct { id, engine: engine.clone().unbind() })
+    Ok(Self { id, engine: engine.clone().unbind() })
   }
 }
 
@@ -1146,7 +1129,7 @@ fn recorded<'py>(
 
 /// A value that is no plain data and no map: an exception, an instance with fields, or a class.
 fn other<'py>(py: Python<'py>, said: ObjectRef<'_>, made: &Made) -> PyResult<Bound<'py, PyAny>> {
-  if let Some(fault) = crate::value::Fault::of(said) {
+  if let Some(fault) = Fault::of(said) {
     let args = each(py, fault.args.iter().map(Object::as_ref).collect())?;
     return made.fault(py, &fault.name, args);
   }
@@ -1256,6 +1239,7 @@ fn of_plain(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
 }
 
 /// A class a word defined and a callable the engine made go back in by their number.
+#[expect(clippy::unnecessary_wraps, reason = "each reader of the table gives a PyResult")]
 fn of_made(value: &Bound<'_, PyAny>) -> PyResult<Option<Object>> {
   if let Ok(n) = value.getattr("__monty__").and_then(|n| n.extract::<i64>())
     && (value.is_instance_of::<PyType>() || value.is_instance_of::<PyFunction>())
@@ -1482,7 +1466,6 @@ fn bare(shown: &str) -> String {
 /// the system prompt, and each constant of the contract.
 #[pymodule]
 fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
-  use super::*;
   module.add_class::<PyEngine>()?;
   module.add_class::<PyAct>()?;
   module.add_class::<NativeEar>()?;
@@ -1492,46 +1475,46 @@ fn _monty(module: &Bound<'_, PyModule>) -> PyResult<()> {
   none.set_item("default", module.py().None())?;
   module.add("life", life.call(("life",), Some(&none))?)?;
   let functions = [
-    wrap_pyfunction!(files, module)?,
-    wrap_pyfunction!(bash, module)?,
-    wrap_pyfunction!(scratch, module)?,
-    wrap_pyfunction!(time, module)?,
-    wrap_pyfunction!(store, module)?,
-    wrap_pyfunction!(kept, module)?,
-    wrap_pyfunction!(log, module)?,
-    wrap_pyfunction!(logged, module)?,
-    wrap_pyfunction!(retold, module)?,
-    wrap_pyfunction!(decode_record, module)?,
-    wrap_pyfunction!(opened, module)?,
-    wrap_pyfunction!(gate, module)?,
-    wrap_pyfunction!(official, module)?,
-    wrap_pyfunction!(enabled, module)?,
-    wrap_pyfunction!(extensions, module)?,
-    wrap_pyfunction!(parts, module)?,
-    wrap_pyfunction!(skills, module)?,
-    wrap_pyfunction!(config_directory, module)?,
-    wrap_pyfunction!(shell, module)?,
-    wrap_pyfunction!(shapes, module)?,
-    wrap_pyfunction!(answers, module)?,
-    wrap_pyfunction!(answered, module)?,
-    wrap_pyfunction!(models, module)?,
-    wrap_pyfunction!(model, module)?,
-    wrap_pyfunction!(codex_auth, module)?,
-    wrap_pyfunction!(config_set, module)?,
-    wrap_pyfunction!(levels, module)?,
-    wrap_pyfunction!(setup, module)?,
-    wrap_pyfunction!(attach_image, module)?,
-    wrap_pyfunction!(image_content, module)?,
-    wrap_pyfunction!(image_path, module)?,
-    wrap_pyfunction!(image_reference, module)?,
-    wrap_pyfunction!(image_references, module)?,
-    wrap_pyfunction!(image_type, module)?,
-    wrap_pyfunction!(on_console_end, module)?,
+    wrap_pyfunction!(super::files, module)?,
+    wrap_pyfunction!(super::bash, module)?,
+    wrap_pyfunction!(super::scratch, module)?,
+    wrap_pyfunction!(super::time, module)?,
+    wrap_pyfunction!(super::store, module)?,
+    wrap_pyfunction!(super::kept, module)?,
+    wrap_pyfunction!(super::log, module)?,
+    wrap_pyfunction!(super::logged, module)?,
+    wrap_pyfunction!(super::retold, module)?,
+    wrap_pyfunction!(super::decode_record, module)?,
+    wrap_pyfunction!(super::opened, module)?,
+    wrap_pyfunction!(super::gate, module)?,
+    wrap_pyfunction!(super::official, module)?,
+    wrap_pyfunction!(super::enabled, module)?,
+    wrap_pyfunction!(super::extensions, module)?,
+    wrap_pyfunction!(super::parts, module)?,
+    wrap_pyfunction!(super::skills, module)?,
+    wrap_pyfunction!(super::config_directory, module)?,
+    wrap_pyfunction!(super::shell, module)?,
+    wrap_pyfunction!(super::shapes, module)?,
+    wrap_pyfunction!(super::answers, module)?,
+    wrap_pyfunction!(super::answered, module)?,
+    wrap_pyfunction!(super::models, module)?,
+    wrap_pyfunction!(super::model, module)?,
+    wrap_pyfunction!(super::codex_auth, module)?,
+    wrap_pyfunction!(super::config_set, module)?,
+    wrap_pyfunction!(super::levels, module)?,
+    wrap_pyfunction!(super::setup, module)?,
+    wrap_pyfunction!(super::attach_image, module)?,
+    wrap_pyfunction!(super::image_content, module)?,
+    wrap_pyfunction!(super::image_path, module)?,
+    wrap_pyfunction!(super::image_reference, module)?,
+    wrap_pyfunction!(super::image_references, module)?,
+    wrap_pyfunction!(super::image_type, module)?,
+    wrap_pyfunction!(super::on_console_end, module)?,
   ];
   for one in functions {
     module.add_function(one)?;
   }
   module.add("ENGINE", crate::ENGINE)?;
   module.add("SYSTEM", crate::SYSTEM)?;
-  crate::engine::constants(module)
+  engine::constants(module)
 }

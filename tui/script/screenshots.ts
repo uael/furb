@@ -2,10 +2,11 @@ import { spawnSync } from "node:child_process";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
-import { busy, type Exit } from "furb/life";
+import { busy, exitOf, isDone } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { type App, follow } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
+import { daemon } from "../src/client.ts";
 import { clock } from "../src/clock.ts";
 import { seedLife } from "../src/demo/life.ts";
 import { seedWorkspaces } from "../src/demo/workspaces.ts";
@@ -16,6 +17,7 @@ import { Preferences } from "../src/preferences.ts";
 import { Session } from "../src/session.ts";
 import { colorless, paletteOf } from "../src/theme.ts";
 import { Workspaces } from "../src/workspaces.ts";
+import { ownDaemon } from "./daemon.ts";
 import { cells, rasterize } from "./raster.ts";
 import { click, end, find, highlighting, home, mount, watch } from "./stage.ts";
 
@@ -38,6 +40,11 @@ const bare = {
 // captures: no spinner turns and no time shows. A run that sets FURB_STILL_CLOCK itself keeps its own time.
 const still = process.env.FURB_STILL_CLOCK || "1767225600000";
 const projects = await home("furb-gallery", { FURB_DEMO_PACE: "200", FURB_STILL_CLOCK: still, ...bare });
+// The lives of the gallery live in a daemon of its own, in a cache of its own, so that no daemon of the machine
+// holds them. It keeps a life for 5 s after its last window, so that a scene that reopens a record at once finds
+// the life it left, as the scene of the paused resume does.
+process.env.XDG_CACHE_HOME = join(projects, ".cache");
+const endDaemon = await ownDaemon(process.env, 5);
 /** What the script waits for: a screen whose state never comes ends the script with an error that names the screen. */
 const waits = watch();
 /** A project of the gallery in its home, new, with the files of the demo. */
@@ -58,7 +65,13 @@ await mkdir(output, { recursive: true });
 const grid = process.env.FURB_GALLERY_CELLS;
 if (grid) await mkdir(grid, { recursive: true });
 /** A new session in the project that the conversation of the gallery is about. */
-const gallerySession = async () => demoSession({ cwd: await project("fieldnotes") });
+const gallerySession = async () => {
+  // The life of an earlier session of the project lives on for the grace of the daemon, and a new session on the same
+  // record would join it with its chains and its acts, so a scene that waits for the work of its own life would wait for
+  // ever. The new session starts once that life has ended.
+  await daemon().ended(join(projects, "fieldnotes", "demo.jsonl"));
+  return demoSession({ cwd: await project("fieldnotes") });
+};
 let session = await gallerySession();
 const test = await createTestRenderer({ width: 152, height: 46 });
 let app!: () => App;
@@ -83,7 +96,7 @@ async function settle(): Promise<void> {
   await session.refresh();
   for (let attempt = 0, quiet = 0; attempt < 20; attempt++) {
     const pending = session.activity.filter(
-      (act) => !act.done && ["prompt", "rung"].includes(act.kind) && !standing.has(act.id),
+      (act) => !isDone(act) && ["prompt", "rung"].includes(act.kind) && !standing.has(act.id),
     );
     // A message that the queue sent shows its prompt a moment later, so the work settles only when two reads a moment
     // apart find nothing to wait for.
@@ -108,6 +121,7 @@ async function rest(): Promise<void> {
 /** The captures that this run wrote. */
 let written = 0;
 async function capture(name: string): Promise<void> {
+  console.log(`capture ${name}`);
   waits(`the screen ${name}`);
   if (!notices.test(name)) session.notice = "";
   if (!/^6[6-8]-/.test(name)) app().session.preferences.view = view;
@@ -209,6 +223,11 @@ try {
   await session.host.providers();
   await capture("91-providers");
   app().closeOverlay();
+  // The address is set first, so that the capture opens no browser.
+  app().authenticationUrl = "https://auth.openai.com/oauth/authorize?client_id=furb";
+  app().authentication({ state: "waiting", url: "https://auth.openai.com/oauth/authorize?client_id=furb" });
+  await capture("92-codex-sign-in");
+  app().closeOverlay();
   app().effortPicker();
   await capture("07-effort");
   app().closeOverlay();
@@ -306,7 +325,7 @@ try {
     on: session.selected,
     to: "operator",
   });
-  await until(session, () => session.acts.some((act) => act.id === notice && act.done));
+  await until(session, () => session.acts.some((act) => act.id === notice && isDone(act)));
   await session.refresh();
   await capture("22-operator-notice");
   app().question();
@@ -347,7 +366,7 @@ try {
     to: "operator",
   });
   // A notice settles as a quiet line, which opens to its whole message.
-  await until(session, () => session.acts.some((act) => act.id === markdown && act.done));
+  await until(session, () => session.acts.some((act) => act.id === markdown && isDone(act)));
   session.folds[markdown] = false;
   await session.refresh();
   await capture("51-markdown");
@@ -439,14 +458,11 @@ try {
     word: `index = await bash("printf 'Building the search index...\\n'; sleep 4; printf '3 notes indexed.\\n'")\nprint(index.stdout.content)`,
     on: session.selected,
   });
-  // The command shows once it has printed its first line.
+  // The command shows once it has printed its first line, which the window holds beside the act while it runs.
   await until(session, () =>
     session.acts.some(
       (act) =>
-        act.kind === "bash" &&
-        act.by === command &&
-        !act.done &&
-        Boolean((act.value as Exit | undefined)?.stdout?.content),
+        act.kind === "bash" && act.by === command && !isDone(act) && Boolean(exitOf(act)?.stdout?.content),
     ),
   );
   // After a second, the line says how long its command has run.
@@ -545,12 +561,15 @@ try {
   session.host.snapshot = snapshot;
   await session.select(session.engine.root);
   await session.submit("/read missing-file.txt");
-  await until(session, () => session.acts.some((act) => act.run?.status === "failed"));
+  await until(session, () => session.acts.some((act) => act.state === "failed"));
   await capture("26-error");
+  const changes = session.host.changes;
   await session.engine.write(
     { path: "preview.txt", content: "A change to inspect.\n" },
     { on: session.engine.root },
   );
+  // The journal is written off the thread of the life, so it stands once the window hears the change.
+  await until(session.host, () => session.host.changes > changes);
   const journal = `${session.host.record}.changes.jsonl`;
   const savedJournal = await readFile(journal);
   await writeFile(journal, "{ damaged journal }");
@@ -638,7 +657,8 @@ try {
   await library.select(desk);
   session = desk.session;
   await session.submit("show live progress");
-  session.enqueue("Check keyboard navigation after this answer.");
+  await session.enqueue("Check keyboard navigation after this answer.");
+  await until(session, () => session.queued.length > 0);
   await capture("34-queued-follow-up");
   app().composer.setText("/queue");
   await app().submit();
@@ -815,8 +835,11 @@ try {
   const older = await demoSession({ cwd: await project("fieldnotes-old") });
   await seedDemo(older);
   const drifts = older.host.record ?? "";
-  await older.dispose();
+  // The record as the life wrote it before its end, since a life that ends writes its checkpoint, and an edit before
+  // that checkpoint is not replayed, so the record would not drift.
   const kept = await readFile(drifts, "utf8");
+  await older.dispose();
+  await daemon().ended(drifts);
   await writeFile(drifts, kept.replace(/("bash","bash\d+","rung\d+","chain\d+","[^"]*"),""/, "$1,false"));
   // Keep the log with the record, since it holds the close that completed its prompt.
   await library.import(drifts, await library.add(older.host.directory));
@@ -835,7 +858,7 @@ try {
   await until(
     session,
     () =>
-      session.acts.filter((act) => act.kind === "rung" && act.on !== session.engine.root && !act.done)
+      session.acts.filter((act) => act.kind === "rung" && act.chain !== session.engine.root && !isDone(act))
         .length === 2,
   );
   const thread = session.activity.find((act) => session.isUserPrompt(act))?.id ?? "";
@@ -847,7 +870,7 @@ try {
   await until(session, () => {
     const last = session.lastOwn;
     return Boolean(
-      last && last.id !== thread && session.activity.some((act) => act.by === last.id && !act.done),
+      last && last.id !== thread && session.activity.some((act) => act.by === last.id && !isDone(act)),
     );
   });
   await session.refresh();
@@ -868,7 +891,7 @@ try {
   // ⌃C takes back the last message alone, and the workers go on.
   const message = session.lastOwn?.id;
   await session.command("/cancel");
-  await until(session, () => session.acts.some((act) => act.id === message && act.done));
+  await until(session, () => session.acts.some((act) => act.id === message && isDone(act)));
   await rest();
   await capture("59-take-back");
   // The last row of a thread while its model works: a loader left of the number of the line that comes, and
@@ -878,7 +901,7 @@ try {
     on: session.selected,
   });
   await until(session, () =>
-    session.acts.some((act) => act.kind === "rung" && act.by === thinks && !act.done),
+    session.acts.some((act) => act.kind === "rung" && act.by === thinks && !isDone(act)),
   );
   await session.refresh();
   await capture("84-thinking-row");
@@ -1059,7 +1082,7 @@ try {
   await quietSession.command('/run read("a.txt")');
   await until(quietSession, () =>
     quietSession.activity.some(
-      (act) => act.kind === "read" && String(act.words[0]).endsWith("/") && act.done,
+      (act) => act.kind === "read" && String(act.words[0]).endsWith("/") && isDone(act),
     ),
   );
   // The extensions stand on one quiet row: the file of markdown that memory told shows no row for each heading, and
@@ -1075,7 +1098,7 @@ try {
   const playing = tour(watched, 300);
   await until(
     watched,
-    () => watched.acts.filter((act) => act.kind === "prompt" && act.words[2] && !act.done).length === 3,
+    () => watched.acts.filter((act) => act.kind === "prompt" && act.words[2] && !isDone(act)).length === 3,
   );
   await rest();
   await capture("64-watch-a-life");
@@ -1177,6 +1200,11 @@ try {
   await opens("/status");
   await capture("75i-status");
   app().closeOverlay();
+  // The settings, each key by the part that gives it, with the description, the type, the default and the layer of the key
+  // under the pointer.
+  await opens("/config");
+  await capture("75j-config");
+  app().closeOverlay();
   app().dispose();
   await library.dispose();
 
@@ -1198,19 +1226,19 @@ try {
     "Add a component for this todo list: a panel with the items, and a line in the feed for each.",
   );
   await settle();
-  await shows("Ready");
+  await shows("Done");
   await shows("2 open of 3");
   await rest();
   await capture("74b-extend-live");
   await session.submit("Sort the Todo panel: the open items first.");
   await settle();
-  await shows("Ready");
+  await shows("Done");
   await shows("evaluating 'seen.todos");
   await rest();
   await capture("75b-extend-broken");
   await session.submit("The Todo panel shows an error. Fix it.");
   await settle();
-  await shows("Ready");
+  await shows("Done");
   await shows("evaluating 'seen.todos", false);
   await rest();
   await capture("75c-extend-fixed");
@@ -1301,7 +1329,7 @@ try {
   await capture("78-terminal-light");
   test.renderer.emit("theme_mode", "dark");
 } catch (error) {
-  console.error(error);
+  console.error(error instanceof Error ? (error.stack ?? error) : error);
   failed = true;
 }
 waits("the end of the script");
@@ -1315,4 +1343,5 @@ await end(
   () => test.renderer.destroy(),
   () => library.dispose(),
   removeDemoDirectories,
+  endDaemon,
 );

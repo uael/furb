@@ -1,6 +1,6 @@
 //! Where furb finds the TUI, in the order it looks, on a PATH and a checkout that a test makes.
 
-use std::{ffi::OsString, fs, path::PathBuf};
+use std::{ffi::OsString, fs, path::PathBuf, process};
 
 #[path = "../../tests/common/yard.rs"]
 mod yard;
@@ -17,12 +17,12 @@ struct Yard {
 }
 
 impl Yard {
-  fn new(name: &str) -> Yard {
-    let at = yard::Yard::new(format!("furb-tui-{name}-{}", std::process::id()));
+  fn new(name: &str) -> Self {
+    let at = yard::Yard::new(format!("furb-tui-{name}-{}", process::id()));
     let (bin, checkout) = (at.join("bin"), at.join("checkout"));
     fs::create_dir_all(&bin).expect("a PATH of the test");
     fs::create_dir_all(&checkout).expect("a checkout of the test");
-    Yard { bin, checkout, _at: at }
+    Self { bin, checkout, _at: at }
   }
 
   /// A program of this name on the PATH of the yard.

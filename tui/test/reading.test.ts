@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createTestRenderer } from "@opentui/core/testing";
+import { isDone, operated } from "furb/life";
 import { App } from "../src/app.ts";
 import { openEngine } from "../src/bridge.ts";
 import { Preferences } from "../src/preferences.ts";
@@ -42,8 +43,8 @@ test("a record whose fact drifts opens to read, with what it kept, and a dialog 
       // The replay that drifted leaves the log of the life before it as it was.
       expect(await readFile(`${record}.log`, "utf8")).toBe(log);
       const bash = session.acts.find((act) => act.id === "bash1");
-      expect(bash?.done).toBe(true);
-      expect(session.acts.find((act) => act.id === ran)?.by).toBe("operator");
+      expect(bash !== undefined && isDone(bash)).toBe(true);
+      expect(operated(session.acts.find((act) => act.id === ran)?.by ?? "")).toBe(true);
       expect(await session.engine.bash("ls").catch((error: Error) => error.message)).toBe(
         `This record is open to read, so nothing runs on it. ${UNRESUMABLE}`,
       );

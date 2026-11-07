@@ -13,8 +13,11 @@ mod pipes;
 #[path = "../../tests/common/yard.rs"]
 mod yard;
 
+use std::path::MAIN_SEPARATOR;
+use std::process;
+use std::process::ExitStatus;
 use std::{
-  fs,
+  env, fs,
   io::{BufRead, BufReader, Read, Write},
   net::TcpListener,
   os::unix::fs::PermissionsExt,
@@ -46,7 +49,7 @@ struct Yard {
 
 impl Drop for Yard {
   fn drop(&mut self) {
-    if std::env::var_os(KEEP).is_some() {
+    if env::var_os(KEEP).is_some() {
       eprintln!("{KEEP} keeps {}", self.base.display());
     } else {
       drop(fs::remove_dir_all(&self.base));
@@ -55,10 +58,10 @@ impl Drop for Yard {
 }
 
 impl Yard {
-  fn new(name: &str) -> Yard {
+  fn new(name: &str) -> Self {
     // A process that starts in the yard reads its directory as the system gives it, with no link in it: on macOS the
     // temporary directory is under /var, a link to /private/var. So the yard is that path too.
-    let base = std::env::temp_dir().join(format!("furb-cli-{name}-{}", std::process::id()));
+    let base = env::temp_dir().join(format!("furb-cli-{name}-{}", process::id()));
     drop(fs::remove_dir_all(&base));
     fs::create_dir_all(&base).expect("the root of the yard");
     let root = fs::canonicalize(&base).expect("the root of the yard, with no link");
@@ -72,7 +75,7 @@ impl Yard {
       .expect("the config");
     fs::write(at.join("a.txt"), "one\ntwo\nthree\n").expect("the file a word reads");
     program(&fake.join("claude"), FAKE);
-    Yard { base, at, fake }
+    Self { base, at, fake }
   }
 
   /// The words the fake answers with, in order.
@@ -351,13 +354,13 @@ fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs
   fs::create_dir_all(skill.parent().expect("a folder")).expect("the folder of a skill");
   fs::write(&skill, "---\nname: brew\ndescription: Make tea.\n---\n").expect("a skill");
   fs::write(yard.at.join("CLAUDE.md"), "Use two spaces.\n").expect("a memory file");
-  let every = "catchup: catchup()\nmemory: await recall()\nskills: await listed()\ncompaction: fitted()\nouroboros\nweb\nmcp: await mcp_index()\n";
+  let every = "catchup: catchup()\nmemory: await recall()\nskills: await listed()\ncompaction: compacted(); fitted()\n";
   assert_eq!(printed(yard.furb(&["extensions"]), ""), every, "the official extensions are on");
   let path = printed(yard.kept(&["run", "close((await skill('brew')).path)"]), "");
   // The World writes a path under the home of the user with ~ in place of the home.
-  let home = std::env::home_dir().filter(|home| home.parent().is_some());
+  let home = env::home_dir().filter(|home| home.parent().is_some());
   let shown = match home.as_deref().and_then(|home| skill.strip_prefix(home).ok()) {
-    Some(rest) => format!("~{}{}", std::path::MAIN_SEPARATOR, rest.display()),
+    Some(rest) => format!("~{}{}", MAIN_SEPARATOR, rest.display()),
     None => skill.display().to_string(),
   };
   assert_eq!(path, format!("{shown:?}\n").replace('"', "'"));
@@ -374,7 +377,7 @@ fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs
     .expect("a config of the project");
   assert_eq!(
     printed(yard.furb(&["extensions"]), ""),
-    "catchup: catchup()\nskills: await listed()\ncompaction: fitted()\nouroboros\nweb\nmcp: await mcp_index()\n"
+    "catchup: catchup()\nskills: await listed()\ncompaction: compacted(); fitted()\n"
   );
   assert_eq!(printed(yard.kept(&["extensions"]), ""), every, "a life runs what its record enables");
 }
@@ -616,7 +619,7 @@ fn said_first(child: &mut Child) -> String {
 }
 
 /// The end of a program, which a minute bounds: past it, the program is killed and the test fails.
-fn ended(mut child: Child) -> std::process::ExitStatus {
+fn ended(mut child: Child) -> ExitStatus {
   let pid = child.id();
   let (said, heard) = mpsc::channel();
   thread::spawn(move || {
@@ -633,7 +636,7 @@ fn ended(mut child: Child) -> std::process::ExitStatus {
 fn furb_host_serves_one_daemon_on_the_machine_and_an_upgrade_takes_its_place() {
   let yard = Yard::new("host");
   // The cache of the yard is too deep for the path of a socket, which macOS bounds at 104 bytes.
-  let cache = yard::Yard::unmade(format!("fc{}", std::process::id()));
+  let cache = yard::Yard::unmade(format!("fc{}", process::id()));
   let host = |words: &[&str]| {
     let mut command = yard.furb(words);
     command.env("XDG_CACHE_HOME", &*cache);

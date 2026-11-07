@@ -310,6 +310,46 @@ fn a_timeout_or_a_wait_past_the_longest_timer_runs_its_full_time() {
 }
 
 #[test]
+fn a_command_runs_where_a_request_for_an_editor_or_a_terminal_fails_at_once() {
+  let mut lived = Lived::new("unasked", &[], true).unwrap();
+  let root = lived.root();
+  let with = verbs::Bash { timeout: Some(30.0), on: on(&root), ..Default::default() };
+  let line = r#"printf '%s %s %s %s' "$GIT_EDITOR" "$VISUAL" "$EDITOR" "$GIT_TERMINAL_PROMPT""#;
+  let exit: Exit = block_on(lived.engine.bash(line, with).unwrap()).unwrap();
+  assert_eq!(exit.stdout.content, "false false false 0");
+  // A commit with no message opens the editor, which is `false` here: the commit fails at once.
+  let with = verbs::Bash { timeout: Some(30.0), on: on(&root), ..Default::default() };
+  // A hook of git hands its own index to each command that it runs, which the repository of the
+  // test must not use.
+  let line = "unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX; cd \"$TMPDIR\" && rm -rf unasked && git init -q unasked && cd unasked && echo a > a \
+              && git add a && git -c user.name=t -c user.email=t@t commit";
+  let begun = Instant::now();
+  let exit: Exit = block_on(lived.engine.bash(line, with).unwrap()).unwrap();
+  assert!(matches!(exit.code, Some(code) if code != 0), "{exit:?}");
+  assert!(begun.elapsed() < Duration::from_secs(25), "the commit waited for an editor");
+  assert!(exit.stdout.content.to_lowercase().contains("editor"), "{}", exit.stdout.content);
+}
+
+#[test]
+#[cfg(unix)]
+fn a_timeout_ends_the_command_though_a_process_of_it_left_its_group_holding_the_stream() {
+  // A process in a session of its own is in no group that the World ends, and it holds the stdout
+  // of the command for LONG seconds, so an exit before LONG has passed proves that the timeout
+  // ended the act, not the stream.
+  const LONG: u64 = 60;
+  let mut lived = Lived::new("escaped", &[], true).unwrap();
+  let with = verbs::Bash { timeout: Some(0.3), on: on(&lived.root()), ..Default::default() };
+  let line = format!("perl -e 'use POSIX; POSIX::setsid(); sleep {LONG}' & echo $!; sleep {LONG}");
+  let begun = Instant::now();
+  let exit: Exit = block_on(lived.engine.bash(&line, with).unwrap()).unwrap();
+  let took = begun.elapsed();
+  let pid = exit.stdout.content.lines().next().unwrap_or_default().to_owned();
+  std::process::Command::new("kill").arg(&pid).status().unwrap();
+  assert_eq!(exit.code, None);
+  assert!(took < Duration::from_secs(LONG / 2), "the act outlived its timeout, for {took:?}");
+}
+
+#[test]
 fn a_command_that_outlives_its_timeout_ends_with_no_code() {
   // Each process of the command sleeps for LONG, and the one in the background holds the stdout of the command, which
   // the World reads to its end before it says the exit. So an exit before LONG has passed proves that the World ended
@@ -1843,14 +1883,40 @@ fn a_life_whose_words_each_ran_within_the_bound_replays_and_keeps_its_checkpoint
 
 #[test]
 fn a_kernel_that_raises_ends_each_run_whose_word_it_lost_so_a_later_message_gets_its_step() {
-  let words = [
-    "await wait(600, __name__)\nclose(1)",
-    "await wait(0.2, __name__)\nclose(2)",
-    "close(7)",
-    "close(7)",
-    "close(7)",
-  ];
-  let mut lived = Lived::new("lost", &words, true).unwrap();
+  lost_runs_end(Lived::new("lost", &LOST, true).unwrap());
+}
+
+#[test]
+fn a_kernel_of_the_major_from_before_it_ended_its_lost_runs_ends_them_through_its_adapter() {
+  // The root and the fact made of a record of 0.4.2, whose Kernel has no lost, as a record that a
+  // life of that build began.
+  let old = include_str!("../tests/corpus/next/language.jsonl");
+  let head: Vec<&str> = old.lines().take(2).collect();
+  assert!(
+    head[1].contains("\"made\"") && !head[1].contains("def lost("),
+    "the record holds an older Kernel"
+  );
+  let name = format!("furb-engine-lost-old-{}", std::process::id());
+  let yard = Yard::new(&name);
+  fs::create_dir_all(std::env::temp_dir().join(&name)).unwrap();
+  fs::write(std::env::temp_dir().join(&name).join("record.jsonl"), head.join("\n") + "\n").unwrap();
+  let mut lived = Lived::new("lost-old", &LOST, false).unwrap();
+  lived.yard = Some(yard);
+  lost_runs_end(lived);
+}
+
+/// The words of the model in a life whose Kernel raises while two runs await.
+const LOST: [&str; 5] = [
+  "await wait(600, __name__)\nclose(1)",
+  "await wait(0.2, __name__)\nclose(2)",
+  "close(7)",
+  "close(7)",
+  "close(7)",
+];
+
+/// The scenario of the lost runs: the Kernel raises while two runs await, and each prompt is asked
+/// again after the loss, a later one first.
+fn lost_runs_end(mut lived: Lived) {
   let root = lived.root();
   // The Kernel asserts that Exit is a type as it carries a word past an act that it awaited,
   // so with Exit rebound it raises at the end of the short wait, and loses the word that

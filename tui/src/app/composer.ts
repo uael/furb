@@ -1,11 +1,10 @@
-import { shapes } from "furb";
-import { takesNothing } from "furb/life";
+import { FilePicker, shapes } from "furb";
+import { isDone, takesNothing, unfinished, WORK } from "furb/life";
 import { canonical, slashes } from "../commands.ts";
 import { emojiNamed, emojis } from "../emoji.ts";
 import { shortenHome } from "../files.ts";
 import { clip, count, dollars, graphemes, modelName, share } from "../format.ts";
 import { modeOf } from "../history.ts";
-import { working } from "../session.ts";
 import { theme as c, glyph, palettes, spacing as space, type ThemeChoice, themeLabels } from "../theme.ts";
 import { bold, type Part } from "../ui.ts";
 import { part } from "./part.ts";
@@ -139,6 +138,12 @@ export const composer = part({
     this.composer.requestRender();
   },
 
+  /** A text that was not sent goes back to its draft, unless that draft holds new text by now. */
+  unsent(key: string, content: string): void {
+    if (this.draftKey === key && !this.composer.plainText) this.composer.setText(content);
+    else if (this.draftKey !== key && !this.session.drafts[key]) this.session.drafts[key] = content;
+  },
+
   async submit(): Promise<void> {
     if (this.submitting) return;
     if (this.session.host.reading) {
@@ -181,9 +186,7 @@ export const composer = part({
       this.historyIndex = -1;
       this.historyPrefix = "";
     } catch (error) {
-      // A text that was not sent goes back to its draft, unless that draft holds new text by now.
-      if (this.draftKey === key && !this.composer.plainText) this.composer.setText(content);
-      else if (this.draftKey !== key && !this.session.drafts[key]) this.session.drafts[key] = content;
+      this.unsent(key, content);
       this.report(error);
     } finally {
       this.submitting = false;
@@ -256,11 +259,37 @@ export const composer = part({
       );
   },
 
-  /** The paths of the project, which the suggestions read, as a pick of them gives them: none until the read of the
-   * session ends, which draws the suggestions again. An `@` that starts a word reads them afresh. */
-  paths(pick = (paths: string[]) => paths, fresh = false): Value[] {
-    void this.session.projectFiles(fresh);
+  /** The paths of the project, which the suggestions of a command read, as a pick of them gives them: none until the
+   * read of the session ends, which draws the suggestions again. */
+  paths(pick = (paths: string[]) => paths): Value[] {
+    void this.session.projectFiles();
     return pick(this.session.files?.paths ?? []).map((path) => ({ value: path, detail: "" }));
+  },
+
+  /** The first files that the crate picks for a query after @, best first, as they stand now. An @ that starts a word
+   * opens the picker of the window again, which walks its folder once in the background and stops the walk of the last
+   * open, and a key gives it the query alone. While the walk or the match runs, the suggestions are drawn again, so no
+   * key waits for a result. */
+  pickedFiles(query: string, started: boolean): string[] {
+    const directory = this.session.workingDirectory;
+    let held = this.filePicker;
+    if (!held) {
+      held = { picker: new FilePicker(directory), directory, running: true };
+      this.filePicker = held;
+    } else if (started || held.directory !== directory) {
+      held.picker.open(directory);
+      held.directory = directory;
+      held.query = undefined;
+    }
+    const found = held.query === query ? held.picker.rows(50) : held.picker.find(query, 50);
+    held.query = query;
+    held.running = found.running;
+    if (found.running)
+      this.pickerTimer ??= setTimeout(() => {
+        this.pickerTimer = undefined;
+        if (!this.closed) this.suggest();
+      }, 30);
+    return found.paths;
   },
 
   valuesTable(): Partial<Record<string, () => Value[]>> {
@@ -338,7 +367,8 @@ export const composer = part({
       wake: () => this.chainValues(),
       cancel: () =>
         this.session.open
-          .filter((act) => working(act))
+          // Work that lives and that no pause holds is what a cancel ends.
+          .filter((act) => WORK.includes(act.kind) && !isDone(act) && !act.pause && !unfinished(act))
           .map((act) => ({
             value: act.id,
             detail: `${act.kind}  ${clip(String(act.words[act.kind === "prompt" ? 1 : 0] ?? ""), 40)}`,
@@ -491,20 +521,18 @@ export const composer = part({
         .slice(0, 50)
         .map(({ label, detail, text }) => ({ label, detail: detail ?? "", text }));
     } else {
-      const wanted = token.text.toLowerCase();
-      // The completions of the parts after @ come before the files of the project.
+      // The completions of the parts after @ come before the files that the crate picks for the query, best first:
+      // from the files of the folder of the session, or from the folder that a query starting with /, ~ or ../ names.
       const given = this.parts.completions("@", token.text, this.seen());
       this.suggestionError = given.errors.join(" ");
       const theirs = given.items.map(({ label, detail, text }) => ({ label, detail: detail ?? "", text }));
       this.suggestions = theirs
         .concat(
-          this.paths((paths) => paths.filter((path) => path.toLowerCase().includes(wanted)), started)
-            .slice(0, 50)
-            .map(({ value: path }) => ({
-              label: `@${path}`,
-              detail: "",
-              text: `@${/\s/.test(path) ? JSON.stringify(path) : path} `,
-            })),
+          this.pickedFiles(token.text, started).map((path) => ({
+            label: `@${path}`,
+            detail: "",
+            text: `@${/\s/.test(path) ? JSON.stringify(path) : path} `,
+          })),
         )
         .slice(0, 50);
     }
@@ -523,9 +551,10 @@ export const composer = part({
         ? ""
         : failed
           ? failed
-          : (token.kind === "@" || pathCommands.has(token.command ?? "")) && files?.error
+          : pathCommands.has(token.command ?? "") && files?.error
             ? files.error
-            : (token.kind === "@" || pathCommands.has(token.command ?? "")) && !files?.paths
+            : (pathCommands.has(token.command ?? "") && !files?.paths) ||
+                (token.kind === "@" && !shown.length && this.filePicker?.running)
               ? "Finding project files…"
               : shown.length
                 ? ""

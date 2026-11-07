@@ -10,6 +10,7 @@ use std::{
   ptr,
 };
 
+use rustix::process;
 use tokio::net::{UnixListener, UnixStream};
 
 use crate::error::TransportError;
@@ -94,11 +95,14 @@ pub(crate) fn private(file: &Path, bytes: &[u8]) -> io::Result<()> {
 }
 
 fn user() -> u32 {
-  // SAFETY: geteuid has no precondition and cannot fail.
-  unsafe { libc::geteuid() }
+  process::geteuid().as_raw()
 }
 
 /// The login of a user, from the database of the users.
+#[expect(
+  unsafe_code,
+  reason = "the database of the users is read through libc, and no crate of the lock reads it safely"
+)]
 fn named(uid: u32) -> Result<String, TransportError> {
   let mut entry = MaybeUninit::<libc::passwd>::uninit();
   let mut buffer = vec![0; 4096];
@@ -132,8 +136,8 @@ fn bounded(socket: &Path) -> Result<(), TransportError> {
   Ok(())
 }
 
-fn listening(socket: &Path, source: io::Error) -> TransportError {
-  TransportError::Listen { place: shown(socket), source }
+fn listening(socket: &Path, cause: io::Error) -> TransportError {
+  TransportError::Listen { place: shown(socket), cause }
 }
 
 fn shown(socket: &Path) -> String {

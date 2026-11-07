@@ -1,4 +1,4 @@
-#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
+use crate::testing::on_reactor;
 use std::{
   io::{BufRead, BufReader, Write},
   net::TcpListener,
@@ -12,7 +12,6 @@ use rig_core::http_client::{
 };
 
 use super::{Amended, CodexHttp};
-use crate::ear::reactor;
 
 #[test]
 fn subscription_events_stream_when_the_response_has_no_content_type() {
@@ -35,7 +34,7 @@ fn subscription_events_stream_when_the_response_has_no_content_type() {
   });
   let request =
     Request::get(format!("http://{address}/responses")).body(Vec::<u8>::new()).expect("request");
-  let text = reactor().block_on(async {
+  let text = on_reactor(async {
     let mut source = GenericEventSource::new(Amended::new(CodexHttp::default()), request);
     loop {
       match source.next().await.expect("an event").expect("valid subscription event") {

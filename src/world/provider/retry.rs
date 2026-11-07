@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use jiff::{Zoned, civil, tz::TimeZone};
+use jiff::{Zoned, civil, fmt::strtime, tz::TimeZone};
 use rig_core::{completion::CompletionError, http_client};
 
 use super::claude;
@@ -192,32 +192,27 @@ pub(super) fn resets(said: &str, now: &Zoned) -> Option<Zoned> {
     None => (rest, now.time_zone().clone()),
   };
   let now = now.with_time_zone(zone.clone());
-  let mut words: Vec<_> =
+  let words: Vec<_> =
     head.split([' ', ',']).filter(|one| !one.is_empty() && *one != "at").collect();
-  let time = words.pop()?.to_lowercase();
-  let (clock, pm) = match time.strip_suffix("pm") {
-    Some(clock) => (clock, true),
-    None => (time.strip_suffix("am")?, false),
-  };
-  let (hour, minute) = clock.split_once(':').unwrap_or((clock, "0"));
-  let (hour, minute): (i8, i8) = (hour.parse().ok()?, minute.parse().ok()?);
-  if !(1..=12).contains(&hour) {
-    return None;
-  }
-  let hour = hour % 12 + if pm { 12 } else { 0 };
-  let at = |date: civil::Date| date.at(hour, minute, 0, 0).to_zoned(zone.clone()).ok();
-  match words.as_slice() {
+  let (time, day) = words.split_last()?;
+  // The clock as jiff reads it, `5:10pm` or `3pm`, whose hour is of 1 to 12.
+  let time = ["%I:%M%p", "%I%p"]
+    .iter()
+    .find_map(|format| strtime::parse(format, time).ok())?
+    .to_time()
+    .ok()?;
+  let at = |date: civil::Date| date.to_datetime(time).to_zoned(zone.clone()).ok();
+  match day {
     [] => {
       let today = at(now.date())?;
       if today > now { Some(today) } else { at(now.date().tomorrow().ok()?) }
     }
     [month, day] => {
-      const MONTHS: [&str; 12] =
-        ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
-      let month =
-        i8::try_from(MONTHS.iter().position(|one| month.to_lowercase().starts_with(one))? + 1)
-          .ok()?;
-      let day = day.parse().ok()?;
+      // The month, whole or short, and the day, as jiff reads them.
+      let date = format!("{month} {day}");
+      let named =
+        ["%B %d", "%b %d"].iter().find_map(|format| strtime::parse(format, &date).ok())?;
+      let (month, day) = (named.month()?, named.day()?);
       let this = at(civil::Date::new(now.year(), month, day).ok()?)?;
       if this > now { Some(this) } else { at(civil::Date::new(now.year() + 1, month, day).ok()?) }
     }

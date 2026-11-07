@@ -3,12 +3,13 @@
 //! of TypeScript give.
 
 use std::collections::HashMap;
+use std::iter;
 
 use furb::view::{
-  Act, Answer, Attention, ChainThread, Concern, Kind, Origin, Pause, Phase, Rows, RunState, Spend,
-  State, ThreadNode, Tick, as_of, attention, chain_threads, choices, concerns, desk, hint,
-  moments_of, nest_threads, open, operator, order_threads, restate, takes_nothing, ticks, wants,
-  working,
+  Act, Answer, Attention, ChainThread, Concern, Kind, NoteRun, Origin, Pause, Phase, Rows,
+  RunState, Spend, State, ThreadNode, Tick, as_of, attention, chain_notes, chain_threads, choices,
+  concerns, desk, hint, moments_of, nest_threads, open, operator, order_threads, restate,
+  takes_nothing, ticks, wants, working,
 };
 use serde_json::{Value, json};
 
@@ -31,6 +32,7 @@ fn act(id: &str, kind: &str, on: &str, by: &str, began: u64, ended: Option<u64>)
       RunState::Running
     }),
     word: None,
+    asking: false,
     began,
     ended,
     spend: None,
@@ -119,7 +121,8 @@ fn each_act_takes_one_state_of_the_one_set() {
     (asked(act("prompt9", "prompt", "chain1", "operator", 1, None)), State::Asks),
     (stated(paused), State::Paused),
     (stated(failed), State::Failed),
-    (rung, State::Thinks),
+    (stated(Act { asking: true, ..rung.clone() }), State::Thinks),
+    (rung, State::Idle),
     (worded, State::Runs),
     (act("bash3", "bash", "chain1", "rung1", 1, None), State::Runs),
     (act("chain2", "chain", "chain1", "rung1", 1, None), State::Delegates),
@@ -156,7 +159,7 @@ fn a_whole_takes_the_first_state_of_its_parts_in_the_order_of_the_one_set() {
 
 #[test]
 fn the_work_of_a_chain_thinks_runs_or_delegates() {
-  let thinking = act("rung1", "rung", "chain1", "prompt1", 1, None);
+  let thinking = stated(Act { asking: true, ..act("rung1", "rung", "chain1", "prompt1", 1, None) });
   let running = Act {
     word: Some("await bash1".to_owned()),
     ..act("rung2", "rung", "chain1", "prompt1", 2, None)
@@ -170,6 +173,18 @@ fn the_work_of_a_chain_thinks_runs_or_delegates() {
 }
 
 #[test]
+fn a_rung_that_waits_for_its_turn_rests_and_the_work_of_its_chain_is_what_else_runs() {
+  let waiting = act("rung1", "rung", "chain1", "prompt1", 1, None);
+  let asking = stated(Act { asking: true, ..waiting.clone() });
+  let prompt = act("prompt1", "prompt", "chain1", "operator", 1, None);
+  let command = act("bash1", "bash", "chain1", "rung0", 2, None);
+  assert_eq!(waiting.state, State::Idle);
+  assert_eq!(working(&[&prompt, &waiting, &command], &[]), State::Runs);
+  assert_eq!(working(&[&prompt, &waiting], &[]), State::Idle);
+  assert_eq!(working(&[&prompt, &asking], &[]), State::Thinks);
+}
+
+#[test]
 fn a_chain_thinks_while_a_model_writes_runs_while_a_command_runs_and_is_done_once_its_prompts_end()
 {
   let acts = [
@@ -179,7 +194,7 @@ fn a_chain_thinks_while_a_model_writes_runs_while_a_command_runs_and_is_done_onc
     act("chain3", "chain", "", "rung1", 4, None),
     act("chain4", "chain", "", "rung1", 5, None),
     act("prompt1", "prompt", "chain2", "rung1", 6, None),
-    act("rung2", "rung", "chain2", "prompt1", 7, None),
+    stated(Act { asking: true, ..act("rung2", "rung", "chain2", "prompt1", 7, None) }),
     act("prompt2", "prompt", "chain3", "rung1", 8, None),
     stated(Act {
       word: Some("await bash(\"make\")".to_owned()),
@@ -427,7 +442,7 @@ fn thread(act: &Act, asks: &[&str]) -> ChainThread {
     asked: Vec::new(),
     asks: asks.iter().map(|one| (*one).to_owned()).collect(),
     state: if asks.is_empty() { State::Runs } else { State::Asks },
-    resolved: false,
+    over: false,
     origin: Origin::Rung,
     yours: false,
   }
@@ -492,7 +507,7 @@ fn the_closed_threads_stand_first_and_the_open_ones_last_each_group_by_its_last_
   let rows = rows(&all);
   let closed = |id: &str, messages: &[&str]| ChainThread {
     messages: messages.iter().map(|one| (*one).to_owned()).collect(),
-    resolved: true,
+    over: true,
     state: State::Done,
     ..thread(rows[id], &[])
   };
@@ -509,7 +524,7 @@ fn the_closed_threads_stand_first_and_the_open_ones_last_each_group_by_its_last_
   let before = nest_threads(list.clone(), &rows);
   assert_eq!(level(&before), ["prompt1", "prompt2", "prompt3", "prompt4", "prompt6"]);
   let tree = order_threads(nest_threads(list, &rows), &rows);
-  // prompt1 closed last at 50, and prompt3 had its last message at 40. prompt6 is resolved, and it
+  // prompt1 closed last at 50, and prompt3 had its last message at 40. prompt6 is over, and it
   // stands open since a question waits in its agent prompt7.
   assert_eq!(level(&tree), ["prompt2", "prompt1", "prompt4", "prompt6", "prompt3"]);
   assert_eq!(tree.iter().map(open).collect::<Vec<_>>(), [false, false, true, true, true]);
@@ -550,7 +565,7 @@ fn a_question_concerns_the_operator_in_any_thread_and_a_failure_or_a_pause_only_
     let found: HashMap<String, (Origin, bool, bool)> =
       nest_threads(chain_threads(&on, &rows), &rows)
         .iter()
-        .flat_map(|top| std::iter::once(top).chain(&top.agents))
+        .flat_map(|top| iter::once(top).chain(&top.agents))
         .map(|node| {
           (
             node.thread.prompt.clone(),
@@ -617,4 +632,61 @@ fn the_spend_counts_the_answers_sums_their_dollars_and_names_the_actor_of_the_la
   ];
   let want = Spend { dollars: 0.75, answers: 2, actor: Some("claude-cli:opus/high".to_owned()) };
   assert_eq!(Spend::of(&answers), want);
+}
+
+/// A wake of the round: a prompt of None that an ear made on the root.
+fn wake(id: &str, began: u64) -> Act {
+  worded(
+    act(id, "prompt", "chain1", "ear1", began, None),
+    json!(["None", format!("{id} wakes"), ""]),
+  )
+}
+
+/// A run of notes, from its prompts and its unread count.
+fn run(prompts: &[&str], unread: usize) -> NoteRun {
+  NoteRun {
+    prompts: prompts.iter().map(|id| (*id).to_owned()).collect(),
+    count: prompts.len(),
+    unread,
+  }
+}
+
+/// The runs of notes of the root, with the place that the operator read up to.
+fn runs(acts: &[Act], read: u64) -> Vec<NoteRun> {
+  let on: Vec<&Act> = acts.iter().collect();
+  chain_notes(&on, &rows(acts), read)
+}
+
+#[test]
+fn the_notes_that_follow_one_another_stand_as_one_run_which_a_card_of_another_kind_ends() {
+  let acts = [
+    act("chain1", "chain", "", "", 0, None),
+    wake("prompt1", 1),
+    wake("prompt2", 2),
+    prompt("prompt3", 3),
+    wake("prompt4", 4),
+    act("bash5", "bash", "chain1", "operator", 5, Some(6)),
+    wake("prompt6", 7),
+    act("run1", "run", "chain1", "chain1", 8, Some(8)),
+    on_thread(prompt("prompt7", 9), "prompt6"),
+    wake("prompt8", 10),
+    act("rung1", "rung", "chain1", "operator", 11, None),
+    worded(
+      act("prompt9", "prompt", "chain1", "rung1", 12, None),
+      json!(["None", "Look at it.", ""]),
+    ),
+  ];
+  // A thread and a command end a run. A step of the engine and a message of a note end none, and
+  // a notice that a rung made stands in the program of that rung, so it is in no run.
+  let all = |unread: [usize; 3]| {
+    vec![
+      run(&["prompt1", "prompt2"], unread[0]),
+      run(&["prompt4"], unread[1]),
+      run(&["prompt6", "prompt8"], unread[2]),
+    ]
+  };
+  assert_eq!(runs(&acts, 1), all([1, 1, 2]));
+  // Each note counts as unread past the place that was read, and none past the last place.
+  assert_eq!(runs(&acts, 0), all([2, 1, 2]));
+  assert_eq!(runs(&acts, 99), all([0, 0, 0]));
 }

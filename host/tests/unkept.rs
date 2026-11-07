@@ -19,16 +19,22 @@ mod yard;
 fn main() {
   #[cfg(unix)]
   {
-    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build();
+    use tokio::runtime::Builder;
+    let runtime = Builder::new_current_thread().enable_all().build();
     let runtime = runtime.expect("the test has a runtime");
     runtime.block_on(unix::a_life_whose_record_takes_no_fact_holds_its_rebirth_and_keeps_its_end());
+    runtime.block_on(
+      unix::a_life_whose_record_lacks_too_many_facts_pauses_its_work_until_it_takes_them(),
+    );
   }
 }
 
 #[cfg(unix)]
 mod unix {
   use std::{
+    fs,
     path::Path,
+    process, slice,
     sync::{
       Arc,
       atomic::{AtomicUsize, Ordering},
@@ -43,6 +49,8 @@ mod unix {
   };
   use furb_host::{Command, Event, Life, LifeHandle, Reply, Seq};
   use futures::{Stream, StreamExt};
+  use rustix::process::{Resource, getrlimit, setrlimit};
+  use tokio::time::timeout;
 
   use super::yard;
 
@@ -85,7 +93,7 @@ mod unix {
   ) -> Vec<Logged> {
     let mut got = Vec::new();
     loop {
-      let next = tokio::time::timeout(Duration::from_secs(120), events.next()).await;
+      let next = timeout(Duration::from_secs(120), events.next()).await;
       let Ok(Some(logged)) = next else {
         let last: Vec<String> =
           got.iter().rev().take(20).map(|one| format!("{:.300}", format!("{one:?}"))).collect();
@@ -115,29 +123,22 @@ mod unix {
 
   /// The largest size of a file that the process writes, as a limit of the system: a write past
   /// it fails, as on a full disk.
-  fn limited(bytes: libc::rlim_t) {
-    let mut now = libc::rlimit { rlim_cur: 0, rlim_max: 0 };
-    // SAFETY: getrlimit writes the limit to a struct that the test owns.
-    let read = unsafe { libc::getrlimit(libc::RLIMIT_FSIZE, &raw mut now) };
-    assert_eq!(read, 0, "the limit of the size of a file reads");
-    now.rlim_cur = bytes.min(now.rlim_max);
-    // SAFETY: setrlimit reads a struct that the test owns.
-    let set = unsafe { libc::setrlimit(libc::RLIMIT_FSIZE, &raw const now) };
-    assert_eq!(set, 0, "the limit of the size of a file is set");
+  fn limited(bytes: u64) {
+    let mut now = getrlimit(Resource::Fsize);
+    now.current = Some(now.maximum.map_or(bytes, |most| bytes.min(most)));
+    setrlimit(Resource::Fsize, now).expect("the limit of the size of a file is set");
   }
 
   /// The lines of the record of the life, in order.
   fn lines(at: &Path) -> Vec<String> {
-    let text = std::fs::read_to_string(at.join("record.jsonl")).expect("the record reads");
+    let text = fs::read_to_string(at.join("record.jsonl")).expect("the record reads");
     text.lines().map(str::to_owned).collect()
   }
 
   /// The events that a life tells within half a second, which tell nothing more once it is quiet.
   async fn quiet(events: &mut (impl Stream<Item = Logged> + Unpin)) -> Vec<Logged> {
     let mut got = Vec::new();
-    while let Ok(Some(logged)) =
-      tokio::time::timeout(Duration::from_millis(500), events.next()).await
-    {
+    while let Ok(Some(logged)) = timeout(Duration::from_millis(500), events.next()).await {
       got.push(logged);
     }
     got
@@ -145,11 +146,116 @@ mod unix {
 
   /// The size of the record of the life in bytes.
   fn size(at: &Path) -> u64 {
-    std::fs::metadata(at.join("record.jsonl")).expect("the record stands").len()
+    fs::metadata(at.join("record.jsonl")).expect("the record stands").len()
   }
 
+  /// Whether an event is a notice that says a text.
+  fn notice(text: &'static str) -> impl Fn(&Event) -> bool {
+    move |event| matches!(event, Event::Notice(why) if why.contains(text))
+  }
+
+  #[expect(unsafe_code, reason = "no crate of the lock sets a signal to be ignored with no unsafe")]
+  pub(super) async fn a_life_whose_record_lacks_too_many_facts_pauses_its_work_until_it_takes_them()
+  {
+    let at = yard::Yard::new(format!("furb-host-backlog-{}", process::id()));
+    let life = Life::spawn(opening(&at)).expect("the life has a thread");
+    let mut events = Box::pin(life.events(0));
+    ran(&life, &mut events, "n = 1").await;
+    let chain =
+      |label: &str| Command::Chain { label: Some(label.to_owned()), source: None, on: None };
+    let made = life.send(chain("apart")).await;
+    let Ok(Reply::Act(apart)) = made else { panic!("no chain: {made:?}") };
+    let first = said(&life, "a = 1", &apart).await;
+    until(&mut events, done(&[first])).await;
+    // A chain that the operator pauses before the hold, one that he pauses in it, and one that he
+    // wakes in it.
+    let [before, after, woken] = chains(&life, ["before", "after", "woken"]).await;
+    let pause = |id: &str| Command::Pause { id: id.to_owned(), why: Some("mine".to_owned()) };
+    assert!(matches!(life.send(pause(&before)).await, Ok(Reply::Done)));
+    // SAFETY: the test sets the action of one signal, and no handler of its own.
+    unsafe { libc::signal(libc::SIGXFSZ, libc::SIG_IGN) };
+    let full = size(&at);
+    limited(full);
+    let word = format!("for i in range({}):\n  chance()", 5 * DRAWS);
+    let made = life.send(Command::Rung { word, on: None }).await;
+    assert!(matches!(made, Ok(Reply::Act(_))), "the word did not run: {made:?}");
+    let paused = until(&mut events, notice("pauses its work")).await;
+    let Event::Notice(told) = &*paused.last().expect("the pause is told").1 else { unreachable!() };
+    assert!(told.contains(&at.display().to_string()), "the notice names the folder: {told}");
+    assert!(told.contains(" left"), "the notice names the space left: {told}");
+    // A word of the operator on each chain, the one made before the hold and one made in it, waits
+    // for the wake.
+    let made = life.send(chain("late")).await;
+    let Ok(Reply::Act(late)) = made else { panic!("no chain: {made:?}") };
+    assert!(matches!(life.send(pause(&after)).await, Ok(Reply::Done)));
+    assert!(matches!(life.send(Command::Wake { id: woken.clone() }).await, Ok(Reply::Done)));
+    let root = "chain1".to_owned();
+    let later = [
+      said(&life, "m = 1", &root).await,
+      said(&life, "a = 2", &apart).await,
+      said(&life, "b = 1", &late).await,
+    ];
+    let held = quiet(&mut events).await;
+    let ran: Vec<&String> =
+      later.iter().filter(|id| held.iter().any(|one| done(slice::from_ref(*id))(&one.1))).collect();
+    assert!(ran.is_empty(), "words ran while the life held its work: {ran:?}");
+    assert_eq!(size(&at), full, "the record took no fact while the limit stood");
+
+    limited(libc::RLIM_INFINITY);
+    let mut left: Vec<String> = later.to_vec();
+    let freed = until(&mut events, notice("wakes the work")).await;
+    left.retain(|id| !freed.iter().any(|one| done(slice::from_ref(id))(&one.1)));
+    while !left.is_empty() {
+      let got = until(&mut events, done(&left)).await;
+      left.retain(|id| !got.iter().any(|one| done(slice::from_ref(id))(&one.1)));
+    }
+    assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
+    let kept = lines(&at);
+    let draws = kept.iter().filter(|line| line.starts_with("[[\"done\",\"chance")).count();
+    assert_eq!(draws, 5 * DRAWS, "the record holds each fact that waited");
+    for one in [root.as_str(), &apart, &late] {
+      assert_eq!(controls(&kept, one), (1, 1), "the life paused and woke {one} once");
+    }
+    assert_eq!(controls(&kept, &before), (1, 0), "a pause of the operator before the hold stays");
+    assert_eq!(controls(&kept, &after), (2, 0), "a pause of the operator in the hold stays");
+    assert_eq!(controls(&kept, &woken), (1, 1), "the life wakes no chain that the operator woke");
+  }
+
+  /// Chains made on the root under some labels: the name of each.
+  async fn chains<const N: usize>(life: &LifeHandle, labels: [&str; N]) -> [String; N] {
+    let mut made = Vec::new();
+    for label in labels {
+      let chain = Command::Chain { label: Some(label.to_owned()), source: None, on: None };
+      let Ok(Reply::Act(one)) = life.send(chain).await else { panic!("no chain {label}") };
+      made.push(one);
+    }
+    made.try_into().expect("a chain for each label")
+  }
+
+  /// How many pauses and how many wakes of a chain the record holds, each said by the operator.
+  fn controls(kept: &[String], chain: &str) -> (usize, usize) {
+    let count = |kind: &str| {
+      let head = format!("[[\"{kind}\",\"{chain}\",\"operator\"");
+      kept.iter().filter(|line| line.starts_with(&head)).count()
+    };
+    (count("pause"), count("wake"))
+  }
+
+  /// A word that the operator says on a chain, with no wait: the name of its rung.
+  async fn said(life: &LifeHandle, word: &str, on: &str) -> String {
+    let made = life.send(Command::Rung { word: word.to_owned(), on: Some(on.to_owned()) }).await;
+    let Ok(Reply::Act(rung)) = made else { panic!("{word} did not run: {made:?}") };
+    rung
+  }
+
+  /// Whether an event is the end of one of some rungs.
+  fn done(rungs: &[String]) -> impl Fn(&Event) -> bool + '_ {
+    move |event| matches!(event, Event::Act(act) if rungs.contains(&act.id) && matches!(act.phase, Phase::Done(_)))
+  }
+
+  #[expect(unsafe_code, reason = "no crate of the lock sets a signal to be ignored with no unsafe")]
   pub(super) async fn a_life_whose_record_takes_no_fact_holds_its_rebirth_and_keeps_its_end() {
-    let at = yard::Yard::new(format!("furb-host-unkept-{}", std::process::id()));
+    let at = yard::Yard::new(format!("furb-host-unkept-{}", process::id()));
     let life = Life::spawn(opening(&at)).expect("the life has a thread");
     let mut events = Box::pin(life.events(0));
     let mut log = ran(&life, &mut events, "n = 1").await;
@@ -177,7 +283,7 @@ mod unix {
     limited(full);
     ran(&life, &mut events, "n = 2").await;
     let mut end = std::pin::pin!(life.send(Command::End));
-    let early = tokio::time::timeout(Duration::from_millis(500), &mut end).await;
+    let early = timeout(Duration::from_millis(500), &mut end).await;
     assert!(early.is_err(), "the life ended while its record did not hold its facts: {early:?}");
     until(
       &mut events,
@@ -188,7 +294,7 @@ mod unix {
 
     // The life keeps the end that it was told once, and ends once the record holds each fact.
     limited(libc::RLIM_INFINITY);
-    let ended = tokio::time::timeout(Duration::from_secs(120), end).await;
+    let ended = timeout(Duration::from_secs(120), end).await;
     assert!(matches!(ended, Ok(Ok(Reply::Done))), "{ended:?}");
     let told = until(&mut events, |event| matches!(event, Event::Ended(_))).await;
     assert!(matches!(&*told.last().expect("the end is told").1, Event::Ended(None)));

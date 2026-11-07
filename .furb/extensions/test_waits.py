@@ -15,11 +15,8 @@ WORDS = sorted(
 
 
 def bare(call: ast.Call) -> bool:
-  """Whether a wait may name no act: it has no act after its seconds, or only a starred list that may be empty, unless
-  that list falls back on an act with or."""
-  acts = call.args[1:]
-  sure = lambda one: not isinstance(one, ast.Starred) or isinstance(one.value, ast.BoolOp)  # noqa: E731
-  return not any(map(sure, acts))
+  """Whether a wait may name no act: it has no act after its seconds, or only starred lists, which may be empty."""
+  return all(isinstance(one, ast.Starred) for one in call.args[1:])
 
 
 def waits(text: str) -> list[int]:
@@ -34,4 +31,4 @@ def test_each_wait_of_a_word_names_an_act(word: Path) -> None:
 
 def test_a_wait_of_seconds_alone_or_of_a_list_that_may_be_empty_is_bare() -> None:
   text = "wait(60)\nwait(EVERY, *living())\nwait(1, x)\nwait(1, *(acts or [here]))\n"
-  assert waits(text) == [1, 2]
+  assert waits(text) == [1, 2, 4]

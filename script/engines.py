@@ -1,13 +1,16 @@
 """Give a copy of a record of an older build the texts of its engine, so that a later build replays it on them.
 
 A fact made names the digest of the engine and of the Kernel that made a segment of its record. For each one that holds
-no texts, this finds in git the commit whose src/furb/engine.py and src/furb/kernel.py have that digest, applies to that
-engine the change of FIX where it applies, and writes the texts and their digest into the fact. It rewrites the file, so
-give it a copy of a record, and never the record of a life.
+no texts, this finds in git the commit whose src/furb/engine.py and src/furb/kernel.py have that digest, and writes
+those texts, as git holds them, into the fact. The digest stays the one that the build wrote, and each text is the one
+that the build ran. A defect of replay that a later build fixed in an engine of the major is mended at replay, by the
+adapter of that engine in src/furb/adapters.py, and never in the texts. It rewrites the file, so give it a copy of a
+record, and never the record of a life.
 
 A build before the texts replayed an older record on its own engine and went on with no fact made of its own, so a
 segment of several lives may hold the entries of several engines. The script says how many lives each segment holds,
-and tests/tip.rs opens the copy to check it: a segment that the texts of one engine cannot replay drifts.
+and tests/tip.rs opens the copy to check it: a segment that the texts of one engine, and its adapter, cannot replay
+drifts.
 
 Usage: python3 script/engines.py <copy of a record>
 """
@@ -16,20 +19,16 @@ import hashlib
 import json
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 WORDS = 7
-"""The words of a fact made that holds no texts: its kind, its chain, its speaker, the digest, the version, the schema and
-the release, each null that an older build did not write."""
-
-FIX = "656c26163"
-"""The commit by which a replay goes on past the raise of an ear (#1281), which each older engine takes where it applies."""
+"""The words of a fact made that holds no texts: its kind, its chain, its speaker, the digest, the version, the schema
+and the release, each null that an older build did not write."""
 
 
-def git(*args: str, at: str | None = None, given: str | None = None) -> str:
+def git(*args: str) -> str:
   """The output of a command of git."""
-  return subprocess.run(["git", *args], cwd=at, input=given, capture_output=True, text=True, check=True).stdout  # noqa: S603, S607
+  return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout  # noqa: S603, S607
 
 
 def digest(engine: str, kernel: str) -> str:
@@ -49,19 +48,6 @@ def found(named: str) -> tuple[str, str]:
   sys.exit(f"no commit holds the engine {named}")
 
 
-def fixed(engine: str) -> str:
-  """The engine with the change of FIX, or as it stands when that change does not apply to it."""
-  with tempfile.TemporaryDirectory() as at:
-    path = Path(at, "src/furb/engine.py")
-    path.parent.mkdir(parents=True)
-    path.write_text(engine, encoding="utf-8")
-    try:
-      git("apply", "--include=src/furb/engine.py", at=at, given=git("show", FIX))
-    except subprocess.CalledProcessError:
-      return engine
-    return path.read_text(encoding="utf-8")
-
-
 def main() -> None:
   """Writes the texts of its engine into each fact made of the copy that holds none."""
   path = Path(sys.argv[1])
@@ -74,8 +60,6 @@ def main() -> None:
       continue
     fact += [None] * (WORDS - len(fact))
     engine, kernel = found(fact[3])
-    engine = fixed(engine)
-    fact[3] = digest(engine, kernel)
     fact += [engine, kernel]
     lines[at] = json.dumps(entry, ensure_ascii=False, separators=(",", ":")) + "\n"
     after = [n for n in lives if n > at]

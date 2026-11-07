@@ -38,7 +38,8 @@ from furb_monty import _monty
 USE = (
   "skill(name) loads a skill: a skill with code plays its word and tells its interface, and any other tells its"
   ' SKILL.md. skill() plays each default skill. read("skills://<name>") gives the word of a skill with code, and'
-  ' read("skills://<name>/<file>") a file of its folder.'
+  ' read("skills://<name>/<file>") a file of its folder. read("settings://<name>") gives the keys of a skill in the'
+  " configs, as JSON."
 )
 """USE is the first line of the list of the skills, which says how a chain loads and reads a skill."""
 
@@ -138,6 +139,7 @@ def extended(  # noqa: PLR0913
     taught = [
       str(path),
       [[x["name"], str(dict(x)["file"]) if x["word"].strip() else "", x["life"], x["root"]] for x in plays],
+      str(Path.home()),
     ]
   sand = replace(sand or sown(), stands=[list(roster) or STANDS[0], str(at / "work"), STANDS[2], *taught])
   files = _monty.files(str(at / "scratch"), str(at / "config"))
@@ -350,12 +352,14 @@ args = sys.argv[1:]
 at = args.index("--jq") if "--jq" in args else len(args)
 jq = args[at + 1] if at < len(args) else None
 said = " ".join(args[:at] + args[at + 2:])
-with open(os.environ["GH_LOG"], "a", encoding="utf-8") as f:
+log = os.environ["GH_LOG"]
+before = open(log, encoding="utf-8").read().splitlines() if os.path.exists(log) else []
+with open(log, "a", encoding="utf-8") as f:
   f.write(said + chr(10))
 with open(os.environ["GH_SAYS"], encoding="utf-8") as f:
   says = json.load(f)
-for pattern, out, code in says:
-  if re.search(pattern, said):
+for pattern, out, code, *times in says:
+  if re.search(pattern, said) and not (times and sum(bool(re.search(pattern, x)) for x in before) >= times[0]):
     break
 else:
   sys.exit(0)
@@ -434,6 +438,7 @@ class Bench:
       "PATH": f"{folder}{os.pathsep}{os.environ['PATH']}",
       "GH_LOG": str(tmp / "gh.log"),
       "GH_SAYS": str(tmp / "says.json"),
+      "FURB_BUILD_MIN_FREE_GB": "0",
     }
     self.tmp, self.says, self.engine = tmp, [], conftest.engine
     self.sand = Shell(files={}, env=env, stands=[roster, str(tmp), actor])
@@ -457,8 +462,10 @@ class Bench:
     await self.word(f"got = {expression}")
     return self.ns["got"]
 
-  def say(self, pattern: str, out: object, code: int = 0) -> None:
-    self.says.insert(0, (pattern, out if isinstance(out, str) else json.dumps(out), code))
+  def say(self, pattern: str, out: object, code: int = 0, times: int | None = None) -> None:
+    """Answer each call that matches pattern, or only its first `times` calls: the later ones go to the next pattern."""
+    entry = (pattern, out if isinstance(out, str) else json.dumps(out), code)
+    self.says.insert(0, entry if times is None else (*entry, times))
     (self.tmp / "says.json").write_text(json.dumps(self.says), encoding="utf-8")
 
   def gh(self) -> list[str]:

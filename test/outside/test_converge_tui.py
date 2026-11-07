@@ -203,3 +203,12 @@ def test_the_slice_of_a_capture_is_the_newest_long_log_at_its_end_until_a_pin_na
   (out / "pins.json").write_text(json.dumps({"slice": {"log": "old.jsonl.log", "moment": 3}}), encoding="utf-8")
   subprocess.run(words, check=True)
   assert json.loads((out / "slice.json").read_text(encoding="utf-8")) == {"log": str(old), "moment": 3}
+
+
+def test_a_capture_of_the_walk_comes_with_the_action_that_led_to_it(tmp_path: Path) -> None:
+  now = {"walk/life-03": (b"one", grid("Main", "row")), "demo/01-welcome": (b"two", grid("Welcome"))}
+  (tmp_path / "out" / "head" / "walk").mkdir(parents=True)
+  (tmp_path / "out" / "head" / "walk" / "life-03.txt").write_text("press ⌃P (Search all actions)", encoding="utf-8")
+  changes = {one["name"]: one for one in shoot(tmp_path, {}, now)["changed"]}
+  assert changes["walk/life-03"]["action"] == "press ⌃P (Search all actions)"
+  assert "action" not in changes["demo/01-welcome"]

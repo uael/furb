@@ -8,8 +8,9 @@
 //!   cargo test -p furb --test tip -- --ignored
 //! ```
 //!
-//! `FURB_PROBE_CONFIG` names the config directory, and `FURB_PROBE_EXTENSIONS` set to anything runs
-//! the extensions that it turns on.
+//! `FURB_PROBE_CONFIG` names the config directory, `FURB_PROBE_EXTENSIONS` set to anything runs
+//! the extensions that it turns on, and `FURB_PROBE_WHOLE` set to anything opens the record from
+//! its first entry, born again at each checkpoint, in the place of its last checkpoint alone.
 
 use std::{fs, path::Path};
 
@@ -37,6 +38,7 @@ fn the_state_at_the_tip() {
     record: Some(record),
     keeps: Some(false),
     inspecting: Some(true),
+    whole: std::env::var_os("FURB_PROBE_WHOLE").map(|_| true),
     extensions: std::env::var("FURB_PROBE_EXTENSIONS").map_or(Some(false), |_| None),
     config: Some(
       std::env::var("FURB_PROBE_CONFIG").unwrap_or_else(|_| config.display().to_string()),

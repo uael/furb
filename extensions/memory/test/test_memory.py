@@ -3,6 +3,8 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 from conftest import STANDS, Dead, life, settle
 from extensions.conftest import extended, memorized, noted, recalled, tilded
 from furb import engine
@@ -82,15 +84,15 @@ async def test_the_memory_files_that_apply_to_a_path(tmp_path: Path) -> None:
 
 
 async def test_memory_finds_the_folders_with_reads_alone(tmp_path: Path) -> None:
-  """memory finds the folders with reads alone: config:// for the config directory, ./ for the working directory, the path of a folder and ../ for the folder above it, and the path of a folder and the name of an entry of it and / for a folder under it, each with a hidden show."""
+  """memory finds the folders with reads alone: config:// for the config directory, ./ for the working directory, and the path of a folder and the name of an entry of it and / for a folder under it, each with a hidden show, and for a folder above the working directory it reads the memory files by name, never a listing."""
   noted(tmp_path / "work" / "a", "a\n")
   _, root = extended("memory", tmp_path)
   ran = engine.rung('memory("a/b.txt")', on=root)
   await ran
   reads = [a[4] for a in engine.transcript(root) if a[0] == "read" and a[2] == ran]
   work = tilded(tmp_path / "work")
-  assert reads[:3] == ["./", f"{work}/../", f"{tilded(tmp_path)}/../"]
-  assert reads[-3:] == [f"{work}/a/", "config://", f"{tilded(tmp_path / 'work' / 'a')}/AGENTS.md"]
+  assert [one for one in reads if str(one).endswith("/")] == ["./", f"{work}/a/", "config://"]
+  assert reads[-1] == f"{tilded(tmp_path / 'work' / 'a')}/AGENTS.md"
   told = {a[1] for a in engine.transcript(root) if a[0] == "tell"}
   assert [a[4] for a in engine.transcript(root) if a[0] == "read" and a[2] == ran and a[1] in told] == [
     f"{tilded(tmp_path / 'work' / 'a')}/AGENTS.md"
@@ -154,3 +156,24 @@ async def test_a_path_of_a_scheme_adds_no_folder_of_its_own(tmp_path: Path) -> N
     noted(tmp_path / "work" / "skills:", "s\n")
   _, root = extended("memory", tmp_path)
   assert await paths(root, tmp_path, "skills://brew") == [tilded(top)]
+
+
+async def test_the_memory_files_above_the_home_of_the_user_load_from_the_root_down(
+  tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+  """When the working directory stands under the home of the user, memory reads the memory files above the home, from the root down to the home, by name and never by a listing: it takes the folders from the absolute home that the standing ends with, as many as the path of the home has, since the World writes the home as ~."""
+  home = tmp_path / "a" / "b" / "c" / "d" / "u"
+  home.mkdir(parents=True)
+  home = home.resolve()
+  monkeypatch.setenv("HOME", str(home))
+  monkeypatch.setenv("USERPROFILE", str(home))
+  fifth, fourth, above = noted(home.parents[4], "e\n"), noted(home.parents[3], "f\n"), noted(home.parent, "a\n")
+  top = noted(home, "h\n")
+  work = noted(home / "work", "t\n")
+  _, root = extended("memory", home, doctrine="Read first.\n")
+  got = await engine.rung("close([one.path for one in memory()])", on=root)
+  assert isinstance(got, list)
+  kept = [one for one in got if one.startswith((str(home.parents[4]), "~"))]
+  assert kept == [str(fifth), str(fourth), str(above), tilded(top), tilded(work)]
+  listed = [str(a[4]) for a in engine.transcript(root) if a[0] == "read" and str(a[4]).endswith("/")]
+  assert listed == ["./", "config://"]

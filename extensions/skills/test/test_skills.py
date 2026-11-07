@@ -1,5 +1,6 @@
 """skills, the skills of a chain."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -76,7 +77,7 @@ async def test_a_skill_whose_metadata_names_a_word_has_code(tmp_path: Path) -> N
   assert [x for x in got if x.startswith(("note ", "skills ", "memory "))] == [
     "memory (code, default): Tells a chain the AGENTS.md or CLAUDE.md files of the project that apply to the files that it reads.",
     "note (code, default): A note.",
-    "skills (code, on): Lists the skills of the project and of the user, and loads one.",
+    "skills (code, on, default): Lists the skills of the project and of the user, and loads one.",
   ]
 
 
@@ -129,6 +130,32 @@ async def test_the_world_answers_the_name_of_a_skill_with_its_word_or_its_skill_
   assert got == Text(tilded(path), path.read_text(encoding="utf-8"))
 
 
+async def test_the_world_answers_settings_with_the_keys_of_a_skill_in_the_configs(tmp_path: Path) -> None:
+  """The World answers settings:// and the name of a skill with the JSON object of its keys, each with the value that a config gives, else with the default of the file of keys that its manifest names under furb-config, so its word reads them; settings:// alone gives each key of the configs, and a name that no config gives and no schema names is refused."""
+  folder = skilled(
+    tmp_path / "work" / ".furb" / "skills",
+    "note",
+    "name: note\ndescription: A note.\nmetadata:\n  furb-word: note.py\n  furb-config: keys.json",
+  ).parent
+  (folder / "note.py").write_text("def note() -> None:\n  pass\n", encoding="utf-8")
+  keys = {"folder": {"type": "string", "default": "notes"}, "depth": {"type": "integer", "default": 2}}
+  (folder / "keys.json").write_text(json.dumps({"properties": keys}), encoding="utf-8")
+  (tmp_path / "work" / ".furb" / "config.json").write_text(
+    json.dumps({"gate": False, "note": {"folder": "journal"}}), encoding="utf-8"
+  )
+  skilled(tmp_path / "work" / ".furb" / "skills", "brew", "name: brew\ndescription: Make tea.")
+  _, root = extended("skills", tmp_path, _monty.skills)
+  got = await engine.rung('import json\nclose(json.loads(read("settings://note", HIDDEN).content))', on=root)
+  assert got == {"folder": "journal", "depth": 2}
+  assert await engine.rung('close(read("settings://brew", HIDDEN).content)', on=root) == "{}"
+  got = await engine.rung('close(read("settings://", HIDDEN))', on=root)
+  assert isinstance(got, Text)
+  assert got.path == "settings://"
+  assert json.loads(got.content)["gate"] is False
+  with pytest.raises(Refused, match=r"No config gives settings://none, and no schema names it\."):
+    await engine.rung('close(read("settings://none", HIDDEN))', on=root)
+
+
 async def test_a_write_of_a_skill_writes_its_word_in_the_project(tmp_path: Path) -> None:
   """A write of skills:// and the name of a skill with code writes the word in its folder in .furb/extensions of the project, after a copy of its folder there when it stands elsewhere, and keeps the imports of furb at the top of its file."""
   folder = skilled(
@@ -172,3 +199,25 @@ async def test_a_write_of_a_skill_that_the_life_runs_reloads_it(tmp_path: Path) 
     "def note() -> int:\n  return 2",
   ]
   assert await engine.rung("close(note())", on=root) == 2
+
+
+async def test_a_refused_write_of_a_skill_changes_no_file_and_a_good_one_replaces_it(tmp_path: Path) -> None:
+  """A write of skills:// and the name of a skill whose word binds a name of the engine at its top is refused with that finding and changes no file, and no copy of the folder of the skill stands."""
+  head = "name: {0}\ndescription: A note.\nmetadata:\n  furb-word: {0}.py"
+  original = "from furb.engine import read\n\n\ndef note():\n  return read('n')\n"
+  folder = skilled(tmp_path / "config" / "skills", "note", head.format("note")).parent
+  (folder / "note.py").write_text(original, encoding="utf-8")
+  mine = skilled(tmp_path / "work" / ".furb" / "extensions", "mine", head.format("mine")).parent
+  (mine / "mine.py").write_text(original, encoding="utf-8")
+  _, root = extended("skills", tmp_path, _monty.skills)
+  refused = r"The word (note|mine)\.py binds filled of the engine at its top"
+  for name in ("note", "mine"):
+    with pytest.raises(Refused, match=refused):
+      await engine.rung(f'close(write(Text("skills://{name}", "def filled():\\n  return 2")))', on=root)
+  assert not (tmp_path / "work" / ".furb" / "extensions" / "note").exists()
+  assert (folder / "note.py").read_text(encoding="utf-8") == original
+  assert (mine / "mine.py").read_text(encoding="utf-8") == original
+  await engine.rung('write(Text("skills://mine", "def noted():\\n  return 2"))', on=root)
+  assert (mine / "mine.py").read_text(
+    encoding="utf-8"
+  ) == "from furb.engine import read\n\n\ndef noted():\n  return 2\n"

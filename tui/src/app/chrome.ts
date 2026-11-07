@@ -230,13 +230,11 @@ export const chrome = part({
       ]);
     } else if (prompt) {
       gap();
-      button(
-        [
-          [name, none ? c.danger : c.text],
-          [shown.provider ? ` ${provider}` : "", c.faint],
-        ],
-        () => this.models(),
-      );
+      // The model and its effort read as one label, opus/high, and each part is a button of its own: the model opens the
+      // models, and the effort opens the efforts of the model.
+      button([[none ? name : id, none ? c.danger : c.text]], () => this.models());
+      if (!none && effort && effort !== "off") button([[`/${effort}`, c.muted]], () => this.effortPicker());
+      if (shown.provider) button([[` ${provider}`, c.faint]], () => this.models());
       if (shown.shape) {
         gap();
         button(

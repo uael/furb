@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { LiveAct } from "furb";
+import type { Act } from "furb/life";
+import { isDone } from "furb/life";
 import { seedDemo } from "../demo.ts";
 import type { Session } from "../session.ts";
 import { audit, checklist } from "./audit.ts";
@@ -24,7 +25,7 @@ export async function quiet(session: Session, still = 1000, limit = 90_000): Pro
   let since = Date.now();
   while (Date.now() - start < limit) {
     await session.refresh();
-    const now = `${session.acts.length}/${session.acts.filter((act) => act.done).length}/${session.host.prompts.size}`;
+    const now = `${session.acts.length}/${session.acts.filter((act) => isDone(act)).length}/${session.host.prompts.size}`;
     if (now !== last) {
       last = now;
       since = Date.now();
@@ -40,14 +41,16 @@ export async function quiet(session: Session, still = 1000, limit = 90_000): Pro
  * `stands` names, as a model that thinks until a cancel. */
 export async function settle(
   session: Session,
-  stands: (act: LiveAct) => boolean = () => false,
+  stands: (act: Act) => boolean = () => false,
   limit = 90_000,
 ): Promise<void> {
   const start = Date.now();
   let busy: string[] = [];
   while (Date.now() - start < limit) {
     await session.refresh();
-    busy = session.acts.filter((act) => !act.done && works(act, limit) && !stands(act)).map((act) => act.id);
+    busy = session.acts
+      .filter((act) => !isDone(act) && works(act, limit) && !stands(act))
+      .map((act) => act.id);
     if (busy.length === 0) return;
     await new Promise((done) => setTimeout(done, 20));
   }
@@ -57,8 +60,8 @@ export async function settle(
 /** Whether an open act ends by itself: a rung whose model has not answered and that no pause holds, a command but the
  * checks, or a wait whose time ends within the limit. A prompt, a chain or a rung that runs its word moves only when
  * one of those ends. */
-function works(act: LiveAct, limit: number): boolean {
-  if (act.kind === "rung") return act.word === undefined && !act.paused;
+function works(act: Act, limit: number): boolean {
+  if (act.kind === "rung") return act.word == null && !act.pause;
   if (act.kind === "bash") return act.words[0] !== checks;
   if (act.kind === "wait") return Number(act.words[0]) * 1000 < limit;
   return false;
@@ -82,7 +85,7 @@ export async function seedLife(session: Session): Promise<Set<string>> {
   await settle(session);
   await seedAsks(session);
   await reached(session);
-  return new Set(session.acts.filter((act) => !act.done).map((act) => act.id));
+  return new Set(session.acts.filter((act) => !isDone(act)).map((act) => act.id));
 }
 
 /** Wait until the host holds each prompt that waits for the operator. The worker sends its state to the host 20 ms
@@ -94,7 +97,7 @@ async function reached(session: Session, limit = 10_000): Promise<void> {
     const missing = session.acts.filter(
       (act) =>
         act.kind === "prompt" &&
-        !act.done &&
+        !isDone(act) &&
         act.words[2] === "operator" &&
         act.words[0] !== "None" &&
         !session.host.prompts.has(act.id),
@@ -116,7 +119,7 @@ function chainOf(session: Session, label: string): string {
 /** The first prompt of a chain, which is the thread of its worker. */
 function threadOf(session: Session, label: string): string {
   const chain = chainOf(session, label);
-  const found = session.acts.find((act) => act.kind === "prompt" && act.on === chain);
+  const found = session.acts.find((act) => act.kind === "prompt" && act.chain === chain);
   if (!found) throw new Error(`The chain ${label} has no prompt.`);
   return found.id;
 }

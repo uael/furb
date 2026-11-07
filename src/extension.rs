@@ -25,7 +25,7 @@
 pub mod skills;
 
 use std::{
-  fs,
+  env, fs,
   io::ErrorKind,
   path::{Path, PathBuf},
 };
@@ -43,11 +43,20 @@ use crate::{
   fact::{Fact, named},
   gate,
   value::{Fault, Object, Text, entry},
-  world::files,
+  world::{config, files},
 };
 
 /// The kind of the fact that enables an extension in a life, which [`extensions`] says and reads.
 pub const ENABLE: &str = "enable";
+
+/// The place of the program of a process among the words of a fact enable, which come after the
+/// name, the word, the life word, the mark of the root, the file and the digest:
+/// [`Extension::said`] writes it and [`enabled_by`] reads it.
+const PROGRAM: usize = 6;
+
+/// The place in a fact enable of the value of the root that holds the tree of the view of a kit of
+/// a session, after each word that an older fact holds, so an older reader reads none.
+const TREE: usize = PROGRAM + 1;
 
 /// The journal, which says the record again in a later life, so a done it says answers no stand of this life.
 const JOURNAL: &str = "journal";
@@ -86,8 +95,14 @@ const VIEW: &str = "furb-view";
 /// bun runs, or a program.
 pub(crate) const PROCESS: &str = "furb-process";
 
+/// The field of the manifest that names the file of the keys that the extension adds to the
+/// configs, a JSON object whose `properties` give each key by its name, as the `configuration` of
+/// an extension of VS Code gives its settings. The configs hold each key under the name of the
+/// extension, as `{"notes": {"folder": "notes"}}`, which `world::config` reads.
+pub(crate) const CONFIG: &str = "furb-config";
+
 /// Each field of furb that a manifest can give.
-const FIELDS: [&str; 7] = [WORD, LIFE, INTERFACE, DEFAULT, PLAYS, VIEW, PROCESS];
+const FIELDS: [&str; 8] = [WORD, LIFE, INTERFACE, DEFAULT, PLAYS, VIEW, PROCESS, CONFIG];
 
 /// The marks that open a block of lines as the value of a key of a frontmatter.
 const BLOCKS: [&str; 6] = ["|", "|-", "|+", ">", ">-", ">+"];
@@ -240,11 +255,11 @@ pub struct Extension {
 
 impl Extension {
   /// The extension that a fact which enables one carries.
-  fn of(a: &Fact) -> Option<Extension> {
+  fn of(a: &Fact) -> Option<Self> {
     let text = |at| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
     let root = text(3).as_deref() == Some(ROOTED);
     let file = text(4).unwrap_or_default();
-    Some(Extension { name: text(0)?, word: text(1)?, life: text(2)?, root, file })
+    Some(Self { name: text(0)?, word: text(1)?, life: text(2)?, root, file })
   }
 
   /// The saying that enables the extension, about the root: its name, its word, its life word,
@@ -266,7 +281,7 @@ impl Extension {
   fn said(&self, program: Option<&str>) -> Fact {
     let rooted = if self.root { ROOTED } else { "" };
     let digest = format!("{:x}", Sha256::digest(self.word.as_bytes()));
-    let words = [
+    let words: [&str; PROGRAM] = [
       self.name.as_str(),
       self.word.as_str(),
       self.life.as_str(),
@@ -288,9 +303,9 @@ pub struct Places {
 impl Places {
   /// The places of this process: the config directory is `FURB_CONFIG_DIR`, else `furb` under `XDG_CONFIG_HOME`,
   /// under `APPDATA` on Windows, or under `.config` in the home, where the TUI keeps its preferences too.
-  pub fn here() -> Places {
-    let var = |key: &str| std::env::var_os(key).map(PathBuf::from);
-    let home = std::env::home_dir();
+  pub fn here() -> Self {
+    let var = |key: &str| env::var_os(key).map(PathBuf::from);
+    let home = env::home_dir();
     let config = var("FURB_CONFIG_DIR").unwrap_or_else(|| {
       var("XDG_CONFIG_HOME")
         .or_else(|| var("APPDATA").filter(|_| cfg!(windows)))
@@ -298,7 +313,7 @@ impl Places {
         .unwrap_or_default()
         .join("furb")
     });
-    Places { config, home }
+    Self { config, home }
   }
 }
 
@@ -357,9 +372,13 @@ pub(crate) fn shipped(name: &str) -> Option<Vec<(String, &'static str)>> {
   })
 }
 
-/// The name of each official extension, in the order a life runs them.
-fn names() -> Vec<String> {
-  let named = OFFICIAL.iter().filter_map(|one| frontmatter(one.0).field("name").map(str::to_owned));
+/// The name of each official extension, in the order a life runs them, and whether it plays by
+/// default.
+fn names() -> Vec<(String, bool)> {
+  let named = OFFICIAL.iter().map(|one| frontmatter(one.0)).filter_map(|front| {
+    let on = front.meta(DEFAULT) == Some("true");
+    front.field("name").map(|name| (name.to_owned(), on))
+  });
   named.collect()
 }
 
@@ -414,6 +433,11 @@ pub(crate) fn manifested<T: AsRef<str>>(
       "A manifest gives a name, and the file of a word under metadata as {WORD}"
     ));
   };
+  if config::furb_key(name) {
+    return Err(format!(
+      "The name {name} is a key of furb in the configs: give the skill a name of its own"
+    ));
+  }
   let foreign =
     |key: &&(String, String)| key.0.starts_with("furb-") && !FIELDS.contains(&key.0.as_str());
   if let Some((key, _)) = manifest.metadata.iter().find(foreign) {
@@ -495,7 +519,7 @@ pub(crate) fn turned_on(
 ) -> Result<Vec<(String, Option<PathBuf>)>, Fault> {
   let official = names();
   let mut named: Vec<(String, Option<PathBuf>, bool)> =
-    official.iter().map(|one| (one.clone(), None, true)).collect();
+    official.iter().map(|(name, on)| (name.clone(), None, *on)).collect();
   for file in configs(&places.config, project) {
     let refused = |why: String| Fault::refused(format!("{why}: {}", file.display()));
     let text = match fs::read_to_string(&file) {
@@ -560,6 +584,24 @@ pub fn parts(places: &Places, project: &Path) -> Result<Vec<Part>, Fault> {
       .map_err(|no| Fault::refused(format!("{no}: {}", file.display())))?;
     if let Some(view) = frontmatter(&text).meta(VIEW) {
       out.push(Part { name, file: root.join(view).display().to_string(), text: None });
+    }
+  }
+  Ok(out)
+}
+
+/// The name and the text of the file of the keys of each extension that the configs turn on and
+/// whose manifest names one, in the order a life runs them. An official extension names none, a
+/// folder whose manifest cannot be read gives none, since its extension does not play, and a file
+/// of keys that cannot be read gives none, so the configs stay readable and writable, and a config
+/// can turn that extension off.
+pub(crate) fn contributed(places: &Places, project: &Path) -> Result<Vec<(String, String)>, Fault> {
+  let mut out = Vec::new();
+  for (name, root) in turned_on(places, project)? {
+    let Some(root) = root else { continue };
+    let Ok(text) = fs::read_to_string(root.join(MANIFEST)) else { continue };
+    let keys = frontmatter(&text).meta(CONFIG).map(|keys| root.join(keys));
+    if let Some(Ok(text)) = keys.map(fs::read_to_string) {
+      out.push((name, text));
     }
   }
   Ok(out)
@@ -711,11 +753,37 @@ pub fn enabled(root: &[Fact]) -> Vec<Extension> {
   out
 }
 
+/// What a fact enable says of the process of its skill: the name of the skill, and the program that
+/// the fact names, empty when the folder of the skill names none, and none for a fact that names no
+/// program, as the fact of a config and the fact of a build before the program.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Enabled {
+  pub name: String,
+  pub program: Option<String>,
+  /// The value of the root that holds the tree of the view of a kit of a session, when it names
+  /// one.
+  pub view: Option<String>,
+}
+
+/// What a fact enable says of the process of its skill, or none for any other fact. It reads the
+/// words that [`Extension::said`] writes, so the layout of the fact has one home.
+pub fn enabled_by(a: &Fact) -> Option<Enabled> {
+  if a.kind() != ENABLE {
+    return None;
+  }
+  let text = |at| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
+  let view = text(TREE).filter(|one| !one.is_empty());
+  Some(Enabled { name: text(0)?, program: text(PROGRAM), view })
+}
+
 /// The ear of the extensions, which says and hears the fact enable. `src/furb/AGENTS.md` says what the fact means and
 /// when a life says it, under the names enable and life word and in its laws.
 ///
 /// The fact is `("enable", "chain1", "extensions", name, word, life)`, with `"root"` after the life word for an
-/// extension that plays on the root alone. No contract holds it, so this is the one home of its shape. The ear says it for each extension it is given that the life does not run as it is given, at each
+/// extension that plays on the root alone, then the file, the digest, the program and, for a kit
+/// of a session, the value of the root that holds the tree of its view.
+/// No contract holds it, so this is the one home of its shape. The ear says it for each extension
+/// it is given that the life does not run as it is given, at each
 /// stand that this life answers, the first of which is at the tip, and for an extension of a folder that a config
 /// turns on, when a write of the life in that folder lands. The fact of an extension that the life runs already
 /// reloads it: each chain plays the definitions of its new word and each name of state that it lacks, so each name of

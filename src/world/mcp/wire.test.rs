@@ -10,6 +10,8 @@ use super::{Events, Failure, seconds};
 use super::{Heard, Peer};
 #[cfg(unix)]
 use crate::{ear::reactor, world::mcp::config::Transport};
+#[cfg(unix)]
+use futures::executor;
 
 #[test]
 fn the_reader_of_a_stream_of_events_gives_each_event_whole_as_its_bytes_come() {
@@ -56,7 +58,7 @@ fn the_end_of_a_process_quotes_the_whole_of_its_stderr() {
     env: Vec::new(),
     cwd: None,
   };
-  let heard = futures::executor::block_on(reactor().spawn(async move {
+  let heard = executor::block_on(reactor().spawn(async move {
     let (_peer, mut heard) = Peer::open(&transport, None, Value::Null).await.unwrap();
     heard.recv().await
   }))

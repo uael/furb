@@ -58,7 +58,7 @@ export type ChainRead = {
 };
 
 /** The mark of a thread in the list of the threads of a chain: it asks the operator, a pause holds it, it failed, a
- * cancel ended it, it is resolved with work that the operator did not read, it is resolved and seen, or it runs. Work
+ * cancel ended it, it is over with work that the operator did not read, it is over and seen, or it runs. Work
  * that the operator did not read concerns him only on a thread that he started. */
 export const threadMarks = (
   thread: ChainThread,
@@ -68,7 +68,7 @@ export const threadMarks = (
   markOf(
     state === "asks" || state === "paused" || state === "failed" || state === "cancelled"
       ? state
-      : thread.resolved
+      : thread.over
         ? unread && thread.yours
           ? "unread"
           : "seen"
@@ -84,11 +84,12 @@ export const PROGRAM_STEPS = 6;
  * each thread of under a hundred lines starts at one column. */
 export const gutterWidth = (digits: number) => Math.max(2, digits) + space.inset;
 
-/** The cells of the column of the states, at the right of the numbers of a block of code, so the numbers stand at the
- * left edge of the block. They show the loader while the model writes, and the mark of the line that failed. A code
- * block of markdown keeps the column blank. So the numbers and the code of every block have the same columns, which
- * the one gutter of furb, `Gutter` in `gutter.ts`, draws for both. */
-export const STATE = 1;
+/** The cells of the column of the states, at the right of the numbers of a block of code and their blank cell, so the
+ * numbers stand at the left edge of the block. The mark takes the first, and the second stays blank before the code. They
+ * show the loader while the model writes, and the mark of the line that failed. A code block of markdown keeps the
+ * column blank. So the numbers and the code of every block have the same columns, which the one gutter of furb,
+ * `Gutter` in `gutter.ts`, draws for both. */
+export const STATE = 2;
 
 /** The label that heads a block of code: the model that wrote a word, or the language of a code block of Markdown. A
  * word draws it with the group word.label of the syntax style, which holds this color and this weight. */

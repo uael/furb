@@ -238,10 +238,11 @@ record when moving a session.
 The model of a life is the views that a host derives from the acts of a life, in `src/life`, which `furb/life`
 gives. It holds no native code and no module of node, so a terminal and a window of the web read the same views:
 
-- `acts`: the act as a view reads it, `LiveAct`, the kinds of work, `WORK`, whether a site is the operator or a member
-  of the operator, `operated`, what a command came to, `Exit`, the measure of a chain, `Measure`, which `measureOf`
-  gives from the answers of its models, a compaction of a chain, `Compaction`, which an `Activity` keeps for each
-  prefix said on a chain after its birth, and whether an act failed or was cancelled.
+- `acts`: the act as a view reads it, `Act`, which the daemon gives with its meaning, and what a view reads of it:
+  whether it is done, `isDone`, what it came to, `outcomeOf`, whether a pause holds it, `isPaused`, and whether it
+  failed or was cancelled; the kinds of work, `WORK`, whether a site is the operator or a member of the operator,
+  `operated`, what a command came to, `Exit`, the measure of a chain, `Measure`, and a compaction of a chain,
+  `Compaction`, which an `Activity` keeps for each prefix said on a chain after its birth.
 - `asks`: the desk of the operator, `desk`: each question that waits for him and each notice that he did not dismiss,
   the oldest first, each with its chain and the choices of its shape, `choicesOf`: yes and no for a bool, and each
   value of a Literal. `aimed` gives the ask that the operator acts on, on the chain that he reads, `beside` the ask a
@@ -253,9 +254,10 @@ gives. It holds no native code and no module of node, so a terminal and a window
   of its ladder and their acts, the last steps at each level, and one line in place of each run of earlier ones, read
   from the index of acts that a host holds.
 - `threads`: the threads of a chain, `chainThreads`, where a thread is a prompt to a model with the messages that came
-  to it, and the asides of the chain, `chainAsides`; the tree of a list of threads, `nestThreads`, where each thread
-  that the ladder of a thread made is its agent, in the order of the list of the threads, `orderThreads`; and how a
-  thread concerns the operator, `concerns` and `attentionOf`.
+  to it, the asides of the chain, `chainAsides`, and the runs of notes that follow one another in its feed,
+  `chainNotes`; the tree of a list of threads, `nestThreads`, where each thread that the ladder of a thread made is its
+  agent, in the order of the list of the threads, `orderThreads`; and how a thread concerns the operator, `concerns`
+  and `attentionOf`.
 - `map`: the place of each chain on the map, which no later chain moves, the messages that flow between chains, and
   the way of a message along the tree of hires.
 - `program`: the program of a thread as the feed shows it, `threadProgram`: the words of its steps as one program,

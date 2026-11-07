@@ -1,0 +1,28 @@
+name: measures
+description: Publish the measures that a job wrote in its folder of measures, with the head and the run, even when the job failed.
+
+inputs:
+  name:
+    description: The part of the name of the artifact that tells what the measures are.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # The run of a pull request builds the merge of its branch, so the head that a reader wants is the one of the pull
+    # request, and the sha of the merge goes beside it.
+    - shell: bash
+      env:
+        HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        JOB: ${{ github.job }}
+      run: |
+        mkdir -p "$RUNNER_TEMP/measures"
+        printf '{"head":"%s","sha":"%s","run":%s,"attempt":%s,"job":"%s","runner":"%s %s"}\n' \
+          "$HEAD" "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" "$JOB" "$RUNNER_OS" "$RUNNER_ARCH" \
+          > "$RUNNER_TEMP/measures/meta.json"
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: measures-${{ inputs.name }}
+        path: ${{ runner.temp }}/measures
+        if-no-files-found: error
+        retention-days: 30

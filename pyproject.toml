@@ -66,7 +66,7 @@ src = ["src", "test", "bind/python"]
 force-exclude = true
 # A word of the project reads the names that a word before it in .furb/config.json defines: pr and shq of pr. A test
 # holds each of them to a definition.
-builtins = ["pr", "shq"]
+builtins = ["choice", "compact", "latest"]
 
 [tool.ruff.per-file-target-version]
 # The verifier images use Python versions older than this repository.
@@ -198,6 +198,7 @@ patch = ["subprocess"]
 
 [tool.coverage.report]
 # The suite runs every line of engine.py. A run counts no file that FURB_UNCOUNTED names: the suite on Windows names
-# src/furb/life.py, since the tests of the life as a program run on POSIX alone.
+# src/furb/life.py, since the tests of the life as a program run on POSIX alone. No run counts src/furb/adapters.py,
+# a table that the store of the crate reads and that no python imports.
 fail_under = 100
-omit = ["${FURB_UNCOUNTED-}"]
+omit = ["${FURB_UNCOUNTED-}", "*/src/furb/adapters.py"]

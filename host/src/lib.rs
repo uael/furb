@@ -20,23 +20,26 @@
 
 pub mod access;
 mod answers;
+mod backlog;
 mod changes;
 mod daemon;
 mod ears;
 mod error;
 mod event;
 mod holders;
+mod kits;
 mod life;
 pub mod processes;
 pub mod protocol;
 mod queue;
 mod rebirth;
+mod records;
 mod serve;
 mod stall;
 pub mod transport;
 mod views;
 
-pub use daemon::{END, GRACE, Settings, Tailnet, run, upgrade};
+pub use daemon::{GRACE, Settings, Tailnet, run, upgrade};
 pub use error::{AccessError, DaemonError, LifeError, ProtocolError, TransportError};
 pub use event::{Event, Seq};
 pub use life::{Command, Life, LifeHandle, Reply};

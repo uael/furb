@@ -8,13 +8,14 @@ use std::collections::HashSet;
 
 use super::{Images, attach, kind, read, reference, references};
 use crate::testing::Yard;
+use std::process;
 
 /// The first bytes of a PNG, which is all the type of an image is read by.
 const PNG: &[u8] = b"\x89PNG\r\n\x1a\nthe rest";
 
 /// A yard of one test, empty.
 fn yard(name: &str) -> Yard {
-  Yard::new(format!("furb-images-{name}-{}", std::process::id()))
+  Yard::new(format!("furb-images-{name}-{}", process::id()))
 }
 
 #[test]
@@ -87,7 +88,7 @@ fn a_turn_hands_a_model_each_image_that_a_read_gives_and_no_image_that_a_text_na
   let mut images = Images::new(Some(at.to_path_buf()));
   assert_eq!(
     images.named(&read, &mut HashSet::new()).map(|seen| seen.len()).map_err(|no| no.to_string()),
-    Ok(2),
+    Ok(1),
     "a read of an image hands it after the text that names it"
   );
   assert_eq!(
@@ -108,10 +109,10 @@ fn a_turn_hands_a_model_each_image_that_the_message_of_a_prompt_it_opens_names_o
   );
   let mut images = Images::new(Some(at.to_path_buf()));
   let seen = images.named(&python, &mut HashSet::new()).expect("the images of the turn");
-  let [UserContent::Text(told), UserContent::Image(image)] = &seen[..] else {
-    panic!("one image after the text that names it: {seen:?}")
-  };
-  assert_eq!(told.text, named);
+  let [one] = &seen[..] else { panic!("one image: {seen:?}") };
+  let UserContent::Image(image) = &one.content else { panic!("an image: {seen:?}") };
+  assert!(python[..one.end].ends_with(&named), "the image stands after the text that names it");
+  assert_eq!(python[..one.end].matches(named.as_str()).count(), 1, "after the first name of it");
   let mut given = HashSet::from([kept.uri.clone()]);
   assert_eq!(
     images.named(&python, &mut given).map(|seen| seen.len()).map_err(|no| no.to_string()),
@@ -139,4 +140,62 @@ fn a_turn_hands_a_model_each_image_that_the_message_of_a_prompt_it_opens_names_o
     Err(gone),
     "an image whose file is gone fails"
   );
+}
+
+#[test]
+fn a_turn_goes_as_its_text_with_each_image_after_the_text_that_names_it() {
+  let at = yard("sequence");
+  fs::write(at.join("a.png"), PNG).expect("the image is written");
+  fs::write(at.join("b.png"), b"\x89PNG\r\n\x1a\nother").expect("the image is written");
+  let first = reference("a.png", &attach(&at, &at.join("a.png")).expect("attached").uri);
+  let second = reference("b.png", &attach(&at, &at.join("b.png")).expect("attached").uri);
+  let python =
+    format!("#prompt1 first {first} middle {second} last\nprompt1: Act[str] = Act('prompt1')");
+  let mut images = Images::new(Some(at.to_path_buf()));
+  let seen = images.named(&python, &mut HashSet::new()).expect("the images of the turn");
+  let parts = super::sequence(&python, seen, None);
+  let kinds: Vec<&str> = parts
+    .iter()
+    .map(|one| match one {
+      UserContent::Text(_) => "text",
+      UserContent::Image(_) => "image",
+      _ => "other",
+    })
+    .collect();
+  assert_eq!(kinds, ["text", "image", "text", "image", "text"]);
+  let texts: Vec<&str> = parts
+    .iter()
+    .filter_map(|one| match one {
+      UserContent::Text(text) => Some(text.text.as_str()),
+      _ => None,
+    })
+    .collect();
+  assert_eq!(texts[0], format!("#prompt1 first {first}"));
+  assert_eq!(texts[1], format!(" middle {second}"));
+  assert_eq!(texts.concat(), python, "no text is lost between the parts");
+}
+
+#[test]
+fn the_open_of_a_chain_stays_a_block_of_its_own_before_an_image_that_a_prompt_after_it_names() {
+  let at = yard("sequence-banner");
+  fs::write(at.join("a.png"), PNG).expect("the image is written");
+  let named = reference("a.png", &attach(&at, &at.join("a.png")).expect("attached").uri);
+  let python = format!(
+    "setup\n\n#chain1\nline\n\n#prompt1 look at {named} now\nprompt1: Act[str] = Act('prompt1')"
+  );
+  let mut images = Images::new(Some(at.to_path_buf()));
+  let seen = images.named(&python, &mut HashSet::new()).expect("the images of the turn");
+  let parts = super::sequence(&python, seen, super::super::banner(&python));
+  let texts: Vec<Option<&str>> = parts
+    .iter()
+    .map(|one| match one {
+      UserContent::Text(text) => Some(text.text.as_str()),
+      _ => None,
+    })
+    .collect();
+  assert_eq!(texts.len(), 4);
+  assert_eq!(texts[0], Some("setup"));
+  assert!(texts[1].is_some_and(|one| one.starts_with("#chain1") && one.ends_with(&named)));
+  assert_eq!(texts[2], None, "the image");
+  assert_eq!(texts[3], Some(" now\nprompt1: Act[str] = Act('prompt1')"));
 }

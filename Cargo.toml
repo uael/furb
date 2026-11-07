@@ -35,6 +35,7 @@ version = "0.4.2"
 
 # The bar of the Rust of furb, which the skill rust says. A module that breaks it holds an expect at its top.
 [workspace.lints.rust]
+unsafe_code = "deny"
 unsafe_op_in_unsafe_fn = "deny"
 unreachable_pub = "warn"
 unused_qualifications = "warn"
@@ -60,6 +61,7 @@ undocumented_unsafe_blocks = "deny"
 multiple_unsafe_ops_per_block = "warn"
 allow_attributes = "deny"
 allow_attributes_without_reason = "deny"
+dbg_macro = "deny"
 
 [lints]
 workspace = true
@@ -97,14 +99,16 @@ path = "docs/examples/rust/door.rs"
 python = ["dep:pyo3"]
 extension-module = ["python", "pyo3/extension-module"]
 typescript = ["dep:napi", "dep:napi-derive", "dep:napi-build"]
+# What a test of another crate builds with: the host reads it in its dev-dependencies, so no build of a program has it.
+test-support = []
 
 [dependencies]
 # The sandbox the engine runs in, and its type checker, which is the gate of the
 # Kernel. A revision of the fork, since the interpreter the engine needs is not
 # released, and a revision reads the same interpreter at every build.
-monty = { git = "https://github.com/uael/monty", rev = "9f7098d6" }
-monty-type-checking = { git = "https://github.com/uael/monty", rev = "9f7098d6" }
-monty-types = { git = "https://github.com/uael/monty", rev = "9f7098d6" }
+monty = { git = "https://github.com/uael/monty", rev = "4ad90472" }
+monty-type-checking = { git = "https://github.com/uael/monty", rev = "4ad90472" }
+monty-types = { git = "https://github.com/uael/monty", rev = "4ad90472" }
 # A whole number past 64 bits, which a host hands in as its digits.
 num-bigint = "0.4"
 # The record: one fact per line, as JSON, whose numbers are read before anything rounds them. The catalog of models
@@ -148,6 +152,10 @@ futures = "0.3"
 unsync = "0.2"
 # The zones in which the usage limit of the claude command line names the moment it ends.
 jiff = "0.2"
+# The walker of ripgrep, which reads .gitignore, and the matcher of helix, which matches the files that the picker of
+# a window offers on threads of its own as the walk gives them.
+ignore = "0.4"
+nucleo = "0.5"
 # A page of the web, which the extension web reads, as Markdown.
 htmd = "0.5"
 pyo3 = { version = "0.29.2", features = ["generate-import-lib", "indexmap", "multiple-pymethods"], optional = true }
@@ -179,6 +187,8 @@ win32job = "2"
 rig-core = { version = "=0.42.0", default-features = false, features = ["test-utils"] }
 # The validator of JSON Schema, which checks that a call of a binding of MCP sends what the tool asks.
 jsonschema = { version = "0.33", default-features = false }
+# The codec of a record of tests/replay that is too large to keep plain, which Cargo.lock holds already.
+zstd = { version = "0.11", default-features = false }
 
 [build-dependencies]
 napi-build = { version = "2", optional = true }
@@ -195,3 +205,11 @@ ruff_text_size = "0.0.9"
 opt-level = 3
 debug-assertions = false
 overflow-checks = false
+
+# The crate and the command line keep the lines of their code, so a backtrace names a source line, and drop the rest
+# of the debug information, which only a debugger reads and which costs compile and link time at each sync.
+[profile.dev.package.furb]
+debug = "line-tables-only"
+
+[profile.dev.package.furb-cli]
+debug = "line-tables-only"

@@ -4,14 +4,20 @@ use std::collections::HashSet;
 
 use rig_core::{
   completion::CompletionError,
-  message::{AssistantContent, Message, Reasoning, Text, UserContent},
+  message::{AssistantContent, Message, Reasoning, UserContent},
 };
 
-use super::{images::Images, model::Model, watch};
+use super::{
+  images::{self, Images},
+  model::Model,
+  watch,
+};
+use crate::fact;
 use crate::{
   value::{ObjectRef, entry},
   wire,
 };
+use std::mem;
 
 /// The id of a thought that the provider cut at the most of its turn, or that ended with no word,
 /// and gave back to its model to write its word with no more thought.
@@ -116,36 +122,36 @@ pub(super) fn messages(
         model.name
       )));
     }
-    spoken(&mut messages, python, seen, std::mem::take(&mut joins));
+    spoken(&mut messages, python, seen, mem::take(&mut joins));
   }
   Ok(messages)
 }
 
-/// A user turn as a message of rig, with the images that it names: joined to the last user turn
-/// when the turn of the model between them held nothing but marks, and else a message of its own.
+/// A user turn as a message of rig, with the images that it names: its text and its images in the
+/// order of the turn, each image after the text that names it, joined to the last user turn when
+/// the turn of the model between them held nothing but marks, and else a message of its own.
 pub(super) fn spoken(
   messages: &mut Vec<Message>,
   python: &str,
-  seen: Vec<UserContent>,
+  seen: Vec<images::Seen>,
   joins: bool,
 ) {
-  if joins
-    && let Some(Message::User { content }) = messages.last_mut()
-    && let Some(UserContent::Text(was)) =
-      content.iter_mut().rev().find(|one| matches!(one, UserContent::Text(_)))
-  {
-    was.text = format!("{}\n\n{python}", was.text);
-    content.extend(seen);
-    return;
-  }
+  let joined = joins && matches!(messages.last(), Some(Message::User { .. }));
   // The open of a chain after the setup that it holds goes as a block of its own, so the setup
   // that every chain with no source shares ends a block, which a provider can keep in its cache.
-  let texts = match banner(python) {
-    Some(at) => vec![&python[..at - 2], &python[at..]],
-    None => vec![python],
-  };
-  let content = texts.into_iter().map(|one| UserContent::Text(Text::new(one))).chain(seen);
-  messages.push(Message::User { content: content.collect() });
+  // A turn that joins the last one goes on after the text of it, as blocks with no such cut.
+  let mut parts = images::sequence(python, seen, if joined { None } else { banner(python) });
+  if joined && let Some(Message::User { content }) = messages.last_mut() {
+    if let Some(UserContent::Text(was)) = content.iter_mut().next_back()
+      && let Some(UserContent::Text(first)) = parts.first()
+    {
+      was.text = format!("{}\n\n{}", was.text, first.text);
+      parts.remove(0);
+    }
+    content.extend(parts);
+    return;
+  }
+  messages.push(Message::User { content: parts.into_iter().collect() });
 }
 
 /// Where the open of a chain starts in a user turn, as `#chain3` alone on the line that starts a
@@ -167,7 +173,7 @@ pub(super) fn refusal(python: &str) -> Option<usize> {
     let at = from + python[from..].find(" refused\n")?;
     let start = python[..at].rfind('\n').map_or(0, |one| one + 1);
     let name = python[start..at].strip_prefix('#').unwrap_or_default();
-    if crate::fact::named(name, "rung") && (start == 0 || python[..start].ends_with("\n\n")) {
+    if fact::named(name, "rung") && (start == 0 || python[..start].ends_with("\n\n")) {
       break (name, at + " refused\n".len());
     }
     from = at + 1;

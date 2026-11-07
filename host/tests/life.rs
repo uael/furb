@@ -10,8 +10,10 @@
 mod yard;
 
 use std::{
+  collections::BTreeMap,
   fs,
   path::{Path, PathBuf},
+  process,
   sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -22,19 +24,20 @@ use std::{
 use furb::{
   Object,
   life::{Answer, Opening},
-  view::{Kind, Phase, RunState, State},
+  view::{Act, Kind, Phase, RunState, State},
   world::config::{Change, Layer},
 };
 use furb_host::{Command, Event, Life, LifeError, LifeHandle, Reply, Seq};
 use futures::{Stream, StreamExt};
 use serde_json::json;
+use tokio::time;
 
 /// The events of a life, each under its place in the log.
 type Logged = (Seq, Arc<Event>);
 
 /// A directory of one test, empty.
 fn place(name: &str) -> yard::Yard {
-  yard::Yard::new(format!("furb-host-{name}-{}", std::process::id()))
+  yard::Yard::new(format!("furb-host-{name}-{}", process::id()))
 }
 
 /// A life with no record and no extension, whose model answers each request with the next word of a
@@ -71,7 +74,7 @@ async fn until(
 ) -> Vec<Logged> {
   let mut got = Vec::new();
   loop {
-    let next = tokio::time::timeout(Duration::from_secs(60), events.next()).await;
+    let next = time::timeout(Duration::from_secs(60), events.next()).await;
     let Ok(Some(logged)) = next else {
       let last: Vec<String> =
         got.iter().rev().take(20).map(|one| format!("{:.300}", format!("{one:?}"))).collect();
@@ -146,7 +149,7 @@ async fn a_reader_that_stands_behind_the_life_reads_its_events_again_from_the_lo
   let life = Life::spawn(scripted(&at, &[])).unwrap();
   let mut behind = Box::pin(life.events(0));
   let mut ahead = Box::pin(life.events(0));
-  let id = made(&life, rung("for n in range(300):\n  clock()")).await;
+  let id = made(&life, rung("for n in range(300):\n  chance()")).await;
   let heard = until(&mut ahead, done(&id)).await;
   assert!(heard.len() > 600, "{} events", heard.len());
   assert_eq!(until(&mut behind, done(&id)).await, heard);
@@ -195,6 +198,25 @@ async fn a_query_is_a_command_that_the_life_answers() {
 }
 
 #[tokio::test]
+async fn the_name_of_the_session_is_the_last_that_the_operator_said_on_the_root_as_the_life_folds_it()
+ {
+  let at = place("named");
+  let life = Life::spawn(scripted(&at, &[])).unwrap();
+  let mut events = Box::pin(life.events(0));
+  assert_eq!(life.name(), None);
+  for name in ["First", "Mine"] {
+    let id = made(&life, rung(&furb::view::word(name))).await;
+    until(&mut events, done(&id)).await;
+  }
+  assert_eq!(life.name().as_deref(), Some("Mine"));
+  let id =
+    made(&life, rung("act('rename_session', 'chain2', lambda id: (yield 'done', id, 'Off'))"))
+      .await;
+  until(&mut events, done(&id)).await;
+  assert_eq!(life.name().as_deref(), Some("Mine"));
+}
+
+#[tokio::test]
 async fn the_configs_of_a_life_are_read_and_changed_through_its_commands_and_a_change_stands_it() {
   let at = place("configs");
   let life = Life::spawn(scripted(&at, &[])).unwrap();
@@ -208,7 +230,9 @@ async fn the_configs_of_a_life_are_read_and_changed_through_its_commands_and_a_c
   let Reply::Values(settings) = life.send(Command::Settings).await.unwrap() else {
     panic!("the settings are values")
   };
-  assert_eq!(settings, vec![json!({"key": ["max_thinking_tokens"], "value": 0, "layer": "local"})]);
+  let thinking = settings.iter().find(|one| one["key"] == json!(["max_thinking_tokens"])).unwrap();
+  assert_eq!((&thinking["value"], &thinking["layer"]), (&json!(0), &json!("local")));
+  assert_eq!(thinking["property"]["type"], json!("integer"), "the schema names the key");
   let wrong =
     Change { key: key(&["providers", "nothing"]), value: Some(json!(true)), layer: Layer::Project };
   let refused = life.send(Command::Configure(wrong)).await;
@@ -351,30 +375,34 @@ async fn the_life_gives_the_meaning_of_the_acts_that_it_told() {
   };
   let asked = made(&life, prompt).await;
   until(&mut events, stands("chain1".to_owned(), State::Asks)).await;
-  let Reply::Value(desk) = life.send(Command::Desk { notices: vec![] }).await.unwrap() else {
-    panic!("the desk is a value")
+  let Reply::Desk(desk) = life.send(Command::Desk { notices: vec![] }).await.unwrap() else {
+    panic!("the desk is a desk")
   };
+  let desk = serde_json::to_value(desk).unwrap();
   assert_eq!(desk["questions"], json!(1), "{desk}");
   assert_eq!(desk["asks"][0]["id"], json!(asked));
   assert_eq!(desk["asks"][0]["choices"], json!(["yes", "no"]));
-  let threads = Command::Threads { on: None, at: None };
-  let Reply::Value(now) = life.send(threads).await.unwrap() else { panic!("a value") };
-  assert_eq!(now["state"], json!("asks"), "{now}");
-  let Reply::Values(moments) = life.send(Command::Moments).await.unwrap() else {
-    panic!("the moments are values")
+  let threads = Command::Threads { on: None, at: None, read: None };
+  let Reply::Threads(now) = life.send(threads).await.unwrap() else { panic!("the threads") };
+  assert_eq!(now.state, State::Asks, "{now:?}");
+  let Reply::Moments(moments) = life.send(Command::Moments).await.unwrap() else {
+    panic!("the moments")
   };
-  let first = moments.first().and_then(serde_json::Value::as_u64).expect("a moment");
-  let Reply::Values(then) = life.send(Command::AsOf { at: first }).await.unwrap() else {
-    panic!("the acts then are values")
+  let first = *moments.first().expect("a moment");
+  let past = Command::Threads { on: None, at: Some(first), read: None };
+  let Reply::Threads(back) = life.send(past).await.unwrap() else { panic!("the threads") };
+  assert_ne!(back.state, State::Asks, "the chain asked nothing at its first moment: {back:?}");
+  let Reply::Acts(then) = life.send(Command::AsOf { at: first }).await.unwrap() else {
+    panic!("the acts then")
   };
-  assert!(then.iter().all(|act| act["began"].as_u64() <= Some(first)), "{then:?}");
-  assert!(!then.iter().any(|act| act["id"] == json!(asked)), "{then:?}");
+  assert!(then.iter().all(|act| act.began <= first), "{then:?}");
+  assert!(!then.iter().any(|act| act.id == asked), "{then:?}");
   life.send(Command::Answer { id: asked, line: "yes".to_owned() }).await.unwrap();
   until(&mut events, stands("chain1".to_owned(), State::Done)).await;
-  let Reply::Value(desk) = life.send(Command::Desk { notices: vec![] }).await.unwrap() else {
-    panic!("the desk is a value")
+  let Reply::Desk(desk) = life.send(Command::Desk { notices: vec![] }).await.unwrap() else {
+    panic!("the desk is a desk")
   };
-  assert_eq!(desk["questions"], json!(0), "{desk}");
+  assert_eq!(serde_json::to_value(desk).unwrap()["questions"], json!(0));
   life.send(Command::End).await.unwrap();
   while events.next().await.is_some() {}
 }
@@ -614,7 +642,7 @@ async fn birth(at: &Path, word: &str, commands: Vec<Command>) -> Vec<serde_json:
 /// that one holds more times than the other when they part.
 fn retells(later: &[serde_json::Value], earlier: &[serde_json::Value], what: &str) {
   let counted = |facts: &[serde_json::Value]| {
-    let mut counts = std::collections::BTreeMap::<String, i64>::new();
+    let mut counts = BTreeMap::<String, i64>::new();
     for one in facts {
       *counts.entry(one.to_string()).or_default() += 1;
     }
@@ -640,9 +668,13 @@ async fn a_life_on_its_checkpoints_tells_each_repeated_fact_of_its_history_in_or
   let first = birth(&at, word, vec![pause(), wake()]).await;
   let second = birth(&at, "z = 0", vec![pause(), wake()]).await;
   let third = birth(&at, "y = 1", vec![pause(), wake()]).await;
+  // The pause and the wake that a birth says again at its seed, as the journal, belong to the
+  // birth, not to the history that it retells.
   let controls = |facts: &[serde_json::Value]| -> Vec<(String, String)> {
     let controls = facts.iter().filter(|one| {
-      one[1] == "chain2" && ["pause", "wake"].contains(&one[0].as_str().unwrap_or_default())
+      one[1] == "chain2"
+        && one[2] != "journal"
+        && ["pause", "wake"].contains(&one[0].as_str().unwrap_or_default())
     });
     controls.map(|one| (one[0].to_string(), one[2].to_string())).collect()
   };
@@ -672,4 +704,38 @@ async fn a_life_on_its_checkpoints_tells_each_repeated_fact_of_its_history_in_or
   assert_eq!(pauses(&third), 5, "{:?}", controls(&third));
   let (later, earlier) = (controls(&third), controls(&second));
   assert_eq!(later[..earlier.len()], earlier[..], "the pauses and wakes keep their order");
+}
+
+#[tokio::test]
+async fn a_life_on_its_checkpoint_tells_the_acts_of_its_history_each_at_the_place_of_its_fact() {
+  let at = place("history");
+  birth(&at, "x = 1", vec![]).await;
+  let Ok(life) = Life::spawn(kept(&at)) else { panic!("the life has no thread") };
+  let mut events = Box::pin(life.events(0));
+  let id = made(&life, rung("y = 2")).await;
+  let mut log = until(&mut events, done(&id)).await;
+  assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
+  log.extend(until(&mut events, |event| matches!(event, Event::Ended(_))).await);
+  // The place of an act is the count of the facts that the log told up to its question, as a
+  // window that hears the log counts them.
+  let (mut facts, mut acts) = (Vec::new(), Vec::new());
+  for one in &log {
+    match &*one.1 {
+      Event::Fact(fact) => facts.push(fact.clone()),
+      Event::Act(act) => acts.push((**act).clone()),
+      _ => {}
+    }
+  }
+  let misplaced: Vec<String> = acts
+    .iter()
+    .filter(|act| {
+      let at = usize::try_from(act.began).ok().and_then(|one| one.checked_sub(1));
+      at.and_then(|one| facts.get(one)).is_none_or(|fact| fact[1] != act.id.as_str())
+    })
+    .map(|act| format!("{} at {}", act.id, act.began))
+    .collect();
+  assert!(misplaced.is_empty(), "these acts stand at no fact of theirs: {misplaced:?}");
+  let earlier = acts.iter().rev().find(|act| act.words.first() == Some(&json!("x = 1")));
+  let done = earlier.is_some_and(|act| act.kind == Kind::Rung && Act::done(act));
+  assert!(done, "the rung of the first birth is told done at last: {earlier:?}");
 }

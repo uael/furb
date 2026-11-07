@@ -5,6 +5,7 @@ hear by, so no name of them stands in the globals of the engine. Every fact is a
 (kind, about, by, *words), and a question (kind, id, by, on, *words), deconstructed only by match.
 """
 
+import ast
 import asyncio
 import atexit
 import json
@@ -62,6 +63,8 @@ ENGINES = {"python": furb.python, "monty": furb_monty.engine}
 SURFACE = frozenset(furb_monty.engine.defined())
 """SURFACE is every name the engine defines, which is what a module of the suite may have bound of it."""
 MONTY_SKIPS = {
+  "test_a_kernel_born_into_a_life_ends_each_run_that_an_earlier_kernel_took_and_the_rung_of_a_run_that_awaited",
+  "test_a_name_of_a_function_or_of_a_class_whose_own_name_is_another_raises_refused",
   "test_an_ear_is_any_generator_of_that_shape",
   "test_boot_gives_the_root_as_an_act_of_never_and_the_root_never_completes",
   "test_a_run_names_the_rung_that_the_word_retells",
@@ -145,6 +148,28 @@ NUMS = (
   "act('nums', '', kept)\n"
 )
 """A word of a rung that opens a door of its own, which answers a read of nums:// with a list."""
+
+
+def definitions(word: str) -> str:
+  """The definitions of a word, as the crate gives them to gathered (definitions of src/extension.rs): each statement at
+  its top that defines a function, a class or a type, an import, and an assignment to names in capitals, in order. A
+  word that does not parse is its own definitions."""
+  try:
+    body = ast.parse(word).body
+  except SyntaxError:
+    return word
+  kept = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.TypeAlias, ast.Import, ast.ImportFrom)
+
+  def capital(target: ast.expr) -> bool:
+    return isinstance(target, ast.Name) and target.id.isupper()
+
+  return "\n".join(
+    ast.get_source_segment(word, one) or ""
+    for one in body
+    if isinstance(one, kept)
+    or (isinstance(one, ast.Assign) and all(map(capital, one.targets)))
+    or (isinstance(one, ast.AnnAssign) and one.value is not None and capital(one.target))
+  )
 
 
 def plain(record: Sequence[tuple]) -> list:
@@ -475,7 +500,7 @@ def kernel() -> dict[str, Kernel]:
 def given(record: Sequence[tuple]) -> Sequence[tuple]:
   """A record as boot is given it, as a host gives it: the engine of monty takes it through the opening of its
   sandbox, and a host of the engine of this interpreter gives what recorded of the Kernel makes of it."""
-  return furb.kernel.recorded(ENGINE, list(record)) if engine is furb.python else record
+  return sheet.recorded(ENGINE, list(record)) if engine is furb.python else record
 
 
 def life(world: Sand, record: Sequence[tuple] = (), **ears: World) -> tuple[list[tuple], str]:

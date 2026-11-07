@@ -1,6 +1,8 @@
 """seed, the entries of a life from the data of a checkpoint."""
 
-from conftest import STANDS, Sand, life, said, settle, sown
+import ast
+
+from conftest import STANDS, Sand, born, life, said, settle, sown, world_says
 from furb import engine
 from furb.engine import OPERATOR, Exit, Text
 
@@ -95,7 +97,7 @@ async def test_each_act_of_the_data_with_a_value_stands_known_on_its_chain_with_
 async def test_a_rung_of_the_operator_on_each_chain_binds_its_definitions_and_its_values_says_its_turns_as_its_prefix_and_tells_what_the_checkpoint_lost_and_cut_with_each_word_that_ran_on_it_in_the_data_of_schema_1_and_it_runs_no_word_again_so_the_model_of_the_chain_starts_a_cut_word_again_in_a_turn_that_shows() -> (
   None
 ):
-  """A rung of the operator on each chain binds its definitions and its values, says its turns as its prefix, and tells what the checkpoint lost and cut, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows."""
+  """A rung of the operator on each chain says its turns as its prefix, binds its definitions and its values, awaits a rung of each life word whose act was open on it at the tip, says its turns as its prefix again with each fact since but a tell, and tells what the checkpoint lost and cut when it lost or cut one, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows."""
   _, log = await seeded()
   root = engine.module("chain1")
   assert (root["f"](), root["shell"], engine.module("chain3").get("SIZE")) == (6, "bash2", None)
@@ -106,3 +108,134 @@ async def test_a_rung_of_the_operator_on_each_chain_binds_its_definitions_and_it
   await settle()
   assert "late" not in engine.module("chain3")
   assert [x for x in engine.transcript("chain3", "rung") if x[2] == "prompt1"]
+
+
+async def test_each_chain_with_an_open_prompt_opens_paused_while_the_seed_binds_it_and_wakes_after_it_unless_the_data_says_it_was_paused_so_an_open_prompt_asks_its_model_again_at_once() -> (
+  None
+):
+  """Each chain with an open prompt opens paused while the seed binds it, and wakes after it unless the data says it was paused, so an open prompt asks its model again at once."""
+  life(sown())
+  data = {**DATA, "chains": [chain("chain1", "", "root"), chain("chain3", "chain1", "work")]}
+  entries = engine.seed(data)
+  kinds = [x[0][:3] for x in entries if x[0][0] in ("pause", "wake")]
+  assert kinds == [("pause", "chain3", OPERATOR), ("wake", "chain3", OPERATOR)]
+  assert [x[0][0] for x in entries][-1] == "wake"
+  log, _ = life(sown(), entries)
+  await settle()
+  assert not engine.paused("chain3")
+  assert not engine.paused("chain1")
+  rungs = [x for x in log if x[0] == "rung"]
+  assert [x[2] for x in rungs][-1:] == ["prompt1"] and OPERATOR in [x[2] for x in rungs]
+
+
+async def test_the_rung_binds_the_definitions_and_the_values_of_the_chain_after_it_says_the_prefix_and_tells_what_the_checkpoint_lost_and_cut_so_a_value_that_raises_as_it_is_bound_leaves_the_turns_of_the_chain_whole() -> (
+  None
+):
+  """The rung binds the definitions and the values of the chain after it says the prefix, so a value that raises as it is bound leaves the turns of the chain whole."""
+  life(sown())
+  data = {
+    **DATA,
+    "chains": [chain("chain1", "", "root", values={"bad": "nan", "SIZE": "6"}), chain("chain3", "chain1", "work")],
+  }
+  log, _ = life(sown(), engine.seed(data))
+  await settle()
+  assert [x for x in said(log, "prefix") if x[1] == "chain1"]
+  told = [x[3][0] for x in said(log, "tell") if x[1].startswith("rung")]
+  assert any("It lost no name" in x for x in told) and any(" raised" in x.split("\\n")[0] for x in told), told
+  assert "SIZE" not in engine.module("chain1")
+
+
+HELD = [["held", "/w/held.py", "held()", False]]
+"""The extensions of a standing whose one life word makes an act that lives until a control ends it."""
+
+
+HELD_FILES = {
+  "/w/a.txt": "one\ntwo\n",
+  "/w/DOCTRINE.md": "Read first.\nThen act.\n",
+  "/w/held.py": "def held(on=''):\n  def ear(id):\n    yield 'started', id\n    while True:\n      yield {id}\n  return act('held', on, controlled(ear))\n",
+}
+"""The files of a World that gives HELD: the doctrine and the file that defines held."""
+
+
+def defined(word: str) -> str:
+  """The defs and the classes of a word, as the host gives them to gathered."""
+  try:
+    body = ast.parse(word).body
+  except SyntaxError:
+    return ""
+  return "\n\n".join(
+    ast.get_source_segment(word, one) or "" for one in body if isinstance(one, ast.FunctionDef | ast.ClassDef)
+  )
+
+
+async def test_a_birth_tells_no_turn_of_its_own_and_each_act_that_a_life_word_made_lives_again_under_a_rung_whose_word_is_that_life_word() -> (
+  None
+):
+  """A birth tells no turn of its own: the turns of a chain after it are its turns at the tip, and each act that a life word made lives again under a rung whose word is that life word."""
+  stands = [*STANDS, "/w/DOCTRINE.md", HELD]
+  born(stands=stands, files=HELD_FILES)
+  await settle()
+  before = engine.turns(on="chain1")
+  for _ in (1, 2):
+    life(sown(stands=stands, files=HELD_FILES), engine.seed(engine.gathered(defined, {})))
+    await settle()
+    held = [a for a in engine.transcript("chain1") if a[0] == "held" and not engine.over(a[1])]
+    assert "__kept" not in engine.module("chain1")
+    assert (engine.turns(on="chain1"), [engine.get(a[2])[4] for a in held]) == (before, ["held()"])
+
+
+DEEP = [["deep", "/w/deep.py", "deep()", False], ["pinged", "/w/pinged.py", "pinged()", False]]
+"""The extensions of a standing whose life words make an act that ends at once: deep() leaves an act of its own open,
+as compacted leaves the prompt of its chooser, and pinged() keeps a lasting ear that hears each ping, as mcp_index
+hears mcp_changed after its done."""
+
+
+DEEP_FILES = {
+  **HELD_FILES,
+  "/w/deep.py": "def deep(on=''):\n  def inner(id):\n    yield 'started', id\n    while True:\n      yield {id}\n  def ear(id):\n    yield 'started', id\n    act('inner', on, controlled(inner))\n    yield 'done', id, None\n  return act('deep', on, controlled(ear))\n",
+  "/w/pinged.py": "def pinged(on=''):\n  def ear(id):\n    yield 'started', id\n    yield 'done', id, None\n    while True:\n      if (yield {id, 'ping'})[0] == 'ping':\n        yield told(id, 'pinged')\n  return act('pinged', on, controlled(ear, lasting=True))\n",
+}
+"""The files of a World that gives DEEP: the doctrine and the files that define deep and pinged."""
+
+
+async def test_a_birth_makes_again_each_life_word_whose_act_left_an_act_of_its_own_open_or_keeps_a_lasting_ear_after_its_done() -> (
+  None
+):
+  """A birth makes again each life word whose act left an act of its own open or keeps a lasting ear after its done."""
+  stands = [*STANDS, "/w/DOCTRINE.md", DEEP]
+  born(stands=stands, files=DEEP_FILES)
+  await settle()
+  for _ in (1, 2):
+    data = engine.gathered(defined, {})
+    assert [x["lives"] for x in data["chains"] if x["id"] == "chain1"] == [["deep()", "pinged()"]]
+    life(sown(stands=stands, files=DEEP_FILES), engine.seed(data))
+    await settle()
+    inner = [a for a in engine.transcript("chain1") if a[0] == "inner" and not engine.over(a[1])]
+    assert [engine.get(engine.get(a[2])[2])[4] for a in inner] == ["deep()"]
+
+    def heard() -> list[tuple]:
+      return [a for a in engine.transcript("chain1") if a[0] == "tell" and engine.question(("pinged", a[1]))]
+
+    before = heard()
+    world_says("ping", "chain1")
+    await settle()
+    assert len(heard()) == len(before) + 1, heard()
+
+
+async def test_a_done_prompt_that_a_module_names_pauses_no_chain_at_a_birth_so_a_word_on_it_runs_with_no_wake() -> None:
+  """A done prompt that a module names pauses no chain at a birth, so a word on it runs with no wake."""
+  stands = [*STANDS, "/w/DOCTRINE.md", HELD]
+  _, _, root = born(stands=stands, files=HELD_FILES)
+  await engine.rung("asked = prompt(str, 'Which?', to=OPERATOR)", on=root)
+  await settle()
+  engine.close("this one", engine.module(root)["asked"])
+  await settle()
+  data = engine.gathered(defined, {})
+  assert [x["paused"] for x in data["chains"]] == [False]
+  life(sown(stands=stands, files=HELD_FILES), engine.seed(data))
+  await settle()
+  assert not engine.paused(root)
+  engine.rung("after = 1", on=root)
+  await settle()
+  assert engine.module(root)["after"] == 1
+  assert [a for a in engine.transcript(root) if a[0] == "held" and not engine.over(a[1])]
