@@ -47,7 +47,10 @@ export async function demoDirectory(): Promise<string> {
 
 /** Remove every temporary directory that a demo of this process made, once no demo of it runs. */
 export async function removeDemoDirectories(): Promise<void> {
-  for (const root of temporary) await rm(root, { recursive: true, force: true });
+  // On Windows the daemon of a demo that just ended still holds its folder for a moment, as the working directory of
+  // its life, and a removal then raises EBUSY: it tries again until the daemon lets the folder go, for 5 s at most.
+  for (const root of temporary)
+    await rm(root, { recursive: true, force: true, maxRetries: 25, retryDelay: 200 });
   temporary.clear();
 }
 
