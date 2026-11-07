@@ -7,7 +7,7 @@ import {
   type RGBA,
 } from "@opentui/core";
 import type { Gesture, Node, Run, Tone, Tree } from "furb/protocol";
-import { theme as c, spacing as space, spin } from "../theme.ts";
+import { theme as c, markOf, spacing as space } from "../theme.ts";
 import { bold, type Part, styled } from "../ui.ts";
 import { part } from "./part.ts";
 import { inputColors } from "./shared.ts";
@@ -154,9 +154,11 @@ export const view = part({
             );
       case "progress": {
         if (node.done === undefined || node.done === null) {
-          const spinner = this.line(spin(), c.accent, { id });
-          this.moving.set(spinner, spin);
-          return spinner;
+          // Work of no known size turns the loader of work that runs, from the one table of marks.
+          const runs = () => markOf("runs")[0];
+          const loader = this.line(runs(), markOf("runs")[1], { id });
+          this.moving.set(loader, runs);
+          return loader;
         }
         const share = Math.min(1, Math.max(0, node.done));
         const full = Math.round(share * bar);
