@@ -2,14 +2,46 @@
 # Refuses each push that moves or deletes the branch main of a remote: main changes only through the merge of a pull
 # request, which gh pr merge makes on GitHub and which runs no hook here. A test that runs git in the clone with the
 # variables of a hook can push its own commits, and main is not protected on GitHub, so this hook is the last guard.
+# It also runs the hooks of a commit on each pushed commit that no remote holds and that has no mark of
+# script/hooks/pre-commit: a commit made with --no-verify, or by an amend or a rebase. The hooks read the work tree, so
+# such a push needs its branch checked out and no change that is not committed. A checked commit costs no run.
+marks=$(git rev-parse --path-format=absolute --git-common-dir)/furb-checked
 refused=
-while read -r _ _ remote _; do
+stray=
+unchecked=
+keys=
+while read -r _ local remote _; do
   if [ "$remote" = refs/heads/main ]; then
     refused=1
   fi
+  case $local in *[!0]*) ;; *) continue ;; esac
+  while read -r one tree first _; do
+    if [ -z "$one" ] || [ -e "$marks/$first-$tree" ]; then continue; fi
+    [ "$local" = "$(git rev-parse HEAD)" ] || stray=$local
+    unchecked="$unchecked $one"
+    keys="$keys $first-$tree"
+  done <<EOF
+$(git log --format='%H %T %P' "$local" --not --remotes)
+EOF
 done
 if [ -n "$refused" ]; then
   echo "The push to main of $1 is refused: main changes only through a pull request. Push a branch of your own." >&2
   exit 1
 fi
-exit 0
+[ -n "$unchecked" ] || exit 0
+if [ -n "$stray" ]; then
+  echo "The push carries $stray, with commits that skipped the hooks: check it out and push again." >&2
+  exit 1
+fi
+if ! git diff --quiet HEAD; then
+  echo "The push carries commits that skipped the hooks: commit or stash your changes, and push again." >&2
+  exit 1
+fi
+set --
+while IFS= read -r path; do
+  if [ -n "$path" ] && git cat-file -e "HEAD:$path" 2>/dev/null; then set -- "$@" "$path"; fi
+done <<EOF
+$(for one in $unchecked; do git -c core.quotePath=false diff-tree -r --root --cc --name-only --no-commit-id "$one"; done | sort -u)
+EOF
+# shellcheck disable=SC2086
+sh "$(dirname "$0")/pre-commit" check $keys -- "$@" >&2

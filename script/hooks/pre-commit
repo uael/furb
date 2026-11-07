@@ -21,12 +21,37 @@ if [ "${1:-}" = run ]; then
 fi
 out=$(mktemp "${TMPDIR:-/tmp}/furb-hook.XXXXXX") || exit 1
 trap 'rm -f "$out"' EXIT
+# A commit whose hooks pass leaves a mark under the git dir, named by its first parent and its tree, which is the change
+# that the hooks checked. script/hooks/pre-push runs the hooks of each pushed commit with no mark, so a commit made with
+# --no-verify, or by an amend or a rebase, is checked once, at its push.
+# check <mark>... -- <file>...: run the hooks on the files, print only what fails, and when they pass leave each mark.
+if [ "${1:-}" = check ]; then
+  shift
+  keys=
+  while [ "$1" != -- ]; do
+    keys="$keys $1"
+    shift
+  done
+  shift
+  if [ "$#" -gt 0 ]; then
+    # shellcheck disable=SC2086
+    if ! $PRE_COMMIT run --config=.pre-commit-config.yaml --hook-stage=pre-commit --files "$@" >"$out" 2>&1; then
+      grep -vE '(Passed|Skipped)$' "$out"
+      exit 1
+    fi
+  fi
+  marks=$(git rev-parse --path-format=absolute --git-common-dir)/furb-checked
+  mkdir -p "$marks"
+  for key in $keys; do : >"$marks/$key"; done
+  exit 0
+fi
+tree=$(git write-tree) || exit 1
+key=$(git rev-parse -q --verify HEAD)-$tree
 if [ "$1" = merge ] || git rev-parse -q --verify MERGE_HEAD >/dev/null; then
   # Git gives a merge no staged diff that the hooks read well: they read only the files that a conflict touched, and a
   # merge with no conflict reaches no pre-commit hook. So the hooks read the merge as a commit of its own, on each file
   # whose content differs from its version in every parent: a resolution of a conflict or new content. A file that the
   # merge takes whole from one parent passed the hooks of that parent, and the gates check the whole tree.
-  tree=$(git write-tree) || exit 1
   # The other parents of the merge. A merge that ends a conflict holds them in MERGE_HEAD. A merge with no conflict
   # writes none before its hook, and git names them in GIT_REFLOG_ACTION, as "merge <commit>...". With neither, the
   # merge is read against HEAD alone, so each file that it changes is checked.
@@ -45,15 +70,13 @@ if [ "$1" = merge ] || git rev-parse -q --verify MERGE_HEAD >/dev/null; then
   done <<EOF
 $(git -c core.quotePath=false diff-tree -r --cc --name-only --no-commit-id "$merge")
 EOF
-  [ "$#" -gt 0 ] || exit 0
-  # shellcheck disable=SC2086
-  $PRE_COMMIT run --config=.pre-commit-config.yaml --hook-stage=pre-commit --files "$@" >"$out" 2>&1
-else
-  # shellcheck disable=SC2086
-  $PRE_COMMIT hook-impl --config=.pre-commit-config.yaml --hook-type=pre-commit --hook-dir "$(dirname "$0")" -- "$@" >"$out" 2>&1
+  rm -f "$out"
+  exec sh "$0" check "$key" -- "$@"
 fi
-code=$?
-if [ "$code" -ne 0 ]; then
-  grep -vE '(Passed|Skipped)$' "$out"
+# shellcheck disable=SC2086
+if $PRE_COMMIT hook-impl --config=.pre-commit-config.yaml --hook-type=pre-commit --hook-dir "$(dirname "$0")" -- "$@" >"$out" 2>&1; then
+  rm -f "$out"
+  exec sh "$0" check "$key" --
 fi
-exit "$code"
+grep -vE '(Passed|Skipped)$' "$out"
+exit 1
