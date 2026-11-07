@@ -359,13 +359,14 @@ def ends_step() -> None:
 
 
 def ledger_row(t: str, key: str, p: str, item: dict) -> dict:
-  """The row of an ended item: the sums of the usage that each reply on its chains carries, as (tokens in, tokens out,
-  tokens read from the cache, tokens written to it, dollars), never an estimate, its steps and its seconds."""
+  """The row of an ended item: the sums of the usage that each answer of a model on its chains carries, as (tokens in,
+  tokens out, tokens read from the cache, tokens written to it, dollars), never an estimate, its steps and its seconds.
+  A reply that the life wrote itself, as the seat of a new chain, carries no usage and is no step."""
   chains, walked = [scope(p)], 0
   while walked < len(chains):
     chains += [x[1] for x in transcript(chains[walked], "chain") if question(x) and under(x[1], p)]
     walked += 1
-  uses = [got[2] for c in chains for x in transcript(c, "reply") if question(x) and under(x[1], p) and isinstance(got := peek(x[1]), tuple)]
+  uses = [got[2] for c in chains for x in transcript(c, "reply") if question(x) and under(x[1], p) and isinstance(got := peek(x[1]), tuple) and got[2]]
   tokens_in, tokens_out, cached, _, cost = (sum(use[i] for use in uses) for i in range(5))
   end = desk_end_at[key]
   return {"key": key, "topic": t, "class": kind(str(item["model"])), "in": tokens_in, "out": tokens_out, "cached": cached, "cost": cost, "steps": len(uses), "seconds": end - item.get("at", end)}

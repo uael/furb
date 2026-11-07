@@ -475,11 +475,12 @@ async def test_a_restart_before_and_after_the_fourth_merge_keeps_the_queue_and_a
   assert audits(life) == [("align-audit-m12", "codex:gpt-6-astra/high", "h8..h12 of w/converge and m2..m3 of main")]
 
 
-async def test_the_ledger_holds_the_cost_of_each_ended_item_from_its_replies_and_gives_the_cost_per_landed_item(conductor: Round) -> None:
+async def test_the_ledger_holds_the_cost_of_each_ended_item_from_the_answers_on_its_chains_and_gives_the_cost_per_landed_item(conductor: Round) -> None:
   await conductor.word('desk_queue["a"].extend([item("one"), item("two", "claude-cli:opus/medium")])\ndesk_queue["b"].append(item("three"))')
   await conductor.beat()
   keys = dict(zip([x[0] for x in conductor.asked()], conductor.keys(), strict=True))
-  uses = {"one": [(1000, 100, 600, 0, 0.5), (2000, 200, 1500, 0, 1.0)], "two": [(4000, 400, 1000, 0, 3.0)], "three": [(500, 50, 0, 0, 0.5)]}
+  uses = {"one": [None, (1000, 100, 600, 0, 0.5), (2000, 200, 1500, 0, 1.0)], "two": [(4000, 400, 1000, 0, 3.0)], "three": [(500, 50, 0, 0, 0.5)]}
+  # A reply that the life writes itself, as the seat of a new chain, carries no usage: it is no step and costs nothing.
   ends = {"one": "done one", "two": "blocked: two", "three": "done three"}
   chains = set(conductor.ns["topic_chain"].values())
   while held := [x[1] for x in said(conductor.log, "reply") if x[3] in chains and not conductor.engine.over(x[1])]:
