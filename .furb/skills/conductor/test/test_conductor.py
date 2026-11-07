@@ -473,3 +473,35 @@ async def test_a_restart_before_and_after_the_fourth_merge_keeps_the_queue_and_a
   await life.beat()
   await life.word("\n".join(f"merges_step('head h{n}\\nmain m3')" for n in range(9, 13)))
   assert audits(life) == [("align-audit-m12", "codex:gpt-6-astra/high", "h8..h12 of w/converge and m2..m3 of main")]
+
+
+async def test_the_ledger_holds_the_cost_of_each_ended_item_from_its_replies_and_gives_the_cost_per_landed_item(conductor: Round) -> None:
+  await conductor.word('desk_queue["a"].extend([item("one"), item("two", "claude-cli:opus/medium")])\ndesk_queue["b"].append(item("three"))')
+  await conductor.beat()
+  keys = dict(zip([x[0] for x in conductor.asked()], conductor.keys(), strict=True))
+  uses = {"one": [(1000, 100, 600, 0, 0.5), (2000, 200, 1500, 0, 1.0)], "two": [(4000, 400, 1000, 0, 3.0)], "three": [(500, 50, 0, 0, 0.5)]}
+  ends = {"one": "done one", "two": "blocked: two", "three": "done three"}
+  chains = set(conductor.ns["topic_chain"].values())
+  while held := [x[1] for x in said(conductor.log, "reply") if x[3] in chains and not conductor.engine.over(x[1])]:
+    for reply in held:
+      key = keys[conductor.engine.get(conductor.engine.get(reply)[2])[2]]
+      use = uses[key].pop(0)
+      word = f"close({ends[key]!r})" if not uses[key] else f'debug(t"a step of {key}")'
+      conductor.engine.say("done", reply, ("assistant", word, use, None))
+    await settle()
+  conductor.sand.now += 60
+  await conductor.beat()
+  assert len(conductor.ns["desk_ledger"]) == 3
+  assert conductor.ns["desk_text"].get("ledger", "") == ""
+  await conductor.word("desk_time['merged_upto'] = clock()")
+  await conductor.beat()
+  rows = {r["key"]: (r["topic"], r["class"], r["in"], r["out"], r["cached"], r["cost"], r["steps"], r["seconds"]) for r in conductor.ns["desk_ledger"]}
+  assert rows == {
+    "one": ("a", "sonnet/high", 3000, 300, 2100, 1.5, 2, 60.0),
+    "two": ("a", "opus/medium", 4000, 400, 1000, 3.0, 1, 60.0),
+    "three": ("b", "sonnet/high", 500, 50, 0, 0.5, 1, 60.0),
+  }
+  assert conductor.ns["desk_text"]["ledger"] == (
+    "Cost per landed item since 0: by class opus/medium none of 1 landed, sonnet/high $1.00 (2 of 2 landed); "
+    "by topic a $4.50 (1 of 2 landed), b $0.50 (1 of 1 landed); the cache gave 41% of 7500 tokens in."
+  )

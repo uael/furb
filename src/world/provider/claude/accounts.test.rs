@@ -7,7 +7,7 @@ use std::{
   time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use super::{Account, Accounts, CONFIG, Source, Switch, TOKEN};
+use super::{Account, Accounts, CONFIG, Source, Switch, TOKEN, Token};
 use crate::testing;
 use std::env;
 use std::ffi;
@@ -92,13 +92,19 @@ fn an_account_gives_its_token_or_its_config_dir_and_takes_away_each_other_creden
   assert!(got.contains(&(CONFIG.to_owned(), Some(folder.display().to_string()))), "{got:?}");
   assert!(got.contains(&(TOKEN.to_owned(), None)), "a token of the environment would win: {got:?}");
 
-  for (source, said) in [
-    (Source::TokenFile(folder.join("none")), "its token file"),
-    (Source::TokenFile(empty), "is empty"),
-    (Source::TokenEnv("FURB_NO_SUCH_TOKEN".to_owned()), "its token variable FURB_NO_SUCH_TOKEN"),
-  ] {
-    let no = accounts(source).apply(0, &mut Command::new("claude")).unwrap_err();
-    assert!(no.starts_with("The account a has no token: "), "{no}");
-    assert!(no.contains(said), "{no}");
-  }
+  let no = |source: Source| accounts(source).apply(0, &mut Command::new("claude")).unwrap_err();
+  let missing = folder.join("none");
+  let unread = no(Source::TokenFile(missing.clone()));
+  assert!(
+    matches!(&unread, Token::Unread { name, file, .. } if name == "a" && *file == missing),
+    "{unread}"
+  );
+  assert_eq!(
+    no(Source::TokenFile(empty.clone())).to_string(),
+    format!("The account a has no token: its token file {} is empty", empty.display())
+  );
+  assert_eq!(
+    no(Source::TokenEnv("FURB_NO_SUCH_TOKEN".to_owned())).to_string(),
+    "The account a has no token: its token variable FURB_NO_SUCH_TOKEN is empty or not set"
+  );
 }

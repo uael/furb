@@ -41,7 +41,7 @@ mod locate;
 mod process;
 mod protocol;
 use accounts::Accounts;
-pub use accounts::{Account, Source, Switch};
+pub use accounts::{Account, Source, Switch, Token};
 use conversation::{Conversation, Run};
 use discover::Found;
 pub use discover::refresh;
@@ -319,8 +319,8 @@ impl Program {
   }
 
   /// A command that holds the program and its words, and the credential of its account. It fails
-  /// with the reason when the token of the account cannot be read.
-  fn command(&self) -> Result<Command, String> {
+  /// when the token of the account cannot be read.
+  fn command(&self) -> Result<Command, Token> {
     let mut command = Command::new(&*self.bin);
     command.args(&*self.args);
     let at = self.pin.unwrap_or_else(|| self.accounts.first_free(SystemTime::now()));
@@ -332,9 +332,9 @@ impl Program {
   /// environment that furb gives the command line for a turn, a probe and a search alike: no source
   /// of settings, no server of another, no command of its own and no bundled skill, and no traffic
   /// of no use when `quiet`. The probe of the models is not quiet, since the command line lists
-  /// fewer models with its traffic off. Each adds its own flags after them. It fails with the
-  /// reason when the token of the account cannot be read.
-  pub(super) fn base_command(&self, first: &[&str], quiet: bool) -> Result<Command, String> {
+  /// fewer models with its traffic off. Each adds its own flags after them. It fails when the
+  /// token of the account cannot be read.
+  pub(super) fn base_command(&self, first: &[&str], quiet: bool) -> Result<Command, Token> {
     let mut command = self.command()?;
     command.args(first);
     command.args(["--setting-sources", "", "--strict-mcp-config", "--disable-slash-commands"]);

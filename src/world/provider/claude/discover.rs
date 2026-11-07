@@ -21,7 +21,10 @@ use tokio::{
   process::{ChildStdin, ChildStdout},
 };
 
-use super::{EFFORTS, Program};
+use super::{
+  EFFORTS, Program,
+  protocol::{Control, Event},
+};
 use crate::world;
 use crate::world::{
   child,
@@ -264,38 +267,62 @@ async fn asked(
     stdin.flush().await.ok()?;
     loop {
       let line = lines.next_line().await.ok()??;
-      let Ok(event) = serde_json::from_str::<Value>(&line) else { continue };
-      let response = &event["response"];
-      if event["type"] == "control_response" && response["request_id"] == id.as_str() {
-        return (response["subtype"] == "success").then(|| response["response"].clone());
+      let Ok(Event::ControlResponse { response }) =
+        serde_json::from_str(&line).and_then(Event::read)
+      else {
+        continue;
+      };
+      match response {
+        Control::Success { request_id, response } if request_id == id => return Some(response),
+        Control::Error { request_id } if request_id == id => return None,
+        _ => {}
       }
     }
   };
-  let init = ask(json!({"subtype": "initialize"})).await?;
+  let Init { models } =
+    serde_json::from_value(ask(json!({"subtype": "initialize"})).await?).ok()?;
   let mut found: Vec<Found> = Vec::new();
-  for one in init["models"].as_array()? {
-    let Some(alias) = one["value"].as_str().filter(|one| plain(one)) else { continue };
-    if found.iter().any(|one| one.alias == alias) {
+  for one in models {
+    if !plain(&one.value) || found.iter().any(|known| known.alias == one.value) {
       continue;
     }
-    let efforts = match (one["supportsEffort"].as_bool(), one["supportedEffortLevels"].as_array()) {
+    let efforts = match (one.supports_effort, one.supported_effort_levels) {
       (Some(false), _) => Vec::new(),
-      (_, Some(levels)) => {
-        levels.iter().filter_map(|one| one.as_str().map(str::to_owned)).collect()
-      }
+      (_, Some(levels)) => levels,
       _ => EFFORTS.iter().map(|one| (*one).to_owned()).collect(),
     };
-    if ask(json!({"subtype": "set_model", "model": alias})).await.is_none() {
+    if ask(json!({"subtype": "set_model", "model": one.value.as_str()})).await.is_none() {
       continue;
     }
-    let Some(window) =
-      ask(json!({"subtype": "get_context_usage"})).await.and_then(|one| one["maxTokens"].as_u64())
-    else {
+    let usage = ask(json!({"subtype": "get_context_usage"})).await;
+    let Some(Usage { max_tokens }) = usage.and_then(|one| serde_json::from_value(one).ok()) else {
       continue;
     };
-    found.push(Found { alias: alias.to_owned(), window, efforts });
+    found.push(Found { alias: one.value, window: max_tokens, efforts });
   }
   (!found.is_empty()).then_some(found)
+}
+
+/// The answer of the request `initialize`: the models that the command line offers.
+#[derive(Deserialize)]
+struct Init {
+  models: Vec<Offered>,
+}
+
+/// A model that the command line offers, by its alias, with the efforts that it takes.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Offered {
+  value: String,
+  supports_effort: Option<bool>,
+  supported_effort_levels: Option<Vec<String>>,
+}
+
+/// The answer of the request `get_context_usage`: the window of the model that is set.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Usage {
+  max_tokens: u64,
 }
 
 #[cfg(test)]

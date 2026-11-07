@@ -2131,6 +2131,9 @@ fn a_replay_takes_the_answer_of_each_question_that_the_record_holds_and_a_live_w
   let ends: Vec<_> = facts.iter().filter(|one| one.starts_with("done")).collect();
   let missing: Vec<_> = ends.iter().filter(|one| !again.contains(one)).collect();
   assert!(missing.is_empty(), "the replay ends each act as the record does: {missing:?}");
+  // The live steps that follow run under a bound that a machine under load keeps, and the spin
+  // passes any bound.
+  bounded_at(Duration::from_secs(2));
   let with = verbs::Prompt { on: on(&root), ..Default::default() };
   let act = second.engine.prompt(Object::string("int"), with).unwrap();
   assert_eq!(block_on(act).unwrap().as_ref().as_int(), Some(9), "the chain asks again");
