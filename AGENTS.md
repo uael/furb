@@ -308,8 +308,9 @@ fix what your change broke, and report what was broken before.
   `base`, `origin/main` by default. It links `target` to `furb-target` beside the main checkout, which each worktree of the
   clone shares, so a dependency builds once and a worktree adds only its crates of the workspace. The build script of
   furb reads `FURB_TREE`, so a build rebuilds a crate that another worktree built last: cargo would call it fresh by
-  the time of its files and test the code of the other worktree. A branch
-  that lacks this stamp must merge `origin/w/converge` before its first build there. It copies on write the build directories of the
+  the time of its files and test the code of the other worktree. A tree
+  that lacks this stamp keeps its own target until it merges `origin/w/converge`: the hooks `post-merge` and
+  `post-commit` run `script/share-target.sh`, which drops that target and links the shared one, when no build runs in it. It copies on write the build directories of the
   checkout whose build stands nearest to the new commit: the `node_modules` of bun, the build of the TypeScript
   package and the cache of the tests of the TUI. Then it runs
   `bun install --offline` and `bun run build`. It sets `core.hooksPath` of the clone to `script/hooks` when no value

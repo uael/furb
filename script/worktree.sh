@@ -87,12 +87,9 @@ if [ $opened != new ]; then
 fi
 
 step="share the target"
-# One target for each worktree of the clone, beside the main checkout: a dependency builds once and a worktree adds only
-# its own crates, where a copy on write of a target splits from its source at the first build and fills the disk.
-# FURB_TREE of .cargo/config.toml makes a build rebuild a crate that another worktree built last.
-shared=$main-target
-mkdir -p "$shared"
-ln -sfn "$shared" "$path/target"
+# One target for each worktree of the clone: a dependency builds once, where a copy on write of a target splits from its
+# source at the first build and fills the disk.
+sh "$(dirname "$0")/share-target.sh" "$path"
 
 step="copy the build"
 # What the python side needs, said at each end of the script.
