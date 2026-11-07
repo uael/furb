@@ -1,5 +1,4 @@
-import type { Act, State } from "../protocol.js";
-import { isDone } from "./acts.js";
+import type { State } from "../protocol.js";
 
 export type { State } from "../protocol.js";
 
@@ -30,18 +29,3 @@ export function rollUp(states: Iterable<State>): State {
  * another chain. */
 export const busy = (state: string): boolean =>
   state === "thinks" || state === "runs" || state === "delegates";
-
-/** What the work of a chain that is not done does, from its own acts that are not done and the prompts that its words
- * made on other chains and that are not done: a model that writes a word of it thinks, a command or a wait of it runs,
- * a word of it that awaits only another chain delegates, and a chain whose open rungs only wait for their turn rests. */
-export function working(
-  local: readonly Act[],
-  remote: readonly Act[],
-): "thinks" | "runs" | "delegates" | "idle" {
-  const open = local.filter((act) => !isDone(act));
-  if (open.some((act) => act.kind === "rung" && act.word == null && act.asking)) return "thinks";
-  if (open.some((act) => act.kind === "bash" || act.kind === "wait")) return "runs";
-  if (remote.some((act) => !isDone(act))) return "delegates";
-  const turn = (act: Act) => act.kind === "rung" && act.word == null;
-  return open.some(turn) && !open.some((act) => act.kind === "rung" && !turn(act)) ? "idle" : "runs";
-}

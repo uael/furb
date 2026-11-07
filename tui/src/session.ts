@@ -2266,9 +2266,7 @@ export class Session extends EventEmitter {
         await this.cancel(argument);
         break;
       case "skills": {
-        const each = (await this.skillsRun()).map(({ name, life }) =>
-          life ? `${name} with ${life}` : name,
-        );
+        const each = (await this.skillsRun()).map(({ name, life }) => (life ? `${name} with ${life}` : name));
         this.notice = each.length
           ? `This life runs ${each.join(", ")}. Run a word of one with /run.`
           : "This life runs no skill.";
