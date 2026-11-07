@@ -34,6 +34,7 @@ use std::{
 use furb::{
   engine::OPERATOR,
   life::{Answer as Answered, Log, Opening},
+  view::WATCH,
   wire::parsed,
   world::{
     codex::{self, SignIn},
@@ -1145,7 +1146,9 @@ async fn woken(
   log: Option<Log>,
 ) {
   let to = on.clone().unwrap_or_else(|| "its root".to_owned());
-  let message = Command::Prompt { shape: "None".to_owned(), message: notice, to: None, on };
+  // The watch speaks for itself, so the threads of the operator read the notice as none of his.
+  let message = Command::Prompt { shape: "None".to_owned(), message: notice, to: None, on }
+    .by(WATCH.to_owned());
   if let Err(no) = life.send(message).await {
     report(log.as_ref(), &format_args!("{record} stalled, and {to} took no message: {no}"));
   }

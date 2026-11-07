@@ -14,7 +14,7 @@ mod state;
 mod threads;
 mod time;
 
-pub use act::{Act, Answer, Kind, Pause, Phase, RunState, Spend, operator};
+pub use act::{Act, Answer, Kind, Pause, Phase, RunState, Spend, WATCH, operator};
 pub use desk::{Ask, Desk, Tick, choices, desk, hint, takes_nothing, ticks, wants};
 pub use fold::{Fold, followed};
 pub use held::{Held, Threads};

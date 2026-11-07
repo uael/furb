@@ -8,9 +8,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::{
-  act::{Act, Kind, operator},
+  act::{Act, Kind, WATCH, operator},
   fold::followed,
-  named::Named,
+  named::{NAME, Named},
   state::{State, working},
 };
 
@@ -111,7 +111,8 @@ pub fn thread_of<'a>(act: &Act, rows: &Rows<'a>) -> Option<&'a str> {
 #[serde(tag = "aside", content = "from", rename_all = "snake_case")]
 pub enum Aside {
   /// A notice of the round: a prompt of None that a rung or a chain made, which no one answers, as
-  /// the acknowledgment of an act that stands in no thread of the chain.
+  /// the acknowledgment of an act that stands in no thread of the chain, a stall that the watch of
+  /// the daemon tells, or the question of the act that names the session.
   Notice,
   /// What a word of the operator told the chain: a prompt of None that a rung of his made, or the
   /// acknowledgment of a rung that stands in no thread.
@@ -144,9 +145,8 @@ enum Verdict<'a> {
 /// What a prompt to a model is: a message of a thread when it stands on one, the acknowledgment of
 /// an act that a chain made, which belongs to the thread of that act, a notice, a word of the
 /// operator, a wake or a question of another chain, and else a thread of its own, as each prompt
-/// that the operator made himself. A prompt of None is never a thread, whoever made it, since no
-/// one answers it: the watch of the daemon tells a stall so, in the name of the operator. A prompt
-/// that a skill made with no thread over it, as the naming of the session, is a notice too.
+/// that the operator made himself. What the watch of the daemon tells of a stall, and what the act
+/// that names the session asks, are notices: no one of the operator made them.
 fn verdict<'a>(act: &'a Act, rows: &Rows<'a>) -> Verdict<'a> {
   if act.thread().is_some() {
     return Verdict::Message(root_of(act, rows));
@@ -155,7 +155,8 @@ fn verdict<'a>(act: &'a Act, rows: &Rows<'a>) -> Verdict<'a> {
   let none = act.words.first().is_some_and(|shape| shape == "None");
   match maker {
     Some(maker) if none && maker.kind == Kind::Chain => acknowledged(act, rows),
-    _ if none && operator(&act.by) => Verdict::Aside(Aside::Notice),
+    _ if act.by == WATCH => Verdict::Aside(Aside::Notice),
+    Some(maker) if maker.kind.as_str() == NAME => Verdict::Aside(Aside::Notice),
     _ if operator(&act.by) => Verdict::Own,
     Some(maker) if none && maker.kind == Kind::Rung && operator(&maker.by) => {
       Verdict::Aside(Aside::Rung)
@@ -166,9 +167,6 @@ fn verdict<'a>(act: &'a Act, rows: &Rows<'a>) -> Verdict<'a> {
     _ if none => Verdict::Aside(Aside::Wake),
     Some(maker) if maker.chain != act.chain && !within(&act.chain, &maker.chain, rows) => {
       Verdict::Aside(Aside::Question(maker.chain.clone()))
-    }
-    Some(maker) if matches!(maker.kind, Kind::Other(_)) && thread_of(act, rows).is_none() => {
-      Verdict::Aside(Aside::Notice)
     }
     _ => Verdict::Own,
   }
