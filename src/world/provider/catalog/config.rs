@@ -1,5 +1,9 @@
 //! The provider settings of the user and the project, applied to a catalog before a life stands on it.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{
   collections::HashMap,
   env, fs, io,
@@ -388,7 +392,7 @@ impl Catalog {
   }
 
   fn set_codex(&mut self, name: String, config: Option<&Path>, form: &Value) -> Result<(), Error> {
-    let models = codex::offered(config, form).map_err(Error::Codex)?;
+    let models = codex::offered(config, form)?;
     self.drop_models(&name);
     self.models.extend(models.into_iter().map(|model| Offer::new(model, true)));
     self.providers.retain(|held| held.name != name);

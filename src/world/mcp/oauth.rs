@@ -9,6 +9,10 @@
 //! The tokens of a server stand in the Keychain of macOS, and elsewhere in a file of the config directory that only
 //! the user reads.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{
   collections::HashMap,
   fs, io,

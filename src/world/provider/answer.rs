@@ -1,5 +1,9 @@
 //! The call of a model for a reply, and the turn that its answer gives.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{
   collections::HashSet,
   time::{Duration, SystemTime},

@@ -123,7 +123,7 @@ export const keys = [
     chord: "⌥D / ⌥E",
     action: "Fold or expand details / external editor",
     bindings: [
-      { on: ["meta+d"], run: "details", chord: "⌥D", command: "details" },
+      { on: ["meta+d"], run: "details", chord: "⌥D", command: "details", always: true },
       { on: ["meta+e"], run: "editor", chord: "⌥E", command: "editor" },
     ],
   },

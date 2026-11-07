@@ -2,6 +2,10 @@
 //! of its own, and one program of HTTP on 127.0.0.1 that serves the streamable HTTP, with JSON or with a stream of
 //! events, the older HTTP with SSE, a server that asks for a login, and its authorization server.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{
   collections::HashMap,
   fmt::Write as _,

@@ -56,12 +56,13 @@ test("the body of Markdown stands in one role, prose, about 8:1 against the pane
   }
 });
 
-test("Markdown draws its body in prose, and its headings and bold words in the text", () => {
+test("Markdown draws its body, its headings and its quotes in prose, and its bold words in the text", () => {
   setTheme("ink");
   const body = markdownSyntax();
   const fg = (group: string) => body.getStyle(group)?.fg;
   expect(fg("default")?.equals(theme.prose)).toBe(true);
-  expect(fg("markup.heading.1")?.equals(theme.text)).toBe(true);
+  expect(fg("markup.heading.1")?.equals(theme.prose)).toBe(true);
+  expect(fg("markup.quote")?.equals(theme.prose)).toBe(true);
   expect(fg("markup.strong")?.equals(theme.text)).toBe(true);
   expect(syntax().getStyle("default")?.fg?.equals(theme.text)).toBe(true);
 });

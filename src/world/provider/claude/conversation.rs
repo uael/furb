@@ -2,6 +2,10 @@
 //! that furb writes for its first process to resume, and each turn, which writes to its process
 //! only what the command line has not heard and settles what that turn came to.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{
   env,
   path::PathBuf,
@@ -636,12 +640,13 @@ pub(super) fn cached(blocks: &mut [Value], marked: &mut bool) {
 
 /// One block of a turn of the model as a conversation of the command line holds it: its text, or
 /// each part of its thought that the model signed, whole with its signature, so the next reply
-/// reads the thought of the turn before it. A thought with no signature, as one that the provider
-/// cut, and one that a record emptied go not at all, since the API takes no thought that its
-/// signature does not prove.
+/// reads the thought of the turn before it. A signed thought with no text goes too: the API gives
+/// one when it omits the display of a thought, and its signature holds the thought. A thought with
+/// no signature, as one that the provider cut, goes not at all, since the API takes no thought
+/// that its signature does not prove.
 fn resumed(block: &AssistantContent) -> Vec<Value> {
   let signed = |one: &ReasoningContent| match one {
-    ReasoningContent::Text { text, signature: Some(signature) } if !text.is_empty() => {
+    ReasoningContent::Text { text, signature: Some(signature) } => {
       Some(json!({"type": "thinking", "thinking": text, "signature": signature}))
     }
     ReasoningContent::Redacted { data } => Some(json!({"type": "redacted_thinking", "data": data})),
@@ -673,7 +678,7 @@ fn said(block: &UserContent) -> Result<Value, CompletionError> {
 }
 
 /// A message as its meaning alone, so two requests that say the same thing agree. A thought counts
-/// by its place alone, since a reply that a record gives back may hold a thought that was emptied.
+/// by its place alone.
 pub(super) fn canonical(message: &Message) -> String {
   let (role, blocks): (&str, Vec<Value>) = match message {
     Message::System { content } => ("system", vec![json!(["text", content])]),

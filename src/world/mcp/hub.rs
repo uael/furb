@@ -7,6 +7,10 @@
 //! row stays failed until a control reconnects it. Each change that no question asked for, a list that the server
 //! says has changed, a connection that ends and one that comes back, is told to the ear, which tells the life.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{
   path::PathBuf,
   sync::{

@@ -1,3 +1,7 @@
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use furb::view::{Act, Kind, Phase, State};
 use serde_json::{Value, json};
 
