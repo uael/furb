@@ -15,20 +15,8 @@ import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Glob } from "bun";
 import { ownDaemon } from "./daemon.ts";
-import { environment, heavy } from "./environment.ts";
+import { environment } from "./environment.ts";
 import { stale, warning } from "./stale.ts";
-
-// The suite is a heavy step: it runs again through script/heavy.sh, which starts it only while the machine has the
-// memory for it, and a stop of this run stops it too.
-if (heavy.length && !process.env.FURB_HEAVY_SLOT) {
-  const guarded = Bun.spawn([...heavy, process.execPath, Bun.main, ...process.argv.slice(2)], {
-    stdio: ["inherit", "inherit", "inherit"],
-  });
-  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const)
-    process.on(signal, () => guarded.kill(signal));
-  const code = await guarded.exited;
-  process.exit(code || (guarded.signalCode ? 1 : 0));
-}
 
 const given = process.argv.slice(2);
 const flags = given.filter((one) => one.startsWith("-"));
