@@ -533,9 +533,9 @@ export interface Opening {
    */
   config?: string
   /**
-   * The logins of the members who answer as the operator, as the access list of a host and its
-   * local login give them, each of which a prompt can ask with `to="operator/<login>"`; none when
-   * unsaid.
+   * The home of the logins of the members who answer as the operator, as the access list of a host
+   * and its local login give them, each of which a prompt can ask with `to="operator/<login>"`;
+   * none when unsaid. A host that changes it changes the roster at the next stand.
    */
   members?: Array<string>
   /**
