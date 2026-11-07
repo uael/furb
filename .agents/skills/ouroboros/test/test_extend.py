@@ -50,7 +50,7 @@ async def test_extend_writes_the_words_of_the_rungs_it_names(tmp_path: Path) -> 
 
 
 async def test_extend_writes_tui_as_the_part_that_the_tui_loads(tmp_path: Path) -> None:
-  """extend writes tui, when it is given, as tui.ts in the folder of the extension, the part that the TUI loads, and the manifest names tui.ts under furb-view of its metadata whenever the folder holds that file."""
+  """extend writes tui, when it is given, as tui.ts in the folder of the skill, the part that the TUI loads, and the manifest names tui.ts under furb-view of its metadata whenever the folder holds that file."""
   _, root = extended("ouroboros", tmp_path, lives=True, sand=Disk())
   f, g = engine.rung(F, on=root), engine.rung(G, on=root)
   await g
@@ -70,15 +70,12 @@ async def test_extend_turns_the_extension_on_in_the_config_of_the_project(tmp_pa
   """extend turns the extension on in .furb/config.json with the path of its folder from the folder of that config, and keeps every other entry of the config."""
   (tmp_path / "work" / ".furb").mkdir(parents=True)
   (config := tmp_path / "work" / ".furb" / "config.json").write_text(
-    '{"extensions": {"memory": false}, "x": 1}', encoding="utf-8", newline=""
+    '{"skills": {"memory": false}, "x": 1}', encoding="utf-8", newline=""
   )
   _, root = extended("ouroboros", tmp_path, lives=True, sand=Disk())
   f = engine.rung(F, on=root)
   await engine.rung(f"extend('kit', {f!r})", on=root)
-  assert json.loads(config.read_text(encoding="utf-8")) == {
-    "extensions": {"memory": False, "kit": "skills/kit"},
-    "x": 1,
-  }
+  assert json.loads(config.read_text(encoding="utf-8")) == {"skills": {"memory": False, "kit": "skills/kit"}, "x": 1}
 
 
 async def test_a_write_of_the_config_of_the_project_enables_what_it_turns_on(tmp_path: Path) -> None:

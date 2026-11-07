@@ -71,7 +71,7 @@ impl Yard {
     // The life of a test names no session, since a name asks the fake claude out of the order
     // of its words.
     fs::create_dir_all(root.join("config")).expect("the config directory");
-    fs::write(root.join("config").join("config.json"), r#"{"extensions": {"naming": false}}"#)
+    fs::write(root.join("config").join("config.json"), r#"{"skills": {"naming": false}}"#)
       .expect("the config");
     fs::write(at.join("a.txt"), "one\ntwo\nthree\n").expect("the file a word reads");
     program(&fake.join("claude"), FAKE);
@@ -216,7 +216,7 @@ fn a_word_its_caller_wrote_runs_on_the_root() {
 fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
   let yard = Yard::new("resumed");
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
-  let off = r#"{"extensions": {"catchup": false, "memory": false, "skills": false, "compaction": false, "ouroboros": false, "web": false, "mcp": false}}"#;
+  let off = r#"{"skills": {"catchup": false, "memory": false, "skills": false, "compaction": false, "ouroboros": false, "web": false, "mcp": false}}"#;
   fs::write(yard.at.join(".furb/config.json"), off).expect("a config of the project");
   assert_eq!(printed(yard.kept(&["run", "k = 3"]), ""), "None\n");
   assert_eq!(printed(yard.kept(&["run", "debug(t\"{k=}\")\nclose(k + 1)"]), ""), "4\n");
@@ -322,7 +322,7 @@ fn a_command_that_runs_past_the_bound_is_killed_and_gives_nothing() {
 fn a_record_is_printed_as_facts_each_after_the_number_of_its_line() {
   let yard = Yard::new("facts");
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
-  let off = r#"{"extensions": {"catchup": false, "memory": false, "skills": false, "compaction": false, "ouroboros": false, "web": false, "mcp": false}}"#;
+  let off = r#"{"skills": {"catchup": false, "memory": false, "skills": false, "compaction": false, "ouroboros": false, "web": false, "mcp": false}}"#;
   fs::write(yard.at.join(".furb/config.json"), off).expect("a config of the project");
   assert_eq!(printed(yard.kept(&["run", "k = 3"]), ""), "None\n");
   let facts = |words: &[&str]| {
@@ -349,13 +349,13 @@ fn a_record_is_printed_as_facts_each_after_the_number_of_its_line() {
 }
 #[test]
 fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs_turn_on() {
-  let yard = Yard::new("extensions");
+  let yard = Yard::new("skills");
   let skill = yard.at.join(".furb/skills/brew/SKILL.md");
   fs::create_dir_all(skill.parent().expect("a folder")).expect("the folder of a skill");
   fs::write(&skill, "---\nname: brew\ndescription: Make tea.\n---\n").expect("a skill");
   fs::write(yard.at.join("CLAUDE.md"), "Use two spaces.\n").expect("a memory file");
   let every = "catchup: catchup()\nmemory: await recall()\nskills: await listed()\ncompaction: compacted(); fitted()\n";
-  assert_eq!(printed(yard.furb(&["extensions"]), ""), every, "the official extensions are on");
+  assert_eq!(printed(yard.furb(&["skills"]), ""), every, "the official extensions are on");
   let path = printed(yard.kept(&["run", "close((await skill('brew')).path)"]), "");
   // The World writes a path under the home of the user with ~ in place of the home.
   let home = env::home_dir().filter(|home| home.parent().is_some());
@@ -373,13 +373,13 @@ fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs
     "{said}"
   );
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
-  fs::write(yard.at.join(".furb/config.json"), r#"{"extensions": {"memory": false}}"#)
+  fs::write(yard.at.join(".furb/config.json"), r#"{"skills": {"memory": false}}"#)
     .expect("a config of the project");
   assert_eq!(
-    printed(yard.furb(&["extensions"]), ""),
+    printed(yard.furb(&["skills"]), ""),
     "catchup: catchup()\nskills: await listed()\ncompaction: compacted(); fitted()\n"
   );
-  assert_eq!(printed(yard.kept(&["extensions"]), ""), every, "a life runs what its record enables");
+  assert_eq!(printed(yard.kept(&["skills"]), ""), every, "a life runs what its record enables");
 }
 
 #[test]

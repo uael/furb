@@ -17,7 +17,7 @@ function skill(directory: string, name: string, detail: string): void {
   writeFileSync(join(folder, "SKILL.md"), `---\nname: ${name}\ndescription: ${detail}\n---\nSteps.\n`);
 }
 
-test("a skill added on the disk shows in the list of / commands after /skills, and its command loads the skill", async () => {
+test("a skill added on the disk shows in the list of / commands after /reload-skills, and its command loads the skill", async () => {
   const directory = mkdtempSync(join(tmpdir(), "furb-skills-"));
   made.push(directory);
   skill(directory, "brew", "Brew a pot of tea");
@@ -37,12 +37,10 @@ test("a skill added on the disk shows in the list of / commands after /skills, a
       expect(await typed("/br", "Brew a pot of tea (skill)", true)).toContain("/brew");
       skill(directory, "bake", "Bake a loaf of bread");
       expect(await typed("/ba", "Bake a loaf", false)).not.toContain("/bake");
-      app.composer.setText("/skills");
+      app.composer.setText("/reload-skills");
       await app.submit();
       expect(await typed("/ba", "Bake a loaf of bread (skill)", true)).toContain("/bake");
       expect(session.notice).toContain("Skills read again");
-      app.composer.setText("/reload-skills");
-      await app.submit();
       app.composer.setText("/bake");
       await app.submit();
       for (

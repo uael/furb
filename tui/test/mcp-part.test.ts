@@ -27,7 +27,7 @@ function project(): string {
   mkdirSync(folder, { recursive: true });
   cpSync(fixture, folder, { recursive: true });
   cpSync(PART, join(folder, "tui.ts"));
-  writeFileSync(join(directory, ".furb", "config.json"), '{"extensions": {"servers": "skills/servers"}}\n');
+  writeFileSync(join(directory, ".furb", "config.json"), '{"skills": {"servers": "skills/servers"}}\n');
   return directory;
 }
 

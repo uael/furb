@@ -903,8 +903,7 @@ mod daemon {
     I: Identity<Stream = Accepted> + Clone + Send + Sync + 'static,
   {
     fs::create_dir_all(at.join(".furb")).unwrap();
-    fs::write(at.join(".furb").join("config.json"), r#"{"extensions": {"ouroboros": true}}"#)
-      .unwrap();
+    fs::write(at.join(".furb").join("config.json"), r#"{"skills": {"ouroboros": true}}"#).unwrap();
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
     let opening = Opening { extensions: None, ..opening(at) };

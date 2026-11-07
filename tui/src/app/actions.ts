@@ -93,8 +93,8 @@ export const actions = part({
       await library.enter(await library.add(text.slice(11).trim()));
       return true;
     }
-    if (name === "extensions" && !argument) {
-      await this.extensionsDialog();
+    if (name === "skills" && !argument) {
+      await this.skillsDialog();
       return true;
     }
     // A command of a part of an extension, which no command of the TUI shadows.

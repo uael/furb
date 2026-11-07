@@ -75,7 +75,7 @@ def yard(tmp_path: Path) -> Yard:
   fake.mkdir()
   # The life of a test names no session, since a name asks the fake claude out of the order of its words.
   (root / "config").mkdir()
-  (root / "config" / "config.json").write_text('{"extensions": {"naming": false}}')
+  (root / "config" / "config.json").write_text('{"skills": {"naming": false}}')
   shutil.copy(FAKE, fake / "claude")
   (fake / "claude").chmod(0o755)
   return Yard(at, fake)

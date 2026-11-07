@@ -282,7 +282,8 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/provider <add\|remove> <name> [URL model window key_env protocol]` | Save a provider in the project settings and use it now |
 | `/config [key] [value]` | Show each key of the configs and change it, or set a key; a key with no value leaves the config that gives it |
 | `/reload` | Read provider settings again and update the standing of this life |
-| `/skills or /reload-skills` | Read the skills of the disk again; each shows in the list of / commands, and its command reads its SKILL.md |
+| `/skills` | List the skills that this life runs, with what their parts give the TUI |
+| `/reload-skills` | Read the skills of the disk again; each shows in the list of / commands, and its command reads its SKILL.md |
 | `/retry` | Ask again at once each model that waits to retry, as at a usage limit, on the provider settings of now |
 | `/effort [level]` | Set the reasoning effort of the selected model |
 | `/shape [type]` | Choose the result type of the next prompt |
@@ -326,7 +327,6 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/delete` | Archive a session, or move it and its files to the workspace trash |
 | `/newthread` | Start a new thread with your next message, in place of a message to the thread that the input targets, as `+ New thread` does |
 | `/autocollapse` | Toggle the fold of the threads that are over |
-| `/extensions` | List the extensions that this life runs, with what their parts give the TUI |
 | `/end` | Let the life of this session go from this window: it ends once no window and no pin holds it |
 | `/pin [holder]` | Keep the life of this session open with no window, until the same holder unpins it |
 | `/unpin [holder]` | Let a pin go, so the life ends once no window and no pin holds it |
@@ -392,7 +392,7 @@ keys, commands that it can give from the life, completions of the input after a 
 dialogs of a list, a form or a confirm that its commands await, and which the TUI loads again live, as [the guide of the
 extensions](../docs/skills.md#a-part-for-the-tui) says. A model adds a part to a life that runs with `extend(name,
 *rungs, tui=module)`, which the skill ouroboros teaches it: the panel stands at once, with no
-restart. A part that fails shows its error in plain words in its own panel, and the TUI goes on. `/extensions` opens a
+restart. A part that fails shows its error in plain words in its own panel, and the TUI goes on. `/skills` opens a
 dialog of what the life runs, each extension with what its part gives or the error that stopped it, and `/run` runs a
 word of one on the chain on screen, as `/run skill("pdf")`. A cancel ends one act and the work under it, and not what an
 extension started on the chain, such as the watcher of the memory.

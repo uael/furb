@@ -38,7 +38,7 @@ pub type Ears = Vec<(String, Box<dyn Ear>)>;
 /// What a life waits for before it boots, as [`Opening::prepared`] gives it.
 struct Prepared {
   places: Places,
-  extensions: Vec<skill::Extension>,
+  extensions: Vec<skill::Skill>,
   /// The line that tells why each extension that the configs turn on does not play.
   refused: Vec<String>,
   provider: world::Provider,
