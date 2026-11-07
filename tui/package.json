@@ -10,7 +10,6 @@
   "dependencies": {
     "@opentui/core": "0.5.11",
     "@opentui/keymap": "0.5.11",
-    "cli-truncate": "6",
     "diff": "^9.0.0",
     "furb": "workspace:@uael/furb@*",
     "gemoji": "^8.1.0",

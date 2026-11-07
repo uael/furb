@@ -26,7 +26,8 @@ test("a width of 0 or 1 shows no ellipsis, and a width of 1 keeps the first grap
   expect(clip("abcdef", 1)).toBe("a");
   expect(clip("abcdef", 1, "end")).toBe("f");
   expect(clip("日本語", 1)).toBe("");
-  expect(clip("日a本", 1)).toBe("a");
+  expect(clip("日a本", 1)).toBe("");
+  expect(clip("a日本語", 1, "end")).toBe("");
   expect(clip("abcdef", 2)).toBe("a…");
 });
 
@@ -49,4 +50,13 @@ test("the renderer draws no cell past the bound of a clipped row", async () => {
           screen.renderer.destroy();
         }
       }
+});
+
+test("a line that Bun measures wider than another table does is cut by Bun's measure, and a long line costs little", () => {
+  expect(width(clip("ab가cd", 6))).toBeLessThanOrEqual(6);
+  expect(width(clip("abกำcd", 5))).toBeLessThanOrEqual(5);
+  const long = "ab日本😀".repeat(2000);
+  const began = performance.now();
+  for (let n = 0; n < 20; n++) clip(long, 80, n % 2 ? "end" : "start");
+  expect(performance.now() - began).toBeLessThan(500);
 });
