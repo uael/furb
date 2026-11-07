@@ -361,6 +361,8 @@ export class App {
    * view, once the scroll box has laid out its cards. */
   scrollTarget?: Scroll | { card: string } | { end: string };
   overlay?: BoxRenderable;
+  /** The dialog of the details, which the key that opens it closes again. */
+  detailsOverlay?: BoxRenderable;
   /** The veil behind the dialog that the overlay holds. */
   backdrop?: BoxRenderable;
   paletteInput?: InputRenderable;
