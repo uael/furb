@@ -1,25 +1,16 @@
 import { basename } from "node:path";
 import type { BoxOptions, BoxRenderable } from "@opentui/core";
-import {
-  type Ask,
-  busy,
-  type ChainThread,
-  nestThreads,
-  orderThreads,
-  type ThreadNode,
-  threadOpen,
-  threadWork,
-} from "furb/life";
+import { type Ask, busy, type ChainThread, type ThreadNode, threadWork } from "furb/life";
 import { checkoutOf } from "../checkout.ts";
 import { clock } from "../clock.ts";
 import { shortenHomes } from "../files.ts";
 import { dollars, recordLabel } from "../format.ts";
-import { statusLabels } from "../session.ts";
-import { theme as c, glyph, type MarkState, markOf, spacing as space, threadTone } from "../theme.ts";
+import { flatThreads, statusLabels } from "../session.ts";
+import { theme as c, glyph, type MarkState, markOf, moves, spacing as space, threadTone } from "../theme.ts";
 import { bold, type Part, plain } from "../ui.ts";
 import type { SessionEntry, Workspace } from "../workspaces.ts";
 import { part } from "./part.ts";
-import { type ChainRead, statusMark, threadMarks } from "./shared.ts";
+import { type ChainRead, statusMark, statusState, threadState } from "./shared.ts";
 
 /** What waits in a part of the library, counted where the operator should look. */
 export interface Attention {
@@ -125,38 +116,36 @@ export const rail = part({
    * the chain that it stands on is a detail of it. */
   railThreads(): ChainThread[] {
     const w = this.session;
-    const owed = [...w.host.prompts.keys()].join(" ");
+    // The tree that the crate last gave keys the list: a new tree reads the list and its rows again.
+    const tree = w.rail;
     const kept = this.railThreadCache;
-    if (kept && kept.session === w && kept.version === w.promptsVersion && kept.owed === owed)
-      return kept.list;
-    const list: ChainThread[] = [];
+    if (kept && kept.session === w && kept.tree === tree) return kept.list;
+    // The threads come from the one tree that the crate folds of every chain, so a chain that is not shown holds the
+    // threads of now too, and each chain keeps what the keys of the sidebar read of its list while that list stands.
+    const list = flatThreads(tree);
     const reads = kept?.chains ?? new Map<string, ChainRead>();
+    const by = new Map<string, ChainThread[]>();
+    for (const one of list) by.set(one.act.chain, [...(by.get(one.act.chain) ?? []), one]);
     const chains = new Map<string, ChainRead>();
-    for (const [chain, acts] of w.activityByChain) {
-      if (!acts.length || w.naming(chain)) continue;
-      const threads = w.threadsOf(chain).list;
+    for (const [chain, threads] of by) {
       const read = reads.get(chain);
-      // A chain whose list of threads stands keeps what the keys of the sidebar read of it.
-      chains.set(chain, read?.list === threads ? read : { list: threads });
-      list.push(...threads);
+      const same =
+        read && read.list.length === threads.length && read.list.every((one, n) => one === threads[n]);
+      chains.set(chain, same ? read : { list: threads });
     }
     const ordered = list
       .map((one): [number, ChainThread] => [numbered(one), one])
       .sort((a, b) => a[0] - b[0])
       .map(([, one]) => one);
-    this.railThreadCache = { session: w, version: w.promptsVersion, owed, list: ordered, chains };
+    this.railThreadCache = { session: w, tree, list: ordered, chains };
     return ordered;
   },
 
   /** The threads of the session shown as the sidebar shows them: each thread with the agents that its ladder made
-   * nested under it, the closed ones first and the open ones last, each by the time of its last message. The tree is
-   * made once for each list of the threads, and the sidebar and the stage both read it. */
+   * nested under it, the closed ones first and the open ones last, each by the time of its last message, as the crate
+   * folds and orders them. The sidebar and the stage both read it. */
   railTree(): ThreadNode[] {
-    const list = this.railThreads();
-    const kept = this.railThreadCache;
-    const tree = kept?.tree ?? orderThreads(nestThreads(list, this.session.boardIndex.ids));
-    if (kept) kept.tree = tree;
-    return tree;
+    return this.session.rail;
   },
 
   /** The title of a thread on its row of the sidebar: its message as the feed reads it, with each home folder short,
@@ -183,7 +172,7 @@ export const rail = part({
             part.list.map((one) => [
               one.act.id,
               one.state,
-              one.resolved,
+              one.over,
               one.title,
               one.messages.length,
               plain(this.threadMeta(one)),
@@ -228,7 +217,7 @@ export const rail = part({
     if (state === "paused") return ["paused", c.warning];
     if (state === "failed") return ["failed", c.danger];
     if (state === "cancelled") return ["cancelled", c.faint];
-    if (thread.resolved) return ["resolved", c.faint];
+    if (thread.over) return ["done", c.faint];
     return [statusLabels[busy(state) ? state : "runs"].toLowerCase(), c.accent];
   },
 
@@ -261,7 +250,7 @@ export const rail = part({
   /** A row of the sidebar in two parts, its head, which the room cuts and a hover shows whole, and its tail, which
    * stays. */
   railSplit(
-    head: Part[],
+    head: Part[] | (() => Part[]),
     tail: Part[],
     run: () => void,
     options: BoxOptions = {},
@@ -276,14 +265,13 @@ export const rail = part({
       this.sideWidth -
       margins.reduce<number>((sum, one) => sum + (typeof one === "number" ? one : 0), 0) -
       (tail.length ? Bun.stringWidth(plain(tail)) + space.between : 0);
-    const fits = Bun.stringWidth(plain(head)) <= room;
-    row.add(
-      this.text(fits ? head : this.clipParts(head, room), c.muted, {
-        truncate: true,
-        flexGrow: 1,
-        flexShrink: 1,
-      }),
-    );
+    const read = typeof head === "function" ? head : () => head;
+    const fits = Bun.stringWidth(plain(read())) <= room;
+    const shown = () => (fits ? read() : this.clipParts(read(), room));
+    const text = this.text(shown(), c.muted, { truncate: true, flexGrow: 1, flexShrink: 1 });
+    // A head that is read again holds a mark that moves, which the tick draws again.
+    if (typeof head === "function") this.moving.set(text, shown);
+    row.add(text);
     if (tail.length) row.add(this.text(tail, c.muted, { marginLeft: space.between, flexShrink: 0 }));
     return row;
   },
@@ -295,7 +283,7 @@ export const rail = part({
     const id = thread.act.id;
     this.railAt = `th:${id}`;
     void (async () => {
-      if (thread.act.on !== w.selected) await w.select(thread.act.on);
+      if (thread.act.chain !== w.selected) await w.select(thread.act.chain);
       w.aim(id);
       if (this.threadFolded(id)) {
         w.folds[`thread:${id}`] = false;
@@ -413,6 +401,8 @@ export const rail = part({
       this.threadsKey(threads),
       this.unreadKey(threads),
       active?.act.id,
+      // The controls under the thread lit say Collapse or Expand, as the feed folds it.
+      active && this.threadFolded(active.act.id),
       [...this.unfolded],
       this.renaming && this.itemKey(this.renaming.item),
       this.menuItem && this.itemKey(this.menuItem),
@@ -467,7 +457,6 @@ export const rail = part({
       const folded = this.threadFolded(id);
       link(folded ? glyph.closed : glyph.open, folded ? "Expand" : "Collapse", () => this.foldThread(id));
       link(glyph.reply, "Reply", () => this.replyTo(id));
-      if (!thread.resolved) link(glyph.done, "Resolve", () => this.resolveThread(thread));
       const ask = thread.asks[0];
       if (ask) link(glyph.asks, "Answer", () => void w.point(ask).catch(this.report), c.warning);
       this.railSpaces.add(row);
@@ -477,21 +466,23 @@ export const rail = part({
     // A thread of the session shown, on one row.
     const threadRow = (thread: ChainThread, indent: number, state = thread.state) => {
       const id = `th:${thread.act.id}`;
-      const lit = active === thread;
-      const [mark, tone] = threadMarks(thread, state, this.unreadThread(thread));
+      // The thread of the session and the row of the sidebar come from two reads of the crate, so they match by id.
+      const lit = active?.act.id === thread.act.id;
+      const shown = threadState(thread, state, this.unreadThread(thread));
       order(id, {
         enter: () => this.chooseThread(thread),
         space: () => this.foldThread(thread.act.id),
         thread,
       });
       const title = this.railTitle(thread);
+      const head = (): Part[] => [
+        [glyph.mark, threadTone(thread.act.id)],
+        [" "],
+        [`${markOf(shown)[0]} `, markOf(shown)[1]],
+        [title, lit ? c.text : thread.over ? c.faint : c.muted, lit ? bold : 0],
+      ];
       const row = this.railSplit(
-        [
-          [glyph.mark, threadTone(thread.act.id)],
-          [" "],
-          [`${mark} `, tone],
-          [title, lit ? c.text : thread.resolved ? c.faint : c.muted, lit ? bold : 0],
-        ],
+        moves(shown) ? head : head(),
         this.threadMeta(thread, state),
         () => this.chooseThread(thread),
         { paddingLeft: indent, paddingRight: RIGHT },
@@ -540,7 +531,7 @@ export const rail = part({
         entry,
         {
           lead: [[" "], [mine ? glyph.mark : " ", c.accent], [" "]],
-          state: statusMark(entry.status),
+          state: moves(statusState(entry.status)) ? () => statusMark(entry.status) : statusMark(entry.status),
           name: [label, mine ? c.text : entry.archived ? c.faint : c.muted, mine ? bold : 0],
           tail,
         },
@@ -585,7 +576,7 @@ export const rail = part({
 
     // A thread on its row, with the agents that its ladder made folded under it to a count, which a click opens, each
     // agent one step deeper on its row. A question that waits in an agent marks the thread over it, since
-    // `nestThreads` rolls it into the state of that thread.
+    // the crate rolls it into the state of that thread.
     const nodeRow = (node: ThreadNode, indent: number) => {
       threadRow(node.thread, indent, node.state);
       if (!node.agents.length) return;
@@ -595,25 +586,15 @@ export const rail = part({
       step(1);
       if (this.unfolded.has(fold)) for (const one of node.agents) nodeRow(one, indent + 2);
     };
-    const shows = (node: ThreadNode): boolean => node.thread === active || node.agents.some(shows);
-    const unresolved = tree.filter((one) => threadOpen(one) || shows(one));
-    const resolvedNodes = tree.filter((one) => !unresolved.includes(one));
-
-    // The threads that a session holds: the resolved ones folded under a row of their own at the top, then those that
-    // live, nearest the input, each with its agents nested under it.
-    const threadBlock = (entry: SessionEntry) => {
+    // The threads that a session holds, in the order of the crate: those that are over first, then those that live,
+    // nearest the input, each with its agents nested under it.
+    const threadBlock = () => {
       if (!threads.length) {
         plainRow([["     No thread yet", c.faint]], () => this.composer.focus());
         step(1);
         return;
       }
-      if (resolvedNodes.length) {
-        const fold = `resolved:${entry.path}`;
-        this.railSpaces.add(this.foldRow(fold, "      Resolved", resolvedNodes.length, padding));
-        step(1);
-        if (this.unfolded.has(fold)) for (const one of resolvedNodes) nodeRow(one, LEFT + 4);
-      }
-      for (const one of unresolved) nodeRow(one, LEFT + 4);
+      for (const one of tree) nodeRow(one, LEFT + 4);
     };
 
     for (const [index, group] of lib.groups.entries()) {
@@ -661,7 +642,7 @@ export const rail = part({
       const { shown, earlier } = sessionsOf(group);
       for (const entry of shown) {
         sessionRow(group, entry);
-        if (entry === lib.current) threadBlock(entry);
+        if (entry === lib.current) threadBlock();
       }
       folds(group, earlier);
     }

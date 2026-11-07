@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type CapturedFrame, CodeRenderable, type Renderable, type RGBA } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
+import { isDone } from "furb/life";
 import * as stage from "../script/stage.ts";
 import { App } from "../src/app.ts";
 import { demoLibrary, demoSession } from "../src/demo.ts";
@@ -12,6 +13,22 @@ import type { Session } from "../src/session.ts";
 /** Preferences in a config directory of the test alone, which the yard of the tests removes. A session on a recorded
  * life that is given none reads the preferences of the user, and a library that holds it writes the list of the user
  * beside them. */
+/** Whether an act exists and is not done: an act that is missing is not open, so a check that it stays open fails. */
+export function open(session: Session, id: string): boolean {
+  const act = session.acts.find((one) => one.id === id);
+  return act !== undefined && !isDone(act);
+}
+
+/** The first frame that passes a test, as the renderer draws it once the session changed, or an error that names what
+ * the test waits for once the renderer drew for 25 seconds with no such frame. */
+export async function framed(frame: () => Promise<string>, passes: (shown: string) => boolean, what: string) {
+  for (const until = Date.now() + 25_000; ; await Bun.sleep(20)) {
+    const shown = await frame();
+    if (passes(shown)) return shown;
+    if (Date.now() > until) throw new Error(`No frame showed ${what}: ${shown.slice(0, 2000)}`);
+  }
+}
+
 export function ownPreferences(): Preferences {
   return new Preferences(join(mkdtempSync(join(tmpdir(), "furb-config-")), "ui.json"));
 }
@@ -61,6 +78,11 @@ export async function composing(
     workspaces: library,
   });
   const frame = async () => {
+    // The crate folds the ladder of the chain shown, which a frame draws once it came.
+    for (let pass = 0; pass < 3; pass++) {
+      app.render();
+      await session.laddersRead();
+    }
     app.render();
     await screen.flush();
     return screen.captureCharFrame();

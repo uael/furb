@@ -1,14 +1,17 @@
 //! The threads of a chain: each prompt to a model that is no message of another thread, with its
 //! messages and what it asks the operator, nested under the thread whose ladder made it.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use super::{
-  act::{Act, Kind, operator},
-  state::State,
+  act::{Act, Kind, WATCH, operator},
+  fold::followed,
+  named::NAME,
+  state::{State, working},
 };
 
 /// The acts of a life by their names.
@@ -17,19 +20,22 @@ pub type Rows<'a> = HashMap<&'a str, &'a Act>;
 /// How deep a walk up the threads or the makers goes at most.
 const DEEP: usize = 64;
 
-/// One thread of a chain: its prompt, the first line of its message, its messages, the prompts to
-/// the operator that it made and the questions of them that wait, and its state. A thread is
-/// resolved once its prompt and each of its messages is done, and a message to a resolved thread
-/// opens it again until its model closes the message.
+/// One thread of a chain: its prompt, its name, its messages, the prompts to the operator that it
+/// made and the questions of them that wait, and its state. A thread is over once its prompt
+/// and each of its messages is done, and a message to a thread that is over opens it again until
+/// its model closes the message.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ChainThread {
   pub prompt: String,
+  /// The name of the thread: the label of its chain for the first thread that no operator made on
+  /// a chain under the root, the name of the session for the first thread of the operator on the
+  /// root, and else the first line of its message that is not empty.
   pub title: String,
   pub messages: Vec<String>,
   pub asked: Vec<String>,
   pub asks: Vec<String>,
   pub state: State,
-  pub resolved: bool,
+  pub over: bool,
   pub origin: Origin,
   /// Whether the operator started it, himself or by a word of his own.
   pub yours: bool,
@@ -84,16 +90,17 @@ pub fn root_of<'a>(prompt: &'a Act, rows: &Rows<'a>) -> &'a str {
   &at.id
 }
 
-/// The thread that an act stands in: the first prompt of the thread whose rung is over it, walking
-/// up the makers. A prompt that the operator, an ear or a chain made stands in none.
+/// The thread that an act stands in: the first prompt of the thread of the nearest prompt above it,
+/// walking up the maker of each act whatever its kind, a rung, a conduct, a chain or any other, so
+/// that a worker that a round made stands in the thread whose word started the round. An act whose
+/// makers end before a prompt, as one that the operator made, stands in none.
 pub fn thread_of<'a>(act: &Act, rows: &Rows<'a>) -> Option<&'a str> {
   let mut maker = rows.get(act.by.as_str())?;
   for _ in 0..DEEP {
-    match maker.kind {
-      Kind::Prompt => return Some(root_of(maker, rows)),
-      Kind::Rung => maker = rows.get(maker.by.as_str())?,
-      _ => return None,
+    if maker.kind == Kind::Prompt {
+      return Some(root_of(maker, rows));
     }
+    maker = rows.get(maker.by.as_str())?;
   }
   None
 }
@@ -104,7 +111,8 @@ pub fn thread_of<'a>(act: &Act, rows: &Rows<'a>) -> Option<&'a str> {
 #[serde(tag = "aside", content = "from", rename_all = "snake_case")]
 pub enum Aside {
   /// A notice of the round: a prompt of None that a rung or a chain made, which no one answers, as
-  /// the acknowledgment of an act that stands in no thread of the chain.
+  /// the acknowledgment of an act that stands in no thread of the chain, a stall that the watch of
+  /// the daemon tells, or the question of the act that names the session.
   Notice,
   /// What a word of the operator told the chain: a prompt of None that a rung of his made, or the
   /// acknowledgment of a rung that stands in no thread.
@@ -137,7 +145,8 @@ enum Verdict<'a> {
 /// What a prompt to a model is: a message of a thread when it stands on one, the acknowledgment of
 /// an act that a chain made, which belongs to the thread of that act, a notice, a word of the
 /// operator, a wake or a question of another chain, and else a thread of its own, as each prompt
-/// that the operator made himself.
+/// that the operator made himself. What the watch of the daemon tells of a stall, and what the act
+/// that names the session asks, are notices: no one of the operator made them.
 fn verdict<'a>(act: &'a Act, rows: &Rows<'a>) -> Verdict<'a> {
   if act.thread().is_some() {
     return Verdict::Message(root_of(act, rows));
@@ -146,6 +155,8 @@ fn verdict<'a>(act: &'a Act, rows: &Rows<'a>) -> Verdict<'a> {
   let none = act.words.first().is_some_and(|shape| shape == "None");
   match maker {
     Some(maker) if none && maker.kind == Kind::Chain => acknowledged(act, rows),
+    _ if act.by == WATCH => Verdict::Aside(Aside::Notice),
+    Some(maker) if maker.kind.as_str() == NAME => Verdict::Aside(Aside::Notice),
     _ if operator(&act.by) => Verdict::Own,
     Some(maker) if none && maker.kind == Kind::Rung && operator(&maker.by) => {
       Verdict::Aside(Aside::Rung)
@@ -211,6 +222,63 @@ pub fn chain_asides(on: &[&Act], rows: &Rows<'_>) -> Vec<ChainAside> {
   sorted(on, rows).1
 }
 
+/// A run of notes: the asides of a chain that are no question and follow one another in its feed
+/// with no card of another kind between them, which a window draws as one block. `unread` counts
+/// the notes that began or ended after the place up to which the operator read the chain.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct NoteRun {
+  pub prompts: Vec<String>,
+  pub count: usize,
+  pub unread: usize,
+}
+
+/// The runs of notes of one chain, from its acts in the order they began. Only a step of the top of
+/// the chain draws a card: an act that a rung of the chain made stands in the program of that rung,
+/// a message stands in its thread or its note, and a reply, a grant, a chain and a rung that the
+/// chain wrote to retell its source draw none. Each other act ends the run that it follows, as a
+/// thread, a question, a command and a word of the operator do. `read` is the place up to which
+/// the operator read the chain, which only a window knows.
+pub fn chain_notes(on: &[&Act], rows: &Rows<'_>, read: u64) -> Vec<NoteRun> {
+  let (threads, asides) = sorted(on, rows);
+  let notes: HashSet<&str> = asides
+    .iter()
+    .filter(|one| !matches!(one.aside, Aside::Question(_)))
+    .map(|one| one.prompt.as_str())
+    .collect();
+  let inside: HashSet<&str> = threads
+    .iter()
+    .flat_map(|one| one.messages.iter().chain(&one.asked))
+    .chain(asides.iter().flat_map(|one| &one.messages))
+    .map(String::as_str)
+    .collect();
+  let mut runs: Vec<NoteRun> = Vec::new();
+  let mut open = false;
+  for act in on {
+    let maker = rows.get(act.by.as_str());
+    let below = maker.is_some_and(|one| one.chain == act.chain && one.kind != Kind::Chain);
+    let retold = act.kind == Kind::Rung && maker.is_some_and(|one| one.kind == Kind::Chain);
+    let silent = act.kind == Kind::Chain
+      || !followed(act.kind.as_str())
+      || matches!(&act.kind, Kind::Other(kind) if kind == "grant");
+    if below || retold || silent || inside.contains(act.id.as_str()) {
+      continue;
+    }
+    if !notes.contains(act.id.as_str()) {
+      open = false;
+      continue;
+    }
+    if !open {
+      runs.push(NoteRun::default());
+      open = true;
+    }
+    let Some(run) = runs.last_mut() else { continue };
+    run.prompts.push(act.id.clone());
+    run.count += 1;
+    run.unread += usize::from(act.ended.unwrap_or(act.began) > read);
+  }
+  runs
+}
+
 /// The threads and the asides of one chain.
 fn sorted(on: &[&Act], rows: &Rows<'_>) -> (Vec<ChainThread>, Vec<ChainAside>) {
   let mut out: Vec<ChainThread> = Vec::new();
@@ -245,17 +313,90 @@ fn sorted(on: &[&Act], rows: &Rows<'_>) -> (Vec<ChainThread>, Vec<ChainAside>) {
   }
   asides.sort_by_key(|one| one.0);
   let asides = asides.into_iter().map(|one| one.1).collect();
+  named(&mut out, rows);
   for thread in &mut out {
     let acts = std::iter::once(&thread.prompt).chain(&thread.messages);
     let open = acts.filter_map(|id| rows.get(id.as_str())).rfind(|act| !act.done());
-    thread.resolved = open.is_none();
+    thread.over = open.is_none();
     thread.state = match open.or_else(|| rows.get(thread.prompt.as_str())) {
       _ if !thread.asks.is_empty() => State::Asks,
-      Some(act) => State::of(act),
+      Some(act) => match State::of(act) {
+        // A model that writes a word for the thread thinks, as the chain and the session say.
+        State::Runs
+          if act.kind == Kind::Prompt && working(&work_of(&act.id, on), &[]) == State::Thinks =>
+        {
+          State::Thinks
+        }
+        state => state,
+      },
       None => State::Idle,
     };
   }
   (out, asides)
+}
+
+/// The acts that work for a prompt: the rungs that advance on it, and the acts that those rungs
+/// made, as the commands and the waits of their words.
+fn work_of<'a>(prompt: &str, on: &[&'a Act]) -> Vec<&'a Act> {
+  let rungs: HashSet<&str> = on
+    .iter()
+    .filter(|act| act.kind == Kind::Rung && act.by == prompt)
+    .map(|act| act.id.as_str())
+    .collect();
+  on.iter()
+    .copied()
+    .filter(|act| rungs.contains(act.id.as_str()) || rungs.contains(act.by.as_str()))
+    .collect()
+}
+
+/// The first thread that no operator made on a chain under the root takes the label of that chain.
+/// Any other thread keeps the first line of its own message, also each thread of the root: the
+/// name of the session stands on the row of the session alone, and a thread never takes it.
+fn named(out: &mut [ChainThread], rows: &Rows<'_>) {
+  let Some(chain) = out.first().and_then(|one| rows.get(one.prompt.as_str())).map(|act| &act.chain)
+  else {
+    return;
+  };
+  let Some(chain) = rows.get(chain.as_str()).filter(|act| act.kind == Kind::Chain) else { return };
+  if chain.on.is_empty() {
+    return;
+  }
+  let Some(name) =
+    chain.words.first().and_then(Value::as_str).map(str::trim).filter(|one| !one.is_empty())
+  else {
+    return;
+  };
+  if let Some(first) = out.iter_mut().find(|one| one.origin != Origin::Operator) {
+    name.clone_into(&mut first.title);
+  }
+}
+
+/// The threads of a chain as a tree, with the threads of each chain under it that nest under one
+/// of them: the workers that a round made under a thread, at any depth, so a window draws them
+/// under the thread whose word started the round. A thread of a chain under it that nests in none
+/// stays the answer of its own chain.
+pub fn chain_tree<'a>(chain: &str, acts: &[&'a Act], rows: &Rows<'a>) -> Vec<ThreadNode> {
+  let mut by_chain: HashMap<&str, Vec<&Act>> = HashMap::new();
+  for act in acts.iter().copied().filter(|act| act.id != act.chain) {
+    by_chain.entry(act.chain.as_str()).or_default().push(act);
+  }
+  let mut list = by_chain.get(chain).map(|on| chain_threads(on, rows)).unwrap_or_default();
+  let mut under: Vec<&Act> = acts
+    .iter()
+    .copied()
+    .filter(|act| act.kind == Kind::Chain && act.id != chain && within(&act.id, chain, rows))
+    .collect();
+  under.sort_by_key(|act| act.began);
+  for inner in under {
+    let Some(on) = by_chain.get(inner.id.as_str()) else { continue };
+    for thread in chain_threads(on, rows) {
+      let parent = rows.get(thread.prompt.as_str()).and_then(|act| thread_of(act, rows));
+      if parent.is_some_and(|parent| list.iter().any(|one| one.prompt == parent)) {
+        list.push(thread);
+      }
+    }
+  }
+  nest_threads(list, rows)
 }
 
 /// An aside of its own, from its prompt, before the prompts on it join it.
@@ -280,7 +421,7 @@ fn opened(act: &Act, rows: &Rows<'_>) -> ChainThread {
     asked: Vec::new(),
     asks: Vec::new(),
     state: State::Done,
-    resolved: true,
+    over: true,
     origin,
     yours: mine || (origin == Origin::Rung && maker.is_some_and(|one| operator(&one.by))),
   }
@@ -333,10 +474,10 @@ pub fn order_threads(mut nodes: Vec<ThreadNode>, rows: &Rows<'_>) -> Vec<ThreadN
   nodes
 }
 
-/// Whether a thread stands open in the list of the threads: it is not resolved, or a question
+/// Whether a thread stands open in the list of the threads: it is not over, or a question
 /// waits in it or in an agent under it.
 pub fn open(node: &ThreadNode) -> bool {
-  !node.thread.resolved || node.state == State::Asks
+  !node.thread.over || node.state == State::Asks
 }
 
 /// When the last message of a thread began: its prompt, or the last prompt on it.
@@ -376,85 +517,5 @@ pub fn attention(tops: &[ThreadNode]) -> Attention {
 }
 
 #[cfg(test)]
-mod tests {
-  use std::collections::HashMap;
-
-  use serde_json::{Value, json};
-
-  use super::{Aside, Rows, chain_asides, chain_threads};
-  use crate::view::{Act, Fold};
-
-  /// The acts of the record of a conductor that the tests of the TUI read, with after it what a
-  /// record of the owner holds and it lacks, scrubbed: a wake of the round, and a word of the
-  /// operator that tells the chain, with the acknowledgment of his rung.
-  fn conductor() -> Vec<Act> {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tui/fixtures/conductor.jsonl");
-    let Ok(record) = std::fs::read_to_string(path) else { panic!("no record at {path}") };
-    let wake = "The ask A27 of the owner is missing, and no item carries it now.";
-    let more = [
-      json!(["prompt", "prompt9001", "quiet2602", "chain1", "None", wake, ""]),
-      json!(["rung", "rung9001", "operator", "chain1", "prompt(None, 'Look at #295.')", "", ""]),
-      json!(["prompt", "prompt9002", "rung9001", "chain1", "None", "Look at #295.", ""]),
-      json!(["done", "rung9001", "chain1", null]),
-      json!(["prompt", "prompt9003", "chain1", "chain1", "None", "rung9001 done", ""]),
-    ];
-    let facts = record.lines().filter_map(|line| serde_json::from_str::<Value>(line).ok());
-    let mut fold = Fold::default();
-    let mut acts: HashMap<String, Act> = HashMap::new();
-    for fact in facts.filter(Value::is_array).chain(more) {
-      for act in fold.hear(&fact, &[], None) {
-        acts.insert(act.id.clone(), act);
-      }
-    }
-    let mut all: Vec<Act> = acts.into_values().collect();
-    all.sort_by_key(|act| act.began);
-    all
-  }
-
-  /// The threads of a chain, and its asides with what each is.
-  fn listed(acts: &[Act], chain: &str) -> (Vec<String>, Vec<(String, Aside)>) {
-    let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
-    let on: Vec<&Act> = acts.iter().filter(|act| act.chain == chain).collect();
-    let threads = chain_threads(&on, &rows).into_iter().map(|one| one.prompt).collect();
-    let asides = chain_asides(&on, &rows).into_iter().map(|one| (one.prompt, one.aside)).collect();
-    (threads, asides)
-  }
-
-  fn names(ids: &[&str]) -> Vec<String> {
-    ids.iter().map(|id| (*id).to_owned()).collect()
-  }
-
-  #[test]
-  fn a_notice_a_word_of_the_operator_a_wake_and_a_question_of_another_chain_are_no_threads() {
-    let acts = conductor();
-    // Before, main listed as the threads of chain1 each prompt of these, and of the asides below.
-    let (threads, asides) = listed(&acts, "chain1");
-    assert_eq!(threads, names(&["prompt1", "prompt29", "prompt34", "prompt95", "prompt97"]));
-    let question = |from: &str| Aside::Question(from.to_owned());
-    let expected = [
-      ("prompt43", Aside::Notice),
-      ("prompt46", question("chain8")),
-      ("prompt52", question("chain8")),
-      ("prompt63", Aside::Notice),
-      ("prompt83", Aside::Notice),
-      ("prompt87", Aside::Notice),
-      ("prompt92", question("chain9")),
-      ("prompt93", question("chain10")),
-      ("prompt9001", Aside::Wake),
-      ("prompt9002", Aside::Rung),
-      ("prompt9003", Aside::Rung),
-    ];
-    let expected: Vec<(String, Aside)> =
-      expected.into_iter().map(|(id, aside)| (id.to_owned(), aside)).collect();
-    assert_eq!(asides, expected);
-    // Main listed prompt36 as a thread of chain7, and prompt47 and prompt64 as threads of chain2.
-    assert_eq!(
-      listed(&acts, "chain7"),
-      (names(&["prompt31"]), vec![("prompt36".to_owned(), Aside::Notice)])
-    );
-    let (threads, asides) = listed(&acts, "chain2");
-    assert_eq!(threads, names(&["prompt3"]));
-    let notices = [("prompt47", Aside::Notice), ("prompt64", Aside::Notice)];
-    assert_eq!(asides, notices.map(|(id, aside)| (id.to_owned(), aside)).to_vec());
-  }
-}
+#[path = "threads.test.rs"]
+mod tests;

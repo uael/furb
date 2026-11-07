@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
-import type { LiveAct } from "furb";
+import type { Act } from "furb/life";
 import { demoSession } from "../src/demo.ts";
 import { loadPart, Parts, plainError, type Seen, summary } from "../src/parts.ts";
 import { composing, pressEscape } from "./composing.ts";
@@ -30,7 +30,7 @@ const TODO = readFileSync(join(fixture, "todo.py"), "utf8").replace(/^from furb\
 
 /** The word of the extension compaction, less its import of furb, as a life plays it. */
 const COMPACTION = readFileSync(
-  resolve(import.meta.dir, "..", "..", "extensions", "compaction", "compaction.py"),
+  resolve(import.meta.dir, "..", "..", ".agents", "skills", "compaction", "compaction.py"),
   "utf8",
 ).replace(/^from furb\.engine import \([^)]*\)\n+/m, "");
 
@@ -40,7 +40,7 @@ function still(chain: string): Seen {
     chain,
     acts: [],
     compactions: [],
-    extensions: async () => [],
+    skills: async () => [],
     of: () => [],
     run: async () => undefined,
     say: () => {},
@@ -57,11 +57,11 @@ function still(chain: string): Seen {
 function project(part = PART): { directory: string; file: string } {
   const directory = mkdtempSync(join(tmpdir(), "furb-parts-"));
   made.push(directory);
-  const folder = join(directory, ".furb", "extensions", "todo");
+  const folder = join(directory, ".furb", "skills", "todo");
   mkdirSync(folder, { recursive: true });
   cpSync(fixture, folder, { recursive: true });
   writeFileSync(join(folder, "tui.ts"), part);
-  writeFileSync(join(directory, ".furb", "config.json"), '{"extensions": {"todo": "extensions/todo"}}\n');
+  writeFileSync(join(directory, ".furb", "config.json"), '{"skills": {"todo": "skills/todo"}}\n');
   return { directory, file: join(folder, "tui.ts") };
 }
 
@@ -90,14 +90,14 @@ test("a life gains the panel of a part of a project extension, which draws again
       let shown = await shows(frame, "○ write the part");
       expect(shown).toContain("✓ read the capture");
       expect(shown).toContain("1 open of 2");
-      expect(app.parts.loaded.map((one) => one.name)).toEqual(["compaction", "mcp", "todo"]);
+      expect(app.parts.loaded.map((one) => one.name)).toEqual(["compaction", "todo"]);
       // The hint of the line of each act todo says what the part draws as its row.
       await shows(frame, "to do: write the part");
       // A change of the file of the part draws again, with no restart.
       writeFileSync(file, PART.replace('"Todo"', '"Todo list"'));
       await shows(frame, "Todo list");
-      // A write that the life makes in the folder of the extension lands, and the part loads again.
-      const word = `write(Text(".furb/extensions/todo/tui.ts", ${JSON.stringify(PART.replace('"Todo"', '"Plan"'))}))`;
+      // A write that the life makes in the folder of the skill lands, and the part loads again.
+      const word = `write(Text(".furb/skills/todo/tui.ts", ${JSON.stringify(PART.replace('"Todo"', '"Plan"'))}))`;
       await session.command(`/run ${word}`);
       await shows(frame, "Plan");
       // A broken module shows its error in its panel, in plain words, and the TUI goes on.
@@ -155,16 +155,15 @@ test("the parts load the part of each extension that the configs give, and a con
   const parts = new Parts(directory, () => changes++);
   await parts.load();
   expect(parts.loaded.map((one) => [one.name, one.file, one.error])).toEqual([
-    ["compaction", "extensions/compaction/tui.ts", undefined],
-    ["mcp", "extensions/mcp/tui.ts", undefined],
+    ["compaction", ".agents/skills/compaction/tui.ts", undefined],
     ["todo", file, undefined],
   ]);
   expect(parts.row("todo")).toBeDefined();
   expect(parts.command("todos")?.detail).toBe("Say how many items are open");
-  writeFileSync(join(directory, ".furb", "config.json"), '{"extensions": []}\n');
+  writeFileSync(join(directory, ".furb", "config.json"), '{"skills": []}\n');
   await parts.load();
-  expect(parts.loaded.map((one) => one.name)).toEqual(["extensions"]);
-  expect(parts.loaded[0]?.error).toContain("A config is a map, whose extensions is a map");
+  expect(parts.loaded.map((one) => one.name)).toEqual(["config"]);
+  expect(parts.loaded[0]?.error).toContain("A config is a map, whose skills is a map");
   expect(changes).toBe(2);
   parts.dispose();
 });
@@ -174,12 +173,17 @@ test("the parts load again when a write of the local config of the project lands
   let changes = 0;
   const parts = new Parts(directory, () => changes++);
   await parts.load();
-  expect(parts.loaded.map((one) => one.name)).toEqual(["compaction", "mcp", "todo"]);
-  writeFileSync(join(directory, ".furb", "config.local.json"), '{"extensions": {"todo": false}}\n');
-  const write = { id: "write1", kind: "write", done: true, words: [{ path: ".furb/config.local.json" }] };
-  parts.heard([write as unknown as LiveAct]);
+  expect(parts.loaded.map((one) => one.name)).toEqual(["compaction", "todo"]);
+  writeFileSync(join(directory, ".furb", "config.local.json"), '{"skills": {"todo": false}}\n');
+  const write = {
+    id: "write1",
+    kind: "write",
+    phase: { phase: "done", value: null },
+    words: [{ path: ".furb/config.local.json" }],
+  };
+  parts.heard([write as unknown as Act]);
   for (let tries = 0; tries < 400 && changes < 2; tries++) await Bun.sleep(10);
-  expect(parts.loaded.map((one) => one.name)).toEqual(["compaction", "mcp"]);
+  expect(parts.loaded.map((one) => one.name)).toEqual(["compaction"]);
   parts.dispose();
 });
 
@@ -326,7 +330,7 @@ test("the command /compact tells that a life that does not run the extension com
 
 test("the command /compact of the part of compaction asks a model what the chain on screen keeps, compacts it with the summary, and says so", async () => {
   const { directory } = project();
-  const session = await demoSession({ cwd: directory, extensions: true });
+  const session = await demoSession({ cwd: directory, skills: true });
   await composing(
     async ({ app, frame }) => {
       for (let tries = 0; tries < 400 && !app.parts.command("compact"); tries++) await Bun.sleep(25);
@@ -378,7 +382,7 @@ test("the command /compact of the part of compaction asks a model what the chain
 
 test("the commands /clear and /reset of the part of compaction cut the chain on screen to nothing, and the rule of each cut says Cleared", async () => {
   const { directory } = project();
-  const session = await demoSession({ cwd: directory, extensions: true });
+  const session = await demoSession({ cwd: directory, skills: true });
   await composing(
     async ({ app, frame }) => {
       for (let tries = 0; tries < 400 && !app.parts.command("clear"); tries++) await Bun.sleep(25);
@@ -431,20 +435,21 @@ async function hides(frame: () => Promise<string>, text: string): Promise<string
 test("a word that writes an extension with extend() gives the TUI its part in a life that runs, with no restart, and a config that turns the extension off takes the part away", async () => {
   const directory = mkdtempSync(join(tmpdir(), "furb-parts-"));
   made.push(directory);
-  const session = await demoSession({ cwd: directory, extensions: true });
+  const session = await demoSession({ cwd: directory, skills: true });
   await composing(
     async ({ app, frame, screen }) => {
       await app.partsReady;
-      expect(app.parts.loaded.map((one) => one.name)).toEqual(["compaction", "mcp"]);
+      expect(app.parts.loaded.map((one) => one.name)).toEqual(["compaction"]);
       await session.command(`/run ${TODO}`);
       const word = 'next(k for k, w in program().items() if "def todo" in w)';
+      await session.command('/run skill("ouroboros")');
       await session.command(`/run <s:part>\n${PART}</s:part>\nextend("todo", ${word}, tui=part)`);
       await session.command('/run todo("write the part")\ntodo("read the capture", done=True)');
-      const shown = await shows(frame, "○ write the part");
+      // The two calls of the word land one after the other, so the frame that shows the first may not hold the second.
+      const shown = await shows(frame, "○ write the part", (rows) => rows.includes("✓ read the capture"));
       expect(shown).toContain("✓ read the capture");
       expect(app.parts.loaded.map((one) => [one.name, one.error])).toEqual([
         ["compaction", undefined],
-        ["mcp", undefined],
         ["todo", undefined],
       ]);
       app.composer.setText("/todos");
@@ -452,10 +457,10 @@ test("a word that writes an extension with extend() gives the TUI its part in a 
       await shows(frame, "1 of 2 items are open");
       // The extension goes off in the config: the panel, the row, the command and the key go with it.
       await session.command(
-        `/run write(Text(".furb/config.json", ${JSON.stringify('{"extensions": {"todo": false}}\n')}))`,
+        `/run write(Text(".furb/config.json", ${JSON.stringify('{"skills": {"todo": false}}\n')}))`,
       );
       await hides(frame, "○ write the part");
-      expect(app.parts.loaded.map((one) => one.name)).toEqual(["compaction", "mcp"]);
+      expect(app.parts.loaded.map((one) => one.name)).toEqual(["compaction"]);
       expect(app.parts.command("todos")).toBeUndefined();
       expect(app.parts.row("todo")).toBeUndefined();
       await screen.mockInput.typeText("+");
@@ -463,7 +468,7 @@ test("a word that writes an extension with extend() gives the TUI its part in a 
       app.composer.setText("");
       // The config turns it on again, and the part comes back.
       await session.command(
-        `/run write(Text(".furb/config.json", ${JSON.stringify('{"extensions": {"todo": "extensions/todo"}}\n')}))`,
+        `/run write(Text(".furb/config.json", ${JSON.stringify('{"skills": {"todo": "skills/todo"}}\n')}))`,
       );
       await shows(frame, "○ write the part");
     },
@@ -472,16 +477,16 @@ test("a word that writes an extension with extend() gives the TUI its part in a 
   );
 });
 
-test("/extensions opens a dialog of the extensions that the life runs, each with what its part gives, or the error that stopped its load", async () => {
+test("/skills opens a dialog of the skills that the life runs, each with what its part gives, or the error that stopped its load", async () => {
   const { directory, file } = project();
   const session = await demoSession({ cwd: directory });
   await composing(
     async ({ app, frame, screen }) => {
       await shows(frame, "Ask");
-      app.composer.setText("/extensions");
+      app.composer.setText("/skills");
       await app.submit();
       let shown = await shows(frame, "Its part gives panel Todo");
-      expect(shown).toContain("Extensions");
+      expect(shown).toContain("Skills");
       expect(shown).toContain("rows of todo, key +, /todos");
       expect(shown).toContain("Its part gives 1 mark in the feed");
       screen.mockInput.pressEscape();
@@ -489,7 +494,7 @@ test("/extensions opens a dialog of the extensions that the life runs, each with
       // A part that fails to load shows its error in the dialog, and the extension still stands in it.
       writeFileSync(file, "export default (furb) => { furb.panel(");
       while (!app.parts.loaded.find((one) => one.name === "todo")?.error) await Bun.sleep(10);
-      app.composer.setText("/extensions");
+      app.composer.setText("/skills");
       await app.submit();
       shown = await shows(frame, "tui.ts of todo");
       expect(shown).not.toContain("Its part gives panel Todo");
@@ -502,7 +507,7 @@ test("/extensions opens a dialog of the extensions that the life runs, each with
 test("the model of the demo adds a component to a life that runs: it reads the teaching, writes the extension, and its panel stands, fails and mends with no restart", async () => {
   const directory = mkdtempSync(join(tmpdir(), "furb-parts-"));
   made.push(directory);
-  const session = await demoSession({ cwd: directory, extensions: true });
+  const session = await demoSession({ cwd: directory, skills: true });
   await composing(
     async ({ app, frame }) => {
       await session.submit(
@@ -515,7 +520,6 @@ test("the model of the demo adds a component to a life that runs: it reads the t
       expect(shown).toContain("2 open of 3");
       expect(app.parts.loaded.map((one) => [one.name, one.error])).toEqual([
         ["compaction", undefined],
-        ["mcp", undefined],
         ["todo", undefined],
       ]);
       // A change that the model gets wrong shows its error in the panel, and the rest of the TUI goes on.
@@ -548,7 +552,6 @@ test("a part gives commands from the life, which the palette and /name read agai
       expect(app.parts.commands(app.seen()).map((one) => one.name)).toEqual([
         "compact",
         "clear",
-        "mcp",
         "todos",
         "pick",
         "add",
@@ -676,9 +679,7 @@ test("a confirm that a part awaits gives true for yes, and false for no or a clo
       app.composer.setText("/docs");
       await app.submit();
       for (let tries = 0; tries < 200 && !opened.length; tries++) await Bun.sleep(10);
-      expect(opened).toEqual([
-        "https://github.com/uael/furb/blob/main/docs/extensions.md#a-part-for-the-tui",
-      ]);
+      expect(opened).toEqual(["https://github.com/uael/furb/blob/main/docs/skills.md#a-part-for-the-tui"]);
       await expect(app.seen().open("file:///etc/passwd")).rejects.toThrow(
         'A part opens only an address of http or https, and "file:///etc/passwd" is not one.',
       );
@@ -810,7 +811,7 @@ test("a write of the life whose path starts with ~ and lands in .furb loads the 
     await parts.load();
     const version = parts.version;
     const path = `~/${relative(homedir(), join(directory, ".furb", "config.json"))}`;
-    const write = { kind: "write", id: "write1", done: true, words: [{ path }] };
+    const write = { kind: "write", id: "write1", phase: { phase: "done", value: null }, words: [{ path }] };
     parts.heard([write] as unknown as Parameters<Parts["heard"]>[0]);
     for (let tries = 0; tries < 200 && parts.version === version; tries++) await Bun.sleep(25);
     expect(parts.version).toBe(version + 1);
@@ -823,7 +824,7 @@ test("the parts load again when the operator changed the configs through the Wor
   const { directory } = project();
   const config = join(directory, ".furb", "config.json");
   const was = readFileSync(config, "utf8");
-  writeFileSync(config, '{"extensions": {}}\n');
+  writeFileSync(config, '{"skills": {}}\n');
   const session = await demoSession({ cwd: directory });
   await composing(
     async ({ app }) => {

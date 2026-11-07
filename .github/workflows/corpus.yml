@@ -19,11 +19,6 @@ permissions:
   # The step clear deletes the old cache of rust of the job, on main.
   actions: write
 
-env:
-  # A gate builds once and runs no debugger, so a build writes no debug information and keeps no incremental state.
-  CARGO_PROFILE_DEV_DEBUG: "0"
-  CARGO_PROFILE_DEV_INCREMENTAL: "false"
-
 jobs:
   pin:
     name: the pin of monty

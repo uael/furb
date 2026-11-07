@@ -52,6 +52,12 @@ linker, the C tools of your system are missing. When `bun: command not found` sh
 come first. It gives the TUI `--demo`, `--record`, `--cwd`, the model and the effort of its `--model` as `--model`
 and `--effort`, each `--roster`, and the words after `--`, as [the command line](../cli/README.md) says.
 
+`--read` opens a window that reads the life and changes nothing, on any transport: its hello asks the daemon for the role
+to read, and the daemon gives the lesser of that role and the one that the transport proved, so each send of the window
+is refused with the reason. A request that the daemon leaves when it goes, as at a handover, is sent again once the life
+is open again when a second time changes nothing, as a read or a pause; a request that makes an act fails with the
+request, since the act may have been made. The window shows a stall that the daemon tells as a notice.
+
 The welcome of an empty chain offers "Watch a life" first: a short life that plays by itself and asks no model, so
 it costs nothing. `/watch` plays it too, and `bun run demo` opens on it.
 [A tour of the TUI](../docs/tui.md#watch-a-life) shows it and its keys.
@@ -251,7 +257,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | ⌥V / ⌥G | Switch the view of the life: main, the loom, or the graph / move in the loom or the graph |
 | ⌥T | Move in the sidebar: the workspaces, their sessions, and the threads of the session shown |
 | ↑↓ / Enter / → / ← or Esc after ⌥T | Move / open a workspace, a session or a thread / peek at a workspace / fold it again, or back to the input |
-| Space / r / o / a after ⌥T | Collapse or expand / resolve / reply to the thread / go to the next question |
+| Space / o / a after ⌥T | Collapse or expand / reply to the thread / go to the next question |
 | ⌥C | Collapse or expand the thread in the middle of the feed, as the toggle on its header does |
 | ⌥A | Go to the next question that waits for you, in any workspace |
 | ↑↓←→ / Enter / Esc after ⌥G | Move or fold / back to the input / back to now, or to the input |
@@ -274,8 +280,10 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/model [model]` | Choose the model that answers on this chain |
 | `/providers` | Add or remove a provider for this project |
 | `/provider <add\|remove> <name> [URL model window key_env protocol]` | Save a provider in the project settings and use it now |
+| `/config [key] [value]` | Show each key of the configs and change it, or set a key; a key with no value leaves the config that gives it |
 | `/reload` | Read provider settings again and update the standing of this life |
-| `/skills or /reload-skills` | Read the skills of the disk again; each shows in the list of / commands, and its command reads its SKILL.md |
+| `/skills` | List the skills that this life runs, with what their parts give the TUI |
+| `/reload-skills` | Read the skills of the disk again; each shows in the list of / commands, and its command reads its SKILL.md |
 | `/retry` | Ask again at once each model that waits to retry, as at a usage limit, on the provider settings of now |
 | `/effort [level]` | Set the reasoning effort of the selected model |
 | `/shape [type]` | Choose the result type of the next prompt |
@@ -319,7 +327,6 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/delete` | Archive a session, or move it and its files to the workspace trash |
 | `/newthread` | Start a new thread with your next message, in place of a message to the thread that the input targets, as `+ New thread` does |
 | `/autocollapse` | Toggle the fold of the threads that are over |
-| `/extensions` | List the extensions that this life runs, with what their parts give the TUI |
 | `/end` | Let the life of this session go from this window: it ends once no window and no pin holds it |
 | `/pin [holder]` | Keep the life of this session open with no window, until the same holder unpins it |
 | `/unpin [holder]` | Let a pin go, so the life ends once no window and no pin holds it |
@@ -328,7 +335,7 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 | `/exit or /quit` | Save every session and quit: each life goes on while a window or a pin holds it |
 | `/compact` | Compact this chain now: a model keeps what the work still needs and sums up the rest (the extension compaction) |
 | `/clear or /reset` | Clear this chain: its model reads from zero, and the chain keeps its name, its prompts and its module (the extension compaction) |
-| `/mcp` | Manage the MCP servers: state, tools, resources, prompts, login (the extension mcp) |
+| `/mcp` | Manage the MCP servers: state, tools, resources, prompts, login; /mcp reload connects each again (the extension mcp) |
 
 <!-- commands:end -->
 
@@ -337,8 +344,9 @@ reaches it from every terminal. F1 lists the chords that the terminal in use sen
 The command table comes from the same source as completion, the palette, and help. Run `bun run docs` after
 changing that source. Enter sends a message straight to the engine. The engine gives the next
 ask to the rung that has waited longest. ⌥Enter or `/queue text` holds a follow-up until the chain's
-current prompt and rungs complete. `/queue` edits or removes waiting messages. Saved queues require a resume
-choice; a dispatch recorded before a crash is not sent twice. Editing a prompt's program writes its door, and the engine
+current prompt and rungs complete. `/queue` edits or removes waiting messages. The life holds the queue and sends each
+follow-up once, from any window, and its record keeps the queue, so a reopen finds it as it stood. A send that fails holds
+the queue of its chain, with its cause, until you take the follow-up out. Editing a prompt's program writes its door, and the engine
 makes the program again only when the edit drops a word that ran; else it keeps the module and runs only the new words.
 A slash command typed while a program is under edit runs as a command, since no Python program starts with a
 slash. Python input uses the same gate as a model's word and marks a refused line in the word and editor.
@@ -377,14 +385,14 @@ the structured JSON export.
 
 ## Extensions
 
-A life runs the extensions that the configs turn on, as [the guide of the extensions](../docs/extensions.md) says, and
+A life runs the extensions that the configs turn on, as [the guide of the extensions](../docs/skills.md) says, and
 the feed of each chain shows the words that they ran on it as one line. An extension can also give the TUI a part, a
 module of TypeScript beside its word, which adds panels over the input, the hint of the line of each act of a kind,
 keys, commands that it can give from the life, completions of the input after a trigger, a status in the footer, and
 dialogs of a list, a form or a confirm that its commands await, and which the TUI loads again live, as [the guide of the
-extensions](../docs/extensions.md#a-part-for-the-tui) says. A model adds a part to a life that runs with `extend(name,
+extensions](../docs/skills.md#a-part-for-the-tui) says. A model adds a part to a life that runs with `extend(name,
 *rungs, tui=module)`, which the skill ouroboros teaches it: the panel stands at once, with no
-restart. A part that fails shows its error in plain words in its own panel, and the TUI goes on. `/extensions` opens a
+restart. A part that fails shows its error in plain words in its own panel, and the TUI goes on. `/skills` opens a
 dialog of what the life runs, each extension with what its part gives or the error that stopped it, and `/run` runs a
 word of one on the chain on screen, as `/run skill("pdf")`. A cancel ends one act and the work under it, and not what an
 extension started on the chain, such as the watcher of the memory.
@@ -402,7 +410,7 @@ files alone, so parallel work on the TUI does not conflict in one file.
 | `blocks.ts` | The blocks that the feed and the panels draw: cards, panels, code, Markdown, excerpts and chips. |
 | `details.ts` | The details of an act: prompts, commands, programs, and the references that open a value. |
 | `rail.ts` | The sidebar: the line on top that counts what waits for you, the tree of the workspaces with their sessions and the threads of the session shown, and the keys that move in it. |
-| `sidebar.ts` | The context of the chain shown, the threads of a chain: their fold, their reply and their resolve. |
+| `sidebar.ts` | The context of the chain shown, the threads of a chain: their fold and their reply. |
 | `spaces.ts` | The workspaces and the sessions in the sidebar, with their menus, rename, archive and delete. |
 | `composer.ts` | The input: drafts, history, submit, and the suggestions for a command, a path or a value. |
 | `questions.ts` | The questions that wait for the operator: the pick at the desk and the dialog of a question. |

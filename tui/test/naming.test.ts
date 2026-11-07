@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { isDone, outcomeOf } from "furb/life";
 import { demoSession, removeDemoDirectories } from "../src/demo.ts";
 import type { Session } from "../src/session.ts";
 import { Workspaces } from "../src/workspaces.ts";
@@ -11,7 +12,7 @@ afterAll(removeDemoDirectories);
 
 /** A demo session that runs the official extensions, in a list of sessions: the session and its row. */
 async function listed() {
-  const session = await demoSession({ extensions: true });
+  const session = await demoSession({ skills: true });
   const library = new Workspaces(session.preferences, { demo: true });
   return { session, library, entry: library.adopt(session, await library.add(session.host.directory)) };
 }
@@ -21,7 +22,7 @@ async function named(session: Session) {
   for (let tries = 0; tries < 400; tries++) {
     await session.refresh();
     const act = session.activityByChain.get(session.engine.root)?.find((one) => one.kind === "name_session");
-    if (act?.done) return act;
+    if (act !== undefined && isDone(act)) return act;
     await Bun.sleep(25);
   }
   throw new Error("The session was not named.");
@@ -35,7 +36,7 @@ test("the first message of the operator names the session and its row, and the s
     const act = await named(session);
     for (let tries = 0; tries < 400 && session.sessionName !== "Fix the login form"; tries++)
       await Bun.sleep(25);
-    expect([act.value, session.sessionName, entry.name]).toEqual([
+    expect([outcomeOf(act), session.sessionName, entry.name]).toEqual([
       "Fix the login form",
       "Fix the login form",
       "Fix the login form",
@@ -65,12 +66,12 @@ test("a rename of the operator is a fact of the record, which a second session o
   const record = join(directory, "life.jsonl");
   let session: Session | undefined;
   try {
-    session = await demoSession({ record, extensions: true });
+    session = await demoSession({ record, skills: true });
     await session.rename("Mine");
     await session.rename("Mine again");
     await session.dispose();
     await rm(`${record}.ui.json`, { force: true });
-    session = await demoSession({ record, extensions: true });
+    session = await demoSession({ record, skills: true });
     for (let tries = 0; tries < 400 && session.sessionName !== "Mine again"; tries++) await Bun.sleep(25);
     expect(session.sessionName).toBe("Mine again");
     await session.rename("");
@@ -84,7 +85,7 @@ test("a rename of the operator is a fact of the record, which a second session o
 function renames(session: Session) {
   return (session.activityByChain.get(session.engine.root) ?? [])
     .filter((one) => one.kind === "rename_session")
-    .map((one) => one.value);
+    .map((one) => outcomeOf(one));
 }
 
 test("a rename of the operator is a fact of the record whatever extension plays, with none playing", async () => {
@@ -98,6 +99,7 @@ test("a rename of the operator is a fact of the record whatever extension plays,
     await session.dispose();
     await rm(`${record}.ui.json`, { force: true });
     session = await demoSession({ record });
+    for (let tries = 0; tries < 400 && session.sessionName !== "Mine"; tries++) await Bun.sleep(25);
     expect([session.sessionName, renames(session)]).toEqual(["Mine", ["Mine"]]);
   } finally {
     await session?.dispose();
@@ -121,7 +123,31 @@ test("a rename that the record does not take keeps the old name and says why in 
   }
 });
 
-test("a name that an older ui.json holds moves into a record with no rename once, and the ui.json then holds no name", async () => {
+// The name of a session stands on its own row: a rename gives its first thread no new title, which stays its message.
+test("a rename of a session that rests leaves its first thread titled by its message", async () => {
+  const session = await demoSession({ skills: true });
+  try {
+    await session.submit("Look at the readme.");
+    const root = session.engine.root;
+    const first = async () => {
+      await session.refresh();
+      await session.readThreads(root);
+      return session.threadsOf(root).list.find((one) => one.origin === "operator");
+    };
+    for (let tries = 0; tries < 400 && !(await first())?.over; tries++) await Bun.sleep(25);
+    expect(await session.rename("New name")).toBe(true);
+    await session.refresh();
+    await session.readThreads(root);
+    expect(session.threadsOf(root).list.find((one) => one.origin === "operator")?.title).toBe(
+      "Look at the readme.",
+    );
+    expect(session.sessionName).toBe("New name");
+  } finally {
+    await session.dispose();
+  }
+});
+
+test("a name that an older ui.json holds moves into a record with no rename once, shows after a reopen, and no save loses it", async () => {
   const directory = await mkdtemp(join(tmpdir(), "furb-name-"));
   const record = join(directory, "life.jsonl");
   const path = `${record}.ui.json`;
@@ -132,11 +158,14 @@ test("a name that an older ui.json holds moves into a record with no rename once
     await session.dispose();
     await writeFile(path, JSON.stringify({ ...held(), sessionName: "Old name" }));
     session = await demoSession({ record });
+    // The first save of the session keeps the name in its old home until the record holds it.
+    session.save();
     for (let tries = 0; tries < 400 && "sessionName" in held(); tries++) await Bun.sleep(25);
     expect("sessionName" in held()).toBe(false);
     await session.refresh();
     expect([session.sessionName, renames(session)]).toEqual(["Old name", ["Old name"]]);
     await session.dispose();
+    // A reopen reads it from the record, and a stale name of the old home does not replace it.
     await writeFile(path, JSON.stringify({ ...held(), sessionName: "Stale name" }));
     session = await demoSession({ record });
     for (let tries = 0; tries < 400 && "sessionName" in held(); tries++) await Bun.sleep(25);

@@ -307,6 +307,24 @@ impl Sand {
   }
 }
 
+thread_local! {
+  /// When the step of a word that runs on this thread began, while one runs under the bound.
+  static STEP: std::cell::Cell<Option<std::time::Instant>> = const { std::cell::Cell::new(None) };
+}
+
+/// A step of a word under the bound begins on this thread, or it ends when `on` is false.
+pub(crate) fn step(on: bool) {
+  STEP.set(on.then(std::time::Instant::now));
+}
+
+/// Whether the step of a word that runs on this thread has run for longer than the bound of a
+/// turn. monty counts a turn again from each round trip to the host, so a word that loops on an
+/// answer of the host, as a reading of the clock, never meets the bound of monty; the host refuses
+/// such an answer once the step ran past it, and the refusal raises in the word.
+pub(crate) fn past() -> Option<Duration> {
+  STEP.get().filter(|at| at.elapsed() >= turn()).map(|_| turn())
+}
+
 /// The bound of the turn of a sandbox: [`TURN`], or what the test set.
 fn turn() -> Duration {
   #[cfg(test)]

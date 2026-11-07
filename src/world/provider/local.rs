@@ -44,6 +44,8 @@ use super::{
   catalog::{LEVELS, reached},
   clients::{Client, Reach},
 };
+use tokio::task;
+use tokio::time;
 
 /// The provider of the models of a local server.
 pub(super) const LOCAL: &str = "local";
@@ -72,7 +74,7 @@ enum Error {
   #[error("it listed nothing in {0:?}")]
   Slow(Duration),
   #[error("{0}")]
-  Task(#[from] tokio::task::JoinError),
+  Task(#[from] task::JoinError),
 }
 
 /// Why a server listed no model.
@@ -171,7 +173,7 @@ struct Asking {
 
 impl Server {
   /// The local server that the environment names, and none when the environment names no address.
-  pub(super) fn named(env: impl Fn(&str) -> Option<String>) -> Option<Server> {
+  pub(super) fn named(env: impl Fn(&str) -> Option<String>) -> Option<Self> {
     let env = |name: &str| env(name).filter(|one| !one.trim().is_empty());
     let address = env(ENV_URL)?;
     // A user and a password in the address would go into each error that names it, so the key goes in its own name.
@@ -190,7 +192,7 @@ impl Server {
     let path = url.path().trim_end_matches('/').trim_end_matches("/v1").trim_end_matches('/');
     let root = format!("{}://{}{path}", url.scheme(), url.authority());
     let count = |name: &str| env(name)?.trim().parse::<u64>().ok().filter(|one| *one > 0);
-    Some(Server {
+    Some(Self {
       root,
       key: env(ENV_KEY).unwrap_or_default(),
       window: count(ENV_WINDOW),
@@ -203,7 +205,7 @@ impl Server {
 
   /// The server, waiting this long for its list and this long before it asks again.
   #[cfg(test)]
-  pub(super) fn timed(mut self, deadline: Duration, again: Duration) -> Server {
+  pub(super) fn timed(mut self, deadline: Duration, again: Duration) -> Self {
     self.deadline = deadline;
     self.again = again;
     self
@@ -311,12 +313,12 @@ impl Server {
     // models when they do not come in time.
     let listing = async move {
       let began = Instant::now();
-      let mut offers = match tokio::time::timeout(deadline, asking.offers()).await {
+      let mut offers = match time::timeout(deadline, asking.offers()).await {
         Ok(listed) => listed?,
         Err(_elapsed) => return Err(Error::Slow(deadline)),
       };
       let windows = asking.windowed(&mut offers);
-      drop(tokio::time::timeout(deadline.saturating_sub(began.elapsed()), windows).await);
+      drop(time::timeout(deadline.saturating_sub(began.elapsed()), windows).await);
       Ok::<_, Error>(offers)
     };
     listing.await

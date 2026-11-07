@@ -4,9 +4,11 @@ import { join } from "node:path";
 import { type CliRenderer, CodeRenderable, type Renderable } from "@opentui/core";
 import type { createTestRenderer } from "@opentui/core/testing";
 import { type App, follow } from "../src/app.ts";
+import { daemonPlace } from "../src/client.ts";
 import { demoLibrary } from "../src/demo.ts";
 import type { Session } from "../src/session.ts";
 import type { Workspaces } from "../src/workspaces.ts";
+import { handedOver } from "./daemon.ts";
 
 /** The longest time, in seconds, that a script of the gallery waits for one screen, that a run of it lasts, and that it
  * waits for another run to end. */
@@ -21,13 +23,18 @@ const SOCKET = 100;
 /** The cache of furb for the child of a home when the socket of its daemon would pass SOCKET bytes there: a private
  * folder in /tmp, of mode 0700, which the caller removes. The child keeps the cache that its home gives when that
  * socket fits, and on Windows, where the daemon listens on a named pipe. */
-async function shorten(real: string, environment: Record<string, string>): Promise<string | undefined> {
-  if (process.platform === "win32") return undefined;
-  const base =
+function cacheOf(real: string, environment: Record<string, string>): string {
+  return (
     environment.XDG_CACHE_HOME ||
     process.env.XDG_CACHE_HOME ||
-    (process.platform === "darwin" ? join(real, "Library", "Caches") : join(real, ".cache"));
-  if (Buffer.byteLength(join(base, "furb", "host", "host.sock")) <= SOCKET) return undefined;
+    (process.platform === "darwin" ? join(real, "Library", "Caches") : join(real, ".cache"))
+  );
+}
+
+async function shorten(real: string, environment: Record<string, string>): Promise<string | undefined> {
+  if (process.platform === "win32") return undefined;
+  if (Buffer.byteLength(join(cacheOf(real, environment), "furb", "host", "host.sock")) <= SOCKET)
+    return undefined;
   return mkdtemp("/tmp/furb-sock-");
 }
 
@@ -121,6 +128,7 @@ export async function home(name: string, environment: Record<string, string> = {
   await hold(lock);
   let child: ReturnType<typeof Bun.spawn> | undefined;
   let short: string | undefined;
+  let place: string | undefined;
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const)
     process.on(signal, () => child?.kill(signal));
   try {
@@ -128,6 +136,9 @@ export async function home(name: string, environment: Record<string, string> = {
     await mkdir(gallery, { recursive: true });
     const real = await realpath(gallery);
     short = await shorten(real, environment);
+    // A cache that the caller names holds a daemon of the caller, which this run never ends.
+    const given = environment.XDG_CACHE_HOME || process.env.XDG_CACHE_HOME;
+    if (short || !given) place = daemonPlace(join(short ?? cacheOf(real, environment), "furb", "host"));
     child = Bun.spawn([process.execPath, Bun.main], {
       env: {
         ...process.env,
@@ -148,6 +159,9 @@ export async function home(name: string, environment: Record<string, string> = {
     clearTimeout(limit);
     process.exitCode = code || (child.signalCode ? 1 : 0);
   } finally {
+    // The window of the child started a daemon of its own, detached, in a cache of this run: it ends here, or it
+    // outlives the run and holds its lives for as long as the machine runs.
+    if (place) await handedOver(place).catch(() => {});
     if (short) await rm(short, { recursive: true, force: true });
     await rm(gallery, { recursive: true, force: true });
     await rm(lock, { recursive: true, force: true });

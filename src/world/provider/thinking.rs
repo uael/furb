@@ -3,6 +3,9 @@
 use serde_json::{Map, Value};
 
 use super::model::{Asked, Model};
+use crate::skill;
+use std::fs;
+use std::path;
 
 /// The name of the environment that gives the most tokens of thought of a model in one turn, as
 /// Claude Code reads it.
@@ -10,7 +13,7 @@ pub(super) const ENV_THINKING: &str = "MAX_THINKING_TOKENS";
 
 /// The key of a config of the project that gives the most tokens of thought of a model in one turn,
 /// and the setting under which the provider tells it to the claude command line.
-pub(super) const KEY_THINKING: &str = "max_thinking_tokens";
+pub(crate) const KEY_THINKING: &str = "max_thinking_tokens";
 
 /// The most tokens of thought of a model in one turn when neither the environment nor the config
 /// gives one: a model that thinks more than this rarely writes a word in the turn. A model whose
@@ -27,8 +30,8 @@ pub struct Thinking {
 }
 
 impl Default for Thinking {
-  fn default() -> Thinking {
-    Thinking { most: THINKING, inherited: false }
+  fn default() -> Self {
+    Self { most: THINKING, inherited: false }
   }
 }
 
@@ -36,13 +39,13 @@ impl Default for Thinking {
 /// as the key `max_thinking_tokens` of the configs of the project in the directory of the life
 /// gives it, `.furb/config.local.json` over `.furb/config.json`, else [`THINKING`]. A value that is
 /// no count of tokens is as unsaid.
-pub(super) fn thinking(env: Option<&str>, directory: &std::path::Path) -> Thinking {
+pub(super) fn thinking(env: Option<&str>, directory: &path::Path) -> Thinking {
   let given = env.and_then(|one| one.trim().parse::<u64>().ok());
-  let read = |file: std::path::PathBuf| -> Option<u64> {
-    let text = std::fs::read_to_string(file).ok()?;
+  let read = |file: path::PathBuf| -> Option<u64> {
+    let text = fs::read_to_string(file).ok()?;
     serde_json::from_str::<Value>(&text).ok()?.get(KEY_THINKING)?.as_u64()
   };
-  let config = || crate::extension::projected(directory).into_iter().rev().find_map(read);
+  let config = || skill::projected(directory).into_iter().rev().find_map(read);
   Thinking { most: given.or_else(config).unwrap_or(THINKING), inherited: env.is_some() }
 }
 

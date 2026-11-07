@@ -14,12 +14,12 @@ from furb_monty._monty import SYSTEM
 PY = Path(engine.__file__)
 PYI = PY.with_suffix(".pyi")
 TESTS = PYI.parents[2] / "test"
-EXTENSIONS = TESTS.parent / "extensions"
+SKILLS = TESTS.parent / ".agents" / "skills"
 # The contract of the engine and the contract of each extension, official or of the project, each with the folder of its suite.
-PROJECT = TESTS.parent / ".furb" / "extensions"
+PROJECT = TESTS.parent / ".furb" / "skills"
 CONTRACTS = {
   PYI: TESTS,
-  **{one: one.parent / "test" for one in sorted([*EXTENSIONS.glob("*/*.pyi"), *PROJECT.glob("*/*.pyi")])},
+  **{one: one.parent / "test" for one in sorted([*SKILLS.glob("*/*.pyi"), *PROJECT.glob("*/*.pyi")])},
 }
 DEFS = (ast.FunctionDef, ast.AsyncFunctionDef)
 SCOPE = (ast.Module, ast.ClassDef, ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp, *DEFS)
@@ -253,19 +253,80 @@ def of_furb(statement: ast.stmt) -> bool:
   return module == "furb" or module.startswith("furb.")
 
 
-def test_the_word_of_an_extension_is_its_file_less_its_imports_of_furb() -> None:
+def test_the_word_of_a_skill_is_its_file_less_its_imports_of_furb() -> None:
   """The word that a chain runs is the program of the file of the extension, which ruff and ty read."""
   for one in _monty.official():
     name, word = one["name"], one["word"]
-    body = ast.parse((EXTENSIONS / name / f"{name}.py").read_text(encoding="utf-8")).body
+    body = ast.parse((SKILLS / name / f"{name}.py").read_text(encoding="utf-8")).body
     kept = [one for one in body if not of_furb(one)]
     assert ast.dump(ast.parse(word)) == ast.dump(ast.Module(body=kept, type_ignores=[]))
 
 
-def test_the_word_of_an_extension_binds_no_name_of_the_engine_nor_again_beneath_itself() -> None:
+def test_the_word_of_a_skill_binds_no_name_of_the_engine_nor_again_beneath_itself() -> None:
   """A word runs in the module of a chain, after the engine, so it keeps the meaning of every name there."""
   held = set(binds(ast.parse(PY.read_text(encoding="utf-8"))))
   for one in _monty.official():
     name, word = one["name"], one["word"]
     assert binds(ast.parse(word)) & held == set(), name
     assert shadows(f"{PY.read_text(encoding='utf-8')}\n{word}") == [], name
+
+
+ROOT = TESTS.parent
+# The text that furb publishes, which holds no word of a person: the skills, the docs, the guides, the workflows and the
+# scripts that say a rule. A fixture or a test holds data, and the rules of the data stand in its own README.
+PUBLIC = [
+  *ROOT.glob("*.md"),
+  *ROOT.glob("docs/**/*.md"),
+  *ROOT.glob("tui/*.md"),
+  ROOT / "tests" / "replay" / "README.md",
+  *SKILLS.glob("*/*.md"),
+  *PROJECT.glob("*/*.md"),
+  *ROOT.glob(".github/**/*.md"),
+  *ROOT.glob(".github/**/*.yml"),
+  ROOT / "script" / "scope.py",
+]
+FRENCH = re.compile(
+  r"\b(les|des|une|pour|avec|dans|sans|sont|mais|donc|nous|vous|elle|qui|pas|tr\u00e8s|aussi|comme|cette|ces|c'est|il faut|j'ai|n'est)\b",
+  re.I,
+)
+ACCENT = re.compile("[\u00e0\u00e2\u00e7\u00e9\u00e8\u00ea\u00eb\u00ee\u00ef\u00f4\u00f9\u00fb\u00fc\u0153]")
+SAID = re.compile(
+  r"the owner (said|asked|wrote|wants|ruled|told|decided|prefers|reads|replied)"
+  r"|owner['\u2019]s (words|ruling|rulings|rule|order|ask|asks|message)"
+  r"|rulings? of the owner|rule of the owner|(?-i:\bpick [A-Z][0-9]\b)",
+  re.I,
+)
+ACT = re.compile(r"\b(prompt|rung)[0-9]{2,}\b")
+
+
+def lines_of(paths: list[Path]) -> list[tuple[str, int, str]]:
+  return [
+    (str(path.relative_to(ROOT)), n, line)
+    for path in sorted(set(paths))
+    if path.is_file()
+    for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+  ]
+
+
+def test_no_public_text_holds_french_or_a_word_of_a_person() -> None:
+  """The words of a person are private: no skill, doc, guide or workflow holds French, a quote, a translation or an attribution of them."""
+  found = []
+  for path, n, line in lines_of(PUBLIC):
+    french = len({x.lower() for x in FRENCH.findall(line)}) >= 2 or (ACCENT.search(line) and FRENCH.search(line))
+    if french or SAID.search(line):
+      found.append(f"{path}:{n}: {line.strip()[:80]}")
+  assert found == []
+
+
+def test_no_skill_nor_doc_names_a_prompt_or_a_rung_of_a_life() -> None:
+  """A rule stands with no id of a prompt or of a rung, which names a record that no reader has."""
+  paths = [*SKILLS.glob("*/*.md"), *PROJECT.glob("*/*.md"), *ROOT.glob("docs/**/*.md"), ROOT / "AGENTS.md"]
+  found = [f"{p}:{n}: {line.strip()[:80]}" for p, n, line in lines_of(paths) if ACT.search(line)]
+  assert found == []
+
+
+def test_the_fixture_of_the_tui_holds_no_attribution_of_a_person() -> None:
+  """A recorded life that the repository ships keeps no word that attributes a rule to a person."""
+  said = re.compile(SAID.pattern + r"|the user,? (on [0-9]|said|asked|wrote|wants|ruled|told|decided)|\bOwner:", re.I)
+  text = (ROOT / "tui" / "fixtures" / "conductor.jsonl").read_text(encoding="utf-8")
+  assert [m.group(0) for m in said.finditer(text)] == []

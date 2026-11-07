@@ -59,12 +59,14 @@ pub struct Local {
 /// A stream of a peer that the local transport accepted.
 pub type Accepted = local::Accepted;
 
+pub(crate) use local::own;
+
 /// The local transport as it listens, which accepts each peer in turn.
 pub struct Listener(local::Listener);
 
 impl Local {
   pub fn new(folder: impl Into<PathBuf>) -> Self {
-    Local { folder: folder.into() }
+    Self { folder: folder.into() }
   }
 
   /// The transport listening, or refused when a daemon listens there already. A socket that no

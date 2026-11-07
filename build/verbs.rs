@@ -44,27 +44,27 @@ enum Fielded {
 }
 
 impl Fielded {
-  fn of(annotation: &str) -> Fielded {
+  fn of(annotation: &str) -> Self {
     match annotation {
       // A host gives a word as text; a Text is for the words of the engine alone.
-      "str" | "str | Text" => Fielded::Str,
-      "str | None" => Fielded::MaybeStr,
-      "int" => Fielded::Int,
-      "float" | "float | None" => Fielded::Float,
-      "bool" => Fielded::Bool,
+      "str" | "str | Text" => Self::Str,
+      "str | None" => Self::MaybeStr,
+      "int" => Self::Int,
+      "float" | "float | None" => Self::Float,
+      "bool" => Self::Bool,
       "object"
       | "type[T] | object"
       | "Show"
       | "Filter"
       | "Callable[[str], str]"
       | "dict[str, int]"
-      | "tuple[int | None, ...] | bool | None" => Fielded::Object,
-      "Text" => Fielded::Text,
-      "list[str]" => Fielded::Strs,
+      | "tuple[int | None, ...] | bool | None" => Self::Object,
+      "Text" => Self::Text,
+      "list[str]" => Self::Strs,
       "Show | None"
       | "Filter | None"
       | "Filter | list[str] | None"
-      | "Callable[[str], Ear] | None" => Fielded::MaybeCallable,
+      | "Callable[[str], Ear] | None" => Self::MaybeCallable,
       _ => panic!("the build holds no kind of parameter for `{annotation}`"),
     }
   }
@@ -72,52 +72,52 @@ impl Fielded {
   /// The type a host of rust gives the parameter in, when it has no default.
   fn given(self) -> &'static str {
     match self {
-      Fielded::Str => "&str",
-      Fielded::Int => "i64",
-      Fielded::Float => "f64",
-      Fielded::Bool => "bool",
-      Fielded::Object => "Object",
-      Fielded::MaybeCallable => "Option<Object>",
-      Fielded::MaybeStr => "Option<&str>",
-      Fielded::Text => "&Text",
-      Fielded::Strs => "&[&str]",
+      Self::Str => "&str",
+      Self::Int => "i64",
+      Self::Float => "f64",
+      Self::Bool => "bool",
+      Self::Object => "Object",
+      Self::MaybeCallable => "Option<Object>",
+      Self::MaybeStr => "Option<&str>",
+      Self::Text => "&Text",
+      Self::Strs => "&[&str]",
     }
   }
 
   /// The type of the field that holds the parameter.
   fn field(self) -> &'static str {
     match self {
-      Fielded::Str => "Option<String>",
-      Fielded::Int => "Option<i64>",
-      Fielded::Float => "Option<f64>",
-      Fielded::Bool => "Option<bool>",
-      Fielded::Object | Fielded::MaybeCallable => "Option<Object>",
-      Fielded::MaybeStr => "Option<Option<String>>",
-      Fielded::Text => "Option<Text>",
-      Fielded::Strs => "Option<Vec<String>>",
+      Self::Str => "Option<String>",
+      Self::Int => "Option<i64>",
+      Self::Float => "Option<f64>",
+      Self::Bool => "Option<bool>",
+      Self::Object | Self::MaybeCallable => "Option<Object>",
+      Self::MaybeStr => "Option<Option<String>>",
+      Self::Text => "Option<Text>",
+      Self::Strs => "Option<Vec<String>>",
     }
   }
 
   /// The value that goes in, from what a host of rust gave.
   fn word(self, name: &str) -> String {
     match self {
-      Fielded::Str => format!("Object::string({name})"),
-      Fielded::Int => format!("Object::int({name})"),
-      Fielded::Float => format!("Object::float({name})"),
-      Fielded::Bool => format!("Object::bool({name})"),
-      Fielded::Object => name.to_owned(),
-      Fielded::MaybeCallable => format!("{name}.unwrap_or_else(Object::none)"),
-      Fielded::MaybeStr => format!("{name}.map_or_else(Object::none, Object::string)"),
-      Fielded::Text => format!("{name}.object()"),
-      Fielded::Strs => format!("Object::list({name}.iter().map(|one| Object::string(*one)))"),
+      Self::Str => format!("Object::string({name})"),
+      Self::Int => format!("Object::int({name})"),
+      Self::Float => format!("Object::float({name})"),
+      Self::Bool => format!("Object::bool({name})"),
+      Self::Object => name.to_owned(),
+      Self::MaybeCallable => format!("{name}.unwrap_or_else(Object::none)"),
+      Self::MaybeStr => format!("{name}.map_or_else(Object::none, Object::string)"),
+      Self::Text => format!("{name}.object()"),
+      Self::Strs => format!("Object::list({name}.iter().map(|one| Object::string(*one)))"),
     }
   }
 
   /// The value that goes in, from a field that holds something.
   fn held(self, name: &str) -> String {
     match self {
-      Fielded::MaybeCallable => name.to_owned(),
-      Fielded::Strs => format!("Object::list({name}.into_iter().map(Object::string))"),
+      Self::MaybeCallable => name.to_owned(),
+      Self::Strs => format!("Object::list({name}.into_iter().map(Object::string))"),
       _ => self.word(name),
     }
   }
@@ -125,21 +125,21 @@ impl Fielded {
   /// The type JavaScript gives the parameter in.
   fn script(self) -> &'static str {
     match self {
-      Fielded::Str => "string",
-      Fielded::Int | Fielded::Float => "number",
-      Fielded::Bool => "boolean",
-      Fielded::Object | Fielded::MaybeCallable => "unknown",
-      Fielded::MaybeStr => "string | null",
-      Fielded::Text => "TextValue",
-      Fielded::Strs => "string[]",
+      Self::Str => "string",
+      Self::Int | Self::Float => "number",
+      Self::Bool => "boolean",
+      Self::Object | Self::MaybeCallable => "unknown",
+      Self::MaybeStr => "string | null",
+      Self::Text => "TextValue",
+      Self::Strs => "string[]",
     }
   }
 
   /// How the door to TypeScript carries the value in.
   fn carried(self) -> &'static str {
     match self {
-      Fielded::MaybeStr => "Word::Maybe",
-      Fielded::Text => "Word::Text",
+      Self::MaybeStr => "Word::Maybe",
+      Self::Text => "Word::Text",
       _ => "Word::Plain",
     }
   }
@@ -155,47 +155,47 @@ enum Kind {
 }
 
 impl Kind {
-  fn of(annotation: &str) -> Kind {
+  fn of(annotation: &str) -> Self {
     match annotation {
-      "Ear" => Kind::Ear,
-      "Template" => Kind::Template,
-      _ => Kind::Fielded(Fielded::of(annotation)),
+      "Ear" => Self::Ear,
+      "Template" => Self::Template,
+      _ => Self::Fielded(Fielded::of(annotation)),
     }
   }
 
   /// The type a host of rust gives the parameter in, when it has no default.
   fn given(self) -> &'static str {
     match self {
-      Kind::Fielded(one) => one.given(),
-      Kind::Ear => "Box<dyn Ear>",
-      Kind::Template => "&[(&str, Object)]",
+      Self::Fielded(one) => one.given(),
+      Self::Ear => "Box<dyn Ear>",
+      Self::Template => "&[(&str, Object)]",
     }
   }
 
   /// The value that goes in, from what a host of rust gave.
   fn word(self, name: &str) -> String {
     match self {
-      Kind::Fielded(one) => one.word(name),
-      Kind::Ear => format!("handed({name}, false)"),
-      Kind::Template => format!("templated({name})"),
+      Self::Fielded(one) => one.word(name),
+      Self::Ear => format!("handed({name}, false)"),
+      Self::Template => format!("templated({name})"),
     }
   }
 
   /// The type JavaScript gives the parameter in.
   fn script(self) -> &'static str {
     match self {
-      Kind::Fielded(one) => one.script(),
-      Kind::Ear => "Generator<unknown, unknown, unknown> | NativeEar",
-      Kind::Template => "Array<[string, unknown]>",
+      Self::Fielded(one) => one.script(),
+      Self::Ear => "Generator<unknown, unknown, unknown> | NativeEar",
+      Self::Template => "Array<[string, unknown]>",
     }
   }
 
   /// How the door to TypeScript carries the value in.
   fn carried(self) -> &'static str {
     match self {
-      Kind::Fielded(one) => one.carried(),
-      Kind::Ear => "Word::Plain",
-      Kind::Template => "Word::Template",
+      Self::Fielded(one) => one.carried(),
+      Self::Ear => "Word::Plain",
+      Self::Template => "Word::Template",
     }
   }
 }
@@ -228,25 +228,23 @@ enum Answer {
 }
 
 impl Answer {
-  fn of(annotation: &str) -> Answer {
+  fn of(annotation: &str) -> Self {
     match annotation {
-      "None" => Answer::Unit,
-      "str" => Answer::Str,
-      "float" => Answer::Float,
-      "list[str]" => Answer::Strs,
-      "Fact" => Answer::Fact,
-      "Question" => Answer::MaybeFact,
-      "list[Fact]" => Answer::Facts,
-      "list[Turn]" => Answer::Turns,
-      "Text" => Answer::Text,
+      "None" => Self::Unit,
+      "str" => Self::Str,
+      "float" => Self::Float,
+      "list[str]" => Self::Strs,
+      "Fact" => Self::Fact,
+      "Question" => Self::MaybeFact,
+      "list[Fact]" => Self::Facts,
+      "list[Turn]" => Self::Turns,
+      "Text" => Self::Text,
       "object" | "Show" | "Filter" | "dict" | "dict[str, str]" | "Standing" | "list[Entry]"
-      | "list[int]" => Answer::Object,
-      "Act" | "Act[object]" | "Act[T]" | "Act[Never]" | "Act[Standing]" => {
-        Answer::Act(Came::Object)
-      }
-      "Act[None]" => Answer::Act(Came::Unit),
-      "Act[Exit]" => Answer::Act(Came::Exit),
-      "Act[str | None]" => Answer::Act(Came::MaybeStr),
+      | "list[int]" => Self::Object,
+      "Act" | "Act[object]" | "Act[T]" | "Act[Never]" | "Act[Standing]" => Self::Act(Came::Object),
+      "Act[None]" => Self::Act(Came::Unit),
+      "Act[Exit]" => Self::Act(Came::Exit),
+      "Act[str | None]" => Self::Act(Came::MaybeStr),
       _ => panic!("the build holds no kind of answer for `{annotation}`"),
     }
   }
@@ -254,42 +252,42 @@ impl Answer {
   /// The type a host of rust is given.
   fn rust(self) -> &'static str {
     match self {
-      Answer::Unit => "()",
-      Answer::Str => "String",
-      Answer::Float => "f64",
-      Answer::Strs => "Vec<String>",
-      Answer::Fact => "Fact",
-      Answer::MaybeFact => "Option<Fact>",
-      Answer::Facts => "Vec<Fact>",
-      Answer::Turns => "Vec<Object>",
-      Answer::Text => "Text",
-      Answer::Object => "Object",
-      Answer::Act(Came::Object) => "Act<'_, Object>",
-      Answer::Act(Came::Unit) => "Act<'_, ()>",
-      Answer::Act(Came::Exit) => "Act<'_, Exit>",
-      Answer::Act(Came::MaybeStr) => "Act<'_, Option<String>>",
+      Self::Unit => "()",
+      Self::Str => "String",
+      Self::Float => "f64",
+      Self::Strs => "Vec<String>",
+      Self::Fact => "Fact",
+      Self::MaybeFact => "Option<Fact>",
+      Self::Facts => "Vec<Fact>",
+      Self::Turns => "Vec<Object>",
+      Self::Text => "Text",
+      Self::Object => "Object",
+      Self::Act(Came::Object) => "Act<'_, Object>",
+      Self::Act(Came::Unit) => "Act<'_, ()>",
+      Self::Act(Came::Exit) => "Act<'_, Exit>",
+      Self::Act(Came::MaybeStr) => "Act<'_, Option<String>>",
     }
   }
 
   /// The type JavaScript is given.
   fn script(self) -> &'static str {
     match self {
-      Answer::Unit => "void",
-      Answer::Str => "string",
-      Answer::Float => "number",
-      Answer::Strs => "string[]",
-      Answer::Fact => "[string, string, string, ...unknown[]]",
-      Answer::MaybeFact => "[string, string, string, ...unknown[]] | null",
-      Answer::Facts => "Array<[string, string, string, ...unknown[]]>",
-      Answer::Turns => {
+      Self::Unit => "void",
+      Self::Str => "string",
+      Self::Float => "number",
+      Self::Strs => "string[]",
+      Self::Fact => "[string, string, string, ...unknown[]]",
+      Self::MaybeFact => "[string, string, string, ...unknown[]] | null",
+      Self::Facts => "Array<[string, string, string, ...unknown[]]>",
+      Self::Turns => {
         "Array<['user' | 'assistant', string, [number, number, number, number, number] | null, unknown]>"
       }
-      Answer::Text => "TextValue",
-      Answer::Object => "unknown",
-      Answer::Act(Came::Object) => "Act & PromiseLike<unknown>",
-      Answer::Act(Came::Unit) => "Act & PromiseLike<null>",
-      Answer::Act(Came::Exit) => "Act & PromiseLike<ExitValue>",
-      Answer::Act(Came::MaybeStr) => "Act & PromiseLike<string | null>",
+      Self::Text => "TextValue",
+      Self::Object => "unknown",
+      Self::Act(Came::Object) => "Act & PromiseLike<unknown>",
+      Self::Act(Came::Unit) => "Act & PromiseLike<null>",
+      Self::Act(Came::Exit) => "Act & PromiseLike<ExitValue>",
+      Self::Act(Came::MaybeStr) => "Act & PromiseLike<string | null>",
     }
   }
 }
@@ -324,7 +322,7 @@ pub(crate) struct Verb {
 }
 
 impl Verb {
-  fn read(source: &str, def: &StmtFunctionDef) -> Verb {
+  fn read(source: &str, def: &StmtFunctionDef) -> Self {
     let text = |expr: &Expr| source[expr.range()].to_owned();
     let annotated = |one: &ruff_python_ast::Parameter| {
       Kind::of(&one.annotation.as_deref().map(text).unwrap_or_default())
@@ -353,7 +351,7 @@ impl Verb {
       .as_deref()
       .map(|one| Parameter { name: one.name.as_str().to_owned(), kind: annotated(one) });
     let answer = Answer::of(&def.returns.as_deref().map(text).unwrap_or_else(|| "None".to_owned()));
-    Verb { name: def.name.as_str().to_owned(), doc: doc(def), needed, optional, rest, answer }
+    Self { name: def.name.as_str().to_owned(), doc: doc(def), needed, optional, rest, answer }
   }
 
   /// The name of the struct of its defaults, when it has one.
@@ -660,6 +658,12 @@ pub(crate) fn pythonic(verbs: &[Verb]) -> String {
     };
     out!(out, "  /// {}", verb.doc);
     out!(out, "  #[pyo3(signature = ({}))]", signature.join(", "));
+    if given.len() + 1 > 7 {
+      out!(
+        out,
+        "  #[expect(clippy::too_many_arguments, reason = \"a method takes each word of its verb\")]"
+      );
+    }
     out!(
       out,
       "  fn {}(slf: &Bound<'_, Self>, {}) -> PyResult<{answer}> {{",

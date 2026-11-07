@@ -205,7 +205,7 @@ async def test_a_cancel_of_it_lifts_the_ceiling_since_it_is_an_act_like_any_othe
   engine.cancel(ceiling)
   await settle()
   assert isinstance(engine.peek(ceiling), CancelledError)
-  sand.script[root] = ["a = 1", "close(2)"]
+  sand.script[root] = ["a = 1\ndebug(t'go')", "close(2)"]
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
   assert said(log, "pause") == []

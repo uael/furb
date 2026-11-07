@@ -12,13 +12,13 @@ test("the provider menu saves, restores and validates provider settings", async 
   const directory = await mkdtemp(join(tmpdir(), "furb-provider-menu-"));
   const path = join(directory, ".furb", "config.json");
   await mkdir(join(directory, ".furb"));
-  await writeFile(path, JSON.stringify({ max_thinking_tokens: 1234, extensions: { memory: false } }));
+  await writeFile(path, JSON.stringify({ max_thinking_tokens: 1234, skills: { memory: false } }));
   const opened = await openEngine({
     cwd: directory,
     record: join(directory, "life.jsonl"),
     config: join(directory, "user"),
     roster: [],
-    extensions: false,
+    skills: false,
   });
   const session = new Session(opened.engine, opened.host, false, new Preferences(join(directory, "ui.json")));
   try {
@@ -27,7 +27,7 @@ test("the provider menu saves, restores and validates provider settings", async 
     const saved = JSON.parse(await readFile(path, "utf8"));
     expect(saved).toEqual({
       max_thinking_tokens: 1234,
-      extensions: { memory: false },
+      skills: { memory: false },
       providers: {
         desk: { url: "http://127.0.0.1:9/v1", protocol: "chat", models: { qwen: { window: 65536 } } },
       },

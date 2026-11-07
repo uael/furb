@@ -66,7 +66,7 @@ fn scripted(at: &Path, kits: bool, script: &[(&str, &str)]) -> Opening {
     config: path("config"),
     roster: Some(vec!["claude-cli:opus".to_owned()]),
     answer: Some(answer),
-    extensions: (!kits).then_some(false),
+    skills: (!kits).then_some(false),
     ..Opening::default()
   }
 }
@@ -214,8 +214,7 @@ fn inspected(at: &Path) -> Result<Engine, furb::Fault> {
 }
 
 /// A life that only inspects the record of a directory from its first entry, born again at each of
-/// its checkpoints,
-/// or why it refused.
+/// its checkpoints, or why it refused.
 fn inspected_whole(at: &Path) -> Result<Engine, furb::Fault> {
   let opening =
     Opening { inspecting: Some(true), whole: Some(true), ..scripted(at, true, &SCRIPT) };
@@ -223,8 +222,7 @@ fn inspected_whole(at: &Path) -> Result<Engine, furb::Fault> {
 }
 
 /// What each chain of a life holds, as python shows it: each fact that it heard, but its module,
-/// which [`MODULES`]
-/// shows with no address of the heap, and the outcome of each act among them.
+/// which [`MODULES`] shows with no address of the heap, and the outcome of each act among them.
 const STATE: &str = "[(c, [x for x in transcript(c) if x[0] != 'module'], [(x[1], peek(x[1], ...)) for x in transcript(c) if question(x)]) \
                      for c in [f'chain{n}' for n in range(1, 99) if get(f'chain{n}')]]";
 
@@ -389,8 +387,7 @@ fn a_record_whose_checkpoint_holds_a_field_that_no_reader_knows_still_opens() {
 }
 
 /// A life born again three times in a directory of its own, each life on the checkpoint of the one
-/// before it, and
-/// its record.
+/// before it, and its record.
 fn thrice(name: &str) -> (yard::Yard, String) {
   let at = place(name);
   for n in 0..4 {

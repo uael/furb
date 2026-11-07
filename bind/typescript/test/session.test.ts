@@ -215,8 +215,8 @@ test("what a model writes streams into the session under its rung until its repl
   try {
     const engine = session.open();
     const prompt = engine.prompt("int", { message: "count", on: engine.root });
-    // The rung that answers the prompt comes after the twenty-one rungs of the setup of the root, so it is found as the
-    // rung that the prompt made.
+    // The rung that answers the prompt comes after the rungs of the setup of the root, however many they are, so it is
+    // found as the rung that the prompt made.
     const answering = () =>
       [...session.activity.acts.values()].find((act) => act.kind === "rung" && act.by === prompt.id)?.id ??
       "";
@@ -224,7 +224,7 @@ test("what a model writes streams into the session under its rung until its repl
     const turn = (role: string, text: unknown) =>
       expect.objectContaining({ role, content: [{ type: "text", text }] });
     await until(session, () => session.streams.get(answering())?.text === "close(3)");
-    expect(answering()).toBe("rung22");
+    expect(answering()).toMatch(/^rung\d+$/);
     expect(session.streams.get(answering())).toEqual({
       chain: engine.root,
       text: "close(3)",
@@ -236,9 +236,9 @@ test("what a model writes streams into the session under its rung until its repl
         chain: engine.root,
         // The setup of the root as turns of the default actor whose words furb writes: the bare paragraph chain(), the
         // debug of the extensions of the standing, whose user turn holds them, the read of the doctrine, for each official extension the word rung(read('<file>', HIDDEN).content) and the turn
-        // of the rung that it made, which holds the code alone, then the life words in one turn, whose user turn holds
-        // what they read, then the stand and the cd, whose user turn holds what they tell, then the open of the root and
-        // the prompt.
+        // of the rung that it made, which holds the code alone, then each life word in a turn of its own, the user turn
+        // after the word that reads holding what it read, then the stand and the cd, whose user turn holds what they
+        // tell, then the open of the root and the prompt.
         messages: [
           turn("user", "chain()"),
           turn("assistant", 'debug(t"{standing()[4]=}")'),
@@ -249,7 +249,7 @@ test("what a model writes streams into the session under its rung until its repl
           // A path of Windows stands with its separators doubled, as python shows a backslash.
           turn("assistant", expect.stringMatching(/^read\('.*[/\\]DOCTRINE\.md'\)$/)),
           turn("user", expect.stringMatching(/^#read1\nread1_path = '.*[/\\]DOCTRINE\.md'\n/)),
-          ...["catchup", "memory", "skills", "compaction", "ouroboros", "web", "mcp"].flatMap((name) => [
+          ...["catchup", "memory", "skills", "compaction"].flatMap((name) => [
             turn(
               "assistant",
               expect.stringMatching(
@@ -261,13 +261,16 @@ test("what a model writes streams into the session under its rung until its repl
             // The turn of the rung that the word made holds the code of the file alone, which that rung ran.
             turn("user", expect.stringMatching(/^(?!#)[\s\S]*\ndef \w+\(/)),
           ]),
-          turn("assistant", "catchup()\nawait recall()\nawait listed()\nfitted()\nawait mcp_index()"),
+          turn("assistant", "catchup()"),
+          turn("assistant", "await recall()"),
+          turn("assistant", "await listed()"),
           turn(
             "user",
             expect.stringMatching(
               /^#read(\d+)\nread\1_path = 'skills:\/\/'\n(<s:read\1_text>\n[\s\S]*<\/s:read\1_text>|read\1_text = '.*')$/,
             ),
           ),
+          turn("assistant", "compacted(); fitted()"),
           // An extension that plays on the root alone comes after the others, with its life word.
           turn(
             "assistant",
@@ -291,7 +294,7 @@ test("what a model writes streams into the session under its rung until its repl
               {
                 type: "text",
                 text: expect.stringMatching(
-                  /^#chain1\nchain1_label = 'root'\nchain1_actor = 'claude-cli:sonnet\/high'\nchain1_actor_via = 'stand'\nchain1: Act\[Never\] = Act\('chain1'\)\n\n#prompt1\nprompt1_message = 'count'\nprompt1: Act\[int\] = Act\('prompt1'\)\n\n#rung22 advance on prompt1$/,
+                  /^#chain1\nchain1_label = 'root'\nchain1_actor = 'claude-cli:sonnet\/high'\nchain1_actor_via = 'stand'\nchain1: Act\[Never\] = Act\('chain1'\)\n\n#prompt1\nprompt1_message = 'count'\nprompt1: Act\[int\] = Act\('prompt1'\)\n\n#rung\d+ advance on prompt1$/,
                 ),
               },
             ],
@@ -411,7 +414,7 @@ test("a fact seen that the operator says covers what came before it, and a later
   const cwd = await mkdtemp(join(tmpdir(), "furb-seen-"));
   const record = join(cwd, "life.jsonl");
   const place = (session: Session, id: string) => session.activity.acts.get(id)?.began ?? 0;
-  const first = new Session({ cwd, record, extensions: false });
+  const first = new Session({ cwd, record, skills: false });
   const engine = first.open();
   const before = engine.prompt("None", { message: "noted", to: "operator", on: engine.root }).id;
   engine.say("seen", engine.root, []);
@@ -419,7 +422,7 @@ test("a fact seen that the operator says covers what came before it, and a later
   const seen = first.activity.seen.get(engine.root) ?? 0;
   expect([place(first, before) < seen, place(first, after) > seen]).toEqual([true, true]);
   await first.dispose();
-  const second = new Session({ cwd, record, extensions: false });
+  const second = new Session({ cwd, record, skills: false });
   try {
     second.open();
     const again = second.activity.seen.get(second.engine?.root ?? "") ?? 0;
@@ -433,11 +436,11 @@ test("a fact seen that the operator says covers what came before it, and a later
 test("a session that ends keeps the checkpoint of its life at the tip of its record, and a later session opens on it", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-checkpoint-"));
   const record = join(cwd, "life.jsonl");
-  const first = new Session({ cwd, record, extensions: false });
+  const first = new Session({ cwd, record, skills: false });
   const engine = first.open();
   engine.prompt("None", { message: "noted", to: "operator", on: engine.root });
   await first.end();
-  const second = new Session({ cwd, record, extensions: false });
+  const second = new Session({ cwd, record, skills: false });
   try {
     expect((await kinds(record)).at(-1)).toBe("checkpoint");
     second.open();
@@ -824,9 +827,8 @@ test("record inspection reports pending work when its replay starts or feeds a c
   await until(first, () => printed(first, "bash2") === "hello\n");
   await first.dispose();
   try {
-    // The stand, the read of the doctrine, the rungs of the eight official extensions, and the stand and the cd come
-    // before the two rungs.
-    expect([sleeps, feeds]).toEqual(["rung22", "rung23"]);
+    // The setup of the root comes before the two rungs, which are made one after the other.
+    expect(Number(feeds.slice(4)) - Number(sleeps.slice(4))).toBe(1);
     expect((await inspectRecord(record)).pending.map(([id]) => id)).toEqual([
       sleeps,
       "bash1",
@@ -1070,7 +1072,7 @@ function tilded(path: string): string {
   return path === home ? "~" : path.startsWith(home + sep) ? `~${path.slice(home.length)}` : path;
 }
 
-test("a session enables the extensions of the configs, and a later session on its record runs them whatever it says", async () => {
+test("a session enables the skills of the configs, and a later session on its record runs them whatever it says", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-extensions-"));
   const record = join(cwd, "life.jsonl");
   const config = join(cwd, "config");
@@ -1081,16 +1083,7 @@ test("a session enables the extensions of the configs, and a later session on it
   const first = new Session({ cwd, record, config });
   try {
     first.open();
-    expect(running(first)).toEqual([
-      "catchup",
-      "memory",
-      "skills",
-      "compaction",
-      "naming",
-      "ouroboros",
-      "web",
-      "mcp",
-    ]);
+    expect(running(first)).toEqual(["catchup", "memory", "skills", "compaction", "naming"]);
     // The life words of the setup read each memory file, after the reads of the doctrine and of the files of the
     // extensions, and the user turn after them shows what each read gave.
     const found = (first.engine?.transcript({ on: ROOT }) ?? []).find(
@@ -1100,25 +1093,27 @@ test("a session enables the extensions of the configs, and a later session on it
     );
     const read = found?.[1];
     expect(read).toMatch(/^read\d+$/);
-    // The stand and the cd come after the life words, and the extension naming, which plays on the root alone, comes
-    // after the others with its life word, so the turn of the life words is the eighth from the end.
+    // The stand and the cd come after the life words, each a turn of its own, and the extension naming, which plays on
+    // the root alone, comes after the others with its life word.
     const turns = (first.engine?.turns({ on: "chain1" }) ?? []).map((turn) => String(turn[1]));
-    expect(turns.at(-8)).toBe("catchup()\nawait recall()\nawait listed()\nfitted()\nawait mcp_index()");
+    expect(
+      turns.filter((turn) => /^(catchup\(\)|await recall\(\)|await listed\(\)|compacted\()/.test(turn)),
+    ).toEqual(["catchup()", "await recall()", "await listed()", "compacted(); fitted()"]);
     expect(turns.at(-2)).toMatch(/^stand\(\)\ncd\('.*'\)$/);
     // The turn writes the path with the separators of the platform, and the transcript keeps its last one as `/`.
-    expect(turns.at(-7)?.replaceAll("\\\\", "/")).toContain(
+    expect(turns.find((turn) => turn.startsWith(`#${read}\n`))?.replaceAll("\\\\", "/")).toContain(
       `#${read}\n${read}_path = '${String(found?.[4]).replaceAll("\\", "/")}'\n${read}_text = 'Use two spaces.'`,
     );
   } finally {
     await first.dispose();
   }
-  const later = new Session({ cwd, record, config, extensions: false });
-  const fresh = new Session({ cwd, config, extensions: false });
+  const later = new Session({ cwd, record, config, skills: false });
+  const fresh = new Session({ cwd, config, skills: false });
   try {
     later.open();
     fresh.open();
     expect([running(later), running(fresh)]).toEqual([
-      ["catchup", "memory", "skills", "compaction", "naming", "ouroboros", "web", "mcp"],
+      ["catchup", "memory", "skills", "compaction", "naming"],
       [],
     ]);
   } finally {

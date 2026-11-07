@@ -7,17 +7,30 @@ description = "The core of an AI harness: the engine in a sandbox, behind an asy
 license = "AGPL-3.0-only"
 repository = "https://github.com/uael/furb"
 readme = "README.md"
-# What the crate on crates.io holds: the engine and what its build reads, the extensions that the crate carries, the
+# What the crate on crates.io holds: the engine and what its build reads, the skills that the crate carries by name, the
 # doctrine, and the examples. The rest of the repository is other packages and their tests.
 include = [
   "/build.rs",
   "/build/*.rs",
   "/src/**",
-  "/extensions/*/SKILL.md",
-  "/extensions/*/*.py",
-  "/extensions/*/*.pyi",
-  "/extensions/*/tui.ts",
-  "/extensions/*/*/SKILL.md",
+  "/.agents/skills/catchup/SKILL.md",
+  "/.agents/skills/catchup/catchup.py*",
+  "/.agents/skills/memory/SKILL.md",
+  "/.agents/skills/memory/memory.py*",
+  "/.agents/skills/skills/SKILL.md",
+  "/.agents/skills/skills/skills.py*",
+  "/.agents/skills/compaction/SKILL.md",
+  "/.agents/skills/compaction/compaction.py*",
+  "/.agents/skills/compaction/tui.ts",
+  "/.agents/skills/naming/SKILL.md",
+  "/.agents/skills/naming/naming.py*",
+  "/.agents/skills/ouroboros/SKILL.md",
+  "/.agents/skills/ouroboros/ouroboros.py*",
+  "/.agents/skills/web/SKILL.md",
+  "/.agents/skills/web/web.py*",
+  "/.agents/skills/mcp/SKILL.md",
+  "/.agents/skills/mcp/mcp.py*",
+  "/.agents/skills/mcp/tui.ts",
   "/DOCTRINE.md",
   "/docs/examples/rust/*.rs",
   "/LICENSE",
@@ -35,6 +48,7 @@ version = "0.4.2"
 
 # The bar of the Rust of furb, which the skill rust says. A module that breaks it holds an expect at its top.
 [workspace.lints.rust]
+unsafe_code = "deny"
 unsafe_op_in_unsafe_fn = "deny"
 unreachable_pub = "warn"
 unused_qualifications = "warn"
@@ -60,6 +74,7 @@ undocumented_unsafe_blocks = "deny"
 multiple_unsafe_ops_per_block = "warn"
 allow_attributes = "deny"
 allow_attributes_without_reason = "deny"
+dbg_macro = "deny"
 
 [lints]
 workspace = true
@@ -97,19 +112,21 @@ path = "docs/examples/rust/door.rs"
 python = ["dep:pyo3"]
 extension-module = ["python", "pyo3/extension-module"]
 typescript = ["dep:napi", "dep:napi-derive", "dep:napi-build"]
+# What a test of another crate builds with: the host reads it in its dev-dependencies, so no build of a program has it.
+test-support = []
 
 [dependencies]
 # The sandbox the engine runs in, and its type checker, which is the gate of the
 # Kernel. A revision of the fork, since the interpreter the engine needs is not
 # released, and a revision reads the same interpreter at every build.
-monty = { git = "https://github.com/uael/monty", rev = "9f7098d6" }
-monty-type-checking = { git = "https://github.com/uael/monty", rev = "9f7098d6" }
-monty-types = { git = "https://github.com/uael/monty", rev = "9f7098d6" }
+monty = { git = "https://github.com/uael/monty", rev = "4ad90472" }
+monty-type-checking = { git = "https://github.com/uael/monty", rev = "4ad90472" }
+monty-types = { git = "https://github.com/uael/monty", rev = "4ad90472" }
 # A whole number past 64 bits, which a host hands in as its digits.
 num-bigint = "0.4"
 # The record: one fact per line, as JSON, whose numbers are read before anything rounds them. The catalog of models
 # is JSON too, read into the shapes it holds.
-serde_json = { version = "1", features = ["preserve_order", "raw_value"] }
+serde_json = { version = "1", features = ["float_roundtrip", "preserve_order", "raw_value"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 url = "2"
@@ -148,6 +165,10 @@ futures = "0.3"
 unsync = "0.2"
 # The zones in which the usage limit of the claude command line names the moment it ends.
 jiff = "0.2"
+# The walker of ripgrep, which reads .gitignore, and the matcher of helix, which matches the files that the picker of
+# a window offers on threads of its own as the walk gives them.
+ignore = "0.4"
+nucleo = "0.5"
 # A page of the web, which the extension web reads, as Markdown.
 htmd = "0.5"
 pyo3 = { version = "0.29.2", features = ["generate-import-lib", "indexmap", "multiple-pymethods"], optional = true }
@@ -179,6 +200,8 @@ win32job = "2"
 rig-core = { version = "=0.42.0", default-features = false, features = ["test-utils"] }
 # The validator of JSON Schema, which checks that a call of a binding of MCP sends what the tool asks.
 jsonschema = { version = "0.33", default-features = false }
+# The codec of a record of tests/replay that is too large to keep plain, which Cargo.lock holds already.
+zstd = { version = "0.11", default-features = false }
 
 [build-dependencies]
 napi-build = { version = "2", optional = true }
@@ -188,10 +211,16 @@ ruff_python_parser = "0.0.9"
 ruff_python_ast = "0.0.9"
 ruff_text_size = "0.0.9"
 
+# A crate of the workspace keeps the lines of its code, so a backtrace names a source line, and drops the rest of the
+# debug information, which only a debugger reads and which costs compile and link time at each sync.
+[profile.dev]
+debug = "line-tables-only"
+
 # A dependency is built once and run many times: the interpreter runs every word of every test. A build for
 # development builds each dependency as a release does, so a test runs them as a user does, and the crates of the
 # workspace stay quick to build again.
 [profile.dev.package."*"]
 opt-level = 3
+debug = false
 debug-assertions = false
 overflow-checks = false

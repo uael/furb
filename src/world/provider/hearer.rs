@@ -7,11 +7,12 @@ use std::{
 };
 
 use futures::{FutureExt, stream};
+use monty::ReplContinuationMode;
 use rig_core::completion::CompletionError;
 use tokio::sync::{mpsc, watch as holding};
 
 use super::{
-  Advertised, Provider, Refresh, Retries, Search, Settings, Told, Writes,
+  Advertised, Mode, Provider, Refresh, Retries, Search, Settings, Told, Writes,
   answer::{Answering, answered, cut},
   images::Images,
   model::{Ask, Model, requested, standing},
@@ -21,12 +22,17 @@ use super::{
   watch::{self, Watch},
   word::{AFTER, Found, RAN, STOPPED, afterward, ending, judged, kept, unquoted, writing},
 };
+use crate::fact;
+use crate::skill;
+use crate::value;
 use crate::{
   ear::{Co, say, spawned},
   engine::OPERATOR,
   fact::Fact,
   value::{Fault, Object},
 };
+use std::fmt;
+use std::mem;
 
 /// The ear of the provider as it hears a life: what the provider stands on, which a refresh
 /// changes, the replies that it took, and the stands and the searches that it answers.
@@ -34,7 +40,7 @@ pub(super) struct Hearer {
   life: String,
   directory: String,
   config: Option<PathBuf>,
-  extensions: Option<Vec<Advertised>>,
+  skills: Option<Vec<Advertised>>,
   models: Arc<RwLock<Vec<Model>>>,
   actor: String,
   thinking: Thinking,
@@ -44,8 +50,8 @@ pub(super) struct Hearer {
   retries: Option<Retries>,
   refresh: Option<Refresh>,
   gone: Vec<String>,
-  inspecting: bool,
-  held: bool,
+  members: Vec<String>,
+  mode: Mode,
   /// The system prompt of each request, as [`Provider::system`] sets it.
   system: Arc<str>,
   native: Search,
@@ -61,12 +67,12 @@ pub(super) struct Hearer {
 }
 
 impl Hearer {
-  pub(super) fn new(provider: Provider, life: String) -> Hearer {
+  pub(super) fn new(provider: Provider, life: String) -> Self {
     let native = provider.search();
     let Provider {
       directory,
       config,
-      extensions,
+      skills,
       models,
       actor,
       thinking,
@@ -76,8 +82,8 @@ impl Hearer {
       retries,
       refresh,
       gone,
-      inspecting,
-      held,
+      members,
+      mode,
       system,
     } = provider;
     let actor = actor.unwrap_or_else(|| {
@@ -87,11 +93,11 @@ impl Hearer {
         .first()
         .map_or_else(|| OPERATOR.to_owned(), |model| model.at(None))
     });
-    Hearer {
+    Self {
       life,
       directory,
       config,
-      extensions,
+      skills,
       models,
       actor,
       thinking,
@@ -101,8 +107,8 @@ impl Hearer {
       retries,
       refresh,
       gone,
-      inspecting,
-      held,
+      members,
+      mode,
       system,
       native,
       replies: Replies::default(),
@@ -130,12 +136,12 @@ impl Hearer {
   /// asks no command line.
   fn stand(&mut self, co: &mut Co<Replied>, a: &Fact) {
     let about = a.about().to_owned();
-    if self.held {
+    if self.mode == Mode::Held {
       say(co, Fact::says("started", &about, []));
       return;
     }
-    let word = crate::fact::named(a.by(), "rung");
-    let first = !std::mem::replace(&mut self.stood, true);
+    let word = fact::named(a.by(), "rung");
+    let first = !mem::replace(&mut self.stood, true);
     if let Some(refresh) = self.refresh.as_ref().filter(|_| !first && !word) {
       // Reading the settings asks each program of a model, which can take seconds, so the
       // stand awaits them as a task of the runtime of the ears, and every chain of the life
@@ -190,8 +196,9 @@ impl Hearer {
       &self.models.read().unwrap_or_else(PoisonError::into_inner),
       &self.directory,
       &self.actor,
-      self.extensions.as_deref(),
-      &self.config.clone().unwrap_or_else(|| crate::extension::Places::here().config),
+      self.skills.as_deref(),
+      &self.members,
+      &self.config.clone().unwrap_or_else(|| skill::Places::here().config),
     );
     say(co, Fact::says("done", &about, [given]));
     if word {
@@ -245,6 +252,9 @@ impl Hearer {
         Ask { system: &self.system, actor, chain, turns: turns.as_ref(), conversation: &key };
       requested(&held, asked, &mut self.images, wrote).map(|one| thinks(one, self.thinking))
     };
+    for uri in self.images.lost() {
+      self::told(co, chain, &format!("#{about} lost an image\n{about}_image = '{uri}'"));
+    }
     let streams = asked.as_ref().is_ok_and(|(model, _)| model.streams_its_word());
     let paused = co.call("paused", vec![Object::string(about)], vec![]).await;
     let paused = paused.ok().and_then(|one| one.as_ref().as_bool()).unwrap_or(false);
@@ -280,8 +290,9 @@ impl Hearer {
       Found::Unsettled => return,
       Found::Nothing => {
         // The word holds no fault so far, so its new statements run now, as the turn holds them:
-        // from its first line that is not blank. A statement whose clause starts at the end, as
-        // an `else`, waits.
+        // from its first line that is not blank, once monty calls them complete. A statement whose
+        // clause starts at the end, as an `else`, waits, and so does a word that monty calls
+        // incomplete or invalid, which the gate of a config turned off finds nothing against.
         let (word, end) = match watch.clause(end).then(|| watch::last(&word)).flatten() {
           Some(line) => {
             let held: String = word.split_inclusive('\n').take(line - 1).collect();
@@ -290,6 +301,9 @@ impl Hearer {
           None if watch.clause(end) => return,
           None => (word, end),
         };
+        if watch::complete(&word) != ReplContinuationMode::Complete {
+          return;
+        }
         let given = word.trim_start();
         let Some((part, before)) = watch.part(given) else { return };
         if writing(co, &rung, part, before).await {
@@ -421,7 +435,7 @@ impl Hearer {
     let about = a.about().to_owned();
     let word = |at: usize| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
     let (query, actor) = (word(1).unwrap_or_default(), word(2).unwrap_or_default());
-    if self.inspecting {
+    if self.mode != Mode::Live {
       let no = "a life that inspects searches nothing";
       say(co, Fact::says("done", &about, [Fault::refused(no).object()]));
       return;
@@ -433,7 +447,7 @@ impl Hearer {
       let got = search(query.clone()).await;
       Replied::Searched {
         id,
-        got: got.map(|answer| crate::value::Text::new(query, answer)).map_err(|no| no.to_string()),
+        got: got.map(|answer| value::Text::new(query, answer)).map_err(|no| no.to_string()),
       }
     };
     co.take(&about, stream::once(asked));
@@ -518,7 +532,7 @@ pub(super) struct Call {
 }
 
 /// What a search came to: its text, or why it gives none.
-pub(super) fn searched(co: &mut Co<Replied>, id: &str, got: Result<crate::value::Text, String>) {
+pub(super) fn searched(co: &mut Co<Replied>, id: &str, got: Result<value::Text, String>) {
   let got = got.map_or_else(|no| Fault::refused(no).object(), |one| one.object());
   say(co, Fact::says("done", id, [got]));
 }
@@ -530,7 +544,7 @@ pub(super) async fn released(hold: &mut holding::Receiver<bool>) -> Result<(), C
 }
 
 /// The failure of a call of a model whose reply went: no one reads what it would give.
-pub(super) fn reply_gone(why: impl std::fmt::Display) -> CompletionError {
+pub(super) fn reply_gone(why: impl fmt::Display) -> CompletionError {
   CompletionError::ProviderError(format!(
     "the reply went before its call of the model ended: {why}"
   ))
@@ -546,7 +560,7 @@ pub(super) enum Replied {
   Retried(Retried),
   Came(Came),
   Refreshed { about: String, got: Result<Settings, String> },
-  Searched { id: String, got: Result<crate::value::Text, String> },
+  Searched { id: String, got: Result<value::Text, String> },
 }
 
 /// A part that the model of a reply wrote: the id of the reply, and what the part added to its

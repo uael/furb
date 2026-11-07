@@ -115,7 +115,8 @@ test("⌥V switches the view of the life between main, the loom and the graph, w
       screen.mockInput.pressArrow("down");
       await soon(() => session.selected !== first);
       screen.mockInput.pressKey("[");
-      expect(app.cursor).toBeDefined();
+      // The step back shows once the crate gave the acts as they stood then.
+      await soon(() => app.cursor !== undefined);
       expect(await frame()).toContain("then");
       screen.mockInput.pressEscape();
       await soon(() => app.cursor === undefined);
@@ -191,6 +192,34 @@ test("the map lights the chain of the thread that the sidebar shows and the chai
       app.cursor = 4554;
       expect(app.stageOf().thread?.chains.has("chain23")).toBe(true);
       app.cursor = undefined;
+    },
+    { width: 152, height: 46 },
+    await recorded(),
+  ));
+
+test("a click on a program of the map selects its chain, as a click on a row of the loom does", async () =>
+  composing(
+    async ({ session, app, screen, frame }) => {
+      await session.refresh();
+      app.switchView("graph");
+      const shown = (await frame()).split("\n");
+      const stage = app.renderer.root.findDescendantById("life-stage");
+      expect(stage?.visible).toBe(true);
+      const top = stage?.y ?? 0;
+      const other = session.chains.find(
+        (chain) =>
+          chain.id !== session.selected &&
+          shown
+            .slice(top + 2, top + (stage?.height ?? 0))
+            .some((line) => line.includes(session.labelOf(chain.id))),
+      );
+      expect(other).toBeDefined();
+      const label = session.labelOf(other?.id ?? "");
+      const y = shown.findIndex((line, at) => at >= top + 2 && line.includes(label));
+      await screen.mockMouse.click((shown[y] ?? "").indexOf(label) + 1, y);
+      for (let tries = 0; tries < 100 && session.selected !== other?.id; tries++) await Bun.sleep(20);
+      expect(session.selected).toBe(other?.id ?? "");
+      app.switchView("main");
     },
     { width: 152, height: 46 },
     await recorded(),

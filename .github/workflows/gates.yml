@@ -11,13 +11,15 @@ on:
   schedule:
     - cron: "30 2 * * *"
 
-# One run of the gates for one branch: a push that follows another ends the run before it. On main, it ends only a run
-# that waits, since a group holds one run that waits at most, and the run in progress goes to its end. Only a run of
-# main that passes saves the caches of rust, and a run that a push ends during its save leaves a key that no later run
-# can save: a cancel on main made the bindings on Windows build their dependencies again on each run, in 12 minutes.
+# One run of the gates for one branch: a push that follows another ends the run before it. On main, and on the pull
+# request of w/converge (the head_ref of a pull request is its branch), it ends only a run that waits, since a group
+# holds one run that waits at most, and the run in progress goes to its end. Only a run of main that passes saves the
+# caches of rust, and a run that a push ends during its save leaves a key that no later run can save: a cancel on main
+# made the bindings on Windows build their dependencies again on each run, in 12 minutes. A run takes 30 to 40 minutes
+# and the aggregator pushes w/converge every 15 to 25, so a cancel at each push left no head of it with a verdict.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ !(github.ref == 'refs/heads/main' || github.head_ref == 'w/converge') }}
 
 permissions:
   contents: read
@@ -27,9 +29,6 @@ permissions:
 env:
   # The one uv every gate installs, so a run of today and a run of next month read the lock the same way.
   UV_VERSION: "0.12.17"
-  # A gate builds once and runs no debugger, so a build writes no debug information and keeps no incremental state.
-  CARGO_PROFILE_DEV_DEBUG: "0"
-  CARGO_PROFILE_DEV_INCREMENTAL: "false"
 
 jobs:
   scope:
@@ -44,8 +43,8 @@ jobs:
     # one commit in under 40 seconds.
     # A job that a push to main skips saves no cache of rust, and the cache that it saved before stays valid: its key
     # holds each manifest and the lock of cargo, and a change of them runs every job.
-    # A render of the gallery changes only files that no gate reads, so it runs this job and the job of the gates, by
-    # the ruling of the owner on 10-29, which script/scope.py holds.
+    # A render of the gallery changes only files that no gate reads, so it runs this job and the job of the gates, as
+    # script/scope.py holds.
     name: the scope
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -78,7 +77,10 @@ jobs:
     needs: scope
     if: needs.scope.outputs.hooks == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The clippy and the tests of the workspace are two builds of each crate. Main saves the cache of rust only from a
+    # job that passes, so a limit shorter than the two builds from nothing fails each later run too, since none finds
+    # a cache. The jobs of the crate and of the bindings hold 60 for the same cause.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -136,10 +138,21 @@ jobs:
         env:
           UV_NO_SYNC: "1"
       # The run syncs nothing, so it does not build the program furb that the setup leaves out.
-      - run: uv run pytest -q
+      - run: uv run python script/budget.py pytest -- uv run pytest -q --durations=25
         env:
           UV_NO_SYNC: "1"
           FURB_UNCOUNTED: ${{ runner.os == 'Windows' && '*/src/furb/life.py' || '' }}
+      # What the walls of the engine and of the doctrine leave, as the script of the tokens says it, kept as an artifact.
+      - if: always() && runner.os == 'Linux'
+        env:
+          UV_NO_SYNC: "1"
+        run: |
+          mkdir -p "$RUNNER_TEMP/measures"
+          uv run python script/tokens.py > "$RUNNER_TEMP/measures/tokens.txt" 2>&1 || echo "exit $?" >> "$RUNNER_TEMP/measures/tokens.txt"
+      - if: always() && runner.os == 'Linux'
+        uses: ./.github/actions/measures
+        with:
+          name: tokens
       - uses: ./.github/actions/clear
 
   crate:
@@ -223,7 +236,7 @@ jobs:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile
       # The job of the crate runs the clippy and the tests of the crate with this feature on Windows and on macOS, and
-      # the job of the speed of the TUI on Linux.
+      # the hooks on Linux.
       - run: bun run build
       - run: bun run docs
       - run: git diff --exit-code -- bind/typescript/index.d.cts tui/README.md
@@ -238,10 +251,10 @@ jobs:
     # The budget of the speed of the TUI holds on Linux, on a machine that runs no other work while it measures: the
     # first frame of a life of 160000 facts, the frames of the renderer at 60 each second while it scrolls and streams,
     # and the cost of a new fact against that in a life of a tenth of the size, each against a measure of the same
-    # machine, since one runner of ubuntu-latest is half as fast as another. Then the job runs the clippy and the tests
-    # of the crate with the feature of the bindings. It runs beside the bindings on Linux, whose tests take most of
-    # their time, so neither job waits for the other.
-    name: the crate and the speed of the TUI on ubuntu-latest
+    # machine, since one runner of ubuntu-latest is half as fast as another. It runs beside the bindings on Linux,
+    # whose tests take most of their time, so neither job waits for the other. The clippy and the tests of the crate
+    # with the feature of the bindings run in the hooks, and not here a second time.
+    name: the speed of the TUI on ubuntu-latest
     needs: scope
     if: needs.scope.outputs.code == 'true'
     runs-on: ubuntu-latest
@@ -266,9 +279,22 @@ jobs:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile
       - run: bun run build
-      - run: bun run bench
-      - run: cargo clippy --all-targets --features typescript -- -D warnings
-      - run: cargo test --features typescript
+      # The measures of the run stay as an artifact, so an audit reads the exact numbers of each run and not the rounded
+      # lines of its log, and a run that goes over a budget keeps them too.
+      - env:
+          FURB_BENCH_JSON: ${{ runner.temp }}/measures/bench.jsonl
+        run: |
+          mkdir -p "$RUNNER_TEMP/measures"
+          bun run bench 2>&1 | tee "$RUNNER_TEMP/measures/bench.log"
+      - if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/measures"
+          printf '{"fixture_bytes":%s,"fixture_lines":%s}\n' "$(wc -c < tui/fixtures/conductor.jsonl)" \
+            "$(wc -l < tui/fixtures/conductor.jsonl)" > "$RUNNER_TEMP/measures/fixture.json"
+      - if: always()
+        uses: ./.github/actions/measures
+        with:
+          name: bench
 
   gates:
     # The one check that reports on each pull request and stands for all the gates, so that a ruleset of main requires

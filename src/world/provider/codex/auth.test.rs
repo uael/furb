@@ -1,10 +1,8 @@
-#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
-
+use crate::testing::pause;
 use std::{
   io::{Read, Write},
   net::{TcpListener, TcpStream},
   sync::mpsc,
-  thread,
   time::Duration,
 };
 
@@ -13,16 +11,18 @@ use tokio::sync::watch;
 
 use super::{
   AuthError, Catalog as Account, Credential, Effort, Listing, SignIn, callback_code, directory,
-  now, random, save, status,
+  now, publish, random, save, status, subscribe,
 };
+use crate::testing;
 use crate::{ear::reactor, world::Catalog};
+use std::fs;
 
-struct Scope(crate::testing::Yard);
+struct Scope(testing::Yard);
 
 impl Scope {
-  fn profile(account: &str, cached: &str) -> Scope {
+  fn profile(account: &str, cached: &str) -> Self {
     let root =
-      Scope(crate::testing::Yard::unmade(format!("furb-auth-{}", random().expect("random bytes"))));
+      Self(testing::Yard::unmade(format!("furb-auth-{}", random().expect("random bytes"))));
     let path = directory(Some(&root.0));
     save(
       &path.join("codex.json"),
@@ -57,7 +57,7 @@ impl Scope {
   }
 
   fn catalog(&self, enabled: bool) -> Catalog {
-    std::fs::write(self.0.join("config.json"), format!(r#"{{"providers":{{"codex":{enabled}}}}}"#))
+    fs::write(self.0.join("config.json"), format!(r#"{{"providers":{{"codex":{enabled}}}}}"#))
       .expect("provider settings");
     Catalog::of(&IndexMap::new(), None, None, |_| None)
       .configured(&self.0, Some(&self.0))
@@ -74,7 +74,7 @@ fn enabling_subscription_models_uses_the_account_window_and_supported_efforts() 
   assert_eq!(model.window, 475_000);
   assert_eq!(model.efforts.iter().map(|one| one.0.as_str()).collect::<Vec<_>>(), ["low", "high"]);
   assert!(model.images);
-  std::fs::write(
+  fs::write(
     scope.0.join("config.json"),
     r#"{"providers":{"codex":{"model_context_window":1000000}}}"#,
   )
@@ -102,10 +102,10 @@ fn the_credential_and_its_directory_are_private() {
   let scope = Scope::profile("account", "account");
   let path = directory(Some(&scope.0));
   assert_eq!(
-    std::fs::metadata(path.join("codex.json")).expect("credential").permissions().mode() & 0o777,
+    fs::metadata(path.join("codex.json")).expect("credential").permissions().mode() & 0o777,
     0o600
   );
-  assert_eq!(std::fs::metadata(path).expect("directory").permissions().mode() & 0o777, 0o700);
+  assert_eq!(fs::metadata(path).expect("directory").permissions().mode() & 0o777, 0o700);
 }
 
 #[test]
@@ -125,7 +125,7 @@ fn the_browser_callback_rejects_another_state_and_reads_a_split_request() {
   assert!(refusal.starts_with("HTTP/1.1 400 Bad Request"));
   let mut browser = TcpStream::connect(address).expect("browser");
   browser.write_all(b"GET /auth/call").expect("first packet");
-  thread::sleep(Duration::from_millis(20));
+  pause(Duration::from_millis(20));
   browser.write_all(b"back?code=accepted&state=expected HTTP/1.1\r\n\r\n").expect("second packet");
   let mut response = String::new();
   browser.read_to_string(&mut response).expect("response");
@@ -166,4 +166,34 @@ fn a_refusal_asks_for_a_new_sign_in_only_when_the_account_is_at_fault() {
   assert_eq!(down.to_string(), "OpenAI sign-in failed (HTTP 503). Try again.");
   assert!(AuthError::ListRefused { status: 403 }.login());
   assert!(!AuthError::ListRefused { status: 500 }.login());
+}
+
+#[test]
+fn a_subscriber_sees_each_change_of_a_sign_in_in_order_and_a_late_one_sees_the_current_state() {
+  let scope = Scope::profile("account", "another");
+  let path = directory(Some(&scope.0));
+  let mut seen = subscribe(Some(&scope.0));
+  assert_eq!(*seen.borrow_and_update(), SignIn::Disconnected, "the state at once");
+  let waiting = SignIn::Waiting { url: "https://auth.example/login".to_owned() };
+  publish(&path, waiting.clone());
+  assert!(seen.has_changed().expect("the sign-in stands"));
+  assert_eq!(*seen.borrow_and_update(), waiting);
+  publish(&path, SignIn::Connecting);
+  assert_eq!(*seen.borrow_and_update(), SignIn::Connecting);
+  super::cancel(Some(&scope.0));
+  assert!(seen.has_changed().expect("the sign-in stands"));
+  assert_eq!(*seen.borrow_and_update(), SignIn::Canceled);
+  publish(&path, SignIn::Failed("no network".to_owned()));
+  assert_eq!(*seen.borrow_and_update(), SignIn::Failed("no network".to_owned()));
+  super::needs_login(&path);
+  let again = SignIn::NeedsLogin(super::AGAIN.to_owned());
+  assert_eq!(*seen.borrow_and_update(), again);
+  assert!(!seen.has_changed().expect("the sign-in stands"), "no change is left unseen");
+  let late = subscribe(Some(&scope.0));
+  assert_eq!(*late.borrow(), again, "a late subscriber sees the current state at once");
+  assert_eq!(
+    status(Some(&scope.0)),
+    again,
+    "the state that status reads is the one that the watch holds"
+  );
 }

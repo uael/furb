@@ -9,8 +9,8 @@ ROOT = Path(__file__).resolve().parents[2]
 CLEAN = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "COVERAGE_PROCESS_"))}
 GITS = [
   "test/outside/test_paths.py::test_a_folder_that_a_rule_of_git_ignores_as_a_folder_stands_before_a_build_makes_it",
-  ".furb/extensions/conductor/test/test_conductor.py"
-  "::test_settle_gives_no_workspace_with_work_off_a_branch_and_gives_one_on_the_head_of_a_merged_pr",
+  ".furb/skills/conductor/test/test_conductor.py"
+  "::test_a_cycle_starts_on_a_new_print_a_floor_after_the_start_of_the_last_and_sends_each_failure_to_its_topic",
 ]
 
 

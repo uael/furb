@@ -1,0 +1,10 @@
+# No build keeps incremental state: it grows in each worktree, and the worktrees share one target. The measures stand in
+# the commits that made this file.
+[build]
+incremental = false
+
+# The path of the worktree. The build script of furb reads it, so that a build in a worktree rebuilds a crate of the
+# workspace that another worktree built last in the target that they share: cargo names such a crate by its path inside
+# the workspace and calls it fresh by the time of its files, so a worktree would test the code of another.
+[env]
+FURB_TREE = { value = ".", relative = true, force = true }

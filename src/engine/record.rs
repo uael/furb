@@ -27,6 +27,15 @@ pub(crate) fn left(record: &[Object]) -> Vec<String> {
   started.map(|a| a.about().to_owned()).collect()
 }
 
+/// The questions that the entries of a record hold, by name: the acts that an earlier life made.
+/// The word of such a run ran within the bound of a turn when its life made it, or the record
+/// keeps the end that the bound gave it, so a replay steps it with no bound, and a machine under
+/// load never ends it otherwise than the record does.
+pub(crate) fn settled(record: &[Object]) -> HashSet<String> {
+  let facts = record.iter().filter_map(|one| entry(&one.as_ref(), 0).and_then(Fact::of));
+  facts.filter(Fact::question).map(|a| a.about().to_owned()).collect()
+}
+
 /// The acts that the entries of a record park, each by its name and its kind, in the order of the
 /// record: an act of a kind that [`PARKS`] names, which the record shows started in [`CRASHES`]
 /// lives or more and not done. The outside says an act started once in each life that takes it, and

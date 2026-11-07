@@ -13,11 +13,11 @@ const crate = [
   "build.rs",
   "DOCTRINE.md",
   "src/**/*.{rs,py,pyi,json}",
-  "extensions/*/SKILL.md",
-  "extensions/*/*.py",
-  "extensions/*/*.pyi",
-  "extensions/*/tui.ts",
-  "extensions/*/*/SKILL.md",
+  ".agents/skills/*/SKILL.md",
+  ".agents/skills/*/*.py",
+  ".agents/skills/*/*.pyi",
+  ".agents/skills/*/tui.ts",
+  ".agents/skills/*/*/SKILL.md",
 ];
 /** What tsc reads, beside the types that the native build wrote. */
 const side = ["bind/typescript/src/**/*", "bind/typescript/tsconfig.json", "bind/typescript/index.d.cts"];

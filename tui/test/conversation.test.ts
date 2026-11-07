@@ -9,11 +9,12 @@ test("the open of a rung that its caller wrote shows as its word, under a header
     kind: "rung",
     by: "operator",
     on: "chain1",
+    chain: "chain1",
     words: ["k = 1"],
-    done: true,
-    value: null,
-    paused: false,
+    phase: { phase: "done", value: null },
+    operator: false,
     began: 1,
+    state: "done",
   };
   const turns = [["user", "#rung1 by operator\nrung1_word = 'k = 1'", null, null]] as unknown as Turn[];
   expect(conversation(turns, (id) => (id === act.id ? act : undefined)).map((item) => item.type)).toEqual([

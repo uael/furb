@@ -21,22 +21,30 @@ use futures::stream;
 use serde_json::value::RawValue;
 use sha2::{Digest, Sha256};
 
-use monty_types::unstable::{MontyGraph, MontyNode};
+use monty_types::{
+  NamedValues,
+  unstable::{MontyGraph, MontyNode},
+};
 
-use self::error::StoreError;
+use self::{error::StoreError, lines::Head};
 use super::{beside, free};
 use crate::{
   ENGINE, KERNEL,
   ear::{Co, Ear, Hooks, Next, With, hearing, say},
   engine::ROOT,
   fact::Fact,
-  value::{Fault, Object, ObjectRef},
+  sand::{Nobody, Sand},
+  value::{Fault, Object, ObjectRef, entry},
   wire::{built, whole},
 };
 
+use crate::checkpoint;
+use crate::fact;
 pub use lines::Lines;
 pub use schema::{CHECKPOINT_SCHEMA, RECORD_SCHEMA, Schema, SchemaError};
 pub use sqlite::Sqlite;
+use std::io;
+use tokio::time;
 
 /// The place that keeps the record of a life, which a host can write for a place of its own and give to `keeping`.
 ///
@@ -95,40 +103,60 @@ pub(crate) fn each(path: impl AsRef<Path>, take: &mut dyn FnMut(Object)) -> Resu
   Ok(Format::of(path).each(path, take)?)
 }
 
-/// The entries that the store kept at a path whose fact is of one of some kinds, in order, read with no lease and
-/// changed in nothing. A file of lines is read from the head of each line, and parses only the lines of those kinds.
-pub fn heads(path: impl AsRef<Path>, kinds: &[&str]) -> Result<Vec<Object>, Fault> {
-  let path = path.as_ref();
-  let format = Format::of(path);
-  if format == Format::Lines {
-    let starts: Vec<String> = kinds.iter().map(|kind| format!("[[\"{kind}\",")).collect();
-    return Ok(lines::heads(path, &starts)?);
-  }
-  let of = |entry: &Object| {
-    let fact = entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
-    fact.is_some_and(|one| kinds.contains(&one.kind()))
-  };
-  Ok(format.kept(path)?.into_iter().filter(of).collect())
+/// What the heads of the lines of a record tell, which one pass over the record reads: the entries
+/// of its facts made and of its checkpoints, in order, the place of each checkpoint among the
+/// entries, counted from 0, and the standing that its last answered stand gave.
+#[derive(Default)]
+pub struct Marks {
+  pub heads: Vec<Object>,
+  pub checkpoints: Vec<usize>,
+  pub standing: Option<Object>,
 }
 
-/// The standing that the last answered stand of the record at a path gave, read as [`heads`]
-/// reads, or nothing when it holds none. A file of lines parses only the lines of the done of a
-/// stand.
-pub fn standing(path: impl AsRef<Path>) -> Result<Option<Object>, Fault> {
+impl Marks {
+  fn hear(&mut self, place: usize, entry: Object) {
+    if let Some(standing) = stood(&entry) {
+      self.standing = Some(standing);
+      return;
+    }
+    let kind = entry.as_ref().items().and_then(|held| Fact::of(*held.first()?));
+    match kind.as_ref().map(Fact::kind) {
+      Some(checkpoint::CHECKPOINT) => {
+        self.checkpoints.push(place);
+        self.heads.push(entry);
+      }
+      Some(MADE) => self.heads.push(entry),
+      _ => {}
+    }
+  }
+}
+
+/// The marks of the record at a path, read with no lease and changed in nothing. A file of lines is
+/// read from the head of each line in one pass, and parses only the lines of a fact made, of a
+/// checkpoint and of the done of a stand.
+pub fn marks(path: impl AsRef<Path>) -> Result<Marks, Fault> {
   let path = path.as_ref();
   let format = Format::of(path);
-  let entries = if format == Format::Lines {
-    lines::heads(path, &[r#"[["done","stand"#.to_owned()])?
+  let mut marks = Marks::default();
+  if format == Format::Lines {
+    let heads = [Head::Kind(MADE), Head::Kind(checkpoint::CHECKPOINT), Head::Done("stand")];
+    lines::heads(path, &heads, &mut |place, entry| marks.hear(place, entry))?;
   } else {
-    format.kept(path)?
-  };
-  Ok(entries.iter().rev().find_map(|entry| {
-    let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
-    let value = fact.word(0)?;
-    let stood =
-      fact.kind() == "done" && crate::fact::named(fact.about(), "stand") && value.items().is_some();
-    stood.then(|| value.to_owned())
-  }))
+    for (place, entry) in format.kept(path)?.into_iter().enumerate() {
+      marks.hear(place, entry);
+    }
+  }
+  Ok(marks)
+}
+
+/// The standing that an entry gives, when it is the done of a stand of the root: the value of that
+/// done, when it is a list. This is the one place that finds the answer of a stand.
+pub fn stood(entry: &Object) -> Option<Object> {
+  let fact = Fact::of(*entry.as_ref().items()?.first()?)?;
+  let value = fact.word(0)?;
+  let stood =
+    fact.kind() == "done" && fact::named(fact.about(), "stand") && value.items().is_some();
+  stood.then(|| value.to_owned())
 }
 
 /// The kind of the fact by which a record names the build that made it: `("made", "chain1",
@@ -183,6 +211,34 @@ pub fn texts(record: &[Object]) -> Result<(String, String), Fault> {
     return Err(Fault::refused(format!(
       "the record names the engine {named}, and the texts that it holds are another engine"
     )));
+  }
+  adapted(&named, source, &kernel)
+}
+
+/// The adapters of the engines of this major, by the digest of an engine, as `src/furb/adapters.py`
+/// says.
+const ADAPTERS: &str = include_str!("../furb/adapters.py");
+
+/// The texts of the engine that a digest names and of its Kernel: the engine with each change of
+/// its adapter made, or as it is when no adapter names it, and the Kernel as `kernel` of the
+/// adapters gives it. A change whose text the engine does not hold is refused, since the adapter
+/// is then of another engine.
+fn adapted(named: &str, mut source: String, kernel: &str) -> Result<(String, String), Fault> {
+  let mut inputs = NamedValues::new();
+  inputs.push("__named", Object::string(named));
+  inputs.push("__kernel", Object::string(kernel));
+  inputs.push("__ours", Object::string(KERNEL));
+  let word = format!("{ADAPTERS}\n(ADAPTERS.get(__named, []), kernel(__kernel, __ours))");
+  let got = Sand::new().run(&word, inputs, &mut Nobody("the adapters"))?;
+  let got = got.as_ref();
+  let kernel = entry(&got, 1).and_then(|one| one.as_str().map(str::to_owned)).unwrap_or_default();
+  for change in entry(&got, 0).and_then(|one| one.items()).unwrap_or_default() {
+    let text = |at| entry(&change, at).and_then(|one| one.as_str().map(str::to_owned));
+    let (Some(old), Some(new)) = (text(0), text(1)) else { continue };
+    if !source.contains(&old) {
+      return Err(Fault::refused(format!("the adapter of the engine {named} finds no {old:?}")));
+    }
+    source = source.replacen(&old, &new, 1);
   }
   Ok((source, kernel))
 }
@@ -290,7 +346,7 @@ pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>
   let held = Rc::clone(&store);
   // A record whose last checkpoint has no fact made after it is new to the build that goes on from it.
   let new = entries.is_empty()
-    || crate::checkpoint::last(&entries).is_some_and(|at| made(&entries[at + 1..]).is_none());
+    || checkpoint::last(&entries).is_some_and(|at| made(&entries[at + 1..]).is_none());
   let kept = hearing(&["keep", "chain"], move |mut co: Co<()>| async move {
     // What the ear told the operator last, and whether a try waits for its time.
     let (mut said, mut again) = (Told::Room, false);
@@ -314,7 +370,7 @@ pub fn keeping(store: impl Store + 'static) -> Result<(Vec<Object>, Box<dyn Ear>
         Some(fault) => {
           if !again {
             again = true;
-            co.work(stream::once(tokio::time::sleep(AGAIN)));
+            co.work(stream::once(time::sleep(AGAIN)));
           }
           if said != Told::Stopped {
             // A message that cannot go leaves what the ear said, so the next pass says it again.
@@ -349,7 +405,7 @@ fn stopped(fault: &Fault) -> String {
   format!(
     "The record of this life cannot be written: {}. The life goes on, and holds in memory each fact \
      that the record does not hold yet. It tries again until the record takes them, in order, and tells \
-     you then. Until then, an end of the life loses them: give the disk room, and keep the life open.",
+     you then. Give the disk room.",
     fault.message()
   )
 }
@@ -381,8 +437,7 @@ impl<S: Store> Held<S> {
     (free < LOW && *said == Told::Room).then(|| {
       format!(
         "The disk of the record of this life is almost full: {} has {} MB left. When it is full, the \
-         life holds each fact in memory until the record takes them again, and an end of the life then \
-         loses them: give the disk room.",
+         life holds each fact in memory until the record takes them again: give the disk room.",
         folder.display(),
         free / 1_000_000
       )
@@ -517,7 +572,7 @@ impl Drop for Lease {
     reason = "a drop cannot return the fault of an unlock, and the kernel ends the lock with the process"
   )]
   fn drop(&mut self) {
-    let _: std::io::Result<()> = self.0.unlock();
+    let _: io::Result<()> = self.0.unlock();
   }
 }
 

@@ -1,12 +1,18 @@
 import { afterAll, expect, setSystemTime, test } from "bun:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { RGBA } from "@opentui/core";
 import { setRendererCapabilities } from "@opentui/core/testing";
+import { imageReferences } from "furb";
+import { isDone } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
+import type { clipboardImage } from "../src/clipboard.ts";
 import { removeDemoDirectories } from "../src/demo.ts";
 import { emojis } from "../src/emoji.ts";
 import { count } from "../src/format.ts";
 import { palettes } from "../src/theme.ts";
-import { cellAt, composing, drawn } from "./composing.ts";
+import { cellAt, composing, drawn, framed } from "./composing.ts";
 import { idle } from "./idle.ts";
 
 // Each test opens a demo session, with its worker and its record, as the tests of the App do, and so has their time:
@@ -158,7 +164,11 @@ test("the shape picker marks the shape of the next prompt and runs /shape, and /
       await idle(session);
       // The prompt of the operator and a prompt that a rung made each hold a program once the model answers it.
       await session.command('/run prompt("str", message="Summarize the notes.")');
-      await until(session, () => session.activity.some((act) => act.id === "prompt2"));
+      // The program of a prompt comes in a read of its own, which a slow runner gives after the prompt is done, and the
+      // picker offers only the prompts that hold a program when it opens.
+      await until(session, () =>
+        session.activity.some((act) => act.id === "prompt2" && session.editable(act)),
+      );
       await idle(session);
       app.ladders();
       shown = await frame();
@@ -231,12 +241,11 @@ test("a sent text leaves its draft at once, and a program under edit opens from 
   ));
 
 test("the completion of a token reads the text before the cursor, whatever the width of the characters before it", () =>
-  composing(async ({ session, app, screen, frame }) => {
-    await session.projectFiles();
+  composing(async ({ app, screen, frame }) => {
     // A combining mark is inserted with the letter it marks, as a paste or an input method gives it.
     app.composer.insertText("Compare cafe\u0301 with ");
     await screen.mockInput.typeText("@READ");
-    await frame();
+    await framed(frame, (shown) => shown.includes("@README.md"), "the file README.md");
     screen.mockInput.pressTab();
     expect(app.composer.plainText).toBe("Compare cafe\u0301 with @README.md ");
     app.composer.setText("");
@@ -249,8 +258,7 @@ test("the completion of a token reads the text before the cursor, whatever the w
 
 test("a click on a suggestion completes the token as it stands when it is clicked", () =>
   composing(
-    async ({ session, app, screen, frame, click }) => {
-      await session.projectFiles();
+    async ({ app, screen, frame, click }) => {
       for (const [typed, more, completed] of [
         ["/rewi", "n", "/rewind "],
         ["Read @READ", "M", "Read @README.md "],
@@ -259,7 +267,9 @@ test("a click on a suggestion completes the token as it stands when it is clicke
         await screen.mockInput.typeText(typed);
         await frame();
         await screen.mockInput.typeText(more);
-        await click(completed.trim().split(" ").at(-1) ?? "");
+        const suggested = completed.trim().split(" ").at(-1) ?? "";
+        await framed(frame, (shown) => shown.includes(suggested), suggested);
+        await click(suggested);
         expect(app.composer.plainText).toBe(completed);
       }
     },
@@ -298,6 +308,23 @@ test("a slash command typed under edit runs as the command it names, and the pro
     true,
   ));
 
+test("a message that the queue shortcut sends comes back to its composer when the enqueue is rejected, and newer text stays", () =>
+  composing(async ({ session, app, screen }) => {
+    session.enqueue = async () => {
+      throw new Error("Not yet: the checks run.");
+    };
+    app.composer.setText("a follow-up");
+    screen.mockInput.pressEnter({ meta: true });
+    expect(app.composer.plainText).toBe("");
+    await Bun.sleep(100);
+    expect(app.composer.plainText).toBe("a follow-up");
+    // Text typed while the enqueue is pending stays, and is not replaced by the message that came back.
+    screen.mockInput.pressEnter({ meta: true });
+    app.composer.setText("newer text");
+    await Bun.sleep(50);
+    expect(app.composer.plainText).toBe("newer text");
+  }));
+
 test("Up and Down walk the history from the edges of the input, and Up on an empty input takes back a queued message", () =>
   composing(
     async ({ session, app, screen }) => {
@@ -330,12 +357,13 @@ test("Up and Down walk the history from the edges of the input, and Up on an emp
       screen.mockInput.pressArrow("down");
       expect(app.composer.plainText).toBe("from");
       app.composer.setText("");
-      session.queueHeld = true;
-      session.enqueue("a queued message");
-      expect(session.queued).toHaveLength(1);
+      // A pause holds the chain, so the life keeps the follow-up in its queue.
+      await session.engine.pause(session.selected);
+      await session.enqueue("a queued message");
+      await until(session, () => session.queued.length === 1);
       screen.mockInput.pressArrow("up");
-      expect(app.composer.plainText).toBe("a queued message");
-      expect(session.queued).toEqual([]);
+      await until(session, () => app.composer.plainText === "a queued message");
+      await until(session, () => session.queued.length === 0);
     },
     { width: 120, height: 44, kittyKeyboard: true },
   ));
@@ -396,7 +424,7 @@ test("Escape twice opens the rewind tree in the feed, which keys move, fold, and
       screen.mockInput.pressEscape();
       await frame();
       expect(rows().some((id) => id.startsWith("tree-"))).toBe(false);
-      expect(session.selected).toBe(last?.on ?? "");
+      expect(session.selected).toBe(last?.chain ?? "");
     },
     { width: 132, height: 44, kittyKeyboard: true },
     true,
@@ -584,11 +612,11 @@ test("the usage of a fork counts the answers of the fork alone, and not those of
 test("a branch that a word made with a filter shows the messages that it took, with their answers, and not the one it left out", () =>
   composing(async ({ session, frame, screen }) => {
     await session.submit("Explore this project.");
-    await until(session, () => session.activity.some((act) => session.isUserPrompt(act) && act.done));
+    await until(session, () => session.activity.some((act) => session.isUserPrompt(act) && isDone(act)));
     await session.submit("Read the notes again.");
     await until(
       session,
-      () => session.activity.filter((act) => session.isUserPrompt(act) && act.done).length === 2,
+      () => session.activity.filter((act) => session.isUserPrompt(act) && isDone(act)).length === 2,
     );
     const origin = session.selected;
     const [first] = session.activity.filter((act) => session.isUserPrompt(act));
@@ -603,8 +631,37 @@ test("a branch that a word made with a filter shows the messages that it took, w
     const shown = await drawn(frame, screen.renderer.root);
     expect(shown).toContain("It takes the message before it, with its answer.");
     expect(shown).toContain("Read the notes again.");
-    expect(shown).not.toContain("Explore this project.");
+    // The sidebar lists the threads of the whole life, so the messages are looked for in the feed, left of the sidebar.
+    const side =
+      shown
+        .split("\n")
+        .find((line) => line.includes("Workspaces"))
+        ?.indexOf("Workspaces") ?? -1;
+    expect(side).toBeGreaterThan(0);
+    const feed = shown
+      .split("\n")
+      .map((line) => line.slice(0, side))
+      .join("\n");
+    expect(feed).toContain("It takes the message before it, with its answer.");
+    expect(feed).toContain("Read the notes again.");
+    expect(feed).not.toContain("Explore this project.");
     expect(shown).not.toContain("Watch a life");
+  }));
+
+test("a click on the effort beside the model in the line under the input opens the efforts, and the one chosen is the effort", () =>
+  composing(async ({ session, frame, click }) => {
+    const { effort } = session.actorChoice;
+    const other = ["low", "medium", "high"].find((one) => one !== effort);
+    if (!other) throw new Error("No other effort.");
+    expect(await frame()).toContain(`/${effort}`);
+    await click(`/${effort}`);
+    await until(session, () => true);
+    const shown = await frame();
+    expect(shown).toContain("Effort of");
+    expect(shown).toContain(other);
+    await click(other);
+    await until(session, () => session.actorChoice.effort === other);
+    expect(await frame()).toContain(`/${other}`);
   }));
 
 test("a paused chain says so at the end of its feed and in the footer, and Wake wakes it", () =>
@@ -626,7 +683,7 @@ test("a paused chain names no cancel as its cause, since a word that closed its 
       word: "from asyncio import CancelledError\nraise CancelledError()",
       on: session.selected,
     });
-    await until(session, () => session.activity.some((act) => act.id === id && act.done));
+    await until(session, () => session.activity.some((act) => act.id === id && isDone(act)));
     await session.submit("/pause");
     await until(session, () => session.paused);
     const rows = (await frame()).split("\n");
@@ -639,7 +696,7 @@ test("a paused chain names no cancel as its cause, since a word that closed its 
 test("a paused chain names the act that paused it and its own error, and no older error of a word", () =>
   composing(async ({ session, frame }) => {
     const id = await session.engine.rung({ word: 'read("scratch://missing.txt")', on: session.selected });
-    await until(session, () => session.activity.some((act) => act.id === id && act.done));
+    await until(session, () => session.activity.some((act) => act.id === id && isDone(act)));
     await session.engine.pause(session.selected, { why: "reply9 found no ear to take it" });
     await until(session, () => session.paused);
     const rows = (await frame()).split("\n");
@@ -686,7 +743,7 @@ test("the footer offers the keys of the top layer that acts, and a click on one 
       await until(session, () => session.editing === undefined);
       app.composer.setText("Think until I cancel.");
       await app.submit();
-      await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
+      await until(session, () => session.activity.some((act) => act.kind === "rung" && !isDone(act)));
       expect(await footer()).toEndWith("⌃P commands   ⌃C take back   Esc pause   F1 help");
       screen.mockInput.pressEscape();
       await until(session, () => session.paused);
@@ -728,7 +785,7 @@ test("a cancelled message keeps its place in the feed, and its cancel reads as a
   composing(async ({ session, app, screen, frame }) => {
     app.composer.setText("Think until I cancel.");
     await app.submit();
-    await until(session, () => session.activity.some((act) => act.kind === "rung" && !act.done));
+    await until(session, () => session.activity.some((act) => act.kind === "rung" && !isDone(act)));
     await session.submit("/cancel");
     await idle(session);
     await session.submit("/newthread");
@@ -770,11 +827,11 @@ test("a word that the gate refused shows a cross on the line that the refusal na
       await idle(session);
       await session.refresh();
       const lines = (await frame()).split("\n");
-      const refused = lines.findIndex((line) => /1✗ +```python/.test(line));
+      const refused = lines.findIndex((line) => /1 {2}✗ +```python/.test(line));
       expect(refused).toBeGreaterThan(0);
       expect(lines[refused + 1]).toMatch(/^[ ┃]+# error\[invalid-syntax\].*Got unexpected token/);
       // The numbers of the thread go on from the refused word to the word that replaced it.
-      const retried = lines.findIndex((line) => / 4 {2}close\("Here it is again as plain Python/.test(line));
+      const retried = lines.findIndex((line) => / 4 {4}close\("Here it is again as plain Python/.test(line));
       expect(retried).toBeGreaterThan(refused + 1);
       expect(lines.slice(retried).join("\n")).not.toContain("✗");
       expect(lines.join("\n")).not.toContain("failed");
@@ -873,4 +930,39 @@ test("The input draws the rest of a line from the history in grey, and Right, Ct
     app.composer.setText("");
     await screen.mockInput.typeText("something else");
     expect(await frame()).not.toContain("tell me about");
+  }));
+
+const PIXEL = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=";
+
+test("a pasted image takes the name image-N and its mark goes into the text at the caret, so the message keeps the order of its text and its images", () =>
+  composing(async ({ app, session, frame }) => {
+    const directory = await mkdtemp(join(tmpdir(), "furb-paste-"));
+    try {
+      // The clipboard writes the image to a file named by the stem that the paste hands it, as the real one does.
+      const clipboard: typeof clipboardImage = async (use, stem = "image") => {
+        const file = join(directory, `${stem}.png`);
+        await writeFile(file, Buffer.from(PIXEL, "base64"));
+        return await use(file);
+      };
+      const paste = () => app.pasteImage(undefined, clipboard);
+      app.composer.setText("see  and  now");
+      app.composer.cursorOffset = 4;
+      await paste();
+      app.composer.cursorOffset = app.composer.plainText.indexOf(" now");
+      await paste();
+      const text = app.composer.plainText;
+      const named = imageReferences(text);
+      // Two images in the middle of one line: the text and the marks stand in the order of the paste.
+      expect(named.map((one) => one.name)).toEqual(["image-1.png", "image-2.png"]);
+      expect(text).toBe(`see ${named[0]?.text} and ${named[1]?.text} now`);
+      // The mark stands in the text, and no row above the input lists the image.
+      expect(await frame()).not.toMatch(/\d+ images? attached/);
+      await app.submit();
+      const prompts = await session.engine.transcript({ on: session.selected, of: "prompt" });
+      const sent = String(prompts.at(-1)?.[5]);
+      expect(sent).toBe(text);
+      expect(imageReferences(sent).map((one) => one.name)).toEqual(["image-1.png", "image-2.png"]);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   }));

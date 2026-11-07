@@ -3,16 +3,18 @@
 
 use std::{fs, path::Path};
 
-use super::{Lines, Sqlite, Store, digest, keeping, kept, store, texts};
+use super::{Lines, Sqlite, Store, digest, keeping, kept, marks, store, texts};
 use crate::testing::Yard;
+use crate::value;
 use crate::{
   value::{Fault, Object},
   wire::parsed,
 };
+use std::process;
 
 /// A record of its own for one test, which does not stand yet.
 fn place(name: &str, file: &str) -> Yard {
-  Yard::new(format!("furb-store-{name}-{}", std::process::id())).within(file)
+  Yard::new(format!("furb-store-{name}-{}", process::id())).within(file)
 }
 
 /// The entries that the suite keeps: facts that hold text on many lines and past ASCII, numbers, nothing, and lists
@@ -126,6 +128,28 @@ macro_rules! conformance {
       }
 
       #[test]
+      fn the_standing_of_a_record_is_the_list_that_its_last_done_of_a_stand_gave() {
+        let path = at("standing");
+        assert!(marks(&path).unwrap().standing.is_none());
+        let mut one = open(&path).unwrap();
+        one.entries().unwrap();
+        let first = "[['first'], 1]";
+        let last = "[['last'], '\u{2665}', None]";
+        for (entry, want) in [
+          (r#"[["done","stand1","operator",[["first"],1]]]"#, first),
+          (r#"[["tell","rung2","chain1",["a stand is not here"]]]"#, first),
+          (r#"[["done","stand7","operator",[["last"],"\u2665",null]]]"#, last),
+          (r#"[["done","stand9","operator","refused"]]"#, last),
+          (r#"[["done","bash3","operator",[["not","a","stand"]]]]"#, last),
+          (r#"[["stand","stand11","operator","chain1"]]"#, last),
+        ] {
+          one.keep(parsed(entry).unwrap().as_ref()).unwrap();
+          let held = marks(&path).unwrap().standing.map(|got| got.as_ref().py_repr());
+          assert_eq!(held.as_deref(), Some(want), "{entry}");
+        }
+      }
+
+      #[test]
       fn the_store_of_a_path_whose_name_ends_so_is_this_store() {
         let path = at("named");
         let (record, ear) = store(&path).unwrap();
@@ -192,7 +216,7 @@ impl Store for Refusing {
     Ok(Vec::new())
   }
 
-  fn keep(&mut self, _: crate::value::ObjectRef<'_>) -> Result<(), Fault> {
+  fn keep(&mut self, _: value::ObjectRef<'_>) -> Result<(), Fault> {
     Err(Fault::refused("No space left on device (os error 28): the record"))
   }
 
@@ -253,7 +277,7 @@ impl Store for Disk {
     self.lines.entries()
   }
 
-  fn keep(&mut self, entry: crate::value::ObjectRef<'_>) -> Result<(), Fault> {
+  fn keep(&mut self, entry: value::ObjectRef<'_>) -> Result<(), Fault> {
     if self.space.full.get() {
       return Err(Fault::refused("No space left on device (os error 28): the record"));
     }

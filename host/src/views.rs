@@ -6,12 +6,14 @@
 //! It holds no life: only a window and a pin do. A viewer is one view of the daemon, mounted by
 //! one window and served by one skill, and no other peer says a frame of it.
 
-use tokio::{sync::mpsc::error::SendError, task::AbortHandle};
+use std::mem;
+
+use tokio::task::AbortHandle;
 
 use crate::{
   error::ProtocolError,
   protocol::{Dispose, Frame, Mount, Peer, Role, Tree, ViewEffect, ViewEvent},
-  serve::Outbox,
+  serve::{Gone, Outbox},
 };
 
 /// A skill attached to a life: its name, the outbox of its peer, and the task that pushes
@@ -75,7 +77,7 @@ impl Views {
       skill: served.outbox.clone(),
     };
     let gone = none();
-    served.outbox.send(Frame::ViewMount(mount)).map_err(|SendError(_)| gone)?;
+    served.outbox.send(Frame::ViewMount(mount)).map_err(|Gone| gone)?;
     self.mounted.push(viewed);
     Ok(())
   }
@@ -149,7 +151,7 @@ impl Views {
 
   /// Each view for which `ends` holds, removed, and told to its window and to its skill.
   fn end(&mut self, ends: impl Fn(&Mounted) -> bool) {
-    let (ended, kept) = std::mem::take(&mut self.mounted).into_iter().partition(|one| ends(one));
+    let (ended, kept) = mem::take(&mut self.mounted).into_iter().partition(|one| ends(one));
     self.mounted = kept;
     for viewed in ended {
       // A peer that is gone hears nothing, and its own end drops what it holds.
@@ -162,5 +164,5 @@ impl Views {
 
 /// A frame of a view said to a peer of it, or the refusal that the peer is gone.
 fn pushed(to: &Outbox, viewed: &Mounted, frame: Frame) -> Result<(), ProtocolError> {
-  to.send(frame).map_err(|SendError(_)| ProtocolError::Unmounted { viewer: viewed.viewer.clone() })
+  to.send(frame).map_err(|Gone| ProtocolError::Unmounted { viewer: viewed.viewer.clone() })
 }

@@ -15,15 +15,21 @@ import {
   type CodeRow,
   cancelled,
   type Exit,
+  exitOf,
   FOLD,
   type Fold,
   failed,
+  isDone,
+  isPaused,
   layout,
   literals,
   operated,
+  outcomeOf,
   type ProgramLine,
   quoteParts,
+  reasonOf,
   tailOf,
+  unfinished,
   writing,
 } from "furb/life";
 import { clock } from "../clock.ts";
@@ -31,11 +37,11 @@ import { conversation } from "../conversation.ts";
 import { shortenHomes } from "../files.ts";
 import { clip, count, dollars, modelLabel, modelName, share } from "../format.ts";
 import type { ActRow } from "../session.ts";
-import { theme as c, glyph, markOf, pulse, spacing as space, spin } from "../theme.ts";
+import { theme as c, glyph, markOf, pulse, spacing as space } from "../theme.ts";
 import { bold, type Part, styled, underline } from "../ui.ts";
 import { Gutter } from "./gutter.ts";
 import { part } from "./part.ts";
-import { STATE, saidOf, seconds, spell, stateOf } from "./shared.ts";
+import { hidden, STATE, saidOf, seconds, spell, stateOf } from "./shared.ts";
 
 /** A reason of the gate or of a raise as one line says it: without the line that the row already shows, and
  * without the place that the parser names, `(<string>, line 2), in 'x = = 1'`, which repeats the line. */
@@ -48,6 +54,8 @@ const TIME = 8;
 /** The columns of the facts of a word, at the right edge of its block: what the acts of each line came to. Each block
  * keeps the same column, so the facts of every word stand one under the other. */
 const FACTS = 30;
+/** The columns that the trailer of a cut line takes at the end of it: two spaces, an ellipsis, a plus and five digits. */
+const TRAILER = 9;
 
 /** The text of the rows of a step that a model writes: the label of the word, then the line that comes. */
 const thinkingText = (label: Part[], tail?: Part[]): Part[] => [
@@ -130,15 +138,15 @@ export const details = part({
    * for, and a mark and a word only when a cancel or a failure ended it, or a pause holds it. */
   promptState(act: ActRow): Part[] {
     const shape: Part = [String(act.words[0] ?? ""), c.faint];
-    if (act.unfinished && !act.done)
+    if (unfinished(act))
       return [shape, [`   ${markOf("idle")[0]} not finished when the record ends`, c.faint]];
-    const state = act.done
+    const state = isDone(act)
       ? failed(act)
         ? stateOf("failed")
         : cancelled(act)
           ? stateOf("cancelled")
           : undefined
-      : act.paused
+      : isPaused(act)
         ? stateOf("paused")
         : undefined;
     return state ? [shape, [`   ${state.mark} ${state.word}`, state.color]] : [shape];
@@ -203,7 +211,7 @@ export const details = part({
   /** The one line that says what to do after the gate refused the word of a rung, and nothing for any other rung:
    * the operator fixes his own word, and the chain asks a model for its word again with the findings. */
   gateHint(act: ActRow): string | undefined {
-    if (act.kind !== "rung" || !act.done || !act.run?.refused) return undefined;
+    if (act.kind !== "rung" || !isDone(act) || act.run?.run !== "refused") return undefined;
     return operated(act.by)
       ? "Press ↑ in the input to bring the word back, fix the line that the gate names, and send it again."
       : "The chain tells the model these findings and asks it for its word again.";
@@ -214,7 +222,7 @@ export const details = part({
       this.word(
         box,
         String(this.session.program[act.id] || act.words[0] || ""),
-        act.run?.reason,
+        reasonOf(act.run),
         this.gateHint(act),
       );
       return;
@@ -250,9 +258,9 @@ export const details = part({
         ]),
       );
     }
-    if (act.done && act.value !== null)
+    if (isDone(act) && outcomeOf(act) !== null)
       details.add(
-        this.text(display(act.value), failed(act) ? c.danger : c.text, { marginTop: space.section }),
+        this.text(display(outcomeOf(act)), failed(act) ? c.danger : c.text, { marginTop: space.section }),
       );
   },
 
@@ -263,7 +271,7 @@ export const details = part({
     details.add(node);
     details.add(this.reference(act.id, act.id));
     void this.session.host.act(act.id).then((whole) => {
-      const text = (whole?.kind === "write" ? whole.words[0] : whole?.value) as
+      const text = (whole?.kind === "write" ? whole.words[0] : whole ? outcomeOf(whole) : undefined) as
         | { content?: unknown }
         | undefined;
       if (!node.isDestroyed && typeof text?.content === "string")
@@ -275,7 +283,7 @@ export const details = part({
    * in its heading. What it
    * printed to stderr takes the color of a failure, and each stream is named only when the command printed to both. */
   commandDetails(details: BoxRenderable, act: ActRow): void {
-    const exit = (act.value && typeof act.value === "object" ? act.value : {}) as Exit;
+    const exit = exitOf(act) ?? {};
     const both = Boolean(exit.stdout?.content && exit.stderr?.content);
     const shown: TextRenderable[] = [];
     for (const [name, color] of [
@@ -308,7 +316,7 @@ export const details = part({
     // The row holds the tail of what the command printed, and the card reads the whole of it once it opens.
     if (act.output !== undefined)
       void this.session.host.act(act.id).then((whole) => {
-        const streams = whole?.value as Exit | undefined;
+        const streams = (whole ? outcomeOf(whole) : undefined) as Exit | undefined;
         const contents = [streams?.stdout?.content, streams?.stderr?.content].filter(Boolean) as string[];
         for (const [index, node] of shown.entries())
           if (!node.isDestroyed && contents[index] !== undefined)
@@ -345,7 +353,7 @@ export const details = part({
           [
             waits
               ? " · waits for its turn"
-              : ` · thinking${ms >= 1000 ? ` ${spell(Math.floor(ms / 1000) * 1000)}` : ""}${thought ? ` · ${count(thought)} chars` : ""}`,
+              : `${ms >= 1000 ? ` · ${spell(Math.floor(ms / 1000) * 1000)}` : ""}${thought ? ` · ${count(thought)} chars` : ""}`,
             c.faint,
           ],
         ];
@@ -372,9 +380,9 @@ export const details = part({
       digits,
       numbers: numbered,
       colors: new Map(all.map((at) => [at, c.raised])),
-      // The loader turns in the column of the states, on the last row, where a line that failed shows its mark.
-      // A rung that waits for its turn does no work, and no loader turns for it.
-      loaders: new Set(rows && !waits ? [rows - 1] : []),
+      // The loader of a thought turns in the cell of the number of the last row. A rung that waits for its turn does no
+      // work, and no loader turns for it.
+      working: new Map(rows && !waits ? [[rows - 1, "thinks" as const]] : []),
     });
     // The loader is drawn by each frame, the first one too, so no tick is needed before it shows.
     this.thinkingRows.set(step, {
@@ -450,7 +458,7 @@ export const details = part({
     since: (act?: ActRow) => string,
     heads: ReadonlySet<ProgramLine>,
     digits = 1,
-    options: { more?: (line: ProgramLine) => void } = {},
+    options: { more?: (line: ProgramLine) => void; key?: string } = {},
   ): Renderable {
     // The column of the states takes its cells from the room of the code.
     const room = width - STATE;
@@ -475,6 +483,9 @@ export const details = part({
     // in the text of its line.
     const folded = new Map<number, { line: Extract<ProgramLine, { kind: "code" }>; folds: Fold[] }>();
     const whole = new Map<number, CodeRow["parts"]>();
+    // The rows that fold one string of a line, each with the string.
+    const registered: [key: string, row: { label: string; open?: () => void }][] = [];
+    const stringRows = new Map<number, { line: Extract<ProgramLine, { kind: "code" }>; literal: number }>();
     // The colors come from each statement whole, so a line cut to its room or a folded string changes no color: the
     // program as it ran, each part of a row with where it starts in that program, and the rows that only comment.
     let program = "";
@@ -482,7 +493,7 @@ export const details = part({
     // The lines that run: where the time of each stands in its row, and the act that it counts.
     const live: { row: number; col: number; act: Parameters<typeof since>[0] }[] = [];
     // The lines that run, whose numbers fade into the loader and back.
-    const running = new Set<number>();
+    const running = new Map<number, "runs">();
     const fixed: [row: number, from: number, to: number, group: string][] = [];
     const comment = (row: number, from = 0) => fixed.push([row, from, texts[row]?.length ?? 0, "comment"]);
     const push = (text: string, number?: number, source?: ProgramLine) => {
@@ -533,8 +544,20 @@ export const details = part({
               (line.runs ? TIME + 1 + space.between : 0),
           ),
         );
-        const rows = layout(line.text, width, this.lineOpen(line) ? undefined : this.openStrings(line));
-        const code = rows[0]?.text ?? "";
+        const open = this.lineOpen(line) ? undefined : this.openStrings(line);
+        // What a cut line hides stands at its end, in the trailer of its row, where the width allows, and in a row of
+        // its own under it only where it does not.
+        const ends = (all: CodeRow[]) => all.map((row, k) => this.cutTrailer(row, k ? room : width));
+        let rows = layout(line.text, width, open);
+        let trailers = ends(rows);
+        // A line that folds a string leaves the room of its trailer, which says what the fold hides, when that room
+        // lets each cut row end with it, and keeps its whole width, with the fold row under it, when it does not.
+        if (rows.some((row) => row.folds.length)) {
+          const narrow = layout(line.text, Math.max(24, width - TRAILER), open);
+          const cut = ends(narrow);
+          if (narrow.every((row, k) => !row.folds.length || cut[k])) [rows, trailers] = [narrow, cut];
+        }
+        const code = `${rows[0]?.text ?? ""}${trailers[0] ?? ""}`;
         // The fact of a line stands at the right edge of the block, and the time of a line that runs after it.
         const slot = line.runs ? TIME + 1 : 0;
         const fact = note ? fit(note, FACTS) : "";
@@ -553,8 +576,19 @@ export const details = part({
           });
         // The number of the line that runs fades into the loader and back, so it reads apart from a model that thinks.
         if (line.fails) states.set(at, markOf("failed"));
-        else if (line.runs) running.add(at);
-        for (const row of rows.slice(1)) push(row.text, undefined, line);
+        else if (line.runs) running.set(at, "runs");
+        if (trailers[0])
+          fixed.push([
+            at,
+            rows[0]?.text.length ?? 0,
+            (rows[0]?.text.length ?? 0) + trailers[0].length,
+            "fact",
+          ]);
+        for (const [k, row] of rows.slice(1).entries()) {
+          const tail = trailers[k + 1] ?? "";
+          const next = push(`${row.text}${tail}`, undefined, line);
+          if (tail) fixed.push([next, row.text.length, row.text.length + tail.length, "fact"]);
+        }
         const base = program.length;
         program += `${line.text}\n`;
         for (const [k, row] of rows.entries()) {
@@ -562,6 +596,18 @@ export const details = part({
           for (const fold of row.folds) fixed.push([at + k, fold.at, fold.at + FOLD.length, "string"]);
           for (const [from, to, source] of row.parts) pieces.push([at + k, from, to, base + source]);
           whole.set(at + k, row.parts);
+        }
+        // Each string that the line folds has its own fold row under the line, in the one wording of every fold: its
+        // count and its noun, which a click opens in place, as its entry in the Details does.
+        for (const [k, row] of rows.entries()) {
+          for (const fold of row.folds) {
+            const label = hidden(this.hiddenIn(row, fold), "character");
+            registered.push([`string:${line.step.id}:${line.number}:${fold.literal}`, { label }]);
+            if (trailers[k]) continue;
+            const stringRow = push(`${glyph.closed} ${label}`, undefined, line);
+            ellipses.push(stringRow);
+            stringRows.set(stringRow, { line, literal: fold.literal });
+          }
         }
         // The line that runs is lit, and so is the line that made the act that a running line awaits.
         if (line.runs || line.awaited !== undefined) colors.set(at, c.selected);
@@ -587,7 +633,16 @@ export const details = part({
         states.set(row, markOf("thinks"));
       } else if (line.kind === "earlier") {
         writing = undefined;
-        ellipses.push(push(line.text, undefined, line));
+        const at = push(line.text, undefined, line);
+        ellipses.push(at);
+        if (options.key && line.text.startsWith(glyph.closed))
+          registered.push([
+            `${options.key}:${at}`,
+            {
+              label: line.text.slice(glyph.closed.length + 1),
+              open: options.more ? () => options.more?.(line) : undefined,
+            },
+          ]);
       } else {
         writing = undefined;
         comment(push(fit(line.text, room - 2)));
@@ -693,6 +748,8 @@ export const details = part({
       return [...out, ...marks, ...ellipsis()];
     };
     const target = this.code(texts.join("\n"), marks, hover, highlights);
+    // The Details of ⌥D list each fold row of the program, as they list each fold of the feed.
+    for (const [key, row] of registered) this.foldRows.set(key, { ...row, node: target });
     // Each row is cut to its room already, so none wraps: a row that is too long loses its end, and no mark falls under it.
     target.wrapMode = "none";
     const view = new Gutter(this.renderer, {
@@ -701,7 +758,7 @@ export const details = part({
       numbers,
       colors,
       states,
-      running,
+      working: running,
       // The time of a line that runs is written over the blanks that its row keeps, so that a tick moves it and the text
       // of the program stays as it was laid out.
       renderAfter(buffer) {
@@ -717,7 +774,10 @@ export const details = part({
     // The cell of the number turns with the tick, so the program draws again at each frame of the fade while a line
     // runs.
     const times = () =>
-      [running.size ? `${pulse().join()}${spin()}` : "", ...live.map((one) => since(one.act))].join("|");
+      [
+        running.size ? `${pulse().join()}${markOf("runs")[0]}` : "",
+        ...live.map((one) => since(one.act)),
+      ].join("|");
     if (live.length) this.liveLines.set(view, { times, shown: times() });
     // The gutter of the numbers takes the events of the pointer over the program, so it shows the string of a fold.
     view.onMouseMove = (event) => {
@@ -730,6 +790,9 @@ export const details = part({
     view.onMouseUp = (event) => {
       const row = event.y - view.y;
       const line = sources[row];
+      const stringRow = stringRows.get(row);
+      if (stringRow && !this.renderer.getSelection()?.getSelectedText())
+        return this.openString(stringRow.line, stringRow.literal);
       if (line?.kind === "earlier" && options.more && !this.renderer.getSelection()?.getSelectedText())
         return options.more(line);
       if (line?.kind !== "code" || this.renderer.getSelection()?.getSelectedText()) return;
@@ -748,6 +811,22 @@ export const details = part({
     return view;
   },
 
+  /** How many characters a fold of a row hides: the string whole, but for what the row shows of it. */
+  hiddenIn(row: CodeRow, fold: Fold): number {
+    const before = row.text.slice(0, fold.at);
+    let kept = Math.min(fold.whole.length, before.length);
+    while (kept > 0 && !before.endsWith(fold.whole.slice(0, kept))) kept--;
+    return Math.max(1, fold.whole.length - kept);
+  },
+
+  /** The trailer that ends a cut row, with the characters that its folds hide, or nothing when the row folds none or
+   * the trailer does not fit the width that it has. The one place that says it for every cut line. */
+  cutTrailer(row: CodeRow, limit: number): string {
+    if (!row.folds.length) return "";
+    const text = `  …+${row.folds.reduce((sum, fold) => sum + this.hiddenIn(row, fold), 0)}`;
+    return Bun.stringWidth(row.text) + Bun.stringWidth(text) <= limit ? text : "";
+  },
+
   /** The card of a line of a program under the pointer: the reason of a line that failed whole, in the color of a
    * failure, the act that a running line awaits, and what each act of the line came to, read whole from the host, or
    * the message of a note whole. A press opens the act, or the line. */
@@ -759,7 +838,7 @@ export const details = part({
       open = () => this.go("feed", line.step.id);
     } else if (line.kind === "code") {
       if (line.fails) {
-        const refused = Boolean((line.step as ActRow).run?.refused);
+        const refused = Boolean((line.step as ActRow).run?.run === "refused");
         nodes.push(
           this.text(
             `${glyph.failed} ${refused ? "The gate refused" : `${line.step.id} raised at`} line ${line.display}`,
@@ -775,7 +854,7 @@ export const details = part({
       const acts = [...(line.awaits ? [line.awaits.act] : []), ...line.acts.slice(-3)] as ActRow[];
       for (const act of acts) {
         const held = await this.actPreview(act);
-        const state = act.done
+        const state = isDone(act)
           ? stateOf(failed(act) ? "failed" : "done")
           : { word: "runs", mark: markOf("runs")[0], color: markOf("runs")[1] };
         const head: Part[] = [
@@ -799,19 +878,19 @@ export const details = part({
   /** What an act came to, as its card under the pointer shows it: the text of a read or of a write, what a command
    * printed, and the value of any other act, read whole from the host. */
   async actPreview(act: ActRow): Promise<string> {
-    if (!act.done) return act.kind === "bash" ? tailOf(act, 10) || "runs" : "pending";
+    if (!isDone(act)) return act.kind === "bash" ? tailOf(act, 10) || "runs" : "pending";
     const whole = (await this.session.host.act(act.id).catch(() => undefined)) ?? act;
     const text = (value: unknown) => (value as { content?: unknown } | null)?.content;
-    if (act.kind === "read" && typeof text(whole.value) === "string")
-      return String(text(whole.value)).trimEnd();
+    if (act.kind === "read" && typeof text(outcomeOf(whole)) === "string")
+      return String(text(outcomeOf(whole))).trimEnd();
     if (act.kind === "write" && typeof text(whole.words[0]) === "string")
       return String(text(whole.words[0])).trimEnd();
     if (act.kind === "bash") {
-      const exit = (whole.value ?? {}) as Exit;
+      const exit = exitOf(whole) ?? exitOf(act) ?? {};
       const printed = [exit.stdout?.content, exit.stderr?.content].filter(Boolean).join("\n").trimEnd();
       return printed || (exit.code === null || exit.code === undefined ? "timed out" : `exit ${exit.code}`);
     }
-    return display(whole.value);
+    return display(outcomeOf(whole));
   },
 
   /** The strings of a line of a program that the operator opened, which show whole. */
@@ -876,6 +955,8 @@ export const details = part({
   /** A text of a dialog, which scrolls past the rows it takes. */
   document(node: Renderable, options: ScrollBoxOptions): ScrollBoxRenderable {
     const document = new ScrollBoxRenderable(this.renderer, { scrollX: false, scrollY: true, ...options });
+    // A click on a text must not take the keys from the input, as a click on the feed does not.
+    document.focusable = false;
     document.add(node);
     return document;
   },
@@ -917,7 +998,7 @@ export const details = part({
     const act = this.session.actOf(value);
     if (value.startsWith("furb-image://")) this.imageActions(value);
     else if (act?.kind === "chain") await this.session.select(act.id);
-    else if (act && act.id === value && act.on === this.session.selected) this.go("feed", act.id);
+    else if (act && act.id === value && act.chain === this.session.selected) this.go("feed", act.id);
     else this.showValue(value, await this.referenced(value));
   },
 
@@ -929,7 +1010,8 @@ export const details = part({
     const act = this.session.actOf(value);
     if (!act) return (await this.session.host.look(value, this.session.selected)).content;
     const whole = (await this.session.host.act(act.id)) ?? act;
-    const held = whole.value && typeof whole.value === "object" ? Object.values(whole.value) : [];
+    const outcome = outcomeOf(whole);
+    const held = outcome && typeof outcome === "object" ? Object.values(outcome) : [];
     const door = held.find(
       (one): one is { path: string; content: string } =>
         Boolean(one) && typeof one === "object" && (one as { path?: unknown }).path === value,
@@ -943,7 +1025,7 @@ export const details = part({
       const detail = value.startsWith("furb-image://")
         ? "Image attachment. Click to open its actions."
         : act
-          ? `${act.kind}  ${act.done ? display(act.value) : "pending"}`
+          ? `${act.kind}  ${isDone(act) ? display(outcomeOf(act)) : "pending"}`
           : display(await this.referenced(value));
       if (this.closed || this.overlay) return;
       this.hoverCard(

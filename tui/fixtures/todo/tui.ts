@@ -101,7 +101,7 @@ export default function todo(furb: Furb): void {
     ),
   );
   furb.command("docs", "Open the guide of the parts in the browser", (_, seen) =>
-    seen.open("https://github.com/uael/furb/blob/main/docs/extensions.md#a-part-for-the-tui"),
+    seen.open("https://github.com/uael/furb/blob/main/docs/skills.md#a-part-for-the-tui"),
   );
   furb.key("+", (seen) => seen.run('todo("one more")'));
 }

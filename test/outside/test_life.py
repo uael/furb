@@ -25,7 +25,7 @@ async def scripted(tmp_path: Path, *words: str) -> furb.Life:
   (fake / "claude").chmod(0o755)
   for n, word in enumerate(words, 1):
     (fake / f"word.{n}").write_text(json.dumps(word))
-  return await furb.open(tmp_path / "life.jsonl", directory=tmp_path, claude=str(fake / "claude"), extensions=False)
+  return await furb.open(tmp_path / "life.jsonl", directory=tmp_path, claude=str(fake / "claude"), skills=False)
 
 
 async def test_the_acts_of_a_chain_have_named_fields_and_a_chain_names_its_actor(tmp_path: Path) -> None:

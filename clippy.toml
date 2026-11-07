@@ -11,3 +11,4 @@ disallowed-methods = [
   { path = "std::thread::park_timeout", reason = "an ear awaits; a park on a timer hides a hang" },
   { path = "std::process::Child::try_wait", reason = "await tokio::process::Child::wait under a timeout" },
 ]
+absolute-paths-max-segments = 2

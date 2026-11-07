@@ -7,15 +7,14 @@
 //! highest number of each kind; `chains`, each chain that lives with its parent, its label, its
 //! source, whether it is paused, its turns, the text of its definitions, its plain values by name,
 //! the names that it lost, and the acts that the checkpoint cut, each word that ran on it among
-//! them, which no later life runs again; and
-//! `acts`, each act that a value names, the last stand and the last clock, with its value, or, for
-//! an open prompt, with its shape, its message, its actor and the ear that held it. `gathered` of
-//! the engine gathers it and `seed` of the engine reads it, so the engine is the one home of its
-//! shape, and this file holds the fact, the store and the boot alone. It holds no word that the
-//! crate crafts and no word of a verb by its place: `seed` of the engine that opens it makes the
-//! entries that a life boots on, so any later engine of the major opens it. Each reader skips each
-//! field that it does not know, so a build opens a checkpoint of each minor of its schema, and
-//! refuses only one of another major.
+//! them, which no later life runs again; and `acts`, each act that a value names, the last stand
+//! and the last clock, with its value, or, for an open prompt, with its shape, its message, its
+//! actor and the ear that held it. `gathered` of the engine gathers it and `seed` of the engine
+//! reads it, so the engine is the one home of its shape, and this file holds the fact, the store
+//! and the boot alone. It holds no word that the crate crafts and no word of a verb by its place:
+//! `seed` of the engine that opens it makes the entries that a life boots on, so any later engine
+//! of the major opens it. Each reader skips each field that it does not know, so a build opens a
+//! checkpoint of each minor of its schema, and refuses only one of another major.
 //!
 //! A life ends with its checkpoint, which the ear of its store keeps, since a life born from a
 //! checkpoint makes acts of its own at its birth; [`keep`] writes one on a record that no life
@@ -24,9 +23,8 @@
 //! whatever build of the major made them: a resume returns to the exact state at the tip. A tail
 //! that a build cannot replay with no drift is a defect, and the record then opens to read only.
 //! Each checkpoint is a birth: the life that writes it ends there, so the facts after it come from
-//! a
-//! life born on it. An open from the first entry is born again at each checkpoint in the same way,
-//! as [`reborn`] proves, and reaches the state of the open from the last one.
+//! a life born on it. An open from the first entry is born again at each checkpoint in the same
+//! way, as [`reborn`] proves, and reaches the state of the open from the last one.
 //!
 //! The checkpoint of the build before the schema holds `entries` in the place of the data: facts
 //! that the journal of any engine replays, and `("reserve", kind, "store", n)`, which stands for
@@ -50,9 +48,10 @@ use std::{
 use crate::{
   Engine,
   engine::{OPERATOR, ROOT, callable},
-  extension::definitions,
   fact::Fact,
+  skill::definitions,
   value::{Fault, Object, ObjectRef, entry},
+  wire,
   world::{self, CHECKPOINT_SCHEMA, Store},
 };
 
@@ -103,16 +102,12 @@ impl Engine {
 }
 
 /// Whether the checkpoint at a place of a record is a birth that a life gathers again: the life
-/// that wrote it ended
-/// there, so the entry after it is the fact made of the next life, and a life born on the entries
-/// before it, as the
-/// engine given gathers it, holds each field of the checkpoint as the checkpoint holds it. Only
-/// this build gathers
-/// as this build wrote, so a checkpoint that another engine wrote is held to the first rule alone,
-/// as a checkpoint of
-/// the form before [`CHECKPOINT_SCHEMA`] is. The refusal names the checkpoint and the first field
-/// that parts, with
-/// both of its values where they part.
+/// that wrote it ended there, so the entry after it is the fact made of the next life, and a life
+/// born on the entries before it, as the engine given gathers it, holds each field of the
+/// checkpoint as the checkpoint holds it. Only this build gathers as this build wrote, so a
+/// checkpoint that another engine wrote is held to the first rule alone, as a checkpoint of the
+/// form before [`CHECKPOINT_SCHEMA`] is. The refusal names the checkpoint and the first field that
+/// parts, with both of its values where they part.
 pub fn reborn(record: &[Object], at: usize, engine: &mut Engine) -> Result<(), Fault> {
   let place = at + 1;
   if record.get(at + 1).and_then(fact).is_some_and(|a| a.kind() != world::MADE) {
@@ -127,10 +122,9 @@ pub fn reborn(record: &[Object], at: usize, engine: &mut Engine) -> Result<(), F
   if engine_of(&held) != Some(serde_json::Value::from(world::engine())) {
     return Ok(());
   }
-  // The life that gathers makes its own stand at its birth, after the tip that the life which
-  // wrote the checkpoint
-  // ended on, so it took one name more, and the tail after the checkpoint holds the names that the
-  // checkpoint gave.
+  // The life that gathers makes its own stand at its birth, after the tip that the life which wrote
+  // the checkpoint ended on, so it took one name more, and the tail after the checkpoint holds the
+  // names that the checkpoint gave.
   for (key, value) in
     fields(&written(engine)?).unwrap_or_default().into_iter().filter(|one| one.0 != "taken")
   {
@@ -156,7 +150,7 @@ fn fields(one: &Object) -> Option<Vec<(String, serde_json::Value)>> {
   Some(
     pairs
       .into_iter()
-      .filter_map(|(key, value)| Some((key.as_str()?.to_owned(), crate::wire::record(value))))
+      .filter_map(|(key, value)| Some((key.as_str()?.to_owned(), wire::record(value))))
       .collect(),
   )
 }
@@ -233,13 +227,7 @@ pub fn opened(kind: &str, by: &str, on: Option<&str>) -> bool {
 
 /// Whether a record holds a stand of the root that was answered.
 pub fn stood(record: &[Object]) -> bool {
-  let mut stands = HashSet::new();
-  record.iter().filter_map(fact).any(|a| {
-    if a.kind() == "stand" && a.question() && a.on() == ROOT {
-      stands.insert(a.about().to_owned());
-    }
-    a.kind() == "done" && stands.contains(a.about())
-  })
+  record.iter().any(|one| world::stood(one).is_some())
 }
 
 /// The entries that the build of the last life on a record made: those after its last checkpoint,

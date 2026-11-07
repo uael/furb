@@ -15,7 +15,7 @@ import {
   TextRenderable,
 } from "@opentui/core";
 import type { Keymap } from "@opentui/keymap";
-import { safeText, type Turn } from "furb";
+import { type FilePicker, safeText, type Turn } from "furb";
 import { type ChainThread, type Loom, type ProgramLine, type ThreadNode, wants } from "furb/life";
 import type { Tree, ViewEvent } from "furb/protocol";
 import { type ActionsPart, actions, actionsBound } from "./app/actions.ts";
@@ -54,7 +54,7 @@ import { type TreePart, tree, treeBound } from "./app/tree.ts";
 import { type ValuesPart, values, valuesBound } from "./app/values.ts";
 import { type ViewPart, view } from "./app/view.ts";
 import { type WelcomePart, welcome, welcomeBound } from "./app/welcome.ts";
-import { graphemes, kibibytes } from "./format.ts";
+import { graphemes } from "./format.ts";
 import { Graph } from "./graph.ts";
 import type { Action } from "./keys.ts";
 import { LoomPane } from "./overview.ts";
@@ -214,11 +214,9 @@ export class App {
    * the tree of them that the sidebar shows, nested once for each list. */
   railThreadCache?: {
     session: unknown;
-    version: number;
-    owed: string;
+    tree: readonly ThreadNode[];
     list: ChainThread[];
     chains: Map<string, ChainRead>;
-    tree?: ThreadNode[];
   };
   /** The key of the rows of the threads of the sidebar, by the list that it came from and the minute. */
   railThreadKey?: { list: ChainThread[]; minute: number; parts: string[]; count: number; text: string };
@@ -257,7 +255,6 @@ export class App {
   choice = { id: "", at: 0, other: false, ticked: [] as number[] };
   pickKey = "";
   readonly queueBox: BoxRenderable;
-  readonly imageBox: BoxRenderable;
   /** The suggestions for a `/command` or an `@path` typed in the input, drawn above it while the input keeps focus. */
   readonly suggestionBox: BoxRenderable;
   suggestions: Suggestion[] = [];
@@ -265,6 +262,11 @@ export class App {
   /** The token whose suggestions Escape hid, which a change of the token shows again. */
   dismissed = "";
   lastToken = "";
+  /** The picker of the files of an `@`, which walks its folder once as the `@` begins: the folder, the query that it
+   * holds, and whether its walk or its match still runs. */
+  filePicker?: { picker: FilePicker; directory: string; query?: string; running: boolean };
+  /** The next draw of the suggestions while the walk or the match of the picker runs. */
+  pickerTimer?: ReturnType<typeof setTimeout>;
   readonly search: InputRenderable;
   readonly searchRow: BoxRenderable;
   /** The bar above the feed while the rewind tree is open, which says what a choice does. */
@@ -306,8 +308,9 @@ export class App {
   readonly views = new Map<string, Tree>();
   /** Where the window says what a person did to a node of a view: the client of the daemon sets it. */
   viewEvents: (event: ViewEvent) => void = () => {};
-  /** The spinners of the views on screen, which move with the clock of the TUI. */
-  readonly viewSpinners = new Set<TextRenderable>();
+  /** The texts on screen whose marks move with the clock of the TUI, as the sidebar and the views show them, each with
+   * what it reads at a tick. */
+  readonly moving = new Map<TextRenderable, () => string | Part[]>();
   /** The panels of the parts over the input, the key of what it shows, and what takes the keys of the parts away. */
   readonly dock: BoxRenderable;
   dockKey = "";
@@ -329,7 +332,7 @@ export class App {
    * that node again between the press and the release, and never when it drew another control in its place. */
   pressedAt?: { x: number; y: number; face: string };
   /** The rows of the folds of the feed by the key of each fold, with what each says, which the Details of ⌥D open. */
-  readonly foldRows = new Map<string, { label: string; node: Renderable }>();
+  readonly foldRows = new Map<string, { label: string; node: Renderable; open?: () => void }>();
   readonly cards = new Map<
     string,
     {
@@ -516,7 +519,7 @@ export class App {
       flexShrink: 0,
       visible: false,
       marginTop: space.section,
-      onMouseUp: (event) => this.clickStage(event.y - this.stage.y),
+      onMouseUp: (event) => this.clickStage(event.x - this.stage.x, event.y - this.stage.y),
     });
     center.add(this.stage);
     this.graph = new Graph(this.stageOf());
@@ -537,6 +540,8 @@ export class App {
     // The ScrollBar constructor resets manual visibility; set it after construction.
     this.scroll.verticalScrollBar.visible = false;
     this.scroll.horizontalScrollBar.visible = false;
+    // A click on the feed must not take the keys from the input.
+    this.scroll.focusable = false;
     center.add(this.scroll);
     // The pin stands in the viewport of the feed beside its content, so the cards scroll under it and it stays.
     this.pin = this.box({
@@ -574,8 +579,6 @@ export class App {
       onMouseUp: this.click(() => this.queuePicker()),
     });
     center.add(this.queueBox);
-    this.imageBox = this.row({ id: "attached-images", gap: space.between, visible: false });
-    center.add(this.imageBox);
     this.suggestionBox = this.box({ id: "suggestions", visible: false, backgroundColor: c.raised });
     center.add(this.suggestionBox);
     this.modeBox = this.row();
@@ -686,6 +689,8 @@ export class App {
       backgroundColor: c.panel,
       contentOptions: { paddingBottom: space.section },
     });
+    // A list that took the focus on a click would leave the typed keys with it: the keys of the sidebar go through ⌥T.
+    this.railSpaces.focusable = false;
     this.railSpaces.verticalScrollBar.visible = false;
     this.railSpaces.horizontalScrollBar.visible = false;
     this.rail.add(this.railSpaces);
@@ -755,7 +760,7 @@ export class App {
       if (this.stage.visible && this.cursor === undefined && this.moves()) this.renderStage();
       if (this.thinkingRows.size) this.tickThinking();
       if (this.liveLines.size) this.tickLive();
-      if (this.viewSpinners.size) this.tickViews();
+      if (this.moving.size) this.tickMoving();
       if (this.tree?.panel?.live) this.renderChains();
     }, frame);
     this.render();
@@ -811,7 +816,7 @@ export class App {
    * selected no text between them. A drag over a button selects its text and does nothing else, and the release of
    * a press that opened a dialog does not close it. A node that the view drew again between the press and the
    * release is the same node when the pointer did not move and the node under it shows what the pressed one showed:
-   * a redraw that moves another control under a still pointer, as Resolve in place of the row pressed, takes no
+   * a redraw that moves another control under a still pointer, as a link in place of the row pressed, takes no
    * click, since the operator never pressed it. */
   click(run: (event: MouseEvent) => void): (event: MouseEvent) => void {
     return (event) => {
@@ -987,53 +992,18 @@ export class App {
     this.railBack.visible = this.drawerOpen;
     this.renderTop();
     const pending = w.operatorPrompt;
-    const images = w.images[w.selected] ?? [];
-    this.imageBox.visible = images.length > 0;
-    if (this.paneChanged(this.imageBox, [images, this.theme])) {
-      this.clear(this.imageBox);
-      this.imageBox.add(
-        this.line(
-          [
-            [`${glyph.chip} `, c.accent],
-            [`${images.length} ${images.length === 1 ? "image" : "images"} attached  `, c.text],
-            [
-              images
-                .map((image) => image.name)
-                .join("  ")
-                .replace(/\s+/g, " "),
-              c.muted,
-            ],
-          ],
-          c.muted,
-          {
-            truncate: true,
-            flexShrink: 1,
-            run: () =>
-              this.openPalette(
-                "Image attachments",
-                images.map((image) => ({
-                  label: image.name,
-                  detail: `${image.mimeType}  ${kibibytes(image.size)}`,
-                  run: () => this.imageActions(image.uri),
-                })),
-              ),
-          },
-        ),
-      );
-    }
     const queued = w.queued.filter((entry) => entry.chain === w.selected);
     this.queueBox.visible = w.queued.length > 0;
-    if (this.paneChanged(this.queueBox, [w.queued, w.queueHeld, w.selected, this.theme])) {
+    // A send that failed holds the queue of its chain until the operator takes the follow-up out.
+    const held = w.queued.some((follow) => follow.failed);
+    if (this.paneChanged(this.queueBox, [w.queued, held, w.selected, this.theme])) {
       this.clear(this.queueBox);
-      const first = (queued.at(-1) ?? w.queued.at(-1))?.text.split("\n")[0] ?? "";
+      const first = (queued.at(-1) ?? w.queued.at(-1))?.message.split("\n")[0] ?? "";
       this.queueBox.add(
         this.line(
           [
-            [`${w.queueHeld ? glyph.held : glyph.ring} `, w.queueHeld ? c.warning : c.faint],
-            [
-              `${w.queueHeld ? "Queue held" : "Queued"} ${w.queued.length}  `,
-              w.queueHeld ? c.warning : c.text,
-            ],
+            [`${held ? glyph.held : glyph.ring} `, held ? c.warning : c.faint],
+            [`${held ? "Queue held" : "Queued"} ${w.queued.length}  `, held ? c.warning : c.text],
             [first, c.muted],
           ],
           c.muted,
@@ -1174,13 +1144,13 @@ export class App {
     const w = this.session;
     const rows = new Map(w.acts.map((one) => [one.id, one]));
     let at = rows.get(id);
-    if (!at || at.on !== w.selected) return undefined;
+    if (!at || at.chain !== w.selected) return undefined;
     w.folds[`prompts:${w.selected}`] = false;
     let head: string | undefined;
     const threads = w.threads.by;
     for (let step = 0; at && step < 64; step++) {
       const maker = rows.get(at.by);
-      if (!maker || maker.on !== w.selected) break;
+      if (!maker || maker.chain !== w.selected) break;
       if (maker.kind === "prompt") {
         w.folds[`rungs:${maker.id}`] = false;
         if (threads.has(maker.id)) head = maker.id;

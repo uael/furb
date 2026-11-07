@@ -27,12 +27,16 @@ use std::{
 };
 
 use furb::{
+  Fact,
   engine::OPERATOR,
-  extension::{
-    ENABLE, Places,
-    skills::{process, program as program_of},
-  },
   life::{Log, Opening},
+  skill::{ENABLE, Enabled, Places, enabled_by},
+  wire::parsed,
+  world::{
+    Group, Unborn,
+    skills::{process, program as program_of},
+    spawn,
+  },
 };
 use futures::{StreamExt, future};
 use serde_json::Value;
@@ -45,7 +49,9 @@ use tokio::{
 };
 
 use crate::{
+  daemon::Inside,
   event::Event,
+  kits::Kit,
   life::{Command, LifeHandle, Reply},
 };
 
@@ -78,12 +84,13 @@ pub(crate) fn speaker(skill: &str) -> String {
 }
 
 /// A life whose skills get their processes: its handle, its record, its folder, where the daemon
-/// listens, where the skills of the user stand, and the log of the daemon.
+/// listens, its door in process, where the skills of the user stand, and the log of the daemon.
 pub(crate) struct Played {
   pub(crate) handle: LifeHandle,
   pub(crate) life: String,
   pub(crate) cwd: PathBuf,
   pub(crate) host: PathBuf,
+  pub(crate) inside: Inside,
   pub(crate) places: Places,
   pub(crate) log: Option<Log>,
 }
@@ -133,20 +140,35 @@ impl Played {
 
   /// The process of a skill started, once its earlier process ended, when its fact enable names
   /// one: the program of the folder that the life played the skill from, or, for a fact of a build
-  /// before the program, the program that the folder of the life and its config find by name.
-  async fn start(&self, one: Enabled<'_>, running: &mut HashMap<String, Running>) {
-    let Enabled { name, program } = one;
-    if let Some(old) = running.remove(name) {
+  /// before the program, the program that the folder of the life and its config find by name. A kit
+  /// of a session whose fact names the value of its view gets the server of that view in its place,
+  /// as [`crate::kits`] says.
+  async fn start(&self, one: Enabled, running: &mut HashMap<String, Running>) {
+    let Enabled { name, program, view } = one;
+    if let Some(old) = running.remove(&name) {
       old.ended().await;
     }
+    if let Some(value) = view {
+      let kit = Kit {
+        life: self.life.clone(),
+        handle: self.handle.clone(),
+        name: name.clone(),
+        value,
+        inside: self.inside.clone(),
+      };
+      let (end, ends) = oneshot::channel();
+      running.insert(name, Running { end, watch: tokio::spawn(kit.served(ends)) });
+      return;
+    }
     let program = match program {
-      Some(named) => program_of(named),
-      None => process(name, &self.cwd, &self.places),
+      Some(named) => program_of(&named),
+      None => process(&name, &self.cwd, &self.places),
     };
     let Some(program) = program else { return };
-    match self.spawned(name, &program) {
-      Ok(child) => {
-        running.insert(name.to_owned(), self.watch(name, &program, child));
+    match self.spawned(&name, &program) {
+      Ok((child, group)) => {
+        let watch = self.watch(&name, &program, child, group);
+        running.insert(name, watch);
       }
       Err(no) => said(
         self.log.as_ref(),
@@ -156,7 +178,7 @@ impl Played {
   }
 
   /// The watch of a process of a skill that started, on a task of its own.
-  fn watch(&self, name: &str, program: &Path, child: Child) -> Running {
+  fn watch(&self, name: &str, program: &Path, child: Child, group: Group) -> Running {
     let (end, ends) = oneshot::channel();
     let teller = Teller {
       handle: self.handle.clone(),
@@ -164,13 +186,13 @@ impl Played {
       program: program.display().to_string(),
       log: self.log.clone(),
     };
-    let watch = tokio::spawn(watched(Process::of(child), ends, teller));
+    let watch = tokio::spawn(watched(Process::of(child, group), ends, teller));
     Running { end, watch }
   }
 
   /// The process of a skill, in the folder of its program, with the variables that say where it
   /// dials and what it serves.
-  fn spawned(&self, name: &str, program: &Path) -> io::Result<Child> {
+  fn spawned(&self, name: &str, program: &Path) -> Result<(Child, Group), Unborn> {
     let script =
       program.extension().and_then(OsStr::to_str).is_some_and(|one| SCRIPTS.contains(&one));
     let mut command = if script {
@@ -189,9 +211,7 @@ impl Played {
       .stdout(Stdio::null())
       .stderr(Stdio::piped())
       .kill_on_drop(true);
-    #[cfg(unix)]
-    command.process_group(0);
-    command.spawn()
+    spawn(&mut command)
   }
 }
 
@@ -228,35 +248,9 @@ struct Process {
 }
 
 impl Process {
-  fn of(mut child: Child) -> Self {
-    let group = Group(child.id());
+  fn of(mut child: Child, group: Group) -> Self {
     let stderr = tokio::spawn(tail(child.stderr.take()));
-    Process { child, group, stderr }
-  }
-}
-
-/// The group of a process, which holds each process that it started unless one left it. A kill
-/// ends them all, once, and so does a drop, so that no process of a skill outlives the daemon even
-/// when its runtime ends with no word. On a system other than Unix, the group is the process alone,
-/// which `kill_on_drop` ends.
-struct Group(Option<u32>);
-
-impl Group {
-  fn kill(&mut self) {
-    let pid = self.0.take();
-    #[cfg(unix)]
-    if let Some(pid) = pid.and_then(|one| i32::try_from(one).ok()) {
-      // SAFETY: killpg reads no memory. A group that is gone gives ESRCH, and nothing stays to end.
-      unsafe { libc::killpg(pid, libc::SIGKILL) };
-    }
-    #[cfg(not(unix))]
-    let _: Option<u32> = pid;
-  }
-}
-
-impl Drop for Group {
-  fn drop(&mut self) {
-    self.kill();
+    Self { child, group, stderr }
   }
 }
 
@@ -292,7 +286,9 @@ async fn watched(mut process: Process, ends: oneshot::Receiver<()>, teller: Tell
   let status = tokio::select! {
     biased;
     _ = ends => {
-      process.group.kill();
+      if let Err(no) = process.group.slay() {
+        said(teller.log.as_ref(), &format!("the group of {} stays: {no}", teller.program));
+      }
       if let Err(no) = process.child.kill().await {
         said(teller.log.as_ref(), &format!("the process {} stays: {no}", teller.program));
       }
@@ -301,7 +297,9 @@ async fn watched(mut process: Process, ends: oneshot::Receiver<()>, teller: Tell
     }
     status = process.child.wait() => status,
   };
-  process.group.kill();
+  if let Err(no) = process.group.slay() {
+    said(teller.log.as_ref(), &format!("the group of {} stays: {no}", teller.program));
+  }
   let reader = process.stderr.abort_handle();
   let lines = timeout(DRAIN, process.stderr).await;
   reader.abort();
@@ -312,7 +310,7 @@ async fn watched(mut process: Process, ends: oneshot::Receiver<()>, teller: Tell
 impl Teller {
   /// The operator told, by a message under the name of the skill, that its process ended.
   async fn told(&self, status: &io::Result<ExitStatus>, lines: VecDeque<String>) {
-    let Teller { handle, skill, program, log } = self;
+    let Self { handle, skill, program, log } = self;
     let exit = match status {
       Ok(status) => status.to_string(),
       Err(no) => format!("no status that the daemon could read ({no})"),
@@ -337,20 +335,8 @@ impl Teller {
   }
 }
 
-/// What a fact enable says of the process of its skill: the name of the skill, and the program
-/// that the fact names, empty when the folder of the skill names none, and none for a fact of a
-/// build before the program.
-struct Enabled<'a> {
-  name: &'a str,
-  program: Option<&'a str>,
-}
-
-/// What a fact enable carries of the process of its skill, as JSON reads the fact: its kind, its
-/// about and its speaker, then the name, the word, the life word, the root, the file, the digest
-/// and the program.
-fn enabled(fact: &Value) -> Option<Enabled<'_>> {
-  let words = fact.as_array()?;
-  (words.first()?.as_str()? == ENABLE).then_some(())?;
-  let name = words.get(3)?.as_str()?;
-  Some(Enabled { name, program: words.get(9).and_then(Value::as_str) })
+/// What the crate reads of a fact enable, as JSON gives the fact.
+fn enabled(fact: &Value) -> Option<Enabled> {
+  let made = parsed(&fact.to_string()).ok()?;
+  enabled_by(&Fact::of(made.as_ref())?)
 }

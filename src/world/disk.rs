@@ -2,6 +2,7 @@
 //! target, and a rename puts them in its place, so a reader sees the old file or the new one and
 //! never a part of either, and a failure midway, as on a full disk, leaves the old file whole.
 
+use std::process;
 use std::{
   fs::{self, OpenOptions},
   io::{self, ErrorKind, Write},
@@ -73,7 +74,7 @@ fn beside(target: &Path, access: Access, counts: &AtomicU32) -> io::Result<(Path
   let name = target.file_name().unwrap_or_default().to_string_lossy();
   loop {
     let count = counts.fetch_add(1, Ordering::Relaxed);
-    let part = target.with_file_name(format!(".{name}.{}.{count}.part", std::process::id()));
+    let part = target.with_file_name(format!(".{name}.{}.{count}.part", process::id()));
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
     restrict(&mut options, access);

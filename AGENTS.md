@@ -19,22 +19,22 @@ API of its own:
   through rig and streams what it writes. The doc comments of `src/world.rs` and of each module say what each does, the
   tables of [`CONTRIBUTING.md`](CONTRIBUTING.md#the-world-and-the-life) list its files, and `docs/models.md` tells a
   user how furb finds a model and how to choose one.
-- `src/extension.rs` says what an extension is and where a host finds the ones that a life runs. Its ear `extensions`
+- `src/skill.rs` says what an extension is and where a host finds the ones that a life runs. Its ear `extensions`
   enables each by a fact that the record keeps, plays its word as a rung on each chain where its manifest says, every
   chain or the root alone, and plays the setup of the root on a new record. `parts` gives the part of each extension for
-  the TUI, which `tui/src/parts.ts` loads. `extensions/` holds the official extensions, `catchup`, `memory`, `skills`,
-  `compaction`, `naming`, `ouroboros`, `web` and `mcp`, each a word, a contract and a suite, and `src/extension/` holds the ear of
-  the World of the one that has one, `skills.rs`. `docs/extensions.md` says how an extension works.
+  the TUI, which `tui/src/parts.ts` loads. `.agents/skills/` holds the official extensions, `catchup`, `memory`, `skills`,
+  `compaction`, `naming`, `ouroboros`, `web` and `mcp`, each a word, a contract and a suite, and `src/world/` holds the ear of
+  the World of the one that has one, `skills.rs`. `docs/skills.md` says how an extension works.
 - `src/life.rs` opens a life as every host opens one, from one `Opening`: the record, the ears of the crate after the
   ears of the host, the default actor, the roster that the host names or every model of the catalog, and the extensions.
-  A host adds only its own ears, as the console of its operator. A life on a record replays the tail after its last
-  checkpoint word by word on the engine and the Kernel that its fact made holds, and goes on with them, so it opens
-  at the exact state of its tip whatever build of the major runs it, as `src/checkpoint.rs` says. Its models read that
-  engine, and the gate reads each word on it. `script/engines.py` gives a copy of a record of a build before the texts
-  the texts of its engine from git. `tests/replay` holds the records that each build must
-  replay on their own engines with no drift. `tests/corpus` holds the records of each release, which each later build must open, as
-  `tests/corpus/README.md` says. Each door gives it as
-  `opened` and as `Engine.open`.
+  A host adds only its own ears, as the console of its operator. When the last segment of its record holds the texts of
+  another engine, a life that inspects the record, on that engine, first writes a checkpoint after its last entry. The
+  life then opens from its last checkpoint and goes on with the engine and the Kernel of this build, so it opens at the
+  exact state of its tip whatever build of the major runs it, as `src/checkpoint.rs` says. Its models read the engine of
+  this build, and the gate reads each word on it. `script/engines.py` gives a copy of a record of a build before the
+  texts of its engine from git. `tests/replay` holds the records that each build must replay on their own engines with
+  no drift. `tests/corpus` holds the records of each release, which each later build must open, as
+  `tests/corpus/README.md` says. Each door gives it as `opened` and as `Engine.open`.
 - `src/view.rs` and `src/view/` fold the facts of a life into its meaning, which every window shows the same way: the
   state of each act and of each chain, the desk of the operator, the threads of a chain, the spend, and the acts as
   they stood at a moment. It depends on the crate alone, so the host and each door read one fold. `Fold` hears each
@@ -44,9 +44,11 @@ API of its own:
   boot, while `gathered` and `seed` of `engine.py` write and read its data. A life ends with one through
   `Engine::checkpoint`, which its store keeps as it keeps each fact, as the TUI does at a handover, and
   `furb checkpoint` writes one on a record that no life holds. A life boots on the last checkpoint of its record,
-  whatever engine wrote it, and replays the entries after it word by word on the engine that their fact made holds,
-  so it opens at the exact state of its tip. A tail that a build cannot replay with no drift is a defect, which #988
-  tracks: the record then opens to read only, and nothing forks it into a new life.
+  whatever engine wrote it, and replays the entries after it word by word. When those entries hold the texts of another
+  engine, a life that inspects the record replays them on that engine and writes a checkpoint after them, so the life
+  replays no word on another engine, goes on with the engine and the Kernel of this build, and opens at the exact state
+  of its tip. A tail that a build cannot replay with no drift is a defect, which #988 tracks: the record then opens to
+  read only, and nothing forks it into a new life.
 - `src/engine.rs` opens a life in the sandbox, with each of its concerns in a file of `src/engine/`: it loads the
   engine, the sheet and the Kernel, each in a namespace of its own, and carries each value between the sandbox and a
   host, whose ears the engine steps as generators. An ear that raises refuses the act that it heard, and starts again
@@ -72,7 +74,7 @@ API of its own:
 - `cli/` is `furb-cli`, the second package of the workspace of the crate, whose program is `furb`, on clap. With no
   command it hands the terminal to the TUI, which it finds in `FURB_TUI`, as `furb-tui` on PATH, or in the checkout it
   was built from. A program that wants a life dials the daemon, as `docs/protocol.md` says. `prompt`,
-  `turns`, `run` and `extensions` each open one life on a record, `facts` prints each fact of a record with no life,
+  `turns`, `run` and `skills` each open one life on a record, `facts` prints each fact of a record with no life,
   `checkpoint` writes the checkpoint of a life, `catalog` shows where the models came from, and `host` serves the
   daemon of the machine of `furb-host`. The package `furb`
   depends on the wheel of `furb-cli`, so `pip install furb` gives the command `furb`.
@@ -96,8 +98,8 @@ API of its own:
   protocol, and `bun run protocol` makes `bind/typescript/src/protocol.ts` again from `host/protocol.schema.json`.
 
 The suite runs on both engines, but for the tests that `MONTY_SKIPS` in `test/conftest.py` names: these boot on a Kernel
-of this interpreter, and the engine of monty holds its own. The suite of each extension, `extensions/<name>/test/`, runs
-on both engines too, and its conftest, `extensions/conftest.py`, hands it the hooks of the harness and the helpers that
+of this interpreter, and the engine of monty holds its own. The suite of each extension, `.agents/skills/<name>/test/`, runs
+on both engines too, and its conftest, `.agents/skills/conftest.py`, hands it the hooks of the harness and the helpers that
 only the suites of the extensions need. `test/outside/test_monty.py` proves what the door carries that no sentence of
 the contract says.
 
@@ -157,7 +159,7 @@ engine does not serve its meaning, the name is wrong, and the name changes.
 - started or done is ownership, and the owner of an act answers it. The life refuses an act that no ear owns.
 - A view reads the life, and makes nothing and keeps nothing: get, peek and transcript, and all that is derived
   from them.
-- No hidden control flow and no magic, which is a hard rule of the owner: a model can rebuild the whole flow of what it
+- No hidden control flow and no magic, which is a hard rule: a model can rebuild the whole flow of what it
   read from the exact code that ran. Each change of the module of a chain comes from a word that the transcript of that
   chain shows as a turn, and the transcript is the whole of what ran: no run is made on the side, and no control flow
   is hidden. furb hosts itself with its own verbs. Only the Kernel and the World stand outside `src/furb/engine.py`,
@@ -188,11 +190,11 @@ commits, PRs or issues: state the rule they carry, in plain English.
 
 Before you write or change a Rust file, read the skill rust.
 
-## Questions of the owner
+## Questions about a state or a delay
 
-A question of the owner about a state or a delay, as "Why is it not built yet?", "Is it fine?" or "Why is this chain
-paused?", most often points at a defect of the agent that he asks, and he wants that defect fixed durably. Read it as
-that request. Fix the state at once, find the cause in your own work, make its durable fix at once (a change of the
+A question about a state or a delay, such as why something is not built yet, whether a state is fine, or why a chain is
+paused, most often points at a defect of the agent that is asked, and it calls for a durable fix of that defect. Read it
+as that request. Fix the state at once, find the cause in your own work, make its durable fix at once (a change of the
 instructions, of a tool or of a test, in a pull request), read the state again to verify, and only then answer, with
 the fix and its proof. An answer that only explains is not done.
 
@@ -220,26 +222,27 @@ The suite drives the engine through its public API alone, end to end, from the m
   better counts the work that the code does, which no load changes. A bound in seconds fails on a machine under load.
   A test of a process that a timeout ends gives it a limit that a loaded machine cannot cross.
 - A helper that only one file needs lives in that file. A helper that several files need lives in
-  `test/conftest.py`, and one that only the suites of the extensions need lives in `extensions/conftest.py`.
-  A test folder of an extension takes no `conftest.py`: it shadows the module `conftest` that `extensions/conftest.py`
+  `test/conftest.py`, and one that only the suites of the extensions need lives in `.agents/skills/conftest.py`.
+  A test folder of an extension takes no `conftest.py`: it shadows the module `conftest` that `.agents/skills/conftest.py`
   imports by name, and breaks the main suite. `test_words.py` fails on it. Put its fixtures in
-  `.furb/extensions/conftest.py`.
+  `.furb/skills/conftest.py`.
 - `test/outside/` holds the tests of the World, the Kernel, the door, the switch of the package that
   `FURB_ENGINE` sets, and the harness. These tests stand outside the hygiene laws.
 
 ## The hygiene laws
 
 `test/test_hygiene.py` holds each contract and its suite to these laws, and it must stay green. The contracts are
-`engine.pyi`, whose suite is `test/`, and the contract of each extension, `extensions/<name>/<name>.pyi`, whose suite
-is the folder `test` beside it.
+`engine.pyi`, whose suite is `test/`, the contract of each official extension, `.agents/skills/<name>/<name>.pyi`, and
+the contract of each extension of the project, `.furb/skills/<name>/<name>.pyi`, each with the folder `test`
+beside it as its suite.
 
 1. Every sentence of a definition has exactly one test, in the file of that definition, whose docstring is that
    sentence. A constructor and a property are no definitions of their own: their sentences are the class's.
 2. Every test carries a sentence of the contract.
 3. Every definition has a file of its own and at least one sentence. Two definitions never share a file.
 4. The module docstring of each contract is empty.
-5. `engine.py`, minified with its program kept as it is, costs fewer than 9854 tokens of `o200k_base`, the
-   tokenizer of OpenAI, and the doctrine of furb, `DOCTRINE.md`, costs at most 1000. The test counts with `o200k_base`
+5. `engine.py`, minified with its program kept as it is, costs fewer tokens of `o200k_base`, the tokenizer of OpenAI,
+   than `BUDGET` of `script/tokens.py`, and the doctrine of furb, `DOCTRINE.md`, costs at most 1000. The test counts with `o200k_base`
    because it is local and the same on each machine: the tokenizer of Claude is not public, and only the network
    counts with it. The wall is a proxy for the cost to Claude, which reads about 1.5 tokens for each token of
    `o200k_base` in the engine.
@@ -259,8 +262,9 @@ file that its build reads changed, which the `cache-keys` of its `pyproject.toml
 python that the crate carries, and the extensions. So a change of `src/furb/engine.py` reaches the suite at the next
 `uv run`, after a build of a few seconds, and a short command can take minutes. To run with no sync, which builds
 nothing, use `uv run --no-sync`, or run the tools in `.venv/bin`.
-A worktree holds no `.venv`: run one test file there with the `.venv/bin/python` of the main checkout, as
-`<main>/.venv/bin/python -m pytest -q <file> -p no:cacheprovider --no-cov`, which syncs nothing.
+`script/worktree.sh` makes the `.venv` of a new worktree, so run one test file there as
+`.venv/bin/python -m pytest -q <file> -p no:cacheprovider --no-cov`, which syncs nothing. Where the script could not make
+it, probe with the `.venv/bin/python` of the main checkout, which imports main and not your change.
 
 Set the timeout of each command, and the bound of each wait, to about twice the time that the step should take, never a
 round 600 or 900 seconds in case: a ceiling that is too large hides a hang for as long. Make a step that can take
@@ -297,26 +301,30 @@ fix what your change broke, and report what was broken before.
   `uv sync --reinstall-package furb-monty --reinstall-package furb-cli` builds them again in any case. This build,
   `cargo test` and `bun run build` take the dev profile, which optimizes every dependency, the interpreter among them,
   so a word runs as fast as in a release while the crates of the workspace build quickly. A wheel for PyPI takes the
-  release.
+  release. A build keeps no incremental state and no debug information of a dependency (`.cargo/config.toml`,
+  `Cargo.toml`), which holds a target to about a third of its bytes; a rebuild of the crate takes about 45 s.
 - `script/worktree.sh <path> <branch> [base]`: make a git worktree whose build starts warm. It checks out a branch that
   stands on origin or in this clone, and moves a local branch that lags behind origin up to it; a new branch starts from
-  `base`, `origin/main` by default. It copies on write the build directories of the checkout whose build stands nearest
-  to the new commit, so cargo builds only the crates of the workspace again: the `target` of cargo, the `node_modules`
-  of bun, the build of the TypeScript package and the cache of the tests of the TUI. Then it runs
+  `base`, `origin/main` by default. It links `target` to `furb-target` beside the main checkout, which each worktree of the
+  clone shares, so a dependency builds once and a worktree adds only its crates of the workspace. The build script of
+  furb reads `FURB_TREE`, so a build rebuilds a crate that another worktree built last: cargo would call it fresh by
+  the time of its files and test the code of the other worktree. The programs keep no such
+  stamp: the program `furb` of the last build of any tree stands in the shared target, so `bun run build` copies it
+  to `bind/typescript/furb` of its tree (`bind/typescript/program.ts`), and the TUI and its tests serve the daemon from
+  that copy, never from the target. A tree
+  that lacks this stamp keeps its own target until it merges `origin/w/converge`: the hooks `post-merge` and
+  `post-commit` run `script/share-target.sh`, which drops that target and links the shared one, when no build runs in it. It copies on write the build directories of the
+  checkout whose build stands nearest to the new commit: the `node_modules` of bun, the build of the TypeScript
+  package and the cache of the tests of the TUI. Then it runs
   `bun install --offline` and `bun run build`. It sets `core.hooksPath` of the clone to `script/hooks` when no value
-  stands, so that the hooks of each worktree print only what fails. It does not copy `.venv`: run the `uv sync` that it prints, and before
-  that, probe with the `.venv/bin/python` of the main checkout. A first build takes about 6 minutes, against about 35 in
-  a worktree of `git worktree add`. Copy on write needs APFS, Btrfs or XFS; on another file system, the script makes a
+  stands, so that the hooks of each worktree print only what fails. It copies no `.venv`: it makes the `.venv` of the new tree with
+  `uv sync --locked` on the warm target, so the python of its hooks imports its own tree. That takes about 52 s in a new
+  tree, and next to no time when uv holds the wheel in its cache. If `uv` is missing or the sync fails, the script says
+  so and names the command to run. A first build takes about a minute when the shared target holds the
+  dependencies, against about 35 in a worktree of `git worktree add`. Copy on write needs APFS, Btrfs or XFS; on another file system, the script makes a
   plain worktree. Remove a worktree with `git worktree remove --force <path>`, then `git branch -D <branch>`. The
   checkout at the root can stand behind `origin/main`, so read and change code in a worktree.
-- `sh script/build-slot.sh <command> [argument...]`: run a command that builds, as `cargo`, `bun run build`, `uv sync`,
-  `uv run pytest` or `git commit` (its hooks run cargo and the suite), in one of the slots of builds that all the
-  worktrees of the machine share, with at most 4 jobs of cargo. A slot is a folder of `/tmp/furb-build-slots-<uid>`
-  that holds the pid of its holder, and the slot of a holder that ended goes to the next build. `FURB_BUILD_SLOTS` sets
-  the slots (one for each 12 GB of memory, at least 1; `FURB_BUILD_MEM_GB` replaces the memory the machine reports),
-  `FURB_BUILD_JOBS` the cap of jobs (4), `FURB_BUILD_WAIT` the seconds to wait for a slot (1200, then exit 75) and
-  `FURB_BUILD_DIR` the folder. The workers of the conductor build only through it: with no cap, 28 rustc processes took
-  13.8 GB, and the machine ran out of memory.
+- `sh script/memwatch.sh`: the one guard of memory, a watcher that runs beside the work. No step of the work waits on memory: a hook, a build, a test run and a capture start at once. While the memory is tight (on macOS the pressure level of the kernel is warn or critical, on Linux less than 20% of the memory is available), the watcher ends the largest test process (a test binary of cargo, pytest, bun test, a capture of the gallery) and prints its pid, its size and its command. It ends no other process: not a daemon of furb, not a window, not a process of the owner. The desk of the conductor starts it, and `sh script/memwatch.sh --once` looks one time.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
   whole.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.
@@ -334,14 +342,14 @@ fix what your change broke, and report what was broken before.
   lints it for what breaks a word, which is a name that nothing binds, a bug of the family B and an error of the family
   PLE, and for no style. A word imports each name of the engine that it uses from `furb.engine`, which the crate leaves
   out of the word. A name of a word before it in `.furb/config.json` is in `builtins` of `[tool.ruff]`, which
-  `.furb/extensions/test_words.py` holds to a definition. Run the tests of an extension of the project alone with
+  `.furb/skills/test_words.py` holds to a definition. Run the tests of an extension of the project alone with
   `uv run --no-sync pytest -q <folder> -p no:cacheprovider --no-cov`, since the coverage of 100 applies to the whole
   suite only.
 - `python3 script/rustwidth.py [base]`: fail on a comment line of a `.rs` file that the change adds past 100
   characters, which rustfmt does not wrap. The lines that main holds are no debt of a change: wrap them when you change
   their file.
 - `uv run ty check --error-on-warning`: the type check. The tests are checked against `engine.pyi`, and the words of
-  `.furb/extensions` too, less their tests.
+  `.furb/skills` too, less their tests.
 - `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`:
   the gates of the crate and of the command line. The tests of a module stand beside it, `src/engine.test.rs` beside
   `src/engine.rs`, and those of the engine drive the real engine on ears in rust. `cli/tests/furb.rs` runs `furb` as
@@ -352,8 +360,9 @@ fix what your change broke, and report what was broken before.
   `--files <files>` to run some files. In a new worktree, `uv run --no-sync pre-commit` makes an empty `.venv` and runs
   the old `pre-commit` of the system, which cannot read the config, so do not use it there. A `git commit` runs the hooks, `cargo test`
   among them, and takes minutes: give it a timeout in `bash` of twice the time that it took last. The hook
-  `script/hooks/pre-commit`, which `git config core.hooksPath script/hooks` turns on, prints only what fails. The hook `script/hooks/pre-push` refuses each push that moves or deletes `main` of a remote: `main` changes only through the merge of a pull request, `gh pr merge`, which runs no hook here. A merge commit, which `git merge` makes or `git commit` ends after a conflict, runs the hooks on
-  each file that it changes against its first parent, as a commit does. Run the
+  `script/hooks/pre-commit`, which `git config core.hooksPath script/hooks` turns on, prints only what fails. The hook `script/hooks/commit-msg` refuses a commit whose title breaks the rules of `script/title.py`, which CI checks on the pull request, so that no commit is amended and pushed again. The hook `script/hooks/pre-push` refuses each push that moves or deletes `main` of a remote: `main` changes only through the merge of a pull request, `gh pr merge`, which runs no hook here. It also runs the hooks once on the files of each pushed commit that no remote holds and whose change did not pass them, as after `--no-verify`, an amend or a rebase, and passes a commit that shares no history with `origin/main`, as a branch of captures, and refuses the push when they fail or when the branch is not checked out with a clean work tree, so a checked commit runs no hook a second time. A merge commit, which `git merge` makes or `git commit` ends after a conflict, runs the hooks only on
+  each file whose content differs from its version in every parent: a file that it takes whole from one parent passed the
+  hooks of that parent, and the gates check the whole tree. Run the
   push as its own command after the commit, so that its result stands in the tail of that command. The hook `cargo test` runs only when a file that the crate
   or its tests read changed, and the gates run every hook on every file. The hook of the links runs only for a README or
   a manifest, and reads git alone. The hook `stray` refuses a `*.rej`, `*.orig` or `*-E` file. The hook `paths` runs on
@@ -399,7 +408,7 @@ fix what your change broke, and report what was broken before.
 - `uv run --no-sync python script/workflows.py`: parse each file of `.github/workflows/` with PyYAML, in a second, with no
   build. It fails on a syntax fault, on a key that a mapping holds twice, on a marker of a conflict, on a job with
   neither `runs-on` nor `uses`, on a step with neither `run` nor `uses`, and on a `needs` that names no job. Run it
-  after a merge or a rebase that touched a workflow. The hooks run it on every commit, a merge commit too.
+  after a merge or a rebase that touched a workflow. The hooks run it on every commit, and on a merge commit with new content.
 - `bun install && bun run build`: install the TypeScript workspace, and build the N-API package that the TUI uses.
 - `bun run check`, `bun run lint` and `bun run test`: the type check, the lint and the tests of the TypeScript side.
   `tui/script/test.ts` deals the tests into runs, each a process that runs one test at a time with a limit of thirty
@@ -409,12 +418,13 @@ fix what your change broke, and report what was broken before.
   in the root and in each package gives a plain run the limit of thirty seconds and the folders of the runner.
   `FURB_TEST_OUTPUT=1` shows all that each run wrote. The tests read the built package, so a build older than its
   sources, as after a switch of branch, fails them as they fail on main: the runner warns before the run and after a
-  failure, and `bun run build` makes the build again. The tests read the configs and the cache of `.furb/tests` of the
-  root, from any folder, not those of the machine. A plain `bun test` gives them that folder in process.env, which the
-  native part, reading the environment that the process started with, never sees: so each test that builds Preferences
-  or Workspaces gives them a config directory of its own, and the preload fails a test that changes a file of the config
-  directory of the machine, and names the file. As root, the test of a folder that cannot be read fails, since
-  root reads every folder.
+  failure, and `bun run build` makes the build again. The tests read the configs of `.furb/tests` of the root, and
+  their cache in `/tmp/furb-cache-<the first 8 hex digits of the sha256 of the root>`, or in the temporary folder on
+  Windows, from any folder, not those of the machine. A plain `bun test` gives them those folders in process.env,
+  which the native part, reading the environment that the process started with, never sees: so each test that builds
+  Preferences or Workspaces gives them a config directory of its own, and the preload fails a test that changes a file
+  of the config directory of the machine, and names the file. As root, the test of a folder that cannot be read fails,
+  since root reads every folder.
   A script of bun in `$TMPDIR` cannot import the package `furb`, so write a quick check in the worktree, where
   `node_modules` stands.
 - `bun run test scenarios`: the scenarios of `tui/scenarios`, the path of the owner end to end. A scripted claude
@@ -423,9 +433,14 @@ fix what your change broke, and report what was broken before.
   guards a defect that a life of the owner met, and fails on the commit before its fix. `bun run test` runs them with
   the other tests, on macOS and Linux, so they are a required check of each pull request. Each fix of a path of the
   operator adds a scenario that fails on the code before the fix.
+  `tui/scenarios/walk.ts` walks the TUI the same way for the audit of the skill converge-tui: each key of the table,
+  each shape of answer, the sizes, and the newest records of the project read-only, with probes that find a defect
+  in a frame with no judge. Its scenario holds only that the walk goes to its end.
 - `bun run demo` and `bun run tui`: the TUI on the demo session, which asks no model, or on a real life.
 - `bun run docs`: write the tables of keys and commands in `tui/README.md` again from `tui/src/keys.ts` and
-  `tui/src/commands.ts`.
+  `tui/src/commands.ts`. A change of the types of the N-API door, or of the keys and the commands, runs
+  `bun run build` and `bun run docs` before its commit: the CI fails when `bind/typescript/index.d.cts` or
+  `tui/README.md` is not what they make. No hook of pre-commit runs them, since the job of the hooks has no bun.
 - `bun run bench`: the speed of the TUI on two recorded lives of about 2.6 KB for each fact, one of about 160000 facts
   and one of a tenth of that: the cost of a new fact, the first frame, the frames while the feed scrolls and a command
   streams, and the memory on Linux. It fails over its budgets, which the docstring of `tui/script/bench.ts` gives in paces of the

@@ -166,25 +166,25 @@ def test_deepswe_enables_compaction_without_dropping_local_config(
   deepswe = rig(monkeypatch)
   config = tmp_path / ".furb" / "config.local.json"
   config.parent.mkdir()
-  config.write_text(json.dumps({"actor": "fixture:model", "extensions": {"skills": False}}))
+  config.write_text(json.dumps({"actor": "fixture:model", "skills": {"skills": False}}))
   deepswe.enable_compaction(tmp_path)
   got = json.loads(config.read_text())
-  assert got == {"actor": "fixture:model", "extensions": {"skills": False, "compaction": True}}
+  assert got == {"actor": "fixture:model", "skills": {"skills": False, "compaction": True}}
 
 
 async def test_task_context_under_a_262144_token_window_triggers_compaction(
   tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
   from conftest import settle  # noqa: PLC0415
-  from extensions import conftest as extension_fixtures  # noqa: PLC0415
   from furb import engine  # noqa: PLC0415
+  from skills import conftest as skill_fixtures  # noqa: PLC0415
 
   stands = [[["operator", [], 200000], ["m", ["low", "high"], 262144]], "/w", "m/low"]
-  monkeypatch.setattr(extension_fixtures, "STANDS", stands)
-  sand, root, _ = extension_fixtures.compacting(tmp_path)
+  monkeypatch.setattr(skill_fixtures, "STANDS", stands)
+  sand, root, _ = skill_fixtures.compacting(tmp_path)
   await engine.rung("compacted()", on=root)
   sand.cost = (160000, 0, 0, 0, 0.0)
-  sand.script[root] = ["x = 1", "close(x)"]
+  sand.script[root] = ["x = 1\ndebug(t'go')", "close(x)"]
   assert await engine.prompt(int, "past the share", on=root) == 1
   await settle()
   assert engine.get("chain2") is not None

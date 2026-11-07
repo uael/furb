@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { inspectRecord, type NativeEar, store } from "furb";
 import { until } from "../../bind/typescript/test/until.ts";
-import { recordName } from "../src/names.ts";
 import { Preferences } from "../src/preferences.ts";
 import { Workspaces } from "../src/workspaces.ts";
 import { ended } from "./ended.ts";
@@ -75,34 +74,6 @@ async function saved(directory: string, open: () => Workspaces, name?: string): 
   return path;
 }
 
-test("a plain scan of a record finds the last name that the operator gave, as a word of a rung of any build", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "furb-names-"));
-  try {
-    const record = join(directory, "life.jsonl");
-    const rung = (name: string) =>
-      JSON.stringify([
-        [
-          "rung",
-          "rung1",
-          "operator",
-          "chain1",
-          `act("rename_session", "", lambda id: (yield "done", id, ${JSON.stringify(name)}))`,
-          "",
-          "",
-        ],
-        1,
-      ]);
-    await writeFile(
-      record,
-      [rung("pf-1208"), "not a fact", rung('say "it" \\ twice'), '[["chain"'].join("\n"),
-    );
-    expect(recordName(record)).toBe('say "it" \\ twice');
-    expect(recordName(join(directory, "none.jsonl"))).toBeUndefined();
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-});
-
 test("a name that one build gave shows in the list of another build, when the record drifts and another host holds it", () =>
   withLibraries(async (directory, open) => {
     const record = await saved(directory, open, "pf-1194");
@@ -119,7 +90,7 @@ test("a name that one build gave shows in the list of another build, when the re
     }
   }));
 
-test("a name that an older release kept beside the record shows in the list and in the session that opens it, and stays there until the record holds it", () =>
+test("a name that an older release kept beside the record shows in the list and in the session that opens it, moves into the record once, and shows in the list after it", () =>
   withLibraries(async (directory, open) => {
     const record = await saved(directory, open);
     const path = `${record}.ui.json`;
@@ -129,11 +100,16 @@ test("a name that an older release kept beside the record shows in the list and 
     const group = await library.add(directory);
     const row = group.sessions.find((entry) => entry.path === record);
     await until(library, () => row?.name === "pf-1193");
+    // The session that opens the record moves the name into it, so the old home holds it no more and no save loses it.
     await library.import(record, group);
     const session = library.current?.session;
     if (!session) throw new Error("The record did not open.");
     await until(library, () => session.sessionName === "pf-1193");
+    await until(library, () => !("sessionName" in held()));
     await library.dispose();
-    // The name stays in its old home, or the life that could write the record moved it there.
-    expect(held().sessionName ?? recordName(record)).toBe("pf-1193");
+    await ended(record);
+    const again = open();
+    const listed = (await again.add(directory)).sessions.find((entry) => entry.path === record);
+    await until(again, () => listed?.name === "pf-1193");
+    expect("sessionName" in held()).toBe(false);
   }));

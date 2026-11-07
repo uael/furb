@@ -22,14 +22,9 @@ async function firstRun(claude?: string): Promise<{ frame: string; acts: string[
       await writeFile(join(programs, "claude"), `#!/bin/sh\n${claude}\n`);
       await chmod(join(programs, "claude"), 0o755);
     }
-    // The program furb is found as the build left it: a PATH of the system alone holds none, and the build of a runner
-    // stands in the folder of its triple.
+    // The program furb is the one that the build left in the tree, as a PATH of the system alone holds none.
     const env = {
-      ...Object.fromEntries(
-        ["FURB_BIN", "CARGO_TARGET_DIR", "CARGO_BUILD_TARGET"].flatMap((name) =>
-          process.env[name] === undefined ? [] : [[name, process.env[name]]],
-        ),
-      ),
+      ...(process.env.FURB_BIN === undefined ? {} : { FURB_BIN: process.env.FURB_BIN }),
       HOME: home,
       XDG_CACHE_HOME: cache,
       TMPDIR: join(home, "tmp"),
@@ -62,20 +57,22 @@ test.skipIf(process.platform === "win32")(
   "a real life on a home with no claude and no key shows the check of the setup over the steps of its extensions",
   async () => {
     const { frame, acts } = await firstRun();
-    // The root wrote its setup on itself, each rung of an extension wrote the code of that extension, and the life
-    // words started the watchers, and the welcome shows all the same. The extension naming plays on the root alone, so
-    // its word and its life word come after the others.
-    expect(acts.filter((line) => line.endsWith(" chain1"))).toEqual(
-      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 21].map((n) => `rung${n} chain1`),
-    );
-    expect(acts.filter((line) => /^rung\d+ rung\d+$/.test(line))).toEqual([
-      ...[3, 4, 5, 6, 7, 8, 9].map((n) => `rung${n + 10} rung${n}`),
-      "rung20 rung11",
-    ]);
-    expect(
-      acts.filter((line) => line.endsWith(" rung10")).filter((line) => !/^(memory|read)\d+ /.test(line)),
-    ).toEqual(["catchup1 rung10", "remember1 rung10", "fitted1 rung10", "mcp_index1 rung10"]);
-    expect(acts).toContain("name_session1 rung12");
+    // The root wrote its setup on itself, the rungs of the skills with code wrote the code of each, and the life
+    // words of the default skills started the watchers, and the welcome shows all the same. The extension naming plays
+    // on the root alone, so its life word comes after the others.
+    const own = acts.filter((line) => line.endsWith(" chain1")).map((line) => line.split(" ")[0]);
+    // The debug, the read of the doctrine and the read of the word of each default skill come first, each on the root.
+    expect(own.slice(0, 6)).toEqual([1, 2, 3, 4, 5, 6].map((n) => `rung${n}`));
+    // Each read of a word of a skill made the rung that plays the word, the four of the default skills first and the
+    // extension naming after them, and each life word is a rung of the root that the watchers it started name.
+    const nested = acts
+      .filter((line) => /^rung\d+ rung\d+$/.test(line))
+      .map((line) => line.split(" ")[1] ?? "");
+    expect(nested.slice(0, 4)).toEqual(["rung3", "rung4", "rung5", "rung6"]);
+    expect(nested.every((maker) => own.includes(maker))).toBe(true);
+    const maker = (name: string) => acts.find((line) => line.startsWith(`${name} `))?.split(" ")[1] ?? "";
+    for (const name of ["catchup1", "remember1", "compacted1", "fitted1", "name_session1"])
+      expect(own).toContain(maker(name));
     expect(frame).toContain("No model answers yet");
     expect(frame).toContain("Claude command line  Not found.");
     expect(frame).toContain("Other providers  No model available.");

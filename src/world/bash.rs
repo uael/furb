@@ -20,6 +20,7 @@ use futures::{
   future::FusedFuture,
   stream,
 };
+use std::io;
 use tokio::{
   io::AsyncWriteExt,
   process::ChildStdin,
@@ -237,6 +238,13 @@ struct Begun {
   given: Option<String>,
 }
 
+/// The environment that makes a request for an editor or a terminal fail at once. No one answers
+/// a command at a terminal, so `git commit` with no message, or a prompt for a password, would
+/// wait for ever: with these set, git fails on the editor `false` and on a prompt, and a program
+/// that reads `VISUAL` or `EDITOR` runs `false`.
+const UNASKING: [(&str, &str); 4] =
+  [("GIT_EDITOR", "false"), ("VISUAL", "false"), ("EDITOR", "false"), ("GIT_TERMINAL_PROMPT", "0")];
+
 /// A command begun: its shell made ready in the directory of its chain, with the scratch directory
 /// as its `TMPDIR`.
 async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, Fault> {
@@ -267,6 +275,9 @@ async fn begun(co: &mut Co<Said>, a: &Fact, scratch: &Scratch) -> Result<Begun, 
     .stderr(Stdio::piped());
   let tmp = scratch.made()?;
   command.env("TMPDIR", tmp);
+  for (name, value) in UNASKING {
+    command.env(name, value);
+  }
   if cfg!(windows) {
     command.env("TMP", tmp).env("TEMP", tmp);
   }
@@ -297,8 +308,8 @@ fn command(begun: Begun, fed: spsc::Receiver<Option<String>>) -> impl futures::S
 /// What ended the wait on a command before its exit.
 enum Cut {
   Unread(Unread),
-  Unslain(std::io::Error),
-  Unwaited(std::io::Error),
+  Unslain(io::Error),
+  Unwaited(io::Error),
 }
 
 /// How a command exited: the code of its shell, and whether its timeout ended it.
@@ -319,7 +330,7 @@ enum Phase {
 /// reach the group ends it with that fault, and the timeout of the command ends its processes at
 /// any time.
 async fn watch(
-  shell: JoinHandle<std::io::Result<Option<i32>>>,
+  shell: JoinHandle<io::Result<Option<i32>>>,
   streams: impl Future<Output = Result<(), Unread>>,
   expired: impl Future<Output = ()>,
   feeding: impl Future<Output = ()>,
@@ -333,7 +344,7 @@ async fn watch(
     tokio::select! {
       biased;
       got = &mut shell, if matches!(phase, Phase::Running) => {
-        let status = got.map_err(std::io::Error::other).and_then(|waited| waited).map_err(Cut::Unwaited)?;
+        let status = got.map_err(io::Error::other).and_then(|waited| waited).map_err(Cut::Unwaited)?;
         phase = Phase::Draining { status, until: Instant::now() + DRAIN };
       }
       read = &mut streams => read.map_err(Cut::Unread)?,

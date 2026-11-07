@@ -9,6 +9,7 @@ use std::{
   convert::Infallible,
   env,
   ffi::{OsStr, OsString},
+  io,
   path::{Path, PathBuf},
   process::Command,
 };
@@ -88,7 +89,7 @@ fn found(
 
 /// The TUI given the terminal: furb becomes it, so it holds the terminal and its signals alone.
 #[cfg(unix)]
-fn handed(mut command: Command) -> std::io::Result<Infallible> {
+fn handed(mut command: Command) -> io::Result<Infallible> {
   use std::os::unix::process::CommandExt;
   Err(command.exec())
 }
@@ -96,7 +97,11 @@ fn handed(mut command: Command) -> std::io::Result<Infallible> {
 /// The TUI given the terminal: furb lets the console give Ctrl+C and Ctrl+Break to the TUI alone, waits for it, and
 /// ends with its code.
 #[cfg(windows)]
-fn handed(mut command: Command) -> std::io::Result<Infallible> {
+#[expect(
+  unsafe_code,
+  reason = "the handler of the console is a call of Windows that no safe crate of the lock makes"
+)]
+fn handed(mut command: Command) -> io::Result<Infallible> {
   unsafe extern "system" fn held(_: u32) -> windows_sys::core::BOOL {
     1
   }

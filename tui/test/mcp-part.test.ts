@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { isDone } from "furb/life";
 import { demoSession } from "../src/demo.ts";
 import { composing, pressEscape } from "./composing.ts";
 
@@ -11,7 +12,7 @@ afterAll(() => {
 });
 
 /** The part of the extension mcp, and a word that answers its acts as the ear of mcp answers them, from two servers. */
-const PART = resolve(import.meta.dir, "..", "..", "extensions", "mcp", "tui.ts");
+const PART = resolve(import.meta.dir, "..", "..", ".agents", "skills", "mcp", "tui.ts");
 const fixture = resolve(import.meta.dir, "..", "fixtures", "mcp");
 const WORD = readFileSync(join(fixture, "servers.py"), "utf8").replace(
   /^from furb\.engine import .*\n+/m,
@@ -22,14 +23,11 @@ const WORD = readFileSync(join(fixture, "servers.py"), "utf8").replace(
 function project(): string {
   const directory = mkdtempSync(join(tmpdir(), "furb-mcp-"));
   made.push(directory);
-  const folder = join(directory, ".furb", "extensions", "servers");
+  const folder = join(directory, ".furb", "skills", "servers");
   mkdirSync(folder, { recursive: true });
   cpSync(fixture, folder, { recursive: true });
   cpSync(PART, join(folder, "tui.ts"));
-  writeFileSync(
-    join(directory, ".furb", "config.json"),
-    '{"extensions": {"servers": "extensions/servers"}}\n',
-  );
+  writeFileSync(join(directory, ".furb", "config.json"), '{"skills": {"servers": "skills/servers"}}\n');
   return directory;
 }
 
@@ -101,6 +99,28 @@ test("/mcp reconnect all reconnects each server that is down in one word, and th
       const control = () => session.acts.filter((act) => act.kind === "mcp_control").map((act) => act.words);
       await until(() => control().length > 0);
       expect(control()).toEqual([["reconnect", "slack"]]);
+      await shows(frame, "MCP servers", (now) => !now.includes("failed"));
+      await pressEscape(screen);
+    },
+    { width: 180, height: 50 },
+    session,
+  );
+});
+
+test("/mcp reload reconnects each server, the connected ones too, in one word", async () => {
+  const session = await demoSession({ cwd: project() });
+  await composing(
+    async ({ app, frame, screen }) => {
+      await session.command(`/run ${WORD}\nmcp_servers()`);
+      await shows(frame, "MCP: 2 servers, 1 failed");
+      app.composer.setText("/mcp reload");
+      await app.submit();
+      const control = () => session.acts.filter((act) => act.kind === "mcp_control").map((act) => act.words);
+      await until(() => control().length > 1);
+      expect(control()).toEqual([
+        ["reconnect", "github"],
+        ["reconnect", "slack"],
+      ]);
       await shows(frame, "MCP servers", (now) => !now.includes("failed"));
       await pressEscape(screen);
     },
@@ -212,7 +232,7 @@ test("/status tells the budget and the servers that the session holds, and no ce
     expect(bare.MCP).toBe("no server");
     await session.engine.grant({ usd: 5, share: 0.5, on: session.selected });
     await session.command(`/run ${WORD}\nmcp_servers()`);
-    await until(() => session.acts.some((act) => act.kind === "mcp_servers" && act.done));
+    await until(() => session.acts.some((act) => act.kind === "mcp_servers" && isDone(act)));
     await session.command("/status");
     const held = Object.fromEntries(seen[1] ?? []);
     expect(held.Budget).toMatch(/^\$[\d.]+ of \$5\.00, pauses at 50% of the window$/);

@@ -1,5 +1,6 @@
-import { cancelled, type Exit, failed, type LiveAct, operated } from "./acts.js";
-import { actState, type State } from "./states.js";
+import type { Rung } from "../protocol.js";
+import { type Act, cancelled, type Exit, exitOf, failed, isDone, outcomeOf } from "./acts.js";
+import type { State } from "./states.js";
 
 /** One line of the thread of a chain.
  *
@@ -15,15 +16,15 @@ import { actState, type State } from "./states.js";
  *   line until it opens, with how many it holds.
  */
 export type Line =
-  | { type: "prompt"; act: LiveAct; depth: number; state: State }
-  | { type: "rung"; act: LiveAct; depth: number; state: State; word: string; more: number; acts: Chip[] }
-  | { type: "act"; act: LiveAct; depth: number; state: State }
-  | { type: "ear"; act: LiveAct; depth: number; state: State; rungs: LiveAct[]; acts: Chip[] }
-  | { type: "tail"; act: LiveAct; depth: number; text: string; model: boolean }
-  | { type: "value"; act: LiveAct; depth: number; text: string }
+  | { type: "prompt"; act: Act; depth: number; state: State }
+  | { type: "rung"; act: Act; depth: number; state: State; word: string; more: number; acts: Chip[] }
+  | { type: "act"; act: Act; depth: number; state: State }
+  | { type: "ear"; act: Act; depth: number; state: State; rungs: Act[]; acts: Chip[] }
+  | { type: "tail"; act: Act; depth: number; text: string; model: boolean }
+  | { type: "value"; act: Act; depth: number; text: string }
   | {
       type: "more";
-      act: LiveAct;
+      act: Act;
       depth: number;
       count: number;
       of: "prompts" | "rungs";
@@ -40,10 +41,10 @@ export interface Chip {
 
 /** The acts of a rung as chips: a run of acts of one kind and one state stands as one chip, by its first and its last
  * number. */
-export function chips(acts: readonly LiveAct[], owed: ReadonlySet<string>): Chip[] {
+export function chips(acts: readonly Act[]): Chip[] {
   const out: Chip[] = [];
   for (const act of acts) {
-    const state = actState(act, owed);
+    const state = act.state;
     const last = out.at(-1);
     if (
       last &&
@@ -72,8 +73,8 @@ export function valueText(value: unknown): string {
 }
 
 /** The last lines that a command printed, at most a count of them, with no empty line at the end. */
-export function tailOf(act: LiveAct, count = 3): string {
-  const exit = act.value as Exit | undefined;
+export function tailOf(act: Act & { printed?: Exit }, count = 3): string {
+  const exit = exitOf(act);
   const lines = `${exit?.stdout?.content ?? ""}${exit?.stderr?.content ?? ""}`
     .replace(/\n+$/, "")
     .split("\n");
@@ -83,36 +84,34 @@ export function tailOf(act: LiveAct, count = 3): string {
 /** What a host already holds of the acts of a life, which the ladder reads in place of a pass over every act: the acts
  * on the chain but its chains, the acts that each act made, and each act by its name, each in the order of the acts. */
 export type ActIndex = {
-  on: readonly LiveAct[];
-  made: ReadonlyMap<string, readonly LiveAct[]>;
-  ids: ReadonlyMap<string, LiveAct>;
+  on: readonly Act[];
+  made: ReadonlyMap<string, readonly Act[]>;
+  ids: ReadonlyMap<string, Act>;
   /** Each act that is not done, and each rung whose run runs, by its name, which the steps that stay shown hold. */
-  live: ReadonlyMap<string, LiveAct>;
+  live: ReadonlyMap<string, Act>;
   /** How many times an act that each act made came or changed, which a host that counts them gives: a thread keeps what
    * it read of each step until that count changes. */
   stamp?: (id: string) => number;
 };
 
-/** How a thread reads its acts: the chain, the word of a rung, what each rung streams, and the prompts that the
- * operator owes. */
+/** How a thread reads its acts: the chain, the word of a rung, and what each rung streams. */
 interface Reading {
   chain: string;
-  made: ReadonlyMap<string, readonly LiveAct[]>;
-  word: (rung: LiveAct) => string;
+  made: ReadonlyMap<string, readonly Act[]>;
+  word: (rung: Act) => string;
   streams: ReadonlyMap<string, { text: string; thinking: string }>;
-  owed: ReadonlySet<string>;
 }
 
 /** A step of a thread: its line, the lines that stand first under it, the acts whose steps stand under it, and the
  * lines that end it. A prompt holds the steps of the rungs of its ladder and ends with its value. A rung holds the
  * tails of what streams and the steps of the prompts that it made on the chain, and the chips of every other act that
  * it made. A command that runs holds its tail. */
-function step(act: LiveAct, depth: number, { chain, made, word, streams, owed }: Reading) {
-  const state = actState(act, owed);
+function step(act: Act, depth: number, { chain, made, word, streams }: Reading) {
+  const state = act.state;
   const lead: Line[] = [];
   const trail: Line[] = [];
   if (act.kind === "prompt") {
-    const text = act.done && !failed(act) && !cancelled(act) ? valueText(act.value) : "";
+    const text = isDone(act) && !failed(act) && !cancelled(act) ? valueText(outcomeOf(act)) : "";
     if (text) trail.push({ type: "value", act, depth: depth + 1, text });
     const line: Line = { type: "prompt", act, depth, state };
     return { line, lead, steps: made.get(act.id) ?? [], trail };
@@ -120,7 +119,7 @@ function step(act: LiveAct, depth: number, { chain, made, word, streams, owed }:
   if (act.kind === "rung") {
     const children = made.get(act.id) ?? [];
     const [first = "", ...rest] = word(act).split("\n");
-    const asked = children.filter((child) => child.kind === "prompt" && child.on === chain);
+    const asked = children.filter((child) => child.kind === "prompt" && child.chain === chain);
     const asks = new Set(asked);
     const line: Line = {
       type: "rung",
@@ -129,13 +128,10 @@ function step(act: LiveAct, depth: number, { chain, made, word, streams, owed }:
       state,
       word: first,
       more: rest.length,
-      acts: chips(
-        children.filter((child) => !asks.has(child)),
-        owed,
-      ),
+      acts: chips(children.filter((child) => !asks.has(child))),
     };
     const stream = streams.get(act.id);
-    if (stream && !act.done)
+    if (stream && !isDone(act))
       lead.push({
         type: "tail",
         act,
@@ -144,42 +140,32 @@ function step(act: LiveAct, depth: number, { chain, made, word, streams, owed }:
         model: true,
       });
     for (const child of children)
-      if (child.kind === "bash" && !child.done && tailOf(child))
+      if (child.kind === "bash" && !isDone(child) && tailOf(child))
         lead.push({ type: "tail", act: child, depth: depth + 1, text: tailOf(child), model: false });
     return { line, lead, steps: asked, trail };
   }
-  if (act.kind === "bash" && !act.done && tailOf(act))
+  if (act.kind === "bash" && !isDone(act) && tailOf(act))
     lead.push({ type: "tail", act, depth: depth + 1, text: tailOf(act), model: false });
-  return { line: { type: "act", act, depth, state } as Line, lead, steps: [] as LiveAct[], trail };
-}
-
-/** A rung that no act wrote: an ear of the outside wrote it, or the chain wrote it on itself and it retells no word of
- * another rung, as the setup of the root and each stand and cd. The words of a chain that retell its source, whose
- * donor is a rung, are no such rung. */
-function written(act: LiveAct, known: (id: string) => boolean): boolean {
-  return act.kind === "rung" && !operated(act.by) && (!known(act.by) || (act.by === act.on && !act.words[1]));
+  return { line: { type: "act", act, depth, state } as Line, lead, steps: [] as Act[], trail };
 }
 
 /** The line of the rungs in a row that one maker wrote on the chain with no word of its own, as the words of the
  * extensions and the setup of a chain. */
-function earLine(rungs: LiveAct[], { made, owed }: Reading): Line {
-  const states = rungs.map((rung) => actState(rung, owed));
+function earLine(rungs: Act[], { made }: Reading): Line {
+  const states = rungs.map((rung) => rung.state);
   return {
     type: "ear",
-    act: rungs[0] as LiveAct,
+    act: rungs[0] as Act,
     depth: 0,
     state: states.find((state) => state !== "done") ?? "done",
     rungs,
-    acts: chips(
-      rungs.flatMap((rung) => made.get(rung.id) ?? []),
-      owed,
-    ),
+    acts: chips(rungs.flatMap((rung) => made.get(rung.id) ?? [])),
   };
 }
 
 /** The parts of a step that a thread read, and what they were read of. */
 interface Kept {
-  act: LiveAct;
+  act: Act;
   depth: number;
   stamp: number;
   word: string;
@@ -190,92 +176,26 @@ interface Kept {
 /** The parts of each step that a thread read, by the index of the host that it read them from. */
 const steps = new WeakMap<object, Map<string, Kept>>();
 
-/** The steps of one level of a thread, which a list of acts that only grows gives: each by its name and its kind, the
- * rungs of an ear that stand as one step, the place of each step by the name of its act, and the places of the steps
- * of each kind, so that a level finds what a fold holds with no pass over the steps. */
-interface Listed {
-  seen: number;
-  steps: { id: string; kind: string; by: string; ear?: string[] }[];
-  place: Map<string, number>;
-  kinds: Map<string, number[]>;
-  /** The places in the list of the acts that were taken as steps, by the act that made them. */
-  makers: Map<string, number[]>;
-}
-/** The steps of each level that a thread read, by the index of the host, and by the list that gives them. */
-const levels = new WeakMap<object, Map<string, Listed>>();
-
-/** The steps that a list of acts gives, read again from where the list was read last. A list that holds fewer acts
- * than were read is a new list, which is read whole. */
-function listed(
-  kept: Map<string, Listed>,
-  key: string,
-  acts: readonly LiveAct[],
-  take: (act: LiveAct) => "step" | "ear" | "",
-): Listed {
-  let held = kept.get(key);
-  if (!held || acts.length < held.seen) {
-    held = { seen: 0, steps: [], place: new Map(), kinds: new Map(), makers: new Map() };
-    kept.set(key, held);
-  }
-  for (; held.seen < acts.length; held.seen++) {
-    const act = acts[held.seen] as LiveAct;
-    // An ear that an act starts can make an act before the life tells the act that started it, so a step whose maker
-    // comes later in the list can stand under that maker once it came: the list is read again whole then.
-    const before = held.makers.get(act.id) ?? [];
-    if (before.some((at) => take(acts[at] as LiveAct) === "")) {
-      kept.delete(key);
-      return listed(kept, key, acts, take);
-    }
-    const taken = take(act);
-    if (!taken) continue;
-    const made = held.makers.get(act.by);
-    if (made) made.push(held.seen);
-    else held.makers.set(act.by, [held.seen]);
-    const last = held.steps.at(-1);
-    // The rungs in a row that one maker wrote with no word of its own stand as one step.
-    if (taken === "ear" && last?.ear && last.by === act.by) {
-      last.ear.push(act.id);
-      continue;
-    }
-    const place = held.steps.length;
-    held.steps.push({
-      id: act.id,
-      kind: act.kind,
-      by: act.by,
-      ...(taken === "ear" ? { ear: [act.id] } : {}),
-    });
-    held.place.set(act.id, place);
-    const kinds = held.kinds.get(act.kind);
-    if (kinds) kinds.push(place);
-    else held.kinds.set(act.kind, [place]);
-  }
-  return held;
-}
-
-/** The thread of a chain as a person reads it at a glance, read from the index of a host: the last steps at each level
- * of the thread, and a line of more in place of each run of earlier ones, which a key of the opened set opens. At the
- * top and under a rung, a step is a prompt, or another line that heads lines of its own, and the last prompts show;
- * under a prompt, a step is a rung, and the last rungs show. A step that asks the operator or runs stays shown, and a
- * fold holds two steps in a row at least. The key of a fold is prompts: or rungs: and the act that the steps stand
- * under, or the chain at the top. It makes the lines of the steps that it shows, and only counts the steps that a fold
- * holds, so that it takes the time of what it shows and not the time of the life. */
+/** The thread of a chain as a person reads it at a glance, from the ladder that the crate folds of it: the lines of
+ * each step that it shows, with the lines that head the steps under it and those that end them, each line of the rungs
+ * of an ear, and a line of more in place of each fold, which a key of the opened set opens. It makes the lines of the
+ * steps that the crate shows, so that it takes the time of what it shows and not the time of the life. */
 export function thread(
+  rungs: readonly Rung[],
   chain: string,
-  word: (rung: LiveAct) => string,
+  word: (rung: Act) => string,
   streams: ReadonlyMap<string, { text: string; thinking: string }>,
   owed: ReadonlySet<string>,
-  opened: ReadonlySet<string>,
   index: ActIndex,
-  shown: { prompts: number; rungs: number } = SHOWN,
 ): Line[] {
   const { ids } = index;
-  const reading: Reading = { chain, made: index.made, word, streams, owed };
+  const reading: Reading = { chain, made: index.made, word, streams };
   // A host that stamps each change of the acts that an act made keeps the parts of each step that it read, until the
   // step, its word, what it streams, or the prompts that the operator owes change.
   const kept = index.stamp && (steps.get(index.made) ?? new Map<string, Kept>());
   if (kept) steps.set(index.made, kept);
   const asks = [...owed].join(" ");
-  const parts = (act: LiveAct, depth: number) => {
+  const parts = (act: Act, depth: number) => {
     const stamp = index.stamp?.(act.id) ?? 0;
     const text = act.kind === "rung" ? word(act) : "";
     const stream = streams.get(act.id);
@@ -294,146 +214,44 @@ export function thread(
     kept?.set(act.id, { act, depth, stamp, word: text, stream, owed: asks, parts: made });
     return made;
   };
-  const local = (id: string) => {
-    const act = ids.get(id);
-    return act !== undefined && act.on === chain && act.kind !== "chain";
-  };
-  const ear = (act: LiveAct) => written(act, (id) => ids.has(id));
-  // A step stays shown when a prompt or a rung under it asks the operator or runs: each such act marks each step from
-  // it up to the top, through the lines that the thread makes of it, in the level of the step above it.
-  const alive = new Map<string, string[]>();
-  for (const act of [...index.live.values(), ...[...owed].flatMap((id) => ids.get(id) ?? [])]) {
-    if (
-      (act.kind !== "prompt" && act.kind !== "rung") ||
-      !["asks", "thinks", "runs", "idle"].includes(actState(act, owed))
-    )
-      continue;
-    const path: string[] = [];
-    for (let at: LiveAct | undefined = act; at && path.length <= ids.size; ) {
-      path.push(at.id);
-      if (at.on === chain && at.kind !== "chain" && !local(at.by)) {
-        if (!ear(at))
-          for (const [place, id] of path.entries()) {
-            const above = path[place + 1] ?? "";
-            const marked = alive.get(above) ?? [];
-            if (!marked.includes(id)) marked.push(id);
-            alive.set(above, marked);
-          }
-        break;
-      }
-      const maker = ids.get(at.by);
-      const under: boolean =
-        maker?.kind === "prompt" || (maker?.kind === "rung" && at.kind === "prompt" && at.on === chain);
-      at = under ? maker : undefined;
-    }
-  }
-  const cache = levels.get(index.made) ?? new Map<string, Listed>();
-  levels.set(index.made, cache);
-  /** The steps under a step: each act that a prompt made, and each prompt that a rung made on the chain. */
-  const under = (act: LiveAct) =>
-    act.kind === "prompt" || act.kind === "rung"
-      ? listed(cache, `${act.kind}:${act.id}`, index.made.get(act.id) ?? [], (child) =>
-          act.kind === "prompt" || (child.kind === "prompt" && child.on === chain) ? "step" : "",
-        )
-      : empty;
   const out: Line[] = [];
-  /** One level of the thread: a group of the lines that stand first, which stays, then a group for each step, and the
-   * lines that end the level in the last group. It reads only the steps that it shows, and the places of the kinds of
-   * the steps that a fold holds. */
-  const level = (
-    lead: Line[],
-    list: Listed,
-    trail: Line[],
-    depth: number,
-    key: string,
-    above: string,
-  ): void => {
-    const rungs = key.startsWith("rungs:");
-    const keep = rungs ? shown.rungs : shown.prompts;
-    const count = list.steps.length;
-    if (lead.length || (!count && trail.length)) out.push(...lead, ...(count ? [] : trail));
-    // The steps that show: each step once the operator opened the fold of the level, else the last steps and each
-    // step under which a prompt or a rung asks the operator or runs.
-    const end = opened.has(key) ? 0 : Math.max(0, count - keep);
-    const marked = (alive.get(above) ?? []).flatMap((id) => {
-      const place = list.place.get(id);
-      return place !== undefined && place < end ? [place] : [];
-    });
-    const shows = [...new Set(marked)].sort((one, other) => one - other);
-    for (let place = end; place < count; place++) shows.push(place);
-    const show = (place: number) => {
-      const one = list.steps[place];
-      const act = one && ids.get(one.id);
-      if (!one || !act) return;
-      if (one.ear)
-        out.push(
-          earLine(
-            one.ear.flatMap((id) => ids.get(id) ?? []),
-            reading,
-          ),
-        );
-      else {
-        const read = parts(act, depth);
-        out.push(read.line);
-        level(
-          read.lead,
-          under(act),
-          read.trail,
-          depth + 1,
-          `${act.kind === "prompt" ? "rungs" : "prompts"}:${act.id}`,
-          act.id,
-        );
-      }
-      if (place === count - 1) out.push(...trail);
-    };
-    let before = -1;
-    for (const place of [...shows, count]) {
-      // A fold holds two steps in a row at least, and a lone step that it would hold shows.
-      const from = before + 1;
-      if (place - from >= 2) {
-        const heads = [...list.kinds]
-          .flatMap(([kind, places]) => {
-            const at = places[lowest(places, from)];
-            return at !== undefined && at < place ? [[at, kind] as const] : [];
-          })
-          .sort(([one], [other]) => one - other)
-          .map(([, kind]) => kind);
-        const head = ids.get(list.steps[from]?.id ?? "");
-        if (head)
-          out.push({
-            type: "more",
-            act: head,
-            depth,
-            count: place - from,
-            of: rungs ? "rungs" : "prompts",
-            key,
-            heads,
-          });
-      } else if (place - from === 1) show(from);
-      if (place < count) show(place);
-      before = place;
+  // The lines that end a step stand after the steps under it, so each waits until a line of its depth or above comes.
+  const trails: { depth: number; lines: Line[] }[] = [];
+  const close = (depth: number) => {
+    for (let last = trails.at(-1); last && last.depth >= depth; last = trails.at(-1)) {
+      trails.pop();
+      out.push(...last.lines);
     }
   };
-  const top = listed(cache, `on:${chain}`, index.on, (act) =>
-    local(act.by) ? "" : ear(act) ? "ear" : "step",
-  );
-  level([], top, [], 0, `prompts:${ids.get(top.steps[0]?.id ?? "")?.on ?? ""}`, "");
+  for (const rung of rungs) {
+    close(rung.depth);
+    if (rung.type === "ear") {
+      const acts = rung.rungs.flatMap((id) => ids.get(id) ?? []);
+      if (acts.length) out.push(earLine(acts, reading));
+      continue;
+    }
+    const act = ids.get(rung.type === "step" ? rung.id : rung.head);
+    if (!act) continue;
+    if (rung.type === "more") {
+      const { depth, count, key, heads } = rung;
+      out.push({
+        type: "more",
+        act,
+        depth,
+        count,
+        of: rung.of === "rungs" ? "rungs" : "prompts",
+        key,
+        heads,
+      });
+      continue;
+    }
+    const read = parts(act, rung.depth);
+    out.push(read.line, ...read.lead);
+    trails.push({ depth: rung.depth, lines: read.trail });
+  }
+  close(0);
   return out;
 }
-
-/** The first place in a sorted list of places that is not less than a place. */
-function lowest(places: readonly number[], place: number): number {
-  let low = 0;
-  for (let high = places.length; low < high; ) {
-    const middle = (low + high) >> 1;
-    if ((places[middle] ?? 0) < place) low = middle + 1;
-    else high = middle;
-  }
-  return low;
-}
-
-/** The steps of a list that gives none. */
-const empty: Listed = { seen: 0, steps: [], place: new Map(), kinds: new Map(), makers: new Map() };
 
 /** How many of the last prompts of a thread, and of the last rungs of each ladder, a condensed thread shows. */
 export const SHOWN = { prompts: 6, rungs: 4 };

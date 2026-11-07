@@ -1,6 +1,7 @@
 import { expect, setSystemTime, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { RGBA } from "@opentui/core";
+import { isDone, onThread } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { glyph, palettes, spacing as space } from "../src/theme.ts";
 import { type Composing, cellAt, composing } from "./composing.ts";
@@ -85,90 +86,7 @@ test("after ⌥T the keys stand on the thread lit, Space collapses it in the fee
     true,
   ));
 
-test("a thread resolves from the controls under its row in the sidebar, and a message to it opens it again", () =>
-  composing(
-    async (use) => {
-      const { session, frame } = use;
-      await idle(session);
-      const root = session.engine.root;
-      await session.engine.pause(root);
-      const id = await session.engine.prompt("str", { message: "Hold this thread open", on: root });
-      await session.refresh();
-      await until(session, () => listed(session).some((one) => one.act.id === id));
-      await railClick(use, "Hold this thread open");
-      await until(session, () => session.thread === id);
-      const open = await frame();
-      keep("chosen", open);
-      // The controls of the thread chosen stand on the row under its row.
-      const side = rail(session, open);
-      const title = side.findIndex((line) => line.includes("Hold this thread open"));
-      expect(side[title + 1]).toContain("↳ Reply");
-      await railClick(use, " Resolve ");
-      await until(session, () => listed(session).find((one) => one.act.id === id)?.resolved === true);
-      expect(await session.engine.result(id)).toBe("resolved");
-      // The thread chosen stays the target of the input, which opens it again with its next message.
-      expect(await frame()).toContain("↳ Replying here");
-      await session.submit("Look at it once more");
-      await until(session, () => listed(session).find((one) => one.act.id === id)?.resolved === false);
-      keep("reopened", await frame());
-    },
-    size,
-    true,
-  ));
-
-// The life of 11-05 showed a prompt of the operator closed as "resolved" that nobody resolved. The sidebar orders the open
-// threads by the time of their last message, so a message moves a thread under a still pointer, and a release that
-// fell on the Resolve link that the redraw put there took it as a click on it.
-test("a redraw that puts Resolve under a still pointer between the press and the release resolves nothing", () =>
-  composing(
-    async (use) => {
-      const { session, screen, frame } = use;
-      await idle(session);
-      const root = session.engine.root;
-      await session.engine.pause(root);
-      const id = await session.engine.prompt("str", { message: "Hold this thread open", on: root });
-      await session.refresh();
-      await until(session, () => listed(session).some((one) => one.act.id === id));
-      await railClick(use, "Hold this thread open");
-      await until(session, () => session.thread === id);
-      const other = await session.engine.prompt("str", { message: "Another thread", on: root });
-      await session.refresh();
-      await until(session, () => listed(session).some((one) => one.act.id === other));
-      const left = size.width - session.preferences.sidebarWidth;
-      const before = rail(session, await frame());
-      const x = (before.find((line) => line.includes("✓ Resolve")) ?? "").indexOf("Resolve");
-      // The press lands on the row of the other thread, under the controls of the thread held open, which the message
-      // moves under that row.
-      const y = before.findIndex((line) => line.includes("Another thread"));
-      expect(before[y - 1]).toContain("✓ Resolve");
-      expect(before[y]?.[x]).toBe(" ");
-      await screen.mockMouse.pressDown(left + x, y);
-      // A message moves the thread held open last, and its Resolve comes under the pointer, which did not move.
-      await session.submit("One more word on it");
-      await until(
-        session,
-        () => (listed(session).find((one) => one.act.id === id)?.messages.length ?? 0) > 0,
-      );
-      let after = before;
-      for (let step = 0; step < 40 && !after[y]?.includes("Resolve"); step++) {
-        await Bun.sleep(25);
-        after = rail(session, await frame());
-      }
-      expect(after[y]?.slice(x, x + "Resolve".length)).toBe("Resolve");
-      await screen.mockMouse.release(left + x, y);
-      await frame();
-      await Bun.sleep(300);
-      expect(listed(session).find((one) => one.act.id === id)?.resolved).toBe(false);
-      // A press and a release on Resolve itself still resolve the thread.
-      await railClick(use, " Resolve ");
-      await until(session, () => listed(session).find((one) => one.act.id === id)?.resolved === true);
-      expect(await session.engine.result(id)).toBe("resolved");
-    },
-    size,
-    true,
-  ));
-
-test("a line on an open thread is a message of None, over at once, and a line on a resolved thread is a prompt of str", () =>
+test("a line on an open thread is a message of None, over at once, and a line on a thread that is over is a prompt of str", () =>
   composing(
     async ({ session }) => {
       await idle(session);
@@ -177,25 +95,26 @@ test("a line on an open thread is a message of None, over at once, and a line on
       const id = await session.engine.prompt("str", { message: "Hold this thread open", on: root });
       await session.refresh();
       await until(session, () => listed(session).some((one) => one.act.id === id));
-      const on = () => session.acts.filter((act) => act.thread === id);
+      const on = () => session.acts.filter((act) => onThread(act) === id);
       session.aim(id);
       expect(session.lineShape(id)).toBe("None");
       await session.submit("Look at it once");
       await until(session, () => on().length === 1);
       expect(on()[0]?.words[0]).toBe("None");
       // The message is over at once, and it holds the thread open no more than the prompt of the thread does.
-      await until(session, () => on()[0]?.done === true);
-      expect(listed(session).find((one) => one.act.id === id)?.resolved).toBe(false);
+      await until(session, () => (on()[0] !== undefined && isDone(on()[0])) === true);
+      expect(listed(session).find((one) => one.act.id === id)?.over).toBe(false);
       await session.reply(id, "And once more");
       await until(session, () => on().length === 2);
       expect(on()[1]?.words[0]).toBe("None");
-      await session.resolve(id);
-      await until(session, () => listed(session).find((one) => one.act.id === id)?.resolved === true);
+      // Its model closes the prompt of the thread, which ends the thread.
+      await session.engine.close(JSON.stringify("done"), { id });
+      await until(session, () => listed(session).find((one) => one.act.id === id)?.over === true);
       expect(session.lineShape(id)).toBe("str");
       await session.submit("Look at it again");
       await until(session, () => on().length === 3);
       expect(on()[2]?.words[0]).toBe("str");
-      await until(session, () => listed(session).find((one) => one.act.id === id)?.resolved === false);
+      await until(session, () => listed(session).find((one) => one.act.id === id)?.over === false);
     },
     size,
     true,
@@ -244,7 +163,7 @@ test("a question that waits shows on top of the sidebar and as a mark on its wor
       // and a thread that is over is no target until he chooses it.
       const active = session.activeThread;
       expect(active).toBeDefined();
-      expect(session.openThread).toBe(active && !active.resolved ? active : undefined);
+      expect(session.openThread).toBe(active && !active.over ? active : undefined);
       expect(session.target).toBe(session.openThread?.act.id);
       await session.submit("/newthread");
       expect(session.fresh).toBe(true);
@@ -268,6 +187,9 @@ test("a string too long for its line folds to its start and an underlined …, w
       expect(y).toBeGreaterThanOrEqual(0);
       expect(rows[y]).toContain('…"');
       expect(folded).not.toContain("ENDMARK");
+      // What the string hides stands at the end of its line, in its trailer, and in no row under it.
+      expect(rows[y]).toMatch(/…"\s+…\+\d+/);
+      expect(folded).not.toContain("more characters");
       const x = (rows[y] ?? "").indexOf('…"');
       await screen.mockMouse.moveTo(x, y);
       await until(screen.renderer, () => screen.captureCharFrame().includes("ENDMARK"), "frame");
@@ -349,7 +271,7 @@ test("a line that awaits a command lights the line that made it, names it, and s
       keep("awaits", rows.join("\n"));
       expect(ready()).toBe(true);
       expect(rows.find((row) => row.includes("b = await build"))).toMatch(
-        /(?:\d|[\u2800-\u28ff✻]) {2}b = await build/,
+        /(?:\d|[◐◓◑◒◉]) {4}b = await build/,
       );
       await session.engine.cancel(rung);
     },
@@ -534,6 +456,7 @@ test("a string of three marks over many lines shows as one string with its escap
       expect(rows[y]).toContain('…"');
       expect(folded).not.toContain("ENDMARK");
       expect(folded).not.toContain('"""');
+      expect(rows[y]).toMatch(/…\+\d+/);
       expect(rows[y + 1]).toContain("print(len(note))");
       const fg = (x: number, row: number) => cellAt(screen.captureSpans(), x, row).fg;
       const string = RGBA.fromHex(palettes.ink.syntaxString);
@@ -574,6 +497,7 @@ test("a quote of a word shows as the string that it binds: its name, an equal si
       expect(rows[y]).toContain("\\n");
       expect(rows[y]).toContain("…'");
       expect(shown).not.toContain("<s:brief>");
+      expect(rows[y]).toMatch(/…\+\d+/);
       expect(rows[y + 1]).toContain("print(brief)");
       const fg = (x: number, row: number) => cellAt(screen.captureSpans(), x, row).fg;
       const x = (rows[y] ?? "").indexOf("Fix");
@@ -717,7 +641,7 @@ test("a line that failed says its reason once, under it, and not again beside it
   composing(
     async ({ session, frame }) => {
       const id = await session.engine.rung({ word: 'read("missing-file.txt")', on: session.selected });
-      await until(session, () => session.activity.some((act) => act.id === id && act.done));
+      await until(session, () => session.activity.some((act) => act.id === id && isDone(act)));
       await session.refresh();
       const shown = await frame();
       expect(shown.split("There is no file").length - 1).toBe(1);
@@ -744,7 +668,8 @@ test("the agents that a thread hires fold under it to their count in the sidebar
       expect(rows.filter((row) => row.includes("Think until I cancel"))).toHaveLength(0);
       await railClick(use, "Agents");
       rows = rail(session, await frame());
-      const agents = rows.filter((row) => row.includes("Think until I cancel"));
+      // The crate names the first thread of a chain under the root that no operator made by the label of its chain.
+      const agents = rows.filter((row) => / w\/\d+ *$/.test(row));
       expect(agents).toHaveLength(8);
       const lead = rows.find((row) => row.includes("Hire eight workers")) ?? "";
       expect((agents[0] ?? "").search(/\S/)).toBeGreaterThan(lead.search(/\S/));
@@ -803,7 +728,7 @@ test("after a switch to another chain, the sidebar lights its open thread and sh
       await frame();
       await session.select(other);
       expect(session.activeThread?.act.id).toBe(there);
-      expect(rail(session, await frame()).join("\n")).toMatch(/Resolve(?!d)/);
+      expect(rail(session, await frame()).join("\n")).toContain("Collapse");
     },
     size,
     true,

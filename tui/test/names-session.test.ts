@@ -1,23 +1,16 @@
 import { expect, mock, test } from "bun:test";
 import { basename, join } from "node:path";
 
-const real = await import("../src/names.ts");
-const scanned: string[] = [];
 const scan: { give?: (said: string | undefined) => void } = {};
-// The scan of the worker waits for the test, and the scan of the thread that draws counts each call.
-mock.module("../src/names.ts", () => ({
-  ...real,
-  recordName: (record: string) => {
-    scanned.push(record);
-    return real.recordName(record);
-  },
-}));
+// The scan of the worker waits for the test.
 mock.module("../src/records.ts", () => ({
   inspectRecords: (paths: string[], _signal: AbortSignal, replay: string[] = paths) =>
     new Promise((resolve) => {
       expect(replay).toEqual([]);
       scan.give = (said) =>
-        resolve(Object.fromEntries(paths.map((path) => [path, { state: "saved", said, replayed: false }])));
+        resolve(
+          Object.fromEntries(paths.map((path) => [path, { state: "saved", name: said, replayed: false }])),
+        );
     }),
 }));
 
@@ -38,13 +31,11 @@ const until = async (done: () => boolean) => {
 test("the constructor of a session reads no record, and the name that the worker scan finds shows when it comes", async () => {
   const session = await opened();
   try {
-    expect(scanned).toEqual([]);
     const before = session.sessionName;
     expect(before).not.toBe("pf-worker");
     scan.give?.("pf-worker");
     await until(() => session.sessionName === "pf-worker");
     expect(session.sessionName).toBe("pf-worker");
-    expect(scanned).toEqual([]);
   } finally {
     await session.dispose();
   }

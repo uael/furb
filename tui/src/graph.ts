@@ -1,5 +1,5 @@
 import type { RGBA } from "@opentui/core";
-import { type Loom, messages, type Place, places, route, type State, you } from "furb/life";
+import { isDone, type Loom, messages, type Place, places, route, type State, you } from "furb/life";
 import { clock } from "./clock.ts";
 import { clip, dollars } from "./format.ts";
 import { questionOf, shortActor } from "./overview.ts";
@@ -175,12 +175,12 @@ export class Graph {
     const { acts, loom } = this.stage;
     const now = clock();
     for (const act of acts)
-      if (act.kind === "prompt" && act.done && !this.seen.has(act.id)) this.seen.set(act.id, now);
+      if (act.kind === "prompt" && isDone(act) && !this.seen.has(act.id)) this.seen.set(act.id, now);
     const chains = acts.filter((act) => act.kind === "chain");
     const rows = new Map(acts.map((act) => [act.id, act]));
     const parent = (chain: ActRow) => {
       const maker = rows.get(chain.by);
-      return maker && maker.on !== chain.id ? maker.on : undefined;
+      return maker && maker.chain !== chain.id ? maker.chain : undefined;
     };
     this.parents = new Map();
     for (const chain of chains) {
@@ -196,10 +196,7 @@ export class Graph {
       [`   ${held.size} of ${chains.length}`, c.faint],
     ];
     const canvas = new Canvas(width, Math.max(4, height - 2));
-    const corner = (place: Place): [number, number] =>
-      place.column === 0 && place.row === 0 && this.placesOf.get(you) === place
-        ? [0, 0]
-        : [indent + place.column * columnWidth, place.row * rowHeight];
+    const corner = (place: Place) => this.corner(place);
     // The camera follows the selected program.
     const chosen = this.placesOf.get(this.node);
     if (chosen) {
@@ -329,6 +326,25 @@ export class Graph {
       );
     }
     return [pad(title, width), [], ...canvas.rows()];
+  }
+
+  /** The cell of the map where a program stands: the operator at the corner, each chain on its column and row. */
+  private corner(place: Place): [number, number] {
+    return place.column === 0 && place.row === 0 && this.placesOf.get(you) === place
+      ? [0, 0]
+      : [indent + place.column * columnWidth, place.row * rowHeight];
+  }
+
+  /** The chain of the program drawn at a cell of the rows that the map gave last, on its mark, its name or the line
+   * under them, and nothing for the operator or a cell between programs. */
+  at(x: number, row: number): string | undefined {
+    const [cx, cy] = this.camera;
+    const [px, py] = [x + cx, row - 2 + cy];
+    for (const [id, place] of this.placesOf) {
+      const [left, top] = this.corner(place);
+      if (id !== you && px >= left && px < left + columnWidth && py >= top && py < top + 2) return id;
+    }
+    return undefined;
   }
 
   /** A key moves the selection to the program nearest in its direction, by the places of the programs, and the session

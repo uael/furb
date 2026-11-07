@@ -139,9 +139,9 @@ no network.
 
 ### The extensions
 
-An official extension is a word, a contract and a suite in `extensions/<name>/`, and an ear of the World in
-`src/extension/<name>.rs`, which answers the questions of its word from the disk. [The guide of the
-extensions](docs/extensions.md) says which hygiene laws hold it and how a life runs it. The crate carries the manifest
+An official extension is a word, a contract and a suite in `.agents/skills/<name>/`, and an ear of the World in
+`src/world/<name>.rs`, which answers the questions of its word from the disk. [The guide of the
+extensions](docs/skills.md) says which hygiene laws hold it and how a life runs it. The crate carries the manifest
 and the word, so `uv run` builds it again after a change of either, as the `cache-keys` of `bind/python/pyproject.toml`
 and `cli/pyproject.toml` say.
 
@@ -151,7 +151,7 @@ and `cli/pyproject.toml` say.
 
 | File | What it holds |
 | --- | --- |
-| `cli/src/main.rs` | The words of the command line, on clap, and the commands `prompt`, `turns`, `facts`, `run`, `checkpoint`, `catalog` and `extensions`. |
+| `cli/src/main.rs` | The words of the command line, on clap, and the commands `prompt`, `turns`, `facts`, `run`, `checkpoint`, `catalog` and `skills`. |
 | `cli/src/life.rs` | One life on the opening of the crate: the prompt of the record it takes up, and how the operator awaits an act. |
 | `cli/src/console.rs` | The console of the terminal, which shows each prompt to the operator and reads the line back by the rules of the crate. |
 | `cli/src/tui.rs` | How furb finds the TUI and hands the terminal to it. |
@@ -184,7 +184,7 @@ sentence.
 | `test/test_<name>.py` | The tests of one definition of the contract, one test for each sentence. |
 | `test/test_hygiene.py` | The hygiene laws. |
 | `test/outside/` | The tests of the World, the Kernel, the door, and the switch, which stand outside the hygiene laws. |
-| `extensions/conftest.py` | The hooks of the harness for the suite of each extension, and the helpers that only those suites need. |
+| `.agents/skills/conftest.py` | The hooks of the harness for the suite of each extension, and the helpers that only those suites need. |
 
 ## The gates
 
@@ -226,4 +226,4 @@ Write all prose in Simplified Technical English, with no em dash and no en dash,
 - [`src/furb/AGENTS.md`](src/furb/AGENTS.md): the technical names of the engine.
 - [`tui/README.md`](tui/README.md) and [`docs/tui.md`](docs/tui.md): what the TUI does, and a picture of each screen.
 - [`bind/typescript/README.md`](bind/typescript/README.md): the TypeScript API.
-- [`docs/extensions.md`](docs/extensions.md): how an extension works.
+- [`docs/skills.md`](docs/skills.md): how an extension works.

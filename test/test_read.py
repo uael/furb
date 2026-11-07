@@ -76,19 +76,19 @@ async def test_a_text_without_a_show_is_told_as_head() -> None:
 
 async def test_a_read_of_the_name_of_a_prompt_gives_the_program_of_that_ladder() -> None:
   """A read of the name of a prompt gives the program of that ladder, the words of its rungs in order."""
-  _, _, root = born("k = BAD", "a = 1", "close(a + 1)", "close(None)")
+  _, _, root = born("k = BAD", "a = 1\ndebug(t'go')", "close(a + 1)", "close(None)")
   act = engine.prompt(int, "count", on=root)
   assert await act == 2
-  assert engine.read(act, on=root) == Text(act, "k = BAD\na = 1\nclose(a + 1)")
+  assert engine.read(act, on=root) == Text(act, "k = BAD\na = 1\ndebug(t'go')\nclose(a + 1)")
 
 
 async def test_whether_a_name_is_one_of_the_prompts_a_chain_has_heard_on_itself() -> None:
   """Whether a name is one of the prompts a chain has heard on itself, which is what the doors of its prompts serve and no other path, a path of no name being none of them."""
-  _, log, root = born("a = 1", "close(a + 1)", "close(None)")
+  _, log, root = born("a = 1\ndebug(t'go')", "close(a + 1)", "close(None)")
   act = engine.prompt(int, "count", on=root)
   assert await act == 2
   await settle()
-  assert engine.read(act, on=root) == Text(act, "a = 1\nclose(a + 1)")
+  assert engine.read(act, on=root) == Text(act, "a = 1\ndebug(t'go')\nclose(a + 1)")
   other = engine.chain("other")
   await settle()
   for path, on in [
@@ -112,12 +112,14 @@ async def test_a_prompt_is_the_door_of_the_program_of_its_ladder() -> None:
 
 async def test_a_read_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word_of_that_rung_out() -> None:
   """A read of a door that a rung of that ladder says leaves the word of that rung out, since a rung is no part of the program it reads."""
-  _, _, root = born("a = 1", "close(read(get(acting())[2]).content)", "close(None)")
+  _, _, root = born("a = 1\ndebug(t'go')", "close(read(get(acting())[2]).content)", "close(None)")
   act = engine.prompt(str, "read it", on=root)
-  assert await act == "a = 1"
+  assert await act == "a = 1\ndebug(t'go')"
   await settle()
-  assert of(engine.turns(on=root), "read") == [f"#read1\nread1_path = {act!r}\nread1_text = 'a = 1'"]
-  assert engine.read(act, on=root) == Text(act, "a = 1\nclose(read(get(acting())[2]).content)")
+  assert of(engine.turns(on=root), "read") == [
+    f"#read1\nread1_path = {act!r}\n<s:read1_text>\na = 1\ndebug(t'go')</s:read1_text>"
+  ]
+  assert engine.read(act, on=root) == Text(act, "a = 1\ndebug(t'go')\nclose(read(get(acting())[2]).content)")
 
 
 async def test_one_made_from_inside_an_act_tells_itself() -> None:

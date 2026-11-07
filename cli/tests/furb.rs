@@ -13,8 +13,11 @@ mod pipes;
 #[path = "../../tests/common/yard.rs"]
 mod yard;
 
+use std::path::MAIN_SEPARATOR;
+use std::process;
+use std::process::ExitStatus;
 use std::{
-  fs,
+  env, fs,
   io::{BufRead, BufReader, Read, Write},
   net::TcpListener,
   os::unix::fs::PermissionsExt,
@@ -46,7 +49,7 @@ struct Yard {
 
 impl Drop for Yard {
   fn drop(&mut self) {
-    if std::env::var_os(KEEP).is_some() {
+    if env::var_os(KEEP).is_some() {
       eprintln!("{KEEP} keeps {}", self.base.display());
     } else {
       drop(fs::remove_dir_all(&self.base));
@@ -55,10 +58,10 @@ impl Drop for Yard {
 }
 
 impl Yard {
-  fn new(name: &str) -> Yard {
+  fn new(name: &str) -> Self {
     // A process that starts in the yard reads its directory as the system gives it, with no link in it: on macOS the
     // temporary directory is under /var, a link to /private/var. So the yard is that path too.
-    let base = std::env::temp_dir().join(format!("furb-cli-{name}-{}", std::process::id()));
+    let base = env::temp_dir().join(format!("furb-cli-{name}-{}", process::id()));
     drop(fs::remove_dir_all(&base));
     fs::create_dir_all(&base).expect("the root of the yard");
     let root = fs::canonicalize(&base).expect("the root of the yard, with no link");
@@ -68,11 +71,11 @@ impl Yard {
     // The life of a test names no session, since a name asks the fake claude out of the order
     // of its words.
     fs::create_dir_all(root.join("config")).expect("the config directory");
-    fs::write(root.join("config").join("config.json"), r#"{"extensions": {"naming": false}}"#)
+    fs::write(root.join("config").join("config.json"), r#"{"skills": {"naming": false}}"#)
       .expect("the config");
     fs::write(at.join("a.txt"), "one\ntwo\nthree\n").expect("the file a word reads");
     program(&fake.join("claude"), FAKE);
-    Yard { base, at, fake }
+    Self { base, at, fake }
   }
 
   /// The words the fake answers with, in order.
@@ -213,7 +216,7 @@ fn a_word_its_caller_wrote_runs_on_the_root() {
 fn a_life_is_opened_on_the_record_it_is_given_and_resumed_from_it() {
   let yard = Yard::new("resumed");
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
-  let off = r#"{"extensions": {"catchup": false, "memory": false, "skills": false, "compaction": false, "ouroboros": false, "web": false, "mcp": false}}"#;
+  let off = r#"{"skills": {"catchup": false, "memory": false, "skills": false, "compaction": false, "ouroboros": false, "web": false, "mcp": false}}"#;
   fs::write(yard.at.join(".furb/config.json"), off).expect("a config of the project");
   assert_eq!(printed(yard.kept(&["run", "k = 3"]), ""), "None\n");
   assert_eq!(printed(yard.kept(&["run", "debug(t\"{k=}\")\nclose(k + 1)"]), ""), "4\n");
@@ -319,7 +322,7 @@ fn a_command_that_runs_past_the_bound_is_killed_and_gives_nothing() {
 fn a_record_is_printed_as_facts_each_after_the_number_of_its_line() {
   let yard = Yard::new("facts");
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
-  let off = r#"{"extensions": {"catchup": false, "memory": false, "skills": false, "compaction": false, "ouroboros": false, "web": false, "mcp": false}}"#;
+  let off = r#"{"skills": {"catchup": false, "memory": false, "skills": false, "compaction": false, "ouroboros": false, "web": false, "mcp": false}}"#;
   fs::write(yard.at.join(".furb/config.json"), off).expect("a config of the project");
   assert_eq!(printed(yard.kept(&["run", "k = 3"]), ""), "None\n");
   let facts = |words: &[&str]| {
@@ -345,19 +348,19 @@ fn a_record_is_printed_as_facts_each_after_the_number_of_its_line() {
   assert!(refused(missing, "").contains("No record at nope.jsonl."), "a record that is not there");
 }
 #[test]
-fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs_turn_on() {
-  let yard = Yard::new("extensions");
+fn a_life_runs_the_skills_that_its_record_enables_and_those_that_the_configs_turn_on() {
+  let yard = Yard::new("skills");
   let skill = yard.at.join(".furb/skills/brew/SKILL.md");
   fs::create_dir_all(skill.parent().expect("a folder")).expect("the folder of a skill");
   fs::write(&skill, "---\nname: brew\ndescription: Make tea.\n---\n").expect("a skill");
   fs::write(yard.at.join("CLAUDE.md"), "Use two spaces.\n").expect("a memory file");
-  let every = "catchup: catchup()\nmemory: await recall()\nskills: await listed()\ncompaction: fitted()\nouroboros\nweb\nmcp: await mcp_index()\n";
-  assert_eq!(printed(yard.furb(&["extensions"]), ""), every, "the official extensions are on");
+  let every = "catchup: catchup()\nmemory: await recall()\nskills: await listed()\ncompaction: compacted(); fitted()\n";
+  assert_eq!(printed(yard.furb(&["skills"]), ""), every, "the official extensions are on");
   let path = printed(yard.kept(&["run", "close((await skill('brew')).path)"]), "");
   // The World writes a path under the home of the user with ~ in place of the home.
-  let home = std::env::home_dir().filter(|home| home.parent().is_some());
+  let home = env::home_dir().filter(|home| home.parent().is_some());
   let shown = match home.as_deref().and_then(|home| skill.strip_prefix(home).ok()) {
-    Some(rest) => format!("~{}{}", std::path::MAIN_SEPARATOR, rest.display()),
+    Some(rest) => format!("~{}{}", MAIN_SEPARATOR, rest.display()),
     None => skill.display().to_string(),
   };
   assert_eq!(path, format!("{shown:?}\n").replace('"', "'"));
@@ -370,13 +373,13 @@ fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs
     "{said}"
   );
   fs::create_dir_all(yard.at.join(".furb")).expect("the folder of the project");
-  fs::write(yard.at.join(".furb/config.json"), r#"{"extensions": {"memory": false}}"#)
+  fs::write(yard.at.join(".furb/config.json"), r#"{"skills": {"memory": false}}"#)
     .expect("a config of the project");
   assert_eq!(
-    printed(yard.furb(&["extensions"]), ""),
-    "catchup: catchup()\nskills: await listed()\ncompaction: fitted()\nouroboros\nweb\nmcp: await mcp_index()\n"
+    printed(yard.furb(&["skills"]), ""),
+    "catchup: catchup()\nskills: await listed()\ncompaction: compacted(); fitted()\n"
   );
-  assert_eq!(printed(yard.kept(&["extensions"]), ""), every, "a life runs what its record enables");
+  assert_eq!(printed(yard.kept(&["skills"]), ""), every, "a life runs what its record enables");
 }
 
 #[test]
@@ -616,7 +619,7 @@ fn said_first(child: &mut Child) -> String {
 }
 
 /// The end of a program, which a minute bounds: past it, the program is killed and the test fails.
-fn ended(mut child: Child) -> std::process::ExitStatus {
+fn ended(mut child: Child) -> ExitStatus {
   let pid = child.id();
   let (said, heard) = mpsc::channel();
   thread::spawn(move || {
@@ -633,7 +636,7 @@ fn ended(mut child: Child) -> std::process::ExitStatus {
 fn furb_host_serves_one_daemon_on_the_machine_and_an_upgrade_takes_its_place() {
   let yard = Yard::new("host");
   // The cache of the yard is too deep for the path of a socket, which macOS bounds at 104 bytes.
-  let cache = yard::Yard::unmade(format!("fc{}", std::process::id()));
+  let cache = yard::Yard::unmade(format!("fc{}", process::id()));
   let host = |words: &[&str]| {
     let mut command = yard.furb(words);
     command.env("XDG_CACHE_HOME", &*cache);

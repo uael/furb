@@ -15,17 +15,21 @@
 #![expect(clippy::match_bool, reason = "debt: a match on a bool")]
 
 use std::{
+  panic,
   path::{Path, PathBuf},
   sync::Arc,
   time::Duration,
 };
 
+use tokio::task;
+
 use crate::{
   Ear, Engine, Fault, Object, ObjectRef, checkpoint,
   ear::{hear, hearing, lasting},
   engine::OPERATOR,
-  extension::{self, Places, skills::skills},
-  world::{self, Catalog, Retries, Scratch, Writes, mcp::mcp},
+  gate, minify,
+  skill::{self, Places},
+  world::{self, Catalog, Mode, Retries, Scratch, Writes, mcp::mcp, skills::skills},
 };
 
 /// The ears of a life, each under the name the engine hears it by, in the order of boot.
@@ -34,7 +38,7 @@ pub type Ears = Vec<(String, Box<dyn Ear>)>;
 /// What a life waits for before it boots, as [`Opening::prepared`] gives it.
 struct Prepared {
   places: Places,
-  extensions: Vec<extension::Extension>,
+  played: Vec<skill::Skill>,
   /// The line that tells why each extension that the configs turn on does not play.
   refused: Vec<String>,
   provider: world::Provider,
@@ -89,24 +93,26 @@ pub struct Opening {
   #[cfg_attr(feature = "python", pyo3(default))]
   pub inspecting: Option<bool>,
   /// Whether the life opens from the first entry of its record, born again at each checkpoint as
-  /// each life of the
-  /// record was, and not from its last checkpoint alone; false when unsaid. Each checkpoint then
-  /// has to end the life
-  /// that wrote it and to hold what a life born on the entries before it gathers, or the open is
-  /// refused, as
-  /// [`checkpoint::reborn`] says. Both opens reach one state at the tip, so the tests and the
-  /// gates open this way to
-  /// prove each checkpoint of a record.
+  /// each life of the record was, and not from its last checkpoint alone; false when unsaid. Each
+  /// checkpoint then has to end the life that wrote it and to hold what a life born on the entries
+  /// before it gathers, or the open is refused, as [`checkpoint::reborn`] says. Both opens reach
+  /// one state at the tip, so the tests and the gates open this way to prove each checkpoint of a
+  /// record.
   #[cfg_attr(feature = "python", pyo3(default))]
   pub whole: Option<bool>,
   /// Whether the life enables at its tip the extensions that the configs turn on; true when unsaid. A life runs what
   /// its record enables either way.
   #[cfg_attr(feature = "python", pyo3(default))]
-  pub extensions: Option<bool>,
+  pub skills: Option<bool>,
   /// The config directory of the user, which the configs and the official extensions read; the one of this process
   /// when unsaid.
   #[cfg_attr(feature = "python", pyo3(default))]
   pub config: Option<String>,
+  /// The logins of the members who answer as the operator, as the access list of a host and its
+  /// local login give them, each of which a prompt can ask with `to="operator/<login>"`; none when
+  /// unsaid.
+  #[cfg_attr(feature = "python", pyo3(default))]
+  pub members: Option<Vec<String>>,
   /// The actor a prompt goes to when it names none, as the catalog names a model, and an effort after a slash, at its
   /// level as [`world::Model::at`] moves it. When unsaid, the default actor of the last stand
   /// that the record answered, so a life opened again goes on with the actor it had, and on a
@@ -217,12 +223,11 @@ impl Opening {
   }
 
   /// The ears of the crate but the store and the log, as [`Opening::parts`] gives them, for a life
-  /// that boots on a
-  /// record.
+  /// that boots on a record.
   fn eared(&self, prepared: Prepared, record: &[Object]) -> Result<Ears, Fault> {
     let works = self.works();
     let keeps = self.keeps != Some(false) && works;
-    let Prepared { places, extensions, refused, provider, .. } = prepared;
+    let Prepared { places, played, refused, provider, .. } = prepared;
     let log = self.log.as_ref().map(|log| log.0.clone());
     let told = |line: &str| match &log {
       Some(log) => log(line),
@@ -244,7 +249,7 @@ impl Opening {
       .transpose()?;
     let gallery = self.gallery();
     let project = PathBuf::from(&self.directory);
-    let provider = provider.held(!works && checkpoint::stood(record)).ear();
+    let provider = provider.mode(Mode::of(works, checkpoint::stood(record))).ear();
     let working = |made: Option<Box<dyn Ear>>| made.unwrap_or_else(silent);
     let config = places.config.clone();
     // An ear that holds nothing that a fresh one lacks starts again after it raises.
@@ -252,7 +257,7 @@ impl Opening {
     let servers = world::mcp::Settings::of(project, config.clone(), gallery.clone());
     let ears = vec![
       ("provider", provider),
-      ("extensions", extension::telling(extensions, refused, places)),
+      ("extensions", skill::telling(played, refused, places)),
       ("skills", lasting(skills(config.clone()), move || skills(config.clone()))),
       (
         "mcp",
@@ -287,26 +292,32 @@ impl Opening {
   /// host with a runtime waits for it on a blocking thread.
   fn prepared(&self) -> Result<Prepared, Fault> {
     let works = self.works();
+    if self.keeps() {
+      self.crossed()?;
+    }
     // A record of another major of its schema is refused before any build reads it whole or writes
     // on it, and the models of a life on a record that holds another engine read that engine.
     let mut system = None;
-    if let Some(path) = self.record.as_deref().filter(|one| Path::new(one).exists()) {
-      let heads = world::heads(path, &[world::MADE, checkpoint::CHECKPOINT])?;
-      world::readable(&heads)?;
-      let (source, _) = world::texts(checkpoint::segment(&heads))?;
+    let marks = match self.record.as_deref() {
+      Some(path) if Path::new(path).exists() => Some(world::marks(path)?),
+      _ => None,
+    };
+    if let Some(marks) = &marks {
+      world::readable(&marks.heads)?;
+      let (source, _) = world::texts(checkpoint::segment(&marks.heads))?;
       if source != crate::ENGINE {
         let unread = || Fault::refused("this build cannot minify the engine that the record holds");
-        system = Some(crate::minify::minified(&source).ok_or_else(unread)?);
+        system = Some(minify::minified(&source).ok_or_else(unread)?);
       }
     }
     let here = Places::here();
     let places = Places { config: self.config.clone().map_or(here.config, PathBuf::from), ..here };
-    let (extensions, refused) = match self.extensions != Some(false) && works {
-      true => extension::configured(&places, self.directory.as_ref())?,
+    let (played, refused) = match self.skills != Some(false) && works {
+      true => skill::configured(&places, self.directory.as_ref())?,
       false => (Vec::new(), Vec::new()),
     };
     // The standing gives each extension whose word or life word plays, with the file of a word that is not blank.
-    let advertised = extensions
+    let advertised = played
       .iter()
       .filter(|one| !(one.word.trim().is_empty() && one.life.is_empty()))
       .map(|one| {
@@ -315,20 +326,15 @@ impl Opening {
       })
       .collect();
     // A life that names no actor or no roster goes on with the ones that its record stood on last.
-    let stood = match self.record.as_deref() {
-      Some(path) if Path::new(path).exists() && (self.actor.is_none() || self.roster.is_none()) => {
-        world::standing(path)?
-      }
-      _ => None,
-    };
+    let stood = marks.and_then(|marks| marks.standing);
     let (actor, roster) = stood.as_ref().map_or((None, None), |one| offered(one.as_ref()));
     let (actor, roster) = (self.actor.clone().or(actor), self.roster.clone().or(roster));
     let provider = match system {
       Some(one) => self.provider(advertised, actor, roster)?.system(one.into()),
       None => self.provider(advertised, actor, roster)?,
     };
-    let gated = crate::gate::configured(&places.config, Path::new(&self.directory));
-    Ok(Prepared { places, extensions, refused, provider, gated })
+    let gated = gate::configured(&places.config, Path::new(&self.directory));
+    Ok(Prepared { places, played, refused, provider, gated })
   }
 
   /// The provider: the models of the roster that the catalog makes, which the function of the host answers when it
@@ -380,7 +386,8 @@ impl Opening {
         Ok(candidate.into_settings())
       })
     }));
-    provider = provider.advertises(advertised).inspecting(!works).config(user);
+    let members = self.members.clone().unwrap_or_default();
+    provider = provider.advertises(advertised).config(user).members(members);
     if let Some(gallery) = gallery {
       provider = provider.images(gallery);
     }
@@ -414,14 +421,14 @@ impl Opening {
     self,
     host: impl IntoIterator<Item = (N, Box<dyn Ear>)>,
   ) -> Result<(Engine, Vec<Object>), Fault> {
-    let waited = tokio::task::spawn_blocking(move || {
+    let waited = task::spawn_blocking(move || {
       let prepared = self.prepared();
       (self, prepared)
     });
     let (opening, prepared) = match waited.await {
       Ok(both) => both,
       Err(no) => match no.try_into_panic() {
-        Ok(panic) => std::panic::resume_unwind(panic),
+        Ok(panic) => panic::resume_unwind(panic),
         Err(no) => return Err(Fault::refused(format!("the life did not open: {no}"))),
       },
     };
@@ -453,16 +460,43 @@ impl Opening {
     Ok((engine, record))
   }
 
-  /// Proves each checkpoint of the record: a life that inspects the entries before it, born on
-  /// them as the life that
-  /// wrote it was, gathers it again, as [`checkpoint::reborn`] says.
+  /// Carries a record whose last life ran another engine of the major across to this build, so a
+  /// life never dies on a fault that this build fixed in the kernel: a life that inspects the
+  /// record, born on the engine that its fact made holds, writes its checkpoint after its last
+  /// entry, as a life that ends writes one, and the life opens from that checkpoint on the engine
+  /// of this build. A record of this build, or of a build whose fact made holds no texts, stays as
+  /// it is.
+  fn crossed(&self) -> Result<(), Fault> {
+    let Some(path) = self.record.as_deref().filter(|one| Path::new(one).exists()) else {
+      return Ok(());
+    };
+    let marks = world::marks(path)?;
+    world::readable(&marks.heads)?;
+    let segment = checkpoint::segment(&marks.heads);
+    let (source, _) = world::texts(segment)?;
+    if source == crate::ENGINE || segment.is_empty() {
+      return Ok(());
+    }
+    let record = checkpoint::booted(world::kept(path)?);
+    let inspects = Self { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
+    let prepared = inspects.prepared()?;
+    let gated = prepared.gated;
+    let ears = inspects.eared(prepared, &record)?;
+    let mut engine = Engine::gated(record, ears, gated)?;
+    if let Some(no) = engine.raised() {
+      return Err(no.clone());
+    }
+    checkpoint::keep(Path::new(path), checkpoint::written(&mut engine)?)
+  }
+
+  /// Proves each checkpoint of the record: a life that inspects the entries before it, born on them
+  /// as the life that wrote it was, gathers it again, as [`checkpoint::reborn`] says.
   fn reborn(&self) -> Result<(), Fault> {
     let Some(path) = self.record.as_deref().filter(|one| Path::new(one).exists()) else {
       return Ok(());
     };
     let record = world::kept(path)?;
-    let inspects =
-      Opening { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
+    let inspects = Self { inspecting: Some(true), keeps: Some(false), whole: None, ..self.clone() };
     for at in checkpoint::all(&record) {
       let before = checkpoint::booted(record[..at].to_vec());
       let prepared = inspects.prepared()?;

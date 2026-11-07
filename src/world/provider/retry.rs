@@ -1,8 +1,8 @@
 //! The failures of a call of a model that pass, and when the provider calls the model again.
 
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use jiff::{Zoned, civil, tz::TimeZone};
+use jiff::{Zoned, civil, fmt::strtime, tz::TimeZone};
 use rig_core::{completion::CompletionError, http_client};
 
 use super::claude;
@@ -169,6 +169,57 @@ pub(super) fn overflows(no: &CompletionError) -> bool {
     .any(|phrase| text.contains(phrase))
 }
 
+/// A usage limit, and the moment it ends when that stands.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct Limit {
+  pub(super) until: Option<SystemTime>,
+}
+
+/// The body of a 429 of a provider that limits the usage of a subscription, as codex words it.
+#[derive(serde::Deserialize)]
+struct Refusal {
+  error: Usage,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum Usage {
+  UsageLimitReached {
+    resets_at: Option<u64>,
+    resets_in_seconds: Option<u64>,
+  },
+  #[serde(other)]
+  Other,
+}
+
+/// The usage limit that a failure says, if it is one: a limit of the claude command line, or the
+/// 429 of a usage limit, whose end is `resets_at` (seconds since the epoch), else
+/// `resets_in_seconds`, else the `retry-after` header. A 429 of another kind is a rate limit, which
+/// `passing` caps.
+pub(super) fn limited(no: &CompletionError, now: SystemTime) -> Option<Limit> {
+  if let Some(claude::Error::Limit { until }) = claude::error(no) {
+    return Some(Limit { until: *until });
+  }
+  if no.provider_response_status()?.as_u16() != 429 {
+    return None;
+  }
+  let Refusal { error: Usage::UsageLimitReached { resets_at, resets_in_seconds } } =
+    serde_json::from_str(no.provider_response_body()?).ok()?
+  else {
+    return None;
+  };
+  let header = no
+    .provider_response_headers()
+    .and_then(|one| one.get("retry-after"))
+    .and_then(|one| one.to_str().ok())
+    .and_then(|one| one.parse::<u64>().ok());
+  let until =
+    resets_at.and_then(|second| UNIX_EPOCH.checked_add(Duration::from_secs(second))).or_else(
+      || resets_in_seconds.or(header).and_then(|span| now.checked_add(Duration::from_secs(span))),
+    );
+  Some(Limit { until })
+}
+
 /// The wait before the claude command line is asked again when its message gives no moment for the
 /// end of a limit.
 pub(super) const LIMIT_POLL: Duration = Duration::from_secs(300);
@@ -192,32 +243,27 @@ pub(super) fn resets(said: &str, now: &Zoned) -> Option<Zoned> {
     None => (rest, now.time_zone().clone()),
   };
   let now = now.with_time_zone(zone.clone());
-  let mut words: Vec<_> =
+  let words: Vec<_> =
     head.split([' ', ',']).filter(|one| !one.is_empty() && *one != "at").collect();
-  let time = words.pop()?.to_lowercase();
-  let (clock, pm) = match time.strip_suffix("pm") {
-    Some(clock) => (clock, true),
-    None => (time.strip_suffix("am")?, false),
-  };
-  let (hour, minute) = clock.split_once(':').unwrap_or((clock, "0"));
-  let (hour, minute): (i8, i8) = (hour.parse().ok()?, minute.parse().ok()?);
-  if !(1..=12).contains(&hour) {
-    return None;
-  }
-  let hour = hour % 12 + if pm { 12 } else { 0 };
-  let at = |date: civil::Date| date.at(hour, minute, 0, 0).to_zoned(zone.clone()).ok();
-  match words.as_slice() {
+  let (time, day) = words.split_last()?;
+  // The clock as jiff reads it, `5:10pm` or `3pm`, whose hour is of 1 to 12.
+  let time = ["%I:%M%p", "%I%p"]
+    .iter()
+    .find_map(|format| strtime::parse(format, time).ok())?
+    .to_time()
+    .ok()?;
+  let at = |date: civil::Date| date.to_datetime(time).to_zoned(zone.clone()).ok();
+  match day {
     [] => {
       let today = at(now.date())?;
       if today > now { Some(today) } else { at(now.date().tomorrow().ok()?) }
     }
     [month, day] => {
-      const MONTHS: [&str; 12] =
-        ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
-      let month =
-        i8::try_from(MONTHS.iter().position(|one| month.to_lowercase().starts_with(one))? + 1)
-          .ok()?;
-      let day = day.parse().ok()?;
+      // The month, whole or short, and the day, as jiff reads them.
+      let date = format!("{month} {day}");
+      let named =
+        ["%B %d", "%b %d"].iter().find_map(|format| strtime::parse(format, &date).ok())?;
+      let (month, day) = (named.month()?, named.day()?);
       let this = at(civil::Date::new(now.year(), month, day).ok()?)?;
       if this > now { Some(this) } else { at(civil::Date::new(now.year() + 1, month, day).ok()?) }
     }

@@ -1,12 +1,14 @@
 // The messages of the operator: each gets the answer of the model, while a word of its thread awaits a command too,
 // and a step that leaves one unanswered is asked again.
+
 import { expect } from "bun:test";
+import { operated } from "furb/life";
 import { scenario, test, until, type Window } from "./harness.ts";
 
 /** The prompts of the operator on the root, in order: each id, shape, message and value. */
 async function asked(window: Window) {
   const facts = await window.engine.transcript({ on: window.root, of: "prompt" });
-  const mine = facts.filter((fact) => fact[2] === "operator");
+  const mine = facts.filter((fact) => operated(String(fact[2])));
   return Promise.all(
     mine.map(async (fact) => ({
       id: fact[1],
@@ -34,6 +36,35 @@ test("a message of the operator gets the answer of the model", () =>
     expect(await asked(window)).toMatchObject([{ message: "Scenario: say hi.", value: "Hi, owner." }]);
     expect(yard.turns().map((one) => one.cue)).toEqual(["Scenario: say hi."]);
   }));
+
+test("a message goes to the thread that the view shows by default, also once the model closed it, and a new thread only on its own key", () =>
+  scenario(
+    [
+      { cue: "Scenario: first.", word: "close('First answer.')" },
+      { cue: "Scenario: second.", word: "close('Second answer.')" },
+      { cue: "Scenario: third.", word: "close('Third answer.')" },
+    ],
+    async (window) => {
+      await window.type("Scenario: first.");
+      await window.shows((frame) => frame.includes("First answer."), "the first answer");
+      const [first] = await asked(window);
+      // The thread is over, and the view still shows it: the next message is a message on it, shown by the line of the input.
+      await window.shows((frame) => frame.includes("to ↳"), "the thread as the target of the input");
+      await window.type("Scenario: second.");
+      await window.shows((frame) => frame.includes("Second answer."), "the second answer");
+      const prompts = await window.engine.transcript({ on: window.root, of: "prompt" });
+      const second = prompts.find((fact) => fact[5] === "Scenario: second.");
+      expect(second?.[3]).toBe(first?.id);
+      // The key of a new thread starts a thread of its own on the chain.
+      window.session.aim();
+      await window.type("Scenario: third.");
+      await window.shows((frame) => frame.includes("Third answer."), "the third answer");
+      const third = (await window.engine.transcript({ on: window.root, of: "prompt" })).find(
+        (fact) => fact[5] === "Scenario: third.",
+      );
+      expect(third?.[3]).toBe(window.root);
+    },
+  ));
 
 // #1118: a message waited until the command that the word of its thread awaited ended. #1256: a word that awaited a
 // command and closed nothing was asked again only when every act of the chain ended, so a message waited behind a
@@ -91,17 +122,17 @@ test("a step that leaves a message unanswered is asked again, and the message ge
     },
   ));
 
-test("a word that ends with no close and awaits nothing is asked again, and its next word answers", () =>
+test("a word that ends with no close and tells something is asked again, and its next word answers", () =>
   scenario(
     [
-      { cue: "Scenario: count.", word: "n = 41" },
+      { cue: "Scenario: count.", word: 'n = 41\ndebug(t"{n}")' },
       // The first turn holds "advance on" too, so the step that is asked again is cued on what only it reads.
-      { cue: "told nothing", word: 'close(f"Counted {n + 1}.")' },
+      { cue: "debugged", word: 'close(f"Counted {n + 1}.")' },
     ],
     async (window, yard) => {
       await window.type("Scenario: count.");
       await window.shows((frame) => frame.includes("Counted 42."), "the answer of the word asked again");
       expect((await asked(window))[0]).toMatchObject({ message: "Scenario: count.", value: "Counted 42." });
-      expect(yard.turns().map((one) => one.cue)).toEqual(["Scenario: count.", "told nothing"]);
+      expect(yard.turns().map((one) => one.cue)).toEqual(["Scenario: count.", "debugged"]);
     },
   ));

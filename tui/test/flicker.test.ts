@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createTestRenderer, type RecordedFrame, TestRecorder } from "@opentui/core/testing";
+import { isDone } from "furb/life";
 import { mount } from "../script/stage.ts";
 import { demoSession, removeDemoDirectories, seedDemoFiles } from "../src/demo.ts";
 import { loadParsers } from "../src/parsers.ts";
@@ -24,7 +25,7 @@ async function streamed(): Promise<RecordedFrame[]> {
   const { library, app } = await mount(session, screen.renderer);
   const recorder = new TestRecorder(screen.renderer, { recordBuffers: { fg: true } });
   const busy = () =>
-    session.activity.some((act) => !act.done && ["prompt", "rung", "bash"].includes(act.kind));
+    session.activity.some((act) => !isDone(act) && ["prompt", "rung", "bash"].includes(act.kind));
   const pause = (milliseconds: number) => new Promise((done) => setTimeout(done, milliseconds));
   try {
     await loadParsers();
@@ -85,14 +86,14 @@ test("no frame draws a cell of code plain between two frames that draw it in its
   expect(last[row]?.fg).not.toBe(PLAIN);
 }, 30000);
 
-test("the row that a model writes takes the next number in the frame that shows the line that it finished", async () => {
+test("the row that a model writes shows the loader of a thought in the cell of its number, under each line that it finished", async () => {
   const frames = await streamed();
   const numbers: number[] = [];
   for (const frame of frames) {
     const lines = frame.frame.split("\n");
-    const row = lines.findIndex((line) => /^[\s┃]*\d+[\u2800-\u28ff] /.test(line));
+    const row = lines.findIndex((line) => /^[\s┃]*[\u2800-\u28ff] {4}\S/.test(line));
     if (row < 0) continue;
-    const number = Number(/(\d+)[\u2800-\u28ff] /.exec(lines[row] ?? "")?.[1]);
+    const number = lines.slice(0, row).filter((line) => LINES.some((code) => line.includes(code))).length + 1;
     numbers.push(number);
     // Each line before the number of the row stands above it as code, in the same frame.
     const above = lines.slice(0, row).filter((line) => !/[\u2800-\u28ff]/.test(line.slice(0, 12)));

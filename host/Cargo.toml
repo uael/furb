@@ -25,6 +25,8 @@ serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 # The JSON Schema of the protocol, from which bind/typescript/src/protocol.ts is made.
 schemars = "1"
+# The real path of a worktree, without the verbatim prefix that Windows gives.
+dunce = "1"
 thiserror = "2"
 # The WebSocket transport.
 tokio-tungstenite = { version = "0.29", default-features = false, features = ["handshake"] }
@@ -39,8 +41,10 @@ form_urlencoded = "1"
 getrandom = "0.3"
 
 [target.'cfg(unix)'.dependencies]
-# The user of the daemon and of a peer of its socket.
+# The login of a user, from the database of the users.
 libc = "0.2"
+# The user of the daemon, read safely.
+rustix = { version = "1", features = ["process"] }
 
 [target.'cfg(windows)'.dependencies]
 # The access list of the pipe, of the folder of the daemon and of the file of its door, which only the
@@ -54,6 +58,9 @@ windows-sys = { version = "0.61", features = [
 ] }
 
 [dev-dependencies]
+furb = { path = "..", version = "0.4.2", features = ["test-support"] }
+# The digest of the schema of each version of the protocol.
+sha2 = "0.10"
 tokio = { version = "1", features = ["rt", "macros", "time"] }
 
 [[test]]
@@ -65,4 +72,10 @@ harness = false
 # The test of a record that takes no fact runs in a process of its own, with no harness, since it
 # sets a limit of the process.
 name = "unkept"
+harness = false
+
+[[test]]
+# The test of the memory of a life runs in a process of its own, with no harness, since it counts
+# each byte that the process allocates.
+name = "memory"
 harness = false

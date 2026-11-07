@@ -4,13 +4,14 @@ use std::{fs, io::Write};
 
 use serde_json::json;
 
-use super::{Lines, heads, stamped};
+use super::{Head, Lines, heads, stamped};
 use crate::testing::Yard;
 use crate::world::{kept, store::Store};
+use std::process;
 
 /// A record of its own for one test, which does not stand yet.
 fn place(name: &str) -> Yard {
-  Yard::new(format!("furb-lines-{name}-{}", std::process::id())).within("record.jsonl")
+  Yard::new(format!("furb-lines-{name}-{}", process::id())).within("record.jsonl")
 }
 
 #[test]
@@ -52,17 +53,49 @@ fn the_heads_of_a_record_are_its_entries_of_some_kinds_in_order_and_no_other_lin
     "[[\"made\",\"chain1\",\"store\",\"abc\",1],1]\n[[\"done\",\"bash1\",\"bash\", not json\n[[\"checkpoint\",\"chain1\",\"store\",{}],2]\n[[\"made\",\"chain1\",\"store\",\"abd\",1]]\n",
   )
   .unwrap();
-  let starts = [r#"[["made","#.to_owned(), r#"[["checkpoint","#.to_owned()];
-  let read = heads(&at, &starts).unwrap();
-  let shown: Vec<String> = read.iter().map(|one| one.as_ref().py_repr()).collect();
+  let mut read = Vec::new();
+  let wanted = [Head::Kind("made"), Head::Kind("checkpoint")];
+  heads(&at, &wanted, &mut |place, one| read.push((place, one.as_ref().py_repr()))).unwrap();
   assert_eq!(
-    shown,
+    read,
     [
-      "[['made', 'chain1', 'store', 'abc', 1]]",
-      "[['checkpoint', 'chain1', 'store', {}]]",
-      "[['made', 'chain1', 'store', 'abd', 1]]",
+      (0, "[['made', 'chain1', 'store', 'abc', 1]]".to_owned()),
+      (2, "[['checkpoint', 'chain1', 'store', {}]]".to_owned()),
+      (3, "[['made', 'chain1', 'store', 'abd', 1]]".to_owned()),
     ]
   );
+}
+
+#[test]
+fn the_place_of_a_head_counts_each_entry_before_it_and_no_blank_line_or_other_head() {
+  let at = place("places");
+  let long = "x".repeat(300);
+  fs::write(
+    &at,
+    format!(
+      "[[\"done\",\"stand1\",\"operator\",[\"wanted-1\"]],1]\n\
+       [[\"tell\",\"rung2\",\"chain1\",[\"{long}\"]],2]\n\
+       \n\
+       [[\"done\",\"stand2\",\"operator\",[\"other \u{2665}\"]],3]\n\
+       [[\"done\",\"stand3\", not json\n\
+       [[\"done\",\"stand4\",\"operator\",[\"wanted-4\"]]]\n\
+       [[\"done\",\"stand5\",\"operator\",[\"wanted-\"",
+    ),
+  )
+  .unwrap();
+  let mut read = Vec::new();
+  heads(&at, &[Head::Done("stand")], &mut |place, one| read.push((place, one.as_ref().py_repr())))
+    .unwrap();
+  let places: Vec<usize> = read.iter().map(|one| one.0).collect();
+  assert_eq!(
+    places,
+    [0, 2, 4],
+    "a blank line is no entry, and a line that does not parse still is"
+  );
+  assert_eq!(read[2].1, "[['done', 'stand4', 'operator', ['wanted-4']]]");
+  let mut none = 0;
+  heads(&place("gone"), &[Head::Done("stand")], &mut |_, _| none += 1).unwrap();
+  assert_eq!(none, 0, "a record that stands not holds none");
 }
 
 #[test]

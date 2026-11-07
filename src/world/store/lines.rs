@@ -18,6 +18,7 @@ use super::{
   error::{At, StoreError},
   leased, now,
 };
+use std::str;
 
 /// The record at a path as a file of lines, under its lease.
 ///
@@ -117,29 +118,68 @@ pub(super) fn each(path: &Path, take: &mut dyn FnMut(Object)) -> Result<(), Stor
   read(path, take).map(drop)
 }
 
-/// The entries of the file of lines at a path whose line starts with one of some heads, as
-/// [`kept`] reads them: a line with another head is not parsed, and a line that does not parse
-/// is passed over.
-pub(super) fn heads(path: &Path, starts: &[String]) -> Result<Vec<Object>, StoreError> {
-  let data = match std::fs::read(path) {
-    Ok(data) => data,
-    Err(no) if no.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
+/// The entries of the file of lines at a path whose line starts with one of some heads, each with
+/// its place among the entries of the record, counted from 0, in order and read one line at a
+/// time, so a reader holds no more of a large record than one line. A line with another head is
+/// not parsed, a line that does not parse is passed over, and a blank line is no entry.
+pub(super) fn heads(
+  path: &Path,
+  heads: &[Head<'_>],
+  take: &mut dyn FnMut(usize, Object),
+) -> Result<(), StoreError> {
+  let file = match File::open(path) {
+    Ok(file) => file,
+    Err(no) if no.kind() == ErrorKind::NotFound => return Ok(()),
     Err(no) => return Err(StoreError::io(path)(no)),
   };
-  let mut entries = Vec::new();
-  let mut start = 0;
-  while start < data.len() {
-    let end = memchr::memchr(b'\n', &data[start..]).map_or(data.len(), |at| start + at);
-    let line = &data[start..end];
-    if starts.iter().any(|head| line.starts_with(head.as_bytes()))
-      && let Ok(held) = serde_json::from_slice::<Vec<&RawValue>>(line)
-      && let Some(entry) = held.first().and_then(|one| entry_of(one))
-    {
-      entries.push(entry);
+  let starts = Head::starts(heads.iter().copied());
+  let mut lines = BufReader::with_capacity(1 << 20, file);
+  let (mut line, mut place) = (Vec::new(), 0);
+  loop {
+    line.clear();
+    if lines.read_until(b'\n', &mut line).map_err(StoreError::io(path))? == 0 {
+      return Ok(());
     }
-    start = end + 1;
+    let text = line.strip_suffix(b"\n").unwrap_or(&line);
+    if text.iter().all(u8::is_ascii_whitespace) {
+      continue;
+    }
+    if let Some(found) = headed(text, &starts) {
+      take(place, found);
+    }
+    place += 1;
   }
-  Ok(entries)
+}
+
+/// The head of a line of a record that a read looks for, which this file alone writes as the start
+/// of a line of JSON.
+#[derive(Clone, Copy)]
+pub(super) enum Head<'a> {
+  /// A fact of this kind.
+  Kind(&'a str),
+  /// The done of an act whose name starts with this.
+  Done(&'a str),
+}
+
+impl Head<'_> {
+  /// The starts of the lines of some heads.
+  pub(super) fn starts<'a>(heads: impl IntoIterator<Item = Head<'a>>) -> Vec<String> {
+    heads
+      .into_iter()
+      .map(|head| match head {
+        Head::Kind(kind) => format!("[[\"{kind}\","),
+        Head::Done(act) => format!("[[\"done\",\"{act}"),
+      })
+      .collect()
+  }
+}
+
+/// The entry of a line that starts with one of some heads, and nothing for a line with another
+/// head or one that does not parse.
+fn headed(line: &[u8], starts: &[String]) -> Option<Object> {
+  starts.iter().any(|head| line.starts_with(head.as_bytes())).then_some(())?;
+  let held = serde_json::from_slice::<Vec<&RawValue>>(line).ok()?;
+  held.first().and_then(|one| entry_of(one))
 }
 
 /// The line of an entry: its fact, and after it the time at which the store kept it, in milliseconds since the start
@@ -182,7 +222,7 @@ fn read(path: &Path, take: &mut dyn FnMut(Object)) -> Result<Tail, StoreError> {
     }
     let ended = line.last() == Some(&b'\n');
     let next = start + read;
-    let Ok(text) = std::str::from_utf8(&line[..read - usize::from(ended)]) else {
+    let Ok(text) = str::from_utf8(&line[..read - usize::from(ended)]) else {
       return Err(invalid(start));
     };
     if text.trim().is_empty() {

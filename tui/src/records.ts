@@ -6,9 +6,10 @@ export interface RecordState {
   state: "runs" | "saved";
   error?: string;
   reading?: boolean;
-  /** The name that the replay found. */
+  /** The name of the session that the fold of the crate gives the record: the one that the operator said last, else the
+   * one that the extension naming gave. */
   name?: string;
-  /** The last name that the operator gave the session, which a plain scan of the record found. */
+  /** The last name that the operator gave the session, which the crate read in the record. */
   said?: string;
   /** Whether the record was replayed, or only scanned. */
   replayed: boolean;

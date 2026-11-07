@@ -1,7 +1,6 @@
 //! The claude command line as a model of rig, driven against a command line that answers from a script, which
 //! `fake-claude.sh` says.
 
-#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
 #![expect(clippy::expect_used, reason = "a test blocks on its runtime and fails by a panic")]
 #![expect(
   clippy::let_underscore_must_use,
@@ -9,6 +8,7 @@
 )]
 #![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
 
+use crate::testing::{on_reactor, pause};
 use std::{
   fs,
   os::unix::fs::PermissionsExt,
@@ -36,7 +36,15 @@ use super::{
   Account, Claude, Completion, Source, Switch,
   conversation::{cached, lasting},
 };
-use crate::{ear::reactor, testing};
+use crate::testing;
+use rig_core::completion;
+#[cfg(unix)]
+use rustix::process;
+use std::env;
+use std::io;
+use std::process as std_process;
+use std::thread;
+use tokio::time;
 
 /// The fake command line, which the tests of the command line of furb run too.
 const FAKE: &str = include_str!("fake-claude.sh");
@@ -49,13 +57,13 @@ pub(crate) struct Yard {
 }
 
 impl Yard {
-  pub(crate) fn new(name: &str) -> Yard {
+  pub(crate) fn new(name: &str) -> Self {
     // The name holds the id of the process, as every yard of the tests of the crate does: two runs of the suite at
     // once, as a hook and a check in two checkouts, would otherwise remove the files of each other.
-    let at = testing::Yard::new(format!("furb-claude-{name}-{}", std::process::id()));
+    let at = testing::Yard::new(format!("furb-claude-{name}-{}", std_process::id()));
     let fake = ran();
     fs::hard_link(&fake.bin, at.join("claude")).expect("the fake is linked");
-    Yard { at, _fake: fake }
+    Self { at, _fake: fake }
   }
 
   /// The fake as the command line, with a stall of these milliseconds.
@@ -137,7 +145,7 @@ fn ran() -> Arc<Fake> {
   // meets none later.
   let n = MADE.fetch_add(1, Ordering::Relaxed);
   let fake = {
-    let at = testing::Yard::new(format!("furb-claude-fake-{}-{n}", std::process::id()));
+    let at = testing::Yard::new(format!("furb-claude-fake-{}-{n}", std_process::id()));
     let bin = at.join("claude");
     fs::write(&bin, FAKE).expect("the fake is written");
     fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).expect("the fake runs");
@@ -146,10 +154,10 @@ fn ran() -> Arc<Fake> {
     let mut tries = 0;
     let status = loop {
       match Command::new(&bin).stdin(Stdio::null()).stdout(Stdio::null()).status() {
-        Err(no) if no.kind() == std::io::ErrorKind::ExecutableFileBusy && tries < 50 => tries += 1,
+        Err(no) if no.kind() == io::ErrorKind::ExecutableFileBusy && tries < 50 => tries += 1,
         got => break got,
       }
-      std::thread::sleep(Duration::from_millis(10));
+      pause(Duration::from_millis(10));
     };
     assert!(status.expect("the fake starts").success(), "the fake ran once");
     Arc::new(Fake { _at: at, bin })
@@ -190,8 +198,8 @@ fn asked(
   model: &Completion,
   messages: &[Message],
   settings: Value,
-) -> Result<rig_core::completion::CompletionResponse, CompletionError> {
-  reactor().block_on(model.completion(request("ENGINE ONLY", messages, settings)))
+) -> Result<completion::CompletionResponse, CompletionError> {
+  on_reactor(model.completion(request("ENGINE ONLY", messages, settings)))
 }
 
 #[test]
@@ -262,9 +270,9 @@ fn a_turn_waits_for_a_program_that_an_update_took_away_and_then_names_the_progra
   let settings = json!({"session": "chain"});
   let model = yard.claude(10_000).waiting(Duration::from_secs(10)).completion_model("sonnet");
   yard.away();
-  let back = std::thread::scope(|scope| {
+  let back = thread::scope(|scope| {
     scope.spawn(|| {
-      std::thread::sleep(Duration::from_millis(300));
+      pause(Duration::from_millis(300));
       yard.back();
     });
     asked(&model, &[user("first")], settings.clone())
@@ -423,11 +431,11 @@ fn a_turn_dropped_after_the_command_line_heard_it_leaves_the_next_turn_to_send_o
   let turn = model.completion(request("ENGINE ONLY", &dropped, settings.clone()));
   let heard = async {
     while !yard.heard().iter().any(|one| one.contains("WAIT")) {
-      tokio::time::sleep(Duration::from_millis(10)).await;
+      time::sleep(Duration::from_millis(10)).await;
     }
   };
-  let raced = reactor().block_on(async {
-    tokio::time::timeout(Duration::from_secs(10), select(Box::pin(turn), Box::pin(heard))).await
+  let raced = on_reactor(async {
+    time::timeout(Duration::from_secs(10), select(Box::pin(turn), Box::pin(heard))).await
   });
   let Ok(Either::Right(((), turn))) = raced else {
     panic!("the turn was still in flight when the fake heard its line")
@@ -623,7 +631,7 @@ fn a_most_of_thought_that_a_turn_names_is_the_max_thinking_tokens_of_its_process
     .iter()
     .map(|pid| fs::read_to_string(yard.at.join(format!("thinking.{pid}"))).unwrap_or_default())
     .collect();
-  let inherited = std::env::var("MAX_THINKING_TOKENS").unwrap_or_else(|_| "unset".to_owned());
+  let inherited = env::var("MAX_THINKING_TOKENS").unwrap_or_else(|_| "unset".to_owned());
   assert_eq!(thinking, [inherited, "0".to_owned()], "a turn that names no most inherits it");
   assert!(gone(&pids[0]), "a new most ends the process");
 }
@@ -678,27 +686,71 @@ fn a_conversation_that_grows_out_of_another_forks_it() {
 }
 
 #[test]
+fn a_fork_of_a_fork_resumes_the_mark_of_the_cache_of_its_origin_and_marks_no_block_more() {
+  let yard = Yard::new("fork-marks");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let opened = |n: usize| Message::User {
+    content: vec![
+      UserContent::text(format!("#read{n}")),
+      UserContent::text(format!("#chain{n}\nchain{n}: Act[object]")),
+    ],
+  };
+  let mut messages = vec![opened(1)];
+  for (at, session) in ["origin", "fork", "fork-of-fork"].into_iter().enumerate() {
+    if at > 0 {
+      messages.push(opened(at + 1));
+    }
+    let one = asked(&model, &messages, json!({"session": session})).unwrap();
+    messages.push(Message::Assistant { id: None, content: one.choice });
+  }
+  // A request carries each mark of the lines that the conversations of its lineage heard, since a
+  // fork resumes its parent, and the command line adds the marks of its system prompt and of its
+  // last message: so furb marks one block at most in a lineage.
+  let marks: Vec<usize> =
+    yard.heard().iter().map(|line| line.matches("cache_control").count()).collect();
+  let lineage: Vec<usize> = marks
+    .iter()
+    .scan(0, |all, one| {
+      *all += one;
+      Some(*all)
+    })
+    .collect();
+  assert_eq!(lineage, [1, 1, 1], "the marks of each line: {marks:?}");
+}
+
+#[test]
 fn a_thought_streams_as_it_comes_and_settles_once_at_its_place() {
   let yard = Yard::new("thought");
   let model = yard.claude(10_000).completion_model("sonnet");
-  let (texts, choice) = reactor()
-    .block_on(async {
-      let mut stream = model.stream(request("ENGINE ONLY", &[user("THINK")], json!({}))).await?;
-      let mut texts = Vec::new();
-      while let Some(one) = stream.next().await {
-        if let StreamedAssistantContent::Text(text) = one? {
-          texts.push(text.text);
-        }
+  let (texts, choice) = on_reactor(async {
+    let mut stream = model.stream(request("ENGINE ONLY", &[user("THINK")], json!({}))).await?;
+    let mut texts = Vec::new();
+    while let Some(one) = stream.next().await {
+      if let StreamedAssistantContent::Text(text) = one? {
+        texts.push(text.text);
       }
-      Ok::<_, CompletionError>((texts, stream.choice))
-    })
-    .unwrap();
+    }
+    Ok::<_, CompletionError>((texts, stream.choice))
+  })
+  .unwrap();
   assert_eq!(texts, ["close(", "\"reply 1\")"]);
   let thought = Reasoning::new_with_signature("hmm", Some("sig".to_owned()));
   let expected =
     [AssistantContent::Reasoning(thought), AssistantContent::text("close(\"reply 1\")")];
   assert_eq!(choice, expected);
   let whole = asked(&model, &[user("THINK")], json!({})).unwrap();
+  assert_eq!(whole.choice, expected);
+}
+
+#[test]
+fn a_thought_that_the_api_redacted_settles_as_its_data_in_the_turn() {
+  let yard = Yard::new("redacted");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let whole = asked(&model, &[user("REDACT")], json!({})).unwrap();
+  let expected = [
+    AssistantContent::Reasoning(Reasoning::redacted("opaque")),
+    AssistantContent::text("close(\"reply 1\")"),
+  ];
   assert_eq!(whole.choice, expected);
 }
 
@@ -717,8 +769,8 @@ fn a_program_that_appears_after_a_delay_starts_its_turn() {
   let model = Claude::with(Some(later.clone()), Some(Duration::from_millis(10_000)))
     .completion_model("sonnet");
   let source = yard.at.join("claude");
-  let placed = std::thread::spawn(move || {
-    std::thread::sleep(Duration::from_millis(300));
+  let placed = thread::spawn(move || {
+    pause(Duration::from_millis(300));
     fs::rename(source, later).expect("the program appears");
   });
   let got = asked(&model, &[user("hi")], json!({}));
@@ -732,7 +784,7 @@ fn a_process_that_writes_more_on_its_stderr_than_its_pipe_holds_while_it_ends_fa
   let yard = Yard::new("loud-end");
   let model = yard.claude(10_000).completion_model("sonnet");
   let turn = model.completion(request("ENGINE ONLY", &[user("LOUD")], json!({})));
-  let no = reactor().block_on(async { tokio::time::timeout(Duration::from_secs(10), turn).await });
+  let no = on_reactor(async { time::timeout(Duration::from_secs(10), turn).await });
   let no = no.expect("the turn ends").unwrap_err();
   assert!(no.to_string().contains("Claude exited (3): eee"), "{no}");
 }
@@ -744,7 +796,7 @@ fn a_process_that_writes_more_on_its_stderr_than_its_pipe_holds_takes_a_long_inp
   let model = yard.claude(10_000).completion_model("sonnet");
   let long = "a".repeat(262_144);
   let turn = model.completion(request("ENGINE ONLY", &[user(&long)], json!({})));
-  let got = reactor().block_on(async { tokio::time::timeout(Duration::from_secs(10), turn).await });
+  let got = on_reactor(async { time::timeout(Duration::from_secs(10), turn).await });
   assert!(got.expect("the turn ends").is_ok(), "the turn is answered");
 }
 
@@ -767,7 +819,7 @@ fn a_turn_that_makes_no_progress_fails_at_its_stall_with_the_last_odd_line_and_e
 /// One turn of a model that answers no request, bounded by ten seconds.
 fn ended(model: &Completion, text: &str) -> Result<CompletionError, String> {
   let turn = model.completion(request("ENGINE ONLY", &[user(text)], json!({})));
-  let got = reactor().block_on(async { tokio::time::timeout(Duration::from_secs(10), turn).await });
+  let got = on_reactor(async { time::timeout(Duration::from_secs(10), turn).await });
   match got {
     Ok(Err(no)) => Ok(no),
     Ok(Ok(response)) => Err(format!("the turn was answered: {:?}", response.choice)),
@@ -817,11 +869,11 @@ fn a_turn_that_is_dropped_ends_its_process() {
   // The turn drops when the fake heard its line, after it wrote its id, however long it took to start.
   let heard = async {
     while !yard.heard().iter().any(|one| one.contains("WAIT")) {
-      tokio::time::sleep(Duration::from_millis(10)).await;
+      time::sleep(Duration::from_millis(10)).await;
     }
   };
-  let raced = reactor().block_on(async {
-    tokio::time::timeout(Duration::from_secs(10), select(Box::pin(turn), Box::pin(heard))).await
+  let raced = on_reactor(async {
+    time::timeout(Duration::from_secs(10), select(Box::pin(turn), Box::pin(heard))).await
   });
   let Ok(Either::Right(((), turn))) = raced else {
     panic!("the turn was still in flight when the fake heard its line")
@@ -840,28 +892,26 @@ fn a_turn_dropped_while_the_keeper_hands_it_the_conversation_leaves_the_conversa
   let first = model.completion(request("ENGINE ONLY", &[user("WAIT")], settings.clone()));
   let heard = async {
     while !yard.heard().iter().any(|one| one.contains("WAIT")) {
-      tokio::time::sleep(Duration::from_millis(10)).await;
+      time::sleep(Duration::from_millis(10)).await;
     }
   };
-  let raced = reactor().block_on(async {
-    tokio::time::timeout(Duration::from_secs(10), select(Box::pin(first), Box::pin(heard))).await
+  let raced = on_reactor(async {
+    time::timeout(Duration::from_secs(10), select(Box::pin(first), Box::pin(heard))).await
   });
   let Ok(Either::Right(((), first))) = raced else {
     panic!("the first turn was still in flight when the fake heard its line")
   };
   let second = model.completion(request("ENGINE ONLY", &[user("second")], settings.clone()));
   let mut second = Box::pin(second);
-  let waited = reactor()
-    .block_on(async { tokio::time::timeout(Duration::from_millis(200), &mut second).await });
+  let waited = on_reactor(async { time::timeout(Duration::from_millis(200), &mut second).await });
   assert!(waited.is_err(), "the second turn waits for the conversation that the first one holds");
   drop(first);
   // The keeper hands the conversation to the second turn, which is dropped before it takes it, as a
   // reply that is cancelled.
-  std::thread::sleep(Duration::from_millis(200));
+  pause(Duration::from_millis(200));
   drop(second);
   let third = model.completion(request("ENGINE ONLY", &[user("third")], settings));
-  let got =
-    reactor().block_on(async { tokio::time::timeout(Duration::from_secs(10), third).await });
+  let got = on_reactor(async { time::timeout(Duration::from_secs(10), third).await });
   let Ok(got) = got else { panic!("the third turn waited for a conversation that no turn holds") };
   got.unwrap();
 }
@@ -869,23 +919,22 @@ fn a_turn_dropped_while_the_keeper_hands_it_the_conversation_leaves_the_conversa
 /// Whether the process of an id is gone, within a time, as a process ends a moment after it is killed. A process
 /// that ended and that nothing reaped yet is gone too.
 pub(crate) fn gone(pid: &str) -> bool {
-  let Some(pid) = pid.parse().ok().and_then(rustix::process::Pid::from_raw) else { return false };
+  let Some(pid) = pid.parse().ok().and_then(process::Pid::from_raw) else { return false };
   for _ in 0..100 {
-    let there = rustix::process::test_kill_process(pid).is_ok();
+    let there = process::test_kill_process(pid).is_ok();
     let status =
       fs::read_to_string(format!("/proc/{}/status", pid.as_raw_nonzero())).unwrap_or_default();
     if !there || status.contains("State:\tZ") {
       return true;
     }
-    std::thread::sleep(Duration::from_millis(20));
+    pause(Duration::from_millis(20));
   }
   false
 }
 
 /// The models of a yard: what the scripted command line says of them, and how many times it was asked.
 fn said(claude: &Claude) -> Vec<(String, u64, Vec<String>)> {
-  reactor()
-    .block_on(claude.models())
+  on_reactor(claude.models())
     .iter()
     .map(|one| (one.name.clone(), one.window, one.efforts.iter().map(|e| e.0.clone()).collect()))
     .collect()
@@ -923,6 +972,45 @@ fn the_models_are_asked_again_after_a_refresh() {
   fs::write(yard.at.join("models"), "nova 200 low\n").unwrap();
   super::refresh();
   assert_eq!(said(&claude)[0].1, 200);
+}
+
+#[test]
+fn a_discovery_that_is_an_hour_old_is_asked_again_so_a_model_that_the_command_line_names_now_shows()
+{
+  use super::discover::{LASTS, models_at};
+  let yard = Yard::new("lasts");
+  fs::write(yard.at.join("models"), "opus 100 low\n").unwrap();
+  let claude = yard.claude(10_000);
+  let aliases = |at: u64| -> Vec<String> {
+    let found = on_reactor(models_at(&claude.program, at)).expect("the command line answers");
+    found.into_iter().map(|one| one.alias).collect()
+  };
+  assert_eq!(aliases(1_000), ["opus"]);
+  fs::write(yard.at.join("models"), "opus 100 low\nfable 100 low\n").unwrap();
+  assert_eq!(aliases(1_000 + LASTS - 1), ["opus"], "a discovery that is young holds");
+  assert_eq!(
+    aliases(1_000 + LASTS),
+    ["opus", "fable"],
+    "the roster names fable once it is asked again"
+  );
+}
+
+#[test]
+fn a_discovery_asks_with_the_traffic_of_the_command_line_on_so_it_lists_each_model_that_it_names() {
+  let yard = Yard::new("traffic");
+  fs::write(
+    yard.at.join("models"),
+    "opus 750000 low\nfable 850000 low\nsonnet 300000 low\nhaiku 850000 low\n",
+  )
+  .unwrap();
+  // What the real command line lists with its traffic off: fable only as `claude-fable-5-1[1m]`.
+  fs::write(yard.at.join("offline"), include_str!("offline-models.json")).unwrap();
+  let got = said(&yard.claude(10_000));
+  let names: Vec<_> = got.iter().map(|one| one.0.as_str()).collect();
+  assert_eq!(
+    names,
+    ["claude-cli:opus", "claude-cli:fable", "claude-cli:sonnet", "claude-cli:haiku"]
+  );
 }
 
 #[test]
@@ -1090,8 +1178,8 @@ fn the_command_line_is_signed_in_when_any_of_its_accounts_is() {
     let accounts = listed(&yard, names);
     Claude::with_accounts(Some(script.clone()), Vec::new(), accounts, Switch::Failover, None)
   };
-  assert!(reactor().block_on(claude(&["a", "b"]).signed()));
-  assert!(!reactor().block_on(claude(&["a"]).signed()));
+  assert!(on_reactor(claude(&["a", "b"]).signed()));
+  assert!(!on_reactor(claude(&["a"]).signed()));
 }
 
 #[test]
@@ -1177,4 +1265,20 @@ fn a_process_gets_no_flag_that_its_command_line_does_not_list() {
   asked(&model, &[user("first")], json!({"session": "chain"})).unwrap();
   let args = yard.args(&yard.pids()[0]);
   assert!(!args.iter().any(|one| one == "--system-prompt-snapshot"), "{args:?}");
+}
+
+#[test]
+fn a_missing_token_and_every_account_signed_out_are_failures_of_their_own_with_the_words_that_a_person_reads()
+ {
+  let token = super::Token::EmptyEnv { name: "a".to_owned(), var: "T".to_owned() };
+  let missing = super::Error::from(token);
+  assert!(matches!(missing, super::Error::NoToken(_)));
+  assert_eq!(
+    missing.to_string(),
+    "The account a has no token: its token variable T is empty or not set"
+  );
+  assert_eq!(
+    super::Error::Exhausted.to_string(),
+    "Every account of the claude command line is signed out. Sign one in, then run /reload."
+  );
 }

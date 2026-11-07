@@ -1,8 +1,8 @@
-import { cancelled, failed, type LiveAct, type Measure, WORK } from "./acts.js";
+import { type Act, cancelled, failed, isDone, type Measure, outcomeOf, reasonOf, WORK } from "./acts.js";
 import { gist } from "./asks.js";
 import { valueText } from "./ladder.js";
 import { unmarked } from "./marks.js";
-import { busy, type State, working } from "./states.js";
+import { busy, type State } from "./states.js";
 
 /** What a row of the loom does now: it asks the operator, it failed, it works, a pause holds it, its prompts are
  * all closed, or it rests. */
@@ -47,7 +47,7 @@ export interface Loom {
   folded: number;
 }
 export interface Weave {
-  acts: readonly LiveAct[];
+  acts: readonly Act[];
   /** The prompts that wait for the operator. */
   prompts: readonly { id: string; shape: string; message: string }[];
   measures: Readonly<Record<string, Measure>>;
@@ -59,10 +59,10 @@ export interface Weave {
   /** What a host already holds of the acts, which a loom of no width reads in place of a pass over every act: each act
    * by its name, the acts on each chain, the chains, and each act that is not done. */
   index?: {
-    ids: ReadonlyMap<string, LiveAct>;
-    on: ReadonlyMap<string, readonly LiveAct[]>;
-    chains: readonly LiveAct[];
-    live: Iterable<LiveAct>;
+    ids: ReadonlyMap<string, Act>;
+    on: ReadonlyMap<string, readonly Act[]>;
+    chains: readonly Act[];
+    live: Iterable<Act>;
     /** How many times an act on each chain came or changed, which a host that counts them gives. */
     stamp?: (chain: string) => number;
     /** The chain of each act that came or changed, once each time, in the order of the changes: a list that only
@@ -94,20 +94,20 @@ export function spans(moments: readonly number[], width: number): [number, numbe
 /** The cells of a set of acts over the spans: the height of a cell is how many of the acts began or ended in its span,
  * and a span in which some work of them runs, and none began or ended, is the lowest height. A failure, then a
  * question to the operator, then work that runs, gives the tone. */
-export function cells(acts: readonly LiveAct[], times: readonly [number, number][], stretch = 1): Cell[] {
+export function cells(acts: readonly Act[], times: readonly [number, number][], stretch = 1): Cell[] {
   return times.flatMap(([lo, hi]): Cell[] => {
     const cell = cellOf(acts, lo, hi);
     if (stretch === 1) return [cell];
     // A moment that takes more than a column shows, before its cell, the work that ran up to it.
     const on = acts.some(
-      (act) => WORK.includes(act.kind) && act.began < lo && (act.ended === undefined || act.ended >= lo),
+      (act) => WORK.includes(act.kind) && act.began < lo && (act.ended == null || act.ended >= lo),
     );
     const gap: Cell = on ? { mark: "▁", tone: "work" } : { mark: " ", tone: "none" };
     return [...Array.from({ length: stretch - 1 }, () => gap), cell];
   });
 }
 /** The cell of the acts over one span of moments. */
-function cellOf(acts: readonly LiveAct[], lo: number, hi: number): Cell {
+function cellOf(acts: readonly Act[], lo: number, hi: number): Cell {
   {
     let count = 0,
       runs = false,
@@ -115,13 +115,12 @@ function cellOf(acts: readonly LiveAct[], lo: number, hi: number): Cell {
       asks = false;
     for (const act of acts) {
       const began = act.began >= lo && act.began <= hi;
-      const ended = act.ended !== undefined && act.ended >= lo && act.ended <= hi;
+      const ended = act.ended != null && act.ended >= lo && act.ended <= hi;
       if (began) count++;
       if (ended) count++;
       if (ended && failed(act) && !cancelled(act)) fails = true;
       if (began && asksOperator(act)) asks = true;
-      if (WORK.includes(act.kind) && act.began <= hi && (act.ended === undefined || act.ended >= lo))
-        runs = true;
+      if (WORK.includes(act.kind) && act.began <= hi && (act.ended == null || act.ended >= lo)) runs = true;
     }
     if (!count && !runs) return { mark: " ", tone: "none" };
     const mark = heights[count ? Math.min(7, 1 + Math.floor(Math.log2(count))) : 0] ?? "▁";
@@ -130,41 +129,28 @@ function cellOf(acts: readonly LiveAct[], lo: number, hi: number): Cell {
 }
 
 /** Whether an act is a question to the operator: a prompt whose actor is the operator. */
-export const asksOperator = (act: LiveAct): boolean => act.kind === "prompt" && act.words[2] === "operator";
+export const asksOperator = (act: Act): boolean => act.kind === "prompt" && act.words[2] === "operator";
 
 /** The chain that a chain stands under in the tree: the chain of the rung that made it, and nothing for a chain that
  * the operator or an ear made. */
-export function parentOf(chain: LiveAct, acts: ReadonlyMap<string, LiveAct>): string | undefined {
+export function parentOf(chain: Act, acts: ReadonlyMap<string, Act>): string | undefined {
   const maker = acts.get(chain.by);
-  return maker && maker.on !== chain.id ? maker.on : undefined;
-}
-
-/** The state of the acts of a chain, with the prompts that the operator owes on it. */
-export function rowState(work: readonly LiveAct[], owes: boolean, remote: readonly LiveAct[] = []): State {
-  if (owes) return "asks";
-  const live = work.filter((act) => WORK.includes(act.kind) && !act.unfinished);
-  // Work that an earlier life left is work: the open of a life on its record resumes it at once.
-  if (live.some((act) => act.paused && !act.done)) return "paused";
-  if (live.some((act) => !act.done)) return working(live, remote);
-  const latest = live.at(-1);
-  if (latest && cancelled(latest)) return "cancelled";
-  if (latest && failed(latest)) return "failed";
-  const prompts = live.filter((act) => act.kind === "prompt");
-  return prompts.length && prompts.every((act) => act.done) ? "done" : "idle";
+  return maker && maker.chain !== chain.id ? maker.chain : undefined;
 }
 
 /** The act that a chain waits on while it works: its newest command or wait that runs, then the newest prompt that one
  * of its rungs made on another chain, then its newest rung that runs. */
 export function waitsOn(
   chain: string,
-  acts: readonly LiveAct[],
-  rows: ReadonlyMap<string, LiveAct>,
+  acts: readonly Act[],
+  rows: ReadonlyMap<string, Act>,
 ): string | undefined {
-  const open = acts.filter((act) => !act.done);
-  const local = open.filter((act) => act.on === chain);
+  const open = acts.filter((act) => !isDone(act));
+  const local = open.filter((act) => act.chain === chain);
   return (
     local.findLast((act) => act.kind === "bash" || act.kind === "wait")?.id ??
-    open.findLast((act) => act.kind === "prompt" && act.on !== chain && rows.get(act.by)?.on === chain)?.id ??
+    open.findLast((act) => act.kind === "prompt" && act.chain !== chain && rows.get(act.by)?.chain === chain)
+      ?.id ??
     local.findLast((act) => act.kind === "rung")?.id
   );
 }
@@ -180,7 +166,7 @@ export function weave({ acts, prompts, measures, folds, width, label, index }: W
     .flatMap((prompt) => {
       const act = byId.get(prompt.id);
       // A prompt is owed until its act is done, though the console can hold it a moment longer.
-      return act && !act.done ? [{ ...prompt, chain: act.on, by: act.by, began: act.began }] : [];
+      return act && !isDone(act) ? [{ ...prompt, chain: act.chain, by: act.by, began: act.began }] : [];
     })
     .sort((one, other) => one.began - other.began);
   const owing = new Set(owed.map((prompt) => prompt.chain));
@@ -190,14 +176,14 @@ export function weave({ acts, prompts, measures, folds, width, label, index }: W
   const stretch = Math.max(1, Math.min(3, Math.floor(width / Math.max(1, moments.length))));
   const times = spans(moments, Math.floor(width / stretch));
   const folded = times.filter(([lo, hi]) => hi > lo).length * stretch;
-  const byChain = new Map<string, LiveAct[]>();
+  const byChain = new Map<string, Act[]>();
   for (const act of acts) {
-    const list = byChain.get(act.on) ?? [];
+    const list = byChain.get(act.chain) ?? [];
     list.push(act);
-    byChain.set(act.on, list);
+    byChain.set(act.chain, list);
   }
   const chains = acts.filter((act) => act.kind === "chain").sort((one, other) => one.began - other.began);
-  const children = new Map<string | undefined, LiveAct[]>();
+  const children = new Map<string | undefined, Act[]>();
   for (const chain of chains) {
     const parent = parentOf(chain, byId);
     const list = children.get(parent) ?? [];
@@ -206,15 +192,11 @@ export function weave({ acts, prompts, measures, folds, width, label, index }: W
   }
   const under = (id: string): string[] =>
     (children.get(id) ?? []).flatMap((child) => [child.id, ...under(child.id)]);
-  const stateOf = (id: string) =>
-    rowState(
-      (byChain.get(id) ?? []).filter((act) => act.kind !== "chain"),
-      owing.has(id),
-      open.filter((act) => act.kind === "prompt" && act.on !== id && byId.get(act.by)?.on === id),
-    );
+  // The state of a chain is the one that the crate gave its act, and a question that the console still holds asks.
+  const stateOf = (id: string): State => (owing.has(id) ? "asks" : (byId.get(id)?.state ?? "idle"));
   const operatorActs = acts.filter(asksOperator);
   // The acts that run, which each row that works reads for what it waits on.
-  const open = acts.filter((act) => !act.done);
+  const open = acts.filter((act) => !isDone(act));
   const rows: Row[] = [
     {
       id: "operator",
@@ -227,7 +209,7 @@ export function weave({ acts, prompts, measures, folds, width, label, index }: W
       cells: cells(operatorActs, times, stretch),
     },
   ];
-  const visit = (chain: LiveAct, lines: string, last: boolean, depth: number): void => {
+  const visit = (chain: Act, lines: string, last: boolean, depth: number): void => {
     const below = under(chain.id);
     const fold = folds.has(chain.id) && below.length > 0;
     const tally: Partial<Record<State, number>> = {};
@@ -367,29 +349,29 @@ function ordered(rows: readonly Row[], place: ReadonlyMap<string, number>, order
  * operator on it changed. */
 function board(
   { prompts, measures, folds, label }: Omit<Weave, "acts" | "width" | "index">,
-  { ids, on, chains: listed, live, stamp, touched }: NonNullable<Weave["index"]>,
+  { ids, chains: listed, live, stamp, touched }: NonNullable<Weave["index"]>,
 ): Loom {
   const owed: Owed[] = prompts
     .flatMap((prompt) => {
       const act = ids.get(prompt.id);
-      return act && !act.done ? [{ ...prompt, chain: act.on, by: act.by, began: act.began }] : [];
+      return act && !isDone(act) ? [{ ...prompt, chain: act.chain, by: act.by, began: act.began }] : [];
     })
     .sort((one, other) => one.began - other.began);
   const owing = new Set(owed.map((prompt) => prompt.chain));
   // The work that is not done on each chain, and the prompts that are not done on another chain that the rungs of
   // each chain made, in the order of the acts, which tell what each chain waits on as waitsOn tells it.
-  const openOn = new Map<string, LiveAct[]>();
-  const asked = new Map<string, LiveAct[]>();
-  const put = (map: Map<string, LiveAct[]>, key: string, act: LiveAct) => {
+  const openOn = new Map<string, Act[]>();
+  const asked = new Map<string, Act[]>();
+  const put = (map: Map<string, Act[]>, key: string, act: Act) => {
     const list = map.get(key);
     if (list) list.push(act);
     else map.set(key, [act]);
   };
   for (const act of live) {
-    if (act.done) continue;
-    put(openOn, act.on, act);
-    const maker = act.kind === "prompt" ? ids.get(act.by)?.on : undefined;
-    if (maker !== undefined && maker !== act.on) put(asked, maker, act);
+    if (isDone(act)) continue;
+    put(openOn, act.chain, act);
+    const maker = act.kind === "prompt" ? ids.get(act.by)?.chain : undefined;
+    if (maker !== undefined && maker !== act.chain) put(asked, maker, act);
   }
   // The tree of the chains holds while no chain comes, and a fold of the operator lays it out again.
   const read = boarded.get(ids);
@@ -407,26 +389,17 @@ function board(
     const asks = asked.get(id)?.at(-1)?.id ?? "";
     const changed = stamp?.(id) ?? -1;
     const kept = states.get(id);
-    if (kept && changed >= 0 && kept.stamp === changed && kept.owes === owes && kept.asks === asks)
+    // The state of a chain is the one that the crate gave its act, and a question that the console still holds asks.
+    const state: State = owes ? "asks" : (ids.get(id)?.state ?? "idle");
+    if (
+      kept &&
+      changed >= 0 &&
+      kept.stamp === changed &&
+      kept.owes === owes &&
+      kept.asks === asks &&
+      kept.state === state
+    )
       return kept;
-    const work = (act?: LiveAct): act is LiveAct =>
-      act !== undefined && act.on === id && WORK.includes(act.kind) && !act.unfinished;
-    const waiting = (openOn.get(id) ?? []).filter(work);
-    const acts = on.get(id) ?? [];
-    const latest = acts.findLast(work);
-    const state: State = owes
-      ? "asks"
-      : waiting.some((act) => act.paused && !act.done)
-        ? "paused"
-        : waiting.some((act) => !act.done)
-          ? working(waiting, asked.get(id) ?? [])
-          : latest && cancelled(latest)
-            ? "cancelled"
-            : latest && failed(latest)
-              ? "failed"
-              : acts.some((act) => act.kind === "prompt")
-                ? "done"
-                : "idle";
     const local = openOn.get(id) ?? [];
     const waits = busy(state)
       ? (local.findLast((act) => act.kind === "bash" || act.kind === "wait")?.id ??
@@ -508,9 +481,9 @@ function board(
 
 /** The rows of the tree of the chains of a life, in its order: each chain under the chain whose rung made it, with
  * the lines of the tree before its label and the chains under it, and none under a chain that a fold holds. */
-function treeOf(listed: readonly LiveAct[], ids: ReadonlyMap<string, LiveAct>, folds: ReadonlySet<string>) {
+function treeOf(listed: readonly Act[], ids: ReadonlyMap<string, Act>, folds: ReadonlySet<string>) {
   const chains = [...listed].sort((one, other) => one.began - other.began);
-  const children = new Map<string | undefined, LiveAct[]>();
+  const children = new Map<string | undefined, Act[]>();
   for (const chain of chains) {
     const parent = parentOf(chain, ids);
     const list = children.get(parent);
@@ -519,8 +492,8 @@ function treeOf(listed: readonly LiveAct[], ids: ReadonlyMap<string, LiveAct>, f
   }
   const under = (id: string): string[] =>
     (children.get(id) ?? []).flatMap((child) => [child.id, ...under(child.id)]);
-  const out: { chain: LiveAct; lines: string; depth: number; below: string[] }[] = [];
-  const visit = (chain: LiveAct, lines: string, last: boolean, depth: number): void => {
+  const out: { chain: Act; lines: string; depth: number; below: string[] }[] = [];
+  const visit = (chain: Act, lines: string, last: boolean, depth: number): void => {
     const below = under(chain.id);
     out.push({ chain, lines: depth ? `${lines}${last ? "└ " : "├ "}` : "", depth, below });
     if (folds.has(chain.id) && below.length > 0) return;
@@ -532,43 +505,16 @@ function treeOf(listed: readonly LiveAct[], ids: ReadonlyMap<string, LiveAct>, f
   return out;
 }
 
-/** The acts of a life as they stood at a moment: each act that began by then, and an act that ended after it as one
- * that runs, with no value yet. */
-export function asOf(acts: readonly LiveAct[], at: number): LiveAct[] {
-  return acts
-    .filter((act) => act.began <= at)
-    .map((act): LiveAct => {
-      if (act.ended === undefined || act.ended <= at) return act;
-      const value =
-        act.kind === "bash"
-          ? {
-              is: "Exit",
-              code: null,
-              stdout: { is: "Text", content: "" },
-              stderr: { is: "Text", content: "" },
-            }
-          : null;
-      return {
-        ...act,
-        done: false,
-        ended: undefined,
-        value,
-        paused: false,
-        ...(act.run ? { run: { status: "running", reason: "" } } : {}),
-      };
-    });
-}
-
 /** The prompts that the operator owed at a moment, from the acts as they stood then. */
-export function owedAt(acts: readonly LiveAct[]): { id: string; shape: string; message: string }[] {
+export function owedAt(acts: readonly Act[]): { id: string; shape: string; message: string }[] {
   return acts
-    .filter((act) => asksOperator(act) && !act.done)
+    .filter((act) => asksOperator(act) && !isDone(act))
     .map((act) => ({ id: act.id, shape: String(act.words[0] ?? ""), message: String(act.words[1] ?? "") }));
 }
 
 /** The moments of a life, in order: each start and each end of an act. */
-export function momentsOf(acts: readonly LiveAct[]): number[] {
-  return [...new Set(acts.flatMap((act) => [act.began, ...(act.ended === undefined ? [] : [act.ended])]))]
+export function momentsOf(acts: readonly Act[]): number[] {
+  return [...new Set(acts.flatMap((act) => [act.began, ...(act.ended == null ? [] : [act.ended])]))]
     .filter((moment) => moment > 0)
     .sort((one, other) => one - other);
 }
@@ -585,7 +531,7 @@ export interface Now {
 
 /** What an act is about, on one line: the first line of the word of a rung, of the message of a prompt, or of the
  * command of a bash, and the seconds of a wait. */
-export function subjectOf(act: LiveAct, word: (rung: LiveAct) => string): string {
+export function subjectOf(act: Act, word: (rung: Act) => string): string {
   const text =
     act.kind === "rung"
       ? word(act)
@@ -648,15 +594,15 @@ export function commandDoing(command: string): string {
  * operator, the chains that a prompt or a wait waits for, what a command does, and the file that a read or a write
  * takes. */
 export function doingOf(
-  act: LiveAct,
-  find: (id: string) => LiveAct | undefined,
+  act: Act,
+  find: (id: string) => Act | undefined,
   label: (chain: string) => string,
 ): string {
   const file = () => {
     const path = String((act.words[0] as { path?: string } | undefined)?.path ?? act.words[0] ?? "");
     return path.split("/").at(-1) ?? path;
   };
-  if (act.kind === "prompt") return asksOperator(act) ? "asks you" : `waits for ${label(act.on)}`;
+  if (act.kind === "prompt") return asksOperator(act) ? "asks you" : `waits for ${label(act.chain)}`;
   if (act.kind === "bash") return commandDoing(String(act.words[0] ?? ""));
   if (act.kind === "read") return `reads ${file()}`;
   if (act.kind === "write") return `writes ${file()}`;
@@ -664,7 +610,7 @@ export function doingOf(
   if (act.kind === "wait") {
     const awaited = act.words.slice(1).flatMap((id) => find(String(id)) ?? []);
     if (!awaited.length) return `waits ${duration(Number(unmarked(act.words[0] ?? 0)))}`;
-    const chains = new Set(awaited.map((one) => (one.kind === "prompt" ? label(one.on) : "")));
+    const chains = new Set(awaited.map((one) => (one.kind === "prompt" ? label(one.chain) : "")));
     const [only] = chains;
     if (chains.size === 1 && only) return `waits for ${only}`;
     const [one] = awaited;
@@ -678,8 +624,8 @@ export function doingOf(
 export function nowOf(
   row: Row,
   loom: Loom,
-  acts: readonly LiveAct[],
-  word: (rung: LiveAct) => string,
+  acts: readonly Act[],
+  word: (rung: Act) => string,
   index?: Pick<NonNullable<Weave["index"]>, "ids" | "on">,
 ): Now {
   const asks = loom.owed.filter((prompt) => prompt.chain === row.id);
@@ -695,17 +641,22 @@ export function nowOf(
     ? (index?.ids.get(row.waits) ?? acts.find((act) => act.id === row.waits))
     : undefined;
   if (busy(row.state) && waits) return { tone: "work", act: waits.id, more: 0, text: subjectOf(waits, word) };
-  const work = (index?.on.get(row.id) ?? acts).filter((act) => act.on === row.id && WORK.includes(act.kind));
+  const work = (index?.on.get(row.id) ?? acts).filter(
+    (act) => act.chain === row.id && WORK.includes(act.kind),
+  );
   if (row.state === "failed") {
     const fault = work.findLast((act) => failed(act) && !cancelled(act));
-    const value = fault?.value as { is?: string; args?: unknown[] } | null | undefined;
+    const value = (fault ? outcomeOf(fault) : undefined) as
+      | { is?: string; args?: unknown[] }
+      | null
+      | undefined;
     const reason =
-      fault?.run?.reason || (value?.is ? `${value.is}: ${(value.args ?? []).map(String).join(", ")}` : "");
+      reasonOf(fault?.run) || (value?.is ? `${value.is}: ${(value.args ?? []).map(String).join(", ")}` : "");
     return { tone: "failed", act: fault?.id, more: 0, text: reason.split("\n")[0]?.trim() ?? "" };
   }
   if (row.state === "done") {
-    const last = work.findLast((act) => act.kind === "prompt" && act.done && !asksOperator(act));
-    const value = last ? valueText(last.value) : "";
+    const last = work.findLast((act) => act.kind === "prompt" && isDone(act) && !asksOperator(act));
+    const value = last ? valueText(outcomeOf(last)) : "";
     return { tone: "past", act: last?.id, more: 0, text: readable(value) };
   }
   return { tone: "none", more: 0, text: "" };

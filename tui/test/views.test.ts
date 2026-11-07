@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type Renderable, TextRenderable } from "@opentui/core";
 import { createTestRenderer } from "@opentui/core/testing";
+import { isDone, outcomeOf } from "furb/life";
 import { until } from "../../bind/typescript/test/until.ts";
 import { find } from "../script/stage.ts";
 import { App } from "../src/app.ts";
@@ -72,10 +73,11 @@ test("a command that printed more than a row holds sends the tail and its length
       const command = session.activity.find((act) => act.kind === "bash");
       if (!command) throw new Error("No command.");
       await session.engine.result(command.id);
-      await session.refresh();
-      const row = session.acts.find((act) => act.id === command.id);
+      const done = () => session.acts.find((act) => act.id === command.id && isDone(act));
+      await until(session, () => Boolean(done()));
+      const row = done();
       const printed = Array.from({ length: 3000 }, (_, index) => `${index + 1}\n`).join("");
-      const stdout = (row?.value as { stdout: { content: string } }).stdout.content;
+      const stdout = ((row ? outcomeOf(row) : undefined) as { stdout: { content: string } }).stdout.content;
       expect(row?.output).toBe(printed.length);
       expect(stdout.length).toBeLessThanOrEqual(2000);
       expect(printed.endsWith(stdout)).toBe(true);
@@ -305,10 +307,10 @@ test("a relative path that the operator types is read from the directory of the 
     expect(session.path("out.json")).toBe(join(directory, "out.json"));
     await session.submit("/export out.json");
     await session.submit("/share page.html");
-    await session.attachImage("pixel.png");
+    const mark = await session.attachImage("pixel.png");
     expect(JSON.parse(await Bun.file(join(directory, "out.json")).text()).chain).toBe(session.selected);
     expect(await Bun.file(join(directory, "page.html")).exists()).toBe(true);
-    expect(session.images[session.selected]?.map((image) => image.name)).toEqual(["pixel.png"]);
+    expect(mark).toStartWith("![pixel.png](");
   }));
 
 test("the stand and the cd that the World plays on a chain are no card of the conversation, though its turns bind the roster, the actor and the directory", () =>

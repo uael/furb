@@ -1,6 +1,6 @@
 {
-  "extensions": {
-    "pr": "extensions/pr",
-    "conductor": "extensions/conductor"
+  "skills": {
+    "pr": "skills/pr",
+    "conductor": "skills/conductor"
   }
 }

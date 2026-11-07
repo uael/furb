@@ -15,7 +15,7 @@ use super::clients::{Amend, Amended};
 
 mod auth;
 
-pub use auth::{AuthError, NAME, SignIn, begin, cancel, refresh, status};
+pub use auth::{AuthError, NAME, SignIn, begin, cancel, refresh, status, subscribe};
 
 #[derive(Clone)]
 pub(super) struct Codex {

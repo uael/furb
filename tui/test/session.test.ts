@@ -3,9 +3,9 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { exitOf, isDone, operated } from "furb/life";
 import { alive, printPid, remove } from "../../bind/typescript/test/processes.ts";
 import { until } from "../../bind/typescript/test/until.ts";
-import type { Engine } from "../src/bridge.ts";
 import { daemon } from "../src/client.ts";
 import { demoSession, removeDemoDirectories } from "../src/demo.ts";
 import type { Session } from "../src/session.ts";
@@ -22,9 +22,9 @@ test("an @word that names no file is text of the message, and a word that names 
     await idle(session);
     await session.refresh();
     const reads = session.acts.filter(
-      (act) => act.kind === "rung" && act.by === "operator" && String(act.words[0]).startsWith("read("),
+      (act) => act.kind === "rung" && operated(act.by) && String(act.words[0]).startsWith("read("),
     );
-    expect(reads.map((act) => [act.words[0], act.run?.status])).toEqual([['read("README.md")', "done"]]);
+    expect(reads.map((act) => [act.words[0], act.run?.run])).toEqual([['read("README.md")', "done"]]);
     expect(session.acts.filter((act) => session.isUserPrompt(act)).map((act) => act.words[1])).toEqual([
       message,
     ]);
@@ -61,17 +61,154 @@ test("a view whose field has another form opens that field empty and names it, a
     session = await demoSession({ record });
     await session.dispose();
     const view = JSON.parse(await readFile(`${record}.ui.json`, "utf8"));
-    await writeFile(`${record}.ui.json`, JSON.stringify({ ...view, queued: "one", models: [1] }));
+    await writeFile(`${record}.ui.json`, JSON.stringify({ ...view, drafts: "one", models: [1] }));
     session = await demoSession({ record });
     expect(session.notice).toBe(
-      `${record}.ui.json holds queued, models in a form this release does not read: each opened empty.`,
+      `${record}.ui.json holds drafts, models in a form this release does not read: each opened empty.`,
     );
-    expect([session.queued, session.models]).toEqual([[], []]);
+    expect([session.drafts, session.models]).toEqual([{}, []]);
     await session.dispose();
     session = undefined;
   } finally {
     await session?.dispose();
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("a follow-up that an older ui.json holds goes to the queue of the life, once, and leaves the file", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "furb-view-queue-"));
+  const record = join(directory, "life.jsonl");
+  let session: Session | undefined;
+  try {
+    session = await demoSession({ record });
+    // A pause of the chain holds its queue, so the follow-up stays where the life puts it.
+    await session.engine.pause(session.selected);
+    const chain = session.selected;
+    await session.dispose();
+    const view = JSON.parse(await readFile(`${record}.ui.json`, "utf8"));
+    const old = { id: "old-1", chain, text: "A follow-up of an older release", shape: "str" };
+    await writeFile(`${record}.ui.json`, JSON.stringify({ ...view, queued: [old] }));
+    const reopened = await demoSession({ record });
+    session = reopened;
+    await until(reopened, () => reopened.queued.some((one) => one.entry === "old-1"));
+    expect(reopened.queued.map((one) => [one.entry, one.chain, one.message])).toEqual([
+      ["old-1", chain, old.text],
+    ]);
+    const left = async () => "queued" in JSON.parse(await readFile(`${record}.ui.json`, "utf8"));
+    for (let tries = 0; tries < 200 && (await left()); tries++) await Bun.sleep(25);
+    expect(await left()).toBe(false);
+  } finally {
+    await session?.dispose();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("the setup of a demo life reads the doctrine of its own project, and no path of a home", async () => {
+  const session = await demoSession();
+  try {
+    const read = session.acts.find(
+      (act) => act.kind === "rung" && act.by === session.engine.root && /^read\(/.test(String(act.word)),
+    );
+    const path = /^read\('(.*)'\)$/.exec(String(read?.word))?.[1] ?? "";
+    // The engine writes a path under the home folder with a ~, so the project is known by its name and its folder.
+    // The word is Python, which writes each backslash of a Windows path twice.
+    expect(
+      path.replaceAll("\\\\", "\\").endsWith(join(basename(session.host.directory), ".furb", "DOCTRINE.md")),
+    ).toBe(true);
+  } finally {
+    await session.dispose();
+  }
+});
+
+test("a follow-up goes to the chain that the operator sent it on, whatever chain he shows meanwhile", async () => {
+  const session = await demoSession();
+  const { engine, host } = session;
+  const queue = host.queue;
+  try {
+    const a = session.selected;
+    const b = await engine.chain({ label: "Other" });
+    const asked: unknown[][] = [];
+    for (const at of ["read", "queue"] as const) {
+      let open = () => {};
+      const gate = new Promise<void>((resolve) => {
+        open = resolve;
+      });
+      // The read of the directory and the queue answer when the test lets them, after a change of chain.
+      Object.assign(session, {
+        engine: new Proxy(engine, {
+          get: (target, key) =>
+            key === "cwd" && at === "read"
+              ? async (...args: Parameters<typeof engine.cwd>) => {
+                  await gate;
+                  return target.cwd(...args);
+                }
+              : Reflect.get(target, key),
+        }),
+      });
+      host.queue = async (...args) => {
+        asked.push(args);
+        if (at === "queue") await gate;
+      };
+      await session.select(a);
+      const sent = session.enqueue(`Sent on the first chain, ${at}`);
+      await session.select(b);
+      open();
+      await sent;
+      expect(asked.at(-1)?.slice(0, 1).concat(asked.at(-1)?.slice(2))).toEqual(["str", a]);
+      expect(String(asked.at(-1)?.[1])).toBe(`Sent on the first chain, ${at}`);
+    }
+  } finally {
+    Object.assign(session, { engine });
+    host.queue = queue;
+    await session.dispose();
+  }
+});
+
+test("a message goes to the chain that the operator sent it on, whatever chain he shows meanwhile", async () => {
+  const session = await demoSession();
+  const { engine } = session;
+  const prompt = engine.prompt;
+  try {
+    const a = session.selected;
+    const b = await engine.chain({ label: "Other" });
+    const asked: { message?: string; on?: string }[] = [];
+    for (const at of ["read", "prompt"] as const) {
+      let open = () => {};
+      const gate = new Promise<void>((resolve) => {
+        open = resolve;
+      });
+      // The read of the directory and the prompt answer when the test lets them, after a change of chain.
+      Object.assign(session, {
+        engine: new Proxy(engine, {
+          get: (target, key) => {
+            if (key === "cwd" && at === "read")
+              return async (...args: Parameters<typeof engine.cwd>) => {
+                await gate;
+                return target.cwd(...args);
+              };
+            if (key === "prompt")
+              return async (...args: Parameters<typeof engine.prompt>) => {
+                asked.push(args[1] ?? {});
+                if (at === "prompt") await gate;
+                return "prompt0";
+              };
+            return Reflect.get(target, key);
+          },
+        }),
+      });
+      await session.select(a);
+      session.aim();
+      const sent = session.submit(`Sent on the first chain, ${at}`);
+      await session.select(b);
+      open();
+      await sent;
+      expect(asked.at(-1)?.on).toBe(a);
+      expect(asked.at(-1)?.message).toBe(`Sent on the first chain, ${at}`);
+    }
+  } finally {
+    Object.assign(session, { engine });
+    engine.prompt = prompt;
+    await session.dispose();
   }
 });
 
@@ -81,11 +218,7 @@ test("a session that cannot save its view still lets its life go, which ends in 
   const session = await demoSession({ record });
   try {
     const command = await session.engine.bash(`${printPid}; sleep 30`, { on: session.engine.root });
-    const pid = () =>
-      Number(
-        (session.acts.find((act) => act.id === command)?.value as { stdout?: { content: string } })?.stdout
-          ?.content,
-      );
+    const pid = () => Number(exitOf(session.acts.find((act) => act.id === command))?.stdout?.content);
     await until(session, () => pid() > 0);
     // A directory where the save writes its file makes the save fail on every system.
     await mkdir(`${record}.ui.json.tmp`);
@@ -161,7 +294,7 @@ async function heldWhileEffortChanges(
   await session.submit("/effort low");
   await until(session, () =>
     session.acts.some(
-      (act) => act.by === "operator" && act.words[0] === 'actor = "claude-cli:sonnet/low"' && act.done,
+      (act) => operated(act.by) && act.words[0] === 'actor = "claude-cli:sonnet/low"' && isDone(act),
     ),
   );
   await session.submit("Take the low effort.");
@@ -189,22 +322,22 @@ test("a follow-up goes to the actor of its chain when it is sent", () =>
     expect(follow?.words).toEqual(["str", "Check keyboard navigation after this answer.", ""]);
   }));
 
-test("a follow-up that the operator removes while an earlier one is sent is not sent", async () => {
+test("a follow-up that the operator takes out of the queue is not sent", async () => {
   const session = await demoSession();
-  const send = session.host.sendQueued.bind(session.host);
   try {
+    const root = session.selected;
     const other = await session.engine.chain({ label: "Other" });
-    session.queueHeld = true;
-    session.enqueue("First follow-up on main");
+    // A pause of each chain holds its queue while the operator takes a follow-up out.
+    for (const chain of [root, other]) await session.engine.pause(chain);
+    await session.enqueue("First follow-up on main");
     await session.select(other);
-    session.enqueue("Second follow-up on the other chain, about @README.md");
-    session.host.sendQueued = async (entry) => {
-      const later = session.queued.find((item) => item.id !== entry.id);
-      if (later) session.removeQueued(later.id);
-      return send(entry);
-    };
-    session.queueHeld = false;
-    await session.drainQueue();
+    await session.enqueue("Second follow-up on the other chain");
+    await until(session, () => session.queued.length === 2);
+    const later = session.queued.find((one) => one.chain === other);
+    if (!later) throw new Error("No follow-up on the other chain.");
+    await session.removeQueued(later.entry);
+    for (const chain of [root, other]) await session.engine.wake(chain);
+    await until(session, () => session.queued.length === 0);
     await idle(session);
     await session.refresh();
     expect(session.queued).toEqual([]);
@@ -221,7 +354,9 @@ test("a follow-up that the operator removes while an earlier one is sent is not 
     expect(read?.word).toMatch(/^read\('.*DOCTRINE\.md'\)$/);
     expect(stood?.word).toMatch(/^stand\(\)\ncd\('.*'\)$/);
     expect(
-      session.acts.filter((act) => act.on === other && act.kind === "rung").map((act) => [act.by, act.words]),
+      session.acts
+        .filter((act) => act.chain === other && act.kind === "rung")
+        .map((act) => [act.by, act.words]),
     ).toEqual([
       [other, [first?.word, first?.id, ""]],
       [other, ["#rung1 debugged\nrung1_debug = 'standing()[4]=[]'", `${read?.id}_told`, ""]],
@@ -230,43 +365,6 @@ test("a follow-up that the operator removes while an earlier one is sent is not 
       [other, [stood?.word, "", "claude-cli:sonnet/high"]],
     ]);
   } finally {
-    session.host.sendQueued = send;
-    await session.dispose();
-  }
-});
-
-test("a follow-up that the operator removes while its files are read is not sent", async () => {
-  const session = await demoSession();
-  const engine = session.engine;
-  try {
-    session.queueHeld = true;
-    session.enqueue("Explain @README.md");
-    const [entry] = session.queued;
-    if (!entry) throw new Error("No follow-up.");
-    // The operator removes the follow-up as the read of its file starts.
-    const reading = new Proxy(engine, {
-      get(target, key) {
-        const value = Reflect.get(target, key);
-        if (key !== "rung") return value;
-        return (...args: Parameters<Engine["rung"]>) => {
-          if (session.queued.includes(entry)) session.removeQueued(entry.id);
-          return engine.rung(...args);
-        };
-      },
-    });
-    Object.assign(session, { engine: reading });
-    session.queueHeld = false;
-    await session.drainQueue();
-    Object.assign(session, { engine });
-    await idle(session);
-    await session.refresh();
-    expect(session.queued).toEqual([]);
-    expect(session.acts.some((act) => act.kind === "rung" && act.words[0] === 'read("README.md")')).toBe(
-      true,
-    );
-    expect(session.acts.filter((act) => session.isUserPrompt(act))).toEqual([]);
-  } finally {
-    Object.assign(session, { engine });
     await session.dispose();
   }
 });
@@ -280,10 +378,9 @@ test("each /feed sends one line, and a /feed with no text closes the input", () 
     await session.submit(`/feed ${command} yes`);
     await session.submit(`/feed ${command} two  words`);
     await until(session, () =>
-      String(
-        (session.acts.find((act) => act.id === command)?.value as { stdout?: { content: string } })?.stdout
-          ?.content,
-      ).includes("a=[yes] b=[two  words]\n"),
+      String(exitOf(session.acts.find((act) => act.id === command))?.stdout?.content).includes(
+        "a=[yes] b=[two  words]\n",
+      ),
     );
     expect((await session.engine.outcome(command)).done).toBe(false);
     await session.submit(`/feed ${command}`);
@@ -308,8 +405,7 @@ const session = await demoSession();
 try {
   await session.submit("/share ~/shared/chat.html");
   await session.submit("/export ~/export.json");
-  await session.attachImage("~/pixel.png");
-  console.log(JSON.stringify({ images: session.images[session.selected]?.length }));
+  console.log(JSON.stringify({ mark: (await session.attachImage("~/pixel.png")).split("](")[0] + "]" }));
 } finally {
   await session.dispose();
   await removeDemoDirectories();
@@ -330,7 +426,7 @@ try {
     ]);
     expect(errors).toBe("");
     expect(code).toBe(0);
-    expect(JSON.parse(output)).toEqual({ images: 1 });
+    expect(JSON.parse(output)).toEqual({ mark: "![pixel.png]" });
     expect(await readFile(join(home, "shared/chat.html"), "utf8")).toContain("<!doctype html>");
     expect(JSON.parse(await readFile(join(home, "export.json"), "utf8")).chain).toBe("chain1");
     expect(existsSync(join(home, "~"))).toBe(false);
@@ -375,11 +471,12 @@ test("a message of a member of the operator is a message of the operator", () =>
       kind: "prompt",
       by: "operator/a",
       on: session.selected,
+      chain: session.selected,
       words: ["str", "Hello", ""],
-      done: false,
-      value: null,
-      paused: false,
+      phase: { phase: "asked" as const },
+      operator: false,
       began: 1,
+      state: "runs" as const,
     };
     expect(session.isUserPrompt(message)).toBe(true);
   }));

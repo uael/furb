@@ -102,16 +102,21 @@ async def test_a_word_unquotes_in_a_time_that_grows_with_its_length_alone() -> N
   def least(small: str, large: str) -> tuple[float, float]:
     spent: tuple[list[float], list[float]] = ([], [])
     for _ in range(9):
-      for word, into in ((small, spent[0]), (large, spent[1])):
-        start = time.perf_counter()
-        engine.unquoted(word)
-        into.append(time.perf_counter() - start)
+      for word, into, times in ((small, spent[0], 32), (large, spent[1], 4)):
+        start = time.process_time()
+        for _ in range(times):
+          engine.unquoted(word)
+        into.append(time.process_time() - start)
     return min(spent[0]), min(spent[1])
 
   repeated = quotes(5000)
   assert engine.unquoted(repeated) == "".join(f"q{n % 50} = {'y' * 1000 + chr(10)!r}\n\n\n" for n in range(5000))
   small, large = least(quotes(625), repeated)
-  assert large < 24 * small
+  # The word is 8 times longer, and the small one runs 8 times as often as the large one, so that each measure lasts
+  # past the tick of a clock of 15.6 ms, as on Windows: linear gives a ratio of 1, quadratic gives 8. The bound lies
+  # between them with room for a loaded machine, where the large word, 5 MB, runs slower than its share when its cache
+  # is shared.
+  assert large < 5 * small
   many = "".join(f"<s:q{n}>\n{'y </s:q' * 2000}\n</s:q{n}>\n" for n in range(100))
   assert len(many) > 1_000_000
   assert await engine.rung(many + "k = len(q99)", on=root) is None

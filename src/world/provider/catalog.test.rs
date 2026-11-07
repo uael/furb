@@ -1,7 +1,6 @@
 //! The catalog of models, read from a snapshot of the tests and from the snapshot the crate carries, with the
 //! credentials a test gives, so no test reads the environment or the network.
 
-#![expect(clippy::disallowed_methods, reason = "a test blocks on its runtime and fails by a panic")]
 #![expect(
   clippy::let_underscore_must_use,
   reason = "debt: a let _ drops a value that must be used"
@@ -9,6 +8,7 @@
 #![expect(clippy::let_underscore_untyped, reason = "debt: a let _ hides the type of what it drops")]
 #![expect(clippy::similar_names, reason = "debt: names that differ by one letter")]
 
+use crate::testing::on_reactor;
 use std::{fs, path::PathBuf, sync::Arc, time::Duration};
 
 use rig_core::{completion::CompletionRequest, message::Message};
@@ -27,7 +27,13 @@ use super::{
   Catalog, DOCTRINE, SNAPSHOT, clamp, doctrine_in, listed, parsed,
   update::{MODELS, PI},
 };
-use crate::ear::reactor;
+use crate::testing;
+#[cfg(unix)]
+use rig_core::message;
+#[cfg(unix)]
+use std::path;
+use std::process;
+use std::sync::mpsc;
 
 /// A snapshot of the tests: a provider of each dialect, and models that think in each way.
 const LISTED: &str = r#"{
@@ -318,7 +324,7 @@ fn a_model_whose_credential_stands_nowhere_is_refused_when_it_is_asked() {
     told,
     thought: None,
   };
-  let Err(no) = reactor().block_on((model.answers)(asked)) else {
+  let Err(no) = on_reactor((model.answers)(asked)) else {
     panic!("a model with no credential answers nothing")
   };
   assert!(no.to_string().contains("set GOOGLE_API_KEY or GEMINI_API_KEY"), "{no}");
@@ -356,7 +362,7 @@ fn the_newer_of_the_cache_and_the_snapshot_holds_for_each_provider() {
 
 #[test]
 fn the_parse_of_the_caches_is_made_again_only_when_a_file_changes() {
-  let root = crate::testing::Yard::unmade(format!("furb-listed-{}", std::process::id()));
+  let root = testing::Yard::unmade(format!("furb-listed-{}", process::id()));
   fs::create_dir_all(&root).unwrap();
   let at = root.join(MODELS);
   fs::write(&at, "{}").unwrap();
@@ -405,7 +411,7 @@ fn a_provider_is_offered_when_the_environment_holds_its_credential_and_each_plac
   assert!(offered(&["AWS_PROFILE"], "amazon-bedrock:qwen.qwen3"));
   assert!(!offered(&["GOOGLE_CLOUD_API_KEY"], "google-vertex:gemini-pro"), "Google asks a project");
   assert!(offered(&["GOOGLE_CLOUD_API_KEY", "GOOGLE_CLOUD_PROJECT=p"], "google-vertex:gemini-pro"));
-  let home = crate::testing::Yard::new(format!("furb-adc-{}", std::process::id()));
+  let home = testing::Yard::new(format!("furb-adc-{}", process::id()));
   let (root, gcloud) =
     if cfg!(windows) { ("APPDATA", "gcloud") } else { ("HOME", ".config/gcloud") };
   fs::create_dir_all(home.join(gcloud)).expect("the folder of gcloud");
@@ -432,7 +438,7 @@ fn names_of(models: &[Model]) -> Vec<String> {
 
 /// A local server that lists one model, qwen, with its window; and its address as the environment names it, and each
 /// request it reads.
-fn qwen() -> (String, std::sync::mpsc::Receiver<String>) {
+fn qwen() -> (String, mpsc::Receiver<String>) {
   let list = json!({"data": [{"id": "qwen", "max_model_len": 1000}]});
   let (address, told) =
     fake(move |request| request.starts_with("GET /v1/models ").then(|| list.clone()));
@@ -573,7 +579,7 @@ fn an_id_alone_of_the_local_server_whose_part_before_its_colon_is_a_provider_is_
 #[test]
 fn a_first_run_reads_whether_the_claude_command_line_is_signed_in() {
   use std::os::unix::fs::PermissionsExt;
-  let folder = crate::testing::Yard::unmade(format!("furb-signed-{}", std::process::id()));
+  let folder = testing::Yard::unmade(format!("furb-signed-{}", process::id()));
   fs::create_dir_all(&folder).expect("a folder for the programs");
   let signed = |name: &str, script: &str| {
     let bin = folder.join(name);
@@ -656,7 +662,7 @@ fn asked_of(actor: &str) -> Asked {
 
 /// Writes a script that anyone may run.
 #[cfg(unix)]
-fn executable(path: &std::path::Path, text: &str) {
+fn executable(path: &path::Path, text: &str) {
   use std::os::unix::fs::PermissionsExt;
   fs::write(path, text).unwrap();
   fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
@@ -664,7 +670,7 @@ fn executable(path: &std::path::Path, text: &str) {
 
 /// Writes the settings that give the command line of Claude.
 #[cfg(unix)]
-fn claude_command(path: &std::path::Path, command: &Value) {
+fn claude_command(path: &path::Path, command: &Value) {
   let settings = json!({"providers": {"claude-cli": {"command": command}}});
   fs::write(path, settings.to_string()).unwrap();
 }
@@ -690,9 +696,9 @@ fn a_configured_claude_prefix_reaches_completions_and_search_and_project_setting
   assert!(models.find("openai:gpt-5").is_some(), "other providers stay");
   let model = models.find("claude-cli:sonnet").unwrap();
   let asked = asked_of("claude-cli:sonnet");
-  let answer = reactor().block_on((model.answers)(asked)).unwrap();
+  let answer = on_reactor((model.answers)(asked)).unwrap();
   let Answer::Response(answer) = answer else { panic!("a Claude response") };
-  assert_eq!(answer.choice, [rig_core::message::AssistantContent::text("close(\"reply 1\")")]);
+  assert_eq!(answer.choice, [message::AssistantContent::text("close(\"reply 1\")")]);
   let pids = yard.pids();
   assert_eq!(pids.len(), 1);
   let prefix = ["run", "3", "two words", "$HOME;literal"];
@@ -711,7 +717,7 @@ fn a_configured_claude_prefix_reaches_completions_and_search_and_project_setting
   let fresh = configured().unwrap();
   let model = fresh.find("claude-cli:sonnet").unwrap();
   let search = model.search.as_ref().unwrap();
-  let got = reactor().block_on(search("what is rust".to_owned())).unwrap();
+  let got = on_reactor(search("what is rust".to_owned())).unwrap();
   let (args, query) = got.split_once("---\n").unwrap();
   assert!(args.starts_with("[run]\n[3]\n[two words]\n[$HOME;literal]\n[-p]\n"), "{args}");
   assert_eq!(query, "what is rust");
@@ -727,8 +733,7 @@ fn a_configured_claude_prefix_reaches_completions_and_search_and_project_setting
 #[test]
 fn an_invalid_claude_command_is_refused_before_it_starts_a_process() {
   use std::fs;
-  let root =
-    crate::testing::Yard::unmade(format!("furb-invalid-claude-command-{}", std::process::id()));
+  let root = testing::Yard::unmade(format!("furb-invalid-claude-command-{}", process::id()));
   fs::create_dir_all(root.join(".furb")).unwrap();
   for command in
     [json!([]), json!(""), json!([" "]), json!(12), json!(["claude", 3]), json!(["claude", "\0"])]
@@ -747,7 +752,7 @@ fn an_invalid_claude_command_is_refused_before_it_starts_a_process() {
 #[test]
 fn a_model_of_a_chat_provider_of_the_settings_takes_the_efforts_that_it_lists_as_a_local_model() {
   use std::fs;
-  let root = crate::testing::Yard::unmade(format!("furb-chat-efforts-{}", std::process::id()));
+  let root = testing::Yard::unmade(format!("furb-chat-efforts-{}", process::id()));
   fs::create_dir_all(root.join(".furb")).unwrap();
   let settings = |models: Value, protocol: &str| {
     let provider =
@@ -817,10 +822,10 @@ fn first_turn(model: &Model) {
     told: Arc::new(|_, _| {}),
     thought: None,
   };
-  let Ok(Answer::Response(answer)) = reactor().block_on((model.answers)(asked)) else {
+  let Ok(Answer::Response(answer)) = on_reactor((model.answers)(asked)) else {
     panic!("a Claude response")
   };
-  assert_eq!(answer.choice, [rig_core::message::AssistantContent::text("close(\"reply 1\")")]);
+  assert_eq!(answer.choice, [message::AssistantContent::text("close(\"reply 1\")")]);
 }
 
 #[cfg(unix)]
@@ -835,7 +840,7 @@ fn configured_claude_accounts_give_their_token_to_a_turn_and_to_a_search() {
   let token = yard.at.join("a.token");
   fs::write(&token, "tok-a\n").unwrap();
   let settings = project.join(".furb/config.json");
-  let configure = |bin: &std::path::Path| {
+  let configure = |bin: &path::Path| {
     let accounts = json!([{"name": "a", "token_file": token}]);
     let claude = json!({"command": [bin], "accounts": accounts, "switch": "spread"});
     fs::write(&settings, json!({"providers": {"claude-cli": claude}}).to_string()).unwrap();
@@ -859,15 +864,14 @@ fn configured_claude_accounts_give_their_token_to_a_turn_and_to_a_search() {
   let fresh = configured().unwrap();
   let model = fresh.find("claude-cli:sonnet").unwrap();
   let search = model.search.as_ref().unwrap();
-  let got = reactor().block_on(search("q".to_owned())).unwrap();
+  let got = on_reactor(search("q".to_owned())).unwrap();
   assert_eq!(got, "token=tok-a\n---\nq");
 }
 
 #[test]
 fn invalid_claude_accounts_are_refused_before_they_start_a_process() {
   use std::fs;
-  let root =
-    crate::testing::Yard::unmade(format!("furb-invalid-claude-accounts-{}", std::process::id()));
+  let root = testing::Yard::unmade(format!("furb-invalid-claude-accounts-{}", process::id()));
   fs::create_dir_all(root.join(".furb")).unwrap();
   let one = json!({"name": "a", "token_env": "X"});
   for settings in [
@@ -896,7 +900,7 @@ fn invalid_claude_accounts_are_refused_before_they_start_a_process() {
 #[test]
 fn the_doctrine_of_a_project_comes_first_then_the_checkout_of_dev_mode_then_the_official_copy_in_the_home()
  {
-  let at = crate::testing::Yard::unmade(format!("furb-doctrine-{}", std::process::id()));
+  let at = testing::Yard::unmade(format!("furb-doctrine-{}", process::id()));
   let (project, checkout, home) = (at.join("project"), at.join("checkout"), at.join("home"));
   for one in [&project, &checkout, &home] {
     fs::create_dir_all(one).unwrap();
@@ -940,7 +944,7 @@ fn the_doctrine_of_a_project_comes_first_then_the_checkout_of_dev_mode_then_the_
 #[test]
 fn the_local_config_of_a_project_wins_over_its_config_for_a_provider() {
   use std::fs;
-  let root = crate::testing::Yard::unmade(format!("furb-local-config-{}", std::process::id()));
+  let root = testing::Yard::unmade(format!("furb-local-config-{}", process::id()));
   fs::create_dir_all(root.join(".furb")).unwrap();
   let local = root.join(".furb/config.local.json");
   let _ = fs::remove_file(&local);

@@ -34,7 +34,7 @@ meanings. The entry of such a name here gives only its form in the engine.
   of its own.
 - tip: the point of a later life where the journal has said the record again whole, at which boot stands the life
   again, and after which the life goes on past it.
-- catch-up: what the official extension catchup does on each chain at each stand, which `extensions/catchup/catchup.pyi`
+- catch-up: what the official extension catchup does on each chain at each stand, which `.agents/skills/catchup/catchup.pyi`
   says.
 - default actor: the actor a prompt goes to when the prompt leaves the actor unsaid, bound as `actor` in the chain.
 - World: the ears of the outside that serve the machine, one or many, which reach the disk, the machine, the actors,
@@ -228,8 +228,9 @@ meanings. The entry of such a name here gives only its form in the engine.
   and no word of a verb by its place. `gathered`, a function of the engine, holds its shape and gives it. `seed` makes
   from that data the entries that a later life boots on, before the record after the checkpoint, so the engine that
   opens it, and not the one that wrote it, says how its own journal makes each chain again. Each name of the past
-  stays taken, an act that a value names stands known with its answer and runs nothing, each chain with an open
-  prompt opens paused, and its prompt asks its model again at a wake. A name of the module whose value the record
+  stays taken, an act that a value names stands known with its answer and runs nothing, and each chain with an open
+  prompt opens paused while its seed binds it, then wakes unless a pause stood over it at the tip, so an open prompt asks its model again
+  at once. A name of the module whose value the record
   cannot hold is lost, and the chain is told.
 - life word: the python of an extension that its rung runs after its word, and that the World plays alone on a chain
   whose origin had the extension, since that chain made the rung of its origin again. In a setup, the life words of
@@ -274,10 +275,10 @@ meanings. The entry of such a name here gives only its form in the engine.
   state of its tip, and goes on with them.
 - A chain is one conversation, and the transcript that a provider caches grows at one end.
 - Nothing is told twice, and nothing tells what it does not know: an act tells of itself, and a chain of the rungs it
-  asks a model for, with the message of the prompt each advances, of a word that told nothing, of the prompts and the
+  asks a model for, with the message of the prompt each advances, of the prompts and the
   words it refuses, and of the done of an act that one of its rungs made on another chain, or of the pause of the
   chain of such a prompt.
-- A recoverable error is one a model can correct on another turn: a cut turn, transient provider failure, or refusal of its word. The provider gives the next turn the cause, and never pauses the chain for these errors. It retries transient failures within its backoff first. A failed setting, missing model, unsupported input, a prompt too long for the context of the model or a fault of the host is not recoverable; do not retry it as a model error. A prompt too long is not, since the next turn holds the same turns and more: a chain that asked again at once looped, with 386 refused replies in 11 minutes, so the second such refusal in a row pauses the chain with its why. The refusal says first that the prompt passes the window of the model, so the life word of the extension compaction, `fitted()`, cuts the chain to its open prompts before the next reply, and only a second refusal in a row pauses it.
+- A recoverable error is one a model can correct on another turn: a cut turn, transient provider failure, or refusal of its word. The provider gives the next turn the cause, and never pauses the chain for these errors. It retries transient failures within its backoff first. A failed setting, missing model, unsupported input, a prompt too long for the context of the model or a fault of the host is not recoverable; do not retry it as a model error. A prompt too long is not, since the next turn holds the same turns and more: a chain that asked again at once looped, with 386 refused replies in 11 minutes, so the second such refusal in a row pauses the chain with its why. The refusal says first that the prompt passes the window of the model, so `fitted()`, in the life word of the extension compaction, cuts the chain to its open prompts before the next reply, and only a second refusal in a row pauses it.
 - A drift is a hard error.
 - A change that makes room under the wall and rewrites the code of a fix names that fix, and shows that the test
   of the fix fails on the old form of its cause, since a test that does not hold the failure lets a later change undo

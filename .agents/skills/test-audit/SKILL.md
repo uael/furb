@@ -16,7 +16,7 @@ tests.
 `AGENTS.md` gives the laws of each suite. Read it first, and read `src/furb/AGENTS.md` for the laws of the engine.
 
 - The contract suite, `test/`, holds one test for each sentence of `src/furb/engine.pyi`, and the suite of each
-  extension, `extensions/<name>/test/`, does the same for its contract. `test/test_hygiene.py` holds each suite to
+  extension, `.agents/skills/<name>/test/`, does the same for its contract. `test/test_hygiene.py` holds each suite to
   its laws. A test of these suites is owned by its sentence: you never delete it alone. When its assertions do not
   prove its sentence, repair them. When the sentence is wrong, the owner decides, and the sentence and its test
   change together.
@@ -92,7 +92,7 @@ claims a behavior of a dependency, such as monty, rig or napi, read that depende
 Keep discovery read-only, and report the evidence before you edit. For a wide scope, split the work into lanes:
 
 - the engine and its contract suite, `src/furb/` and `test/`;
-- the extensions, `extensions/`;
+- the extensions, `.agents/skills/`;
 - the crate and the command line, `src/*.rs` and `cli/`;
 - the doors, `src/binding*`, `bind/python` and `bind/typescript`;
 - the TUI, `tui/`;

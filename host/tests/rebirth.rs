@@ -11,7 +11,9 @@
 mod yard;
 
 use std::{
+  collections::BTreeMap,
   path::Path,
+  process,
   sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -27,6 +29,8 @@ use furb::{
 };
 use furb_host::{Command, Event, Life, LifeHandle, Reply, Seq};
 use futures::{Stream, StreamExt};
+use tokio::runtime::Builder;
+use tokio::time;
 
 /// The events of a life, each under its place in the log.
 type Logged = (Seq, Arc<Event>);
@@ -35,16 +39,37 @@ type Logged = (Seq, Arc<Event>);
 const TAIL: usize = 10_000;
 
 fn main() {
-  let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build();
+  let runtime = Builder::new_current_thread().enable_all().build();
   runtime.expect("the test has a runtime").block_on(async {
     a_life_goes_on_through_each_rebirth().await;
-    a_rebirth_waits_for_each_word_up_to_its_bound_and_names_what_it_cuts().await;
+    a_rebirth_waits_for_each_word_that_runs().await;
+    a_rebirth_waits_for_each_act_with_an_ear_and_cuts_nothing().await;
+    a_life_with_the_default_skills_is_born_again_at_its_tail().await;
   });
+  the_check_of_a_held_rebirth_fails_on_an_early_rebirth_and_passes_a_later_one();
+}
+
+/// How many rebirths the log tells from a place on: the interval where live work must hold the
+/// rebirth, which the test marks before the workload that it checks.
+fn rebirths_from(log: &[Logged], mark: usize) -> usize {
+  log[mark..].iter().filter(|one| matches!(*one.1, Event::Reborn(_))).count()
+}
+
+/// The check of the interval fails when a rebirth comes inside it, early or late, and passes when
+/// the only rebirth comes after it.
+fn the_check_of_a_held_rebirth_fails_on_an_early_rebirth_and_passes_a_later_one() {
+  let at = |seq: Seq, event: Event| -> Logged { (seq, Arc::new(event)) };
+  let told = || Event::Notice("a fact".to_owned());
+  let early = [at(0, told()), at(1, Event::Reborn(None)), at(2, told()), at(3, told())];
+  assert_eq!(rebirths_from(&early, 1), 1, "an early rebirth inside the interval is seen");
+  let late = [at(0, told()), at(1, told()), at(2, told()), at(3, Event::Reborn(None))];
+  assert_eq!(rebirths_from(&late, 1), 1, "a rebirth at the end of the interval is seen");
+  assert_eq!(rebirths_from(&late, 4), 0, "a rebirth after the interval is allowed");
 }
 
 /// A directory of the test, empty, under a name of its own.
 fn place(name: &str) -> yard::Yard {
-  yard::Yard::new(format!("furb-host-rebirth-{name}-{}", std::process::id()))
+  yard::Yard::new(format!("furb-host-rebirth-{name}-{}", process::id()))
 }
 
 /// A life that keeps its record, with no extension, whose model closes each request with None.
@@ -65,7 +90,7 @@ fn opening(at: &Path) -> Opening {
     record: Some(at.join("record.jsonl").display().to_string()),
     config: Some(at.join("config").display().to_string()),
     roster: Some(vec!["claude-cli:opus".to_owned()]),
-    extensions: Some(false),
+    skills: Some(false),
     answer: Some(answer),
     ..Opening::default()
   }
@@ -79,7 +104,7 @@ async fn until(
 ) -> Vec<Logged> {
   let mut got = Vec::new();
   loop {
-    let next = tokio::time::timeout(Duration::from_secs(120), events.next()).await;
+    let next = time::timeout(Duration::from_secs(120), events.next()).await;
     let Ok(Some(logged)) = next else {
       let last: Vec<String> =
         got.iter().rev().take(20).map(|one| format!("{:.300}", format!("{one:?}"))).collect();
@@ -192,7 +217,18 @@ async fn a_life_goes_on_through_each_rebirth() {
   assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
   log.extend(until(&mut events, |event| matches!(event, Event::Ended(None))).await);
   let late: Vec<Logged> = life.events(0).collect().await;
-  assert_eq!(late, log, "a reader that comes late reads the same log");
+  let others = |of: &[Logged]| -> Vec<Logged> {
+    of.iter().filter(|one| !matches!(*one.1, Event::Act(_) | Event::Text { .. })).cloned().collect()
+  };
+  assert_eq!(others(&late), others(&log), "a reader that comes late reads the same facts");
+  let last = |of: &[Logged]| -> BTreeMap<String, Logged> {
+    let acts = of.iter().filter_map(|one| match &*one.1 {
+      Event::Act(act) => Some((act.id.clone(), one.clone())),
+      _ => None,
+    });
+    acts.collect()
+  };
+  assert_eq!(last(&late), last(&log), "and the last event of each act, which replaces the others");
   let rebirths = log.iter().filter(|one| matches!(*one.1, Event::Reborn(_))).count();
   assert_eq!(rebirths, 1, "each reader heard each rebirth");
   assert_eq!(
@@ -208,13 +244,13 @@ async fn a_life_goes_on_through_each_rebirth() {
   assert!(matches!(again.send(Command::End).await, Ok(Reply::Done)));
 }
 
-/// A word that binds an act whose ear lives until its life ends, which no checkpoint keeps.
+/// A word that binds an act whose ear lives until a cancel ends it, which no checkpoint keeps.
 const LASTING: &str = "def lasting(on=''):
   def ear(id):
     yield 'started', id
     while True:
       yield {id}
-  return act('lasting', on, ear)
+  return act('lasting', on, controlled(ear))
 held = lasting()
 held_id = str(held)";
 
@@ -224,7 +260,7 @@ async fn bound(life: &LifeHandle, name: &str) -> String {
   got.trim_matches('\'').to_owned()
 }
 
-async fn a_rebirth_waits_for_each_word_up_to_its_bound_and_names_what_it_cuts() {
+async fn a_rebirth_waits_for_each_word_that_runs() {
   let at = place("bound");
   let life = Life::spawn(opening(&at)).expect("the life has a thread");
   let mut events = Box::pin(life.events(0));
@@ -247,24 +283,51 @@ async fn a_rebirth_waits_for_each_word_up_to_its_bound_and_names_what_it_cuts() 
     "the word ended before the rebirth"
   );
 
-  ran(&life, LASTING).await;
+  assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
+}
+
+async fn a_rebirth_waits_for_each_act_with_an_ear_and_cuts_nothing() {
+  let at = place("ear");
+  let life = Life::spawn(opening(&at)).expect("the life has a thread");
+  let mut events = Box::pin(life.events(0));
+  let mut log = Vec::new();
+  let lasting = ran(&life, LASTING).await;
+  log.extend(until(&mut events, ran_out(&lasting)).await);
   let held = bound(&life, "held_id").await;
   ran(&life, "late = prompt(str, 'Name a fruit.', to=OPERATOR)").await;
   let late = bound(&life, "late").await;
-  let stuck = ran(&life, "await wait(3600, late)").await;
-  ran(&life, "for i in range(6000):\n  chance()").await;
+  let stuck = ran(&life, "kept = await wait(3600, late)").await;
+  let mark = log.len();
+  let busy = ran(&life, "for i in range(6000):\n  chance()").await;
+  log.extend(until(&mut events, ran_out(&busy)).await);
+  assert_eq!(
+    rebirths_from(&log, mark),
+    0,
+    "a word that runs and an act with an ear hold the rebirth past twice the tail"
+  );
+  let answered = life.send(Command::Answer { id: late.clone(), line: "pear".to_owned() }).await;
+  assert!(matches!(answered, Ok(Reply::Done)), "the prompt stayed open: {answered:?}");
+  log.extend(until(&mut events, ran_out(&stuck)).await);
+  let ended = ran(&life, &format!("cancel('{held}')")).await;
+  log.extend(until(&mut events, ran_out(&ended)).await);
   log.extend(until(&mut events, reborn(false)).await);
-  let told =
-    until(&mut events, |event| message(event).is_some_and(|one| one.contains("born again")));
-  let told = message(&told.await.last().expect("the root was told").1).expect("a prompt");
+  assert_eq!(named(&life, "kept").await, Ok(format!("'{late}'")), "the word ended before it");
   assert!(
-    told.contains(&format!("{held} on ")),
-    "the rebirth names the act with an ear that it cut: {told}"
+    !log.iter().any(|one| message(&one.1).is_some_and(|said| said.contains("born again"))),
+    "a rebirth cuts nothing, so it tells the root nothing"
   );
-  assert!(
-    told.contains(&format!("(the word of {stuck})")),
-    "the rebirth names the word that it cut: {told}"
-  );
-  assert!(!told.contains(&late), "the rebirth names no prompt that the checkpoint keeps: {told}");
+  assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
+}
+
+/// A life with the default skills, whose life words hold acts that live until the life ends, is
+/// born again at its tail: the seed makes each of those acts again, so none holds the rebirth.
+async fn a_life_with_the_default_skills_is_born_again_at_its_tail() {
+  let at = place("skills");
+  let life = Life::spawn(Opening { skills: None, ..opening(&at) }).expect("the life has a thread");
+  let mut events = Box::pin(life.events(0));
+  ran(&life, "n = 1").await;
+  ran(&life, "for i in range(2600):\n  chance()").await;
+  until(&mut events, reborn(false)).await;
+  assert_eq!(named(&life, "n").await, Ok("1".to_owned()), "the life goes on past its tail");
   assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
 }

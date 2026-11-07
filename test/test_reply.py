@@ -63,7 +63,7 @@ async def test_the_request_of_a_reply_is_the_transcript_of_the_chain_as_turns() 
 
 async def test_the_model_reads_the_turns_of_the_chain_at_each_step() -> None:
   """The model reads the turns of the chain at each step."""
-  sand, log, root = born("k = 1", "close(k + 1)")
+  sand, log, root = born("k = 1\ndebug(t'go')", "close(k + 1)")
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
   asked = [sand.turns[a[1]] for a in said(log, "reply")]
@@ -155,14 +155,14 @@ async def test_a_reply_ends_as_a_wait_does() -> None:
 
 async def test_the_world_reads_the_turns_of_the_chain_whole_when_it_takes_a_reply() -> None:
   """The World reads the turns of the chain whole when it takes a reply, folded again for that reply, and the journal keeps the answer and no turns."""
-  sand, log, root = born("k = 1", "close(k + 1)")
+  sand, log, root = born("k = 1\ndebug(t'go')", "close(k + 1)")
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
   asked = [sand.turns[a[1]] for a in said(log, "reply")]
   assert asked[0][0] == asked[1][0] and asked[0][0] is not asked[1][0]
   kept = [e[0] for e in sand.record if e[0][0] in ("reply", "done") and e[0][1].startswith("reply")]
   assert [len(a) for a in kept if a[0] == "reply"] == [5, 5] and [a[3][1] for a in kept if a[0] == "done"] == [
-    "k = 1",
+    "k = 1\ndebug(t'go')",
     "close(k + 1)",
   ]
 
@@ -216,7 +216,7 @@ async def test_across_chains_there_is_no_limit_on_the_replies_in_flight() -> Non
 
 async def test_every_model_asked_on_a_chain_reads_all_the_turns_of_the_chain_as_the_turns_grow() -> None:
   """Every model asked on a chain reads all the turns of the chain, as the turns grow."""
-  sand, log, root = born("a = 1", "close(a + 1)", "close(None)")
+  sand, log, root = born("a = 1\ndebug(t'go')", "close(a + 1)", "close(None)")
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
   first, second = [sand.turns[a[1]] for a in said(log, "reply")][:2]
@@ -286,7 +286,7 @@ async def test_a_paused_chain_makes_no_new_reply_after_a_held_response() -> None
 
 async def test_no_model_is_asked_for_a_rung_the_journal_answered() -> None:
   """No model is asked for a rung the journal answered, since a later life asks again for nothing it was answered once."""
-  sand, _, root = born("a = 1", "close(a + 1)", "close(None)")
+  sand, _, root = born("a = 1\ndebug(t'go')", "close(a + 1)", "close(None)")
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
   later = Sand()
@@ -356,3 +356,21 @@ async def test_the_chain_asks_one_model_at_a_time() -> None:
   await settle()
   assert engine.peek(mine) is None and engine.peek(theirs) is None
   assert [a[3] for a in said(log, "reply")[2:]] == [root, side]
+
+
+async def test_a_pause_over_the_rung_that_the_chain_asked_for_gives_the_turn_of_the_chain_to_the_next_rung_that_waits() -> (
+  None
+):
+  """A pause over the rung that the chain asked for gives the turn of the chain to the next rung that waits, so a paused prompt holds no other prompt of the chain, and the paused rung takes the turn again after its wake."""
+  sand, log, root = born("close(1)", "close(2)")
+  one = engine.prompt(int, "a", on=root)
+  engine.pause(one)
+  two = engine.prompt(int, "b", on=root)
+  await settle()
+  assert (engine.over(one), engine.peek(two)) == (False, 2)
+  assert [a[2] for a in said(log, "reply")] == [x[1] for x in said(log, "rung")][:2]
+  engine.wake(one)
+  await settle()
+  assert engine.peek(one) == 1
+  await relived(Sand(), plain(sand.record))
+  assert (engine.peek(one), engine.peek(two)) == (1, 2)

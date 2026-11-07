@@ -6,10 +6,11 @@ use serde_json::json;
 
 use super::{Line, Log, logged};
 use crate::testing::Yard;
+use std::process;
 
 /// A record of its own for one test, which does not stand yet.
 fn place(name: &str) -> Yard {
-  Yard::new(format!("furb-log-{name}-{}", std::process::id())).within("record.jsonl")
+  Yard::new(format!("furb-log-{name}-{}", process::id())).within("record.jsonl")
 }
 
 #[test]

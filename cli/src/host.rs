@@ -1,13 +1,19 @@
 //! `furb host`: the daemon of this machine, which holds each life by its record, at one place in
 //! the cache of furb, as `furb-host` serves it. The file `host.json` of the config folder of furb
 //! turns on the daemon on the tailnet, gives each login of the network its role, and gives the
-//! bound of a stall.
+//! bound of a stall. The daemon reads the file again at each change of it, and each peer of the
+//! tailnet that is connected follows the list at once: a login that the file drops is refused and
+//! loses its connection, a login whose role changes holds the new role from its next verb, and a
+//! login that the file adds is let in at its next connection. A file that does not parse keeps the
+//! list before.
 
 use std::{path::Path, time::Duration};
 
-use furb::{extension::Places, life::Opening, world};
+use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher, recommended_watcher};
+
+use furb::{life::Opening, skill::Places, world};
 use furb_host::{
-  DaemonError, END, STALL, Settings, Tailnet,
+  DaemonError, STALL, Settings, Tailnet,
   access::Config,
   run,
   transport::{Local, LocalApi, Tailscale},
@@ -29,8 +35,13 @@ pub(crate) async fn serve(grace: Duration, upgrading: bool) -> Result<(), CliErr
   let config = Config::load(&path)?;
   let stall = config.stall.map_or(STALL, Duration::from_secs);
   let tailnet = tailnet(&path, config)?;
-  let settings =
-    Settings { opening: Opening::default(), grace, end: END, stall, tailnet, door, host };
+  let _followed = tailnet.as_ref().and_then(|one| {
+    let said = |why: &str| eprintln!("furb host: {why}");
+    followed(&path, one.identity.clone(), said)
+      .inspect_err(|no| eprintln!("furb host: no watch of {}: {no}", path.display()))
+      .ok()
+  });
+  let settings = Settings { opening: Opening::default(), grace, stall, tailnet, door, host };
   let local = Local::new(&folder);
   if upgrading {
     return Ok(upgrade(&local, settings).await?);
@@ -51,3 +62,32 @@ fn tailnet(path: &Path, config: Config) -> Result<Option<Tailnet>, CliError> {
   let Some(api) = LocalApi::find() else { return Err(CliError::NoTailscale(path.to_path_buf())) };
   Ok(Some(Tailnet { identity: Tailscale::new(api, roles), ports }))
 }
+
+/// The watch of `host.json` at a path, which gives the access list of each change of the file to
+/// the identity of the tailnet, and says why it keeps the list before when the file does not
+/// parse. It watches the folder, since an editor writes the file anew in its place. The ports of
+/// the tailnet and the bound of a stall take a change only at the next start of the daemon.
+fn followed(
+  path: &Path,
+  identity: Tailscale,
+  said: impl Fn(&str) + Send + 'static,
+) -> notify::Result<RecommendedWatcher> {
+  let file = path.to_path_buf();
+  let mut watcher = recommended_watcher(move |event: notify::Result<Event>| {
+    let Ok(event) = event else { return };
+    let ours = event.paths.iter().any(|one| one.file_name() == file.file_name());
+    if !ours || event.kind.is_access() {
+      return;
+    }
+    match Config::load(&file) {
+      Ok(config) => identity.replace(config.roles),
+      Err(no) => said(&format!("keeps the access list before the change of the file: {no}")),
+    }
+  })?;
+  watcher.watch(path.parent().unwrap_or(path), RecursiveMode::NonRecursive)?;
+  Ok(watcher)
+}
+
+#[cfg(test)]
+#[path = "host.test.rs"]
+mod test;

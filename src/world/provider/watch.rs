@@ -11,6 +11,11 @@
 //! the provider asks the gate about the statements that a model finished, and ends the reply after the first
 //! statement with no such part that holds a fault.
 //!
+//! Whether the statements that a model wrote so far are whole is the answer of the parser of
+//! monty, the one judge of the grammar: a string, a bracket or a block that stands open makes them
+//! incomplete, whatever line starts at the left edge inside it, as a paragraph of a triple quote
+//! does. A line at the left edge after them only says that no block of theirs goes on.
+//!
 //! The statements that a model finished, and that the gate finds nothing against, run as the model writes the rest:
 //! the provider says each new part of the word as a writing of its rung, a fact that the Kernel hears and runs. A
 //! statement that raised ends the word where it raised, which the Kernel says as the fact ran, so the reply ends
@@ -18,6 +23,7 @@
 //! as the parts that ran, whatever the model wrote after them that the chain would refuse, since a later life runs
 //! the word of the rung and a statement of it must run there as it ran.
 
+use monty::{ReplContinuationMode, detect_repl_continuation_mode};
 use ruff_python_ast::{
   Expr, Stmt,
   visitor::{self, Visitor},
@@ -50,11 +56,13 @@ pub(super) struct Watch {
 }
 
 impl Watch {
-  /// The word grown by a part the model wrote, and where the statements to read end if a new line at the left edge
-  /// started: the start of the last such line. A statement that starts there may not be whole, but every statement
-  /// before it is, unless a string or a bracket stays open, which the faults of [`broken`] leave to a later read. The
-  /// text takes each line once it ends, less the marks that [`Bare`] drops, so a line that the text has not taken
-  /// yet only says whether a line at the left edge starts.
+  /// The word grown by a part the model wrote, and where the statements to read end if a new line
+  /// at the left edge started after statements that monty does not call incomplete: the start of
+  /// the last such line. A statement that starts there may not be whole, but every statement before
+  /// it is, since no string or bracket of theirs stands open, and the line at the left edge goes on
+  /// with no block of theirs. The text takes each line once it ends, less the marks that [`Bare`]
+  /// drops, so a line that the text has not taken yet only says whether a line at the left edge
+  /// starts.
   pub(super) fn wrote(&mut self, part: &str) -> Option<usize> {
     self.tail.push_str(part);
     while let Some(at) = self.tail.find('\n') {
@@ -65,10 +73,13 @@ impl Watch {
       }
     }
     let (text, tail) = (&self.text, &self.tail);
-    let end =
-      text[self.seen..].match_indices('\n').map(|(at, _)| self.seen + at + 1).rfind(|after| {
+    let end = text[self.seen..]
+      .match_indices('\n')
+      .map(|(at, _)| self.seen + at + 1)
+      .filter(|after| {
         text[*after..].chars().chain(tail.chars()).next().is_some_and(|one| !one.is_whitespace())
-      })?;
+      })
+      .rfind(|after| complete(&text[..*after]) != ReplContinuationMode::IncompleteImplicit)?;
     self.seen = end;
     Some(end)
   }
@@ -89,7 +100,7 @@ impl Watch {
 
   /// The word forgotten, as when the model is asked again and writes it from its start.
   pub(super) fn forget(&mut self) {
-    *self = Watch::default();
+    *self = Self::default();
   }
 
   /// The part of a word, as python, that is new since the parts given to the Kernel, and how many characters of the
@@ -331,6 +342,13 @@ fn unquoted(word: &str) -> String {
   }
   made.push_str(&word[at..]);
   made
+}
+
+/// What the parser of monty says of a word as python, each quote that ends bound as a name:
+/// complete, incomplete as a string or a bracket that stands open (implicit) or a block with no
+/// body yet, or invalid.
+pub(super) fn complete(word: &str) -> ReplContinuationMode {
+  detect_repl_continuation_mode(&unquoted(word))
 }
 
 /// The line, counted from 1, of the first fault of a word that more text cannot mend, if it has one: a fault at the

@@ -5,7 +5,14 @@ import { busy, type ChainThread, type Chip } from "furb/life";
 import { ago, clip, dollars, kibibytes } from "../format.ts";
 import type { ActRow, Status, View } from "../session.ts";
 import { statusLabels } from "../session.ts";
-import { theme as c, markOf, spacing as space, terminalThemes, themeLabels } from "../theme.ts";
+import {
+  theme as c,
+  type MarkState,
+  markOf,
+  spacing as space,
+  terminalThemes,
+  themeLabels,
+} from "../theme.ts";
 import { bold, type Part } from "../ui.ts";
 import type { SessionEntry } from "../workspaces.ts";
 
@@ -42,12 +49,14 @@ export const stateOf = (state: "failed" | "cancelled" | "done" | "paused"): Stat
 /** The mark of the status of a session in its color, with the space after it: at work, waiting on the operator,
  * paused, failed, finished and not yet seen, and at rest. */
 export const statusMark = (status: Status): Part => {
-  // A state of the window shows as the state of work that it stands for: a session that opens runs, and the others rest.
-  const [mark, color, attributes] = markOf(
-    status === "opening" ? "runs" : status === "reading" || status === "saved" ? "idle" : status,
-  );
+  const [mark, color, attributes] = markOf(statusState(status));
   return [`${mark} `, color, attributes];
 };
+
+/** The state of the table of marks that the status of a session shows: a state of the window shows as the state of
+ * work that it stands for, so a session that opens runs, and the others rest. */
+export const statusState = (status: Status): MarkState =>
+  status === "opening" ? "runs" : status === "reading" || status === "saved" ? "idle" : status;
 
 /** The threads of one chain, with what the keys of the sidebar read of them while the list stands. */
 export type ChainRead = {
@@ -57,25 +66,23 @@ export type ChainRead = {
   unread?: { reads: number; text: string };
 };
 
-/** The mark of a thread in the list of the threads of a chain: it asks the operator, a pause holds it, it failed, a
- * cancel ended it, it is resolved with work that the operator did not read, it is resolved and seen, or it runs. Work
+/** The state of the table of marks that a thread in the list of the threads of a chain shows: it asks the operator, a pause holds it, it failed, a
+ * cancel ended it, it is over with work that the operator did not read, it is over and seen, or it runs. Work
  * that the operator did not read concerns him only on a thread that he started. */
-export const threadMarks = (
+export const threadState = (
   thread: ChainThread,
   state: ChainThread["state"] = thread.state,
   unread = false,
-): Part =>
-  markOf(
-    state === "asks" || state === "paused" || state === "failed" || state === "cancelled"
-      ? state
-      : thread.resolved
-        ? unread && thread.yours
-          ? "unread"
-          : "seen"
-        : busy(state)
-          ? state
-          : "runs",
-  );
+): MarkState =>
+  state === "asks" || state === "paused" || state === "failed" || state === "cancelled"
+    ? state
+    : thread.over
+      ? unread && thread.yours
+        ? "unread"
+        : "seen"
+      : busy(state)
+        ? state
+        : "runs";
 
 /** How many of the last steps of a thread its program shows until a click shows the earlier ones. */
 export const PROGRAM_STEPS = 6;
@@ -84,11 +91,12 @@ export const PROGRAM_STEPS = 6;
  * each thread of under a hundred lines starts at one column. */
 export const gutterWidth = (digits: number) => Math.max(2, digits) + space.inset;
 
-/** The cells of the column of the states, at the right of the numbers of a block of code, so the numbers stand at the
- * left edge of the block. They show the loader while the model writes, and the mark of the line that failed. A code
- * block of markdown keeps the column blank. So the numbers and the code of every block have the same columns, which
- * the one gutter of furb, `Gutter` in `gutter.ts`, draws for both. */
-export const STATE = 1;
+/** The cells of the column of the states, at the right of the numbers of a block of code and their blank cell, so the
+ * numbers stand at the left edge of the block. The first stays blank, so the mark stands apart from the number, the mark
+ * takes the second, and the third stays blank before the code. They show the mark of the line that failed. A code block of markdown keeps the
+ * column blank. So the numbers and the code of every block have the same columns, which the one gutter of furb,
+ * `Gutter` in `gutter.ts`, draws for both. */
+export const STATE = 3;
 
 /** The label that heads a block of code: the model that wrote a word, or the language of a code block of Markdown. A
  * word draws it with the group word.label of the syntax style, which holds this color and this weight. */

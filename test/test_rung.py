@@ -4,7 +4,9 @@ from asyncio import CancelledError
 
 import pytest
 
+import furb.kernel
 from conftest import (
+  ENGINE,
   STANDS,
   WORLD,
   Py,
@@ -73,14 +75,17 @@ async def test_the_engine_tells_what_a_step_raised() -> None:
 
 
 async def test_a_step_that_raised_nothing_and_debugged_nothing_tells_nothing() -> None:
-  """A step that raised nothing and debugged nothing tells nothing."""
+  """A step that raised nothing and debugged nothing tells nothing, and the chain asks no more until a fact comes, as a message."""
   _, log, root = born("k = 1", "close(1)")
   act = engine.prompt(int, "count", on=root)
+  await settle()
+  assert len(said(log, "reply")) == 1
+  engine.prompt(None, "go on", on=act)
   assert await act == 1
   steps = [a[1] for a in said(log, "rung") if a[2] == act]
   assert len(steps) == 2 and [a for a in said(log, "tell") if a[1] in steps and a[2] in steps] == []
   assert [of(engine.turns(on=root), step) for step in steps] == [
-    [f"#{steps[0]} advance on {act}", f"#{steps[0]} told nothing"],
+    [f"#{steps[0]} advance on {act}"],
     [f"#{steps[1]} advance on {act}"],
   ]
 
@@ -400,9 +405,11 @@ async def test_of_the_acts_its_word_made_and_read_at_once_it_tells_nothing() -> 
 
 
 async def test_an_answer_with_no_text_is_a_word_like_any_other() -> None:
-  """An answer with no text is a word like any other, so the gate reads it, the run gives no value, and the model is asked again."""
+  """An answer with no text is a word like any other, so the gate reads it, the run gives no value, and the chain asks the model again when something new comes, as a message."""
   _, log, root = born("", "close(1)")
   act = engine.prompt(int, "work", on=root)
+  await settle()
+  engine.prompt(None, "go on", on=act)
   assert await act == 1
   first, second = [a[1] for a in said(log, "rung") if a[2] == act]
   assert [q[4] for q in acts(log).values() if q[0] == "gate"] == ["", "close(1)"]
@@ -425,7 +432,10 @@ async def test_a_replay_makes_a_rung_of_its_own_retelling_each_rung_of_the_donor
 async def test_a_replay_makes_no_rung_for_a_word_that_is_empty() -> None:
   """A replay makes no rung for a word that is empty, since a rung with no word asks a model for a word."""
   _, log, root = born("", "close(1)")
-  assert await engine.prompt(int, "count", on=root) == 1
+  act = engine.prompt(int, "count", on=root)
+  await settle()
+  engine.prompt(None, "go on", on=act)
+  assert await act == 1
   await settle()
   side = await chained("side", root, 300)
   assert "" in engine.program(root).values()
@@ -665,3 +675,22 @@ async def test_a_later_life_makes_that_reply_again_in_the_ear_of_the_rung() -> N
   again, root = await relived(Sand(stands=STANDS), plain(sand.record))
   assert engine.turns(on=root) == before
   assert [a[1:4] for a in again if a[0] == "reply"] == [a[1:4] for a in log if a[0] == "reply"]
+
+
+async def test_a_kernel_born_into_a_life_ends_each_run_that_an_earlier_kernel_took_and_the_rung_of_a_run_that_awaited() -> (
+  None
+):
+  """A Kernel born into a life that holds a run that is not over ends that run, each wants of it that is not over, and the rung of a run that awaited, each with a refusal that says the word was lost, since it holds no frame of that run."""
+  _, _, root = born()
+  engine.rung("got = await prompt(str, 'q', to=OPERATOR)", on=root)
+  await settle()
+  runs = [x[1] for x in engine.transcript(root, "run") if not engine.over(x[1])]
+  wants = [x[1] for x in engine.transcript(root, "wants") if not engine.over(x[1])]
+  rungs = [str(engine.get(run)[4]) for run in runs]
+  assert runs and wants and not any(engine.over(rung) for rung in rungs)
+  with engine.site.set("kernel2"):
+    engine.lives(furb.kernel.kernel(ENGINE), None)
+  await settle()
+  lost = [engine.peek(x) for x in [*wants, *runs]]
+  assert all(isinstance(x, engine.Refused) and "the word was lost" in str(x) for x in lost), lost
+  assert all(engine.over(rung) for rung in rungs)

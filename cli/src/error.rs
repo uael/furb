@@ -6,6 +6,7 @@ use std::{io, num::ParseFloatError, path::PathBuf, time::TryFromFloatSecsError};
 use furb::Fault;
 use furb_host::{AccessError, DaemonError};
 use thiserror::Error;
+use tokio::task::JoinError;
 
 /// Why a command of the operator failed.
 #[derive(Debug, Error)]
@@ -21,7 +22,7 @@ pub(crate) enum CliError {
   Update,
   /// The update of the catalog ended with no status.
   #[error("the update of the catalog did not end: {0}")]
-  Updating(#[source] tokio::task::JoinError),
+  Updating(#[source] JoinError),
   /// The record that `facts` reads is no file.
   #[error("No record at {}.", .0.display())]
   NoRecord(PathBuf),

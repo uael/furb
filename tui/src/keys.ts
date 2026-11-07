@@ -239,8 +239,8 @@ export const keys = [
       "Move / open a workspace, a session or a thread / peek at a workspace / fold it again, or back to the input",
   },
   {
-    chord: "Space / r / o / a after ⌥T",
-    action: "Collapse or expand / resolve / reply to the thread / go to the next question",
+    chord: "Space / o / a after ⌥T",
+    action: "Collapse or expand / reply to the thread / go to the next question",
   },
   {
     chord: "⌥C",

@@ -3,12 +3,14 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
 
 CLEAN = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
 SCRIPT = Path(__file__).resolve().parents[2] / "script" / "worktree.sh"
+SHARE = SCRIPT.with_name("share-target.sh")
 
 
 def git(cwd: Path, *args: str) -> None:
@@ -22,6 +24,9 @@ def clone_with_origin(root: Path) -> Path:
   subprocess.run(["git", "clone", "-q", str(origin), str(main)], check=True, capture_output=True, env=CLEAN)
   (main / "script").mkdir()
   shutil.copy(SCRIPT, main / "script" / "worktree.sh")
+  shutil.copy(SHARE, main / "script" / "share-target.sh")
+  (main / ".cargo").mkdir()
+  shutil.copy(SCRIPT.parents[1] / ".cargo" / "config.toml", main / ".cargo" / "config.toml")
   git(main, "add", ".")
   git(main, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "x")
   git(main, "push", "-q", "origin", "HEAD:refs/heads/main")
@@ -49,6 +54,51 @@ def test_failure_names_the_path_and_the_step(tmp_path: Path) -> None:
   assert got.returncode != 0
   last = got.stderr.strip().splitlines()[-1]
   assert last == f'worktree.sh failed at "make the worktree" with exit {got.returncode}: {tmp_path / "second"} on held'
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the sh of Git on Windows names a path in a form of its own")
+def test_each_worktree_links_its_target_to_the_one_that_the_clone_shares(tmp_path: Path) -> None:
+  main = clone_with_origin(tmp_path)
+  assert run(main, tmp_path / "one", "first").returncode == 0
+  assert run(main, tmp_path / "two", "second").returncode == 0
+  shared = tmp_path / "main-target"
+  assert (tmp_path / "one" / "target").resolve() == shared.resolve()
+  assert (tmp_path / "two" / "target").resolve() == shared.resolve()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the sh of Git on Windows names a path in a form of its own")
+def test_a_tree_with_a_target_of_its_own_drops_it_for_the_shared_one_unless_it_is_in_use(tmp_path: Path) -> None:
+  main = clone_with_origin(tmp_path)
+  shared = tmp_path / "main-target"
+
+  def share(name: str) -> None:
+    subprocess.run(["sh", str(main / "script" / "share-target.sh"), str(tmp_path / name)], check=True, env=CLEAN)
+
+  for name in ("one", "two", "busy", "bare"):
+    git(main, "worktree", "add", "-q", "-b", name, str(tmp_path / name))
+    (tmp_path / name / "target").mkdir()
+    (tmp_path / name / "target" / "own").write_text(name)
+  (tmp_path / "bare" / ".cargo" / "config.toml").write_text("")
+  share("one")
+  share("two")
+  share("two")
+  assert list(shared.iterdir()) == []
+  for name in ("one", "two"):
+    assert (tmp_path / name / "target").resolve() == shared.resolve()
+  for _ in range(100):
+    if not list(tmp_path.glob("main-target-drop.*")):
+      break
+    time.sleep(0.1)
+  assert list(tmp_path.glob("main-target-drop.*")) == []
+  share("bare")
+  assert (tmp_path / "bare" / "target" / "own").read_text() == "bare"
+  user = subprocess.Popen(["sh", "-c", "sleep 30; true", "user", str(tmp_path / "busy" / "target")])
+  try:
+    share("busy")
+  finally:
+    user.kill()
+    user.wait()
+  assert (tmp_path / "busy" / "target" / "own").read_text() == "busy"
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="the sh of Git on Windows names a path in a form of its own")
@@ -92,3 +142,43 @@ def test_fetch_runs_again_when_another_fetch_holds_a_ref_lock(tmp_path: Path) ->
   assert got.returncode == 0
   assert "runs again in 1 s: error: cannot lock ref refs/remotes/origin/main" in got.stderr
   assert (tmp_path / "new").is_dir()
+
+
+def python_tree(root: Path) -> Path:
+  main = clone_with_origin(root)
+  (main / "pyproject.toml").write_text(
+    '[project]\nname = "furb"\nversion = "0"\nrequires-python = ">=3.9"\n\n'
+    '[build-system]\nrequires = ["uv_build>=0.9.26,<0.10.0"]\nbuild-backend = "uv_build"\n',
+    encoding="utf-8",
+  )
+  (main / "src" / "furb").mkdir(parents=True)
+  (main / "src" / "furb" / "__init__.py").write_text('MARK = "main"\n', encoding="utf-8")
+  subprocess.run(["uv", "lock", "-q"], cwd=main, check=True, env=CLEAN)
+  subprocess.run(["uv", "sync", "-q", "--locked"], cwd=main, check=True, env=CLEAN)
+  git(main, "add", ".")
+  git(main, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "python")
+  git(main, "push", "-q", "origin", "HEAD:refs/heads/main")
+  git(main, "fetch", "-q", "origin")
+  return main
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the sh of Git on Windows names a path in a form of its own")
+def test_the_python_of_a_worktree_imports_the_tree_of_that_worktree(tmp_path: Path) -> None:
+  main = python_tree(tmp_path)
+  assert run(main, tmp_path / "new", "fresh").returncode == 0
+  (tmp_path / "new" / "src" / "furb" / "__init__.py").write_text('MARK = "new"\n', encoding="utf-8")
+  python = tmp_path / "new" / ".venv" / "bin" / "python"
+  seen = subprocess.run(
+    [str(python), "-c", "import furb; print(furb.MARK)"], capture_output=True, text=True, check=True
+  )
+  assert seen.stdout.strip() == "new"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the sh of Git on Windows names a path in a form of its own")
+def test_the_venv_of_a_worktree_names_no_path_of_another_tree(tmp_path: Path) -> None:
+  main = python_tree(tmp_path)
+  assert run(main, tmp_path / "new", "fresh").returncode == 0
+  venv = tmp_path / "new" / ".venv"
+  assert venv.is_dir()
+  named = [one for one in venv.rglob("*") if one.is_file() and str(main).encode() in one.read_bytes()]
+  assert named == []

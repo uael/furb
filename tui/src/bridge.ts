@@ -1,19 +1,17 @@
+import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { createTwoFilesPatch } from "diff";
 import {
-  type Activity,
   actorParts,
   attachImage,
-  codexAuth,
   ENGINE,
   type Fact,
   type FileChange,
   FileChanges,
   type ImageAttachment,
   isQuestion,
-  type LiveAct,
   model,
   models,
   questionKind,
@@ -27,19 +25,19 @@ import {
   usageOf,
   WINDOW,
 } from "furb";
-import { type Compaction, type Measure, measureOf } from "furb/life";
-import type { Config } from "furb/protocol";
+import { type Act, type Compaction, type Exit, isPaused, type Measure, type Spend } from "furb/life";
+import type { Config, FollowUp, Rung, ThreadNode, Threads } from "furb/protocol";
 import { type Choices, daemon, type Listener, Refused, RemoteLife } from "./client.ts";
 import { clock } from "./clock.ts";
+import type { Setting } from "./configs.ts";
 import { demoModels } from "./demo/answer.ts";
 import { expandHome } from "./files.ts";
 import { lineCounts } from "./format.ts";
 import { type EngineOptions, roster } from "./models.ts";
-import { type ProviderChoice } from "./providers.ts";
-import { dispatchesFrom } from "./queue.ts";
+import type { ProviderChoice } from "./providers.ts";
 import { isRecorded, Reader, type Reading, row } from "./reading.ts";
 import { branchChanges, net } from "./review.ts";
-import type { ActRow, FollowUp } from "./session.ts";
+import type { ActRow } from "./session.ts";
 
 /** What one answer of a model read and wrote: its whole prompt, its output, the reads and the writes of the cache,
  * and its dollars. */
@@ -58,7 +56,6 @@ export interface Tail<T> {
 export interface Snapshot {
   /** The mark of this snapshot, which the session gives with its next request once it holds this snapshot. */
   mark: number;
-  dispatched: string[];
   paused: boolean;
   /** The cause that the pause over the chain gave, null when none stands or none was given. */
   cause: import("furb/life").PauseCause | null;
@@ -126,7 +123,6 @@ class ReadLife extends EventEmitter {
   readonly lost = "";
   readonly daemon = undefined;
   readonly streams = new Map<string, Stream>();
-  readonly acts = new Map<string, never>();
   /** The pace at which a recorded life reads its file for the lines that it added. */
   private readonly following?: ReturnType<typeof setInterval>;
   constructor(readonly reader: Reader) {
@@ -145,8 +141,90 @@ class ReadLife extends EventEmitter {
         }
       }, FOLLOW).unref();
   }
-  get activity(): Activity {
-    return this.reader.activity;
+  /** The acts that changed after a count of changes, as the daemon gives them, each with the count of the lines of
+   * the text and of the characters of the output that the reader left out of it, and the count now. */
+  since(count: number): { count: number; acts: ActRow[] } {
+    const { activity } = this.reader;
+    const changed = activity.since(count);
+    const counted = (act: Act): ActRow => {
+      const { count: lines, output } = (activity.acts.get(act.id) ?? {}) as {
+        count?: number;
+        output?: number;
+      };
+      return {
+        ...act,
+        ...(lines === undefined ? {} : { count: lines }),
+        ...(output === undefined ? {} : { output }),
+      };
+    };
+    return { count: changed.count, acts: activity.hosted(changed.acts).map(counted) };
+  }
+  /** An act as the daemon gives it, and nothing for a name of no act that a person follows. */
+  act(id: string): Act | undefined {
+    const act = this.reader.activity.acts.get(id);
+    return act && this.reader.activity.hosted([act]).find((one) => one.id === id);
+  }
+  scope(id: string): string {
+    return this.reader.activity.scope(id);
+  }
+  /** The threads of a chain as the crate folds them from the record, as the daemon folds them for a life that runs. */
+  async threads(on: string, at?: number, read?: number): Promise<Threads> {
+    return this.reader.meaning.threads(on, at, read);
+  }
+  /** The ladder of a chain as the crate folds it from the record, as the daemon folds it for a life that runs. */
+  async ladder(
+    on: string,
+    at?: number,
+    opened?: string[],
+    owed?: string[],
+    taken?: string[],
+  ): Promise<Rung[]> {
+    return this.reader.meaning.ladder(on, at, opened, owed, taken);
+  }
+  /** The acts of the record as they stood just after a moment, as the crate folds them. */
+  async asOf(at: number): Promise<Act[]> {
+    return this.reader.meaning.asOf(at);
+  }
+  /** Each moment at which an act of the record, or of one chain, began or ended, in order. */
+  async moments(on?: string): Promise<number[]> {
+    return this.reader.meaning.moments(on);
+  }
+  /** The threads of every chain of the record but those that `hidden` names, as one tree, as the crate folds them. */
+  async rail(hidden: string[], at?: number): Promise<ThreadNode[]> {
+    return this.reader.meaning.rail(hidden, at);
+  }
+  get seenAt(): ReadonlyMap<string, number> {
+    return this.reader.activity.seen;
+  }
+  get compactions(): readonly Compaction[] {
+    return this.reader.activity.compactions;
+  }
+  get completed(): number {
+    return this.reader.activity.completed;
+  }
+  get cost(): number {
+    return this.reader.activity.cost;
+  }
+  /** What the answers of the models cost each chain, by the chain. */
+  get spends(): ReadonlyMap<string, Spend> {
+    const { activity } = this.reader;
+    const kept = this.chainSpends;
+    if (kept?.at === activity.spendChanges) return kept.spends;
+    const spends = new Map([...activity.spends].filter(([id]) => activity.acts.get(id)?.kind === "chain"));
+    this.chainSpends = { at: activity.spendChanges, spends };
+    return spends;
+  }
+  /** How many times a spend changed, which tells a view when to read the spends again. */
+  get spendChanges(): number {
+    return this.reader.activity.spendChanges;
+  }
+  private chainSpends?: { at: number; spends: Map<string, Spend> };
+  /** What a command that had no end when the record ended printed. */
+  output(id: string): { stdout: string; stderr: string } | undefined {
+    const act = this.reader.activity.acts.get(id);
+    if (act?.kind !== "bash" || act.done) return undefined;
+    const exit = act.value as Exit | null;
+    return { stdout: exit?.stdout?.content ?? "", stderr: exit?.stderr?.content ?? "" };
   }
   get facts(): readonly Fact[] {
     return this.reader.facts;
@@ -159,6 +237,8 @@ class ReadLife extends EventEmitter {
   grant = this.refuse;
   stand = this.refuse;
   config = this.refuse;
+  cancelSignIn = this.refuse;
+  settings = this.refuse;
   pause = this.refuse;
   wake = this.refuse;
   cancel = this.refuse;
@@ -168,6 +248,8 @@ class ReadLife extends EventEmitter {
   answer = this.refuse;
   seen = async (): Promise<void> => {};
   queue = this.refuse;
+  unqueue = this.refuse;
+  readonly queues = new Map<string, FollowUp[]>();
   pin = this.refuse;
   unpin = this.refuse;
   names = async (): Promise<string[]> => [];
@@ -213,7 +295,7 @@ class ReadLife extends EventEmitter {
   async filled(id: string): Promise<number | undefined> {
     const turn = this.reader.outcome(id).value;
     if (!Array.isArray(turn) || !Array.isArray(turn[2])) return undefined;
-    const to = String(this.activity.acts.get(id)?.words[0] ?? "");
+    const to = String(this.reader.activity.acts.get(id)?.words[0] ?? "");
     const roster = ((await this.standing())[0] ?? []) as Roster;
     const window =
       roster.find(
@@ -302,6 +384,8 @@ export class HostView extends EventEmitter {
   recorded?: boolean;
   /** The measure of each chain whose models answered, by the chain. */
   measures: Record<string, Measure> = {};
+  /** The life and the count of spend changes that the measures were read at. */
+  private spent?: { life: Held; at: number };
   compactions: Compaction[] = [];
   /** The count of facts that the window heard. */
   seq = 0;
@@ -378,6 +462,7 @@ export class HostView extends EventEmitter {
     const facts = () => this.heard();
     const change = () => this.update();
     const log = (line: string) => this.emit("log", line);
+    const authentication = (status: unknown) => this.emit("authentication", status);
     const ended = (why: string) => {
       this.lost = why;
       this.emit("fault", new Error(why));
@@ -392,6 +477,7 @@ export class HostView extends EventEmitter {
       ["facts", facts],
       ["change", change],
       ["log", log],
+      ["authentication", authentication],
       ["ended", ended],
       ["reset", reset],
     ];
@@ -408,8 +494,6 @@ export class HostView extends EventEmitter {
     this.answers.clear();
     this.replies.clear();
     this.lines.clear();
-    this.dispatches.clear();
-    this.dispatchedAt = 0;
     this.measured.clear();
     this.given = undefined;
     this.heardAt = 0;
@@ -435,31 +519,31 @@ export class HostView extends EventEmitter {
 
   /** What the view holds after a change of the life. */
   private update(): void {
-    const { activity } = this.life;
-    this.completed = activity.completed;
-    this.cost = activity.cost;
-    this.seq = this.life.facts.length;
-    this.streams = new Map(this.life.streams);
+    const life = this.life;
+    this.completed = life.completed;
+    this.cost = life.cost;
+    this.seq = life.facts.length;
+    this.streams = new Map(life.streams);
     // A view keys on the measures, the compactions, the seen and the prompts, as the loom of the life does on the
     // measures: each keeps its object while nothing of it changed, so a fact that changes none of them, as a line of a
     // command, weaves nothing again in a long life.
-    const measures = Object.fromEntries(
-      [...activity.answers].map(([chain, list]) => [chain, this.measure(chain, list)]),
-    );
-    const held = Object.keys(this.measures);
-    if (
-      held.length !== Object.keys(measures).length ||
-      held.some((chain) => this.measures[chain] !== measures[chain])
-    )
-      this.measures = measures;
-    const { compactions } = activity;
+    if (this.spent?.life !== life || this.spent.at !== life.spendChanges) {
+      this.spent = { life, at: life.spendChanges };
+      const measures = Object.fromEntries(
+        [...life.spends].map(([chain, spend]) => [chain, this.measure(chain, spend)]),
+      );
+      const held = Object.keys(this.measures);
+      if (
+        held.length !== Object.keys(measures).length ||
+        held.some((chain) => this.measures[chain] !== measures[chain])
+      )
+        this.measures = measures;
+    }
+    const { compactions, seenAt: seen } = life;
     if (compactions.length !== this.compactions.length || compactions.at(-1) !== this.compactions.at(-1))
       this.compactions = [...compactions];
-    if (
-      activity.seen.size !== this.seen.size ||
-      [...activity.seen].some(([id, at]) => this.seen.get(id) !== at)
-    )
-      this.seen = new Map(activity.seen);
+    if (seen.size !== this.seen.size || [...seen].some(([id, at]) => this.seen.get(id) !== at))
+      this.seen = new Map(seen);
     const prompts = new Map<string, Prompt>();
     if (this.life instanceof RemoteLife)
       for (const act of this.life.acts.values())
@@ -480,16 +564,18 @@ export class HostView extends EventEmitter {
     this.emit("change");
   }
 
-  /** The measure of a chain from its answers, which the activity only appends to: the answers that came since the
-   * last change add their dollars to it, and a list of another activity is measured from its start. */
-  private measure(chain: string, list: Parameters<typeof measureOf>[0]): Measure {
+  /** The measure of a chain from what the answers of its models cost, as the life gives it: it keeps its object while
+   * the spend of the chain stays the same. */
+  private measure(chain: string, spend: Spend): Measure {
     const known = this.measured.get(chain);
-    if (known?.list === list && known.counted === list.length) return known.measure;
-    const from = known?.list === list && known.counted < list.length ? known.counted : 0;
-    const added = measureOf(list.slice(from));
-    const dollars = (from ? (known?.measure.dollars ?? 0) : 0) + added.dollars;
-    const measure = { ...added, dollars, spent: dollars, answers: list.length };
-    this.measured.set(chain, { list, counted: list.length, measure });
+    if (known?.spend === spend) return known.measure;
+    const measure = {
+      dollars: spend.dollars,
+      spent: spend.dollars,
+      answers: spend.answers,
+      ...(spend.actor ? { actor: spend.actor } : {}),
+    };
+    this.measured.set(chain, { spend, measure });
     return measure;
   }
 
@@ -516,15 +602,8 @@ export class HostView extends EventEmitter {
   private readonly began = new Map<string, number>();
   private readonly took = new Map<string, number>();
   private replayed = 0;
-  /** The follow-ups that the life sent, as the facts read so far say, and the index of the fact that the next read
-   * starts at. */
-  private readonly dispatches = new Map<string, string>();
-  private dispatchedAt = 0;
-  /** The measure of each chain, and the answers that it counts, so that a change adds only the new answers. */
-  private readonly measured = new Map<
-    string,
-    { list: readonly unknown[]; counted: number; measure: Measure }
-  >();
+  /** The measure of each chain, and the spend that it reads. */
+  private readonly measured = new Map<string, { spend: Spend; measure: Measure }>();
   private timed = 0;
   private time(): void {
     const now = clock();
@@ -571,7 +650,7 @@ export class HostView extends EventEmitter {
           turns: undefined,
         });
     const turn = fact[3];
-    const scope = this.life.activity.scope(id);
+    const scope = this.life.scope(id);
     if (answered === "reply" && Array.isArray(turn) && Array.isArray(turn[2])) {
       const answers = this.answers.get(scope) ?? [];
       answers.push(usageOf(turn[2]));
@@ -625,7 +704,7 @@ export class HostView extends EventEmitter {
     const facts = life.facts;
     for (const fact of facts.slice(this.heardAt)) this.changed(fact);
     const start = facts.length;
-    const selected = life.activity.acts.get(requested)?.kind === "chain" ? requested : life.root;
+    const selected = life.act(requested)?.kind === "chain" ? requested : life.root;
     const view = this.chains.get(selected) ?? {};
     this.chains.set(selected, view);
     view.roster ??= ((await life.standing())[0] ?? []).map(([name, efforts, window]) => [
@@ -644,8 +723,6 @@ export class HostView extends EventEmitter {
     if (selected === life.root) this.actor = view.actor;
     // A fact that came while the views were read changes them at the next snapshot, which the session takes then.
     this.heardAt = start;
-    this.dispatchedAt = dispatchesFrom(facts, this.dispatches, this.dispatchedAt);
-    const dispatched = [...this.dispatches.keys()];
     // The daemon writes the journal after it tells the write, so the counts of a write may come after its act: the
     // act whose counts came is given again with them.
     const counted = new Set<string>();
@@ -657,10 +734,10 @@ export class HostView extends EventEmitter {
         );
         counted.add(change.act);
       }
-    const { acts, count } = life.activity.since(since);
+    const { acts, count } = life.since(since);
     for (const act of acts) counted.delete(act.id);
     for (const id of counted) {
-      const act = life.activity.acts.get(id);
+      const act = life.act(id);
       if (act) acts.push(act);
     }
     const given = this.given?.mark === held && this.given.chain === selected ? this.given : undefined;
@@ -672,17 +749,18 @@ export class HostView extends EventEmitter {
     view.worded = undefined;
     const mark = ++this.marks;
     this.given = { mark, chain: selected, roster: view.roster, turns: view.turns, answers: answers.length };
-    const chain = life.activity.acts.get(selected);
+    const chain = life.act(selected);
     return {
       mark,
       selected,
-      // Each row is a copy of its act as it stands now: the activity changes its acts in place, and the session finds
-      // what changed by the rows that it held before.
-      acts: acts.map((act) => row(structuredClone(act), this.lines.get(act.id), this.took.get(act.id))),
+      // Each row is a copy of its act as it stands now, and the session finds what changed by the rows that it held
+      // before.
+      acts: acts.map((act) =>
+        row(structuredClone(act), this.lines.get(act.id), this.took.get(act.id), life.output(act.id)),
+      ),
       count,
-      paused: Boolean(chain?.paused),
-      cause: (chain?.paused && chain.pause) || null,
-      dispatched,
+      paused: chain ? isPaused(chain) : false,
+      cause: (chain && isPaused(chain) && chain.pause) || null,
       ...(given?.roster === view.roster ? {} : { roster: view.roster }),
       ...(program ? { program } : {}),
       turns: { from: from.turns, list: view.turns.slice(from.turns) },
@@ -697,23 +775,9 @@ export class HostView extends EventEmitter {
   private get demo(): boolean {
     return Boolean(this.options.demo || this.options.watch);
   }
-  private async refreshCodex(): Promise<void> {
-    const { claude, config } = this.options;
-    if (
-      this.demo ||
-      !setup(claude, this.directory, config).providers.some((one) => one.provider === "codex" && one.enabled)
-    )
-      return;
-    let status = codexAuth("refresh", config);
-    while (status.state === "connecting") {
-      await Bun.sleep(200);
-      status = codexAuth("status", config);
-    }
-  }
   /** The models the catalog of the crate offers, each as its name, its efforts and its window. */
   async catalog(): Promise<Roster> {
     if (this.demo) return [];
-    await this.refreshCodex();
     return models(this.options.claude, this.directory, this.options.config).map(
       ({ name, efforts, window }) => [name, efforts, window],
     );
@@ -736,40 +800,25 @@ export class HostView extends EventEmitter {
       offered.push({ name: "local", enabled: true, models: found.local?.offered ?? 0 });
     return offered.sort((a, b) => a.name.localeCompare(b.name));
   }
-  /** The sign-in of codex that a change of its provider asks: a cancel when it turns codex off, and a sign-in, which
-   * waits for the browser, when it turns codex on. False when the operator canceled the sign-in. */
-  private async codexSigned(value: unknown): Promise<boolean> {
-    const { config } = this.options;
-    if (value === false) codexAuth("cancel", config);
-    if (value !== true) return true;
-    let status = codexAuth("refresh", config);
-    if (["disconnected", "needs-login", "failed", "canceled"].includes(status.state))
-      status = codexAuth("start", config);
-    this.emit("authentication", status);
-    while (["waiting", "connecting"].includes(status.state)) {
-      await Bun.sleep(200);
-      const next = codexAuth("status", config);
-      if (next.state !== status.state) this.emit("authentication", next);
-      status = next;
-    }
-    if (status.state === "canceled") return false;
-    if (status.state !== "connected") throw new Error(status.message || "OpenAI sign-in did not complete.");
-    return true;
+  /** A cancel of the sign-in of codex that the daemon runs, which refuses the config that asked it. */
+  async cancelSignIn(): Promise<void> {
+    await this.life.cancelSignIn();
   }
-  codexAuth = async (action = "status") => codexAuth(action, this.options.config);
   /** A change of a key of a layer of the configs, which the World writes in the daemon, or a reload of them, each then
-   * a stand of the life. False when the operator canceled the sign-in that the change asked. */
-  async config(config: Config): Promise<boolean> {
+   * a stand of the life. The daemon drives the sign-in that a change of codex asks, and refuses the change when the
+   * operator cancels it or it fails, as the frames of the sign-in tell the window. */
+  async config(config: Config): Promise<void> {
     if (this.demo) throw new Error("Provider settings are not available in the demo.");
     if (config.action === "get") throw new Error("A window reads the configs from the host.");
-    if (config.action === "set") {
-      const [group, name] = config.key;
-      if (group === "providers" && name === "codex" && !(await this.codexSigned(config.value))) return false;
-    } else await this.refreshCodex();
     await this.life.result(await this.life.config(config));
-    return true;
   }
-  private async stand(): Promise<void> {
+  /** Each key of the configs of the folder of the life, with the value that wins for it and the property that a schema
+   * gives it, as the host reads them, and none in the demo. */
+  async settings(): Promise<Setting[]> {
+    return this.demo ? [] : await this.life.settings();
+  }
+  /** A stand of the life on the configs as the disk holds them, which asks again each model that waits to retry. */
+  async stand(): Promise<void> {
     await this.life.result(await this.life.stand());
   }
   /** The name of the model that a name gives in the roster or in the catalog, and nothing when it gives none. */
@@ -797,43 +846,16 @@ export class HostView extends EventEmitter {
     this.life.close(JSON.stringify({ is: "Refused", args: [words] }), { id });
   /** The operator read a chain or a thread up to a place, which the record keeps as a fact seen. */
   async see(about: string, place: number): Promise<null> {
-    if (place > (this.life.activity.seen.get(about) ?? 0)) await this.life.seen(about);
+    if (place > (this.life.seenAt.get(about) ?? 0)) await this.life.seen(about);
     return null;
   }
   async attachImage(path: string): Promise<ImageAttachment> {
     if (this.role === "read" || this.reading) throw new Error("Record inspection cannot attach an image.");
     return attachImage(this.imageDirectory, resolve(this.directory, path));
   }
-  /** A message that the operator queued, sent once on its chain, whichever window sends it: the life sends it once its
-   * chain rests, and tells the prompt that it made, or why its send failed, in a fact `queue` of the operator. */
-  async sendQueued(entry: FollowUp): Promise<string> {
-    await this.life.queue(entry.id, entry.shape, entry.text, entry.chain);
-    return await new Promise<string>((resolve, reject) => {
-      const look = () => {
-        const facts = this.life.facts;
-        for (let at = facts.length - 1; at >= 0; at--) {
-          const fact = facts[at] as Fact;
-          if (fact[0] !== "queue" || fact[2] !== "operator" || fact[4] !== entry.id) continue;
-          if (fact[3] === "sent") return end(() => resolve(String(fact[5])));
-          if (fact[3] === "failed") return end(() => reject(new Error(String(fact[5]))));
-          if (fact[3] === "drop")
-            return end(() => reject(new Error("The follow-up was taken out of the queue.")));
-        }
-        if (this.lost) end(() => reject(new Error(this.lost)));
-      };
-      const end = (settle: () => void) => {
-        this.off("facts", look);
-        this.off("fault", look);
-        settle();
-      };
-      this.on("facts", look);
-      this.on("fault", look);
-      look();
-    });
-  }
   /** The work that waits for a wake started again: a wake of each chain that holds some. */
   async resume(): Promise<void> {
-    const chains = new Set([...this.pending.keys()].map((id) => this.life.activity.acts.get(id)?.on));
+    const chains = new Set([...this.pending.keys()].map((id) => this.life.scope(id)));
     for (const chain of chains) if (chain) await this.life.wake(chain);
   }
   private get files(): FileChanges {
@@ -867,8 +889,39 @@ export class HostView extends EventEmitter {
     }
   }
   /** An act whole, with all that a command printed, and nothing when the life holds no such act. */
-  async act(id: string): Promise<LiveAct | undefined> {
-    return this.life instanceof ReadLife ? this.life.reader.act(id) : this.life.activity.acts.get(id);
+  /** The threads of a chain as the crate folds them, now or as they stood just after a moment, with the runs of its
+   * notes counted past the place up to which the window read it. */
+  async threads(chain: string, at?: number, read?: number): Promise<Threads> {
+    return await this.life.threads(chain, at, read);
+  }
+  /** The ladder of a chain as the crate folds it, now or as it stood just after a moment, with the folds that the
+   * window opened, the prompts that the operator owes, and the only acts at its top when `taken` names them. */
+  async ladder(
+    chain: string,
+    at?: number,
+    opened?: string[],
+    owed?: string[],
+    taken?: string[],
+  ): Promise<Rung[]> {
+    return await this.life.ladder(chain, at, opened, owed, taken);
+  }
+  /** The threads of every chain of the life but those that `hidden` names, as one tree in the order of the list of
+   * the threads, as the crate folds them, now or as they stood just after a moment. */
+  async rail(hidden: string[], at?: number): Promise<ThreadNode[]> {
+    return await this.life.rail(hidden, at);
+  }
+  /** The acts of the life as they stood just after a moment, as the crate folds them. */
+  async asOf(at: number): Promise<Act[]> {
+    return await this.life.asOf(at);
+  }
+  /** Each moment at which an act of the life, or of one chain, began or ended, in order. */
+  async moments(on?: string): Promise<number[]> {
+    return await this.life.moments(on);
+  }
+  async act(id: string): Promise<Act | undefined> {
+    if (!(this.life instanceof ReadLife)) return this.life.acts.get(id);
+    const whole = this.life.reader.act(id);
+    return whole && this.life.reader.activity.hosted([whole]).find((one) => one.id === id);
   }
   /** The text at a path, from where a chain stands, which makes no act and keeps nothing. */
   async look(path: string, chain: string): Promise<{ path: string; content: string }> {
@@ -889,6 +942,16 @@ export class HostView extends EventEmitter {
     this.emit("reset");
   }
   /** The life pinned under the name of a holder, so it lives with no window, until an unpin of that holder. */
+  /** The follow-ups that wait on each chain of the life, in order, as the life told them last. */
+  get queued(): FollowUp[] {
+    return [...this.life.queues.values()].flat();
+  }
+  /** A message put in the queue of a chain, which the life sends once the chain rests. A second queue of the same
+   * entry changes nothing. */
+  queue = (shape: string, message: string, on: string, entry: string = randomUUID()) =>
+    this.life.queue(entry, shape, message, on);
+  /** A follow-up taken out of its queue before the life sent it. */
+  unqueue = (entry: string) => this.life.unqueue(entry);
   pin = (holder: string) => this.life.pin(holder);
   unpin = (holder: string) => this.life.unpin(holder);
   /** The window lets the life go: the life ends once no window and no pin holds it, after the grace of the daemon. */
@@ -922,7 +985,7 @@ export function openingEngine(options: EngineOptions): {
     cwd: options.cwd && resolve(options.cwd),
     actor: [options.model, options.effort].filter(Boolean).join("/") || undefined,
     roster: roster(options),
-    extensions: options.demo ? options.extensions === true : options.extensions,
+    skills: options.demo ? options.skills === true : options.skills,
     // The life reads the settings and runs the claude command line that this window reads, whatever the environment
     // of the daemon names.
     config: options.config ?? process.env.FURB_CONFIG_DIR,

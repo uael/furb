@@ -10,14 +10,17 @@ use std::{
 
 use monty_types::NamedValues;
 use ruff_python_ast::{
-  ExceptHandler, Expr, ExprContext, Parameter, Pattern, Stmt,
+  ExceptHandler, Expr, ExprContext, ExprDictComp, ExprGenerator, ExprListComp, ExprSetComp,
+  Parameter, Pattern, Stmt,
   statement_visitor::{StatementVisitor, walk_stmt},
   visitor::{self, Visitor},
 };
 use ruff_python_parser::parse_module;
 use ruff_text_size::{Ranged, TextRange};
 
-use super::{ACTS, MODULE, Parsed, WORDS, binds, deleted, layout::builtin, named, strings, worded};
+use super::{
+  ACTS, MODULE, Parsed, VALUED, WORDS, binds, deleted, layout::builtin, named, strings, worded,
+};
 use crate::sand::{Nobody, Sand};
 
 /// The rule that a finding of the gate breaks: a rule that the gate checks itself, or any other
@@ -34,6 +37,8 @@ pub enum Rule {
   Coroutine,
   /// A name that the transcript binds.
   Told,
+  /// A bare expression at the end of a word that answers a prompt that wants a value.
+  Bare,
   /// A name of the engine that a word binds.
   Engine,
   /// A builtin that a word binds and that a def of the program reads.
@@ -62,6 +67,7 @@ impl Rule {
       Rule::Asyncio => "asyncio-in-word",
       Rule::Coroutine => "unawaited-coroutine",
       Rule::Told => "transcript-name",
+      Rule::Bare => "bare-answer",
       Rule::Engine => "engine-name",
       Rule::Builtin => "builtin-name",
       Rule::Assign => "invalid-assignment",
@@ -386,7 +392,8 @@ pub(super) fn unawaited(sheet: &Parsed<'_>) -> Vec<Finding> {
     .collect()
 }
 
-/// Each call of an async function that stands as a statement of the word, by the line it stands on.
+/// Each call of an async function that nothing awaits or binds, by the line it stands on: a
+/// statement, an argument, an element of a container, a return.
 ///
 /// A call of an `async def` makes a coroutine and runs nothing until it is awaited, and the checker
 /// lets the statement pass, so the word goes on as if the call had run. The gate refuses it first
@@ -394,7 +401,8 @@ pub(super) fn unawaited(sheet: &Parsed<'_>) -> Vec<Finding> {
 /// and the word adds the ones that it defines.
 pub(super) fn dropped(sheet: &Parsed<'_>, known: &HashSet<String>) -> Vec<Finding> {
   let Some(body) = sheet.bodied() else { return vec![] };
-  let mut calls = Coroutines { names: known.clone(), depth: 0, found: vec![] };
+  let mut calls =
+    Coroutines { names: known.clone(), depth: 0, found: vec![], taken: HashSet::new() };
   calls.visit_body(word_of(body));
   calls
     .found
@@ -418,6 +426,16 @@ struct Coroutines {
   names: HashSet<String>,
   depth: usize,
   found: Vec<(usize, String)>,
+  /// The calls that something takes: one under `await` or bound by a store stands for its result.
+  taken: HashSet<usize>,
+}
+
+impl Coroutines {
+  fn take(&mut self, value: &Expr) {
+    if let Expr::Call(call) = value {
+      self.taken.insert(call.start().to_usize());
+    }
+  }
 }
 
 impl<'a> Visitor<'a> for Coroutines {
@@ -434,14 +452,14 @@ impl<'a> Visitor<'a> for Coroutines {
           self.names.insert(def.name.to_string());
         }
       }
-      Stmt::Expr(one) => {
-        if let Expr::Call(call) = &*one.value
-          && let Expr::Name(name) = &*call.func
-          && self.names.contains(name.id.as_str())
-        {
-          self.found.push((stmt.start().to_usize(), name.id.to_string()));
+      Stmt::Assign(one) => self.take(&one.value),
+      Stmt::AnnAssign(one) => {
+        if let Some(value) = &one.value {
+          self.take(value);
         }
       }
+      Stmt::AugAssign(one) => self.take(&one.value),
+      Stmt::For(one) if one.is_async => self.take(&one.iter),
       _ => {}
     }
     let scoped = matches!(stmt, Stmt::FunctionDef(_) | Stmt::ClassDef(_));
@@ -451,10 +469,29 @@ impl<'a> Visitor<'a> for Coroutines {
   }
 
   fn visit_expr(&mut self, expr: &'a Expr) {
-    if let Expr::Name(one) = expr
-      && matches!(one.ctx, ExprContext::Store)
-    {
-      self.names.remove(one.id.as_str());
+    match expr {
+      Expr::Name(one) if matches!(one.ctx, ExprContext::Store) => {
+        self.names.remove(one.id.as_str());
+      }
+      Expr::Await(one) => self.take(&one.value),
+      Expr::Named(one) => self.take(&one.value),
+      Expr::ListComp(ExprListComp { generators, .. })
+      | Expr::SetComp(ExprSetComp { generators, .. })
+      | Expr::DictComp(ExprDictComp { generators, .. })
+      | Expr::Generator(ExprGenerator { generators, .. }) => {
+        for one in generators.iter().filter(|one| one.is_async) {
+          self.take(&one.iter);
+        }
+      }
+      Expr::Call(call) => {
+        if let Expr::Name(name) = &*call.func
+          && self.names.contains(name.id.as_str())
+          && !self.taken.contains(&call.start().to_usize())
+        {
+          self.found.push((expr.start().to_usize(), name.id.to_string()));
+        }
+      }
+      _ => {}
     }
     visitor::walk_expr(self, expr);
   }
@@ -608,9 +645,34 @@ pub(super) fn told(sheet: &Parsed<'_>) -> Vec<Finding> {
     .collect()
 }
 
+/// The last statement of the word, when the word answers a prompt that wants a value, which the
+/// sheet binds as `VALUED`, and that statement is a bare expression and no call or await.
+///
+/// A model that writes the value as the whole word, as a tuple of ids and a summary, writes a word
+/// that runs and closes nothing, and its prompt asks it again: the gate names the close that it
+/// means, and nothing of the word runs.
+pub(super) fn bare(sheet: &Parsed<'_>) -> Vec<Finding> {
+  let Some(body) = sheet.bodied() else { return vec![] };
+  let Some(Stmt::Expr(last)) = word_of(body).last() else { return vec![] };
+  if strings(body, VALUED).is_empty() || matches!(&*last.value, Expr::Call(_) | Expr::Await(_)) {
+    return vec![];
+  }
+  let at = last.start().to_usize();
+  let text = &sheet.text[last.range()];
+  let shown = if text.len() <= 60 && !text.contains('\n') { text } else { "..." };
+  vec![Finding {
+    line: sheet.line(at),
+    column: sheet.column(at),
+    rule: Rule::Bare,
+    why: format!(
+      "the word ends with a bare expression, which closes nothing: close the prompt with it, as close({shown})"
+    ),
+  }]
+}
+
 /// The names that a chain binds of its own, though the engine binds each first: the actor, the last
 /// raise and the policy of the codes of a command, which a word binds like any name.
-const OWN: [&str; 3] = ["actor", "raised", "accepts"];
+pub(crate) const OWN: [&str; 3] = ["actor", "raised", "accepts"];
 
 /// Each name of the engine that a statement at the top of the word binds or deletes, by the line it
 /// stands on.
@@ -639,14 +701,7 @@ pub(super) fn contracted(sheet: &Parsed<'_>, engine: &str, whole: &str) -> Vec<F
     })
     .filter(|name| !OWN.contains(name))
     .collect();
-  let mut found = vec![];
-  topped(word_of(body), &mut found);
-  let mut reached = Reached(vec![]);
-  for stmt in word_of(body) {
-    reached.visit_stmt(stmt);
-  }
-  found.extend(reached.0.into_iter().map(|(at, name)| (at, name, false)));
-  found.sort_by_key(|(at, ..)| *at);
+  let found = bound(word_of(body));
   let deletes: HashSet<usize> = word_of(body)
     .iter()
     .filter(|stmt| matches!(stmt, Stmt::Delete(_)))
@@ -677,6 +732,22 @@ pub(super) fn contracted(sheet: &Parsed<'_>, engine: &str, whole: &str) -> Vec<F
       Some(Finding { line: sheet.line(at), column: sheet.column(at), rule, why })
     })
     .collect()
+}
+
+/// Each name that a statement at the top of a body binds or deletes, by where it starts, and
+/// whether an import with no alias binds it: what [`topped`] finds and what [`Reached`] finds, in
+/// the order of the body. The rule of a name of the engine that [`contracted`] holds reads them,
+/// for a word and for the word of an extension alike.
+pub(crate) fn bound(body: &[Stmt]) -> Vec<(usize, &str, bool)> {
+  let mut found = vec![];
+  topped(body, &mut found);
+  let mut reached = Reached(vec![]);
+  for stmt in body {
+    reached.visit_stmt(stmt);
+  }
+  found.extend(reached.0.into_iter().map(|(at, name)| (at, name, false)));
+  found.sort_by_key(|(at, ..)| *at);
+  found
 }
 
 /// Each builtin that a def, a class or a lambda of the program of a sheet reads by its name.
@@ -796,7 +867,7 @@ fn topped<'a>(body: &'a [Stmt], found: &mut Vec<(usize, &'a str, bool)>) {
 /// The names that an engine imports, which a word may import too under the same name, since each
 /// is no name of the contract. The imports of an engine stand at its head, before its first other
 /// statement, and one may hold more than one line.
-fn imported(engine: &str) -> Vec<String> {
+pub(crate) fn imported(engine: &str) -> Vec<String> {
   let head: String = engine
     .split_inclusive('\n')
     .take_while(|line| {
@@ -861,7 +932,10 @@ impl<'a> Visitor<'a> for Bound<'a> {
 /// The names that a statement binds in the module by a way that `binds` does not read: the target
 /// of a walrus (also inside a comprehension, which binds it in the scope around it), each capture
 /// of a pattern of a match, and each name that a def or a class declares `global`, at any depth. A
-/// lambda binds its walrus apart, so nothing inside it counts.
+/// lambda binds its walrus apart, so nothing inside it counts. A def or a class runs its
+/// decorators, the defaults of its parameters, and its bases and keywords in the module, so a
+/// walrus there binds too, but a walrus in its body binds apart. Python refuses a walrus in an
+/// annotation.
 struct Reached<'a>(Vec<(usize, &'a str)>);
 
 impl<'a> Visitor<'a> for Reached<'a> {
@@ -870,6 +944,17 @@ impl<'a> Visitor<'a> for Reached<'a> {
       let mut globals = Globals(vec![]);
       StatementVisitor::visit_stmt(&mut globals, stmt);
       self.0.extend(globals.0);
+      match stmt {
+        Stmt::FunctionDef(one) => {
+          one.decorator_list.iter().for_each(|one| self.visit_decorator(one));
+          self.visit_parameters(&one.parameters);
+        }
+        Stmt::ClassDef(one) => {
+          one.decorator_list.iter().for_each(|one| self.visit_decorator(one));
+          one.arguments.iter().for_each(|one| self.visit_arguments(one));
+        }
+        _ => {}
+      }
     } else {
       visitor::walk_stmt(self, stmt);
     }

@@ -13,12 +13,12 @@
 pub mod checkpoint;
 pub mod ear;
 pub mod engine;
-pub mod extension;
 pub mod fact;
 pub mod gate;
 pub mod life;
 mod minify;
 mod sand;
+pub mod skill;
 #[cfg(test)]
 mod testing;
 pub mod value;
@@ -31,7 +31,7 @@ pub mod binding;
 
 pub use crate::{
   ear::{Ear, Heard, Spoken, Step},
-  engine::{Act, Engine, Life, Plain, verbs},
+  engine::{Act, Engine, Kept, Life, Plain, verbs},
   fact::Fact,
   value::{Exit, Fault, Object, ObjectRef, Text},
 };

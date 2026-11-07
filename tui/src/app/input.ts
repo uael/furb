@@ -1,6 +1,5 @@
 import type { BoxRenderable, KeyEvent } from "@opentui/core";
 import { asksOperator, type ChainThread } from "furb/life";
-import { clipboardImage } from "../clipboard.ts";
 import { type Action, bindings, shown } from "../keys.ts";
 import { commentStart, type Hunk, lines, scopeLabels, scopes } from "../review.ts";
 import { type View, views } from "../session.ts";
@@ -164,8 +163,12 @@ export const input = part({
     const watched = () => bare() && this.session.watching && !this.composer.plainText;
     const past = () => this.session.moment !== undefined;
     layer(watched, "watch", [
-      { on: "ctrl+left", run: () => this.session.travel(-1), hint: ["⌃←→", "move in time"] },
-      { on: "ctrl+right", run: () => this.session.travel(1) },
+      {
+        on: "ctrl+left",
+        run: () => void this.session.travel(-1).catch(() => {}),
+        hint: ["⌃←→", "move in time"],
+      },
+      { on: "ctrl+right", run: () => void this.session.travel(1).catch(() => {}) },
       {
         on: "meta+b",
         run: () => void this.session.branchHere().catch(this.report),
@@ -237,12 +240,6 @@ export const input = part({
         hint: ["Space", "fold"],
       },
       { on: "a", run: () => void this.nextAttention().catch(this.report), hint: ["a", "question"] },
-      {
-        on: "r",
-        run: onThread((thread) => this.resolveThread(thread)),
-        when: () => this.railThread()?.resolved === false,
-        hint: ["r", "resolve"],
-      },
       {
         on: "o",
         run: onThread((thread) => this.replyTo(thread.act.id)),
@@ -389,9 +386,10 @@ export const input = part({
       }
     }
     if (up && !anywhere && !this.composer.plainText && queued && this.historyIndex < 0) {
-      this.session.removeQueued(queued.id);
-      this.insert(queued.text);
-      this.session.notice = "The queued message is back in the input. ⌥Enter queues it again.";
+      void this.session.removeQueued(queued.entry).then(() => {
+        this.insert(queued.message);
+        this.session.notice = "The queued message is back in the input. ⌥Enter queues it again.";
+      }, this.report);
       return true;
     }
     const cursor = this.composer.visualCursor.visualRow;
@@ -455,8 +453,15 @@ export const input = part({
           this.session.notice = "Only a message can wait in the queue. Enter runs this Python now.";
           return;
         }
-        this.session.enqueue(this.composer.plainText);
+        const key = this.draftKey;
+        const content = this.composer.plainText;
+        // The message leaves its draft as it is queued, and a rejection gives it back as a rejected send does.
         this.composer.setText("");
+        void this.session.enqueue(content).catch((error) => {
+          this.unsent(key, content);
+          this.report(error);
+          this.render();
+        });
       },
       stash: () => this.stash(),
       view: (key) => this.showView(views[Number(key?.name) - 1] ?? "feed"),
@@ -473,7 +478,7 @@ export const input = part({
       sidebar: () => this.toggleSidebar(),
       details: () => this.details(),
       editor: () => void this.editDraft().catch(this.report),
-      image: () => void clipboardImage((path) => this.session.attachImage(path)).catch(this.report),
+      image: () => void this.pasteImage().catch(this.report),
       search: () => this.openSearch(),
       scroll: (key) =>
         this.scroll.scrollBy(

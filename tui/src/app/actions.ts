@@ -1,6 +1,5 @@
 import { imageContent, imagePath, WORK } from "furb";
-import { asksOperator } from "furb/life";
-import { clipboardImage } from "../clipboard.ts";
+import { asksOperator, isDone, outcomeOf, unfinished } from "furb/life";
 import { externalEditor, openFile } from "../editor.ts";
 import { shortenHome } from "../files.ts";
 import { kibibytes } from "../format.ts";
@@ -27,6 +26,7 @@ export const actions = part({
       queue: this.queuePicker,
       model: this.models,
       providers: this.providers,
+      config: this.configs,
       effort: this.effortPicker,
       shape: this.shapes,
       theme: () => this.themes(),
@@ -71,8 +71,7 @@ export const actions = part({
     }
     if (text === "/image" || text.startsWith("/image ")) {
       const path = text.slice(6).trim();
-      if (path) await this.session.attachImage(path);
-      else await clipboardImage((path) => this.session.attachImage(path));
+      await this.pasteImage(path || undefined);
       return true;
     }
     if (text === "/delete") {
@@ -92,8 +91,8 @@ export const actions = part({
       await library.enter(await library.add(text.slice(11).trim()));
       return true;
     }
-    if (name === "extensions" && !argument) {
-      await this.extensionsDialog();
+    if (name === "skills" && !argument) {
+      await this.skillsDialog();
       return true;
     }
     // A command of a part of an extension, which no command of the TUI shadows.
@@ -140,28 +139,12 @@ export const actions = part({
   imageActions(uri: string): void {
     const content = imageContent(this.session.host.imageDirectory, uri);
     const file = imagePath(this.session.host.imageDirectory, uri).path;
-    const pending = this.session.images[this.session.selected]?.find((image) => image.uri === uri);
-    this.openPalette(pending?.name ?? "Image attachment", [
+    this.openPalette("Image attachment", [
       {
         label: "Open image",
         detail: `${content.mimeType}  ${kibibytes(Buffer.byteLength(content.data, "base64"))}`,
         run: () => openFile(file),
       },
-      ...(pending
-        ? [
-            {
-              label: "Remove from this draft",
-              detail: "Keep the saved image file",
-              run: () => {
-                this.session.images[this.session.selected] = (
-                  this.session.images[this.session.selected] ?? []
-                ).filter((image) => image.uri !== uri);
-                this.session.save();
-                this.render();
-              },
-            },
-          ]
-        : []),
     ]);
   },
 
@@ -201,24 +184,13 @@ export const actions = part({
     this.openPalette(
       "Queued follow-ups",
       [
-        ...(session.queueHeld
-          ? [
-              {
-                label: "Resume queue",
-                detail: session.queueError || "Send when this chain's current work is complete",
-                run: async () => {
-                  session.queueHeld = false;
-                  session.queueError = "";
-                  await session.drainQueue();
-                },
-              },
-            ]
-          : []),
         ...session.queued.map((entry) => ({
-          label: entry.text.split("\n")[0] ?? "Follow-up",
+          label: entry.message.split("\n")[0] ?? "Follow-up",
           // A follow-up asks the actor of its chain when it is sent, and the session reads that actor for the
           // selected chain alone.
-          detail: `${entry.chain === session.selected ? `to ${this.model("").name} ` : ""}on ${session.labelOf(entry.chain)}`,
+          detail:
+            entry.failed ??
+            `${entry.chain === session.selected ? `to ${this.model("").name} ` : ""}on ${session.labelOf(entry.chain)}`,
           mark: [`${glyph.ring} `, c.faint] as Part,
           run: () =>
             this.openPalette("Queued message", [
@@ -226,17 +198,15 @@ export const actions = part({
                 label: "Edit in composer",
                 detail: "Remove from the queue and edit before sending again",
                 run: async () => {
-                  session.removeQueued(entry.id);
+                  await session.removeQueued(entry.entry);
                   await session.select(entry.chain);
-                  this.insert(entry.text);
+                  this.insert(entry.message);
                 },
               },
               {
                 label: "Remove",
                 detail: "Remove this queued message",
-                run: () => {
-                  session.removeQueued(entry.id);
-                },
+                run: () => session.removeQueued(entry.entry),
               },
             ]),
         })),
@@ -316,8 +286,8 @@ export const actions = part({
             kind: act.kind,
             by: act.by,
             words: act.words,
-            done: act.done,
-            value: act.value,
+            done: isDone(act),
+            value: outcomeOf(act),
           }),
       },
       ...(!w.host.reading && w.editable(act)
@@ -329,7 +299,7 @@ export const actions = part({
             },
           ]
         : []),
-      ...(!w.host.reading && !act.done && !act.unfinished && WORK.includes(act.kind)
+      ...(!w.host.reading && !isDone(act) && !unfinished(act) && WORK.includes(act.kind)
         ? [
             w.lastOwn?.id === act.id && message
               ? {

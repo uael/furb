@@ -14,10 +14,14 @@ use super::{
   Advertised, Hosted, Told, answer::streamed, catalog, images::Images, messages::messages,
   search::Searches, thinking::Thought,
 };
+use crate::skill;
+use crate::world::files;
 use crate::{
   engine::{OPERATOR, WINDOW},
   value::{Object, ObjectRef},
 };
+use std::env;
+use std::fs;
 
 /// What streams one response of a model of rig, whatever model it is.
 pub(super) type Streams = Arc<
@@ -29,7 +33,7 @@ pub(super) type Streams = Arc<
 >;
 
 /// The streams of a model of rig.
-pub(super) fn streams<M: CompletionModel + 'static>(model: M) -> Streams {
+pub(super) fn streams(model: impl CompletionModel + 'static) -> Streams {
   let model = Arc::new(model);
   Arc::new(move |request| {
     let model = Arc::clone(&model);
@@ -72,16 +76,16 @@ impl Class {
   /// The name of the class, as the roster, the catalog and `.furb/config.json` say it.
   pub fn name(self) -> &'static str {
     match self {
-      Class::Cheap => "cheap",
-      Class::Dear => "dear",
+      Self::Cheap => "cheap",
+      Self::Dear => "dear",
     }
   }
 
   /// The class of a name, and nothing for another word.
-  pub fn named(name: &str) -> Option<Class> {
+  pub fn named(name: &str) -> Option<Self> {
     match name {
-      "cheap" => Some(Class::Cheap),
-      "dear" => Some(Class::Dear),
+      "cheap" => Some(Self::Cheap),
+      "dear" => Some(Self::Dear),
       _ => None,
     }
   }
@@ -92,10 +96,10 @@ pub(crate) const CHEAP: f64 = 1.0;
 
 /// The key of a config whose map gives a model the class that it names, over the one of the
 /// catalog.
-pub(super) const KEY_CLASSES: &str = "classes";
+pub(crate) const KEY_CLASSES: &str = "classes";
 
 /// The key of a config whose list names the models of automatic work, the first first.
-pub(super) const KEY_AUTOMATIC: &str = "automatic";
+pub(crate) const KEY_AUTOMATIC: &str = "automatic";
 
 /// What the configs say of the models: the class of each model that a config names, and the models
 /// of automatic work.
@@ -106,13 +110,13 @@ pub(super) struct Configured {
 }
 
 /// What the configs of the user, in the config directory, and of the project, in a directory, say
-/// of the models, in the order of [`crate::extension::configs`]: a later file gives a model another
+/// of the models, in the order of [`crate::skill::configs`]: a later file gives a model another
 /// class over an earlier one, and its list of automatic work replaces the list of an earlier one. A
 /// word that names no class, and a name of the list that is no string, give nothing.
 pub(super) fn configured(user: &Path, directory: &Path) -> Configured {
   let mut given = Configured::default();
-  for file in crate::extension::configs(user, directory) {
-    let Ok(text) = std::fs::read_to_string(file) else { continue };
+  for file in skill::configs(user, directory) {
+    let Ok(text) = fs::read_to_string(file) else { continue };
     let Ok(config) = serde_json::from_str::<Value>(&text) else { continue };
     for (name, class) in config.get(KEY_CLASSES).and_then(Value::as_object).into_iter().flatten() {
       if let Some(class) = class.as_str().and_then(Class::named) {
@@ -178,12 +182,9 @@ pub struct Model {
 
 impl Model {
   /// A model of rig under a name, with the window it reads, and no effort yet.
-  pub fn new<M>(name: impl Into<String>, window: u64, model: M) -> Model
-  where
-    M: CompletionModel + 'static,
-  {
+  pub fn new(name: impl Into<String>, window: u64, model: impl CompletionModel + 'static) -> Self {
     let streams = streams(model);
-    Model::lazy(name, window, move || Ok(Arc::clone(&streams)))
+    Self::lazy(name, window, move || Ok(Arc::clone(&streams)))
   }
 
   /// A model of rig that is made when it is first asked, or the reason it cannot be.
@@ -191,12 +192,12 @@ impl Model {
     name: impl Into<String>,
     window: u64,
     made: impl Fn() -> Result<Streams, CompletionError> + Send + Sync + 'static,
-  ) -> Model {
+  ) -> Self {
     let answers: Answers = Arc::new(move |asked| {
       let made = made();
       Box::pin(async move { Ok(Answer::Response(Box::new(streamed(made?, asked).await?))) })
     });
-    Model {
+    Self {
       name: name.into(),
       window,
       efforts: Vec::new(),
@@ -221,7 +222,7 @@ impl Model {
   /// additional parameters: a budget of thinking for one provider, an effort of reasoning for
   /// another.
   #[must_use]
-  pub fn effort(mut self, name: impl Into<String>, settings: Value) -> Model {
+  pub fn effort(mut self, name: impl Into<String>, settings: Value) -> Self {
     let settings = match settings {
       Value::Object(settings) => settings,
       _ => Map::new(),
@@ -233,7 +234,7 @@ impl Model {
   /// The setting that carries the conversation of a reply, the chain of this life, which a provider
   /// keeps a conversation or a cache by.
   #[must_use]
-  pub fn conversation(mut self, key: impl Into<String>) -> Model {
+  pub fn conversation(mut self, key: impl Into<String>) -> Self {
     self.conversation = Some(key.into());
     self
   }
@@ -241,28 +242,28 @@ impl Model {
   /// What the model costs, in dollars for a million tokens: read, written, read from the cache, and
   /// written to it.
   #[must_use]
-  pub fn price(mut self, input: f64, output: f64, read: f64, wrote: f64) -> Model {
+  pub fn price(mut self, input: f64, output: f64, read: f64, wrote: f64) -> Self {
     self.price = Some([input, output, read, wrote]);
     self
   }
 
   /// The model takes the images that a turn names.
   #[must_use]
-  pub fn images(mut self) -> Model {
+  pub fn images(mut self) -> Self {
     self.images = true;
     self
   }
 
   /// The model, whose provider searches the web with this search.
   #[must_use]
-  pub fn searches(mut self, search: Searches) -> Model {
+  pub fn searches(mut self, search: Searches) -> Self {
     self.search = Some(search);
     self
   }
 
   /// The same model, whose turns a function of the host answers in place of the model.
   #[must_use]
-  pub fn hosted(mut self, host: Hosted) -> Model {
+  pub fn hosted(mut self, host: Hosted) -> Self {
     self.hosted = true;
     self.answers = Arc::new(move |asked| {
       let Asked { actor, chain, request, told, .. } = asked;
@@ -323,7 +324,7 @@ impl Model {
 
   /// The model, of a class that the catalog gives, which its price no longer gives.
   #[must_use]
-  pub fn classed(mut self, class: Class) -> Model {
+  pub fn classed(mut self, class: Class) -> Self {
     self.class = Some(class);
     self
   }
@@ -351,7 +352,8 @@ impl Model {
 /// What the chains stand on: the models and the operator, the directory, the default actor, and the
 /// path of the doctrine that a chain reads, which [`catalog::doctrine`] gives, each path as
 /// [`crate::world::files::tilded`] writes it, then the extensions that the engine seeds the root
-/// with, each as `[name, file, life word, root alone]`. A standing with no doctrine, or of a
+/// with, each as `[name, file, life word, root alone]`, then the absolute home of the user, which
+/// a path under the home hides as `~`. A standing with no doctrine, or of a
 /// provider that advertises no extensions, gives none, and the engine seeds no root then. Each
 /// model of the roster gives its class, and a model of the list of automatic work its place in that
 /// list, which the configs of the user, in the config directory, and of the project give, as
@@ -360,7 +362,8 @@ pub(super) fn standing(
   models: &[Model],
   directory: &str,
   actor: &str,
-  extensions: Option<&[Advertised]>,
+  skills: Option<&[Advertised]>,
+  members: &[String],
   user: &Path,
 ) -> Object {
   let given = configured(user, Path::new(directory));
@@ -373,17 +376,18 @@ pub(super) fn standing(
     let fields = [Object::string(&model.name), Object::list(efforts), Object::int(window)];
     Object::list(fields.into_iter().chain([Object::string(class.name())]).chain(place))
   });
-  // The operator answers in person, with no effort, reads the window of the engine, and costs no
-  // dollar.
+  // The operator answers in person, reads the window of the engine, and costs no dollar. In place
+  // of efforts it lists the logins of its members, so `operator/<login>` names one person, as
+  // `<model>/<effort>` names an effort.
   let operator = Object::list([
     Object::string(OPERATOR),
-    Object::list([]),
+    Object::list(members.iter().map(Object::string)),
     Object::int(WINDOW),
     Object::string(Class::Cheap.name()),
   ]);
   let roster = Object::list(offered.chain([operator]));
-  let home = std::env::home_dir();
-  let shown = |one: &Path| Object::string(crate::world::files::tilded(one, home.as_deref()));
+  let home = env::home_dir();
+  let shown = |one: &Path| Object::string(files::tilded(one, home.as_deref()));
   let doctrine = catalog::doctrine(Path::new(directory)).map(|one| shown(&one));
   let given = |all: &[Advertised]| {
     Object::list(all.iter().map(|(name, file, life, root)| {
@@ -391,12 +395,15 @@ pub(super) fn standing(
       Object::list(texts.into_iter().chain([Object::bool(*root)]))
     }))
   };
-  let advertised = extensions.filter(|_| doctrine.is_some()).map(given);
+  let advertised = skills.filter(|_| doctrine.is_some()).map(given);
+  let above =
+    advertised.as_ref().and(home.as_deref()).map(|one| Object::string(one.display().to_string()));
   Object::list(
     [roster, shown(Path::new(directory)), Object::string(actor)]
       .into_iter()
       .chain(doctrine)
-      .chain(advertised),
+      .chain(advertised)
+      .chain(above),
   )
 }
 

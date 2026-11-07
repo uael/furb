@@ -7,18 +7,22 @@ __pycache__/
 dist/
 .coverage
 traces/
-target/
+target
 # The extension maturin builds into the binding: made by the build, never source.
 *.so
 *.pyd
 *.node
-# The loader of the engine, which napi writes at each build of the TypeScript package.
+# The loader of the engine, which napi writes at each build of the TypeScript package, and the program furb of the tree,
+# which the build copies beside it.
 bind/typescript/index.cjs
+bind/typescript/furb
+bind/typescript/furb.exe
+bind/typescript/furb.new
 node_modules/
 # Of .furb/, only the config and the extensions of the project are source.
 .furb/*
 !.furb/config.json
-!.furb/extensions/
+!.furb/skills/
 # The config of a project on this machine alone, as its local models and its local extensions.
 .furb/config.local.json
 # The memory of a folder on this machine alone, which the memory extension reads after its AGENTS.md.

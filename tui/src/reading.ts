@@ -8,11 +8,12 @@ import {
   FileChanges,
   isQuestion,
   type LiveAct,
+  Meaning,
   questionKind,
   type Turn,
   WORK,
 } from "furb";
-import type { Exit, PauseCause } from "furb/life";
+import { type Exit, isDone, outcomeOf, type PauseCause } from "furb/life";
 import type { ActRow } from "./session.ts";
 
 /** Why a record opens to read: the engine that made it, as the record names it, the engine of this build, and what
@@ -138,37 +139,66 @@ export function reads(reading?: Reading): string {
 /** How many of the last characters of each stream of a command a row carries. */
 const TAIL = 2000;
 
-/** An act as a row of a snapshot: a write carries the lines that its change added and removed, and a command that
- * printed more than a tail carries the tail of each stream. An act carries its time when this window saw it run. */
-export function row(act: LiveAct, lines?: ActRow["lines"], took?: number): ActRow {
-  if (took !== undefined) return row({ ...act, took } as ActRow, lines);
-  // A read and a write carry the count of the lines of their text, and leave the text out, which the view reads whole
-  // when it shows it.
-  if (act.kind === "read" || act.kind === "write") {
-    const text = (act.kind === "write" ? act.words[0] : act.value) as { content?: unknown } | null;
+/** What a row keeps of the words and of the value of an act: a read and a write carry the count of the lines of their
+ * text and leave the text out, which the view reads whole when it shows it, and a command that printed more than a
+ * tail carries the tail of each stream and how many characters it printed. A row that a reader made already carries
+ * the count of the text that it left out. */
+function slim(
+  kind: string,
+  words: unknown[],
+  value: unknown,
+  count?: number,
+): { words: unknown[]; value: unknown; count?: number; output?: number } {
+  if (kind === "read" || kind === "write") {
+    const text = (kind === "write" ? words[0] : value) as { content?: unknown } | null;
     const bare = (one: unknown) =>
       one && typeof one === "object" && "content" in one ? { ...one, content: "" } : one;
     const content = typeof text?.content === "string" ? text.content : undefined;
     return {
-      ...act,
-      words: act.words.map(bare),
-      value: bare(act.value),
-      // A row that a reader made already carries the count of the text that it left out.
+      words: words.map(bare),
+      value: bare(value),
       ...(content === undefined
         ? {}
-        : { count: content ? content.replace(/\n$/, "").split("\n").length : ((act as ActRow).count ?? 0) }),
-      ...(lines ? { lines } : {}),
+        : { count: content ? content.replace(/\n$/, "").split("\n").length : (count ?? 0) }),
     };
   }
-  const exit: Exit = act.kind === "bash" ? (act.value as Exit) : {};
+  const exit: Exit = kind === "bash" ? ((value ?? {}) as Exit) : {};
   const streams = [exit?.stdout?.content ?? "", exit?.stderr?.content ?? ""];
-  if (streams.every((content) => content.length <= TAIL)) return act;
+  if (streams.every((content) => content.length <= TAIL)) return { words, value };
   const tail = (stream?: { content: string }) =>
     stream && { ...stream, content: stream.content.slice(-TAIL).replace(/^[\uDC00-\uDFFF]/, "") };
   return {
-    ...act,
+    words,
     value: { ...exit, stdout: tail(exit.stdout), stderr: tail(exit.stderr) },
     output: streams.join("").length,
+  };
+}
+
+/** An act as a row of a snapshot: an act of the daemon whose texts the row slims, a write with the lines that its
+ * change added and removed, a command that is not done with what it printed so far, and an act with its time when this
+ * window saw it run. */
+export function row(
+  act: ActRow,
+  lines?: ActRow["lines"],
+  took?: number,
+  printed?: { stdout: string; stderr: string },
+): ActRow {
+  const done = isDone(act);
+  const ran = printed && {
+    is: "Exit",
+    code: null,
+    stdout: { is: "Text", content: printed.stdout },
+    stderr: { is: "Text", content: printed.stderr },
+  };
+  const made = slim(act.kind, act.words, done ? outcomeOf(act) : ran, act.count);
+  return {
+    ...act,
+    words: made.words,
+    ...(done ? { phase: { phase: "done", value: made.value } } : ran ? { printed: made.value as Exit } : {}),
+    ...(made.count === undefined ? {} : { count: made.count }),
+    ...(made.output === undefined ? {} : { output: made.output }),
+    ...(lines ? { lines } : {}),
+    ...(took === undefined ? {} : { took }),
   };
 }
 
@@ -178,6 +208,8 @@ export function row(act: LiveAct, lines?: ActRow["lines"], took?: number): ActRo
 export class Reader {
   readonly root = "chain1";
   readonly activity = new Activity();
+  /** The meaning of the record as the crate folds it from each fact, as a daemon folds a life that runs. */
+  readonly meaning = new Meaning();
   readonly facts: Fact[] = [];
   readonly entries: Entry[] = [];
   readonly streams = new Map<string, never>();
@@ -224,7 +256,9 @@ export class Reader {
       for (const act of [...this.activity.acts.values()]) {
         if (act.done || act.began > at || !WORK.includes(act.kind) || !this.covers(fact, act.id)) continue;
         const ended = kind === "close" && act.id === about ? value : { is: "CancelledError", args: [] };
-        this.feed(["done", act.id, "", ended] as Fact);
+        const done = ["done", act.id, "", ended] as Fact;
+        this.feed(done);
+        this.meaning.hear(done as unknown[]);
       }
     }
   }
@@ -306,6 +340,8 @@ export class Reader {
     const whole = this.normalize(told);
     this.feed(whole);
     const fact = line ? this.cut(whole, line) : whole;
+    // The crate keeps of the fact what its row keeps, since the file holds its long texts whole.
+    this.meaning.told(JSON.stringify(line ? shortened(told) : told));
     this.facts.push(fact);
     const [kind, about] = fact;
     // A question stands in the transcript of the chain that it is on, and any other fact in that of what it is about.
@@ -330,11 +366,18 @@ export class Reader {
     if (short !== fact && act && (kind === "done" || isQuestion(kind, about)))
       this.whole.set(about, [...(this.whole.get(about) ?? []), line]);
     if (act?.done && this.whole.has(about)) {
-      const slim = ["read", "write", "bash"].includes(act.kind)
-        ? row(act)
-        : { ...act, words: shortened(act.words), value: shortened(act.value) };
+      const kept = act as LiveAct & { count?: number; output?: number };
+      const made: { words: unknown[]; value: unknown; count?: number; output?: number } = [
+        "read",
+        "write",
+        "bash",
+      ].includes(act.kind)
+        ? slim(act.kind, act.words, act.value, kept.count)
+        : { words: shortened(act.words), value: shortened(act.value) };
       // A part of a text holds the whole text in memory, so the parts that the act keeps are copies.
-      Object.assign(act, slim, { words: structuredClone(slim.words), value: structuredClone(slim.value) });
+      Object.assign(act, { words: structuredClone(made.words), value: structuredClone(made.value) });
+      if (made.count !== undefined) kept.count = made.count;
+      if (made.output !== undefined) kept.output = made.output;
     }
     return short === fact ? fact : structuredClone(short);
   }
