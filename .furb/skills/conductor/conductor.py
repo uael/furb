@@ -237,6 +237,35 @@ def number(p: str) -> int:
   return int(re.sub(r"\D", "", p) or 0)
 
 
+def holds() -> dict[str, str]:
+  """For each class with a free seat after admission, the cause that keeps each of its queued items from it."""
+  used, done, out = seats_used(), merged_keys(), {}
+  for k, room in ROOM_CAP.items():
+    if used.get(k, 0) >= room:
+      continue
+    why: list[str] = []
+    for t in TOPICS:
+      for x in desk_queue[t]:
+        if kind(str(x["model"])) == k:
+          wait = [a for a in afters_of(x) if a not in done]
+          busy = "fixes its CI" if desk_fixing.get(t) else "is at its width"
+          why.append(f"{x['key']} waits on {', '.join(wait)}" if wait else f"{x['key']}: {t} {busy}")
+    if why:
+      out[k] = "; ".join(why)
+  return out
+
+
+def idle_step() -> list[str]:
+  """Each seat that stays free has its cause on the record, told once for each change."""
+  held = holds()
+  text = "Free seats and their causes: " + " | ".join(f"{k}: {why}" for k, why in held.items()) if held else ""
+  if text == desk_text.get("holds", ""):
+    return []
+  desk_text["holds"] = text
+  desk_notes[:] = [n for n in desk_notes if not n.startswith("Free seats")]
+  return [text] if text else []
+
+
 def admit() -> None:
   while got := pick():
     t, item = got
@@ -833,7 +862,10 @@ def apply_cover(out: str, src: str) -> tuple[int, list[str], list[str], list[str
       covered += 1
     elif s.startswith("amend "):
       k, _, txt = s[6:].partition("|")
-      (amended if txt.strip() and amend_item(k.strip(), txt.strip(), src) else missed).append(k.strip() if txt.strip() else s[:200])
+      if txt.strip() and amend_item(k.strip(), txt.strip(), src):
+        amended.append(k.strip())
+      else:
+        missed.append(s[:300])
     elif s.count("|") >= 4:
       rows.append(s)
   return covered, amended, queue_found("\n".join(rows), src), missed
@@ -940,6 +972,7 @@ def desk_beat(every: float, floor: float) -> Generator[set[str], object, None]:
     desk_text["triage_last"] = said
     "not applied" in said and desk_notes.append(said)
   admit()
+  desk_notes.extend(idle_step())
   if desk_notes and (clock() - desk_time.get("notes_at", 0.0) >= HOUR or any(re.search(URGENT_NOTE, n) for n in desk_notes)):
     prompt(None, "Desk:\n" + "\n\n".join(desk_notes), on=ROOT)
     desk_notes.clear()
