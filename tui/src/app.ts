@@ -1042,7 +1042,8 @@ export class App {
               ? [
                   "Prompt",
                   c.danger,
-                  "No model answers yet. Fix the setup above, or watch a life, which needs none.",
+                  // The check of the setup stands in the welcome, which a feed that holds work covers.
+                  `No model answers yet. ${this.welcoming ? "Fix the setup above" : "Add a provider with /providers"}, or watch a life, which needs none.`,
                 ]
               : w.target
                 ? ["Prompt", threadTone(w.target), "Reply to the thread, or type / for commands"]
