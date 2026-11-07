@@ -441,3 +441,33 @@ fn an_open_thread_thinks_while_a_model_writes_a_word_for_it_and_else_runs() {
   let bash = json!(["bash", "bash1", "rung1", "chain1", "sleep 9", "", 120.0, null]);
   assert_eq!(states(vec![bash]), [State::Runs]);
 }
+
+#[test]
+fn a_stall_that_the_watch_tells_and_the_naming_of_the_session_are_notices_and_no_threads() {
+  // The facts of a record of the QA, scrubbed: the watch of the daemon tells a stall as a prompt
+  // of None in the name of the operator, and the naming skill asks a name on a chain of its own.
+  let facts = [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["rung", "rung12", "chain1", "chain1", "name_session()", "", ""]),
+    json!(["name_session", "name_session1", "rung12", "chain1"]),
+    json!(["prompt", "prompt1", "operator/uael", "chain1", "str", "Reply with pong.", ""]),
+    json!(["chain", "chain2", "name_session1", "chain1", "naming", ""]),
+    json!(["prompt", "prompt2", "name_session1", "chain2", "str", "Give a name to a session.", ""]),
+    json!([
+      "prompt",
+      "prompt5",
+      "operator",
+      "chain1",
+      "None",
+      "The chain chain1 had no change.",
+      ""
+    ]),
+  ];
+  let acts = folded(facts.clone());
+  let (threads, asides) = listed(&acts, "chain1");
+  assert_eq!(threads, names(&["prompt1"]));
+  assert_eq!(asides, vec![("prompt5".to_owned(), Aside::Notice)]);
+  assert_eq!(listed(&acts, "chain2"), (vec![], vec![("prompt2".to_owned(), Aside::Notice)]));
+  let rail = held(facts).rail(&[], None);
+  assert_eq!(shape(&rail), vec![("prompt1".to_owned(), vec![])]);
+}

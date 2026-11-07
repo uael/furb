@@ -1,5 +1,7 @@
 # ruff: noqa: S603, S607
+import contextlib
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -49,8 +51,20 @@ def env(tmp: Path, **more: str) -> dict[str, str]:
 
 
 def start(tmp: Path, *command: str, err: IO[str] | int = subprocess.PIPE, **more: str) -> subprocess.Popen[str]:
-  pipe = subprocess.PIPE
-  return subprocess.Popen(["sh", str(SCRIPT), *command], env=env(tmp, **more), text=True, stdout=pipe, stderr=err)
+  pipe, args = subprocess.PIPE, ["sh", str(SCRIPT), *command]
+  # A process group of its own, so end() also ends the step that heavy.sh started.
+  return subprocess.Popen(args, env=env(tmp, **more), text=True, stdout=pipe, stderr=err, start_new_session=True)
+
+
+def end(one: subprocess.Popen[str]) -> None:
+  """Ends the process group that start gave to one, closes its pipes and reaps it."""
+  # macOS gives EPERM for a group that holds only a zombie.
+  with one, contextlib.suppress(ProcessLookupError, PermissionError):
+    os.killpg(one.pid, signal.SIGKILL)
+
+
+def alive(pid: int) -> bool:
+  return subprocess.run(["ps", "-p", str(pid)], capture_output=True, check=False).returncode == 0
 
 
 def run(tmp: Path, *command: str, **more: str) -> subprocess.CompletedProcess[str]:
@@ -100,12 +114,14 @@ def test_more_steps_than_the_memory_holds_wait_and_start_only_as_it_frees(tmp_pa
       time.sleep(0.05)
     time.sleep(0.5)
     assert entered(log) == 4
-  finally:
     release.touch()
+    for one in runs:
+      one.communicate(timeout=60)
+  finally:
     for f in files:
       f.close()
     for one in runs:
-      one.communicate(timeout=60)
+      end(one)
   assert [one.returncode for one in runs] == [0] * 6
   held = peak = 0
   for line in log.read_text(encoding="utf-8").split():
@@ -113,6 +129,33 @@ def test_more_steps_than_the_memory_holds_wait_and_start_only_as_it_frees(tmp_pa
     peak = max(peak, held)
   assert peak == 4
   assert list((tmp_path / "slots").glob("slot*")) == []
+
+
+def test_a_wait_whose_caller_ended_ends_with_it(tmp_path: Path) -> None:
+  machine(tmp_path, 10)
+  mark = tmp_path / "ran"
+  # The caller starts the script, says its pid and waits for it, as a hook of a commit does.
+  body = f"sh {SCRIPT} touch {mark} & echo $!; wait"
+  caller = subprocess.Popen(
+    ["sh", "-c", body],
+    env=env(tmp_path),
+    text=True,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.DEVNULL,
+    start_new_session=True,
+  )
+  try:
+    assert caller.stdout is not None
+    waiter = int(caller.stdout.readline())
+    time.sleep(0.5)
+    caller.kill()
+    deadline = time.monotonic() + 15
+    while alive(waiter) and time.monotonic() < deadline:
+      time.sleep(0.05)
+    assert not alive(waiter)
+    assert not mark.exists()
+  finally:
+    end(caller)
 
 
 def test_a_step_inside_a_step_takes_no_second_slot(tmp_path: Path) -> None:
