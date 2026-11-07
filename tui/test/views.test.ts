@@ -307,10 +307,10 @@ test("a relative path that the operator types is read from the directory of the 
     expect(session.path("out.json")).toBe(join(directory, "out.json"));
     await session.submit("/export out.json");
     await session.submit("/share page.html");
-    await session.attachImage("pixel.png");
+    const mark = await session.attachImage("pixel.png");
     expect(JSON.parse(await Bun.file(join(directory, "out.json")).text()).chain).toBe(session.selected);
     expect(await Bun.file(join(directory, "page.html")).exists()).toBe(true);
-    expect(session.images[session.selected]?.map((image) => image.name)).toEqual(["pixel.png"]);
+    expect(mark).toStartWith("![pixel.png](");
   }));
 
 test("the stand and the cd that the World plays on a chain are no card of the conversation, though its turns bind the roster, the actor and the directory", () =>
