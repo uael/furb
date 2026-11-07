@@ -1,5 +1,5 @@
 import { isAbsolute, relative } from "node:path";
-import { asksOperator } from "furb/life";
+import { asksOperator, operated } from "furb/life";
 import { shortenHome } from "../files.ts";
 import { clip } from "../format.ts";
 import type { ActRow } from "../session.ts";
@@ -80,9 +80,16 @@ export const tree = part({
   /** Whether an act is a point that a branch can start from: an act that a turn of its chain tells, which is no
    * chain, no grant, and no rung that its chain wrote to retell its source. */
   isPoint(act: ActRow): boolean {
+    const w = this.session;
+    // A step that a skill plays is a rung that no act and no operator made, as the feed folds it: neither it nor what
+    // it made is a point to go back to.
+    const skill = (one: ActRow | undefined) =>
+      one?.kind === "rung" && !operated(one.by) && w.actOf(one.by) === undefined;
     return (
       !["chain", "grant"].includes(act.kind) &&
-      (act.kind !== "rung" || this.session.actOf(act.by)?.kind !== "chain")
+      (act.kind !== "rung" || w.actOf(act.by)?.kind !== "chain") &&
+      !skill(act) &&
+      !skill(w.actOf(act.by))
     );
   },
 
@@ -250,15 +257,23 @@ export const tree = part({
     tree.rows = this.treeRows();
     if (!tree.rows.some((row) => row.id === selected)) tree.selected = tree.rows[0]?.id ?? "";
     const width = this.feedWidth;
-    if (this.paneChanged(this.treeBar, [this.theme, width, tree.title])) {
+    // A list that scrolled says how many rows stand above the first row shown.
+    const above = this.scroll.scrollTop;
+    if (this.paneChanged(this.treeBar, [this.theme, width, tree.title, above])) {
       this.clear(this.treeBar);
       const note =
         tree.title === "Rewind"
           ? "Choose a point to go back to, with the files as they were or not. A change by a command stays."
           : "Open a chain, or go back to a point, with the files as they were or not. A change by a command stays.";
       // The note is cut at its end where the bar has no room for it beside the title and the key that leaves.
+      const mark = above > 0 ? `${glyph.up} ${above} ${above === 1 ? "row" : "rows"} above` : "";
       const room =
-        width - space.inset * 2 - Bun.stringWidth(tree.title) - space.between * 2 - Bun.stringWidth("Esc");
+        width -
+        space.inset * 2 -
+        Bun.stringWidth(tree.title) -
+        space.between * 3 -
+        Bun.stringWidth("Esc") -
+        Bun.stringWidth(mark);
       this.treeBar.add(
         this.line(
           [
@@ -269,6 +284,7 @@ export const tree = part({
           { flexGrow: 1, flexShrink: 1 },
         ),
       );
+      if (mark) this.treeBar.add(this.text(mark, c.muted, { marginRight: space.between }));
       this.treeBar.add(this.text("Esc", c.faint, { run: () => this.closeTree() }));
     }
     if (
@@ -317,12 +333,7 @@ export const tree = part({
       if (tag) line.add(this.line(tag, active ? c.muted : c.faint));
       this.scroll.add(line);
     }
-    // A pointer in the first rows of a list that fits the view leaves the root in view, where a scroll to the pointer
-    // alone hid the root and the first rows hung from a joint that joined nothing.
-    const at = tree.rows.findIndex((row) => row.id === tree.selected);
-    this.scrollAfterLayout(
-      at >= 0 && at < Math.max(1, this.scroll.viewport.height - 1) ? 0 : { card: `tree-${tree.selected}` },
-    );
+    this.scrollAfterLayout({ card: `tree-${tree.selected}` });
   },
 
   /** Parts cut to a width at their end, with the mark of a cut. */
