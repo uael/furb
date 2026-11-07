@@ -46,7 +46,7 @@ repos:
       - id: pytest
         name: pytest
         # The tests that the files of the commit reach, which script/hooks/reach.py names; the gates give every file.
-        entry: python3 script/hooks/reach.py pytest
+        entry: python3 script/budget.py pytest -- python3 script/hooks/reach.py pytest
         language: system
         # The suite drives the engine through furb-monty, which builds the crate, so a change of the Rust is read too.
         types_or: [python, pyi, toml, json, rust]

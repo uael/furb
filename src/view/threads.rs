@@ -10,7 +10,7 @@ use serde_json::Value;
 use super::{
   act::{Act, Kind, WATCH, operator},
   fold::followed,
-  named::{NAME, Named},
+  named::NAME,
   state::{State, working},
 };
 
@@ -313,7 +313,7 @@ fn sorted(on: &[&Act], rows: &Rows<'_>) -> (Vec<ChainThread>, Vec<ChainAside>) {
   }
   asides.sort_by_key(|one| one.0);
   let asides = asides.into_iter().map(|one| one.1).collect();
-  named(&mut out, on, rows);
+  named(&mut out, rows);
   for thread in &mut out {
     let acts = std::iter::once(&thread.prompt).chain(&thread.messages);
     let open = acts.filter_map(|id| rows.get(id.as_str())).rfind(|act| !act.done());
@@ -349,25 +349,25 @@ fn work_of<'a>(prompt: &str, on: &[&'a Act]) -> Vec<&'a Act> {
     .collect()
 }
 
-/// Each thread of a chain takes its name: the first thread that no operator made on a chain under
-/// the root takes the label of that chain, and the first thread of the operator on the root the
-/// name of the session, when each stands. Any other keeps the first line of its message.
-fn named(out: &mut [ChainThread], on: &[&Act], rows: &Rows<'_>) {
+/// The first thread that no operator made on a chain under the root takes the label of that chain.
+/// Any other thread keeps the first line of its own message, also each thread of the root: the
+/// name of the session stands on the row of the session alone, and a thread never takes it.
+fn named(out: &mut [ChainThread], rows: &Rows<'_>) {
   let Some(chain) = out.first().and_then(|one| rows.get(one.prompt.as_str())).map(|act| &act.chain)
   else {
     return;
   };
   let Some(chain) = rows.get(chain.as_str()).filter(|act| act.kind == Kind::Chain) else { return };
-  let root = chain.on.is_empty();
-  let name = if root {
-    Named::of_acts(on).name().map(|one| one.trim().to_owned())
-  } else {
-    chain.words.first().and_then(Value::as_str).map(str::trim).map(str::to_owned)
+  if chain.on.is_empty() {
+    return;
+  }
+  let Some(name) =
+    chain.words.first().and_then(Value::as_str).map(str::trim).filter(|one| !one.is_empty())
+  else {
+    return;
   };
-  let Some(name) = name.filter(|one| !one.is_empty()) else { return };
-  let first = out.iter_mut().find(|one| (one.origin == Origin::Operator) == root);
-  if let Some(first) = first {
-    first.title = name;
+  if let Some(first) = out.iter_mut().find(|one| one.origin != Origin::Operator) {
+    name.clone_into(&mut first.title);
   }
 }
 

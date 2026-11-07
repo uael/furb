@@ -25,7 +25,7 @@ def hooks() -> dict[str, dict]:
 def test_the_hooks_of_the_tests_give_all_the_files_of_the_commit_to_the_reach_in_one_call() -> None:
   for name, kind in (("pytest", "pytest"), ("cargo-test", "cargo")):
     hook = hooks()[name]
-    assert hook["entry"] == f"python3 script/hooks/reach.py {kind}"
+    assert hook["entry"].endswith(f"python3 script/hooks/reach.py {kind}")
     assert hook.get("pass_filenames", True) and hook["require_serial"]
 
 

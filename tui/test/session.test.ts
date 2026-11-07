@@ -120,15 +120,13 @@ test("the setup of a demo life reads the doctrine of its own project, and no pat
   }
 });
 
-test("a follow-up goes to the chain that the operator sent it on, with its images, whatever chain he shows meanwhile", async () => {
+test("a follow-up goes to the chain that the operator sent it on, whatever chain he shows meanwhile", async () => {
   const session = await demoSession();
   const { engine, host } = session;
   const queue = host.queue;
   try {
     const a = session.selected;
     const b = await engine.chain({ label: "Other" });
-    const image = (name: string) =>
-      ({ name, uri: `furb-image://${name}`, mime: "image/png", size: 1 }) as never;
     const asked: unknown[][] = [];
     for (const at of ["read", "queue"] as const) {
       let open = () => {};
@@ -152,16 +150,12 @@ test("a follow-up goes to the chain that the operator sent it on, with its image
         if (at === "queue") await gate;
       };
       await session.select(a);
-      session.images = { [a]: [image(`a-${at}`)], [b]: [image(`b-${at}`)] };
       const sent = session.enqueue(`Sent on the first chain, ${at}`);
       await session.select(b);
       open();
       await sent;
       expect(asked.at(-1)?.slice(0, 1).concat(asked.at(-1)?.slice(2))).toEqual(["str", a]);
-      expect(String(asked.at(-1)?.[1])).toContain(`a-${at}`);
-      expect(String(asked.at(-1)?.[1])).not.toContain(`b-${at}`);
-      expect(session.images[a]).toBeUndefined();
-      expect(session.images[b]?.map((one) => one.name)).toEqual([`b-${at}`]);
+      expect(String(asked.at(-1)?.[1])).toBe(`Sent on the first chain, ${at}`);
     }
   } finally {
     Object.assign(session, { engine });
@@ -170,15 +164,13 @@ test("a follow-up goes to the chain that the operator sent it on, with its image
   }
 });
 
-test("a message goes to the chain that the operator sent it on, with its images, whatever chain he shows meanwhile", async () => {
+test("a message goes to the chain that the operator sent it on, whatever chain he shows meanwhile", async () => {
   const session = await demoSession();
   const { engine } = session;
   const prompt = engine.prompt;
   try {
     const a = session.selected;
     const b = await engine.chain({ label: "Other" });
-    const image = (name: string) =>
-      ({ name, uri: `furb-image://${name}`, mime: "image/png", size: 1 }) as never;
     const asked: { message?: string; on?: string }[] = [];
     for (const at of ["read", "prompt"] as const) {
       let open = () => {};
@@ -206,16 +198,12 @@ test("a message goes to the chain that the operator sent it on, with its images,
       });
       await session.select(a);
       session.aim();
-      session.images = { [a]: [image(`a-${at}`)], [b]: [image(`b-${at}`)] };
       const sent = session.submit(`Sent on the first chain, ${at}`);
       await session.select(b);
       open();
       await sent;
       expect(asked.at(-1)?.on).toBe(a);
-      expect(asked.at(-1)?.message).toContain(`a-${at}`);
-      expect(asked.at(-1)?.message).not.toContain(`b-${at}`);
-      expect(session.images[a]).toBeUndefined();
-      expect(session.images[b]?.map((one) => one.name)).toEqual([`b-${at}`]);
+      expect(asked.at(-1)?.message).toBe(`Sent on the first chain, ${at}`);
     }
   } finally {
     Object.assign(session, { engine });
@@ -417,8 +405,7 @@ const session = await demoSession();
 try {
   await session.submit("/share ~/shared/chat.html");
   await session.submit("/export ~/export.json");
-  await session.attachImage("~/pixel.png");
-  console.log(JSON.stringify({ images: session.images[session.selected]?.length }));
+  console.log(JSON.stringify({ mark: (await session.attachImage("~/pixel.png")).split("](")[0] + "]" }));
 } finally {
   await session.dispose();
   await removeDemoDirectories();
@@ -439,7 +426,7 @@ try {
     ]);
     expect(errors).toBe("");
     expect(code).toBe(0);
-    expect(JSON.parse(output)).toEqual({ images: 1 });
+    expect(JSON.parse(output)).toEqual({ mark: "![pixel.png]" });
     expect(await readFile(join(home, "shared/chat.html"), "utf8")).toContain("<!doctype html>");
     expect(JSON.parse(await readFile(join(home, "export.json"), "utf8")).chain).toBe("chain1");
     expect(existsSync(join(home, "~"))).toBe(false);

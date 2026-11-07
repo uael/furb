@@ -2,13 +2,12 @@ import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
-import type { FileChange, ImageAttachment, SetupInfo, Turn } from "furb";
+import type { FileChange, SetupInfo, Turn } from "furb";
 import {
   actorParts,
   decodeRecord,
   enabled,
   furbDirectory,
-  imagePath,
   imageReference,
   imageReferences,
   ROOT,
@@ -194,8 +193,6 @@ interface Index {
    * a chain depend on its prompts alone, so an act of another kind reads no thread again. */
   threaded: Map<string, number>;
   prompts: number;
-  /** How many times an act that names the session came or changed. */
-  named: number;
   /** The chain of each act that came or changed, once each time, which tells the board which chains to read again. */
   touched: string[];
   /** The writes that are done, in the order that the session saw them done. */
@@ -251,8 +248,6 @@ function placed(index: Index, act: ActRow): void {
   // A prompt tells that a thread changed, and so does a step that works for one, whose model thinks while it asks.
   if (act.kind === "prompt" || (act.kind === "rung" && index.ids.get(act.by)?.kind === "prompt"))
     index.threaded.set(act.chain, ++index.prompts);
-  // A name of the session names the first thread of the operator in the crate, so it reads the threads again.
-  if (act.kind === "name_session" || act.kind === "rename_session") index.named++;
   index.touched.push(act.chain);
   const latest = index.latest.get(act.chain);
   if (
@@ -290,7 +285,6 @@ function indexOf(acts: readonly ActRow[], prompts = 0): Index {
     stamps: new Map(),
     chained: new Map(),
     threaded: new Map(),
-    named: 0,
     prompts,
     touched: [],
     written: [],
@@ -348,7 +342,6 @@ const kept = [
   "started",
   "changedAt",
   "took",
-  "images",
   "redo",
   "drafts",
   "scrolls",
@@ -378,7 +371,6 @@ const forms: Record<(typeof kept)[number] | "cost", "text" | "flag" | "number" |
   started: "map",
   changedAt: "map",
   took: "map",
-  images: "map",
   redo: "maps",
   drafts: "map",
   scrolls: "map",
@@ -556,7 +548,6 @@ export class Session extends EventEmitter {
   models: string[] = [];
   findings: string[] = [];
   rejectedWord = "";
-  images: Record<string, ImageAttachment[]> = {};
   redo: { from: string; to: string }[] = [];
   private savedCost = 0;
   /** The folder that owns the history of the workspace of the session: the main checkout, for a worktree. */
@@ -1156,10 +1147,9 @@ export class Session extends EventEmitter {
   private readonly crateThreads = new Map<string, { stamp: number; owed: string; got: Threads }>();
   /** The reads of the threads of a chain that the session waits for, one for each chain. */
   private readonly askingThreads = new Map<string, Promise<void>>();
-  /** What the threads read beside the prompts of a chain: the questions that wait now, and the acts that name the
-   * session, whose name the crate gives the first thread of the operator. */
+  /** What the threads read beside the prompts of a chain: the questions that wait now. */
   private get owedNow(): string {
-    return `${[...this.host.prompts.keys()].join(" ")}\n${this.indexed().named}`;
+    return [...this.host.prompts.keys()].join(" ");
   }
   /** Whether the threads that the crate gave of a chain are of the prompts and the questions of now. */
   threadsFresh(chain: string): boolean {
@@ -1675,18 +1665,20 @@ export class Session extends EventEmitter {
     const [name] = path.split("/");
     return this.indexed().ids.get(name ?? "");
   }
-  async attachImage(path: string): Promise<void> {
+  /** An image attached to a message: the mark that the message holds for it, which the window puts in the text where
+   * the operator is, so the message keeps the order of its text and its images. */
+  async attachImage(path: string): Promise<string> {
     if (!(await this.host.sees(this.actor)))
       throw new Error("Choose a model that accepts images before attaching one.");
     const image = await this.host.attachImage(this.path(path));
-    const images = this.images[this.selected] ?? [];
-    this.images[this.selected] = images;
-    if (!images.some((current) => current.uri === image.uri)) images.push(image);
-    this.save();
     this.notice = `${image.name} attached.`;
+    return imageReference(image.name, image.uri);
   }
-  private withImages(text: string, images = this.images[this.selected] ?? []): string {
-    return [text, ...images.map(({ name, uri }) => imageReference(name, uri))].join("\n");
+  /** The name, with no suffix, of the next image that a message takes from the clipboard: image-N, with N one past
+   * the highest that the text of the message names. The one home of the name of a pasted image. */
+  imageStem(text: string): string {
+    const taken = imageReferences(text).map((one) => /^image-(\d+)\./.exec(one.name)?.[1]);
+    return `image-${Math.max(0, ...taken.map(Number).filter(Number.isFinite)) + 1}`;
   }
   /** The name of a chain: its label, or Main for the root. */
   labelOf(id: string): string {
@@ -1787,12 +1779,8 @@ export class Session extends EventEmitter {
     if (!text.trim()) return;
     // The follow-up goes where the operator sent it, whatever chain he shows while the reads and the queue answer.
     const { selected: chain, shape } = this;
-    const images = [...(this.images[chain] ?? [])];
     await this.attachFiles(text, chain, false);
-    await this.host.queue(shape, this.withImages(text, images), chain);
-    const left = (this.images[chain] ?? []).filter((one) => !images.includes(one));
-    if (left.length) this.images[chain] = left;
-    else delete this.images[chain];
+    await this.host.queue(shape, text, chain);
     this.save();
     this.notice = "Follow-up queued.";
   }
@@ -1851,7 +1839,7 @@ export class Session extends EventEmitter {
     const omitted = this.activity.slice(message ? at : at + 1).map((later) => later.id);
     const branch = await this.branch(label ?? this.branchLabel(), omitted);
     if (files) await this.restoreFiles(files, branch);
-    if (message) await this.restore(String(act.words[1] ?? ""));
+    if (message) this.restore(String(act.words[1] ?? ""));
     const kept = files
       ? `${this.restored(files)} The module keeps its state.`
       : "The module and the files keep their state.";
@@ -2023,17 +2011,9 @@ export class Session extends EventEmitter {
     this.moment = undefined;
     return this.rewind(last.id, undefined, await this.filesAt(last.id));
   }
-  /** A message sent before as the draft of the composer, with the images it referred to attached again. */
-  private async restore(text: string): Promise<void> {
-    let message = text;
-    for (const reference of imageReferences(message)) {
-      const image = await this.host.attachImage(imagePath(this.host.imageDirectory, reference.uri).path);
-      image.name = reference.name || image.name;
-      this.images[this.selected] ??= [];
-      this.images[this.selected]?.push(image);
-      message = message.replace(reference.text, "");
-    }
-    this.emit("compose", message.trimEnd());
+  /** A message sent before as the draft of the composer, with the marks of its images where they stood. */
+  private restore(text: string): void {
+    this.emit("compose", text.trimEnd());
   }
   /** The last act that the operator made on the chain shown and that is not over: the message, the word or the
    * command of his that the feed shows last. A cancel that names no act ends it. */
@@ -2205,22 +2185,18 @@ export class Session extends EventEmitter {
         // The message goes where the operator sent it, whatever chain he shows while the reads and the prompt answer.
         const { selected: chain, shape } = this;
         const thread = this.target;
-        const images = [...(this.images[chain] ?? [])];
         await this.attachFiles(input, chain);
         this.redo = [];
         this.fresh = false;
         this.pinned = undefined;
         const id = thread
           ? await this.engine.prompt(this.lineShape(thread), {
-              message: this.withImages(input, images),
+              message: input,
               on: thread,
             })
-          : await this.engine.prompt(shape, { message: this.withImages(input, images), on: chain });
+          : await this.engine.prompt(shape, { message: input, on: chain });
         if (thread) this.notice = `Your message went to the thread ${thread}.`;
         this.sentTo.set(id, thread);
-        const left = (this.images[chain] ?? []).filter((one) => !images.includes(one));
-        if (left.length) this.images[chain] = left;
-        else delete this.images[chain];
         this.save();
         this.track(id);
       }
