@@ -341,6 +341,16 @@ impl<'a> Reply<'a> {
     }
   }
 
+  /// A message that the command line says whole: its blocks, and its usage, which grows what the
+  /// reply holds, since the command line settles a message with the usage of its start, and may do
+  /// so after the delta that says the whole usage.
+  pub(super) fn said(&mut self, message: &Said) {
+    if let Some(usage) = &message.usage {
+      self.spent.get_or_insert_default().grow(usage);
+    }
+    self.settled(&message.content);
+  }
+
   /// The blocks of a message that the command line says whole. It says each block again, once it is
   /// whole, in the order it streamed them: the whole block stands over the one streamed at its
   /// place, and never twice. A message that did not stream is told as it comes.

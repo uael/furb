@@ -494,8 +494,7 @@ impl Conversation {
       match event {
         Event::Stream { event } => reply.streamed(&event),
         Event::Assistant { message } => {
-          reply.spent = message.usage.or_else(|| reply.spent.take());
-          reply.settled(&message.content);
+          reply.said(&message);
         }
         Event::Result(result) => return self.concluded(&result, reply, process),
         Event::ControlResponse { .. } | Event::Other => {}

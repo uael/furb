@@ -326,6 +326,16 @@ fn a_turn_of_many_requests_says_the_usage_of_its_last_request() {
 }
 
 #[test]
+fn a_message_settled_after_its_delta_leaves_the_tokens_out_that_the_delta_said() {
+  let yard = Yard::new("late");
+  let model = yard.claude(10_000).completion_model("sonnet");
+  let got = asked(&model, &[user("LATE")], json!({"session": "chain"})).unwrap();
+  let spent = got.usage;
+  let counts = (spent.input_tokens, spent.output_tokens, spent.cached_input_tokens);
+  assert_eq!(counts, (10, 5, 20));
+}
+
+#[test]
 fn the_next_turn_of_a_conversation_writes_to_its_process_only_what_it_has_not_heard() {
   let yard = Yard::new("next");
   let model = yard.claude(10_000).completion_model("sonnet");

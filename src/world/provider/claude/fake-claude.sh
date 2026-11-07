@@ -201,6 +201,8 @@ while IFS= read -r line; do
   # token out, and the delta at its end says what it spent in all.
   settle "{\"type\":\"text\",\"text\":$word}" "{\"input_tokens\":10,\"output_tokens\":1,\"cache_read_input_tokens\":20,\"cache_creation_input_tokens\":3}"
   say '{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":20,"cache_creation_input_tokens":3}}'
+  # A line that holds LATE gets a message settled again after its delta, with the usage of its start.
+  case $line in *LATE*) settle "{\"type\":\"text\",\"text\":$word}" "{\"input_tokens\":10,\"output_tokens\":1,\"cache_read_input_tokens\":20,\"cache_creation_input_tokens\":3}" ;; esac
   say '{"type":"message_stop"}'
   paid="0.0$n"
   if [ -f "$here/cost" ]; then paid=$(awk "BEGIN { print $n * $(cat "$here/cost") }"); fi
