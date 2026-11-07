@@ -61,8 +61,9 @@ export const graphemes = new Intl.Segmenter();
  * the end of a path. It fills the width to its last cell, and shows no ellipsis where none fits. */
 export function clip(line: string, width: number, keep: "start" | "end" = "start"): string {
   if (Bun.stringWidth(line) <= width) return line;
-  // One measure, Bun.stringWidth, says both the guard and the cut, and the cut reads only the graphemes that it keeps
-  // from the side that stays, so a long text costs what the room shows.
+  // One measure, Bun.stringWidth, says both the guard and the cut. A cut that keeps the start reads graphemes only as
+  // far as the room goes, so a long line costs what the room shows. A cut that keeps the end segments the line once
+  // to read it from its last grapheme, which costs the length of the line.
   const parts =
     keep === "end"
       ? [...graphemes.segment(line)].map(({ segment }) => segment).reverse()
