@@ -162,7 +162,7 @@ async def test_a_fix_of_ci_pauses_the_live_items_of_its_topic_takes_each_new_fai
   assert conductor.engine.peek(fix) == "fixed at h3"
   await conductor.beat()
   assert (conductor.engine.paused(one), conductor.engine.paused(two)) == (False, True)
-  assert "a ended the fix" in conductor.ns["desk_notes"][-1]
+  assert any("a ended the fix" in x for x in conductor.ns["desk_notes"])
 
 
 async def test_a_cycle_starts_on_a_new_print_a_floor_after_the_start_of_the_last_and_sends_each_failure_to_its_topic(conductor: Round) -> None:
@@ -405,3 +405,50 @@ async def test_the_proof_lane_runs_one_batch_at_a_time_on_its_chain(conductor: R
   await conductor.beat()
   assert len(conductor.asked()) == 2
   assert conductor.ns["desk_notes"][-1].startswith(f"The proof lane ended {first}: proved 2 of 5 at abc. It started proof-2")
+
+
+async def test_a_scripted_round_fills_each_free_seat_with_ready_work_hard_first_and_records_the_cause_of_each_seat_left_free(conductor: Round) -> None:
+  await conductor.word("""ROOM_CAP.update({"sonnet/high": 2, "sonnet/medium": 1, "opus/high": 1})
+desk_width.update({"a": 2, "b": 1})
+POLISH_KEYS.append("shine")
+desk_queue["a"].extend([item("shine"), item("deep", p=1), item("later", "claude-cli:opus/high", after=["deep"])])
+desk_queue["b"].extend([item("fix-b", p=0), item("tidy-b", "claude-cli:sonnet/medium")])""")
+  await conductor.beat()
+  assert conductor.keys() == ["fix-b", "deep"]
+  (said_,) = [x for x in conductor.ns["desk_notes"] if x.startswith("Free seats")]
+  assert "opus/high 1 free: later waits on deep" in said_ and "sonnet/medium 1 free: tidy-b: b runs 1 of its width 1" in said_
+  await conductor.beat()
+  assert len([x for x in conductor.ns["desk_notes"] if x.startswith("Free seats")]) == 1
+  deep = [x[0] for x in conductor.asked() if x[3].startswith("Item deep")][0]
+  await conductor.end(deep, "done")
+  await conductor.word("desk_time['merged_upto'] = clock() + 1")
+  await conductor.beat()
+  assert conductor.keys() == ["fix-b", "deep", "later", "shine"]
+  assert not any(x[6] == "operator" for x in said(conductor.log, "prompt") if x[4] != "None" and x[3] != conductor.root)
+
+
+async def test_a_part_of_the_owner_that_no_item_holds_reaches_the_lead_at_once(conductor: Round) -> None:
+  await conductor.word("SIDE[:] = [words_step]\ndesk_time['notes_at'] = clock()")
+  conductor.engine.prompt(str, "Do x.", on=conductor.root)
+  await conductor.beat()
+  ((judge, *_),) = [x for x in conductor.asked() if x[1] == "words"]
+  await conductor.end(judge, "amend ghost | x, verbatim")
+  await conductor.beat()
+  assert any("not applied: ['ghost']" in x for x in conductor.notes(conductor.root))
+
+
+async def test_a_restart_keeps_the_count_of_merges_so_one_audit_comes_at_the_fourth_and_the_turns_go_on(tmp_path: Path) -> None:
+  (tmp_path / "one").mkdir()
+  (tmp_path / "two").mkdir()
+  first = Round(tmp_path / "one")
+  await first.load(TEST)
+  for n in range(3):
+    await first.word(f"merges_step('head h{n}')")
+  kept = {name: first.ns[name] for name in ("desk_time", "desk_text", "desk_queue", "desk_live")}
+  again = Round(tmp_path / "two")
+  await again.word("\n".join(f"{name} = {value!r}" for name, value in kept.items()))
+  await again.load(TEST)
+  await again.word("merges_step('head h2')\nmerges_step('head h3')")
+  assert [(x["key"], x["model"]) for x in again.ns["desk_queue"]["review"]] == []
+  await again.word("merges_step('head h4')\nmerges_step('head h4')")
+  assert [(x["key"], x["model"]) for x in again.ns["desk_queue"]["review"]] == [("align-audit-m4", "codex:gpt-6-astra/high")]
