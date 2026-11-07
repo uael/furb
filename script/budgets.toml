@@ -1,0 +1,11 @@
+# The seconds that a warm run of each part of the suite may take. A run past its limit fails and names its slowest
+# tests. One home: the hooks and the gates both run each part through script/budget.py, which reads its limit here.
+# [local] holds the limits of this machine, [ci] those of a runner of the gates, which is slower. A part with no limit
+# here has none that its run fits yet: it reports its time and fails never.
+# Measured on 11-07: pytest took 45 s on this machine and 93 to 114 s on the runners. A limit is never raised to pass:
+# make the run faster.
+[local]
+pytest = 90
+
+[ci]
+pytest = 180
