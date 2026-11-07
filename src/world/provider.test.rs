@@ -194,7 +194,7 @@ fn the_provider_answers_a_stand_with_its_roster_its_directory_its_default_actor_
 }
 
 #[test]
-fn a_standing_that_gives_extensions_ends_with_the_absolute_home_of_the_user() {
+fn a_standing_that_gives_skills_ends_with_the_absolute_home_of_the_user() {
   let at = yard("home");
   let memory = ("memory".to_owned(), "memory.py".to_owned(), String::new(), false);
   let model = scripted(&MockCompletionModel::new([]));

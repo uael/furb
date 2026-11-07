@@ -105,7 +105,7 @@ async def test_the_world_hears_every_fact(tmp_path: Path) -> None:
   assert not (tmp_path / "scratch:").exists() and not (tmp_path / "plan.md").exists()
 
 
-async def test_the_world_performs_any_fact_that_an_extension_defines_and_that_the_world_knows() -> None:
+async def test_the_world_performs_any_fact_that_a_skill_defines_and_that_the_world_knows() -> None:
   """The World performs any fact that an extension defines and that the World knows."""
   sand = Knows()
   _, root = life(sand)

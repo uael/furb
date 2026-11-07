@@ -315,12 +315,6 @@ export declare function enabled(root: unknown[][]): Array<Skill>
 export declare const ENGINE: string
 
 /**
- * The ear of the extensions, given each extension that the life runs: it enables each at the tip of the life,
- * unless the record enables it, and plays each as a rung on each chain.
- */
-export declare function extensions(given: Array<Skill>): NativeEar
-
-/**
  * The ear of the files, which reads and writes a path, a path of `scratch://` in the scratch
  * directory that the host names, which the ear of commands is given too, and a path of `config://`
  * in the config directory of the user, the one of this process when the host names none.
@@ -374,7 +368,7 @@ export declare function imageType(data: Uint8Array): ImageType
 /** The type of an image: its media type and its extension. */
 export interface ImageType {
   mimeType: string
-  extension: string
+  suffix: string
 }
 
 /**
@@ -510,7 +504,7 @@ export interface Opening {
    * Whether the life enables at its tip the extensions that the configs turn on; true when unsaid. A life runs what
    * its record enables either way.
    */
-  extensions?: boolean
+  skills?: boolean
   /**
    * The config directory of the user, which the configs and the official extensions read; the one of this process
    * when unsaid.
@@ -591,6 +585,12 @@ export interface Part {
  * one, as the configs of the user and of the project say it now, which a TUI loads beside the life.
  */
 export declare function parts(project: string): Array<Part>
+
+/**
+ * The ear of the extensions, given each extension that the life runs: it enables each at the tip of the life,
+ * unless the record enables it, and plays each as a rung on each chain.
+ */
+export declare function played(given: Array<Skill>): NativeEar
 
 /**
  * A provider as a first run checks it: its name, the names of its credential in the environment, whether the

@@ -92,7 +92,7 @@ class ImageType(TypedDict):
   """The type of an image: its media type and its extension."""
 
   mime_type: str
-  extension: str
+  suffix: str
 
 class Named(TypedDict):
   """An image a message names: its text in the message, its name, and its uri."""
@@ -118,7 +118,7 @@ class Inspection(TypedDict):
 
 class Opening(TypedDict):
   """What a life is opened on, which every host gives the same. Each part that is unsaid takes its default: no
-  record, a life that keeps and does work and enables the extensions that the configs turn on, the config directory of
+  record, a life that keeps and does work and enables the skills that the configs turn on, the config directory of
   this process, and the first model the catalog offers."""
 
   directory: str
@@ -126,7 +126,7 @@ class Opening(TypedDict):
   keeps: NotRequired[bool | None]
   inspecting: NotRequired[bool | None]
   whole: NotRequired[bool | None]
-  extensions: NotRequired[bool | None]
+  skills: NotRequired[bool | None]
   config: NotRequired[str | None]
   actor: NotRequired[str | None]
   roster: NotRequired[list[str] | None]
@@ -175,7 +175,7 @@ class Engine:
   @staticmethod
   def open(ears: Ears, **opening: Unpack[Opening]) -> Engine:
     """A life opened as every host of the crate opens one: on its record, on these ears of the host, and then on the
-    ears of the crate and of the extensions. A life whose record drifted is refused."""
+    ears of the crate and of the skills. A life whose record drifted is refused."""
 
   @property
   def root(self) -> str:
@@ -299,7 +299,7 @@ def decode_record(line: str) -> object:
 
 def opened(**opening: Unpack[Opening]) -> tuple[list[list[list[object]]], list[tuple[str, NativeEar]]]:
   """The record a life opens on, and the ears of the crate that it hears after the ears of the host, as every host of
-  the crate opens a life: the provider, the extensions, each official extension, the files, the commands, time, and
+  the crate opens a life: the provider, the skills, each official extension, the files, the commands, time, and
   the store of the record when the life keeps."""
 
 def gate(sheet: str) -> list[tuple[int, str]]:
@@ -312,7 +312,7 @@ def official() -> list[Skill]:
 def enabled(root: Iterable[Iterable[object]]) -> list[Skill]:
   """The extensions that a life runs, in the order it enabled them, as the facts of its root say them."""
 
-def extensions(given: list[Skill]) -> NativeEar:
+def played(given: list[Skill]) -> NativeEar:
   """The ear of the extensions, given each extension that the life runs: it enables each at the tip of the life,
   unless the record enables it, and plays each as a rung on each chain."""
 

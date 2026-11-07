@@ -133,7 +133,7 @@ def extended(  # noqa: PLR0913
   (at / "work").mkdir(exist_ok=True)
   before = [x for x in _monty.official() if x["name"] in also]
   enabled = [*before, one if lives else {**one, "life": ""}]
-  given = _monty.extensions(enabled)
+  given = _monty.played(enabled)
   taught = []
   if doctrine:
     (path := at / "DOCTRINE.md").write_text(doctrine, encoding="utf-8", newline="")
@@ -145,7 +145,9 @@ def extended(  # noqa: PLR0913
     ]
   sand = replace(sand or sown(), stands=[list(roster) or STANDS[0], str(at / "work"), STANDS[2], *taught])
   files = _monty.files(str(at / "scratch"), str(at / "config"))
-  return sand, life(sand, record, extensions=given, **({name: ear(str(at / "config"))} if ear else {}), files=files)[1]
+  return sand, life(
+    sand, record, **{"extensions": given}, **({name: ear(str(at / "config"))} if ear else {}), files=files
+  )[1]
 
 
 def naming(
@@ -162,9 +164,9 @@ CATCHUP = next(x for x in _monty.official() if x["name"] == "catchup")
 """CATCHUP is the official extension catchup, with its life word."""
 
 
-def number(extension: Mapping[str, object], name: str) -> int:
+def number(skill: Mapping[str, object], name: str) -> int:
   """The number that the word of an extension binds to a name in capitals, as each chain binds it."""
-  word = extension["word"]
+  word = skill["word"]
   assert isinstance(word, str)
   got = next(
     ast.literal_eval(one.value)
@@ -178,7 +180,7 @@ def number(extension: Mapping[str, object], name: str) -> int:
 async def catching(sand: Sand, record: Sequence[tuple] = ()) -> tuple[list[tuple], str]:
   """A life on a World of the suite and a record, which runs the extension catchup with its life word, once the loop
   gave it room to play the extension on the root: what was said in the life, and the root."""
-  log, root = life(sand, record, extensions=_monty.extensions([CATCHUP]))
+  log, root = life(sand, record, **{"extensions": _monty.played([CATCHUP])})
   await settle(300)
   return log, root
 

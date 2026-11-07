@@ -12,7 +12,7 @@ afterAll(removeDemoDirectories);
 
 /** A demo session that runs the official extensions, in a list of sessions: the session and its row. */
 async function listed() {
-  const session = await demoSession({ extensions: true });
+  const session = await demoSession({ skills: true });
   const library = new Workspaces(session.preferences, { demo: true });
   return { session, library, entry: library.adopt(session, await library.add(session.host.directory)) };
 }
@@ -66,12 +66,12 @@ test("a rename of the operator is a fact of the record, which a second session o
   const record = join(directory, "life.jsonl");
   let session: Session | undefined;
   try {
-    session = await demoSession({ record, extensions: true });
+    session = await demoSession({ record, skills: true });
     await session.rename("Mine");
     await session.rename("Mine again");
     await session.dispose();
     await rm(`${record}.ui.json`, { force: true });
-    session = await demoSession({ record, extensions: true });
+    session = await demoSession({ record, skills: true });
     for (let tries = 0; tries < 400 && session.sessionName !== "Mine again"; tries++) await Bun.sleep(25);
     expect(session.sessionName).toBe("Mine again");
     await session.rename("");
@@ -126,7 +126,7 @@ test("a rename that the record does not take keeps the old name and says why in 
 // Before, the threads of a chain were read again only when a prompt or a question changed, so a rename of a session
 // that rests kept the old title on its first thread.
 test("a rename of a session that rests gives its first thread the new name, with no prompt more", async () => {
-  const session = await demoSession({ extensions: true });
+  const session = await demoSession({ skills: true });
   try {
     await session.submit("Look at the readme.");
     const root = session.engine.root;

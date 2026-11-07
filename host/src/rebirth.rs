@@ -47,8 +47,8 @@ impl Watch {
         self.facts += 1;
         let stood =
           fact[0] == "done" && fact[1].as_str().is_some_and(|one| one.starts_with("stand"));
-        if let Some(extensions) = fact[3].get(4).and_then(Value::as_array).filter(|_| stood) {
-          let words = extensions.iter().filter_map(|one| one.get(2)?.as_str());
+        if let Some(skills) = fact[3].get(4).and_then(Value::as_array).filter(|_| stood) {
+          let words = skills.iter().filter_map(|one| one.get(2)?.as_str());
           self.lives = words.filter(|one| !one.is_empty()).map(str::to_owned).collect();
         }
       }

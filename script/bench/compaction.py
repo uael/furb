@@ -54,7 +54,7 @@ async def engined(record: Path, cut: str) -> None:
   fresh = record.with_suffix(".fresh")
   fresh.unlink(missing_ok=True)
   world = Live(str(record.parent), None)
-  held = world.opened(fresh, keeps=True, extensions=False)
+  held = world.opened(fresh, keeps=True, skills=False)
   gate = sheet.gating(vars(python), furb_monty.gate)
   engine.boot(held, world=world.hears(), kernel=kernel(vars(python)), gate=gate, **world.ears)
   await asyncio.sleep(0.5)
@@ -126,7 +126,7 @@ def acts(chain: str, kind: str, **words: object) -> list[str]:
 async def measured(record: Path, chain: str, *, dry: bool) -> dict[str, object]:
   """What the bench prints of one chain of a record."""
   world = Live(str(record.parent), None)
-  held = world.opened(record, keeps=False, extensions=False)
+  held = world.opened(record, keeps=False, skills=False)
   gate = sheet.gating(vars(python), furb_monty.gate)
   engine.boot(held, bench=bench(), world=world.hears(), kernel=kernel(vars(python)), gate=gate, **world.ears)
   replies = [one for one in acts(chain, "reply") if engine.scope(one) == chain]

@@ -35,7 +35,7 @@ HARNESS = {
 HOOK = {"script/hooks/pre-commit": "test/outside/test_hook_script.py"}
 CONTRACT = re.compile(r"(test/(?!outside/)|\.agents/skills/[^/]+/test/|\.furb/skills/[^/]+/test/)")
 TEST = re.compile(r"(test|\.agents/skills/[^/]+/test|\.furb/skills(/[^/]+/test)?)/(.+/)?test_[^/]*\.py$")
-EXTENSION = re.compile(r"((?:\.furb|\.agents)/skills/[^/]+)/")
+SKILL = re.compile(r"((?:\.furb|\.agents)/skills/[^/]+)/")
 SCRIPT = re.compile(r"script/(?:hooks/)?([^/]+)\.(?:py|sh)$")
 
 
@@ -65,7 +65,7 @@ def suite(files: list[str]) -> list[str] | None:
         found.append("test/test_hygiene.py")
     elif path in HOOK:
       found.append(HOOK[path])
-    elif hit := EXTENSION.match(path):
+    elif hit := SKILL.match(path):
       tests = ROOT / hit[1] / "test"
       # The words of the project have tests of their own beside them, and the contract of an official one has its laws.
       found.append("test/test_hygiene.py")

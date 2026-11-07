@@ -145,8 +145,8 @@ impl Open {
 
   /// Whether the life enables the extensions that the configs turn on; true when unsaid.
   #[must_use]
-  pub fn extensions(mut self, enables: bool) -> Self {
-    self.0.extensions = Some(enables);
+  pub fn skills(mut self, enables: bool) -> Self {
+    self.0.skills = Some(enables);
     self
   }
 

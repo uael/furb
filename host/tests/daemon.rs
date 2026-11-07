@@ -147,7 +147,7 @@ mod daemon {
     Opening {
       config: Some(at.join("config").display().to_string()),
       roster: Some(vec!["claude-cli:opus".to_owned()]),
-      extensions: Some(false),
+      skills: Some(false),
       answer: Some(answer),
       ..Opening::default()
     }
@@ -339,7 +339,7 @@ mod daemon {
       cwd,
       actor: None,
       roster: None,
-      extensions: None,
+      skills: None,
       config: None,
       claude: None,
       answers: false,
@@ -493,7 +493,7 @@ mod daemon {
       cwd: Some(at.display().to_string()),
       actor: None,
       roster: None,
-      extensions: None,
+      skills: None,
       config: None,
       claude: None,
       answers: false,
@@ -634,7 +634,7 @@ mod daemon {
       cwd: Some(at.display().to_string()),
       actor: None,
       roster: None,
-      extensions: None,
+      skills: None,
       config: None,
       claude: None,
       answers: false,
@@ -804,7 +804,7 @@ mod daemon {
     fs::write(at.join(".furb").join("config.json"), r#"{"skills": {"ouroboros": true}}"#).unwrap();
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
-    let opening = Opening { extensions: None, ..opening(&at) };
+    let opening = Opening { skills: None, ..opening(&at) };
     let host = Some(at.join("sock"));
     let settings =
       Settings { opening, grace: SHORT, stall: STALL, tailnet: None, door: None, host };
@@ -1092,7 +1092,7 @@ mod daemon {
       cwd,
       actor: None,
       roster,
-      extensions: None,
+      skills: None,
       config: None,
       claude: None,
       answers: true,
@@ -1151,7 +1151,7 @@ mod daemon {
       cwd: Some(at.display().to_string()),
       actor: None,
       roster: Some(vec!["claude-cli:sonnet".to_owned()]),
-      extensions: None,
+      skills: None,
       config: None,
       claude: None,
       answers: true,
@@ -1198,7 +1198,7 @@ mod daemon {
       cwd: Some(at.display().to_string()),
       actor: None,
       roster: Some(vec!["claude-cli:sonnet".to_owned()]),
-      extensions: None,
+      skills: None,
       config: None,
       claude: None,
       answers: true,
@@ -1628,7 +1628,7 @@ mod daemon {
       cwd: Some(at.display().to_string()),
       actor: None,
       roster: None,
-      extensions: None,
+      skills: None,
       config: Some(config.display().to_string()),
       claude: None,
       answers: false,

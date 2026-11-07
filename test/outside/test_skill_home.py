@@ -1,8 +1,10 @@
 """The built-in skills of furb stand in .agents/skills, as skills that Claude Code reads too, with no folder of extensions."""
 
+import io
 import re
 import shutil
 import subprocess
+import tokenize
 from pathlib import Path
 
 from furb.engine import OPERATOR
@@ -24,7 +26,7 @@ def fields(manifest: Path) -> tuple[list[str], list[str]]:
   return top, under
 
 
-def test_each_built_in_skill_stands_in_the_skills_of_the_repository_and_no_folder_of_extensions_is_left() -> None:
+def test_each_built_in_skill_stands_in_the_skills_of_the_repository_and_no_former_folder_is_left() -> None:
   """Each skill that furb carries stands in .agents/skills with its manifest, its word and its interface, and the
   repository holds no folder extensions, at its top or in .furb."""
   for one in _monty.official():
@@ -68,3 +70,40 @@ async def test_a_script_of_a_skill_folder_gives_the_same_output_through_bash_as_
   got = await bench.value('(await bash("sh kit/count.sh")).stdout.content')
   assert shell == "kit 42\n"
   assert got == shell
+
+
+COMMENT = r"""//[^\n]*|/\*[\s\S]*?\*/|"(?:[^"\\]|\\[\s\S])*"|"""
+CODE = {
+  ".rs": re.compile(COMMENT + r"""r(#*)"[\s\S]*?"\1|'(?:[^'\\\n]|\\[^'\n]{1,10})'"""),
+  ".ts": re.compile(
+    COMMENT
+    + r"""'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\[\s\S])*`|[(,=:\[!&|?{};]\s*/(?![/*])(?:[^/\\\n\[]|\\.|\[(?:[^\]\\\n]|\\.)*\])+/"""
+  ),
+}
+"""CODE is a comment or a literal of a string or of a char, of a regular expression of TypeScript,
+which holds prose or the name that a record holds, and names nothing in code. A lifetime of Rust is no literal."""
+STANDARD = re.compile(r"\.extension\(|\bwith_extension\b")
+"""STANDARD is a call of the standard library of Rust on the extension of the name of a file, which is no skill."""
+
+
+def names(path: Path) -> list[str]:
+  """The names in the code of a file of Rust, Python or TypeScript, with no comment, no docstring and no literal."""
+  text = path.read_text(encoding="utf-8")
+  if path.suffix in {".py", ".pyi"}:
+    lines = io.StringIO(text).readline
+    return [one.string for one in tokenize.generate_tokens(lines) if one.type == tokenize.NAME]
+  return re.findall(r"[A-Za-z_]\w*", CODE[path.suffix.replace(".cts", ".ts")].sub(" ", STANDARD.sub(" ", text)))
+
+
+def test_each_name_in_code_says_skill_and_the_name_of_the_ear_that_a_record_holds_stands_as_a_literal() -> None:
+  """A skill has one name in code: no name of Rust, Python or TypeScript says extension. The ear extensions, the fact
+  enable and words/<name>/<file> are names that each record holds, and the code gives them as literals alone."""
+  tracked = subprocess.run(  # noqa: S603
+    [shutil.which("git") or "git", "ls-files", "*.rs", "*.py", "*.pyi", "*.ts", "*.cts"],
+    cwd=ROOT,
+    capture_output=True,
+    text=True,
+    check=True,
+  ).stdout.split()
+  left = sorted({f"{file}: {one}" for file in tracked for one in names(ROOT / file) if "extension" in one.lower()})
+  assert left == [], "\n".join(left)

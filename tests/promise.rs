@@ -66,7 +66,7 @@ fn scripted(at: &Path, kits: bool, script: &[(&str, &str)]) -> Opening {
     config: path("config"),
     roster: Some(vec!["claude-cli:opus".to_owned()]),
     answer: Some(answer),
-    extensions: (!kits).then_some(false),
+    skills: (!kits).then_some(false),
     ..Opening::default()
   }
 }

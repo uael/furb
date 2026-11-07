@@ -38,7 +38,7 @@ pub type Ears = Vec<(String, Box<dyn Ear>)>;
 /// What a life waits for before it boots, as [`Opening::prepared`] gives it.
 struct Prepared {
   places: Places,
-  extensions: Vec<skill::Skill>,
+  played: Vec<skill::Skill>,
   /// The line that tells why each extension that the configs turn on does not play.
   refused: Vec<String>,
   provider: world::Provider,
@@ -103,7 +103,7 @@ pub struct Opening {
   /// Whether the life enables at its tip the extensions that the configs turn on; true when unsaid. A life runs what
   /// its record enables either way.
   #[cfg_attr(feature = "python", pyo3(default))]
-  pub extensions: Option<bool>,
+  pub skills: Option<bool>,
   /// The config directory of the user, which the configs and the official extensions read; the one of this process
   /// when unsaid.
   #[cfg_attr(feature = "python", pyo3(default))]
@@ -227,7 +227,7 @@ impl Opening {
   fn eared(&self, prepared: Prepared, record: &[Object]) -> Result<Ears, Fault> {
     let works = self.works();
     let keeps = self.keeps != Some(false) && works;
-    let Prepared { places, extensions, refused, provider, .. } = prepared;
+    let Prepared { places, played, refused, provider, .. } = prepared;
     let log = self.log.as_ref().map(|log| log.0.clone());
     let told = |line: &str| match &log {
       Some(log) => log(line),
@@ -257,7 +257,7 @@ impl Opening {
     let servers = world::mcp::Settings::of(project, config.clone(), gallery.clone());
     let ears = vec![
       ("provider", provider),
-      ("extensions", skill::telling(extensions, refused, places)),
+      ("extensions", skill::telling(played, refused, places)),
       ("skills", lasting(skills(config.clone()), move || skills(config.clone()))),
       (
         "mcp",
@@ -309,12 +309,12 @@ impl Opening {
     }
     let here = Places::here();
     let places = Places { config: self.config.clone().map_or(here.config, PathBuf::from), ..here };
-    let (extensions, refused) = match self.extensions != Some(false) && works {
+    let (played, refused) = match self.skills != Some(false) && works {
       true => skill::configured(&places, self.directory.as_ref())?,
       false => (Vec::new(), Vec::new()),
     };
     // The standing gives each extension whose word or life word plays, with the file of a word that is not blank.
-    let advertised = extensions
+    let advertised = played
       .iter()
       .filter(|one| !(one.word.trim().is_empty() && one.life.is_empty()))
       .map(|one| {
@@ -331,7 +331,7 @@ impl Opening {
       None => self.provider(advertised, actor, roster)?,
     };
     let gated = gate::configured(&places.config, Path::new(&self.directory));
-    Ok(Prepared { places, extensions, refused, provider, gated })
+    Ok(Prepared { places, played, refused, provider, gated })
   }
 
   /// The provider: the models of the roster that the catalog makes, which the function of the host answers when it

@@ -325,7 +325,7 @@ pub struct ImagePath {
 #[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
 pub struct ImageType {
   pub mime_type: String,
-  pub extension: String,
+  pub suffix: String,
 }
 
 /// What an act came to, and whether it is done: nothing while it lives.
@@ -505,8 +505,8 @@ pub fn enabled(root: Vec<Said>) -> Vec<Skill> {
 /// unless the record enables it, and plays each as a rung on each chain.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn extensions(given: Vec<Skill>) -> NativeEar {
-  NativeEar::of(skill::extensions(given, skill::Places::here()))
+pub fn played(given: Vec<Skill>) -> NativeEar {
+  NativeEar::of(skill::played(given, skill::Places::here()))
 }
 
 /// The part for a TUI of each extension that a life in the directory of a project runs and whose manifest names
@@ -813,8 +813,8 @@ pub fn image_references(message: String) -> Vec<images::Named> {
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn image_type(data: &[u8]) -> Result<ImageType, Fault> {
-  let (media, extension) = images::kind(data).map_err(|no| Fault::refused(no.to_string()))?;
-  Ok(ImageType { mime_type: media.to_owned(), extension: extension.to_owned() })
+  let (media, suffix) = images::kind(data).map_err(|no| Fault::refused(no.to_string()))?;
+  Ok(ImageType { mime_type: media.to_owned(), suffix: suffix.to_owned() })
 }
 
 /// The words of a call that a host gave, by position and by name, as the engine takes them.

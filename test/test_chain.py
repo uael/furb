@@ -510,10 +510,10 @@ STOOD = "stand()\ncd('/w')"
 """The turn of the stand that a chain with no source whose standing names a doctrine plays on itself."""
 
 
-async def taught(*extensions: list) -> tuple[Sand, list[tuple], str]:
+async def taught(*skills: list) -> tuple[Sand, list[tuple], str]:
   """A life whose standing names a doctrine and the extensions of TAUGHT, then those that it is given, so the root
   crafts its setup from them: the World, what was said and the root."""
-  sand = sown(stands=[*TAUGHT[:4], [*TAUGHT[4], *extensions]], files=TAUGHT_FILES)
+  sand = sown(stands=[*TAUGHT[:4], [*TAUGHT[4], *skills]], files=TAUGHT_FILES)
   log, root = life(sand)
   await settle()
   return sand, log, root

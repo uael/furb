@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// The version of the protocol. A peer of another version is refused at its hello.
-pub const PROTOCOL: u32 = 3;
+pub const PROTOCOL: u32 = 4;
 
 /// The most bytes that one frame holds. A frame past it closes the peer.
 pub const BOUND: usize = 16 << 20;
@@ -95,7 +95,7 @@ pub enum Verb {
     cwd: Option<String>,
     actor: Option<String>,
     roster: Option<Vec<String>>,
-    extensions: Option<bool>,
+    skills: Option<bool>,
     #[serde(default)]
     config: Option<String>,
     #[serde(default)]

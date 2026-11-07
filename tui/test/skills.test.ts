@@ -21,7 +21,7 @@ test("a skill added on the disk shows in the list of / commands after /reload-sk
   const directory = mkdtempSync(join(tmpdir(), "furb-skills-"));
   made.push(directory);
   skill(directory, "brew", "Brew a pot of tea");
-  const session = await demoSession({ cwd: directory, extensions: true });
+  const session = await demoSession({ cwd: directory, skills: true });
   await composing(
     async ({ app, frame }) => {
       const typed = async (text: string, wanted: string, present: boolean) => {

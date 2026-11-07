@@ -948,7 +948,7 @@ export function openingEngine(options: EngineOptions): {
     cwd: options.cwd && resolve(options.cwd),
     actor: [options.model, options.effort].filter(Boolean).join("/") || undefined,
     roster: roster(options),
-    extensions: options.demo ? options.extensions === true : options.extensions,
+    skills: options.demo ? options.skills === true : options.skills,
     // The life reads the settings and runs the claude command line that this window reads, whatever the environment
     // of the daemon names.
     config: options.config ?? process.env.FURB_CONFIG_DIR,

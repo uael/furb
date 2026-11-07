@@ -59,7 +59,7 @@ pub struct Setting {
   pub property: Option<Property>,
   /// The extension whose schema names the key, or none for a key of furb or of no schema.
   #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub extension: Option<String>,
+  pub skill: Option<String>,
 }
 
 /// A key that a schema names, in the form of a setting of VS Code: the kind of its value, the
@@ -130,7 +130,7 @@ struct Keys {
 struct Named {
   key: Vec<String>,
   property: Property,
-  extension: Option<String>,
+  skill: Option<String>,
 }
 
 /// The objects of furb that each reader merges name by name, which the settings give with each of
@@ -148,7 +148,7 @@ fn own() -> Vec<Named> {
   let one = |name: &str, kind, default, description: &str| Named {
     key: vec![name.to_owned()],
     property: Property { kind, default, description: description.to_owned(), values: vec![] },
-    extension: None,
+    skill: None,
   };
   vec![
     one(
@@ -246,8 +246,8 @@ impl Layers {
   pub fn get(&self) -> Result<Vec<Setting>, Error> {
     let mut won = self.won()?;
     let mut out = Vec::new();
-    for Named { key, property, extension } in self.schema()? {
-      let (value, layer, within) = if property.kind == Kind::Object && extension.is_none() {
+    for Named { key, property, skill } in self.schema()? {
+      let (value, layer, within) = if property.kind == Kind::Object && skill.is_none() {
         let (within, rest) =
           won.into_iter().partition(|(one, _)| one.len() == 2 && one[0] == key[0]);
         won = rest;
@@ -262,7 +262,7 @@ impl Layers {
           None => (property.default.clone(), None, vec![]),
         }
       };
-      out.push(Setting { key, value, layer, property: Some(property), extension });
+      out.push(Setting { key, value, layer, property: Some(property), skill });
       out.extend(within);
     }
     out.extend(settings(won));
@@ -303,7 +303,7 @@ impl Layers {
       named.extend(keys.properties.into_iter().map(|(one, property)| Named {
         key: vec![name.clone(), one],
         property,
-        extension: Some(name.clone()),
+        skill: Some(name.clone()),
       }));
     }
     Ok(named)
@@ -368,13 +368,8 @@ pub fn defaults(name: &str, text: &str) -> Result<Map<String, Value>, Error> {
 
 /// The settings of keys with no property of their own, each with the layer that gives its value.
 fn settings(won: IndexMap<Vec<String>, (Value, Layer)>) -> Vec<Setting> {
-  let one = |(key, (value, layer))| Setting {
-    key,
-    value,
-    layer: Some(layer),
-    property: None,
-    extension: None,
-  };
+  let one =
+    |(key, (value, layer))| Setting { key, value, layer: Some(layer), property: None, skill: None };
   won.into_iter().map(one).collect()
 }
 

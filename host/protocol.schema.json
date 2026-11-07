@@ -93,7 +93,7 @@
                 "type": "string"
               }
             },
-            "extensions": {
+            "skills": {
               "type": [
                 "boolean",
                 "null"
@@ -3886,5 +3886,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 3
+  "x-protocol": 4
 }

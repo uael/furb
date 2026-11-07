@@ -253,7 +253,7 @@ mod net {
     let identity = Tailscale::new(api, access("alice@github", Role::Read));
     let held = folder();
     let config = Some(held.join("config").display().to_string());
-    let opening = Opening { extensions: Some(false), config, ..Opening::default() };
+    let opening = Opening { skills: Some(false), config, ..Opening::default() };
     let settings = Settings {
       opening,
       grace: Duration::from_secs(1),
@@ -310,7 +310,7 @@ mod net {
 
   /// A daemon with no tailnet, which opens its door in `file`.
   async fn daemon(yard: &Yard, file: &Path) -> JoinHandle<()> {
-    let opening = Opening { extensions: Some(false), ..Opening::default() };
+    let opening = Opening { skills: Some(false), ..Opening::default() };
     let settings = Settings {
       opening,
       grace: Duration::from_secs(1),

@@ -866,7 +866,7 @@ pub fn enabled_by(a: &Fact) -> Option<Enabled> {
 /// state that it holds keeps its value, and its life word does not run again. The ear plays the
 /// rungs from the fact alone, so a later life plays the same rungs
 /// where the journal says the fact again.
-pub fn extensions(given: Vec<Skill>, places: Places) -> Box<dyn Ear> {
+pub fn played(given: Vec<Skill>, places: Places) -> Box<dyn Ear> {
   telling(given, Vec::new(), places)
 }
 

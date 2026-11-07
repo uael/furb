@@ -154,9 +154,9 @@ export const settings = part({
           const name = one.key.join(".");
           const { property } = one;
           // The names of an object of furb, as each provider, follow the setting of the object.
-          if (property) group = property.type === "object" && !one.extension ? (one.key[0] ?? "") : "";
+          if (property) group = property.type === "object" && !one.skill ? (one.key[0] ?? "") : "";
           const heading = property
-            ? (one.extension ?? "furb")
+            ? (one.skill ?? "furb")
             : one.key[0] === group
               ? "furb"
               : "Not in a schema";
