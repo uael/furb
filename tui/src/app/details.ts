@@ -54,6 +54,8 @@ const TIME = 8;
 /** The columns of the facts of a word, at the right edge of its block: what the acts of each line came to. Each block
  * keeps the same column, so the facts of every word stand one under the other. */
 const FACTS = 30;
+/** The columns that the trailer of a cut line takes at the end of it: two spaces, an ellipsis, a plus and five digits. */
+const TRAILER = 9;
 
 /** The text of the rows of a step that a model writes: the label of the word, then the line that comes. */
 const thinkingText = (label: Part[], tail?: Part[]): Part[] => [
@@ -542,8 +544,15 @@ export const details = part({
               (line.runs ? TIME + 1 + space.between : 0),
           ),
         );
-        const rows = layout(line.text, width, this.lineOpen(line) ? undefined : this.openStrings(line));
-        const code = rows[0]?.text ?? "";
+        const open = this.lineOpen(line) ? undefined : this.openStrings(line);
+        let rows = layout(line.text, width, open);
+        // A line that folds a string leaves the room of its trailer, which says what the fold hides.
+        if (rows.some((row) => row.folds.length))
+          rows = layout(line.text, Math.max(24, width - TRAILER), open);
+        // What a cut line hides stands at its end, in the trailer of its row, where the width allows, and in a row of
+        // its own under it only where it does not.
+        const trailers = rows.map((row) => this.cutTrailer(row, row === rows[0] ? width : room));
+        const code = `${rows[0]?.text ?? ""}${trailers[0] ?? ""}`;
         // The fact of a line stands at the right edge of the block, and the time of a line that runs after it.
         const slot = line.runs ? TIME + 1 : 0;
         const fact = note ? fit(note, FACTS) : "";
@@ -563,7 +572,18 @@ export const details = part({
         // The number of the line that runs fades into the loader and back, so it reads apart from a model that thinks.
         if (line.fails) states.set(at, markOf("failed"));
         else if (line.runs) running.set(at, "runs");
-        for (const row of rows.slice(1)) push(row.text, undefined, line);
+        if (trailers[0])
+          fixed.push([
+            at,
+            rows[0]?.text.length ?? 0,
+            (rows[0]?.text.length ?? 0) + trailers[0].length,
+            "fact",
+          ]);
+        for (const [k, row] of rows.slice(1).entries()) {
+          const tail = trailers[k + 1] ?? "";
+          const next = push(`${row.text}${tail}`, undefined, line);
+          if (tail) fixed.push([next, row.text.length, row.text.length + tail.length, "fact"]);
+        }
         const base = program.length;
         program += `${line.text}\n`;
         for (const [k, row] of rows.entries()) {
@@ -574,16 +594,14 @@ export const details = part({
         }
         // Each string that the line folds has its own fold row under the line, in the one wording of every fold: its
         // count and its noun, which a click opens in place, as its entry in the Details does.
-        for (const row of rows) {
+        for (const [k, row] of rows.entries()) {
           for (const fold of row.folds) {
-            const before = row.text.slice(0, fold.at);
-            let kept = Math.min(fold.whole.length, before.length);
-            while (kept > 0 && !before.endsWith(fold.whole.slice(0, kept))) kept--;
-            const label = hidden(Math.max(1, fold.whole.length - kept), "character");
+            const label = hidden(this.hiddenIn(row, fold), "character");
+            registered.push([`string:${line.step.id}:${line.number}:${fold.literal}`, { label }]);
+            if (trailers[k]) continue;
             const stringRow = push(`${glyph.closed} ${label}`, undefined, line);
             ellipses.push(stringRow);
             stringRows.set(stringRow, { line, literal: fold.literal });
-            registered.push([`string:${line.step.id}:${line.number}:${fold.literal}`, { label }]);
           }
         }
         // The line that runs is lit, and so is the line that made the act that a running line awaits.
@@ -786,6 +804,22 @@ export const details = part({
       if (line.acts.length || Bun.stringWidth(line.text) > column) this.openLine(line);
     };
     return view;
+  },
+
+  /** How many characters a fold of a row hides: the string whole, but for what the row shows of it. */
+  hiddenIn(row: CodeRow, fold: Fold): number {
+    const before = row.text.slice(0, fold.at);
+    let kept = Math.min(fold.whole.length, before.length);
+    while (kept > 0 && !before.endsWith(fold.whole.slice(0, kept))) kept--;
+    return Math.max(1, fold.whole.length - kept);
+  },
+
+  /** The trailer that ends a cut row, with the characters that its folds hide, or nothing when the row folds none or
+   * the trailer does not fit the width that it has. The one place that says it for every cut line. */
+  cutTrailer(row: CodeRow, limit: number): string {
+    if (!row.folds.length) return "";
+    const text = `  …+${row.folds.reduce((sum, fold) => sum + this.hiddenIn(row, fold), 0)}`;
+    return Bun.stringWidth(row.text) + Bun.stringWidth(text) <= limit ? text : "";
   },
 
   /** The card of a line of a program under the pointer: the reason of a line that failed whole, in the color of a
