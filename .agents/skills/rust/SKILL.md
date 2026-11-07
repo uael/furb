@@ -299,8 +299,10 @@ A module that does not meet the lints yet says so at its top, one line for each 
     with each file that a life wrote before. A field that comes later takes `#[serde(default)]`, a field or a variant
     that changes its name takes `#[serde(alias = "old")]`, and `#[serde(deny_unknown_fields)]` never stands on such a
     shape, since a field that a newer build wrote must not fail an older one. A tuple and a tuple variant are
-    positional, so they only grow at their end. A config that a person writes is not such a shape: it may deny an
-    unknown field, so a typo fails where the person reads it.
+    positional, so a persisted one never changes its length: a shape that can grow is a struct. A change of what a
+    stored value means, with the same names, bumps the version of the shape, and a test loads a file of the version
+    before. A config that a person writes is not such a shape: it may deny an unknown field, so a typo fails where
+    the person reads it.
 
     ```rust
     #[derive(Serialize, Deserialize)]

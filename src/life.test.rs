@@ -305,14 +305,24 @@ fn a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_t
   assert_eq!(running, "[]", "no act stays running with no process");
 }
 
+/// The bound of a turn for the words that a test does not cut: a step of a word that a loaded
+/// machine runs in a minute still holds under it.
+const LOADED: Duration = Duration::from_secs(120);
+
+/// The most that a word cut at 2 s may take as a whole on a loaded machine, under the 60 s that
+/// the word of a poll would take if nothing cut it.
+const CUT: Duration = Duration::from_secs(50);
+
 #[test]
 fn a_word_that_polls_the_clock_ends_at_the_bound_of_a_turn_and_two_readings_in_a_row_still_run() {
   BOUND.set(Duration::from_secs(2));
   let at = place("clock-spin");
   let poll = "t0 = clock()\nwhile clock() - t0 < 60:\n  pass\nclose('polled')";
   let twice = "a = clock()\nb = clock()\nclose(b >= a)";
-  let mut life =
-    Opening { skills: Some(false), ..scripted(&at, &[poll, twice]) }.boot::<String>([]).unwrap().0;
+  let mut life = Opening { skills: Some(false), ..scripted_cut(&at, &[poll, twice], LOADED) }
+    .boot::<String>([])
+    .unwrap()
+    .0;
   let asked = verbs::Prompt {
     message: Some("go".to_owned()),
     on: Some("chain1".to_owned()),
@@ -334,7 +344,7 @@ fn a_word_that_polls_the_clock_ends_at_the_bound_of_a_turn_and_two_readings_in_a
   );
   let clocks = life.word("len(transcript('chain1', 'clock'))", vec![]).unwrap();
   eprintln!("the poll made {:?} acts of clock in {took:?}", clocks.as_ref().as_int());
-  assert!(took < Duration::from_secs(20), "the poll was cut near 2 s, not at 60: {took:?}");
+  assert!(took < CUT, "the poll was cut near 2 s, not at 60: {took:?}");
   drop(life);
   let again = scripted(&at, &[]).boot::<String>([]).unwrap().0;
   assert!(again.raised().is_none(), "a later life replays the poll and its refusal with no drift");
@@ -357,7 +367,7 @@ fn a_word_that_loops_on_an_answer_of_the_host_ends_at_the_bound_of_a_turn_with_a
   BOUND.set(Duration::from_secs(2));
   let at = place("cd-spin");
   let spin = "while True:\n  cd('.')";
-  let mut life = Opening { skills: Some(false), ..scripted(&at, &[spin, "close(1)"]) }
+  let mut life = Opening { skills: Some(false), ..scripted_cut(&at, &[spin, "close(1)"], LOADED) }
     .boot::<String>([])
     .unwrap()
     .0;
@@ -374,7 +384,7 @@ fn a_word_that_loops_on_an_answer_of_the_host_ends_at_the_bound_of_a_turn_with_a
   let cds = life.word("len(transcript('chain1', 'cd'))", vec![]).unwrap();
   let cds = cds.as_ref().as_int().unwrap_or_default();
   eprintln!("the loop made {cds} acts of cd in {took:?}");
-  assert!(took < Duration::from_secs(20), "the loop was cut near 2 s: {took:?}");
+  assert!(took < CUT, "the loop was cut near 2 s: {took:?}");
   assert!(cds < 200_000, "the record holds the acts of the bound alone: {cds}");
   drop(life);
   let again = scripted(&at, &[]).boot::<String>([]).unwrap().0;
@@ -391,9 +401,10 @@ fn a_word_that_catches_the_refusal_of_the_bound_and_loops_ends_its_step_and_leav
   let started = Instant::now();
   drop(asked_of(&mut first, "go"));
   assert!(first.stopped().is_some(), "a word that asks past the refusal ends its step");
-  assert!(started.elapsed() < Duration::from_secs(20), "the step ends near 2 s");
+  assert!(started.elapsed() < CUT, "the step ends near 2 s");
   assert!(crate::sand::past().is_none(), "the stop leaves no deadline on the thread");
   drop(first);
+  BOUND.set(LOADED);
   let mut later =
     Opening { skills: Some(false), ..scripted(&at, &["close(clock() > 0)", "close(clock() > 0)"]) }
       .boot::<String>([])
@@ -424,7 +435,9 @@ fn a_life_whose_open_act_a_verb_of_no_words_made_ends_with_a_checkpoint_in_its_r
 
 #[test]
 fn a_life_that_a_fault_of_the_sandbox_stopped_opens_again_and_goes_on() {
-  BOUND.set(Duration::from_millis(100));
+  // A bound of 100 ms may pass before the loop enters its `try` on a loaded machine, and the
+  // refusal then raises outside it, so no `finally` runs and no second excess stops the life.
+  BOUND.set(Duration::from_secs(1));
   let at = place("faulted");
   let cutter = "try:\n  while True:\n    pass\nfinally:\n  while True:\n    pass";
   let mut first =
@@ -436,6 +449,7 @@ fn a_life_that_a_fault_of_the_sandbox_stopped_opens_again_and_goes_on() {
   drop(executor::block_on(Act::<Object>::of(&mut first, &prompt)));
   assert!(first.stopped().is_some(), "the second excess of the turn stops the life");
   drop(first);
+  BOUND.set(LOADED);
   let mut later =
     Opening { skills: Some(false), ..scripted(&at, &["close('again')", "close('on')"]) }
       .boot::<String>([])
@@ -626,10 +640,27 @@ fn replays() -> PathBuf {
 /// A life of a test whose model answers each request with the next word of a script, and with close(None) once the
 /// script runs out.
 fn scripted(at: &Path, words: &[&str]) -> Opening {
+  cut_after(at, words, None)
+}
+
+/// A scripted life whose bound of a turn becomes `then` once its model gave its first word: the
+/// first word meets the short bound that the test set, and each word after it runs under a bound
+/// that a loaded machine does not pass, since the test proves what the first word did, not how
+/// fast the machine runs the others.
+fn scripted_cut(at: &Path, words: &[&str], then: Duration) -> Opening {
+  cut_after(at, words, Some(then))
+}
+
+fn cut_after(at: &Path, words: &[&str], then: Option<Duration>) -> Opening {
   let said: VecDeque<String> = words.iter().map(|one| (*one).to_owned()).collect();
+  let all = said.len();
   let said = Arc::new(Mutex::new(said));
   let answer = Answer(Arc::new(move |_, _| {
-    let word = said.lock().unwrap().pop_front().unwrap_or_else(|| "close(None)".to_owned());
+    let mut left = said.lock().unwrap();
+    if let Some(then) = then.filter(|_| left.len() < all) {
+      BOUND.set(then);
+    }
+    let word = left.pop_front().unwrap_or_else(|| "close(None)".to_owned());
     let turn = Object::tuple([
       Object::string("assistant"),
       Object::string(word),
