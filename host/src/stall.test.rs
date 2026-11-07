@@ -240,8 +240,13 @@ fn the_watch_lets_go_of_a_chain_that_ends_and_of_each_chain_at_a_rebirth() {
   heard(&mut quiet, act("chain", "chain2", "chain1", &[]));
   heard(&mut quiet, rung("rung3", "chain2"));
   heard(&mut quiet, finished(act("chain", "chain2", "chain1", &[])));
-  assert!(!quiet.chains.contains_key("chain2"));
+  let stalled = told(&mut quiet, after(3600));
+  assert!(!stalled.iter().any(|(one, _)| one == "rung3"), "a chain that ends stalls no more");
   heard(&mut quiet, rung("rung4", "chain5"));
+  assert!(quiet.due().is_some(), "a rung on a chain that lives arms the watch");
   quiet.heard(&Event::Reborn(None));
-  assert!(quiet.chains.is_empty() && quiet.ours.is_empty() && quiet.acts.is_empty());
+  assert!(quiet.due().is_none(), "a rebirth keeps no chain");
+  assert!(quiet.stalled(after(3600)).is_empty(), "a rebirth keeps no stall");
+  // The watch of a long life must not grow, which no stall shows: a narrow check of its memory.
+  assert!(quiet.chains.is_empty() && quiet.ours.is_empty(), "a rebirth lets go of each chain");
 }

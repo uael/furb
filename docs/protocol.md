@@ -46,7 +46,10 @@ folder of furb (`~/.config/furb` by default), turns it on. WireGuard encrypts ea
   its role, and the daemon closes the peer of a login that it does not name, before its hello.
 - `stall` gives the seconds after which the daemon tells that a life with an open act and no new fact stalled, as
   the section on attach says. With no `stall`, the bound is 1200 seconds.
-- The daemon reads `host.json` when it starts. A change takes effect at the next start or upgrade.
+- The daemon reads `host.json` when it starts and at each change of the file, and a file that does not parse keeps
+  the list before. A change of `roles` takes effect at once on each connected peer: a login that the file drops gets
+  a refusal and loses its connection, and a login whose role changes holds the new role from its next verb. A change
+  of `tailnet` or `stall` takes effect at the next start or upgrade.
 - The daemon finds the local API on the socket of `tailscaled`, or on the port of the app for macOS from the
   standalone download. It does not find the app of the App Store.
 - Plain TCP listens only on loopback or on the tailnet, `100.64.0.0/10` and `fd7a:115c:a1e0::/48`, since no other
@@ -65,7 +68,7 @@ folder of furb (`~/.config/furb` by default), turns it on. WireGuard encrypts ea
 The first frame of a peer is its hello:
 
 ```json
-{"id": 0, "verb": "hello", "protocol": 2, "kind": "window", "name": null, "role": null}
+{"id": 0, "verb": "hello", "protocol": 3, "kind": "window", "name": null, "role": null}
 ```
 
 - `kind` is `window`, `skill`, or `daemon` for the daemon of a new build that asks the handover, and a skill gives
@@ -76,7 +79,7 @@ The first frame of a peer is its hello:
 - The daemon answers with its protocol and the peer as it knows it: its login, its role, its kind and its name.
 
   ```json
-  {"frame": "reply", "id": 0, "answer": "welcome", "data": {"protocol": 2, "peer": {"login": "uael", "role": "write", "kind": "window", "name": null}}}
+  {"frame": "reply", "id": 0, "answer": "welcome", "data": {"protocol": 3, "peer": {"login": "uael", "role": "write", "kind": "window", "name": null}}}
   ```
 
 - A hello of another protocol gets a refusal that names both versions, and the daemon closes the peer. A first frame

@@ -21,7 +21,7 @@ mod protocol {
   };
 
   use furb_host::{
-    Host, Outbox, ProtocolError,
+    Host, Outbox, ProtocolError, fixed,
     protocol::{
       Answer, Axis, BOUND, Config, Dispose, Effect, Frame, Gesture, Hello, Kind, Layer, Mount,
       Node, PROTOCOL, Peer, Request, Role, Run, Shape, Slot, Tone, Tree, Verb, ViewEffect,
@@ -297,7 +297,7 @@ mod protocol {
   fn served(role: Role) -> Client<DuplexStream> {
     let (ours, theirs) = duplex(1 << 16);
     let who = Who { login: "uael".to_owned(), role };
-    tokio::spawn(async move { serve(&Echo, theirs, who).await });
+    tokio::spawn(async move { serve(&Echo, theirs, who, fixed(role)).await });
     Client { lines: BufReader::new(ours) }
   }
 
@@ -521,7 +521,8 @@ mod protocol {
     tokio::spawn(async move {
       let stream = listener.accept().await.unwrap();
       let who = door.identify(&stream).await.unwrap();
-      serve(&Echo, stream, who).await
+      let granted = fixed(who.role);
+      serve(&Echo, stream, who, granted).await
     });
     let mut client = Client { lines: BufReader::new(local.dial().await.unwrap()) };
     let Frame::Reply { answer: Answer::Welcome { peer, .. }, .. } = client.hello(PROTOCOL).await

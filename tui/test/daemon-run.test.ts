@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { daemonFolder, daemonPlace, dialed } from "../src/client.ts";
 import { handedOver } from "../script/daemon.ts";
+import { daemonFolder, daemonPlace, dialed } from "../src/client.ts";
 
 test("a run of the tests that a kill ends leaves no daemon of it", async () => {
   // A short folder, since the path of a socket has a bound.

@@ -1,7 +1,7 @@
 use furb::view::{Act, Kind, Phase, State};
 use serde_json::{Value, json};
 
-use super::Watch;
+use super::{TAIL, Watch};
 use crate::event::Event;
 
 fn act(kind: &str, id: &str, by: &str, words: &[Value], phase: Phase) -> Event {
@@ -35,10 +35,19 @@ fn stood() -> Event {
   ]))
 }
 
+/// A watch that heard the facts of a whole tail, so that only an act that a checkpoint does not
+/// keep holds its rebirth.
+fn aged(watch: &mut Watch) {
+  for n in 0..TAIL {
+    watch.heard(&Event::Fact(json!(["say", format!("x{n}"), "", []])));
+  }
+}
+
 #[test]
-fn the_rungs_of_completed_words_are_not_kept_and_the_rungs_of_life_words_go_with_their_birth() {
+fn the_rungs_of_completed_words_hold_no_rebirth_and_the_rungs_of_life_words_go_with_their_birth() {
   let mut watch = Watch::default();
   watch.heard(&stood());
+  aged(&mut watch);
   for n in 0..50 {
     let id = format!("rung{n}");
     watch.heard(&act("rung", &id, "chain1", &[json!(format!("x = {n}"))], Phase::Started));
@@ -50,15 +59,25 @@ fn the_rungs_of_completed_words_are_not_kept_and_the_rungs_of_life_words_go_with
       Phase::Done(Value::Null),
     ));
   }
+  assert!(watch.due(), "the rungs of completed words hold no rebirth");
   watch.heard(&act("rung", "rung90", "chain1", &[json!("seed()")], Phase::Started));
   watch.heard(&act("lasting", "lasting1", "rung90", &[], Phase::Started));
   watch.heard(&act("rung", "rung90", "chain1", &[json!("seed()")], Phase::Done(Value::Null)));
   watch.heard(&act("lasting", "lasting1", "rung90", &[], Phase::Started));
-  assert!(watch.held.is_empty(), "an act of a life word holds no rebirth, though its rung ended");
-  assert_eq!(watch.seeds.len(), 1, "only the rung of a life word is kept: {:?}", watch.seeds);
+  assert!(watch.due(), "an act of a life word holds no rebirth, though its rung ended");
   watch.heard(&act("lasting", "other1", "rung3", &[], Phase::Started));
-  assert_eq!(watch.held.len(), 1, "an act of another word holds the rebirth");
+  assert!(!watch.due(), "an act of another word holds the rebirth");
+  watch.heard(&act("lasting", "other1", "rung3", &[], Phase::Done(Value::Null)));
+  assert!(watch.due(), "the rebirth is due once that act ends");
   watch.reborn();
-  assert!(watch.seeds.is_empty(), "a birth keeps no rung of the birth before it");
-  assert_eq!(watch.lives.len(), 1, "the life words stand until the next stand");
+  aged(&mut watch);
+  watch.heard(&act("lasting", "again1", "rung90", &[], Phase::Started));
+  assert!(
+    !watch.due(),
+    "a birth keeps no rung of the birth before it, so its act holds the rebirth"
+  );
+  watch.heard(&act("lasting", "again1", "rung90", &[], Phase::Done(Value::Null)));
+  watch.heard(&act("rung", "rung91", "chain1", &[json!("seed()")], Phase::Started));
+  watch.heard(&act("lasting", "life1", "rung91", &[], Phase::Started));
+  assert!(watch.due(), "the life words stand until the next stand");
 }

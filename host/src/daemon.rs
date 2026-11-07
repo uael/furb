@@ -63,7 +63,7 @@ use crate::{
     Request, Verb,
   },
   records,
-  serve::{Host, Outbox, serve},
+  serve::{Host, Outbox, fixed, serve},
   stall::{Quiet, Stall},
   transport::{
     Accepted, Dialer, Door, Identity, Listener, Local, Tailscale, Tcp, Ticket, own, upgraded,
@@ -232,7 +232,8 @@ async fn peer<I: Identity<Stream = Accepted>>(
   stream: Accepted,
 ) -> Result<(), TransportError> {
   let who = identity.identify(&stream).await?;
-  serve(&daemon, stream, who).await
+  let granted = fixed(who.role);
+  serve(&daemon, stream, who, granted).await
 }
 
 /// One peer of the tailnet, identified by Tailscale, upgraded when it came by WebSocket, then
@@ -245,11 +246,13 @@ async fn remote(
   match arrival {
     Arrival::Tcp(stream) => {
       let who = identity.identify(&stream).await?;
-      serve(&daemon, stream, who).await
+      let granted = identity.follow(&who);
+      serve(&daemon, stream, who, granted).await
     }
     Arrival::WebSocket(stream) => {
       let who = identity.identify(&stream).await?;
-      serve(&daemon, upgraded(stream).await?, who).await
+      let granted = identity.follow(&who);
+      serve(&daemon, upgraded(stream).await?, who, granted).await
     }
   }
 }
@@ -266,7 +269,8 @@ async fn knock(door: Option<&Door>) -> Result<(TcpStream, Ticket), TransportErro
 /// leaves.
 async fn window(daemon: Daemon, ticket: Ticket, stream: TcpStream) -> Result<(), TransportError> {
   let (stream, who) = ticket.admitted(stream).await?;
-  serve(&daemon, stream, who).await
+  let granted = fixed(who.role);
+  serve(&daemon, stream, who, granted).await
 }
 
 /// The listeners of the daemon on the address of the machine on the tailnet, each where the
@@ -340,6 +344,25 @@ struct Daemon {
 }
 
 type Replied = oneshot::Sender<Result<Answer, ProtocolError>>;
+
+/// The door of a peer that lives in the process of the daemon, as a kit of a session does: it says
+/// its verbs as a peer of a transport does, with an outbox of its own, and holds the task that owns
+/// the lives no longer than the daemon does.
+#[derive(Clone)]
+pub(crate) struct Inside(mpsc::WeakUnboundedSender<Asked>);
+
+impl Inside {
+  /// The answer to a verb of the peer, or the refusal that the daemon stopped.
+  pub(crate) async fn answer(
+    &self,
+    peer: &Peer,
+    verb: Verb,
+    outbox: &Outbox,
+  ) -> Result<Answer, ProtocolError> {
+    let asks = self.0.upgrade().ok_or(ProtocolError::Stopped)?;
+    Daemon { asks }.answer(peer, verb, outbox).await
+  }
+}
 
 /// What the task that owns the lives hears.
 enum Asked {
@@ -842,6 +865,7 @@ impl Lives {
         life: life.clone(),
         cwd: PathBuf::from(&cwd),
         host: host.clone(),
+        inside: Inside(self.asks.clone()),
         places,
         log: self.settings.opening.log.clone(),
       };
