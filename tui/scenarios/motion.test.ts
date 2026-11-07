@@ -49,7 +49,7 @@ test("the marks of a command that runs and of a thought turn in the sidebar, the
         ran.push(await read(window, 'bash("sleep 10"', [session, "Scenario: run long"]));
       }
       for (const [at, one] of ran.entries()) {
-        // The session, named as its first message, and its thread show the one mark of work that runs.
+        // The session, named as its record, and its thread show the one mark of work that runs.
         expect(one.rail).toHaveLength(2);
         expect(one.rail[0]).toMatch(runs);
         expect(one.rail[1]).toBe(one.rail[0]);
@@ -83,7 +83,10 @@ test("the marks of a command that runs and of a thought turn in the sidebar, the
         // The cell of the number of the line that a model writes turns the loader of a thought, which no still mark of
         // a thought stands for, and the line says no word that the loader already says.
         expect(one.cell).toMatch(thinks);
+        // The session and its thread that thinks show the one mark of a thought.
+        expect(one.rail).toHaveLength(2);
         expect(one.rail[0]).toMatch(thinks);
+        expect(one.rail[1]).toBe(one.rail[0]);
         expect(one.footer).toMatch(/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] Thinking/);
         expect(one.frame).not.toContain("✻");
         expect(one.frame).not.toContain("· thinking");

@@ -4,7 +4,7 @@ import { createTestRenderer } from "@opentui/core/testing";
 import type { Node, Tree, ViewEvent } from "furb/protocol";
 import { App } from "../src/app.ts";
 import { demoLibrary, demoSession, removeDemoDirectories } from "../src/demo.ts";
-import { frame, spin } from "../src/theme.ts";
+import { frame, markOf } from "../src/theme.ts";
 
 afterAll(removeDemoDirectories);
 
@@ -175,7 +175,7 @@ test("a member who reads only sees each acting node inert", async () => {
   }
 });
 
-test("a spinner moves with the clock of the TUI", async () => {
+test("the loader of work of no known size turns with the clock of the TUI, as work that runs", async () => {
   const life = await opened();
   try {
     setSystemTime(new Date(1_000_000));
@@ -184,9 +184,9 @@ test("a spinner moves with the clock of the TUI", async () => {
     const wait = life.find("wait");
     if (!(wait instanceof TextRenderable)) throw new Error("No spinner.");
     const first = wait.plainText;
-    setSystemTime(new Date(1_000_000 + frame));
+    setSystemTime(new Date(1_000_000 + 2 * frame));
     life.app.tickMoving();
-    expect(wait.plainText).toBe(spin());
+    expect(wait.plainText).toBe(markOf("runs")[0]);
     expect(wait.plainText).not.toBe(first);
   } finally {
     setSystemTime();

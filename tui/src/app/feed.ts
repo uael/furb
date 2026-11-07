@@ -1548,7 +1548,12 @@ export const feed = part({
         "view-loading",
         `${w.view}:${height}`,
         [],
-        (box) => this.centered(box, height, this.text(loading())),
+        (box) => {
+          // The loader turns at the frame of the clock, as every loader does.
+          const text = this.text(loading());
+          this.moving.set(text, loading);
+          return this.centered(box, height, text);
+        },
         {
           title: loading,
           heading: false,
