@@ -323,3 +323,10 @@ def test_no_skill_nor_doc_names_a_prompt_or_a_rung_of_a_life() -> None:
   paths = [*SKILLS.glob("*/*.md"), *PROJECT.glob("*/*.md"), *ROOT.glob("docs/**/*.md"), ROOT / "AGENTS.md"]
   found = [f"{p}:{n}: {line.strip()[:80]}" for p, n, line in lines_of(paths) if ACT.search(line)]
   assert found == []
+
+
+def test_the_fixture_of_the_tui_holds_no_attribution_of_a_person() -> None:
+  """A recorded life that the repository ships keeps no word that attributes a rule to a person."""
+  said = re.compile(SAID.pattern + r"|the user,? (on [0-9]|said|asked|wrote|wants|ruled|told|decided)|\bOwner:", re.I)
+  text = (ROOT / "tui" / "fixtures" / "conductor.jsonl").read_text(encoding="utf-8")
+  assert [m.group(0) for m in said.finditer(text)] == []
