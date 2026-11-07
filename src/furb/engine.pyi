@@ -418,7 +418,7 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
   """The run of a word on a chain: a word its caller wrote, which it tells, since nothing else did; or, with no word, a turn of a model, which its chain asks for at the turn it gives it and which the World answers, of which it tells nothing, since that turn stands as the turn it is.
   A rung is an act: the run of one word in the globals of its chain, which the chain has the Kernel run.
   The engine tells what a step raised.
-  A step that raised nothing and debugged nothing tells nothing.
+  A step that raised nothing and debugged nothing tells nothing, and the chain asks no more until a fact comes, as a message.
   The open of a rung with a word tells that word alone, the code that the rung runs, and the chain binds no paragraph that holds it, so no word that ran runs again.
   A rung with no word tells nothing where it is made, since the chain tells it as the last line of the turn it asks for it with.
   A rung with no word and no actor takes the default actor of its chain when it is made, and writes it into its actor word, so its reply and its ledger read the one actor.
@@ -451,7 +451,7 @@ def rung(word: str = "", retells: str = "", to: str = "", on: str = "") -> Act:
   The chain has the Kernel begin it in the module of that chain, and the run carries it forward at the done of every act the word waits for, so that the engine owns the order of it.
   It is done with what the word gave, nothing for a word that ran to its end and the exception for a raise, which it tells with its type and its message, or as cancelled for a CancelledError, which its close then holds none of.
   Of the acts its word made and read at once it tells nothing, since such an act tells of itself or not at all.
-  An answer with no text is a word like any other, so the gate reads it, the run gives no value, and the model is asked again.
+  An answer with no text is a word like any other, so the gate reads it, the run gives no value, and the chain asks the model again when something new comes, as a message.
   A replay makes a rung of its own retelling each rung of the donor it keeps.
   A replay makes no rung for a word that is empty, since a rung with no word asks a model for a word.
   What a rung that retells asks is named under the one it retells, so the life answers it with what it answered then and the World is asked nothing twice.
@@ -487,7 +487,7 @@ def prompt(shape: None, message: str = "", to: str = "", on: str = "") -> Act[No
   The actor that a prompt leaves unsaid, and that its thread leaves unsaid too, is the default actor of the chain when each rung of the prompt is made, which that rung writes into its actor word, so a rung asks the actor the chain stands on then, a prompt that names an actor asks that one at every rung, and every life asks the actor the record holds.
   A prompt to a model runs in steps until the prompt completes.
   The binding of a prompt gives the shape as python shows the expression, as prompt1: Act[int] = Act('prompt1').
-  A rung whose word closes nothing ends its step, and the engine asks the model again.
+  A rung whose word closes nothing ends its step, and the chain asks the model again when something new comes, as a message or the end of an act that the word awaited.
   The completion of a prompt cancels nothing under the prompt but the words it ran.
   The operator prompts on any chain, by the id of the chain.
   A rung prompts on any chain, by the id of the chain.
@@ -624,13 +624,15 @@ def chain(label: str = "", source: str = "", filter: Filter | list[str] | None =
   Before every reply the chain tells the last paragraph of the turn, whose header says what the answer is for, as #rung5 advance on prompt1, which names the one that made the rung.
   The advance binds the share of the window that the last reply on the chain read, as rung5_share = 0.25: the tokens that reply read over the window that the roster gives its actor, to two places, and no share before a reply that read a token.
   The advance binds each act that a word of the chain awaits and that is not over, as rung5_waits = ['bash3'], and no waits when no word awaits, so the model sees which acts the words that it wrote before still wait for.
-  When nothing was told on the chain since the word of the last rung that the chain did not make was ready, the chain tells that rung under the header told nothing before the advance, so the model sees that the word showed it nothing.
+  The chain asks a prompt again only when something new came on the chain since its last ask: a fact that another speaker said, or the end of an act that the word did not end itself. Nothing that the last word made, nor what the chain says of that word, is new, so a word that tells nothing, that only sends a message to the operator or that only writes a page ends its step with no second ask, and a message of the operator asks again at once.
   After a second word in a row that bound no new name and after which nothing but the chain or a reminder of a message that is not answered told on the chain, the chain advances no rung until a fact comes, a tell of another or the end of an act that a word made, and tells the maker of that prompt once, so a model that answers a bare expression, prose and pass in turn is asked twice.
-  When no word of the chain runs, the chain advances no rung of the maker of a word that awaited no act that was not over and told no paragraph of its own, as a debug or a read does, while a prompt, or an act that the outside started, that the word of a rung that is no crafted rung made is not over, until a fact comes after that word ended, a tell or the end of such an act, and it advances at once when no such act is open, so a word with no close waits for what it made.
-  A word that ends with no close after it awaited an act that was not over is asked again at once, even while an act that it or another word made is open, so the model reads what it awaited, as the answer that the operator waits for.
+  When a word ends with no close and tells nothing while a prompt, or an act that the outside started, that it made is not over, the chain asks no rung of its maker until that act ends, and it asks no model while a word of the chain runs, so a word with no close waits for what it made.
+  A word that ends with no close after it awaited an act that was not over is asked again at once, whatever the value of that act, as a wait that timed out or a message answered with None, even while an act that it or another word made is open, so the model reads what it awaited, as the answer that the operator waits for.
   A message or a prompt of a person on the chain tells its open, so the chain asks it at once while an act that a word of the chain made runs.
   Of the rungs that wait, the chain advances first the one that was made first, so no prompt, of the operator or of a model, waits behind a prompt that came after it, and each other prompt delays a new one by one turn at most.
   A new prompt on a chain is asked while a word of the chain awaits a wait that is not over, so no wait holds a prompt.
+  When the fact that a word awaits comes, each chain whose rung waits with no run and no reply open asks it at once, with no timer and no message of the operator, while a paused chain and a word that awaits a prompt to the operator stay held.
+  A word that only debugs tells what it debugged, which is new, so the chain asks again at once with no message of the operator.
   The chain holds the text of each paragraph told on it but the word of a rung, in order.
   At the advance of the next rung, before it asks the reply, or at the first ready of a rung that it does not advance, the chain runs that text as the told rung of that rung, and holds nothing more.
   Each act that a told paragraph opened and each value that it told is bound for the word of that rung, whoever wrote it.
@@ -654,6 +656,7 @@ def seed(data: object) -> list[Entry]:
   Each open prompt of the data is made again through prompt under its name, and each chain that the data says paused is paused.
   Each chain with an open prompt opens paused while the seed binds it, and wakes after it unless the data says it was paused, so an open prompt asks its model again at once.
   Each act of the data with a value stands known on its chain with that value and runs nothing.
+  Each act of the data with a value is made before each open prompt, so a message that the operator sent on a done prompt while its chain was paused reads that prompt, and its model is asked once a wake comes in the later life.
   A rung of the operator on each chain says its turns as its prefix, binds its definitions and its values, awaits a rung of each life word whose act was open on it at the tip, says its turns as its prefix again with each fact since but a tell, and tells what the checkpoint lost and cut when it lost or cut one, with each word that ran on it in the data of schema 1, and it runs no word again, so the model of the chain starts a cut word again in a turn that shows.
   The rung binds the definitions and the values of the chain after it says the prefix, so a value that raises as it is bound leaves the turns of the chain whole.
   A birth tells no turn of its own: the turns of a chain after it are its turns at the tip, and each act that a life word made lives again under a rung whose word is that life word.
@@ -1228,7 +1231,7 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
   An act whose maker is neither an act nor an ear that boot was given is said again through its verb, with the words the record holds and the chain it names, so its ear is the verb's, a host finds it made when boot returns and makes it not again, and each show and the acts that each filter kept come again with its words, since the record holds them.
   A later life says an act whose maker is neither an act nor an ear that boot was given again only through a verb in the globals of its chain, and an act whose kind no verb binds is refused when it is made, so no record holds one.
   The journal says again a done that is the first answer of an act when the act is made again, and every later fact of it at the place where the record holds it, the started of each act that a wake began again among them.
-  An act that the life makes under no site, as the chain makes the reply of an advance whose rung ended, is no fact of the World, so a later life makes it again with no drift.
+  The chain asks no reply for the advance of a rung that ended before the reply, so the World pays no turn that no rung hears, no act is made under no site, and a later life makes none either.
   A first answer that the record holds with no maker is a refusal of the life, that nothing took the act, so the journal says it again under no site, as the life said it, and neither keeps it again nor reads it as a drift.
   What the record shows started and not done when boot returns is pending: the journal holds it from the outside until a wake that this life says.
   An act whose maker is the journal, as seed gives one, stands known in the transcript of its chain with no verb and runs nothing, and the journal says its later facts at their place.

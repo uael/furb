@@ -10,7 +10,7 @@ async def test_program_gives_the_program_of_a_chain() -> None:
   sand, log, root = born()
   mine = engine.rung("mine = 1", on=root)
   await mine
-  sand.script[root] = ["<s:hi>\nhi\n</s:hi>\na = hi", "b = BAD", "close(len(a))"]
+  sand.script[root] = ["<s:hi>\nhi\n</s:hi>\na = hi\ndebug(t'go')", "b = BAD", "close(len(a))"]
   one = engine.prompt(int, "count", on=root)
   assert await one == 3
   await settle()
@@ -21,8 +21,8 @@ async def test_program_gives_the_program_of_a_chain() -> None:
     (f"{mine}_told", fresh(root)),
     (mine, "mine = 1"),
     (f"{first}_told", f"{prompted(one, 'int', 'count')}\n\n#{first} advance on {one}"),
-    (first, "hi = 'hi\\n'\n\n\na = hi"),
-    (f"{refused}_told", f"#{first} told nothing\n\n#{refused} advance on {one}"),
+    (first, "hi = 'hi\\n'\n\n\na = hi\ndebug(t'go')"),
+    (f"{refused}_told", f"#{first} debugged\n{first}_debug = 'go'\n\n#{refused} advance on {one}"),
     (f"{last}_told", f"{findings}\n\n#{last} advance on {one}"),
     (last, "close(len(a))"),
   ]

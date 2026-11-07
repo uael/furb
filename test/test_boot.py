@@ -291,13 +291,16 @@ async def test_the_engine_makes_a_chain_from_the_record_and_in_no_other_way() ->
 
 async def test_the_rungs_of_the_ladder_run_in_record_order() -> None:
   """The rungs of a chain run in record order."""
-  sand, _, root = born("a = 1", "b = a + 1", "close(b)")
+  sand, _, root = born("a = 1\ndebug(t'go')", "b = a + 1\ndebug(t'go')", "close(b)")
   assert await engine.prompt(int, "count", on=root) == 2
   await settle()
   again, _ = await relived(Sand(), list(sand.record))
   bound = fresh(root, prompted("prompt1", "int", "count"), "#rung1 advance on prompt1")
-  told = ["#rung1 told nothing\n\n#rung2 advance on prompt1", "#rung2 told nothing\n\n#rung3 advance on prompt1"]
-  assert ran(again) == [bound, "a = 1", told[0], "b = a + 1", told[1], "close(b)"]
+  told = [
+    "#rung1 debugged\nrung1_debug = 'go'\n\n#rung2 advance on prompt1",
+    "#rung2 debugged\nrung2_debug = 'go'\n\n#rung3 advance on prompt1",
+  ]
+  assert ran(again) == [bound, "a = 1\ndebug(t'go')", told[0], "b = a + 1\ndebug(t'go')", told[1], "close(b)"]
 
 
 async def test_each_act_a_rung_makes_again_is_the_act_the_record_holds_at_that_place() -> None:
@@ -1078,10 +1081,10 @@ def ending(on: str = "") -> str:
   return engine.act("ending", on, ender)
 
 
-async def test_an_act_that_the_life_makes_under_no_site_is_no_fact_of_the_world_in_a_replay(
+async def test_the_chain_asks_no_reply_for_the_advance_of_a_rung_that_ended_before_it_so_no_act_is_made_under_no_site(
   monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-  """An act that the life makes under no site, as the chain makes the reply of an advance whose rung ended, is no fact of the World, so a later life makes it again with no drift."""
+  """The chain asks no reply for the advance of a rung that ended before the reply, so the World pays no turn that no rung hears, no act is made under no site, and a later life makes none either."""
   monkeypatch.setattr(engine, "ending", ending, raising=False)
   first = Sand()
   log, root = life(first)
@@ -1090,7 +1093,7 @@ async def test_an_act_that_the_life_makes_under_no_site_is_no_fact_of_the_world_
   await settle()
   engine.prompt(int, "count", on=other)
   await settle()
-  made = [a[1:4] for a in said(log, "reply") if a[2] == ""]
-  assert made, said(log, "reply")
+  assert [a for a in said(log, "reply") if a[2] == ""] == []
   again, _ = await relived(Sand(), list(first.record))
-  assert [a[1:4] for a in said(again, "reply") if a[2] == ""] == made
+  assert [a for a in said(again, "reply") if a[2] == ""] == []
+  assert [a[1:4] for a in said(again, "reply")] == [a[1:4] for a in said(log, "reply")]

@@ -336,9 +336,6 @@ fn a_word_that_polls_the_clock_ends_at_the_bound_of_a_turn_and_two_readings_in_a
   eprintln!("the poll made {:?} acts of clock in {took:?}", clocks.as_ref().as_int());
   assert!(took < Duration::from_secs(20), "the poll was cut near 2 s, not at 60: {took:?}");
   drop(life);
-  // The replay of thousands of readings takes the time of the machine, and this test reads no
-  // bound of a turn in it: a slow machine must not cut the replay where the record did not.
-  BOUND.set(Duration::from_secs(600));
   let again = scripted(&at, &[]).boot::<String>([]).unwrap().0;
   assert!(again.raised().is_none(), "a later life replays the poll and its refusal with no drift");
 }

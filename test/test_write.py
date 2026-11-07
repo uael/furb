@@ -156,23 +156,25 @@ async def test_the_chain_answers_a_write_of_the_door_of_one_of_its_prompts_with_
 async def test_a_write_of_a_door_that_a_rung_of_that_ladder_says_leaves_the_word_of_that_rung_out() -> None:
   """A write of a door that a rung of that ladder says leaves the word of that rung out of the ladder, so the door shows it no more."""
   _, log, root = born(
-    "k = 1",
+    "k = 1\ndebug(t'go')",
     "ok = BAD",
     "mine = get(acting())[2]\nwrite(read(mine).replace('BAD', '2'))\nwrite(read(mine))",
     "close((k, ok, read(get(acting())[2]).content))",
   )
   act = engine.prompt(object, "fix it", on=root)
-  assert await act == (1, 2, "k = 1\nok = 2")
+  assert await act == (1, 2, "k = 1\ndebug(t'go')\nok = 2")
   await settle()
   one, _, writer, made, last = [a[1] for a in said(log, "rung") if a[2] == act]
-  read = f"#read1\nread1_path = {act!r}\n<s:read1_text>\nk = 1\nok = BAD</s:read1_text>"
+  read = f"#read1\nread1_path = {act!r}\n<s:read1_text>\nk = 1\ndebug(t'go')\nok = BAD</s:read1_text>"
   assert said(log, "run")[4][4:] == (
     writer,
     "mine = get(acting())[2]\nwrite(read(mine).replace('BAD', '2'))\nwrite(read(mine))",
     "",
   )
   assert said(log, "run")[5][4:] == (f"{made}_told", engine.unquoted(read), "")
-  assert engine.read(act, on=root) == Text(act, "k = 1\nok = 2\nclose((k, ok, read(get(acting())[2]).content))")
+  assert engine.read(act, on=root) == Text(
+    act, "k = 1\ndebug(t'go')\nok = 2\nclose((k, ok, read(get(acting())[2]).content))"
+  )
   assert engine.read(act, on=root) == Text(act, "\n".join(engine.program(root)[x] for x in (one, made, last)))
 
 
