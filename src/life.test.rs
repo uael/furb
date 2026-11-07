@@ -887,27 +887,29 @@ fn each_record_of_the_replays_replays_on_its_own_engine_with_no_drift() {
 #[test]
 fn a_record_of_an_engine_that_an_adapter_names_drifts_on_that_engine_without_the_adapter() {
   use sha2::{Digest, Sha256};
-  let at = place("unadapted");
-  laid(&replays().join("ranks.jsonl.zst"), &at.join("record.jsonl"));
-  let mut lines: Vec<String> =
-    fs::read_to_string(at.join("record.jsonl")).unwrap().lines().map(str::to_owned).collect();
-  let made = lines.iter().position(|one| one.starts_with(r#"[["made""#)).unwrap();
-  let mut entry: serde_json::Value = serde_json::from_str(&lines[made]).unwrap();
-  let fact = entry[0].as_array_mut().unwrap();
-  // The same engine with one more line at its end, which no adapter names.
-  let engine = format!("{}\n", fact[7].as_str().unwrap());
-  let mut hash = Sha256::new();
-  for one in [engine.as_str(), fact[8].as_str().unwrap()] {
-    hash.update(one.as_bytes());
-    hash.update([0]);
+  for (record, first) in [("ranks.jsonl.zst", "rung3230"), ("speaker.jsonl", "reply4")] {
+    let at = place(&format!("unadapted-{first}"));
+    laid(&replays().join(record), &at.join("record.jsonl"));
+    let mut lines: Vec<String> =
+      fs::read_to_string(at.join("record.jsonl")).unwrap().lines().map(str::to_owned).collect();
+    let made = lines.iter().position(|one| one.starts_with(r#"[["made""#)).unwrap();
+    let mut entry: serde_json::Value = serde_json::from_str(&lines[made]).unwrap();
+    let fact = entry[0].as_array_mut().unwrap();
+    // The same engine with one more line at its end, which no adapter names.
+    let engine = format!("{}\n", fact[7].as_str().unwrap());
+    let mut hash = Sha256::new();
+    for one in [engine.as_str(), fact[8].as_str().unwrap()] {
+      hash.update(one.as_bytes());
+      hash.update([0]);
+    }
+    fact[3] = format!("{:x}", hash.finalize()).into();
+    fact[7] = engine.into();
+    lines[made] = entry.to_string();
+    fs::write(at.join("record.jsonl"), lines.join("\n") + "\n").unwrap();
+    let drift =
+      Opening { inspecting: Some(true), ..opening(&at, false) }.boot::<String>([]).unwrap_err();
+    assert!(format!("{drift:?}").contains(&format!("{first} drifts")), "{record}: {drift:?}");
   }
-  fact[3] = format!("{:x}", hash.finalize()).into();
-  fact[7] = engine.into();
-  lines[made] = entry.to_string();
-  fs::write(at.join("record.jsonl"), lines.join("\n") + "\n").unwrap();
-  let drift =
-    Opening { inspecting: Some(true), ..opening(&at, false) }.boot::<String>([]).unwrap_err();
-  assert!(format!("{drift:?}").contains("rung3230 drifts"), "{drift:?}");
 }
 
 #[test]

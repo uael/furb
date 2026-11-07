@@ -66,3 +66,17 @@ gathered of that engine reads slot 4 of the maker of each open act, which that i
 IndexError and the life writes no checkpoint. The adapter of that engine in `src/furb/adapters.py` gives it the lives
 of a later engine. The test `a_life_of_an_engine_whose_gathered_raised_on_an_act_that_no_rung_made_writes_its_checkpoint_through_its_adapter`
 writes its checkpoint, which carries the life word of compaction.
+
+`speaker.jsonl` is a scripted life of the engine `c63db8af`, with two chains. The first word of the root runs a
+command, then reads `transcript(of="bash")`, and closes its prompt only when that transcript holds more than three
+facts. That engine says again, under the journal and not under its speaker, each fact of the outside that the record
+holds, and holds no started of an act that the outside took. So in the replay that transcript holds only the command:
+an act that the outside made, as the merged, comes again in no replay. The word then debugs in place of its close, the
+root asks again, and the life drifts at `reply4`. The adapter of that engine in `src/furb/adapters.py` says each such
+fact again under its speaker, which the journal then keeps no second time, and holds the started, so the transcript
+holds the command, its started, its out and its done, and the record replays with no drift. Each of the two changes
+is needed: with the first alone the transcript holds three facts and the life drifts at `reply4`. The test
+`a_record_of_an_engine_that_an_adapter_names_drifts_on_that_engine_without_the_adapter` in `src/life.test.rs` proves
+the drift without the adapter, and the test
+`a_record_of_an_older_engine_opens_through_its_adapter_and_keeps_no_fact_of_its_record_again` in `src/engine.test.rs`
+proves that a life that keeps the record adds no copy of its facts.

@@ -319,7 +319,11 @@ export async function lived(walk: Walk, window: Window, yard: Yard): Promise<voi
           window.engine.peek(String(fact[1])),
         ),
       );
-    await until(async () => (await answers()).includes("Held, then done."), "the answer of the held message", BOUND);
+    await until(
+      async () => (await answers()).includes("Held, then done."),
+      "the answer of the held message",
+      BOUND,
+    );
   });
   await walk.step("open a new thread with /newthread", () => window.type("/newthread"));
   await walk.step(

@@ -19,7 +19,10 @@ test("a message queued with the shortcut while the model works gets its answer o
       await window.shows((frame) => frame.includes("Queued 1"), "the follow-up in the queue");
       expect(window.app.composer.plainText).toBe("");
       await yard.release("go");
-      await window.shows((frame) => frame.includes("Queued, then answered."), "the answer of the queued message");
+      await window.shows(
+        (frame) => frame.includes("Queued, then answered."),
+        "the answer of the queued message",
+      );
       const prompts = await window.engine.transcript({ on: window.root, of: "prompt" });
       const answers = await Promise.all(prompts.map((fact) => window.engine.peek(String(fact[1]))));
       expect(answers).toEqual(["Held, then done.", "Queued, then answered."]);
