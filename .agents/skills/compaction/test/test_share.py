@@ -11,10 +11,10 @@ async def test_share_is_the_share_of_the_window_past_which_compacted_compacts(tm
   sand, root, _ = compacting(tmp_path)
   await engine.rung("compacted()", on=root)
   sand.cost = (240000, 0, 0, 0, 0.0)
-  sand.script[root] = ["x = 1", "close(SHARE)"]
+  sand.script[root] = ["x = 1\ndebug(t'go')", "close(SHARE)"]
   assert await engine.prompt(float, "share", on=root) == 0.6
   assert engine.get("chain2") is None
   sand.cost = (244000, 0, 0, 0, 0.0)
-  sand.script[root] = ["x = 2", "close(x)"]
+  sand.script[root] = ["x = 2\ndebug(t'go')", "close(x)"]
   assert await engine.prompt(int, "past", on=root) == 2
   assert engine.get("chain2")[3:] == (root, "chosen", "")

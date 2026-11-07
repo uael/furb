@@ -153,8 +153,8 @@ def choice(to: str = "", on: str = "") -> Act:
           replies += 1
           if replies >= bound and not over(asked):
             close(Refused(f"{asked}: the model of choice wrote {replies} words on {side} and closed none"), asked)
-        # The chain of choice asks the prompt no more after words that made nothing new, so it ends refused.
-        case ("tell", _, _, [head, *_]) if head.startswith(f"#{asked} asked no more") and not over(asked):
+        # The chain of choice tells the maker of the prompt only that it asks it no more, after a word that made nothing new, so it ends refused.
+        case ("tell", about, by, _) if about == maker and by == side and not over(asked):
           close(Refused(f"{asked}: the model of choice wrote {replies} words on {side} that made nothing new"), asked)
     yield "done", id, None
 
