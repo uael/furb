@@ -342,6 +342,8 @@ export const themeLabels: Record<ThemeName, [string, string]> = {
 export const spacing = { inset: 1, gutter: 2, stack: 0, section: 1, rest: 0, bar: 1, between: 2 } as const;
 /** The glyphs of the TUI, so that one shape says one thing everywhere. */
 export const glyph = {
+  /** Rows of a list stand above the first row that it shows. */
+  up: "↑",
   open: "▾",
   closed: "▸",
   dot: "●",
