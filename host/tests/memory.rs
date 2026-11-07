@@ -1,8 +1,9 @@
 //! The memory that a life holds as it grows: a life that keeps a record of its own draws numbers
 //! and answers prompts whose model writes its reply in many small parts, and the heap of the
-//! process is read at 10k, 40k and 160k facts, with the events and the bytes that a reader who
-//! attaches at the start of the log reads. The test counts each byte that the process allocates, so
-//! it runs in a process of its own, with no harness.
+//! process is read at two small sizes, with the events and the bytes that a reader who attaches at
+//! the start of the log reads. With the argument `--large` it is the measure of the bench, at 10k,
+//! 40k and 160k facts, with the budget of its heap. The test counts each byte that the process
+//! allocates, so it runs in a process of its own, with no harness.
 
 #![expect(
   clippy::disallowed_methods,
@@ -71,9 +72,20 @@ unsafe impl GlobalAlloc for Counted {
 #[global_allocator]
 static COUNTED: Counted = Counted;
 
-/// The sizes of a life, in facts, at which the test reads the heap, which `FURB_MEMORY_SIZES` may
-/// name as numbers apart by commas.
-const SIZES: [usize; 3] = [10_000, 40_000, 160_000];
+/// The sizes of a life, in facts, at which the suite reads the heap: two sizes that run in a few
+/// seconds, which show what a reader reads and how the heap grows from one to the other.
+/// `FURB_MEMORY_SIZES` may name others, as numbers apart by commas.
+const SMALL: [usize; 2] = [2_000, 6_000];
+
+/// The sizes of the measure of the bench, which the argument `--large` runs.
+const LARGE: [usize; 3] = [10_000, 40_000, 160_000];
+
+/// How many bytes of heap each fact may hold at the second small size, as a multiple of those at
+/// the first: a heap that grows faster than the facts shows at once.
+const GROWTH: usize = 2;
+
+/// The most heap that a life of the last large size may hold, in MiB: the budget of the bench.
+const BUDGET: usize = 1024;
 
 /// How many events a reader may stand behind the life and still hear each of them, as the life
 /// says.
@@ -198,15 +210,23 @@ fn footprint() -> String {
   line.split("Footprint: ").nth(1).and_then(|one| one.split(" (").next()).unwrap_or("?").to_owned()
 }
 
+/// The suite runs the small sizes, in a few seconds. `--large` runs the measure of the bench, at
+/// 10k, 40k and 160k facts, with the budget of its heap and a slow window on a life of 40k facts.
 fn main() {
   let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build();
   let runtime = runtime.expect("the test has a runtime");
-  runtime.block_on(the_heap_of_a_life_grows_with_its_facts_and_no_more());
-  runtime.block_on(a_window_that_reads_slowly_holds_no_copy_of_the_log());
+  let large = std::env::args().any(|one| one == "--large");
+  let sizes: Vec<usize> = std::env::var("FURB_MEMORY_SIZES").map_or_else(
+    |_| if large { LARGE.to_vec() } else { SMALL.to_vec() },
+    |named| named.split(',').map(|one| one.trim().parse().expect("a size is a number")).collect(),
+  );
+  runtime.block_on(the_heap_of_a_life_grows_with_its_facts_and_no_more(&sizes, large));
+  let (attached, most) = if large { (40_000, 16 << 20) } else { (10_000, 6 << 20) };
+  runtime.block_on(a_window_that_reads_slowly_holds_no_copy_of_the_log(attached, most));
 }
 
 /// The heap of a life at each size, and what a reader that attaches reads, printed as a table.
-async fn the_heap_of_a_life_grows_with_its_facts_and_no_more() {
+async fn the_heap_of_a_life_grows_with_its_facts_and_no_more(sizes: &[usize], large: bool) {
   let at = yard::Yard::new(format!("furb-host-memory-{}", std::process::id()));
   let base = LIVE.load(Ordering::Relaxed);
   std::fs::write(at.join("big.txt"), "y".repeat(FILE - 1) + "\n").expect("the file is written");
@@ -215,12 +235,9 @@ async fn the_heap_of_a_life_grows_with_its_facts_and_no_more() {
   let (mut facts, mut last) = (0, 0);
   println!("facts\theap MiB\tbytes/fact\tattach events\tattach MiB");
   let mut rows = Vec::new();
-  let sizes: Vec<usize> = std::env::var("FURB_MEMORY_SIZES").map_or_else(
-    |_| SIZES.to_vec(),
-    |named| named.split(',').map(|one| one.trim().parse().expect("a size is a number")).collect(),
-  );
   let started = Instant::now();
-  for size in sizes {
+  let mut heaps = Vec::new();
+  for &size in sizes {
     while facts < size {
       let heap = LIVE.load(Ordering::Relaxed);
       assert!(heap < MOST, "the process holds {heap} bytes at {facts} facts, past {MOST}");
@@ -251,9 +268,30 @@ async fn the_heap_of_a_life_grows_with_its_facts_and_no_more() {
       footprint()
     );
     rows.push((facts, parts, events, acts));
+    heaps.push((facts, heap));
   }
   life.send(Command::End).await.ok();
-  for (facts, parts, events, acts) in rows {
+  checked(&rows, &heaps, large);
+}
+
+/// What each size showed: what a reader that attaches read, how the heap grew from the first size
+/// to the last, and, for the bench, the budget of the heap.
+fn checked(rows: &[(usize, usize, usize, usize)], heaps: &[(usize, usize)], large: bool) {
+  if let [(few, small), .., (many, big)] = heaps[..] {
+    let (each_small, each_big) = (small / few, big / many);
+    assert!(
+      each_big <= GROWTH * each_small,
+      "the heap holds {each_small} bytes for each fact at {few} facts and {each_big} at {many}: it grows faster than the facts"
+    );
+  }
+  if large && let Some(&(facts, heap)) = heaps.last() {
+    assert!(
+      heap >> 20 <= BUDGET,
+      "a life of {facts} facts holds {} MiB of heap, past the budget of {BUDGET} MiB",
+      heap >> 20
+    );
+  }
+  for &(facts, parts, events, acts) in rows {
     assert!(
       parts <= PARTS,
       "at {facts} facts, a reader who attaches reads {parts} parts that a model wrote, past the {PARTS} of the last reply: the log keeps each part of each reply that is done"
@@ -264,13 +302,6 @@ async fn the_heap_of_a_life_grows_with_its_facts_and_no_more() {
     );
   }
 }
-
-/// The size of the life that a slow window attaches, in facts.
-const ATTACHED: usize = 40_000;
-
-/// The most bytes that the daemon may take for a window that attaches at the start of the log of
-/// a life and reads nothing.
-const SLOW: usize = 16 << 20;
 
 /// A peer of the daemon: its stream and the id of its next request.
 struct Peer {
@@ -338,7 +369,7 @@ impl Peer {
 /// A daemon whose life told many facts, and a window that attaches at the start of its log and
 /// reads nothing: the daemon pushes it the events of the life no faster than it reads them, so it
 /// holds no copy of the log for it.
-async fn a_window_that_reads_slowly_holds_no_copy_of_the_log() {
+async fn a_window_that_reads_slowly_holds_no_copy_of_the_log(attached: usize, most: usize) {
   let at = yard::Yard::new(format!("furb-host-slow-{}", std::process::id()));
   std::fs::write(at.join("big.txt"), "y".repeat(FILE - 1) + "\n").expect("the file is written");
   let local = Local::new(at.join("sock"));
@@ -369,7 +400,7 @@ async fn a_window_that_reads_slowly_holds_no_copy_of_the_log() {
   assert_eq!(driver.ask(open).await, Answer::Done);
   assert_eq!(driver.ask(Verb::Attach { life: life.clone(), from: 0 }).await, Answer::Done);
   let mut facts = 0;
-  while facts < ATTACHED {
+  while facts < attached {
     let word =
       format!("for i in range({DRAWS}):\n  chance()\nfor i in range({READS}):\n  read('big.txt')");
     let Answer::Act(rung) = driver.ask(Verb::Run { life: life.clone(), word, on: None }).await
@@ -382,12 +413,12 @@ async fn a_window_that_reads_slowly_holds_no_copy_of_the_log() {
   let before = LIVE.load(Ordering::Relaxed);
   let mut slow = Peer::dialed(&local).await;
   slow.said(Verb::Attach { life: life.clone(), from: 0 }).await;
-  tokio::time::sleep(Duration::from_secs(3)).await;
+  tokio::time::sleep(Duration::from_secs(if attached > 20_000 { 3 } else { 1 })).await;
   let taken = LIVE.load(Ordering::Relaxed).saturating_sub(before);
   println!("a slow window on a life of {facts} facts: the daemon took {} KiB", taken >> 10);
   assert!(
-    taken < SLOW,
-    "a window that reads nothing on a life of {facts} facts took {taken} bytes of the daemon, past {SLOW}: the daemon copies the log for it"
+    taken < most,
+    "a window that reads nothing on a life of {facts} facts took {taken} bytes of the daemon, past {most}: the daemon copies the log for it"
   );
   drop(slow);
 }
