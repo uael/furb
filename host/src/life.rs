@@ -167,6 +167,7 @@ impl Command {
       | Self::Bash { .. }
       | Self::Read { .. }
       | Self::Write { .. }
+      | Self::Seen { .. }
       | Self::Stand => Self::By { speaker, command: Box::new(self) },
       other => other,
     }

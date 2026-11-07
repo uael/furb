@@ -190,6 +190,76 @@ mod daemon {
     }
   }
 
+  /// The identity of a test whose peers that dial in turn are the logins of a list, each a writer.
+  #[derive(Clone)]
+  struct Logins {
+    local: Local,
+    next: Arc<AtomicUsize>,
+    names: Arc<[&'static str]>,
+  }
+
+  impl Identity for Logins {
+    type Stream = Accepted;
+
+    async fn identify(&self, stream: &Accepted) -> Result<Who, TransportError> {
+      let who = self.local.identify(stream).await?;
+      let at = self.next.fetch_add(1, Ordering::SeqCst);
+      Ok(Who { login: self.names[at].to_owned(), ..who })
+    }
+  }
+
+  /// Who said each fact seen of a life about a chain, in the order of the record.
+  async fn seen_by(window: &mut Window, life: &str, about: &str) -> Vec<String> {
+    let of = Some("seen".to_owned());
+    let verb = Verb::Transcript { life: life.to_owned(), on: None, of };
+    let Ok(Answer::Values(facts)) = window.ask(verb).await else { panic!("no transcript") };
+    let about = facts.iter().filter(|one| one[1] == about);
+    about.filter_map(|one| one[2].as_str().map(str::to_owned)).collect()
+  }
+
+  #[tokio::test]
+  async fn the_seen_of_each_operator_is_a_fact_of_his_own_that_a_reopen_keeps() {
+    let at = place();
+    let local = Local::new(at.join("sock"));
+    let listener = local.listen().await.unwrap();
+    let settings = Settings {
+      opening: opening(&at),
+      grace: SHORT,
+      stall: STALL,
+      tailnet: None,
+      door: None,
+      host: None,
+    };
+    let logins: Arc<[&str]> = ["alice", "bob", "alice"].into();
+    let identity = Logins { local: local.clone(), next: Arc::default(), names: logins };
+    tokio::spawn(async move { run(&identity, listener, settings).await });
+    let (mut alice, mut bob) = (Window::dialed(&local).await, Window::dialed(&local).await);
+    let life = opened(&mut alice, &at, "a.jsonl").await;
+    alice.attach(&life).await;
+    bob.attach(&life).await;
+    let seen = |about: &str| Verb::Seen { life: life.clone(), about: about.to_owned() };
+    assert_eq!(alice.ask(seen("chain1")).await, Ok(Answer::Done));
+    assert_eq!(
+      seen_by(&mut bob, &life, "chain1").await,
+      ["operator/alice"],
+      "the seen of alice is hers, so bob has not seen chain1"
+    );
+    assert_eq!(bob.ask(seen("chain1")).await, Ok(Answer::Done));
+    assert_eq!(seen_by(&mut alice, &life, "chain1").await, ["operator/alice", "operator/bob"]);
+    for window in [&mut alice, &mut bob] {
+      assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+    }
+    time::sleep(PAST).await;
+    assert!(!alice.lives(&life).await, "the life ended after its grace");
+    let mut again = Window::dialed(&local).await;
+    opened(&mut again, &at, "a.jsonl").await;
+    assert_eq!(
+      seen_by(&mut again, &life, "chain1").await,
+      ["operator/alice", "operator/bob"],
+      "a reopen keeps the seen of each operator apart"
+    );
+  }
+
   /// A daemon that gives each peer that dials, in turn, the role of a list.
   async fn started_as(at: &Path, roles: &[Role]) -> Local {
     let local = Local::new(at.join("sock"));
