@@ -210,9 +210,26 @@ impl Fold {
       spend: None,
       state: State::Idle,
     };
+    let taken = if act.kind == Kind::Chain { self.carried(rest) } else { Vec::new() };
+    let act = Act { taken, ..act };
     self.placed(&act);
     self.moved.push(act.id.clone());
     self.acts.insert(act.id.clone(), act);
+  }
+
+  /// The messages that a chain with a source takes from it: its fact names the acts of the source
+  /// that it carries, which a record holds though it holds no prefix, and the prompts of the
+  /// operator among them are its messages.
+  fn carried(&self, rest: &[Value]) -> Vec<String> {
+    let named = rest.get(3).and_then(Value::as_array).map_or(&[][..], Vec::as_slice);
+    named
+      .iter()
+      .filter_map(Value::as_str)
+      .filter(|id| {
+        self.acts.get(*id).is_some_and(|one| one.kind == Kind::Prompt && operator(&one.by))
+      })
+      .map(str::to_owned)
+      .collect()
   }
 
   /// A new act in the places that the fold reads it from: the live acts, the children of its maker,

@@ -301,19 +301,24 @@ fix what your change broke, and report what was broken before.
   `uv sync --reinstall-package furb-monty --reinstall-package furb-cli` builds them again in any case. This build,
   `cargo test` and `bun run build` take the dev profile, which optimizes every dependency, the interpreter among them,
   so a word runs as fast as in a release while the crates of the workspace build quickly. A wheel for PyPI takes the
-  release. A build keeps no incremental state (`.cargo/config.toml`), so no folder grows in a worktree;
-  a rebuild of the crate takes about 45 s.
+  release. A build keeps no incremental state and no debug information of a dependency (`.cargo/config.toml`,
+  `Cargo.toml`), which holds a target to about a third of its bytes; a rebuild of the crate takes about 45 s.
 - `script/worktree.sh <path> <branch> [base]`: make a git worktree whose build starts warm. It checks out a branch that
   stands on origin or in this clone, and moves a local branch that lags behind origin up to it; a new branch starts from
-  `base`, `origin/main` by default. It copies on write the build directories of the checkout whose build stands nearest
-  to the new commit, so cargo builds only the crates of the workspace again: the `target` of cargo, the `node_modules`
-  of bun, the build of the TypeScript package and the cache of the tests of the TUI. Then it runs
+  `base`, `origin/main` by default. It links `target` to `furb-target` beside the main checkout, which each worktree of the
+  clone shares, so a dependency builds once and a worktree adds only its crates of the workspace. The build script of
+  furb reads `FURB_TREE`, so a build rebuilds a crate that another worktree built last: cargo would call it fresh by
+  the time of its files and test the code of the other worktree. A tree
+  that lacks this stamp keeps its own target until it merges `origin/w/converge`: the hooks `post-merge` and
+  `post-commit` run `script/share-target.sh`, which drops that target and links the shared one, when no build runs in it. It copies on write the build directories of the
+  checkout whose build stands nearest to the new commit: the `node_modules` of bun, the build of the TypeScript
+  package and the cache of the tests of the TUI. Then it runs
   `bun install --offline` and `bun run build`. It sets `core.hooksPath` of the clone to `script/hooks` when no value
   stands, so that the hooks of each worktree print only what fails. It copies no `.venv`: it makes the `.venv` of the new tree with
   `uv sync --locked` on the warm target, so the python of its hooks imports its own tree. That takes about 52 s in a new
   tree, and next to no time when uv holds the wheel in its cache. If `uv` is missing or the sync fails, the script says
-  so and names the command to run. A first build takes about 6 minutes, against about 35 in a worktree of
-  `git worktree add`. Copy on write needs APFS, Btrfs or XFS; on another file system, the script makes a
+  so and names the command to run. A first build takes about a minute when the shared target holds the
+  dependencies, against about 35 in a worktree of `git worktree add`. Copy on write needs APFS, Btrfs or XFS; on another file system, the script makes a
   plain worktree. Remove a worktree with `git worktree remove --force <path>`, then `git branch -D <branch>`. The
   checkout at the root can stand behind `origin/main`, so read and change code in a worktree.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
@@ -351,8 +356,9 @@ fix what your change broke, and report what was broken before.
   `--files <files>` to run some files. In a new worktree, `uv run --no-sync pre-commit` makes an empty `.venv` and runs
   the old `pre-commit` of the system, which cannot read the config, so do not use it there. A `git commit` runs the hooks, `cargo test`
   among them, and takes minutes: give it a timeout in `bash` of twice the time that it took last. The hook
-  `script/hooks/pre-commit`, which `git config core.hooksPath script/hooks` turns on, prints only what fails. The hook `script/hooks/commit-msg` refuses a commit whose title breaks the rules of `script/title.py`, which CI checks on the pull request, so that no commit is amended and pushed again. The hook `script/hooks/pre-push` refuses each push that moves or deletes `main` of a remote: `main` changes only through the merge of a pull request, `gh pr merge`, which runs no hook here. A merge commit, which `git merge` makes or `git commit` ends after a conflict, runs the hooks on
-  each file that it changes against its first parent, as a commit does. Run the
+  `script/hooks/pre-commit`, which `git config core.hooksPath script/hooks` turns on, prints only what fails. The hook `script/hooks/commit-msg` refuses a commit whose title breaks the rules of `script/title.py`, which CI checks on the pull request, so that no commit is amended and pushed again. The hook `script/hooks/pre-push` refuses each push that moves or deletes `main` of a remote: `main` changes only through the merge of a pull request, `gh pr merge`, which runs no hook here. A merge commit, which `git merge` makes or `git commit` ends after a conflict, runs the hooks only on
+  each file whose content differs from its version in every parent: a file that it takes whole from one parent passed the
+  hooks of that parent, and the gates check the whole tree. Run the
   push as its own command after the commit, so that its result stands in the tail of that command. The hook `cargo test` runs only when a file that the crate
   or its tests read changed, and the gates run every hook on every file. The hook of the links runs only for a README or
   a manifest, and reads git alone. The hook `stray` refuses a `*.rej`, `*.orig` or `*-E` file. The hook `paths` runs on
@@ -398,7 +404,7 @@ fix what your change broke, and report what was broken before.
 - `uv run --no-sync python script/workflows.py`: parse each file of `.github/workflows/` with PyYAML, in a second, with no
   build. It fails on a syntax fault, on a key that a mapping holds twice, on a marker of a conflict, on a job with
   neither `runs-on` nor `uses`, on a step with neither `run` nor `uses`, and on a `needs` that names no job. Run it
-  after a merge or a rebase that touched a workflow. The hooks run it on every commit, a merge commit too.
+  after a merge or a rebase that touched a workflow. The hooks run it on every commit, and on a merge commit with new content.
 - `bun install && bun run build`: install the TypeScript workspace, and build the N-API package that the TUI uses.
 - `bun run check`, `bun run lint` and `bun run test`: the type check, the lint and the tests of the TypeScript side.
   `tui/script/test.ts` deals the tests into runs, each a process that runs one test at a time with a limit of thirty

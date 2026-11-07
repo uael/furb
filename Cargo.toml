@@ -211,18 +211,16 @@ ruff_python_parser = "0.0.9"
 ruff_python_ast = "0.0.9"
 ruff_text_size = "0.0.9"
 
+# A crate of the workspace keeps the lines of its code, so a backtrace names a source line, and drops the rest of the
+# debug information, which only a debugger reads and which costs compile and link time at each sync.
+[profile.dev]
+debug = "line-tables-only"
+
 # A dependency is built once and run many times: the interpreter runs every word of every test. A build for
 # development builds each dependency as a release does, so a test runs them as a user does, and the crates of the
 # workspace stay quick to build again.
 [profile.dev.package."*"]
 opt-level = 3
+debug = false
 debug-assertions = false
 overflow-checks = false
-
-# The crate and the command line keep the lines of their code, so a backtrace names a source line, and drop the rest
-# of the debug information, which only a debugger reads and which costs compile and link time at each sync.
-[profile.dev.package.furb]
-debug = "line-tables-only"
-
-[profile.dev.package.furb-cli]
-debug = "line-tables-only"

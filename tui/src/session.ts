@@ -1340,8 +1340,10 @@ export class Session extends EventEmitter {
       this.past = undefined;
       return ladderOf(this.indexed(), this.selected);
     }
-    if (this.past?.moment !== moment || this.past.of !== this.acts)
-      this.past = { moment, of: this.acts, index: indexOf(this.at(this.acts)) };
+    // The acts of a moment that passed change no more, so its index holds until the crate gives other acts of it.
+    const shown = this.at(this.acts);
+    if (this.past?.moment !== moment || this.past.of !== shown)
+      this.past = { moment, of: shown, index: indexOf(shown) };
     return ladderOf(this.past.index, this.selected);
   }
   private past?: { moment: number; of: readonly ActRow[]; index: Index };
@@ -1349,11 +1351,12 @@ export class Session extends EventEmitter {
    * while the chain shown and that moment stand. */
   ladderAt(chain: string, moment: number): ActIndex {
     const kept = this.frozen;
-    if (kept?.chain === chain && kept.moment === moment && kept.of === this.acts) return kept.index;
     const then = this.actsThen(moment);
-    if (!then) return ladderOf(indexOf([]), chain);
+    if (kept?.chain === chain && kept.moment === moment && kept.of === then) return kept.index;
+    // While the crate reads the moment, the ladder that stood before stands.
+    if (!then) return kept?.chain === chain ? kept.index : ladderOf(indexOf([]), chain);
     const index = ladderOf(indexOf(then), chain);
-    this.frozen = { chain, moment, of: this.acts, index };
+    this.frozen = { chain, moment, of: then, index };
     return index;
   }
   private frozen?: { chain: string; moment: number; of: readonly ActRow[]; index: ActIndex };
@@ -1852,7 +1855,8 @@ export class Session extends EventEmitter {
   at(acts: ActRow[]): ActRow[] {
     const moment = this.moment;
     if (moment === undefined) return acts;
-    const then = this.actsThen(moment) ?? [];
+    // While the crate reads a new moment, the acts of the last moment that it gave stand.
+    const then = this.actsThen(moment) ?? this.lastThen ?? [];
     if (acts === this.acts) return then;
     const ids = new Set(acts.map((act) => act.id));
     return then.filter((act) => ids.has(act.id));
@@ -1860,15 +1864,18 @@ export class Session extends EventEmitter {
   /** The acts of the session as the crate gave them just after a moment, each with what its row of now knows besides, or
    * none until the crate answers. A read of acts that changed since is asked again, and shows until the new one comes. */
   private actsThen(moment: number): ActRow[] | undefined {
+    // The acts as they stood at a moment that passed change no more, so each moment is read once.
     const read = this.thenRead.get(moment);
-    if (read?.of !== this.acts) void this.readThen(moment).catch(this.threadFault);
-    return read?.acts;
+    if (!read) void this.readThen(moment).catch(this.threadFault);
+    else this.lastThen = read;
+    return read;
   }
+  /** The acts of the last moment that the crate gave, which stand while it reads another. */
+  private lastThen?: ActRow[];
   /** The crate gives the acts of the life as they stood just after a moment, which the session holds while they stand. */
   private readThen(moment: number): Promise<void> {
     const asking = this.thenAsking.get(moment);
     if (asking) return asking;
-    const of = this.acts;
     const read = (async () => {
       try {
         const got = await this.host.asOf(moment);
@@ -1879,7 +1886,7 @@ export class Session extends EventEmitter {
           const row = rows.get(act.id);
           return row ? [{ ...row, ...act }] : [];
         });
-        this.thenRead.set(moment, { of, acts });
+        this.thenRead.set(moment, acts);
         this.emit("change");
       } finally {
         this.thenAsking.delete(moment);
@@ -1894,12 +1901,19 @@ export class Session extends EventEmitter {
     this.moment = moment;
     this.emit("change");
   }
-  private readonly thenRead = new Map<number, { of: readonly ActRow[]; acts: ActRow[] }>();
+  private readonly thenRead = new Map<number, ActRow[]>();
   private readonly thenAsking = new Map<number, Promise<void>>();
   /** Move the moment that the feed shows a count of steps back or on, over the moments of the selected chain or of
    * the whole life, as the crate gives them: a step is a moment when an act began or ended. A step on to the last
    * moment returns to now. The moment shows once the crate gave the acts as they stood then. */
-  async travel(by: number, life = false): Promise<void> {
+  travel(by: number, life = false): Promise<void> {
+    // Each step starts from the moment that the one before it reached, so steps in a row each count.
+    const next = this.travelling.then(() => this.stepTime(by, life));
+    this.travelling = next.catch(() => {});
+    return next;
+  }
+  private travelling: Promise<void> = Promise.resolve();
+  private async stepTime(by: number, life: boolean): Promise<void> {
     const moments = await this.host.moments(life ? undefined : this.selected);
     const last = moments.at(-1);
     if (last === undefined) return;

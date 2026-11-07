@@ -145,8 +145,9 @@ pub enum Command {
   /// each fact that it said yet, as on a full disk, keeps the end, tells why in a notice, and ends
   /// once the record holds them: the reply comes then.
   End,
-  /// A command of the engine said by a speaker of the life other than the operator, as the process
-  /// of a skill under its name: each act and each fact that the command says is of that speaker.
+  /// A command of the engine said by a speaker other than the life itself, a skill as skill/<name>
+  /// or a window as operator/<login>: each act and each fact that the command says is of that
+  /// speaker, so a fact seen names the person who read.
   By { speaker: String, command: Box<Self> },
 }
 

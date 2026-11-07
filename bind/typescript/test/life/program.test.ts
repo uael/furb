@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import "../../src/index.ts";
 import {
   actLines,
   earProgram,
@@ -8,7 +9,6 @@ import {
   layout,
   literals,
   placed,
-  quoteBinding,
   quoteParts,
   stepLines,
   threadProgram,
@@ -334,11 +334,20 @@ test("a text parts into its runs of python and each quote that closes, which bin
   const parts = quoteParts("#read1\n<s:read1_text>\nit's\n</s:read1_text>\nx = 1\n<s:open>\nno close");
   expect(parts).toEqual([
     { code: "#read1" },
-    { quote: { name: "read1_text", body: "it's\n", end: 3, closed: true } },
+    {
+      quote: {
+        start: 1,
+        name: "read1_text",
+        body: "it's\n",
+        end: 3,
+        closed: true,
+        binding: `read1_text = "it's\\n"`,
+      },
+    },
     { code: "x = 1\n<s:open>\nno close" },
   ]);
   const quote = parts[1];
-  expect(quote && "quote" in quote ? quoteBinding(quote.quote) : "").toBe(`read1_text = "it's\\n"`);
+  expect(quote && "quote" in quote ? quote.quote.binding : "").toBe(`read1_text = "it's\\n"`);
 });
 
 test("a string of three marks that runs over many lines stands in its statement as one string with its escapes, on the line that starts the statement", () => {

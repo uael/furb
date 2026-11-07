@@ -24,9 +24,6 @@ concurrency:
 permissions:
   contents: read
 
-env:
-  CARGO_PROFILE_DEV_DEBUG: "0"
-
 jobs:
   render:
     name: the render

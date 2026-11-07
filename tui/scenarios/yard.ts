@@ -25,6 +25,8 @@ export interface Rule {
   chunk?: number;
   pause?: number;
   hold?: string;
+  /** A thought that the model streams first, in the same parts, before it holds. */
+  thought?: string;
 }
 
 /** The model of every scenario. */
