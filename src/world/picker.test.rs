@@ -67,6 +67,43 @@ fn a_walk_lists_each_dot_file_but_git_itself_and_each_file_that_gitignore_hides(
 }
 
 #[test]
+fn a_walk_leaves_out_the_state_that_furb_writes_under_its_folder_and_keeps_its_config_and_skills() {
+  let at = Yard::new(format!("furb-picker-state-{}", process::id()));
+  for path in [
+    "src/main.rs",
+    ".furb/config.json",
+    ".furb/skills/review/SKILL.md",
+    ".furb/history.json",
+    ".furb/sessions/r1.jsonl",
+    ".furb/sessions/r1.changes.jsonl",
+    ".furb/sessions/r1.lock",
+    ".furb/sessions/r1.log",
+    ".furb/sessions/r1.session.json",
+    ".furb/sessions/r1.told",
+    ".furb/trash/r2/r2.jsonl",
+    ".furb/shares/1.html",
+    "docs/sessions/plan.md",
+    "docs/history.json",
+  ] {
+    let file = at.join(path);
+    fs::create_dir_all(file.parent().expect("a folder")).expect("the folder of a file");
+    fs::write(file, "").expect("a file of the project");
+  }
+  let kept = [
+    ".furb/config.json",
+    ".furb/skills/review/SKILL.md",
+    "docs/history.json",
+    "docs/sessions/plan.md",
+    "src/main.rs",
+  ];
+  assert_eq!(walked(&at), kept);
+  let mut rows = settled(&mut Picker::new(&at), "");
+  rows.sort();
+  assert_eq!(rows, kept, "a query of no text lists no file of the state of furb");
+  assert!(walked(&at.join(".furb/sessions")).is_empty(), "a walk from the state lists nothing");
+}
+
+#[test]
 fn a_known_query_ranks_the_file_that_it_means_first() {
   let at = Yard::new(format!("furb-picker-rank-{}", process::id()));
   project(&at);

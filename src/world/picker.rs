@@ -27,7 +27,8 @@ use nucleo::{
 const MOST: usize = 50_000;
 
 /// The files under a folder, by their path from it with `/` between its parts, in order: each dot
-/// file too, but each file that a `.gitignore` or an `.ignore` hides, and `.git` itself.
+/// file too, but each file that a `.gitignore` or an `.ignore` hides, `.git` itself, and the state
+/// that furb writes, as [`state`] says.
 pub fn walked(root: &Path) -> Vec<String> {
   let mut found = Vec::new();
   walk(root, |path| {
@@ -38,16 +39,27 @@ pub fn walked(root: &Path) -> Vec<String> {
   found
 }
 
+/// Whether a path is `.git`, or the state that furb writes under a `.furb` folder, which is its
+/// `sessions`, `trash` and `shares` folders and its `history.json`: no user means to pick them. The
+/// config and the skills that a user edits in `.furb` stay.
+fn state(path: &Path) -> bool {
+  let name = path.file_name().and_then(|name| name.to_str());
+  let folder = path.parent().and_then(Path::file_name).and_then(|name| name.to_str());
+  name == Some(".git")
+    || (folder == Some(".furb")
+      && matches!(name, Some("sessions" | "trash" | "shares" | "history.json")))
+}
+
 /// Each file of [`walked`], given to `each` as the walk finds it, until `each` says to stop or
 /// [`MOST`] files came.
 fn walk(root: &Path, mut each: impl FnMut(String) -> bool) {
-  if root.file_name().is_some_and(|name| name == ".git") {
+  if state(root) {
     return;
   }
   let walk = WalkBuilder::new(root)
     .hidden(false)
     .require_git(false)
-    .filter_entry(|entry| entry.file_name() != ".git")
+    .filter_entry(|entry| !state(entry.path()))
     .sort_by_file_name(Ord::cmp)
     .build();
   let files = walk
