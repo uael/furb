@@ -2,9 +2,10 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { saveFile } from "furb";
 import { realConfigs, watch } from "../script/guard.ts";
 
-test("a write, a change and a removal in a watched folder each show by their path, once", () => {
+test("a file that appears or goes in a watched folder shows by its path, once", () => {
   const folder = mkdtempSync(join(tmpdir(), "furb-guard-"));
   mkdirSync(join(folder, "sub"));
   writeFileSync(join(folder, "ui.json"), "{}");
@@ -14,11 +15,25 @@ test("a write, a change and a removal in a watched folder each show by their pat
   writeFileSync(join(folder, "sub", "one"), "a");
   expect(written()).toEqual([join(folder, "sub", "one"), join(folder, "workspaces.json")]);
   expect(written()).toEqual([]);
-  utimesSync(join(folder, "ui.json"), new Date(0), new Date(0));
   rmSync(join(folder, "workspaces.json"));
-  expect(written()).toEqual([join(folder, "ui.json"), join(folder, "workspaces.json")]);
+  expect(written()).toEqual([join(folder, "workspaces.json")]);
   rmSync(folder, { recursive: true, force: true });
   expect(written()).toEqual([join(folder, "sub", "one"), join(folder, "ui.json")]);
+});
+
+test("a file that another process changed is no write of the run, and one that the run saved is", () => {
+  const folder = mkdtempSync(join(tmpdir(), "furb-guard-"));
+  writeFileSync(join(folder, "ui.json"), "{}");
+  writeFileSync(join(folder, "workspaces.json"), "{}");
+  const written = watch([folder]);
+  // The program of the user keeps its files here while the tests run: a new size and a new time, and no save of this run.
+  writeFileSync(join(folder, "ui.json"), '{"other":1}');
+  utimesSync(join(folder, "workspaces.json"), new Date(0), new Date(0));
+  expect(written()).toEqual([]);
+  // The preload gives the tests a saveFile that notes each save, so a test that saves there is found by its path.
+  saveFile(join(folder, "workspaces.json"), '{"mine":1}');
+  expect(written()).toEqual([join(folder, "workspaces.json")]);
+  rmSync(folder, { recursive: true, force: true });
 });
 
 test("the words that the engine installs in the folder change with no test to blame", () => {

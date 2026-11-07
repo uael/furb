@@ -914,7 +914,7 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
         // each enable, and
         // it plays the setup once it heard them, as the journal of a later life says them again.
         "done" if named(a.about(), "stand") && a.by() != JOURNAL => {
-          tell(&mut co, &refused);
+          tell(&mut co, &refused).await?;
           refused.clear();
           let new: Vec<Skill> =
             given.iter().filter(|one| !enabled.contains(one)).cloned().collect();
@@ -984,7 +984,7 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
           };
           if projected(&project).contains(&file) {
             let (found, refused) = turned(&file, &text.content, &places);
-            tell(&mut co, &refused);
+            tell(&mut co, &refused).await?;
             found.into_iter().filter(|one| !runs(one)).collect()
           } else {
             let folders =
@@ -995,7 +995,7 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
             for (name, root) in mine.filter_map(|(name, root)| Some((name, root?))) {
               loaded(&name, &root, &places, &mut found);
             }
-            tell(&mut co, &found.1);
+            tell(&mut co, &found.1).await?;
             found.0.into_iter().filter(|one| !enabled.contains(one)).collect()
           }
         }
@@ -1044,11 +1044,29 @@ pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -
   })
 }
 
-/// Tells the root why each extension of these lines does not play, in one note, when there is one.
-fn tell(co: &mut Co, refused: &[String]) {
-  if !refused.is_empty() {
-    say(co, Fact::says("tell", ROOT, [Object::list([Object::string(refused.join("\n"))])]));
+/// Tells the root why each skill of these lines does not play, in one note, when there is one and
+/// no fact of the record holds it.
+async fn tell(co: &mut Co, refused: &[String]) -> Result<(), Fault> {
+  let note = refused.join("\n");
+  if !refused.is_empty() && !told(co, &note).await? {
+    say(co, Fact::says("tell", ROOT, [Object::list([Object::string(note)])]));
   }
+  Ok(())
+}
+
+/// Whether a fact of the root holds this note already: a life that opens again on its record
+/// replays that fact, so a note is told once in a life and never made again by an open.
+async fn told(co: &mut Co, note: &str) -> Result<bool, Fault> {
+  let of = [ROOT, "tell"].map(Object::string).to_vec();
+  let got = co.call("transcript", of, vec![]).await?;
+  let facts = got.as_ref();
+  Ok((0..).map_while(|at| entry(&facts, at)).filter_map(|one| Fact::of(one)).any(|one| {
+    one
+      .word(0)
+      .and_then(|notes| entry(&notes, 0))
+      .and_then(|one| one.as_str().map(|one| one == note))
+      == Some(true)
+  }))
 }
 
 /// One extension played on a chain as a rung: its word then its life word, or its life word alone

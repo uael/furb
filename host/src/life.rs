@@ -358,8 +358,9 @@ impl Life {
   }
 
   /// The facts of a record before its last checkpoint, told first, in order, each with the acts
-  /// that it changed: the life boots on that checkpoint and replays none of them, so each reader
-  /// hears the life whole, as after a rebirth. No engine reads them, so no pause covers their acts.
+  /// that it changed, then the rebirth on that checkpoint: the life boots on it and replays none of
+  /// them, so each reader hears the life whole, as after a rebirth, and the watch of a stall holds
+  /// only the acts that the open tells again. No engine reads them, so no pause covers their acts.
   /// Each birth on a checkpoint before the last opened by saying again what that checkpoint
   /// restates, which its log told no reader twice, and this one tells none twice either; each other
   /// fact is told, though it equals one before it, as a second pause of a chain. A record that the
@@ -391,10 +392,11 @@ impl Life {
         }
       }
     }
-    self.watch.reborn();
+    self.reborn(None);
   }
 
-  /// The life opened again, after each event that the engine before it told.
+  /// A rebirth: each event told so far, then the rebirth, and the watch of the rebirth let go of
+  /// the birth before.
   fn reborn(&mut self, fault: Option<String>) {
     self.told(None);
     self.put(Event::Reborn(fault));
