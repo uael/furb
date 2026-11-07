@@ -1,5 +1,9 @@
 //! The ear of the provider: one method for each event that it hears, and the replies that it took.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{
   collections::{HashMap, HashSet},
   path::PathBuf,

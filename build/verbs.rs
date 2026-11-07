@@ -531,82 +531,106 @@ pub(crate) fn structs(verbs: &[Verb]) -> String {
 pub(crate) fn scripted(verbs: &[Verb]) -> String {
   let mut out = String::from("#[napi]\nimpl JsEngine {\n");
   for verb in verbs {
-    let mut given: Vec<String> =
-      verb.needed.iter().map(|one| format!("{}: Unknown<'env>", one.name)).collect();
-    let mut typed: Vec<String> =
-      verb.needed.iter().map(|one| format!("{}: {}", one.name, one.kind.script())).collect();
-    let words: Vec<String> =
-      verb.needed.iter().map(|one| format!("({}, {})", one.name, one.kind.carried())).collect();
-    let rest = match &verb.rest {
-      Some(rest) => {
-        given.push(format!("{}: Option<Vec<Unknown<'env>>>", rest.name));
-        typed.push(format!("{}?: {}[]", rest.name, rest.kind.script()));
-        rest.name.clone()
-      }
-      None => "None".to_owned(),
-    };
-    let options = match verb.with() {
-      Some(_) => {
-        given.push("options: Option<JsObject<'env>>".to_owned());
-        let fields: Vec<String> =
-          verb.optional.iter().map(|one| format!("{}?: {}", one.name, one.kind.script())).collect();
-        typed.push(format!("options?: {{ {} }} | null", fields.join("; ")));
-        "options"
-      }
-      None => "None",
-    };
-    let keys: Vec<String> = verb
-      .optional
-      .iter()
-      .filter(|one| one.placed.is_none())
-      .map(|one| format!("({:?}, {})", one.name, one.kind.carried()))
-      .collect();
-    // A word with a default that stands before the star goes by its place, with the default of the
-    // contract.
-    let placed: Vec<String> = verb
-      .optional
-      .iter()
-      .filter_map(|one| {
-        let value = one.placed.as_ref()?;
-        Some(format!("({:?}, {}, {value})", one.name, one.kind.carried()))
-      })
-      .collect();
-    let (called, answer) = match verb.answer {
-      Answer::Act(_) => ("acted", "napi::Result<JsAct>"),
-      _ => ("plain", "napi::Result<Value>"),
-    };
-    out!(out, "  /// {}", verb.doc);
-    out!(
-      out,
-      "  #[napi(ts_args_type = {:?}, ts_return_type = {:?})]",
-      typed.join(", "),
-      verb.answer.script()
-    );
-    // A verb that takes no word of JavaScript names no lifetime of its env.
-    let env = if given.is_empty() { "" } else { "'env" };
-    out!(
-      out,
-      "  pub fn {}<{env}>(&self, env: &{env} Env, {}) -> {answer} {{",
-      verb.name,
-      given.join(", ")
-    );
-    // A field whose value is a word of the same name takes the short form, as clippy asks.
-    let field = |name: &str, value: &str| {
-      if name == value { name.to_owned() } else { format!("{name}: {value}") }
-    };
-    let (rest, options) = (field("rest", &rest), field("options", options));
-    out!(
-      out,
-      "    self.{called}(*env, {:?}, Words {{ given: vec![{}], placed: &[{}], {rest}, {options}, \
-       keys: &[{}] }})\n  }}\n",
-      verb.name,
-      words.join(", "),
-      placed.join(", "),
-      keys.join(", ")
-    );
+    scripted_verb(&mut out, verb);
   }
   out.push_str("}\n");
   out
+}
+
+/// The words of a method of the door to JavaScript.
+struct Script {
+  /// Each word that its Rust takes.
+  given: Vec<String>,
+  /// Each word that its TypeScript names.
+  typed: Vec<String>,
+  /// The name of its star parameter, or `None`.
+  rest: String,
+  /// The name of its options, or `None`.
+  options: &'static str,
+}
+
+/// The words of a method of the door to JavaScript: each word that its Rust takes, each that its
+/// TypeScript names, the name of its star parameter, and the name of its options.
+fn script_words(verb: &Verb) -> Script {
+  let mut given: Vec<String> =
+    verb.needed.iter().map(|one| format!("{}: Unknown<'env>", one.name)).collect();
+  let mut typed: Vec<String> =
+    verb.needed.iter().map(|one| format!("{}: {}", one.name, one.kind.script())).collect();
+  let rest = match &verb.rest {
+    Some(rest) => {
+      given.push(format!("{}: Option<Vec<Unknown<'env>>>", rest.name));
+      typed.push(format!("{}?: {}[]", rest.name, rest.kind.script()));
+      rest.name.clone()
+    }
+    None => "None".to_owned(),
+  };
+  let options = match verb.with() {
+    Some(_) => {
+      given.push("options: Option<JsObject<'env>>".to_owned());
+      let fields: Vec<String> =
+        verb.optional.iter().map(|one| format!("{}?: {}", one.name, one.kind.script())).collect();
+      typed.push(format!("options?: {{ {} }} | null", fields.join("; ")));
+      "options"
+    }
+    None => "None",
+  };
+  Script { given, typed, rest, options }
+}
+
+/// The method of one verb on the door to JavaScript.
+fn scripted_verb(out: &mut String, verb: &Verb) {
+  let Script { given, typed, rest, options } = script_words(verb);
+  let words: Vec<String> =
+    verb.needed.iter().map(|one| format!("({}, {})", one.name, one.kind.carried())).collect();
+  let keys: Vec<String> = verb
+    .optional
+    .iter()
+    .filter(|one| one.placed.is_none())
+    .map(|one| format!("({:?}, {})", one.name, one.kind.carried()))
+    .collect();
+  // A word with a default that stands before the star goes by its place, with the default of the
+  // contract.
+  let placed: Vec<String> = verb
+    .optional
+    .iter()
+    .filter_map(|one| {
+      let value = one.placed.as_ref()?;
+      Some(format!("({:?}, {}, {value})", one.name, one.kind.carried()))
+    })
+    .collect();
+  let (called, answer) = match verb.answer {
+    Answer::Act(_) => ("acted", "napi::Result<JsAct>"),
+    _ => ("plain", "napi::Result<Value>"),
+  };
+  out!(out, "  /// {}", verb.doc);
+  out!(
+    out,
+    "  #[napi(ts_args_type = {:?}, ts_return_type = {:?})]",
+    typed.join(", "),
+    verb.answer.script()
+  );
+  // A verb that takes no word of JavaScript names no lifetime of its env.
+  let env = if given.is_empty() { "" } else { "'env" };
+  out!(
+    out,
+    "  pub fn {}<{env}>(&self, env: &{env} Env, {}) -> {answer} {{",
+    verb.name,
+    given.join(", ")
+  );
+  // A field whose value is a word of the same name takes the short form, as clippy asks.
+  let field = |name: &str, value: &str| {
+    if name == value { name.to_owned() } else { format!("{name}: {value}") }
+  };
+  let (rest, options) = (field("rest", &rest), field("options", options));
+  out!(
+    out,
+    "    self.{called}(*env, {:?}, Words {{ given: vec![{}], placed: &[{}], {rest}, {options}, \
+     keys: &[{}] }})\n  }}\n",
+    verb.name,
+    words.join(", "),
+    placed.join(", "),
+    keys.join(", ")
+  );
 }
 
 /// The methods of the engine that the door to python gives, one per verb: the words it needs by
@@ -615,74 +639,99 @@ pub(crate) fn scripted(verbs: &[Verb]) -> String {
 pub(crate) fn pythonic(verbs: &[Verb]) -> String {
   let mut out = String::from("#[pymethods]\nimpl PyEngine {\n");
   for verb in verbs {
-    let mut signature: Vec<String> = verb.needed.iter().map(|one| one.name.clone()).collect();
-    let mut given: Vec<String> =
-      verb.needed.iter().map(|one| format!("{}: Value", one.name)).collect();
-    // A word with a default that stands before the star stands before it here too, as in python.
-    let (placed, named): (Vec<_>, Vec<_>) =
-      verb.optional.iter().partition(|one| one.placed.is_some());
-    signature.extend(placed.iter().map(|one| format!("{} = None", one.name)));
-    given.extend(placed.iter().map(|one| format!("{}: Option<Value>", one.name)));
-    match &verb.rest {
-      Some(rest) => {
-        signature.push(format!("*{}", rest.name));
-        given.push(format!("{}: Vec<Value>", rest.name));
-      }
-      None if verb.with().is_some() => signature.push("*".to_owned()),
-      None => {}
-    }
-    // A word whose None is a word of its own is left out apart from None, so a None that python
-    // gives goes in as None, and a word left out leaves the default of the engine.
-    signature.extend(named.iter().map(|one| match one.kind {
-      Fielded::MaybeStr => format!("{} = Maybe(None)", one.name),
-      _ => format!("{} = None", one.name),
-    }));
-    given.extend(named.iter().map(|one| match one.kind {
-      Fielded::MaybeStr => format!("{}: Maybe", one.name),
-      _ => format!("{}: Option<Value>", one.name),
-    }));
-    let mut words: Vec<String> = verb.needed.iter().map(|one| format!("{}.0", one.name)).collect();
-    words.extend(placed.iter().filter_map(|one| {
-      one.placed.as_ref().map(|value| format!("{}.map_or_else(|| {value}, |one| one.0)", one.name))
-    }));
-    let keys: Vec<String> = named
-      .iter()
-      .map(|one| match one.kind {
-        Fielded::MaybeStr => format!("({0:?}, {0}.0)", one.name),
-        _ => format!("({0:?}, {0})", one.name),
-      })
-      .collect();
-    let (answer, made) = match verb.answer {
-      Answer::Act(_) => ("PyAct", "PyAct::of(slf, &got)?"),
-      _ => ("Value", "Value(got)"),
-    };
-    out!(out, "  /// {}", verb.doc);
-    out!(out, "  #[pyo3(signature = ({}))]", signature.join(", "));
-    if given.len() + 1 > 7 {
-      out!(
-        out,
-        "  #[expect(clippy::too_many_arguments, reason = \"a method takes each word of its verb\")]"
-      );
-    }
-    out!(
-      out,
-      "  fn {}(slf: &Bound<'_, Self>, {}) -> PyResult<{answer}> {{",
-      verb.name,
-      given.join(", ")
-    );
-    let mutable = if verb.rest.is_some() { "mut " } else { "" };
-    out!(out, "    let {mutable}args: Vec<Object> = vec![{}];", words.join(", "));
-    if let Some(rest) = &verb.rest {
-      out!(out, "    args.extend({}.into_iter().map(|one| one.0));", rest.name);
-    }
-    out!(out, "    let kwargs: [(&str, Option<Value>); {}] = [{}];", keys.len(), keys.join(", "));
-    out!(
-      out,
-      "    let kwargs = kwargs.into_iter().filter_map(|(key, one)| Some((key, one?.0))).collect();"
-    );
-    out!(out, "    let got = slf.borrow().said({:?}, args, kwargs)?;", verb.name);
-    out!(out, "    Ok({made})\n  }}\n");
+    pythonic_verb(&mut out, verb);
   }
   out.push_str("}\n");
   out
+}
+
+/// The words of a method of the door to python.
+struct Python {
+  /// Its signature for pyo3.
+  signature: Vec<String>,
+  /// Each word that its Rust takes.
+  given: Vec<String>,
+  /// The words that it gives the engine by place.
+  words: Vec<String>,
+  /// The words that it gives the engine by name.
+  keys: Vec<String>,
+}
+
+/// The words of a method of the door to python: its signature, each word that its Rust takes, the
+/// words that it gives the engine by place, and the words that it gives by name.
+fn python_words(verb: &Verb) -> Python {
+  let mut signature: Vec<String> = verb.needed.iter().map(|one| one.name.clone()).collect();
+  let mut given: Vec<String> =
+    verb.needed.iter().map(|one| format!("{}: Value", one.name)).collect();
+  // A word with a default that stands before the star stands before it here too, as in python.
+  let (placed, named): (Vec<_>, Vec<_>) =
+    verb.optional.iter().partition(|one| one.placed.is_some());
+  signature.extend(placed.iter().map(|one| format!("{} = None", one.name)));
+  given.extend(placed.iter().map(|one| format!("{}: Option<Value>", one.name)));
+  match &verb.rest {
+    Some(rest) => {
+      signature.push(format!("*{}", rest.name));
+      given.push(format!("{}: Vec<Value>", rest.name));
+    }
+    None if verb.with().is_some() => signature.push("*".to_owned()),
+    None => {}
+  }
+  // A word whose None is a word of its own is left out apart from None, so a None that python
+  // gives goes in as None, and a word left out leaves the default of the engine.
+  signature.extend(named.iter().map(|one| match one.kind {
+    Fielded::MaybeStr => format!("{} = Maybe(None)", one.name),
+    _ => format!("{} = None", one.name),
+  }));
+  given.extend(named.iter().map(|one| match one.kind {
+    Fielded::MaybeStr => format!("{}: Maybe", one.name),
+    _ => format!("{}: Option<Value>", one.name),
+  }));
+  let mut words: Vec<String> = verb.needed.iter().map(|one| format!("{}.0", one.name)).collect();
+  words.extend(placed.iter().filter_map(|one| {
+    one.placed.as_ref().map(|value| format!("{}.map_or_else(|| {value}, |one| one.0)", one.name))
+  }));
+  let keys: Vec<String> = named
+    .iter()
+    .map(|one| match one.kind {
+      Fielded::MaybeStr => format!("({0:?}, {0}.0)", one.name),
+      _ => format!("({0:?}, {0})", one.name),
+    })
+    .collect();
+  Python { signature, given, words, keys }
+}
+
+/// The method of one verb on the door to python.
+fn pythonic_verb(out: &mut String, verb: &Verb) {
+  let Python { signature, given, words, keys } = python_words(verb);
+  let (answer, made) = match verb.answer {
+    Answer::Act(_) => ("PyAct", "PyAct::of(slf, &got)?"),
+    _ => ("Value", "Value(got)"),
+  };
+  out!(out, "  /// {}", verb.doc);
+  out!(out, "  #[pyo3(signature = ({}))]", signature.join(", "));
+  // 4 is the too-many-arguments-threshold of clippy.toml, the one home of the bound.
+  if given.len() + 1 > 4 {
+    out!(
+      out,
+      "  #[expect(clippy::too_many_arguments, reason = \"a method takes each word of its verb\")]"
+    );
+  }
+  out!(
+    out,
+    "  fn {}(slf: &Bound<'_, Self>, {}) -> PyResult<{answer}> {{",
+    verb.name,
+    given.join(", ")
+  );
+  let mutable = if verb.rest.is_some() { "mut " } else { "" };
+  out!(out, "    let {mutable}args: Vec<Object> = vec![{}];", words.join(", "));
+  if let Some(rest) = &verb.rest {
+    out!(out, "    args.extend({}.into_iter().map(|one| one.0));", rest.name);
+  }
+  out!(out, "    let kwargs: [(&str, Option<Value>); {}] = [{}];", keys.len(), keys.join(", "));
+  out!(
+    out,
+    "    let kwargs = kwargs.into_iter().filter_map(|(key, one)| Some((key, one?.0))).collect();"
+  );
+  out!(out, "    let got = slf.borrow().said({:?}, args, kwargs)?;", verb.name);
+  out!(out, "    Ok({made})\n  }}\n");
 }

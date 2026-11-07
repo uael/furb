@@ -1,5 +1,9 @@
 //! The provider settings of the user and the project, applied to a catalog before a life stands on it.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{
   collections::HashMap,
   env, fs, io,

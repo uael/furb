@@ -2,6 +2,10 @@
 //! conversation to one turn at a time, takes it back, and sweeps the processes and the
 //! conversations that no turn needs.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{
   collections::{HashMap, VecDeque},
   sync::Arc,

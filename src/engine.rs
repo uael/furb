@@ -27,6 +27,10 @@
   clippy::unreadable_literal,
   reason = "debt: a constant that the build makes is a long literal with no separator"
 )]
+#![expect(
+  clippy::too_many_arguments,
+  reason = "a verb of the host API takes each argument that the host gives it"
+)]
 
 mod crossing;
 mod hosted;

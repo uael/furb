@@ -2,6 +2,10 @@
 //! checker reads once, and the bindings that keep the type of each name across the tries of the
 //! words.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{
   cell::RefCell,
   collections::{HashMap, HashSet},
