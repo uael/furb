@@ -348,7 +348,7 @@ fn a_record_is_printed_as_facts_each_after_the_number_of_its_line() {
   assert!(refused(missing, "").contains("No record at nope.jsonl."), "a record that is not there");
 }
 #[test]
-fn a_life_runs_the_extensions_that_its_record_enables_and_those_that_the_configs_turn_on() {
+fn a_life_runs_the_skills_that_its_record_enables_and_those_that_the_configs_turn_on() {
   let yard = Yard::new("skills");
   let skill = yard.at.join(".furb/skills/brew/SKILL.md");
   fs::create_dir_all(skill.parent().expect("a folder")).expect("the folder of a skill");

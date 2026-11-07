@@ -21,7 +21,7 @@ async def test_the_memory_of_a_chain_read_where_its_word_runs(tmp_path: Path) ->
   assert recalled(root, tmp_path)[1:] == [memorized(sub, "two\n")]
 
 
-async def test_the_life_word_of_the_extension_is_await_recall(tmp_path: Path) -> None:
+async def test_the_life_word_of_the_skill_is_await_recall(tmp_path: Path) -> None:
   """The life word of the extension is await recall(), so the setup of the root reads its memory in the turn of the life words of the extensions, and each chain with no source holds those reads in its setup."""
   top = noted(tmp_path / "work", "one\n")
   _, root = extended("memory", tmp_path, lives=True, doctrine="Read first.\n")

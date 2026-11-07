@@ -414,7 +414,7 @@ test("a fact seen that the operator says covers what came before it, and a later
   const cwd = await mkdtemp(join(tmpdir(), "furb-seen-"));
   const record = join(cwd, "life.jsonl");
   const place = (session: Session, id: string) => session.activity.acts.get(id)?.began ?? 0;
-  const first = new Session({ cwd, record, extensions: false });
+  const first = new Session({ cwd, record, skills: false });
   const engine = first.open();
   const before = engine.prompt("None", { message: "noted", to: "operator", on: engine.root }).id;
   engine.say("seen", engine.root, []);
@@ -422,7 +422,7 @@ test("a fact seen that the operator says covers what came before it, and a later
   const seen = first.activity.seen.get(engine.root) ?? 0;
   expect([place(first, before) < seen, place(first, after) > seen]).toEqual([true, true]);
   await first.dispose();
-  const second = new Session({ cwd, record, extensions: false });
+  const second = new Session({ cwd, record, skills: false });
   try {
     second.open();
     const again = second.activity.seen.get(second.engine?.root ?? "") ?? 0;
@@ -436,11 +436,11 @@ test("a fact seen that the operator says covers what came before it, and a later
 test("a session that ends keeps the checkpoint of its life at the tip of its record, and a later session opens on it", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-checkpoint-"));
   const record = join(cwd, "life.jsonl");
-  const first = new Session({ cwd, record, extensions: false });
+  const first = new Session({ cwd, record, skills: false });
   const engine = first.open();
   engine.prompt("None", { message: "noted", to: "operator", on: engine.root });
   await first.end();
-  const second = new Session({ cwd, record, extensions: false });
+  const second = new Session({ cwd, record, skills: false });
   try {
     expect((await kinds(record)).at(-1)).toBe("checkpoint");
     second.open();
@@ -1072,7 +1072,7 @@ function tilded(path: string): string {
   return path === home ? "~" : path.startsWith(home + sep) ? `~${path.slice(home.length)}` : path;
 }
 
-test("a session enables the extensions of the configs, and a later session on its record runs them whatever it says", async () => {
+test("a session enables the skills of the configs, and a later session on its record runs them whatever it says", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "furb-extensions-"));
   const record = join(cwd, "life.jsonl");
   const config = join(cwd, "config");
@@ -1107,8 +1107,8 @@ test("a session enables the extensions of the configs, and a later session on it
   } finally {
     await first.dispose();
   }
-  const later = new Session({ cwd, record, config, extensions: false });
-  const fresh = new Session({ cwd, config, extensions: false });
+  const later = new Session({ cwd, record, config, skills: false });
+  const fresh = new Session({ cwd, config, skills: false });
   try {
     later.open();
     fresh.open();

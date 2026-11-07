@@ -74,7 +74,7 @@ async def first(app: Path, message: str, record: Path, cap: float) -> object:
   """The life that works the task, as the rig puts it: a float that says how sure the model is, and the same chain
   asked to go on under the confidence that the rig wants. At the cap, the bench cancels the prompt, so the record
   ends with no question open and a later life asks the model nothing."""
-  world, root, _ = lived(record, app, ACTOR, keeps=True, extensions=False)
+  world, root, _ = lived(record, app, ACTOR, keeps=True, skills=False)
   began, got = time.monotonic(), None
   try:
     while (left := cap - (time.monotonic() - began)) > 0:

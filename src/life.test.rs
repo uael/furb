@@ -97,7 +97,7 @@ fn a_life_that_inspects_its_record_keeps_nothing_enables_nothing_new_and_its_ear
  {
   let at = place("inspects");
   fs::write(at.join("a.txt"), "one\n").unwrap();
-  drop(Opening { extensions: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap());
+  drop(Opening { skills: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap());
   let before = fs::read_to_string(at.join("record.jsonl")).unwrap();
   let (mut engine, _) =
     Opening { inspecting: Some(true), ..opening(&at, true) }.boot::<String>([]).unwrap();
@@ -142,7 +142,7 @@ fn a_life_that_keeps_a_record_writes_a_new_file_and_a_new_file_in_a_new_folder_t
  {
   let at = place("scratch");
   let (mut engine, _) =
-    Opening { extensions: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap();
+    Opening { skills: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap();
   let root = engine.root().to_owned();
   let on = || Some(root.clone());
   let write = verbs::Write { on: on() };
@@ -160,8 +160,7 @@ fn a_life_that_keeps_a_record_writes_the_log_of_every_fact_beside_it_and_a_later
  {
   let at = place("log");
   let record = at.join("record.jsonl");
-  let open =
-    || Opening { extensions: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap().0;
+  let open = || Opening { skills: Some(false), ..opening(&at, true) }.boot::<String>([]).unwrap().0;
   let mut engine = open();
   let word = Some("x = 1\nclose(x)".to_owned());
   let rung =
@@ -215,7 +214,7 @@ fn a_later_life_writes_in_its_log_each_act_of_its_record_that_an_ear_of_the_outs
   let at = place("owed");
   let record = at.join("record.jsonl");
   let open = || {
-    let opening = Opening { extensions: Some(false), ..opening(&at, true) };
+    let opening = Opening { skills: Some(false), ..opening(&at, true) };
     opening.boot::<String>([]).unwrap().0
   };
   let mut engine = open();
@@ -268,7 +267,7 @@ fn a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_t
   let first = Opening {
     roster: Some(vec!["claude-cli:opus".to_owned()]),
     answer: Some(streams),
-    extensions: Some(false),
+    skills: Some(false),
     ..opening(&at, true)
   };
   let mut first = first.boot::<String>([]).unwrap().0;
@@ -284,7 +283,7 @@ fn a_life_that_opens_on_a_record_that_a_stop_cut_asks_the_reply_again_and_ends_t
     executor::block_on(select(act, streamed));
   }
   drop(first);
-  let mut later = Opening { extensions: Some(false), ..scripted(&at, &["close('again')"]) }
+  let mut later = Opening { skills: Some(false), ..scripted(&at, &["close('again')"]) }
     .boot::<String>([])
     .unwrap()
     .0;
@@ -312,10 +311,8 @@ fn a_word_that_polls_the_clock_ends_at_the_bound_of_a_turn_and_two_readings_in_a
   let at = place("clock-spin");
   let poll = "t0 = clock()\nwhile clock() - t0 < 60:\n  pass\nclose('polled')";
   let twice = "a = clock()\nb = clock()\nclose(b >= a)";
-  let mut life = Opening { extensions: Some(false), ..scripted(&at, &[poll, twice]) }
-    .boot::<String>([])
-    .unwrap()
-    .0;
+  let mut life =
+    Opening { skills: Some(false), ..scripted(&at, &[poll, twice]) }.boot::<String>([]).unwrap().0;
   let asked = verbs::Prompt {
     message: Some("go".to_owned()),
     on: Some("chain1".to_owned()),
@@ -363,7 +360,7 @@ fn a_word_that_loops_on_an_answer_of_the_host_ends_at_the_bound_of_a_turn_with_a
   BOUND.set(Duration::from_secs(2));
   let at = place("cd-spin");
   let spin = "while True:\n  cd('.')";
-  let mut life = Opening { extensions: Some(false), ..scripted(&at, &[spin, "close(1)"]) }
+  let mut life = Opening { skills: Some(false), ..scripted(&at, &[spin, "close(1)"]) }
     .boot::<String>([])
     .unwrap()
     .0;
@@ -393,20 +390,18 @@ fn a_word_that_catches_the_refusal_of_the_bound_and_loops_ends_its_step_and_leav
   let at = place("clock-caught");
   let caught = "while True:\n  try:\n    clock()\n  except Refused:\n    pass";
   let mut first =
-    Opening { extensions: Some(false), ..scripted(&at, &[caught]) }.boot::<String>([]).unwrap().0;
+    Opening { skills: Some(false), ..scripted(&at, &[caught]) }.boot::<String>([]).unwrap().0;
   let started = Instant::now();
   drop(asked_of(&mut first, "go"));
   assert!(first.stopped().is_some(), "a word that asks past the refusal ends its step");
   assert!(started.elapsed() < Duration::from_secs(20), "the step ends near 2 s");
   assert!(crate::sand::past().is_none(), "the stop leaves no deadline on the thread");
   drop(first);
-  let mut later = Opening {
-    extensions: Some(false),
-    ..scripted(&at, &["close(clock() > 0)", "close(clock() > 0)"])
-  }
-  .boot::<String>([])
-  .expect("a life that the bound stopped opens again")
-  .0;
+  let mut later =
+    Opening { skills: Some(false), ..scripted(&at, &["close(clock() > 0)", "close(clock() > 0)"]) }
+      .boot::<String>([])
+      .expect("a life that the bound stopped opens again")
+      .0;
   assert!(later.stopped().is_none() && later.raised().is_none(), "{:?}", later.raised());
   let got = asked_of(&mut later, "go on").unwrap();
   assert_eq!(got.as_ref().as_bool(), Some(true), "the next step reads the clock");
@@ -415,8 +410,7 @@ fn a_word_that_catches_the_refusal_of_the_bound_and_loops_ends_its_step_and_leav
 #[test]
 fn a_life_whose_open_act_a_verb_of_no_words_made_ends_with_a_checkpoint_in_its_record() {
   let at = place("ends-kept");
-  let mut life =
-    Opening { extensions: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+  let mut life = Opening { skills: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
   // A verb with no words makes an act that makes an open prompt, as name_session makes the
   // prompt of its chain.
   let word = "with site.set(act('named', ROOT, None)):\n  named = prompt(str, 'Name?', to=OPERATOR)\nclose(1)";
@@ -437,7 +431,7 @@ fn a_life_that_a_fault_of_the_sandbox_stopped_opens_again_and_goes_on() {
   let at = place("faulted");
   let cutter = "try:\n  while True:\n    pass\nfinally:\n  while True:\n    pass";
   let mut first =
-    Opening { extensions: Some(false), ..scripted(&at, &[cutter]) }.boot::<String>([]).unwrap().0;
+    Opening { skills: Some(false), ..scripted(&at, &[cutter]) }.boot::<String>([]).unwrap().0;
   let on = Some("chain1".to_owned());
   let message = Some("go".to_owned());
   let asked = verbs::Prompt { message, on: on.clone(), ..Default::default() };
@@ -446,7 +440,7 @@ fn a_life_that_a_fault_of_the_sandbox_stopped_opens_again_and_goes_on() {
   assert!(first.stopped().is_some(), "the second excess of the turn stops the life");
   drop(first);
   let mut later =
-    Opening { extensions: Some(false), ..scripted(&at, &["close('again')", "close('on')"]) }
+    Opening { skills: Some(false), ..scripted(&at, &["close('again')", "close('on')"]) }
       .boot::<String>([])
       .expect("a life that a fault stopped opens again")
       .0;
@@ -467,7 +461,7 @@ fn a_life_that_a_fault_of_the_sandbox_stopped_opens_again_and_goes_on() {
   );
   drop(later);
   let mut again =
-    Opening { extensions: Some(false), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+    Opening { skills: Some(false), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
   assert!(again.stopped().is_none(), "a second open replays the end of the rung");
   let replayed = again.word(&state, vec![]).unwrap();
   assert_eq!(
@@ -492,7 +486,7 @@ fn a_record_names_the_engine_that_made_it_once_in_a_file_of_lines_and_in_a_datab
     let record = at.join(name);
     let open = || {
       let path = Some(record.display().to_string());
-      Opening { record: path, extensions: Some(false), ..opening(&at, true) }.boot::<String>([])
+      Opening { record: path, skills: Some(false), ..opening(&at, true) }.boot::<String>([])
     };
     drop(open().unwrap());
     let made = vec![world::engine()];
@@ -518,7 +512,7 @@ fn a_record_names_the_engine_that_made_it_once_in_a_file_of_lines_and_in_a_datab
 fn a_record_that_names_no_engine_replays_as_before_and_names_none() {
   let at = place("unnamed");
   let record = at.join("record.jsonl");
-  let open = || Opening { extensions: Some(false), ..opening(&at, true) };
+  let open = || Opening { skills: Some(false), ..opening(&at, true) };
   let mut first = open().boot::<String>([]).unwrap().0;
   closed(&mut first, "x = 1\nclose(x)");
   drop(first);
@@ -561,7 +555,7 @@ fn ours() -> String {
 fn made_elsewhere(at: &Path, made: &str) -> (PathBuf, String) {
   let record = at.join("record.jsonl");
   let mut first =
-    Opening { extensions: Some(false), ..opening(at, true) }.boot::<String>([]).unwrap().0;
+    Opening { skills: Some(false), ..opening(at, true) }.boot::<String>([]).unwrap().0;
   closed(&mut first, "x = 1\nclose(x)");
   drop(first);
   let ours = ours();
@@ -577,7 +571,7 @@ fn a_record_of_another_engine_that_holds_no_texts_replays_and_goes_on() {
   let at = place("same-version");
   let made = made_of(&"0".repeat(64));
   let (record, _) = made_elsewhere(&at, &made);
-  let open = || Opening { extensions: Some(false), ..opening(&at, true) };
+  let open = || Opening { skills: Some(false), ..opening(&at, true) };
   let mut later = open().boot::<String>([]).unwrap().0;
   assert_eq!(closed(&mut later, "close(x + 1)").as_ref().as_int(), Some(2));
   drop(later);
@@ -596,7 +590,7 @@ fn a_record_of_another_engine_crosses_to_this_build_by_a_checkpoint_and_goes_on_
   }
   let named = format!("{:x}", hash.finalize());
   let (record, text) = made_elsewhere(&at, &made_with(&named, &source, crate::KERNEL));
-  let open = || Opening { extensions: Some(false), ..opening(&at, true) };
+  let open = || Opening { skills: Some(false), ..opening(&at, true) };
   let mut later = open().boot::<String>([]).unwrap().0;
   assert_eq!(
     closed(&mut later, "close([x + 1, globals().get('crossed')])").as_ref().py_repr(),
@@ -669,7 +663,7 @@ fn the_boot_of_a_life_asks_the_claude_command_line_its_models_once_and_a_later_s
   let (mut engine, _) = Opening {
     claude: Some(bin.display().to_string()),
     roster: Some(vec!["claude-cli:nova".to_owned()]),
-    extensions: Some(false),
+    skills: Some(false),
     ..opening(&at, true)
   }
   .boot::<String>([])
@@ -697,7 +691,7 @@ fn the_boot_of_a_life_asks_the_claude_command_line_its_models_once_and_a_later_s
 fn a_life_opens_when_its_actor_and_a_roster_name_left_the_catalog_and_tells_each_chain_once() {
   let at = place("catalog-left");
   let (mut engine, _) = Opening {
-    extensions: Some(false),
+    skills: Some(false),
     roster: Some(vec!["claude-cli:opus".to_owned(), "claude-cli:gone".to_owned()]),
     actor: Some("claude-cli:vanished/high".to_owned()),
     ..scripted(&at, &[])
@@ -721,7 +715,7 @@ fn a_life_that_names_no_actor_and_no_roster_goes_on_with_the_ones_its_record_sto
   let at = place("stood-again");
   let both = "close((standing()[2], sorted(a[0] for a in standing()[0])))";
   let given = Opening {
-    extensions: Some(false),
+    skills: Some(false),
     roster: Some(vec!["claude-cli:opus".to_owned(), "claude-cli:sonnet".to_owned()]),
     actor: Some("claude-cli:sonnet/low".to_owned()),
     ..scripted(&at, &[])
@@ -733,7 +727,7 @@ fn a_life_that_names_no_actor_and_no_roster_goes_on_with_the_ones_its_record_sto
     "('claude-cli:sonnet/low', ['claude-cli:opus', 'claude-cli:sonnet', 'operator'])"
   );
   drop(first);
-  let unsaid = Opening { extensions: Some(false), roster: None, actor: None, ..scripted(&at, &[]) };
+  let unsaid = Opening { skills: Some(false), roster: None, actor: None, ..scripted(&at, &[]) };
   let (mut later, _) = unsaid.boot::<String>([]).unwrap();
   assert_eq!(
     closed(&mut later, both).py_repr(),
@@ -755,7 +749,7 @@ fn a_stand_reloads_provider_settings_and_a_refused_reload_keeps_the_life() {
   let path = at.join(".furb/config.json");
   fs::write(&path, r#"{"providers":{"claude-cli":false,"local":false}}"#).unwrap();
   let (mut engine, _) = Opening {
-    extensions: Some(false),
+    skills: Some(false),
     roster: None,
     actor: Some("bench:one".to_owned()),
     ..scripted(&at, &["close(23)", "close(29)"])
@@ -1001,7 +995,7 @@ fn each_run_of_a_chain_of_the_replays_has_a_turn_that_shows_its_word() {
 }
 
 #[test]
-fn a_replay_of_work_shows_each_file_of_an_extension_as_the_rung_of_its_read_then_its_code_alone() {
+fn a_replay_of_work_shows_each_file_of_a_skill_as_the_rung_of_its_read_then_its_code_alone() {
   let (_, mut engine) = replayed("seeded").into_iter().find(|one| one.0 == "work").unwrap();
   let enables = engine.word("len(transcript('chain1', 'enable'))", vec![]).unwrap();
   assert_eq!(
@@ -1186,8 +1180,7 @@ fn seeds(at: &Path) -> usize {
 #[test]
 fn a_checkpoint_of_a_later_life_of_a_record_opens_with_no_drift_and_seeds_the_root_once() {
   let at = place("checkpoint-relife");
-  let open =
-    || Opening { extensions: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+  let open = || Opening { skills: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
   let mut first = open();
   assert_eq!(closed(&mut first, "n = 1\nclose(n)").as_ref().as_int(), Some(1));
   assert_eq!(seeds(&at), 1, "the first life of a record seeds the root once");
@@ -1660,7 +1653,7 @@ fn a_life_reads_the_classes_of_the_config_directory_that_it_opens_on_and_none_of
   fs::write(at.join("config/config.json"), r#"{"classes": {"claude-cli:opus": "cheap"}}"#).unwrap();
   let opening = Opening {
     roster: Some(vec!["claude-cli:opus".to_owned()]),
-    extensions: Some(false),
+    skills: Some(false),
     ..opening(&at, false)
   };
   let (mut engine, _) = opening.boot::<String>([]).unwrap();
@@ -1693,7 +1686,7 @@ fn facts(engine: &mut Engine) -> Vec<String> {
 fn a_config_that_turns_the_gate_off_runs_a_word_that_the_gate_refuses_and_its_replay_with_the_gate_on_holds_the_same_facts()
  {
   let on = place("gate-on");
-  let open = |at: &Path, keeps: bool| Opening { extensions: Some(false), ..opening(at, keeps) };
+  let open = |at: &Path, keeps: bool| Opening { skills: Some(false), ..opening(at, keeps) };
   let (mut engine, _) = open(&on, false).boot::<String>([]).unwrap();
   let refused = rung(&mut engine, MISTYPED).unwrap_err();
   assert!(refused.to_string().contains("int"), "the gate on refuses the word: {refused}");

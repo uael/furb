@@ -143,7 +143,7 @@ async def test_memory_leaves_out_a_memory_file_whose_content_the_chain_holds_at_
 async def test_memory_leaves_out_each_folder_and_each_file_whose_read_the_world_refuses() -> None:
   """memory leaves out each folder and each file whose read the World refuses, and each folder above one whose read the World refuses."""
   one = next(one for one in _monty.official() if one["name"] == "memory")
-  _, root = life(Dead(stands=STANDS), extensions=_monty.extensions([{**one, "life": ""}]))
+  _, root = life(Dead(stands=STANDS), (), **{"extensions": _monty.played([{**one, "life": ""}])})
   ran = engine.rung("close(memory())", on=root)
   assert await ran == []
   assert [a[4] for a in engine.transcript(root) if a[0] == "read" and a[2] == ran] == ["./", "config://"]

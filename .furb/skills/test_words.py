@@ -88,7 +88,7 @@ def bound(word: str) -> set[str]:
 
 
 @pytest.mark.parametrize("name", NAMES)
-def test_word_binds_no_name_of_an_official_extension(name: str) -> None:
+def test_word_binds_no_name_of_an_official_skill(name: str) -> None:
   """A word of the project that binds a name of an official extension changes that extension on its chains, as a BUDGET of text broke the catch-up of the root."""
   official = set().union(*(bound(one["word"]) for one in _monty.official()))
   assert bound(word(name)) & official == set()
@@ -130,7 +130,7 @@ def test_no_two_words_of_the_project_bind_one_name_but_to_extend_it() -> None:
 ALLOWED = (".agents/skills/conftest.py", ".furb/skills/conftest.py")
 
 
-def test_no_test_folder_of_an_extension_holds_a_conftest_that_shadows_the_conftest_of_the_suite() -> None:
+def test_no_test_folder_of_a_skill_holds_a_conftest_that_shadows_the_conftest_of_the_suite() -> None:
   """A conftest.py in a test folder of an extension shadows the conftest module that .agents/skills/conftest.py imports by name."""
   root = PROJECT.parent
   found = sorted(

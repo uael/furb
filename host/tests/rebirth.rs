@@ -89,7 +89,7 @@ fn opening(at: &Path) -> Opening {
     record: Some(at.join("record.jsonl").display().to_string()),
     config: Some(at.join("config").display().to_string()),
     roster: Some(vec!["claude-cli:opus".to_owned()]),
-    extensions: Some(false),
+    skills: Some(false),
     answer: Some(answer),
     ..Opening::default()
   }
@@ -311,8 +311,7 @@ async fn a_rebirth_waits_for_each_act_with_an_ear_and_cuts_nothing() {
 /// born again at its tail: the seed makes each of those acts again, so none holds the rebirth.
 async fn a_life_with_the_default_skills_is_born_again_at_its_tail() {
   let at = place("skills");
-  let life =
-    Life::spawn(Opening { extensions: None, ..opening(&at) }).expect("the life has a thread");
+  let life = Life::spawn(Opening { skills: None, ..opening(&at) }).expect("the life has a thread");
   let mut events = Box::pin(life.events(0));
   ran(&life, "n = 1").await;
   ran(&life, "for i in range(2600):\n  chance()").await;
