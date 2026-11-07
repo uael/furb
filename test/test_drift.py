@@ -42,7 +42,7 @@ async def test_an_act_whose_words_are_not_the_ones_the_record_holds_is_a_drift()
 
 
 async def test_its_message_names_the_act_that_drifted_and_both_facts() -> None:
-  """Its message names the act that drifted, the fact that the life made under that name and the fact that the record holds under it, which is the act or else its first answer, each cut to 300 characters, so a drift says the fact that differs."""
+  """Its message names the act that drifted, the fact that the life made under that name and the fact that the record holds under it, which is the act or else its first answer, or None when the record holds no fact under that name, each cut to 300 characters, so a drift says the fact that differs."""
   sand, _, root = born()
   assert await engine.rung("t = read('a.txt')", on=root) is None
   made = next(e[0] for e in plain(sand.record) if e[0][:2] == ("read", "read1"))
@@ -63,6 +63,13 @@ async def test_its_message_names_the_act_that_drifted_and_both_facts() -> None:
   made = (made[0], "bash2", *made[2:])
   assert str(raised.value) == f"bash1 drifts: the life made {repr(made)[:300]}, the record holds {repr(held)[:300]}"
   assert len(repr(made)) > 300
+  sand, _, root = born()
+  assert await engine.rung("a = read('a.txt')\nb = read('a.txt')", on=root) is None
+  gap = [((e[0][0], "read3", *e[0][2:]),) if e[0][1] == "read2" else e for e in plain(sand.record)]
+  with pytest.raises(Drift) as raised:
+    life(Sand(), [(("made", root, "store", "", None, "1.0", "0.4.2"),), *gap])
+  assert str(raised.value).startswith("read2 drifts: the life made ('read', 'read2', ")
+  assert str(raised.value).endswith("the record holds None")
 
 
 async def test_a_drift_breaks_the_journal_which_keeps_nothing_more() -> None:
