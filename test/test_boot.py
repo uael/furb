@@ -772,10 +772,7 @@ async def test_a_question_of_the_record_that_no_act_took_on_a_chain_that_the_lif
     if e[1] == "bash2" and e[0] in ("bash", "started", "done")
   ]
   at = next(n for n, (e,) in enumerate(record) if e[:2] == ("bash", "bash2"))
-  with pytest.raises(
-    Drift,
-    match=r"^bash1 drifts: the life made no act that the record holds under it, the record holds \('bash', 'bash1', ",
-  ):
+  with pytest.raises(Drift, match=r"^bash1 drifts: the life made no act, the record holds \('bash', 'bash1', "):
     life(Sand(), [*record[:at], *extra, *record[at:]])
 
 
@@ -797,7 +794,7 @@ async def test_a_record_whose_last_fact_made_names_a_schema_before_1_1_holds_no_
   again, _ = await relived(Sand(), [(("made", "chain1", "store", "e", None, "1.0", "0.4.2"),), *kept])
   assert {(e[0], e[1]) for e in again if engine.question(e) and e[0] != "stand"} <= set(made)
   assert [a[1] for a in said(again, "rung")] == [a[1] for a in said(log, "rung")] == ["rung1", "rung2", "rung3"]
-  with pytest.raises(Drift, match=r"^reply1 drifts: the life made no act that the record holds under it, "):
+  with pytest.raises(Drift, match=r"^reply1 drifts: the life made no act, "):
     life(Sand(), [(("made", "chain1", "store", "e", None, "1.1", "0.4.2"),), *kept])
 
 
