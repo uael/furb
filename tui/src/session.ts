@@ -43,6 +43,7 @@ import {
 import type { ThreadNode as CrateNode, FollowUp, Layer, Rung, Threads } from "furb/protocol";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { clock } from "./clock.ts";
+import { skillSlashes } from "./commands.ts";
 import { typed } from "./configs.ts";
 import { expandHome, fileReferences, fromDirectory, projectFiles, shortenHome } from "./files.ts";
 import { count, dollars } from "./format.ts";
@@ -2183,22 +2184,7 @@ export class Session extends EventEmitter {
       if (pending) await this.answer(pending, input);
       else {
         // The message goes where the operator sent it, whatever chain he shows while the reads and the prompt answer.
-        const { selected: chain, shape } = this;
-        const thread = this.target;
-        await this.attachFiles(input, chain);
-        this.redo = [];
-        this.fresh = false;
-        this.pinned = undefined;
-        const id = thread
-          ? await this.engine.prompt(this.lineShape(thread), {
-              message: input,
-              on: thread,
-            })
-          : await this.engine.prompt(shape, { message: input, on: chain });
-        if (thread) this.notice = `Your message went to the thread ${thread}.`;
-        this.sentTo.set(id, thread);
-        this.save();
-        this.track(id);
+        await this.send(input, this.selected, this.target, this.shape);
       }
     }
     await this.refresh();
@@ -2512,12 +2498,56 @@ export class Session extends EventEmitter {
         break;
       default: {
         // A skill is a command that loads the skill on the chain, as skill(name) does.
-        if (!this.skills.some(({ name }) => name === command))
+        if (!(await this.skillNamed(command)))
           throw new Error(`Unknown command /${command}. Press F1 for the command list.`);
-        this.track(await this.engine.rung({ word: `skill(${JSON.stringify(command)})`, on: this.selected }));
+        // The skill and its message go where the operator aimed them when he sent the line, as a plain message does.
+        const { selected: chain, shape } = this;
+        const thread = this.target;
+        const loaded = await this.engine.rung({
+          word: `skill(${JSON.stringify(command)})`,
+          on: chain,
+        });
+        this.track(loaded);
         this.view = "feed";
+        // The text after the name is the message that uses the skill, sent once the skill is loaded on the chain.
+        if (argument) {
+          await this.engine.result(loaded);
+          await this.send(argument, chain, thread, shape);
+        }
       }
     }
+  }
+
+  /** The entry that a skill gives for a name, read from the list of skills, or from the read of skills:// that the list
+   * has not taken yet, so a command typed before the list loads is not refused. */
+  async skillNamed(name: string): Promise<{ name: string } | undefined> {
+    let list: readonly Skill[] = this.skills;
+    if (!skillSlashes(list).some((one) => one.name === name)) {
+      const read = this.indexed().skills;
+      if (read) list = skillsIn(await this.engine.result(read.id));
+    }
+    return skillSlashes(list).find((one) => one.name === name);
+  }
+
+  /** A message of the operator on a chain, or on a thread of it, as it was aimed when it was sent, whatever chain the
+   * operator shows while the reads and the prompt answer. */
+  async send(
+    input: string,
+    chain: string,
+    thread: string | undefined,
+    shape: typeof this.shape,
+  ): Promise<void> {
+    await this.attachFiles(input, chain);
+    this.redo = [];
+    this.fresh = false;
+    this.pinned = undefined;
+    const id = thread
+      ? await this.engine.prompt(this.lineShape(thread), { message: input, on: thread })
+      : await this.engine.prompt(shape, { message: input, on: chain });
+    if (thread) this.notice = `Your message went to the thread ${thread}.`;
+    this.sentTo.set(id, thread);
+    this.save();
+    this.track(id);
   }
 
   /** A key of the configs set in a layer, or taken out of it for no value, and the life stands on the configs of now. */

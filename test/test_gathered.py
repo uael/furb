@@ -170,3 +170,18 @@ async def test_gathered_reads_the_questions_of_the_life_alone_so_the_fact_of_an_
   data = engine.gathered(lambda word: word, {})
   assert [c["id"] for c in data["chains"]] == [root]
   assert "prompt99" not in [a["id"] for a in data["acts"]]
+
+
+async def test_the_definitions_of_a_chain_take_no_text_that_the_chain_heard() -> None:
+  """The definitions of a chain take only the words whose rung is an act, so no text that the chain heard, as a note in prose of a tell, and the word of a checkpoint parses, so a later life binds each value again."""
+  _, _, root = born()
+  await engine.rung("k = 1", on=root)
+  world_says("tell", root, ["A note in prose, which no python parses."])
+  await engine.rung("j = 2", on=root)
+  await settle()
+  data = engine.gathered(definitions, {})
+  [one] = [x for x in data["chains"] if x["id"] == root]
+  assert "A note in prose" not in one["definitions"]
+  _, again = life(sown(), engine.seed(data))
+  await settle()
+  assert (engine.module(again)["k"], engine.module(again)["j"]) == (1, 2)
