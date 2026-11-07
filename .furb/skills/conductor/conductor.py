@@ -6,7 +6,6 @@ from typing import Any
 
 from furb.engine import (
   HIDDEN,
-  OPERATOR,
   ROOT,
   WINDOW,
   Act,
@@ -19,7 +18,6 @@ from furb.engine import (
   close,
   controlled,
   covers,
-  dump,
   filled,
   get,
   offered,
@@ -63,8 +61,6 @@ DISK_FLOOR = 60
 ROOM_WHY, FIX_WHY = "past the room of its class", "a fix of the CI of w/converge runs first on this topic"
 DF = "df -k ~ | tail -1"
 MEM = "memory_pressure | tail -1; sysctl -n vm.swapusage"
-GH_POLL = 'sh "$TMPDIR/converge/gh.sh"'
-SHOTS = 'sh "$TMPDIR/converge/shots.sh"'
 REGROUND, REGROUND_TOKENS, REGROUND_GROWTH = 0.5, 300000, 150000
 NO_VERIFY = '^(audit|review|qa-run|words-audit|perf-|libs-audit|align-audit|fold)'
 URGENT_NOTE = '(?m)The disk|The memory runs low|not applied|\\bP0\\b|checks of CI of w/converge pass|push of the captures'
@@ -82,7 +78,6 @@ PERF_BRIEF = 'The census of speed, again, read only: by the charter of this chai
 TRIAGE_NEW = 'Each row gets an after list of the keys of the items that it waits on: an item that changes a path that another queued or live item moves or redesigns waits on that item, and an item that builds on the result of another waits on it. A wide cut, as the rename of extension to skill (skill-rename-cut), comes before each row that touches a path that it moves.\n\nNew rows for the queue. Read scratch://converge/triage/queue.md again, the queue as it stands now, and scratch://converge/words-life.md for the latest words of the owner. By the charter of this chain, give each new row below its priority, its class and its complete brief. Merge a new row into a queued item that one commit of its topic serves: keep the key of the queued item, give its whole new brief, and list the new key in absorbs; or merge two new rows. Drop only with a reason. Keep each after key valid. Close with close((items, dropped)), each new key present once; an item may carry the key of a queued item that it changes, never the key of a live one.\n\n'
 DEPS_ASK = 'Rule the dependencies of the queue of the converge, which you own: the desk starts an item only once a cycle merged each item of its after list, and the lead no longer edits an after list. Read each row below (the live items, then each queued item with its priority, its after list and the head of its brief) against your charter. Close with a dict that maps the key of each queued item to the list of keys that it must wait on: an item that changes a path that a live or queued item moves or redesigns waits on it, an item that builds on the result of another waits on it, and a wide cut comes before each row that touches a path that it moves. Each key of a list is the key of a live or a queued item, or of an item that ended with a commit. No list makes a cycle. Give an empty list to an item that waits on nothing. Hard first: a P0 or P1 item waits on a lower one only when it needs its result. Why the desk asks now:\n'
 VERIFY_BRIEF = 'Verify one item of the converge against the ask of the owner, as an independent judge. The item counts as done only when you answer yes.\nFirst read the part What done means of scratch://converge/method.md, and run skill("ponytail-review").\nThe item KEY of the topic TOPIC. Its brief:\nBRIEF\n\nIts report:\nREPORT\n\nCheck by reading alone: git fetch origin, git show, git log and git grep in /Users/uael/src/github.com/uael/furb-converge. Make no change, no build and no merge there.\n1. The commit that the report names stands on origin/c/TOPIC or origin/w/converge, and its diff does what the brief asks, at the cause, in the least code, with no hack, no second home of a truth, and no quote of a person.\n2. For a report of the owner, the report shows his symptom on his path before the fix and gone after it, with the command and its output. A unit test of the item\'s own reading alone proves nothing.\n3. A change that the owner can see carries a QA line with his steps.\n4. A close with no commit holds only when the report proves, with a command and its output on origin/w/converge, that the claim does not hold or that w/converge already serves the ask.\nClose with the one word yes when each check holds. Else close with the cause: each check that fails, what is missing, and the smallest work that makes it hold, in at most 120 words.'
-PROOF_BRIEF = 'Prove on his path the asks of the owner that stand committed with no proof, in a batch. A later run takes the next batch.\nSetup, once for each head, in one word. The tree stands under /tmp, since a socket path under the scratch of the life passes 103 bytes and no scenario runs there; remove each older furb-proof tree of this chain with git worktree remove --force once the new one stands:\ncd /Users/uael/src/github.com/uael/furb-converge && git fetch -q origin && head=$(git rev-parse --short=9 origin/w/converge) && d=/tmp/furb-proof-$head && { [ -d "$d" ] || sh script/worktree.sh "$d" "proof/$head" "$head"; }\nscript/worktree.sh copies the build of the aggregator on write, so build nothing more there unless a test says that the build is stale. Work in that tree alone: never in furb-converge, the topic worktrees, or furb-try-930ed03c9, which runs a window of the owner. Each life that you open runs with a daemon of its own (XDG_CACHE_HOME under $TMPDIR/proof/<head>) in a workspace under $TMPDIR, on claude-cli:haiku/low.\nRead scratch://converge/asks-state.md (the table committed and the part QA lines) and your ledger scratch://converge/proof.md, if it stands. Take the 15 oldest committed asks that the ledger does not mark as passed at an earlier head of the same paths, top 10 first.\nFor each ask, run its QA line on the path of the owner: the TUI on a real life (the headless window and the keys of tui/scenarios, as the QA runs it), the real command line, or a real record. Judge the result against the ask itself, not against the QA line alone. For a screen, capture it from the real renderer and read the PNG as an image.\nWrite to scratch://converge/proof.md, for each ask: its id, the head, passed with the command and its output or the path of the capture, or failed with the evidence. Write in words that a later run reads at once.\nClose with one row for each ask that failed: reopen-<ask id> | <topic> | opus/medium | <paths> | P0, a reopen of <ask id>: <the ask>, <what failed on his path, with the evidence>, <the commit that claimed it>. The topic is one of engine, host, tui, skills, rust and ci. End with one line: proved <n> of <m> at <head>.'
 COVER_ONE = 'A new message of the owner, MSG, stands below. Split it into each thing that he asks: a request, a correction, a ruling, a report of a defect. For each part, find the item that serves it whole: grep $TMPDIR/converge/items-full.md, one section per item under ## <state> <topic>:<key>, for its words. An ended item serves a part only when its outcome shows that change.\nClose with lines only: covered <the part>; amend <key> | <the part that its brief misses, with his words verbatim>; or a row <new key> | <topic> | <class> | <paths> | <the part, his words verbatim, and the proof on his path> (topic: engine, host, tui, skills, rust or ci; class: opus/high, opus/medium, sonnet/high or sonnet/medium; keys in lower case with dashes). A message with no ask, as a thanks or a question that the lead answered, closes with: no ask.\n\nThe message:\nTEXT'
 
 ROUTE = "Route the checks of w/converge now, with no merge and no push: the run RUN of the gates at HEAD ended CONCLUSION. For each failed job, read its log (gh api repos/uael/furb/actions/jobs/<id>/logs, with grep and tail), and find each failing test or file and the topic that owns its path, as step 4 of a cycle does. Close with a tuple: a dict that maps each topic to the brief of its failures (the check, the link of the job, the head, the failing tests, and the lines of the log that show the cause), and a summary in 60 words at most. Route nothing that you routed already at this head, and say so in the summary."
@@ -539,73 +534,12 @@ def verify_step() -> list[str]:
   return notes
 
 
-def proof_step() -> list[str]:
-  last = desk_text.get("proof_live", "")
-  if last and not over(last):
-    return []
-  got = str(peek(last)) if last else ""
-  m = re.search(r"proved (\d+) of (\d+) at (\w+)", got)
-  if last:
-    desk_text["proof_last"] = m.group(0) if m else got[-300:]
-  if m and m.group(2) == "0" and desk_text.get("proof_idle_at", "") == desk_text.get("asks_state_at", ""):
-    return []
-  desk_text["proof_idle_at"] = desk_text.get("asks_state_at", "")
-  n = int(desk_text.get("proof_n", "0")) + 1
-  desk_text["proof_n"] = str(n)
-  p = str(prompt(str, PROOF_BRIEF, to=VERIFIER, on=chain_of("proof")))
-  desk_live[REVIEW][p] = {"key": f"proof-{n}", "model": VERIFIER, "brief": PROOF_BRIEF}
-  desk_text["proof_live"] = p
-  return [f"The proof lane ended {last}: {desk_text.get('proof_last', '')}. It started proof-{n} ({p})."] if last else []
 
 
-def printed_by_life(url: str) -> bool:
-  n = 1
-  while get(f"chain{n}"):
-    if any(url in str(x[3:]) for x in transcript(f"chain{n}", "out")):
-      return True
-    n += 1
-  return False
 
 
-def gh_step() -> list[str]:
-  """Each word of the owner on GitHub reaches the root as a message of his."""
-  live = desk_text.get("gh_live", "")
-  if live and not over(live):
-    return []
-  if live:
-    desk_text["gh_live"] = ""
-    got = peek(live)
-    for line in (got.stdout.content if isinstance(got, Exit) else "").splitlines():
-      parts = line.split("\t")
-      if parts[0] == "now" and len(parts) > 1:
-        desk_text["gh_since"] = parts[1]
-      elif parts[0] in ("issue", "comment") and len(parts) >= 4 and (key := parts[0] + parts[1]) not in gh_seen and not parts[3].lstrip().startswith("🤖"):
-        gh_seen.add(key)
-        if not printed_by_life(parts[2]):
-          prompt(None, f"The owner wrote on GitHub, {parts[0]} {parts[2]}: {parts[3]}\nRead it whole with gh, answer it there with a body that starts with 🤖, and act on it as a message of his.", on=ROOT)
-  if clock() - desk_time.get("gh_at", 0.0) >= CI_EVERY:
-    desk_time["gh_at"] = clock()
-    desk_text["gh_live"] = str(bash(f"{GH_POLL} {desk_text.get('gh_since', '')}", show=HIDDEN, ok=True, timeout=60))
-  return []
 
 
-def shots_step() -> list[str]:
-  live = desk_text.get("shots_live", "")
-  if live and not over(live):
-    return []
-  notes = []
-  if live:
-    desk_text["shots_live"] = ""
-    got = peek(live)
-    out = got.stdout.content.strip() if isinstance(got, Exit) else str(got)
-    if not isinstance(got, Exit) or got.code != 0:
-      notes.append(f"The push of the captures to w/shots failed: {out[-300:]} {got.stderr.content[-300:] if isinstance(got, Exit) else ''}")
-    elif "published" in out:
-      desk_text["shots_last"] = out.splitlines()[-1]
-  if clock() - desk_time.get("shots_at", 0.0) >= EVERY:
-    desk_time["shots_at"] = clock()
-    desk_text["shots_live"] = str(bash(SHOTS, show=HIDDEN, ok=True, timeout=300))
-  return notes
 
 
 def mem_step() -> list[str]:
@@ -903,33 +837,8 @@ def qa_handoff() -> str:
   return head + "\n".join(rows[:30]) if rows else ""
 
 
-def answers_file() -> str:
-  rows = []
-  for x in transcript(ROOT, "prompt"):
-    if (made := get(str(x[2]))) and (under(str(x[2]), chain_of(REVIEW)) or str(made[3]) == chain_of(REVIEW)):
-      answer = peek(x[1]) if over(x[1]) and str(x[4]) != "None" else "(a note, answered by a change of the desk)"
-      rows.append(f"## {x[1]}, asked by the review chain\n{str(x[5])[:1500]}\n\nThe answer of the lead:\n{str(answer)[:3000]}")
-  write(Text("scratch://converge/answers.md", "# The questions of the audits to the lead, and his answers\n\n" + "\n\n".join(rows) + "\n"))
-  return f"{len(rows)} answers"
 
 
-def words_files() -> str:
-  said = []
-  for x in transcript(ROOT, "prompt"):
-    if operated(str(x[2])):
-      said.append(f"## {x[1]}, a message of the owner\n{x[5]}")
-    elif str(x[6]) == OPERATOR and str(x[4]) != "None" and over(x[1]) and not isinstance(peek(x[1]), BaseException):
-      said.append(f"## {x[1]}, his answer to a question of the lead: {str(x[5])[:400]}\n{peek(x[1])}")
-    elif str(x[6]) == OPERATOR and str(x[4]) == "None":
-      said.append(f"## {x[1]}, a message of the lead to the owner, made by {x[2]}\n{str(x[5])[:1500]}")
-  write(Text("scratch://converge/words-life.md", "# The words of the owner in this life, and the messages of the lead to him, in order\n\n" + "\n\n".join(said) + "\n"))
-  done = {str(k) for _, k, _ in desk_ended}
-  queues = "\n".join(f"- {t}: width {desk_width.get(t, 0)}; live {[(str(i['key']), kind(str(i['model']))) for i in desk_live[t].values()]}; queued {[(str(x['key']), f'P{priority(x)}', kind(str(x['model'])), [a for a in afters_of(x) if a not in done]) for x in desk_queue[t]]}" for t in TOPICS)
-  names = ["ROOM_CAP", "TOPICS", "topic_chain", "desk_width", "desk_fixing", "desk_paused", "desk_ground", "SERIAL2", "FIX_MODEL", "AGG_MODEL", "ASTRA", "VERIFIER", "RANK", "desk_prio", "desk_time", "DISK_FLOOR"]
-  values = "\n".join(f"{n} = {globals()[n]!r}" for n in names) + f"\nseats_used() = {seats_used()!r}"
-  page = f"# The converge as it runs\n\nThe kit conductor runs the converge; each definition below is the one bound now.\n\nTopics, widths and queues (key, priority, class, the keys that it still waits for):\n{queues}\n\n## Values bound now\n{values}\n\n## FIX_HEAD\n{FIX_HEAD}\n\n## CYCLE\n{CYCLE}\n\n## FINGER\n{FINGER}\n\n## QA_BRIEF\n{QA_BRIEF}\n\n## REVIEW_BRIEF\n{REVIEW_BRIEF}\n\n## WORDS_BRIEF\n{WORDS_BRIEF}\n\n## ALIGN_BRIEF\n{ALIGN_BRIEF}\n\n## PERF_BRIEF\n{PERF_BRIEF}\n\n## The definitions bound now\n{dump(*PAGED)}\n"
-  write(Text("scratch://converge/desk.md", page))
-  return f"{len(said)} entries, desk.md {len(page)} chars"
 
 
 def review_rows(n: int) -> list[dict[str, str]]:
@@ -940,8 +849,6 @@ def review_rows(n: int) -> list[dict[str, str]]:
 def queue_reviews() -> list[str]:
   """Each hour, one audit of the words, one census of speed and one review of each topic, with no second of a kind that waits."""
   review_round["n"] += 1
-  words_files()
-  answers_file()
   pending = {str(x["key"]).rsplit("-", 1)[0] for x in [*desk_queue[REVIEW], *desk_live[REVIEW].values()]}
   rows = [x for x in review_rows(review_round["n"]) if x["key"].rsplit("-", 1)[0] not in pending]
   desk_queue[REVIEW].extend(rows)
@@ -981,7 +888,7 @@ def watched() -> list[str]:
   return [*[p for t in TOPICS for p in desk_live[t]], *desk_fixing.values(), *[desk_text[k] for k in keys if desk_text.get(k)], *desk_verify, *words_live]
 
 
-SIDE = [verify_step, proof_step, gh_step, shots_step, mem_step, words_step, chain_stalls, blanks_and_stuck]
+SIDE = [verify_step, mem_step, words_step, chain_stalls, blanks_and_stuck]
 
 
 def desk(every: float = EVERY, floor: float = FLOOR, on: str = "") -> Act:

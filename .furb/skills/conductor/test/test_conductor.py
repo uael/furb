@@ -27,8 +27,6 @@ FINGER = "cat finger.txt 2>/dev/null; true"
 CI_PROBE = "cat ci.txt 2>/dev/null; true"
 DF = "cat df.txt 2>/dev/null; true"
 MEM = "cat mem.txt 2>/dev/null; true"
-SHOTS = "cat shots.txt 2>/dev/null; true"
-GH_POLL = "cat gh.txt 2>/dev/null; true"
 desk_time.update(review_at=1e12, ci_at=1e12, disk_at=1e12)
 SIDE = []
 
@@ -342,14 +340,11 @@ async def test_a_message_of_the_owner_is_judged_part_by_part_and_each_part_is_ap
   assert len([x for x in conductor.asked() if x[1] == "words"]) == 1
 
 
-async def test_reviews_come_each_hour_once_for_each_kind_and_write_the_words_of_the_owner(conductor: Round) -> None:
-  told = conductor.engine.prompt(str, "Do it.", on=conductor.root)
+async def test_reviews_come_each_hour_once_for_each_kind(conductor: Round) -> None:
   await conductor.word("desk_time['review_at'] = -1e9")
   await conductor.beat()
   assert [x[2] for x in conductor.asked() if x[1] == "review"] == ["codex:gpt-6-astra/high"] * 2
   assert conductor.queue("review") == ["review-a-1", "review-b-1"]
-  assert f"## {told}, a message of the owner\nDo it." in conductor.sand.files["scratch://converge/words-life.md"]
-  assert "## Values bound now" in conductor.sand.files["scratch://converge/desk.md"]
   conductor.sand.now += 3600
   await conductor.beat()
   assert len(conductor.queue("review")) == 2
@@ -382,29 +377,12 @@ async def test_news_is_done_with_the_next_prompt_of_the_root(conductor: Round) -
   assert conductor.engine.peek(conductor.ns["heard"]) == told
 
 
-async def test_the_lanes_of_memory_captures_and_github_read_their_command_and_tell_what_needs_the_lead(conductor: Round) -> None:
+async def test_the_lane_of_memory_reads_its_command_and_tells_the_lead_when_it_runs_low(conductor: Round) -> None:
   conductor.file("mem.txt", "System-wide memory free percentage: 9%\n")
-  conductor.file("shots.txt", "push failed\n")
-  conductor.file("gh.txt", "now\t2026-11-07T01:00:00Z\ncomment\t42\thttps://github.com/uael/furb/pull/1#c42\tPlease look.\ncomment\t43\thttps://x/43\t\U0001f916 mine\n")
-  await conductor.word("SIDE[:] = [mem_step, shots_step, gh_step]\ndesk_time.update(mem_at=-1e9, shots_at=-1e9, gh_at=-1e9)")
+  await conductor.word("SIDE[:] = [mem_step]\ndesk_time.update(mem_at=-1e9)")
   await conductor.beat()
   await conductor.beat()
   assert "The memory runs low: memory 9% free" in "\n".join(conductor.notes(conductor.root))
-  assert conductor.ns["desk_text"]["gh_since"] == "2026-11-07T01:00:00Z"
-  (said_,) = [x for x in conductor.notes(conductor.root) if x.startswith("The owner wrote on GitHub")]
-  assert said_.startswith("The owner wrote on GitHub, comment https://github.com/uael/furb/pull/1#c42: Please look.")
-
-
-async def test_the_proof_lane_runs_one_batch_at_a_time_on_its_chain(conductor: Round) -> None:
-  await conductor.word("SIDE[:] = [proof_step]\ndesk_width['review'] = 0")
-  await conductor.beat()
-  await conductor.beat()
-  ((first, label, model, _),) = conductor.asked()
-  assert (label, model) == ("proof", OPUS_M)
-  await conductor.end(first, "proved 2 of 5 at abc")
-  await conductor.beat()
-  assert len(conductor.asked()) == 2
-  assert conductor.ns["desk_notes"][-1].startswith(f"The proof lane ended {first}: proved 2 of 5 at abc. It started proof-2")
 
 
 async def test_a_scripted_round_fills_each_free_seat_with_ready_work_hard_first_and_records_the_cause_of_each_seat_left_free(conductor: Round) -> None:
