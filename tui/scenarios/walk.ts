@@ -76,7 +76,6 @@ const VIEWS = new Set([
   "themes",
   "workspaces",
   "search",
-  "python",
   "ladders",
   "names",
   "help",
@@ -85,7 +84,8 @@ const VIEWS = new Set([
 ]);
 
 /** The actions that a second press undoes. */
-const TOGGLES = new Set(["sidebar", "details", "foldHere"]);
+// ⌃R is a mode of the input, which a second ⌃R leaves, as it leaves it in the table of keys, and Esc keeps.
+const TOGGLES = new Set(["sidebar", "details", "foldHere", "python"]);
 
 /** A long answer in markdown, with a paragraph past the width of the feed, a block of code and a list. */
 const LONG = [
