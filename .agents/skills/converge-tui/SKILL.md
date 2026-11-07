@@ -1,9 +1,9 @@
 ---
 name: converge-tui
-description: How an audit of the round judges the TUI of main against the rulings of the owner on it, and turns each gap into a row of its register.
+description: How an audit of the round judges the TUI of main against the rulings on it, and turns each gap into a row of its register.
 ---
-An audit of the TUI judges what main draws against the rulings of the issues 14 to 17 and 28 of the private repository
-of decisions, and against nothing else: no spec, no plan, no taste of your own. The walk of step 5 adds the defects
+An audit of the TUI judges what main draws against the rulings of the issues 14 to 17 and 28 of the repository of
+decisions, and against nothing else: no spec, no plan, no taste of your own. The walk of step 5 adds the defects
 that a person meets as he uses the TUI, which need no ruling. The local file
 `.furb/skills/conductor/private.json` of the main checkout names that repository under the key `repo`: read each of
 these issues whole, with its comments, as `gh issue view <n> --repo <repo> --comments`.
@@ -33,7 +33,7 @@ these issues whole, with its comments, as `gh issue view <n> --repo <repo> --com
    ruling, since no ruling allows a broken key: read its capture and the capture before it, and make each one that holds
    a row of your register, with its step, its probe and its capture as evidence. Drop a finding that the capture shows
    to be a fault of the walk itself, and say why in your report. Read the frames of the walk in their order as well, as
-   the owner reads his screen, and add a row for each defect that you see there that no probe names.
+   a person reads the screen, and add a row for each defect that you see there that no probe names.
 6. Judge with blind judges. For each batch of at most 16 changed captures, make a chain of its own, give it a grant of
    3 dollars, and prompt claude-cli:sonnet/high there with the rulings whole, the legend below, and the captures of the
    batch, each capture of the walk with its action. Each image of a capture stands in its tag as

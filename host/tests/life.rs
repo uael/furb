@@ -112,7 +112,7 @@ fn rung(word: &str) -> Command {
 }
 
 #[tokio::test]
-async fn a_prompt_is_told_as_its_facts_and_its_acts_in_order_with_no_gap_until_the_end() {
+async fn a_prompt_is_told_as_its_facts_and_its_acts_in_order_until_the_end() {
   let at = place("prompt");
   let life = Life::spawn(scripted(&at, &["close('ok')"])).unwrap();
   let mut events = Box::pin(life.events(0));
@@ -121,7 +121,8 @@ async fn a_prompt_is_told_as_its_facts_and_its_acts_in_order_with_no_gap_until_t
   let id = made(&life, prompt).await;
   let got = until(&mut events, done(&id)).await;
   let places: Vec<Seq> = got.iter().map(|one| one.0).collect();
-  assert_eq!(places, (0..got.len() as Seq).collect::<Vec<_>>());
+  assert_eq!(places[0], 0);
+  assert!(places.windows(2).all(|two| two[0] < two[1]), "{places:?}");
   let phases: Vec<&Phase> = got
     .iter()
     .filter_map(|one| match &*one.1 {
@@ -138,7 +139,7 @@ async fn a_prompt_is_told_as_its_facts_and_its_acts_in_order_with_no_gap_until_t
   assert_eq!(life.send(Command::End).await.unwrap(), Reply::Done);
   let rest = until(&mut events, |event| matches!(event, Event::Ended(_))).await;
   assert_eq!(*rest.last().unwrap().1, Event::Ended(None));
-  assert_eq!(rest[0].0, got.len() as Seq);
+  assert_eq!(rest[0].0, places[places.len() - 1] + 1);
   assert!(events.next().await.is_none());
   assert!(matches!(life.send(Command::Standing).await, Err(LifeError::Ended)));
 }
@@ -155,7 +156,8 @@ async fn a_reader_that_stands_behind_the_life_reads_its_events_again_from_the_lo
   assert_eq!(until(&mut behind, done(&id)).await, heard);
   let mut late = Box::pin(life.events(0));
   assert_eq!(until(&mut late, done(&id)).await, heard);
-  let mut tail = Box::pin(life.events(heard.len() as Seq - 1));
+  let last = heard.last().map_or(0, |one| one.0);
+  let mut tail = Box::pin(life.events(last));
   assert_eq!(until(&mut tail, done(&id)).await, heard[heard.len() - 1..]);
 }
 

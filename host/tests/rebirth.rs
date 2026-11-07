@@ -11,6 +11,7 @@
 mod yard;
 
 use std::{
+  collections::BTreeMap,
   path::Path,
   process,
   sync::{
@@ -216,7 +217,18 @@ async fn a_life_goes_on_through_each_rebirth() {
   assert!(matches!(life.send(Command::End).await, Ok(Reply::Done)));
   log.extend(until(&mut events, |event| matches!(event, Event::Ended(None))).await);
   let late: Vec<Logged> = life.events(0).collect().await;
-  assert_eq!(late, log, "a reader that comes late reads the same log");
+  let others = |of: &[Logged]| -> Vec<Logged> {
+    of.iter().filter(|one| !matches!(*one.1, Event::Act(_) | Event::Text { .. })).cloned().collect()
+  };
+  assert_eq!(others(&late), others(&log), "a reader that comes late reads the same facts");
+  let last = |of: &[Logged]| -> BTreeMap<String, Logged> {
+    let acts = of.iter().filter_map(|one| match &*one.1 {
+      Event::Act(act) => Some((act.id.clone(), one.clone())),
+      _ => None,
+    });
+    acts.collect()
+  };
+  assert_eq!(last(&late), last(&log), "and the last event of each act, which replaces the others");
   let rebirths = log.iter().filter(|one| matches!(*one.1, Event::Reborn(_))).count();
   assert_eq!(rebirths, 1, "each reader heard each rebirth");
   assert_eq!(

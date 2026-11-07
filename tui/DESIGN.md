@@ -352,8 +352,8 @@ The keyboard reaches all of it. A click on a program of the map is left for late
 
 ### The finish
 
-The owner asked for the finish of the best apps of its kind: their care of type, space, color and motion, on a
-design that is furb's own. In the terminal the same rules hold within its means:
+The aim is the finish of the best apps of its kind: their care of type, space, color and motion, on a design that is
+furb's own. In the terminal the same rules hold within its means:
 
 - A small palette with one accent. Dusk is the dark theme of #255, warm grays with a clay accent, and Day is
   the light one, on paper white. Color says the state alone: the accent is work that runs, amber is what waits for
@@ -395,8 +395,7 @@ gave a first draft that the brief changed; and opentui, which this repository ho
 
 ## The feed
 
-The owner asked for a design of the feed of its own: where a person reads what a chain said and did, from its start
-to its end. Three directions differ at the root:
+The feed has a design of its own: where a person reads what a chain said and did, from its start to its end. Three directions differ at the root:
 
 1. The transcript: the turns as the model of the chain reads them, as python. It is the one truth of the engine, and
    it shows what the model saw when an answer is wrong. But it is the input of a model, not a page for a person.
@@ -413,8 +412,8 @@ work, to read when a model went wrong.
 
 ## The three views side by side
 
-The owner ruled on the views: keep all three, the view of main, the loom of #244 with the cursor in time of #246, and
-the graph of #255, behind a switch at run time, and iterate on each. The owner chooses later. The sections above, from
+The three views stay: the view of main, the loom of #244 with the cursor in time of #246, and the graph of #255, behind
+a switch at run time, and each iterates on its own. The choice among them comes later. The sections above, from
 "As built: the Loom", say what #244, #246 and #255 built on their own branches. This section says how the TUI holds the
 three now, in one App, so that no view deletes a screen of main.
 

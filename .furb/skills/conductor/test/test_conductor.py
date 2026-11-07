@@ -27,8 +27,6 @@ FINGER = "cat finger.txt 2>/dev/null; true"
 CI_PROBE = "cat ci.txt 2>/dev/null; true"
 DF = "cat df.txt 2>/dev/null; true"
 MEM = "cat mem.txt 2>/dev/null; exit $(cat code.txt 2>/dev/null || echo 0)"
-SHOTS = "cat shots.txt 2>/dev/null; true"
-GH_POLL = "cat gh.txt 2>/dev/null; true"
 desk_time.update(review_at=1e12, ci_at=1e12, disk_at=1e12)
 SIDE = []
 
@@ -259,7 +257,22 @@ async def test_an_ended_item_is_judged_and_a_no_opens_it_again_one_effort_higher
     await conductor.beat()
   assert [(x["key"], x["model"].split("/")[-1]) for x in conductor.ns["desk_queue"]["a"]] == []
   assert [x[2].split("/")[-1] for x in conductor.asked() if x[1] == "a"] == ["high", "xhigh", "xhigh", "xhigh"]
-  assert "a:one-r3 failed its verification 3 times." in conductor.ns["desk_notes"][-1]
+  assert any("P0 unresolved: a:one-r3 failed its verification 3 times." in x for x in conductor.notes(conductor.root))
+
+
+async def test_an_ended_item_whose_judge_gives_no_verdict_is_judged_again_and_then_reaches_the_lead_unresolved(conductor: Round) -> None:
+  await conductor.word("SIDE[:] = [verify_step]\ndesk_queue['a'].append(item('one'))")
+  await conductor.beat()
+  await conductor.end([x for x in conductor.asked() if x[1] == "a"][-1][0], "done")
+  await conductor.beat()
+  for n in range(1, 4):
+    judges = [x for x in conductor.asked() if x[1].startswith("verify")]
+    assert len(judges) == n
+    await conductor.end(judges[-1][0], RuntimeError("the judge fell"))
+    await conductor.beat()
+  assert len([x for x in conductor.asked() if x[1].startswith("verify")]) == 3
+  assert conductor.ns["desk_verified"] == [] and conductor.queue("a") == []
+  assert any("P0 unresolved: a:one has no verdict after 3 verifications" in x for x in conductor.notes(conductor.root))
 
 
 async def test_the_needs_of_an_ended_item_go_to_the_triage_whose_answer_applies_whole_or_not_at_all(conductor: Round) -> None:
@@ -342,14 +355,11 @@ async def test_a_message_of_the_owner_is_judged_part_by_part_and_each_part_is_ap
   assert len([x for x in conductor.asked() if x[1] == "words"]) == 1
 
 
-async def test_reviews_come_each_hour_once_for_each_kind_and_write_the_words_of_the_owner(conductor: Round) -> None:
-  told = conductor.engine.prompt(str, "Do it.", on=conductor.root)
+async def test_reviews_come_each_hour_once_for_each_kind(conductor: Round) -> None:
   await conductor.word("desk_time['review_at'] = -1e9")
   await conductor.beat()
   assert [x[2] for x in conductor.asked() if x[1] == "review"] == ["codex:gpt-6-astra/high"] * 2
   assert conductor.queue("review") == ["review-a-1", "review-b-1"]
-  assert f"## {told}, a message of the owner\nDo it." in conductor.sand.files["scratch://converge/words-life.md"]
-  assert "## Values bound now" in conductor.sand.files["scratch://converge/desk.md"]
   conductor.sand.now += 3600
   await conductor.beat()
   assert len(conductor.queue("review")) == 2
@@ -382,31 +392,14 @@ async def test_news_is_done_with_the_next_prompt_of_the_root(conductor: Round) -
   assert conductor.engine.peek(conductor.ns["heard"]) == told
 
 
-async def test_the_lanes_of_memory_captures_and_github_read_their_command_and_tell_what_needs_the_lead(conductor: Round) -> None:
+async def test_the_lane_of_memory_reads_its_guard_and_holds_each_new_item_while_the_memory_runs_low(conductor: Round) -> None:
   conductor.file("mem.txt", "memory 9% free, swap 6000 MB in use, grown 0 MB in 1s\n")
   conductor.file("code.txt", "75\n")
-  conductor.file("shots.txt", "push failed\n")
-  conductor.file("gh.txt", "now\t2026-11-07T01:00:00Z\ncomment\t42\thttps://github.com/uael/furb/pull/1#c42\tPlease look.\ncomment\t43\thttps://x/43\t\U0001f916 mine\n")
-  await conductor.word("SIDE[:] = [mem_step, shots_step, gh_step]\ndesk_time.update(mem_at=-1e9, shots_at=-1e9, gh_at=-1e9)")
+  await conductor.word("SIDE[:] = [mem_step]\ndesk_time.update(mem_at=-1e9)")
   await conductor.beat()
   await conductor.beat()
   assert "The memory runs low: memory 9% free" in "\n".join(conductor.notes(conductor.root))
   assert conductor.ns["pick"]() is None
-  assert conductor.ns["desk_text"]["gh_since"] == "2026-11-07T01:00:00Z"
-  (said_,) = [x for x in conductor.notes(conductor.root) if x.startswith("The owner wrote on GitHub")]
-  assert said_.startswith("The owner wrote on GitHub, comment https://github.com/uael/furb/pull/1#c42: Please look.")
-
-
-async def test_the_proof_lane_runs_one_batch_at_a_time_on_its_chain(conductor: Round) -> None:
-  await conductor.word("SIDE[:] = [proof_step]\ndesk_width['review'] = 0")
-  await conductor.beat()
-  await conductor.beat()
-  ((first, label, model, _),) = conductor.asked()
-  assert (label, model) == ("proof", OPUS_M)
-  await conductor.end(first, "proved 2 of 5 at abc")
-  await conductor.beat()
-  assert len(conductor.asked()) == 2
-  assert conductor.ns["desk_notes"][-1].startswith(f"The proof lane ended {first}: proved 2 of 5 at abc. It started proof-2")
 
 
 async def test_a_scripted_round_fills_each_free_seat_with_ready_work_hard_first_and_records_the_cause_of_each_seat_left_free(conductor: Round) -> None:
@@ -439,20 +432,44 @@ async def test_a_part_of_the_owner_that_no_item_holds_reaches_the_lead_at_once(c
   assert any("not applied: ['amend ghost | x, verbatim']" in x for x in conductor.notes(conductor.root))
 
 
-async def test_a_restart_keeps_the_count_of_merges_so_one_audit_comes_at_the_fourth_and_the_turns_go_on(tmp_path: Path) -> None:
-  (tmp_path / "one").mkdir()
-  (tmp_path / "two").mkdir()
-  first = Round(tmp_path / "one")
-  await first.load(TEST)
-  for n in range(7):
-    await first.word(f"merges_step('head h{n}')")
-  assert [(x["key"], x["model"]) for x in first.ns["desk_queue"]["review"]] == [("align-audit-m4", "codex:gpt-6-astra/high")]
-  await first.word("desk_queue['review'].clear()")
-  kept = {name: first.ns[name] for name in ("desk_time", "desk_text", "desk_queue", "desk_live")}
-  again = Round(tmp_path / "two")
-  await again.word("\n".join(f"{name} = {value!r}" for name, value in kept.items()))
-  await again.load(TEST)
-  await again.word("merges_step('head h6')\nmerges_step('head h7')")
-  assert again.ns["desk_queue"]["review"] == []
-  await again.word("merges_step('head h8')\nmerges_step('head h8')")
-  assert [(x["key"], x["model"]) for x in again.ns["desk_queue"]["review"]] == [("align-audit-m8", OPUS)]
+async def test_a_restart_before_and_after_the_fourth_merge_keeps_the_queue_and_audits_each_range_of_w_converge_and_main_once(tmp_path: Path) -> None:
+  names = ("desk_time", "desk_text", "desk_queue", "desk_live")
+
+  async def restart(old: Round, n: int) -> Round:
+    kept = "\n".join(f"{name} = {old.ns[name]!r}" for name in names)
+    (tmp_path / str(n)).mkdir()
+    new = Round(tmp_path / str(n))
+    await new.word(kept)
+    await new.load(TEST)
+    return new
+
+  def audits(one: Round) -> list[tuple[str, str, str]]:
+    return [(x["key"], x["model"], x["brief"].split("in the ranges ")[1].split(", each range")[0]) for x in one.ns["desk_queue"]["review"]]
+
+  (tmp_path / "0").mkdir()
+  life = Round(tmp_path / "0")
+  await life.load(TEST)
+  for n in range(3):
+    await life.word(f"merges_step('head h{n}\\nmain m0')")
+  life = await restart(life, 1)
+  await life.word("merges_step('head h2\\nmain m0')")
+  assert audits(life) == []
+  await life.word("merges_step('head h3\\nmain m0')\nmerges_step('head h4\\nmain m1')")
+  m4 = [("align-audit-m4", "codex:gpt-6-astra/high", "h0..h4 of w/converge and m0..m1 of main")]
+  assert audits(life) == m4
+  await life.word("merges_step('head h5\\nmain m1')\nmerges_step('head h6\\nmain m1')")
+  life = await restart(life, 2)
+  await life.word("merges_step('head h6\\nmain m1')\nmerges_step('head h7\\nmain m1')\nmerges_step('head h8\\nmain m2')")
+  assert audits(life) == m4
+  await life.beat()
+  ((failed, *_),) = [x for x in life.asked() if x[1] == "review"]
+  await life.end(failed, RuntimeError("the audit fell"))
+  await life.beat()
+  await life.word("merges_step('head h8\\nmain m2')")
+  assert audits(life) == [("align-audit-m8", OPUS, "h0..h8 of w/converge and m0..m2 of main")]
+  await life.beat()
+  (ran,) = [x[0] for x in life.asked() if x[1] == "review" and x[0] != failed]
+  await life.end(ran, "clean at h8 and m2")
+  await life.beat()
+  await life.word("\n".join(f"merges_step('head h{n}\\nmain m3')" for n in range(9, 13)))
+  assert audits(life) == [("align-audit-m12", "codex:gpt-6-astra/high", "h8..h12 of w/converge and m2..m3 of main")]

@@ -17,7 +17,7 @@ use crate::view::{Act, Fold, Held, State};
 fn conductor() -> Vec<Act> {
   let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tui/fixtures/conductor.jsonl");
   let Ok(record) = std::fs::read_to_string(path) else { panic!("no record at {path}") };
-  let wake = "The ask A27 of the owner is missing, and no item carries it now.";
+  let wake = "An ask of the ledger is missing, and no item carries it now.";
   let more = [
     json!(["prompt", "prompt9001", "quiet2602", "chain1", "None", wake, ""]),
     json!(["rung", "rung9001", "operator", "chain1", "prompt(None, 'Look at #295.')", "", ""]),
