@@ -257,7 +257,22 @@ async def test_an_ended_item_is_judged_and_a_no_opens_it_again_one_effort_higher
     await conductor.beat()
   assert [(x["key"], x["model"].split("/")[-1]) for x in conductor.ns["desk_queue"]["a"]] == []
   assert [x[2].split("/")[-1] for x in conductor.asked() if x[1] == "a"] == ["high", "xhigh", "xhigh", "xhigh"]
-  assert "a:one-r3 failed its verification 3 times." in conductor.ns["desk_notes"][-1]
+  assert any("P0 unresolved: a:one-r3 failed its verification 3 times." in x for x in conductor.notes(conductor.root))
+
+
+async def test_an_ended_item_whose_judge_gives_no_verdict_is_judged_again_and_then_reaches_the_lead_unresolved(conductor: Round) -> None:
+  await conductor.word("SIDE[:] = [verify_step]\ndesk_queue['a'].append(item('one'))")
+  await conductor.beat()
+  await conductor.end([x for x in conductor.asked() if x[1] == "a"][-1][0], "done")
+  await conductor.beat()
+  for n in range(1, 4):
+    judges = [x for x in conductor.asked() if x[1].startswith("verify")]
+    assert len(judges) == n
+    await conductor.end(judges[-1][0], RuntimeError("the judge fell"))
+    await conductor.beat()
+  assert len([x for x in conductor.asked() if x[1].startswith("verify")]) == 3
+  assert conductor.ns["desk_verified"] == [] and conductor.queue("a") == []
+  assert any("P0 unresolved: a:one has no verdict after 3 verifications" in x for x in conductor.notes(conductor.root))
 
 
 async def test_the_needs_of_an_ended_item_go_to_the_triage_whose_answer_applies_whole_or_not_at_all(conductor: Round) -> None:
@@ -415,20 +430,34 @@ async def test_a_part_of_the_owner_that_no_item_holds_reaches_the_lead_at_once(c
   assert any("not applied: ['amend ghost | x, verbatim']" in x for x in conductor.notes(conductor.root))
 
 
-async def test_a_restart_keeps_the_count_of_merges_so_one_audit_comes_at_the_fourth_and_the_turns_go_on(tmp_path: Path) -> None:
-  (tmp_path / "one").mkdir()
-  (tmp_path / "two").mkdir()
-  first = Round(tmp_path / "one")
-  await first.load(TEST)
-  for n in range(7):
-    await first.word(f"merges_step('head h{n}')")
-  assert [(x["key"], x["model"]) for x in first.ns["desk_queue"]["review"]] == [("align-audit-m4", "codex:gpt-6-astra/high")]
-  await first.word("desk_queue['review'].clear()")
-  kept = {name: first.ns[name] for name in ("desk_time", "desk_text", "desk_queue", "desk_live")}
-  again = Round(tmp_path / "two")
-  await again.word("\n".join(f"{name} = {value!r}" for name, value in kept.items()))
-  await again.load(TEST)
-  await again.word("merges_step('head h6')\nmerges_step('head h7')")
-  assert again.ns["desk_queue"]["review"] == []
-  await again.word("merges_step('head h8')\nmerges_step('head h8')")
-  assert [(x["key"], x["model"]) for x in again.ns["desk_queue"]["review"]] == [("align-audit-m8", OPUS)]
+async def test_a_restart_before_and_after_the_fourth_merge_keeps_the_queue_and_audits_each_range_of_w_converge_and_main_once(tmp_path: Path) -> None:
+  names = ("desk_time", "desk_text", "desk_queue", "desk_live")
+  (tmp_path / "0").mkdir()
+  life = Round(tmp_path / "0")
+
+  async def restart(old: Round, n: int) -> Round:
+    kept = "\n".join(f"{name} = {old.ns[name]!r}" for name in names)
+    (tmp_path / str(n)).mkdir()
+    new = Round(tmp_path / str(n))
+    await new.word(kept)
+    await new.load(TEST)
+    return new
+
+  def audits(one: Round) -> list[tuple[str, str, str]]:
+    return [(x["key"], x["model"], x["brief"].split("in the ranges ")[1].split(", each range")[0]) for x in one.ns["desk_queue"]["review"]]
+
+  await life.load(TEST)
+  for n in range(3):
+    await life.word(f"merges_step('head h{n}\\nmain m0')")
+  life = await restart(life, 1)
+  await life.word("merges_step('head h2\\nmain m0')")
+  assert audits(life) == []
+  await life.word("merges_step('head h3\\nmain m0')\nmerges_step('head h4\\nmain m1')")
+  m4 = [("align-audit-m4", "codex:gpt-6-astra/high", "h0..h4 of w/converge and m0..m1 of main")]
+  assert audits(life) == m4
+  await life.word("merges_step('head h5\\nmain m1')\nmerges_step('head h6\\nmain m1')")
+  life = await restart(life, 2)
+  await life.word("merges_step('head h6\\nmain m1')\nmerges_step('head h7\\nmain m1')\nmerges_step('head h8\\nmain m2')")
+  assert audits(life) == m4
+  await life.word("desk_queue['review'].clear()\nmerges_step('head h8\\nmain m2')\nmerges_step('head h8\\nmain m2')")
+  assert audits(life) == [("align-audit-m8", OPUS, "h4..h8 of w/converge and m1..m2 of main")]
