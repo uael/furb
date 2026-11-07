@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { createTwoFilesPatch } from "diff";
 import {
   actorParts,
   attachImage,
@@ -32,11 +31,10 @@ import { clock } from "./clock.ts";
 import type { Setting } from "./configs.ts";
 import { demoModels } from "./demo/answer.ts";
 import { expandHome } from "./files.ts";
-import { lineCounts } from "./format.ts";
 import { type EngineOptions, roster } from "./models.ts";
 import type { ProviderChoice } from "./providers.ts";
 import { isRecorded, Reader, type Reading, row } from "./reading.ts";
-import { branchChanges, net } from "./review.ts";
+import { branchChanges, net, reviewed } from "./review.ts";
 import type { ActRow } from "./session.ts";
 
 /** What one answer of a model read and wrote: its whole prompt, its output, the reads and the writes of the cache,
@@ -728,10 +726,8 @@ export class HostView extends EventEmitter {
     const counted = new Set<string>();
     for (const change of this.journal?.readable(0, this.journal.length) ?? [])
       if (change.act && !this.lines.has(change.act)) {
-        this.lines.set(
-          change.act,
-          lineCounts(createTwoFilesPatch(change.path, change.path, change.before, change.after)),
-        );
+        const { added, removed } = reviewed(change);
+        this.lines.set(change.act, { added, removed });
         counted.add(change.act);
       }
     const { acts, count } = life.since(since);
@@ -804,8 +800,7 @@ export class HostView extends EventEmitter {
   async cancelSignIn(): Promise<void> {
     await this.life.cancelSignIn();
   }
-  /** A change of a key of a layer of the configs, which the World writes in the daemon, or a reload of them, each then
-   * a stand of the life. The daemon drives the sign-in that a change of codex asks, and refuses the change when the
+  /** A change of a key of a layer of the configs, which the World writes in the daemon, then a stand of the life. The daemon drives the sign-in that a change of codex asks, and refuses the change when the
    * operator cancels it or it fails, as the frames of the sign-in tell the window. */
   async config(config: Config): Promise<void> {
     if (this.demo) throw new Error("Provider settings are not available in the demo.");

@@ -130,6 +130,20 @@ fn exclusive() -> MutexGuard<'static, ()> {
 }
 
 fn store(file: &path::Path, stamp: &str, found: &[Found], now: u64) {
+  // A cache that cannot be written costs the next life one probe more, so the failure ends here.
+  stored_by(file, stamp, entry(found, now), |file, bytes| {
+    drop(disk::write(file, bytes, Access::Shared));
+  });
+}
+
+/// A discovery as the cache holds it, which [`stored`] reads: [`Told`] as JSON.
+fn entry(found: &[Found], now: u64) -> Value {
+  json!({"at": now, "found": found})
+}
+
+/// [`store`] of a discovery as the cache holds it, with the write of the file given, so a test of
+/// the race writes with no sync to the disk, whose time grows with the load of the machine.
+fn stored_by(file: &path::Path, stamp: &str, told: Value, write: impl FnOnce(&path::Path, &[u8])) {
   let _held = exclusive();
   let mut map: serde_json::Map<String, Value> = fs::read_to_string(file)
     .ok()
@@ -138,13 +152,12 @@ fn store(file: &path::Path, stamp: &str, found: &[Found], now: u64) {
   // One entry for each program: an older stamp of it goes.
   let program = stamp.splitn(3, '\0').take(2).collect::<Vec<_>>().join("\0");
   map.retain(|key, _| !key.starts_with(&program));
-  map.insert(stamp.to_owned(), json!({"at": now, "found": found}));
+  map.insert(stamp.to_owned(), told);
   while map.len() > 16 {
     let Some(oldest) = map.keys().next().cloned() else { break };
     map.shift_remove(&oldest);
   }
-  // A cache that cannot be written costs the next life one probe more, so the failure ends here.
-  drop(disk::write(file, Value::Object(map).to_string().as_bytes(), Access::Shared));
+  write(file, Value::Object(map).to_string().as_bytes());
 }
 
 /// The cache gone, so the next models ask the command line again.

@@ -43,7 +43,7 @@
         "@opentui/core": "0.5.11",
         "@opentui/keymap": "0.5.11",
         "diff": "^9.0.0",
-        "furb": "workspace:*",
+        "furb": "workspace:@uael/furb@*",
         "gemoji": "^8.1.0",
         "marked": "17.0.1",
         "tree-sitter-json": "^0.24.8",
@@ -301,6 +301,16 @@
     "@types/upng-js": ["@types/upng-js@2.1.5", "", {}, "sha512-CzXg1lcCcWzrmYmke9BLbBPzb2DpdC1bXuXf0BtK3Bygvsozslei8S1bheDI1QUfZzZpMeQI5fywfnMj4CxocQ=="],
 
     "@uael/furb": ["@uael/furb@workspace:bind/typescript"],
+
+    "@uael/furb-darwin-arm64": ["@uael/furb-darwin-arm64@0.4.2", "", { "os": "darwin", "cpu": "arm64" }, "sha512-zbPCMSj7jaQYiwmH93IvaXpB2jmSqjJYyQkHczxZxe3DfPq8E7Y+0aMZ6Ja5KumdmSrMA/GshcF6b0JnQVPzfg=="],
+
+    "@uael/furb-darwin-x64": ["@uael/furb-darwin-x64@0.4.2", "", { "os": "darwin", "cpu": "x64" }, "sha512-OAZ6xBfg72Al7lgaLHBRge8s+3dQF+7H/XyP7MQsvgtswXO9zM77MQTHMuoQkrxwHbsrABiv8ack7WHp+rq+Fg=="],
+
+    "@uael/furb-linux-arm64-gnu": ["@uael/furb-linux-arm64-gnu@0.4.2", "", { "os": "linux", "cpu": "arm64" }, "sha512-iZGeGHEPuKdvY3SSJm8LMEQu2TcFi00ZWltVtzOWjcc0f4kfPNcCkH8A+Tr9e2SRVJHFBheQSXDMWADuioDdxA=="],
+
+    "@uael/furb-linux-x64-gnu": ["@uael/furb-linux-x64-gnu@0.4.2", "", { "os": "linux", "cpu": "x64" }, "sha512-vAE8k/XFdQQ3W3fr1Ne9C5KMfWneckFZOivEcIgQMscGctBSKRGsNAWmlL1QbIF8CkdvOkg4pSJjSdNLwBCSKQ=="],
+
+    "@uael/furb-win32-x64-msvc": ["@uael/furb-win32-x64-msvc@0.4.2", "", { "os": "win32", "cpu": "x64" }, "sha512-9KcTuPv481IG47wR8Xz0Ylz9XnzAuL8a0JbV+S7KyE9Kbu9MpIMcRZat6ezo8FyuZKiTI3mVt5aPuVryVphEdA=="],
 
     "ansi-regex": ["ansi-regex@6.3.0", "", {}, "sha512-WpDfL7NO6j7tH88IDBNVdUJxDh9nmCteAVW9dsep846XdwF4naCBK+/tGLX3KJgcpgMRXCFlTM2hKGoK9FsdrQ=="],
 

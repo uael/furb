@@ -241,9 +241,10 @@ export const rail = part({
         : minutes < 60 * 24
           ? `${Math.floor(minutes / 60)}h`
           : `${Math.floor(minutes / 60 / 24)}d`;
+    // One cell parts the state word from the age, for each state.
     return [
       ...(live ? [] : [this.stateWord(thread, state)]),
-      ...(minutes < 1 ? [] : [[age, c.faint] as Part]),
+      ...(minutes < 1 ? [] : [[`${live ? "" : " "}${age}`, c.faint] as Part]),
     ];
   },
 

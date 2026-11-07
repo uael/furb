@@ -14,6 +14,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
 import { Glob } from "bun";
+import { endedByMemory, endOf } from "./children.ts";
 import { ownDaemon } from "./daemon.ts";
 import { environment } from "./environment.ts";
 import { stale, warning } from "./stale.ts";
@@ -45,6 +46,8 @@ const everything = process.env.FURB_TEST_OUTPUT === "1";
 let passes = 0;
 let fails = 0;
 const env = environment();
+/** The tests that the watcher of memory ended. */
+const ended_by_memory: string[] = [];
 const entities: Record<string, string> = { quot: '"', amp: "&", lt: "<", gt: ">", apos: "'" };
 
 /** What a run of the tests wrote, and whether it passed. The run, and each process that it starts, takes a temporary
@@ -55,13 +58,15 @@ async function test(args: string[]): Promise<{ text: string; passed: boolean }> 
   const yard = await mkdtemp(join(machine, "furb-yard-"));
   const own = { ...env, TMPDIR: yard, TMP: yard, TEMP: yard, FURB_MACHINE_TMPDIR: machine, FURB_YARD: yard };
   const run = Bun.spawn([process.execPath, "test", ...args], { env: own, stdout: "pipe", stderr: "pipe" });
-  const [out, err, code] = await Promise.all([
+  const [out, err, end] = await Promise.all([
     new Response(run.stdout).text(),
     new Response(run.stderr).text(),
-    run.exited,
+    endOf(run),
   ]);
   if (process.env.FURB_KEEP_YARDS === undefined) await rm(yard, { recursive: true, force: true });
-  return { text: out + err, passed: code === 0 };
+  // A child that the watcher of memory ended is no failure of its test: it is named and run again by the owner.
+  if (end.memory) ended_by_memory.push(args[args.length - 1] ?? "a test");
+  return { text: out + err, passed: end.code === 0 };
 }
 
 /** Each work, as many at once as `slots`, in the order given, and what each came to. */
@@ -147,6 +152,7 @@ await deal(runs, cores, async ({ file, names }) => {
 });
 if (failed.length > 0) console.log(`\n${failed.length} of ${runs.length} runs failed: ${failed.join(", ")}`);
 if (failed.length > 0 && behind.length > 0) console.log(`\n${warning(behind)}`);
+for (const name of ended_by_memory) console.log(endedByMemory(name));
 console.log(`${passes} pass, ${fails} fail`);
 await ended();
 process.exit(failed.length > 0 ? 1 : 0);

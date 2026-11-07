@@ -18,6 +18,7 @@ import {
 import { safeText } from "furb";
 import { busy, type Chip, failed, isDone, unfinished } from "furb/life";
 import type { Token, Tokens } from "marked";
+import { openFile } from "../editor.ts";
 import { shortenHomes } from "../files.ts";
 import { clip } from "../format.ts";
 import type { ActRow } from "../session.ts";
@@ -496,7 +497,7 @@ export const blocks = part({
 
   /** Markdown, whose code blocks stand on the one surface that the blocks of a word stand on. */
   markdown(content: string): MarkdownRenderable {
-    return new MarkdownRenderable(this.renderer, {
+    const node = new MarkdownRenderable(this.renderer, {
       content: safeText(content),
       syntaxStyle: this.bodyStyle,
       // OpenTUI draws a code block as bare lines in the color of the prose, so the TUI draws each one as a block. A
@@ -510,6 +511,17 @@ export const blocks = part({
         { codeBlockOnly: true },
       ),
     });
+    // A link of the text opens at a click, as the other controls of the feed do, whether or not the terminal knows OSC 8.
+    node.onMouseUp = this.click((event) => {
+      const url = this.renderer.getLinkAt(event.x, event.y);
+      if (url) void this.openLink(url).catch(this.report);
+    });
+    return node;
+  },
+
+  /** A link of a text opens in the program of the machine for it. */
+  openLink(url: string): Promise<void> {
+    return openFile(url);
   },
 
   /** A code block: the surface of the blocks of a word, with no inset at its left, so that its numbers stand where

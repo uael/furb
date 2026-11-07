@@ -165,9 +165,12 @@ test("the shape picker marks the shape of the next prompt and runs /shape, and /
       // The prompt of the operator and a prompt that a rung made each hold a program once the model answers it.
       await session.command('/run prompt("str", message="Summarize the notes.")');
       // The program of a prompt comes in a read of its own, which a slow runner gives after the prompt is done, and the
-      // picker offers only the prompts that hold a program when it opens.
+      // picker offers only the prompts that hold a program when it opens. It marks prompt2 done once the model answered
+      // it, which a loaded runner gives after the program, so the test waits on that mark too.
       await until(session, () =>
-        session.activity.some((act) => act.id === "prompt2" && session.editable(act)),
+        session.activity.some(
+          (act) => act.id === "prompt2" && act.phase.phase === "done" && session.editable(act),
+        ),
       );
       await idle(session);
       app.ladders();

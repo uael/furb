@@ -4,6 +4,7 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { scripted } from "../script/scripted.ts";
 
 const SCRIPTED = new Set([
   "(removed)",
@@ -35,4 +36,16 @@ test("the record of the conductor holds no account, no private host and no path 
   expect(record).not.toContain("/home/");
   expect(record).not.toMatch(/\b192\.168\.|DESKTOP-|\.local\b/);
   expect(record).not.toMatch(/scratch\/[0-9a-f]{16}\b(?<!0{16})(?<!1{16})/);
+});
+
+test("the record of the conductor is what the scripted words make: a second pass of the script writes it again", () => {
+  // Each text of the record that is no token of the engine is a line of the scripted vocabulary, as long as the line that
+  // it stands for, so the script that makes the record from its shape gives the same record from it.
+  expect(scripted(record) === record).toBe(true);
+});
+
+test("the record of the conductor holds no address of a repository of a person and no number of a run or a pull request", () => {
+  expect(record).not.toMatch(/github\.com\/(?!example)/);
+  expect(record).not.toMatch(/\bactions\/runs\/\d|\/pull\/\d|\bjob\/\d/);
+  expect(record).not.toMatch(/gh (?:run|pr|api)\b/);
 });
