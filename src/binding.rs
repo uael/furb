@@ -320,7 +320,7 @@ pub struct ImagePath {
   pub digest: String,
 }
 
-/// The type of an image: its media type and its extension.
+/// The type of an image: its media type and the suffix of the name of its file.
 #[cfg_attr(feature = "typescript", napi(object, object_from_js = false))]
 #[cfg_attr(feature = "python", derive(pyo3::IntoPyObject))]
 pub struct ImageType {
@@ -484,14 +484,14 @@ pub fn gate(sheet: String) -> Result<Vec<(i64, String)>, Fault> {
   )
 }
 
-/// The official extensions, in the order a life runs them.
+/// The official skills, in the order a life runs them.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn official() -> Vec<Skill> {
   skill::official()
 }
 
-/// The extensions that a life runs, in the order it enabled them, as the facts of its root say them.
+/// The skills that a life runs, in the order it enabled them, as the facts of its root say them.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi(ts_args_type = "root: unknown[][]"))]
 pub fn enabled(root: Vec<Said>) -> Vec<Skill> {
@@ -501,7 +501,7 @@ pub fn enabled(root: Vec<Said>) -> Vec<Skill> {
   skill::enabled(&facts)
 }
 
-/// The ear of the extensions, given each extension that the life runs: it enables each at the tip of the life,
+/// The ear that plays each skill that the life runs: it enables each at the tip of the life,
 /// unless the record enables it, and plays each as a rung on each chain.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
@@ -809,7 +809,8 @@ pub fn image_references(message: String) -> Vec<images::Named> {
   images::references(&message)
 }
 
-/// The type of an image by its first bytes: its media type and its extension, for a PNG, a JPEG, a GIF or a WebP.
+/// The type of an image by its first bytes: its media type and the suffix of the name of its
+/// file, for a PNG, a JPEG, a GIF or a WebP.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn image_type(data: &[u8]) -> Result<ImageType, Fault> {

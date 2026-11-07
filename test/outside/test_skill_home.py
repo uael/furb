@@ -72,18 +72,30 @@ async def test_a_script_of_a_skill_folder_gives_the_same_output_through_bash_as_
   assert got == shell
 
 
-COMMENT = r"""//[^\n]*|/\*[\s\S]*?\*/|"(?:[^"\\]|\\[\s\S])*"|"""
-CODE = {
-  ".rs": re.compile(COMMENT + r"""r(#*)"[\s\S]*?"\1|'(?:[^'\\\n]|\\[^'\n]{1,10})'"""),
+QUOTED = [r"//[^\n]*", r"/\*[\s\S]*?\*/", r'"(?:[^"\\]|\\[\s\S])*"']
+PROSE = {
+  ".rs": re.compile("|".join([*QUOTED, r'r(#*)"[\s\S]*?"\1', r"'(?:[^'\\\n]|\\[^'\n]{1,10})'"])),
   ".ts": re.compile(
-    COMMENT
-    + r"""'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\[\s\S])*`|[(,=:\[!&|?{};]\s*/(?![/*])(?:[^/\\\n\[]|\\.|\[(?:[^\]\\\n]|\\.)*\])+/"""
+    "|".join(
+      [
+        *QUOTED,
+        r"'(?:[^'\\\n]|\\.)*'",
+        r"`(?:[^`\\]|\\[\s\S])*`",
+        r"[(,=:\[!&|?{};]\s*/(?![/*])(?:[^/\\\n\[]|\\.|\[(?:[^\]\\\n]|\\.)*\])+/",
+      ]
+    )
   ),
 }
-"""CODE is a comment or a literal of a string or of a char, of a regular expression of TypeScript,
-which holds prose or the name that a record holds, and names nothing in code. A lifetime of Rust is no literal."""
-STANDARD = re.compile(r"\.extension\(|\bwith_extension\b")
+"""PROSE is a comment, or a literal of a string, of a char or of a regular expression, of Rust or of TypeScript. It holds
+prose or the name that a record holds, and names nothing in code but the names that a string puts in its text, as
+{name} of Rust and ${name} of TypeScript do. A lifetime of Rust is no literal."""
+STANDARD = re.compile(r"\.extension\(\)|\.with_extension\(")
 """STANDARD is a call of the standard library of Rust on the extension of the name of a file, which is no skill."""
+
+
+def put(literal: re.Match[str]) -> str:
+  """The names that a string of Rust or of TypeScript puts in its text, and none for a comment or another literal."""
+  return " ".join(re.findall(r"\{([A-Za-z_][\w.]*)", literal[0])) if literal[0][0] in '"`r' else " "
 
 
 def names(path: Path) -> list[str]:
@@ -92,7 +104,7 @@ def names(path: Path) -> list[str]:
   if path.suffix in {".py", ".pyi"}:
     lines = io.StringIO(text).readline
     return [one.string for one in tokenize.generate_tokens(lines) if one.type == tokenize.NAME]
-  return re.findall(r"[A-Za-z_]\w*", CODE[path.suffix.replace(".cts", ".ts")].sub(" ", STANDARD.sub(" ", text)))
+  return re.findall(r"[A-Za-z_]\w*", PROSE[path.suffix.replace(".cts", ".ts")].sub(put, STANDARD.sub(" ", text)))
 
 
 def test_each_name_in_code_says_skill_and_the_name_of_the_ear_that_a_record_holds_stands_as_a_literal() -> None:

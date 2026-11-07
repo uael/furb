@@ -309,7 +309,7 @@ export declare function configSet(directory: string, change: string, config?: st
 /** One line of a record, read with every number exact, as the record keeps it. */
 export declare function decodeRecord(line: string): unknown
 
-/** The extensions that a life runs, in the order it enabled them, as the facts of its root say them. */
+/** The skills that a life runs, in the order it enabled them, as the facts of its root say them. */
 export declare function enabled(root: unknown[][]): Array<Skill>
 
 /**
@@ -368,10 +368,13 @@ export declare function imageReference(name: string, uri: string): string
 /** Each image a message names, as its text in the message, its name, and its uri. */
 export declare function imageReferences(message: string): Array<Named>
 
-/** The type of an image by its first bytes: its media type and its extension, for a PNG, a JPEG, a GIF or a WebP. */
+/**
+ * The type of an image by its first bytes: its media type and the suffix of the name of its
+ * file, for a PNG, a JPEG, a GIF or a WebP.
+ */
 export declare function imageType(data: Uint8Array): ImageType
 
-/** The type of an image: its media type and its extension. */
+/** The type of an image: its media type and the suffix of the name of its file. */
 export interface ImageType {
   mimeType: string
   suffix: string
@@ -451,7 +454,7 @@ export interface Named {
   uri: string
 }
 
-/** The official extensions, in the order a life runs them. */
+/** The official skills, in the order a life runs them. */
 export declare function official(): Array<Skill>
 
 /**
@@ -593,7 +596,7 @@ export interface Part {
 export declare function parts(project: string): Array<Part>
 
 /**
- * The ear of the extensions, given each extension that the life runs: it enables each at the tip of the life,
+ * The ear that plays each skill that the life runs: it enables each at the tip of the life,
  * unless the record enables it, and plays each as a rung on each chain.
  */
 export declare function played(given: Array<Skill>): NativeEar

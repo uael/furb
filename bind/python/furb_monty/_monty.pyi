@@ -89,7 +89,7 @@ class ImagePath(TypedDict):
   digest: str
 
 class ImageType(TypedDict):
-  """The type of an image: its media type and its extension."""
+  """The type of an image: its media type and the suffix of the name of its file."""
 
   mime_type: str
   suffix: str
@@ -395,7 +395,7 @@ def image_references(message: str) -> list[Named]:
   """Each image a message names, as its text in the message, its name, and its uri."""
 
 def image_type(data: bytes) -> ImageType:
-  """The type of an image by its first bytes: its media type and its extension."""
+  """The type of an image by its first bytes: its media type and the suffix of the name of its file."""
 
 class Life:
   """The life, lent to the code of python while the life hears it: that code calls each verb of the life through it,
