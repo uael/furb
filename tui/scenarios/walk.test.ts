@@ -1,5 +1,5 @@
 // The walk of the audit of the TUI goes to the end of its journey on a life of the scripted model. What its probes find
-// is for the audit to judge against main, so the test prints it and holds the walk alone: each step, its capture and
+// is for the audit to judge against main, so the test prints it, fails on a stuck step or an input that takes no key, and holds the walk alone otherwise: each step, its capture and
 // the action before it.
 import { expect } from "bun:test";
 import { existsSync } from "node:fs";
@@ -14,6 +14,8 @@ test("the walk of the audit drives a life with keys to the end of its journey, a
   try {
     const { steps, findings } = await walk(out, []);
     for (const one of findings) console.log(`${one.step} ${one.probe}: ${one.detail}`);
+    // A step that is stuck and a key that reaches no input fail the walk: the rest is for the audit to judge.
+    expect(findings.filter((one) => one.probe === "stuck" || one.probe === "input")).toEqual([]);
     expect(steps.at(-1)?.action).toBe(END);
     expect(steps.length).toBeGreaterThan(40);
     const missing = steps.flatMap(({ name }) =>

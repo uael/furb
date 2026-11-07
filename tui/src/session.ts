@@ -50,7 +50,7 @@ import { count, dollars } from "./format.ts";
 import { append, modeOf, seed, sentIn, workspaceRoot } from "./history.ts";
 import { renameWord } from "./names.ts";
 import { Preferences } from "./preferences.ts";
-import { inspectRecords } from "./records.ts";
+import { inspectRecords, type RecordState } from "./records.ts";
 import { type Hunk, type Reviewed, revertWord, reviewed, type Scope, scopes } from "./review.ts";
 import { shareHtml, shareMarkdown } from "./share.ts";
 import { isThemeChoice, palettes, type ThemeChoice, type ThemeName, themeOf } from "./theme.ts";
@@ -588,6 +588,10 @@ export class Session extends EventEmitter {
   private closed = false;
   /** The follow-ups that `<record>.ui.json` held from an older release, which move into the queue of the life. */
   private legacyQueue: Kept[] = [];
+  /** The name that `<record>.ui.json` held from an older release, which moves into the record once. Until the record
+   * holds it, each save keeps it in `<record>.ui.json`, so no save loses it. */
+  private legacyName?: string;
+  private carryingName = false;
   private carryingQueue = false;
   /** The name that the fold of the crate gives the record, as a read of the record in the worker brought it. */
   private foldedName?: string;
@@ -621,7 +625,10 @@ export class Session extends EventEmitter {
         demo && path && !host.recorded ? join(dirname(path), "ui-preferences.json") : undefined,
       );
     if (path) {
-      const { view, queued, damage } = savedView(path);
+      const { view, name, queued, damage } = savedView(path);
+      this.legacyName = name;
+      // The header shows this name at once, before the first read of the record comes back.
+      if (name) this.sessionName = name;
       this.legacyQueue = queued ?? [];
       this.scanName(path);
       Object.assign(this, Object.fromEntries(kept.flatMap((key) => (key in view ? [[key, view[key]]] : []))));
@@ -760,18 +767,43 @@ export class Session extends EventEmitter {
     const read = ++this.nameScans;
     if (acts !== undefined) this.nameReads = acts;
     inspectRecords([path], this.scanning.signal, []).then(
-      (states) => this.scannedName(read, states[path]?.name),
-      () => this.scannedName(read, undefined),
+      (states) => this.scannedName(read, states[path]),
+      () => this.scannedName(read),
     );
   }
-  private scannedName(read: number, name: string | undefined): void {
+  private scannedName(read: number, state?: RecordState): void {
     if (this.closed || read !== this.nameScans) return;
-    if (name !== undefined) {
-      this.foldedName = name;
+    if (state?.name !== undefined) {
+      this.foldedName = state.name;
       this.sessionName = this.recordName ?? this.sessionName;
     }
+    // A read that failed says nothing of the record, so no name moves on it.
+    if (state) this.carryName(state.said);
     this.carryQueue();
     this.emit("change");
+  }
+  /** A name that an older release kept in `<record>.ui.json` moves into the record once the record is read: when the
+   * record holds no name that the operator said, the name is said as a rename_session, and the save that follows
+   * writes the view without it. A record that this life cannot write keeps the name in the old home, which the next
+   * life carries. */
+  private carryName(said: string | undefined): void {
+    const name = this.legacyName;
+    if (name === undefined || this.carryingName) return;
+    if (this.host.role === "read" || this.host.recorded || this.host.reading) return;
+    if (said !== undefined) {
+      this.legacyName = undefined;
+      this.save();
+      return;
+    }
+    this.carryingName = true;
+    void this.rename(name).then((kept) => {
+      this.carryingName = false;
+      // A session that closed while the name was said may have ended its life before the record held the name, and
+      // its last save kept the name in the old home: a save after it would take the name from there too.
+      if (!kept || this.closed) return;
+      this.legacyName = undefined;
+      this.save();
+    });
   }
   /** The follow-ups that an older release kept in `<record>.ui.json` go to the queue of the life under their own
    * entries, which the life takes once, and the save that follows writes the view without them. A record that this
@@ -2553,7 +2585,8 @@ export class Session extends EventEmitter {
     const view: SavedView = {
       ...Object.fromEntries(kept.map((key) => [key, this[key]])),
       cost: this.savedCost,
-      // The follow-ups of an older release stay in their home until the life holds them.
+      // A name and the follow-ups of an older release stay in their home until the record and the life hold them.
+      ...(this.legacyName === undefined ? {} : { sessionName: this.legacyName }),
       ...(this.legacyQueue.length ? { queued: this.legacyQueue } : {}),
     };
     saveFile(path, JSON.stringify(view));

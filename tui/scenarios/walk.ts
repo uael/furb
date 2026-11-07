@@ -304,11 +304,22 @@ export async function lived(walk: Walk, window: Window, yard: Yard): Promise<voi
     await window.type("Walk: hold.");
     await Bun.sleep(1500);
   });
-  await walk.step("send Walk: queued. while the model works", () => window.type("Walk: queued."));
+  await walk.step("queue Walk: queued. with ⌥Enter while the model works", async () => {
+    await window.screen.mockInput.typeText("Walk: queued.");
+    walk.press("meta+return");
+    await walk.shows("Queued 1");
+  });
   await walk.step("let the model answer, then the message that queued", async () => {
     await yard.release("go");
-    await walk.shows("Held, then done.");
     await walk.shows("Queued, then answered.");
+    // The feed shows the thread of the last message, so the first answer is read from the life, not from the frame.
+    const answers = async () =>
+      Promise.all(
+        (await window.engine.transcript({ on: window.root, of: "prompt" })).map((fact) =>
+          window.engine.peek(String(fact[1])),
+        ),
+      );
+    await until(async () => (await answers()).includes("Held, then done."), "the answer of the held message", BOUND);
   });
   await walk.step("open a new thread with /newthread", () => window.type("/newthread"));
   await walk.step(

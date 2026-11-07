@@ -165,7 +165,13 @@ async fn attached(life: &LifeHandle, last: Seq) -> (usize, usize, usize, usize, 
     count += 1;
     let json = serde_json::to_vec(&*event).expect("an event is JSON");
     bytes += json.len();
-    let kind = format!("{event:?}").split(['(', ' ']).next().unwrap_or_default().to_owned();
+    let kind = match &*event {
+      Event::Fact(fact) if fact[0] == "keep" => {
+        format!("keep {}", fact[3][0][0].as_str().unwrap_or("?"))
+      }
+      Event::Fact(fact) => format!("fact {}", fact[0].as_str().unwrap_or("?")),
+      _ => format!("{event:?}").split(['(', ' ']).next().unwrap_or_default().to_owned(),
+    };
     let tally = kinds.entry(kind).or_default();
     (tally.0, tally.1) = (tally.0 + 1, tally.1 + json.len());
     if seq >= last {
@@ -173,8 +179,23 @@ async fn attached(life: &LifeHandle, last: Seq) -> (usize, usize, usize, usize, 
     }
   }
   eprintln!("kinds {kinds:?}");
-  let of = |kind: &str| kinds.get(kind).map_or(0, |tally| tally.0);
+  let mut heavy: Vec<_> =
+    kinds.iter().filter(|one| one.0.starts_with("fact") || one.0.starts_with("keep")).collect();
+  heavy.sort_by_key(|one| std::cmp::Reverse(one.1.1));
+  eprintln!("heaviest facts {:?}", &heavy[..heavy.len().min(8)]);
+  let facts: usize = heavy.iter().map(|one| one.1.0).sum();
+  let of =
+    |kind: &str| if kind == "Fact" { facts } else { kinds.get(kind).map_or(0, |tally| tally.0) };
   (count, bytes, of("Text"), of("Act"), acts.len())
+}
+
+/// The footprint of this process, as the footprint tool of the system reads it.
+fn footprint() -> String {
+  let id = std::process::id().to_string();
+  let read = std::process::Command::new("footprint").arg(id).output();
+  let text = read.map(|one| String::from_utf8_lossy(&one.stdout).into_owned()).unwrap_or_default();
+  let line = text.lines().find(|one| one.contains("Footprint:")).unwrap_or_default();
+  line.split("Footprint: ").nth(1).and_then(|one| one.split(" (").next()).unwrap_or("?").to_owned()
 }
 
 fn main() {
@@ -222,7 +243,13 @@ async fn the_heap_of_a_life_grows_with_its_facts_and_no_more() {
     tokio::time::sleep(Duration::from_millis(200)).await;
     let heap = LIVE.load(Ordering::Relaxed).saturating_sub(base);
     let (count, bytes, parts, events, acts) = attached(&life, last).await;
-    println!("{facts}\t{}\t{}\t{count}\t{}", heap >> 20, heap / facts, bytes >> 20);
+    println!(
+      "{facts}\t{}\t{}\t{count}\t{}\t{}",
+      heap >> 20,
+      heap / facts,
+      bytes >> 20,
+      footprint()
+    );
     rows.push((facts, parts, events, acts));
   }
   life.send(Command::End).await.ok();
