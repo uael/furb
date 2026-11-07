@@ -11,6 +11,10 @@
 //! as one the sandbox calls back. Each door hands the ears and the functions over to the life the value comes into,
 //! and a verb that a host says while a life hears it goes to that life.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "a verb of the host API takes each argument that the host gives it"
+)]
 // This tree pays these lints already, so they hold here ahead of the workspace.
 #![deny(clippy::absolute_paths, clippy::use_self)]
 #![expect(

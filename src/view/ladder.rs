@@ -6,6 +6,10 @@
 //! two steps in a row at least. It reads the lists of the acts that the window holds by maker and
 //! by chain, and the acts that live, so it takes the time of what it shows and not of the life.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use schemars::JsonSchema;

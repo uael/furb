@@ -2,6 +2,10 @@
 //! it writes as it writes it, and ends at its exit, at its timeout, or at the done that a control
 //! said of it first.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 mod kept;
 mod shell;
 

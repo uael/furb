@@ -21,6 +21,10 @@
 //! also opens a door of the windows, a WebSocket on loopback, which lets in the user alone: the
 //! peer that gives the token that the daemon wrote in a file of its folder.
 
+#![expect(
+  clippy::too_many_arguments,
+  reason = "debt: a function of more than 4 parameters takes a struct, rule 8 of the skill rust"
+)]
 use std::{
   collections::HashMap,
   fmt::Display,
