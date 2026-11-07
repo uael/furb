@@ -60,7 +60,6 @@ test("/mcp reload lists again the tools that a server changed, and the changed t
     expect(before).not.toContain("fresh(): Tool fresh.");
     // The tools change on the side of the server, with no restart of the session.
     await writeFile(join(folder, "tools.txt"), "hello\nfresh\n");
-    await window.app.partsReady;
     await window.type("/mcp reload");
     await window.shows((frame) => frame.includes("MCP: tools is connected."), "the state of the server after the reload");
     // The command ends in the dialog of the servers, which Escape closes.
