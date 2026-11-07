@@ -309,8 +309,9 @@ export class App {
   readonly views = new Map<string, Tree>();
   /** Where the window says what a person did to a node of a view: the client of the daemon sets it. */
   viewEvents: (event: ViewEvent) => void = () => {};
-  /** The spinners of the views on screen, which move with the clock of the TUI. */
-  readonly viewSpinners = new Set<TextRenderable>();
+  /** The texts on screen whose marks move with the clock of the TUI, as the sidebar and the views show them, each with
+   * what it reads at a tick. */
+  readonly moving = new Map<TextRenderable, () => string | Part[]>();
   /** The panels of the parts over the input, the key of what it shows, and what takes the keys of the parts away. */
   readonly dock: BoxRenderable;
   dockKey = "";
@@ -758,7 +759,7 @@ export class App {
       if (this.stage.visible && this.cursor === undefined && this.moves()) this.renderStage();
       if (this.thinkingRows.size) this.tickThinking();
       if (this.liveLines.size) this.tickLive();
-      if (this.viewSpinners.size) this.tickViews();
+      if (this.moving.size) this.tickMoving();
       if (this.tree?.panel?.live) this.renderChains();
     }, frame);
     this.render();

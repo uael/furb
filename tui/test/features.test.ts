@@ -32,7 +32,7 @@ test("a word of the operator stands as his messages stand, as its program in a p
       await session.refresh();
       const running = await frame();
       expect(running).not.toContain("You ran");
-      expect(line(running)).toMatch(/(?:\d|[\u2800-\u28ff✻]) +await wait\(60, __name__\) +waits 60s/);
+      expect(line(running)).toMatch(/(?:\d|[◐◓◑◒◉]) +await wait\(60, __name__\) +waits 60s/);
       expect(app.scroll.getChildren().some((card) => card.id === rung)).toBe(true);
       expect(line(running)).toMatch(/^ +┃ /);
       const wait = session.acts.find((act) => act.kind === "wait" && act.by === rung);
@@ -42,7 +42,7 @@ test("a word of the operator stands as his messages stand, as its program in a p
       await session.refresh();
       const done = line(await frame());
       expect(done).not.toContain("◉");
-      expect(done).toMatch(/ 1 {3}await wait\(60, __name__\) +woke/);
+      expect(done).toMatch(/ 1 {4}await wait\(60, __name__\) +woke/);
       session.show("transcript");
       await session.refresh();
       await frame();
@@ -60,7 +60,7 @@ test("a word of the operator stands as his messages stand, as its program in a p
       expect(session.findings.join("\n")).toContain("line 1");
       await session.refresh();
       const rows = (await frame()).split("\n");
-      const at = rows.findIndex((row) => /1 ✗ this is invalid python !!!/.test(row));
+      const at = rows.findIndex((row) => /1 {2}✗ this is invalid python !!!/.test(row));
       expect(at).toBeGreaterThan(0);
       expect(rows[at + 1]).toMatch(/^ +┃ +# \S/);
       record = session.host.record;
@@ -73,7 +73,7 @@ test("a word of the operator stands as his messages stand, as its program in a p
     async ({ frame }) => {
       const shown = line(await frame());
       expect(shown).not.toContain("◉");
-      expect(shown).toMatch(/ 1 {3}await wait\(60, __name__\) +woke/);
+      expect(shown).toMatch(/ 1 {4}await wait\(60, __name__\) +woke/);
     },
     // The later life boots on the checkpoint that the end of the first one wrote, and the word of that boot holds the
     // setup of the life and its values, which stands under the words of the first life, so the frame is tall enough to
@@ -437,7 +437,7 @@ test("the setup of the root stands as code: a comment that names the setup, then
             row
               .slice(0, 80)
               .trim()
-              .replace(/^(\d+) {3}/, "$1 ")
+              .replace(/^(\d+) {4}/, "$1 ")
               .replace(/\s{2,}.*$/, ""),
           )
           .filter((row) => /^\d+ /.test(row))

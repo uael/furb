@@ -1,13 +1,14 @@
 import type { BoxRenderable, RGBA, TextRenderable } from "@opentui/core";
 import { busy, gist } from "furb/life";
+import { clock } from "../clock.ts";
 import { shortenHome, shortenHomes } from "../files.ts";
 import { clip, count, modelLabel, modelName, retryLine } from "../format.ts";
 import { readOnly } from "../reading.ts";
 import { statusLabels, views } from "../session.ts";
-import { theme as c, glyph, markOf, spacing as space, spin, threadTone } from "../theme.ts";
+import { theme as c, frame, glyph, markOf, motion, shimmer, spacing as space, threadTone } from "../theme.ts";
 import { bold, type Part, plain, styled } from "../ui.ts";
 import { part } from "./part.ts";
-import { exitNotice, type Hint, rewindNotice, statusMark } from "./shared.ts";
+import { exitNotice, type Hint, rewindNotice, spell, statusMark } from "./shared.ts";
 
 export const chrome = part({
   /** A switch between a few choices, which the views and the mode of the input share. A track in a color of its own
@@ -301,17 +302,10 @@ export const chrome = part({
     const retry = loading
       ? undefined
       : (retries.find((stream) => stream.chain === w.selected) ?? retries[0])?.retry;
-    // The block of the word that a model writes on the chain shown holds the loader of the step, so the footer turns
-    // no second loader for it.
-    const written = !retry && w.writing(w.selected);
-    const moving = (busy(status) || status === "opening" || Boolean(retry)) && !written;
+    // The footer holds the loader of the work of the chain shown, which turns the mark of its state.
+    const moving = busy(status) || status === "opening" || Boolean(retry);
     this.statusMoves = moving;
-    // While the block of the word holds the loader, the footer shows the still mark of a model that thinks.
-    const [mark, color] = retry
-      ? [`${markOf("paused")[0]} `, markOf("paused")[1]]
-      : written && status === "thinks"
-        ? [`${glyph.thinks} `, markOf("thinks")[1]]
-        : statusMark(status);
+    const [mark, color] = retry ? [`${markOf("paused")[0]} `, markOf("paused")[1]] : statusMark(status);
     const label = loading
       ? "Loading"
       : retry
@@ -359,9 +353,18 @@ export const chrome = part({
     const notice = w.error ? "" : w.notice;
     // The state stays in the footer, and a notice stands after it, cut at its end where the footer has no room for it
     // beside the keys.
+    // Work reads at a glance: the word of its state under a light that sweeps over it, the time since the work began,
+    // and the size of what its models streamed. The key that stops it stands in the keys of the footer.
+    const work = moving && !retry && !loading ? w.progress(w.selected) : undefined;
+    const since = work?.began === undefined ? 0 : clock() - work.began;
+    const tally = [
+      since >= 1000 ? spell(Math.floor(since / 1000) * 1000) : "",
+      work?.streamed ? `${count(work.streamed)} chars` : "",
+    ].filter(Boolean);
     const state: Part[] = [
-      [moving && !retry ? `${spin()} ` : mark, color],
-      [label, moving ? c.text : c.muted],
+      [mark, color],
+      ...(work ? shimmer(label) : [[label, moving ? c.text : c.muted] as Part]),
+      ...(tally.length ? [[` · ${tally.join(" · ")}`, c.faint] as Part] : []),
     ];
     // The status of each part that is not empty stands at the end of the state, after a notice.
     const statuses = (this.parts?.status(this.seen()) ?? []).flatMap((line): Part[] => [
@@ -413,7 +416,15 @@ export const chrome = part({
         [clip(notice, room - 3), [exitNotice, rewindNotice].includes(notice) ? c.warning : c.text],
       );
     state.push(...statuses);
-    const key = JSON.stringify([plain(state), plain(hints), color, this.theme, cornered]);
+    // The light over the word of work that runs moves at each frame, which its plain text does not show.
+    const key = JSON.stringify([
+      plain(state),
+      plain(hints),
+      color,
+      this.theme,
+      cornered,
+      work && !motion.still && Math.floor(clock() / frame),
+    ]);
     if (key === this.statusKey) return;
     this.statusKey = key;
     this.status.content = styled(state);

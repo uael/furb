@@ -417,3 +417,27 @@ fn the_rail_holds_the_closed_threads_first_and_the_open_ones_last_each_by_its_la
     ["prompt1", "prompt2"]
   );
 }
+
+#[test]
+fn an_open_thread_thinks_while_a_model_writes_a_word_for_it_and_else_runs() {
+  let states = |more: Vec<Value>| {
+    let mut facts = vec![
+      json!(["chain", "chain1", "operator", "", "root", ""]),
+      asked("prompt1"),
+      json!(["rung", "rung1", "prompt1", "chain1", "", "", "claude"]),
+    ];
+    facts.extend(more);
+    let acts = folded(facts);
+    let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
+    let on: Vec<&Act> = acts.iter().filter(|act| act.chain == "chain1").collect();
+    chain_threads(&on, &rows).into_iter().map(|one| one.state).collect::<Vec<_>>()
+  };
+  // A model that writes the word of the rung of the thread thinks, as the session does.
+  assert_eq!(
+    states(vec![json!(["reply", "reply1", "rung1", "chain1", "claude"])]),
+    [State::Thinks]
+  );
+  // A command that the word runs runs.
+  let bash = json!(["bash", "bash1", "rung1", "chain1", "sleep 9", "", 120.0, null]);
+  assert_eq!(states(vec![bash]), [State::Runs]);
+}

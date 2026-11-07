@@ -159,7 +159,11 @@ test("the shape picker marks the shape of the next prompt and runs /shape, and /
       await idle(session);
       // The prompt of the operator and a prompt that a rung made each hold a program once the model answers it.
       await session.command('/run prompt("str", message="Summarize the notes.")');
-      await until(session, () => session.activity.some((act) => act.id === "prompt2"));
+      // The program of a prompt comes in a read of its own, which a slow runner gives after the prompt is done, and the
+      // picker offers only the prompts that hold a program when it opens.
+      await until(session, () =>
+        session.activity.some((act) => act.id === "prompt2" && session.editable(act)),
+      );
       await idle(session);
       app.ladders();
       shown = await frame();
@@ -818,11 +822,11 @@ test("a word that the gate refused shows a cross on the line that the refusal na
       await idle(session);
       await session.refresh();
       const lines = (await frame()).split("\n");
-      const refused = lines.findIndex((line) => /1 ✗ +```python/.test(line));
+      const refused = lines.findIndex((line) => /1 {2}✗ +```python/.test(line));
       expect(refused).toBeGreaterThan(0);
       expect(lines[refused + 1]).toMatch(/^[ ┃]+# error\[invalid-syntax\].*Got unexpected token/);
       // The numbers of the thread go on from the refused word to the word that replaced it.
-      const retried = lines.findIndex((line) => / 4 {3}close\("Here it is again as plain Python/.test(line));
+      const retried = lines.findIndex((line) => / 4 {4}close\("Here it is again as plain Python/.test(line));
       expect(retried).toBeGreaterThan(refused + 1);
       expect(lines.slice(retried).join("\n")).not.toContain("✗");
       expect(lines.join("\n")).not.toContain("failed");
