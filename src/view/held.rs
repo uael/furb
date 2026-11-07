@@ -49,8 +49,16 @@ impl Held {
   /// An act of the life heard as a host tells it: it takes the place of the earlier one of the same
   /// id.
   pub fn heard(&mut self, act: &Act) {
+    self.took(act.clone());
+  }
+
+  /// An act of the life heard as a host tells it, which the life gives up to it: the fold of a
+  /// record tells some hundred thousand of them, each with its words and its value, so it takes no
+  /// copy of each.
+  pub fn took(&mut self, act: Act) {
+    let live = lives(&act);
     let at = if let Some(&at) = self.at.get(&act.id) {
-      self.acts[at] = act.clone();
+      self.acts[at] = act;
       at
     } else {
       let at = self.acts.len();
@@ -65,10 +73,10 @@ impl Held {
       self.at.insert(act.id.clone(), at);
       self.made.entry(act.by.clone()).or_default().push(at);
       self.on.entry(act.chain.clone()).or_default().push(at);
-      self.acts.push(act.clone());
+      self.acts.push(act);
       at
     };
-    if lives(act) {
+    if live {
       self.live.insert(at);
     } else {
       self.live.remove(&at);
