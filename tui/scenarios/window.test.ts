@@ -212,3 +212,38 @@ test('"thinking" shows only while a reply of the rung runs, and a rung that wait
       expect(done).not.toContain("thinking");
     },
   ));
+
+// A long thought of a model shows its progress: the size of the thought grows as it streams, and its last line shows,
+// before the model writes any line of its word.
+test("a long thought shows its size as it grows and its last line, until the word comes", () =>
+  scenario(
+    [
+      {
+        cue: "Scenario: think.",
+        thought: `${"I read the notes of the project one by one. ".repeat(12)}\nThe last notes name the tests.`,
+        chunk: 60,
+        pause: 120,
+        word: 'close("Thought through.")',
+        hold: "go",
+      },
+    ],
+    async (window, yard) => {
+      await window.type("Scenario: think.");
+      const early = await window.shows(
+        (frame) => /thinking[^\n]* · \d+ chars/.test(frame),
+        "the size of the thought",
+      );
+      const first = Number(early.match(/ · (\d+) chars/)?.[1] ?? 0);
+      const later = await window.shows(
+        (frame) => Number(frame.match(/ · (\d+) chars/)?.[1] ?? 0) > first,
+        "the thought growing",
+      );
+      expect(Number(later.match(/ · (\d+) chars/)?.[1] ?? 0)).toBeGreaterThan(first);
+      await window.shows(
+        (frame) => frame.includes("The last notes name the tests."),
+        "the last line of the thought",
+      );
+      await yard.release("go");
+      await window.shows((frame) => frame.includes("Thought through."), "the answer after the thought");
+    },
+  ));
