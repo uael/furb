@@ -5,7 +5,7 @@
 # all. The word of a turn is the JSON text in the file word.N beside it, for the Nth turn of all, and else a close of
 # "reply n", for the nth turn of its process. A line that holds FAIL ends it with a failure, a line that holds WAIT
 # gets no answer, a line that holds LONG gets a line longer than a reader takes, a line that holds ERROR gets a result
-# that says an error, a line that holds LIMIT gets, once, a result that says the usage limit ends a second from now, a line that holds BARE gets a result with no block before it, a line that holds THINK gets a
+# that says an error, a line that holds LIMIT gets, once, a result that says the usage limit ends a second from now, a line that holds BARE gets a result with no block before it, a line that holds DEEP gets a long signed thought, a signed thought with no text and a redacted thought before its text, a line that holds THINK gets a
 # thought before the text, and a line that holds LOUD closes the stdout, writes more on the stderr than its pipe holds,
 # and ends it with a failure, and a line that holds GAP streams its text with its first part left out, and settles the
 # text whole. A line that holds LOOP gets a message that calls a tool before the last one, as a turn of many
@@ -161,6 +161,25 @@ while IFS= read -r line; do
       say '{"type":"content_block_stop","index":0}'
       settle '{"type":"thinking","thinking":"hmm","signature":"sig"}'
       at=1 ;;
+    # A line that holds DEEP gets a long signed thought in parts, a signed thought whose display the
+    # API omitted, with no text, as the real command line gives one, then a thought that the API
+    # redacted, before its word.
+    *DEEP*)
+      say '{"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}'
+      thought=$(awk 'BEGIN { for (i = 1; i <= 4000; i++) printf "step %d of a long thought. ", i }')
+      { printf '%s' "$thought" | fold -w 20000; echo; } | while IFS= read -r piece; do
+        say "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"$piece\"}}"
+      done
+      sign=$(awk 'BEGIN { for (i = 1; i <= 512; i++) printf "%x", i % 16 }')
+      say "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"$sign\"}}"
+      say '{"type":"content_block_stop","index":0}'
+      say '{"type":"content_block_start","index":1,"content_block":{"type":"thinking","thinking":""}}'
+      say "{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"omitted-$sign\"}}"
+      say '{"type":"content_block_stop","index":1}'
+      say '{"type":"content_block_start","index":2,"content_block":{"type":"redacted_thinking","data":"opaque"}}'
+      say '{"type":"content_block_stop","index":2}'
+      settle "{\"type\":\"thinking\",\"thinking\":\"$thought\",\"signature\":\"$sign\"},{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"omitted-$sign\"},{\"type\":\"redacted_thinking\",\"data\":\"opaque\"}"
+      at=3 ;;
     # A line that holds REDACT gets a thought that the API redacted before its word.
     *REDACT*)
       say '{"type":"content_block_start","index":0,"content_block":{"type":"redacted_thinking","data":"opaque"}}'
