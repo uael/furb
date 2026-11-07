@@ -2184,22 +2184,7 @@ export class Session extends EventEmitter {
       if (pending) await this.answer(pending, input);
       else {
         // The message goes where the operator sent it, whatever chain he shows while the reads and the prompt answer.
-        const { selected: chain, shape } = this;
-        const thread = this.target;
-        await this.attachFiles(input, chain);
-        this.redo = [];
-        this.fresh = false;
-        this.pinned = undefined;
-        const id = thread
-          ? await this.engine.prompt(this.lineShape(thread), {
-              message: input,
-              on: thread,
-            })
-          : await this.engine.prompt(shape, { message: input, on: chain });
-        if (thread) this.notice = `Your message went to the thread ${thread}.`;
-        this.sentTo.set(id, thread);
-        this.save();
-        this.track(id);
+        await this.send(input, this.selected, this.target, this.shape);
       }
     }
     await this.refresh();
@@ -2515,16 +2500,19 @@ export class Session extends EventEmitter {
         // A skill is a command that loads the skill on the chain, as skill(name) does.
         if (!(await this.skillNamed(command)))
           throw new Error(`Unknown command /${command}. Press F1 for the command list.`);
+        // The skill and its message go where the operator aimed them when he sent the line, as a plain message does.
+        const { selected: chain, shape } = this;
+        const thread = this.target;
         const loaded = await this.engine.rung({
           word: `skill(${JSON.stringify(command)})`,
-          on: this.selected,
+          on: chain,
         });
         this.track(loaded);
         this.view = "feed";
         // The text after the name is the message that uses the skill, sent once the skill is loaded on the chain.
         if (argument) {
           await this.engine.result(loaded);
-          await this.submit(argument);
+          await this.send(argument, chain, thread, shape);
         }
       }
     }
@@ -2539,6 +2527,27 @@ export class Session extends EventEmitter {
       if (read) list = skillsIn(await this.engine.result(read.id));
     }
     return skillSlashes(list).find((one) => one.name === name);
+  }
+
+  /** A message of the operator on a chain, or on a thread of it, as it was aimed when it was sent, whatever chain the
+   * operator shows while the reads and the prompt answer. */
+  async send(
+    input: string,
+    chain: string,
+    thread: string | undefined,
+    shape: typeof this.shape,
+  ): Promise<void> {
+    await this.attachFiles(input, chain);
+    this.redo = [];
+    this.fresh = false;
+    this.pinned = undefined;
+    const id = thread
+      ? await this.engine.prompt(this.lineShape(thread), { message: input, on: thread })
+      : await this.engine.prompt(shape, { message: input, on: chain });
+    if (thread) this.notice = `Your message went to the thread ${thread}.`;
+    this.sentTo.set(id, thread);
+    this.save();
+    this.track(id);
   }
 
   /** A key of the configs set in a layer, or taken out of it for no value, and the life stands on the configs of now. */
