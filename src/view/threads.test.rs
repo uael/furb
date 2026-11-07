@@ -228,6 +228,26 @@ fn a_worker_that_a_round_made_nests_under_the_thread_that_started_the_round() {
 }
 
 #[test]
+fn a_thread_names_the_actor_of_its_last_rung_and_else_the_one_of_its_prompt() {
+  let facts = [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["prompt", "prompt1", "operator", "chain1", "str", "Ask the model.", ""]),
+    json!(["rung", "rung1", "prompt1", "chain1", "", "", "claude-cli:opus/high"]),
+    json!(["prompt", "prompt2", "operator", "chain1", "str", "Ask another.", "codex:gpt-6.1-sol"]),
+  ];
+  let acts = folded(facts);
+  let on: Vec<&Act> = acts.iter().filter(|act| act.chain == "chain1").collect();
+  let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
+  let (threads, _) = super::sorted(&on, &rows);
+  let models: Vec<(&str, Option<&str>)> =
+    threads.iter().map(|one| (one.prompt.as_str(), one.model.as_deref())).collect();
+  assert_eq!(
+    models,
+    [("prompt1", Some("claude-cli:opus/high")), ("prompt2", Some("codex:gpt-6.1-sol"))]
+  );
+}
+
+#[test]
 fn the_first_thread_of_a_named_session_is_titled_by_its_own_message() {
   // The name of the session stands on its own row: the thread keeps the first line of its message.
   let facts = [

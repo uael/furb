@@ -41,6 +41,8 @@ export interface ChainThread {
   origin: "operator" | "rung" | "ear";
   /** Whether the operator started it, directly or by a word of their own. */
   yours: boolean;
+  /** The actor whose model answers the thread, as the crate says it. */
+  model?: string | null;
 }
 
 /** The acts whose changes are the work of a thread: its prompt, its messages and its prompts to the operator. */
