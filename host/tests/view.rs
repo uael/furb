@@ -24,6 +24,7 @@ fn act(id: &str, kind: &str, on: &str, by: &str, began: u64, ended: Option<u64>)
     kind: Kind::from(kind),
     id: id.to_owned(),
     by: by.to_owned(),
+    maker: furb::view::Role::Engine,
     on: if kind == "chain" { id } else { on }.to_owned(),
     chain: if kind == "chain" { id } else { on }.to_owned(),
     words: Vec::new(),

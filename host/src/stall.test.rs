@@ -12,6 +12,7 @@ fn act(kind: &str, id: &str, chain: &str, words: &[Value]) -> Act {
     kind: Kind::from(kind),
     id: id.to_owned(),
     by: String::new(),
+    maker: furb::view::Role::Engine,
     on: chain.to_owned(),
     chain: chain.to_owned(),
     words: words.to_vec(),

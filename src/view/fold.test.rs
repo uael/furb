@@ -3,8 +3,10 @@
 
 use serde_json::{Value, json};
 
+use std::collections::HashMap;
+
 use super::Fold;
-use crate::view::Pause;
+use crate::view::{Pause, Role};
 
 /// A paused prompt, a rung born under its pause, and a later wake, with what the engine of the live
 /// life finds for each fact: the acts that it covers, and the pause that holds a new act.
@@ -134,4 +136,56 @@ fn a_record_folds_the_cost_of_each_answer_as_the_float_that_python_reads_from_it
     let spend = moved.iter().find_map(|act| act.spend.clone()).expect("the answer moves its chain");
     assert_eq!(spend.dollars.to_bits(), bits, "the cost {cost}");
   }
+}
+
+#[test]
+fn each_act_names_the_role_of_its_maker_live_and_from_its_record_alike() {
+  let roster = json!([["claude-cli:opus", ["low", "high"], 200_000], ["operator", ["uael"], 0]]);
+  let facts = [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["stand", "stand1", "chain1", "chain1"]),
+    json!(["done", "stand1", "journal", [roster, "/tmp", "claude-cli:opus/high"]]),
+    json!(["rung", "rung1", "chain1", "chain1", "", "", "claude-cli:opus/high"]),
+    json!(["bash", "bash1", "rung1", "chain1", "ls", "", 120.0, null]),
+    json!(["rung", "rung2", "operator/uael", "chain1", "x = 1", "", ""]),
+    json!(["rung", "rung3", "operator", "chain1", "y = 2", "", ""]),
+    json!(["rung", "rung4", "operator/tui", "chain1", "z = 3", "", ""]),
+    json!(["rung", "rung5", "extensions", "chain1", "w = 4", "", ""]),
+    json!(["rung", "rung6", "chain1", "chain1", "stand()", "", "claude-cli:opus/high"]),
+  ];
+  let (mut live, mut recorded) = (Fold::default(), Fold::default());
+  let (mut lived, mut read) = (HashMap::new(), HashMap::new());
+  for fact in &facts {
+    lived.extend(live.hear(fact, &[], None).into_iter().map(|act| (act.id.clone(), act.maker)));
+    read.extend(recorded.recorded(fact).into_iter().map(|act| (act.id.clone(), act.maker)));
+  }
+  let opus = Role::Model { model: "claude-cli:opus".to_owned(), effort: "high".to_owned() };
+  let want = [
+    ("rung1", opus.clone()),
+    ("bash1", opus),
+    ("rung2", Role::Member { login: "uael".to_owned() }),
+    ("rung3", Role::Operator),
+    ("rung4", Role::Operator),
+    ("rung5", Role::Skill),
+    ("rung6", Role::Engine),
+    ("chain1", Role::Operator),
+  ];
+  for (id, role) in want {
+    assert_eq!(lived.get(id), Some(&role), "{id} live");
+    assert_eq!(read.get(id), Some(&role), "{id} from the record");
+  }
+}
+
+#[test]
+fn an_actor_names_its_model_and_its_effort_unless_the_roster_holds_its_whole_name() {
+  let model =
+    |model: &str, effort: &str| Role::Model { model: model.to_owned(), effort: effort.to_owned() };
+  assert_eq!(Role::of("claude-cli:org/plain", &[], &[]), model("claude-cli:org/plain", "off"));
+  assert_eq!(
+    Role::of("claude-cli:org/plain/high", &[], &[]),
+    model("claude-cli:org/plain", "high")
+  );
+  let whole = ["claude-cli:org/high".to_owned()];
+  assert_eq!(Role::of("claude-cli:org/high", &whole, &[]), model("claude-cli:org/high", "off"));
+  assert_eq!(Role::of("", &[], &[]), Role::Engine);
 }

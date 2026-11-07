@@ -3226,6 +3226,17 @@
         "by": {
           "type": "string"
         },
+        "maker": {
+          "default": {
+            "role": "engine"
+          },
+          "description": "Who made the act: for a rung that waits for the word of an actor, that actor; for any\nother act, the role of the act or the person that made it.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Role2"
+            }
+          ]
+        },
         "on": {
           "type": "string",
           "description": "What the act is on: a chain, or the prompt of a thread for a prompt on a thread."
@@ -3335,6 +3346,83 @@
         "state"
       ],
       "description": "One act of a life with its meaning, as it stands after the last fact about it."
+    },
+    "Role2": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "const": "operator"
+            }
+          },
+          "required": [
+            "role"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "login": {
+              "type": "string"
+            },
+            "role": {
+              "type": "string",
+              "const": "member"
+            }
+          },
+          "required": [
+            "role",
+            "login"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "model": {
+              "type": "string"
+            },
+            "effort": {
+              "type": "string"
+            },
+            "role": {
+              "type": "string",
+              "const": "model"
+            }
+          },
+          "required": [
+            "role",
+            "model",
+            "effort"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "const": "skill"
+            }
+          },
+          "required": [
+            "role"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "const": "engine"
+            }
+          },
+          "required": [
+            "role"
+          ]
+        }
+      ],
+      "description": "Who made an act, as a window names it: the operator, a member who answers as him by his login,\na model with its effort, a skill, or the engine itself."
     },
     "Phase": {
       "oneOf": [
@@ -4105,5 +4193,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 6
+  "x-protocol": 7
 }
