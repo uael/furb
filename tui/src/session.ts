@@ -2514,8 +2514,17 @@ export class Session extends EventEmitter {
         // A skill is a command that loads the skill on the chain, as skill(name) does.
         if (!this.skills.some(({ name }) => name === command))
           throw new Error(`Unknown command /${command}. Press F1 for the command list.`);
-        this.track(await this.engine.rung({ word: `skill(${JSON.stringify(command)})`, on: this.selected }));
+        const loaded = await this.engine.rung({
+          word: `skill(${JSON.stringify(command)})`,
+          on: this.selected,
+        });
+        this.track(loaded);
         this.view = "feed";
+        // The text after the name is the message that uses the skill, sent once the skill is loaded on the chain.
+        if (argument) {
+          await this.engine.result(loaded);
+          await this.submit(argument);
+        }
       }
     }
   }
