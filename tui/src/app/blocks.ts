@@ -17,7 +17,8 @@ import {
 } from "@opentui/core";
 import { safeText } from "furb";
 import { busy, type Chip, failed, isDone, unfinished } from "furb/life";
-import type { Token, Tokens } from "marked";
+import { Lexer, type Token, type Tokens } from "marked";
+import { openFile } from "../editor.ts";
 import { shortenHomes } from "../files.ts";
 import { clip } from "../format.ts";
 import type { ActRow } from "../session.ts";
@@ -496,7 +497,7 @@ export const blocks = part({
 
   /** Markdown, whose code blocks stand on the one surface that the blocks of a word stand on. */
   markdown(content: string): MarkdownRenderable {
-    return new MarkdownRenderable(this.renderer, {
+    const node = new MarkdownRenderable(this.renderer, {
       content: safeText(content),
       syntaxStyle: this.bodyStyle,
       // OpenTUI draws a code block as bare lines in the color of the prose, so the TUI draws each one as a block. A
@@ -510,6 +511,52 @@ export const blocks = part({
         { codeBlockOnly: true },
       ),
     });
+    // A link of the text opens at a click, as the other controls of the feed do, whether or not the terminal knows OSC 8.
+    node.onMouseUp = this.click((event) => {
+      const url = this.linkUnder(event, content);
+      if (url) void this.openLink(url).catch(this.report);
+    });
+    return node;
+  },
+
+  /** The address of the link of a Markdown text under the pointer: a link with a text, as [name](address), or an address
+   * of the web, read from the row of the text that the pointer is on, as the terminal draws it. */
+  linkUnder(event: MouseEvent, content: string): string | undefined {
+    const node = event.target as unknown as {
+      x: number;
+      y: number;
+      plainText?: string;
+      lineInfo?: { lineWraps: number[]; lineStartCols: number[] };
+      getLineSources?: (row: number, count: number) => number[];
+    } | null;
+    if (!node?.plainText || !node.lineInfo || !node.getLineSources) return undefined;
+    const row = event.y - node.y;
+    const line = node.plainText.split("\n")[node.getLineSources(row, 1)[0] ?? row] ?? "";
+    const first = row - (node.lineInfo.lineWraps[row] ?? 0);
+    const column =
+      event.x - node.x + (node.lineInfo.lineStartCols[row] ?? 0) - (node.lineInfo.lineStartCols[first] ?? 0);
+    const links: { text: string; href: string }[] = [];
+    const walk = (tokens: readonly Token[]): void => {
+      for (const token of tokens) {
+        if (token.type === "link")
+          links.push({ text: (token as Tokens.Link).text, href: (token as Tokens.Link).href });
+        const inner = (token as { tokens?: Token[] }).tokens;
+        if (inner) walk(inner);
+        const items = (token as { items?: Token[] }).items;
+        if (items) walk(items);
+      }
+    };
+    walk(new Lexer().lex(content));
+    for (const link of links) {
+      const found = covering(line, column, new RegExp(link.text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"));
+      if (found) return link.href;
+    }
+    return covering(line, column, /https?:\/\/[^\s"'`<>()[\]{}]+[^\s"'`<>()[\]{}.,;:!?]/g)?.[0];
+  },
+
+  /** A link of a text opens in the program of the machine for it. */
+  openLink(url: string): Promise<void> {
+    return openFile(url);
   },
 
   /** A code block: the surface of the blocks of a word, with no inset at its left, so that its numbers stand where
