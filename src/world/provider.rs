@@ -164,7 +164,7 @@ impl Provider {
   }
 
   /// The config directory of the user whose `config.json` the standing reads for the classes
-  /// and the list of automatic work, else the one that [`crate::extension::Places::here`]
+  /// and the list of automatic work, else the one that [`crate::skill::Places::here`]
   /// names: a life that opens on a config directory of its own reads no file of the machine.
   #[must_use]
   pub fn config(mut self, config: impl Into<PathBuf>) -> Self {

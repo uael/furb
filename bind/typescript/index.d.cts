@@ -321,10 +321,14 @@ export declare function enabled(root: unknown[][]): Array<Extension>
 export declare const ENGINE: string
 
 /**
- * An extension: its name, its word, its life word, which is empty when it has none, whether it plays on the root
- * alone, and the path of the file of its word, with `~` for the home of the user as the World writes a path for a
- * model, which each chain reads as a turn of its setup, and which is empty when no file stands for the word. An
- * extension that plays on the root alone plays on no other chain but one whose source had it, since that chain makes
+ * An extension: its name, its word, its life word, which is empty when it has none, whether it
+ * plays on the root
+ * alone, and the path of the file of its word, with `~` for the home of the user as the World
+ * writes a path for a
+ * model, which each chain reads as a turn of its setup, and which is empty when no file stands for
+ * the word. An
+ * extension that plays on the root alone plays on no other chain but one whose source had it,
+ * since that chain makes
  * the rung of its source again; any other extension plays on every chain.
  */
 export interface Extension {
@@ -593,9 +597,12 @@ export interface Outcome {
 }
 
 /**
- * The part of an extension that a TUI loads: the name of the extension, the path of its module of TypeScript, which
- * the manifest names under `tui`, beside the word, and the text of that module when the crate carries it. The crate
- * carries the part of an official extension, so a TUI loads it from the text where no checkout of furb stands, as in
+ * The part of an extension that a TUI loads: the name of the extension, the path of its module of
+ * TypeScript, which
+ * the manifest names under `tui`, beside the word, and the text of that module when the crate
+ * carries it. The crate
+ * carries the part of an official extension, so a TUI loads it from the text where no checkout of
+ * furb stands, as in
  * an installed package, and the path is then its place in the repository of furb.
  */
 export interface Part {

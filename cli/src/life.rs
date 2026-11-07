@@ -10,9 +10,9 @@ use std::{
 use furb::{
   Act, Engine, Fact, Fault, Object,
   engine::OPERATOR,
-  extension::{self, Extension},
   fact,
   life::Opening,
+  skill::{self, Extension},
   verbs,
   wire::outward,
   world::Catalog,
@@ -46,7 +46,7 @@ impl Life {
   /// The extensions that the life runs, in the order it enabled them.
   pub(crate) fn extensions(&mut self) -> Result<Vec<Extension>, CliError> {
     let root = self.engine.transcript(verbs::Transcript { on: Some(self.root.clone()), of: None });
-    Ok(extension::enabled(&root?))
+    Ok(skill::enabled(&root?))
   }
 
   /// The name of the prompt the record already holds for this message: of the operator, on the root, of this shape

@@ -41,7 +41,7 @@ repos:
         language: system
         types_or: [python, pyi]
         # The files that the suite and the checker read: a python file or a manifest elsewhere changes neither.
-        files: ^(src/furb/|test/|extensions/|\.furb/|bind/python/|script/|tests/|docs/examples/python/)|^pyproject\.toml$
+        files: ^(src/furb/|test/|\.agents/skills/|\.furb/|bind/python/|script/|tests/|docs/examples/python/)|^pyproject\.toml$
         pass_filenames: false
       - id: pytest
         name: pytest
@@ -50,7 +50,7 @@ repos:
         language: system
         # The suite drives the engine through furb-monty, which builds the crate, so a change of the Rust is read too.
         types_or: [python, pyi, toml, json, rust]
-        files: ^(src/|build/|test/|extensions/|\.furb/|bind/python/|script/|tests/|docs/examples/python/)|^(pyproject|Cargo|rust-toolchain)\.toml$
+        files: ^(src/|build/|test/|\.agents/skills/|\.furb/|bind/python/|script/|tests/|docs/examples/python/)|^(pyproject|Cargo|rust-toolchain)\.toml$
         require_serial: true
       - id: fmt
         name: fmt
@@ -78,7 +78,7 @@ repos:
         entry: python3 script/hooks/reach.py cargo
         language: system
         # The files that the crate and its tests read. The gates run every hook on every file.
-        files: ^(src|cli|host|extensions|tests|docs/examples)/|^(build\.rs|Cargo\.toml|Cargo\.lock|DOCTRINE\.md)$
+        files: ^(src|cli|host|\.agents/skills|tests|docs/examples)/|^(build\.rs|Cargo\.toml|Cargo\.lock|DOCTRINE\.md)$
         require_serial: true
       - id: links
         name: the links of the READMEs of the packages

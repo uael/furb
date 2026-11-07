@@ -44,8 +44,8 @@ use serde::Serialize;
 use crate::gate::checked;
 use crate::{
   Ear, Fact, Fault, Heard, Life, Object, Spoken, Step,
-  extension::{self, Extension, Part},
   life::Opening,
+  skill::{self, Extension, Part},
   view::{Act as ViewAct, Fold, Held, Pause, quotes as quotes_of, restate, writing as writing_of},
   wire,
   world::{self, images},
@@ -356,7 +356,7 @@ pub struct Inspection {
 #[cfg_attr(feature = "python", pyo3(signature = (scratch, config = None)))]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn files(scratch: String, config: Option<String>) -> Result<NativeEar, Fault> {
-  let config = config.map_or_else(|| extension::Places::here().config, Into::into);
+  let config = config.map_or_else(|| skill::Places::here().config, Into::into);
   Ok(NativeEar::of(world::files(world::Scratch::at(scratch)?, config, None)))
 }
 
@@ -488,7 +488,7 @@ pub fn gate(sheet: String) -> Result<Vec<(i64, String)>, Fault> {
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn official() -> Vec<Extension> {
-  extension::official()
+  skill::official()
 }
 
 /// The extensions that a life runs, in the order it enabled them, as the facts of its root say them.
@@ -498,7 +498,7 @@ pub fn enabled(root: Vec<Said>) -> Vec<Extension> {
   let words = root.into_iter().filter_map(|one| one.0);
   let facts: Vec<Fact> =
     words.map(|words| Fact(Object::tuple(words.iter().map(Object::string)))).collect();
-  extension::enabled(&facts)
+  skill::enabled(&facts)
 }
 
 /// The ear of the extensions, given each extension that the life runs: it enables each at the tip of the life,
@@ -506,7 +506,7 @@ pub fn enabled(root: Vec<Said>) -> Vec<Extension> {
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn extensions(given: Vec<Extension>) -> NativeEar {
-  NativeEar::of(extension::extensions(given, extension::Places::here()))
+  NativeEar::of(skill::extensions(given, skill::Places::here()))
 }
 
 /// The part for a TUI of each extension that a life in the directory of a project runs and whose manifest names
@@ -514,14 +514,14 @@ pub fn extensions(given: Vec<Extension>) -> NativeEar {
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn parts(project: String) -> Result<Vec<Part>, Fault> {
-  extension::parts(&extension::Places::here(), path::Path::new(&project))
+  skill::parts(&skill::Places::here(), path::Path::new(&project))
 }
 
 /// The ear of the skills extension, which finds skills in the folders of a chain and in the config directory.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn skills(config: String) -> NativeEar {
-  NativeEar::of(extension::skills::skills(config.into()))
+  NativeEar::of(world::skills::skills(config.into()))
 }
 
 /// The config directory of the user for this process, where the configs, the extensions of the user and the
@@ -529,7 +529,7 @@ pub fn skills(config: String) -> NativeEar {
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
 pub fn config_directory() -> String {
-  extension::Places::here().config.display().to_string()
+  skill::Places::here().config.display().to_string()
 }
 
 /// The POSIX shell that runs a command of this machine, which a host runs its own commands in too.

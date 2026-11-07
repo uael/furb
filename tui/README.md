@@ -385,12 +385,12 @@ the structured JSON export.
 
 ## Extensions
 
-A life runs the extensions that the configs turn on, as [the guide of the extensions](../docs/extensions.md) says, and
+A life runs the extensions that the configs turn on, as [the guide of the extensions](../docs/skills.md) says, and
 the feed of each chain shows the words that they ran on it as one line. An extension can also give the TUI a part, a
 module of TypeScript beside its word, which adds panels over the input, the hint of the line of each act of a kind,
 keys, commands that it can give from the life, completions of the input after a trigger, a status in the footer, and
 dialogs of a list, a form or a confirm that its commands await, and which the TUI loads again live, as [the guide of the
-extensions](../docs/extensions.md#a-part-for-the-tui) says. A model adds a part to a life that runs with `extend(name,
+extensions](../docs/skills.md#a-part-for-the-tui) says. A model adds a part to a life that runs with `extend(name,
 *rungs, tui=module)`, which the skill ouroboros teaches it: the panel stands at once, with no
 restart. A part that fails shows its error in plain words in its own panel, and the TUI goes on. `/extensions` opens a
 dialog of what the life runs, each extension with what its part gives or the error that stopped it, and `/run` runs a

@@ -48,8 +48,8 @@ use std::{
 use crate::{
   Engine,
   engine::{OPERATOR, ROOT, callable},
-  extension::definitions,
   fact::Fact,
+  skill::definitions,
   value::{Fault, Object, ObjectRef, entry},
   wire,
   world::{self, CHECKPOINT_SCHEMA, Store},
