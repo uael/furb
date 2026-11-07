@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { openEngine } from "./bridge.ts";
+import { Daemon } from "./client.ts";
 import type { Preferences } from "./preferences.ts";
 import { Session } from "./session.ts";
 import { Workspaces } from "./workspaces.ts";
@@ -35,6 +36,8 @@ export async function seedDemoFiles(directory: string): Promise<void> {
 
 /** The temporary directories that the demos of this process made. */
 const temporary = new Set<string>();
+/** The records of the demo lives of this process, whose lives end in the daemon after their window let them go. */
+const records = new Set<string>();
 
 /** A new demo project with its files, in a temporary directory that stays until removeDemoDirectories. */
 export async function demoDirectory(): Promise<string> {
@@ -45,12 +48,21 @@ export async function demoDirectory(): Promise<string> {
   return directory;
 }
 
-/** Remove every temporary directory that a demo of this process made, once no demo of it runs. */
+/** Remove every temporary directory that a demo of this process made, once no demo of it runs. The daemon holds the
+ * folder of a life as the working directory of that life until the life ends, so the removal waits for that end of each
+ * life of a demo, and then removes the folder once. */
 export async function removeDemoDirectories(): Promise<void> {
-  // On Windows the daemon of a demo that just ended still holds its folder for a moment, as the working directory of
-  // its life, and a removal then raises EBUSY: it tries again until the daemon lets the folder go, for 5 s at most.
-  for (const root of temporary)
-    await rm(root, { recursive: true, force: true, maxRetries: 25, retryDelay: 200 });
+  if (records.size > 0) {
+    const asked = new Daemon();
+    try {
+      // A life that the daemon does not hold, or holds for another window, has nothing to wait for.
+      for (const record of records) await asked.ended(record, 20000).catch(() => {});
+    } finally {
+      asked.close();
+    }
+  }
+  records.clear();
+  for (const root of temporary) await rm(root, { recursive: true, force: true });
   temporary.clear();
 }
 
@@ -81,6 +93,7 @@ export async function demoSession({
     cwd: cwd ?? (record ? undefined : await demoDirectory()),
     skills,
   });
+  if (host.record) records.add(host.record);
   const session = new Session(engine, host, true, preferences);
   session.watching = watch;
   await session.refresh();
