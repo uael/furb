@@ -253,7 +253,7 @@ def of_furb(statement: ast.stmt) -> bool:
   return module == "furb" or module.startswith("furb.")
 
 
-def test_the_word_of_an_extension_is_its_file_less_its_imports_of_furb() -> None:
+def test_the_word_of_a_skill_is_its_file_less_its_imports_of_furb() -> None:
   """The word that a chain runs is the program of the file of the extension, which ruff and ty read."""
   for one in _monty.official():
     name, word = one["name"], one["word"]
@@ -262,7 +262,7 @@ def test_the_word_of_an_extension_is_its_file_less_its_imports_of_furb() -> None
     assert ast.dump(ast.parse(word)) == ast.dump(ast.Module(body=kept, type_ignores=[]))
 
 
-def test_the_word_of_an_extension_binds_no_name_of_the_engine_nor_again_beneath_itself() -> None:
+def test_the_word_of_a_skill_binds_no_name_of_the_engine_nor_again_beneath_itself() -> None:
   """A word runs in the module of a chain, after the engine, so it keeps the meaning of every name there."""
   held = set(binds(ast.parse(PY.read_text(encoding="utf-8"))))
   for one in _monty.official():

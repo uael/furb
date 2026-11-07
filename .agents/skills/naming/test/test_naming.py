@@ -7,7 +7,7 @@ from furb import engine
 from skills.conftest import naming
 
 
-async def test_naming_is_the_doctrine_of_the_extension(tmp_path: Path) -> None:
+async def test_naming_is_the_doctrine_of_the_skill(tmp_path: Path) -> None:
   """naming is the doctrine of the extension, a quote that says what it does."""
   sand, root = naming(tmp_path, STANDS[0])
   sand.script[root] = ["close(naming)"]

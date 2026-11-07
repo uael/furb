@@ -59,7 +59,7 @@ export async function demoSession({
   record,
   cwd,
   preferences,
-  extensions,
+  skills,
 }: {
   seed?: boolean;
   /** Whether the operator watches the session, which streams each turn and spends nothing. */
@@ -69,14 +69,14 @@ export async function demoSession({
   preferences?: Preferences;
   /** Whether the life runs the extensions that the configs turn on, the official ones among them. The demo runs none
    * by default, so it shows the same on every machine. */
-  extensions?: boolean;
+  skills?: boolean;
 } = {}): Promise<Session> {
   const { engine, host } = await openEngine({
     demo: true,
     watch,
     record,
     cwd: cwd ?? (record ? undefined : await demoDirectory()),
-    extensions,
+    skills,
   });
   const session = new Session(engine, host, true, preferences);
   session.watching = watch;

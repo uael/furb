@@ -56,7 +56,7 @@ async def test_name_session_is_the_name_of_the_session(tmp_path: Path) -> None:
   assert names(root) == ["Fix the login form"]
 
 
-async def test_the_life_word_of_the_extension_is_name_session(tmp_path: Path) -> None:
+async def test_the_life_word_of_the_skill_is_name_session(tmp_path: Path) -> None:
   """The life word of the extension is name_session(), and the extension plays on the root alone, so a life names its session once."""
   assert NAMING["life"] == "name_session()" and NAMING["root"]
   sand, root = naming(tmp_path)

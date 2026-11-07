@@ -358,7 +358,7 @@ export interface Choices {
   cwd?: string;
   actor?: string;
   roster?: string[];
-  extensions?: boolean;
+  skills?: boolean;
   /** The folder of the settings of the user and the claude command line that the window reads, which the life reads
    * too. */
   config?: string;
@@ -494,7 +494,7 @@ export class RemoteLife extends EventEmitter {
     if (!this.held) this.daemon.hold();
     this.held = true;
     await this.daemon.connect();
-    const { cwd, actor, roster, extensions, config, claude, models } = this.choices;
+    const { cwd, actor, roster, skills, config, claude, models } = this.choices;
     const told = new Promise<void>((resolve) => {
       const heard = () => {
         this.off("facts", heard);
@@ -530,7 +530,7 @@ export class RemoteLife extends EventEmitter {
         cwd,
         actor,
         roster,
-        extensions,
+        skills,
         config,
         claude,
         answers,

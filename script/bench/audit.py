@@ -98,9 +98,7 @@ def made(record: list[tuple]) -> tuple[dict[str, str], dict[str, str], dict[str,
 async def replayed(record: Path, directory: Path) -> tuple[dict[str, str], dict[str, str], dict[str, str], list[str]]:
   """The life that inspects the record, on the ears of the crate, the Kernel and the gate, and what it made again.
   The journal says the whole record again before boot returns."""
-  stored, pairs = _monty.opened(
-    directory=str(directory), record=str(record), inspecting=True, extensions=False, roster=[]
-  )
+  stored, pairs = _monty.opened(directory=str(directory), record=str(record), inspecting=True, skills=False, roster=[])
   ears = dict(pairs)
   try:
     held = entries(stored)

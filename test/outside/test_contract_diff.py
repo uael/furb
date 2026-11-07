@@ -248,7 +248,7 @@ def test_a_kit_that_goes_since_the_release_is_a_break_and_a_kit_that_is_more_is_
   assert "minor: .agents/skills/mcp/mcp.pyi: the contract is more" in out
 
 
-def test_a_kit_that_moved_from_extensions_to_the_skills_with_the_same_interface_is_no_change(
+def test_a_kit_that_moved_to_the_skills_with_the_same_interface_is_no_change(
   tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
   tagged(tmp_path, "def a() -> int: ...\n")

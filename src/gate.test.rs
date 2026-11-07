@@ -644,7 +644,7 @@ fn a_word_binds_no_builtin_that_a_def_of_the_program_reads() {
 }
 
 #[test]
-fn a_word_of_an_extension_that_binds_a_name_of_the_engine_in_a_block_a_walrus_a_capture_or_a_global_binds_it()
+fn a_word_of_a_skill_that_binds_a_name_of_the_engine_in_a_block_a_walrus_a_capture_or_a_global_binds_it()
  {
   let bound = |word: &str| super::engine_bound(word, ENGINE);
   assert_eq!(bound("if True:\n  over = 1"), vec!["over"]);

@@ -55,7 +55,7 @@ export async function clipboardImage<T>(use: (path: string) => Promise<T>): Prom
   if (!bytes?.length) throw new Error("No clipboard image is available. Use /image with a file path.");
   const type = imageType(bytes);
   const directory = await mkdtemp(join(tmpdir(), "furb-clipboard-"));
-  const path = join(directory, `pasted-image.${type.extension}`);
+  const path = join(directory, `pasted-image.${type.suffix}`);
   try {
     await writeFile(path, bytes, { mode: 0o600 });
     return await use(path);

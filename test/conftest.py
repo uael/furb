@@ -57,7 +57,7 @@ SUITES = (HERE, *sorted(SKILLS.glob("*/test")))
 """SUITES are the suite of the engine and the suite of each extension, each test of which runs on both engines."""
 BOUND = (*(f"{suite}{os.sep}" for suite in SUITES), str(SKILLS / "conftest.py"))
 """BOUND are the files whose modules bind the names of the engine under test: the suites, and the conftest of the
-suites of the extensions, each as the start of the path of such a file, which every test reads twice."""
+suites of the skills, each as the start of the path of such a file, which every test reads twice."""
 ENGINES = {"python": furb.python, "monty": furb_monty.engine}
 """ENGINES are the two engines every test runs on: the one of this interpreter, and the one in the sandbox of monty."""
 SURFACE = frozenset(furb_monty.engine.defined())
@@ -518,7 +518,7 @@ def machine(directory: Path, record: Path | None = None) -> tuple[Live, str]:
   """A life on the World of this machine, in a directory, on a record that it keeps when it is given one, which asks
   no model and offers the operator alone: the World, which a test ends, and the root."""
   live = Live(str(directory), roster=[])
-  return live, engine.boot(live.opened(record, extensions=False), world=live.hears(), **live.ears, **kernel())
+  return live, engine.boot(live.opened(record, skills=False), world=live.hears(), **live.ears, **kernel())
 
 
 async def scratched(on: str) -> Path:

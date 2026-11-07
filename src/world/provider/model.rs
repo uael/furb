@@ -362,7 +362,7 @@ pub(super) fn standing(
   models: &[Model],
   directory: &str,
   actor: &str,
-  extensions: Option<&[Advertised]>,
+  skills: Option<&[Advertised]>,
   members: &[String],
   user: &Path,
 ) -> Object {
@@ -395,7 +395,7 @@ pub(super) fn standing(
       Object::list(texts.into_iter().chain([Object::bool(*root)]))
     }))
   };
-  let advertised = extensions.filter(|_| doctrine.is_some()).map(given);
+  let advertised = skills.filter(|_| doctrine.is_some()).map(given);
   let above =
     advertised.as_ref().and(home.as_deref()).map(|one| Object::string(one.display().to_string()));
   Object::list(

@@ -1,7 +1,7 @@
 # The protocol of the host
 
 `furb-host` is the daemon of a machine: it holds each life, and each window or skill reaches it over one protocol. This
-page says that protocol. Its version is `PROTOCOL`, now 3. The crate gives its JSON Schema in
+page says that protocol. Its version is `PROTOCOL`. The crate gives its JSON Schema in
 `host/protocol.schema.json`, and `bind/typescript/src/protocol.ts` holds the types that `bun run protocol` makes from
 that schema. A test of each side fails when the schema or the types do not agree with the code.
 
@@ -100,7 +100,7 @@ it is not given. The daemon answers requests in any order.
 | Verb | Fields | Role |
 | --- | --- | --- |
 | `list` | `config` | read |
-| `open` | `life`, `cwd`, `actor`, `roster`, `extensions`, `config`, `claude`, `answers`, `attach` | write |
+| `open` | `life`, `cwd`, `actor`, `roster`, `skills`, `config`, `claude`, `answers`, `attach` | write |
 | `attach` | `life`, `from` | read |
 | `detach` | `life` | read |
 | `pin`, `unpin` | `life`, `holder` | write |
@@ -145,7 +145,7 @@ it is not given. The daemon answers requests in any order.
 - `config` reads and changes the configs of the folder of a life, which the World writes, so no window writes a disk.
   A get gives `values`, each key with the value that wins for it and its layer, `user`, `project` or `local`. A key has
   one or two names, as `["providers", "codex"]`. A key that a schema names comes with its `property`, as
-  [`config.md`](config.md#the-schema) says, and with the `extension` that adds it, when one does; such a key that no
+  [`config.md`](config.md#the-schema) says, and with the `skill` that adds it, when one does; such a key that no
   layer gives comes with its default and no layer, and an object of furb, as `providers`, comes with the object of
   the values that win and no layer, then with a value for each of its names. A set refuses a value that the property
   of its key does not take, and writes nothing. A set writes the key in its layer, `project` when none is named, or
@@ -172,7 +172,7 @@ it is not given. The daemon answers requests in any order.
   `lives`, `act` (the name of the act that the verb made), `value`, `values`, `inspected` or `presence`.
 - A refusal is a frame `refused` with the `id`, or none for a frame that could not be read, the `error` as data, and
   `why`, the text that a person reads.
-- An `open` that makes a life gives it the `actor`, the `roster` and the `extensions` that it names, and the settings
+- An `open` that makes a life gives it the `actor`, the `roster` and the `skills` that it names, and the settings
   of the daemon give each one that it does not name. It reads the settings of the user in the folder `config` and runs
   the claude command line `claude` that it names, as the window that opens it reads them. An open of a life that
   lives changes none of them.

@@ -259,7 +259,7 @@ async def open(
   directory: str | Path = ".",
   roster: list[str] | None = None,
   claude: str | None = None,
-  extensions: bool = True,
+  skills: bool = True,
 ) -> Life:
   """A life on its record, or a new one when the record holds nothing, whose prompts go to the model named, or to the
   default actor of the crate."""
@@ -269,7 +269,7 @@ async def open(
     actor=model,
     roster=roster,
     claude=claude,
-    extensions=extensions,
+    skills=skills,
   )
   life = Life(dict(ears), [(tuple(one),) for (one,) in stored])
   atexit.register(life.end)

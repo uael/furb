@@ -88,7 +88,7 @@ async def life(args: argparse.Namespace) -> int:
     os.environ["PATH"] = os.pathsep.join([str(app / ".venv" / "bin"), os.environ["PATH"]])
   os.chdir(app)
   record = run / "record.jsonl"
-  world, root, held = lived(record, app, ACTOR, keeps=True, extensions=False)
+  world, root, held = lived(record, app, ACTOR, keeps=True, skills=False)
   facts = [one for (one, *_) in held]
   pending = sorted({str(x[1]) for x in facts if x[0] == "started"} - {str(x[1]) for x in facts if x[0] == "done"})
   for chain in dict.fromkeys([root, *(engine.scope(one) for one in pending)]):

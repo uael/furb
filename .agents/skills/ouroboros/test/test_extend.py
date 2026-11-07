@@ -66,7 +66,7 @@ async def test_extend_writes_tui_as_the_part_that_the_tui_loads(tmp_path: Path) 
   assert (folder / "SKILL.md").read_text(encoding="utf-8") == manifest
 
 
-async def test_extend_turns_the_extension_on_in_the_config_of_the_project(tmp_path: Path) -> None:
+async def test_extend_turns_the_skill_on_in_the_config_of_the_project(tmp_path: Path) -> None:
   """extend turns the extension on in .furb/config.json with the path of its folder from the folder of that config, and keeps every other entry of the config."""
   (tmp_path / "work" / ".furb").mkdir(parents=True)
   (config := tmp_path / "work" / ".furb" / "config.json").write_text(
@@ -96,7 +96,7 @@ async def test_a_write_of_the_config_of_the_project_enables_what_it_turns_on(tmp
   assert callable(engine.module(again).get("f"))
 
 
-async def test_a_write_again_of_an_extension_that_the_life_runs_reloads_its_definitions(tmp_path: Path) -> None:
+async def test_a_write_again_of_a_skill_that_the_life_runs_reloads_its_definitions(tmp_path: Path) -> None:
   """When extend writes again the word of an extension that the life runs, the World enables it again with the new word, and each chain plays the definitions of that word alone, so a function and a name in capitals take their new value and every other name keeps its value."""
   sand, root = extended("ouroboros", tmp_path, lives=True, sand=Disk())
   there = engine.chain("there")

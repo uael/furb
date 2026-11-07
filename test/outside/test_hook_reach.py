@@ -35,7 +35,7 @@ def test_a_script_reaches_the_tests_that_name_it_and_no_other() -> None:
   assert "test/outside/test_scope.py" in reach.suite(["script/scope.py"])
 
 
-def test_a_file_of_an_extension_reaches_its_tests_and_the_hygiene_laws() -> None:
+def test_a_file_of_a_skill_reaches_its_tests_and_the_hygiene_laws() -> None:
   assert reach.suite([".agents/skills/memory/memory.py"]) == [".agents/skills/memory/test", "test/test_hygiene.py"]
 
 
@@ -64,7 +64,7 @@ def test_a_selection_of_tests_runs_with_no_coverage_and_the_whole_suite_keeps_it
   assert reach.command("pytest", ["tui/src/app.ts"]) is None
 
 
-def test_a_contract_test_an_official_extension_test_and_a_project_contract_reach_the_hygiene_laws() -> None:
+def test_a_contract_test_an_official_skill_test_and_a_project_contract_reach_the_hygiene_laws() -> None:
   laws = "test/test_hygiene.py"
   assert laws in reach.suite(["test/test_peek.py"])
   assert laws in reach.suite([".agents/skills/memory/test/test_memory.py"])

@@ -1,6 +1,5 @@
-"""The conductor, on the real engine: topics with a chain each, items as prompts in a room by class, one aggregator, fixes of CI before items, the reground of a topic chain, and reviews, audits and QA on a clock."""
+"""The conductor, on the real engine: one test for each rule of the round."""
 
-import re
 from pathlib import Path
 
 import pytest
@@ -10,21 +9,29 @@ from skills.conftest import Bench
 from furb.engine import OPERATOR
 
 HERE = Path(__file__).resolve().parent.parent
-SONNET, OPUS, OPUS_M = "claude-cli:sonnet/high", "claude-cli:opus/high", "claude-cli:opus/medium"
+SONNET, SONNET_M, OPUS, OPUS_M = "claude-cli:sonnet/high", "claude-cli:sonnet/medium", "claude-cli:opus/high", "claude-cli:opus/medium"
 ROSTER = [
   [OPERATOR, [], 200000],
-  ["claude-cli:sonnet", ["medium", "high"], 1000000],
-  ["claude-cli:opus", ["medium", "high"], 1000000],
+  ["claude-cli:sonnet", ["medium", "high", "xhigh"], 1000000],
+  ["claude-cli:opus", ["medium", "high", "xhigh"], 1000000],
   ["codex:gpt-6-astra", ["high"], 258400],
 ]
-TEST = '''width.clear()
-width.update({"a": 2, "b": 1, "qa": 1, "review": 2})
-REPO = cwd()
-state.update(review_at=1e12, qa_at=1e12)
+TEST = """TOPICS[:] = ["a", "b", "tidy", "review", "qa"]
+for t in TOPICS:
+  desk_queue.setdefault(t, [])
+  desk_live.setdefault(t, {})
+desk_width.clear()
+desk_width.update({"a": 2, "b": 1, "tidy": 1, "review": 2, "qa": 1})
+CODE = ("a", "b")
+FINGER = "cat finger.txt 2>/dev/null; true"
+CI_PROBE = "cat ci.txt 2>/dev/null; true"
+DF = "cat df.txt 2>/dev/null; true"
+desk_time.update(review_at=1e12, ci_at=1e12, disk_at=1e12)
+SIDE = []
 
 
-def item(key, model="claude-cli:sonnet/high", after=()):
-  return {"key": key, "model": model, "brief": "do " + key, "after": list(after)}
+def item(key, model="claude-cli:sonnet/high", after=(), p=None):
+  return {"key": key, "model": model, "brief": (f"P{p}. " if p is not None else "") + "do " + key, "after": list(after)}
 
 
 def stepped(step, *args):
@@ -34,7 +41,7 @@ def stepped(step, *args):
     yield "done", id, got
 
   return act("stepped", "", controlled(ear))
-'''
+"""
 
 
 class Round(Bench):
@@ -44,19 +51,28 @@ class Round(Bench):
     super().__init__(tmp, [HERE / "../../../.agents/skills/compaction/compaction.py", HERE / "conductor.py"], ROSTER, OPUS)
 
   async def beat(self) -> None:
-    await self.value("await stepped(beat)")
+    await self.value("await stepped(desk_beat, 300.0, 900.0)")
 
   async def end(self, name: str, value: object) -> None:
     self.engine.close(value, name)
     await settle()
+
+  def file(self, name: str, text: str) -> None:
+    (self.tmp / name).write_text(text, encoding="utf-8")
 
   def asked(self, kind: str = "str") -> list[tuple[str, str, str, str]]:
     """Each prompt to a model: its id, the label of its chain, its model and its message."""
     made = [x for x in said(self.log, "prompt") if x[4] == kind and x[6] != OPERATOR]
     return [(str(x[1]), str(self.engine.get(x[3])[4]), str(x[6]), str(x[5])) for x in made]
 
-  def notices(self) -> list[str]:
-    return [str(x[5]) for x in said(self.log, "prompt") if x[3] == self.root and x[4] == "None"]
+  def keys(self, label: str = "") -> list[str]:
+    return [x[3].split(" of the topic")[0].removeprefix("Item ") for x in self.asked() if x[3].startswith("Item ") and (x[1] == label or not label)]
+
+  def notes(self, on: str) -> list[str]:
+    return [str(x[5]) for x in said(self.log, "prompt") if x[3] == on and x[4] == "None"]
+
+  def queue(self, t: str) -> list[str]:
+    return [str(x["key"]) for x in self.ns["desk_queue"][t]]
 
 
 @pytest.fixture
@@ -66,131 +82,292 @@ async def conductor(tmp_path: Path) -> Round:
   return made
 
 
-async def test_an_item_goes_to_its_model_on_the_one_chain_of_its_topic_within_its_width(conductor: Round) -> None:
-  await conductor.word('queue("a").extend([item("one"), item("two"), item("three")])')
+async def test_an_item_goes_to_its_model_on_the_chain_of_its_topic_within_its_width(conductor: Round) -> None:
+  await conductor.word('desk_queue["a"].extend([item("one"), item("two"), item("three")])')
   await conductor.beat()
   assert [(label, model) for _, label, model, _ in conductor.asked()] == [("a", SONNET), ("a", SONNET)]
-  assert [x["key"] for x in conductor.ns["queues"]["a"]] == ["three"]
-  assert conductor.asked()[0][3].startswith("Item one of the topic a. The charter of this chain, scratch://converge/a.md")
+  assert conductor.queue("a") == ["three"]
+  assert conductor.asked()[0][3].startswith("Item one of the topic a. Follow scratch://converge/method.md")
 
 
-async def test_an_item_waits_for_its_after_and_for_a_seat_of_its_class(conductor: Round) -> None:
-  await conductor.word('ROOM["opus/high"] = 1\nqueue("a").extend([item("late", after=["first"]), item("x", "claude-cli:opus/high")])\nqueue("b").append(item("y", "claude-cli:opus/high"))')
+async def test_the_hardest_ready_item_of_any_topic_goes_first_a_hot_fix_before_it_and_polish_last(conductor: Round) -> None:
+  await conductor.word('ROOM_CAP["sonnet/high"] = 1\nPOLISH_KEYS.append("shine")\ndesk_queue["a"].extend([item("shine"), item("plain"), item("hard", p=1)])\ndesk_queue["b"].append(item("hot", p=0))')
+  assert await conductor.value("[priority(x) for x in desk_queue['a']]") == [6, 4, 1]
+  for _ in range(4):
+    await conductor.beat()
+    (live,) = [p for t in ("a", "b") for p in conductor.ns["desk_live"][t]]
+    await conductor.end(live, "done")
+  assert conductor.keys() == ["hot", "hard", "plain", "shine"]
+
+
+async def test_an_item_starts_once_each_key_of_its_after_list_is_merged_and_engine_changes_run_in_their_order(conductor: Round) -> None:
+  await conductor.word('SERIAL2[:] = ["e1", "e2"]\ndesk_queue["b"].append(item("one"))\ndesk_queue["a"].extend([item("two", after=["one"]), item("e2"), item("e1", p=5)])')
   await conductor.beat()
-  assert [x[3].split(".")[0] for x in conductor.asked()] == ["Item x of the topic a"]
-  assert conductor.notices() == ["Conductor:\nb holds 1 queued items and runs none: no item has its after done and a seat of its class free"]
+  assert conductor.keys() == ["one", "e1"]
+  (one,) = conductor.ns["desk_live"]["b"]
+  await conductor.end(one, "done one")
+  (e1,) = [p for p in conductor.ns["desk_live"]["a"]]
+  await conductor.end(e1, "done e1")
   await conductor.beat()
-  assert len(conductor.notices()) == 1
+  assert conductor.keys() == ["one", "e1"]
+  await conductor.word("desk_time['merged_upto'] = clock()")
+  await conductor.beat()
+  assert sorted(conductor.keys()[2:]) == ["e2", "two"]
 
 
-async def test_an_ended_item_tells_the_root_and_frees_its_place_for_the_next(conductor: Round) -> None:
-  await conductor.word('queue("b").extend([item("one"), item("two", after=["one"])])')
+async def test_a_medium_item_takes_a_medium_seat_and_moves_up_only_when_none_is_free_and_no_item_of_the_class_above_waits(conductor: Round) -> None:
+  await conductor.word('ROOM_CAP.update({"sonnet/medium": 1, "sonnet/high": 1})\ndesk_width["a"] = 3\ndesk_queue["a"].extend([item("m1", SONNET_M), item("m2", SONNET_M), item("h1", after=["later"])])')
   await conductor.beat()
-  (first, *_), = conductor.asked()
-  await conductor.end(first, "done one")
+  assert [(k, x[2]) for k, x in zip(conductor.keys(), conductor.asked(), strict=True)] == [("m1", SONNET_M), ("m2", SONNET)]
+  await conductor.word('desk_queue["a"].extend([item("m3", SONNET_M), item("h2")])\nROOM_CAP["sonnet/high"] = 2')
   await conductor.beat()
-  assert f"b: the item one ({first}, {SONNET}) ended: done one" in conductor.notices()[-1]
-  assert [x[3].split(".")[0] for x in conductor.asked()] == ["Item one of the topic b", "Item two of the topic b"]
+  assert conductor.keys()[2:] == ["h2"]
+  assert conductor.queue("a") == ["h1", "m3"]
 
 
-async def test_a_fix_of_ci_goes_before_the_items_of_its_topic_and_waits_for_a_seat_of_the_fixer(conductor: Round) -> None:
-  await conductor.word('ROOM["sonnet/high"] = 0\nqueue("b").append(item("one", "claude-cli:opus/medium"))\nfix("b", "red at abc")')
-  assert conductor.ns["fixwait"] == {"b": "red at abc"}
+async def test_items_past_a_room_that_shrank_pause_with_no_cancel_and_resume_when_a_seat_frees(conductor: Round) -> None:
+  await conductor.word('desk_queue["a"].extend([item("one"), item("two")])')
   await conductor.beat()
-  assert conductor.asked() == []
-  await conductor.word('ROOM["sonnet/high"] = 1')
+  first, second = [x[0] for x in conductor.asked()]
+  await conductor.word('ROOM_CAP["sonnet/high"] = 1\ndesk_queue["b"].append(item("three"))')
   await conductor.beat()
-  ((fixed, label, model, message),) = conductor.asked()
-  assert (label, model, message.endswith("The brief of the aggregator:\n\nred at abc")) == ("b", SONNET, True)
-  await conductor.end(fixed, "fixed at def")
+  assert (conductor.engine.paused(first), conductor.engine.paused(second)) == (False, True)
+  assert conductor.keys() == ["one", "two"]
+  await conductor.end(first, "done")
   await conductor.beat()
-  assert f"b ended the fix {fixed} of CI: fixed at def" in conductor.notices()[-1]
-  assert conductor.asked()[-1][3].startswith("Item one of the topic b")
+  assert not conductor.engine.paused(second) and not conductor.engine.over(second)
+  assert conductor.keys() == ["one", "two"]
+  await conductor.end(second, "done")
+  await conductor.beat()
+  assert conductor.keys() == ["one", "two", "three"]
 
 
-async def test_a_cycle_of_the_aggregator_starts_on_a_new_print_and_sends_each_failure_to_its_topic(conductor: Round) -> None:
-  conductor.say(r"pr list --head w/converge", [{"number": 7}])
-  conductor.say(r"pr checks 7", [{"bucket": "pass"}, {"bucket": "fail"}])
+async def test_a_fix_of_ci_pauses_the_live_items_of_its_topic_takes_each_new_failure_and_wakes_only_them(conductor: Round) -> None:
+  await conductor.word('desk_queue["a"].extend([item("one"), item("two")])')
+  await conductor.beat()
+  one, two = [x[0] for x in conductor.asked()]
+  await conductor.word(f"pause({two!r})\nfix = start_fix('a', 'red at h1')")
+  fix = conductor.ns["fix"]
+  assert conductor.engine.paused(one) and not conductor.engine.paused(fix)
+  assert conductor.asked()[-1][1:] == ("a", SONNET, conductor.ns["FIX_HEAD"] + "red at h1")
+  await conductor.word("start_fix('a', 'red at h2')\ndesk_queue['a'].append(item('three'))")
+  assert conductor.notes(fix) == ["A new failure of the CI of w/converge for this fix:\n\nred at h2"]
+  await conductor.beat()
+  assert conductor.keys() == ["one", "two"]
+  topic = conductor.ns["topic_chain"]["a"]
+  conductor.sand.script[topic] = ['close("fixed at h3")']
+  for held in [x[1] for x in said(conductor.log, "reply") if x[3] == topic and not conductor.engine.over(x[1])]:
+    conductor.engine.say("done", held, ("assistant", "x = 1", (0, 0, 0, 0, 0.0), ["signed 5"]))
+  await settle()
+  assert conductor.engine.peek(fix) == "fixed at h3"
+  await conductor.beat()
+  assert (conductor.engine.paused(one), conductor.engine.paused(two)) == (False, True)
+  assert "a ended the fix" in conductor.ns["desk_notes"][-1]
+
+
+async def test_a_cycle_starts_on_a_new_print_a_floor_after_the_start_of_the_last_and_sends_each_failure_to_its_topic(conductor: Round) -> None:
+  conductor.file("finger.txt", "pr 7\nfail 1\nhead h1\n")
   await conductor.beat()
   ((cycle, label, model, message),) = conductor.asked("tuple[dict[str, str], str]")
-  assert (label, model, message.startswith("One cycle of the aggregator.")) == ("converge", OPUS_M, True)
-  assert "pr 7\nfail 1, pass 1" in conductor.ns["state"]["print"]
-  await conductor.end(cycle, ({"a": "test x fails"}, "merged b"))
-  conductor.sand.now += 300
+  assert (label, model, message) == ("converge", OPUS_M, conductor.ns["CYCLE"])
+  conductor.sand.now += 1000
+  conductor.file("finger.txt", "pr 7\nfail 1\nhead h2\n")
+  await conductor.end(cycle, ({"a": "test x fails", "nowhere": "y"}, "merged b"))
   await conductor.beat()
-  assert conductor.asked()[-1][1:3] == ("a", SONNET)
-  assert conductor.notices()[-1].endswith(f"cycle {cycle}: merged b Sent to a.")
-  assert len(conductor.asked("tuple[dict[str, str], str]")) == 1
-  conductor.say(r"pr checks 7", [{"bucket": "pending"}])
-  conductor.sand.now += 300
-  await conductor.beat()
-  assert len(conductor.asked("tuple[dict[str, str], str]")) == 1
-  conductor.sand.now += 900
+  assert [x[2] for x in conductor.asked() if x[1] == "a"] == [SONNET]
+  assert conductor.ns["desk_notes"][0] == f"cycle {cycle}: merged b Sent to a."
+  assert len(conductor.asked("tuple[dict[str, str], str]")) == 2
+  conductor.file("finger.txt", "pr 7\nfail 2\nhead h3\n")
+  conductor.sand.now += 600
+  await conductor.end(conductor.asked("tuple[dict[str, str], str]")[-1][0], ({}, "merged a"))
   await conductor.beat()
   assert len(conductor.asked("tuple[dict[str, str], str]")) == 2
-
-
-async def test_each_cycle_that_ends_starts_one_qa_run_on_the_build_of_the_aggregator(conductor: Round) -> None:
-  await conductor.word('state.update(last=1e12)')
-  await conductor.word('state["cycle"] = str(prompt(tuple[dict[str, str], str], "c", to="claude-cli:opus/medium", on=chain_of("converge")))')
+  conductor.sand.now += 300
   await conductor.beat()
-  assert [x for x in conductor.asked() if x[1] == "qa"] == []
-  await conductor.end(conductor.ns["state"]["cycle"], ({}, "pushed h2"))
-  await conductor.beat()
-  await conductor.beat()
-  (qa,) = [x for x in conductor.asked() if x[1] == "qa"]
-  assert qa[3].startswith("Item qa-run-1 of the topic qa") and "worktree.sh" not in qa[3]
-  await conductor.end(qa[0], "clean")
-  conductor.sand.now += 2000
-  await conductor.beat()
-  assert len([x for x in conductor.asked() if x[1] == "qa"]) == 1
+  assert len(conductor.asked("tuple[dict[str, str], str]")) == 3
 
 
-async def test_reviews_and_audits_on_astra_come_each_hour_and_once_for_each_kind(conductor: Round) -> None:
-  await conductor.word('state.update(review_at=-1e9, last=1e12)\nqueue("review").clear()\nwidth["review"] = 0')
+async def test_each_new_head_counts_one_merge_and_each_fourth_queues_one_audit_of_alignment_by_turns_across_a_restart(conductor: Round) -> None:
+  for n in range(5):
+    await conductor.word(f"merges_step('head h{n}')\nmerges_step('head h{n}')")
+  assert [(x["key"], x["model"]) for x in conductor.ns["desk_queue"]["review"]] == [("align-audit-m4", "codex:gpt-6-astra/high")]
+  await conductor.load(TEST)
+  await conductor.word("desk_queue['review'].clear()")
+  for n in range(5, 9):
+    await conductor.word(f"merges_step('head h{n}')")
+  assert [(x["key"], x["model"]) for x in conductor.ns["desk_queue"]["review"]] == [("align-audit-m8", OPUS)]
+
+
+async def test_each_cycle_that_ends_starts_one_qa_run_when_no_cycle_runs_and_a_new_cycle_tells_it_to_wrap_up(conductor: Round) -> None:
+  conductor.file("finger.txt", "head h1\n")
   await conductor.beat()
-  keys = [x["key"] for x in conductor.ns["queues"]["review"]]
-  assert keys == ["words-audit-1", "align-audit-1", "perf-1", "review-a-1", "review-b-1"]
-  assert {x["model"] for x in conductor.ns["queues"]["review"]} == {"codex:gpt-6-astra/high"}
-  assert "## Values bound now" in conductor.sand.files["scratch://converge/desk.md"]
-  conductor.sand.now += 1800
+  ((cycle, *_),) = conductor.asked("tuple[dict[str, str], str]")
+  assert conductor.keys("qa") == []
+  await conductor.end(cycle, ({}, "pushed h1"))
   await conductor.beat()
-  assert len(conductor.ns["queues"]["review"]) == 5
-  conductor.sand.now += 3600
+  ((qa, *_),) = [x for x in conductor.asked() if x[1] == "qa"]
+  conductor.file("finger.txt", "head h2\n")
+  conductor.sand.now += 900
   await conductor.beat()
-  assert len(conductor.ns["queues"]["review"]) == 5
+  assert conductor.notes(qa) == [conductor.ns["QA_WRAP"]]
+  await conductor.end(qa, "rows")
+  await conductor.end(conductor.asked("tuple[dict[str, str], str]")[-1][0], ({}, "pushed h2"))
+  await conductor.beat()
+  assert conductor.keys("qa") == ["qa-run-1", "qa-run-2"]
 
 
-async def test_queue_rows_puts_each_row_of_a_known_topic_and_class_once(conductor: Round) -> None:
-  rows = "- k1 | a | sonnet/high | x.py | Fix x.\nk2 | b | opus/medium | y.py | Fix y.\nk3 | qa | sonnet/high | z | no\nk4 | nowhere | sonnet/high | z | no\nk1 | a | sonnet/high | x.py | again\nshort | row"
-  got = await conductor.value(f"queue_rows({rows!r}, 'review-a-1')")
-  assert got == ["a:k1", "b:k2"]
-  (one,) = conductor.ns["queues"]["a"]
-  assert (one["model"], one["brief"]) == (SONNET, "A finding of review-a-1: Fix x. Paths: x.py. Judge it against w/converge first, then fix it at its cause as one commit, with a test or a scenario that fails before the fix. Judge the row against main first: it is a claim of an audit.")
-  await conductor.word('queue_rows("k5 | a | opus/high | w | Fix w.", "r", before="k1")')
-  assert [x["key"] for x in conductor.ns["queues"]["a"]] == ["k5", "k1"]
+async def test_a_failed_run_of_the_gates_is_routed_once_to_its_topics_and_a_green_run_is_told(conductor: Round) -> None:
+  conductor.file("ci.txt", "abc completed failure 11\n")
+  await conductor.word("desk_time['ci_at'] = -1e9")
+  await conductor.beat()
+  ((route, label, model, _),) = conductor.asked("tuple[dict[str, str], str]")
+  assert (label, model) == ("converge", OPUS_M)
+  await conductor.end(route, ({"b": "test y fails"}, "one failure"))
+  await conductor.word("desk_time['ci_at'] = -1e9")
+  await conductor.beat()
+  assert conductor.asked()[-1][1] == "b" and len(conductor.asked("tuple[dict[str, str], str]")) == 1
+  conductor.file("ci.txt", "abd completed success 12\n")
+  await conductor.word("desk_time['ci_at'] = -1e9")
+  await conductor.beat()
+  assert "The checks of CI of w/converge pass at abd (run 12)." in conductor.notes(conductor.root)[-1]
 
 
-async def test_a_topic_chain_past_reground_keeps_its_reads_then_a_model_chooses_what_to_keep(conductor: Round) -> None:
-  await conductor.word('chains["a"] = str(chain("a"))')
-  topic = conductor.ns["chains"]["a"]
+async def test_under_the_floor_of_the_disk_tidy_frees_the_oldest_ended_worktree_first_once(conductor: Round) -> None:
+  conductor.file("df.txt", f"/dev/disk 1 1 {50 * 1048576} 99% /\n")
+  await conductor.word("desk_time['disk_at'] = -1e9")
+  await conductor.beat()
+  await conductor.word("desk_time['disk_at'] = -1e9")
+  await conductor.beat()
+  ((_, label, model, message),) = conductor.asked()
+  assert (label, model) == ("tidy", SONNET_M)
+  assert "50 GB free, under the floor of 60 GB. Free the target of the oldest ended worktree first" in message
+
+
+async def test_an_ended_item_is_judged_and_a_no_opens_it_again_one_effort_higher_at_most_three_times(conductor: Round) -> None:
+  await conductor.word("SIDE[:] = [verify_step]\ndesk_queue['a'].append(item('one'))")
+  await conductor.beat()
+  for n in range(1, 5):
+    await conductor.end([x for x in conductor.asked() if x[1] == "a"][-1][0], f"done, round {n}")
+    await conductor.beat()
+    judges = [x for x in conductor.asked() if x[1].startswith("verify")]
+    assert (len(judges), judges[-1][1]) == (n, "verify one" if n == 1 else f"verify one-r{n - 1}")
+    await conductor.end(judges[-1][0], "no: the test is missing")
+    await conductor.beat()
+  assert [(x["key"], x["model"].split("/")[-1]) for x in conductor.ns["desk_queue"]["a"]] == []
+  assert [x[2].split("/")[-1] for x in conductor.asked() if x[1] == "a"] == ["high", "xhigh", "xhigh", "xhigh"]
+  assert "a:one-r3 failed its verification 3 times." in conductor.ns["desk_notes"][-1]
+
+
+async def test_the_needs_of_an_ended_item_go_to_the_triage_whose_answer_applies_whole_or_not_at_all(conductor: Round) -> None:
+  await conductor.word("SIDE[:] = []\ndesk_width['b'] = 0\ndesk_queue['a'].append(item('one'))")
+  await conductor.beat()
+  await conductor.end(conductor.asked()[0][0], "done. Needs: b: export x\nNeeds: nowhere: no")
+  await conductor.beat()
+  assert [x["key"] for x in conductor.ns["triage_batch"]] == ["needs-one-1"]
+  ((tri, label, model, _),) = conductor.asked("tuple[list[dict[str, object]], dict[str, str]]")
+  assert (label, model) == ("triage", OPUS_M)
+  await conductor.end(tri, ([], {}))
+  await conductor.beat()
+  assert conductor.queue("b") == ["needs-one-1"]
+  assert "the triage was not applied: missing ['needs-one-1']" in conductor.ns["desk_text"]["triage_last"]
+  await conductor.word("queue_found('k2 | a | sonnet/medium | p | fix p', 'r')")
+  await conductor.beat()
+  tri = conductor.asked("tuple[list[dict[str, object]], dict[str, str]]")[-1][0]
+  await conductor.end(tri, ([{"key": "k2", "topic": "a", "class": "opus/high", "priority": 0, "brief": "hot fix p", "after": ["needs-one-1"]}], {}))
+  await conductor.beat()
+  assert conductor.ns["desk_queue"]["a"] == [{"key": "k2", "model": OPUS, "brief": "hot fix p", "after": ["needs-one-1"]}]
+  assert await conductor.value("priority(desk_queue['a'][0])") == 0
+
+
+async def test_the_deps_of_the_triage_apply_only_with_known_keys_and_no_cycle(conductor: Round) -> None:
+  await conductor.word("desk_queue['a'].extend([item('x'), item('y')])\ndesk_width['a'] = 0")
+  assert await conductor.value("deps_apply({'x': ['ghost']})") == "the deps of the triage were not applied: unknown or self keys ['x:ghost']"
+  assert await conductor.value("deps_apply({'x': ['y'], 'y': ['x']})") == "the deps of the triage were not applied: a cycle holds ['x', 'y']"
+  assert await conductor.value("deps_apply({'y': ['x']})") == "the triage set the deps: 1 items changed"
+  assert conductor.ns["desk_queue"]["a"][1]["after"] == ["x"]
+
+
+async def test_a_dead_wait_goes_to_the_triage_a_topic_that_runs_nothing_says_why_and_a_stuck_item_is_stepped(conductor: Round) -> None:
+  await conductor.word("SIDE[:] = [blanks_and_stuck]\ndesk_queue['b'].append(item('lone', after=['ghost', 'one']))\ndesk_queue['a'].append(item('one'))")
+  await conductor.beat()
+  assert conductor.ns["desk_notes"][:2] == ["Dead waits sent to the triage: b:lone waits on ghost.", "b runs nothing, with 1 queued: lone (waits on ghost, one)."]
+  ((_, label, _, ask),) = conductor.asked("dict[str, list[str]]")
+  assert label == "triage" and "b:lone waits on ghost" in ask
+  (one,) = conductor.ns["desk_live"]["a"]
+  await conductor.beat()
+  conductor.sand.now += 1300
+  await conductor.beat()
+  assert not any("made no step" in x for x in conductor.ns["desk_notes"])
+  conductor.sand.now += 1500
+  await conductor.beat()
+  await conductor.beat()
+  assert [x for x in [*conductor.ns["desk_notes"], *"\n\n".join(conductor.notes(conductor.root)).split("\n\n")] if "made no step" in x] == [f"a: {one} made no step for 47 minutes, and its last act still runs past the timeout of a commit."]
+
+
+async def test_a_chain_past_its_bound_is_regrounded_once_until_it_grows_again_then_a_model_chooses_its_reads(conductor: Round) -> None:
+  topic = await conductor.value('chain_of("a")')
   conductor.sand.cost = (600000, 0, 0, 0, 0.0)
-  conductor.sand.script[topic] = ['read("notes.md")', 'x = 2']
-  (conductor.tmp / "notes.md").write_text("one\n", encoding="utf-8")
+  conductor.sand.script[topic] = ['read("notes.md")', "x = 2"]
+  conductor.file("notes.md", "one\n")
   conductor.engine.prompt(str, "work", to=SONNET, on=topic)
   await settle()
-  await conductor.word('state["last"] = 1e12')
   await conductor.beat()
-  assert "a (" + topic + ") read 60% of its window, so it was regrounded on its reads." in conductor.notices()[-1]
+  assert f"a ({topic}) read 600k tokens, 60% of its window, so it was regrounded on its reads." in conductor.ns["desk_notes"]
   await conductor.beat()
-  assert conductor.ns["ground"]["a"].startswith("g:")
-  await conductor.word('ground["a"] = "g:an-earlier-reply"')
+  assert conductor.ns["desk_ground"]["a"].startswith("g:")
+  await conductor.word('desk_ground["a"] = "g:an-earlier-reply"')
   await conductor.beat()
-  chose = conductor.ns["ground"]["a"].removeprefix("c:")
+  chose = conductor.ns["desk_ground"]["a"].removeprefix("c:")
   assert conductor.engine.get(chose)[0] == "prompt"
   await conductor.end(chose, ([], "nothing more to keep"))
   await conductor.beat()
-  assert "still read 60% of its window after its reground, so a cheap model chose the acts to keep (0)." in conductor.notices()[-1]
+  assert f"a ({topic}) still read 60% of its window after its reground, so a cheap model chose the acts to keep (0)." in conductor.ns["desk_notes"]
+
+
+async def test_a_message_of_the_owner_is_judged_part_by_part_and_each_part_is_applied(conductor: Round) -> None:
+  await conductor.word("SIDE[:] = [words_step]\ndesk_queue['a'].append(item('one'))\ndesk_width['a'] = 0")
+  told = conductor.engine.prompt(str, "Do x and y.", on=conductor.root)
+  await conductor.beat()
+  ((judge, label, _, message),) = [x for x in conductor.asked() if x[1] == "words"]
+  assert label == "words" and message.endswith("The message:\nDo x and y.") and told in message
+  await conductor.end(judge, "covered x\namend one | y, verbatim\n- k9 | b | sonnet/medium | p | z")
+  await conductor.beat()
+  assert conductor.ns["desk_queue"]["a"][0]["brief"].endswith("a part of the ask of the owner that this item missed: y, verbatim")
+  assert [x["key"] for x in conductor.ns["triage_batch"]] == ["k9"]
+  await conductor.beat()
+  assert len([x for x in conductor.asked() if x[1] == "words"]) == 1
+
+
+async def test_reviews_come_each_hour_once_for_each_kind_and_write_the_words_of_the_owner(conductor: Round) -> None:
+  told = conductor.engine.prompt(str, "Do it.", on=conductor.root)
+  await conductor.word("desk_time['review_at'] = -1e9\ndesk_width['review'] = 0")
+  await conductor.beat()
+  assert conductor.queue("review") == ["words-audit-1", "perf-1", "review-a-1", "review-b-1"]
+  assert f"## {told}, a message of the owner\nDo it." in conductor.sand.files["scratch://converge/words-life.md"]
+  assert "## Values bound now" in conductor.sand.files["scratch://converge/desk.md"]
+  conductor.sand.now += 3600
+  await conductor.beat()
+  assert len(conductor.queue("review")) == 4
+
+
+async def test_notes_reach_the_root_at_once_when_urgent_and_else_each_hour(conductor: Round) -> None:
+  await conductor.word("desk_time['notes_at'] = clock()\ndesk_notes.append('plain')")
+  await conductor.beat()
+  assert conductor.notes(conductor.root) == []
+  await conductor.word("desk_notes.append('a P0 row')")
+  await conductor.beat()
+  assert conductor.notes(conductor.root) == ["Desk:\nplain\n\na P0 row"]
+
+
+async def test_a_new_desk_ends_the_old_one_and_the_workers_live_on(conductor: Round) -> None:
+  await conductor.word('desk_queue["b"].append(item("one"))\nfirst = desk()')
+  ((worker, *_),) = conductor.asked()
+  await conductor.word("second = desk()")
+  first, second = conductor.ns["first"], conductor.ns["second"]
+  assert conductor.engine.over(first) and not conductor.engine.over(second)
+  assert conductor.ns["desk_text"]["id"] == second and not conductor.engine.over(worker)
+  await conductor.word("close(None, second)")
+  assert conductor.engine.over(second)
 
 
 async def test_news_is_done_with_the_next_prompt_of_the_root(conductor: Round) -> None:
@@ -198,79 +375,3 @@ async def test_news_is_done_with_the_next_prompt_of_the_root(conductor: Round) -
   told = conductor.engine.prompt(str, "Next.", on=conductor.root)
   await settle()
   assert conductor.engine.peek(conductor.ns["heard"]) == told
-
-
-async def test_words_writes_each_message_of_the_owner_in_order(conductor: Round) -> None:
-  told = conductor.engine.prompt(str, "Do it.", on=conductor.root)
-  await conductor.word("words()")
-  assert f"## {told}, a message of the owner\nDo it." in conductor.sand.files["scratch://converge/words-life.md"]
-
-
-async def test_conduct_beats_until_it_is_closed(conductor: Round) -> None:
-  await conductor.word('queue("b").append(item("one"))\nheld = conduct()')
-  assert [x[3].split(".")[0] for x in conductor.asked()] == ["Item one of the topic b"]
-  assert re.fullmatch(r"conduct\d+", conductor.ns["state"]["id"])
-  await conductor.word("close(None, held)")
-  assert conductor.engine.over(conductor.ns["held"])
-
-
-async def test_a_new_conduct_ends_the_old_one_so_one_beat_starts_a_cycle_and_the_workers_live_on(conductor: Round) -> None:
-  conductor.say(r"pr list --head w/converge", [{"number": 7}])
-  conductor.say(r"pr checks 7", [{"bucket": "pending"}])
-  conductor.sand.hold = r"pr list --head"
-  await conductor.word('queue("b").append(item("one"))\nfirst = conduct()')
-  ((worker, *_),) = conductor.asked()
-  conductor.say(r"pr checks 7", [{"bucket": "fail"}])
-  await conductor.word("second = conduct()")
-  conductor.sand.release()
-  await settle()
-  ((cycle, *_),) = conductor.asked("tuple[dict[str, str], str]")
-  first, second = conductor.ns["first"], conductor.ns["second"]
-  assert conductor.engine.over(first) and not conductor.engine.over(second)
-  assert conductor.ns["state"]["id"] == second
-  assert conductor.ns["state"]["cycle"] == cycle
-  assert "fail 1" in conductor.ns["state"]["print"]
-  assert not conductor.engine.over(worker)
-
-
-async def test_a_failure_of_a_topic_whose_fix_runs_waits_for_the_next_fix_of_that_topic(conductor: Round) -> None:
-  await conductor.word('state["last"] = 1e12\nfirst = fix("a", "test x fails at h1")')
-  await conductor.word('state["cycle"] = str(prompt(tuple[dict[str, str], str], "c", to="claude-cli:opus/medium", on=chain_of("converge")))')
-  await conductor.end(conductor.ns["state"]["cycle"], ({"a": "test y fails at h2"}, "merged b"))
-  await conductor.beat()
-  assert conductor.ns["fixwait"] == {"a": "test y fails at h2"}
-  assert conductor.notices()[-1].endswith("merged b Kept for the next fix of a.")
-  await conductor.end(conductor.ns["first"], "fixed x")
-  await conductor.beat()
-  assert [x for x in conductor.asked() if x[1] != "qa"][-1][3].endswith("The brief of the aggregator:\n\ntest y fails at h2")
-  assert conductor.ns["fixwait"] == {}
-
-
-async def test_a_cycle_starts_a_floor_after_the_last_ended_and_tells_a_live_qa_run_to_wrap_up(conductor: Round) -> None:
-  conductor.say(r"pr list --head w/converge", [{"number": 7}])
-  conductor.say(r"pr checks 7", [{"bucket": "pass"}])
-  conductor.say(r"pr view 7", {"headRefOid": "h2"})
-  await conductor.word('state.update(last=-1e9, cycle_at=-1e9)')
-  await conductor.word('state["cycle"] = str(prompt(tuple[dict[str, str], str], "c", to="claude-cli:opus/medium", on=chain_of("converge")))')
-  await conductor.end(conductor.ns["state"]["cycle"], ({}, "pushed h2"))
-  await conductor.beat()
-  await conductor.beat()
-  (qa,) = [x for x in conductor.asked() if x[1] == "qa"]
-  conductor.say(r"pr checks 7", [{"bucket": "fail"}])
-  conductor.sand.now += 400
-  await conductor.beat()
-  assert len(conductor.asked("tuple[dict[str, str], str]")) == 1
-  conductor.sand.now += 600
-  await conductor.beat()
-  assert len(conductor.asked("tuple[dict[str, str], str]")) == 2
-  wraps = [x for x in said(conductor.log, "prompt") if x[3] == qa[0] and x[4] == "None"]
-  assert [str(x[5]) for x in wraps] == [conductor.ns["QA_WRAP"]]
-  await conductor.end(qa[0], "rows")
-  conductor.sand.now += 400
-  await conductor.beat()
-  assert len([x for x in conductor.asked() if x[1] == "qa"]) == 1
-  await conductor.end(conductor.ns["state"]["cycle"], ({}, "pushed h3"))
-  await conductor.beat()
-  await conductor.beat()
-  runs = [x for x in conductor.asked() if x[1] == "qa"]
-  assert [x[3].split(".")[0] for x in runs] == ["Item qa-run-1 of the topic qa", "Item qa-run-2 of the topic qa"]

@@ -31,7 +31,7 @@ async fn the_time_to_open_a_life_on_a_record() {
     directory,
     record: Some(record),
     config: Some(config.display().to_string()),
-    extensions: Some(false),
+    skills: Some(false),
     ..Opening::default()
   };
   let started = Instant::now();

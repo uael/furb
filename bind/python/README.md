@@ -45,7 +45,7 @@ The words of `opened`, each of which can be left out:
   [Models](https://github.com/uael/furb/blob/main/docs/models.md) says how a model is named.
 - `keeps` false keeps nothing in the record, and `inspecting` true opens a life that keeps nothing, enables nothing
   new, and asks no model.
-- `extensions` false enables no new extension, and `config` names the config directory of the user.
+- `skills` false enables no new skill, and `config` names the config directory of the user.
 - `answer`, a function, answers each request in place of the models, as the suite of furb does.
 - `stream`, a function, hears what a model writes as it writes it, and `retrying` each retry of a call of a model.
 - `log`, a function, hears each report of the life that no model reads, one line each, in place of the stderr of the
@@ -63,7 +63,7 @@ deletes the record.
   `levels()` the levels of effort.
 - `files(scratch, config)`, `bash(scratch)`, `time()`, `extensions(given)` and `skills(config)`
   give the ears one by one, as the suite of each extension boots them. `store(path)` gives the record that a path
-  holds and the ear of its store, and `official()` gives the official extensions, which `extensions` takes. The files
+  holds and the ear of its store, and `official()` gives the official skills, which `played` takes. The files
   and the commands share the scratch directory that the host names, which a word reads as `scratch://` and a command
   as `$TMPDIR`.
 - `answered(shape, line)` reads a line of the operator as a value of one of the `shapes()`, by the rules that every

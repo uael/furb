@@ -27,7 +27,6 @@ from conftest import (
   relived,
   said,
   settle,
-  sown,
   world_says,
 )
 from furb import engine
@@ -577,15 +576,34 @@ async def test_a_command_accepts_the_codes_that_its_ok_names_and_every_code_when
   assert [a[7] for a in said(log, "bash")] == [(0, 1), True, (0,)]
 
 
-async def test_bash_refuses_an_ok_that_is_a_callable_since_no_later_life_makes_it_again_as_it_was() -> None:
-  """bash refuses an ok that is a callable, since no later life makes it again as it was."""
-  _, log, root = born("try:\n  bash('one', ok=lambda e: True)\nexcept Refused as no:\n  close(str(no))", auto=False)
-  assert await engine.prompt(str, "run it", on=root) == "no callable ok"
+async def test_bash_refuses_an_ok_or_a_show_that_is_a_callable_since_no_later_life_makes_it_again_as_it_was_so_a_later_life_tells_each_command_as_its_life_told_it() -> (
+  None
+):
+  """bash refuses an ok or a show that is a callable, since no later life makes it again as it was, so a later life tells each command as its life told it."""
+  word = (
+    "got = []\n"
+    + "".join(
+      f"try:\n  bash('one', {one}=lambda lines: [1])\nexcept Refused as no:\n  got.append(str(no))\n"
+      for one in ("ok", "show", "show_err")
+    )
+    + "close(got)"
+  )
+  _, log, root = born(word, auto=False)
+  assert await engine.prompt(list, "run it", on=root) == ["no callable"] * 3
   assert said(log, "bash") == []
-  [chain] = engine.gathered(lambda one: one, {})["chains"]
-  life(sown(), engine.seed(engine.gathered(lambda one: one, {})))
-  await settle()
-  assert chain["turns"] and engine.transcript(root, "bash") == []
+  sand, _, root = born(auto=False)
+  for show, show_err in ((span(1, 1), grep("e")), (span(2, 2), None)):
+    ran = engine.bash("two lines", show=show, show_err=show_err, on=root)
+    await settle()
+    sand.writes(ran, "one\ntwo\n", "stdout")
+    sand.writes(ran, "err\n", "stderr")
+    sand.exits(ran, 0)
+    await ran
+  told = [one for one in paragraphs(engine.turns(on=root)) if one.startswith("#bash")]
+  assert len(told) == 4, told
+  before = engine.turns(on=root)
+  await relived(Sand(), plain(sand.record))
+  assert engine.turns(on=root) == before
 
 
 async def test_what_an_accepts_raises_the_word_that_awaits_the_command_raises_and_every_other_word_goes_on() -> None:

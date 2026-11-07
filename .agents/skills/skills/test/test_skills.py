@@ -89,7 +89,7 @@ async def test_a_name_that_an_earlier_folder_holds_wins(tmp_path: Path) -> None:
   assert await lines(tmp_path) == index("all: Every drink.", "brew: Make tea.")
 
 
-async def test_a_chain_that_finds_no_skill_in_a_folder_reads_a_list_of_the_official_extensions(tmp_path: Path) -> None:
+async def test_a_chain_that_finds_no_skill_in_a_folder_reads_a_list_of_the_official_skills(tmp_path: Path) -> None:
   """A chain that finds no skill in a folder reads a list of the official extensions."""
   assert await lines(tmp_path) == index()
 

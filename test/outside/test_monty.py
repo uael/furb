@@ -390,7 +390,7 @@ async def test_an_engine_and_an_ear_that_the_collector_of_cycles_drops_on_anothe
 
 async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> None:
   """A life opens on its record and on the ears of the crate, in the order every host boots them after its own, and
-  enables at its tip what the configs turn on; a life that turns the extensions off enables nothing new."""
+  enables at its tip what the configs turn on; a life that turns the skills off enables nothing new."""
   path, config = str(tmp_path / "record.jsonl"), str(tmp_path / "config")
   record, ears = _monty.opened(directory=str(tmp_path), record=path, config=config)
   assert (record, [name for name, _ in ears]) == (
@@ -409,7 +409,7 @@ async def test_the_door_opens_a_life_as_every_host_opens_one(tmp_path: Path) -> 
   for _, one in ears:
     one.dispose()
   fresh = str(tmp_path / "fresh.jsonl")
-  record, ears = _monty.opened(directory=str(tmp_path), record=fresh, config=config, keeps=False, extensions=False)
+  record, ears = _monty.opened(directory=str(tmp_path), record=fresh, config=config, keeps=False, skills=False)
   assert (record, [name for name, _ in ears]) == (
     [],
     ["provider", "extensions", "skills", "mcp", "fetch", "files", "bash", "time"],
