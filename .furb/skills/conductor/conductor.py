@@ -246,19 +246,22 @@ def holds() -> dict[str, str]:
       for x in desk_queue[t]:
         if kind(str(x["model"])) == k:
           wait = [a for a in afters_of(x) if a not in done]
-          busy = "fixes its CI" if desk_fixing.get(t) else f"runs {len(desk_live[t])} of its width {desk_width.get(t, 0)}"
+          busy = "fixes its CI" if desk_fixing.get(t) else "is at its width"
           why.append(f"{x['key']} waits on {', '.join(wait)}" if wait else f"{x['key']}: {t} {busy}")
     if why:
-      out[k] = f"{room - used.get(k, 0)} free: " + "; ".join(why)
+      out[k] = "; ".join(why)
   return out
 
 
 def idle_step() -> list[str]:
   """Each seat that stays free has its cause on the record, told once for each change."""
-  if (now := repr(holds())) == desk_text.get("holds", ""):
+  held = holds()
+  text = "Free seats and their causes: " + " | ".join(f"{k}: {why}" for k, why in held.items()) if held else ""
+  if text == desk_text.get("holds", ""):
     return []
-  desk_text["holds"] = now
-  return ["Free seats and their causes: " + "; ".join(f"{k} {why}" for k, why in holds().items())] if holds() else []
+  desk_text["holds"] = text
+  desk_notes[:] = [n for n in desk_notes if not n.startswith("Free seats")]
+  return [text] if text else []
 
 
 def admit() -> None:
@@ -856,7 +859,10 @@ def apply_cover(out: str, src: str) -> tuple[int, list[str], list[str], list[str
       covered += 1
     elif s.startswith("amend "):
       k, _, txt = s[6:].partition("|")
-      (amended if txt.strip() and amend_item(k.strip(), txt.strip(), src) else missed).append(k.strip() if txt.strip() else s[:200])
+      if txt.strip() and amend_item(k.strip(), txt.strip(), src):
+        amended.append(k.strip())
+      else:
+        missed.append(s[:300])
     elif s.count("|") >= 4:
       rows.append(s)
   return covered, amended, queue_found("\n".join(rows), src), missed
