@@ -278,14 +278,7 @@ jobs:
         with:
           bun-version: "1.4.2"
       - run: bun install --frozen-lockfile
-      # The window reads a record through the crate, which folds each fact of it, so the first frame of the long life
-      # of the bench runs the code of the crate some hundred thousand times: a build with no optimization of the crate
-      # took about 10 s for it, against about 3 s for the same build optimized, and a user runs the crate optimized.
-      # The profile optimizes the crates of the workspace alone, since it optimizes each dependency already, so the
-      # cache of the dependencies holds, and the variable stands on this step alone, out of the key of that cache.
       - run: bun run build
-        env:
-          CARGO_PROFILE_DEV_OPT_LEVEL: "2"
       # The measures of the run stay as an artifact, so an audit reads the exact numbers of each run and not the rounded
       # lines of its log, and a run that goes over a budget keeps them too.
       - env:
