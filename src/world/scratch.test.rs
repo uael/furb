@@ -237,3 +237,37 @@ fn a_reap_removes_the_scratch_of_a_record_past_its_days_that_no_life_holds_and_a
   drop((life, again));
   fs::remove_dir_all(&at).unwrap();
 }
+
+#[test]
+fn a_reap_keeps_a_directory_whose_file_changed_within_the_days_and_goes_on_past_one_that_will_not_go()
+ {
+  let at = place("reap-kept");
+  let root = at.join("scratch");
+  let named = |one: char| root.join(one.to_string().repeat(16));
+  let (written, stuck, free) = (named('a'), named('b'), named('c'));
+  let record = [wrote("write1", "notes.md", "kept")];
+  for one in [&written, &stuck, &free] {
+    Scratch::at(one).unwrap().remade(&record, &quiet);
+  }
+  let later = SystemTime::now() + Duration::from_hours(24 * 8);
+  fs::create_dir_all(written.join("deep/down")).unwrap();
+  let file = fs::File::create(written.join("deep/down/log")).unwrap();
+  file.set_modified(later).unwrap();
+  #[cfg(unix)]
+  {
+    use std::os::unix::fs::PermissionsExt;
+    fs::create_dir_all(stuck.join("locked")).unwrap();
+    fs::write(stuck.join("locked/file"), "").unwrap();
+    fs::set_permissions(stuck.join("locked"), fs::Permissions::from_mode(0o555)).unwrap();
+  }
+  let gone = reaped(&root, Duration::from_hours(24 * 7), later);
+  assert_eq!(gone, slice::from_ref(&free), "a change at any depth keeps a directory");
+  assert!(written.join("deep/down/log").is_file());
+  #[cfg(unix)]
+  {
+    use std::os::unix::fs::PermissionsExt;
+    assert!(stuck.join("locked/file").is_file(), "a directory that will not go stays");
+    fs::set_permissions(stuck.join("locked"), fs::Permissions::from_mode(0o755)).unwrap();
+  }
+  fs::remove_dir_all(&at).unwrap();
+}

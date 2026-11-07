@@ -172,7 +172,10 @@ fn own() -> Vec<Named> {
       Kind::Integer,
       json!(scratch::DAYS),
       "The days with no use after which the scratch directory of a record that no life holds is \
-       removed. A reopen of the record makes it again from the writes that the record holds.",
+       removed: no change of any file in it, at any depth, for that many days. A directory that \
+       the system refuses to remove, as one with an open file, stays. A reopen of the record \
+       makes it again from the writes that the record holds; the files that commands made in it \
+       are lost.",
     ),
     one(KEY_CLASSES, Kind::Object, json!({}), "The class, cheap or dear, of each model it names."),
     one(PROVIDERS, Kind::Object, json!({}), "The providers of models, each by its name."),
