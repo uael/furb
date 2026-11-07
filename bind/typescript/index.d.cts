@@ -192,6 +192,12 @@ export declare class Meaning {
    */
   hear(fact: unknown[], covered?: string[], born?: unknown[] | null): Array<import("./dist/protocol.js").Act>
   /**
+   * A fact of a record, as the JSON of its line, which the meaning folds as [`Meaning::hear`]
+   * does with neither `covered` nor `born`, and gives back nothing: a window that reads a record
+   * asks the meaning later for what it draws, so no act crosses the door again for each fact.
+   */
+  told(line: string): void
+  /**
    * The live acts whose pause a pause would change, or a wake: each that no pause holds, or each
    * that one holds.
    */

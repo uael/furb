@@ -848,6 +848,21 @@ impl Meaning {
     meant(&acts)
   }
 
+  /// A fact of a record, as the JSON of its line, which the meaning folds as [`Meaning::hear`]
+  /// does with neither `covered` nor `born`, and gives back nothing: a window that reads a record
+  /// asks the meaning later for what it draws, so no act crosses the door again for each fact.
+  #[cfg_attr(feature = "typescript", napi)]
+  pub fn told(&mut self, line: String) -> Result<(), Fault> {
+    // A line of a record is plain JSON, which serde reads as the sandbox would give it out, but for
+    // the last digit of a float, so the fact takes no pass through the values of the sandbox.
+    let fact: serde_json::Value = serde_json::from_str(&line)
+      .map_err(|no| Fault::refused(format!("the line is no JSON: {no}")))?;
+    for act in &self.fold.recorded(&fact) {
+      self.held.heard(act);
+    }
+    Ok(())
+  }
+
   /// The live acts whose pause a pause would change, or a wake: each that no pause holds, or each
   /// that one holds.
   #[cfg_attr(feature = "typescript", napi)]
