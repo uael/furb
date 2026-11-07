@@ -38,6 +38,7 @@ use std::{
 
 use futures::future::BoxFuture;
 use serde_json::Value;
+use tokio::task::JoinError;
 
 use self::search::Searches;
 pub(crate) use self::{
@@ -162,7 +163,19 @@ pub type Advertised = (String, String, String, bool);
 /// settings give them.
 type Settings = (Vec<Model>, Option<String>, Thinking);
 
-type Refresh = Arc<dyn Fn() -> BoxFuture<'static, Result<Settings, String>> + Send + Sync>;
+type Refresh = Arc<dyn Fn() -> BoxFuture<'static, Result<Settings, Unrefreshed>> + Send + Sync>;
+
+/// Why a refresh read no settings: the configs refused them, the roster names a model that the
+/// catalog does not hold, or its task ended before it read them.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum Unrefreshed {
+  #[error(transparent)]
+  Settings(#[from] catalog::Error),
+  #[error(transparent)]
+  Roster(#[from] catalog::Unknown),
+  #[error(transparent)]
+  Lost(#[from] JoinError),
+}
 
 impl Provider {
   /// A provider of these models, on a directory, whose model thinks

@@ -31,12 +31,6 @@ pub enum Cut {
   Lost(String),
 }
 
-impl From<Cut> for String {
-  fn from(cut: Cut) -> Self {
-    cut.to_string()
-  }
-}
-
 /// Why a search gives no answer.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
