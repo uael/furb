@@ -630,6 +630,13 @@ export interface ProviderInfo {
 }
 
 /**
+ * Each quote of a word, in order: of a word that ran, each that closes, and of a word that a model
+ * still writes, `open`, the last one too while its close mark has not come. Each window reads the
+ * quotes of a word here, as the fold reads them.
+ */
+export declare function quotes(text: string, open?: boolean | undefined | null): Array<{ start: number; name: string; body: string; end: number; closed: boolean; binding: string }>
+
+/**
  * Acts each in the state that the crate gives it, and each chain in the state that the acts that
  * stand in it give, as a daemon tells them: what a window that makes acts of its own, as a test
  * does, reads in place of a state of its own.
@@ -724,3 +731,10 @@ export declare function walkedFiles(root: string): Array<string>
 
 /** WINDOW is the window, in tokens, of a model whose roster entry does not say one. */
 export declare const WINDOW: number
+
+/**
+ * What a model writes while its word has not come yet, from the text of its word that came and
+ * the text that it thinks: the lines of the word that it finished, the line that it still writes,
+ * the line of the word where each line starts, and the count of the lines of the word.
+ */
+export declare function writing(text: string, thinking: string): { lines: string; tail: string; numbers: number[]; count: number }
