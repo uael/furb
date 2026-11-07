@@ -184,6 +184,39 @@ async def test_a_birth_tells_no_turn_of_its_own_and_each_act_that_a_life_word_ma
     assert (engine.turns(on="chain1"), [engine.get(a[2])[4] for a in held]) == (before, ["held()"])
 
 
+TICKED = [["ticked", "/w/ticked.py", "ticked()", False], ["tocked", "/w/ticked.py", "tocked()", False]]
+"""The extensions of a standing whose two life words each ask an act that no ear takes, as a life that inspects a
+record hears the clock and the files silent, and then make an act that lives until a control ends it: a birth makes
+the first again while the journal still owes the rung of the second."""
+
+
+TICKED_FILES = {
+  **HELD_FILES,
+  "/w/ticked.py": "def tick(on=''):\n  return act('tick', on, None)\ndef ticked(on='', kind='ticked'):\n  tick(on=on)\n  def ear(id):\n    yield 'started', id\n    while True:\n      yield {id}\n  return act(kind, on, controlled(ear))\ndef tocked(on=''):\n  return ticked(on, 'tocked')\n",
+}
+"""The files of a World that gives TICKED: the doctrine and the file that defines tick and ticked."""
+
+
+async def test_a_birth_makes_again_a_life_word_that_asks_an_act_that_no_ear_takes_and_the_journal_reads_no_drift() -> (
+  None
+):
+  """A birth makes again a life word that asks an act that no question of the record matches and that no ear takes, as the clock of a life that inspects its record: that act ends as it did in the life before, and the journal reads no drift, because the record holds no fact of it."""
+  stands = [*STANDS, "/w/DOCTRINE.md", TICKED]
+  born(stands=stands, files=TICKED_FILES)
+  await settle()
+  before = engine.turns(on="chain1")
+
+  def ends() -> list[str]:
+    return [repr(engine.peek(a[1], None)) for a in engine.transcript("chain1") if a[0] == "tick"]
+
+  assert ends() == ["Refused('nothing takes tick')"] * 2
+  for _ in (1, 2):
+    life(sown(stands=stands, files=TICKED_FILES), engine.seed(engine.gathered(defined, {})))
+    await settle()
+    assert engine.turns(on="chain1") == before
+    assert ends()[-2:] == ["Refused('nothing takes tick')"] * 2, ends()
+
+
 DEEP = [["deep", "/w/deep.py", "deep()", False], ["pinged", "/w/pinged.py", "pinged()", False]]
 """The extensions of a standing whose life words make an act that ends at once: deep() leaves an act of its own open,
 as compacted leaves the prompt of its chooser, and pinged() keeps a lasting ear that hears each ping, as mcp_index
