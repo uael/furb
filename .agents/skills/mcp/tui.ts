@@ -269,14 +269,20 @@ async function act(seen: Seen, one: Server, key: string): Promise<void> {
  * action first, as enable or approve. */
 const down = actions[0].when.filter((state) => state !== "connected") as readonly string[];
 
-/** Reconnects each server of the last `mcp_servers` that is down, in one word that awaits them all, and says the state
- * of each after. */
-async function reconnectAll(seen: Seen, selected = ""): Promise<void> {
+/** Reconnects each server of the last `mcp_servers` that is down, or with `reload` each server that reconnect serves,
+ * the connected ones too, so a changed tool is listed again. It does so in one word that awaits them all, and says the
+ * state of each after. */
+async function reconnectAll(seen: Seen, selected = "", reload = false): Promise<void> {
+  const serves: readonly string[] = reload ? actions[0].when : down;
   const names = servers(seen)
-    .filter((one) => down.includes(one.state ?? ""))
+    .filter((one) => serves.includes(one.state ?? ""))
     .map((one) => one.name);
   if (!names.length) {
-    seen.say("MCP: each server is connected, or needs enable or approve first.");
+    seen.say(
+      reload
+        ? "MCP: no server to reload; each one needs enable or approve first."
+        : "MCP: each server is connected, or needs enable or approve first.",
+    );
     return dialog(seen, selected);
   }
   seen.say(`MCP: reconnect ${names.join(", ")}…`);
@@ -525,8 +531,12 @@ function cut(text: string, most: number, tone: Tone): Line[] {
  * connected server, and the resources of the servers after `@` in the input. It reads the servers from the acts that
  * the record holds, and acts through words that the record keeps. */
 export default function mcp(furb: Furb): void {
-  furb.command("mcp", "Manage the MCP servers: state, tools, resources, prompts, login", (argument, seen) =>
-    argument.trim() === "reconnect all" ? reconnectAll(seen) : dialog(seen),
+  furb.command("mcp", "Manage the MCP servers: state, tools, resources, prompts, login; /mcp reload connects each again", (argument, seen) =>
+    argument.trim() === "reconnect all"
+      ? reconnectAll(seen)
+      : argument.trim() === "reload"
+        ? reconnectAll(seen, "", true)
+        : dialog(seen),
   );
   furb.status((seen) => {
     const all = servers(seen);
