@@ -302,7 +302,9 @@ async function reconnectAll(seen: Seen, selected = "", reload = false): Promise<
       seen.say(`MCP: ${name} is ${one?.state ?? "done"}${one?.error ? `: ${gist(one.error)}` : ""}.`);
     }
   } catch (error) {
-    seen.say(`MCP: ${reload ? "reload" : "reconnect all"} failed: ${gist(error instanceof Error ? error.message : error, 300)}`);
+    seen.say(
+      `MCP: ${reload ? "reload" : "reconnect all"} failed: ${gist(error instanceof Error ? error.message : error, 300)}`,
+    );
   }
   return dialog(seen, selected);
 }
@@ -531,12 +533,15 @@ function cut(text: string, most: number, tone: Tone): Line[] {
  * connected server, and the resources of the servers after `@` in the input. It reads the servers from the acts that
  * the record holds, and acts through words that the record keeps. */
 export default function mcp(furb: Furb): void {
-  furb.command("mcp", "Manage the MCP servers: state, tools, resources, prompts, login; /mcp reload connects each again", (argument, seen) =>
-    argument.trim() === "reconnect all"
-      ? reconnectAll(seen)
-      : argument.trim() === "reload"
-        ? reconnectAll(seen, "", true)
-        : dialog(seen),
+  furb.command(
+    "mcp",
+    "Manage the MCP servers: state, tools, resources, prompts, login; /mcp reload connects each again",
+    (argument, seen) =>
+      argument.trim() === "reconnect all"
+        ? reconnectAll(seen)
+        : argument.trim() === "reload"
+          ? reconnectAll(seen, "", true)
+          : dialog(seen),
   );
   furb.status((seen) => {
     const all = servers(seen);
