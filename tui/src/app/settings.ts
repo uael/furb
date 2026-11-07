@@ -1,7 +1,7 @@
 import { getTreeSitterClient, type Renderable, type RGBA } from "@opentui/core";
 import { gist } from "furb/life";
 import type { Layer } from "furb/protocol";
-import { type Setting, shown, typed } from "../configs.ts";
+import { rowsOf, type Setting, shown, typed } from "../configs.ts";
 import { openFile } from "../editor.ts";
 import { shortenHomes } from "../files.ts";
 import { clip, modelName } from "../format.ts";
@@ -166,12 +166,6 @@ export const settings = part({
             [`${name.padEnd(9)}`, c.faint],
             [value, c.text],
           ];
-          const kind = property
-            ? [
-                property.type,
-                ...(property.enum ? [`one of ${property.enum.map(shown).join(", ")}`] : []),
-              ].join(" · ")
-            : "";
           return {
             label: property || one.key[0] !== group ? name : `  ${one.key[1]}`,
             detail: [shown(one.value), from].filter(Boolean).join("  ·  "),
@@ -181,9 +175,7 @@ export const settings = part({
             ...(property?.description ? { command: property.description } : {}),
             lines: [
               ...(property?.description ? [[[property.description, c.muted] as Part]] : []),
-              ...(kind ? [line("type", kind)] : []),
-              ...(property ? [line("default", shown(property.default))] : []),
-              line("from", from || "an object of furb"),
+              ...rowsOf(one, from).map(([name, value]) => line(name, value)),
             ],
             run: () => this.editConfig(one),
           };

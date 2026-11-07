@@ -22,10 +22,10 @@ test("/config finds a key, edits it in place and writes it to the config chosen"
       "the settings by part",
     );
     await screen.mockInput.typeText(name);
-    // The key under the pointer shows its description, its type, its default and where its value comes from.
+    // The key under the pointer shows its description, its type, its default and the layer that gives its value.
     await window.shows(
       (frame) =>
-        frame.includes("default") && frame.includes("from") && frame.includes(String(first.property?.type)),
+        frame.includes("default") && frame.includes("layer") && frame.includes(String(first.property?.type)),
       `the key ${name} with its type, its default and where it comes from`,
     );
     screen.mockInput.pressEnter();

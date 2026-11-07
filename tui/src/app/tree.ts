@@ -317,7 +317,12 @@ export const tree = part({
       if (tag) line.add(this.line(tag, active ? c.muted : c.faint));
       this.scroll.add(line);
     }
-    this.scrollAfterLayout({ card: `tree-${tree.selected}` });
+    // A pointer in the first rows of a list that fits the view leaves the root in view, where a scroll to the pointer
+    // alone hid the root and the first rows hung from a joint that joined nothing.
+    const at = tree.rows.findIndex((row) => row.id === tree.selected);
+    this.scrollAfterLayout(
+      at >= 0 && at < Math.max(1, this.scroll.viewport.height - 1) ? 0 : { card: `tree-${tree.selected}` },
+    );
   },
 
   /** Parts cut to a width at their end, with the mark of a cut. */
