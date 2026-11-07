@@ -55,12 +55,32 @@ export function realConfigs(
   );
 }
 
-/** A function that gives the files of the folders that changed since the last call, or since the start. */
-export function watch(folders: string[]): () => string[] {
+/** The paths that this process saved through saveFile since the guard last looked. The preload gives the tests a
+ * saveFile that records here. So the guard can tell a write of the run from a write of another process. */
+export const saved = new Set<string>();
+
+/** The saveFile that notes each path that it saves in `saved`, and saves it as `save` does. */
+export function recording(save: (path: string, text: string) => void): (path: string, text: string) => void {
+  return (path, text) => {
+    saved.add(resolve(path));
+    save(path, text);
+  };
+}
+
+/** A function that gives the files of the folders that the run wrote since the last call, or since the start. A file
+ * that appeared or went is a write of the run. A file that changed is a write of the run only if the run saved it
+ * through saveFile. Other processes write files in these folders while the tests run. */
+export function watch(folders: string[], saves: Set<string> = saved): () => string[] {
   let before = folders.map(snapshot);
   return () => {
     const after = folders.map(snapshot);
-    const found = after.flatMap((now, at) => changed(before[at] ?? new Map(), now));
+    const found = after.flatMap((now, at) => {
+      const was = before[at] ?? new Map();
+      return changed(was, now).filter(
+        (path) => !(was.has(path) && now.has(path)) || saves.has(resolve(path)),
+      );
+    });
+    saves.clear();
     before = after;
     return found;
   };

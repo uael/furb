@@ -1,12 +1,12 @@
 // A plain `bun test` loads this file through bunfig.toml. It gives the tests the folders of the runner, but it cannot
 // hide the claude command line, since the native part reads the PATH that the process started with. So it says so.
-import { afterAll, afterEach, beforeEach, setDefaultTimeout } from "bun:test";
+import { afterAll, afterEach, beforeEach, mock, setDefaultTimeout } from "bun:test";
 import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
-import { configDirectory } from "furb";
+import * as furb from "furb";
 import { environment } from "./environment.ts";
-import { realConfigs, watch } from "./guard.ts";
+import { realConfigs, recording, watch } from "./guard.ts";
 
 const program = process.platform === "win32" ? "claude.exe" : "claude";
 const found = (process.env.PATH ?? "")
@@ -40,11 +40,14 @@ Object.assign(process.env, {
 // the process started with, so a plain `bun test` gives it the folder of the tests nowhere, and a test that builds
 // Preferences with no path then writes the file of the user. A test that changes a file there fails with its name.
 const tests = resolve(environment().FURB_CONFIG_DIR ?? "");
-const native = configDirectory();
+const native = furb.configDirectory();
 if (resolve(native) !== tests)
   console.error(
     `The native part reads ${native}, not ${tests}: a plain bun test cannot give it that folder, so give each test that builds Preferences or Workspaces a config directory of its own, or run \`bun run test <filter>\`.`,
   );
+// The guard blames a file that changed only if this run saved it. Other processes write the same folder while the
+// tests run. So each save of the run is noted as it goes.
+mock.module("furb", () => ({ ...furb, saveFile: recording(furb.saveFile) }));
 const written = watch(realConfigs(tests, native));
 let before = new Set<string>();
 beforeEach(() => {

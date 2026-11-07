@@ -26,6 +26,9 @@ CODE = ("a", "b")
 FINGER = "cat finger.txt 2>/dev/null; true"
 CI_PROBE = "cat ci.txt 2>/dev/null; true"
 DF = "cat df.txt 2>/dev/null; true"
+MEM = "cat mem.txt 2>/dev/null; true"
+SHOTS = "cat shots.txt 2>/dev/null; true"
+GH_POLL = "cat gh.txt 2>/dev/null; true"
 desk_time.update(review_at=1e12, ci_at=1e12, disk_at=1e12)
 SIDE = []
 
@@ -125,20 +128,17 @@ async def test_a_medium_item_takes_a_medium_seat_and_moves_up_only_when_none_is_
   assert conductor.queue("a") == ["h1", "m3"]
 
 
-async def test_items_past_a_room_that_shrank_pause_with_no_cancel_and_resume_when_a_seat_frees(conductor: Round) -> None:
-  await conductor.word('desk_queue["a"].extend([item("one"), item("two")])')
+async def test_items_past_a_room_that_shrank_pause_newest_first_and_resume_when_a_seat_frees_unless_the_operator_paused_them(conductor: Round) -> None:
+  await conductor.word('desk_width["a"] = 3\ndesk_queue["a"].extend([item("one"), item("two"), item("three")])')
   await conductor.beat()
-  first, second = [x[0] for x in conductor.asked()]
-  await conductor.word('ROOM_CAP["sonnet/high"] = 1\ndesk_queue["b"].append(item("three"))')
+  one, two, three = [x[0] for x in conductor.asked()]
+  await conductor.word('ROOM_CAP["sonnet/high"] = 1\ndesk_queue["b"].append(item("four"))')
   await conductor.beat()
-  assert (conductor.engine.paused(first), conductor.engine.paused(second)) == (False, True)
-  assert conductor.keys() == ["one", "two"]
-  await conductor.end(first, "done")
+  assert [conductor.engine.paused(x) for x in (one, two, three)] == [False, True, True]
+  await conductor.word(f"pause({three!r})")
+  await conductor.end(one, "done")
   await conductor.beat()
-  assert not conductor.engine.paused(second) and not conductor.engine.over(second)
-  assert conductor.keys() == ["one", "two"]
-  await conductor.end(second, "done")
-  await conductor.beat()
+  assert (conductor.engine.paused(two), conductor.engine.over(two), conductor.engine.paused(three)) == (False, False, True)
   assert conductor.keys() == ["one", "two", "three"]
 
 
@@ -188,14 +188,17 @@ async def test_a_cycle_starts_on_a_new_print_a_floor_after_the_start_of_the_last
 
 
 async def test_each_new_head_counts_one_merge_and_each_fourth_queues_one_audit_of_alignment_by_turns_across_a_restart(conductor: Round) -> None:
+  await conductor.word("desk_time.clear()\ndesk_time['align_mark'] = 23.0")
+  await conductor.load(TEST)
   for n in range(5):
     await conductor.word(f"merges_step('head h{n}')\nmerges_step('head h{n}')")
-  assert [(x["key"], x["model"]) for x in conductor.ns["desk_queue"]["review"]] == [("align-audit-m4", "codex:gpt-6-astra/high")]
-  await conductor.load(TEST)
-  await conductor.word("desk_queue['review'].clear()")
-  for n in range(5, 9):
+  assert [(x["key"], x["model"]) for x in conductor.ns["desk_queue"]["review"]] == [("align-audit-m27", "codex:gpt-6-astra/high")]
+  for n in range(5, 13):
     await conductor.word(f"merges_step('head h{n}')")
-  assert [(x["key"], x["model"]) for x in conductor.ns["desk_queue"]["review"]] == [("align-audit-m8", OPUS)]
+  assert len(conductor.ns["desk_queue"]["review"]) == 1
+  await conductor.load(TEST)
+  await conductor.word("desk_queue['review'].clear()\nmerges_step('head h13')")
+  assert [(x["key"], x["model"]) for x in conductor.ns["desk_queue"]["review"]] == [("align-audit-m36", OPUS)]
 
 
 async def test_each_cycle_that_ends_starts_one_qa_run_when_no_cycle_runs_and_a_new_cycle_tells_it_to_wrap_up(conductor: Round) -> None:
@@ -234,13 +237,14 @@ async def test_a_failed_run_of_the_gates_is_routed_once_to_its_topics_and_a_gree
 
 async def test_under_the_floor_of_the_disk_tidy_frees_the_oldest_ended_worktree_first_once(conductor: Round) -> None:
   conductor.file("df.txt", f"/dev/disk 1 1 {50 * 1048576} 99% /\n")
-  await conductor.word("desk_time['disk_at'] = -1e9")
+  await conductor.word("desk_queue['a'].append(item('one'))\ndesk_time['disk_at'] = -1e9")
   await conductor.beat()
   await conductor.word("desk_time['disk_at'] = -1e9")
   await conductor.beat()
-  ((_, label, model, message),) = conductor.asked()
+  ((_, label, model, message),) = [x for x in conductor.asked() if x[1] == "tidy"]
   assert (label, model) == ("tidy", SONNET_M)
   assert "50 GB free, under the floor of 60 GB. Free the target of the oldest ended worktree first" in message
+  assert message.endswith("The topics that build now, whose worktrees you keep: a.")
 
 
 async def test_an_ended_item_is_judged_and_a_no_opens_it_again_one_effort_higher_at_most_three_times(conductor: Round) -> None:
@@ -340,14 +344,15 @@ async def test_a_message_of_the_owner_is_judged_part_by_part_and_each_part_is_ap
 
 async def test_reviews_come_each_hour_once_for_each_kind_and_write_the_words_of_the_owner(conductor: Round) -> None:
   told = conductor.engine.prompt(str, "Do it.", on=conductor.root)
-  await conductor.word("desk_time['review_at'] = -1e9\ndesk_width['review'] = 0")
+  await conductor.word("desk_time['review_at'] = -1e9")
   await conductor.beat()
-  assert conductor.queue("review") == ["words-audit-1", "perf-1", "review-a-1", "review-b-1"]
+  assert [x[2] for x in conductor.asked() if x[1] == "review"] == ["codex:gpt-6-astra/high"] * 2
+  assert conductor.queue("review") == ["review-a-1", "review-b-1"]
   assert f"## {told}, a message of the owner\nDo it." in conductor.sand.files["scratch://converge/words-life.md"]
   assert "## Values bound now" in conductor.sand.files["scratch://converge/desk.md"]
   conductor.sand.now += 3600
   await conductor.beat()
-  assert len(conductor.queue("review")) == 4
+  assert len(conductor.queue("review")) == 2
 
 
 async def test_notes_reach_the_root_at_once_when_urgent_and_else_each_hour(conductor: Round) -> None:
@@ -375,3 +380,28 @@ async def test_news_is_done_with_the_next_prompt_of_the_root(conductor: Round) -
   told = conductor.engine.prompt(str, "Next.", on=conductor.root)
   await settle()
   assert conductor.engine.peek(conductor.ns["heard"]) == told
+
+
+async def test_the_lanes_of_memory_captures_and_github_read_their_command_and_tell_what_needs_the_lead(conductor: Round) -> None:
+  conductor.file("mem.txt", "System-wide memory free percentage: 9%\n")
+  conductor.file("shots.txt", "push failed\n")
+  conductor.file("gh.txt", "now\t2026-11-07T01:00:00Z\ncomment\t42\thttps://github.com/uael/furb/pull/1#c42\tPlease look.\ncomment\t43\thttps://x/43\t\U0001f916 mine\n")
+  await conductor.word("SIDE[:] = [mem_step, shots_step, gh_step]\ndesk_time.update(mem_at=-1e9, shots_at=-1e9, gh_at=-1e9)")
+  await conductor.beat()
+  await conductor.beat()
+  assert "The memory runs low: memory 9% free" in "\n".join(conductor.notes(conductor.root))
+  assert conductor.ns["desk_text"]["gh_since"] == "2026-11-07T01:00:00Z"
+  (said_,) = [x for x in conductor.notes(conductor.root) if x.startswith("The owner wrote on GitHub")]
+  assert said_.startswith("The owner wrote on GitHub, comment https://github.com/uael/furb/pull/1#c42: Please look.")
+
+
+async def test_the_proof_lane_runs_one_batch_at_a_time_on_its_chain(conductor: Round) -> None:
+  await conductor.word("SIDE[:] = [proof_step]\ndesk_width['review'] = 0")
+  await conductor.beat()
+  await conductor.beat()
+  ((first, label, model, _),) = conductor.asked()
+  assert (label, model) == ("proof", OPUS_M)
+  await conductor.end(first, "proved 2 of 5 at abc")
+  await conductor.beat()
+  assert len(conductor.asked()) == 2
+  assert conductor.ns["desk_notes"][-1].startswith(f"The proof lane ended {first}: proved 2 of 5 at abc. It started proof-2")
