@@ -622,6 +622,36 @@ fn the_ear_tells_the_root_once_why_each_skill_that_does_not_play_does_not_play()
 }
 
 #[test]
+fn a_life_that_opens_again_on_its_record_replays_the_note_of_the_former_key_and_tells_it_no_more() {
+  let yard = place("retold");
+  let at: &Path = &yard;
+  let why = ["The key extensions of config.json is now skills, so it turns nothing on".to_owned()];
+  let opened = || {
+    let (record, store) = world::store(at.join("record.jsonl")).unwrap();
+    let ears = [
+      ("extensions", telling(vec![], why.to_vec(), places(at))),
+      ("stand", standing(at.to_owned())),
+      ("files", world::files(world::Scratch::own(), at.join("user"), None)),
+      ("store", store),
+    ];
+    let mut engine = Engine::boot(record, ears).unwrap();
+    assert!(engine.raised().is_none(), "{:?}", engine.raised());
+    engine.stand(verbs::Stand { on: Some("chain1".to_owned()) }).unwrap();
+    let on = verbs::Transcript { on: Some("chain1".to_owned()), of: None };
+    let told: Vec<String> = engine
+      .transcript(on)
+      .unwrap()
+      .iter()
+      .filter(|one| one.kind() == "tell")
+      .filter_map(|one| one.word(0).and_then(|notes| entry(&notes, 0)))
+      .filter_map(|note| note.as_str().map(str::to_owned))
+      .collect();
+    told.iter().filter(|note| **note == why[0]).count()
+  };
+  assert_eq!([opened(), opened(), opened()], [1, 1, 1], "a note is a fact of the record");
+}
+
+#[test]
 fn a_skill_of_the_root_alone_plays_on_the_root_and_on_a_chain_whose_source_had_it() {
   let at = place("rooted");
   let first = format!("{NOTE}\n\nseen = ['first']");
