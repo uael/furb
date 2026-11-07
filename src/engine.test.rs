@@ -1819,19 +1819,18 @@ fn bounded_at(bound: Duration) {
 ///
 /// A step of a word in a replay holds more than the word: it holds the work of each ear that the
 /// word wakes, and each run of the collector of cycles, whose time grows with the heap of the
-/// life. In the last life of this test, one step took 15 ms with the collector and 0.6 ms with no
-/// collector, and a gather took 190 ms, so a bound under the gather is too near a step on a loaded
-/// machine. A replay as a whole took 50 to 110 gathers, so at eight gathers each step stays about
-/// 100 times under the bound, and the replay as a whole outlasts it. The gather is one stretch of
-/// the work of the engine, and the bound of three quarters of it holds only while the life writes
-/// its checkpoint, when no word steps.
+/// life. A step takes a few milliseconds in this life, and a gather about 25 ms, so a bound under
+/// the gather is too near a step on a loaded machine. A replay as a whole takes about 13 gathers,
+/// so at six gathers each step stays well under the bound, and the replay as a whole outlasts it.
+/// The gather is one stretch of the work of the engine, and the bound of three quarters of it
+/// holds only while the life writes its checkpoint, when no word steps.
 fn bounds(gather: Duration) -> (Duration, Duration) {
-  (gather * 8, gather * 3 / 4)
+  (gather * 6, gather * 3 / 4)
 }
 
 #[test]
 fn a_life_whose_words_each_ran_within_the_bound_replays_and_keeps_its_checkpoint_past_it() {
-  let word = "for i in range(3000):\n  await wait(0, __name__)\nclose(8)";
+  let word = "for i in range(300):\n  await wait(0, __name__)\nclose(8)";
   let (root, facts, gather, _yard) = {
     let mut first = Lived::new("outlasts", &[word], true).unwrap();
     let root = first.root();
