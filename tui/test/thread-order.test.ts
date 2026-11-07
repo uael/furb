@@ -91,9 +91,9 @@ test("the sidebar lists the closed threads at the top and the open ones last, ne
       const at = (text: string) => rows.findIndex((line) => line.includes(text));
       // The threads stand under the row of the session that holds them, which bears the name of its record.
       expect(at("conductor")).toBeGreaterThan(0);
-      expect(at("Have an agent loading")).toBeGreaterThan(at("conductor"));
-      expect(at("This one is a bit more")).toBeGreaterThan(at("Have an agent loading"));
-      expect(at("You are the orchestrator")).toBeGreaterThan(at("This one is a bit more"));
+      expect(at("Have a worker loading")).toBeGreaterThan(at("conductor"));
+      expect(at("A second task is a bit more")).toBeGreaterThan(at("Have a worker loading"));
+      expect(at("You are the conductor")).toBeGreaterThan(at("A second task is a bit more"));
     },
     tall,
     await recorded(),
@@ -157,7 +157,7 @@ test("a click on a thread in the sidebar moves the feed to the end of that threa
         return end ? end.y + end.height : Number.NaN;
       };
       expect(bottom()).toBeGreaterThan(viewport.y + viewport.height);
-      await railClick(use, "You are the orchestrator", short.width);
+      await railClick(use, "You are the conductor", short.width);
       await until(session, () => session.thread === "prompt1");
       const shown = await settled(use);
       keep("click-to-the-end", shown);
