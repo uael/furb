@@ -34,6 +34,7 @@ fn main() {
   napi_build::setup();
   println!("cargo::rerun-if-changed=src/furb/engine.pyi");
   println!("cargo::rerun-if-changed=src/furb/engine.py");
+  println!("cargo::rerun-if-env-changed=FURB_TREE");
   let source =
     fs::read_to_string("src/furb/engine.pyi").expect("the contract is beside the engine");
   let all = verbs::verbs(&source);
