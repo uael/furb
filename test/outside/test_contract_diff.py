@@ -336,3 +336,23 @@ def test_the_contract_holds_the_schema_of_the_protocol(tmp_path: Path, capsys: p
   (tmp_path / contract.SCHEMA).write_text(schema({"text": ["runs"]}), encoding="utf-8")
   assert contract.main([], root=tmp_path) == 1
   assert "break: host/protocol.schema.json: the node code goes" in capsys.readouterr().out
+
+
+def test_a_break_that_the_page_of_the_promise_does_not_name_fails_whatever_the_title(
+  tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+  tagged(tmp_path, "def a(x: int) -> int: ...\ndef b(y: int) -> int: ...\n")
+  page = tmp_path / "docs" / "promise.md"
+  page.parent.mkdir()
+  page.write_text("- `src/furb/engine.pyi a: the parameter x goes`: for the next major.\n", encoding="utf-8")
+  edit(tmp_path, "def a() -> int: ...\ndef b(y: int) -> int: ...\n")
+  assert contract.main(["--title", "feat(engine)!: Drop x"], root=tmp_path) == 0
+  edit(tmp_path, "def a() -> int: ...\ndef b() -> int: ...\n")
+  assert contract.main(["--title", "feat(engine)!: Drop y"], root=tmp_path) == 1
+  assert "does not list the break src/furb/engine.pyi b: the parameter y goes" in capsys.readouterr().err
+  page.write_text(
+    page.read_text(encoding="utf-8") + "- `src/furb/engine.pyi b: the parameter y goes`\n", encoding="utf-8"
+  )
+  assert contract.main(["--title", "feat(engine)!: Drop y"], root=tmp_path) == 1
+  page.write_text(page.read_text(encoding="utf-8").replace("y goes`", "y goes`: for the next major."), encoding="utf-8")
+  assert contract.main(["--title", "feat(engine)!: Drop y"], root=tmp_path) == 0

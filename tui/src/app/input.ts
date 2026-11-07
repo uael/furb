@@ -512,8 +512,19 @@ export const input = part({
       rail: () => this.railSteer(),
       nextAsk: () => void this.nextAttention().catch(this.report),
       foldHere: () => {
-        const id = this.threadInView();
-        if (id) this.foldHere(id);
+        // The thread that the key folded stands at its head, and the middle of the view may hold another thread then, so
+        // the next press opens the thread that the key folded while its head shows, as a toggle does.
+        const head = this.keyFolded && this.cards.get(this.keyFolded)?.node;
+        const { viewport } = this.scroll;
+        const shown = head && head.y >= viewport.y && head.y < viewport.y + viewport.height;
+        const id = shown && this.threadFolded(this.keyFolded ?? "") ? this.keyFolded : this.threadInView();
+        if (!id) return;
+        // The press that opens the thread again goes back to the place of the feed where the key folded it.
+        const back = id === this.keyFolded ? this.keyFoldedAt : undefined;
+        if (back === undefined) this.keyFoldedAt = this.scroll.scrollTop;
+        this.foldThread(id);
+        this.scrollAfterLayout(back ?? { card: id });
+        this.keyFolded = this.threadFolded(id) ? id : undefined;
       },
       repair: () => void this.session.repairJournal().catch(this.session.fail),
       renew: () => void this.session.renewJournal().catch(this.session.fail),

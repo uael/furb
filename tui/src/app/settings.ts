@@ -265,6 +265,11 @@ export const settings = part({
   },
 
   details(): void {
+    // The key is a toggle, also while its dialog holds the keys: with the details open, it closes them.
+    if (this.overlay && this.overlay === this.detailsOverlay) {
+      this.closeOverlay();
+      return;
+    }
     const w = this.session;
     // Each thread of the chain folds to its header and opens to its program, as a click on its header does.
     const threads = w.view === "feed" ? w.threads.list : [];
@@ -300,6 +305,7 @@ export const settings = part({
           run: () => (one.open ? one.open() : this.openFold(key)),
         })),
     ]);
+    this.detailsOverlay = this.overlay;
   },
 
   themes(): void {

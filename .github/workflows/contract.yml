@@ -34,6 +34,7 @@ jobs:
             src/furb/engine.pyi
             .agents/skills/*/*.pyi
             script/contract.py
+            docs/promise.md
           sparse-checkout-cone-mode: false
       # The script reads each contract of the last tag through git, so the tags come with the commit that each names.
       # The title and the labels come through the environment, and never into the text of the script.

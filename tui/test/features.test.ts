@@ -448,6 +448,10 @@ test("the setup of the root stands as code: a comment that names the setup, then
         // A word whose file path is long breaks into more lines, as ruff format lays it out, so a path of a longer checkout
         // splits the word of each extension: the test reads the call that each line starts, not the width of the path.
         expect(shown.slice(2, 6).map((row) => /^\d+ rung\(/.test(row))).toEqual(Array(4).fill(true));
+        // The card holds each read that a row starts, with its HIDDEN, whatever the lines that the call breaks into.
+        const card = rows.slice(at + 1).join("\n");
+        expect(card.match(/rung\(\s*\n?\s*read\(/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
+        expect(card.match(/HIDDEN/g)?.length ?? 0).toBeGreaterThanOrEqual(4);
         // The life words stand as the calls that end their one word, each on its line, then the stand and the cd,
         // and the card ends there.
         expect(shown.slice(6, 10)).toEqual([
