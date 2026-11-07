@@ -744,8 +744,8 @@ def grant(usd: float | None = None, share: float | None = None, on="") -> Act[No
 def bash(
   command: str, stdin: str | None = "", timeout=TIMEOUT, ok=None, show: Show = TAIL, show_err: Show | None = None, on=""
 ) -> Act[Exit]:
-  if callable(ok):
-    raise Refused("no callable ok")
+  if any(map(callable, (ok, show, show_err))):
+    raise Refused("no callable")
 
   def ear(id):
     yield opened(id, "Exit", command="" if show == HIDDEN else command)
@@ -775,7 +775,7 @@ def bash(
     stdin,
     timeout,
     ok,
-    *[None if callable(one) else one for one in (show, show_err)] * ((show, show_err) != (TAIL, None)),
+    *(show, show_err) * ((show, show_err) != (TAIL, None)),
   )
 
 
