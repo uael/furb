@@ -202,6 +202,13 @@ export class Walk {
     }
     return frame;
   }
+  /** A click on the first place of the frame that shows a text, as the pointer of the owner does. */
+  async click(text: string): Promise<void> {
+    const rows = (await this.drawn()).split("\n");
+    const y = rows.findIndex((row) => row.includes(text));
+    if (y < 0) throw new Error(`no ${JSON.stringify(text)} to click`);
+    await this.view.screen.mockMouse.click(rows[y]?.indexOf(text) ?? 0, y);
+  }
   press(on: string): void {
     const { key, modifiers } = chord(on);
     this.view.screen.mockInput.pressKey(key, modifiers);
@@ -279,7 +286,12 @@ export async function lived(walk: Walk, window: Window, yard: Yard): Promise<voi
     "send Walk: a long answer. and look while it streams",
     ask("Walk: a long answer.", "A long answer"),
   );
-  await walk.step("wait for the end of the long answer", () => walk.shows("The end of the long answer."));
+  // A long answer folds past its rows, so the owner reads its end by a click on its fold row.
+  await walk.step("wait for the long answer to end, folded", () => walk.shows("more lines"));
+  await walk.step("click the fold row and read the end of the long answer", async () => {
+    await walk.click("more lines");
+    await walk.shows("The end of the long answer.");
+  });
   await walk.step("send Walk: ask me. and wait for the question", ask("Walk: ask me.", "Walk: which color?"));
   await walk.step("answer blue in the input", ask("blue", "You said blue."));
   await walk.step(
