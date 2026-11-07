@@ -707,7 +707,7 @@ def gathered(define, floor):
         "paused": paused(c),
         "turns": [x for x in saved if x[0] not in ("started", "done") or x[1] in held],
         "definitions": "\n\n".join(
-          filter(None, [define(w) for r, w in program(c).items() if (get(r) or [0] * 3)[2] != "extensions"])
+          filter(None, [define(w) for r, w in program(c).items() if get(r) and get(r)[2] != "extensions"])
         ),
         "values": values[c],
         "lost": lost[c],

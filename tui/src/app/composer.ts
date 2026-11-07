@@ -1,7 +1,7 @@
 import { FilePicker, shapes } from "furb";
 import { isDone, takesNothing, unfinished, WORK } from "furb/life";
 import { clipboardImage } from "../clipboard.ts";
-import { canonical, slashes } from "../commands.ts";
+import { canonical, skillSlashes, slashes } from "../commands.ts";
 import { emojiNamed, emojis } from "../emoji.ts";
 import { shortenHome } from "../files.ts";
 import { clip, count, dollars, graphemes, modelName, share } from "../format.ts";
@@ -479,15 +479,11 @@ export const composer = part({
             }),
         )
         .concat(
-          this.session.skills
-            .filter(
-              (one) =>
-                one.name.startsWith(token.text) &&
-                !slashes.some(({ name, alias }) => name === one.name || alias === one.name),
-            )
+          skillSlashes(this.session.skills)
+            .filter((one) => one.name.startsWith(token.text))
             .map((one) => ({
               label: `/${one.name}`,
-              detail: `${one.detail} (skill)`,
+              detail: one.detail,
               text: `/${one.name} `,
               submit: () => {
                 this.composer.setText("");
