@@ -173,14 +173,14 @@ fn each_worker_nests_under_the_thread_that_made_it_and_takes_the_label_of_its_ch
     .map(|(_, id, name)| (id.as_str(), name.as_str()))
     .collect();
   let labels = [
-    ("prompt3", "life3/thought"),
-    ("prompt4", "life3/fabricated"),
-    ("prompt5", "life3/qwen"),
-    ("prompt6", "life3/citime"),
-    ("prompt12", "w/fix295"),
-    ("prompt31", "life3/feed"),
+    ("prompt3", "lane/panels"),
+    ("prompt4", "lane/labels"),
+    ("prompt5", "lane/colors"),
+    ("prompt6", "lane/checks"),
+    ("prompt12", "w/fix-board"),
+    ("prompt31", "lane/feed"),
     ("prompt59", "w/literal"),
-    ("prompt94", "literal/monty"),
+    ("prompt94", "literal/parser"),
     ("prompt79", "w/wheels"),
     ("prompt86", "w/bench-replay"),
     ("prompt35", "untitled"),
@@ -225,26 +225,6 @@ fn a_worker_that_a_round_made_nests_under_the_thread_that_started_the_round() {
   assert_eq!(got, expected);
   // The chain of a worker answers its own thread, nested in none, under the label of its chain.
   assert_eq!(tree(&acts, "chain5"), vec![(0, "prompt98".to_owned(), "w/fix1296".to_owned())]);
-}
-
-#[test]
-fn a_thread_names_the_actor_of_its_last_rung_and_else_the_one_of_its_prompt() {
-  let facts = [
-    json!(["chain", "chain1", "operator", "", "root", ""]),
-    json!(["prompt", "prompt1", "operator", "chain1", "str", "Ask the model.", ""]),
-    json!(["rung", "rung1", "prompt1", "chain1", "", "", "claude-cli:opus/high"]),
-    json!(["prompt", "prompt2", "operator", "chain1", "str", "Ask another.", "codex:gpt-6.1-sol"]),
-  ];
-  let acts = folded(facts);
-  let on: Vec<&Act> = acts.iter().filter(|act| act.chain == "chain1").collect();
-  let rows: Rows<'_> = acts.iter().map(|act| (act.id.as_str(), act)).collect();
-  let (threads, _) = super::sorted(&on, &rows);
-  let models: Vec<(&str, Option<&str>)> =
-    threads.iter().map(|one| (one.prompt.as_str(), one.model.as_deref())).collect();
-  assert_eq!(
-    models,
-    [("prompt1", Some("claude-cli:opus/high")), ("prompt2", Some("codex:gpt-6.1-sol"))]
-  );
 }
 
 #[test]

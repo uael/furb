@@ -1011,11 +1011,6 @@ export interface ChainThread {
    * Whether the operator started it, himself or by a word of his own.
    */
   yours: boolean;
-  /**
-   * The actor whose model answers the thread: the one that the last rung of its prompts runs on,
-   * else the one that its prompt names.
-   */
-  model?: string | null;
 }
 /**
  * A prompt of a chain that is no thread, with what it is and the prompts on it, in order.
@@ -1143,4 +1138,4 @@ export interface Open {
   chain: string;
 }
 
-export const PROTOCOL = 7;
+export const PROTOCOL = 6;

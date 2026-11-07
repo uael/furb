@@ -355,7 +355,7 @@ export const rail = part({
         {
           thread,
           chain: w.labelOf(chain.id),
-          model: thread.model || "no model",
+          model: String(thread.act.words[2] ?? "") || "no model",
           why: said,
         },
       ];

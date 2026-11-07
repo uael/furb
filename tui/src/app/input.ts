@@ -43,7 +43,9 @@ export const input = part({
       bindings.flatMap(({ key, binding }) => {
         const { run, on = [], hint } = binding;
         if (!run || Boolean(binding.always) !== always) return [];
-        const offered: Hint | undefined = hint ? [() => shown(key, binding, this.kitty), hint] : undefined;
+        const offered: Hint | undefined = hint
+          ? [() => shown(key, binding, this.kitty), this.hintTable()[run] ?? hint]
+          : undefined;
         return { on, run: (event) => void this.actions[run](event), when: this.when[run], hint: offered };
       });
     // While a row takes a new name, Escape or Ctrl+C leaves the name as it was, and Ctrl+Q keeps it and quits.
@@ -516,6 +518,12 @@ export const input = part({
       repair: () => void this.session.repairJournal().catch(this.session.fail),
       renew: () => void this.session.renewJournal().catch(this.session.fail),
     };
+  },
+
+  /** The hints of the footer that say more than their key: on a question that waits, ⌃C refuses it, and else it takes
+   * back the last message. */
+  hintTable(): Partial<Record<Action, () => string>> {
+    return { takeBack: () => (this.session.operatorPrompt ? "refuse" : "take back") };
   },
 
   whenTable(): Partial<Record<Action, () => boolean>> {

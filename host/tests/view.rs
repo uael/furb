@@ -446,7 +446,6 @@ fn thread(act: &Act, asks: &[&str]) -> ChainThread {
     over: false,
     origin: Origin::Rung,
     yours: false,
-    model: None,
   }
 }
 
