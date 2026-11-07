@@ -86,7 +86,7 @@ reads it.
   prompt and its answer, so a later life gives the same name and asks no model. `rename_session(name)` says the
   name that the operator chose, as an act of the root, and it wins over the name of `name_session()`. Each client
   shows the name that the record holds, and the sidebar hides the chain `naming`. A
-  config that turns `naming` off, as `{"extensions": {"naming": false}}`, saves the call of that model. A rename in a
+  config that turns `naming` off, as `{"skills": {"naming": false}}`, saves the call of that model. A rename in a
   client is the same act, which the client makes with an ear of its own, so it lasts whatever extension plays.
 - **`ouroboros`** gives `extend(name, *rungs)`, which writes the words of those rungs as an extension of the project
   and turns it on, so every later chain runs it, and `extend(name, *rungs, tui=module)`, which also writes a [part for
@@ -135,7 +135,7 @@ extensions there, as the ones that serve this machine alone. The config director
 Windows.
 
 ```json
-{ "extensions": { "memory": true, "skills": false, "notes": "~/src/furb-notes" } }
+{ "skills": { "memory": true, "skills": false, "notes": "~/src/furb-notes" } }
 ```
 
 - `true` turns an extension on, and keeps the path that an earlier config gave.
@@ -314,7 +314,7 @@ export default function (furb) {
 - `furb.status(draw)` adds a status to the footer: `draw(seen)` gives a line, which shows after the state of the
   session only when it is not empty. A status that throws shows its error in its place.
 - `seen` gives the chain on screen, every act of the life, `compactions`, each compaction of a chain as the model of
-  a life gives it, `extensions()` for the names of the extensions that the life runs, and `of(kind)` for the acts of a
+  a life gives it, `skills()` for the names of the skills that the life runs, and `of(kind)` for the acts of a
   kind. It acts in the life too, and each of its acts goes through
   the record:
   - `run(word)` runs Python on the chain through the gate, as `/run` does, and gives the value of the last act that
@@ -393,7 +393,7 @@ life gets the same answer from the record. So a replay is exact, and the World i
 
 ## In each host
 
-- The command line: `furb extensions` prints each extension that a life on a record runs, with its life word. The
+- The command line: `furb skills` prints each skill that a life on a record runs, with its life word. The
   `state` of the protocol names them.
 - The TUI: `/extensions` lists what the life runs, and `/run` runs a word of one on the chain on screen, as
   `/run skill("pdf")`.

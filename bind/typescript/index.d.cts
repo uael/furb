@@ -304,7 +304,7 @@ export declare function configSet(directory: string, change: string, config?: st
 export declare function decodeRecord(line: string): unknown
 
 /** The extensions that a life runs, in the order it enabled them, as the facts of its root say them. */
-export declare function enabled(root: unknown[][]): Array<Extension>
+export declare function enabled(root: unknown[][]): Array<Skill>
 
 /**
  * The engine: the one file the sandbox runs, and the whole system prompt of a model.
@@ -315,25 +315,10 @@ export declare function enabled(root: unknown[][]): Array<Extension>
 export declare const ENGINE: string
 
 /**
- * An extension: its name, its word, its life word, which is empty when it has none, whether it plays on the root
- * alone, and the path of the file of its word, with `~` for the home of the user as the World writes a path for a
- * model, which each chain reads as a turn of its setup, and which is empty when no file stands for the word. An
- * extension that plays on the root alone plays on no other chain but one whose source had it, since that chain makes
- * the rung of its source again; any other extension plays on every chain.
- */
-export interface Extension {
-  name: string
-  word: string
-  life: string
-  root: boolean
-  file: string
-}
-
-/**
  * The ear of the extensions, given each extension that the life runs: it enables each at the tip of the life,
  * unless the record enables it, and plays each as a rung on each chain.
  */
-export declare function extensions(given: Array<Extension>): NativeEar
+export declare function extensions(given: Array<Skill>): NativeEar
 
 /**
  * The ear of the files, which reads and writes a path, a path of `scratch://` in the scratch
@@ -467,7 +452,7 @@ export interface Named {
 }
 
 /** The official extensions, in the order a life runs them. */
-export declare function official(): Array<Extension>
+export declare function official(): Array<Skill>
 
 /**
  * Call back when the console of Windows ends this process: at Ctrl+Break, at the close of the console, at a logoff
@@ -587,9 +572,12 @@ export interface Outcome {
 }
 
 /**
- * The part of an extension that a TUI loads: the name of the extension, the path of its module of TypeScript, which
- * the manifest names under `tui`, beside the word, and the text of that module when the crate carries it. The crate
- * carries the part of an official extension, so a TUI loads it from the text where no checkout of furb stands, as in
+ * The part of an extension that a TUI loads: the name of the extension, the path of its module of
+ * TypeScript, which
+ * the manifest names under `tui`, beside the word, and the text of that module when the crate
+ * carries it. The crate
+ * carries the part of an official extension, so a TUI loads it from the text where no checkout of
+ * furb stands, as in
  * an installed package, and the path is then its place in the repository of furb.
  */
 export interface Part {
@@ -671,6 +659,25 @@ export declare function shapes(): Array<string>
 
 /** The POSIX shell that runs a command of this machine, which a host runs its own commands in too. */
 export declare function shell(): string
+
+/**
+ * A skill: its name, its word, its life word, which is empty when it has none, whether it
+ * plays on the root
+ * alone, and the path of the file of its word, with `~` for the home of the user as the World
+ * writes a path for a
+ * model, which each chain reads as a turn of its setup, and which is empty when no file stands for
+ * the word. An
+ * extension that plays on the root alone plays on no other chain but one whose source had it,
+ * since that chain makes
+ * the rung of its source again; any other extension plays on every chain.
+ */
+export interface Skill {
+  name: string
+  word: string
+  life: string
+  root: boolean
+  file: string
+}
 
 /** The ear of the skills extension, which finds skills in the folders of a chain and in the config directory. */
 export declare function skills(config: string): NativeEar

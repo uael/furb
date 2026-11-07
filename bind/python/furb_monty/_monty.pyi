@@ -11,7 +11,7 @@ from collections.abc import Awaitable, Callable, Generator, Iterable
 from contextvars import ContextVar
 from typing import NotRequired, TypedDict, Unpack, final
 
-class Extension(TypedDict):
+class Skill(TypedDict):
   """An extension: its name, its word, its life word, which is empty when it has none, and whether it plays on the root
   alone. An extension that plays on the root alone plays on no other chain but one whose source had it, since that
   chain makes the rung of its source again; any other extension plays on every chain."""
@@ -306,13 +306,13 @@ def gate(sheet: str) -> list[tuple[int, str]]:
   """The gate of the crate: what the type checker of monty found on a sheet, each error by its line, and no warning.
   It raises when the checker could not read the sheet."""
 
-def official() -> list[Extension]:
+def official() -> list[Skill]:
   """The official extensions, in the order a life runs them."""
 
-def enabled(root: Iterable[Iterable[object]]) -> list[Extension]:
+def enabled(root: Iterable[Iterable[object]]) -> list[Skill]:
   """The extensions that a life runs, in the order it enabled them, as the facts of its root say them."""
 
-def extensions(given: list[Extension]) -> NativeEar:
+def extensions(given: list[Skill]) -> NativeEar:
   """The ear of the extensions, given each extension that the life runs: it enables each at the tip of the life,
   unless the record enables it, and plays each as a rung on each chain."""
 

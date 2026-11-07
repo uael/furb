@@ -159,7 +159,7 @@ enum Command {
   },
   /// Print each extension that a life on the record runs: those it enables, then those that the configs of the user
   /// and of the directory turn on, each with its life word.
-  Extensions {
+  Skills {
     #[command(flatten)]
     place: Place,
   },
@@ -252,7 +252,7 @@ async fn command(furb: Furb) -> Result<(), CliError> {
     }
     Some(Command::Facts { record, act, chain }) => facts(&record, act.as_deref(), chain.as_deref()),
     Some(Command::Run { word, place, stand }) => run(stand.on(place.opening(true)), word).await,
-    Some(Command::Extensions { place }) => extensions(place.opening(false)).await,
+    Some(Command::Skills { place }) => skills(place.opening(false)).await,
     Some(Command::Catalog { update }) => catalog(update).await,
     Some(Command::Host { grace, then }) => {
       host::serve(Duration::from_secs_f64(grace), matches!(then, Some(Hosting::Upgrade))).await
@@ -367,9 +367,9 @@ async fn checkpoint(opening: Opening, record: &Path) -> Result<(), CliError> {
 
 /// Each extension that a life on the record runs, as its name and its life word, or its name alone when it has none,
 /// one on each line.
-async fn extensions(opening: Opening) -> Result<(), CliError> {
+async fn skills(opening: Opening) -> Result<(), CliError> {
   let mut life = Life::lived(opening).await?;
-  for one in life.extensions()? {
+  for one in life.skills()? {
     match one.life.as_str() {
       "" => say(&one.name)?,
       life => say(format_args!("{}: {life}", one.name))?,

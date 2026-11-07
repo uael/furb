@@ -57,6 +57,6 @@ def extend(name: str, *rungs: str, tui: str = "", session: bool = False, view: s
     config = json.loads(read(".furb/config.json", HIDDEN).content)
   except Refused:
     config = {}
-  config.setdefault("extensions", {})[name] = f"skills/{name}"
+  config.setdefault("skills", {})[name] = f"skills/{name}"
   write(Text(".furb/config.json", json.dumps(config, indent=2) + "\n"))
   return landed

@@ -75,8 +75,8 @@ export const desk = part({
   /** The dialog of the extensions that the life runs, each with its part for the TUI: what the part gives, or the error
    * that stopped its load. A part of an extension that the life does not run stands in it too, since the configs
    * turn it on. */
-  async extensionsDialog(): Promise<void> {
-    const running = await this.session.extensionsRun();
+  async skillsDialog(): Promise<void> {
+    const running = await this.session.skillsRun();
     const names = [
       ...new Set([...running.map((one) => one.name), ...this.parts.loaded.map((one) => one.name)]),
     ];
@@ -94,7 +94,7 @@ export const desk = part({
         },
       };
     });
-    this.openPalette("Extensions", choices, {
+    this.openPalette("Skills", choices, {
       note: "A part for the TUI loads live from the folder of its extension. A part that fails shows its error in a panel.",
     });
   },
@@ -120,7 +120,7 @@ export const desk = part({
       chain: w.selected,
       acts: w.acts,
       compactions: w.host.compactions,
-      extensions: async () => (await w.extensionsRun()).map(({ name }) => name),
+      skills: async () => (await w.skillsRun()).map(({ name }) => name),
       of: (kind) =>
         kindsOf(w.acts)
           .get(kind)

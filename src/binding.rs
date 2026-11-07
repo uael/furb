@@ -45,7 +45,7 @@ use crate::gate::checked;
 use crate::{
   Ear, Fact, Fault, Heard, Life, Object, Spoken, Step,
   life::Opening,
-  skill::{self, Extension, Part},
+  skill::{self, Part, Skill},
   view::{Fold, Held, Pause},
   wire,
   world::{self, images},
@@ -487,14 +487,14 @@ pub fn gate(sheet: String) -> Result<Vec<(i64, String)>, Fault> {
 /// The official extensions, in the order a life runs them.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn official() -> Vec<Extension> {
+pub fn official() -> Vec<Skill> {
   skill::official()
 }
 
 /// The extensions that a life runs, in the order it enabled them, as the facts of its root say them.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi(ts_args_type = "root: unknown[][]"))]
-pub fn enabled(root: Vec<Said>) -> Vec<Extension> {
+pub fn enabled(root: Vec<Said>) -> Vec<Skill> {
   let words = root.into_iter().filter_map(|one| one.0);
   let facts: Vec<Fact> =
     words.map(|words| Fact(Object::tuple(words.iter().map(Object::string)))).collect();
@@ -505,7 +505,7 @@ pub fn enabled(root: Vec<Said>) -> Vec<Extension> {
 /// unless the record enables it, and plays each as a rung on each chain.
 #[cfg_attr(feature = "python", pyfunction)]
 #[cfg_attr(feature = "typescript", napi)]
-pub fn extensions(given: Vec<Extension>) -> NativeEar {
+pub fn extensions(given: Vec<Skill>) -> NativeEar {
   NativeEar::of(skill::extensions(given, skill::Places::here()))
 }
 

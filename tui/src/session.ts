@@ -2100,8 +2100,8 @@ export class Session extends EventEmitter {
     }
   }
 
-  /** The extensions that the life runs, in the order that it enabled them, each with its life word. */
-  async extensionsRun(): Promise<{ name: string; life: string }[]> {
+  /** The skills that the life runs, in the order that it enabled them, each with its life word. */
+  async skillsRun(): Promise<{ name: string; life: string }[]> {
     return enabled(await this.engine.transcript({ on: ROOT })).map(({ name, life }) => ({ name, life }));
   }
 
@@ -2191,13 +2191,13 @@ export class Session extends EventEmitter {
       case "cancel":
         await this.cancel(argument);
         break;
-      case "extensions": {
-        const each = (await this.extensionsRun()).map(({ name, life }) =>
+      case "skills": {
+        const each = (await this.skillsRun()).map(({ name, life }) =>
           life ? `${name} with ${life}` : name,
         );
         this.notice = each.length
           ? `This life runs ${each.join(", ")}. Run a word of one with /run.`
-          : "This life runs no extension.";
+          : "This life runs no skill.";
         break;
       }
       case "chain":
@@ -2383,8 +2383,8 @@ export class Session extends EventEmitter {
         this.emit("shared", path, shareMarkdown(this));
         break;
       }
-      case "skills":
-        if (argument) throw new Error("/skills takes no argument.");
+      case "reload-skills":
+        if (argument) throw new Error("/reload-skills takes no argument.");
         this.skillList = skillsIn(await this.runWord("skills()"));
         this.skillsFrom = this.indexed().skills?.id ?? "";
         this.notice = `Skills read again: ${this.skillList.length || "none"} found.`;

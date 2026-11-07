@@ -801,8 +801,7 @@ mod daemon {
   async fn a_kit_of_a_session_gives_its_view_to_each_window_in_each_life_of_its_record() {
     let at = place();
     fs::create_dir_all(at.join(".furb")).unwrap();
-    fs::write(at.join(".furb").join("config.json"), r#"{"extensions": {"ouroboros": true}}"#)
-      .unwrap();
+    fs::write(at.join(".furb").join("config.json"), r#"{"skills": {"ouroboros": true}}"#).unwrap();
     let local = Local::new(at.join("sock"));
     let listener = local.listen().await.unwrap();
     let opening = Opening { extensions: None, ..opening(&at) };

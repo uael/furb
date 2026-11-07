@@ -69,7 +69,7 @@ The life word starts the work of the extension on each chain. The file `.furb/co
 `.furb/config.local.json` beside it, which git ignores, for an extension of this machine alone:
 
 ```json
-{ "extensions": { "notes": "path/to/notes" } }
+{ "skills": { "notes": "path/to/notes" } }
 ```
 
 ## A part for the TUI
