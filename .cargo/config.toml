@@ -1,0 +1,4 @@
+# No build keeps incremental state: it grows in each worktree, no copy on write shares it, and a gate caches it for
+# nothing. The measures stand in the commit that made this file.
+[build]
+incremental = false
