@@ -131,8 +131,14 @@ fn exclusive() -> MutexGuard<'static, ()> {
 
 fn store(file: &path::Path, stamp: &str, found: &[Found], now: u64) {
   // A cache that cannot be written costs the next life one probe more, so the failure ends here.
-  let told = json!({"at": now, "found": found});
-  stored_by(file, stamp, told, |file, bytes| drop(disk::write(file, bytes, Access::Shared)));
+  stored_by(file, stamp, entry(found, now), |file, bytes| {
+    drop(disk::write(file, bytes, Access::Shared));
+  });
+}
+
+/// A discovery as the cache holds it, which [`stored`] reads: [`Told`] as JSON.
+fn entry(found: &[Found], now: u64) -> Value {
+  json!({"at": now, "found": found})
 }
 
 /// [`store`] of a discovery as the cache holds it, with the write of the file given, so a test of

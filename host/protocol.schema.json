@@ -2939,13 +2939,6 @@
         "yours": {
           "type": "boolean",
           "description": "Whether the operator started it, himself or by a word of his own."
-        },
-        "model": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "description": "The actor whose model answers the thread: the one that the last rung of its prompts runs on,\nelse the one that its prompt names."
         }
       },
       "required": [
@@ -4112,5 +4105,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 7
+  "x-protocol": 6
 }
