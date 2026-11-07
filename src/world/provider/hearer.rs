@@ -50,7 +50,7 @@ pub(super) struct Hearer {
   retries: Option<Retries>,
   refresh: Option<Refresh>,
   gone: Vec<String>,
-  members: Vec<String>,
+  members: super::Members,
   mode: Mode,
   /// The system prompt of each request, as [`Provider::system`] sets it.
   system: Arc<str>,
@@ -197,7 +197,7 @@ impl Hearer {
       &self.directory,
       &self.actor,
       self.skills.as_deref(),
-      &self.members,
+      &self.members.logins(),
       &self.config.clone().unwrap_or_else(|| skill::Places::here().config),
     );
     say(co, Fact::says("done", &about, [given]));

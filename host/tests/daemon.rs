@@ -1182,6 +1182,12 @@ mod daemon {
       stands(&mut window, &life).await > stood,
       "a change of the list tells the life to stand"
     );
+    let after = json!([login, "ann", "bob", "cat"]);
+    assert_eq!(
+      members(&mut window, &life, &after).await,
+      after,
+      "the life that lives names the third login after its stand"
+    );
   }
 
   #[tokio::test]

@@ -37,6 +37,7 @@ use crate::{
   engine::{Life, handed, lending},
   life::{Answer, Log, Opening, Retrying, Stream},
   value::{IS, entry, field, marked, templated},
+  world::Members,
 };
 use tokio::task;
 
@@ -256,6 +257,15 @@ impl<'a, 'py> FromPyObject<'a, 'py> for Stream {
         }
       });
     })))
+  }
+}
+
+impl<'a, 'py> FromPyObject<'a, 'py> for Members {
+  type Error = PyErr;
+
+  /// A list of logins of python, as a home that the life alone changes.
+  fn extract(value: Borrowed<'a, 'py, PyAny>) -> PyResult<Self> {
+    Ok(Self::new(value.extract()?))
   }
 }
 

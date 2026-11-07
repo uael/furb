@@ -49,7 +49,8 @@ pub use files::{CONFIG, files};
 pub use log::{log, logged};
 pub use operator::{Asked, CONSOLE, SHAPES, Shape, answered, answers, named};
 pub use provider::{
-  Advertised, BACKOFF, Backoff, Hosted, Model, Provider, Retries, Retry, Search, Told, Writes,
+  Advertised, BACKOFF, Backoff, Hosted, Members, Model, Provider, Retries, Retry, Search, Told,
+  Writes,
   catalog::{self, Catalog},
   claude, codex, images,
   search::Searches,

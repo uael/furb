@@ -217,7 +217,7 @@ fn the_operator_entry_lists_its_members_and_a_prompt_asks_one_of_them_as_operato
   let model = streaming(&[("close(offered(standing()[0], 'operator/ana') or -1)", Usage::new())]);
   let at = yard("members");
   let provider = Provider::new(at.display().to_string(), vec![scripted(&model)])
-    .members(vec!["ana".to_owned(), "bo".to_owned()]);
+    .members(super::Members::new(vec!["ana".to_owned(), "bo".to_owned()]));
   let mut engine = lived(provider);
   let standing = engine.standing().expect("the life stands").py_repr();
   assert!(standing.contains("['operator', ['ana', 'bo'], 200000, 'cheap']"), "{standing}");
