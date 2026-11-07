@@ -1,8 +1,8 @@
 // A message that the operator queues while the model works gets its answer once the work ends: the queue of the life
 // sends it, and the window keeps no second copy of it.
 import { expect } from "bun:test";
-import { chord } from "./probes.ts";
 import { scenario, test } from "./harness.ts";
+import { chord } from "./probes.ts";
 
 test("a message queued with the shortcut while the model works gets its answer once the work ends", () =>
   scenario(

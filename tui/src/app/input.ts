@@ -1,6 +1,5 @@
 import type { BoxRenderable, KeyEvent } from "@opentui/core";
 import { asksOperator, type ChainThread } from "furb/life";
-import { clipboardImage } from "../clipboard.ts";
 import { type Action, bindings, shown } from "../keys.ts";
 import { commentStart, type Hunk, lines, scopeLabels, scopes } from "../review.ts";
 import { type View, views } from "../session.ts";
@@ -353,13 +352,18 @@ export const input = part({
     );
   },
 
-  /** Ctrl+C closes a dialog or the rewind tree, or clears the input, or cancels the last act that the operator made on
-   * the chain, which takes back a message of his. */
+  /** Ctrl+C closes a dialog or the rewind tree, or clears the input, or, on a question of a model with an empty input,
+   * refuses the question, or else cancels the last act that the operator made on the chain, which takes back a message
+   * of his. */
   cancel(): void {
     if (this.overlay) this.closeOverlay();
     else if (this.tree) this.closeTree();
     else if (this.composer.plainText) this.composer.replaceText("");
-    else this.action("/cancel");
+    else if (this.session.operatorPrompt) {
+      // On a question of a model, an empty input refuses the question at once, with no dialog that asks to confirm.
+      const ask = this.session.operatorPrompt;
+      void this.session.decline(ask, "The operator refused the question.").catch(this.report);
+    } else this.action("/cancel");
   },
 
   /** Right and Ctrl+F at the end of the line take the grey rest of it, and Alt+Right and Alt+F take its next word, as
@@ -479,7 +483,7 @@ export const input = part({
       sidebar: () => this.toggleSidebar(),
       details: () => this.details(),
       editor: () => void this.editDraft().catch(this.report),
-      image: () => void clipboardImage((path) => this.session.attachImage(path)).catch(this.report),
+      image: () => void this.pasteImage().catch(this.report),
       search: () => this.openSearch(),
       scroll: (key) =>
         this.scroll.scrollBy(

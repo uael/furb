@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { imageType } from "furb";
 
-export async function clipboardImage<T>(use: (path: string) => Promise<T>): Promise<T> {
+/** The image on the clipboard, written to a file named `<stem>.<suffix>` that `use` reads, and gone after it. */
+export async function clipboardImage<T>(use: (path: string) => Promise<T>, stem = "image"): Promise<T> {
   // Each reader prints the image on the clipboard: as base64 text through macOS AppKit and through the .NET of
   // Windows PowerShell, and as bytes through wl-paste and xclip.
   const readers: [command: string[], base64: boolean][] =
@@ -55,7 +56,7 @@ export async function clipboardImage<T>(use: (path: string) => Promise<T>): Prom
   if (!bytes?.length) throw new Error("No clipboard image is available. Use /image with a file path.");
   const type = imageType(bytes);
   const directory = await mkdtemp(join(tmpdir(), "furb-clipboard-"));
-  const path = join(directory, `pasted-image.${type.suffix}`);
+  const path = join(directory, `${stem}.${type.suffix}`);
   try {
     await writeFile(path, bytes, { mode: 0o600 });
     return await use(path);

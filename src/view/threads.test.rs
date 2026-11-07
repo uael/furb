@@ -215,7 +215,7 @@ fn a_worker_that_a_round_made_nests_under_the_thread_that_started_the_round() {
   let acts = folded(facts);
   let got: Vec<(usize, String, String)> = tree(&acts, "chain1");
   let expected = [
-    (0, "prompt1", "Resume the crashed Nov 5 session"),
+    (0, "prompt1", "Open the life that died."),
     (0, "prompt24", "Fix it for each life."),
     (1, "prompt98", "w/fix1296"),
     (1, "prompt100", "promise/grant-cancelled-reply"),
@@ -228,25 +228,31 @@ fn a_worker_that_a_round_made_nests_under_the_thread_that_started_the_round() {
 }
 
 #[test]
-fn the_name_that_the_operator_gave_the_session_wins_over_the_name_that_naming_gave() {
-  let named = |more: Vec<Value>| {
-    let mut facts = vec![
-      json!(["chain", "chain1", "operator", "", "root", ""]),
-      json!(["name_session", "name_session1", "rung1", "chain1"]),
-      json!(["done", "name_session1", "name_session1", "A given name"]),
-    ];
-    facts.extend(more);
-    let acts = folded(facts);
-    let on: Vec<&Act> = acts.iter().filter(|act| act.chain == "chain1").collect();
-    crate::view::Named::of_acts(&on).name().map(|one| one.trim().to_owned())
-  };
-  assert_eq!(named(vec![]).as_deref(), Some("A given name"));
-  let said = |id: &str, name: &str| {
-    [json!(["rename_session", id, "rung2", "chain1"]), json!(["done", id, id, name])]
-  };
-  assert_eq!(named(said("rename_session1", "Mine").to_vec()).as_deref(), Some("Mine"));
-  let both = [said("rename_session1", "Mine"), said("rename_session2", "")].concat();
-  assert_eq!(named(both).as_deref(), Some(""));
+fn the_first_thread_of_a_named_session_is_titled_by_its_own_message() {
+  // The name of the session stands on its own row: the thread keeps the first line of its message.
+  let facts = [
+    json!(["chain", "chain1", "operator", "", "root", ""]),
+    json!(["rename_session", "rename_session1", "rung1", "chain1"]),
+    json!(["done", "rename_session1", "rename_session1", "Release 0.4"]),
+    json!([
+      "prompt",
+      "prompt1",
+      "operator",
+      "chain1",
+      "str",
+      "Explore this project, run its checks and tell me what fails.",
+      ""
+    ]),
+  ];
+  let acts = folded(facts);
+  assert_eq!(
+    tree(&acts, "chain1"),
+    vec![(
+      0,
+      "prompt1".to_owned(),
+      "Explore this project, run its checks and tell me what fails.".to_owned()
+    )]
+  );
 }
 
 /// The meaning that a window reads of the facts of a record: each act heard as the fold of the

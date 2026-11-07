@@ -55,3 +55,14 @@ pub enum Error {
   #[error("A path of the account {name} of claude-cli must be absolute or start with ~: {path}")]
   Path { name: String, path: String },
 }
+
+/// Why the environment does not say how to reach a model of a provider of the network.
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum Unreached {
+  #[error("no credential of it stands in the environment: set {}", .env.join(" or "))]
+  NoCredential { env: Vec<String> },
+  #[error("no project of Google stands in the environment: set GOOGLE_CLOUD_PROJECT")]
+  NoProject,
+  #[error("its address needs {name}: set it in the environment")]
+  Unfilled { name: String },
+}
