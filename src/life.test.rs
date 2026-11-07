@@ -1055,6 +1055,49 @@ fn measure_how_long_a_life_opens_from_its_checkpoint_and_by_a_replay() {
 }
 
 #[test]
+fn an_open_that_inspects_a_record_whose_tip_is_a_checkpoint_replays_the_life_words_that_ask_the_clock_with_no_drift()
+ {
+  let at = place("tip-clock");
+  let mut first = scripted(&at, &["close('one')"]).boot::<String>([]).unwrap().0;
+  let word = "close(await prompt(str, 'Reply with the word one.'))";
+  assert_eq!(closed(&mut first, word).as_ref().as_str(), Some("one"));
+  // The turns up to the tip, which the pending turn of the operator ends.
+  let upto = |life: &mut Engine, n: i64| {
+    let word = format!("repr(turns(on='chain1')[:{n}])");
+    life.word(&word, vec![]).unwrap().as_ref().py_repr()
+  };
+  let n = first.word("len(turns(on='chain1')) - 1", vec![]).unwrap().as_ref().as_int().unwrap();
+  let tip = upto(&mut first, n);
+  drop(first);
+  // The checkpoint is written as the command line writes it, in a life that only replays.
+  let mut inspected =
+    Opening { inspecting: Some(true), ..scripted(&at, &[]) }.boot::<String>([]).unwrap().0;
+  let written = checkpoint::written(&mut inspected).unwrap();
+  drop(inspected);
+  checkpoint::keep(&at.join("record.jsonl"), written).unwrap();
+  // As furb turns opens it, and from its first entry, born again at each checkpoint.
+  let inspects = Opening { inspecting: Some(true), ..scripted(&at, &[]) };
+  let mut inspected =
+    inspects.clone().boot::<String>([]).expect("the open replays to its tip with no drift").0;
+  let refused =
+    "len([x for x in transcript('chain1', 'clock') if isinstance(peek(x[1], None), Refused)])";
+  let refused = inspected.word(refused, vec![]).unwrap().as_ref().as_int().unwrap_or_default();
+  assert!(
+    refused > 0,
+    "the birth asks the clock again, and the open that inspects hears it silent"
+  );
+  (Opening { whole: Some(true), ..inspects })
+    .boot::<String>([])
+    .expect("the whole open replays with no drift");
+  // Each turn up to the tip is as in the life that wrote it and as in a live reopen.
+  let seen = upto(&mut inspected, n);
+  drop(inspected);
+  assert_eq!(seen, tip, "the open that inspects stands at the tip");
+  let mut live = scripted(&at, &[]).boot::<String>([]).unwrap().0;
+  assert_eq!(upto(&mut live, n), seen, "the open that inspects stands where a live reopen stands");
+}
+
+#[test]
 fn a_life_goes_on_from_a_checkpoint_with_the_names_the_module_and_the_open_prompt_of_each_chain() {
   let at = place("checkpoint");
   let ran = "rounds = globals().get('rounds', 0) + 1\nawait wait(3600 if rounds == 1 else 0, __name__)\nclose(f'round {rounds}')";
