@@ -119,6 +119,24 @@ test("a life gains the panel of a part of a project extension, which draws again
   );
 });
 
+test("a panel that throws names its part and panel in plain words, with the raw message on a second line", async () => {
+  const { directory } = project(
+    'export default (furb) => { furb.panel("Broken", (seen) => seen.todos.sort()); }\n',
+  );
+  const session = await demoSession({ cwd: directory });
+  await composing(
+    async ({ frame }) => {
+      const shown = await shows(frame, "The panel Broken of todo failed while it drew its lines.");
+      const rows = shown.split("\n");
+      const at = rows.findIndex((row) => row.includes("The panel Broken of todo failed"));
+      // The raw message of the engine stands on the next line, under the plain one.
+      expect(rows[at + 1]).toMatch(/seen\.todos|undefined/);
+    },
+    { width: 132, height: 44 },
+    session,
+  );
+});
+
 test("a part loads from a file in a folder that a link names, and so does each file that the folder gets after the first", async () => {
   const folder = mkdtempSync(join(tmpdir(), "furb-parts-"));
   const link = `${folder}-link`;
