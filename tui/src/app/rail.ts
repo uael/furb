@@ -342,20 +342,24 @@ export const rail = part({
    * the cause of the pause of a paused one. */
   activePrompts(): { thread: ChainThread; chain: string; model: string; why: string }[] {
     const w = this.session;
-    return w.chains.flatMap((chain) =>
-      w.threadsOf(chain.id).list.flatMap((thread) => {
-        if (thread.over) return [];
-        const said = thread.state === "paused" && chain.pause ? pauseSaid(chain.pause).text : "";
-        return [
-          {
-            thread,
-            chain: w.labelOf(chain.id),
-            model: thread.model || "no model",
-            why: said,
-          },
-        ];
-      }),
-    );
+    // The tree of the sidebar holds the threads of every chain from one read of the crate, where a read of the threads
+    // of each chain read every act of the life once for each chain, at each draw of the top of the sidebar.
+    const chains = new Map(w.chains.map((chain) => [chain.id, chain]));
+    const flat = (nodes: readonly ThreadNode[]): ChainThread[] =>
+      nodes.flatMap((node) => [node.thread, ...flat(node.agents)]);
+    return flat(w.rail).flatMap((thread) => {
+      const chain = chains.get(thread.act.chain);
+      if (thread.over || !chain) return [];
+      const said = thread.state === "paused" && chain.pause ? pauseSaid(chain.pause).text : "";
+      return [
+        {
+          thread,
+          chain: w.labelOf(chain.id),
+          model: thread.model || "no model",
+          why: said,
+        },
+      ];
+    });
   },
 
   /** A click on the count lists each active prompt with its chain, its model and its state, and each paused one with
@@ -380,14 +384,13 @@ export const rail = part({
     const lib = this.options.workspaces;
     const width = this.rail.width || w.preferences.sidebarWidth;
     const total = this.attentionOf(lib.groups.flatMap((group) => group.sessions));
+    const rows = this.activePrompts();
     if (
       !this.paneChanged(this.railSession, [
         this.theme,
         width,
         total,
-        this.activePrompts()
-          .map((one) => `${one.thread.act.id}${one.thread.state}`)
-          .join(),
+        rows.map((one) => `${one.thread.act.id}${one.thread.state}`).join(),
       ])
     )
       return;
@@ -402,7 +405,6 @@ export const rail = part({
           [`${glyph.done} `, c.success],
           ["Nothing waits for you", c.muted],
         ];
-    const rows = this.activePrompts();
     const paused = rows.filter((one) => one.thread.state === "paused").length;
     const count = rows.length ? `${rows.length} active${paused ? ` · ${paused} paused` : ""}` : "";
     const tail: Part[] = [
