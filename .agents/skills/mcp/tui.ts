@@ -302,7 +302,7 @@ async function reconnectAll(seen: Seen, selected = "", reload = false): Promise<
       seen.say(`MCP: ${name} is ${one?.state ?? "done"}${one?.error ? `: ${gist(one.error)}` : ""}.`);
     }
   } catch (error) {
-    seen.say(`MCP: reconnect all failed: ${gist(error instanceof Error ? error.message : error, 300)}`);
+    seen.say(`MCP: ${reload ? "reload" : "reconnect all"} failed: ${gist(error instanceof Error ? error.message : error, 300)}`);
   }
   return dialog(seen, selected);
 }

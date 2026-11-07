@@ -107,7 +107,7 @@ test("/mcp reconnect all reconnects each server that is down in one word, and th
   );
 });
 
-test("/mcp reload reconnects each server, the connected ones too, in one word, so a changed tool is listed again", async () => {
+test("/mcp reload reconnects each server, the connected ones too, in one word", async () => {
   const session = await demoSession({ cwd: project() });
   await composing(
     async ({ app, frame, screen }) => {
