@@ -1572,6 +1572,36 @@ mod daemon {
   }
 
   #[tokio::test]
+  async fn a_reopen_tells_no_stall_of_an_act_that_the_life_before_its_checkpoint_left_open() {
+    let at = place();
+    let local = Local::new(at.join("sock"));
+    let listener = local.listen().await.unwrap();
+    let settings = Settings {
+      opening: opening(&at),
+      grace: SHORT,
+      stall: QUIET,
+      tailnet: None,
+      door: None,
+      host: None,
+    };
+    let served = local.clone();
+    tokio::spawn(async move { run(&served, listener, settings).await });
+    let mut window = Window::dialed(&local).await;
+    let life = opened(&mut window, &at, "a.jsonl").await;
+    window.attach(&life).await;
+    let waits = "await wait(3600, __name__)".to_owned();
+    let verb = Verb::Run { life: life.clone(), word: waits, on: None };
+    let Ok(Answer::Act(rung)) = window.ask(verb).await else { panic!("no rung") };
+    assert_eq!(window.ask(Verb::Detach { life: life.clone() }).await, Ok(Answer::Done));
+    time::sleep(PAST).await;
+    assert!(!window.lives(&life).await, "the life ended after its grace, on its checkpoint");
+    opened(&mut window, &at, "a.jsonl").await;
+    window.attach(&life).await;
+    let stalls: Vec<Frame> = window.during(QUIET * 3).await.into_iter().filter(stall).collect();
+    assert!(stalls.is_empty(), "{rung} and its run are acts of the life before: {stalls:?}");
+  }
+
+  #[tokio::test]
   async fn a_rung_that_waits_with_no_reply_is_told_to_its_chain_after_the_bound() {
     let at = place();
     let local = Local::new(at.join("sock"));
