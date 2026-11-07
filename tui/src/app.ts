@@ -15,7 +15,7 @@ import {
   TextRenderable,
 } from "@opentui/core";
 import type { Keymap } from "@opentui/keymap";
-import { safeText, type Turn } from "furb";
+import { type FilePicker, safeText, type Turn } from "furb";
 import { type ChainThread, type Loom, type ProgramLine, type ThreadNode, wants } from "furb/life";
 import type { Tree, ViewEvent } from "furb/protocol";
 import { type ActionsPart, actions, actionsBound } from "./app/actions.ts";
@@ -263,6 +263,11 @@ export class App {
   /** The token whose suggestions Escape hid, which a change of the token shows again. */
   dismissed = "";
   lastToken = "";
+  /** The picker of the files of an `@`, which walks its folder once as the `@` begins: the folder, the query that it
+   * holds, and whether its walk or its match still runs. */
+  filePicker?: { picker: FilePicker; directory: string; query?: string; running: boolean };
+  /** The next draw of the suggestions while the walk or the match of the picker runs. */
+  pickerTimer?: ReturnType<typeof setTimeout>;
   readonly search: InputRenderable;
   readonly searchRow: BoxRenderable;
   /** The bar above the feed while the rewind tree is open, which says what a choice does. */

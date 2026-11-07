@@ -51,7 +51,7 @@ ENGINE = vars(furb.python)
 """ENGINE is the module of the engine of this interpreter, whose names the Kernel and the gate read."""
 HERE = Path(__file__).resolve().parent
 """HERE is the directory of the suite, whose modules bind the names of the engine under test."""
-EXTENSIONS = HERE.parent / "extensions"
+EXTENSIONS = HERE.parent / ".agents" / "skills"
 """EXTENSIONS is the folder of the extensions, whose conftest holds the helpers that only their suites need."""
 SUITES = (HERE, *sorted(EXTENSIONS.glob("*/test")))
 """SUITES are the suite of the engine and the suite of each extension, each test of which runs on both engines."""
@@ -151,7 +151,7 @@ NUMS = (
 
 
 def definitions(word: str) -> str:
-  """The definitions of a word, as the crate gives them to gathered (definitions of src/extension.rs): each statement at
+  """The definitions of a word, as the crate gives them to gathered (definitions of src/skill.rs): each statement at
   its top that defines a function, a class or a type, an import, and an assignment to names in capitals, in order. A
   word that does not parse is its own definitions."""
   try:
@@ -857,13 +857,15 @@ def engine_of(request: pytest.FixtureRequest) -> Generator[str]:
 
 # pytest loads this file as its plugin under a name of its own; the tests and the probe import it as conftest. One
 # module object under both names keeps isinstance true against the classes above.
-sys.modules.setdefault("conftest", sys.modules[__name__])
+HARNESS = sys.modules[__name__]
+"""HARNESS is this module, which the tests import as conftest, whatever name pytest loaded it under."""
+sys.modules.setdefault("conftest", HARNESS)
 
 
 def pytest_collectstart(collector: pytest.Collector) -> None:  # noqa: ARG001
   """Every collector sees this module under the name conftest: pytest drops that name before it loads a conftest of a
-  folder outside a package, as one under .furb/extensions, and a test would then import a second copy."""
-  sys.modules["conftest"] = sys.modules[__name__]
+  folder outside a package, as one under .furb/skills, and a test would then import a second copy."""
+  sys.modules["conftest"] = HARNESS
 
 
 QUOTES = json.loads((Path(__file__).parent / "quotes.json").read_text(encoding="utf-8"))

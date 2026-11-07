@@ -133,12 +133,21 @@ fn a_turn_hands_a_model_each_image_that_the_message_of_a_prompt_it_opens_names_o
   );
   let file = at.join(kept.uri.strip_prefix("furb-image://").unwrap_or_default());
   fs::remove_file(&file).expect("the image goes");
-  let system = fs::metadata(&file).expect_err("the image is gone");
-  let gone = format!("The image {} did not load from {}: {system}", kept.uri, file.display());
+  assert!(fs::metadata(&file).is_err(), "the image is gone");
   assert_eq!(
     images.named(&python, &mut HashSet::new()).map(|seen| seen.len()).map_err(|no| no.to_string()),
-    Err(gone),
-    "an image whose file is gone fails"
+    Ok(0),
+    "an image whose file is gone is handed to no model, and the turn goes"
+  );
+  let lost = images.lost();
+  assert_eq!(lost.len(), 1, "the loss is told");
+  assert_eq!(lost[0], kept.uri);
+  images.named(&python, &mut HashSet::new()).expect("the turn goes again");
+  assert!(images.lost().is_empty(), "the loss is told once");
+  fs::create_dir(&file).expect("a directory stands where the file stood");
+  assert!(
+    images.named(&python, &mut HashSet::new()).is_err(),
+    "a file that fails to load for another cause than its loss still fails"
   );
 }
 

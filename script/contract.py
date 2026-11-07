@@ -1,6 +1,6 @@
 """Compare the contract of a build with the contract of the last release, and name each change that breaks a caller.
 
-The contract is `src/furb/engine.pyi`, the interface of each official kit, `extensions/<name>/<name>.pyi`, and the
+The contract is `src/furb/engine.pyi`, the interface of each official kit, `.agents/skills/<name>/<name>.pyi`, and the
 closed set of the nodes of a view in `host/protocol.schema.json`, each node with its fields. The
 script reads each one at the last tag, with `git show <tag>:<path>`, and in the working tree. It reads a contract as the
 signatures of its top-level definitions, the fields and the methods of each class, its constants and its aliases, and
@@ -44,7 +44,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 ENGINE = "src/furb/engine.pyi"
 SCHEMA = "host/protocol.schema.json"
-KIT = re.compile(r"extensions/[^/]+/[^/]+\.pyi")
+KIT = re.compile(r"(?:extensions|\.agents/skills)/([^/]+/[^/]+\.pyi)")
+"""KIT is the interface of a kit, in .agents/skills, or in extensions, its folder in a release before the kits moved."""
+HOME = ".agents/skills/"
+FORMER = "extensions/"
 POLICY = "A minor may change the default of each policy:"
 POSITIONAL = ("posonly", "pos")
 
@@ -364,12 +367,20 @@ def last_tag(root: Path) -> str:
 
 
 def paths(root: Path, *refs: str) -> list[str]:
-  here = {x.relative_to(root).as_posix() for x in root.glob("extensions/*/*.pyi")}
+  here = {x.relative_to(root).as_posix() for x in root.glob(".agents/skills/*/*.pyi")}
   there: set[str] = set()
   for ref in refs:
-    _, out = git(root, "ls-tree", "-r", "--name-only", ref, "--", "extensions")
-    there |= {x for x in out.split() if KIT.fullmatch(x)}
+    _, out = git(root, "ls-tree", "-r", "--name-only", ref, "--", FORMER, HOME)
+    there |= {HOME + found[1] for x in out.split() if (found := KIT.fullmatch(x))}
   return [ENGINE, *sorted(here | there), SCHEMA]
+
+
+def shown(root: Path, ref: str, path: str) -> tuple[int, str]:
+  """The text of a path at a ref, or for a kit, of its file in extensions at a ref before the kits moved."""
+  code, text = git(root, "show", f"{ref}:{path}")
+  if code and path.startswith(HOME):
+    code, text = git(root, "show", f"{ref}:{FORMER}{path.removeprefix(HOME)}")
+  return code, text
 
 
 def declared(title: str) -> bool:
@@ -379,9 +390,9 @@ def declared(title: str) -> bool:
 def compared(root: Path, tag: str, files: list[str], ref: str = "") -> list[Finding]:
   found: list[Finding] = []
   for path in files:
-    code, old = git(root, "show", f"{tag}:{path}")
+    code, old = shown(root, tag, path)
     if ref:
-      kept, text = git(root, "show", f"{ref}:{path}")
+      kept, text = shown(root, ref, path)
       new = text if kept == 0 else None
     else:
       file = root / path

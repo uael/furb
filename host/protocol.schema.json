@@ -1131,6 +1131,14 @@
             "life": {
               "type": "string"
             },
+            "on": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "The chain whose acts give the moments; none gives those of the whole life.",
+              "default": null
+            },
             "verb": {
               "type": "string",
               "const": "moments"
@@ -3068,6 +3076,13 @@
           "description": "Whether a reply of a rung runs, while its model writes its word. A rung with no word and no\nreply that runs waits for its turn.",
           "default": false
         },
+        "taken": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The messages of the operator that a chain with a source took from it, in their order: each\nprompt of the operator that the prefix of the chain carries, with the id it has on the source."
+        },
         "began": {
           "type": "integer",
           "format": "uint64",
@@ -3886,5 +3901,5 @@
       "description": "An act that stays open in a life that stalled: its name, its kind, and the chain that it stands\nin."
     }
   },
-  "x-protocol": 1
+  "x-protocol": 4
 }

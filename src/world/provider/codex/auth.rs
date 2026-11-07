@@ -23,7 +23,7 @@ use tokio::{
 
 use crate::{
   ear::runtime,
-  extension::Places,
+  skill::Places,
   world::disk::{self, Access},
 };
 use serde::de;

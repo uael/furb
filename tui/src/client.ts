@@ -198,7 +198,18 @@ export class Daemon extends EventEmitter {
     socket.on("error", () => {});
     socket.on("close", () => this.gone(socket));
     if (this.held === 0) socket.unref();
-    const welcome = await this.ask({ verb: "hello", protocol: PROTOCOL, kind: "window", role: this.role });
+    const welcome = await this.ask({
+      verb: "hello",
+      protocol: PROTOCOL,
+      kind: "window",
+      role: this.role,
+    }).catch((error: unknown) => {
+      // A refusal of the version is told as a daemon of another build.
+      if (!(error instanceof Refused) || error.kind !== "protocol") throw error;
+      throw new Error(
+        `The daemon of this machine is of another build (${error.message}). It ends once its windows quit and its grace passes, and the next window starts one of this build.`,
+      );
+    });
     if (welcome.answer !== "welcome") throw new Error("The daemon gave no welcome.");
     this.peer = welcome.data.peer;
   }
@@ -938,6 +949,18 @@ export class RemoteLife extends EventEmitter {
   async rail(hidden: string[], at?: number): Promise<ThreadNode[]> {
     const got = await this.verb({ verb: "rail", life: this.record, hidden, at: at ?? null });
     if (got.answer !== "rail") throw new Error(`The daemon gave ${got.answer}, and no threads.`);
+    return got.data;
+  }
+  /** The acts of the life as they stood just after a moment, as the crate folds them in the daemon. */
+  async asOf(at: number): Promise<Act[]> {
+    const got = await this.verb({ verb: "as_of", life: this.record, at });
+    if (got.answer !== "acts") throw new Error(`The daemon gave ${got.answer}, and no acts.`);
+    return got.data;
+  }
+  /** Each moment at which an act of the life, or of one chain, began or ended, in order. */
+  async moments(on?: string): Promise<number[]> {
+    const got = await this.verb({ verb: "moments", life: this.record, on: on ?? null });
+    if (got.answer !== "moments") throw new Error(`The daemon gave ${got.answer}, and no moments.`);
     return got.data;
   }
   async pending(): Promise<Map<string, string>> {

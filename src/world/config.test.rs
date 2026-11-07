@@ -3,7 +3,7 @@ use std::{fs, path::PathBuf};
 use serde_json::{Value, json};
 
 use super::{Change, Error, Kind, Layer, Layers, Property, Setting};
-use crate::extension::{Places, load};
+use crate::skill::{Places, load};
 use crate::world::catalog::blocking;
 use std::env;
 use std::path;

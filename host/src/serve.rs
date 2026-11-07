@@ -4,20 +4,30 @@
 use std::future::Future;
 
 use futures::{SinkExt, StreamExt, stream::FuturesUnordered};
+use serde_json::Value;
 use tokio::{
   io::{self, AsyncRead, AsyncWrite},
-  sync::mpsc,
+  sync::{mpsc, watch},
 };
 use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec, LinesCodecError};
 
 use crate::{
   error::{ProtocolError, TransportError},
-  protocol::{Answer, BOUND, Frame, Hello, Kind, PROTOCOL, Peer, Request, Verb},
+  protocol::{Answer, BOUND, Frame, Hello, Kind, PROTOCOL, Peer, Request, Role, Verb},
   transport::Who,
 };
 
 /// What the daemon pushes to one peer, as the events of a life that it attached.
 pub type Outbox = mpsc::UnboundedSender<Frame>;
+
+/// The role that a peer holds now: the one that its transport gave, which an access list that
+/// changes moves, or none once the list drops its login.
+pub type Granted = watch::Receiver<Option<Role>>;
+
+/// The role of a peer that no access list moves.
+pub fn fixed(role: Role) -> Granted {
+  watch::channel(Some(role)).1
+}
 
 /// What a daemon does with each verb of a peer, once the door checked its role.
 pub trait Host {
@@ -31,38 +41,38 @@ pub trait Host {
 }
 
 /// One peer served on a stream until it ends: its hello first, then each verb that its role
-/// allows, answered at once and in any order. A hello of another protocol, a first frame that is
-/// no hello, and a frame past the bound close the peer, each with its refusal.
+/// allows, answered at once and in any order. The role is the one that `granted` gives at the
+/// moment of the verb, so a role that moves holds from the next verb, and a login that the list
+/// drops is refused and closed at once. A hello of another protocol, a first frame that is no
+/// hello, and a frame past the bound close the peer, each with its refusal.
 pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
   host: &H,
   stream: S,
   who: Who,
+  mut granted: Granted,
 ) -> Result<(), TransportError> {
   let (read, write) = io::split(stream);
   let mut lines = FramedRead::new(read, LinesCodec::new_with_max_length(BOUND));
   let mut out = FramedWrite::new(write, LinesCodec::new());
-  let peer = match heard(&mut lines).await? {
+  let (mut peer, asked) = match heard(&mut lines).await? {
     None => return Ok(()),
     Some(Ok(Request { id, verb: Verb::Hello(Hello { kind: Kind::Skill, name: None, .. }) })) => {
       return closed(&mut out, Some(id), ProtocolError::Nameless).await;
     }
     Some(Ok(Request { id, verb: Verb::Hello(hello) })) if hello.protocol == PROTOCOL => {
-      let peer = Peer {
-        login: who.login,
-        role: hello.role.map_or(who.role, |asked| asked.min(who.role)),
-        kind: hello.kind,
-        name: hello.name,
-      };
+      let asked = hello.role;
+      let role = asked.map_or(who.role, |asked| asked.min(who.role));
+      let peer = Peer { login: who.login, role, kind: hello.kind, name: hello.name };
       let answer = Answer::Welcome { protocol: PROTOCOL, peer: peer.clone() };
       send(&mut out, &Frame::Reply { id, answer }).await?;
-      peer
+      (peer, asked)
     }
     Some(Ok(Request { id, verb: Verb::Hello(hello) })) => {
       let error = ProtocolError::Protocol { ours: PROTOCOL, theirs: hello.protocol };
       return closed(&mut out, Some(id), error).await;
     }
     Some(Ok(Request { id, .. })) => return closed(&mut out, Some(id), ProtocolError::First).await,
-    Some(Err(error)) => return closed(&mut out, None, error).await,
+    Some(Err((id, error))) => return closed(&mut out, id, error).await,
   };
   let (outbox, mut pushed) = mpsc::unbounded_channel();
   let mut answers = FuturesUnordered::new();
@@ -71,32 +81,44 @@ pub async fn serve<H: Host, S: AsyncRead + AsyncWrite>(
       heard = heard(&mut lines) => match heard? {
         None => return Ok(()),
         Some(Ok(Request { id, verb })) => match allowed(&peer, &verb) {
-          Ok(()) => answers.push(answered(host, &peer, &outbox, id, verb)),
+          Ok(()) => answers.push(answered(host, peer.clone(), &outbox, id, verb)),
           Err(error) => send(&mut out, &Frame::refused(Some(id), error)).await?,
         },
-        Some(Err(error @ ProtocolError::Large { .. })) => return closed(&mut out, None, error).await,
-        Some(Err(error)) => send(&mut out, &Frame::refused(None, error)).await?,
+        Some(Err((_, error @ ProtocolError::Large { .. }))) => {
+          return closed(&mut out, None, error).await;
+        }
+        Some(Err((id, error))) => send(&mut out, &Frame::refused(id, error)).await?,
       },
+      Ok(()) = granted.changed() => {
+        let now = *granted.borrow_and_update();
+        let Some(role) = now else {
+          let why = format!("the access list no longer names {}", peer.login);
+          return closed(&mut out, None, ProtocolError::Refused { why }).await;
+        };
+        peer.role = asked.map_or(role, |asked| asked.min(role));
+      }
       Some(frame) = pushed.recv() => send(&mut out, &frame).await?,
       Some(frame) = answers.next() => send(&mut out, &frame).await?,
     }
   }
 }
 
-/// The next request of a peer, none at its end, or the refusal of its frame. A blank line is no
-/// frame.
+/// The next request of a peer, none at its end, or the refusal of its frame, under the id that the
+/// frame gives when it gives one, so that a verb that this daemon does not know is refused to the
+/// request that waits for it. A blank line is no frame.
 async fn heard<R: AsyncRead + Unpin>(
   lines: &mut FramedRead<R, LinesCodec>,
-) -> Result<Option<Result<Request, ProtocolError>>, TransportError> {
+) -> Result<Option<Result<Request, (Option<u64>, ProtocolError)>>, TransportError> {
   loop {
     return match lines.next().await {
       None => Ok(None),
       Some(Ok(line)) if line.trim().is_empty() => continue,
-      Some(Ok(line)) => Ok(Some(
-        serde_json::from_str(&line).map_err(|no| ProtocolError::Unread { why: no.to_string() }),
-      )),
+      Some(Ok(line)) => Ok(Some(serde_json::from_str(&line).map_err(|no| {
+        let id = serde_json::from_str::<Value>(&line).ok().and_then(|one| one["id"].as_u64());
+        (id, ProtocolError::Unread { why: no.to_string() })
+      }))),
       Some(Err(LinesCodecError::MaxLineLengthExceeded)) => {
-        Ok(Some(Err(ProtocolError::Large { bound: BOUND })))
+        Ok(Some(Err((None, ProtocolError::Large { bound: BOUND }))))
       }
       Some(Err(no)) => Err(no.into()),
     };
@@ -114,8 +136,8 @@ fn allowed(peer: &Peer, verb: &Verb) -> Result<(), ProtocolError> {
 }
 
 /// The frame of what the host answered to a verb.
-async fn answered<H: Host>(host: &H, peer: &Peer, outbox: &Outbox, id: u64, verb: Verb) -> Frame {
-  match host.answer(peer, verb, outbox).await {
+async fn answered<H: Host>(host: &H, peer: Peer, outbox: &Outbox, id: u64, verb: Verb) -> Frame {
+  match host.answer(&peer, verb, outbox).await {
     Ok(answer) => Frame::Reply { id, answer },
     Err(error) => Frame::refused(Some(id), error),
   }

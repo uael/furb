@@ -341,7 +341,7 @@ export class Reader {
     this.feed(whole);
     const fact = line ? this.cut(whole, line) : whole;
     // The crate keeps of the fact what its row keeps, since the file holds its long texts whole.
-    this.meaning.hear((line ? shortened(told) : told) as unknown[]);
+    this.meaning.told(JSON.stringify(line ? shortened(told) : told));
     this.facts.push(fact);
     const [kind, about] = fact;
     // A question stands in the transcript of the chain that it is on, and any other fact in that of what it is about.

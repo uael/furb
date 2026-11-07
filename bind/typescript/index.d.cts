@@ -176,6 +176,25 @@ export declare class Engine {
 export type JsEngine = Engine
 
 /**
+ * The picker of the files of a window, which walks its folder once as it opens, in the
+ * background: each key gives it the query and reads the first rows that stand then, so no key
+ * waits for the walk or the match.
+ */
+export declare class FilePicker {
+  /** A picker of the files of a directory, whose walk starts now. */
+  constructor(directory: string)
+  /**
+   * The picker opened again on a directory, for a new `@`: the walks of the last open stop now,
+   * and a walk of the directory starts.
+   */
+  open(directory: string): void
+  /** Takes the query that the operator typed after `@`, and gives the first rows that stand now. */
+  find(query: string, most: number): Rows
+  /** The first rows of the last query as they stand now, which a window reads again while they run. */
+  rows(most: number): Rows
+}
+
+/**
  * The meaning of a life that each window draws, folded in the crate from the facts of the life in
  * the order of its log, as a daemon folds it: the acts, the desk, the threads of a chain, the acts
  * as they stood at a moment, and the moments. A window that reads a record with no daemon folds it
@@ -191,6 +210,12 @@ export declare class Meaning {
    * itself, as the engine does, so a record folds as its life did.
    */
   hear(fact: unknown[], covered?: string[], born?: unknown[] | null): Array<import("./dist/protocol.js").Act>
+  /**
+   * A fact of a record, as the JSON of its line, which the meaning folds as [`Meaning::hear`]
+   * does with neither `covered` nor `born`, and gives back nothing: a window that reads a record
+   * asks the meaning later for what it draws, so no act crosses the door again for each fact.
+   */
+  told(line: string): void
   /**
    * The live acts whose pause a pause would change, or a wake: each that no pause holds, or each
    * that one holds.
@@ -210,8 +235,8 @@ export declare class Meaning {
   rail(hidden?: Array<string> | undefined | null, at?: number | undefined | null): Array<import("./dist/protocol.js").ThreadNode>
   /** The acts as they stood just after a moment. */
   asOf(at: number): Array<import("./dist/protocol.js").Act>
-  /** Each moment at which an act began or ended, in order. */
-  moments(): number[]
+  /** Each moment at which an act began or ended, in order, of the life or of the acts of one chain. */
+  moments(on?: string | undefined | null): number[]
 }
 
 /**
@@ -296,10 +321,14 @@ export declare function enabled(root: unknown[][]): Array<Extension>
 export declare const ENGINE: string
 
 /**
- * An extension: its name, its word, its life word, which is empty when it has none, whether it plays on the root
- * alone, and the path of the file of its word, with `~` for the home of the user as the World writes a path for a
- * model, which each chain reads as a turn of its setup, and which is empty when no file stands for the word. An
- * extension that plays on the root alone plays on no other chain but one whose source had it, since that chain makes
+ * An extension: its name, its word, its life word, which is empty when it has none, whether it
+ * plays on the root
+ * alone, and the path of the file of its word, with `~` for the home of the user as the World
+ * writes a path for a
+ * model, which each chain reads as a turn of its setup, and which is empty when no file stands for
+ * the word. An
+ * extension that plays on the root alone plays on no other chain but one whose source had it,
+ * since that chain makes
  * the rung of its source again; any other extension plays on every chain.
  */
 export interface Extension {
@@ -568,9 +597,12 @@ export interface Outcome {
 }
 
 /**
- * The part of an extension that a TUI loads: the name of the extension, the path of its module of TypeScript, which
- * the manifest names under `tui`, beside the word, and the text of that module when the crate carries it. The crate
- * carries the part of an official extension, so a TUI loads it from the text where no checkout of furb stands, as in
+ * The part of an extension that a TUI loads: the name of the extension, the path of its module of
+ * TypeScript, which
+ * the manifest names under `tui`, beside the word, and the text of that module when the crate
+ * carries it. The crate
+ * carries the part of an official extension, so a TUI loads it from the text where no checkout of
+ * furb stands, as in
  * an installed package, and the path is then its place in the repository of furb.
  */
 export interface Part {
@@ -586,12 +618,6 @@ export interface Part {
 export declare function parts(project: string): Array<Part>
 
 /**
- * The files that a query after `@` picks from the directory, best first: from the files of the
- * project that a walk gave, or from the folder that a query starting with `/`, `~` or `../` names.
- */
-export declare function pickedFiles(directory: string, query: string, project: Array<string>): Array<string>
-
-/**
  * A provider as a first run checks it: its name, the names of its credential in the environment, whether the
  * settings enable it, and how many of its models the catalog offers.
  */
@@ -602,6 +628,13 @@ export interface ProviderInfo {
   /** Whether the provider settings enable this provider. */
   enabled: boolean
 }
+
+/**
+ * Acts each in the state that the crate gives it, and each chain in the state that the acts that
+ * stand in it give, as a daemon tells them: what a window that makes acts of its own, as a test
+ * does, reads in place of a state of its own.
+ */
+export declare function restated(acts: Array<import("./dist/protocol.js").Act>): Array<import("./dist/protocol.js").Act>
 
 /**
  * What the record at a path tells, read with no life, so no word runs again and a record of any
@@ -618,6 +651,15 @@ export declare function retold(path: string): { made: string | null; engine: str
 
 /** ROOT is the name of the root, which every life opens first under that one name, and on which boot stands the life. */
 export declare const ROOT: string
+
+/**
+ * What a key of the picker shows: the first rows that the query picks, best first, and whether the
+ * walk or the match still runs, so later rows may come.
+ */
+export interface Rows {
+  paths: Array<string>
+  running: boolean
+}
 
 /**
  * The scratch directory of the record at a path, in the cache of furb, which a host removes when it deletes the

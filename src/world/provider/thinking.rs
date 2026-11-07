@@ -3,7 +3,7 @@
 use serde_json::{Map, Value};
 
 use super::model::{Asked, Model};
-use crate::extension;
+use crate::skill;
 use std::fs;
 use std::path;
 
@@ -45,7 +45,7 @@ pub(super) fn thinking(env: Option<&str>, directory: &path::Path) -> Thinking {
     let text = fs::read_to_string(file).ok()?;
     serde_json::from_str::<Value>(&text).ok()?.get(KEY_THINKING)?.as_u64()
   };
-  let config = || extension::projected(directory).into_iter().rev().find_map(read);
+  let config = || skill::projected(directory).into_iter().rev().find_map(read);
   Thinking { most: given.or_else(config).unwrap_or(THINKING), inherited: env.is_some() }
 }
 

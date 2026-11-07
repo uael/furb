@@ -26,7 +26,7 @@ import { hunkPatch, type Scope } from "../review.ts";
 import type { ActRow, View } from "../session.ts";
 import { theme as c, glyph, markOf, spacing as space, spin, threadTone } from "../theme.ts";
 import { bold, italic, type Part, plain } from "../ui.ts";
-import { branchMessages, branchStart, branchTaken, branchTakes } from "../watching.ts";
+import { branchStart, branchTakes } from "../watching.ts";
 import { part } from "./part.ts";
 import { type BlockOptions, hidden, MESSAGE_ROWS, PROGRAM_STEPS, spell, viewLabels } from "./shared.ts";
 import { SCROLL } from "./thread.ts";
@@ -320,19 +320,12 @@ export const feed = part({
       const owed = new Set(w.host.prompts.keys());
       const word = (rung: ActRow) => this.subject(rung);
       const own = thread(w.selected, word, w.host.streams, owed, opened, index);
-      // A branch takes from its source each message before the word that made it, which the word does not leave out,
-      // with what answered it. Its feed shows these threads as they stood when the branch began, after the line that
-      // names the source and before its own acts, since its model reads them as its own turns.
+      // A branch takes from its source the messages that its prefix carries, as the crate folds them, with what
+      // answered them. Its feed shows these threads as they stood when the branch began, after the line that names the
+      // source and before its own acts, since its model reads them as its own turns.
       const branch = rows.get(w.selected);
       const source = branch?.kind === "chain" ? String(branch.words[1] ?? "") : "";
-      const maker = branch && (w.actOf(String(branch.by)) ?? branch);
-      const taken = new Set(
-        source && maker
-          ? branchTaken(shown, source, maker, this.subject(maker), (one) => w.isUserPrompt(one)).map(
-              (one) => one.id,
-            )
-          : [],
-      );
+      const taken = new Set(source ? (branch?.taken ?? []) : []);
       // The threads that the branch took stand as they stood at the fact before the one that made the branch, and no
       // other step of its source stands at their top.
       const frozen = branch && taken.size ? w.ladderAt(source, branch.began - 1) : undefined;
@@ -1059,15 +1052,8 @@ export const feed = part({
             if (retold) continue;
             retold = true;
             const source = String(rows.get(act.by)?.words[1] ?? "");
-            // The branch says what it takes of its source: each message before the moment it starts at, which the
-            // word that made it does not leave out.
-            const made = rows.get(act.by);
-            const maker = made && (w.actOf(String(made.by)) ?? made);
-            const messages =
-              act.by === w.selected && source
-                ? taken.size
-                : maker &&
-                  branchMessages(w.acts, source, maker, this.subject(maker), (one) => w.isUserPrompt(one));
+            // The branch says what it takes of its source: each message that its prefix carries, as the crate folds it.
+            const messages = rows.get(act.by)?.taken?.length ?? 0;
             const name = w.labelOf(source);
             if (source)
               add(

@@ -35,7 +35,7 @@ export interface GutterOptions extends RenderableOptions<Gutter> {
 }
 
 /** The gutter of a block of code, which furb draws in each cell that it owns: at the left edge the number of each line
- * in a column of its own, then the column of the states, then one blank cell before the code. The number of a line that
+ * in a column of its own, then one blank cell, then the column of the states, then one blank cell before the code. The number of a line that
  * runs fades out into the loader and back, and a line that a model writes turns the loader in its state. The gutter
  * reads the time at each frame, so a tick only asks for a frame. The code stands inside the box, past the cells of the
  * gutter, so the pointer over the gutter reaches the box. */
@@ -133,7 +133,7 @@ export class Gutter extends Renderable {
           buffer.drawText(text, this.x + column - Bun.stringWidth(text), at, color, light);
         }
         const [mark, tone] = this.states.get(line) ?? (this.loaders.has(line) ? [spin(), c.accent] : [""]);
-        if (mark) buffer.drawText(mark, this.x + column, at, tone ?? fg, light);
+        if (mark) buffer.drawText(mark, this.x + gutterWidth(column), at, tone ?? fg, light);
       }
       last = line;
     }

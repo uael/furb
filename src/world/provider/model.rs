@@ -14,7 +14,7 @@ use super::{
   Advertised, Hosted, Told, answer::streamed, catalog, images::Images, messages::messages,
   search::Searches, thinking::Thought,
 };
-use crate::extension;
+use crate::skill;
 use crate::world::files;
 use crate::{
   engine::{OPERATOR, WINDOW},
@@ -110,12 +110,12 @@ pub(super) struct Configured {
 }
 
 /// What the configs of the user, in the config directory, and of the project, in a directory, say
-/// of the models, in the order of [`crate::extension::configs`]: a later file gives a model another
+/// of the models, in the order of [`crate::skill::configs`]: a later file gives a model another
 /// class over an earlier one, and its list of automatic work replaces the list of an earlier one. A
 /// word that names no class, and a name of the list that is no string, give nothing.
 pub(super) fn configured(user: &Path, directory: &Path) -> Configured {
   let mut given = Configured::default();
-  for file in extension::configs(user, directory) {
+  for file in skill::configs(user, directory) {
     let Ok(text) = fs::read_to_string(file) else { continue };
     let Ok(config) = serde_json::from_str::<Value>(&text) else { continue };
     for (name, class) in config.get(KEY_CLASSES).and_then(Value::as_object).into_iter().flatten() {
@@ -352,7 +352,8 @@ impl Model {
 /// What the chains stand on: the models and the operator, the directory, the default actor, and the
 /// path of the doctrine that a chain reads, which [`catalog::doctrine`] gives, each path as
 /// [`crate::world::files::tilded`] writes it, then the extensions that the engine seeds the root
-/// with, each as `[name, file, life word, root alone]`. A standing with no doctrine, or of a
+/// with, each as `[name, file, life word, root alone]`, then the absolute home of the user, which
+/// a path under the home hides as `~`. A standing with no doctrine, or of a
 /// provider that advertises no extensions, gives none, and the engine seeds no root then. Each
 /// model of the roster gives its class, and a model of the list of automatic work its place in that
 /// list, which the configs of the user, in the config directory, and of the project give, as
@@ -395,11 +396,14 @@ pub(super) fn standing(
     }))
   };
   let advertised = extensions.filter(|_| doctrine.is_some()).map(given);
+  let above =
+    advertised.as_ref().and(home.as_deref()).map(|one| Object::string(one.display().to_string()));
   Object::list(
     [roster, shown(Path::new(directory)), Object::string(actor)]
       .into_iter()
       .chain(doctrine)
-      .chain(advertised),
+      .chain(advertised)
+      .chain(above),
   )
 }
 

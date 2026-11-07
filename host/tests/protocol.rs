@@ -21,7 +21,7 @@ mod protocol {
   };
 
   use furb_host::{
-    Host, Outbox, ProtocolError,
+    Host, Outbox, ProtocolError, fixed,
     protocol::{
       Answer, Axis, BOUND, Config, Dispose, Effect, Frame, Gesture, Hello, Kind, Layer, Mount,
       Node, PROTOCOL, Peer, Request, Role, Run, Shape, Slot, Tone, Tree, Verb, ViewEffect,
@@ -30,7 +30,7 @@ mod protocol {
     serve,
     transport::{Dialer, Identity, Local, Who},
   };
-  use serde_json::json;
+  use serde_json::{Value, json};
   use tokio::io::DuplexStream;
   use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, duplex};
 
@@ -141,7 +141,7 @@ mod protocol {
       Verb::Desk { life: life(), notices: vec![id()] },
       Verb::Threads { life: life(), on: on(), at: Some(3), read: Some(2) },
       Verb::AsOf { life: life(), at: 3 },
-      Verb::Moments { life: life() },
+      Verb::Moments { life: life(), on: None },
       Verb::Answered {
         life: life(),
         ask: 1,
@@ -297,7 +297,7 @@ mod protocol {
   fn served(role: Role) -> Client<DuplexStream> {
     let (ours, theirs) = duplex(1 << 16);
     let who = Who { login: "uael".to_owned(), role };
-    tokio::spawn(async move { serve(&Echo, theirs, who).await });
+    tokio::spawn(async move { serve(&Echo, theirs, who, fixed(role)).await });
     Client { lines: BufReader::new(ours) }
   }
 
@@ -421,6 +421,53 @@ mod protocol {
     assert_eq!(client.heard().await, None);
   }
 
+  /// The digest of the shape of the schema of each version, the version 1 first: the SHA-256 of
+  /// the schema with no `x-protocol`, no `description` and no `title`, so the words of a doc
+  /// comment take no new version. Its length is the version, so a new shape takes one.
+  const SCHEMAS: [&str; PROTOCOL as usize] = [
+    "43cd8affad009b9de1c73c355ae4822f1de6149d95d919a5f02171f8c7072604",
+    "3d67e6b3dc718819064aae275d0f84cdd16c0f39b92d2a82a945461a19589713",
+    "b7fcc6ef6baf1e729e50bc4c81bd3ea06e83a906a66e62709d6aa40607e5a2cf",
+    "31c217c979811fbf74d11684749ed59de0ca097e387b59820826b22478069d41",
+  ];
+
+  /// A schema with no word that never crosses the wire: each `description` and `title` of a schema,
+  /// and no property that bears such a name.
+  fn shape(schema: &mut Value) {
+    match schema {
+      Value::Object(map) => {
+        map.remove("description");
+        map.remove("title");
+        for (key, one) in map.iter_mut() {
+          match (key.as_str(), one.as_object_mut()) {
+            ("properties" | "definitions" | "$defs", Some(named)) => {
+              named.values_mut().for_each(shape);
+            }
+            _ => shape(one),
+          }
+        }
+      }
+      Value::Array(all) => all.iter_mut().for_each(shape),
+      _ => {}
+    }
+  }
+
+  #[test]
+  fn each_change_of_the_schema_raises_the_protocol() {
+    use sha2::{Digest, Sha256};
+    let mut made = schema();
+    made.as_object_mut().unwrap().remove("x-protocol");
+    shape(&mut made);
+    let digest = format!("{:x}", Sha256::digest(made.to_string()));
+    assert_eq!(
+      SCHEMAS.last().copied(),
+      Some(digest.as_str()),
+      "the schema of the protocol changed: raise PROTOCOL and end SCHEMAS with {digest}"
+    );
+    let distinct: std::collections::BTreeSet<_> = SCHEMAS.iter().collect();
+    assert_eq!(distinct.len(), SCHEMAS.len(), "each version has a schema of its own");
+  }
+
   #[tokio::test]
   async fn a_hello_of_another_version_is_refused_with_both_versions() {
     let mut client = served(Role::Write);
@@ -450,10 +497,12 @@ mod protocol {
     let mut client = served(Role::Write);
     client.hello(PROTOCOL).await;
     client.say("{\"id\": 1, \"verb\": \"fly\"}").await;
-    assert!(matches!(
-      client.heard().await,
-      Some(Frame::Refused { id: None, error: ProtocolError::Unread { .. }, .. })
-    ));
+    let heard = client.heard().await;
+    let Some(Frame::Refused { id, error: ProtocolError::Unread { .. }, why }) = heard else {
+      panic!("no refusal: {heard:?}")
+    };
+    assert_eq!(id, Some(1), "a verb that the daemon does not know is refused to its request");
+    assert!(why.contains("fly"), "the refusal names the verb: {why}");
     assert!(matches!(client.ask(2, Verb::List { config: None }).await, Frame::Reply { id: 2, .. }));
   }
 
@@ -473,7 +522,8 @@ mod protocol {
     tokio::spawn(async move {
       let stream = listener.accept().await.unwrap();
       let who = door.identify(&stream).await.unwrap();
-      serve(&Echo, stream, who).await
+      let granted = fixed(who.role);
+      serve(&Echo, stream, who, granted).await
     });
     let mut client = Client { lines: BufReader::new(local.dial().await.unwrap()) };
     let Frame::Reply { answer: Answer::Welcome { peer, .. }, .. } = client.hello(PROTOCOL).await

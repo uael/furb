@@ -29,13 +29,13 @@ HARNESS = {
   "test/conftest.py",
   "test/outside/conftest.py",
   "test/outside/doubles.py",
-  "extensions/conftest.py",
-  ".furb/extensions/conftest.py",
+  ".agents/skills/conftest.py",
+  ".furb/skills/conftest.py",
 }
 HOOK = {"script/hooks/pre-commit": "test/outside/test_hook_script.py"}
-CONTRACT = re.compile(r"(test/(?!outside/)|extensions/[^/]+/test/|\.furb/extensions/[^/]+/test/)")
-TEST = re.compile(r"(test|extensions/[^/]+/test|\.furb/extensions(/[^/]+/test)?)/(.+/)?test_[^/]*\.py$")
-EXTENSION = re.compile(r"((?:\.furb/)?extensions/[^/]+)/")
+CONTRACT = re.compile(r"(test/(?!outside/)|\.agents/skills/[^/]+/test/|\.furb/skills/[^/]+/test/)")
+TEST = re.compile(r"(test|\.agents/skills/[^/]+/test|\.furb/skills(/[^/]+/test)?)/(.+/)?test_[^/]*\.py$")
+EXTENSION = re.compile(r"((?:\.furb|\.agents)/skills/[^/]+)/")
 SCRIPT = re.compile(r"script/(?:hooks/)?([^/]+)\.(?:py|sh)$")
 
 
@@ -45,7 +45,7 @@ def naming(name: str, stem: str) -> list[str]:
   tests = [
     *ROOT.glob("test/**/test_*.py"),
     *ROOT.glob("script/hooks/test_*.py"),
-    *ROOT.glob(".furb/extensions/**/test_*.py"),
+    *ROOT.glob(".furb/skills/**/test_*.py"),
   ]
   return [
     one.relative_to(ROOT).as_posix() for one in tests if any(mark in one.read_text(encoding="utf-8") for mark in marks)
@@ -70,7 +70,7 @@ def suite(files: list[str]) -> list[str] | None:
       # The words of the project have tests of their own beside them, and the contract of an official one has its laws.
       found.append("test/test_hygiene.py")
       if hit[1].startswith(".furb/"):
-        found.append(".furb/extensions")
+        found.append(".furb/skills")
       if tests.is_dir():
         found.append(tests.relative_to(ROOT).as_posix())
     elif hit := SCRIPT.match(path):

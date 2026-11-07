@@ -32,7 +32,7 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             src/furb/engine.pyi
-            extensions/*/*.pyi
+            .agents/skills/*/*.pyi
             script/contract.py
           sparse-checkout-cone-mode: false
       # The script reads each contract of the last tag through git, so the tags come with the commit that each names.
