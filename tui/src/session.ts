@@ -1188,10 +1188,11 @@ export class Session extends EventEmitter {
         try {
           const got = await this.host.ladder(chain, at, [...opened], owed, taken && [...taken]);
           this.crateLadders.set(slot, { key, of, at, got });
-          this.emit("change");
         } finally {
           this.askingLadders.delete(slot);
         }
+        // The draw that this change brings may find the ladder stale again, and asks for it again, so the read is over.
+        this.emit("change");
       })();
       this.askingLadders.set(slot, read);
       read.catch(this.threadFault);
@@ -1208,10 +1209,10 @@ export class Session extends EventEmitter {
       try {
         const got = await this.host.threads(chain, undefined, this.read(chain));
         this.crateThreads.set(chain, { stamp, owed, got });
-        this.emit("change");
       } finally {
         this.askingThreads.delete(chain);
       }
+      this.emit("change");
     })();
     this.askingThreads.set(chain, read);
     return read;
@@ -1269,10 +1270,10 @@ export class Session extends EventEmitter {
     this.railAsking = (async () => {
       try {
         this.railRead = { version, owed, tree: await this.host.rail(hidden) };
-        this.emit("change");
       } finally {
         this.railAsking = undefined;
       }
+      this.emit("change");
     })();
     return this.railAsking;
   }
