@@ -1238,6 +1238,8 @@ def boot(record: Sequence[Entry] = (), **outside: Ear) -> Act[Never]:
 def listening() -> dict[str, Ear]:
   """listening gives the ear of each act and of each outside that still hears, by its name, in the order that boot drove them.
   An ear lives from its drive until it returns: a lasting ear lives past the done of its act, as the ear of mcp_index hears mcp_changed after it.
+  It gives a new copy each time, so a word that makes an act while it loops on it goes through each ear that it found.
+  A word that writes into what it read leaves each ear alive.
   """
 
 actor: str
