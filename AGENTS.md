@@ -19,22 +19,22 @@ API of its own:
   through rig and streams what it writes. The doc comments of `src/world.rs` and of each module say what each does, the
   tables of [`CONTRIBUTING.md`](CONTRIBUTING.md#the-world-and-the-life) list its files, and `docs/models.md` tells a
   user how furb finds a model and how to choose one.
-- `src/extension.rs` says what an extension is and where a host finds the ones that a life runs. Its ear `extensions`
+- `src/skill.rs` says what an extension is and where a host finds the ones that a life runs. Its ear `extensions`
   enables each by a fact that the record keeps, plays its word as a rung on each chain where its manifest says, every
   chain or the root alone, and plays the setup of the root on a new record. `parts` gives the part of each extension for
-  the TUI, which `tui/src/parts.ts` loads. `extensions/` holds the official extensions, `catchup`, `memory`, `skills`,
-  `compaction`, `naming`, `ouroboros`, `web` and `mcp`, each a word, a contract and a suite, and `src/extension/` holds the ear of
-  the World of the one that has one, `skills.rs`. `docs/extensions.md` says how an extension works.
+  the TUI, which `tui/src/parts.ts` loads. `.agents/skills/` holds the official extensions, `catchup`, `memory`, `skills`,
+  `compaction`, `naming`, `ouroboros`, `web` and `mcp`, each a word, a contract and a suite, and `src/world/` holds the ear of
+  the World of the one that has one, `skills.rs`. `docs/skills.md` says how an extension works.
 - `src/life.rs` opens a life as every host opens one, from one `Opening`: the record, the ears of the crate after the
   ears of the host, the default actor, the roster that the host names or every model of the catalog, and the extensions.
-  A host adds only its own ears, as the console of its operator. A life on a record replays the tail after its last
-  checkpoint word by word on the engine and the Kernel that its fact made holds, and goes on with them, so it opens
-  at the exact state of its tip whatever build of the major runs it, as `src/checkpoint.rs` says. Its models read that
-  engine, and the gate reads each word on it. `script/engines.py` gives a copy of a record of a build before the texts
-  the texts of its engine from git. `tests/replay` holds the records that each build must
-  replay on their own engines with no drift. `tests/corpus` holds the records of each release, which each later build must open, as
-  `tests/corpus/README.md` says. Each door gives it as
-  `opened` and as `Engine.open`.
+  A host adds only its own ears, as the console of its operator. When the last segment of its record holds the texts of
+  another engine, a life that inspects the record, on that engine, first writes a checkpoint after its last entry. The
+  life then opens from its last checkpoint and goes on with the engine and the Kernel of this build, so it opens at the
+  exact state of its tip whatever build of the major runs it, as `src/checkpoint.rs` says. Its models read the engine of
+  this build, and the gate reads each word on it. `script/engines.py` gives a copy of a record of a build before the
+  texts of its engine from git. `tests/replay` holds the records that each build must replay on their own engines with
+  no drift. `tests/corpus` holds the records of each release, which each later build must open, as
+  `tests/corpus/README.md` says. Each door gives it as `opened` and as `Engine.open`.
 - `src/view.rs` and `src/view/` fold the facts of a life into its meaning, which every window shows the same way: the
   state of each act and of each chain, the desk of the operator, the threads of a chain, the spend, and the acts as
   they stood at a moment. It depends on the crate alone, so the host and each door read one fold. `Fold` hears each
@@ -44,9 +44,11 @@ API of its own:
   boot, while `gathered` and `seed` of `engine.py` write and read its data. A life ends with one through
   `Engine::checkpoint`, which its store keeps as it keeps each fact, as the TUI does at a handover, and
   `furb checkpoint` writes one on a record that no life holds. A life boots on the last checkpoint of its record,
-  whatever engine wrote it, and replays the entries after it word by word on the engine that their fact made holds,
-  so it opens at the exact state of its tip. A tail that a build cannot replay with no drift is a defect, which #988
-  tracks: the record then opens to read only, and nothing forks it into a new life.
+  whatever engine wrote it, and replays the entries after it word by word. When those entries hold the texts of another
+  engine, a life that inspects the record replays them on that engine and writes a checkpoint after them, so the life
+  replays no word on another engine, goes on with the engine and the Kernel of this build, and opens at the exact state
+  of its tip. A tail that a build cannot replay with no drift is a defect, which #988 tracks: the record then opens to
+  read only, and nothing forks it into a new life.
 - `src/engine.rs` opens a life in the sandbox, with each of its concerns in a file of `src/engine/`: it loads the
   engine, the sheet and the Kernel, each in a namespace of its own, and carries each value between the sandbox and a
   host, whose ears the engine steps as generators. An ear that raises refuses the act that it heard, and starts again
@@ -96,8 +98,8 @@ API of its own:
   protocol, and `bun run protocol` makes `bind/typescript/src/protocol.ts` again from `host/protocol.schema.json`.
 
 The suite runs on both engines, but for the tests that `MONTY_SKIPS` in `test/conftest.py` names: these boot on a Kernel
-of this interpreter, and the engine of monty holds its own. The suite of each extension, `extensions/<name>/test/`, runs
-on both engines too, and its conftest, `extensions/conftest.py`, hands it the hooks of the harness and the helpers that
+of this interpreter, and the engine of monty holds its own. The suite of each extension, `.agents/skills/<name>/test/`, runs
+on both engines too, and its conftest, `.agents/skills/conftest.py`, hands it the hooks of the harness and the helpers that
 only the suites of the extensions need. `test/outside/test_monty.py` proves what the door carries that no sentence of
 the contract says.
 
@@ -220,18 +222,18 @@ The suite drives the engine through its public API alone, end to end, from the m
   better counts the work that the code does, which no load changes. A bound in seconds fails on a machine under load.
   A test of a process that a timeout ends gives it a limit that a loaded machine cannot cross.
 - A helper that only one file needs lives in that file. A helper that several files need lives in
-  `test/conftest.py`, and one that only the suites of the extensions need lives in `extensions/conftest.py`.
-  A test folder of an extension takes no `conftest.py`: it shadows the module `conftest` that `extensions/conftest.py`
+  `test/conftest.py`, and one that only the suites of the extensions need lives in `.agents/skills/conftest.py`.
+  A test folder of an extension takes no `conftest.py`: it shadows the module `conftest` that `.agents/skills/conftest.py`
   imports by name, and breaks the main suite. `test_words.py` fails on it. Put its fixtures in
-  `.furb/extensions/conftest.py`.
+  `.furb/skills/conftest.py`.
 - `test/outside/` holds the tests of the World, the Kernel, the door, the switch of the package that
   `FURB_ENGINE` sets, and the harness. These tests stand outside the hygiene laws.
 
 ## The hygiene laws
 
 `test/test_hygiene.py` holds each contract and its suite to these laws, and it must stay green. The contracts are
-`engine.pyi`, whose suite is `test/`, the contract of each official extension, `extensions/<name>/<name>.pyi`, and
-the contract of each extension of the project, `.furb/extensions/<name>/<name>.pyi`, each with the folder `test`
+`engine.pyi`, whose suite is `test/`, the contract of each official extension, `.agents/skills/<name>/<name>.pyi`, and
+the contract of each extension of the project, `.furb/skills/<name>/<name>.pyi`, each with the folder `test`
 beside it as its suite.
 
 1. Every sentence of a definition has exactly one test, in the file of that definition, whose docstring is that
@@ -331,14 +333,14 @@ fix what your change broke, and report what was broken before.
   lints it for what breaks a word, which is a name that nothing binds, a bug of the family B and an error of the family
   PLE, and for no style. A word imports each name of the engine that it uses from `furb.engine`, which the crate leaves
   out of the word. A name of a word before it in `.furb/config.json` is in `builtins` of `[tool.ruff]`, which
-  `.furb/extensions/test_words.py` holds to a definition. Run the tests of an extension of the project alone with
+  `.furb/skills/test_words.py` holds to a definition. Run the tests of an extension of the project alone with
   `uv run --no-sync pytest -q <folder> -p no:cacheprovider --no-cov`, since the coverage of 100 applies to the whole
   suite only.
 - `python3 script/rustwidth.py [base]`: fail on a comment line of a `.rs` file that the change adds past 100
   characters, which rustfmt does not wrap. The lines that main holds are no debt of a change: wrap them when you change
   their file.
 - `uv run ty check --error-on-warning`: the type check. The tests are checked against `engine.pyi`, and the words of
-  `.furb/extensions` too, less their tests.
+  `.furb/skills` too, less their tests.
 - `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`:
   the gates of the crate and of the command line. The tests of a module stand beside it, `src/engine.test.rs` beside
   `src/engine.rs`, and those of the engine drive the real engine on ears in rust. `cli/tests/furb.rs` runs `furb` as

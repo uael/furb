@@ -32,12 +32,12 @@ const items = `todo("Read the capture", done=True)
 todo("Draw the todo list in a panel")
 todo("Load the part again when its file changes")`;
 
-const read = `part = read(".furb/extensions/todo/tui.ts", grep("items|panel"))`;
+const read = `part = read(".furb/skills/todo/tui.ts", grep("items|panel"))`;
 
-const sorted = `part = read(".furb/extensions/todo/tui.ts")
+const sorted = `part = read(".furb/skills/todo/tui.ts")
 write(part.replace("const all = items(seen);", "const all = seen.todos.sort((one, other) => Number(one.done) - Number(other.done));"))`;
 
-const mended = `part = read(".furb/extensions/todo/tui.ts")
+const mended = `part = read(".furb/skills/todo/tui.ts")
 write(part.replace("seen.todos.sort(", "items(seen).sort("))`;
 
 export const extending: Script[] = [
@@ -63,7 +63,7 @@ export const extending: Script[] = [
       { thinking: "The part loads at once. Three items show that it draws them.", word: items },
       {
         thinking: "The panel stands over the input, so I report.",
-        word: 'close("The Todo panel stands over the input, and the feed shows a line for each todo. It lives in .furb/extensions/todo: todo.py makes the acts and tui.ts draws them. Make one with todo(item).")',
+        word: 'close("The Todo panel stands over the input, and the feed shows a line for each todo. It lives in .furb/skills/todo: todo.py makes the acts and tui.ts draws them. Make one with todo(item).")',
       },
     ],
   },

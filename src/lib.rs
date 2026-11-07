@@ -13,12 +13,12 @@
 pub mod checkpoint;
 pub mod ear;
 pub mod engine;
-pub mod extension;
 pub mod fact;
 pub mod gate;
 pub mod life;
 mod minify;
 mod sand;
+pub mod skill;
 #[cfg(test)]
 mod testing;
 pub mod value;

@@ -53,7 +53,7 @@ keepers, and the seams of the product it lets go.
 
 ## 5. Cutover
 
-Edit lane by lane. One owner changes the shared harness, `test/conftest.py` and `extensions/conftest.py`, one change
+Edit lane by lane. One owner changes the shared harness, `test/conftest.py` and `.agents/skills/conftest.py`, one change
 at a time. With each lane, remove the seams of the product it lets go: the parameters that only tests inject, the
 getters, the exports, and the layers of indirection. Keep the hygiene laws green.
 

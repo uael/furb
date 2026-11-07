@@ -25,9 +25,9 @@ use crate::testing::Yard;
 use crate::{
   Act, Ear, Engine, Fact, Object, Text, checkpoint,
   ear::{ear, hear, say},
-  extension::enabled,
   gate,
   sand::BOUND,
+  skill::enabled,
   value::entry,
   verbs, wire, world,
 };

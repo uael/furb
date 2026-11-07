@@ -48,7 +48,7 @@ this package writes. `Engine.open(ears, opening)` opens it as every host of the 
 the ears of the host, and then on the ears of the crate, which are the provider of the models, the extensions, the ear
 of each official extension, the files, the commands, time, and the store of the record. Its `record` getter gives the
 record it opened on. The extensions enable at the start of the life what the configs of the user and of the directory
-turn on, which [Extensions](https://github.com/uael/furb/blob/main/docs/extensions.md) says: `SessionOptions.extensions`
+turn on, which [Extensions](https://github.com/uael/furb/blob/main/docs/skills.md) says: `SessionOptions.extensions`
 is false to enable nothing new, and `config` names the config directory of the user. A life runs what its record enables
 either way. The package also gives the ears of the files, the commands, time and the store one by one, as
 `files(scratch)`, `bash(scratch)`, `time()` and `store(path)`, for a host that boots an engine by hand. The

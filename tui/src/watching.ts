@@ -48,32 +48,6 @@ export function branchStart(source: string): string {
   return `This branch starts from a moment of ${source}, with the files as they were.`;
 }
 
-/** How many messages of the operator a branch takes from its source: each one that came before the word that made
- * the branch and that this word does not name, since the word names each act that the branch leaves out. */
-export function branchMessages<T extends { id: string; chain: string; began: number }>(
-  acts: readonly T[],
-  source: string,
-  maker: { began: number },
-  word: string,
-  message: (act: T) => boolean,
-): number {
-  return branchTaken(acts, source, maker, word, message).length;
-}
-
-/** The messages of the operator that a branch takes from its source, in their order, as branchMessages counts them. */
-export function branchTaken<T extends { id: string; chain: string; began: number }>(
-  acts: readonly T[],
-  source: string,
-  maker: { began: number },
-  word: string,
-  message: (act: T) => boolean,
-): T[] {
-  const left = new Set([...word.matchAll(/"([a-z_]+\d+)"/g)].map((found) => found[1]));
-  return acts.filter(
-    (act) => act.chain === source && act.began < maker.began && !left.has(act.id) && message(act),
-  );
-}
-
 /** What a branch takes from the chain that it branched from: the messages before the moment it starts at, with what
  * answered them. */
 export function branchTakes(messages: number): string {

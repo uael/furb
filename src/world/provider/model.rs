@@ -14,7 +14,7 @@ use super::{
   Advertised, Hosted, Told, answer::streamed, catalog, images::Images, messages::messages,
   search::Searches, thinking::Thought,
 };
-use crate::extension;
+use crate::skill;
 use crate::world::files;
 use crate::{
   engine::{OPERATOR, WINDOW},
@@ -110,12 +110,12 @@ pub(super) struct Configured {
 }
 
 /// What the configs of the user, in the config directory, and of the project, in a directory, say
-/// of the models, in the order of [`crate::extension::configs`]: a later file gives a model another
+/// of the models, in the order of [`crate::skill::configs`]: a later file gives a model another
 /// class over an earlier one, and its list of automatic work replaces the list of an earlier one. A
 /// word that names no class, and a name of the list that is no string, give nothing.
 pub(super) fn configured(user: &Path, directory: &Path) -> Configured {
   let mut given = Configured::default();
-  for file in extension::configs(user, directory) {
+  for file in skill::configs(user, directory) {
     let Ok(text) = fs::read_to_string(file) else { continue };
     let Ok(config) = serde_json::from_str::<Value>(&text) else { continue };
     for (name, class) in config.get(KEY_CLASSES).and_then(Value::as_object).into_iter().flatten() {

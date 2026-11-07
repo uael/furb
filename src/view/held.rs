@@ -109,8 +109,14 @@ impl Held {
     self.then(Some(at))
   }
 
-  /// Each moment at which an act began or ended.
-  pub fn moments(&self) -> Vec<u64> {
-    moments_of(&self.acts)
+  /// Each moment at which an act began or ended, of the life or of the acts of one chain.
+  pub fn moments(&self, on: Option<&str>) -> Vec<u64> {
+    match on {
+      Some(chain) => {
+        let acts: Vec<Act> = self.acts.iter().filter(|act| act.chain == chain).cloned().collect();
+        moments_of(&acts)
+      }
+      None => moments_of(&self.acts),
+    }
   }
 }

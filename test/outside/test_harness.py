@@ -19,7 +19,18 @@ def test_a_test_of_an_extension_sees_no_skill_of_a_folder_above_the_temporary_fo
   (temp := tmp_path / "home" / "tmp").mkdir()
   env = {key: value for key, value in os.environ.items() if not key.startswith(("PYTEST_", "COV_CORE_"))}
   ran = subprocess.run(
-    [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "-n", "0", "--no-cov", "extensions/skills/test"],
+    [
+      sys.executable,
+      "-m",
+      "pytest",
+      "-q",
+      "-p",
+      "no:cacheprovider",
+      "-n",
+      "0",
+      "--no-cov",
+      ".agents/skills/skills/test",
+    ],
     env={**env, "TMPDIR": str(temp)},
     cwd=ROOT,
     capture_output=True,

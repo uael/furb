@@ -176,8 +176,8 @@ async def test_task_context_under_a_262144_token_window_triggers_compaction(
   tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
   from conftest import settle  # noqa: PLC0415
-  from extensions import conftest as extension_fixtures  # noqa: PLC0415
   from furb import engine  # noqa: PLC0415
+  from skills import conftest as extension_fixtures  # noqa: PLC0415
 
   stands = [[["operator", [], 200000], ["m", ["low", "high"], 262144]], "/w", "m/low"]
   monkeypatch.setattr(extension_fixtures, "STANDS", stands)
