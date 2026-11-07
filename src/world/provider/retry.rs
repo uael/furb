@@ -1,6 +1,6 @@
 //! The failures of a call of a model that pass, and when the provider calls the model again.
 
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use jiff::{Zoned, civil, fmt::strtime, tz::TimeZone};
 use rig_core::{completion::CompletionError, http_client};
@@ -167,6 +167,57 @@ pub(super) fn overflows(no: &CompletionError) -> bool {
   ["prompt is too long", "context window", "context length", "maximum context", "too many tokens"]
     .iter()
     .any(|phrase| text.contains(phrase))
+}
+
+/// A usage limit, and the moment it ends when that stands.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) struct Limit {
+  pub(super) until: Option<SystemTime>,
+}
+
+/// The body of a 429 of a provider that limits the usage of a subscription, as codex words it.
+#[derive(serde::Deserialize)]
+struct Refusal {
+  error: Usage,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum Usage {
+  UsageLimitReached {
+    resets_at: Option<u64>,
+    resets_in_seconds: Option<u64>,
+  },
+  #[serde(other)]
+  Other,
+}
+
+/// The usage limit that a failure says, if it is one: a limit of the claude command line, or the
+/// 429 of a usage limit, whose end is `resets_at` (seconds since the epoch), else
+/// `resets_in_seconds`, else the `retry-after` header. A 429 of another kind is a rate limit, which
+/// `passing` caps.
+pub(super) fn limited(no: &CompletionError, now: SystemTime) -> Option<Limit> {
+  if let Some(claude::Error::Limit { until }) = claude::error(no) {
+    return Some(Limit { until: *until });
+  }
+  if no.provider_response_status()?.as_u16() != 429 {
+    return None;
+  }
+  let Refusal { error: Usage::UsageLimitReached { resets_at, resets_in_seconds } } =
+    serde_json::from_str(no.provider_response_body()?).ok()?
+  else {
+    return None;
+  };
+  let header = no
+    .provider_response_headers()
+    .and_then(|one| one.get("retry-after"))
+    .and_then(|one| one.to_str().ok())
+    .and_then(|one| one.parse::<u64>().ok());
+  let until =
+    resets_at.and_then(|second| UNIX_EPOCH.checked_add(Duration::from_secs(second))).or_else(
+      || resets_in_seconds.or(header).and_then(|span| now.checked_add(Duration::from_secs(span))),
+    );
+  Some(Limit { until })
 }
 
 /// The wait before the claude command line is asked again when its message gives no moment for the

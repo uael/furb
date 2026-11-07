@@ -442,7 +442,6 @@ class Bench:
       "PATH": f"{folder}{os.pathsep}{os.environ['PATH']}",
       "GH_LOG": str(tmp / "gh.log"),
       "GH_SAYS": str(tmp / "says.json"),
-      "FURB_BUILD_MIN_FREE_GB": "0",
     }
     self.tmp, self.says, self.engine = tmp, [], conftest.engine
     self.sand = Shell(files={}, env=env, stands=[roster, str(tmp), actor])

@@ -26,7 +26,7 @@ CODE = ("a", "b")
 FINGER = "cat finger.txt 2>/dev/null; true"
 CI_PROBE = "cat ci.txt 2>/dev/null; true"
 DF = "cat df.txt 2>/dev/null; true"
-MEM = "cat mem.txt 2>/dev/null; true"
+MEM = "cat mem.txt 2>/dev/null; exit $(cat code.txt 2>/dev/null || echo 0)"
 desk_time.update(review_at=1e12, ci_at=1e12, disk_at=1e12)
 SIDE = []
 
@@ -392,12 +392,14 @@ async def test_news_is_done_with_the_next_prompt_of_the_root(conductor: Round) -
   assert conductor.engine.peek(conductor.ns["heard"]) == told
 
 
-async def test_the_lane_of_memory_reads_its_command_and_tells_the_lead_when_it_runs_low(conductor: Round) -> None:
-  conductor.file("mem.txt", "System-wide memory free percentage: 9%\n")
+async def test_the_lane_of_memory_reads_its_guard_and_holds_each_new_item_while_the_memory_runs_low(conductor: Round) -> None:
+  conductor.file("mem.txt", "memory 9% free, swap 6000 MB in use, grown 0 MB in 1s\n")
+  conductor.file("code.txt", "75\n")
   await conductor.word("SIDE[:] = [mem_step]\ndesk_time.update(mem_at=-1e9)")
   await conductor.beat()
   await conductor.beat()
   assert "The memory runs low: memory 9% free" in "\n".join(conductor.notes(conductor.root))
+  assert conductor.ns["pick"]() is None
 
 
 async def test_a_scripted_round_fills_each_free_seat_with_ready_work_hard_first_and_records_the_cause_of_each_seat_left_free(conductor: Round) -> None:
