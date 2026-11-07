@@ -158,7 +158,7 @@ async def test_a_statement_that_a_paragraph_shows_binds_the_name_of_an_act_in_th
   assert engine.module(root)["bash1"] == "bash1"
   assert engine.module(root)["prompt1_message"] == "run it\nnow"
   _, _, fixed = born(
-    "k = 1",
+    "k = 1\ndebug(t'go')",
     "ok = BAD",
     "mine = get(acting())[2]\nwrite(read(mine).replace('BAD', '2'))",
     "close((k, ok, rung2_findings))",

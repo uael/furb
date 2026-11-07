@@ -295,9 +295,42 @@ A module that does not meet the lints yet says so at its top, one line for each 
     assert_eq!(fault.to_string(), "/tmp/yard/catalog.json cannot be read");
     ```
 
+23. A shape that furb writes and reads back, as a record, a dump or a cache, keeps its names: they are the contract
+    with each file that a life wrote before. A field that comes later takes `#[serde(default)]`, a field or a variant
+    that changes its name takes `#[serde(alias = "old")]`, and `#[serde(deny_unknown_fields)]` never stands on such a
+    shape, since a field that a newer build wrote must not fail an older one. A tuple and a tuple variant are
+    positional, so they only grow at their end. A config that a person writes is not such a shape: it may deny an
+    unknown field, so a typo fails where the person reads it.
+
+    ```rust
+    #[derive(Serialize, Deserialize)]
+    struct Spend {
+      dollars: f64,
+      #[serde(default, alias = "count")]
+      answers: u32,
+    }
+    ```
+
+24. A feature works on each system that furb ships for. A `#[cfg(unix)]` or `#[cfg(windows)]` holds only the call of
+    an API of that system, beside its twin for the other systems, never a feature that one system lacks. The trait of
+    one system that such a block needs, as `std::os::unix::fs::PermissionsExt`, is imported in that block, which is
+    the one exception to rule 17, since its path does not exist on the other systems.
+
+    ```rust
+    fn runs(info: &Metadata) -> bool {
+      #[cfg(unix)]
+      {
+        use std::os::unix::fs::PermissionsExt;
+        info.is_file() && info.permissions().mode() & 0o111 != 0
+      }
+      #[cfg(not(unix))]
+      info.is_file()
+    }
+    ```
+
 ## Where furb keeps its own rule
 
-The rules 15 to 22 come from the guidelines of Monty, the interpreter that the engine runs in. Furb keeps its own rule
+The rules 15 to 24 come from the guidelines of Monty, the interpreter that the engine runs in. Furb keeps its own rule
 in three places:
 
 - A docstring is not on each struct, enum and function. The section Comments of `AGENTS.md` rules: a comment says

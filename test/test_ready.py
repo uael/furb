@@ -20,7 +20,7 @@ async def test_a_ready_says_the_word_a_rung_holds() -> None:
 
 async def test_the_word_of_a_rung_enters_the_program_when_the_gate_accepts_it_or_the_chain_wrote_it() -> None:
   """The word of a rung enters the program of the chain when the gate accepts it or when the chain wrote it, and runs in the globals of the chain."""
-  _, log, root = born("a = BAD", "a = 1", "close(a + 1)")
+  _, log, root = born("a = BAD", "a = 1\ndebug(t'go')", "close(a + 1)")
   act = engine.prompt(int, "count", on=root)
   assert await act == 2
   refused, first, second = [a[1] for a in said(log, "rung") if a[2] == act]
@@ -30,12 +30,12 @@ async def test_the_word_of_a_rung_enters_the_program_when_the_gate_accepts_it_or
   assert engine.program(root) == {
     f"{refused}_told": wrote,
     f"{first}_told": bound,
-    first: "a = 1",
-    f"{second}_told": f"#{first} told nothing\n\n#{second} advance on {act}",
+    first: "a = 1\ndebug(t'go')",
+    f"{second}_told": f"#{first} debugged\n{first}_debug = 'go'\n\n#{second} advance on {act}",
     second: "close(a + 1)",
   }
-  assert [q[4] for q in acts(log).values() if q[0] == "gate"] == ["a = BAD", "a = 1", "close(a + 1)"]
-  assert engine.read(act, on=root).content == "a = BAD\na = 1\nclose(a + 1)"
+  assert [q[4] for q in acts(log).values() if q[0] == "gate"] == ["a = BAD", "a = 1\ndebug(t'go')", "close(a + 1)"]
+  assert engine.read(act, on=root).content == "a = BAD\na = 1\ndebug(t'go')\nclose(a + 1)"
   assert (engine.module(root)[root], engine.module(root)[act], engine.module(root)["a"]) == (root, act, 1)
   assert type(engine.peek(refused)).__name__ == "Refused"
 

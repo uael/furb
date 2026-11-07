@@ -134,7 +134,7 @@ async def test_a_wake_makes_a_prompt_ask_its_model_with_the_transcript_as_it_gre
 
 async def test_a_wake_makes_no_reply_twice_and_loses_none() -> None:
   """A wake makes no reply twice and loses none."""
-  sand, log, root, act = await hushed("a = 1", "b = a + 1", "close(b + 1)")
+  sand, log, root, act = await hushed("a = 1\ndebug(t'go')", "b = a + 1\ndebug(t'go')", "close(b + 1)")
   engine.wake(root)
   await settle()
   asks = [a[1] for a in said(log, "reply")]

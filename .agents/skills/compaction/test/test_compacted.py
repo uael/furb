@@ -9,7 +9,7 @@ from skills.conftest import FULL, compacting
 
 GIST = "close(([], 'gist'))"
 """GIST is the word of a model that chooses no act and sums the rest up as gist."""
-ONCE = "SHARE = 2\ny = 2"
+ONCE = "SHARE = 2\ny = 2\ndebug(t'{y}')"
 """ONCE is a word that binds y and rebinds SHARE past any share, so the chain compacts once."""
 
 
@@ -21,7 +21,7 @@ async def wrapped(tmp_path: Path, *words: str, chooser: str = GIST) -> tuple[str
   for word in words:
     await engine.rung(word, on=root)
   sand.cost = FULL
-  sand.script.update({root: ["x = 1", ONCE, "close(x + y)"], "chain2": [chooser]})
+  sand.script.update({root: ["x = 1\ndebug(t'{x}')", ONCE, "close(x + y)"], "chain2": [chooser]})
   act = engine.prompt(int, "go", on=root)
   await act
   await settle()
@@ -100,7 +100,12 @@ async def test_it_never_completes(tmp_path: Path) -> None:
   """It never completes."""
   sand, root, _ = compacting(tmp_path)
   sand.cost = FULL
-  sand.script.update({root: ["w = compacted()", "x = 1", "SHARE = 2", "close(1)"], "chain2": [GIST]})
+  sand.script.update(
+    {
+      root: ["w = compacted()\ndebug(t'{w}')", "x = 1\ndebug(t'{x}')", "SHARE = 2\ndebug(t'{SHARE}')", "close(1)"],
+      "chain2": [GIST],
+    }
+  )
   assert await engine.prompt(int, "go", on=root) == 1
   await settle()
   watcher = engine.module(root)["w"]
