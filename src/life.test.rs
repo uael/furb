@@ -918,7 +918,7 @@ fn each_record_of_the_replays_replays_on_its_own_engine_with_no_drift() {
 #[test]
 fn a_record_of_an_engine_that_an_adapter_names_drifts_on_that_engine_without_the_adapter() {
   use sha2::{Digest, Sha256};
-  for (record, first) in [("ranks.jsonl.zst", "rung3230"), ("speaker.jsonl", "reply4")] {
+  for (record, first) in [("ranks.jsonl", "bash2"), ("speaker.jsonl", "reply4")] {
     let at = place(&format!("unadapted-{first}"));
     laid(&replays().join(record), &at.join("record.jsonl"));
     let mut lines: Vec<String> =

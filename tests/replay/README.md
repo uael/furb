@@ -52,13 +52,16 @@ open drifted at `gate1`. The reader of that form puts the turns of each chain ju
 `a_checkpoint_of_the_form_before_its_schema_that_a_later_life_wrote_opens_and_seeds_no_root_again` in `src/life.test.rs`
 proves it.
 
-`ranks.jsonl.zst` is the tail of the life `5eb81f9c` of 11-05 after its last checkpoint, which the engine `5f66c73c`
-made. Its checkpoint is cut: it keeps each chain and each act, with no turns, no values and no long value of an act. It
-is kept by zstd with a long window, 10.1 MB plain and 0.19 MB kept, and the harness reads it through zstd. On its own
-engine it drifts at `rung3230`, since that engine says the first started or done of an act of the outside before the
-facts that the record holds before it. The adapter of that engine in `src/furb/adapters.py` carries the ranks of #1329,
+`ranks.jsonl` is a scripted life of the engine `5f66c73c`, from no words of a person, which
+`python3 tests/replay/ranks.py` writes. Its root runs a command, and the operator pauses an act that is over before the
+command starts. The word reads the order of that pause and of that started in its transcript, and runs a second command
+that names the order. That engine says the first started or done of an act of the outside as soon as a later life makes
+the act again, before the facts that the record holds before it. So with no adapter the second command names another
+order, and the life drifts at `bash2`. The adapter of that engine in `src/furb/adapters.py` carries the ranks of #1329,
 so the record replays with no drift. The test `a_record_of_an_engine_that_an_adapter_names_drifts_on_that_engine_without_the_adapter`
 in `src/life.test.rs` proves the drift without the adapter.
+
+No record here holds a checkpoint now, so the open from the first entry of `each_record_of_the_replays_replays_on_its_own_engine_with_no_drift` runs for a record that a later change adds with one. The tests `a_life_born_again_three_times_opens_from_its_first_entry_to_the_state_of_its_last_checkpoint` in `tests/promise.rs` and `a_record_that_another_engine_went_on_with_after_a_checkpoint_replays_its_tail_to_the_exact_state_at_its_tip` in `src/life.test.rs` prove that open.
 
 `lives.jsonl.zst` is a life of the engine `0a11688b` of the commit `d5550efda`, with the default extensions. Its root
 runs a word that makes an act whose ear makes an act of its own, as compaction makes the prompt of its chooser. The
