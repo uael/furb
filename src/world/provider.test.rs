@@ -3093,22 +3093,29 @@ fn a_signed_thought_written_after_a_compaction_reaches_the_next_turn_whole() {
   let (mut engine, yard) = on_claude("thought-after");
   answer(&mut engine, "first");
   closed(&mut engine, CUT).expect("the cut runs");
-  answer(&mut engine, "THINK after the cut");
+  answer(&mut engine, "DEEP after the cut");
   // A process of the command line keeps its own turns, so a turn reads the thought from the
   // conversation that furb writes only when it begins a new one: a second compaction makes it.
   closed(&mut engine, CUT).expect("the second cut runs");
   answer(&mut engine, "third");
-  let thought = signed();
+  let thought: String = (1..=4000).map(|at| format!("step {at} of a long thought. ")).collect();
+  let signature: String = (1..=512).map(|at| format!("{:x}", at % 16)).collect();
+  let deep = [
+    json!({"type": "thinking", "thinking": thought, "signature": signature}),
+    json!({"type": "thinking", "thinking": "", "signature": format!("omitted-{signature}")}),
+    json!({"type": "redacted_thinking", "data": "opaque"}),
+  ];
   let held = resumed(&yard)
     .iter()
     .filter(|one| one["type"] == "assistant")
     .filter(|one| {
-      one["message"]["content"].as_array().is_some_and(|blocks| blocks.contains(&thought))
+      one["message"]["content"].as_array().is_some_and(|blocks| blocks.starts_with(&deep))
     })
     .count();
   assert_eq!(
     held, 1,
-    "the conversation of the third turn holds the thought written after the first cut, once"
+    "the conversation of the third turn holds the long signed thought, the one with no text \
+     and the redacted one written after the first cut, whole and once"
   );
 }
 

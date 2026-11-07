@@ -1,3 +1,4 @@
+import cliTruncate from "cli-truncate";
 import type { Retry } from "furb";
 import { clock } from "./clock.ts";
 
@@ -45,16 +46,6 @@ export function dollars(value: number): string {
   return (value !== 0 && Math.abs(value) < 1 ? fractions : cents).format(value);
 }
 
-/** The lines that a patch adds and removes, with no header of a file or a hunk. */
-export function lineCounts(patch: string): { added: number; removed: number } {
-  let added = 0,
-    removed = 0;
-  for (const line of patch.split("\n"))
-    if (line.startsWith("+") && !line.startsWith("+++")) added++;
-    else if (line.startsWith("-") && !line.startsWith("---")) removed++;
-  return { added, removed };
-}
-
 /** A size in bytes, in KiB. */
 export function kibibytes(bytes: number): string {
   return `${(bytes / 1024).toFixed(1)} KiB`;
@@ -68,26 +59,11 @@ export function share(value: number): string {
 /** The graphemes of a text, which the terminal draws and the composer deletes one at a time. */
 export const graphemes = new Intl.Segmenter();
 /** A line cut to a width of terminal cells, with an ellipsis where it was cut: at its end, or at its start to keep
- * the end of a path. */
+ * the end of a path. It fills the width to its last cell, and shows no ellipsis where none fits. */
 export function clip(line: string, width: number, keep: "start" | "end" = "start"): string {
   if (Bun.stringWidth(line) <= width) return line;
-  // The width of a text is the sum of the widths of its graphemes, so a cut at the end reads only the graphemes that
-  // it keeps, and a long text costs what the room shows.
-  const kept: string[] = [];
-  let taken = 0;
-  const parts =
-    keep === "end"
-      ? [...graphemes.segment(line)].map(({ segment }) => segment).reverse()
-      : (function* () {
-          for (const { segment } of graphemes.segment(line)) yield segment;
-        })();
-  for (const part of parts) {
-    const cells = Bun.stringWidth(part);
-    if (taken + cells >= width - 1) break;
-    kept.push(part);
-    taken += cells;
-  }
-  return keep === "end" ? `…${kept.reverse().join("")}` : `${kept.join("")}…`;
+  if (width < 2) return width === 1 ? "…" : "";
+  return cliTruncate(line, width, { position: keep === "end" ? "start" : "end", truncationCharacter: "…" });
 }
 
 /** A span of time, short: 42s, 3m 05s, 1h 02m. */
