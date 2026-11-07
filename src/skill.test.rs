@@ -1052,6 +1052,29 @@ fn a_write_of_the_local_config_of_the_project_turns_on_each_skill_that_it_gives_
   assert_eq!(enables(&at), [NOTE.to_owned()]);
 }
 #[test]
+fn a_write_of_a_config_that_gives_the_former_key_tells_the_note_at_each_write() {
+  let at = place("former-write");
+  let mut engine = lived(&at, vec![]);
+  let file = projected(&at)[1].display().to_string();
+  let text = r#"{"extensions": {"note": "skills/note"}}"#;
+  for _ in 0..2 {
+    engine
+      .write(&Text::new(file.clone(), text), verbs::Write { on: Some("chain1".to_owned()) })
+      .unwrap();
+  }
+  let on = verbs::Transcript { on: Some("chain1".to_owned()), of: None };
+  let told = engine
+    .transcript(on)
+    .unwrap()
+    .iter()
+    .filter(|one| one.kind() == "tell")
+    .filter_map(|one| one.word(0).and_then(|notes| entry(&notes, 0)))
+    .filter(|note| note.as_str().is_some_and(|note| note.contains("is now skills")))
+    .count();
+  assert_eq!(told, 2, "a note that an open replays is not a note that a write tells");
+}
+
+#[test]
 fn a_fact_enable_gives_the_name_of_its_skill_and_the_program_that_it_names() {
   let one = note("x = 1");
   let said = |fact: Fact| {
