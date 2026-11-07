@@ -26,6 +26,8 @@ pub(super) enum Event {
   Assistant { message: Said },
   /// The end of the turn.
   Result(Finished),
+  /// The answer of a control request, which the probe of the models sends.
+  ControlResponse { response: Control },
   #[serde(other)]
   Other,
 }
@@ -39,6 +41,22 @@ impl Event {
     }
     serde_json::from_value(value)
   }
+}
+
+/// The answer of a control request, by the id of the request: what it gave, or that it failed.
+#[derive(Deserialize)]
+#[serde(tag = "subtype", rename_all = "snake_case")]
+pub(super) enum Control {
+  Success {
+    request_id: String,
+    #[serde(default)]
+    response: Value,
+  },
+  Error {
+    request_id: String,
+  },
+  #[serde(other)]
+  Other,
 }
 
 /// An event of the message that streams.
