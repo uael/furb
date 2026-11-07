@@ -39,7 +39,7 @@ when both are over, and chance when only its own is over. The journal says those
 the World said them. So the word reads the clock again, as in the life.
 
 `handover/checkpoint.jsonl` is a life that ended with a checkpoint of the form before `schema`. That form holds the
-entries that the journal replays, in the place of the data. The life of the owner wrote that form at its handover. So
+entries that the journal replays, in the place of the data. A life wrote that form at its handover. So
 the first build with the data must open it. The test `a_checkpoint_of_the_form_before_its_schema_opens_on_this_build` in
 `src/life.test.rs` opens it on a build of another engine. It stands apart from the replays, because its crafted word
 says a prefix that no turn shows. It and the reader of that form in `src/checkpoint.rs` go away once each life of that

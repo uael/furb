@@ -323,7 +323,7 @@ export async function lived(walk: Walk, window: Window, yard: Yard): Promise<voi
   await walk.step(END);
 }
 
-/** The journey of a record of the project that opens read-only, as the owner reads a life: the sidebar and its
+/** The journey of a record of the project that opens read-only, as a person reads a life: the sidebar and its
  * threads, the jumps between messages, a fold, the scroll, the chains, the two newest chains, the sizes and the keys. */
 export async function read(walk: Walk, session: Session): Promise<void> {
   await walk.step("open the record");

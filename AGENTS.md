@@ -159,7 +159,7 @@ engine does not serve its meaning, the name is wrong, and the name changes.
 - started or done is ownership, and the owner of an act answers it. The life refuses an act that no ear owns.
 - A view reads the life, and makes nothing and keeps nothing: get, peek and transcript, and all that is derived
   from them.
-- No hidden control flow and no magic, which is a hard rule of the owner: a model can rebuild the whole flow of what it
+- No hidden control flow and no magic, which is a hard rule: a model can rebuild the whole flow of what it
   read from the exact code that ran. Each change of the module of a chain comes from a word that the transcript of that
   chain shows as a turn, and the transcript is the whole of what ran: no run is made on the side, and no control flow
   is hidden. furb hosts itself with its own verbs. Only the Kernel and the World stand outside `src/furb/engine.py`,
@@ -190,11 +190,11 @@ commits, PRs or issues: state the rule they carry, in plain English.
 
 Before you write or change a Rust file, read the skill rust.
 
-## Questions of the owner
+## Questions about a state or a delay
 
-A question of the owner about a state or a delay, as "Why is it not built yet?", "Is it fine?" or "Why is this chain
-paused?", most often points at a defect of the agent that he asks, and he wants that defect fixed durably. Read it as
-that request. Fix the state at once, find the cause in your own work, make its durable fix at once (a change of the
+A question about a state or a delay, such as why something is not built yet, whether a state is fine, or why a chain is
+paused, most often points at a defect of the agent that is asked, and it calls for a durable fix of that defect. Read it
+as that request. Fix the state at once, find the cause in your own work, make its durable fix at once (a change of the
 instructions, of a tool or of a test, in a pull request), read the state again to verify, and only then answer, with
 the fix and its proof. An answer that only explains is not done.
 

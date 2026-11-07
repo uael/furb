@@ -269,3 +269,57 @@ def test_the_word_of_a_skill_binds_no_name_of_the_engine_nor_again_beneath_itsel
     name, word = one["name"], one["word"]
     assert binds(ast.parse(word)) & held == set(), name
     assert shadows(f"{PY.read_text(encoding='utf-8')}\n{word}") == [], name
+
+
+ROOT = TESTS.parent
+# The text that furb publishes, which holds no word of a person: the skills, the docs, the guides, the workflows and the
+# scripts that say a rule. A fixture or a test holds data, and the rules of the data stand in its own README.
+PUBLIC = [
+  *ROOT.glob("*.md"),
+  *ROOT.glob("docs/**/*.md"),
+  *ROOT.glob("tui/*.md"),
+  ROOT / "tests" / "replay" / "README.md",
+  *SKILLS.glob("*/*.md"),
+  *PROJECT.glob("*/*.md"),
+  *ROOT.glob(".github/**/*.md"),
+  *ROOT.glob(".github/**/*.yml"),
+  ROOT / "script" / "scope.py",
+]
+FRENCH = re.compile(
+  r"\b(les|des|une|pour|avec|dans|sans|sont|mais|donc|nous|vous|elle|qui|pas|tr\u00e8s|aussi|comme|cette|ces|c'est|il faut|j'ai|n'est)\b",
+  re.I,
+)
+ACCENT = re.compile("[\u00e0\u00e2\u00e7\u00e9\u00e8\u00ea\u00eb\u00ee\u00ef\u00f4\u00f9\u00fb\u00fc\u0153]")
+SAID = re.compile(
+  r"the owner (said|asked|wrote|wants|ruled|told|decided|prefers|reads|replied)"
+  r"|owner['\u2019]s (words|ruling|rulings|rule|order|ask|asks|message)"
+  r"|rulings? of the owner|rule of the owner|(?-i:\bpick [A-Z][0-9]\b)",
+  re.I,
+)
+ACT = re.compile(r"\b(prompt|rung)[0-9]{2,}\b")
+
+
+def lines_of(paths: list[Path]) -> list[tuple[str, int, str]]:
+  return [
+    (str(path.relative_to(ROOT)), n, line)
+    for path in sorted(set(paths))
+    if path.is_file()
+    for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+  ]
+
+
+def test_no_public_text_holds_french_or_a_word_of_a_person() -> None:
+  """The words of a person are private: no skill, doc, guide or workflow holds French, a quote, a translation or an attribution of them."""
+  found = []
+  for path, n, line in lines_of(PUBLIC):
+    french = len({x.lower() for x in FRENCH.findall(line)}) >= 2 or (ACCENT.search(line) and FRENCH.search(line))
+    if french or SAID.search(line):
+      found.append(f"{path}:{n}: {line.strip()[:80]}")
+  assert found == []
+
+
+def test_no_skill_nor_doc_names_a_prompt_or_a_rung_of_a_life() -> None:
+  """A rule stands with no id of a prompt or of a rung, which names a record that no reader has."""
+  paths = [*SKILLS.glob("*/*.md"), *PROJECT.glob("*/*.md"), *ROOT.glob("docs/**/*.md"), ROOT / "AGENTS.md"]
+  found = [f"{p}:{n}: {line.strip()[:80]}" for p, n, line in lines_of(paths) if ACT.search(line)]
+  assert found == []
