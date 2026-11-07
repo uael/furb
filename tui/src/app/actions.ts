@@ -65,8 +65,10 @@ export const actions = part({
       else throw new Error(`Choose ${lifeViews.join(", ")}.`);
       return true;
     }
-    if (name === "inspect" && argument) {
-      await this.inspect(argument);
+    if (name === "inspect") {
+      // With no name, the command lists the names that it can inspect, as ⌃G does, in place of doing nothing.
+      if (argument) await this.inspect(argument);
+      else await this.names();
       return true;
     }
     if (text === "/image" || text.startsWith("/image ")) {
