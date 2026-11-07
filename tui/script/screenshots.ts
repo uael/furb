@@ -988,7 +988,7 @@ try {
     Object.entries(session.folds).filter(([key]) => !key.startsWith("string:")),
   );
   // A worker of the life, whose ladders are long: the earlier rungs of a ladder fold into one line.
-  await session.select(session.chains.find((chain) => session.labelOf(chain.id) === "life3/feed")?.id ?? "");
+  await session.select(session.chains.find((chain) => session.labelOf(chain.id) === "lane/feed")?.id ?? "");
   await capture("60-long-ladder");
   // The window of code of a thread opens in a block that scrolls.
   const windowed = app()
@@ -1018,7 +1018,7 @@ try {
   app().switchView("loom");
   await capture("66-loom");
   app().steer(true);
-  await session.select(session.chains.find((chain) => session.labelOf(chain.id) === "life3/feed")?.id ?? "");
+  await session.select(session.chains.find((chain) => session.labelOf(chain.id) === "lane/feed")?.id ?? "");
   app().travel(-40);
   await capture("67-loom-time-cursor");
   app().travel(Number.MAX_SAFE_INTEGER);

@@ -173,14 +173,14 @@ fn each_worker_nests_under_the_thread_that_made_it_and_takes_the_label_of_its_ch
     .map(|(_, id, name)| (id.as_str(), name.as_str()))
     .collect();
   let labels = [
-    ("prompt3", "life3/thought"),
-    ("prompt4", "life3/fabricated"),
-    ("prompt5", "life3/qwen"),
-    ("prompt6", "life3/citime"),
-    ("prompt12", "w/fix295"),
-    ("prompt31", "life3/feed"),
+    ("prompt3", "lane/panels"),
+    ("prompt4", "lane/labels"),
+    ("prompt5", "lane/colors"),
+    ("prompt6", "lane/checks"),
+    ("prompt12", "w/fix-board"),
+    ("prompt31", "lane/feed"),
     ("prompt59", "w/literal"),
-    ("prompt94", "literal/monty"),
+    ("prompt94", "literal/parser"),
     ("prompt79", "w/wheels"),
     ("prompt86", "w/bench-replay"),
     ("prompt35", "untitled"),
