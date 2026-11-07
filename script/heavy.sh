@@ -100,6 +100,11 @@ told=$((start - 30))
 take
 while [ -z "$got" ]; do
   now=$(date +%s)
+  # A wait whose caller ended serves no one, and adopted by init it would run to its limit: it ends with its caller.
+  if [ $(ps -o ppid= -p $$) != "$PPID" ]; then
+    echo "heavy: the caller of the wait ended, so the wait ends" >&2
+    exit 143
+  fi
   if [ $((now - start)) -ge "$limit" ]; then
     echo "heavy: no step started in ${limit}s, with $(said): run it again" >&2
     exit 75
