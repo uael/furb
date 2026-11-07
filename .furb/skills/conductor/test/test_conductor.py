@@ -26,7 +26,7 @@ CODE = ("a", "b")
 FINGER = "cat finger.txt 2>/dev/null; true"
 CI_PROBE = "cat ci.txt 2>/dev/null; true"
 DF = "cat df.txt 2>/dev/null; true"
-MEM = "cat mem.txt 2>/dev/null; true"
+MEM = "cat mem.txt 2>/dev/null; exit $(cat code.txt 2>/dev/null || echo 0)"
 SHOTS = "cat shots.txt 2>/dev/null; true"
 GH_POLL = "cat gh.txt 2>/dev/null; true"
 desk_time.update(review_at=1e12, ci_at=1e12, disk_at=1e12)
@@ -383,13 +383,15 @@ async def test_news_is_done_with_the_next_prompt_of_the_root(conductor: Round) -
 
 
 async def test_the_lanes_of_memory_captures_and_github_read_their_command_and_tell_what_needs_the_lead(conductor: Round) -> None:
-  conductor.file("mem.txt", "System-wide memory free percentage: 9%\n")
+  conductor.file("mem.txt", "memory 9% free, swap 6000 MB in use, grown 0 MB in 1s\n")
+  conductor.file("code.txt", "75\n")
   conductor.file("shots.txt", "push failed\n")
   conductor.file("gh.txt", "now\t2026-11-07T01:00:00Z\ncomment\t42\thttps://github.com/uael/furb/pull/1#c42\tPlease look.\ncomment\t43\thttps://x/43\t\U0001f916 mine\n")
   await conductor.word("SIDE[:] = [mem_step, shots_step, gh_step]\ndesk_time.update(mem_at=-1e9, shots_at=-1e9, gh_at=-1e9)")
   await conductor.beat()
   await conductor.beat()
   assert "The memory runs low: memory 9% free" in "\n".join(conductor.notes(conductor.root))
+  assert conductor.ns["pick"]() is None
   assert conductor.ns["desk_text"]["gh_since"] == "2026-11-07T01:00:00Z"
   (said_,) = [x for x in conductor.notes(conductor.root) if x.startswith("The owner wrote on GitHub")]
   assert said_.startswith("The owner wrote on GitHub, comment https://github.com/uael/furb/pull/1#c42: Please look.")

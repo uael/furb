@@ -62,7 +62,7 @@ STALL, STUCK, STUCK_RUNNING, ROUNDS, MERGES = 600.0, 1200.0, 2700.0, 3, 4
 DISK_FLOOR = 60
 ROOM_WHY, FIX_WHY = "past the room of its class", "a fix of the CI of w/converge runs first on this topic"
 DF = "df -k ~ | tail -1"
-MEM = "memory_pressure | tail -1; sysctl -n vm.swapusage"
+MEM = "sh ~/src/github.com/uael/furb/script/heavy.sh"
 GH_POLL = 'sh "$TMPDIR/converge/gh.sh"'
 SHOTS = 'sh "$TMPDIR/converge/shots.sh"'
 REGROUND, REGROUND_TOKENS, REGROUND_GROWTH = 0.5, 300000, 150000
@@ -209,6 +209,8 @@ def review_cut(acts: list[tuple]) -> list[tuple]:
 
 def pick() -> tuple[str, dict] | None:
   """The hardest ready item of a topic with room, on a seat of its class, or of the class above when its class is full and no ready item of that class waits."""
+  if desk_text.get("mem_low"):
+    return None
   done, used = merged_keys(), seats_used()
   ready = [(t, x) for t in TOPICS if t != QA and not desk_fixing.get(t) and len(desk_live[t]) < desk_width.get(t, 0) for x in desk_queue[t] if all(a in done for a in afters_of(x))]
   kinds = {kind(str(x["model"])) for _, x in ready}
@@ -585,13 +587,14 @@ def mem_step() -> list[str]:
   if live and over(live):
     desk_text["mem_live"] = ""
     got = peek(live)
-    out = got.stdout.content if isinstance(got, Exit) else ""
-    m_free, m_swap = re.search(r"free percentage: (\d+)%", out), re.search(r"free = ([\d.]+)M", out)
-    free = int(m_free.group(1)) if m_free else 100
-    swap = float(m_swap.group(1)) if m_swap else 1e9
-    desk_text["mem_last"] = f"memory {free}% free, swap {swap:.0f} MB free"
-    if free < 15 or (swap < 512 and free < 30):
-      notes.append(f"The memory runs low: {desk_text['mem_last']}. Find the processes that hold it (ps by rss) and tell the owner.")
+    # The guard of the heavy steps reads the memory, and exits 75 when no step can start: no item starts then either.
+    low = isinstance(got, Exit) and got.code == 75
+    desk_text["mem_last"] = got.stdout.content.strip() if isinstance(got, Exit) else ""
+    desk_text["mem_low"] = "low" * low
+    if not isinstance(got, Exit) or got.code not in (0, 75):
+      notes.append(f"The guard of the memory did not run, so no item waits for the memory: {got.stderr.content[-300:] if isinstance(got, Exit) else got}")
+    elif low:
+      notes.append(f"The memory runs low: {desk_text['mem_last']}. No new item starts until it frees. Find the processes that hold it (ps by rss) and tell the owner.")
   elif not live and clock() - desk_time.get("mem_at", 0.0) >= CI_EVERY:
     desk_time["mem_at"] = clock()
     desk_text["mem_live"] = str(bash(MEM, show=HIDDEN, ok=True, timeout=30))
