@@ -62,7 +62,13 @@ export const graphemes = new Intl.Segmenter();
  * the end of a path. It fills the width to its last cell, and shows no ellipsis where none fits. */
 export function clip(line: string, width: number, keep: "start" | "end" = "start"): string {
   if (Bun.stringWidth(line) <= width) return line;
-  if (width < 2) return width === 1 ? "…" : "";
+  // Below two cells no ellipsis fits: a width of one keeps the first one-cell grapheme of the side that stays.
+  if (width < 2) {
+    const parts = [...graphemes.segment(line)].map(({ segment }) => segment);
+    return width === 1
+      ? ((keep === "end" ? parts.reverse() : parts).find((part) => Bun.stringWidth(part) === 1) ?? "")
+      : "";
+  }
   return cliTruncate(line, width, { position: keep === "end" ? "start" : "end", truncationCharacter: "…" });
 }
 
