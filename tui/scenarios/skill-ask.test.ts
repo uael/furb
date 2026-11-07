@@ -4,7 +4,6 @@ import { scenario, test, until } from "./harness.ts";
 
 test("/ouroboros with a text loads the skill and sends the text as a message", () =>
   scenario([{ cue: "build a todo list", word: 'close("Built.")' }], async (window) => {
-    await until(() => window.session.skills.some((one) => one.name === "ouroboros"), "the skill in the list");
     await window.type("/ouroboros build a todo list with a panel");
     await window.shows((frame) => frame.includes("Built."), "the answer to the message");
     const { engine, root } = window;

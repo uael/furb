@@ -43,6 +43,7 @@ import {
 import type { ThreadNode as CrateNode, FollowUp, Layer, Rung, Threads } from "furb/protocol";
 import type { Engine, HostView, Usage } from "./bridge.ts";
 import { clock } from "./clock.ts";
+import { skillSlashes } from "./commands.ts";
 import { typed } from "./configs.ts";
 import { expandHome, fileReferences, fromDirectory, projectFiles, shortenHome } from "./files.ts";
 import { count, dollars } from "./format.ts";
@@ -2512,7 +2513,7 @@ export class Session extends EventEmitter {
         break;
       default: {
         // A skill is a command that loads the skill on the chain, as skill(name) does.
-        if (!this.skills.some(({ name }) => name === command))
+        if (!(await this.skillNamed(command)))
           throw new Error(`Unknown command /${command}. Press F1 for the command list.`);
         const loaded = await this.engine.rung({
           word: `skill(${JSON.stringify(command)})`,
@@ -2527,6 +2528,17 @@ export class Session extends EventEmitter {
         }
       }
     }
+  }
+
+  /** The entry that a skill gives for a name, read from the list of skills, or from the read of skills:// that the list
+   * has not taken yet, so a command typed before the list loads is not refused. */
+  async skillNamed(name: string): Promise<{ name: string } | undefined> {
+    let list: readonly Skill[] = this.skills;
+    if (!skillSlashes(list).some((one) => one.name === name)) {
+      const read = this.indexed().skills;
+      if (read) list = skillsIn(await this.engine.result(read.id));
+    }
+    return skillSlashes(list).find((one) => one.name === name);
   }
 
   /** A key of the configs set in a layer, or taken out of it for no value, and the life stands on the configs of now. */
