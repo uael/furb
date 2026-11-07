@@ -42,29 +42,46 @@ async def test_a_gate_is_the_question_of_whether_a_word_may_run() -> None:
 async def test_a_gate_carries_the_word_alone() -> None:
   """A gate carries the word alone, and the gate reads the program of the chain before that rung and the names of its acts when it takes the gate, and the word after it, so the Kernel keeps no ladder of its own, the journal keeps no program, and a word of a program made again is read after the rungs that stand."""
   sand, log, root = born(
-    "k = 1", "x = BAD", "y = 2", "write(read(get(acting())[2]).replace('y = 2', 'k = 3'))", "close(k)"
+    "k = 1\ndebug(t'go')",
+    "x = BAD",
+    "y = 2\ndebug(t'go')",
+    "write(read(get(acting())[2]).replace('y = 2', 'k = 3'))",
+    "close(k)",
   )
   act = engine.prompt(int, "edit", on=root)
   assert await act == 3
   await settle()
   assert [len(e[0]) for e in sand.record if e[0][0] == "gate"] == [5] * 6
   first, bad, after, edit, _, last = [a[1] for a in said(log, "rung") if a[2] == act]
+  made = next(a[1] for a in said(log, "rung") if a[4] == "k = 3\ndebug(t'go')")
   bind = fresh(root, prompted(act, "int", "edit"), f"#{first} advance on {act}")
   refused = f"#{bad} refused\n{bad}_findings = {faulted('x = BAD')!r}"
   told = [
-    f"#{first} told nothing\n\n#{bad} advance on {act}",
+    f"#{first} debugged\n{first}_debug = 'go'\n\n#{bad} advance on {act}",
     f"{refused}\n\n#{after} advance on {act}",
-    f"#{after} told nothing\n\n#{edit} advance on {act}",
+    f"#{after} debugged\n{after}_debug = 'go'\n\n#{edit} advance on {act}",
   ]
-  read = engine.unquoted(f"#read1\nread1_path = {act!r}\n<s:read1_text>\nk = 1\nx = BAD\ny = 2</s:read1_text>")
-  again = [read, bind, "k = 1", *told]
+  read = engine.unquoted(
+    f"#read1\nread1_path = {act!r}\n<s:read1_text>\nk = 1\ndebug(t'go')\nx = BAD\ny = 2\ndebug(t'go')</s:read1_text>"
+  )
+  again = [read, bind, "k = 1\ndebug(t'go')", *told]
   assert gatings(log) == [
-    ("k = 1", [bind]),
-    ("x = BAD", [bind, "k = 1", told[0]]),
-    ("y = 2", [bind, "k = 1", told[0], told[1]]),
-    ("write(read(get(acting())[2]).replace('y = 2', 'k = 3'))", [bind, "k = 1", *told[:2], "y = 2", told[2]]),
-    ("k = 3", again),
-    ("close(k)", [*again, "k = 3", f"#write1\nwrite1_path = {act!r}\n\n#{last} advance on {act}"]),
+    ("k = 1\ndebug(t'go')", [bind]),
+    ("x = BAD", [bind, "k = 1\ndebug(t'go')", told[0]]),
+    ("y = 2\ndebug(t'go')", [bind, "k = 1\ndebug(t'go')", told[0], told[1]]),
+    (
+      "write(read(get(acting())[2]).replace('y = 2', 'k = 3'))",
+      [bind, "k = 1\ndebug(t'go')", *told[:2], "y = 2\ndebug(t'go')", told[2]],
+    ),
+    ("k = 3\ndebug(t'go')", again),
+    (
+      "close(k)",
+      [
+        *again,
+        "k = 3\ndebug(t'go')",
+        f"#write1\nwrite1_path = {act!r}\n\n#{made} debugged\n{made}_debug = 'go'\n\n#{last} advance on {act}",
+      ],
+    ),
   ]
 
 
@@ -110,14 +127,14 @@ async def test_a_refused_word_of_a_rung_stands_in_the_ladder_of_its_prompt() -> 
 
 async def test_a_rung_that_retells_stands_with_the_gate_where_the_one_it_retells_stood() -> None:
   """A rung that retells stands with the gate where the one it retells stood, so the gate reads a word once in a life, and a replay makes no copy of a refused word, which never ran, so the chain tells nothing of that word again."""
-  _, log, root = born("k = 1", "x = BAD", "close(k)", "close(None)")
+  _, log, root = born("k = 1\ndebug(t'go')", "x = BAD", "close(k)", "close(None)")
   act = engine.prompt(int, "count", on=root)
   assert await act == 1
   await settle()
-  engine.write(Text(act, "k = 1\nx = BAD"), on=root)
+  engine.write(Text(act, "k = 1\ndebug(t'go')\nx = BAD"), on=root)
   await settle(300)
-  assert gated(log) == ["k = 1", "x = BAD", "close(k)"]
-  assert [a[4] for a in acts(log).values() if a[0] == "gate"] == ["k = 1", "x = BAD", "close(k)"]
+  assert gated(log) == ["k = 1\ndebug(t'go')", "x = BAD", "close(k)"]
+  assert [a[4] for a in acts(log).values() if a[0] == "gate"] == ["k = 1\ndebug(t'go')", "x = BAD", "close(k)"]
   first = [a[1] for a in said(log, "rung") if not a[5]]
   copies = [(a[1], a[4], a[5]) for a in said(log, "rung") if a[5]]
   bind = fresh(root, prompted(act, "int", "count"), f"#{first[0]} advance on {act}")
@@ -125,8 +142,8 @@ async def test_a_rung_that_retells_stands_with_the_gate_where_the_one_it_retells
   bad = f"{refused}\n\n#{first[2]} advance on {act}"
   assert [(word, donor) for _, word, donor in copies] == [
     (bind, f"{first[0]}_told"),
-    ("k = 1", first[0]),
-    (f"#{first[0]} told nothing\n\n#{first[1]} advance on {act}", f"{first[1]}_told"),
+    ("k = 1\ndebug(t'go')", first[0]),
+    (f"#{first[0]} debugged\n{first[0]}_debug = 'go'\n\n#{first[1]} advance on {act}", f"{first[1]}_told"),
     (bad, f"{first[2]}_told"),
   ]
   kinds = ["NoneType"] * 4
@@ -134,7 +151,7 @@ async def test_a_rung_that_retells_stands_with_the_gate_where_the_one_it_retells
   assert [(a[1], a[3][0].split("\n")[0]) for a in said(log, "tell") if " refused" in a[3][0]] == [
     (first[1], f"#{first[1]} refused")
   ]
-  assert engine.read(act, on=root).content == "k = 1\nx = BAD"
+  assert engine.read(act, on=root).content == "k = 1\ndebug(t'go')\nx = BAD"
   assert [one for one in heads(engine.turns(on=root)) if one.split(" ")[1:2] == ["closed"]] == []
   assert engine.program(root) == {donor: word for _, word, donor in copies}
 

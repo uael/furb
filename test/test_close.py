@@ -218,6 +218,8 @@ async def test_a_close_said_from_a_word_that_names_no_act_is_over_the_prompt_tha
   assert [one[1] for one in said(log, "close")] == [act, mine]
   sand.script[root] = ["close(5, 'rung3')", "close(6)"]
   named = engine.prompt(int, "count", on=root)
+  await settle()
+  engine.prompt(None, "go on", on=named)
   assert await named == 6
   assert [one[1] for one in said(log, "close")][2:] == ["rung3", named] and engine.peek("rung3") == 5
 

@@ -122,17 +122,17 @@ test("a step that leaves a message unanswered is asked again, and the message ge
     },
   ));
 
-test("a word that ends with no close and awaits nothing is asked again, and its next word answers", () =>
+test("a word that ends with no close and tells something is asked again, and its next word answers", () =>
   scenario(
     [
-      { cue: "Scenario: count.", word: "n = 41" },
+      { cue: "Scenario: count.", word: 'n = 41\ndebug(t"{n}")' },
       // The first turn holds "advance on" too, so the step that is asked again is cued on what only it reads.
-      { cue: "told nothing", word: 'close(f"Counted {n + 1}.")' },
+      { cue: "debugged", word: 'close(f"Counted {n + 1}.")' },
     ],
     async (window, yard) => {
       await window.type("Scenario: count.");
       await window.shows((frame) => frame.includes("Counted 42."), "the answer of the word asked again");
       expect((await asked(window))[0]).toMatchObject({ message: "Scenario: count.", value: "Counted 42." });
-      expect(yard.turns().map((one) => one.cue)).toEqual(["Scenario: count.", "told nothing"]);
+      expect(yard.turns().map((one) => one.cue)).toEqual(["Scenario: count.", "debugged"]);
     },
   ));
