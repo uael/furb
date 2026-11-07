@@ -800,8 +800,7 @@ export class HostView extends EventEmitter {
   async cancelSignIn(): Promise<void> {
     await this.life.cancelSignIn();
   }
-  /** A change of a key of a layer of the configs, which the World writes in the daemon, or a reload of them, each then
-   * a stand of the life. The daemon drives the sign-in that a change of codex asks, and refuses the change when the
+  /** A change of a key of a layer of the configs, which the World writes in the daemon, then a stand of the life. The daemon drives the sign-in that a change of codex asks, and refuses the change when the
    * operator cancels it or it fails, as the frames of the sign-in tell the window. */
   async config(config: Config): Promise<void> {
     if (this.demo) throw new Error("Provider settings are not available in the demo.");
