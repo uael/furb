@@ -1,3 +1,4 @@
+#![expect(clippy::too_many_lines, reason = "debt: a test longer than 60 lines")]
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use monty_types::NamedValues;
