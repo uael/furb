@@ -36,3 +36,8 @@ export function environment(
     FURB_TESTS: "1",
   };
 }
+
+/** The words that run a heavy step, as the tests or a run of the gallery, through script/heavy.sh, which starts it only
+ * while the machine has the memory for it. Windows has no sh, so a step there runs as it is. */
+export const heavy =
+  process.platform === "win32" ? [] : ["sh", join(import.meta.dir, "../../script/heavy.sh")];

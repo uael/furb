@@ -321,7 +321,7 @@ fix what your change broke, and report what was broken before.
   dependencies, against about 35 in a worktree of `git worktree add`. Copy on write needs APFS, Btrfs or XFS; on another file system, the script makes a
   plain worktree. Remove a worktree with `git worktree remove --force <path>`, then `git branch -D <branch>`. The
   checkout at the root can stand behind `origin/main`, so read and change code in a worktree.
-- `sh script/heavy.sh <command> [argument...]`: run a heavy step (a build, a test run, a capture) only while the machine has the memory for it: at most one for each 9 GB of memory at once, and none while less than 20% of the memory is free or the swap grows; the hooks, `script/worktree.sh`, the gallery and the desk of the conductor go through it.
+- `sh script/heavy.sh <command> [argument...]`: run a heavy step (a build, a test run, a capture) only while the machine has the memory for it: at most one for each 9 GB of memory at once, and none while less than 20% of the memory is free or the swap grows; the hooks, `script/worktree.sh`, `bun run test`, the gallery and the desk of the conductor go through it, and a runner of CI (`CI=true`) skips it. A step that waits past `FURB_HEAVY_WAIT` (1200 s) exits 75.
 - `uv run pytest -q`: the suite on both engines, with the coverage of `furb` and of `furb_monty`, which must be
   whole.
 - `uv run pytest -q test/test_hygiene.py`: the hygiene laws alone.

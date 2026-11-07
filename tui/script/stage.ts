@@ -9,6 +9,7 @@ import { demoLibrary } from "../src/demo.ts";
 import type { Session } from "../src/session.ts";
 import type { Workspaces } from "../src/workspaces.ts";
 import { handedOver } from "./daemon.ts";
+import { heavy } from "./environment.ts";
 
 /** The longest time, in seconds, that a script of the gallery waits for one screen, that a run of it lasts, and that it
  * waits for another run to end. */
@@ -141,7 +142,6 @@ export async function home(name: string, environment: Record<string, string> = {
     if (short || !given) place = daemonPlace(join(short ?? cacheOf(real, environment), "furb", "host"));
     // The run is a heavy step, which starts only while the machine has the memory for it: script/heavy.sh holds it for
     // up to WAIT seconds, which the limit of the run adds.
-    const heavy = process.platform === "win32" ? [] : ["sh", join(import.meta.dir, "../../script/heavy.sh")];
     const most = heavy.length ? LIMIT + WAIT : LIMIT;
     child = Bun.spawn([...heavy, process.execPath, Bun.main], {
       env: {

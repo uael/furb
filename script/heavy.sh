@@ -26,8 +26,9 @@ EOF
   fi
   free=${free:-0} swap=${swap:-0}
 }
-# A step that this script started holds its slot already, so a step inside it takes no second one.
-[ -z "${FURB_HEAVY_SLOT:-}" ] || [ $# -eq 0 ] || exec "$@"
+# A step that this script started holds its slot already, so a step inside it takes no second one. A runner of CI runs
+# one job alone, so its steps take no slot either.
+[ -z "${FURB_HEAVY_SLOT:-}" ] && [ "${CI:-}" != true ] || [ $# -eq 0 ] || exec "$@"
 dir=${FURB_HEAVY_DIR:-/tmp/furb-heavy-$(id -u)}
 mkdir -p "$dir" || exit 1
 # room: whether the memory holds one more step. Each look of each waiter and of the desk adds the swap to $dir/swap,
