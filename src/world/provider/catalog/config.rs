@@ -388,7 +388,7 @@ impl Catalog {
   }
 
   fn set_codex(&mut self, name: String, config: Option<&Path>, form: &Value) -> Result<(), Error> {
-    let models = codex::offered(config, form).map_err(Error::Codex)?;
+    let models = codex::offered(config, form)?;
     self.drop_models(&name);
     self.models.extend(models.into_iter().map(|model| Offer::new(model, true)));
     self.providers.retain(|held| held.name != name);
