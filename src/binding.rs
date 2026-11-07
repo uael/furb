@@ -46,7 +46,7 @@ use crate::{
   Ear, Fact, Fault, Heard, Life, Object, Spoken, Step,
   extension::{self, Extension, Part},
   life::Opening,
-  view::{Act as ViewAct, Fold, Held, Pause, restate},
+  view::{Act as ViewAct, Fold, Held, Pause, quotes as quotes_of, restate, writing as writing_of},
   wire,
   world::{self, images},
 };
@@ -941,6 +941,30 @@ impl Meaning {
   pub fn moments(&self, on: Option<String>) -> Result<Value, Fault> {
     meant(&self.held.moments(on.as_deref()))
   }
+}
+
+/// Each quote of a word, in order: of a word that ran, each that closes, and of a word that a model
+/// still writes, `open`, the last one too while its close mark has not come. Each window reads the
+/// quotes of a word here, as the fold reads them.
+#[cfg_attr(
+  feature = "typescript",
+  napi(
+    ts_return_type = "Array<{ start: number; name: string; body: string; end: number; closed: boolean; binding: string }>"
+  )
+)]
+pub fn quotes(text: String, open: Option<bool>) -> Result<Value, Fault> {
+  meant(&quotes_of(&text, open.unwrap_or(false)))
+}
+
+/// What a model writes while its word has not come yet, from the text of its word that came and
+/// the text that it thinks: the lines of the word that it finished, the line that it still writes,
+/// the line of the word where each line starts, and the count of the lines of the word.
+#[cfg_attr(
+  feature = "typescript",
+  napi(ts_return_type = "{ lines: string; tail: string; numbers: number[]; count: number }")
+)]
+pub fn writing(text: String, thinking: String) -> Result<Value, Fault> {
+  meant(&writing_of(&text, &thinking))
 }
 
 /// Acts each in the state that the crate gives it, and each chain in the state that the acts that
