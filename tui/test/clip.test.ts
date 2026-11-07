@@ -31,21 +31,31 @@ test("a width of 0 or 1 shows no ellipsis, and a width of 1 keeps the first grap
   expect(clip("abcdef", 2)).toBe("a…");
 });
 
-test("the renderer draws no cell past the bound of a clipped row", async () => {
+test("the renderer draws a clipped row in the cells of its width, none past them and the last one filled", async () => {
   const { createTestRenderer } = await import("@opentui/core/testing");
   const { TextRenderable } = await import("@opentui/core");
-  for (const text of ["日本語のテキストです", "a👍🏽b👨‍👩‍👧c日本語", "abcdefghijklmnop"])
-    for (const size of [1, 2, 3, 4, 5, 6])
+  // A mark stands on the first cell past the bound. A cell that the clip let past the bound lies under it, and the row
+  // that the renderer draws then lacks the end of the line that was clipped.
+  const lines = [
+    "abcdefghijklmnop",
+    "日本語のテキストです",
+    "a👍🏽b👨‍👩‍👧c日本語😀😀",
+    "e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301e\u0301",
+  ];
+  for (const text of lines)
+    for (const size of [2, 3, 4, 5, 6, 7, 8])
       for (const keep of ["start", "end"] as const) {
-        const screen = await createTestRenderer({ width: 20, height: 2, exitSignals: [] });
+        const cut = clip(text, size, keep);
+        const screen = await createTestRenderer({ width: size + 6, height: 1, exitSignals: [] });
         try {
-          screen.renderer.root.add(
-            new TextRenderable(screen.renderer, { content: clip(text, size, keep), left: 0, top: 0 }),
-          );
+          screen.renderer.root.add(new TextRenderable(screen.renderer, { content: cut, left: 0, top: 0 }));
+          screen.renderer.root.add(new TextRenderable(screen.renderer, { content: "|", left: size, top: 0 }));
           await screen.renderOnce();
-          const row = screen.captureCharFrame().split("\n")[0] ?? "";
-          // The row reads in cells: the text that the renderer drew ends within the bound.
-          expect(Bun.stringWidth(row.trimEnd())).toBeLessThanOrEqual(size);
+          const row = (screen.captureCharFrame().split("\n")[0] ?? "").trimEnd();
+          expect(row.endsWith("|")).toBe(true);
+          expect(row.slice(0, -1).trimEnd()).toBe(cut.trimEnd());
+          // A line of one-cell graphemes fills its last cell, with the ellipsis where it was cut.
+          if (/^[a-p]+$/.test(text)) expect(cut.length).toBe(size);
         } finally {
           screen.renderer.destroy();
         }
