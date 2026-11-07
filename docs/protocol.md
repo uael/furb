@@ -274,7 +274,7 @@ once it listens. A second daemon refuses to start there.
   `skill/<name>`, with its exit and the last 20 lines of its stderr, and starts again at the next fact `enable` of its
   skill. The variables `FURB_HOST`, `FURB_LIFE` and `FURB_SKILL` of the process give the folder of the local
   transport, the record of the life and the name of the skill. `@uael/furb/skill` gives its client, and
-  `docs/extensions.md` says the field.
+  `docs/skills.md` says the field.
 
 ## Views
 

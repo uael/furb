@@ -935,7 +935,7 @@ mod daemon {
     later.attach(&life).await;
     mounted(&mut later, &viewing(&life, "v2")).await;
     later.until(shows("second")).await;
-    assert!(!at.join(".furb").join("extensions").exists(), "the kit writes no file");
+    assert!(!at.join(".furb").join("skills").exists(), "the kit writes no file");
   }
 
   #[tokio::test]
@@ -1470,7 +1470,7 @@ mod daemon {
     window.ran(&life, r#"write(Text("skills://probe", "PROBED = 2"))"#).await;
     // The write copies the folder of the skill in the project, whose word the reload plays, so the
     // process of that copy, which keeps the lines of the file, starts.
-    let started = at.join(".furb").join("extensions").join("probe").join("started");
+    let started = at.join(".furb").join("skills").join("probe").join("started");
     let second = lines(&started, 2).await.remove(1);
     assert!(gone(first[3]).await, "a reload ends the process that ran");
     let second = second.rsplit(' ').next().unwrap().to_owned();
@@ -1774,7 +1774,7 @@ mod daemon {
     assert!(!heard.iter().any(crashed), "a process that ended is told once");
     assert_eq!(lines(&started, 1).await.len(), 1, "a process that ended does not start by itself");
     window.ran(&life, r#"write(Text("skills://probe", "PROBED = 2"))"#).await;
-    let again = at.join(".furb").join("extensions").join("probe").join("started");
+    let again = at.join(".furb").join("skills").join("probe").join("started");
     assert_eq!(lines(&again, 2).await.len(), 2, "the next enable starts the process again");
     window.until(crashed).await;
   }

@@ -34,7 +34,7 @@ meanings. The entry of such a name here gives only its form in the engine.
   of its own.
 - tip: the point of a later life where the journal has said the record again whole, at which boot stands the life
   again, and after which the life goes on past it.
-- catch-up: what the official extension catchup does on each chain at each stand, which `extensions/catchup/catchup.pyi`
+- catch-up: what the official extension catchup does on each chain at each stand, which `.agents/skills/catchup/catchup.pyi`
   says.
 - default actor: the actor a prompt goes to when the prompt leaves the actor unsaid, bound as `actor` in the chain.
 - World: the ears of the outside that serve the machine, one or many, which reach the disk, the machine, the actors,

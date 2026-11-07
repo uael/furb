@@ -14,7 +14,7 @@ use super::{
   super::codex, Catalog, Client, Cost, Entry, Error, LOCAL, Limit, Listed, Listing, Modalities,
   Model, Offer, cache, claude, listed, switched, update::MODELS,
 };
-use crate::extension;
+use crate::skill;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -316,8 +316,9 @@ fn is_of(model: &Model, provider: &str) -> bool {
 }
 
 impl Catalog {
-  /// The catalog with the provider settings of the configs, in the order of [`crate::extension::configs`]: the user,
-  /// the project, then the local config of the project. A false entry removes a provider.
+  /// The catalog with the provider settings of the configs, in the order of
+  /// [`crate::skill::configs`]: the user, the project, then the local config of the project. A
+  /// false entry removes a provider.
   /// Invalid settings give an error. A running provider keeps its previous settings when a reload fails.
   pub fn configured(self, directory: &Path, config: Option<&Path>) -> Result<Self, Error> {
     super::blocking(self.configure(directory, config))
@@ -326,8 +327,8 @@ impl Catalog {
   /// The catalog with the provider settings of the configs, as [`Catalog::configured`] gives it,
   /// for a caller that awaits.
   pub async fn configure(mut self, directory: &Path, config: Option<&Path>) -> Result<Self, Error> {
-    let places = extension::Places::here();
-    let files = extension::configs(config.unwrap_or(&places.config), directory);
+    let places = skill::Places::here();
+    let files = skill::configs(config.unwrap_or(&places.config), directory);
     let entries = merged(files)?;
     let cached = cache().map(|at| at.join(MODELS));
     let defaults = listed(cached.as_ref());

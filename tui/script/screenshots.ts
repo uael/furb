@@ -1118,9 +1118,9 @@ try {
   app().dispose();
   await library.dispose();
   const listed = await project("todo");
-  const folder = join(listed, ".furb", "extensions", "todo");
+  const folder = join(listed, ".furb", "skills", "todo");
   await cp(resolve(import.meta.dir, "..", "fixtures", "todo"), folder, { recursive: true });
-  await writeFile(join(listed, ".furb", "config.json"), '{"extensions": {"todo": "extensions/todo"}}\n');
+  await writeFile(join(listed, ".furb", "config.json"), '{"extensions": {"todo": "skills/todo"}}\n');
   await show(await demoSession({ cwd: listed }));
   const todo = (await readFile(join(folder, "todo.py"), "utf8")).replace(
     /^from furb\.engine import .*\n+/m,
@@ -1170,17 +1170,14 @@ try {
   // status in the footer, and the dialog of /mcp, whose selected server shows its target, its version and what it
   // gives.
   const served = await project("mcp");
-  const servers = join(served, ".furb", "extensions", "servers");
+  const servers = join(served, ".furb", "skills", "servers");
   await cp(resolve(import.meta.dir, "..", "fixtures", "mcp"), servers, { recursive: true });
   // The part of mcp is the official one, which each project loads: the folder of the fixtures holds the word alone.
   await writeFile(
     join(servers, "SKILL.md"),
     "---\nname: servers\ndescription: The servers of the fixture.\nmetadata:\n  furb-word: servers.py\n---\n",
   );
-  await writeFile(
-    join(served, ".furb", "config.json"),
-    '{"extensions": {"servers": "extensions/servers"}}\n',
-  );
+  await writeFile(join(served, ".furb", "config.json"), '{"extensions": {"servers": "skills/servers"}}\n');
   await show(await demoSession({ cwd: served }));
   const serving = (await readFile(join(servers, "servers.py"), "utf8")).replace(
     /^from furb\.engine import .*\n+/m,
@@ -1254,7 +1251,10 @@ try {
   // each chain compacted.
   await show(await demoSession({ cwd: await project("compaction") }));
   const compaction = (
-    await readFile(resolve(import.meta.dir, "..", "..", "extensions", "compaction", "compaction.py"), "utf8")
+    await readFile(
+      resolve(import.meta.dir, "..", "..", ".agents", "skills", "compaction", "compaction.py"),
+      "utf8",
+    )
   ).replace(/^from furb\.engine import \([^)]*\)\n+/m, "");
   await session.command(`/run ${compaction}\nchain("review")\nplan = read("README.md")`);
   await settle();

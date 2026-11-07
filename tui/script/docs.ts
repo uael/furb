@@ -7,7 +7,7 @@ import { chords, keys } from "../src/keys.ts";
 import { loadPart } from "../src/parts.ts";
 
 /** The commands that the part of each official extension adds, which a life that runs the extension has. */
-const official = fileURLToPath(new URL("../../extensions/", import.meta.url));
+const official = fileURLToPath(new URL("../../.agents/skills/", import.meta.url));
 const parted: string[] = [];
 for (const name of readdirSync(official).sort()) {
   const file = join(official, name, "tui.ts");

@@ -8,7 +8,7 @@ export function furbDirectory(project: string, ...parts: string[]): string {
   const furb = join(project, ".furb");
   try {
     mkdirSync(furb);
-    writeFileSync(join(furb, ".gitignore"), "*\n!config.json\n!extensions/\n!extensions/**\n");
+    writeFileSync(join(furb, ".gitignore"), "*\n!config.json\n!skills/\n!skills/**\n");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
   }

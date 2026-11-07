@@ -23,7 +23,7 @@ Each gate runs locally. `uv run` builds the crate again after a change of it, as
 | A defect of the runtime | Reproduce it narrowly; run that proof again after the repair, and the tests beside it |
 | `src/furb/engine.py` | `uv run pytest -q`, which runs the suite on both engines and the hygiene laws, whose wall of tokens the engine must stay under |
 | `src/furb/engine.pyi` | The test of each sentence you changed, then `uv run pytest -q test/test_hygiene.py --no-cov` and `uv run ty check --error-on-warning` |
-| An extension | `uv run pytest -q extensions/<name> --no-cov`, and the hygiene laws |
+| An extension | `uv run pytest -q .agents/skills/<name> --no-cov`, and the hygiene laws |
 | The crate, `src/*.rs` | `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`, and again with `--features typescript`, then `uv run pytest -q` |
 | A door | The gates of the crate, then `uv run pytest -q test/outside` for python, and `bun run build && bun run check && bun run test` for TypeScript |
 | The command line, `cli/` | `cargo test -p furb-cli`, which runs `furb` as a process on a claude command line that answers from a script |

@@ -33,6 +33,7 @@ pub mod picker;
 mod provider;
 mod reader;
 mod scratch;
+pub mod skills;
 mod store;
 mod time;
 

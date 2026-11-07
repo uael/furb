@@ -14,9 +14,9 @@ from furb_monty._monty import SYSTEM
 PY = Path(engine.__file__)
 PYI = PY.with_suffix(".pyi")
 TESTS = PYI.parents[2] / "test"
-EXTENSIONS = TESTS.parent / "extensions"
+EXTENSIONS = TESTS.parent / ".agents" / "skills"
 # The contract of the engine and the contract of each extension, official or of the project, each with the folder of its suite.
-PROJECT = TESTS.parent / ".furb" / "extensions"
+PROJECT = TESTS.parent / ".furb" / "skills"
 CONTRACTS = {
   PYI: TESTS,
   **{one: one.parent / "test" for one in sorted([*EXTENSIONS.glob("*/*.pyi"), *PROJECT.glob("*/*.pyi")])},
