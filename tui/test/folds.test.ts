@@ -105,6 +105,44 @@ test("a long string in a folded word has the one fold row of the feed under its 
     expect(session.folds["string:rung1:1:0"]).toBe(false);
   }));
 
+/** The lines that the details of a word draw for a line of code of 100 columns or less, and the labels of its folds. */
+function drawn(app: Parameters<Parameters<typeof composing>[0]>[0]["app"], text: string, width: number) {
+  const view = app.programView(
+    [codeLine(text)],
+    width,
+    () => "",
+    () => "",
+    new Set(),
+    1,
+  );
+  const rows = String(Reflect.get(Reflect.get(view, "target") as object, "content") ?? "").split("\n");
+  const labels = [...app.foldRows.entries()]
+    .filter(([key]) => key.startsWith("string:rung1:1:"))
+    .map(([, fold]) => Number(fold.label.split(" ")[0]));
+  return { rows, labels };
+}
+
+test("a line that cuts two strings ends with one trailer that sums what both hide", () =>
+  composing(async ({ app }) => {
+    const text = `pair = ("${"alpha ".repeat(30)}", "${"omega ".repeat(36)}")`;
+    const { rows, labels } = drawn(app, text, 100);
+    expect(labels).toHaveLength(2);
+    const trailers = rows.flatMap((row) => [...row.matchAll(/…\+(\d+)$/g)].map((one) => Number(one[1])));
+    expect(trailers).toHaveLength(1);
+    expect(trailers.reduce((sum, one) => sum + one, 0)).toBe(labels.reduce((sum, one) => sum + one, 0));
+    expect(rows.some((one) => /more characters/.test(one))).toBe(false);
+  }));
+
+test("a cut line whose width has no room for its trailer keeps the fold row of its own under it", () =>
+  composing(async ({ app }) => {
+    const { rows, labels } = drawn(app, `brief = "${"word ".repeat(30)}"`, 32);
+    expect(labels.length).toBeGreaterThan(0);
+    expect(rows.some((one) => /…\+\d+/.test(one))).toBe(false);
+    // The line keeps its whole width, as the room for a trailer that cannot fit is no room lost.
+    expect(Bun.stringWidth(rows[0] ?? "")).toBeGreaterThan(24);
+    expect(rows.filter((one) => /^▸ \d+ more characters$/.test(one))).toHaveLength(labels.length);
+  }));
+
 test("the rolling window of a running word has the one fold row of the feed, with its count and plural, which the Details open", () =>
   composing(async ({ app, session }) => {
     const lines = Array.from(

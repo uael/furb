@@ -239,3 +239,21 @@ async def test_a_done_prompt_that_a_module_names_pauses_no_chain_at_a_birth_so_a
   await settle()
   assert engine.module(root)["after"] == 1
   assert [a for a in engine.transcript(root) if a[0] == "held" and not engine.over(a[1])]
+
+
+async def test_each_act_of_the_data_with_a_value_is_made_before_each_open_prompt_so_a_message_on_a_done_prompt_of_a_paused_chain_is_asked_after_a_wake() -> (
+  None
+):
+  """Each act of the data with a value is made before each open prompt, so a message that the operator sent on a done prompt while its chain was paused reads that prompt, and its model is asked once a wake comes in the later life."""
+  _, _, root = born("close('done')", auto=False)
+  one = engine.prompt(str, "fix it", on=root)
+  assert await one == "done"
+  engine.pause(root, "held")
+  more = engine.prompt(str, "continue", on=one)
+  await settle()
+  log, root = life(sown(script={"chain1": ["close('on')"]}), engine.seed(engine.gathered(lambda word: word, {})))
+  await settle()
+  assert engine.paused(more) and said(log, "reply") == []
+  engine.wake(root)
+  assert await more == "on"
+  assert len(said(log, "reply")) == 1

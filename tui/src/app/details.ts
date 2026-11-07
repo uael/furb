@@ -545,13 +545,18 @@ export const details = part({
           ),
         );
         const open = this.lineOpen(line) ? undefined : this.openStrings(line);
-        let rows = layout(line.text, width, open);
-        // A line that folds a string leaves the room of its trailer, which says what the fold hides.
-        if (rows.some((row) => row.folds.length))
-          rows = layout(line.text, Math.max(24, width - TRAILER), open);
         // What a cut line hides stands at its end, in the trailer of its row, where the width allows, and in a row of
         // its own under it only where it does not.
-        const trailers = rows.map((row) => this.cutTrailer(row, row === rows[0] ? width : room));
+        const ends = (all: CodeRow[]) => all.map((row, k) => this.cutTrailer(row, k ? room : width));
+        let rows = layout(line.text, width, open);
+        let trailers = ends(rows);
+        // A line that folds a string leaves the room of its trailer, which says what the fold hides, when that room
+        // lets each cut row end with it, and keeps its whole width, with the fold row under it, when it does not.
+        if (rows.some((row) => row.folds.length)) {
+          const narrow = layout(line.text, Math.max(24, width - TRAILER), open);
+          const cut = ends(narrow);
+          if (narrow.every((row, k) => !row.folds.length || cut[k])) [rows, trailers] = [narrow, cut];
+        }
         const code = `${rows[0]?.text ?? ""}${trailers[0] ?? ""}`;
         // The fact of a line stands at the right edge of the block, and the time of a line that runs after it.
         const slot = line.runs ? TIME + 1 : 0;

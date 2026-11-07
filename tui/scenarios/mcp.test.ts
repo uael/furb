@@ -46,7 +46,10 @@ test("/mcp reload lists again the tools that a server changed, and the changed t
     // The window loads the part of mcp from the configs of the project, so a skill of the project holds that part.
     const view = join(yard.work, ".furb", "skills", "mcpview");
     await mkdir(view, { recursive: true });
-    await copyFile(resolve(import.meta.dir, "..", "..", ".agents", "skills", "mcp", "tui.ts"), join(view, "tui.ts"));
+    await copyFile(
+      resolve(import.meta.dir, "..", "..", ".agents", "skills", "mcp", "tui.ts"),
+      join(view, "tui.ts"),
+    );
     await writeFile(
       join(view, "SKILL.md"),
       "---\nname: mcpview\ndescription: The part of mcp for the TUI.\nmetadata:\n  furb-view: tui.ts\n---\nThe part of mcp.\n",
@@ -56,18 +59,27 @@ test("/mcp reload lists again the tools that a server changed, and the changed t
     await window.type("Scenario: load.");
     await window.shows((frame) => frame.includes("mcp played"), "the skill mcp played");
     await window.type("Scenario: list.");
-    const before = await window.shows((frame) => frame.includes("hello(): Tool hello."), "the tool hello of the server");
+    const before = await window.shows(
+      (frame) => frame.includes("hello(): Tool hello."),
+      "the tool hello of the server",
+    );
     expect(before).not.toContain("fresh(): Tool fresh.");
     // The tools change on the side of the server, with no restart of the session.
     await writeFile(join(folder, "tools.txt"), "hello\nfresh\n");
     await window.type("/mcp reload");
-    await window.shows((frame) => frame.includes("MCP: tools is connected."), "the state of the server after the reload");
+    await window.shows(
+      (frame) => frame.includes("MCP: tools is connected."),
+      "the state of the server after the reload",
+    );
     // The command ends in the dialog of the servers, which Escape closes.
     await window.shows((frame) => frame.includes("MCP servers"), "the dialog of the servers");
     window.screen.mockInput.pressEscape();
     await window.shows((frame) => !frame.includes("MCP servers"), "the dialog closed");
     await window.type("Scenario: list.");
-    await window.shows((frame) => frame.includes("fresh(): Tool fresh."), "the tool fresh that the reload lists");
+    await window.shows(
+      (frame) => frame.includes("fresh(): Tool fresh."),
+      "the tool fresh that the reload lists",
+    );
     await window.type("Scenario: call.");
     await window.shows((frame) => frame.includes("called fresh"), "the call of the tool fresh");
   } finally {
