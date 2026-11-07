@@ -101,10 +101,35 @@ pub struct Provider {
   retries: Option<Retries>,
   refresh: Option<Refresh>,
   gone: Vec<String>,
-  members: Vec<String>,
+  members: Members,
   mode: Mode,
   /// The system prompt of each request: the engine of the life, minified.
   system: Arc<str>,
+}
+
+/// The one home of the logins of the members who answer as the operator. Each clone shares it, so
+/// a host that changes it, as when its access list changes, changes the roster of each life at its
+/// next stand.
+#[derive(Clone, Default)]
+pub struct Members(Arc<RwLock<Vec<String>>>);
+
+impl Members {
+  /// A home that holds these logins.
+  #[must_use]
+  pub fn new(logins: Vec<String>) -> Self {
+    Self(Arc::new(RwLock::new(logins)))
+  }
+
+  /// Put these logins in place of the ones that the home held.
+  pub fn set(&self, logins: Vec<String>) {
+    *self.0.write().unwrap_or_else(PoisonError::into_inner) = logins;
+  }
+
+  /// The logins that the home holds now.
+  #[must_use]
+  pub fn logins(&self) -> Vec<String> {
+    self.0.read().unwrap_or_else(PoisonError::into_inner).clone()
+  }
 }
 
 /// What a life does with its provider. A life that only inspects its record asks no model and
@@ -157,7 +182,7 @@ impl Provider {
       retries: None,
       refresh: None,
       gone: Vec::new(),
-      members: Vec::new(),
+      members: Members::default(),
       mode: Mode::Live,
       system: Arc::from(crate::SYSTEM),
     }
@@ -213,11 +238,12 @@ impl Provider {
     (models, self.actor, self.thinking)
   }
 
-  /// The logins of the members who answer as the operator, which the operator entry of the roster
-  /// lists in place of its efforts, so a prompt asks one person with `to="operator/<login>"`.
+  /// The home of the logins of the members who answer as the operator, which the operator entry of
+  /// the roster lists in place of its efforts at each stand, so a prompt asks one person with
+  /// `to="operator/<login>"`.
   #[must_use]
-  pub fn members(mut self, logins: Vec<String>) -> Self {
-    self.members = logins;
+  pub fn members(mut self, members: Members) -> Self {
+    self.members = members;
     self
   }
 

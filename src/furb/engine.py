@@ -1259,7 +1259,7 @@ def boot(record=(), **outside):
     dispatch()
 
   def listening():
-    return alive
+    return dict(alive)
 
   def get(about):
     return known.get(about)

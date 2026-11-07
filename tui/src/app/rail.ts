@@ -1,6 +1,6 @@
 import { basename } from "node:path";
 import type { BoxOptions, BoxRenderable } from "@opentui/core";
-import { type Ask, busy, type ChainThread, type ThreadNode, threadWork } from "furb/life";
+import { type Ask, busy, type ChainThread, pauseSaid, type ThreadNode, threadWork } from "furb/life";
 import { checkoutOf } from "../checkout.ts";
 import { clock } from "../clock.ts";
 import { shortenHomes } from "../files.ts";
@@ -338,13 +338,59 @@ export const rail = part({
     this.renderWorkspaces();
   },
 
+  /** Each prompt of the session that is not over, with its chain, its model and its state as the crate gives it, and
+   * the cause of the pause of a paused one. */
+  activePrompts(): { thread: ChainThread; chain: string; model: string; why: string }[] {
+    const w = this.session;
+    return w.chains.flatMap((chain) =>
+      w.threadsOf(chain.id).list.flatMap((thread) => {
+        if (thread.over) return [];
+        const said = thread.state === "paused" && chain.pause ? pauseSaid(chain.pause).text : "";
+        return [
+          {
+            thread,
+            chain: w.labelOf(chain.id),
+            model: String(thread.act.words[2] ?? "") || "no model",
+            why: said,
+          },
+        ];
+      }),
+    );
+  },
+
+  /** A click on the count lists each active prompt with its chain, its model and its state, and each paused one with
+   * the cause of its pause. */
+  openActivePrompts(): void {
+    const rows = this.activePrompts();
+    this.openPalette(
+      "Active prompts",
+      rows.map(({ thread, chain, model, why }) => ({
+        label: thread.title,
+        detail: [chain, model, thread.state, why].filter(Boolean).join(" · "),
+        mark: markOf(thread.state),
+        run: () => void this.session.select(thread.act.chain),
+      })),
+      { note: rows.length ? "" : "No prompt is active." },
+    );
+  },
+
   /** The top of the sidebar: one line that says whether something waits for you, anywhere, and what a click goes to. */
   renderRailTop(): void {
     const w = this.session;
     const lib = this.options.workspaces;
     const width = this.rail.width || w.preferences.sidebarWidth;
     const total = this.attentionOf(lib.groups.flatMap((group) => group.sessions));
-    if (!this.paneChanged(this.railSession, [this.theme, width, total])) return;
+    if (
+      !this.paneChanged(this.railSession, [
+        this.theme,
+        width,
+        total,
+        this.activePrompts()
+          .map((one) => `${one.thread.act.id}${one.thread.state}`)
+          .join(),
+      ])
+    )
+      return;
     this.clear(this.railSession);
     const edge: BoxOptions = { paddingLeft: LEFT, paddingRight: RIGHT };
     const head: Part[] = total.asks
@@ -356,10 +402,14 @@ export const rail = part({
           [`${glyph.done} `, c.success],
           ["Nothing waits for you", c.muted],
         ];
-    const tail: Part[] = [...(total.asks ? [["  ⌥A", c.faint] as Part] : [])];
-    this.railSession.add(
-      this.railSplit(head, tail, () => void this.nextAttention().catch(this.report), edge),
-    );
+    const rows = this.activePrompts();
+    const paused = rows.filter((one) => one.thread.state === "paused").length;
+    const count = rows.length ? `${rows.length} active${paused ? ` · ${paused} paused` : ""}` : "";
+    const tail: Part[] = [
+      ...(total.asks ? [["  ⌥A", c.faint] as Part] : []),
+      ...(count ? [[`  ${count}`, c.faint] as Part] : []),
+    ];
+    this.railSession.add(this.railSplit(head, tail, () => this.openActivePrompts(), edge));
   },
 
   /** The workspaces and the threads in the scroll of the sidebar. The workspace shown stands open, with its sessions

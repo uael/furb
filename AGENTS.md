@@ -441,6 +441,11 @@ fix what your change broke, and report what was broken before.
   `tui/src/commands.ts`. A change of the types of the N-API door, or of the keys and the commands, runs
   `bun run build` and `bun run docs` before its commit: the CI fails when `bind/typescript/index.d.cts` or
   `tui/README.md` is not what they make. No hook of pre-commit runs them, since the job of the hooks has no bun.
+- `cargo test -p furb-host --test memory -- --large`: the memory of a life, the measure of the bench. A scripted life
+  grows to 10k, 40k and 160k facts, and the test prints its heap, its footprint and what a window that attaches reads
+  at each size. It fails when the log keeps each part of each reply or each state of each act, and over its budget,
+  `BUDGET` of `host/tests/memory.rs` (1024 MiB of heap at 160k facts). It takes a few minutes and holds 1.2 GB. The suite
+  runs the same test at 2k and 6k facts in about 10 s, with no argument, and a slow window on a life of 10k facts.
 - `bun run bench`: the speed of the TUI on two recorded lives of about 2.6 KB for each fact, one of about 160000 facts
   and one of a tenth of that: the cost of a new fact, the first frame, the frames while the feed scrolls and a command
   streams, and the memory on Linux. It fails over its budgets, which the docstring of `tui/script/bench.ts` gives in paces of the
