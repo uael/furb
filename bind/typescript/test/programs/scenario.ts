@@ -5,7 +5,8 @@
 // last thing that it was told. A turn that no cue answers waits an hour, so a scenario that misses a cue fails on the
 // answer that it waited for, and no loop of refusals floods the life. A rule can stream its word in parts of
 // `chunk` characters, `pause` milliseconds apart, and hold its answer until the file that `hold` names stands beside
-// the program, so a scenario holds a reply open as long as it wants. Each turn appends a line to the file turns beside
+// the program, so a scenario holds a reply open as long as it wants. A rule with a `thought` streams it first, as a
+// block of thinking in the same parts, before it holds, so a scenario sees a long thought grow. Each turn appends a line to the file turns beside
 // the program: the cue that it answered, or null, and the text that it read.
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -17,6 +18,7 @@ interface Rule {
   chunk?: number;
   pause?: number;
   hold?: string;
+  thought?: string;
 }
 
 const here = dirname(process.execPath);
@@ -83,7 +85,23 @@ for await (const line of createInterface({ input: process.stdin })) {
   }
   appendFileSync(beside("turns"), `${JSON.stringify({ cue: rule?.cue ?? null, text })}\n`);
   say({ type: "message_start" });
-  say({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } });
+  // A thought streams first, in the parts of the word, as its own block.
+  const thought = rule?.thought ?? "";
+  const block = thought ? 1 : 0;
+  if (thought) {
+    say({ type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "" } });
+    const part = rule?.chunk ?? thought.length;
+    for (let from = 0; from < thought.length; from += part) {
+      say({
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "thinking_delta", thinking: thought.slice(from, from + part) },
+      });
+      if (rule?.pause) await Bun.sleep(rule.pause);
+    }
+    say({ type: "content_block_stop", index: 0 });
+  }
+  say({ type: "content_block_start", index: block, content_block: { type: "text", text: "" } });
   if (rule?.hold) {
     const { cue, hold } = rule;
     while (!existsSync(beside(hold))) await Bun.sleep(20);
@@ -98,12 +116,12 @@ for await (const line of createInterface({ input: process.stdin })) {
   for (let from = 0; from < word.length; from += size) {
     say({
       type: "content_block_delta",
-      index: 0,
+      index: block,
       delta: { type: "text_delta", text: word.slice(from, from + size) },
     });
     if (rule?.pause) await Bun.sleep(rule.pause);
   }
-  say({ type: "content_block_stop", index: 0 });
+  say({ type: "content_block_stop", index: block });
   say({ type: "message_stop" });
   console.log(
     JSON.stringify({ type: "assistant", message: { content: [{ type: "text", text: word }], usage } }),

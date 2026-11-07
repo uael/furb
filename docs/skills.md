@@ -86,7 +86,7 @@ reads it.
   prompt and its answer, so a later life gives the same name and asks no model. `rename_session(name)` says the
   name that the operator chose, as an act of the root, and it wins over the name of `name_session()`. Each client
   shows the name that the record holds, and the sidebar hides the chain `naming`. A
-  config that turns `naming` off, as `{"extensions": {"naming": false}}`, saves the call of that model. A rename in a
+  config that turns `naming` off, as `{"skills": {"naming": false}}`, saves the call of that model. A rename in a
   client is the same act, which the client makes with an ear of its own, so it lasts whatever extension plays.
 - **`ouroboros`** gives `extend(name, *rungs)`, which writes the words of those rungs as an extension of the project
   and turns it on, so every later chain runs it, and `extend(name, *rungs, tui=module)`, which also writes a [part for
@@ -135,7 +135,7 @@ extensions there, as the ones that serve this machine alone. The config director
 Windows.
 
 ```json
-{ "extensions": { "memory": true, "skills": false, "notes": "~/src/furb-notes" } }
+{ "skills": { "memory": true, "skills": false, "notes": "~/src/furb-notes" } }
 ```
 
 - `true` turns an extension on, and keeps the path that an earlier config gave.
@@ -205,7 +205,7 @@ What the notes are for.
 - `furb-view` is the file of the [part for the TUI](#a-part-for-the-tui). It can be absent.
 - `furb-process` is the file of the process of the extension, relative to the folder: a module of TypeScript or of
   JavaScript, which bun runs, or any other program. When a life plays the extension, the daemon of the machine starts
-  it in the folder of the extension, at the end of the replay of the record, and ends it when the life ends or when
+  it in the folder of the skill, at the end of the replay of the record, and ends it when the life ends or when
   the life plays a new word of the extension. Its variables `FURB_HOST`, `FURB_LIFE` and `FURB_SKILL` give the folder
   where the daemon listens, the record of the life and the name of the extension, so it dials the daemon and attaches
   the life as a skill, as [the protocol](protocol.md) says. A folder that holds the extension starts nothing: only a
@@ -314,7 +314,7 @@ export default function (furb) {
 - `furb.status(draw)` adds a status to the footer: `draw(seen)` gives a line, which shows after the state of the
   session only when it is not empty. A status that throws shows its error in its place.
 - `seen` gives the chain on screen, every act of the life, `compactions`, each compaction of a chain as the model of
-  a life gives it, `extensions()` for the names of the extensions that the life runs, and `of(kind)` for the acts of a
+  a life gives it, `skills()` for the names of the skills that the life runs, and `of(kind)` for the acts of a
   kind. It acts in the life too, and each of its acts goes through
   the record:
   - `run(word)` runs Python on the chain through the gate, as `/run` does, and gives the value of the last act that
@@ -355,7 +355,7 @@ and a key or a command that throws shows its error in the footer.
 
 A model adds a part to a life that runs with `extend(name, *rungs, tui=module)` of `ouroboros`, whose skill
 teaches it. The write lands in `.furb`, so the TUI loads the part at once. The config turns the extension on in
-the same life. A config that sets the extension to `false` takes its part away again. `/extensions` opens a dialog of
+the same life. A config that sets the extension to `false` takes its part away again. `/skills` opens a dialog of
 the extensions that the life runs, each with what its part gives, or with the error that stopped its load. Only the
 operator sees an error of a part, so the skill tells the model to check its module with `bun build --no-bundle` and to
 read the error that the operator gives it.
@@ -393,11 +393,11 @@ life gets the same answer from the record. So a replay is exact, and the World i
 
 ## In each host
 
-- The command line: `furb extensions` prints each extension that a life on a record runs, with its life word. The
+- The command line: `furb skills` prints each skill that a life on a record runs, with its life word. The
   `state` of the protocol names them.
-- The TUI: `/extensions` lists what the life runs, and `/run` runs a word of one on the chain on screen, as
+- The TUI: `/skills` lists what the life runs, and `/run` runs a word of one on the chain on screen, as
   `/run skill("pdf")`.
-- TypeScript: `Session` takes `extensions`, false to enable nothing new, and `config`, the config directory of the
+- TypeScript: `Session` takes `skills`, false to enable nothing new, and `config`, the config directory of the
   user.
-- Both doors: `opened` gives the record and the ears of the crate, and `extensions` false enables nothing new.
+- Both doors: `opened` gives the record and the ears of the crate, and `skills` false enables nothing new.
   `enabled`, on the facts of the root, gives the extensions that a life runs, in the order that it enabled them.

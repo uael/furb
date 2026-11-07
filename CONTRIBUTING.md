@@ -151,7 +151,7 @@ and `cli/pyproject.toml` say.
 
 | File | What it holds |
 | --- | --- |
-| `cli/src/main.rs` | The words of the command line, on clap, and the commands `prompt`, `turns`, `facts`, `run`, `checkpoint`, `catalog` and `extensions`. |
+| `cli/src/main.rs` | The words of the command line, on clap, and the commands `prompt`, `turns`, `facts`, `run`, `checkpoint`, `catalog` and `skills`. |
 | `cli/src/life.rs` | One life on the opening of the crate: the prompt of the record it takes up, and how the operator awaits an act. |
 | `cli/src/console.rs` | The console of the terminal, which shows each prompt to the operator and reads the line back by the rules of the crate. |
 | `cli/src/tui.rs` | How furb finds the TUI and hands the terminal to it. |

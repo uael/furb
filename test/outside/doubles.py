@@ -110,7 +110,7 @@ def life(live: Live, record: Path | None = None) -> str:
   """A life on the World under test and on the ears of the crate, its provider among them, which enables no extension
   and is not gated, since reading every word with ty would spend a second of the suite on each of them, so it is
   driven by the words a model would write."""
-  return booted(live.hears(), live.opened(record, extensions=False), gated=False, **live.ears)
+  return booted(live.hears(), live.opened(record, skills=False), gated=False, **live.ears)
 
 
 async def settle() -> None:

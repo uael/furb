@@ -12,7 +12,7 @@ export interface Setting {
     description: string;
     enum?: unknown[];
   };
-  extension?: string;
+  skill?: string;
 }
 
 /** The text of a value in the form of a key: a key that the schema types as a string shows its text as it is, and any

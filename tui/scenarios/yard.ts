@@ -25,6 +25,8 @@ export interface Rule {
   chunk?: number;
   pause?: number;
   hold?: string;
+  /** A thought that the model streams first, in the same parts, before it holds. */
+  thought?: string;
 }
 
 /** The model of every scenario. */
@@ -87,7 +89,7 @@ export class Yard {
     // The life names no session: a name asks the model a question that no scenario scripts.
     await writeFile(
       join(configs, "config.json"),
-      JSON.stringify({ extensions: { naming: false }, ...config }),
+      JSON.stringify({ skills: { naming: false }, ...config }),
     );
     executable(join(programs, "scenario.ts"), home, "claude");
     const yard = new Yard(root, work, home, join(work, ".furb", "sessions", "life.jsonl"), cache);

@@ -51,9 +51,7 @@ def spy(last: tuple, seen: dict[str, list], *, made: bool) -> Generator[None, tu
 
 async def replayed(record: Path, directory: Path) -> dict[str, list]:
   """What the life that inspects the record put on to the outside and kept before its tip."""
-  stored, pairs = _monty.opened(
-    directory=str(directory), record=str(record), inspecting=True, extensions=False, roster=[]
-  )
+  stored, pairs = _monty.opened(directory=str(directory), record=str(record), inspecting=True, skills=False, roster=[])
   ears = dict(pairs)
   held = entries(stored)
   last = held[-1][0]

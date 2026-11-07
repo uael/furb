@@ -248,7 +248,9 @@ function placed(index: Index, act: ActRow): void {
   else index.live.delete(act.id);
   index.stamps.set(act.by, (index.stamps.get(act.by) ?? 0) + 1);
   index.chained.set(act.chain, (index.chained.get(act.chain) ?? 0) + 1);
-  if (act.kind === "prompt") index.threaded.set(act.chain, ++index.prompts);
+  // A prompt tells that a thread changed, and so does a step that works for one, whose model thinks while it asks.
+  if (act.kind === "prompt" || (act.kind === "rung" && index.ids.get(act.by)?.kind === "prompt"))
+    index.threaded.set(act.chain, ++index.prompts);
   // A name of the session names the first thread of the operator in the crate, so it reads the threads again.
   if (act.kind === "name_session" || act.kind === "rename_session") index.named++;
   index.touched.push(act.chain);
@@ -1067,6 +1069,18 @@ export class Session extends EventEmitter {
       (act) => act.kind === "rung" && !isDone(act) && !this.program[act.id],
     );
   }
+  /** When the work of a chain began, as the first of its rungs, commands and waits that are not done began, and how many
+   * characters its models streamed for it: the progress that the loader of the footer shows. */
+  progress(chain: string): { began?: number; streamed: number } {
+    const began = (this.liveOn().get(chain) ?? [])
+      .filter((act) => act.kind === "rung" || act.kind === "bash" || act.kind === "wait")
+      .map((act) => this.started[act.id])
+      .filter((at): at is number => at !== undefined);
+    let streamed = 0;
+    for (const stream of this.host.streams.values())
+      if (stream.chain === chain) streamed += stream.thinking.length + stream.text.length;
+    return { began: began.length ? Math.min(...began) : undefined, streamed };
+  }
   /** The state of the acts of each chain, or of every chain, as actStatus read it at a version of the acts. */
   private states = { version: -1, of: new Map<string, Status>() };
   private statusOf(chain?: string): Status {
@@ -1340,8 +1354,10 @@ export class Session extends EventEmitter {
       this.past = undefined;
       return ladderOf(this.indexed(), this.selected);
     }
-    if (this.past?.moment !== moment || this.past.of !== this.acts)
-      this.past = { moment, of: this.acts, index: indexOf(this.at(this.acts)) };
+    // The acts of a moment that passed change no more, so its index holds until the crate gives other acts of it.
+    const shown = this.at(this.acts);
+    if (this.past?.moment !== moment || this.past.of !== shown)
+      this.past = { moment, of: shown, index: indexOf(shown) };
     return ladderOf(this.past.index, this.selected);
   }
   private past?: { moment: number; of: readonly ActRow[]; index: Index };
@@ -1349,11 +1365,12 @@ export class Session extends EventEmitter {
    * while the chain shown and that moment stand. */
   ladderAt(chain: string, moment: number): ActIndex {
     const kept = this.frozen;
-    if (kept?.chain === chain && kept.moment === moment && kept.of === this.acts) return kept.index;
     const then = this.actsThen(moment);
-    if (!then) return ladderOf(indexOf([]), chain);
+    if (kept?.chain === chain && kept.moment === moment && kept.of === then) return kept.index;
+    // While the crate reads the moment, the ladder that stood before stands.
+    if (!then) return kept?.chain === chain ? kept.index : ladderOf(indexOf([]), chain);
     const index = ladderOf(indexOf(then), chain);
-    this.frozen = { chain, moment, of: this.acts, index };
+    this.frozen = { chain, moment, of: then, index };
     return index;
   }
   private frozen?: { chain: string; moment: number; of: readonly ActRow[]; index: ActIndex };
@@ -1852,7 +1869,8 @@ export class Session extends EventEmitter {
   at(acts: ActRow[]): ActRow[] {
     const moment = this.moment;
     if (moment === undefined) return acts;
-    const then = this.actsThen(moment) ?? [];
+    // While the crate reads a new moment, the acts of the last moment that it gave stand.
+    const then = this.actsThen(moment) ?? this.lastThen ?? [];
     if (acts === this.acts) return then;
     const ids = new Set(acts.map((act) => act.id));
     return then.filter((act) => ids.has(act.id));
@@ -1860,15 +1878,18 @@ export class Session extends EventEmitter {
   /** The acts of the session as the crate gave them just after a moment, each with what its row of now knows besides, or
    * none until the crate answers. A read of acts that changed since is asked again, and shows until the new one comes. */
   private actsThen(moment: number): ActRow[] | undefined {
+    // The acts as they stood at a moment that passed change no more, so each moment is read once.
     const read = this.thenRead.get(moment);
-    if (read?.of !== this.acts) void this.readThen(moment).catch(this.threadFault);
-    return read?.acts;
+    if (!read) void this.readThen(moment).catch(this.threadFault);
+    else this.lastThen = read;
+    return read;
   }
+  /** The acts of the last moment that the crate gave, which stand while it reads another. */
+  private lastThen?: ActRow[];
   /** The crate gives the acts of the life as they stood just after a moment, which the session holds while they stand. */
   private readThen(moment: number): Promise<void> {
     const asking = this.thenAsking.get(moment);
     if (asking) return asking;
-    const of = this.acts;
     const read = (async () => {
       try {
         const got = await this.host.asOf(moment);
@@ -1879,7 +1900,7 @@ export class Session extends EventEmitter {
           const row = rows.get(act.id);
           return row ? [{ ...row, ...act }] : [];
         });
-        this.thenRead.set(moment, { of, acts });
+        this.thenRead.set(moment, acts);
         this.emit("change");
       } finally {
         this.thenAsking.delete(moment);
@@ -1894,12 +1915,19 @@ export class Session extends EventEmitter {
     this.moment = moment;
     this.emit("change");
   }
-  private readonly thenRead = new Map<number, { of: readonly ActRow[]; acts: ActRow[] }>();
+  private readonly thenRead = new Map<number, ActRow[]>();
   private readonly thenAsking = new Map<number, Promise<void>>();
   /** Move the moment that the feed shows a count of steps back or on, over the moments of the selected chain or of
    * the whole life, as the crate gives them: a step is a moment when an act began or ended. A step on to the last
    * moment returns to now. The moment shows once the crate gave the acts as they stood then. */
-  async travel(by: number, life = false): Promise<void> {
+  travel(by: number, life = false): Promise<void> {
+    // Each step starts from the moment that the one before it reached, so steps in a row each count.
+    const next = this.travelling.then(() => this.stepTime(by, life));
+    this.travelling = next.catch(() => {});
+    return next;
+  }
+  private travelling: Promise<void> = Promise.resolve();
+  private async stepTime(by: number, life: boolean): Promise<void> {
     const moments = await this.host.moments(life ? undefined : this.selected);
     const last = moments.at(-1);
     if (last === undefined) return;
@@ -2146,8 +2174,8 @@ export class Session extends EventEmitter {
     }
   }
 
-  /** The extensions that the life runs, in the order that it enabled them, each with its life word. */
-  async extensionsRun(): Promise<{ name: string; life: string }[]> {
+  /** The skills that the life runs, in the order that it enabled them, each with its life word. */
+  async skillsRun(): Promise<{ name: string; life: string }[]> {
     return enabled(await this.engine.transcript({ on: ROOT })).map(({ name, life }) => ({ name, life }));
   }
 
@@ -2237,13 +2265,13 @@ export class Session extends EventEmitter {
       case "cancel":
         await this.cancel(argument);
         break;
-      case "extensions": {
-        const each = (await this.extensionsRun()).map(({ name, life }) =>
+      case "skills": {
+        const each = (await this.skillsRun()).map(({ name, life }) =>
           life ? `${name} with ${life}` : name,
         );
         this.notice = each.length
           ? `This life runs ${each.join(", ")}. Run a word of one with /run.`
-          : "This life runs no extension.";
+          : "This life runs no skill.";
         break;
       }
       case "chain":
@@ -2429,8 +2457,8 @@ export class Session extends EventEmitter {
         this.emit("shared", path, shareMarkdown(this));
         break;
       }
-      case "skills":
-        if (argument) throw new Error("/skills takes no argument.");
+      case "reload-skills":
+        if (argument) throw new Error("/reload-skills takes no argument.");
         this.skillList = skillsIn(await this.runWord("skills()"));
         this.skillsFrom = this.indexed().skills?.id ?? "";
         this.notice = `Skills read again: ${this.skillList.length || "none"} found.`;

@@ -16,11 +16,11 @@ export const commands = {
     "Show each key of the configs and change it, or set a key; a key with no value leaves the config that gives it",
   ],
   reload: ["Reload settings", "", "Read provider settings again and update the standing of this life"],
-  skills: [
+  skills: ["Skills", "", "List the skills that this life runs, with what their parts give the TUI"],
+  "reload-skills": [
     "Reload skills",
     "",
     "Read the skills of the disk again; each shows in the list of / commands, and its command reads its SKILL.md",
-    "reload-skills",
   ],
   retry: [
     "Retry now",
@@ -93,11 +93,6 @@ export const commands = {
     "Start a new thread with your next message, in place of a message to the thread that the input targets, as `+ New thread` does",
   ],
   autocollapse: ["Automatic fold", "", "Toggle the fold of the threads that are over"],
-  extensions: [
-    "Extensions",
-    "",
-    "List the extensions that this life runs, with what their parts give the TUI",
-  ],
   end: [
     "Detach this window",
     "",

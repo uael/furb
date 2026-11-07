@@ -109,15 +109,19 @@ work that the TUI saw run, since the record holds no time. The line that runs is
 after a second, its time, which only the clock moves, and the last lines that its command prints stream under it. Each
 word stands in a block on the raised surface, under its label, the model that wrote it, as `opus/high`, or `operator`
 for a word of the operator, with the time and the cost of the whole word at the right of the label. The numbers stand at
-the left edge of the block. The number of the line that runs fades out into the loader and back, in its own cell, and
-that line is lit. A column of one cell at the right of
-the numbers holds a red cross on the line that failed, whose reason stands under it as a comment. One
+the left edge of the block. The number of the line that runs fades out into the loader of work that runs, `◐◓◑◒`, and
+back, in its own cell, and that line is lit. A column at the right of the numbers, two blank cells away from them, holds
+a red cross on the line that failed, whose reason stands under it as a comment. One
 column at the right edge of the block holds what the acts of each line came to, in a faint color. A time that this life
 did not measure shows nothing. A message that you send to the thread, and each notice of
 the chain, stands as a comment among the steps. While the model of the thread works on a step, each line of its word
-that it finished stands above as Python in its colors, and the loader stands in the column of the states, on the line
-that the model still writes. While no line is written, the label says `opus/high · thinking 4s`, and once the model thinks aloud it adds the size of its thought, as `26 chars`, and the last line of it, faint, so a long thought shows that the model works. The footer turns no
-second loader for that step. The answer of the thread stands under its program, with the
+that it finished stands above as Python in its colors, and the loader of a thought, a spinner of braille, turns in the
+cell of the number of the line that the model still writes, on a ground that differs from the light of a line that runs.
+While no line is written, the label says `opus/high · 4s`, and once the model thinks aloud it adds the size of its
+thought, as `26 chars`, and the last line of it, faint, so a long thought shows that the model works. The footer holds
+the loader of the work of the chain shown: the mark of its state, its word under a light that sweeps over it, the time
+since the work began and the size of what its models streamed, as `⠹ Thinking · 4.0s · 26 chars`, beside the key that
+pauses it. The sidebar turns the same marks, and a session shows the mark of its thread that works. The answer of the thread stands under its program, with the
 model that gave it and its effort at its right. A thread that you fold stands as one line, with the line of its color
 half a row above and under it. A word that you run stands as your messages stand, as its program in a panel of its own
 color, and so does an act that no word made, as a command that `/bash` starts: one line of Python that binds the act to
@@ -423,7 +427,8 @@ returns to now, then gives the keys back.
 
 One mark means one state in every view, dialog, and sidebar, from one table: `◆` for a question that waits for you,
 `●` for what ended or changed while you were away, `✗` for a failure, `◌` for paused work, a spinner for a model that
-thinks, which stands still as `✻`, `◉` for a command that runs or a word that awaits one, which turns as `◐◓◑◒` while the view moves, `◎` for work that waits on
+thinks, which stands still as `✻`, `◉` for a command that runs or a word that awaits one, which turns as `◐◓◑◒` while the view moves, in the sidebar, the
+cell of the number of its line and the footer, `◎` for work that waits on
 another chain, `✓` for a done act, a faint `✓` for a done thread that you saw, `⊘` for a cancel, and `○` for rest. F1 lists the chords that the terminal in use sends, what each mark means, and every slash
 command.
 
@@ -665,9 +670,9 @@ session keeps its name in its saved view, and a workspace in the list of workspa
 
 ![Rename a session](screenshots/50-rename-session.png)
 
-## Extensions
+## Skills
 
-`/extensions` opens a dialog of the extensions that the life runs, each with what its part for the TUI gives, or the
+`/skills` opens a dialog of the skills that the life runs, each with what its part for the TUI gives, or the
 error that stopped its load. `/run` runs a word of one. The demo runs none.
 
 ![Extension command](screenshots/42-extension-command.png)
@@ -717,7 +722,7 @@ operator tells the model, and the panel draws again from the file that the model
 
 ![The panel mended](screenshots/75c-extend-fixed.png)
 
-`/extensions` says what each part gives.
+`/skills` says what each part gives.
 
 ![The extensions of a life](screenshots/75d-extensions.png)
 

@@ -8,7 +8,7 @@ import {
 } from "@opentui/core";
 import type { Gesture, Node, Run, Tone, Tree } from "furb/protocol";
 import { theme as c, spacing as space, spin } from "../theme.ts";
-import { bold, type Part } from "../ui.ts";
+import { bold, type Part, styled } from "../ui.ts";
 import { part } from "./part.ts";
 import { inputColors } from "./shared.ts";
 
@@ -155,7 +155,7 @@ export const view = part({
       case "progress": {
         if (node.done === undefined || node.done === null) {
           const spinner = this.line(spin(), c.accent, { id });
-          this.viewSpinners.add(spinner);
+          this.moving.set(spinner, spin);
           return spinner;
         }
         const share = Math.min(1, Math.max(0, node.done));
@@ -214,11 +214,16 @@ export const view = part({
     return runs.map(({ text, tone }) => [text, toneColor(tone)] as const);
   },
 
-  /** Moves each spinner of a view to the frame of the clock of the TUI, and draws nothing else again. */
-  tickViews(): void {
-    for (const spinner of this.viewSpinners)
-      if (spinner.isDestroyed) this.viewSpinners.delete(spinner);
-      else spinner.content = spin();
+  /** Draws each text whose mark moves again at the frame of the clock of the TUI, and nothing else. */
+  tickMoving(): void {
+    for (const [text, read] of this.moving) {
+      if (text.isDestroyed) {
+        this.moving.delete(text);
+        continue;
+      }
+      const now = read();
+      text.content = typeof now === "string" ? now : styled(now);
+    }
   },
 });
 

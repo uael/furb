@@ -14,12 +14,12 @@ from furb_monty._monty import SYSTEM
 PY = Path(engine.__file__)
 PYI = PY.with_suffix(".pyi")
 TESTS = PYI.parents[2] / "test"
-EXTENSIONS = TESTS.parent / ".agents" / "skills"
+SKILLS = TESTS.parent / ".agents" / "skills"
 # The contract of the engine and the contract of each extension, official or of the project, each with the folder of its suite.
 PROJECT = TESTS.parent / ".furb" / "skills"
 CONTRACTS = {
   PYI: TESTS,
-  **{one: one.parent / "test" for one in sorted([*EXTENSIONS.glob("*/*.pyi"), *PROJECT.glob("*/*.pyi")])},
+  **{one: one.parent / "test" for one in sorted([*SKILLS.glob("*/*.pyi"), *PROJECT.glob("*/*.pyi")])},
 }
 DEFS = (ast.FunctionDef, ast.AsyncFunctionDef)
 SCOPE = (ast.Module, ast.ClassDef, ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp, *DEFS)
@@ -253,16 +253,16 @@ def of_furb(statement: ast.stmt) -> bool:
   return module == "furb" or module.startswith("furb.")
 
 
-def test_the_word_of_an_extension_is_its_file_less_its_imports_of_furb() -> None:
+def test_the_word_of_a_skill_is_its_file_less_its_imports_of_furb() -> None:
   """The word that a chain runs is the program of the file of the extension, which ruff and ty read."""
   for one in _monty.official():
     name, word = one["name"], one["word"]
-    body = ast.parse((EXTENSIONS / name / f"{name}.py").read_text(encoding="utf-8")).body
+    body = ast.parse((SKILLS / name / f"{name}.py").read_text(encoding="utf-8")).body
     kept = [one for one in body if not of_furb(one)]
     assert ast.dump(ast.parse(word)) == ast.dump(ast.Module(body=kept, type_ignores=[]))
 
 
-def test_the_word_of_an_extension_binds_no_name_of_the_engine_nor_again_beneath_itself() -> None:
+def test_the_word_of_a_skill_binds_no_name_of_the_engine_nor_again_beneath_itself() -> None:
   """A word runs in the module of a chain, after the engine, so it keeps the meaning of every name there."""
   held = set(binds(ast.parse(PY.read_text(encoding="utf-8"))))
   for one in _monty.official():

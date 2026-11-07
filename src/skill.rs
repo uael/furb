@@ -11,7 +11,7 @@
 //! the same form.
 //!
 //! A host finds the extensions in the configs that [`configs`] gives, in its order, each
-//! `{"extensions": {name:
+//! `{"skills": {name:
 //! true, false, or a path}}`: `config.json` in the config directory of the user,
 //! `.furb/config.json` in the directory
 //! of the life, then `.furb/config.local.json` beside it, which git ignores. A later config wins
@@ -51,12 +51,33 @@ use crate::{
   world::{config, files},
 };
 
+/// The key of a config that turns the skills on and off, each by its name: true, false, or the
+/// path of its folder.
+pub(crate) const KEY: &str = "skills";
+
+/// The key that a config gave in place of [`KEY`] before the rename of extension to skill. It
+/// turns nothing on, and the life tells the root that the key is now [`KEY`], with the path of
+/// the config.
+const FORMER_KEY: &str = "extensions";
+
+/// The name of each skill that the configs turn on, with the path of its folder when it is not
+/// official, and the line of each config that still gives [`FORMER_KEY`].
+pub(crate) type Turned = (Vec<(String, Option<PathBuf>)>, Vec<String>);
+
+/// The line that tells that a config gives [`FORMER_KEY`], which turns nothing on.
+fn former(file: &Path, read: &Value) -> Option<String> {
+  let at = file.display();
+  read
+    .get(FORMER_KEY)
+    .map(|_| format!("The key {FORMER_KEY} of {at} is now {KEY}, so it turns nothing on"))
+}
+
 /// The kind of the fact that enables an extension in a life, which [`extensions`] says and reads.
 pub const ENABLE: &str = "enable";
 
 /// The place of the program of a process among the words of a fact enable, which come after the
 /// name, the word, the life word, the mark of the root, the file and the digest:
-/// [`Extension::said`] writes it and [`enabled_by`] reads it.
+/// [`Skill::said`] writes it and [`enabled_by`] reads it.
 const PROGRAM: usize = 6;
 
 /// The place in a fact enable of the value of the root that holds the tree of the view of a kit of
@@ -251,7 +272,7 @@ pub(crate) fn imports_furb(line: &str) -> bool {
   after.is_some_and(|rest| rest.is_empty() || rest.starts_with([' ', '\t', '.', ',']))
 }
 
-/// An extension: its name, its word, its life word, which is empty when it has none, whether it
+/// A skill: its name, its word, its life word, which is empty when it has none, whether it
 /// plays on the root
 /// alone, and the path of the file of its word, with `~` for the home of the user as the World
 /// writes a path for a
@@ -263,7 +284,7 @@ pub(crate) fn imports_furb(line: &str) -> bool {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "typescript", napi_derive::napi(object))]
 #[cfg_attr(feature = "python", derive(pyo3::FromPyObject, pyo3::IntoPyObject), pyo3(from_item_all))]
-pub struct Extension {
+pub struct Skill {
   pub name: String,
   pub word: String,
   pub life: String,
@@ -271,7 +292,7 @@ pub struct Extension {
   pub file: String,
 }
 
-impl Extension {
+impl Skill {
   /// The extension that a fact which enables one carries.
   fn of(a: &Fact) -> Option<Self> {
     let text = |at| a.word(at).and_then(|one| one.as_str().map(str::to_owned));
@@ -287,7 +308,7 @@ impl Extension {
     self.said(None)
   }
 
-  /// The saying that enables the extension of a skill, as [`Extension::enable`] says it, with the
+  /// The saying that enables the extension of a skill, as [`Skill::enable`] says it, with the
   /// program of the process of the folder that the life played it from last, empty when that
   /// folder names none. An enable of a build before the program holds no program, and one that
   /// the ear of the extensions says for a config holds none either.
@@ -359,13 +380,13 @@ pub fn projected(project: &Path) -> [PathBuf; 2] {
 
 /// The official extensions, in the order a life runs them, each with the file of its word, the
 /// [`copy`] in the config directory of this process.
-pub fn official() -> Vec<Extension> {
+pub fn official() -> Vec<Skill> {
   officials(&Places::here())
 }
 
 /// The official extensions, each with the [`copy`] of its word in the config directory of these
 /// places.
-fn officials(places: &Places) -> Vec<Extension> {
+fn officials(places: &Places) -> Vec<Skill> {
   let whole = "an official extension is whole";
   OFFICIAL
     .iter()
@@ -428,7 +449,7 @@ pub(crate) fn copy(name: &str, file: &str, text: &str, places: &Places) -> Strin
 /// The extension in a folder, under the name that its config gives it: its manifest, whose name
 /// must be that name, and the word of the file that the manifest names, with the [`copy`] of that
 /// word in the config directory of these places.
-pub fn load(name: &str, root: &Path, places: &Places) -> Result<Extension, Fault> {
+pub fn load(name: &str, root: &Path, places: &Places) -> Result<Skill, Fault> {
   let file = root.join(MANIFEST);
   let refused = |why: String| Fault::refused(format!("{why}: {}", file.display()));
   let text = fs::read_to_string(&file).map_err(|no| refused(no.to_string()))?;
@@ -452,14 +473,16 @@ pub fn load(name: &str, root: &Path, places: &Places) -> Result<Extension, Fault
 pub(crate) fn manifested<T: AsRef<str>>(
   text: &str,
   read: impl FnOnce(&str) -> Result<T, String>,
-) -> Result<Extension, String> {
+) -> Result<Skill, String> {
   let manifest = frontmatter(text);
   let (Some(name), Some(file)) = (manifest.field("name"), manifest.meta(WORD)) else {
     return Err(format!(
       "A manifest gives a name, and the file of a word under metadata as {WORD}"
     ));
   };
-  if config::furb_key(name) {
+  // The configs hold the keys of a skill under its name, so a skill that gives keys takes no
+  // name of a key of furb.
+  if config::furb_key(name) && manifest.metadata.iter().any(|(key, _)| key == CONFIG) {
     return Err(format!(
       "The name {name} is a key of furb in the configs: give the skill a name of its own"
     ));
@@ -494,7 +517,7 @@ pub(crate) fn manifested<T: AsRef<str>>(
        give each a name of its own"
     ));
   }
-  Ok(Extension { name: name.to_owned(), word, life, root, file: file.to_owned() })
+  Ok(Skill { name: name.to_owned(), word, life, root, file: file.to_owned() })
 }
 
 /// The extensions that the configs of the user and of the project turn on, in the order a life runs
@@ -505,10 +528,13 @@ pub(crate) fn manifested<T: AsRef<str>>(
 /// folder of the
 /// config, `~` being the home, and `true` keeps the path that an earlier config gave.
 /// An extension that does not load does not play, and the second list says why, one line for each.
-pub fn configured(places: &Places, project: &Path) -> Result<(Vec<Extension>, Vec<String>), Fault> {
+/// A config that still gives [`FORMER_KEY`] turns nothing on from it, and the second list says
+/// that the key is now [`KEY`].
+pub fn configured(places: &Places, project: &Path) -> Result<(Vec<Skill>, Vec<String>), Fault> {
   let official = officials(places);
-  let mut out = (Vec::new(), Vec::new());
-  for (name, path) in turned_on(places, project)? {
+  let (turned, moved) = turned_on(places, project)?;
+  let mut out = (Vec::new(), moved);
+  for (name, path) in turned {
     // A copy of an official extension in the folder of the skills of the project prevails over the
     // one that furb carries, for its word and for the file that a chain reads. A skill of that name
     // with no word is a skill of the project alone, and the official one plays.
@@ -531,28 +557,22 @@ pub fn configured(places: &Places, project: &Path) -> Result<(Vec<Extension>, Ve
 
 /// The extension of a folder under a name, which goes in the first list, or the line that tells why
 /// it does not play, which goes in the second.
-fn loaded(
-  name: &str,
-  root: &Path,
-  places: &Places,
-  (on, refused): &mut (Vec<Extension>, Vec<String>),
-) {
+fn loaded(name: &str, root: &Path, places: &Places, (on, refused): &mut (Vec<Skill>, Vec<String>)) {
   match load(name, root, places) {
     Ok(one) => on.push(one),
-    Err(no) => refused.push(format!("The extension {name} does not play: {}", no.message())),
+    Err(no) => refused.push(format!("The skill {name} does not play: {}", no.message())),
   }
 }
 
 /// The name of each extension that the configs turn on, in the order a life runs them, with the
 /// path of its folder,
-/// which an official extension has not.
-pub(crate) fn turned_on(
-  places: &Places,
-  project: &Path,
-) -> Result<Vec<(String, Option<PathBuf>)>, Fault> {
+/// which an official extension has not. The second list tells each config that still gives
+/// [`FORMER_KEY`].
+pub(crate) fn turned_on(places: &Places, project: &Path) -> Result<Turned, Fault> {
   let official = names();
   let mut named: Vec<(String, Option<PathBuf>, bool)> =
     official.iter().map(|(name, on)| (name.clone(), None, *on)).collect();
+  let mut moved = Vec::new();
   for file in configs(&places.config, project) {
     let refused = |why: String| Fault::refused(format!("{why}: {}", file.display()));
     let text = match fs::read_to_string(&file) {
@@ -560,12 +580,13 @@ pub(crate) fn turned_on(
       got => got.map_err(|no| refused(no.to_string()))?,
     };
     let read: Value = serde_json::from_str(&text).map_err(|no| refused(no.to_string()))?;
-    let extensions = match read.get("extensions") {
-      Some(Value::Object(extensions)) => extensions,
+    moved.extend(former(&file, &read));
+    let skills = match read.get(KEY) {
+      Some(Value::Object(skills)) => skills,
       None if read.is_object() => continue,
-      _ => return Err(refused("A config is a map, whose extensions is a map".to_owned())),
+      _ => return Err(refused("A config is a map, whose skills is a map".to_owned())),
     };
-    for (name, form) in extensions {
+    for (name, form) in skills {
       let at = named.iter().position(|one| &one.0 == name).unwrap_or_else(|| {
         named.push((name.clone(), None, false));
         named.len() - 1
@@ -574,7 +595,7 @@ pub(crate) fn turned_on(
       let theirs = at >= official.len();
       match form {
         Value::Bool(true) if theirs && one.1.is_none() => {
-          return Err(refused(format!("No config gives the folder of the extension {name}")));
+          return Err(refused(format!("No config gives the folder of the skill {name}")));
         }
         Value::Bool(on) => one.2 = *on,
         Value::String(path) if theirs => (one.1, one.2) = (Some(beside(&file, path, places)), true),
@@ -586,7 +607,8 @@ pub(crate) fn turned_on(
     }
   }
   // The official extensions stand first, and each other one that is on has the path of its folder.
-  Ok(named.into_iter().filter(|one| one.2).map(|(name, path, _)| (name, path)).collect())
+  let on = named.into_iter().filter(|one| one.2).map(|(name, path, _)| (name, path)).collect();
+  Ok((on, moved))
 }
 
 /// The part of an extension that a TUI loads: the name of the extension, the path of its module of
@@ -612,7 +634,7 @@ pub struct Part {
 /// folder is read again, so a part that a later write names is found.
 pub fn parts(places: &Places, project: &Path) -> Result<Vec<Part>, Fault> {
   let mut out = Vec::new();
-  for (name, root) in turned_on(places, project)? {
+  for (name, root) in turned_on(places, project)?.0 {
     let Some(root) = root else {
       out.extend(carried(&name));
       continue;
@@ -634,7 +656,7 @@ pub fn parts(places: &Places, project: &Path) -> Result<Vec<Part>, Fault> {
 /// can turn that extension off.
 pub(crate) fn contributed(places: &Places, project: &Path) -> Result<Vec<(String, String)>, Fault> {
   let mut out = Vec::new();
-  for (name, root) in turned_on(places, project)? {
+  for (name, root) in turned_on(places, project)?.0 {
     let Some(root) = root else { continue };
     let Ok(text) = fs::read_to_string(root.join(MANIFEST)) else { continue };
     let keys = frontmatter(&text).meta(CONFIG).map(|keys| root.join(keys));
@@ -675,14 +697,16 @@ fn beside(file: &Path, path: &str, places: &Places) -> PathBuf {
 /// of that config
 /// gives in the middle of a life. A config that is not of the form of a config turns on nothing.
 /// A folder whose extension does not load turns on nothing, and the second list says why.
-fn turned(file: &Path, text: &str, places: &Places) -> (Vec<Extension>, Vec<String>) {
+fn turned(file: &Path, text: &str, places: &Places) -> (Vec<Skill>, Vec<String>) {
   let mut out = (Vec::new(), Vec::new());
-  let Some(Value::Object(extensions)) =
-    serde_json::from_str::<Value>(text).ok().and_then(|one| one.get("extensions").cloned())
-  else {
+  let Ok(read) = serde_json::from_str::<Value>(text) else {
     return out;
   };
-  for (name, form) in &extensions {
+  out.1.extend(former(file, &read));
+  let Some(Value::Object(skills)) = read.get(KEY) else {
+    return out;
+  };
+  for (name, form) in skills {
     if let Some(path) = form.as_str() {
       loaded(name, &beside(file, path, places), places, &mut out);
     }
@@ -789,9 +813,9 @@ fn shaped(word: &str, state: bool) -> String {
 /// The extensions that a life runs, in the order it first enabled them, each with the word and the
 /// life word that
 /// it last enabled, as the transcript of its root holds them.
-pub fn enabled(root: &[Fact]) -> Vec<Extension> {
-  let mut out: Vec<Extension> = Vec::new();
-  for one in root.iter().filter(|a| a.kind() == ENABLE).filter_map(Extension::of) {
+pub fn enabled(root: &[Fact]) -> Vec<Skill> {
+  let mut out: Vec<Skill> = Vec::new();
+  for one in root.iter().filter(|a| a.kind() == ENABLE).filter_map(Skill::of) {
     match out.iter_mut().find(|two| two.name == one.name) {
       Some(two) => *two = one,
       None => out.push(one),
@@ -813,7 +837,7 @@ pub struct Enabled {
 }
 
 /// What a fact enable says of the process of its skill, or none for any other fact. It reads the
-/// words that [`Extension::said`] writes, so the layout of the fact has one home.
+/// words that [`Skill::said`] writes, so the layout of the fact has one home.
 pub fn enabled_by(a: &Fact) -> Option<Enabled> {
   if a.kind() != ENABLE {
     return None;
@@ -842,18 +866,18 @@ pub fn enabled_by(a: &Fact) -> Option<Enabled> {
 /// state that it holds keeps its value, and its life word does not run again. The ear plays the
 /// rungs from the fact alone, so a later life plays the same rungs
 /// where the journal says the fact again.
-pub fn extensions(given: Vec<Extension>, places: Places) -> Box<dyn Ear> {
+pub fn played(given: Vec<Skill>, places: Places) -> Box<dyn Ear> {
   telling(given, Vec::new(), places)
 }
 
 /// The ear of [`extensions`], which tells the root once, at the first stand that this life answers,
 /// why each extension of `refused` does not play.
-pub(crate) fn telling(given: Vec<Extension>, refused: Vec<String>, places: Places) -> Box<dyn Ear> {
+pub(crate) fn telling(given: Vec<Skill>, refused: Vec<String>, places: Places) -> Box<dyn Ear> {
   hearing(&["chain", "stand", "rung", "write", ENABLE, TEACH], move |mut co| async move {
     // What the life enabled, in order, and each chain in the order of its birth, with the
     // extensions it has.
     let mut refused = refused;
-    let (mut enabled, mut chains) = (Vec::<Extension>::new(), Vec::<(String, Vec<String>)>::new());
+    let (mut enabled, mut chains) = (Vec::<Skill>::new(), Vec::<(String, Vec<String>)>::new());
     // The setup of the root: the actor and the doctrine that the fact teach names with the enables
     // still to hear
     // before it plays, and whether the root took it.
@@ -861,8 +885,8 @@ pub(crate) fn telling(given: Vec<Extension>, refused: Vec<String>, places: Place
     loop {
       let a = hear(&mut co).await;
       let runs_name = |name: &str| enabled.iter().any(|two| two.name == name);
-      let runs = |one: &Extension| runs_name(&one.name);
-      let new: Vec<Extension> = match a.kind() {
+      let runs = |one: &Skill| runs_name(&one.name);
+      let new: Vec<Skill> = match a.kind() {
         // The ear hears a chain at its birth, before the call that made it returns, and the chain
         // has what its
         // origin had, which it made again. A chain with no source in a life whose root took its
@@ -892,7 +916,7 @@ pub(crate) fn telling(given: Vec<Extension>, refused: Vec<String>, places: Place
         "done" if named(a.about(), "stand") && a.by() != JOURNAL => {
           tell(&mut co, &refused);
           refused.clear();
-          let new: Vec<Extension> =
+          let new: Vec<Skill> =
             given.iter().filter(|one| !enabled.contains(one)).cloned().collect();
           if !taught
             && teach.is_none()
@@ -923,7 +947,7 @@ pub(crate) fn telling(given: Vec<Extension>, refused: Vec<String>, places: Place
           Vec::new()
         }
         ENABLE if teach.is_some() => {
-          if let Some(one) = Extension::of(&a) {
+          if let Some(one) = Skill::of(&a) {
             match enabled.iter().position(|two| two.name == one.name) {
               Some(at) => enabled[at] = one,
               None => enabled.push(one),
@@ -963,7 +987,8 @@ pub(crate) fn telling(given: Vec<Extension>, refused: Vec<String>, places: Place
             tell(&mut co, &refused);
             found.into_iter().filter(|one| !runs(one)).collect()
           } else {
-            let folders = turned_on(&places, &project).unwrap_or_default().into_iter();
+            let folders =
+              turned_on(&places, &project).map(|got| got.0).unwrap_or_default().into_iter();
             let mine =
               folders.filter(|(name, root)| root.as_deref() == file.parent() && runs_name(name));
             let mut found = (Vec::new(), Vec::new());
@@ -974,7 +999,7 @@ pub(crate) fn telling(given: Vec<Extension>, refused: Vec<String>, places: Place
             found.0.into_iter().filter(|one| !enabled.contains(one)).collect()
           }
         }
-        ENABLE => Extension::of(&a).filter(|one| !enabled.contains(one)).into_iter().collect(),
+        ENABLE => Skill::of(&a).filter(|one| !enabled.contains(one)).into_iter().collect(),
         _ => continue,
       };
       // The root of a new record takes its setup from the engine, which crafts it from the
@@ -1032,7 +1057,7 @@ fn tell(co: &mut Co, refused: &[String]) {
 /// the root alone.
 async fn play(
   co: &mut Co,
-  one: &Extension,
+  one: &Skill,
   (chain, had): &mut (String, Vec<String>),
 ) -> Result<(), Fault> {
   let word = if had.contains(&one.name) {

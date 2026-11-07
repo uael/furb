@@ -24,7 +24,7 @@ function regrounding(seen: Seen, chain: string, at: number): string | undefined 
  * has no condense() or clear(), and the gate would refuse the word. */
 async function ready(name: string, argument: string, seen: Seen): Promise<boolean> {
   if (argument.trim()) seen.say(`/${name} takes no argument`);
-  else if (!(await seen.extensions()).includes("compaction")) seen.say("This chain has no compaction");
+  else if (!(await seen.skills()).includes("compaction")) seen.say("This chain has no compaction");
   else return true;
   return false;
 }

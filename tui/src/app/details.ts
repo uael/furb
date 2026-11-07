@@ -37,7 +37,7 @@ import { conversation } from "../conversation.ts";
 import { shortenHomes } from "../files.ts";
 import { clip, count, dollars, modelLabel, modelName, share } from "../format.ts";
 import type { ActRow } from "../session.ts";
-import { theme as c, glyph, markOf, pulse, spacing as space, spin } from "../theme.ts";
+import { theme as c, glyph, markOf, pulse, spacing as space } from "../theme.ts";
 import { bold, type Part, styled, underline } from "../ui.ts";
 import { Gutter } from "./gutter.ts";
 import { part } from "./part.ts";
@@ -351,7 +351,7 @@ export const details = part({
           [
             waits
               ? " · waits for its turn"
-              : ` · thinking${ms >= 1000 ? ` ${spell(Math.floor(ms / 1000) * 1000)}` : ""}${thought ? ` · ${count(thought)} chars` : ""}`,
+              : `${ms >= 1000 ? ` · ${spell(Math.floor(ms / 1000) * 1000)}` : ""}${thought ? ` · ${count(thought)} chars` : ""}`,
             c.faint,
           ],
         ];
@@ -378,9 +378,9 @@ export const details = part({
       digits,
       numbers: numbered,
       colors: new Map(all.map((at) => [at, c.raised])),
-      // The loader turns in the column of the states, on the last row, where a line that failed shows its mark.
-      // A rung that waits for its turn does no work, and no loader turns for it.
-      loaders: new Set(rows && !waits ? [rows - 1] : []),
+      // The loader of a thought turns in the cell of the number of the last row. A rung that waits for its turn does no
+      // work, and no loader turns for it.
+      working: new Map(rows && !waits ? [[rows - 1, "thinks" as const]] : []),
     });
     // The loader is drawn by each frame, the first one too, so no tick is needed before it shows.
     this.thinkingRows.set(step, {
@@ -491,7 +491,7 @@ export const details = part({
     // The lines that run: where the time of each stands in its row, and the act that it counts.
     const live: { row: number; col: number; act: Parameters<typeof since>[0] }[] = [];
     // The lines that run, whose numbers fade into the loader and back.
-    const running = new Set<number>();
+    const running = new Map<number, "runs">();
     const fixed: [row: number, from: number, to: number, group: string][] = [];
     const comment = (row: number, from = 0) => fixed.push([row, from, texts[row]?.length ?? 0, "comment"]);
     const push = (text: string, number?: number, source?: ProgramLine) => {
@@ -562,7 +562,7 @@ export const details = part({
           });
         // The number of the line that runs fades into the loader and back, so it reads apart from a model that thinks.
         if (line.fails) states.set(at, markOf("failed"));
-        else if (line.runs) running.add(at);
+        else if (line.runs) running.set(at, "runs");
         for (const row of rows.slice(1)) push(row.text, undefined, line);
         const base = program.length;
         program += `${line.text}\n`;
@@ -735,7 +735,7 @@ export const details = part({
       numbers,
       colors,
       states,
-      running,
+      working: running,
       // The time of a line that runs is written over the blanks that its row keeps, so that a tick moves it and the text
       // of the program stays as it was laid out.
       renderAfter(buffer) {
@@ -751,7 +751,10 @@ export const details = part({
     // The cell of the number turns with the tick, so the program draws again at each frame of the fade while a line
     // runs.
     const times = () =>
-      [running.size ? `${pulse().join()}${spin()}` : "", ...live.map((one) => since(one.act))].join("|");
+      [
+        running.size ? `${pulse().join()}${markOf("runs")[0]}` : "",
+        ...live.map((one) => since(one.act)),
+      ].join("|");
     if (live.length) this.liveLines.set(view, { times, shown: times() });
     // The gutter of the numbers takes the events of the pointer over the program, so it shows the string of a fold.
     view.onMouseMove = (event) => {

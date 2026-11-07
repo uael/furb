@@ -16,7 +16,7 @@ from furb_monty import _monty
 
 PROJECT = Path(__file__).resolve().parent.parent
 CONFIG = json.loads((PROJECT / "config.json").read_text(encoding="utf-8"))
-NAMES = list(CONFIG["extensions"])
+NAMES = list(CONFIG["skills"])
 IMPORT = re.compile(r"^(?:from furb(?:\.\w+)* import \([^)]*\)|from furb(?:\.\w+)* import [^\n(]*|import furb[^\n]*)\n", re.M)
 BOOTED = [name for node in ast.walk(ast.parse(inspect.getsource(furb.python.boot))) if isinstance(node, ast.Global) for name in node.names]
 ENGINE = {**vars(furb.python), **dict.fromkeys(BOOTED)}
@@ -25,7 +25,7 @@ ENGINE = {**vars(furb.python), **dict.fromkeys(BOOTED)}
 
 def word(name: str) -> str:
   """The word of an extension of the project: its file less the imports of furb, as the crate plays it."""
-  folder = PROJECT / CONFIG["extensions"][name]
+  folder = PROJECT / CONFIG["skills"][name]
   manifest = (folder / "SKILL.md").read_text(encoding="utf-8")
   file = re.search(r"^  furb-word: (\S+)$", manifest, re.M)
   assert file, f"the manifest of {name} names no word"
@@ -88,7 +88,7 @@ def bound(word: str) -> set[str]:
 
 
 @pytest.mark.parametrize("name", NAMES)
-def test_word_binds_no_name_of_an_official_extension(name: str) -> None:
+def test_word_binds_no_name_of_an_official_skill(name: str) -> None:
   """A word of the project that binds a name of an official extension changes that extension on its chains, as a BUDGET of text broke the catch-up of the root."""
   official = set().union(*(bound(one["word"]) for one in _monty.official()))
   assert bound(word(name)) & official == set()
@@ -130,7 +130,7 @@ def test_no_two_words_of_the_project_bind_one_name_but_to_extend_it() -> None:
 ALLOWED = (".agents/skills/conftest.py", ".furb/skills/conftest.py")
 
 
-def test_no_test_folder_of_an_extension_holds_a_conftest_that_shadows_the_conftest_of_the_suite() -> None:
+def test_no_test_folder_of_a_skill_holds_a_conftest_that_shadows_the_conftest_of_the_suite() -> None:
   """A conftest.py in a test folder of an extension shadows the conftest module that .agents/skills/conftest.py imports by name."""
   root = PROJECT.parent
   found = sorted(

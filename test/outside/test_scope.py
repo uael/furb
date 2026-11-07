@@ -41,7 +41,7 @@ def test_a_change_to_the_engine_with_the_world_runs_every_job() -> None:
   assert got == {"suite_os": EVERY, "ts_os": EVERY, "crate": True, "code": True, "hooks": True}
 
 
-def test_a_change_to_an_extension_of_the_project_runs_the_suite_on_linux() -> None:
+def test_a_change_to_a_skill_of_the_project_runs_the_suite_on_linux() -> None:
   got = scope.scope([".furb/skills/conductor/conductor.py", ".furb/config.json"])
   assert got == {"suite_os": LINUX, "ts_os": LINUX, "crate": False, "code": True, "hooks": True}
 

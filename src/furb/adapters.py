@@ -33,6 +33,21 @@ LIVES = (
 )
 """The lives of 00ac9534e."""
 
+GATHERED = [
+  (
+    '  chains = []\n  while get(f"chain{len(chains) + 1}"):\n    chains.append(f"chain{len(chains) + 1}")\n',
+    '  chains = [x for x in listening() if question(("chain", x))]\n',
+  ),
+  (
+    '[x for h in chains for x in transcript(h) if question(x) and x[0] != "chain"]',
+    "[x for h in chains for x in transcript(h) if x is get(x[1])]",
+  ),
+]
+"""The chains and the questions of a later gathered: each chain whose ear still hears, after a number that no chain of
+the life holds too, and the questions of the life alone, so the fact of an act of an earlier life that a carried turn
+holds raises nothing. Each engine of the major before it stops at the first such number, and raises TypeError on such a
+fact, so its life writes no checkpoint. gathered is a view, so these change no replay."""
+
 
 ADAPTERS = {
   # 5f66c73c (engine.py of 8f4d10c9b, #1313) repeats the first started or done of an act of the outside before the
@@ -50,6 +65,8 @@ ADAPTERS = {
       "              recount(due.pop())\n"
       "            repeat(*f)\n",
     ),
+    *LISTENING,
+    *GATHERED,
   ],
   # The engines from bc342872a (#1404) to 7ba1825fc gather the lives of a chain from the maker of each open question:
   # those up to d5550efda read its slot 4, which an act that no rung made has not, as the inner act of an act of a
@@ -57,7 +74,7 @@ ADAPTERS = {
   # rung stands higher in the lineage, or whose act is done while its lasting ear still hears, so a born life makes no
   # watcher of the skills again. The lives of 00ac9534e read each life word through the lineage of each ear that hears.
   **{
-    digest: [*LISTENING, (OLD_LIVES, LIVES)]
+    digest: [*LISTENING, (OLD_LIVES, LIVES), *GATHERED]
     for digest in (
       "55d2b55ef3f0d893811a9b3a753c7bccb07408f9548f7c3ea4f0298d55e4c284",  # bc342872a
       "18c4d46fdede426f80829f0656515c2efaa4daa6a34bd9b2bded42e919c293e5",  # ac353a4d2
@@ -67,7 +84,7 @@ ADAPTERS = {
     )
   },
   **{
-    digest: [*LISTENING, (RUNG_LIVES, LIVES)]
+    digest: [*LISTENING, (RUNG_LIVES, LIVES), *GATHERED]
     for digest in (
       "1a358a320146986dc372541f71ccd7da27989cf6f2a5f6355c506bf876245c2d",  # 72f9fdc97
       "70bb886877d9f53861b4332df552cac163b13e6a8ece5eeedf35ef8ce33cdddd",  # 7ba1825fc

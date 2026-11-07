@@ -91,7 +91,7 @@ pub type Search = Arc<dyn Fn(&str) -> Option<Searches> + Send + Sync>;
 pub struct Provider {
   directory: String,
   config: Option<PathBuf>,
-  extensions: Option<Vec<Advertised>>,
+  skills: Option<Vec<Advertised>>,
   models: Arc<RwLock<Vec<Model>>>,
   actor: Option<String>,
   thinking: Thinking,
@@ -147,7 +147,7 @@ impl Provider {
     Self {
       directory,
       config: None,
-      extensions: None,
+      skills: None,
       models: Arc::new(RwLock::new(models)),
       actor: None,
       thinking: Thinking::default(),
@@ -231,8 +231,8 @@ impl Provider {
 
   /// The extensions that the standing gives, from which the engine seeds the root of a new record.
   #[must_use]
-  pub fn advertises(mut self, extensions: Vec<Advertised>) -> Self {
-    self.extensions = Some(extensions);
+  pub fn advertises(mut self, skills: Vec<Advertised>) -> Self {
+    self.skills = Some(skills);
     self
   }
 

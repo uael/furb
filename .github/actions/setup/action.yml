@@ -54,10 +54,10 @@ runs:
     # set, at the same values, so the key of the cache stays the same. That action installed a bash of brew on each
     # macOS job before its own scripts, in 12 s to 47 s, and these steps run in the bash of the system. The cache is
     # the step after them, so that its key holds this rust alone.
-    # CARGO_INCREMENTAL is not one of them: .cargo/config.toml turns incremental compilation off for each build.
+    # CARGO_INCREMENTAL and CARGO_PROFILE_DEV_DEBUG are not among them: .cargo/config.toml turns incremental compilation
+    # and the debug information of a dependency off for each build.
     - run: |
         set_default() { if [ -z "$(printenv "$1")" ]; then echo "$1=$2" >> "$GITHUB_ENV"; fi; }
-        set_default CARGO_PROFILE_DEV_DEBUG 0
         set_default CARGO_TERM_COLOR always
         set_default RUST_BACKTRACE short
         set_default CARGO_BUILD_WARNINGS deny

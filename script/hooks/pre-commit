@@ -21,21 +21,66 @@ if [ "${1:-}" = run ]; then
 fi
 out=$(mktemp "${TMPDIR:-/tmp}/furb-hook.XXXXXX") || exit 1
 trap 'rm -f "$out"' EXIT
+# A commit whose hooks passed holds a mark under the git dir, named by its first parent and its tree, which is the change
+# that the hooks checked. This file alone reads and writes the marks.
+marks=$(git rev-parse --path-format=absolute --git-common-dir)/furb-checked
+key() { echo "$(git rev-parse -q --verify "$1")-$2"; }
+# Run the hooks on each file that stdin names and the index holds, and print only what fails.
+hooks() {
+  set --
+  while IFS= read -r one; do
+    if [ -n "$one" ] && git cat-file -e ":$one" 2>/dev/null; then set -- "$@" "$one"; fi
+  done
+  # shellcheck disable=SC2086
+  [ "$#" -eq 0 ] || $PRE_COMMIT run --config=.pre-commit-config.yaml --hook-stage=pre-commit --files "$@" >"$out" 2>&1 ||
+    { grep -vE '(Passed|Skipped)$' "$out"; return 1; }
+}
+mark() { mkdir -p "$marks" && for one; do : >"$marks/$one"; done; }
+# check <tip>: script/hooks/pre-push runs it for each pushed tip. It runs the hooks once on the files of the commits
+# under it that no remote holds and that hold no mark, as the work tree holds them, and marks the tip when they pass: a
+# commit made with --no-verify, or by an amend or a rebase. So the tip must be HEAD, with no change that is not committed.
+if [ "${1:-}" = check ]; then
+  todo=
+  for one in $(git rev-list "$2" --not --remotes); do
+    [ -e "$marks/$(key "$one^1" "$(git rev-parse "$one^{tree}")")" ] || todo="$todo $one"
+  done
+  [ -n "$todo" ] || exit 0
+  if [ "$2" != "$(git rev-parse HEAD)" ] || ! git diff --quiet HEAD; then
+    echo "The push carries$todo, which skipped the hooks: check it out with no change that is not committed, and push again."
+    exit 1
+  fi
+  for one in $todo; do git -c core.quotePath=false diff-tree -r --root --cc --name-only --no-commit-id "$one"; done |
+    sort -u | hooks || exit 1
+  mark "$(key HEAD^1 "$(git rev-parse "HEAD^{tree}")")"
+  exit 0
+fi
+tree=$(git write-tree) || exit 1
+own=$(key HEAD "$tree")
 if [ "$1" = merge ] || git rev-parse -q --verify MERGE_HEAD >/dev/null; then
   # Git gives a merge no staged diff that the hooks read well: they read only the files that a conflict touched, and a
-  # merge with no conflict reaches no pre-commit hook. So a merge is checked on every file that it changes against its
-  # first parent, as a commit is.
-  tree=$(git write-tree) || exit 1
+  # merge with no conflict reaches no pre-commit hook. So the hooks read the merge as a commit of its own, on each file
+  # whose content differs from its version in every parent: a resolution of a conflict or new content. A file that the
+  # merge takes whole from one parent passed the hooks of that parent, and the gates check the whole tree.
+  # The other parents of the merge. A merge that ends a conflict holds them in MERGE_HEAD. A merge with no conflict
+  # writes none before its hook, and git names them in GIT_REFLOG_ACTION, as "merge <commit>...". With neither, the
+  # merge is read against HEAD alone, so each file that it changes is checked.
+  # shellcheck disable=SC2086
+  heads=$(cat "$(git rev-parse --git-path MERGE_HEAD)" 2>/dev/null) || case $GIT_REFLOG_ACTION in
+    "merge "*) heads=$(git rev-list --no-walk ${GIT_REFLOG_ACTION#merge } 2>/dev/null) || heads= ;;
+  esac
+  parents="-p HEAD"
+  for one in $heads; do parents="$parents -p $one"; done
+  # shellcheck disable=SC2086
   merge=$(GIT_AUTHOR_NAME=hook GIT_AUTHOR_EMAIL=hook@furb GIT_COMMITTER_NAME=hook GIT_COMMITTER_EMAIL=hook@furb \
-    git commit-tree "$tree" -p HEAD -m merge) || exit 1
-  # shellcheck disable=SC2086
-  $PRE_COMMIT run --config=.pre-commit-config.yaml --hook-stage=pre-commit --from-ref=HEAD --to-ref="$merge" >"$out" 2>&1
-else
-  # shellcheck disable=SC2086
-  $PRE_COMMIT hook-impl --config=.pre-commit-config.yaml --hook-type=pre-commit --hook-dir "$(dirname "$0")" -- "$@" >"$out" 2>&1
+    git commit-tree "$tree" $parents -m merge) || exit 1
+  git -c core.quotePath=false diff-tree -r --cc --name-only --no-commit-id "$merge" | hooks || exit 1
+  mark "$own"
+  exit 0
 fi
-code=$?
-if [ "$code" -ne 0 ]; then
-  grep -vE '(Passed|Skipped)$' "$out"
+# shellcheck disable=SC2086
+if $PRE_COMMIT hook-impl --config=.pre-commit-config.yaml --hook-type=pre-commit --hook-dir "$(dirname "$0")" -- "$@" >"$out" 2>&1; then
+  mark "$own"
+  exit 0
 fi
-exit "$code"
+grep -vE '(Passed|Skipped)$' "$out"
+exit 1

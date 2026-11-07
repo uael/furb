@@ -722,7 +722,7 @@ try {
   await capture("41-slash-suggestions");
   app().composer.setText("");
   app().closeOverlay();
-  app().composer.setText("/extensions");
+  app().composer.setText("/skills");
   await app().submit();
   await capture("42-extension-command");
   app().closeOverlay();
@@ -1120,7 +1120,7 @@ try {
   const listed = await project("todo");
   const folder = join(listed, ".furb", "skills", "todo");
   await cp(resolve(import.meta.dir, "..", "fixtures", "todo"), folder, { recursive: true });
-  await writeFile(join(listed, ".furb", "config.json"), '{"extensions": {"todo": "skills/todo"}}\n');
+  await writeFile(join(listed, ".furb", "config.json"), '{"skills": {"todo": "skills/todo"}}\n');
   await show(await demoSession({ cwd: listed }));
   const todo = (await readFile(join(folder, "todo.py"), "utf8")).replace(
     /^from furb\.engine import .*\n+/m,
@@ -1177,7 +1177,7 @@ try {
     join(servers, "SKILL.md"),
     "---\nname: servers\ndescription: The servers of the fixture.\nmetadata:\n  furb-word: servers.py\n---\n",
   );
-  await writeFile(join(served, ".furb", "config.json"), '{"extensions": {"servers": "skills/servers"}}\n');
+  await writeFile(join(served, ".furb", "config.json"), '{"skills": {"servers": "skills/servers"}}\n');
   await show(await demoSession({ cwd: served }));
   const serving = (await readFile(join(servers, "servers.py"), "utf8")).replace(
     /^from furb\.engine import .*\n+/m,
@@ -1208,8 +1208,8 @@ try {
   // A model adds a component to a life that runs. It reads the teaching of the skill
   // ouroboros, writes an extension with a part for the TUI, and the panel stands over the input with no restart. A
   // change that it gets wrong shows its error in the panel, the operator tells it, and the panel draws again. The
-  // dialog of /extensions says what each part gives.
-  await show(await demoSession({ cwd: await project("extend"), extensions: true }));
+  // dialog of /skills says what each part gives.
+  await show(await demoSession({ cwd: await project("extend"), skills: true }));
   const shows = async (text: string, yes = true) => {
     for (let tries = 0; tries < 400 && test.captureCharFrame().includes(text) !== yes; tries++) {
       await Bun.sleep(25);
@@ -1239,7 +1239,7 @@ try {
   await shows("evaluating 'seen.todos", false);
   await rest();
   await capture("75c-extend-fixed");
-  app().composer.setText("/extensions");
+  app().composer.setText("/skills");
   await app().submit();
   await rest();
   await capture("75d-extensions");

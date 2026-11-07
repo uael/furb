@@ -544,7 +544,7 @@ struct Birth {
   cwd: String,
   actor: Option<String>,
   roster: Option<Vec<String>>,
-  extensions: Option<bool>,
+  skills: Option<bool>,
   config: Option<String>,
   claude: Option<String>,
   answerer: Option<Answerer>,
@@ -725,11 +725,11 @@ impl Lives {
 
   fn verb(&mut self, peer: Peer, verb: Verb, outbox: &Outbox, reply: Replied) {
     let answer = match verb {
-      Verb::Open { life, cwd, actor, roster, extensions, config, claude, answers, attach } => {
+      Verb::Open { life, cwd, actor, roster, skills, config, claude, answers, attach } => {
         let answerer = answers.then(|| Answerer::new(life.clone(), outbox.clone()));
         let holder = attach.map(|from| Holder { peer, outbox: outbox.clone(), from });
         let cwd = cwd.unwrap_or_default();
-        let birth = Birth { cwd, actor, roster, extensions, config, claude, answerer, holder };
+        let birth = Birth { cwd, actor, roster, skills, config, claude, answerer, holder };
         return self.open(life, birth, reply);
       }
       Verb::List { config } => Ok(Answer::Lives(self.listed(config))),
@@ -832,7 +832,7 @@ impl Lives {
 
   /// A life born on a thread of its own, with no holder yet, and watched for its end.
   fn opened(&mut self, life: String, birth: Birth) -> Result<(), ProtocolError> {
-    let Birth { cwd, actor, roster, extensions, config, claude, answerer, holder: _ } = birth;
+    let Birth { cwd, actor, roster, skills, config, claude, answerer, holder: _ } = birth;
     let base = &self.settings.opening;
     let config = config.or_else(|| base.config.clone());
     let answer = answerer.as_ref().map(|one| Answered(one.hosted()));
@@ -841,7 +841,7 @@ impl Lives {
       directory: cwd.clone(),
       actor: actor.or_else(|| base.actor.clone()),
       roster: roster.or_else(|| base.roster.clone()),
-      extensions: extensions.or(base.extensions),
+      skills: skills.or(base.skills),
       config: config.clone(),
       claude: claude.or_else(|| base.claude.clone()),
       answer: answer.or_else(|| base.answer.clone()),

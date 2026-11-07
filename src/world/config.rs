@@ -59,7 +59,7 @@ pub struct Setting {
   pub property: Option<Property>,
   /// The extension whose schema names the key, or none for a key of furb or of no schema.
   #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub extension: Option<String>,
+  pub skill: Option<String>,
 }
 
 /// A key that a schema names, in the form of a setting of VS Code: the kind of its value, the
@@ -130,17 +130,16 @@ struct Keys {
 struct Named {
   key: Vec<String>,
   property: Property,
-  extension: Option<String>,
+  skill: Option<String>,
 }
 
 /// The objects of furb that each reader merges name by name, which the settings give with each of
 /// their names after them.
 const PROVIDERS: &str = "providers";
-const EXTENSIONS: &str = "extensions";
 
 /// The keys that furb reads.
-/// Whether a name is a key of furb at the top of the configs, which no extension takes as its name,
-/// since the configs hold the keys of an extension under its name.
+/// Whether a name is a key of furb at the top of the configs, which no skill that gives keys of
+/// its own takes as its name, since the configs hold those keys under its name.
 pub(crate) fn furb_key(name: &str) -> bool {
   own().iter().any(|one| one.key[0] == name)
 }
@@ -149,7 +148,7 @@ fn own() -> Vec<Named> {
   let one = |name: &str, kind, default, description: &str| Named {
     key: vec![name.to_owned()],
     property: Property { kind, default, description: description.to_owned(), values: vec![] },
-    extension: None,
+    skill: None,
   };
   vec![
     one(
@@ -170,10 +169,10 @@ fn own() -> Vec<Named> {
     one(KEY_CLASSES, Kind::Object, json!({}), "The class, cheap or dear, of each model it names."),
     one(PROVIDERS, Kind::Object, json!({}), "The providers of models, each by its name."),
     one(
-      EXTENSIONS,
+      skill::KEY,
       Kind::Object,
       json!({}),
-      "The extensions that a life runs, each by its name: true, false, or the path of its folder.",
+      "The skills that a life runs, each by its name: true, false, or the path of its folder.",
     ),
   ]
 }
@@ -208,9 +207,9 @@ pub enum Error {
   Refused(#[source] catalog::Error),
   #[error("The change was not kept: {refused}, and its config was not put back: {source}")]
   Restore { refused: catalog::Error, source: disk::Error },
-  #[error("The keys of the extensions were not read: {0}")]
-  Extensions(#[source] Fault),
-  #[error("The keys of the extension {name} are no schema of keys: {source}")]
+  #[error("The keys of the skills were not read: {0}")]
+  Skills(#[source] Fault),
+  #[error("The keys of the skill {name} are no schema of keys: {source}")]
   Schema { name: String, source: serde_json::Error },
   #[error("The key {key} takes {wanted}, and {value} is not")]
   Value { key: String, wanted: String, value: Value },
@@ -247,8 +246,8 @@ impl Layers {
   pub fn get(&self) -> Result<Vec<Setting>, Error> {
     let mut won = self.won()?;
     let mut out = Vec::new();
-    for Named { key, property, extension } in self.schema()? {
-      let (value, layer, within) = if property.kind == Kind::Object && extension.is_none() {
+    for Named { key, property, skill } in self.schema()? {
+      let (value, layer, within) = if property.kind == Kind::Object && skill.is_none() {
         let (within, rest) =
           won.into_iter().partition(|(one, _)| one.len() == 2 && one[0] == key[0]);
         won = rest;
@@ -263,7 +262,7 @@ impl Layers {
           None => (property.default.clone(), None, vec![]),
         }
       };
-      out.push(Setting { key, value, layer, property: Some(property), extension });
+      out.push(Setting { key, value, layer, property: Some(property), skill });
       out.extend(within);
     }
     out.extend(settings(won));
@@ -296,7 +295,7 @@ impl Layers {
   fn schema(&self) -> Result<Vec<Named>, Error> {
     let places = Places { config: self.user.clone(), home: Places::here().home };
     let mut named = own();
-    for (name, text) in skill::contributed(&places, &self.project).map_err(Error::Extensions)? {
+    for (name, text) in skill::contributed(&places, &self.project).map_err(Error::Skills)? {
       if furb_key(&name) {
         continue;
       }
@@ -304,7 +303,7 @@ impl Layers {
       named.extend(keys.properties.into_iter().map(|(one, property)| Named {
         key: vec![name.clone(), one],
         property,
-        extension: Some(name.clone()),
+        skill: Some(name.clone()),
       }));
     }
     Ok(named)
@@ -369,13 +368,8 @@ pub fn defaults(name: &str, text: &str) -> Result<Map<String, Value>, Error> {
 
 /// The settings of keys with no property of their own, each with the layer that gives its value.
 fn settings(won: IndexMap<Vec<String>, (Value, Layer)>) -> Vec<Setting> {
-  let one = |(key, (value, layer))| Setting {
-    key,
-    value,
-    layer: Some(layer),
-    property: None,
-    extension: None,
-  };
+  let one =
+    |(key, (value, layer))| Setting { key, value, layer: Some(layer), property: None, skill: None };
   won.into_iter().map(one).collect()
 }
 

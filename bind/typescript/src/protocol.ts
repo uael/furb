@@ -21,7 +21,7 @@ export type Request1 =
       cwd?: string | null;
       actor?: string | null;
       roster?: string[] | null;
-      extensions?: boolean | null;
+      skills?: boolean | null;
       config?: string | null;
       claude?: string | null;
       answers?: boolean;
@@ -1094,4 +1094,4 @@ export interface Open {
   chain: string;
 }
 
-export const PROTOCOL = 4;
+export const PROTOCOL = 5;

@@ -110,7 +110,7 @@ export interface Seen {
   /** The acts of a kind, in the order of the record. */
   of(kind: string): Act[];
   /** The names of the extensions that the life runs, in the order that it enabled them. */
-  extensions(): Promise<string[]>;
+  skills(): Promise<string[]>;
   /** Runs python on the chain on screen, through the gate, as `/run` does, and gives, once the word ended, the value
    * of the last act that the word made on that chain, as the record holds it once that act is done. A word that makes
    * no act gives undefined, and a word that raises or that the gate refuses rejects with its error. */
@@ -361,7 +361,7 @@ export class Parts {
     }
     const loaded = await Promise.all(found.map((one) => loadPart(one.name, one.file, one.text)));
     if (asked !== this.asked || this.closed) return;
-    this.loaded = error ? [bare("extensions", join(this.project, ".furb"), error), ...loaded] : loaded;
+    this.loaded = error ? [bare("config", join(this.project, ".furb"), error), ...loaded] : loaded;
     this.follow(found);
     this.version++;
     this.changed();
