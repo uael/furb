@@ -1,22 +1,17 @@
 // ⌃G and /inspect with no name never leave the window silent: each opens the list of the names that it can inspect.
-import { expect, test } from "bun:test";
-import { composing } from "./composing.ts";
+import { test } from "bun:test";
+import { composing, framed } from "./composing.ts";
 
 test("⌃G and /inspect with no name open the list of the names to inspect", () =>
   composing(
     async ({ app, screen, frame }) => {
-      const before = await frame();
+      const listed = (shown: string) => shown.includes("Named in this chain");
       screen.mockInput.pressKey("g", { ctrl: true });
-      for (let k = 0; k < 20 && !app.overlay; k++) await frame();
-      const keyed = await frame();
-      expect(keyed).not.toBe(before);
-      expect(keyed).toContain("Named in this chain");
+      await framed(frame, listed, "the list of the names after ⌃G");
       app.closeOverlay();
-      await frame();
       app.composer.setText("/inspect");
       await app.submit();
-      for (let k = 0; k < 20 && !app.overlay; k++) await frame();
-      expect(await frame()).toContain("Named in this chain");
+      await framed(frame, listed, "the list of the names after /inspect");
     },
     { width: 140, height: 44 },
     true,
