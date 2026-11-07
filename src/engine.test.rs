@@ -1413,7 +1413,8 @@ fn a_word_that_never_yields_on_another_chain_raises_and_the_root_goes_on() {
 #[test]
 fn an_ear_that_spins_past_the_bound_is_dropped_as_an_ear_that_raises_and_the_life_goes_on() {
   bounded();
-  let word = "def spin():\n  yield\n  while True:\n    pass\ndrive(spin(), 'spin')";
+  let word =
+    "def spin():\n  yield\n  while True:\n    pass\ndrive(spin(), 'spin')\ndebug(t'driven')";
   let again =
     "def calm():\n  yield\ntry:\n  drive(calm(), 'spin')\n  close(8)\nexcept Refused:\n  close(0)";
   let mut lived = Lived::new("ear", &[word, again], true).unwrap();

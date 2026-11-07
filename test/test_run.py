@@ -81,7 +81,7 @@ async def test_every_rung_of_a_chain_runs_in_the_globals_of_the_chain() -> None:
 
 async def test_what_a_rung_binds_stays_bound_for_every_later_rung_of_the_chain() -> None:
   """What a rung binds stays bound for every later rung of the chain."""
-  _, _, root = born("a = 1", "b = a + 1", "close(b + 1)", "close(None)")
+  _, _, root = born("a = 1\ndebug(t'go')", "b = a + 1\ndebug(t'go')", "close(b + 1)", "close(None)")
   assert await engine.prompt(int, "count", on=root) == 3
   assert (engine.module(root)["a"], engine.module(root)["b"]) == (1, 2)
 
@@ -156,7 +156,7 @@ async def test_two_prompts_on_one_chain_see_the_bindings_of_each_other_as_they_r
 
 async def test_a_rung_whose_word_rebinds_a_broken_name_repairs_the_chain() -> None:
   """A rung whose word rebinds a broken name repairs the chain, since the last rung to bind wins."""
-  sand, _, root = born("def twice(x):\n  raise ValueError('broken')", "close(None)")
+  sand, _, root = born("def twice(x):\n  raise ValueError('broken')\ndebug(t'go')", "close(None)")
   assert await engine.prompt(None, "bind it", on=root) is None
   await engine.rung("def twice(x):\n  return x * 2", on=root)
   sand.script[root] = ["close(twice(21))", "close(None)"]

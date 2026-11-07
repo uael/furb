@@ -75,14 +75,17 @@ async def test_the_engine_tells_what_a_step_raised() -> None:
 
 
 async def test_a_step_that_raised_nothing_and_debugged_nothing_tells_nothing() -> None:
-  """A step that raised nothing and debugged nothing tells nothing."""
+  """A step that raised nothing and debugged nothing tells nothing, and the chain asks no more until a fact comes, as a message."""
   _, log, root = born("k = 1", "close(1)")
   act = engine.prompt(int, "count", on=root)
+  await settle()
+  assert len(said(log, "reply")) == 1
+  engine.prompt(None, "go on", on=act)
   assert await act == 1
   steps = [a[1] for a in said(log, "rung") if a[2] == act]
   assert len(steps) == 2 and [a for a in said(log, "tell") if a[1] in steps and a[2] in steps] == []
   assert [of(engine.turns(on=root), step) for step in steps] == [
-    [f"#{steps[0]} advance on {act}", f"#{steps[0]} told nothing"],
+    [f"#{steps[0]} advance on {act}"],
     [f"#{steps[1]} advance on {act}"],
   ]
 
@@ -402,9 +405,11 @@ async def test_of_the_acts_its_word_made_and_read_at_once_it_tells_nothing() -> 
 
 
 async def test_an_answer_with_no_text_is_a_word_like_any_other() -> None:
-  """An answer with no text is a word like any other, so the gate reads it, the run gives no value, and the model is asked again."""
+  """An answer with no text is a word like any other, so the gate reads it, the run gives no value, and the chain asks the model again when something new comes, as a message."""
   _, log, root = born("", "close(1)")
   act = engine.prompt(int, "work", on=root)
+  await settle()
+  engine.prompt(None, "go on", on=act)
   assert await act == 1
   first, second = [a[1] for a in said(log, "rung") if a[2] == act]
   assert [q[4] for q in acts(log).values() if q[0] == "gate"] == ["", "close(1)"]
@@ -427,7 +432,10 @@ async def test_a_replay_makes_a_rung_of_its_own_retelling_each_rung_of_the_donor
 async def test_a_replay_makes_no_rung_for_a_word_that_is_empty() -> None:
   """A replay makes no rung for a word that is empty, since a rung with no word asks a model for a word."""
   _, log, root = born("", "close(1)")
-  assert await engine.prompt(int, "count", on=root) == 1
+  act = engine.prompt(int, "count", on=root)
+  await settle()
+  engine.prompt(None, "go on", on=act)
+  assert await act == 1
   await settle()
   side = await chained("side", root, 300)
   assert "" in engine.program(root).values()

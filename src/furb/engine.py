@@ -284,7 +284,7 @@ def prompt[T](shape: type[T] | object, message="", to="", on="") -> Act[T]:
     shape if isinstance(shape, str) else re.sub(r"""<class '|'>|('[^']*'|"[^"]*")|[\w.:/]*\.""", r"\1", repr(shape))
   )
   thread = on * prompted(on)
-  to = to or (thread and get(thread)[6])
+  to = to or (thread and "".join(get(thread)[6:]))
   asks = (to or module(on).get("actor")) != OPERATOR
   says = asks and thread and named == "None" and not over(thread)
 
@@ -342,8 +342,8 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
     h = [(x[0] == "tell" and x[3][0].splitlines()[0]) or x[0] for x in t] + ["chain()", "#" + o, "setup"]
     hi = h.index("#" + o, lo := h.index("chain()"))
     hi *= hi < len(t)
-    blocked, running, waiting, last, heard, seen = set(), {}, {}, standing(), [], set()
-    step = news = ran = reply = note = to = mute = loud = dull = stuck = names = ""
+    blocked, running, waiting, last, heard = set(), {}, {}, standing(), []
+    step = news = ran = reply = note = to = hush = dull = stuck = ""
     stood = module(source or get(id)[3]).get("actor", last and last[2])
 
     def placed(went):
@@ -433,6 +433,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           transcript(id, "wants") + [x[1] for x in transcript(id, "close") if scope(x[2]) == id != x[2]]
         ):
           scope(about) != id and (yield "tell", maker, [headed(about, "done", value=value)])
+          dull = stuck = ""
           value is None or isinstance(value, CancelledError) or (
             news := (about + " done", maker, isinstance(value, Exception))
           )
@@ -444,21 +445,22 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         ):
           yield "tell", maker, [headed(p, "paused", why=why)]
           running[maker] or (news := (p + " paused", maker, 0))
-        case (kind, about, by, *_) if (
-          ((kind == "started" and not get(by)) or kind == "prompt")
-          and r[2] in running
-          and not (r[0] == "reply" or get(r[2])[4])
-        ):
-          seen.add(about)
-      if a[1] in seen and a[0] == "done":
-        mute = dull = stuck = ""
       if scope(a[1]) != id:
         continue
       if a[0] in ("ready", "done"):
         waiting.pop(a[1], None)
-      if a[0] == "done" and prompted(r[2]) and a[1] in (ran, *blocked) and len(module(id)) == names:
-        if stuck := dull:
-          yield "tell", get(r[2])[2], [headed(r[2], "asked no more until a fact comes")]
+      if a[0] == "done" and (
+        r[0] == "wants"
+        or (
+          question(("rung", m := r[2]))
+          and not running.get(m)
+          and not (get(m)[4] or isinstance(a[3], CancelledError | None | tuple))
+        )
+      ):
+        hush = dull = stuck = ""
+      if a[0] == "done" and prompted(r[2]) and a[1] in (ran, *blocked) and not over(r[2]):
+        if hush == r[2] or (stuck := dull):
+          ran = yield "tell", get(r[2])[2], [headed(r[2], "asked no more until a fact comes")]
         dull = 1
       match a:
         case ("read", about, by, _, path) if prompted(path) and scope(path) == id:
@@ -483,20 +485,28 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
             top = ""
           else:
             seat = placed(last[1])
-        case ("rung", rid, _, _, "", *_):
+        case ("rung", rid, by, _, "", *_):
           waiting[rid] = running[rid] = ""
-        case ("tell", *_, notes) if notes not in (["chain()"], [*r[4:5]]):
+          prompted(by) or (hush := "")
+        case ("tell", about, by, notes) if notes not in (["chain()"], [*r[4:5]]):
           heard.append("\n".join(notes))
-          ran = mute = ""
-          a[2] == id or (prompted(a[2]) and prompted(get(a[2])[2])) or (dull := "") or (stuck := "")
-          loud = a[2]
           if a is note:
             note = bind(step)
-        case ("done", about, *_) if about == note:
+          elif not (
+            a is ran
+            or (not over(about) and question(("rung", r[2])))
+            or r[0] == "write"
+            or (
+              prompted(by) and prompted(get(by)[2]) and [x[5] for x in transcript(id, "prompt")].count(get(by)[5]) > 1
+            )
+          ):
+            hush = ""
+            by == id or (dull := (stuck := ""))
+          ran = ""
+        case ("done", about, *_) if about == note and step in waiting:
           with site.set(step):
             reply = act("reply", id, controlled(idle), to)
         case ("ready", rid, _, word):
-          names = len(module(id))
           try:
             rid == step or bind(rid)
             ladder[(donor := r[5]) or rid] = word
@@ -513,9 +523,6 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
           pause(id, why)
       if r[0] == "run":
         running[r[4]] = a[0] != "done"
-        a[0] == "done" and (
-          mute := (get(r[4]) or a)[2] * (repr(a[1]) not in str(transcript(id, "wants")) and r[4] != loud)
-        )
       elif r[0] == "wants":
         running[get(r[2])[4]] = a[0] != "started"
       if any(running.values()):
@@ -534,7 +541,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
                   paused(x)
                   or over(x)
                   or x in {y[2] for y in transcript(id, "reply") if not over(y[1])}
-                  or (mute == get(x)[2] and not all(map(over, seen)))
+                  or get(x)[2] == hush
                 )
               ),
               "",
@@ -547,7 +554,7 @@ def chain(label="", source="", filter: Filter | list[str] | None = None, on="") 
         if offered(last[0], to) is None:
           close(Refused(to + " no actor"), maker * prompted(maker) or step)
         else:
-          ran and (yield told(ran, "told nothing"))
+          hush = maker
           note = yield told(step, "advance on " + maker, share=filled(reply) or None, waits=waits or None)
           news = ""
       if news and not waiting and (r[2] in running or over(r[2]) or a[0] == "tell"):
@@ -596,17 +603,17 @@ def seed(data):
     )
     (c["paused"] or c["id"] in asking) and entries.append((("pause", c["id"], OPERATOR),))
   for x in data["acts"]:
+    "value" in x and (
+      put(x["kind"], i := x["id"], "journal", x["on"]),
+      entries.extend([(("started", i, "journal"),), (("done", i, "journal", x["value"]),)]),
+    )
+  for x in data["acts"]:
     "value" in x or (
       put("prompt", x["id"], OPERATOR, x["on"], x["shape"], x["message"], x["to"]),
       x["held"] and entries.append((("started", x["id"], x["held"]),)),
     )
   for kind, most in data["taken"].items():
     put(kind, f"{kind}{most + 1}")
-  for x in data["acts"]:
-    i = x["id"]
-    "value" in x and entries.extend(
-      [((x["kind"], i, "journal", x["on"]),), (("started", i, "journal"),), (("done", i, "journal", x["value"]),)]
-    )
   for c in data["chains"]:
     i, cut = c["id"], c["cut"] + [y["rung"] for y in c.get("again", ())]
     loud = bool(c["lost"] or cut)

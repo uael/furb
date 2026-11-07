@@ -86,13 +86,13 @@ async def test_a_chooser_whose_words_make_nothing_new_ends_refused_once_its_chai
   await settle()
   got = engine.module(root)["got"]
   assert isinstance(engine.peek(got), engine.Refused) and "nothing new" in str(engine.peek(got))
-  assert len([a for a in engine.transcript("chain2") if a[0] == "reply"]) == 3
+  assert len([a for a in engine.transcript("chain2") if a[0] == "reply"]) == 1
 
 
 async def test_a_chooser_that_never_closes_ends_refused(tmp_path: Path) -> None:
   """When the model of choice writes 4 words on its chain and closes none, the prompt ends refused, so no chooser loops."""
   sand, root, _ = compacting(tmp_path)
-  sand.script.update({root: ["got = choice()"], "chain2": [f"n{k} = {k}" for k in range(12)]})
+  sand.script.update({root: ["got = choice()"], "chain2": [f"n{k} = {k}\ndebug(t'{{n{k}}}')" for k in range(12)]})
   await engine.rung("got = choice()", on=root)
   await settle()
   got = engine.module(root)["got"]
