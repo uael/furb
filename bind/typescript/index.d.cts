@@ -604,6 +604,13 @@ export interface ProviderInfo {
 }
 
 /**
+ * Acts each in the state that the crate gives it, and each chain in the state that the acts that
+ * stand in it give, as a daemon tells them: what a window that makes acts of its own, as a test
+ * does, reads in place of a state of its own.
+ */
+export declare function restated(acts: Array<import("./dist/protocol.js").Act>): Array<import("./dist/protocol.js").Act>
+
+/**
  * What the record at a path tells, read with no life, so no word runs again and a record of any
  * engine opens: the engine that made it, as the record names it, and nothing when it names none;
  * the engine of this build; whether the facts are those of its log; and the file that holds the

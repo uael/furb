@@ -1,19 +1,8 @@
-import {
-  type Act,
-  cancelled,
-  failed,
-  isDone,
-  isPaused,
-  type Measure,
-  outcomeOf,
-  reasonOf,
-  unfinished,
-  WORK,
-} from "./acts.js";
+import { type Act, cancelled, failed, isDone, type Measure, outcomeOf, reasonOf, WORK } from "./acts.js";
 import { gist } from "./asks.js";
 import { valueText } from "./ladder.js";
 import { unmarked } from "./marks.js";
-import { busy, type State, working } from "./states.js";
+import { busy, type State } from "./states.js";
 
 /** What a row of the loom does now: it asks the operator, it failed, it works, a pause holds it, its prompts are
  * all closed, or it rests. */
@@ -149,20 +138,6 @@ export function parentOf(chain: Act, acts: ReadonlyMap<string, Act>): string | u
   return maker && maker.chain !== chain.id ? maker.chain : undefined;
 }
 
-/** The state of the acts of a chain, with the prompts that the operator owes on it. */
-export function rowState(work: readonly Act[], owes: boolean, remote: readonly Act[] = []): State {
-  if (owes) return "asks";
-  const live = work.filter((act) => WORK.includes(act.kind) && !unfinished(act));
-  // Work that an earlier life left is work: the open of a life on its record resumes it at once.
-  if (live.some(isPaused)) return "paused";
-  if (live.some((act) => !isDone(act))) return working(live, remote);
-  const latest = live.at(-1);
-  if (latest && cancelled(latest)) return "cancelled";
-  if (latest && failed(latest)) return "failed";
-  const prompts = live.filter((act) => act.kind === "prompt");
-  return prompts.length && prompts.every((act) => isDone(act)) ? "done" : "idle";
-}
-
 /** The act that a chain waits on while it works: its newest command or wait that runs, then the newest prompt that one
  * of its rungs made on another chain, then its newest rung that runs. */
 export function waitsOn(
@@ -217,12 +192,8 @@ export function weave({ acts, prompts, measures, folds, width, label, index }: W
   }
   const under = (id: string): string[] =>
     (children.get(id) ?? []).flatMap((child) => [child.id, ...under(child.id)]);
-  const stateOf = (id: string) =>
-    rowState(
-      (byChain.get(id) ?? []).filter((act) => act.kind !== "chain"),
-      owing.has(id),
-      open.filter((act) => act.kind === "prompt" && act.chain !== id && byId.get(act.by)?.chain === id),
-    );
+  // The state of a chain is the one that the crate gave its act, and a question that the console still holds asks.
+  const stateOf = (id: string): State => (owing.has(id) ? "asks" : (byId.get(id)?.state ?? "idle"));
   const operatorActs = acts.filter(asksOperator);
   // The acts that run, which each row that works reads for what it waits on.
   const open = acts.filter((act) => !isDone(act));
@@ -378,7 +349,7 @@ function ordered(rows: readonly Row[], place: ReadonlyMap<string, number>, order
  * operator on it changed. */
 function board(
   { prompts, measures, folds, label }: Omit<Weave, "acts" | "width" | "index">,
-  { ids, on, chains: listed, live, stamp, touched }: NonNullable<Weave["index"]>,
+  { ids, chains: listed, live, stamp, touched }: NonNullable<Weave["index"]>,
 ): Loom {
   const owed: Owed[] = prompts
     .flatMap((prompt) => {
@@ -418,26 +389,17 @@ function board(
     const asks = asked.get(id)?.at(-1)?.id ?? "";
     const changed = stamp?.(id) ?? -1;
     const kept = states.get(id);
-    if (kept && changed >= 0 && kept.stamp === changed && kept.owes === owes && kept.asks === asks)
+    // The state of a chain is the one that the crate gave its act, and a question that the console still holds asks.
+    const state: State = owes ? "asks" : (ids.get(id)?.state ?? "idle");
+    if (
+      kept &&
+      changed >= 0 &&
+      kept.stamp === changed &&
+      kept.owes === owes &&
+      kept.asks === asks &&
+      kept.state === state
+    )
       return kept;
-    const work = (act?: Act): act is Act =>
-      act !== undefined && act.chain === id && WORK.includes(act.kind) && !unfinished(act);
-    const waiting = (openOn.get(id) ?? []).filter(work);
-    const acts = on.get(id) ?? [];
-    const latest = acts.findLast(work);
-    const state: State = owes
-      ? "asks"
-      : waiting.some(isPaused)
-        ? "paused"
-        : waiting.some((act) => !isDone(act))
-          ? working(waiting, asked.get(id) ?? [])
-          : latest && cancelled(latest)
-            ? "cancelled"
-            : latest && failed(latest)
-              ? "failed"
-              : acts.some((act) => act.kind === "prompt")
-                ? "done"
-                : "idle";
     const local = openOn.get(id) ?? [];
     const waits = busy(state)
       ? (local.findLast((act) => act.kind === "bash" || act.kind === "wait")?.id ??

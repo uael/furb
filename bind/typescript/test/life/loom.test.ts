@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
+import { restated } from "../../index.cjs";
 import type { Act, Measure } from "../../src/life/acts.ts";
-import { isDone, outcomeOf } from "../../src/life/acts.ts";
+import { isDone } from "../../src/life/acts.ts";
 import { thread } from "../../src/life/ladder.ts";
 import {
   commandDoing,
@@ -13,15 +14,28 @@ import {
   owedAt,
   spans,
   subjectOf,
+  type Weave,
   weave,
 } from "../../src/life/loom.ts";
 import { act, actIndex, changed, type More } from "./acts.ts";
+
+/** A loom woven from acts in the states that the crate gives them, as a host tells them, and the index of the host
+ * with those states. */
+const woven = (given: Weave): Loom => {
+  const acts = restated([...given.acts]);
+  const byId = new Map(acts.map((one) => [one.id, one]));
+  const index = given.index && {
+    ...given.index,
+    ids: new Map([...given.index.ids].map(([id, one]) => [id, byId.get(id) ?? one])),
+  };
+  return weave({ ...given, acts, index });
+};
 
 const loomOf = (
   acts: Act[],
   options: { folds?: string[]; prompts?: { id: string; shape: string; message: string }[] } = {},
 ) =>
-  weave({
+  woven({
     acts,
     prompts: options.prompts ?? [],
     measures: {},
@@ -331,14 +345,14 @@ test("a loom of no width read from the index of a host gives the rows that it gi
   };
   const base = { acts, prompts, measures: {}, width: 0, label: (id: string) => id };
   for (const folds of [new Set<string>(), new Set(["chain1"])]) {
-    const whole = weave({ ...base, folds });
+    const whole = woven({ ...base, folds });
     if (!folds.size) expect(new Set(whole.rows.map((row) => row.state)).size).toBeGreaterThan(3);
-    expect(weave({ ...base, folds, index })).toEqual(whole);
+    expect(woven({ ...base, folds, index })).toEqual(whole);
   }
   // A host that stamps the changes of the acts on each chain has the board read again only the chains that changed.
   const stamps = new Map<string, number>();
   const stamped = { ...index, stamp: (chain: string) => stamps.get(chain) ?? 0 };
-  expect(weave({ ...base, folds: new Set(), index: stamped })).toEqual(weave({ ...base, folds: new Set() }));
+  expect(woven({ ...base, folds: new Set(), index: stamped })).toEqual(woven({ ...base, folds: new Set() }));
   for (const [place, one] of acts.entries())
     if (one.kind === "bash" && !isDone(one) && one.chain !== "chain7") {
       const done = changed(one, { done: true, ended: acts.length + 1 });
@@ -350,7 +364,7 @@ test("a loom of no width read from the index of a host gives the rows that it gi
     }
   index.live = acts.filter((one) => !isDone(one));
   stamped.live = index.live;
-  expect(weave({ ...base, folds: new Set(), index: stamped })).toEqual(weave({ ...base, folds: new Set() }));
+  expect(woven({ ...base, folds: new Set(), index: stamped })).toEqual(woven({ ...base, folds: new Set() }));
 });
 
 test("a board read from the chains that a host names as touched gives the rows and the order of a whole board", () => {
@@ -384,8 +398,8 @@ test("a board read from the chains that a host names as touched gives the rows a
       width: 0,
       label: (id: string) => id,
     };
-    const read = weave({ ...base, index });
-    const whole = weave(base);
+    const read = woven({ ...base, index });
+    const whole = woven(base);
     expect(order(orderOf(read), read)).toEqual(order(orderOf(whole), whole));
   };
   same();
@@ -687,7 +701,7 @@ test("a reopened session with work that an earlier life left shows that work as 
     chains: acts.filter((one) => one.kind === "chain"),
     live: acts.filter((one) => !isDone(one)),
   };
-  for (const loom of [weave({ ...base, width: 40 }), weave({ ...base, width: 0, index })]) {
+  for (const loom of [woven({ ...base, width: 40 }), woven({ ...base, width: 0, index })]) {
     const of = (id: string) => loom.rows.find((row) => row.id === id);
     expect(of("chain2")?.state).toBe("runs");
     expect(of("chain2")?.waits).toBe("bash1");
@@ -695,7 +709,7 @@ test("a reopened session with work that an earlier life left shows that work as 
   }
   // A pause of the operator still holds the same work as paused.
   const held = acts.map((one) => (one.id === "bash1" ? changed(one, { paused: true }) : one));
-  expect(weave({ ...base, acts: held, width: 40 }).rows.find((row) => row.id === "chain2")?.state).toBe(
+  expect(woven({ ...base, acts: held, width: 40 }).rows.find((row) => row.id === "chain2")?.state).toBe(
     "paused",
   );
 });

@@ -46,7 +46,7 @@ use crate::{
   Ear, Fact, Fault, Heard, Life, Object, Spoken, Step,
   extension::{self, Extension, Part},
   life::Opening,
-  view::{Fold, Held, Pause},
+  view::{Act as ViewAct, Fold, Held, Pause, restate},
   wire,
   world::{self, images},
 };
@@ -898,6 +898,24 @@ impl Meaning {
   pub fn moments(&self, on: Option<String>) -> Result<Value, Fault> {
     meant(&self.held.moments(on.as_deref()))
   }
+}
+
+/// Acts each in the state that the crate gives it, and each chain in the state that the acts that
+/// stand in it give, as a daemon tells them: what a window that makes acts of its own, as a test
+/// does, reads in place of a state of its own.
+#[cfg_attr(
+  feature = "typescript",
+  napi(
+    ts_args_type = "acts: Array<import(\"./dist/protocol.js\").Act>",
+    ts_return_type = "Array<import(\"./dist/protocol.js\").Act>"
+  )
+)]
+pub fn restated(acts: Value) -> Result<Value, Fault> {
+  let json = wire::outward(acts.0.as_ref());
+  let mut acts: Vec<ViewAct> = serde_json::from_value(json)
+    .map_err(|no| Fault::refused(format!("these are no acts: {no}")))?;
+  restate(&mut acts);
+  meant(&acts)
 }
 
 /// A meaning as a value of the engine, which crosses each door as JSON would.
