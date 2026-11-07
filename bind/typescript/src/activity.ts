@@ -1,3 +1,4 @@
+import { restated } from "../index.cjs";
 import { type Call, call, isFault } from "./ears.js";
 import {
   type Act,
@@ -8,8 +9,6 @@ import {
   type Spend,
   WORK,
 } from "./life/acts.js";
-import type { State } from "./life/states.js";
-import { working } from "./life/states.js";
 import { bound, display, type Fact, isQuestion, usageOf } from "./types.js";
 
 /** One answer of a model on a chain: its place in time, the actor whose reply it answered, and its usage, which is
@@ -56,52 +55,6 @@ export interface LiveAct {
   ended?: number;
   /** The dollars of the answers of the models that wrote the word of a rung, once one is done. */
   cost?: number;
-}
-/** Whether an act failed: a rung that the gate refused or whose run raised, or an act done with an exception other
- * than a cancel. */
-function failed(act: LiveAct): boolean {
-  if (act.run) return act.run.status === "failed" && !cancelled(act);
-  return isFault(act.value) && act.value.is !== "CancelledError";
-}
-/** Whether a cancel ended an act. A cancel is what the operator asked for, so it is no failure. */
-function cancelled(act: LiveAct): boolean {
-  if (act.run) return act.run.status === "failed" && /^CancelledError\b/.test(act.run.reason ?? "");
-  return isFault(act.value) && act.value.is === "CancelledError";
-}
-/** The state of an act, with the prompts that the operator owes, as the daemon gives it. A rung whose word has not
- * come yet is its model that thinks while a reply of it runs, and it rests while it waits for its turn, and an act
- * that is no work and lives, as a chain or a grant, is work that waits on another chain. An act that had no end when
- * the record ended stays held, since nothing runs to end it. */
-function stateOf(act: LiveAct, owed: ReadonlySet<string>): State {
-  if (owed.has(act.id)) return "asks";
-  if ((act.paused || act.unfinished) && !act.done) return "paused";
-  if (cancelled(act)) return "cancelled";
-  if (failed(act)) return "failed";
-  if (!act.done && !WORK.includes(act.kind)) return "delegates";
-  if (act.done && (act.kind !== "rung" || act.run?.status !== "running")) return "done";
-  if (act.kind === "rung" && !act.done && act.word === undefined) return act.asking ? "thinks" : "idle";
-  return "runs";
-}
-/** The state of a chain, as the daemon gives it, from the acts that stand in it in the order they began and the
- * prompts that its words made on other chains. It asks while the operator owes a prompt of it, a pause holds it while
- * it holds a live act of work, it works while one lives, and else its last act of work says whether a cancel or a
- * fault ended it. A chain whose prompts all closed is done, and one with no prompt rests. An act that had no end when
- * the record ended is no work. */
-function chainState(
-  on: readonly Act[],
-  remote: readonly Act[],
-  owed: ReadonlySet<string>,
-  unfinished: { has(id: string): boolean },
-): State {
-  if (on.some((act) => owed.has(act.id))) return "asks";
-  const live = on.filter((act) => WORK.includes(act.kind) && !unfinished.has(act.id));
-  const open = (act: Act) => act.phase.phase !== "done";
-  if (live.some((act) => act.pause && open(act))) return "paused";
-  if (live.some(open)) return working(live, remote);
-  const last = live.at(-1);
-  if (last?.state === "cancelled") return "cancelled";
-  if (last?.state === "failed") return "failed";
-  return live.some((act) => act.kind === "prompt") ? "done" : "idle";
 }
 /** Whether a pause or a wake covers an act, which the engine answers the ear that yields the question. */
 function* covers(control: Fact, id: string): Generator<Call, boolean, unknown> {
@@ -174,26 +127,31 @@ export class Activity {
   hosted(acts: readonly LiveAct[], owed: ReadonlySet<string> = new Set()): Act[] {
     const out = new Map(acts.map((act) => [act.id, this.shape(act, owed)]));
     const shaped = (act: LiveAct) => out.get(act.id) ?? this.shape(act, owed);
-    const unfinished = { has: (id: string) => this.acts.get(id)?.unfinished === true };
-    const open = [...this.open].flatMap((id) => this.acts.get(id) ?? []);
-    for (const chain of new Set(acts.map((act) => act.on))) {
+    // An act that had no end when the record ended is no work of its chain, unless the operator owes it.
+    const open = [...this.open].flatMap((id) => {
+      const act = this.acts.get(id);
+      return act && (!act.unfinished || owed.has(id)) ? [act] : [];
+    });
+    // The crate gives each act its state, and each chain the state that the acts that stand in it give.
+    const states = new Map(restated([...out.values()]).map((act) => [act.id, act.state]));
+    const chains = new Set([
+      ...acts.map((act) => act.on),
+      ...acts.flatMap((act) => (act.kind === "chain" ? [act.id] : [])),
+    ]);
+    for (const chain of chains) {
       const act = this.acts.get(chain);
       if (act?.kind !== "chain") continue;
-      const made = shaped(act);
       const remote = open.filter(
         (one) =>
           one.kind === "prompt" &&
           one.on !== chain &&
           this.acts.get(this.acts.get(one.by)?.kind === "rung" ? one.by : "")?.on === chain,
       );
-      made.state = chainState(
-        this.stating(chain, open, owed).map(shaped),
-        remote.map(shaped),
-        owed,
-        unfinished,
-      );
-      out.set(chain, made);
+      const read = [act, ...this.stating(chain, open, owed), ...remote].map(shaped);
+      states.set(chain, restated(read).find((one) => one.id === chain)?.state ?? "idle");
+      out.set(chain, shaped(act));
     }
+    for (const [id, act] of out) act.state = states.get(id) ?? act.state;
     return [...out.values()];
   }
   /** The acts of a chain that its state reads, in the order they began: the acts that the operator owes, the acts that
@@ -223,7 +181,8 @@ export class Activity {
       words: act.words,
       phase: act.done ? { phase: "done", value: act.value } : { phase: "asked" },
       operator: owed.has(act.id),
-      pause: act.paused ? (act.pause ?? { by: "" }) : null,
+      // An act that had no end when the record ended stays held, since nothing runs to end it.
+      pause: act.paused || act.unfinished ? (act.pause ?? { by: "" }) : null,
       run: !run
         ? null
         : run.status !== "failed"
@@ -238,7 +197,8 @@ export class Activity {
       began: act.began,
       ended: act.ended ?? null,
       spend: this.spends.get(act.id) ?? null,
-      state: stateOf(act, owed),
+      // The crate gives the state, which hosted reads.
+      state: "idle",
     };
   }
 
