@@ -1,6 +1,9 @@
 //! The call of a model for a reply, and the turn that its answer gives.
 
-use std::{collections::HashSet, time::Duration};
+use std::{
+  collections::HashSet,
+  time::{Duration, SystemTime},
+};
 
 use futures::{Stream, StreamExt, stream};
 use jiff::{Timestamp, Zoned};
@@ -17,7 +20,7 @@ use super::{
   hearer::{Came, Replied, Retried, released, reply_gone},
   messages::CUT,
   model::{Answer, Asked, Model, Streams},
-  retry::{Backoff, LIMIT_POLL, LIMIT_SLACK, Retry, SIGN_POLL, passing},
+  retry::{Backoff, LIMIT_POLL, LIMIT_SLACK, Limit, Retry, SIGN_POLL, limited, passing},
   thinking::merged,
   watch,
 };
@@ -284,8 +287,8 @@ impl Waits {
   /// the first wait of a usage limit and of a failed sign in; or the failure, which ends the call.
   fn retry(&mut self, no: CompletionError) -> Result<(Retry, bool), CompletionError> {
     let most = self.backoff.most;
-    if let Some(claude::Error::Limit { until }) = claude::error(&no) {
-      let now = Zoned::now();
+    let now = Zoned::now();
+    if let Some(Limit { until }) = limited(&no, SystemTime::from(now.timestamp())) {
       let reset = until
         .and_then(|at| Timestamp::try_from(at).ok())
         .map(|at| at.to_zoned(now.time_zone().clone()));

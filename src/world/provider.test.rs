@@ -55,7 +55,9 @@ use super::{
   local::Server,
   messages::{messages, tail},
   model::{CHEAP, Class, standing},
-  retry::{Backoff, OVERFLOW, Retry, Transient, overflows, passing, recoverable, resets},
+  retry::{
+    Backoff, Limit, OVERFLOW, Retry, Transient, limited, overflows, passing, recoverable, resets,
+  },
   search::Searches,
   thinking::{Thinking, budgeted, thinking},
 };
@@ -2046,6 +2048,90 @@ fn a_call_that_the_usage_limit_refuses_waits_for_its_reset_and_the_chain_is_told
     note.contains(&format!("rung(\"actor = \\'<model>\\'\", on=\"{root}\") and wake(\"{root}\")")),
     "{note}"
   );
+}
+
+/// The 429 of a provider, with this body and these headers.
+fn too_many(body: &str, headers: &[(&'static str, &str)]) -> CompletionError {
+  let response = http_client::Response::builder().status(429).body(()).expect("a response");
+  let mut held = http_client::HeaderMap::new();
+  for (name, value) in headers {
+    held.insert(*name, http_client::HeaderValue::from_str(value).expect("a header value"));
+  }
+  CompletionError::HttpError(http_client::Error::InvalidStatusCodeWithDetails {
+    status: response.status(),
+    body: body.to_owned(),
+    headers: Box::new(held),
+  })
+}
+
+/// The same model, whose first call a 429 refuses with this body, as a provider of a subscription
+/// says it, and the moment of each call.
+fn refused(mut model: Model, body: &str) -> (Model, Arc<Mutex<Vec<Instant>>>) {
+  let inner = Arc::clone(&model.answers);
+  let calls: Arc<Mutex<Vec<Instant>>> = Arc::default();
+  let (kept, body) = (Arc::clone(&calls), body.to_owned());
+  model.answers = Arc::new(move |asked| {
+    let first = {
+      let mut moments = kept.lock().expect("the calls");
+      moments.push(Instant::now());
+      moments.len() == 1
+    };
+    if !first {
+      return inner(asked);
+    }
+    let no = too_many(&body, &[]);
+    Box::pin(async move { Err(no) })
+  });
+  (model, calls)
+}
+
+/// A call that a 429 with this body refuses goes again after the reset that the body names, and
+/// the chain is told that reset once.
+fn waits_for_the_reset_of(name: &str, body: &Value) {
+  let (host, _) = failing(&[]);
+  let (model, calls) =
+    refused(scripted(&MockCompletionModel::default()).hosted(host), &body.to_string());
+  let (retries, told) = retried();
+  let provider = Provider::new(yard(name).display().to_string(), vec![model]).retries(retries);
+  let mut engine = lived(provider);
+  let id = asked(&mut engine);
+  let got = block_on(Act::<Object>::of(&mut engine, &id)).expect("the prompt is answered");
+  assert_eq!(got.as_ref().as_int(), Some(7));
+  let moments = calls.lock().expect("the calls").clone();
+  assert_eq!(moments.len(), 2);
+  assert!(moments[1] - moments[0] >= Duration::from_secs(1), "{:?}", moments[1] - moments[0]);
+  let heard = told.lock().expect("the retries told").clone();
+  assert_eq!(heard.len(), 1);
+  assert!(heard[0].2.why.starts_with("usage limit until "), "{}", heard[0].2.why);
+  assert!(heard[0].2.wait <= Duration::from_secs(4), "{:?}", heard[0].2.wait);
+}
+
+#[test]
+fn a_429_of_a_usage_limit_that_gives_resets_in_seconds_is_asked_again_after_that_reset() {
+  let error = json!({"type": "usage_limit_reached", "resets_in_seconds": 1});
+  waits_for_the_reset_of("limit-in-seconds", &json!({"error": error}));
+}
+
+#[test]
+fn a_429_of_a_usage_limit_that_gives_resets_at_alone_is_asked_again_after_that_reset() {
+  let now =
+    time::SystemTime::now().duration_since(time::UNIX_EPOCH).expect("a time after the epoch");
+  let error = json!({"type": "usage_limit_reached", "resets_at": now.as_secs() + 2});
+  waits_for_the_reset_of("limit-at", &json!({"error": error}));
+}
+
+#[test]
+fn a_429_is_a_usage_limit_only_when_its_body_says_so_and_a_number_past_the_range_gives_no_end() {
+  let now = time::SystemTime::now();
+  let plain = too_many(r#"{"error": {"type": "rate_limit_error"}}"#, &[("retry-after", "20")]);
+  assert_eq!(limited(&plain, now), None);
+  assert_eq!(passing(&plain), Some(Transient::RateLimited));
+  let limit = r#"{"error": {"type": "usage_limit_reached"}}"#;
+  let until = now.checked_add(Duration::from_secs(20));
+  assert_eq!(limited(&too_many(limit, &[("retry-after", "20")]), now), Some(Limit { until }));
+  assert_eq!(limited(&too_many(limit, &[]), now), Some(Limit { until: None }));
+  let huge = json!({"error": {"type": "usage_limit_reached", "resets_at": u64::MAX}});
+  assert_eq!(limited(&too_many(&huge.to_string(), &[]), now), Some(Limit { until: None }));
 }
 
 #[test]
